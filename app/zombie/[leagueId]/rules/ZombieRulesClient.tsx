@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
+import type { ZombieRulesResolved } from '@/lib/zombie/zombieRules'
 import { getScheduleSummary, getZombieSeasonSchedule } from '@/lib/zombie/zombieSeasonSchedule'
 
 type Tab = 'rules' | 'thresholds' | 'items' | 'schedule'
@@ -15,6 +16,10 @@ export function ZombieRulesClient({
   currentWeek,
   season,
   rulesHtml,
+  rules,
+  experienceMode,
+  serumAwardHighScore,
+  serumAwardOnBashMaul,
 }: {
   leagueId: string
   sport: string
@@ -23,6 +28,10 @@ export function ZombieRulesClient({
   currentWeek: number
   season: number
   rulesHtml: string
+  rules: ZombieRulesResolved
+  experienceMode: string | null
+  serumAwardHighScore: boolean
+  serumAwardOnBashMaul: boolean
 }) {
   const [tab, setTab] = useState<Tab>('rules')
   const cfg = getZombieSportConfig(sport)
@@ -74,7 +83,7 @@ export function ZombieRulesClient({
             type="button"
             onClick={() => setTab(t.id)}
             className={clsx(
-              'rounded-lg px-4 py-2 text-[12px] font-semibold whitespace-nowrap transition-colors',
+              'min-h-[44px] rounded-lg px-4 py-2 text-[12px] font-semibold whitespace-nowrap transition-colors',
               tab === t.id
                 ? 'bg-[var(--zombie-crimson)]/15 text-[var(--zombie-crimson)]'
                 : 'text-[var(--zombie-text-dim)] hover:text-[var(--zombie-text-mid)]',
@@ -99,11 +108,11 @@ export function ZombieRulesClient({
       )}
 
       {tab === 'thresholds' && (
-        <ThresholdsTab cfg={cfg} isPaid={isPaid} />
+        <ThresholdsTab cfg={cfg} rules={rules} isPaid={isPaid} />
       )}
 
       {tab === 'items' && (
-        <ItemsTab cfg={cfg} />
+        <ItemsTab cfg={cfg} rules={rules} experienceMode={experienceMode} serumAwardHighScore={serumAwardHighScore} serumAwardOnBashMaul={serumAwardOnBashMaul} />
       )}
 
       {tab === 'schedule' && (
@@ -113,14 +122,14 @@ export function ZombieRulesClient({
   )
 }
 
-function ThresholdsTab({ cfg, isPaid }: { cfg: ReturnType<typeof getZombieSportConfig>; isPaid: boolean }) {
+function ThresholdsTab({ cfg, rules, isPaid }: { cfg: ReturnType<typeof getZombieSportConfig>; rules: ZombieRulesResolved; isPaid: boolean }) {
   return (
     <div className="space-y-5">
       {/* Bashing & Mauling */}
       <section className="rounded-xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-5">
         <h2 className="text-[14px] font-bold text-[var(--zombie-text-full)]">Bashing & Mauling Thresholds</h2>
         <p className="mt-1 text-[12px] text-[var(--zombie-text-mid)]">
-          Sport-tuned for {cfg.label} scoring patterns.
+          Effective {cfg.label} scoring rules for this league.
         </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-orange-500/20 bg-orange-500/[0.04] p-4">
@@ -128,11 +137,11 @@ function ThresholdsTab({ cfg, isPaid }: { cfg: ReturnType<typeof getZombieSportC
               <span className="text-2xl">🔥</span>
               <div>
                 <p className="text-[13px] font-bold text-orange-300">Bashing</p>
-                <p className="text-[24px] font-black text-orange-200">{cfg.bashingThreshold}+ pts</p>
+                <p className="text-[24px] font-black text-orange-200">{rules.bashingThreshold}+ pts</p>
               </div>
             </div>
             <p className="mt-2 text-[11px] text-[var(--zombie-text-mid)]">
-              Win by {cfg.bashingThreshold}+ points to Bash your opponent.
+              Win by {rules.bashingThreshold}+ points to Bash your opponent.
               {isPaid ? ' Loser forfeits additional pot share.' : ' Loser receives "Bashed" marker.'}
             </p>
           </div>
@@ -141,11 +150,11 @@ function ThresholdsTab({ cfg, isPaid }: { cfg: ReturnType<typeof getZombieSportC
               <span className="text-2xl">💀</span>
               <div>
                 <p className="text-[13px] font-bold text-red-300">Mauling</p>
-                <p className="text-[24px] font-black text-red-200">{cfg.maulingThreshold}+ pts</p>
+                <p className="text-[24px] font-black text-red-200">{rules.maulingThreshold}+ pts</p>
               </div>
             </div>
             <p className="mt-2 text-[11px] text-[var(--zombie-text-mid)]">
-              Win by {cfg.maulingThreshold}+ points for a Mauling.
+              Win by {rules.maulingThreshold}+ points for a Mauling.
               {isPaid ? ' Double winnings transfer.' : ' Double currency transfer + mauling animation.'}
             </p>
           </div>
@@ -200,88 +209,71 @@ function ThresholdsTab({ cfg, isPaid }: { cfg: ReturnType<typeof getZombieSportC
   )
 }
 
-function ItemsTab({ cfg }: { cfg: ReturnType<typeof getZombieSportConfig> }) {
-  const WEAPON_ICONS: Record<string, string> = {
-    weapon_knife: '🔪',
-    weapon_axe: '🪓',
-    weapon_bow: '🏹',
-    weapon_gun: '🔫',
-    weapon_bomb: '💣',
-  }
+function ItemsTab({ cfg, rules, experienceMode, serumAwardHighScore, serumAwardOnBashMaul }: {
+  cfg: ReturnType<typeof getZombieSportConfig>
+  rules: ZombieRulesResolved
+  experienceMode: string | null
+  serumAwardHighScore: boolean
+  serumAwardOnBashMaul: boolean
+}) {
+  const weapons = [
+    { type: 'knife', icon: '🔪', earn: `Score ${rules.weaponShieldThreshold.toLocaleString()}+ in a week` },
+    { type: 'bow', icon: '🏹', earn: `Score ${rules.weaponAmbushThreshold.toLocaleString()}+ in a week` },
+    { type: 'axe', icon: '🪓', earn: `Win a matchup by ${rules.weaponAxeMargin.toLocaleString()}+` },
+    { type: 'gun', icon: '🔫', earn: 'Survive 3 Zombie attacks' },
+    { type: 'bomb', icon: '💣', earn: 'Win 5 straight as a Survivor' },
+  ]
+  const simple = experienceMode === 'simple'
+  const serumAwards = [
+    ...(serumAwardHighScore ? [{ label: 'Weekly top score', description: 'Highest final matchup score' }] : []),
+    ...(serumAwardOnBashMaul ? [{ label: 'Bashing or Mauling', description: 'Win by the effective Bashing or Mauling margin' }] : []),
+  ]
 
   return (
     <div className="space-y-5">
-      {/* Weapons */}
       <section className="rounded-xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-5">
-        <h2 className="text-[14px] font-bold text-[var(--zombie-text-full)]">
-          Weapons — {cfg.label} Thresholds
-        </h2>
+        <h2 className="text-[14px] font-bold text-[var(--zombie-text-full)]">Weapons — {cfg.label}</h2>
         <p className="mt-1 text-[12px] text-[var(--zombie-text-mid)]">
-          Earned automatically each week. This season weapons are tracked only — they do not change scores.
+          {simple
+            ? 'Weapons are off in Simple Zombie.'
+            : 'Earn weapons automatically. Before kickoff, arm one held Knife, Bow, Axe, or Gun with @Chimmy to block an eligible infection. It is spent only if it blocks one. Bomb effects are inactive.'}
         </p>
-        <div className="mt-4 space-y-2">
-          {cfg.weaponThresholds.map((w) => (
-            <div
-              key={w.type}
-              className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{WEAPON_ICONS[w.type] ?? '⚔️'}</span>
+        {!simple && (
+          <ul className="mt-4 space-y-2">
+            {weapons.map((weapon) => (
+              <li key={weapon.type} className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3">
+                <span className="text-xl" aria-hidden="true">{weapon.icon}</span>
                 <div>
-                  <p className="text-[13px] font-semibold text-[var(--zombie-text-full)]">{w.label}</p>
-                  <p className="text-[11px] text-[var(--zombie-text-mid)]">{w.description}</p>
+                  <p className="text-[13px] font-semibold capitalize text-[var(--zombie-text-full)]">{weapon.type}</p>
+                  <p className="text-[11px] text-[var(--zombie-text-mid)]">{weapon.earn}</p>
                 </div>
-              </div>
-              {w.minPoints != null && (
-                <span className="rounded-lg bg-white/[0.06] px-3 py-1 text-[13px] font-bold text-white/80">
-                  {w.minPoints.toLocaleString()}+ pts
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
-      {/* Serums */}
       <section className="rounded-xl border border-teal-500/20 bg-[var(--zombie-panel)] p-5">
-        <h2 className="text-[14px] font-bold text-[var(--zombie-text-full)]">
-          Serums — Award Triggers
-        </h2>
+        <h2 className="text-[14px] font-bold text-[var(--zombie-text-full)]">Serums — Award Triggers</h2>
         <p className="mt-1 text-[12px] text-[var(--zombie-text-mid)]">
-          {cfg.serumAwardSummary}
+          {serumAwards.length ? 'This league awards serums for:' : 'Automatic serum awards are disabled for this league.'}
         </p>
-        <div className="mt-4 space-y-2">
-          {cfg.serumAwards.map((s) => (
-            <div
-              key={s.trigger}
-              className="flex items-center gap-3 rounded-xl border border-teal-500/15 bg-teal-500/[0.04] px-4 py-3"
-            >
-              <span className="text-xl">🧪</span>
-              <div>
-                <p className="text-[13px] font-semibold text-teal-200">{s.label}</p>
-                <p className="text-[11px] text-[var(--zombie-text-mid)]">{s.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Item legend */}
-      <section className="rounded-xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-5">
-        <h2 className="text-[14px] font-bold text-[var(--zombie-text-full)]">Item Legend</h2>
-        {/* v1: the engine awards items; no item changes a score or a matchup yet, so no effects are promised. */}
-        <div className="mt-3 space-y-2 text-[12px]">
-          <p className="flex items-center gap-2">
-            <span>🧪</span>
-            <span className="text-teal-300">Serums</span>
-            <span className="text-[var(--zombie-text-dim)]">— collect enough and a Zombie returns as a Survivor</span>
-          </p>
-          <p className="flex items-center gap-2">
-            <span>🔪🏹🪓🔫💣</span>
-            <span className="text-white/80">Weapons</span>
-            <span className="text-[var(--zombie-text-dim)]">— earned and tracked this season; they do not change scores</span>
-          </p>
-        </div>
+        {serumAwards.length > 0 && (
+          <ul className="mt-4 space-y-2">
+            {serumAwards.map((award) => (
+              <li key={award.label} className="flex items-center gap-3 rounded-xl border border-teal-500/15 bg-teal-500/[0.04] px-4 py-3">
+                <span className="text-xl" aria-hidden="true">🧪</span>
+                <div>
+                  <p className="text-[13px] font-semibold text-teal-200">{award.label}</p>
+                  <p className="text-[11px] text-[var(--zombie-text-mid)]">{award.description}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-3 text-[12px] text-[var(--zombie-text-mid)]">
+          Register a held serum with @Chimmy before kickoff to block an eligible infection, or collect {rules.reviveThreshold} to revive a Zombie.
+        </p>
       </section>
     </div>
   )
