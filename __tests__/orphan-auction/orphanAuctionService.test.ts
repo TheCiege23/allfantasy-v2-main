@@ -249,14 +249,14 @@ describe('closing', () => {
 })
 
 describe('Commish OS and Chimmy', () => {
-  it('a task while open with who has bid, a high one once it is due, and nothing after', async () => {
+  it('a task while open with who has bid, an elevated one once it is due, and nothing after', async () => {
     expect(await readOrphanAuctionTasks('L', T0)).toEqual([])
     await open()
     await saveOrphanAuctionBids('L', 'userA', { 'p:rO:P1': 40 }, T0)
     const [openTask] = await readOrphanAuctionTasks('L', T0)
     expect(openTask).toMatchObject({ title: 'Orphan auction open', priority: 'standard' })
     expect(openTask!.description).toContain('1 of 3 teams have bid')
-    expect((await readOrphanAuctionTasks('L', AFTER))[0]).toMatchObject({ title: 'The orphan auction is ready to close', priority: 'high' })
+    expect((await readOrphanAuctionTasks('L', AFTER))[0]).toMatchObject({ title: 'The orphan auction is ready to close', priority: 'elevated' })
     await closeOrphanAuction('L', { actorUserId: null, now: AFTER })
     expect(await readOrphanAuctionTasks('L', AFTER)).toEqual([])
   })

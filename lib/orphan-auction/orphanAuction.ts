@@ -99,11 +99,11 @@ export function readOrphanAuctionBids(rosterSettings: unknown, auctionId: string
   return { auctionId, bids: clean, updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date(0).toISOString() }
 }
 
-export const isAuctionOpen = (a: OrphanAuction | null, now: Date): a is OrphanAuction =>
+export const isAuctionOpen = (a: OrphanAuction | null, now: Date): boolean =>
   Boolean(a && a.status === 'open' && Date.parse(a.closesAt) > now.getTime())
 
 /** Open, and its closing time has passed: ready to award. */
-export const isAuctionDue = (a: OrphanAuction | null, now: Date): a is OrphanAuction =>
+export const isAuctionDue = (a: OrphanAuction | null, now: Date): boolean =>
   Boolean(a && a.status === 'open' && Date.parse(a.closesAt) <= now.getTime())
 
 export type BidIssue = 'AUCTION_CLOSED' | 'UNKNOWN_ASSET' | 'NOT_WHOLE_DOLLARS' | 'BELOW_MIN_BID' | 'OVER_BUDGET'

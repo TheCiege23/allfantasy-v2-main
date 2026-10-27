@@ -483,14 +483,14 @@ export async function readOrphanAuctionTasks(leagueId: string, now = new Date())
   const { teams } = await loadTeams(leagueId)
   const pub = publicAuction(auction, teams)
   const href = `/core/commissioner?league=${encodeURIComponent(leagueId)}#ch-orphan-auction`
-  const links = [{ label: 'Commissioner Hub', moduleId: 'managers', href }]
+  const links = [{ label: 'Commissioner Hub', moduleId: 'managers' as const, href }]
   if (isAuctionDue(auction, now)) {
     return [
       {
         sourceKey: `orphan-auction-due:${auction.id}:v1`,
         title: 'The orphan auction is ready to close',
         description: `Bidding on ${pub.teams.join(', ')} ended ${when(auction.closesAt)}. AllFantasy closes it within the hour; you can also close it now from the Commissioner Hub.`,
-        priority: 'high',
+        priority: 'elevated',
         automationCandidate: false,
         relatedLinks: links,
       },
@@ -514,7 +514,7 @@ export async function readOrphanAuctionForChimmy(leagueId: string, now = new Dat
   const league = await loadLeague(leagueId)
   if (!league || !supported(league)) return null
   const auction = readOrphanAuction(league.settings)
-  if (!isAuctionOpen(auction, now) && !isAuctionDue(auction, now)) return null
+  if (!auction || (!isAuctionOpen(auction, now) && !isAuctionDue(auction, now))) return null
   const players = auction.assets.filter((a) => a.kind === 'player').length
   const picks = auction.assets.length - players
   return (
