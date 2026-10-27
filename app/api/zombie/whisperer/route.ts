@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
-import { applyAmbush, selectWhisperer } from '@/lib/zombie/whispererEngine'
+import { selectWhisperer } from '@/lib/zombie/whispererEngine'
 import { canViewerSeeWhisperer } from '@/lib/zombie/whispererVisibility'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { withWhispererDisplayName } from '@/lib/zombie/zombieTeamNames'
@@ -36,13 +36,9 @@ export async function POST(req: Request) {
   }
 
   if (action === 'ambush') {
-    const targetUserId = typeof body.targetUserId === 'string' ? body.targetUserId : null
-    const ambushType = typeof body.ambushType === 'string' ? body.ambushType : 'steal_winnings'
-    const week = typeof body.week === 'number' ? body.week : parseInt(String(body.week), 10)
-    if (!targetUserId || !Number.isFinite(week))
-      return NextResponse.json({ error: 'targetUserId and week required' }, { status: 400 })
-    const result = await applyAmbush(z.id, userId, targetUserId, week, ambushType)
-    return NextResponse.json(result)
+    return NextResponse.json({
+      error: 'Use @Chimmy ambush swap <exact Survivor team name> before the provider lineup lock.',
+    }, { status: 409 })
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
