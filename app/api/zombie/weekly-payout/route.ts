@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
+import { buildWeeklyUpdate, composeWeeklyUpdateBody } from '@/lib/zombie/weeklyUpdateEngine'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,5 +77,16 @@ export async function PUT(req: Request) {
       confirmedAt: status === 'confirmed' ? new Date() : null,
     },
   })
+  const announcement = await prisma.zombieAnnouncement.findUnique({
+    where: { idempotencyKey: `zombie-weekly:${z.id}:${week}` }, select: { id: true, isPosted: true },
+  })
+  if (announcement?.isPosted) {
+    const draft = await buildWeeklyUpdate(leagueId, week)
+    const text = composeWeeklyUpdateBody(draft)
+    await prisma.$transaction([
+      prisma.zombieAnnouncement.update({ where: { id: announcement.id }, data: { content: text } }),
+      prisma.leagueChatMessage.update({ where: { zombieWeeklyAnnouncementId: announcement.id }, data: { message: text.slice(0, 100_000) } }),
+    ])
+  }
   return NextResponse.json({ payout })
 }
