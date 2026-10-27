@@ -21,6 +21,7 @@ import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
 import {
+  Anchor,
   ArrowLeftRight,
   Ban,
   BarChart3,

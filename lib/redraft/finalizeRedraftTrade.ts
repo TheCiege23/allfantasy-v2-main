@@ -106,7 +106,7 @@ export async function finalizeRedraftTrade(
       actorUserId: decidedByUserId,
     })
   const league = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { leagueType: true, leagueVariant: true } })
-  const pirateLeague = isPirateLeague(league)
+  const pirateLeague = league != null && isPirateLeague(league)
   const proposerOffers = mapLegacyOffers(proposal.assets ?? [], proposal.proposerRosterId, proposal.receiverRosterId)
   const receiverOffers = mapLegacyOffers(proposal.assets ?? [], proposal.receiverRosterId, proposal.proposerRosterId)
 
