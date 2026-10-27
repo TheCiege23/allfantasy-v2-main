@@ -106,3 +106,30 @@ describe('NHL pool season stats', () => {
     expect((entry.display.stats as Record<string, unknown>).goals).toBeUndefined()
   })
 })
+
+describe('MLB / NHL Proj/G column', () => {
+  const projFor = (sport: 'MLB' | 'NHL', position: string, afProjectionPerGame: number | null) => {
+    const entry = normalizeDraftPlayer({ name: 'Example', position, team: 'NYY', afProjectionPerGame }, sport)
+    const col = getDraftStatColumnsForSport(sport, { position }).find((c) => c.label === 'Proj/G')!
+    return getStatValueForDraftPlayer(entry as unknown as DraftStatPlayerSource, col)
+  }
+
+  it('shows the AF projection per game for hitters, pitchers, skaters and goalies', () => {
+    expect(projFor('MLB', 'OF', 8.236)).toBe(8.24)
+    expect(projFor('MLB', 'SP', 17.5)).toBe(17.5)
+    expect(projFor('NHL', 'C', 6.1)).toBe(6.1)
+    expect(projFor('NHL', 'G', 9)).toBe(9)
+  })
+
+  it('stays empty without a projection, and never shows FPPG as a projection', () => {
+    const entry = normalizeDraftPlayer({ name: 'Example', position: 'OF', team: 'NYY', fantasyPointsPerGame: 8.2 }, 'MLB')
+    const col = getDraftStatColumnsForSport('MLB', { position: 'OF' }).find((c) => c.label === 'Proj/G')!
+    expect(getStatValueForDraftPlayer(entry as unknown as DraftStatPlayerSource, col)).toBeNull()
+    expect(projFor('MLB', 'OF', 0)).toBeNull()
+  })
+
+  it('is not attached for NBA', () => {
+    const entry = normalizeDraftPlayer({ name: 'Example', position: 'PG', team: 'BOS', afProjectionPerGame: 40 }, 'NBA')
+    expect((entry.display.stats as Record<string, unknown>).projectedPointsPerGame).toBeUndefined()
+  })
+})
