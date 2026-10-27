@@ -131,6 +131,13 @@ async function main() {
     await new Promise(res => setTimeout(res, 2_000))
   }
   log(`post-draft setup: tribes after ${Math.round((performance.now() - waitStart) / 1000)}s of real time`)
+  // RedraftRosterPlayer.addedAt is a database default, so it carries the REAL time, not the moved
+  // clock: a draft "held" on 2026-10-16 reads as added on the day the job ran. NBA weekly scoring
+  // counts only players added before the week ends, so run 40577159056 (NBA 20) found no roster
+  // player in week 1 and never finalized it. Stamp them with the rehearsal's draft time.
+  const draftedRosterIds = (await prisma.redraftRoster.findMany({ where: { leagueId }, select: { id: true } })).map(r => r.id)
+  const restamped = await prisma.redraftRosterPlayer.updateMany({ where: { rosterId: { in: draftedRosterIds }, addedAt: { gt: rehearsalNow() } }, data: { addedAt: rehearsalNow() } })
+  log(`restamped ${restamped.count} drafted players to the rehearsal clock`)
   log(`cast ${await prisma.survivorPlayer.count({ where: { leagueId } })}, tribes ${await prisma.survivorTribe.count({ where: { leagueId } })}, idols ${await prisma.survivorIdol.count({ where: { leagueId } })}`)
 
   const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { settings: true, season: true } })
