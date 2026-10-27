@@ -64,6 +64,7 @@ export function ZombieCommissionerModal({
 
   useEffect(() => {
     if (!open) return
+    setCanEdit(false)
     const fetchData = async () => {
       try {
         const res = await fetch(`/api/zombie/league?leagueId=${encodeURIComponent(leagueId)}`, {
@@ -71,7 +72,7 @@ export function ZombieCommissionerModal({
         })
         if (!res.ok) return
         const data = await res.json()
-        setBackgroundTheme(data.league?.backgroundTheme)
+        setBackgroundTheme(data.league?.themeLabel ?? null)
         setCanEdit(Boolean(data.viewerIsCommissioner))
         
         // Get current user ID for intro modal
