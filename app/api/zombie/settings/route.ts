@@ -96,7 +96,10 @@ export async function PATCH(req: Request) {
   if (weeklyAmbushPatch !== undefined && (!Number.isInteger(weeklyAmbushPatch) || weeklyAmbushPatch < 0 || weeklyAmbushPatch > 5)) {
     return NextResponse.json({ error: 'ambushCountPerWeek must be an integer between 0 and 5.' }, { status: 400 })
   }
-  if ((seasonAmbushPatch ?? z.whispererAmbushCount) < (weeklyAmbushPatch ?? 0)) {
+  const currentAmbushConfig = await prisma.zombieLeagueConfig.findUnique({
+    where: { leagueId }, select: { ambushCountPerWeek: true },
+  })
+  if ((seasonAmbushPatch ?? z.whispererAmbushCount) < (weeklyAmbushPatch ?? currentAmbushConfig?.ambushCountPerWeek ?? 1)) {
     return NextResponse.json({ error: 'Weekly ambush cap cannot exceed season ambushes.' }, { status: 400 })
   }
 
@@ -108,7 +111,7 @@ export async function PATCH(req: Request) {
     })
     if (selected || !['setup', 'registering'].includes(z.status)) {
       return NextResponse.json(
-        { error: 'Whisperer selection is locked once the draft assigns the role.' },
+        { error: 'Whisperer and ambush settings are locked once the draft assigns the role.' },
         { status: 409 },
       )
     }
