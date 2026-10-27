@@ -431,7 +431,7 @@ export async function scheduleWeeklyUpdate(leagueId: string): Promise<void> {
   })
   if (!latest) return
   const week = latest.week
-  if (!z.weeklyUpdateAutoPost || z.weeklyUpdateApproval) return
+  if (!z.weeklyUpdateAutoPost && !z.weeklyUpdateApproval) return
 
   const dup = await prisma.zombieAnnouncement.findFirst({
     where: { zombieLeagueId: z.id, week, type: 'weekly_update', isPosted: true },
@@ -449,7 +449,7 @@ export async function tryPostWeeklyUpdateAfterResolution(
   zombieLeagueId: string,
 ): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { id: zombieLeagueId } })
-  if (!z || !z.weeklyUpdateAutoPost || z.weeklyUpdateApproval) return
+  if (!z || (!z.weeklyUpdateAutoPost && !z.weeklyUpdateApproval)) return
   if (z.weeklyUpdateDay != null && z.weeklyUpdateHour != null) return
 
   const dup = await prisma.zombieAnnouncement.findFirst({
