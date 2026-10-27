@@ -44,6 +44,7 @@ import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThrea
 import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/league-log/leagueLog'
 import { ELIMINATED_LINEUP_RULE_KEY, parseEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLineups'
+import { ORPHAN_AUCTION_KEY } from '@/lib/orphan-auction/orphanAuction'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
@@ -792,6 +793,12 @@ export async function executeLeagueSettingsPatch(
     const parsed = parseDeadlineAtInput((merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY])
     if (!parsed.ok) return jsonError(parsed.error, 400)
     ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
+  }
+
+  // The orphan auction (lib/orphan-auction) is state, not a setting: its assets, bids and result are
+  // written only by its own service, so a settings save could otherwise rewrite who won what.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && ORPHAN_AUCTION_KEY in merge) {
+    return jsonError('The orphan auction is run from the Commissioner Hub, not saved as a setting.', 400)
   }
 
   // Lineup minimums for eliminated teams (lib/eliminated-lineups) — an AF Commissioner rule. Stored only

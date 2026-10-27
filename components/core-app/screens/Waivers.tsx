@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { WaiverLineupBoard } from '@/components/core-app/WaiverLineupBoard'
 import { WaiverRunClock } from '@/components/core-app/WaiverRunClock'
+import { OrphanAuctionBids } from '@/components/core-app/OrphanAuctionBids'
 import { ResponsiveDetails } from '@/components/core-app/ResponsiveDetails'
 import '@/components/core-app/af-waivers.css'
 import { WaiverIntel } from '@/components/decide/WaiverIntel'
@@ -190,6 +191,14 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
         </div>
 
         <div className="af-wv-area-main">
+          {/*
+            ── Orphan auction ──────────────────────────────────────────────
+
+            First while one is open: an abandoned team's players and picks for sealed FAAB bids, with
+            a closing time (lib/orphan-auction). Renders nothing when the league has no auction.
+          */}
+          <OrphanAuctionBids leagueId={data.league.id} />
+
           {/*
             ── Worth adding ─────────────────────────────────────────────────
 
