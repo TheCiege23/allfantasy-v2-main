@@ -54,7 +54,7 @@ export async function POST(
 
   if (action === 'accept') {
     // Acceptance is where the deadline binds a trade (lib/trade-deadline/tradeDeadlineWindow.ts).
-    const deadlineRefusal = await tradeDeadlineRefusal(leagueId)
+    const deadlineRefusal = await tradeDeadlineRefusal(leagueId, {}, { picksOnly: true })
     if (deadlineRefusal) return NextResponse.json({ error: deadlineRefusal, code: 'TRADE_DEADLINE_PASSED' }, { status: 409 })
     const draftPickTradingAllowed = await isDraftPickTradingAllowedForLeague(leagueId)
     if (!draftPickTradingAllowed) {
