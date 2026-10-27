@@ -146,6 +146,11 @@ export async function PATCH(req: Request) {
     })
   }
 
+  const serumReviveCountPatch = num('serumReviveCount')
+  if (serumReviveCountPatch !== undefined && (!Number.isInteger(serumReviveCountPatch) || serumReviveCountPatch < 1 || serumReviveCountPatch > 10)) {
+    return NextResponse.json({ error: 'serumReviveCount must be an integer between 1 and 10.' }, { status: 400 })
+  }
+
   const configPatch = {
     ...(str('universeId') !== undefined ? { universeId: str('universeId') || null } : {}),
     ...(requestedSelection !== undefined ? { whispererSelection: requestedSelection } : {}),
@@ -153,7 +158,8 @@ export async function PATCH(req: Request) {
       ? { infectionLossToWhisperer: bool('infectionLossToWhisperer') }
       : {}),
     ...(bool('infectionLossToZombie') !== undefined ? { infectionLossToZombie: bool('infectionLossToZombie') } : {}),
-    ...(num('serumReviveCount') !== undefined ? { serumReviveCount: num('serumReviveCount') } : {}),
+    ...(serumReviveCountPatch !== undefined ? { serumReviveCount: serumReviveCountPatch } : {}),
+    ...(bool('autoSerumRevive') !== undefined ? { autoSerumRevive: bool('autoSerumRevive') } : {}),
     ...(bool('serumAwardHighScore') !== undefined ? { serumAwardHighScore: bool('serumAwardHighScore') } : {}),
     ...(bool('serumAwardOnBashMaul') !== undefined ? { serumAwardOnBashMaul: bool('serumAwardOnBashMaul') } : {}),
     ...(bool('serumUseBeforeLastStarter') !== undefined
