@@ -4,7 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { getZombieLeagueConfig } from './ZombieLeagueConfig'
-import { getStatus, setRevived } from './ZombieOwnerStatusService'
+import { getStatus } from './ZombieOwnerStatusService'
 import { appendZombieAudit } from './ZombieAuditLog'
 
 export async function getSerumBalance(leagueId: string, rosterId: string): Promise<number> {
