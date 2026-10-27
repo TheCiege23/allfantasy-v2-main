@@ -100,6 +100,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'standings': () => import('../standings/handler'),
   'storylines': () => import('../storylines/handler'),
   'survivor': () => import('../survivor/handler'),
+  'taxi-rules': () => import('../taxi-rules/handler'),
   'tournament-context': () => import('../tournament-context/handler'),
   'trades': () => import('../trades/handler'),
 }

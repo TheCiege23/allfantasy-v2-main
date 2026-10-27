@@ -54,6 +54,9 @@ describe('readLineupIntegrity', () => {
     expect(rep.findings.map((f) => [f.teamName, f.flagged])).toEqual([['bob', false], ['Tankers', true]])
     expect(rep.findings.find((f) => f.rosterId === '1')?.text).toBe('Week 6: Tankers — 1 empty starting slot; started Patrick Mahomes on a bye.')
     expect(rep.findings.find((f) => f.rosterId === '2')?.ruledOutStarters).toEqual(['hurt'])
+    // Names travel with the finding, so a flag built from it accuses a player, not an id.
+    expect(rep.findings.find((f) => f.rosterId === '1')?.playerNames).toEqual({ mahomes: 'Patrick Mahomes' })
+    expect(rep.findings.find((f) => f.rosterId === '2')?.playerNames).toEqual({ hurt: 'Hurt Guy' })
   })
 
   it('full season adds the team-by-team record', async () => {

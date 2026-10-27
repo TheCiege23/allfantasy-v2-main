@@ -17,7 +17,8 @@ export function buildIntegrityCoverage(input: {
 }): IntegrityCoverage {
   const native = resolveWriteAuthority(input.platform) === 'NATIVE' && input.hasNativeRedraftSeason
   // Completed trades in an imported Sleeper league are scanned from the trade ledger
-  // (lib/integrity/scanImportedTrades.ts). Tanking reads native lineups, so it stays native-only.
+  // (lib/integrity/scanImportedTrades.ts), and its finished weeks' lineups from the lineup audit
+  // (lib/integrity/scanImportedTanking.ts).
   const importedSleeper = (input.platform ?? '').trim().toLowerCase() === 'sleeper'
   const one = (supported: boolean, enabled: boolean, at: Date | null): IntegrityCoverage['collusion'] => ({
     status: !supported ? 'unsupported' : !enabled ? 'disabled' : !at ? 'never_scanned' : 'scanned',
@@ -27,6 +28,6 @@ export function buildIntegrityCoverage(input: {
     // Collusion scanning is triggered by trade acceptance; the legacy setting
     // column does not gate the engine and must not be presented as an off switch.
     collusion: one(native || importedSleeper, true, input.lastCollusionScanAt),
-    tanking: one(native, input.tankingEnabled, input.lastTankingScanAt),
+    tanking: one(native || importedSleeper, input.tankingEnabled, input.lastTankingScanAt),
   }
 }
