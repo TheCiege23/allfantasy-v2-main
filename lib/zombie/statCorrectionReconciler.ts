@@ -68,23 +68,19 @@ export async function reconcileScoreOnlyCorrection(input: {
   zombieLeagueId: string
   leagueId: string
   seasonId: string
+  season: number
   sport: string
   week: number
   ownerUserId: string
   previous: ZombieWeeklyResolution
 }): Promise<ZombieWeeklyResolution | null> {
-  const { zombieLeagueId, leagueId, seasonId, sport, week, ownerUserId, previous } = input
-  const [matchups, native, rules, newer] = await Promise.all([
+  const { zombieLeagueId, leagueId, seasonId, season, sport, week, ownerUserId, previous } = input
+  const [matchups, weekResults, rules, newer] = await Promise.all([
     prisma.redraftMatchup.findMany({ where: { seasonId, week }, select: { id: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true } }),
-    loadNativeWeekResults(leagueId, week, Number.NaN),
+    loadNativeWeekResults(leagueId, week, season),
     getZombieRulesForSport(sport),
     prisma.zombieWeeklyResolution.findFirst({ where: { zombieLeagueId, week: { gt: week }, status: 'complete' }, select: { id: true } }),
   ])
-  // loadNativeWeekResults needs the season year. The caller supplies the season id, so read the year
-  // from the persisted season rather than estimating it from the wall clock.
-  const season = await prisma.redraftSeason.findUnique({ where: { id: seasonId }, select: { season: true } })
-  const weekResults = season ? await loadNativeWeekResults(leagueId, week, season.season) : null
-  void native
   if (newer || !weekResults || weekResults.length !== matchups.length || weekResults.some(row => !row.final)) return null
   const oldRows = oldScoreRows(previous)
   if (!scoreOnlyCorrectionIsSafe(oldRows, matchups, rules)) return null
@@ -140,7 +136,7 @@ export async function reconcileScoreOnlyCorrection(input: {
             scoreDifference: Math.round((infectorScore - victimScore) * 100) / 100, isStatCorrected: true, correctedAt: new Date() },
         })
       }
-      const oldJson = previous.matchupResults as Array<Record<string, unknown>>
+      const oldJson = previous.matchupResults as unknown as Array<Record<string, unknown>>
       const byMatchup = new Map(matchups.map(row => [key(row.homeRosterId, row.awayRosterId), row]))
       const corrected = oldJson.map(row => {
         const current = byMatchup.get(key(String(row.homeUserId), String(row.awayUserId)))
