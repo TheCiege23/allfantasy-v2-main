@@ -356,7 +356,8 @@ const MLB_HITTER: DraftStatColumnDef[] = [
   col('rbi', 'RBI', 'number', 'hitter', ['rbi', 'runsBattedIn']),
   col('r', 'R', 'number', 'hitter', ['runs', 'r']),
   col('sb', 'SB', 'number', 'hitter', ['stolenBases', 'sb']),
-  col('avg', 'AVG', 'number', 'hitter', ['battingAverage', 'avg', 'ba']),
+  // Not 'avg': the stat bag puts fantasy points per game there, which is not a batting average.
+  col('avg', 'AVG', 'number', 'hitter', ['battingAverage', 'ba']),
   col('obp', 'OBP', 'number', 'hitter', ['onBasePercentage', 'obp']),
   col('hit_proj', 'Proj', 'number', 'hitter', ['projectedPoints', 'fantasy_points']),
 ]
