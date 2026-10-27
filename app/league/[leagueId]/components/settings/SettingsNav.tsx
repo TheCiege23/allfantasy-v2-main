@@ -229,7 +229,7 @@ export function SettingsNav({
           type="button"
           onClick={() => onSelect(t.id)}
           className={clsx(
-            'rounded-xl px-3 py-2.5 text-left text-[13px] transition-colors',
+            'min-h-11 rounded-xl px-3 py-2.5 text-left text-[13px] transition-colors',
             activeTab === t.id
               ? 'bg-white/[0.08] font-medium text-teal-300/95'
               : 'text-white/65 hover:bg-white/[0.05] hover:text-white/90',
