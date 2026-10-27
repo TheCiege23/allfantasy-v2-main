@@ -10189,6 +10189,7 @@ model ZombieLeague {
   ultimateSurvivorPot      Boolean                  @default(false)
   weeklyPayoutEnabled      Boolean                  @default(false)
   whispererAmbushCount     Int                      @default(3)
+  whispererCount           Int                      @default(1)
   whispererIsPublic        Boolean                  @default(true)
   whispererSelectionMode   String                   @default("random")
   /// 0=Sun â€¦ 6=Sat (UTC). Null = no scheduled weekly post.
@@ -10222,6 +10223,7 @@ model ZombieLeague {
   externalWeeklyPayouts    ZombieExternalWeeklyPayout[]
   winnings                 ZombieWeeklyWinnings[]
   whispererRecord          WhispererRecord?
+  coWhisperers             ZombieCoWhisperer[]
 
   @@index([universeId])
   @@index([levelId])
@@ -10255,6 +10257,28 @@ model WhispererRecord {
   @@index([zombieLeagueId])
   @@index([userId])
   @@map("zombie_whisperer_records")
+}
+
+/// Optional second Whisperer seat for NBA, NHL, and MLB. Primary record remains intact.
+model ZombieCoWhisperer {
+  id                  String       @id @default(cuid())
+  zombieLeagueId      String
+  userId              String
+  displayName         String
+  selectionMode       String
+  selectedAt          DateTime     @default(now())
+  isPubliclyRevealed  Boolean      @default(true)
+  ambushesGranted     Int          @default(3)
+  ambushesUsed        Int          @default(0)
+  ambushesRemaining   Int          @default(3)
+  wasDefeated         Boolean      @default(false)
+  defeatedAtWeek      Int?
+  createdAt           DateTime     @default(now())
+  league              ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+
+  @@unique([zombieLeagueId, userId])
+  @@index([zombieLeagueId])
+  @@map("zombie_co_whisperers")
 }
 
 model ZombieInfectionEvent {
