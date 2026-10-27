@@ -199,7 +199,7 @@ ${infLines.length ? infLines.join('\n') : 'None'}`
     const bomb = weapons.some((i) => i.itemType === 'weapon_bomb')
     sectionInventory = `🎒 ITEM INVENTORY SNAPSHOT
 Serums held: ${serums}
-Active weapons: ${weapons.length} (${[...new Set(weapons.map((w) => w.itemType))].join(', ') || 'none'})
+Weapons held: ${weapons.length} (${[...new Set(weapons.map((w) => w.itemType))].join(', ') || 'none'})
 Bomb status: ${bomb ? 'Held' : 'None'}\nThis week's awards: ${awardLines.join('; ') || 'None recorded'}`
   }
 
@@ -336,73 +336,64 @@ export function composeWeeklyUpdateBody(d: ZombieWeeklyUpdateDraft): string {
 export async function postWeeklyUpdate(leagueId: string, week: number, draft: ZombieWeeklyUpdateDraft): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
-
   const body = composeWeeklyUpdateBody(draft)
-  // AfSub prose: call `generateWeeklyRecap` from commissioner tools or a dedicated job — it creates its own row.
+  const key = `zombie-weekly:${z.id}:${week}`
+  const existing = await prisma.zombieAnnouncement.findUnique({ where: { idempotencyKey: key } })
+  if (existing?.isPosted) return
 
-  const ann = await prisma.zombieAnnouncement.create({
-    data: {
-      zombieLeagueId: z.id,
-      universeId: z.universeId,
-      type: 'weekly_update',
-      title: `Week ${week} — Horde report`,
-      content: body,
-      week,
-      isPosted: false,
-      isPublic: true,
-    },
-  })
-
-  if (z.weeklyUpdateApproval) {
-    await notifyCommissioner(leagueId, 'weekly_resolution_complete', 'Weekly update ready', `Week ${week} update is ready to review and post.`, {
-      week,
-      relatedEventId: ann.id,
-      relatedEventType: 'ZombieAnnouncement',
-      requiresAction: true,
+  if (z.weeklyUpdateApproval || !z.weeklyUpdateAutoPost) {
+    const ann = await prisma.zombieAnnouncement.upsert({
+      where: { idempotencyKey: key },
+      create: {
+        zombieLeagueId: z.id, universeId: z.universeId, type: 'weekly_update',
+        title: `Week ${week} — Horde report`, content: body, week,
+        isPosted: false, isPublic: true, idempotencyKey: key,
+      },
+      update: { content: body },
     })
+    if (z.weeklyUpdateApproval && !existing) {
+      await notifyCommissioner(leagueId, 'weekly_resolution_complete', 'Weekly update ready', `Week ${week} update is ready to review and post.`, {
+        week, relatedEventId: ann.id, relatedEventType: 'ZombieAnnouncement', requiresAction: true,
+      })
+    }
     return
   }
 
-  if (!z.weeklyUpdateAutoPost) return
-
   const lg = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
-  if (lg?.userId) {
-    const meta: Record<string, unknown> = {
-      senderIsHost: true,
-      contentType: 'host_announcement',
-      isPinned: true,
-      zombieWeeklyUpdate: true,
-      week,
-    }
-    if (z.bannerUrl) {
-      meta.cardData = { type: 'banner_image', url: z.bannerUrl }
-    }
-    await prisma.leagueChatMessage.create({
-      data: {
-        leagueId,
-        userId: lg.userId,
-        message: body.slice(0, 100_000),
-        type: 'host_announcement',
-        metadata: toPrismaJsonInput(meta),
+  if (!lg?.userId) throw new Error('League owner not found for weekly chat post')
+  await prisma.$transaction(async (tx) => {
+    const ann = await tx.zombieAnnouncement.upsert({
+      where: { idempotencyKey: key },
+      create: {
+        zombieLeagueId: z.id, universeId: z.universeId, type: 'weekly_update',
+        title: `Week ${week} — Horde report`, content: body, week,
+        isPosted: false, isPublic: true, idempotencyKey: key,
       },
+      update: { content: body },
     })
-  }
-
-  await prisma.zombieAnnouncement.update({
-    where: { id: ann.id },
-    data: { isPosted: true, postedAt: new Date() },
+    await tx.leagueChatMessage.upsert({
+      where: { zombieWeeklyAnnouncementId: ann.id },
+      create: {
+        leagueId, userId: lg.userId, message: body.slice(0, 100_000), type: 'host_announcement',
+        zombieWeeklyAnnouncementId: ann.id,
+        metadata: toPrismaJsonInput({
+          senderIsHost: true, contentType: 'host_announcement', isPinned: true,
+          zombieWeeklyUpdate: true, week,
+          ...(z.bannerUrl ? { cardData: { type: 'banner_image', url: z.bannerUrl } } : {}),
+        }),
+      },
+      update: {},
+    })
+    await tx.zombieAnnouncement.update({ where: { id: ann.id }, data: { isPosted: true, postedAt: new Date() } })
   })
 
   if (draft.meta.hordeSize - draft.meta.prevHordeSize >= 2) {
     const surv = await prisma.zombieLeagueTeam.count({ where: { leagueId, status: 'Survivor' } })
-    const primaryUserId =
-      z.commissionerId ??
-      (await prisma.roster.findFirst({ where: { leagueId }, select: { platformUserId: true } }))?.platformUserId ??
-      leagueId
+    const primaryUserId = z.commissionerId ??
+      (await prisma.roster.findFirst({ where: { leagueId }, select: { platformUserId: true } }))?.platformUserId ?? leagueId
     await queueAnimation(leagueId, week, 'horde_grows', primaryUserId, {
-      hordeSize: draft.meta.hordeSize,
-      survivorCount: surv,
-    })
+      hordeSize: draft.meta.hordeSize, survivorCount: surv,
+    }).catch(() => {})
   }
 }
 
