@@ -149,13 +149,13 @@ export async function reconcileScoreOnlyCorrection(input: {
       const bashings = await tx.zombieBashingEvent.findMany({ where: { leagueId, week } })
       for (const event of bashings) {
         const score = scoreFor(event.winnerUserId, event.loserUserId)
-        if (!score) return null
+        if (!score) throw new Error('Bashing score pair missing during correction')
         await tx.zombieBashingEvent.update({ where: { id: event.id }, data: score })
       }
       const maulings = await tx.zombieMaulingEvent.findMany({ where: { leagueId, week } })
       for (const event of maulings) {
         const score = scoreFor(event.maulerUserId, event.victimUserId)
-        if (!score) return null
+        if (!score) throw new Error('Mauling score pair missing during correction')
         await tx.zombieMaulingEvent.update({ where: { id: event.id }, data: {
           maulerScore: score.winnerScore, victimScore: score.loserScore, margin: score.margin,
         } })
