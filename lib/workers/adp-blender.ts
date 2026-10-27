@@ -5,7 +5,7 @@ import { getAiAdpForLeague } from '@/lib/ai-adp-engine'
 import { resolveAiAdpFormatKeyFromSettings } from '@/lib/ai-adp-engine/segment-resolver'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueSport } from '@prisma/client'
-import { blendOne, normalizeBlendWeights } from '@/lib/adp/blendPolicy'
+import { blendOne, normalizeBlendWeights, type BlendWeights } from '@/lib/adp/blendPolicy'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 
 export type ADPSource = 'api' | 'global_app' | 'ai' | 'blended' | 'custom'
@@ -14,6 +14,8 @@ export type ADPWeights = {
   api: number
   app: number
   ai: number
+  /** Imported real-league drafts. Optional: saved league weights predate it; see blendPolicy. */
+  imported?: number
   custom?: number
 }
 
@@ -116,8 +118,8 @@ async function resolveDraftSegment(leagueId: string): Promise<DraftSegment> {
  * (40/35/25) on the zero-total path while returning fractions on every other path, so a league
  * that had explicitly zeroed its weights got numbers on a different scale from every other league.
  */
-function normalizeWeights(weights?: ADPWeights): Required<ADPWeights> {
-  return normalizeBlendWeights(weights) as Required<ADPWeights>
+function normalizeWeights(weights?: ADPWeights): BlendWeights {
+  return normalizeBlendWeights(weights)
 }
 
 async function loadApiAdp(segment: DraftSegment): Promise<ADPRanking[]> {
