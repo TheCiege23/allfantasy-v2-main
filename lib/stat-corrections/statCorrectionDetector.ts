@@ -11,10 +11,16 @@
  * read by the commissioner card), and a `stat_correction_detected` league-log row the first time
  * each distinct set of corrections is seen.
  *
- * Scope, deliberately narrow: native NFL and NBA points leagues with ordinary weekly lineups. Best ball,
- * devy, C2C, category, games-count, daily-lineup and imported leagues score differently or are scored by
- * their platform, and team defenses are scored from game results rather than this stat line — all are
- * reported as not covered rather than guessed at.
+ * Scope, deliberately narrow: native NFL and NBA points leagues, with weekly lineups or — NBA only —
+ * daily lineups. Best ball, devy, C2C, category, games-count, games-limits and imported leagues score
+ * differently or are scored by their platform, and team defenses are scored from game results rather
+ * than this stat line — all are reported as not covered rather than guessed at.
+ *
+ * A DAILY-LINEUP league is compared DAY BY DAY. Its week is the sum of each Eastern day's starters on
+ * that day's line (lib/redraft/dailyLineups.ts), so a weekly re-sum would count games a player sat on
+ * the bench for. Each day he started is re-read on its own and compared with the `player_daily_scores`
+ * line it was scored on, using the same slot rule the scorer uses (`dailySlotFor`, else the weekly
+ * lineup) and the same roster days (`daysOnRoster`, a player dropped mid-week included).
  *
  * Where the fresh stats come from differs by sport. NFL: a provider pull (corrections never reach a
  * table on their own). NBA: the week re-summed from `player_game_stats`, which the scheduled import
@@ -41,10 +47,23 @@ import {
   readExtendedCorrections,
 } from './extendedCorrections'
 import { applyStatCorrections, ownerHasAfCommissionerPlan } from './applyStatCorrections'
-import { loadDailyWeekStats, type DailyWeekStatsFetcher } from './dailyWeekStats'
-import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { loadDailyDayStats, loadDailyWeekStats, type DailyDayStatsFetcher, type DailyWeekStatsFetcher } from './dailyWeekStats'
+import {
+  dailySlotFor,
+  dayKey,
+  daysInWindow,
+  daysOnRoster,
+  droppedInWindow,
+  isDailyLineupScoringEnabled,
+  loadDailyLineups,
+  loadPlayerDailyStats,
+} from '@/lib/redraft/dailyLineups'
+import { readGamesLimits } from '@/lib/redraft/gamesLimits'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
+import type { StarterStatLine } from './statCorrectionReview'
 
-/** Sports whose weekly-lineup points leagues are checked. NBA's fresh stats come from the game table. */
+/** Sports whose points leagues are checked. NBA's fresh stats come from the game table. */
 export const STAT_CORRECTION_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA'])
 
 /** How long after a week's seal it is still re-checked (free leagues). Corrections land within the week. */
@@ -110,12 +129,15 @@ export function readStoredReview(data: unknown): StoredStatCorrectionReview | nu
   return d
 }
 
+type StarterLines = { lines: StarterStatLine[]; freshCount: number }
+
 export async function checkStatCorrectionsForSeason(
   seasonId: string,
   deps: {
     now?: number
     fetchStats?: NflWeekStatsFetcher
     fetchDailyStats?: DailyWeekStatsFetcher
+    fetchDailyDayStats?: DailyDayStatsFetcher
     ownerHasPlan?: (userId: string | null) => Promise<boolean>
     applyCorrections?: typeof applyStatCorrections
   } = {},
@@ -138,8 +160,10 @@ export async function checkStatCorrectionsForSeason(
   if (!STAT_CORRECTION_SPORTS.has(sport)) return 'not_supported'
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return 'not_supported'
   if (leagueIsBestBall(league) || gamesCountActive(league.settings, sport)) return 'not_supported'
-  // A daily-lineup league is scored day by day on that day's starters; a weekly re-sum cannot match it.
-  if (sport !== 'NFL' && isDailyLineupScoringEnabled(league.settings, sport)) return 'not_supported'
+  // A daily-lineup league is compared day by day (below). Games limits cap which started days count,
+  // so a day's line alone does not say what it scored: not covered.
+  const daily = sport !== 'NFL' && isDailyLineupScoringEnabled(league.settings, sport)
+  if (daily && readGamesLimits(league.settings, sport)) return 'not_supported'
 
   // Extended scoring corrections (./extendedCorrections.ts): AF Commissioner leagues that switched it
   // on re-check the last two finished weeks for 14 days and APPLY what they find. Everyone else: the
@@ -151,6 +175,110 @@ export async function checkStatCorrectionsForSeason(
     ? (await prisma.redraftMatchup.findMany({ where: { seasonId, status: 'final' }, distinct: ['week'], orderBy: { week: 'desc' }, take: EXTENDED_CORRECTION_WEEKS, select: { week: true } })).map((r) => r.week)
     : [(await prisma.redraftMatchup.findFirst({ where: { seasonId, status: 'final' }, orderBy: { week: 'desc' }, select: { week: true } }))?.week].filter((w): w is number => typeof w === 'number')
   if (weeks.length === 0) return 'no_sealed_week'
+
+  /** Weekly lineups: each starter's week line, stored and re-pulled. */
+  const loadWeeklyStarterLines = async (week: number, rosterIds: string[]): Promise<StarterLines | StatCorrectionCheckOutcome> => {
+    // The same starter set the scorer uses: current roster rows, placed by the lineup saved for THAT week.
+    const players = await prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: { in: rosterIds }, droppedAt: null },
+      select: { rosterId: true, playerId: true, playerName: true, position: true, slotType: true, sport: true },
+    })
+    const lineups = await loadWeekLineups(prisma, { redraftRosterIds: rosterIds, season: season.season, week })
+    const starters = players.filter(
+      (p) => isScoringStarterSlot(weekSlotType(p, lineups)) && !isTeamDefenseRow(p.playerId, p.position),
+    )
+    if (starters.length === 0) return 'no_starters'
+    const playerIds = [...new Set(starters.map((p) => p.playerId))]
+
+    const stored = await prisma.playerWeeklyScore.findMany({
+      where: { playerId: { in: playerIds }, week, season: season.season, sport },
+      select: { playerId: true, stats: true },
+    })
+    const storedBy = new Map(stored.map((r) => [r.playerId, asStats(r.stats)]))
+
+    let fresh: Map<string, Record<string, number>>
+    try {
+      fresh =
+        sport === 'NFL'
+          ? await (deps.fetchStats ?? defaultFetch)({ season: season.season, week, playerIds })
+          : await (deps.fetchDailyStats ?? loadDailyWeekStats)({
+              sport,
+              season: season.season,
+              week,
+              players: playerIds.map((id) => ({ playerId: id, playerName: starters.find((p) => p.playerId === id)?.playerName ?? null })),
+            })
+    } catch {
+      fresh = new Map()
+    }
+    return {
+      freshCount: fresh.size,
+      lines: starters.map((p) => ({
+        rosterId: p.rosterId,
+        playerId: p.playerId,
+        playerName: p.playerName,
+        position: p.position,
+        storedStats: storedBy.get(p.playerId) ?? null,
+        freshStats: fresh.get(p.playerId) ?? null,
+      })),
+    }
+  }
+
+  /** Daily lineups: each starter's STARTED days, each day's stored line beside the same day re-read. */
+  const loadDailyStarterLines = async (week: number, rosterIds: string[]): Promise<StarterLines | StatCorrectionCheckOutcome> => {
+    await ensureDailySportSeasonStart(sport, season.season, { db: prisma as never })
+    const window = resolveDailySportWeekWindow(sport, season.season, week)
+    if (!window) return 'not_supported'
+    // Dropped this week too, as the scorer reads them: the days he was here still count.
+    const players = await prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: { in: rosterIds }, ...droppedInWindow(window) },
+      select: { rosterId: true, playerId: true, playerName: true, position: true, slotType: true, sport: true, addedAt: true, droppedAt: true },
+    })
+    const weekLineups = await loadWeekLineups(prisma, { redraftRosterIds: rosterIds, season: season.season, week })
+    const dailyLineups = await loadDailyLineups(prisma, { redraftRosterIds: rosterIds, window })
+    const days = daysInWindow(window)
+    const starters = players
+      .map((p) => ({
+        p,
+        started: daysOnRoster(p, days).filter((d) =>
+          isScoringStarterSlot(dailySlotFor(dailyLineups, p.rosterId, p.playerId, d) ?? weekSlotType(p, weekLineups)),
+        ),
+      }))
+      .filter((s) => s.started.length > 0)
+    if (starters.length === 0) return 'no_starters'
+    const playerIds = [...new Set(starters.map((s) => s.p.playerId))]
+
+    // Keyed by each row's own sport, as the scorer reads them.
+    const storedBySport = new Map<string, Awaited<ReturnType<typeof loadPlayerDailyStats>>>()
+    for (const playerSport of new Set(starters.map((s) => s.p.sport))) {
+      storedBySport.set(playerSport, await loadPlayerDailyStats(prisma, { playerIds, sport: playerSport, season: season.season, window }))
+    }
+    let fresh: Map<string, Map<string, Record<string, number>>>
+    try {
+      fresh = await (deps.fetchDailyDayStats ?? loadDailyDayStats)({
+        sport,
+        season: season.season,
+        week,
+        players: playerIds.map((id) => ({ playerId: id, playerName: starters.find((s) => s.p.playerId === id)?.p.playerName ?? null })),
+      })
+    } catch {
+      fresh = new Map()
+    }
+    return {
+      freshCount: fresh.size,
+      lines: starters.map(({ p, started }) => ({
+        rosterId: p.rosterId,
+        playerId: p.playerId,
+        playerName: p.playerName,
+        position: p.position,
+        storedStats: null,
+        freshStats: null,
+        days: started.map((d) => ({
+          storedStats: asStats(storedBySport.get(p.sport)?.get(p.playerId)?.get(dayKey(d))?.stats),
+          freshStats: fresh.get(p.playerId)?.get(dayKey(d)) ?? null,
+        })),
+      })),
+    }
+  }
 
   const checkWeek = async (week: number): Promise<StatCorrectionCheckOutcome> => {
   const rows = await prisma.redraftMatchup.findMany({
@@ -189,38 +317,9 @@ export async function checkStatCorrectionsForSeason(
       : [],
   )
   const rosterIds = [...new Set(matchups.flatMap((m) => [m.homeRosterId, m.awayRosterId]))]
-  // The same starter set the scorer uses: current roster rows, placed by the lineup saved for THAT week.
-  const players = await prisma.redraftRosterPlayer.findMany({
-    where: { rosterId: { in: rosterIds }, droppedAt: null },
-    select: { rosterId: true, playerId: true, playerName: true, position: true, slotType: true, sport: true },
-  })
-  const lineups = await loadWeekLineups(prisma, { redraftRosterIds: rosterIds, season: season.season, week })
-  const starters = players.filter(
-    (p) => isScoringStarterSlot(weekSlotType(p, lineups)) && !isTeamDefenseRow(p.playerId, p.position),
-  )
-  if (starters.length === 0) return 'no_starters'
-  const playerIds = [...new Set(starters.map((p) => p.playerId))]
-
-  const stored = await prisma.playerWeeklyScore.findMany({
-    where: { playerId: { in: playerIds }, week, season: season.season, sport },
-    select: { playerId: true, stats: true },
-  })
-  const storedBy = new Map(stored.map((r) => [r.playerId, asStats(r.stats)]))
-
-  let fresh: Map<string, Record<string, number>>
-  try {
-    fresh =
-      sport === 'NFL'
-        ? await (deps.fetchStats ?? defaultFetch)({ season: season.season, week, playerIds })
-        : await (deps.fetchDailyStats ?? loadDailyWeekStats)({
-            sport,
-            season: season.season,
-            week,
-            players: playerIds.map((id) => ({ playerId: id, playerName: starters.find((p) => p.playerId === id)?.playerName ?? null })),
-          })
-  } catch {
-    fresh = new Map()
-  }
+  const loaded = daily ? await loadDailyStarterLines(week, rosterIds) : await loadWeeklyStarterLines(week, rosterIds)
+  if (typeof loaded === 'string') return loaded
+  const { lines, freshCount } = loaded
   const at = new Date(now).toISOString()
   const write = (review: StatCorrectionReview) => {
     const data: StoredStatCorrectionReview = {
@@ -242,7 +341,7 @@ export async function checkStatCorrectionsForSeason(
   }
   // An empty pull is a refusal or an outage, never "every correction was reverted": keep the last
   // review, only stamp the check so the provider is not asked again every five minutes.
-  if (fresh.size === 0) {
+  if (freshCount === 0) {
     if (previous) await write(previous.review)
     return 'provider_empty'
   }
@@ -250,14 +349,7 @@ export async function checkStatCorrectionsForSeason(
   const scorer = buildLeagueStatScorer({ sport, settings: league.settings })
   if (!scorer) return 'not_supported'
   const review = reviewStatCorrections({
-    starters: starters.map((p) => ({
-      rosterId: p.rosterId,
-      playerId: p.playerId,
-      playerName: p.playerName,
-      position: p.position,
-      storedStats: storedBy.get(p.playerId) ?? null,
-      freshStats: fresh.get(p.playerId) ?? null,
-    })),
+    starters: lines,
     matchups,
     score: scorer,
   })

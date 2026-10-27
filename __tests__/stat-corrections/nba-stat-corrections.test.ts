@@ -78,12 +78,6 @@ describe('NBA stat corrections', () => {
     expect(m.prisma.leagueAuditLog.create).not.toHaveBeenCalled()
   })
 
-  it('a daily-lineup NBA league is not covered: a weekly re-sum cannot match day-by-day starters', async () => {
-    seed({ settings: { sportConfig: { lineupLockType: 'daily', dailyLineupsEnabled: true } } })
-    expect(await run()).toBe('not_supported')
-    expect(fetchDailyStats).not.toHaveBeenCalled()
-  })
-
   it('other daily sports stay out until they are checked', async () => {
     seed({ sport: 'NHL' })
     expect(await run()).toBe('not_supported')
