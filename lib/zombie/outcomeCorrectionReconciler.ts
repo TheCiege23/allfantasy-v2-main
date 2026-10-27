@@ -131,12 +131,33 @@ export async function reconcileOutcomeChangingCorrection(input: {
       const teamByRoster = new Map(teams.map(team => [team.rosterId, team]))
       if (snapshot.teams.length !== teams.length || snapshot.teams.some(team =>
         teamByRoster.get(team.rosterId)?.id !== team.id)) return null
-      const scoredExtraIds = extra.filter(item =>
-        (item.itemType === 'serum' && item.awardKey?.startsWith('serum:' + zombieLeagueId + ':' + week + ':')) ||
-        ['weapon_knife', 'weapon_bow', 'weapon_axe'].includes(item.itemType),
-      ).map(item => item.id)
-      if (scoredExtraIds.length) {
-        await tx.zombieTeamItem.deleteMany({ where: { id: { in: scoredExtraIds } } })
+      // Only replace awards that the original final scores prove this settlement created.
+      // A commissioner grant or another item earned during the week requires review.
+      const expectedAwards = [
+        ...oldPlan.serumAwards.map(award => ({
+          teamStatusId: teamByRoster.get(award.rosterId)?.id,
+          userId: ownerByRoster.get(award.rosterId),
+          itemType: 'serum',
+          awardKey: 'serum:' + zombieLeagueId + ':' + week + ':' + award.reason + ':' + award.rosterId,
+        })),
+        ...oldPlan.weaponAwards.map(award => ({
+          teamStatusId: teamByRoster.get(award.rosterId)?.id,
+          userId: ownerByRoster.get(award.rosterId),
+          itemType: award.itemType,
+          awardKey: null,
+        })),
+      ]
+      const unmatched = [...expectedAwards]
+      for (const item of extra) {
+        const index = unmatched.findIndex(award =>
+          award.teamStatusId === item.teamStatusId && award.userId === item.userId &&
+          award.itemType === item.itemType && award.awardKey === item.awardKey)
+        if (index < 0) return null
+        unmatched.splice(index, 1)
+      }
+      if (unmatched.length) return null
+      if (extra.length) {
+        await tx.zombieTeamItem.deleteMany({ where: { id: { in: extra.map(item => item.id) } } })
       }
       for (const item of snapshot.items) {
         const spent = plan.spentItemIds.includes(item.id)
