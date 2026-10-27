@@ -104,9 +104,12 @@ How many teams are chopped each week, and in which weeks.
    leagues create it with the button. A Commissioner league whose offseason had already begun
    before 2026-10-28 is not switched on: its commissioner is told once and can turn it on
    (`lib/dynasty-core/rookieDraftCalendar.ts`, `resolveRookieDraftAutoOpen`).
-8. **Taxi rules are enforced (2026-10-27).** In a league played on AllFantasy, every taxi rule in
-   the settings is now applied to roster saves (`lib/taxi/taxiRules.ts`): the taxi deadline (no
-   new arrivals after it), in-season and postseason moves (postseason is off by default), the
-   promotion deadline, and the lock rule (once promoted, a player cannot return to taxi). The
-   offseason is always open, drops are never refused, and the commissioner can override.
-   NHL and MLB still offer no taxi squads (decision of 2026-10-20, reconfirmed).
+8. **Taxi rules can be enforced, on the Commissioner plan (2026-10-27).** In a league played on
+   AllFantasy, the commissioner can switch on "Enforce these rules" in the taxi settings
+   (`League.settings.taxi_rules_enforced`) while the league owner holds AF Commissioner. Roster
+   saves then apply every taxi rule shown beside the switch (`lib/taxi/taxiMoveRules.ts`): the lock
+   week (nothing onto taxi after it), the promotion deadline, in-season and postseason moves, and
+   "once promoted, cannot return", read across seasons from the promotion log. It is opt-in because
+   every league already holds default rules nobody chose. The offseason is always open, drops are
+   never refused, the commissioner can override, and a lapsed plan stops enforcement without
+   deleting the rules. NHL and MLB still offer no taxi squads (decision of 2026-10-20, reconfirmed).
