@@ -9,6 +9,7 @@ import { DEFAULT_LEAGUE_TIMEZONE, timeZoneShortName } from '@/lib/timezone'
 import { fromLocalInput, readDeadlineAt, toLocalInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
+import { PickTermsPanel } from '@/components/league-settings/PickTermsPanel'
 
 export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
@@ -142,6 +143,8 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           {t('lsHub.tr.closeAtHint')} {timeZoneShortName(timezone)}
         </p>
       </div>
+      {/* Renders nothing outside dynasty leagues that play on AllFantasy. */}
+      <PickTermsPanel leagueId={leagueId} />
     </div>
   )
 }

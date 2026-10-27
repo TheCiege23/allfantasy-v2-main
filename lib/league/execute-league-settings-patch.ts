@@ -46,6 +46,7 @@ import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/leagu
 import { ELIMINATED_LINEUP_RULE_KEY, parseEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLineups'
 import { IR_AUTO_MOVE_KEY, parseIrAutoMoveRule } from '@/lib/ir-activation/irAutoMove'
 import { ORPHAN_AUCTION_KEY } from '@/lib/orphan-auction/orphanAuction'
+import { parsePickTermsRule, PICK_TERMS_KEY, PICK_TERMS_RULE_KEY } from '@/lib/league-trade-engine/pickTerms'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
@@ -819,6 +820,18 @@ export async function executeLeagueSettingsPatch(
     if (!parsed.ok) return jsonError(parsed.error, 400)
     if (parsed.value.enabled && !hasSub) return jsonError('IR auto-move is part of the AF Commissioner plan.', 403)
     ;(merge as Record<string, unknown>)[IR_AUTO_MOVE_KEY] = parsed.value
+  }
+
+  // Conditional and protected picks (lib/league-trade-engine/pickTerms.ts) — an AF Commissioner rule;
+  // switching it off is free. The terms themselves are written only by a settled trade.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && PICK_TERMS_KEY in merge) {
+    return jsonError('Pick terms are agreed in a trade, not saved as a setting.', 400)
+  }
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && PICK_TERMS_RULE_KEY in merge) {
+    const parsed = parsePickTermsRule((merge as Record<string, unknown>)[PICK_TERMS_RULE_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value.enabled && !hasSub) return jsonError('Conditional and protected picks are part of the AF Commissioner plan.', 403)
+    ;(merge as Record<string, unknown>)[PICK_TERMS_RULE_KEY] = parsed.value
   }
 
   // Who may read the league log (lib/league-log/leagueLog.ts). A value the reader does not know would
