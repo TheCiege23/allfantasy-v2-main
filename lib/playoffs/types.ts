@@ -151,6 +151,8 @@ export type PlayoffChallengeView = {
     updatedAt: string
   }
   viewerUserId?: string | null
+  viewerTournamentBracketLimit?: number | null
+  viewerTournamentBracketUsed?: number | null
   activeEntry: {
     id: string
     name: string
