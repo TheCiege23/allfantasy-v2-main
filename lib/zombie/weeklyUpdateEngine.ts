@@ -77,7 +77,6 @@ ${tierLabel ? `${tierLabel} | ` : ''}${z.sport} | Season ${z.season}
     hiddenIds.has(userId) ? Promise.resolve('Hidden Whisperer') : displayNameForUser(leagueId, userId)
   const whispererLines = whisperers.map((record, index) =>
     `${z.whispererIsPublic ? record.displayName : `Identity hidden #${index + 1}`} — ${record.ambushesRemaining} ambushes remaining`)
-  const ambushesLeft = whisperers.reduce((sum, record) => sum + record.ambushesRemaining, 0)
   const hordeSize = z.teams.filter((t) => t.status === 'Zombie').length
   const survivorCount = z.teams.filter((t) => t.status === 'Survivor').length
 
