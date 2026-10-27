@@ -70,7 +70,7 @@ export async function runScheduleImporter(options?: {
       const awayTeam = normalizeTeamAbbrev(game.awayTeamAbbrev ?? game.awayTeam) ?? game.awayTeamAbbrev ?? game.awayTeam ?? 'TBD'
       const rawStart = game.startTime ?? game.date
       if (!rawStart) return []
-      const dateOnly = typeof rawStart === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(rawStart)
+      const dateOnly = typeof rawStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawStart)
       const gameDate = new Date(dateOnly ? `${rawStart}T12:00:00.000Z` : rawStart)
       if (Number.isNaN(gameDate.getTime())) return []
       const legacy = legacyMap.get(`${homeTeam}:${awayTeam}:${gameDate.toISOString().slice(0, 10)}`)
