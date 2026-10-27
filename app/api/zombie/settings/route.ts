@@ -50,7 +50,7 @@ export async function PATCH(req: Request) {
   }
   const nextPaid = typeof body.isPaid === 'boolean' ? body.isPaid : z.isPaid
   const nextBuyIn = typeof body.buyInAmount === 'number' ? body.buyInAmount : z.buyInAmount
-  if (nextPaid && (!nextBuyIn || nextBuyIn <= 0)) {
+  if ((body.isPaid === true || body.buyInAmount !== undefined) && nextPaid && (!nextBuyIn || nextBuyIn <= 0)) {
     return NextResponse.json({ error: 'Paid Zombie leagues require a buy-in greater than zero.' }, { status: 400 })
   }
   if (body.commissionerUiPrefs !== undefined) {
