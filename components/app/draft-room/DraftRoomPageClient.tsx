@@ -28,6 +28,7 @@ import { DraftIntelQueuePanel } from '@/components/app/draft-room/DraftIntelQueu
 import { DraftChatPanel, type DraftChatMessage, type DraftChatSendPayload } from '@/components/app/draft-room/DraftChatPanel'
 import { DraftChatDock } from '@/components/app/draft-room/DraftChatDock'
 import { DraftHelperPanel } from '@/components/app/draft-room/DraftHelperPanel'
+import { currentChimmySurface } from '@/lib/draft-room/chimmySurface'
 import { DraftHelperFloatingBubble } from '@/components/app/draft-room/DraftHelperFloatingBubble'
 import { DraftHelperFloatingWindow } from '@/components/app/draft-room/DraftHelperFloatingWindow'
 import { DraftHelperCopilot } from '@/components/app/draft-room/DraftHelperCopilot'
@@ -417,17 +418,24 @@ export function DraftRoomPageClient({
   /*
    * Chimmy lives in a different place at each breakpoint: the phone tray's AI tab, the AI tab of
    * the bottom dock below xl, and the right dock's Chimmy tab at xl+. Every "Ask Chimmy" button
-   * opens all three; only the one on screen is visible. These buttons used to call
-   * setMobileTab('helper') alone while no helper panel was mounted, so they did nothing anywhere.
+   * opens the ONE that is on screen: both layouts are always mounted and hidden by CSS, so opening
+   * all three mounted two invisible chats beside the visible one (see lib/draft-room/chimmySurface).
+   * These buttons used to call setMobileTab('helper') alone while no helper panel was mounted, so
+   * they did nothing anywhere.
    */
   const [rightDockOpenRequest, setRightDockOpenRequest] =
     useState<{ tab: DraftRightDockTab; key: number } | null>(null)
   const [dockChimmyOpen, setDockChimmyOpen] = useState(false)
   const openChimmy = useCallback(() => {
-    setMobileTab('helper')
-    setCenterDockTab('ai')
-    setDockChimmyOpen(true)
-    setRightDockOpenRequest((prev) => ({ tab: 'chimmy', key: (prev?.key ?? 0) + 1 }))
+    const surface = currentChimmySurface()
+    if (surface === 'right_dock') {
+      setRightDockOpenRequest((prev) => ({ tab: 'chimmy', key: (prev?.key ?? 0) + 1 }))
+    } else if (surface === 'bottom_dock') {
+      setCenterDockTab('ai')
+      setDockChimmyOpen(true)
+    } else {
+      setMobileTab('helper')
+    }
   }, [setMobileTab])
   const [aiReorderLoading, setAiReorderLoading] = useState(false)
   const [aiReorderExplanation, setAiReorderExplanation] = useState<string | null>(null)
