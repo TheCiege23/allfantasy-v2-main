@@ -228,9 +228,8 @@ export default async function BracketsHomePage() {
       {/* ─────────────────────────────────────────────────────────────
           CENTERED HERO — AF Playoff Bracket Challenge
           Owner call 2026-10-01: the World Cup is over and switched off as
-          a destination; MLB and NHL brackets are open now; the College
-          Football Playoff (December) and NFL playoffs (January) are up
-          next. Every claim here is about TODAY — when the season moves,
+          a destination; CFP, NBA Cup, MLB and NHL brackets are available;
+          NFL playoffs (January) are up next. Every claim here is about TODAY — when the season moves,
           move the copy with it, or it goes as stale as the World Cup
           "Registration Open" badge this replaced (still live in October,
           three months after the final).
@@ -292,6 +291,22 @@ export default async function BracketsHomePage() {
             {t("brk.hub.v3.cta.nhl")}
           </Link>
           <Link
+            href={playoffPoolHref("NCAAF")}
+            data-testid="brackets-hub-cta-cfp"
+            className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-cyan-300 to-cyan-400 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_10px_40px_-10px_rgba(34,211,238,0.65)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Trophy className="h-4 w-4" />
+            {t("brk.hub.v3.cta.cfp")}
+          </Link>
+          <Link
+            href={playoffPoolHref("NBA_CUP")}
+            data-testid="brackets-hub-cta-nba-cup"
+            className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-cyan-300 to-cyan-400 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_10px_40px_-10px_rgba(34,211,238,0.65)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Trophy className="h-4 w-4" />
+            {t("brk.hub.v3.cta.nbaCup")}
+          </Link>
+          <Link
             href="/brackets/join"
             className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-violet-400/35 bg-violet-500/[0.06] px-6 py-3 text-sm font-bold text-violet-200 transition-colors hover:border-violet-400/55 hover:bg-violet-500/[0.10] hover:text-violet-100"
           >
@@ -300,13 +315,12 @@ export default async function BracketsHomePage() {
           </Link>
         </div>
 
-        {/* Up next — NOT links: neither sport has a playoff template yet. */}
+        {/* The NFL bracket is up next; its template is not published yet. */}
         <div
           data-testid="brackets-hub-up-next"
           className="mt-10 inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/60 backdrop-blur sm:text-xs"
         >
           <span className="font-black uppercase tracking-wider text-white/75">{t("brk.hub.v3.upNext.title")}</span>
-          <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white/75">{t("brk.hub.v3.upNext.ncaaf")}</span>
           <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white/75">{t("brk.hub.v3.upNext.nfl")}</span>
         </div>
       </section>
