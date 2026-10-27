@@ -41,6 +41,32 @@ reaches `LeagueTrade`, and nothing reports it. This is not confirmed: the repo h
 transaction payload, fixture or parser test. Check it against a capture before relying on MFL
 trades for anything.
 
+## Sleeper NBA, MLB and NHL imports store no weekly data at all
+
+Checked 2026-10-27 because tanking for these leagues was proposed. It is blocked earlier than
+tanking:
+
+- **No season calendar.** The sync only ingests weekly matchups and per-player scores while
+  `isInSeason(seasonState)` is true (lib/import-os/collector/syncConnectedSleeperLeague.ts). The
+  season state comes from `SPORT_CALENDARS` in lib/import-os/season.ts, which defines **NFL only**.
+  Any other sport resolves to `unknown`, which is never in season, so an imported Sleeper NBA,
+  MLB or NHL league never gets `WeeklyMatchup` rows or `league_player_weekly_scores` from the sync.
+  The week numbers on that path also come from `nflWeekForDate`.
+- **The live-points sync is NFL-only by design** (lib/live/liveSleeperPointsSync.ts).
+- **The response shape is uncaptured.** `contracts/sleeper` has no `ENDPOINTS.yaml`, no fixtures and
+  no `probe.sh`. Whether Sleeper's matchups for a daily sport say who started on EACH day, or only
+  the lineup as it stands, is unknown. A daily-sport tanking check needs the per-day answer.
+- **The lineup audit is NFL-only** (bye weeks from the NFL schedule).
+
+This probably affects more than integrity: an imported Sleeper NBA league's matchup and score
+screens have nothing weekly to read. That is inferred from the code, not observed in the app.
+
+**What would unblock it, in order:**
+1. Count the imported Sleeper NBA/MLB/NHL leagues. If there are none, nothing here is urgent.
+2. Add NBA/MLB/NHL calendars and week mapping to lib/import-os/season.ts.
+3. Create the Sleeper contract (ENDPOINTS.yaml + probe.sh) and capture one NBA matchups response.
+4. Only then a per-day lineup reader and a tanking check.
+
 ## One more thing to check before building on any of this
 
 Every scheduled sync of imported leagues runs only if `FANTASY_OS_EXEC_SYNC_LIVE === 'true'` on
