@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { SettingsSection, SettingsRow, Input } from '@/app/league/[leagueId]/tabs/settings/components'
 import { ZombiePaymentTrackerGrid } from '@/app/zombie/components/commissioner/ZombiePaymentTrackerGrid'
+import { ZombieExternalPayoutPanel } from '@/app/zombie/components/commissioner/ZombieExternalPayoutPanel'
 import { ZombiePayoutMatrixPanel } from '@/app/zombie/components/commissioner/ZombiePayoutMatrixPanel'
 
 type Prefs = {
@@ -207,6 +208,7 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
                 canEdit={canEdit}
                 isPaid={paid}
               />
+              <ZombieExternalPayoutPanel leagueId={leagueId} canEdit={canEdit} />
               <ZombiePaymentTrackerGrid leagueId={leagueId} canEdit={canEdit} />
             </>
           ) : (
