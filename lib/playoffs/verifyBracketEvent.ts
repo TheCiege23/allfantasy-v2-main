@@ -13,17 +13,17 @@ function names(team: unknown): string[] {
   const value = object(team)
   return [value.displayName, value.location, value.shortDisplayName]
     .filter((name): name is string => typeof name === "string" && Boolean(name.trim()))
-    .map((name) => name.replace(/\\s+/g, " ").trim().toLowerCase())
+    .map((name) => name.replace(/\s+/g, " ").trim().toLowerCase())
 }
 function score(value: unknown): number | null {
   if (typeof value !== "string" && typeof value !== "number") return null
   const text = String(value).trim()
-  if (!/^\\d{1,3}$/.test(text)) return null
+  if (!/^\d{1,3}$/.test(text)) return null
   const number = Number(text)
   return Number.isInteger(number) && number <= 300 ? number : null
 }
 function sameTeam(expected: string, team: unknown): boolean {
-  const normalized = expected.replace(/\\s+/g, " ").trim().toLowerCase()
+  const normalized = expected.replace(/\s+/g, " ").trim().toLowerCase()
   return names(team).includes(normalized)
 }
 
