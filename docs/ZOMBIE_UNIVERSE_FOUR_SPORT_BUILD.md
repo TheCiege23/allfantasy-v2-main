@@ -12,14 +12,14 @@ The next release supports **NFL, NBA, NHL, and MLB**. Existing college and socce
 
 | Area | Current code | Work required |
 | --- | --- | --- |
-| Season calendars | `zombieSeasonSchedule.ts` defines NFL 17, NBA 21, NHL 23, MLB 23 scoring weeks. | Bind weeks to actual season and provider scoring periods. Treat All-Star breaks and postponed games as calendar data, not fixed week numbers. |
+| Season calendars | `zombieSeasonSchedule.ts` defines NFL 17, NBA 21, NHL 23, MLB 23 scoring weeks. | The pre-scoring power gate now reads dated GameSchedule rows for the sport/season/week and closes when the first game starts. The schedule importer can assign week 0 for sports without a provider period mapping, so NBA/NHL/MLB lock coverage still requires provider data and live verification. |
 | Draft and universe | League and universe setup, levels, and per-league drafts exist. | Certify create → draft → first week for all four sports and every level. |
-| Infection and serum | Native high-score and Bashing/Mauling serum awards now use stable award keys. Configured revival cost, exact spending, and optional automatic revival are wired. | Make the entire weekly settlement atomic and correction-safe, including status history and item transfers. |
+| Infection and serum | Native high-score and Bashing/Mauling serum awards now use stable award keys. Configured revival cost, exact spending, and optional automatic revival are wired. | Completed weeks now refuse a second side-effect run after a changed score and create a commissioner reconciliation alert. Transactional reversal/replay, item transfers, and status history remain release work. |
 | Trade restriction | Server trade gate blocks Zombies. This branch blocks Whisperers from trading at all times, independent of the commissioner-controlled Zombie trade setting. | Lock and explain the rule in commissioner settings before the draft; review every trade execution path and pending offers. |
-| Weapons and Whisperer powers | Knife, Bow, Axe, and Gun can now arm one infection shield; a Whisperer can swap two unscored matchups via `@Chimmy ambush swap <team name>`. Bombs and other powers remain disabled. | Add a provider-backed lineup lock time, finish bomb/power designs, and verify all four sports end to end. |
-| Weekly report | Report posts share a durable announcement/chat key, show named serum/weapon awards and threat matchups, and display commissioner-recorded external prize amounts. | Add full settlement snapshots, real win cards, provider confirmation, and universe rollup. |
+| Weapons and Whisperer powers | Knife, Bow, Axe, and Gun can now arm one infection shield; a Whisperer can swap two unscored matchups via `@Chimmy ambush swap <team name>`. Bombs and other powers remain disabled. | The GameSchedule first-game lock is wired and fails closed if times are absent. Finish scoring-period mapping, bomb/power designs, and live four-sport verification. |
+| Weekly report | Report posts share a durable announcement/chat key, show named serum/weapon awards and threat matchups, and display commissioner-recorded external prize amounts. | Settled matchup facts now produce accessible mobile Horde victory cards. Add full settlement snapshots, provider confirmation, and universe rollup. |
 | Commissioner UI | Several Zombie modal panels still contain static controls. This branch wires Whisperer selection and replaces the placeholder structure controls with live league details. | Apply loaded settings, validated save actions, error feedback, and per-league/universe scope to the remaining panels. |
-| Two Whisperers | Team status can represent several Whisperers, but the selection, record, and UI paths assume one. | Migrate to a per-Whisperer record before enabling two in NBA, NHL, or MLB. |
+| Two Whisperers | Team status can represent several Whisperers, but the selection, record, and UI paths assume one. | An independent second seat, draft selection, ambush balance, report, secrecy, and commissioner count control are on this branch. Integration and access testing are still required before release. |
 
 Older audit documents describe several of these areas as complete. Acceptance must be based on current running code and end-to-end tests.
 
@@ -36,7 +36,7 @@ Older audit documents describe several of these areas as complete. Acceptance mu
 | Settings | A short guided set | Advanced per-league controls and universe defaults with visible overrides |
 | Money | Optional third-party prize tracker | Per-manager weekly prize ledger and universe rollup |
 
-Simple and Enhanced are season-scoped presets, not separate game engines. Save the mode with a rules snapshot at draft lock. Changes that alter competitive outcomes take effect next season unless the commissioner records an explicit, visible override. A league can choose Enhanced next season without losing its history.
+Simple and Enhanced are season-scoped presets on one game engine. Creation and pre-draft setup save the mode; draft activation saves a rules snapshot. Changes that alter competitive outcomes take effect next season unless the commissioner records an explicit, visible override. A league can choose Enhanced next season without losing its history.
 
 ## Season and draft rules
 
@@ -81,7 +81,7 @@ The report is built from settlement events, never inferred from current balances
 - each paid league's manager, **recorded weekly prize amount**, currency, and external provider status; or Outbreak Points in a free league;
 - the next action and lineup deadlines.
 
-A Whisperer or Zombie win queues a branded result card with winner, opponent, score, status effect, and a spoiler-safe preview. Animation is optional and respects reduced motion. The accessible text card is the source of truth even if video fails. Rules use the existing status/item icon vocabulary consistently across the rules page, chat cards, standings, and notifications.
+A Whisperer or Zombie win produces a branded result card with winner, opponent, score, status effect, and a spoiler-safe preview. Animation is optional and respects reduced motion. The accessible text card is the source of truth even if video fails. Rules use the existing status/item icon vocabulary consistently across the rules page, chat cards, standings, and notifications.
 
 For third-party payments, store `projected`, `commissioner_confirmed`, and `provider_confirmed` as separate states. Show the amount won without claiming an external payout occurred. LeagueSafe's published flow has the commissioner assign winnings when payouts are available; the app should prepare an export/reconciliation view rather than promise automatic external transfers without a supported provider integration. See [LeagueSafe payout instructions](https://help.leaguesafe.com/hc/en-us/articles/115005841583-How-do-I-assign-winnings-or-allocate-funds-to-a-winner-in-my-league).
 
@@ -115,3 +115,7 @@ Use at least 44 × 44 point touch controls and avoid horizontal page overflow, f
 - **Commissioner exception inbox:** group only missing scores, invalid roster mapping, disputed stat corrections, and unverified prizes. Routine weeks require no action.
 - **Fairness simulator:** before draft lock, preview expected infection pace and item frequency using the league's sport and settings. It should warn when a rule set is likely to eliminate Humans too early.
 - **Season archive:** preserve roles, weekly result cards, universe promotion/relegation, and the final survivor story so managers want to return next season.
+
+## Verification status (October 27, 2026)
+
+The draft PR has four-sport mocked resolution checks and focused lock/two-seat tests, but no full provider-backed end-to-end week has passed in this environment. Local shell launch fails with Windows error 267. GitHub Actions jobs remain queued while successive branch pushes cancel earlier attempts; Vercel reports an account block. The branch remains a draft and must not be treated as release-ready. Stat-correction score changes stop for commissioner reconciliation until transactional reversal/replay exists.
