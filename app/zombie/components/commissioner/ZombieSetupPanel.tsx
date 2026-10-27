@@ -10,12 +10,15 @@ type LeagueOverview = {
   teamCount?: number
   totalWeeks?: number | null
   universeId?: string | null
+  experienceMode?: 'simple' | 'enhanced'
   level?: { name?: string | null } | null
 }
 
 export function ZombieSetupPanel({ leagueId, canEdit }: { leagueId: string; canEdit: boolean }) {
   const [league, setLeague] = useState<LeagueOverview | null>(null)
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
 
   useEffect(() => {
     let active = true
@@ -38,6 +41,27 @@ export function ZombieSetupPanel({ leagueId, canEdit }: { leagueId: string; canE
   if (error) return <p role="alert" className="px-4 py-6 text-sm text-red-200 sm:px-6">{error}</p>
   if (!league) return <p className="px-4 py-6 text-sm text-white/60 sm:px-6">Loading league structure…</p>
 
+  const mode = league.experienceMode === 'simple' ? 'simple' : 'enhanced'
+  const editable = canEdit && ['setup', 'registering'].includes(league.status ?? '')
+
+  async function saveMode(next: 'simple' | 'enhanced') {
+    if (!editable) return
+    setSaving(true)
+    setMessage('')
+    try {
+      const response = await fetch('/api/zombie/settings', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ leagueId, experienceMode: next }),
+      })
+      const result = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(result.error ?? 'Could not save experience.')
+      setLeague((current) => current ? { ...current, experienceMode: next } : current)
+      setMessage(`${next === 'simple' ? 'Simple' : 'Enhanced'} Zombie saved for the upcoming draft.`)
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : 'Could not save experience.')
+    } finally { setSaving(false) }
+  }
+
   const rows = [
     ['League', league.name || 'Zombie League'],
     ['Sport and season', `${league.sport ?? 'Unknown'} ${league.season ?? ''}`.trim()],
@@ -50,6 +74,21 @@ export function ZombieSetupPanel({ leagueId, canEdit }: { leagueId: string; canE
   return (
     <div className="space-y-4 px-4 py-5 text-[13px] text-white/85 sm:px-6">
       <h3 className="font-semibold text-white">League structure</h3>
+      <fieldset className="rounded-xl border border-white/10 bg-white/[0.04] p-3" disabled={!editable || saving}>
+        <legend className="px-1 font-semibold text-white">Experience</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(['simple', 'enhanced'] as const).map((choice) => (
+            <button key={choice} type="button" onClick={() => void saveMode(choice)}
+              aria-pressed={mode === choice}
+              className={`min-h-[48px] rounded-xl border p-3 text-left ${mode === choice ? 'border-red-400 bg-red-950/50' : 'border-white/15 bg-black/20'}`}>
+              <span className="block font-semibold text-white">{choice === 'simple' ? 'Simple Zombie' : 'Enhanced Zombie'}</span>
+              <span className="mt-1 block text-xs text-white/65">{choice === 'simple' ? 'Automatic revival, one serum to revive, no weapons or ambushes.' : 'Serums, defensive weapons, ambushes, and full weekly story.'}</span>
+            </button>
+          ))}
+        </div>
+        {!editable && <p className="mt-2 text-xs text-amber-200">Experience locks when the draft starts.</p>}
+        {message && <p role="status" className="mt-2 text-xs text-white">{message}</p>}
+      </fieldset>
       <dl className="grid gap-2 sm:grid-cols-2">
         {rows.map(([label, value]) => (
           <div key={label} className="min-h-[60px] rounded-xl border border-white/10 bg-white/[0.04] p-3">
