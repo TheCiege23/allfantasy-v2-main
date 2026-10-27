@@ -18,7 +18,7 @@
 
 ## Production preflight
 
-- The verified production Neon host is `ep-curly-block-ad0dlt9o.c-2.us-east-1.aws.neon.tech`. An earlier read-only migration audit found five local migrations pending there: `20261020010000_guilly_lifecycle_invariants` and the four Pirate migrations. Recheck migration state immediately before production work. A broad `prisma migrate deploy` would include the Guillotine migration unless it is applied or explicitly excluded by a reviewed plan.
+- The verified production Neon host is `ep-curly-block-ad0dlt9o.c-2.us-east-1.aws.neon.tech`. An earlier read-only audit using the separate G checkout found five local migrations pending there: `20261020010000_guilly_lifecycle_invariants` and the four Pirate migrations. The Guillotine file is absent from this PR branch and current `main`; it exists in G. Recheck both the database migration table and the exact checkout migration directory immediately before production work. `prisma migrate deploy` applies the pending files in the checkout where it runs.
 - The read-only schema check found the required `leagues` and `redraft_matchups` tables, with no existing Pirate tables to collide with the new migrations.
 - The repository production checklist requires a reviewed PR merged into `main` with green CI before deployment. No production migration or deployment has been performed for Pirate League.
 
