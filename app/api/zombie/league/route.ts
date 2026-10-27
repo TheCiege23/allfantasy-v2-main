@@ -12,6 +12,7 @@ import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 import { redactWhispererRecord, redactZombieEvent, redactZombieTeam } from '@/lib/zombie/whispererRedaction'
 import { withWhispererDisplayName } from '@/lib/zombie/zombieTeamNames'
 import { loadNativeSeasonRecords } from '@/lib/zombie/ZombieInfectionEngine'
+import { isZombieExperienceMode } from '@/lib/zombie/zombieExperience'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +51,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Zombie leagues do not support sport "${sportRaw}".` }, { status: 400 })
   }
   const sport = normalizeToSupportedSport(sportRaw)
+  if (body.experienceMode !== undefined && !isZombieExperienceMode(body.experienceMode)) {
+    return NextResponse.json({ error: 'experienceMode must be simple or enhanced.' }, { status: 400 })
+  }
 
   const teamCountRaw = typeof body.teamCount === 'number' ? body.teamCount : null
   if (teamCountRaw == null || !(ZOMBIE_ALLOWED_TEAM_COUNTS as readonly number[]).includes(teamCountRaw)) {
@@ -130,6 +134,7 @@ export async function POST(req: Request) {
         typeof body.whispererSelectionMode === 'string' ? body.whispererSelectionMode : 'random',
       namingMode: typeof body.namingMode === 'string' ? body.namingMode : 'hybrid',
       backgroundTheme: getRandomZombieTheme(),
+      experienceMode: isZombieExperienceMode(body.experienceMode) ? body.experienceMode : 'enhanced',
     },
     universeId ?? null,
     tierId ?? null,
