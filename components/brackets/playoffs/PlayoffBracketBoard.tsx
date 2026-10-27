@@ -221,7 +221,7 @@ export default function PlayoffBracketBoard({
                   const pick = getPickForSeries(picks, item.id)
                   const unresolved = !isPlayoffSeriesResolved(item)
                   const unresolvedMessage = officialBracketMode ? PLAYOFF_OFFICIAL_MATCHUP_TBD_MESSAGE : PLAYOFF_UNRESOLVED_SERIES_MESSAGE
-                  const lockedReason = locked ? `${matchupNoun(item)} already started/locked` : getPlayoffSeriesLockedReason(item, lockRule, { hasPoolAdminAccess: canUseLatePicks })
+                  const lockedReason = locked ? (onPick ? `${matchupNoun(item)} already started/locked` : "Read-only bracket. Picks reveal as games begin.") : getPlayoffSeriesLockedReason(item, lockRule, { hasPoolAdminAccess: canUseLatePicks })
                   const isSaving = savingSeriesIds?.has(item.id) ?? false
                   const isSaved = savedSeriesIds?.has(item.id) ?? false
                   const isNext = nextSeriesId === item.id
@@ -306,7 +306,7 @@ export default function PlayoffBracketBoard({
                       </div>
                       <div className="mt-2 space-y-1 rounded-lg bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-600">
                         <p data-testid={`playoff-series-summary-${item.id}`}>
-                          {item.seriesSummary || `${matchupNoun(item)} starts TBD`}
+                          {item.seriesSummary || (item.startsAt ? `${matchupNoun(item)} scheduled` : `${matchupNoun(item)} starts TBD`)}
                         </p>
                         {item.liveStatus ? (
                           <p data-testid={`playoff-series-live-${item.id}`} className="text-emerald-700">
