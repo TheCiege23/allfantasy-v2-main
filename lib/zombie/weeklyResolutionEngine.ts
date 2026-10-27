@@ -83,7 +83,7 @@ export async function runWeeklyResolution(
       const reconciled = await reconcileScoreOnlyCorrection({
         zombieLeagueId, leagueId: z.leagueId, seasonId: season.id, season: z.season,
         sport: z.sport, week, ownerUserId: z.league.userId, previous: existing,
-      })
+      }).catch(() => null)
       if (reconciled) return { resolution: reconciled }
     }
     const marked = await prisma.zombieWeeklyResolution.updateMany({
