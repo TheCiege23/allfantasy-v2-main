@@ -98,6 +98,16 @@ export async function reconcileScoreOnlyCorrection(input: {
 
       const rosters = await tx.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
       const byUser = new Map(rosters.filter(row => row.platformUserId).map(row => [row.platformUserId!, row.id]))
+      const scoreFor = (winnerUserId: string, loserUserId: string) => {
+        const winnerId = byUser.get(winnerUserId)
+        const loserId = byUser.get(loserUserId)
+        const result = weekResults.find(row => winnerId && loserId &&
+          [row.homeRosterId, row.awayRosterId].includes(winnerId) && [row.homeRosterId, row.awayRosterId].includes(loserId))
+        if (!result || !winnerId) return null
+        const winnerScore = result.homeRosterId === winnerId ? result.homeScore : result.awayScore
+        const loserScore = result.homeRosterId === winnerId ? result.awayScore : result.homeScore
+        return { winnerScore, loserScore, margin: Math.abs(winnerScore - loserScore) }
+      }
       const infectionEvents = await tx.zombieInfectionEvent.findMany({ where: { zombieLeagueId, week } })
       const infected = infectionEvents.flatMap(event => {
         const victimRosterId = byUser.get(event.victimUserId)
@@ -136,6 +146,20 @@ export async function reconcileScoreOnlyCorrection(input: {
             scoreDifference: Math.round((infectorScore - victimScore) * 100) / 100, isStatCorrected: true, correctedAt: new Date() },
         })
       }
+      const bashings = await tx.zombieBashingEvent.findMany({ where: { leagueId, week } })
+      for (const event of bashings) {
+        const score = scoreFor(event.winnerUserId, event.loserUserId)
+        if (!score) return null
+        await tx.zombieBashingEvent.update({ where: { id: event.id }, data: score })
+      }
+      const maulings = await tx.zombieMaulingEvent.findMany({ where: { leagueId, week } })
+      for (const event of maulings) {
+        const score = scoreFor(event.maulerUserId, event.victimUserId)
+        if (!score) return null
+        await tx.zombieMaulingEvent.update({ where: { id: event.id }, data: {
+          maulerScore: score.winnerScore, victimScore: score.loserScore, margin: score.margin,
+        } })
+      }
       const oldJson = previous.matchupResults as unknown as Array<Record<string, unknown>>
       const byMatchup = new Map(matchups.map(row => [key(row.homeRosterId, row.awayRosterId), row]))
       const corrected = oldJson.map(row => {
@@ -150,6 +174,7 @@ export async function reconcileScoreOnlyCorrection(input: {
       const resolution = await tx.zombieWeeklyResolution.update({
         where: { zombieLeagueId_week: { zombieLeagueId, week } },
         data: { matchupResults: toPrismaJsonInput(corrected), requiresStatCorrection: false,
+          weeklyWinningsPool: Math.round([...netByRoster.values()].reduce((sum, amount) => sum + amount, 0) * 100) / 100,
           winningsDistribution: toPrismaJsonInput(Object.fromEntries(netByRoster)) },
       })
       const body = `Week ${week} scores were corrected. Winners, roles, item awards, and combat outcomes did not change. Weekly winnings and infection transfers were recalculated from the final scores.`
@@ -166,7 +191,7 @@ export async function reconcileScoreOnlyCorrection(input: {
         update: { message: body },
       })
       return resolution
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20_000 })
   } catch {
     // A concurrent score ingest or settlement can make the snapshot stale. The ordinary
     // reconciliation case remains available on the next attempt.
