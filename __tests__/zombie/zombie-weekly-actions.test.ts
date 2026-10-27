@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   zombieAnnouncementFindUnique: vi.fn(),
   redraftSeasonFindFirst: vi.fn(),
   gameScheduleFindMany: vi.fn(),
+  sportsGameFindMany: vi.fn(),
   redraftMatchupFindMany: vi.fn(),
   redraftRosterFindMany: vi.fn(),
   rosterFindMany: vi.fn(),
@@ -42,6 +43,7 @@ vi.mock('@/lib/prisma', () => ({
     zombieAnnouncement: { findUnique: h.zombieAnnouncementFindUnique },
     redraftSeason: { findFirst: h.redraftSeasonFindFirst },
     gameSchedule: { findMany: h.gameScheduleFindMany },
+    sportsGame: { findMany: h.sportsGameFindMany },
     redraftMatchup: { findMany: h.redraftMatchupFindMany },
     zombieWeeklyResolution: { findUnique: h.weeklyResolutionFindUnique },
     $transaction: h.transaction,
@@ -66,6 +68,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.zombieLeagueFindUnique.mockResolvedValue({ id: 'z', leagueId: 'L', sport: 'NFL', season: 2026, status: 'active', currentWeek: 3, experienceMode: 'enhanced' })
   h.gameScheduleFindMany.mockResolvedValue([{ startTime: new Date(Date.now() + 60_000) }])
+  h.sportsGameFindMany.mockResolvedValue([{ startTime: new Date(Date.now() + 60_000) }])
   h.rosterFindFirst.mockResolvedValue({ id: 'r', platformUserId: 'u' })
   h.zombieLeagueTeamFindUnique.mockResolvedValue({ id: 'team', status: 'Zombie' })
   h.getConfig.mockResolvedValue({ serumReviveCount: 2 })
@@ -108,9 +111,9 @@ describe('Zombie weekly actions', () => {
   it('rejects an ambush when the provider schedule is missing or already locked', async () => {
     h.redraftSeasonFindFirst.mockResolvedValue({ id: 'season' })
     h.redraftMatchupFindMany.mockResolvedValue([{ status: 'scheduled', homeScore: 0, awayScore: 0 }])
-    h.gameScheduleFindMany.mockResolvedValueOnce([])
+    h.sportsGameFindMany.mockResolvedValueOnce([])
     expect(await validatePreScoringWindow('L', 3, 2026)).toMatchObject({ valid: false })
-    h.gameScheduleFindMany.mockResolvedValueOnce([{ startTime: new Date(Date.now() - 1000) }])
+    h.sportsGameFindMany.mockResolvedValueOnce([{ startTime: new Date(Date.now() - 1000) }])
     expect(await validatePreScoringWindow('L', 3, 2026)).toMatchObject({ valid: false })
     expect(h.weeklyResolutionFindUnique).not.toHaveBeenCalled()
   })
@@ -170,7 +173,7 @@ describe('Zombie weekly actions', () => {
     h.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
         whispererRecord: { updateMany: debit },
-        gameSchedule: { findMany: vi.fn().mockResolvedValue([{ startTime: new Date(Date.now() + 60_000) }]) },
+        sportsGame: { findMany: vi.fn().mockResolvedValue([{ startTime: new Date(Date.now() + 60_000) }]) },
         redraftMatchup: { updateMany: remap },
         zombieAmbushAction: { count: vi.fn().mockResolvedValue(0), create },
         zombieChimmyAction: { update: h.chimmyActionUpdate },
