@@ -30,6 +30,7 @@ import { BetaInvitePanel } from "@/components/admin/BetaInvitePanel"
 import { AiProviderHealthPanel } from "@/components/admin/AiProviderHealthPanel"
 import { EmailSegmentsPanel } from "@/components/admin/EmailSegmentsPanel"
 import { PlatformOsOperatorPanel } from "@/components/admin/PlatformOsOperatorPanel"
+import { StatReingestPanel } from "@/components/admin/StatReingestPanel"
 import type {
   AdminProviderHealthRow,
   AdminProviderHealthStatus,
@@ -1924,6 +1925,11 @@ export default async function AdminPage(
         <div id="beta-invites">
           <AccordionSection title="Closed-Beta Invitations" eyebrow="access">
             <BetaInvitePanel />
+          </AccordionSection>
+        </div>
+        <div id="stat-reingest">
+          <AccordionSection title="Re-ingest Stats & Rescore Weeks" eyebrow="redraft scoring" defaultOpen={false}>
+            <StatReingestPanel />
           </AccordionSection>
         </div>
         <div id="email-center">
