@@ -43,7 +43,7 @@ async function ensureTeamItem(
 
 export async function checkAndAwardWeapons(leagueId: string, week: number, zombieLeagueId: string): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { id: zombieLeagueId } })
-  if (!z) return
+  if (!z || z.experienceMode === 'simple') return
   const rules = await getZombieRulesForSport(z.sport)
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId, season: z.season },
@@ -104,6 +104,7 @@ export async function processWeaponAction(
 ): Promise<ZombieChimmyAction> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
+  if (z.experienceMode === 'simple') throw new Error('Weapons are available in Enhanced Zombie only')
   const timing = await validatePreScoringWindow(leagueId, week, z.season)
   const lower = rawMessage.toLowerCase()
 
