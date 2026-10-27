@@ -42,9 +42,9 @@ beforeEach(() => {
   h.resolutionFindFirst.mockResolvedValue(null)
   h.native.mockResolvedValue([{ matchupId: 'matchup-1', homeRosterId: 'a', awayRosterId: 'b', homeScore: 91, awayScore: 85, final: true }])
   h.rules.mockResolvedValue(rules)
-  h.resolutionUpdate.mockImplementation(async ({ data }) => ({ ...previous, ...data }))
+  h.resolutionUpdate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ ...previous, ...data }))
   h.announcementUpsert.mockResolvedValue({ id: 'announcement-1' })
-  h.transaction.mockImplementation(async callback => callback({
+  h.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback({
     zombieWeeklyResolution: { findUnique: vi.fn(async () => previous), update: h.resolutionUpdate },
     redraftMatchup: { findMany: vi.fn(async () => [current]) },
     roster: { findMany: vi.fn(async () => [
