@@ -271,7 +271,7 @@ Questions? Tag @Chimmy in chat.
     sectionDangerMatchups,
     sectionUniverseMovement,
     footer,
-    meta: { hordeSize, prevHordeSize: prevHorde, week, leagueName },
+    meta: { hordeSize, prevHordeSize: prevHorde, week, leagueName, experienceMode: z.experienceMode === 'simple' ? 'simple' : 'enhanced' },
   }
 }
 
