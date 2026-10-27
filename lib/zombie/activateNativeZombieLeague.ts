@@ -31,7 +31,7 @@ export async function ensureZombieSeasonActivated(input: {
 }): Promise<ZombieActivationResult> {
   const z = await prisma.zombieLeague.findUnique({
     where: { leagueId: input.leagueId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, experienceMode: true, whispererAmbushCount: true, whispererSelectionMode: true },
   })
   if (!z) return { ok: false, reason: 'NOT_ZOMBIE' }
   if (!STARTABLE.includes(z.status)) return { ok: false, reason: 'NOT_STARTABLE' }
@@ -53,9 +53,9 @@ export async function ensureZombieSeasonActivated(input: {
   await ensureLeagueTeamRows(input.leagueId, z.id)
 
   let whispererPicked = false
+  const cfg = await getZombieLeagueConfig(input.leagueId).catch(() => null)
   const existing = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId: z.id }, select: { id: true } })
   if (!existing) {
-    const cfg = await getZombieLeagueConfig(input.leagueId).catch(() => null)
     const mode = cfg?.whispererSelection === 'veteran_priority' ? 'veteran_priority' : 'random'
     await selectWhisperer(z.id, mode)
     whispererPicked = true
@@ -64,7 +64,23 @@ export async function ensureZombieSeasonActivated(input: {
   // The resolver matches matchups by season YEAR, so the zombie league must carry the draft's.
   const flipped = await prisma.zombieLeague.updateMany({
     where: { id: z.id, status: { in: STARTABLE } },
-    data: { status: 'active', season: season.season, totalWeeks, currentWeek },
+    data: {
+      status: 'active', season: season.season, totalWeeks, currentWeek,
+      rulesSnapshot: {
+        version: 1,
+        experienceMode: z.experienceMode,
+        whispererCount: 1,
+        whispererSelectionMode: z.whispererSelectionMode,
+        whispererAmbushCount: z.whispererAmbushCount,
+        serumReviveCount: cfg?.serumReviveCount ?? 2,
+        autoSerumRevive: cfg?.autoSerumRevive ?? false,
+        serumAwardHighScore: cfg?.serumAwardHighScore ?? true,
+        serumAwardOnBashMaul: cfg?.serumAwardOnBashMaul ?? true,
+        weaponTopTwoActive: cfg?.weaponTopTwoActive ?? true,
+        ambushCountPerWeek: cfg?.ambushCountPerWeek ?? 1,
+        ambushRemapMatchup: cfg?.ambushRemapMatchup ?? true,
+      },
+    },
   })
   return { ok: true, activated: flipped.count > 0, whispererPicked, zombieLeagueId: z.id }
 }
