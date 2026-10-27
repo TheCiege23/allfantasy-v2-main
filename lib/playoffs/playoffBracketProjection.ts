@@ -29,8 +29,8 @@ function resolveProjectedTeamName(
 export function isOfficialTeamName(value: string | null | undefined): boolean {
   const name = String(value ?? "").trim()
   if (!name) return false
-  return !/^(?:AL|NL|EAST|WEST|CFP)\d+$/i.test(name) &&
-    !/^Winner\s+S\d+$/i.test(name) &&
+  // Seed slots remain pickable before official seeding; feeder winners do not.
+  return !/^Winner\s+S\d+$/i.test(name) &&
     !/^(East|Eastern|West|Western)\s+Winner\s+[AB]$/i.test(name) &&
     !/Champion$/i.test(name) &&
     !/Winner\s+[AB]$/i.test(name)
