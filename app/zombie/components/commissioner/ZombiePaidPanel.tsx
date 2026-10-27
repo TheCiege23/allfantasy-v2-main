@@ -152,7 +152,7 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
                       onChange={(e) => setBuyIn(Number(e.target.value) || 0)}
                       min={0.01}
                       step={0.01}
-                      onBlur={() => void saveZombie({ buyInAmount: buyIn, isPaid: paid })}
+                      onBlur={() => { if (paid) void saveZombie({ buyInAmount: buyIn }) }}
                     />
                   }
                 />
