@@ -10277,7 +10277,6 @@ model ZombieCoWhisperer {
   league              ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
 
   @@unique([zombieLeagueId, userId])
-  @@index([zombieLeagueId])
   @@map("zombie_co_whisperers")
 }
 
