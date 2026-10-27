@@ -171,6 +171,7 @@ export async function GET(req: Request) {
       teams: true,
       level: true,
       whispererRecord: true,
+      coWhisperers: true,
       paidConfig: true,
       freeRewardConfig: true,
       weeklyResolutions: { orderBy: { week: 'desc' }, take: 4 },
@@ -316,6 +317,9 @@ export async function GET(req: Request) {
       whispererRecord: viewer.canSee
         ? await withWhispererDisplayName(z.whispererRecord)
         : redactWhispererRecord(z.whispererRecord),
+      coWhisperers: viewer.canSee
+        ? await Promise.all(z.coWhisperers.map((record) => withWhispererDisplayName(record)))
+        : z.coWhisperers.map((record) => redactWhispererRecord(record)),
       counts: {
         ...counts,
         horde: horde,
