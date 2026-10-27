@@ -163,6 +163,7 @@ function buildSections(
     'THE WHISPERER',
     'One team is secretly (or publicly) designated as the Whisperer at the start of the season.',
     'The Whisperer infects every Survivor it beats, and leads the Horde.',
+    'Whisperers cannot trade players at any time.',
     `Selection mode: ${z.whispererSelectionMode ?? 'random'}`,
   ].join('\n')
 
@@ -277,28 +278,28 @@ export async function generateRulesDocument(zombieLeagueId: string): Promise<Zom
 }
 
 export function getRulesDocAsHtml(doc: ZombieRulesDocument): string {
-  const sec = (title: string, body: string) =>
-    `<section class="zombie-rules-section mb-6"><h2 class="zombie-rules-heading text-[14px] font-bold text-[var(--zombie-text-full)] mb-2">${esc(title)}</h2><pre class="whitespace-pre-wrap text-[12px] leading-relaxed opacity-90">${esc(body)}</pre></section>`
+  const sec = (icon: string, title: string, body: string) =>
+    `<section class="zombie-rules-section mb-6"><h2 class="zombie-rules-heading text-[14px] font-bold text-[var(--zombie-text-full)] mb-2"><span aria-hidden="true">${esc(icon)}</span> ${esc(title)}</h2><pre class="whitespace-pre-wrap text-[12px] leading-relaxed opacity-90">${esc(body)}</pre></section>`
 
   return `<article class="zombie-rules-doc max-w-3xl">
   ${doc.isPaid ? '<p class="zombie-rules-paid-badge mb-4 inline-block rounded-lg bg-amber-500/15 px-3 py-1 text-[12px] font-bold text-amber-200/90">PAID LEAGUE</p>' : '<p class="zombie-rules-threshold-badge mb-4 inline-block rounded-lg bg-sky-500/15 px-3 py-1 text-[12px] font-bold text-sky-200/80">FREE LEAGUE</p>'}
-  ${sec('Overview', doc.sectionOverview)}
-  ${sec('Infection', doc.sectionInfection)}
-  ${sec('The Whisperer', doc.sectionWhisperer)}
-  ${sec('Survivors', doc.sectionSurvivor)}
-  ${sec('The Horde', doc.sectionZombie)}
-  ${sec('Scoring', doc.sectionScoring)}
-  ${sec('Roster', doc.sectionRoster)}
-  ${sec('Ambushes', doc.sectionAmbush)}
-  ${sec('Bashing', doc.sectionBashing)}
-  ${sec('Mauling', doc.sectionMauling)}
-  ${sec('Serums', doc.sectionSerums)}
-  ${sec('Weapons', doc.sectionWeapons)}
-  ${sec('Winnings / Rewards', doc.sectionWinnings)}
-  ${sec('Universe', doc.sectionUniverseMovement)}
-  ${sec('Weekly Schedule', doc.sectionWeeklyTiming)}
-  ${sec('@Chimmy', doc.sectionChimmy)}
-  ${sec('Paid vs Free', doc.sectionPaidVsFree)}
+  ${sec('🧟', 'Overview', doc.sectionOverview)}
+  ${sec('🩸', 'Infection', doc.sectionInfection)}
+  ${sec('🎭', 'The Whisperer', doc.sectionWhisperer)}
+  ${sec('🧍', 'Survivors', doc.sectionSurvivor)}
+  ${sec('🧟', 'The Horde', doc.sectionZombie)}
+  ${sec('📊', 'Scoring', doc.sectionScoring)}
+  ${sec('🧾', 'Roster', doc.sectionRoster)}
+  ${sec('⚡', 'Ambushes', doc.sectionAmbush)}
+  ${sec('🔥', 'Bashing', doc.sectionBashing)}
+  ${sec('💀', 'Mauling', doc.sectionMauling)}
+  ${sec('🧪', 'Serums', doc.sectionSerums)}
+  ${sec('⚔️', 'Weapons', doc.sectionWeapons)}
+  ${sec('💰', 'Winnings / Rewards', doc.sectionWinnings)}
+  ${sec('🌍', 'Universe', doc.sectionUniverseMovement)}
+  ${sec('📅', 'Weekly Schedule', doc.sectionWeeklyTiming)}
+  ${sec('🤖', '@Chimmy', doc.sectionChimmy)}
+  ${sec('🪙', 'Paid vs Free', doc.sectionPaidVsFree)}
 </article>`
 }
 
