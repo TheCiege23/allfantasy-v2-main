@@ -99,7 +99,8 @@ export async function PATCH(req: Request) {
   const currentAmbushConfig = await prisma.zombieLeagueConfig.findUnique({
     where: { leagueId }, select: { ambushCountPerWeek: true },
   })
-  if ((seasonAmbushPatch ?? z.whispererAmbushCount) < (weeklyAmbushPatch ?? currentAmbushConfig?.ambushCountPerWeek ?? 1)) {
+  if ((seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined) &&
+      (seasonAmbushPatch ?? z.whispererAmbushCount) < (weeklyAmbushPatch ?? currentAmbushConfig?.ambushCountPerWeek ?? 1)) {
     return NextResponse.json({ error: 'Weekly ambush cap cannot exceed season ambushes.' }, { status: 400 })
   }
 
