@@ -46,6 +46,7 @@ import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/leagu
 import { ELIMINATED_LINEUP_RULE_KEY, parseEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLineups'
 import { IR_AUTO_MOVE_KEY, parseIrAutoMoveRule } from '@/lib/ir-activation/irAutoMove'
 import { ORPHAN_AUCTION_KEY } from '@/lib/orphan-auction/orphanAuction'
+import { parseTaxiStealingRule, readTaxiStealingRule, TAXI_STEAL_CLAIMS_KEY, TAXI_STEALING_KEY } from '@/lib/taxi/taxiStealing'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
@@ -819,6 +820,18 @@ export async function executeLeagueSettingsPatch(
     if (!parsed.ok) return jsonError(parsed.error, 400)
     if (parsed.value.enabled && !hasSub) return jsonError('IR auto-move is part of the AF Commissioner plan.', 403)
     ;(merge as Record<string, unknown>)[IR_AUTO_MOVE_KEY] = parsed.value
+  }
+
+  // Taxi stealing (lib/taxi/taxiStealing.ts) — an AF Commissioner rule, stored only in the shape the
+  // reader knows; switching it off is free. Its claims are state written only by its own service.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TAXI_STEAL_CLAIMS_KEY in merge) {
+    return jsonError('Taxi steal claims are made on the Waivers page, not saved as a setting.', 400)
+  }
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TAXI_STEALING_KEY in merge) {
+    const parsed = parseTaxiStealingRule((merge as Record<string, unknown>)[TAXI_STEALING_KEY], readTaxiStealingRule(league.settings))
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value.enabled && !hasSub) return jsonError('Taxi stealing is part of the AF Commissioner plan.', 403)
+    ;(merge as Record<string, unknown>)[TAXI_STEALING_KEY] = parsed.value
   }
 
   // Who may read the league log (lib/league-log/leagueLog.ts). A value the reader does not know would
