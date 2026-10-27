@@ -13,6 +13,7 @@ import { processDueTradeReviews, type TradeReviewSweepResult } from '@/lib/redra
 import type { InactiveLineupRunResult } from '@/lib/inactive-manager/inactiveManagerService'
 import type { EliminatedLineupRunResult } from '@/lib/eliminated-lineups/eliminatedLineupService'
 import type { RookieOrderRoundNoticeRun } from '@/lib/rookie-order/roundNoticeService'
+import type { IrAutoMoveRunResult } from '@/lib/ir-activation/irAutoMoveService'
 import type { OrphanAuctionRunResult } from '@/lib/orphan-auction/orphanAuctionService'
 
 export const dynamic = 'force-dynamic'
@@ -261,6 +262,29 @@ export async function GET(request: Request) {
   }
 
   /*
+   * IR auto-move (lib/ir-activation): AF Commissioner. An activated player on IR goes to the bench
+   * through the ordinary lineup save, or the manager is told why not. Hourly because designations land
+   * on the injury sync's schedule; guarded and on its own job identity, like the sweeps above.
+   */
+  let irAutoMove: IrAutoMoveRunResult | { error: string } | null = null
+  try {
+    const { runIrAutoMove } = await import('@/lib/ir-activation/irAutoMoveService')
+    irAutoMove = await withSyncJobRun(
+      { jobName: 'cron-ir-auto-move', trigger: 'cron' },
+      () => runIrAutoMove(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.moved + r.notified,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, moved: r.moved, notified: r.notified, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] IR auto-move failed', e)
+    irAutoMove = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Orphan team auctions (lib/orphan-auction): AF Commissioner. Every auction whose closing time has
    * passed is awarded — players, picks and FAAB move in one transaction. Hourly, so an auction closes
    * within the hour of its deadline; guarded and on its own job identity, like the sweeps above.
@@ -308,5 +332,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, rookieOrderRounds, orphanAuctions, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, exileRollover })
 }

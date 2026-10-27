@@ -38,6 +38,7 @@ import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkfl
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
 import { EliminatedLineups } from '@/components/core-app/commissioner/EliminatedLineups'
+import { IrAutoMove } from '@/components/core-app/commissioner/IrAutoMove'
 import { OrphanAuction } from '@/components/core-app/commissioner/OrphanAuction'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { StorylineStudio } from '@/components/core-app/commissioner/StorylineStudio'
@@ -264,6 +265,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       {league.native && data.role === 'commissioner' && <NativeAutoSubsCommissioner leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <InactiveManagerCommissioner leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <EliminatedLineups leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <IrAutoMove leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <OrphanAuction leagueId={league.id} />}
 
       <HubSection id="ch-intelligence" title={t('Commissioner intelligence')}>
