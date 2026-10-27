@@ -62,6 +62,8 @@ export function ZombieCommissionerModal({
   const [userId, setUserId] = useState<string | null>(null)
   const [canEdit, setCanEdit] = useState(false)
   const dialogRef = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     if (!open) return
@@ -96,7 +98,7 @@ export function ZombieCommissionerModal({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        onClose()
+        onCloseRef.current()
       }
       if (event.key !== 'Tab' || !dialogRef.current) return
       const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])')]
@@ -112,7 +114,7 @@ export function ZombieCommissionerModal({
       document.body.style.overflow = oldOverflow
       previous?.focus()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
   const theme = getZombieTheme(backgroundTheme)
