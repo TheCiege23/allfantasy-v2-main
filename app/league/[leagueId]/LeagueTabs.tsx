@@ -43,8 +43,16 @@ const FOOTBALL_REDRAFT_COMPACT_TABS: TabDef[] = [
 const NFL_TABS: TabDef[] = FOOTBALL_REDRAFT_COMPACT_TABS
 const NCAAF_TABS: TabDef[] = FOOTBALL_REDRAFT_COMPACT_TABS
 
+/**
+ * NBA, MLB, NHL and NCAAB share this list, and all of them carry the Draft tab the football shell
+ * has always had. Without it their league pages had no path to the live draft room at all —
+ * reported by an Android manager during a live NBA draft, 2026-10-26. The tab renders the same
+ * pre-draft setup / DraftTab ("Enter Draft Room") as football, and the group bar already lands its
+ * Draft pill on `draft`.
+ */
 const BASKETBALL_LIKE_TABS: TabDef[] = [
   { id: 'roster', label: 'Roster' },
+  { id: 'draft', label: 'Draft' },
   { id: 'redraft', label: 'Redraft' },
   { id: 'team', label: 'My Team' },
   { id: 'matchups', label: 'Matchups' },
@@ -58,18 +66,6 @@ const BASKETBALL_LIKE_TABS: TabDef[] = [
   { id: 'war_room', label: 'AF Legacy' },
   { id: 'ai_coaching', label: 'Manager Intelligence' },
   { id: 'history', label: 'History' },
-]
-
-/**
- * NBA, MLB and NHL get the Draft tab the football shell has always had. Without it their league
- * pages had no path to the live draft room at all — reported by an Android manager during a live
- * NBA draft, 2026-10-26. The tab renders the same pre-draft setup / DraftTab ("Enter Draft Room")
- * as football, and the group bar already lands its Draft pill on `draft`. NCAAB is unchanged.
- */
-const DRAFT_ENABLED_BASKETBALL_LIKE_TABS: TabDef[] = [
-  BASKETBALL_LIKE_TABS[0]!,
-  { id: 'draft', label: 'Draft' },
-  ...BASKETBALL_LIKE_TABS.slice(1),
 ]
 
 const SOCCER_TABS: TabDef[] = [
@@ -104,9 +100,9 @@ const PGA_TABS: TabDef[] = [
 
 const SPORT_TABS: Record<string, TabDef[]> = {
   NFL: NFL_TABS,
-  NBA: DRAFT_ENABLED_BASKETBALL_LIKE_TABS,
-  MLB: DRAFT_ENABLED_BASKETBALL_LIKE_TABS,
-  NHL: DRAFT_ENABLED_BASKETBALL_LIKE_TABS,
+  NBA: BASKETBALL_LIKE_TABS,
+  MLB: BASKETBALL_LIKE_TABS,
+  NHL: BASKETBALL_LIKE_TABS,
   SOCCER: SOCCER_TABS,
   NCAAF: NCAAF_TABS,
   NCAAB: BASKETBALL_LIKE_TABS,
