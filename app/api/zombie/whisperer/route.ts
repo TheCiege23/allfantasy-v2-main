@@ -25,6 +25,10 @@ export async function POST(req: Request) {
 
   if (action === 'select') {
     await requireCommissionerOnly(leagueId, userId)
+    const selected = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId: z.id }, select: { id: true } })
+    if (selected || !['setup', 'registering'].includes(z.status)) {
+      return NextResponse.json({ error: 'Whisperer selection is locked after assignment.' }, { status: 409 })
+    }
     const mode = typeof body.mode === 'string' ? body.mode : 'random'
     const manualUserId = typeof body.manualUserId === 'string' ? body.manualUserId : undefined
     const out = await selectWhisperer(z.id, mode, manualUserId)
