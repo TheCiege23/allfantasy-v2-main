@@ -71,7 +71,11 @@ ${tierLabel ? `${tierLabel} | ` : ''}${z.sport} | Season ${z.season}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
 
   const wr = z.whispererRecord
-  const whispererName = wr?.displayName ?? 'Unknown'
+  const whispererName = z.whispererIsPublic ? (wr?.displayName ?? 'Unknown') : 'Identity hidden'
+  const nameForUser = (userId: string) =>
+    !z.whispererIsPublic && wr?.userId === userId
+      ? Promise.resolve('Hidden Whisperer')
+      : displayNameForUser(leagueId, userId)
   const ambushesLeft = wr?.ambushesRemaining ?? 0
   const hordeSize = z.teams.filter((t) => t.status === 'Zombie').length
   const survivorCount = z.teams.filter((t) => t.status === 'Survivor').length
@@ -93,8 +97,8 @@ This week's ambush: ${ambushSummary}`
   const zombies = z.teams.filter((t) => t.status === 'Zombie')
   const zombieLines: string[] = []
   for (const t of zombies) {
-    const nm = await displayNameForUser(leagueId, (await rosterUserId(t.rosterId)) ?? t.rosterId)
-    const by = t.killedByUserId ? await displayNameForUser(leagueId, t.killedByUserId) : '—'
+    const nm = await nameForUser( (await rosterUserId(t.rosterId)) ?? t.rosterId)
+    const by = t.killedByUserId ? await nameForUser( t.killedByUserId) : '—'
     zombieLines.push(`🧟 ${nm} — Week turned: ${t.weekBecameZombie ?? '?'} — Infected by: ${by}`)
   }
   const newInf = await prisma.zombieInfectionEvent.findMany({
@@ -103,7 +107,7 @@ This week's ambush: ${ambushSummary}`
   const newList: string[] = []
   for (const ev of newInf) {
     newList.push(
-      `${await displayNameForUser(leagueId, ev.victimUserId)} ← ${await displayNameForUser(leagueId, ev.infectorUserId)}`,
+      `${await nameForUser( ev.victimUserId)} ← ${await nameForUser( ev.infectorUserId)}`,
     )
   }
 
@@ -115,14 +119,14 @@ New this week: ${newList.length ? newList.join('; ') : 'None'}`
   const survLines: string[] = []
   for (const t of survivors) {
     const uid = await rosterUserId(t.rosterId)
-    const nm = uid ? await displayNameForUser(leagueId, uid) : t.rosterId
+    const nm = uid ? await nameForUser( uid) : t.rosterId
     survLines.push(`🧍 ${nm} — Record: ${t.wins}-${t.losses} — PF: ${(t.pointsFor ?? 0).toFixed(1)}`)
   }
   const revived = z.teams.filter((t) => t.status.toLowerCase().includes('revived'))
   const revivedNames: string[] = []
   for (const r of revived) {
     const uid = await rosterUserId(r.rosterId)
-    if (uid) revivedNames.push(await displayNameForUser(leagueId, uid))
+    if (uid) revivedNames.push(await nameForUser( uid))
   }
   const sectionSurvivors = `🧍 SURVIVORS (${survivorCount} remaining)
 ${survLines.length ? survLines.join('\n') : '—'}
@@ -135,7 +139,7 @@ ${revivedNames.length ? `⚡ REVIVED: ${revivedNames.join(', ')}` : ''}`
         where: { zombieLeagueId_week: { zombieLeagueId: z.id, week } },
       })
       const winner = payout ? await prisma.roster.findUnique({ where: { id: payout.winnerRosterId }, select: { platformUserId: true } }) : null
-      const winnerName = winner?.platformUserId ? await displayNameForUser(leagueId, winner.platformUserId) : '—'
+      const winnerName = winner?.platformUserId ? await nameForUser( winner.platformUserId) : '—'
       sectionMoney = payout
         ? `💰 THIRD-PARTY WEEKLY PRIZE\n${winnerName} — $${(payout.amountCents / 100).toFixed(2)} (${payout.status}; ${payout.providerName})`
         : '💰 THIRD-PARTY WEEKLY PRIZE\nNo external prize amount recorded for this week.'
@@ -144,7 +148,7 @@ ${revivedNames.length ? `⚡ REVIVED: ${revivedNames.join(', ')}` : ''}`
       const leader = leaders[0]
       const owner = leader ? await prisma.roster.findUnique({ where: { id: leader.rosterId }, select: { platformUserId: true } }) : null
       sectionMoney = leader && owner?.platformUserId
-        ? `🏅 OUTBREAK POINTS\n${await displayNameForUser(leagueId, owner.platformUserId)} led Week ${week} with ${leader.amount.toFixed(2)} points.`
+        ? `🏅 OUTBREAK POINTS\n${await nameForUser( owner.platformUserId)} led Week ${week} with ${leader.amount.toFixed(2)} points.`
         : '🏅 OUTBREAK POINTS\nWeekly points are pending.'
     }
   }
@@ -153,15 +157,15 @@ ${revivedNames.length ? `⚡ REVIVED: ${revivedNames.join(', ')}` : ''}`
   const maul = await prisma.zombieMaulingEvent.findMany({ where: { leagueId, week } })
   const bashLines = await Promise.all(
     bash.map(async (b) => {
-      const wn = await displayNameForUser(leagueId, b.winnerUserId)
-      const ln = await displayNameForUser(leagueId, b.loserUserId)
+      const wn = await nameForUser( b.winnerUserId)
+      const ln = await nameForUser( b.loserUserId)
       return `🔥 BASHING: ${wn} defeated ${ln} by ${b.margin.toFixed(1)} pts`
     }),
   )
   const maulLines = await Promise.all(
     maul.map(async (m) => {
-      const mn = await displayNameForUser(leagueId, m.maulerUserId)
-      const vn = await displayNameForUser(leagueId, m.victimUserId)
+      const mn = await nameForUser( m.maulerUserId)
+      const vn = await nameForUser( m.victimUserId)
       return `💀 MAULING: ${mn} destroyed ${vn} by ${m.margin.toFixed(1)} pts`
     }),
   )
@@ -170,8 +174,8 @@ ${[...bashLines, ...maulLines].join('\n') || '—'}`
 
   const infLines = await Promise.all(
     newInf.map(async (ev) => {
-      const v = await displayNameForUser(leagueId, ev.victimUserId)
-      const i = await displayNameForUser(leagueId, ev.infectorUserId)
+      const v = await nameForUser( ev.victimUserId)
+      const i = await nameForUser( ev.infectorUserId)
       return `${v} turned by ${i} — margin: ${ev.scoreDifference.toFixed(1)} pts`
     }),
   )
@@ -191,11 +195,11 @@ ${infLines.length ? infLines.join('\n') : 'None'}`
       select: { rosterId: true, delta: true },
     })
     const awardLines: string[] = []
-    for (const item of awardedWeapons) awardLines.push(`${await displayNameForUser(leagueId, item.userId)} won ${item.itemLabel}`)
-    for (const item of awardedSerums) awardLines.push(`${await displayNameForUser(leagueId, item.userId)} won ${item.itemLabel} (${item.acquiredReason ?? 'weekly award'})`)
+    for (const item of awardedWeapons) awardLines.push(`${await nameForUser( item.userId)} won ${item.itemLabel}`)
+    for (const item of awardedSerums) awardLines.push(`${await nameForUser( item.userId)} won ${item.itemLabel} (${item.acquiredReason ?? 'weekly award'})`)
     for (const award of serumAwards) {
       const owner = await prisma.roster.findUnique({ where: { id: award.rosterId }, select: { platformUserId: true } })
-      if (owner?.platformUserId) awardLines.push(`${await displayNameForUser(leagueId, owner.platformUserId)} won ${award.delta} serum${award.delta === 1 ? '' : 's'}`)
+      if (owner?.platformUserId) awardLines.push(`${await nameForUser( owner.platformUserId)} won ${award.delta} serum${award.delta === 1 ? '' : 's'}`)
     }
     const weapons = items.filter((i) => i.itemType.startsWith('weapon_') && !i.isUsed)
     const bomb = weapons.some((i) => i.itemType === 'weapon_bomb')
@@ -220,7 +224,9 @@ Bomb status: ${bomb ? 'Held' : 'None'}\nThis week's awards: ${awardLines.join(';
         const h = await redraftOwnerStatus(leagueId, m.homeRosterId)
         const a = await redraftOwnerStatus(leagueId, m.awayRosterId)
         const pair = infectionRiskPair(h, a)
-        if (pair && h && a) danger.push(`${await displayNameForUser(leagueId, h.userId)} vs ${await displayNameForUser(leagueId, a.userId)} — ${pair}`)
+        if (pair && h && a) danger.push(!z.whispererIsPublic && pair === 'Whisperer threat'
+          ? 'A Survivor faces a hidden Horde threat'
+          : `${await nameForUser(h.userId)} vs ${await nameForUser(a.userId)} — ${pair}`)
       }
     }
     sectionDangerMatchups = `⚠️ DANGER MATCHUPS — WEEK ${nextWeek}
