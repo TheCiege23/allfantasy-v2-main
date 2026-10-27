@@ -485,6 +485,7 @@ export default function MlbBracketBoard({
             ) : null}
 
             {/* The tree */}
+            <p className="af-pb-scroll-cue" role="note">← Scroll or swipe to see every round →</p>
             <div className="af-pb-scroller" data-testid="pb-scroller">
               <div className="af-pb-tree" style={{ gridTemplateColumns }}>
                 {/* Left half, outward-in: match column, gutter, match column… */}
