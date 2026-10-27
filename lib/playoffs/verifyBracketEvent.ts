@@ -42,15 +42,15 @@ export function verifyBracketEvent(input: {
   const home = competitors.filter((row: unknown) => object(row).homeAway === "home")
   const away = competitors.filter((row: unknown) => object(row).homeAway === "away")
   if (home.length !== 1 || away.length !== 1) return { ok: false, reason: "ambiguous-competitors" }
-  if (!sameTeam(input.homeTeam, object(home[0]).team) || !sameTeam(input.awayTeam, object(away[0]).team)) {
-    return { ok: false, reason: "team-mismatch" }
-  }
+  const direct = sameTeam(input.homeTeam, object(home[0]).team) && sameTeam(input.awayTeam, object(away[0]).team)
+  const reversed = sameTeam(input.homeTeam, object(away[0]).team) && sameTeam(input.awayTeam, object(home[0]).team)
+  if (!direct && !reversed) return { ok: false, reason: "team-mismatch" }
   const actualAt = Date.parse(String(event.date ?? ""))
   const scheduledAt = Date.parse(input.scheduledAt)
   if (!Number.isFinite(actualAt) || !Number.isFinite(scheduledAt) || Math.abs(actualAt - scheduledAt) > 2 * 60 * 60 * 1000) {
     return { ok: false, reason: "start-time-mismatch" }
   }
-  const eventSeason = object(event.season)
+  const eventSeason = object(event.season ?? object(input.payload).season)
   if (input.sport === "ncaaf" && (Number(eventSeason.year) !== input.season || Number(eventSeason.type) !== 3)) {
     return { ok: false, reason: "not-cfp-postseason" }
   }
@@ -59,8 +59,8 @@ export function verifyBracketEvent(input: {
   }
   const status = object(object(competition.status).type)
   if (status.state !== "post" || status.completed !== true) return { ok: false, reason: "not-final" }
-  const homeScore = score(object(home[0]).score)
-  const awayScore = score(object(away[0]).score)
+  const homeScore = score(object(direct ? home[0] : away[0]).score)
+  const awayScore = score(object(direct ? away[0] : home[0]).score)
   if (homeScore == null || awayScore == null || homeScore === awayScore) return { ok: false, reason: "invalid-final-score" }
   return {
     ok: true,
