@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import clsx from 'clsx'
 import { RotateCcw } from 'lucide-react'
 import { ZombieUpdatesPanel } from './commissioner/ZombieUpdatesPanel'
@@ -61,6 +61,7 @@ export function ZombieCommissionerModal({
   const [showIntroReplay, setShowIntroReplay] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [canEdit, setCanEdit] = useState(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -85,6 +86,33 @@ export function ZombieCommissionerModal({
     }
     void fetchData()
   }, [open, leagueId])
+
+  useEffect(() => {
+    if (!open) return
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const oldOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLButtonElement>('button')?.focus())
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return
+      const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])')]
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (!first || !last) return
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = oldOverflow
+      previous?.focus()
+    }
+  }, [open, onClose])
 
   if (!open) return null
   const theme = getZombieTheme(backgroundTheme)
@@ -111,8 +139,10 @@ export function ZombieCommissionerModal({
         onClick={onClose}
         role="dialog"
         aria-label="Commissioner Settings"
+        aria-modal="true"
       >
         <div
+        ref={dialogRef}
         className="flex h-[100dvh] max-h-none w-full max-w-4xl flex-col overflow-hidden rounded-none sm:h-[90vh] sm:max-h-[700px] sm:rounded-2xl border border-[var(--zombie-border)] bg-[var(--zombie-bg)] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -137,7 +167,8 @@ export function ZombieCommissionerModal({
                   <button
                     type="button"
                     onClick={() => setShowIntroReplay(true)}
-                    className="ml-2 flex min-h-[44px] items-center gap-1.5 px-2 rounded-lg text-[12px] font-medium text-amber-200 bg-amber-900/20 hover:bg-amber-900/40 transition border border-amber-700/20"
+                    aria-label="Replay intro video"
+            className="ml-2 flex min-h-[44px] items-center gap-1.5 px-2 rounded-lg text-[12px] font-medium text-amber-200 bg-amber-900/20 hover:bg-amber-900/40 transition border border-amber-700/20"
                     title="Replay intro video"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
@@ -168,7 +199,7 @@ export function ZombieCommissionerModal({
           </nav>
 
           {/* Mobile tab scroller */}
-          <div className="flex shrink-0 overflow-x-auto border-b border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-1 md:hidden">
+          <div aria-label="Commissioner settings sections" className="flex shrink-0 overflow-x-auto border-b border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-1 md:hidden">
             {TABS.map((t) => (
               <button
                 key={t.id}
@@ -182,7 +213,7 @@ export function ZombieCommissionerModal({
                 )}
               >
                 <span>{t.icon}</span>
-                <span className="hidden xs:inline">{t.label}</span>
+                <span>{t.label}</span>
               </button>
             ))}
           </div>
