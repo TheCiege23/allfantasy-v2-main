@@ -75,6 +75,21 @@ describe('snapshot-based outcome correction plan', () => {
     expect(planZombieOutcomeReplay(row(90, 101), snapshot, 3, 'simple')?.spentItemIds).toEqual([])
   })
 
+  it('returns an armed weapon when that infection rule is disabled', () => {
+    const snapshot: ZombieSettlementSnapshotV1 = {
+      ...base,
+      config: { ...base.config!, infectionLossToZombie: false },
+      items: [{
+        id: 'w', teamStatusId: 'th', userId: 'h', itemType: 'weapon_knife',
+        itemLabel: '🔪 Knife', isUsed: false, isExpired: false,
+        activationState: 'pending_activation', activatesAtWeek: 3,
+        usedAtWeek: null, usedOnUserId: null, usedEffect: 'infection_shield',
+        acquiredAtWeek: 2, awardKey: null,
+      }],
+    }
+    expect(planZombieOutcomeReplay(row(101, 90), snapshot, 3, 'enhanced')?.spentItemIds).toEqual([])
+  })
+
   it('declines combat and automatic revival weeks for commissioner review', () => {
     expect(planZombieOutcomeReplay(row(130, 90), base, 3, 'enhanced')).toBeNull()
     expect(planZombieOutcomeReplay(row(101, 90), {
