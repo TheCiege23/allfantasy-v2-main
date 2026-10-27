@@ -6,6 +6,9 @@ import { SettingsSection, SettingsRow, Select } from '@/app/league/[leagueId]/ta
 type LeaguePayload = {
   league?: {
     status?: string
+    sport?: string
+    experienceMode?: string
+    whispererCount?: number
     whispererSelectionMode?: string
     whispererAmbushCount?: number
     whispererRecord?: { id: string } | null
@@ -29,6 +32,8 @@ export function ZombieWhispererPanel({
   const [message, setMessage] = useState('')
   const [ambushCount, setAmbushCount] = useState(3)
   const [weeklyCap, setWeeklyCap] = useState(1)
+  const [whispererCount, setWhispererCount] = useState(1)
+  const [allowsTwo, setAllowsTwo] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -49,6 +54,8 @@ export function ZombieWhispererPanel({
         setCommissioner(Boolean(data.viewerIsCommissioner))
         setAmbushCount(typeof league.whispererAmbushCount === 'number' ? league.whispererAmbushCount : 3)
         setWeeklyCap(typeof league.config?.ambushCountPerWeek === 'number' ? league.config.ambushCountPerWeek : 1)
+        setWhispererCount(league.whispererCount === 2 ? 2 : 1)
+        setAllowsTwo(league.experienceMode !== 'simple' && ['NBA', 'NHL', 'MLB'].includes((league.sport ?? '').toUpperCase()))
       })
       .catch((error: unknown) => {
         if (active) setMessage(error instanceof Error ? error.message : 'Could not load settings.')
@@ -70,7 +77,7 @@ export function ZombieWhispererPanel({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ leagueId, whispererSelectionMode: selection, whispererAmbushCount: ambushCount, ambushCountPerWeek: weeklyCap }),
+        body: JSON.stringify({ leagueId, whispererSelectionMode: selection, whispererCount, whispererAmbushCount: ambushCount, ambushCountPerWeek: weeklyCap }),
       })
       const result = (await response.json().catch(() => ({}))) as { error?: string }
       if (!response.ok) throw new Error(result.error ?? 'Could not save Whisperer settings.')
@@ -97,6 +104,7 @@ export function ZombieWhispererPanel({
             </Select>
           }
         />
+        {allowsTwo && <SettingsRow label="Whisperer seats" description="Each Whisperer has a separate ambush balance." control={<Select value={String(whispererCount)} onChange={(value) => setWhispererCount(Number(value))} disabled={!editable} className="min-h-[44px]"><option value="1">One</option><option value="2">Two</option></Select>} />}
         <SettingsRow label="Season ambushes" description="Total ambushes granted when the Whisperer is chosen." control={<input type="number" min={0} max={20} value={ambushCount} onChange={(event) => setAmbushCount(Number(event.target.value))} disabled={!editable} className="min-h-[44px] w-20 rounded-lg border border-white/15 bg-[#050a18] px-2" />} />
         <SettingsRow label="Per-week cap" description="Maximum matchup swaps in one week." control={<input type="number" min={0} max={5} value={weeklyCap} onChange={(event) => setWeeklyCap(Number(event.target.value))} disabled={!editable} className="min-h-[44px] w-20 rounded-lg border border-white/15 bg-[#050a18] px-2" />} />
       </SettingsSection>
@@ -109,7 +117,7 @@ export function ZombieWhispererPanel({
       <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
         <p className="font-semibold text-amber-200">Matchup ambush</p>
         <p className="mt-1 text-white/65">
-          The Whisperer has {ambushCount} season ambushes and may use {weeklyCap} per week. Before scoring starts, use @Chimmy ambush swap followed by an exact Survivor team name to change two matchups.
+          Each Whisperer has {ambushCount} season ambushes and may use {weeklyCap} per week. Before scoring starts, use @Chimmy ambush swap followed by an exact Survivor team name to change two matchups.
         </p>
       </div>
 
