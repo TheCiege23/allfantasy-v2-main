@@ -5,13 +5,16 @@
  *         the drafted announcement and the dues-to-payouts carry
  *   POST  { action: 'carry_payouts' }  head commissioner with AF Commissioner — next season's dues
  *         become the payout buy-in, through the settings patch
+ *   POST  { action: 'set_dues', amount }  dynasty, head commissioner — next season's dues, a fresh
+ *         list with nobody marked paid (a redraft league sets them in its renew)
  *
- * The renew itself stays POST /api/commissioner/leagues/[id]/renew.
+ * The renew itself stays POST /api/commissioner/leagues/[id]/renew; a dynasty league's start stays
+ * POST /api/leagues/[id]/season/start-new and its rookie draft the `create_next_draft` control.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { carryDuesIntoPayouts, readRolloverView } from '@/lib/season-rollover/rolloverService'
+import { carryDuesIntoPayouts, readRolloverView, setNextSeasonDues } from '@/lib/season-rollover/rolloverService'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +36,14 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
 export async function POST(req: NextRequest, ctx: Ctx) {
   const { leagueId } = await ctx.params
-  const body = (await req.json().catch(() => null)) as { action?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { action?: unknown; amount?: unknown } | null
+  if (body?.action === 'set_dues') {
+    const amount = body.amount == null || body.amount === '' ? null : Number(body.amount)
+    if (amount != null && !Number.isFinite(amount)) return NextResponse.json({ error: 'Enter dues as a number.' }, { status: 400 })
+    const result = await setNextSeasonDues(leagueId, await sessionUserId(), amount)
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    return result.response
+  }
   if (body?.action !== 'carry_payouts') return NextResponse.json({ error: 'Unknown action.' }, { status: 400 })
   const result = await carryDuesIntoPayouts(leagueId, await sessionUserId())
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })

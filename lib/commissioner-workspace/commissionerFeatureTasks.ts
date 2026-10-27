@@ -138,16 +138,22 @@ export function detectPayoutOvercommitment(
  * The season is over and the league has not been renewed (lib/season-rollover). Self-clearing:
  * renewing moves the league into next season, which removes the condition.
  */
-export function detectRolloverDue(leagueId: string, input: { season: number } | null): WorkspaceTaskCandidate | null {
+export function detectRolloverDue(
+  leagueId: string,
+  input: { season: number; kind?: 'redraft' | 'dynasty' } | null,
+): WorkspaceTaskCandidate | null {
   if (!input) return null
   return {
     sourceKey: `season-rollover:${input.season}:v1`,
     title: `Set up the ${input.season + 1} season`,
     description:
-      `The ${input.season} season is over. The rollover wizard walks you through payouts, returning managers, ` +
-      `next season’s dues and the draft order, then renews the league in one step.`,
+      input.kind === 'dynasty'
+        ? `The ${input.season} season is over. The rollover wizard walks you through the rookie draft order, ` +
+          `taxi squads, contracts, next season’s dues and the schedule, then starts the season. Rosters carry over.`
+        : `The ${input.season} season is over. The rollover wizard walks you through payouts, returning managers, ` +
+          `next season’s dues and the draft order, then renews the league in one step.`,
     priority: 'standard',
-    // Renewing resets every roster; only the commissioner decides when.
+    // Renewing resets every roster, and a dynasty start moves taxi players; only the commissioner decides when.
     automationCandidate: false,
     relatedLinks: [{ label: 'Next season', moduleId: 'settings', href: `/core/commissioner?league=${encodeURIComponent(leagueId)}#ch-rollover` }],
   }

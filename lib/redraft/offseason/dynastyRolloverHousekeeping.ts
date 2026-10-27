@@ -167,15 +167,8 @@ export type RolloverHousekeepingResult = {
 /** The key under `League.lifecycleMetadata` the commissioner surface reads. */
 export const DYNASTY_ROLLOVER_METADATA_KEY = 'dynastyRollover'
 
-/**
- * Apply the plan to one season's rosters and record the outcome on the league, where the
- * commissioner's "Start new season" panel reads it.
- */
-export async function runDynastyRolloverHousekeeping(
-  leagueId: string,
-  seasonId: string,
-  now: Date = new Date(),
-): Promise<RolloverHousekeepingResult | null> {
+/** One season's rosters, read and planned. Shared by the run and the rollover wizard's preview. */
+async function loadHousekeepingPlan(leagueId: string, seasonId: string) {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: {
@@ -231,6 +224,33 @@ export async function runDynastyRolloverHousekeeping(
     yearsExpByPlayerId,
     maxRosterSize,
   })
+  return { league, plan, maxRosterSize }
+}
+
+/**
+ * What the start would do to one season's rosters, without doing it: the rollover wizard's
+ * preview (lib/season-rollover/dynastyRolloverService.ts). Null when the league or season is gone.
+ */
+export async function previewDynastyRolloverHousekeeping(
+  leagueId: string,
+  seasonId: string,
+): Promise<(HousekeepingPlan & { maxRosterSize: number }) | null> {
+  const loaded = await loadHousekeepingPlan(leagueId, seasonId)
+  return loaded ? { ...loaded.plan, maxRosterSize: loaded.maxRosterSize } : null
+}
+
+/**
+ * Apply the plan to one season's rosters and record the outcome on the league, where the
+ * commissioner's "Start new season" panel reads it.
+ */
+export async function runDynastyRolloverHousekeeping(
+  leagueId: string,
+  seasonId: string,
+  now: Date = new Date(),
+): Promise<RolloverHousekeepingResult | null> {
+  const loaded = await loadHousekeepingPlan(leagueId, seasonId)
+  if (!loaded) return null
+  const { league, plan, maxRosterSize } = loaded
 
   const applied: HousekeepingMove[] = []
   for (const m of plan.moves) {
