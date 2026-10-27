@@ -44,3 +44,11 @@ describe('draft room ↔ Chimmy wiring', () => {
     expect(panel).toMatch(/leagueId=\{leagueId\}/)
   })
 })
+
+describe('draft room ↔ commissioner control center', () => {
+  it('warms the control center chunk for commissioners so opening the assistant cannot starve it', () => {
+    expect(src).toMatch(
+      /if \(!isCommissioner\) return\s*void import\('@\/components\/app\/draft-room\/CommissionerControlCenterModal'\)/,
+    )
+  })
+})

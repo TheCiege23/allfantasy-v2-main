@@ -437,6 +437,17 @@ export function DraftRoomPageClient({
       setMobileTab('helper')
     }
   }, [setMobileTab])
+  /*
+   * Warm the commissioner control center's chunk once the room is up. It is a lazy client chunk, so
+   * its first open waited on the network — behind whatever else the room had in flight. Opening the
+   * draft assistant fires about a dozen requests (Chimmy chat, entitlements, providers), and in the
+   * mobile Draft Room Regression run the control center then never finished loading. Warming it
+   * here makes the commissioner's first open instant and independent of that burst.
+   */
+  useEffect(() => {
+    if (!isCommissioner) return
+    void import('@/components/app/draft-room/CommissionerControlCenterModal').catch(() => {})
+  }, [isCommissioner])
   const [aiReorderLoading, setAiReorderLoading] = useState(false)
   const [aiReorderExplanation, setAiReorderExplanation] = useState<string | null>(null)
   const [aiReorderExecutionMode, setAiReorderExecutionMode] = useState<string | null>(null)
