@@ -85,15 +85,15 @@ export async function reconcileScoreOnlyCorrection(input: {
   const oldRows = oldScoreRows(previous)
   if (!scoreOnlyCorrectionIsSafe(oldRows, matchups, rules)) return null
 
-  const snapshot = matchups.map(row => ({ id: row.id, homeScore: row.homeScore, awayScore: row.awayScore }))
+  const snapshot = matchups.map(row => ({ id: row.id, homeRosterId: row.homeRosterId, awayRosterId: row.awayRosterId, homeScore: row.homeScore, awayScore: row.awayScore }))
   try {
     return await prisma.$transaction(async tx => {
       const live = await tx.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId, week } } })
       if (!live || live.status !== 'complete' || live.resolvedAt?.getTime() !== previous.resolvedAt?.getTime()) return null
-      const nowRows = await tx.redraftMatchup.findMany({ where: { seasonId, week }, select: { id: true, homeScore: true, awayScore: true } })
+      const nowRows = await tx.redraftMatchup.findMany({ where: { seasonId, week }, select: { id: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true } })
       if (nowRows.length !== snapshot.length || nowRows.some(row => {
         const seen = snapshot.find(item => item.id === row.id)
-        return !seen || seen.homeScore !== row.homeScore || seen.awayScore !== row.awayScore
+        return !seen || seen.homeRosterId !== row.homeRosterId || seen.awayRosterId !== row.awayRosterId || seen.homeScore !== row.homeScore || seen.awayScore !== row.awayScore
       })) return null
 
       const rosters = await tx.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
