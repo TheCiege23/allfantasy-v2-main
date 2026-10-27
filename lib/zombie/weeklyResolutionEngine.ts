@@ -176,6 +176,7 @@ export async function runWeeklyResolution(
   const hordeSize = zombieCount
 
   const whisperer = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId } })
+  const coWhisperers = await prisma.zombieCoWhisperer.findMany({ where: { zombieLeagueId } })
   if (whisperer && hordeSize > (whisperer.hordeSizeAtPeak ?? 0)) {
     await prisma.whispererRecord.update({
       where: { id: whisperer.id },
@@ -311,7 +312,7 @@ export async function runWeeklyResolution(
     hordeSize,
     survivorCount,
     winningsSum,
-    whisperer?.ambushesRemaining ?? 0,
+    (whisperer?.ambushesRemaining ?? 0) + coWhisperers.reduce((sum, record) => sum + record.ambushesRemaining, 0),
     sitOutScoring,
   ), {
     week,
