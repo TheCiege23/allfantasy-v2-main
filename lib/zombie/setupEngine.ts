@@ -7,6 +7,7 @@ import {
 } from '@/lib/zombie/zombie-universe-tier'
 import { getRandomZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
 import { getZombieSeasonSchedule } from '@/lib/zombie/zombieSeasonSchedule'
+import { zombieExperienceDefaults, type ZombieExperienceMode } from '@/lib/zombie/zombieExperience'
 
 export type ZombieUniverseConfig = {
   name?: string
@@ -37,6 +38,7 @@ export type ZombieLeagueSetupConfig = {
   isSingleLeague?: boolean
   slug?: string
   backgroundTheme?: string | null
+  experienceMode?: ZombieExperienceMode
 }
 
 /**
@@ -262,6 +264,7 @@ export async function createZombieLeague(
         )
       : 'Zombie League')
 
+  const experienceMode = config.experienceMode ?? 'enhanced'
   const row = await prisma.zombieLeague.create({
     data: {
       universeId: universeId ?? null,
@@ -271,6 +274,8 @@ export async function createZombieLeague(
       slug: config.slug ?? '',
       sport,
       season: config.season ?? new Date().getFullYear(),
+      experienceMode,
+      whispererAmbushCount: experienceMode === 'simple' ? 0 : 3,
       isSingleLeague: config.isSingleLeague ?? !universeId,
       isPaid: config.isPaid ?? false,
       status: 'setup',
@@ -285,6 +290,12 @@ export async function createZombieLeague(
       weeklyUpdateDay: schedule.weeklyUpdateDayOfWeek,
       weeklyUpdateHour: schedule.automationHourUtc,
     },
+  })
+
+  await prisma.zombieLeagueConfig.upsert({
+    where: { leagueId },
+    create: { leagueId, ...zombieExperienceDefaults(experienceMode) },
+    update: zombieExperienceDefaults(experienceMode),
   })
 
   if (row.isPaid && config.buyInAmount != null) {
