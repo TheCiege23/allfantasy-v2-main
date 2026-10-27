@@ -24,8 +24,8 @@ export async function getZombieTradeRestriction(
     where: { leagueId, rosterId: { in: uniqueRosterIds } },
     select: { status: true },
   })
-  if (teams.some((team) => team.status === 'Zombie')) return 'zombie_trade_blocked'
-  if (!teams.some((team) => team.status === 'Whisperer')) return null
+  if (teams.some((team) => String(team.status).toLowerCase() === 'zombie')) return 'zombie_trade_blocked'
+  if (!teams.some((team) => String(team.status).toLowerCase() === 'whisperer')) return null
 
   const zombieLeague = await prisma.zombieLeague.findUnique({
     where: { leagueId },
@@ -34,7 +34,9 @@ export async function getZombieTradeRestriction(
   if (!zombieLeague) return null
 
   // A commissioner override or an in-flight infection can make a Zombie before its history row exists.
-  const activeZombies = await prisma.zombieLeagueTeam.count({ where: { leagueId, status: 'Zombie' } })
+  const activeZombies = await prisma.zombieLeagueTeam.count({
+    where: { leagueId, status: { in: ['Zombie', 'zombie'] } },
+  })
   if (activeZombies > 0) return 'whisperer_trade_blocked'
 
   const infections = await prisma.zombieInfectionEvent.count({
