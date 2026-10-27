@@ -37,3 +37,30 @@ describe('SurvivorPremiumCommandCenterPanel', () => {
     expect(screen.queryByText(/token costs/)).toBeNull()
   })
 })
+
+describe('Story mode controls', () => {
+  it('previews the chosen tone, hides the confessional when off, and saves through the tile endpoint', async () => {
+    const { SurvivorPremiumTileDetail } = await import('@/components/survivor/SurvivorPremiumTileDetail')
+    const { buildStoryModeTile } = await import('@/lib/survivor/premium/survivorHostTiles')
+    const data = buildStoryModeTile({ tone: 'classic', confessionals: true, postToChat: true })
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => (init?.method === 'POST'
+      ? json({ ok: true, settings: JSON.parse(String(init.body)) })
+      : json({ ok: true, tileId: 'story_mode_controls', data })))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<SurvivorPremiumTileDetail leagueId="lg-1" tileId="story_mode_controls" title="Story mode controls" />)
+    const preview = await screen.findByTestId('story-mode-preview')
+    expect(preview.textContent).toContain('The Tribe Has Spoken')
+    expect(preview.textContent).toContain('Confessional')
+
+    fireEvent.click(screen.getByRole('radio', { name: /Dramatic/ }))
+    expect(screen.getByTestId('story-mode-preview').textContent).toContain('The Torch Goes Dark')
+    fireEvent.click(screen.getByRole('checkbox', { name: /confessional/ }))
+    expect(screen.getByTestId('story-mode-preview').textContent).not.toContain('Confessional')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save story mode' }))
+    await screen.findByText(/Saved\. The next episode uses these settings\./)
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(post[0]).toBe('/api/leagues/lg-1/survivor/premium?tile=story_mode_controls')
+    expect(JSON.parse(String(post[1]!.body))).toEqual({ tone: 'dramatic', confessionals: false, postToChat: true })
+  })
+})

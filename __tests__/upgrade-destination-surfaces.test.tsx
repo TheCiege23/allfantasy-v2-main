@@ -149,6 +149,6 @@ describe('locks that used to send buyers to /settings', () => {
     const expected = SURVIVOR_PREMIUM_COMMAND_TILES.filter((t) => t.status === 'live').map((t) => upgradePathForPlan(t.requiredPlan))
     expect(hrefs).toEqual(expected)
     expect(new Set(hrefs).size).toBeGreaterThan(1)
-    expect(screen.getAllByText('Coming next')).toHaveLength(SURVIVOR_PREMIUM_COMMAND_TILES.filter((t) => t.status !== 'live').length)
+    expect(screen.queryAllByText('Coming next')).toHaveLength(SURVIVOR_PREMIUM_COMMAND_TILES.filter((t) => t.status !== 'live').length)
   })
 })

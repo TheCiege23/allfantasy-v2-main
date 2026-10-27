@@ -8,6 +8,8 @@
  */
 
 import { SURVIVOR_HOST_USER_ID } from '@/lib/survivor/survivorTribeRedrawActions'
+import { buildSurvivorEpisode, type SurvivorEpisode, type SurvivorEpisodeFacts } from '@/lib/survivor/survivorEpisode'
+import { SURVIVOR_STORY_TONES, type SurvivorStoryModeSettings, type SurvivorStoryTone } from '@/lib/survivor/survivorStoryMode'
 
 // ── Mini-game planner ────────────────────────────────────────────────────────
 
@@ -165,7 +167,41 @@ export function buildFairnessRadarTile(input: {
   }
 }
 
+// ── Story mode controls ──────────────────────────────────────────────────────
+
+export type StoryModeTile = {
+  settings: SurvivorStoryModeSettings
+  /** The same sample week told in each tone, so the commissioner can hear the difference. */
+  previews: Record<SurvivorStoryTone, SurvivorEpisode>
+}
+
+/** A made-up week (no real manager), used only to preview the tones. */
+const STORY_SAMPLE: SurvivorEpisodeFacts = {
+  week: 6,
+  merged: false,
+  tribeTotals: [{ name: 'Tribe A', total: 512.4 }, { name: 'Tribe B', total: 468.9 }],
+  attendingTribes: ['Tribe B'],
+  challengeWinner: 'Tribe A',
+  topScorer: 'Castaway One',
+  topScore: 141.2,
+  eliminated: ['Castaway Two'],
+  idolsPlayed: [],
+  tie: false,
+  remaining: 11,
+  votedOutSoFar: 5,
+  confessionals: [{ name: 'Castaway Two', text: 'I trusted the wrong people.' }],
+}
+
+/** Previews always carry the sample confessional; the form hides it while confessionals are off. */
+export function buildStoryModeTile(settings: SurvivorStoryModeSettings): StoryModeTile {
+  return {
+    settings,
+    previews: Object.fromEntries(SURVIVOR_STORY_TONES.map(tone => [tone, buildSurvivorEpisode({ ...STORY_SAMPLE, tone })])) as Record<SurvivorStoryTone, SurvivorEpisode>,
+  }
+}
+
 export type SurvivorHostTilePayload =
+  | { tileId: 'story_mode_controls'; data: StoryModeTile }
   | { tileId: 'minigame_planner'; data: MinigamePlannerTile }
   | { tileId: 'risk_alerts'; data: RiskAlertsTile }
   | { tileId: 'host_fairness_radar'; data: FairnessRadarTile }

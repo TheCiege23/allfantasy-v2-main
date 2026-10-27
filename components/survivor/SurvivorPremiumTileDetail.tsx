@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import type { SurvivorPremiumTilePayload, ThreatMapTile, SocialPulseTile, ChallengeOutlookTile, JuryProjectionTile, ExileStatusTile } from '@/lib/survivor/premium/survivorPremiumTiles'
-import type { FairnessRadarTile, MinigamePlannerTile, RiskAlertsTile } from '@/lib/survivor/premium/survivorHostTiles'
+import type { FairnessRadarTile, MinigamePlannerTile, RiskAlertsTile, StoryModeTile } from '@/lib/survivor/premium/survivorHostTiles'
+import { SURVIVOR_STORY_TONES, SURVIVOR_STORY_TONE_LABELS, type SurvivorStoryModeSettings } from '@/lib/survivor/survivorStoryMode'
 
 const muted = 'text-xs text-white/55'
 const you = (isYou: boolean) => (isYou ? <span className="ml-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-200">you</span> : null)
@@ -198,7 +199,61 @@ function FairnessRadar({ data }: { data: FairnessRadarTile }) {
   )
 }
 
-function render(payload: SurvivorPremiumTilePayload) {
+function StoryMode({ data, leagueId }: { data: StoryModeTile; leagueId: string }) {
+  const [draft, setDraft] = useState<SurvivorStoryModeSettings>(data.settings)
+  const [saved, setSaved] = useState<SurvivorStoryModeSettings>(data.settings)
+  const [state, setState] = useState<{ saving: boolean; message: string | null; error: boolean }>({ saving: false, message: null, error: false })
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
+  const preview = data.previews[draft.tone]
+  const scenes = draft.confessionals ? preview.scenes : preview.scenes.filter(scene => scene.label !== 'Confessional')
+  async function save() {
+    setState({ saving: true, message: null, error: false })
+    try {
+      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/premium?tile=story_mode_controls`, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error ?? 'Could not save story mode.')
+      setSaved(body.settings ?? draft)
+      setState({ saving: false, message: 'Saved. The next episode uses these settings.', error: false })
+    } catch (cause) {
+      setState({ saving: false, message: cause instanceof Error ? cause.message : 'Could not save story mode.', error: true })
+    }
+  }
+  return (
+    <div className="space-y-4">
+      <fieldset>
+        <legend className="text-xs font-bold uppercase tracking-wide text-white/50">Tone</legend>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          {SURVIVOR_STORY_TONES.map(tone => (
+            <label key={tone} className={`cursor-pointer rounded-lg border px-3 py-2 text-sm ${draft.tone === tone ? 'border-violet-400/50 bg-violet-500/10' : 'border-white/[0.08] bg-black/25'}`}>
+              <input type="radio" name="story-tone" value={tone} checked={draft.tone === tone} onChange={() => setDraft({ ...draft, tone })} className="mr-2" />
+              <span className="font-semibold text-white">{SURVIVOR_STORY_TONE_LABELS[tone].label}</span>
+              <span className="mt-0.5 block text-xs text-white/55">{SURVIVOR_STORY_TONE_LABELS[tone].hint}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className="space-y-2 text-sm text-white/80">
+        <label className="flex items-start gap-2"><input type="checkbox" checked={draft.confessionals} onChange={e => setDraft({ ...draft, confessionals: e.target.checked })} className="mt-1" /><span>Include the voted-out manager&apos;s last confessional</span></label>
+        <label className="flex items-start gap-2"><input type="checkbox" checked={draft.postToChat} onChange={e => setDraft({ ...draft, postToChat: e.target.checked })} className="mt-1" /><span>Post each episode to league chat <span className="block text-xs text-white/50">Off still keeps every episode on the Episodes page and the watch page.</span></span></label>
+      </div>
+      <div className="rounded-xl border border-white/[0.08] bg-black/30 p-3" data-testid="story-mode-preview">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Preview · a sample week</p>
+        <p className="mt-1 text-sm font-bold text-white">Episode {preview.week}: {preview.title}</p>
+        <ul className="mt-1 space-y-1 text-xs text-white/70">
+          {scenes.map((scene, i) => <li key={i}><span className="font-semibold text-white/85">{scene.label}:</span> {scene.text}</li>)}
+        </ul>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={() => void save()} disabled={!dirty || state.saving} className="rounded-lg border border-violet-400/40 bg-violet-500/15 px-4 py-2 text-sm font-semibold text-violet-100 disabled:opacity-40">{state.saving ? 'Saving…' : 'Save story mode'}</button>
+        {state.message ? <p role="status" className={`text-sm ${state.error ? 'text-amber-200' : 'text-emerald-200'}`}>{state.message}</p> : null}
+      </div>
+    </div>
+  )
+}
+
+function render(payload: SurvivorPremiumTilePayload, leagueId: string) {
   switch (payload.tileId) {
     case 'threat_map': return <ThreatMap data={payload.data} />
     case 'social_pulse': return <SocialPulse data={payload.data} />
@@ -208,6 +263,7 @@ function render(payload: SurvivorPremiumTilePayload) {
     case 'minigame_planner': return <MinigamePlanner data={payload.data} />
     case 'risk_alerts': return <RiskAlerts data={payload.data} />
     case 'host_fairness_radar': return <FairnessRadar data={payload.data} />
+    case 'story_mode_controls': return <StoryMode data={payload.data} leagueId={leagueId} />
   }
 }
 
@@ -231,7 +287,7 @@ export function SurvivorPremiumTileDetail({ leagueId, tileId, title }: { leagueI
     <section aria-label={title} data-testid={`survivor-premium-detail-${tileId}`} className="rounded-2xl border border-emerald-400/20 bg-black/30 p-4">
       <h3 className="text-sm font-bold text-white">{title}</h3>
       <div className="mt-3">
-        {state.loading ? <p className={muted} role="status">Loading…</p> : state.error ? <p className="text-sm text-amber-200" role="alert">{state.error}</p> : state.payload ? render(state.payload) : null}
+        {state.loading ? <p className={muted} role="status">Loading…</p> : state.error ? <p className="text-sm text-amber-200" role="alert">{state.error}</p> : state.payload ? render(state.payload, leagueId) : null}
       </div>
     </section>
   )
