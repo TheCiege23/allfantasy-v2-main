@@ -40,7 +40,7 @@ the one the renew path itself uses.
 |---|---|---|---|
 | ✅ | Taxi size and eligibility (rookies / years limit) | Free | `lib/taxi/TaxiSettingsService.ts`, enforced on lineup save (`rosterValidationService`), ineligible players moved to the bench at rollover. Settings → Taxi squad. |
 | ✅ | Taxi rules: lock after week X, promote-only windows | Plan | Enforced on both lineup saves once the commissioner turns on **Enforce these rules** (Roster settings → Taxi squad rules, `League.settings.taxi_rules_enforced`) and the owner holds AF Commissioner: lock week (`TAXI_DEADLINE_PASSED`), promotion deadline, once promoted cannot return (a `taxi_promotion` row in `RedraftRosterMoveHistory`), in-season and playoff switches. `lib/taxi/taxiMoveRules.ts`, `taxiRulesService.ts`. Opt-in because every league holds defaults nobody chose; the offseason is always open and a commissioner override is never refused. |
-| ⬜ | Max years on taxi | Plan | No tenure counter for native rosters (`lib/core-app/taxiTenure.ts` reads Sleeper snapshots only). |
+| ✅ | Max years on taxi | Free | Commissioner setting, **2 seasons by default** (1–5 or no limit; Roster settings → Taxi squad rules, `League.settings.taxi_max_years`). Counted from completed seasons' rosters on any team (`lib/taxi/taxiMaxYears.ts`, no migration); a player who has used them moves to the bench at the season start and can't be put back on taxi by a lineup save. |
 | ⬜ | Taxi stealing (claim another team's taxi player) | Plan | Not built. Devy has a display-only flag (misspelled `taxiPoachaingEnabled`). |
 
 ## Picks and trades

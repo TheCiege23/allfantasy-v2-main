@@ -97,7 +97,8 @@ export function DynastyRolloverWizard({ leagueId, view, reload }: { leagueId: st
         const rule =
           input.taxi.slots > 0
             ? tx(input.taxi.allowNonRookies ? 'taxi.rule.any' : 'taxi.rule.rookies', { slots: input.taxi.slots }) +
-              (input.taxi.yearsLimit ? ` ${plural('taxi.rule.years', input.taxi.yearsLimit)}` : '')
+              (input.taxi.yearsLimit ? ` ${plural('taxi.rule.years', input.taxi.yearsLimit)}` : '') +
+              (input.taxi.maxSeasons ? ` ${plural('taxi.rule.maxSeasons', input.taxi.maxSeasons)}` : '')
             : tx('taxi.none')
         const effect = input.started
           ? plural('taxi.moved', input.taxi.toBench)

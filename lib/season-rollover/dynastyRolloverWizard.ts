@@ -44,6 +44,8 @@ export type DynastyRolloverInput = {
   taxi: {
     slots: number
     yearsLimit: number | null
+    /** Max seasons on the taxi squad (lib/taxi/taxiMaxYears.ts); null is no limit. */
+    maxSeasons: number | null
     allowNonRookies: boolean
     /** Taxi players the start will move to the bench (a preview before it, what it did after). */
     toBench: number

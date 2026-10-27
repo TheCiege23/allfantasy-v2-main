@@ -46,6 +46,8 @@ export type TaxiMoveIssueCode =
   | 'TAXI_NO_RETURN'
   | 'TAXI_IN_SEASON_LOCKED'
   | 'TAXI_POSTSEASON_LOCKED'
+  /** Max seasons on the taxi squad (./taxiMaxYears.ts): checked even when the rules above are off. */
+  | 'TAXI_MAX_YEARS'
 
 export type TaxiMoveIssue = { code: TaxiMoveIssueCode; playerId: string; message: string }
 
