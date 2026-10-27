@@ -8,6 +8,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 const pool = vi.hoisted(() => ({ load: vi.fn() }))
 vi.mock('@/lib/draft-room/getResolvedDraftPoolForLeague', () => ({ getResolvedDraftPoolForLeague: pool.load }))
+const cache = vi.hoisted(() => ({ warm: vi.fn(), stale: vi.fn() }))
+vi.mock('@/lib/draft-room/ensureDraftPoolReady', () => ({
+  getWarmDraftPoolSnapshotFast: cache.warm,
+  readStaleDraftPoolRow: cache.stale,
+  resolveDraftPoolCacheContext: vi.fn(async () => ({ standardCacheKey: 'key', rosterFp: 'fp' })),
+}))
 const outer = vi.hoisted(() => ({ prisma: {} as Record<string, unknown>, tx: vi.fn(), order: [] as string[] }))
 vi.mock('@/lib/prisma', () => ({ prisma: outer.prisma }))
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: outer.tx }))
@@ -45,6 +51,59 @@ beforeEach(() => {
   outer.order.length = 0
   for (const key of Object.keys(outer.prisma)) delete outer.prisma[key]
   pool.load.mockImplementation(async () => { outer.order.push('pool'); return { entries, sport: 'NBA', count: entries.length, rosterConfigurationIncomplete: false } })
+  cache.warm.mockImplementation(async () => ({ warm: false, source: 'cold', entryCount: 0, syncedAt: null, cacheKey: 'key' }))
+  cache.stale.mockImplementation(async () => null)
+})
+
+/*
+ * A cold pool build is ~160 s, and both post-draft bootstraps paid it for the waiver-wire idols
+ * while the pool the draft had just used sat in the cache. Measured in the season rehearsal.
+ */
+describe('idol placement reads the cached draft pool before building one', () => {
+  const waiverPrisma = () => ({
+    survivorIdol: { count: vi.fn(async (args: { where: { rosterId: unknown } }) => (args.where.rosterId === SURVIVOR_POOL_IDOL_ROSTER_ID ? 3 : 0)) },
+    draftSession: { findFirst: vi.fn(async () => ({ id: 'draft-1', status: 'completed' })) },
+    draftPick: { findMany: vi.fn(async () => [{ playerId: 'nba-0' }, { playerId: 'nba-2' }]) },
+  })
+
+  it('a fresh cached pool is used, without drafted players, and nothing is built', async () => {
+    Object.assign(outer.prisma, waiverPrisma())
+    cache.warm.mockImplementation(async () => ({ warm: true, source: 'db-cache', payload: { entries }, entryCount: entries.length, syncedAt: null, cacheKey: 'key' }))
+    const out = await loadSurvivorWaiverIdolPool('lg')
+    expect(pool.load).not.toHaveBeenCalled()
+    expect(cache.stale).not.toHaveBeenCalled()
+    expect(out).toHaveLength(78)
+    expect(out!.slice(0, 2)).toEqual([{ playerId: 'nba-1', playerName: 'Player 1', adp: 2 }, { playerId: 'nba-3', playerName: 'Player 3', adp: 4 }])
+  })
+
+  it('an expired row from the same draft is used when no fresh one exists', async () => {
+    Object.assign(outer.prisma, waiverPrisma())
+    cache.stale.mockImplementation(async () => ({ payload: { entries }, entryCount: entries.length, syncedAt: null, cacheKey: 'key' }))
+    expect(await loadSurvivorWaiverIdolPool('lg')).toHaveLength(78)
+    expect(cache.stale).toHaveBeenCalledWith('lg', { cacheKey: 'key', rosterFp: 'fp' })
+    expect(pool.load).not.toHaveBeenCalled()
+  })
+
+  it('draft-lock placement takes only its window from a cached pool', async () => {
+    const db = baseDb()
+    Object.assign(outer.prisma, { survivorIdol: { count: vi.fn(async () => 0) }, league: { findUnique: vi.fn(async () => ({ settings: {} })) } })
+    outer.tx.mockImplementation(async (_leagueId: string, work: (tx: unknown) => unknown) => work(db))
+    cache.warm.mockImplementation(async () => ({ warm: true, source: 'db-cache', payload: { entries }, entryCount: entries.length, syncedAt: null, cacheKey: 'key' }))
+    expect(await placeSurvivorIdolsInPool('lg', { teamCount: 4, rounds: 2, seed: 11 })).toMatchObject({ ok: true, placed: true, count: 6 })
+    expect(pool.load).not.toHaveBeenCalled()
+    // Twice the largest window it can use, max(12 idol picks, 4 x 2) = 12: the top 24 rows only.
+    const placed = db.survivorIdol.create.mock.calls.map(([arg]: any) => Number(String(arg.data.playerId).slice(4)))
+    expect(Math.max(...placed)).toBeLessThan(24)
+  })
+
+  it('no cached row, or a cache read that fails, falls back to building the pool', async () => {
+    Object.assign(outer.prisma, waiverPrisma())
+    expect(await loadSurvivorWaiverIdolPool('lg')).toHaveLength(78)
+    expect(pool.load).toHaveBeenCalledTimes(1)
+    cache.warm.mockImplementation(async () => { throw new Error('cache table missing') })
+    expect(await loadSurvivorWaiverIdolPool('lg')).toHaveLength(78)
+    expect(pool.load).toHaveBeenCalledTimes(2)
+  })
 })
 
 /*
@@ -84,7 +143,7 @@ describe('the draft pool is read before the setup transaction opens', () => {
       draftSession: { findFirst: vi.fn(async () => ({ id: 'draft-1', status: 'completed' })) },
       draftPick: { findMany: vi.fn(async () => [{ playerId: 'nba-3' }, { playerId: null }, { playerId: 'nba-9' }]) },
     })
-    expect(await loadSurvivorWaiverIdolPool('lg')).toHaveLength(80)
+    expect(await loadSurvivorWaiverIdolPool('lg')).toHaveLength(78)
     expect(pool.load).toHaveBeenCalledWith('lg', expect.objectContaining({ limit: 120, excludeDraftedPlayerIds: new Set(['nba-3', 'nba-9']) }))
     pool.load.mockClear()
     count.mockImplementation(async () => 3)

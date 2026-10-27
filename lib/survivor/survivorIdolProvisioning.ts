@@ -34,13 +34,38 @@ export type SurvivorIdolPlacementOutcome =
   | { ok: true; placed: boolean; alreadyPlaced: boolean; count: number }
   | { ok: false; status: 422; code: string; error: string }
 
+type PoolEntryLike = { playerId?: unknown; name?: unknown; adp?: unknown; aiAdp?: unknown }
+
+/*
+ * 🛑 READ THE CACHED POOL BEFORE BUILDING ONE. The draft room, autopick and lookahead keep the pool
+ * in the draft-pool cache for the whole draft, and its key depends on the roster template, never on
+ * who has been drafted. A cold build costs ~160 s for a 16-team NFL pool. Measured in the season
+ * rehearsal: both post-draft bootstraps (DraftSessionService and postDraftFinalizeArtifacts) built
+ * it from scratch for the waiver-wire idols, so tribes appeared minutes after the last pick. The
+ * cached row, fresh or stale, is the pool the draft just used; drafted players are excluded here.
+ */
+async function readCachedPoolEntries(leagueId: string): Promise<PoolEntryLike[] | null> {
+  const { getWarmDraftPoolSnapshotFast, readStaleDraftPoolRow, resolveDraftPoolCacheContext } = await import('@/lib/draft-room/ensureDraftPoolReady')
+  const warm = await getWarmDraftPoolSnapshotFast(leagueId)
+  if (warm.warm && warm.payload.entries?.length) return warm.payload.entries as PoolEntryLike[]
+  const context = await resolveDraftPoolCacheContext(leagueId)
+  const stale = await readStaleDraftPoolRow(leagueId, { cacheKey: context.standardCacheKey, rosterFp: context.rosterFp })
+  return stale?.payload.entries?.length ? stale.payload.entries as PoolEntryLike[] : null
+}
+
 /** The draft pool as idol candidates: stable ids with ADP, best first. Lazy: the pool is heavy. */
 async function loadPoolCandidates(leagueId: string, limit: number, excludeDraftedPlayerIds?: ReadonlySet<string>): Promise<PoolIdolCandidate[]> {
-  const { getResolvedDraftPoolForLeague } = await import('@/lib/draft-room/getResolvedDraftPoolForLeague')
-  const pool = await getResolvedDraftPoolForLeague(leagueId, { limit, excludeDraftedPlayerIds })
-  return pool.entries
-    .filter(entry => entry.playerId)
-    .map(entry => ({ playerId: String(entry.playerId), playerName: entry.name ?? null, adp: entry.adp ?? entry.aiAdp ?? null }))
+  const cached = await readCachedPoolEntries(leagueId).catch(() => null)
+  const entries: PoolEntryLike[] = cached ?? (await (await import('@/lib/draft-room/getResolvedDraftPoolForLeague'))
+    .getResolvedDraftPoolForLeague(leagueId, { limit, excludeDraftedPlayerIds })).entries
+  return entries
+    .filter(entry => entry.playerId && !excludeDraftedPlayerIds?.has(String(entry.playerId)))
+    .slice(0, limit)
+    .map(entry => ({
+      playerId: String(entry.playerId),
+      playerName: typeof entry.name === 'string' ? entry.name : null,
+      adp: typeof entry.adp === 'number' ? entry.adp : typeof entry.aiAdp === 'number' ? entry.aiAdp : null,
+    }))
 }
 
 /*
