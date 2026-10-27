@@ -125,7 +125,7 @@ export default function KnockoutBracketAdminPage() {
           <h2 className="text-xl font-bold">NBA Cup knockout field</h2>
           <p className="mt-1 text-sm text-slate-300">Enter each conference's four qualified teams in official seed order. Publish after group play is final.</p>
           <label className="mt-4 block text-sm" htmlFor="season">Tournament season</label>
-          <input id="season" className={inputClass} type="number" min={2024} max={2100} value={season} onChange={(e) => setSeason(Number(e.target.value))} />
+          <input id="season" className={inputClass} type="number" min={2024} max={2100} value={season} onChange={(e) => { setSeason(Number(e.target.value)); setEventIds(Array.from({ length: scheduleSport === "ncaaf" ? 11 : 7 }, () => "")); setEventMessage("") }} />
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
             {(["east", "west"] as const).map((side) => {
               const values = side === "east" ? east : west
