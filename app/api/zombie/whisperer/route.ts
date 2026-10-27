@@ -64,7 +64,7 @@ export async function GET(req: Request) {
   if (!z?.whispererRecord) return NextResponse.json({ whisperer: null, whisperers: [] })
 
   const isComm = z.league.userId === userId
-  const records = [z.whispererRecord, ...z.coWhisperers]
+  const records = [z.whispererRecord, ...(z.coWhisperers ?? [])]
   const visible = await Promise.all(records.map(async (record) => {
     const own = record.userId === userId
     const canSee = canViewerSeeWhisperer({
