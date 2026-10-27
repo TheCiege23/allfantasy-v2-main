@@ -7,7 +7,8 @@
  *
  * Free: any commissioner sees the order and previews other settings. AF Commissioner: the
  * automation switch, which saves the final order when the title game ends and seats the next
- * rookie draft from it. Built for a 360–390px phone first.
+ * rookie draft from it, and the round notices under it (tell the commissioner, post in league chat).
+ * Built for a 360–390px phone first.
  *
  * The per-slot reasons come from the server engine (lib/rookie-order/rookieOrderEngine.ts) and
  * are shown as sent; the labels, options and badges around them are translated here.
@@ -20,6 +21,7 @@ import { SettingsSwitch } from '@/components/league-settings/SettingsSwitch'
 import { ImportedOrderChecklist } from '@/components/import-assist/ImportedOrderChecklist'
 
 type Config = { nonPlayoff: string; playoff: string; withinRound: string }
+type RoundNotices = { notify: boolean; chat: boolean }
 
 type Slot = {
   slot: number
@@ -43,7 +45,13 @@ type LiveView = {
     | { kind: 'computed'; weeks: number; estimated: number; note: string }
     | { kind: 'best_ball'; note: string }
     | { kind: 'unsupported'; reason: string; note: string }
-  settings: { enabled: boolean; config: Config; finalOrder: { basedOnSeason: number; savedAt: string } | null }
+  settings: {
+    enabled: boolean
+    config: Config
+    finalOrder: { basedOnSeason: number; savedAt: string } | null
+    roundNotices?: RoundNotices
+    lastRoundNotice?: { season: number; phase: string; lockedTeamIds: string[]; at: string } | null
+  }
   automationActive: boolean
   canAutomate: boolean
   preview: boolean
@@ -55,6 +63,8 @@ const fill = (s: string, vars: Record<string, string | number>) =>
 const NON_PLAYOFF = ['reverse_max_pf', 'reverse_points_for', 'reverse_record'] as const
 const PLAYOFF = ['finish_then_seed', 'reverse_record', 'reverse_max_pf'] as const
 const WITHIN = ['worse_seed', 'reverse_max_pf', 'reverse_points_for'] as const
+
+const DEFAULT_NOTICES: RoundNotices = { notify: true, chat: false }
 
 /** The Max PF line in the viewer's language; its English twin is dropped from `notes`. */
 function maxPfLine(info: NonNullable<LiveView['maxPfInfo']>, t: (k: string) => string): string {
@@ -74,13 +84,14 @@ function pickLabel(round: number, slot: number) {
 
 export function LiveRookieOrderPanel({ leagueId }: { leagueId: string }) {
   const { t } = useLanguage()
-  const ids = { auto: useId(), np: useId(), po: useId(), wr: useId() }
+  const ids = { auto: useId(), np: useId(), po: useId(), wr: useId(), rnN: useId(), rnC: useId() }
   const base = `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/rookie-draft-order/live`
 
   const [view, setView] = useState<LiveView | null>(null)
   const [unavailable, setUnavailable] = useState(false)
   const [config, setConfig] = useState<Config | null>(null)
   const [enabled, setEnabled] = useState(false)
+  const [notices, setNotices] = useState<RoundNotices>(DEFAULT_NOTICES)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
 
@@ -95,6 +106,7 @@ export function LiveRookieOrderPanel({ leagueId }: { leagueId: string }) {
       if (!preview) {
         setConfig(data.settings.config)
         setEnabled(data.settings.enabled)
+        setNotices(data.settings.roundNotices ?? DEFAULT_NOTICES)
       }
     } catch {
       setUnavailable(true)
@@ -118,7 +130,7 @@ export function LiveRookieOrderPanel({ leagueId }: { leagueId: string }) {
       const res = await fetch(base, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled, config }),
+        body: JSON.stringify({ enabled, config, roundNotices: notices }),
       })
       const data = await res.json().catch(() => ({}))
       if (res.status === 402) { setMessage({ tone: 'error', text: t('lsEd.dr.live.needsSub') }); return }
@@ -146,8 +158,12 @@ export function LiveRookieOrderPanel({ leagueId }: { leagueId: string }) {
   const phaseLabel = t(`lsEd.dr.live.phase.${result.phase}`)
   const nonPlayoff = result.slots.filter((s) => s.group === 'non_playoff')
   const playoff = result.slots.filter((s) => s.group === 'playoff')
+  const savedNotices = view.settings.roundNotices ?? DEFAULT_NOTICES
+  const lastNotice = view.settings.lastRoundNotice
   const dirty =
     enabled !== view.settings.enabled ||
+    notices.notify !== savedNotices.notify ||
+    notices.chat !== savedNotices.chat ||
     (Object.keys(config) as (keyof Config)[]).some((k) => config[k] !== view.settings.config[k])
   const savedOrder = view.settings.finalOrder
 
@@ -206,6 +222,24 @@ export function LiveRookieOrderPanel({ leagueId }: { leagueId: string }) {
           labelledBy={`${ids.auto}-label`} describedBy={`${ids.auto}-desc`} />
       </div>
 
+      {enabled && (
+        <fieldset className="min-w-0 space-y-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2" data-testid="rookie-order-round-notices">
+          <legend className="px-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">{t('lsEd.dr.live.rn.title')}</legend>
+          <NoticeSwitch id={ids.rnN} label={t('lsEd.dr.live.rn.notify')} desc={t('lsEd.dr.live.rn.notifyDesc')}
+            checked={notices.notify} onChange={(v) => { setNotices({ ...notices, notify: v }); setMessage(null) }} />
+          <NoticeSwitch id={ids.rnC} label={t('lsEd.dr.live.rn.chat')} desc={t('lsEd.dr.live.rn.chatDesc')}
+            checked={notices.chat} onChange={(v) => { setNotices({ ...notices, chat: v }); setMessage(null) }} />
+          {lastNotice?.at && lastNotice.season === view.basedOnSeason && (
+            <p className="text-[11px] text-white/40">
+              {fill(t(lastNotice.phase === 'final' ? 'lsEd.dr.live.rn.lastFinal' : 'lsEd.dr.live.rn.last'), {
+                locked: lastNotice.lockedTeamIds.length,
+                date: lastNotice.at.slice(0, 10),
+              })}
+            </p>
+          )}
+        </fieldset>
+      )}
+
       {savedOrder && (
         <p className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-[11px] text-emerald-300">
           {fill(t('lsEd.dr.live.savedOrder'), { season: savedOrder.basedOnSeason + 1 })}
@@ -261,6 +295,20 @@ export function LiveRookieOrderPanel({ leagueId }: { leagueId: string }) {
         {saving ? t('scoring.saving') : t('lsEd.dr.live.save')}
       </button>
     </section>
+  )
+}
+
+function NoticeSwitch({ id, label, desc, checked, onChange }: {
+  id: string; label: string; desc: string; checked: boolean; onChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <p id={`${id}-label`} className="text-[12px] font-semibold text-white/85">{label}</p>
+        <p id={`${id}-desc`} className="mt-0.5 text-[11px] leading-snug text-white/40">{desc}</p>
+      </div>
+      <SettingsSwitch checked={checked} onChange={onChange} labelledBy={`${id}-label`} describedBy={`${id}-desc`} />
+    </div>
   )
 }
 

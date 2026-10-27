@@ -23,6 +23,8 @@ export type LeagueOfficeInput = {
   viewerTeamManaged: boolean
   /** The league's lineup rule for eliminated teams (lib/eliminated-lineups), in words; every member. */
   eliminatedLineupRule?: string | null
+  /** The live rookie order's round notices (lib/rookie-order/roundNotices.ts), in words; every member. */
+  rookieOrderRounds?: string | null
   /** The latest league-log lines the viewer may read; null when the log is hidden from them. */
   log: ReadonlyArray<{ at: string; title: string; detail: string | null }> | null
   /** The payout calculator (lib/payouts), when the commissioner has set a place split. */
@@ -112,6 +114,7 @@ export function buildLeagueOfficeSummary(input: LeagueOfficeInput): string | nul
   }
   if (input.viewerTeamManaged) lines.push('AllFantasy is setting your lineup while you are away; saving a lineup yourself stops it.')
   if (input.eliminatedLineupRule) lines.push(input.eliminatedLineupRule)
+  if (input.rookieOrderRounds) lines.push(input.rookieOrderRounds)
 
   if (input.log?.length) {
     lines.push('Latest league log:')

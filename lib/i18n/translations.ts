@@ -618,6 +618,13 @@ export const translations: Record<string, Record<string, string>> = {
     "lsEd.dr.live.pending": "Pending",
     "lsEd.dr.live.save": "Save rookie order settings",
     "lsEd.dr.live.saved": "Rookie order settings saved",
+    "lsEd.dr.live.rn.title": "After each playoff round",
+    "lsEd.dr.live.rn.notify": "Tell me which picks locked",
+    "lsEd.dr.live.rn.notifyDesc": "AllFantasy checks the order every hour and sends you the picks each round decided.",
+    "lsEd.dr.live.rn.chat": "Post the update in league chat",
+    "lsEd.dr.live.rn.chatDesc": "Everyone sees which picks are locked in as the playoffs go.",
+    "lsEd.dr.live.rn.last": "Last update: {{locked}} picks locked on {{date}}.",
+    "lsEd.dr.live.rn.lastFinal": "Last update: order final on {{date}}.",
     "lsEd.dr.runnerUp": "Runner-Up",
     "lsEd.dr.saved": "Draft settings saved.",
     // Draft tab mobile overhaul (DraftSettingsCommissionerPanel) — 2026-10-14

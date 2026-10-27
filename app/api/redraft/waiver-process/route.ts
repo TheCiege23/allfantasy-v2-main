@@ -12,6 +12,7 @@ import {
 import { processDueTradeReviews, type TradeReviewSweepResult } from '@/lib/redraft/tradeReviewWindowSweep'
 import type { InactiveLineupRunResult } from '@/lib/inactive-manager/inactiveManagerService'
 import type { EliminatedLineupRunResult } from '@/lib/eliminated-lineups/eliminatedLineupService'
+import type { RookieOrderRoundNoticeRun } from '@/lib/rookie-order/roundNoticeService'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -234,6 +235,30 @@ export async function GET(request: Request) {
     eliminatedLineups = { error: e instanceof Error ? e.message : String(e) }
   }
 
+  /*
+   * Live rookie order (lib/rookie-order/roundNoticeService): AF Commissioner automation. Refreshes the
+   * order of every league that automates it — saving the final order when the title game is decided —
+   * and tells the commissioner (and league chat, when chosen) which picks each playoff round locked.
+   * Hourly because playoff results land on the score sync's schedule; guarded and on its own job identity.
+   */
+  let rookieOrderRounds: RookieOrderRoundNoticeRun | { error: string } | null = null
+  try {
+    const { runRookieOrderRoundNotices } = await import('@/lib/rookie-order/roundNoticeService')
+    rookieOrderRounds = await withSyncJobRun(
+      { jobName: 'cron-rookie-order-round-notices', trigger: 'cron' },
+      () => runRookieOrderRoundNotices(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.announced,
+        errors: r.failures.map((f) => `${f.leagueId}: ${f.error}`),
+        metadata: { refreshed: r.refreshed, notified: r.notified, posted: r.posted, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] rookie order round notices failed', e)
+    rookieOrderRounds = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   const out = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
     () => processDueWaiverWindows(),
@@ -259,5 +284,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, rookieOrderRounds, exileRollover })
 }
