@@ -257,7 +257,8 @@ export async function PATCH(req: Request) {
   }
 
   if (serumReviveCountPatch !== undefined || bool('autoSerumRevive') !== undefined ||
-      bool('serumAwardHighScore') !== undefined || bool('serumAwardOnBashMaul') !== undefined) {
+      bool('serumAwardHighScore') !== undefined || bool('serumAwardOnBashMaul') !== undefined ||
+      seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined) {
     await generateRulesDocument(z.id)
   }
 
