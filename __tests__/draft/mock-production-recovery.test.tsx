@@ -18,9 +18,10 @@ function checkpoint(overrides: Record<string, unknown> = {}) {
 }
 function saved() { return JSON.parse(localStorage.getItem(key)!) }
 async function openPlayers() {
-  // The mobile drawer is the same production component mounted alongside desktop content.
+  // The mobile tray is the same production component mounted alongside desktop content. It is a
+  // non-modal region (the board stays usable behind it), not a dialog.
   fireEvent.click(screen.getByRole('button', { name: 'Players', exact: true }))
-  return within(screen.getByRole('dialog', { name: 'Players', exact: true }))
+  return within(screen.getByRole('region', { name: 'Players', exact: true }))
 }
 beforeEach(() => {
   localStorage.clear()
