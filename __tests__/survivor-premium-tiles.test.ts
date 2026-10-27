@@ -132,6 +132,13 @@ describe('tile access: the one rule the page and the server share', () => {
     expect(resolveSurvivorPremiumTileAccess({ tileId: 'threat_map', plan: 'af_commissioner', isCommissioner: true })).toMatchObject({ ok: false, reason: 'plan_required' })
   })
 
+  it('host tiles open only for a commissioner, and only on AF Commissioner or Supreme', () => {
+    expect(resolveSurvivorPremiumTileAccess({ tileId: 'risk_alerts', plan: 'af_supreme', isCommissioner: false })).toEqual({ ok: false, reason: 'commissioner_only' })
+    expect(resolveSurvivorPremiumTileAccess({ tileId: 'risk_alerts', plan: 'af_pro', isCommissioner: true })).toEqual({ ok: false, reason: 'plan_required', requiredPlan: 'af_commissioner' })
+    expect(resolveSurvivorPremiumTileAccess({ tileId: 'risk_alerts', plan: 'af_commissioner', isCommissioner: true })).toEqual({ ok: true })
+    expect(resolveSurvivorPremiumTileAccess({ tileId: 'host_fairness_radar', plan: 'af_supreme', isCommissioner: true })).toEqual({ ok: true })
+  })
+
   it('unbuilt tiles never open, whatever the plan', () => {
     for (const tile of SURVIVOR_PREMIUM_COMMAND_TILES.filter(t => t.status !== 'live')) {
       expect(resolveSurvivorPremiumTileAccess({ tileId: tile.tileId, plan: 'af_supreme', isCommissioner: true })).toEqual({ ok: false, reason: 'coming_next' })
@@ -141,7 +148,7 @@ describe('tile access: the one rule the page and the server share', () => {
 
   it('every live tile has a builder, and no live tile claims token runs that do not exist', () => {
     const live = SURVIVOR_PREMIUM_COMMAND_TILES.filter(t => t.status === 'live')
-    expect(live.map(t => t.tileId).sort()).toEqual(['challenge_outlook', 'exile_status', 'jury_projection', 'social_pulse', 'threat_map'])
+    expect(live.map(t => t.tileId).sort()).toEqual(['challenge_outlook', 'exile_status', 'host_fairness_radar', 'jury_projection', 'minigame_planner', 'risk_alerts', 'social_pulse', 'threat_map'])
     expect(SURVIVOR_PREMIUM_COMMAND_TILES.every(t => t.tokenEligible === false)).toBe(true)
   })
 })
