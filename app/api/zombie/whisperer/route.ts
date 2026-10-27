@@ -59,34 +59,25 @@ export async function GET(req: Request) {
 
   const z = await prisma.zombieLeague.findUnique({
     where: { leagueId },
-    include: { whispererRecord: true, league: { select: { userId: true } } },
+    include: { whispererRecord: true, coWhisperers: true, league: { select: { userId: true } } },
   })
-  if (!z?.whispererRecord) return NextResponse.json({ whisperer: null })
+  if (!z?.whispererRecord) return NextResponse.json({ whisperer: null, whisperers: [] })
 
   const isComm = z.league.userId === userId
-  const rec = (await withWhispererDisplayName(z.whispererRecord))!
-  if (isComm) return NextResponse.json({ whisperer: rec })
-
-  // The league's secrecy setting wins over the record. `isPubliclyRevealed` defaults to true and
-  // `selectWhisperer` never sets it, so on its own it revealed secret-league Whisperers.
-  if (
-    canViewerSeeWhisperer({
+  const records = [z.whispererRecord, ...z.coWhisperers]
+  const visible = await Promise.all(records.map(async (record) => {
+    const own = record.userId === userId
+    const canSee = canViewerSeeWhisperer({
       whispererIsPublic: z.whispererIsPublic,
-      isPubliclyRevealed: rec.isPubliclyRevealed,
-      viewerIsCommissioner: false,
-      viewerIsWhisperer: rec.userId === userId,
+      isPubliclyRevealed: record.isPubliclyRevealed,
+      viewerIsCommissioner: isComm,
+      viewerIsWhisperer: own,
     })
-  ) {
-    return NextResponse.json({
-      whisperer: {
-        displayName: rec.displayName,
-        ambushesRemaining: rec.ambushesRemaining,
-        wasDefeated: rec.wasDefeated,
-      },
-    })
-  }
-  return NextResponse.json({
-    whisperer: { message: 'Whisperer identity hidden this season.' },
-  })
+    if (!canSee) return { message: 'Whisperer identity hidden this season.' }
+    const named = (await withWhispererDisplayName(record))!
+    return isComm || own
+      ? named
+      : { displayName: named.displayName, ambushesRemaining: named.ambushesRemaining, wasDefeated: named.wasDefeated }
+  }))
+  return NextResponse.json({ whisperer: visible[0], whisperers: visible })
 }
-
