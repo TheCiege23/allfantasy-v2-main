@@ -15,6 +15,7 @@ import { getLeagueMode } from '@/lib/zombie/zombieLeagueMode'
 import { applyZombieHordeSitOutToScoring } from '@/lib/zombie/ZombieHordeSitOutEngine'
 import { settleWeeklyWinnings } from '@/lib/zombie/weeklyWinningsEngine'
 import { syncZombieTeamNames } from '@/lib/zombie/zombieTeamNames'
+import { reconcileScoreOnlyCorrection } from '@/lib/zombie/statCorrectionReconciler'
 
 export type WeeklyResolutionOptions = {
   /** Re-run infections + recap even if this week already resolved (stat corrections / commissioner). */
@@ -77,6 +78,13 @@ export async function runWeeklyResolution(
         return { resolution: cleared }
       }
       return { resolution: existing }
+    }
+    if (opts.reason === 'stat_correction' && season && z.league.userId) {
+      const reconciled = await reconcileScoreOnlyCorrection({
+        zombieLeagueId, leagueId: z.leagueId, seasonId: season.id, season: z.season,
+        sport: z.sport, week, ownerUserId: z.league.userId, previous: existing,
+      })
+      if (reconciled) return { resolution: reconciled }
     }
     const marked = await prisma.zombieWeeklyResolution.updateMany({
       where: { zombieLeagueId, week, status: 'complete', requiresStatCorrection: false },
