@@ -21,6 +21,7 @@ import { isRedraftWeekSealed } from '@/lib/redraft/weekSealed'
 import { checkStatCorrectionsForSeason } from '@/lib/stat-corrections/statCorrectionDetector'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
+import { maintainPirateClaims, queuePirateProtectionReminders, seedPirateClaims } from '@/lib/pirate/service'
 import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSeasonRunner'
@@ -212,7 +213,7 @@ async function runRedraftReconciliation() {
         ],
       }],
     },
-    select: { id: true, leagueId: true, sport: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true } } },
+    select: { id: true, leagueId: true, sport: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true, leagueType: true, leagueVariant: true } } },
     orderBy: { id: 'asc' },
   })
   const seasons = rotatingBatch(eligible, SCORE_SYNC_BATCH, Date.now())
@@ -230,6 +231,8 @@ async function runRedraftReconciliation() {
   let guillotineChops = 0
   let guillotineFailed = 0
   const guillotineOutcomes: Record<string, number> = {}
+  let pirateClaimsCreated = 0
+  let pirateSeedFailed = 0
   let playoffMatchupsScored = 0
   let playoffFailed = 0
   const playoffOutcomes: Record<string, number> = {}
@@ -293,6 +296,12 @@ async function runRedraftReconciliation() {
         playoffMatchupsScored += playoff.matchupsScored + (playoff.lowerBracket?.matchupsScored ?? 0)
       } catch {
         playoffFailed += 1
+      }
+      if (season.league.leagueType === 'pirate' || season.league.leagueVariant === 'pirate') {
+        try {
+          pirateClaimsCreated += await seedPirateClaims(season.leagueId)
+          await queuePirateProtectionReminders(season.leagueId)
+        } catch { pirateSeedFailed += 1 }
       }
       continue
     }
@@ -425,7 +434,15 @@ async function runRedraftReconciliation() {
     } catch {
       guillotineFailed += 1
     }
+    if (season.league.leagueType === 'pirate' || season.league.leagueVariant === 'pirate') {
+      try {
+        pirateClaimsCreated += await seedPirateClaims(season.leagueId)
+        await queuePirateProtectionReminders(season.leagueId)
+      } catch { pirateSeedFailed += 1 }
+    }
   }
+
+  const pirateSettlements = await maintainPirateClaims({ limit: 30 }).catch(() => ({ considered: 0, transferred: 0, failed: 1 }))
 
   return {
     seasonsConsidered: seasons.length,
@@ -442,6 +459,9 @@ async function runRedraftReconciliation() {
     guillotineChops,
     guillotineFailed,
     guillotineOutcomes,
+    pirateClaimsCreated,
+    pirateSeedFailed,
+    pirateSettlements,
     playoffMatchupsScored,
     playoffFailed,
     playoffOutcomes,
@@ -571,6 +591,8 @@ export async function GET(request: Request) {
         r.redraft.failed > 0 ||
         r.redraft.finalizeFailed > 0 ||
         r.redraft.guillotineFailed > 0 ||
+        r.redraft.pirateSeedFailed > 0 ||
+        r.redraft.pirateSettlements.failed > 0 ||
         r.redraft.tournamentFailed > 0 ||
         r.redraft.playoffFailed > 0
           ? 'partial'

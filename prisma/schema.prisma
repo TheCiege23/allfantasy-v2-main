@@ -6226,6 +6226,8 @@ enum LeagueLifecycleState {
 
 model League {
   id                                    String                                 @id @default(uuid())
+  pirateProtectionSets                  PirateProtectionSet[]
+  pirateClaims                          PirateClaim[]
   // Commissioner OS tenancy — T-101. See prisma/tenancy.prisma and
   // docs/commissioner-os/TENANCY.md §5.
   //
@@ -14657,6 +14659,7 @@ model RedraftRosterMoveHistory {
 
 model RedraftMatchup {
   id               String            @id @default(cuid())
+  pirateClaims     PirateClaim[]
   seasonId         String
   leagueId         String
   week             Int
@@ -14683,6 +14686,69 @@ model RedraftMatchup {
   @@index([homeRosterId])
   @@index([awayRosterId])
   @@map("redraft_matchups")
+}
+
+/// One manager's protection declaration for one scoring period. A void set remains
+/// persisted so an attempted late/oversized change cannot silently restore locks.
+model PirateProtectionSet {
+  id            String   @id @default(cuid())
+  leagueId      String
+  seasonId      String
+  week          Int
+  rosterId      String
+  playerIds     Json     @default("[]")
+  lockAt        DateTime
+  status        String   @default("active") @db.VarChar(16)
+  voidReason    String?  @db.VarChar(64)
+  actorUserId   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  league        League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, seasonId, week, rosterId])
+  @@index([leagueId, seasonId, week])
+  @@map("pirate_protection_sets")
+}
+
+/// Exactly one optional steal for each final head-to-head matchup.
+model PirateClaim {
+  id               String          @id @default(cuid())
+  leagueId         String
+  seasonId         String
+  week             Int
+  matchupId        String?
+  playoffMatchupId String?
+  claimCycle       Int             @default(0)
+  winnerRosterId   String
+  loserRosterId    String
+  playerId         String?
+  offeredPlayerId  String?
+  counterPlayerId  String?
+  status           String          @default("awaiting_selection") @db.VarChar(32)
+  deadlineAt       DateTime?
+  selectionDeadlineAt DateTime?
+  settledReturnPlayerId String?
+  overflowGraceUntil DateTime?
+  reversedAt       DateTime?
+  reversedByUserId String?
+  reversalReason   String?
+  selectedAt       DateTime?
+  respondedAt      DateTime?
+  transferredAt    DateTime?
+  resolutionNote   String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  league           League          @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  matchup          RedraftMatchup? @relation(fields: [matchupId], references: [id], onDelete: Cascade)
+  playoffMatchup   RedraftPlayoffMatchup? @relation(fields: [playoffMatchupId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, seasonId, week])
+  @@unique([matchupId, winnerRosterId, claimCycle])
+  @@unique([playoffMatchupId, winnerRosterId, claimCycle])
+  @@index([status, deadlineAt])
+  @@index([status, selectionDeadlineAt])
+  @@index([loserRosterId, playerId, status])
+  @@map("pirate_claims")
 }
 
 model RedraftWaiverClaim {
@@ -15386,6 +15452,7 @@ model RedraftPlayoffSeed {
 }
 
 model RedraftPlayoffMatchup {
+  pirateClaims   PirateClaim[]
   id             String                  @id
   seasonId       String
   roundId        String

@@ -132,13 +132,20 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
   if (fatigue.suppress) return { outcome: "skipped", error: fatigue.reason }
 
   const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {}
+  if (row.eventType.startsWith('pirate_claim_') && typeof metadata.pirateClaimId === 'string') {
+    const claim = await prisma.pirateClaim.findUnique({ where: { id: metadata.pirateClaimId }, select: { status: true } })
+    const relevant = row.eventType === 'pirate_claim_created'
+      ? claim?.status === 'awaiting_selection'
+      : claim?.status === 'pending' || claim?.status === 'countered'
+    if (!relevant) return { outcome: 'skipped', error: 'pirate claim is no longer awaiting this action' }
+  }
   const deadline = gameAlertDeadline(row.eventType, row.createdAt, metadata.expiresAt)
   if (deadline !== undefined && deadline <= Date.now()) {
     return { outcome: 'skipped', error: 'notification expired before delivery' }
   }
   const category = metadata.notificationCategory as NotificationCategoryId | undefined
   // Durable dispatcher rows re-evaluate current preferences at retry time.
-  if (category && row.userId && (row.channel === 'push' || row.channel === 'email')) {
+  if (category && row.userId && (row.channel === 'push' || row.channel === 'email' || row.channel === 'in_app')) {
     const profile = await getSettingsProfile(row.userId)
     if (!profile) return { outcome: 'skipped', error: 'profile unavailable' }
     const prefs = resolveNotificationPreferences(profile.notificationPreferences as NotificationPreferences | null)
@@ -146,12 +153,17 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
     if (!prefs.globalEnabled || !cat?.enabled || !isCategoryAllowedForLeague(prefs, category, row.leagueId)) {
       return { outcome: 'skipped', error: 'notifications muted' }
     }
-    // Hidden from the home in Settings → Home page after this row was queued (lib/core-app/homeSections.ts).
-    if (isCategoryHiddenByHomeSection(profile.notificationPreferences, category)) {
-      return { outcome: 'skipped', error: 'home section hidden' }
+    if (row.channel === 'in_app' && !cat.inApp) {
+      return { outcome: 'skipped', error: 'in-app notifications muted' }
     }
-    const quiet = quietHoursSuppression(prefs.quietHours, new Date(), metadata.severity === 'high' ? 'high' : 'medium', profile.timezone)
-    if (quiet.push) return { outcome: 'skipped', error: 'quiet hours; retained in app' }
+    if (row.channel !== 'in_app') {
+      // Hidden from the home in Settings → Home page after this row was queued.
+      if (isCategoryHiddenByHomeSection(profile.notificationPreferences, category)) {
+        return { outcome: 'skipped', error: 'home section hidden' }
+      }
+      const quiet = quietHoursSuppression(prefs.quietHours, new Date(), metadata.severity === 'high' ? 'high' : 'medium', profile.timezone)
+      if (quiet.push) return { outcome: 'skipped', error: 'quiet hours; retained in app' }
+    }
     if (row.channel === 'email' && (!cat.email || !profile.email || isUndeliverableEmailDomain(profile.email) || emailWithheldByUnsubscribe(profile.emailSubscription, category))) {
       return { outcome: 'skipped', error: 'email unavailable or muted' }
     }

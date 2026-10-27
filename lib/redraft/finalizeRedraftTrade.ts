@@ -8,6 +8,7 @@
  */
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { assertPirateTradeAllowed } from '@/lib/pirate/tradeGuard'
 import {
   applyRedraftTradeCapTransfersInTransaction,
   refreshCapProjections,
@@ -147,6 +148,9 @@ export async function finalizeRedraftTrade(
       if (claimed.count === 0) {
         throw new Error('PROPOSAL_ALREADY_RESOLVED')
       }
+      await assertPirateTradeAllowed(proposal.leagueId, (proposal.assets ?? []).map((asset) => ({
+        fromRosterId: asset.fromRosterId, assetType: asset.assetType, playerId: asset.playerId,
+      })), tx)
       // 🛑 THE CAP CHECK THAT DECIDES, ON THE SETTLEMENT'S OWN TRANSACTION.
       //
       // The only cap check used to be the one above, run before this transaction existed. Anything

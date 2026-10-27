@@ -150,6 +150,7 @@ import { GuillotineTab } from './tabs/GuillotineTab'
 import { DynastyHome } from './tabs/DynastyHome'
 import { SurvivorHome } from '@/components/survivor/SurvivorHome'
 import { SurvivorNativeHome } from '@/components/survivor/SurvivorNativeHome'
+import { PirateHome } from '@/components/pirate/PirateHome'
 import { SurvivorLeagueDeepLinkPanel } from '@/components/survivor/SurvivorLeagueDeepLinkPanel'
 import { SurvivorFirstEntryModal } from '@/components/survivor/SurvivorFirstEntryModal'
 import { SurvivorIdolRevealModal } from '@/components/survivor/SurvivorIdolRevealModal'
@@ -466,6 +467,7 @@ export function LeagueShell({
         { id: 'draft_intel', label: 'Live Intel' },
         { id: 'roster', label: 'My Team' },
         { id: 'matchups', label: 'Matchups' },
+        ...(league.leagueType === 'pirate' || league.leagueVariant === 'pirate' ? [{ id: 'pirate', label: 'Pirate Deck' }] : []),
         { id: 'schedule', label: 'Schedule' },
         { id: 'players', label: 'Players' },
         { id: 'waivers', label: 'Waivers' },
@@ -501,6 +503,11 @@ export function LeagueShell({
       const idx = base.findIndex((t) => t.id === 'redraft')
       const g = { id: 'guillotine', label: 'Guilly' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), g, ...base.slice(idx + 1)] : [g, ...base]
+    }
+    if (league.leagueType === 'pirate' || league.leagueVariant === 'pirate') {
+      const idx = base.findIndex((tab) => tab.id === 'redraft')
+      const pirate = { id: 'pirate', label: 'Pirate Deck' }
+      base = idx >= 0 ? [...base.slice(0, idx + 1), pirate, ...base.slice(idx + 1)] : [pirate, ...base]
     }
     if (league.leagueVariant === 'survivor') {
       const idx = base.findIndex((t) => t.id === 'redraft')
@@ -593,10 +600,11 @@ export function LeagueShell({
     shouldUseMatchupPrimary,
     t,
   ])
-  const [activeTab, setActiveTab] = useState<string>(() => tabDefs[0]?.id ?? 'draft')
+  const [activeTab, setActiveTab] = useState<string>(() => guillyInitialTab({ guilly: league.guillotineMode === true, predraft: isPredraftLifecycle, drafting: String(league.lifecycleState).toLowerCase() === 'drafting', requested: searchParams?.get('view') ?? searchParams?.get('tab'), tabIds: tabDefs.map(tab => tab.id) }))
   const [rosterLegalityIssueCount, setRosterLegalityIssueCount] = useState(0)
   const guillotineLandingApplied = useRef(false)
   const survivorLandingApplied = useRef(false)
+  const pirateLandingApplied = useRef(false)
   const zombieLandingApplied = useRef(false)
   const bigBrotherLandingApplied = useRef(false)
   const predraftLandingApplied = useRef(false)
@@ -608,10 +616,12 @@ export function LeagueShell({
   // echo so it never fights the tab->URL effect (the Draft/League flicker). External deep-links /
   // back-forward carry a different value and are still honored. See lib/league/leagueTabSync.
   const lastSyncedViewRef = useRef<string | null>(null)
+  const pendingIncomingTabRef = useRef<string | null>(null)
 
   useEffect(() => {
     guillotineLandingApplied.current = false
     survivorLandingApplied.current = false
+    pirateLandingApplied.current = false
     zombieLandingApplied.current = false
     bigBrotherLandingApplied.current = false
     predraftLandingApplied.current = false
@@ -712,6 +722,16 @@ export function LeagueShell({
     survivorLandingApplied.current = true
   }, [league.id, league.leagueVariant, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary])
 
+  /** Pirate leagues open on their protection and claim deck. */
+  useEffect(() => {
+    const deepLink = searchParams?.get('view') ?? searchParams?.get('tab')
+    if (deepLink?.trim() || pirateLandingApplied.current || userPickedTabRef.current) return
+    if (league.leagueType !== 'pirate' && league.leagueVariant !== 'pirate') return
+    if (!tabDefs.some((tab) => tab.id === 'pirate')) return
+    setActiveTab('pirate')
+    pirateLandingApplied.current = true
+  }, [league.id, league.leagueType, league.leagueVariant, tabDefs, searchParams])
+
   /** Zombie leagues default to the Zombie hub (once per visit) when no deep link. */
   useEffect(() => {
     const deepLink = searchParams?.get('view') ?? searchParams?.get('tab')
@@ -800,6 +820,8 @@ export function LeagueShell({
       waivers: 'waivers',
       settings: 'settings',
       guillotine: 'guillotine',
+      pirate: 'pirate',
+      guilly: 'guillotine',
       bestball: 'bestball',
       keeper: 'keeper',
       intelligence: nflRedraftCore ? 'players' : intelligenceFallback,
@@ -2380,6 +2402,8 @@ function LeagueTabRouter({
       return (
         <GuillotineTab leagueId={leagueId} sport={sport} leagueName={selectedLeague.name} />
       )
+    case 'pirate':
+      return <PirateHome leagueId={leagueId} isCommissioner={isCommissioner} />
     case 'dynasty':
     case 'dynasty_taxi':
     case 'dynasty_picks':
@@ -2635,6 +2659,7 @@ const LEAGUE_TAB_NAV_ICONS: Record<string, LucideIcon> = {
   schedule: CalendarRange,
   bestball: Sparkles,
   guillotine: Scissors,
+  pirate: Anchor,
   survivor: TreePalm,
   survivor_tribal: Flame,
   survivor_challenges: Zap,
