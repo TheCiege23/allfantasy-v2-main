@@ -95,7 +95,7 @@ export function DraftDecisionOsCard({ leagueId, refreshKey }: { leagueId: string
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-indigo-100/90">Decision OS</p>
           {decision ? (
             <span
-              className="rounded-full border border-white/15 bg-black/25 px-1.5 py-0.5 text-[10px] font-semibold text-white/80"
+              className="rounded-full border border-white/15 bg-black/25 px-1.5 py-0.5 text-[11px] font-semibold text-white/80"
               data-testid="draft-decision-os-confidence"
             >
               {band(decision.confidence)} · {decision.confidence}
@@ -131,7 +131,7 @@ export function DraftDecisionOsCard({ leagueId, refreshKey }: { leagueId: string
 
           <div className="flex flex-wrap gap-1 pt-0.5" data-testid="draft-decision-os-verdicts">
             {(blocking.length > 0 ? blocking : decision.ruleVerdicts).map((v) => (
-              <span key={v.rule} className={`rounded border px-1.5 py-0.5 text-[10px] ${verdictTone(v.verdict)}`} title={v.rule}>
+              <span key={v.rule} className={`rounded border px-1.5 py-0.5 text-[11px] ${verdictTone(v.verdict)}`} title={v.rule}>
                 {v.message}
               </span>
             ))}
@@ -152,7 +152,7 @@ export function DraftDecisionOsCard({ leagueId, refreshKey }: { leagueId: string
             </ol>
           ) : null}
 
-          <p className="text-[10px] text-white/40">
+          <p className="text-[11px] text-white/40">
             Inputs {decision.dataCompleteness}% complete · ranked by the same engine as your draft helper
           </p>
         </div>
