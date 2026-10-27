@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
 import { validatePreScoringWindow } from '@/lib/zombie/ambushEngine'
 import { getNativeMatchupOutcomes } from '@/lib/zombie/ZombieInfectionEngine'
+import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { notifyCommissioner, notifyZombiePlayer } from '@/lib/zombie/commissionerNotificationService'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
 import { appendZombieAudit } from '@/lib/zombie/ZombieAuditLog'
@@ -199,6 +200,7 @@ export async function processWeaponAction(
 export async function finalizePendingWeaponsForWeek(leagueId: string, week: number, season: number): Promise<void> {
   const matchups = await getNativeMatchupOutcomes(leagueId, week, season)
   if (!matchups) return
+  const config = await getZombieLeagueConfig(leagueId)
   const pending = await prisma.zombieTeamItem.findMany({
     where: { team: { leagueId }, activationState: 'pending_activation', activatesAtWeek: week, usedEffect: 'infection_shield' },
     include: { team: true },
@@ -209,8 +211,10 @@ export async function finalizePendingWeaponsForWeek(leagueId: string, week: numb
       where: { leagueId_rosterId: { leagueId, rosterId: matchup.winnerRosterId } },
       select: { status: true },
     }) : null
-    const protectedInfection =
-      matchup && item.team.status === 'Survivor' && (winner?.status === 'Zombie' || winner?.status === 'Whisperer')
+    const protectedInfection = Boolean(matchup && item.team.status === 'Survivor' && (
+      (winner?.status === 'Zombie' && config?.infectionLossToZombie) ||
+      (winner?.status === 'Whisperer' && config?.infectionLossToWhisperer)
+    ))
     await prisma.zombieTeamItem.update({
       where: { id: item.id },
       data: protectedInfection
