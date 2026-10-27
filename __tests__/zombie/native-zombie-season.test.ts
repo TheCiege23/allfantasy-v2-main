@@ -28,7 +28,8 @@ vi.mock('@/lib/prisma', () => {
         },
       },
     )
-  return { prisma: new Proxy({}, { get: (_t, prop: string) => model(prop) }) }
+  const db = new Proxy({}, { get: (_t, prop: string) => prop === '$transaction' ? async (callback: (tx: unknown) => Promise<unknown>) => callback(db) : model(prop) })
+  return { prisma: db }
 })
 
 const m = vi.hoisted(() => ({
@@ -70,7 +71,7 @@ import { ensureZombieSeasonActivated } from '@/lib/zombie/activateNativeZombieLe
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { getNativeMatchupOutcomes } from '@/lib/zombie/ZombieInfectionEngine'
 import { checkAllMatchupsComplete } from '@/lib/zombie/matchupCompletion'
-import { selectWhisperer } from '@/lib/zombie/whispererEngine'
+import { selectSecondWhisperer, selectWhisperer } from '@/lib/zombie/whispererEngine'
 
 const argsOf = (key: string) => calls.filter((c) => c.key === key).map((c) => c.args as Record<string, any>)
 
@@ -337,6 +338,33 @@ describe('checkAllMatchupsComplete — odd-sized leagues', () => {
       { awayRosterId: null, status: 'scheduled' },
     ])
     expect(await checkAllMatchupsComplete('L1', 3, 2026)).toBe(true)
+  })
+})
+
+describe('two independent Whisperers', () => {
+  it('chooses a distinct managed Survivor for the second NBA seat', async () => {
+    overrides.set('zombieLeague.findUniqueOrThrow', async () => ({
+      id: 'z1', leagueId: 'L1', sport: 'NBA', whispererCount: 2,
+      experienceMode: 'enhanced', whispererAmbushCount: 3, whispererIsPublic: false,
+    }))
+    overrides.set('whispererRecord.findUnique', async () => ({ userId: 'primary' }))
+    overrides.set('zombieLeagueTeam.findMany', async () => [
+      { rosterId: 'R-primary', status: 'Whisperer' },
+      { rosterId: 'R-second', status: 'Survivor', isVeteran: false },
+      { rosterId: 'R-open', status: 'Survivor', isVeteran: false },
+    ])
+    overrides.set('roster.findMany', async () => [
+      { id: 'R-primary', platformUserId: 'primary' },
+      { id: 'R-second', platformUserId: 'second' },
+      { id: 'R-open', platformUserId: 'open-slot-L1-3' },
+    ])
+    overrides.set('zombieCoWhisperer.create', async () => ({ id: 'co-1' }))
+    const chosen = await selectSecondWhisperer('z1', 'random')
+    expect(chosen).toEqual({ whispererRecordId: 'co-1', rosterId: 'R-second' })
+    expect(argsOf('zombieCoWhisperer.create')[0].data).toMatchObject({
+      zombieLeagueId: 'z1', userId: 'second', ambushesRemaining: 3,
+    })
+    expect(argsOf('zombieLeagueTeam.update')[0].data).toMatchObject({ status: 'Whisperer', isWhisperer: true })
   })
 })
 
