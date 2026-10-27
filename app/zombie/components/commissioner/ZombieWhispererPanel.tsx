@@ -91,7 +91,7 @@ export function ZombieWhispererPanel({
             ? 'Locked after the draft assigns the Whisperer.'
             : 'Choose how the Whisperer is picked when the draft completes.'}
           control={
-            <Select value={selection} onChange={setSelection} disabled={!editable}>
+            <Select value={selection} onChange={setSelection} disabled={!editable} className="min-h-[44px]">
               <option value="random">Random</option>
               <option value="veteran_priority">Veteran priority</option>
             </Select>
