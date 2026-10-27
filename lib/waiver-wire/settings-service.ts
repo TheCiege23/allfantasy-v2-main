@@ -19,6 +19,8 @@ import {
   type OffseasonWaiverRule,
   type PlayoffWaiverRule,
 } from "./hub-waiver-options"
+import { dailySportWaiverRunDays } from "./daily-sport-waiver-runs"
+import { readDailyWaiverScheduleFromSettings } from "@/lib/waivers/dailyWaiverSchedule"
 
 function toIntOrNull(value: unknown): number | null {
   if (value == null || value === "") return null
@@ -150,11 +152,20 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
     const mergedWeek =
       row.claimLimitPerWeek ??
       (typeof engineConfig.max_adds_per_week === "number" ? engineConfig.max_adds_per_week : null)
+    const freeAgencyMode = readFreeAgencyMode(engineConfig.free_agency_mode)
+    // NBA / NHL / MLB under Sleeper-style free agency run claims every day (daily-sport-waiver-runs.ts).
+    const dailyRunDays = dailySportWaiverRunDays({
+      sport: league?.sport,
+      leagueVariant: league?.leagueVariant,
+      freeAgencyMode,
+      waiverType: normalizeWaiverTypeForEngine(wt),
+      perDayScheduleEnabled: Boolean(readDailyWaiverScheduleFromSettings(league?.settings)?.enabled),
+    })
     return {
       leagueId,
       waiverType: wt,
       processingDayOfWeek: row.processingDayOfWeek ?? null,
-      processingTimeUtc: row.processingTimeUtc ?? null,
+      processingTimeUtc: row.processingTimeUtc ?? (dailyRunDays ? sportDefaults.processing_time_utc ?? null : null),
       claimLimitPerPeriod: mergedPeriod,
       claimLimitPerWeek: mergedWeek,
       claimLimitPerRun: row.claimLimitPerRun ?? null,
@@ -163,7 +174,7 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
       faabResetType: row.faabResetType ?? null,
       waiverOrderResetPolicy: row.waiverOrderResetPolicy ?? null,
       postGameWaiverBehavior: row.postGameWaiverBehavior ?? null,
-      processingDays: row.processingDays ?? null,
+      processingDays: dailyRunDays ?? row.processingDays ?? null,
       freeAgentWindowRules: row.freeAgentWindowRules ?? null,
       tiebreakRule: row.tiebreakRule ?? engineConfig.faab_tiebreaker ?? null,
       lockType: row.lockType ?? null,
@@ -179,7 +190,7 @@ export async function getEffectiveLeagueWaiverSettings(leagueId: string): Promis
       commissionerOverrideRules: row.commissionerOverrideRules ?? null,
       offseasonWaiverRule: readOffseasonWaiverRule(engineConfig.offseason_waiver_rules),
       playoffWaiverRule: readPlayoffWaiverRule(engineConfig.playoff_waiver_rules),
-      freeAgencyMode: readFreeAgencyMode(engineConfig.free_agency_mode),
+      freeAgencyMode,
       faabRolloverRule: readFaabRolloverRule(engineConfig.faab_rollover_rule),
     }
   }

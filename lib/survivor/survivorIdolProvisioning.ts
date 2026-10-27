@@ -13,7 +13,7 @@ import {
 } from './survivorIdolSeedingEngine'
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { lockSurvivorIdolDraw } from './survivorIdolConfigService'
-import { survivorIdolStoredPowerType, survivorIdolTypeIdForPower } from './survivorIdolTypes'
+import { SURVIVOR_IDOL_PICK_COUNT_MAX, survivorIdolStoredPowerType, survivorIdolTypeIdForPower } from './survivorIdolTypes'
 import { SURVIVOR_NOTIFICATION_SPECS, survivorNotificationCopy } from './survivorNotificationCatalog'
 import { survivorIdolExpiryRule, survivorIdolExpiryText, survivorIdolRowExpiry } from './survivorIdolExpiry'
 import {
@@ -43,6 +43,40 @@ async function loadPoolCandidates(leagueId: string, limit: number, excludeDrafte
     .map(entry => ({ playerId: String(entry.playerId), playerName: entry.name ?? null, adp: entry.adp ?? entry.aiAdp ?? null }))
 }
 
+/*
+ * 🛑 THE POOL BUILD NEVER RUNS INSIDE A SETUP TRANSACTION. A cold `getResolvedDraftPoolForLeague`
+ * takes ~95 s for a 16-team NFL pool; the setup transaction times out at 30 s. Measured in the
+ * season rehearsal: the draft-lock placement died with "Transaction already closed" every time
+ * (swallowed, so no idol was ever hidden in the pool), holding the setup lock while it did. The
+ * outer, lock-free callers load the pool first and hand the rows in.
+ */
+
+/** Waiver-wire immunity idols go on two of the best undrafted players. */
+const SURVIVOR_WAIVER_POOL_LIMIT = 120
+
+/** Pool rows to read before draft-lock placement: twice the largest window it can use. */
+function placementPoolLimit(teamCount: number, rounds: number): number {
+  return Math.max(SURVIVOR_IDOL_PICK_COUNT_MAX, Math.floor(teamCount) * Math.floor(rounds)) * 2
+}
+
+/**
+ * The undrafted pool for the waiver-wire immunity idols, read OUTSIDE any transaction, or
+ * undefined when the post-draft seed will not place them (no idols waiting in the pool, or the
+ * league is already seeded). Callers pass the result to `seedSurvivorIdols` as `waiverPool`.
+ */
+export async function loadSurvivorWaiverIdolPool(leagueId: string): Promise<PoolIdolCandidate[] | undefined> {
+  const [pooled, seeded] = await Promise.all([
+    prisma.survivorIdol.count({ where: { leagueId, rosterId: SURVIVOR_POOL_IDOL_ROSTER_ID } }),
+    prisma.survivorIdol.count({ where: { leagueId, ...SEEDED_IDOL_WHERE } }),
+  ])
+  if (pooled === 0 || seeded > 0) return undefined
+  const draft = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true, status: true } })
+  if (!draft || draft.status !== 'completed') return undefined
+  const picks = await prisma.draftPick.findMany({ where: { sessionId: draft.id }, select: { playerId: true } })
+  const drafted = new Set(picks.map(pick => pick.playerId).filter((id): id is string => Boolean(id)))
+  return loadPoolCandidates(leagueId, SURVIVOR_WAIVER_POOL_LIMIT, drafted).catch(() => undefined)
+}
+
 /** Seeded (post-draft) idols only: a pool placement waiting for the draft does not count. */
 const SEEDED_IDOL_WHERE = { rosterId: { not: SURVIVOR_POOL_IDOL_ROSTER_ID } } as const
 
@@ -55,9 +89,19 @@ const SEEDED_IDOL_WHERE = { rosterId: { not: SURVIVOR_POOL_IDOL_ROSTER_ID } } as
  */
 export async function placeSurvivorIdolsInPool(
   leagueId: string,
-  opts: { teamCount: number; rounds: number; seed?: number | null; actorUserId?: string; db?: Prisma.TransactionClient },
+  opts: { teamCount: number; rounds: number; seed?: number | null; actorUserId?: string; db?: Prisma.TransactionClient; poolCandidates?: PoolIdolCandidate[] },
 ): Promise<SurvivorIdolPlacementOutcome> {
-  if (!opts.db) return withSurvivorSetupTransaction(leagueId, (db) => placeSurvivorIdolsInPool(leagueId, { ...opts, db }))
+  if (!opts.db) {
+    // Cheap checks first, so a league that already placed (or has idols off) never pays for a build.
+    const existing = await prisma.survivorIdol.count({ where: { leagueId } })
+    if (existing > 0) return { ok: true, placed: false, alreadyPlaced: true, count: existing }
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    if (league && !normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown> | null).idolsEnabled) {
+      return { ok: true, placed: false, alreadyPlaced: false, count: 0 }
+    }
+    const poolCandidates = opts.poolCandidates ?? await loadPoolCandidates(leagueId, placementPoolLimit(opts.teamCount, opts.rounds))
+    return withSurvivorSetupTransaction(leagueId, (db) => placeSurvivorIdolsInPool(leagueId, { ...opts, poolCandidates, db }))
+  }
   const db = opts.db
   const existing = await db.survivorIdol.count({ where: { leagueId } })
   if (existing > 0) return { ok: true, placed: false, alreadyPlaced: true, count: existing }
@@ -68,7 +112,8 @@ export async function placeSurvivorIdolsInPool(
   const draw = await lockSurvivorIdolDraw(leagueId, db)
   if (!draw || draw.types.length === 0) return { ok: false, status: 422, code: 'no_draw', error: 'The idol draw is not sealed for this league.' }
   const windowSize = Math.max(draw.types.length, Math.floor(opts.teamCount) * Math.floor(opts.rounds))
-  const candidates = await loadPoolCandidates(leagueId, windowSize * 2)
+  if (!opts.poolCandidates) return { ok: false, status: 422, code: 'pool_not_loaded', error: 'Load the draft pool before opening the setup transaction.' }
+  const candidates = opts.poolCandidates.slice(0, windowSize * 2)
   const plan = computeSurvivorIdolPoolPlacement({
     candidates, windowSize, powerTypes: draw.types.map(survivorIdolStoredPowerType), seed: opts.seed ?? randomInt(0, 2_147_483_647),
   })
@@ -129,9 +174,16 @@ export async function getIdolSeedStatus(leagueId: string, db: Prisma.Transaction
  */
 export async function seedSurvivorIdols(
   leagueId: string,
-  opts: { tribeCount?: number; rosterSpots?: number; seed?: number | null; actorUserId?: string; allowReseed?: boolean; db?: Prisma.TransactionClient } = {},
+  opts: {
+    tribeCount?: number; rosterSpots?: number; seed?: number | null; actorUserId?: string; allowReseed?: boolean; db?: Prisma.TransactionClient
+    /** The undrafted pool from `loadSurvivorWaiverIdolPool`; without it no waiver-wire idols are placed. */
+    waiverPool?: PoolIdolCandidate[]
+  } = {},
 ): Promise<SurvivorIdolSeedOutcome> {
-  if (!opts.db) return withSurvivorSetupTransaction(leagueId, (db) => seedSurvivorIdols(leagueId, { ...opts, db }))
+  if (!opts.db) {
+    const waiverPool = opts.waiverPool ?? await loadSurvivorWaiverIdolPool(leagueId)
+    return withSurvivorSetupTransaction(leagueId, (db) => seedSurvivorIdols(leagueId, { ...opts, waiverPool, db }))
+  }
   const db = opts.db
   const status = await getIdolSeedStatus(leagueId, db)
   if (status.seeded && !opts.allowReseed) {
@@ -180,7 +232,7 @@ export async function seedSurvivorIdols(
     select: { id: true, playerId: true, powerType: true, powerLabel: true, powerDesc: true, auditLog: true },
   })
   if (pooled.length > 0 && !(status.seeded && opts.allowReseed)) {
-    return resolvePooledIdols(leagueId, { db, league, draftId: draft.id, pooled, candidates, tribeCount, expiryText, rowExpiry, seed: opts.seed ?? randomInt(0, 2_147_483_647) })
+    return resolvePooledIdols(leagueId, { db, league, draftId: draft.id, pooled, candidates, tribeCount, expiryText, rowExpiry, seed: opts.seed ?? randomInt(0, 2_147_483_647), waiverPool: opts.waiverPool })
   }
   const config = await db.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { idolPowerPool: true } })
   const powerPool = Array.isArray(config?.idolPowerPool) ? config.idolPowerPool.filter((power): power is string => typeof power === 'string') as SurvivorIdolPowerType[] : undefined
@@ -325,6 +377,7 @@ async function resolvePooledIdols(
     expiryText: string
     rowExpiry: { expiresAtMerge: boolean; expiresAtWeek: number | null; validUntilPhase: string }
     seed: number
+    waiverPool?: PoolIdolCandidate[]
   },
 ): Promise<SurvivorIdolSeedOutcome> {
   const { db, league, pooled, candidates } = input
@@ -380,7 +433,7 @@ async function resolvePooledIdols(
   const draftedIds = new Set(candidates.map(candidate => candidate.playerId))
   const carrying = new Set(pooled.map(idol => idol.playerId))
   try {
-    const undraftedPool = await loadPoolCandidates(leagueId, 120, draftedIds)
+    const undraftedPool = input.waiverPool ?? []
     const chosen = chooseWaiverImmunityPlayers({ undrafted: undraftedPool.filter(candidate => !draftedIds.has(candidate.playerId)), excludePlayerIds: carrying, count: SURVIVOR_WAIVER_IMMUNITY_IDOLS, windowSize: 40, seed: input.seed })
     if (chosen.length) {
       const configId = await ensureConfigId(leagueId, input.tribeCount, pooled.length, db)

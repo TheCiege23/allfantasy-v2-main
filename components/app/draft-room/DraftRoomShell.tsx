@@ -1,9 +1,16 @@
 'use client'
 
-import { type ReactNode, useCallback, useEffect, useState } from 'react'
+import { type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, LayoutGrid, MessageCircle, ListOrdered, User, Sparkles, Users, Shield, Radar, MoreHorizontal } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cn } from '@/lib/utils'
+import {
+  cycleTraySnap,
+  resolveTraySnap,
+  stepTraySnap,
+  trayHeightFor,
+  type TraySnap,
+} from '@/lib/draft-room/mobileTraySnap'
 import './draft-mobile.css'
 
 const BOTTOM_DOCK_PREF_KEY = 'af:draft-premium-bottom-dock-expanded'
@@ -102,6 +109,108 @@ export function DraftRoomShell({
     onMobileTabChange(tab)
   }
   const allowPremiumDockCollapse = surfaceVariant !== 'redraft_snake'
+
+  /*
+   * Mobile tray — a Sleeper-style bottom sheet over an always-visible board.
+   *
+   * ⚠ THE PARENT'S `mobileTab` STAYS THE SOURCE OF TRUTH, AND 'board' MEANS "TRAY COLLAPSED".
+   * DraftRoomPageClient and the e2e suites drive the room through `mobileTab` (they click
+   * `draft-mobile-tab-board` to see the board), so the tray maps onto that contract instead of
+   * replacing it: choosing any other tab opens the tray, collapsing the tray reports 'board', and
+   * dragging it back up reopens the tab that was showing.
+   */
+  const layoutRef = useRef<HTMLDivElement | null>(null)
+  const trayChromeRef = useRef<HTMLDivElement | null>(null)
+  const [traySnap, setTraySnap] = useState<TraySnap>(mobileTab === 'board' ? 'peek' : 'half')
+  const [trayFullHeight, setTrayFullHeight] = useState<number | null>(null)
+  const [trayDragHeight, setTrayDragHeight] = useState<number | null>(null)
+  const lastTrayTabRef = useRef<MobileDraftTab>(mobileTab === 'board' ? 'players' : mobileTab)
+  const dragRef = useRef<{ startY: number; startHeight: number; lastY: number; lastT: number; velocity: number } | null>(null)
+
+  useEffect(() => {
+    if (mobileTab === 'board') {
+      setTraySnap('peek')
+      return
+    }
+    lastTrayTabRef.current = mobileTab
+    setTraySnap((snap) => (snap === 'peek' ? 'half' : snap))
+  }, [mobileTab])
+
+  useEffect(() => {
+    const layout = layoutRef.current
+    if (!layout) return
+    const measure = () => {
+      const chrome = trayChromeRef.current?.offsetHeight ?? 0
+      // Leave a sliver of board above a full tray so the sheet still reads as a sheet.
+      const full = layout.clientHeight - chrome - 8
+      /*
+       * ⚠ ZERO MEANS "NOT LAID OUT", NOT "NO ROOM". The mobile layout is `md:hidden`, so on a wide
+       * window — or a phone rotating through a desktop breakpoint — it measures 0. Storing that
+       * would pin an OPEN tray at 0px; null falls back to the dvh heights until a real size lands.
+       */
+      setTrayFullHeight(full > 0 ? full : null)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(layout)
+    return () => observer.disconnect()
+  }, [])
+
+  const settleTray = useCallback(
+    (next: TraySnap) => {
+      setTraySnap((prev) => {
+        if (prev !== next && typeof navigator !== 'undefined') navigator.vibrate?.(8)
+        return next
+      })
+      if (next === 'peek' && mobileTab !== 'board') onMobileTabChange('board')
+      if (next !== 'peek' && mobileTab === 'board') onMobileTabChange(lastTrayTabRef.current)
+    },
+    [mobileTab, onMobileTabChange],
+  )
+
+  const trayContentHeight =
+    trayDragHeight ?? (trayFullHeight == null ? null : trayHeightFor(traySnap, trayFullHeight))
+
+  const onTrayPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (trayFullHeight == null) return
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    const startHeight = trayHeightFor(traySnap, trayFullHeight)
+    dragRef.current = { startY: event.clientY, startHeight, lastY: event.clientY, lastT: event.timeStamp, velocity: 0 }
+    setTrayDragHeight(startHeight)
+  }
+  const onTrayPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current
+    if (!drag || trayFullHeight == null) return
+    const dt = Math.max(1, event.timeStamp - drag.lastT)
+    drag.velocity = (event.clientY - drag.lastY) / dt
+    drag.lastY = event.clientY
+    drag.lastT = event.timeStamp
+    const next = drag.startHeight + (drag.startY - event.clientY)
+    setTrayDragHeight(Math.min(trayFullHeight, Math.max(0, next)))
+  }
+  const onTrayPointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current
+    dragRef.current = null
+    if (!drag || trayFullHeight == null) {
+      setTrayDragHeight(null)
+      return
+    }
+    const moved = Math.abs(event.clientY - drag.startY)
+    setTrayDragHeight(null)
+    // A tap on the handle (no real movement) toggles, like the keyboard does.
+    if (moved < 6) {
+      settleTray(cycleTraySnap(traySnap))
+      return
+    }
+    settleTray(
+      resolveTraySnap({
+        heightPx: drag.startHeight + (drag.startY - event.clientY),
+        velocity: drag.velocity,
+        fullHeight: trayFullHeight,
+      }),
+    )
+  }
 
   useEffect(() => {
     if (!allowPremiumDockCollapse) {
@@ -336,16 +445,18 @@ export function DraftRoomShell({
         </div>
       )}
 
-      {/* Mobile */}
+      {/* Mobile — the board is always on screen; Players / Queue / Roster / Chat live in a
+          draggable tray over it (peek → half → full), like Sleeper. */}
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden md:hidden"
+        ref={layoutRef}
+        className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden md:hidden"
         data-testid="draft-mobile-layout"
+        data-tray-snap={traySnap}
       >
         {/*
           F.2 — mobile pane uses `overflow-y-auto` (NOT `overflow-auto`) so wide
-          children like the Sleeper player table and the snake draft board can't
-          bleed horizontal scroll out to the whole page. Each individual wide
-          panel wraps its own children in `overflow-x-auto` containers below.
+          children like the snake draft board can't bleed horizontal scroll out to
+          the whole page. The board wraps its own children in `overflow-x-auto`.
         */}
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth" data-testid="draft-mobile-scroll-root">
           {mobileStickyBar && (
@@ -353,57 +464,95 @@ export function DraftRoomShell({
               {mobileStickyBar}
             </div>
           )}
-          {auctionStrip && mobileTab === 'board' && (
+          {auctionStrip && (
             <div className="shrink-0 border-b border-white/10 bg-[#050c1d]">{auctionStrip}</div>
           )}
           <div
-            key={mobileTab}
-            className="min-h-[220px] min-w-0 p-2 pb-3 text-sm sm:p-3"
-            data-testid="draft-mobile-content"
-            data-active-tab={mobileTab}
+            className="min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth p-2 sm:p-3"
+            data-testid="draft-mobile-board-scroll"
           >
-            {/* F.2 — Board and Players are the only tabs whose internal content
-                exceeds typical mobile widths (snake grid + 18-column table).
-                Wrapping them in their own `overflow-x-auto min-w-0` container
-                keeps the horizontal scroll INSIDE the tab pane. */}
-            {mobileTab === 'board' && (
-              <div
-                className="min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth"
-                data-testid="draft-mobile-board-scroll"
-              >
-                {draftBoard}
-              </div>
-            )}
-            {mobileTab === 'players' && (
-              <div
-                className="overflow-hidden rounded-t-2xl border border-white/12 bg-[linear-gradient(180deg,rgba(9,17,34,0.96),rgba(7,12,24,0.98))] shadow-[0_-10px_30px_rgba(0,0,0,0.35)]"
-                data-testid="draft-mobile-players-sheet"
-              >
-                <div className="flex justify-center py-2" aria-hidden>
-                  <span className="h-1 w-10 rounded-full bg-white/25" />
-                </div>
-                <div
-                  className="min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth"
-                  data-testid="draft-mobile-players-scroll"
-                >
-                  {playerPanel}
-                </div>
-              </div>
-            )}
-            {mobileTab === 'queue' && queuePanel}
-            {mobileTab === 'chat' && chatPanel}
-            {intelPanel && mobileTab === 'intel' && intelPanel}
-            {helperPanel && mobileTab === 'helper' && helperPanel}
-            {rosterPanel && mobileTab === 'roster' && rosterPanel}
-            {keeperPanel && mobileTab === 'keepers' && keeperPanel}
+            {draftBoard}
           </div>
         </div>
-        <div className="relative shrink-0">
+
+        <section
+          className="relative z-10 flex shrink-0 flex-col rounded-t-2xl border-t border-cyan-400/20 bg-[linear-gradient(180deg,rgba(9,17,34,0.98),rgba(7,12,24,0.99))] shadow-[0_-12px_32px_rgba(0,0,0,0.45)]"
+          data-testid="draft-mobile-tray"
+          data-snap={traySnap}
+          aria-label={t('draftRoom.shell.aria.draftSections')}
+        >
           {mobileDockAccessory ? (
             <div className="absolute bottom-full right-4 z-20 mb-3" data-testid="draft-mobile-dock-accessory">
               {mobileDockAccessory}
             </div>
           ) : null}
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={traySnap === 'full' ? 'Collapse draft tray' : 'Expand draft tray'}
+            aria-expanded={traySnap !== 'peek'}
+            aria-controls="draft-mobile-tray-content"
+            data-testid="draft-mobile-tray-handle"
+            onPointerDown={onTrayPointerDown}
+            onPointerMove={onTrayPointerMove}
+            onPointerUp={onTrayPointerEnd}
+            onPointerCancel={onTrayPointerEnd}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                settleTray(cycleTraySnap(traySnap))
+              } else if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                settleTray(stepTraySnap(traySnap, 'up'))
+              } else if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                settleTray(stepTraySnap(traySnap, 'down'))
+              }
+            }}
+            className="flex min-h-[28px] cursor-grab touch-none select-none items-center justify-center active:cursor-grabbing"
+          >
+            <span className="h-1 w-10 rounded-full bg-white/30" aria-hidden />
+          </div>
+          <div
+            id="draft-mobile-tray-content"
+            className={cn(
+              'min-h-0 overflow-hidden',
+              trayDragHeight == null && 'transition-[height] duration-200 ease-out motion-reduce:transition-none',
+            )}
+            style={{ height: trayContentHeight ?? (traySnap === 'peek' ? 0 : traySnap === 'half' ? '45dvh' : '78dvh') }}
+            aria-hidden={traySnap === 'peek' && trayDragHeight == null}
+          >
+            <div
+              key={mobileTab}
+              className="h-full min-h-0 min-w-0 overflow-y-auto overscroll-contain px-2 pb-3 text-sm sm:px-3"
+              data-testid="draft-mobile-content"
+              data-active-tab={mobileTab}
+              onFocusCapture={(event) => {
+                // Typing in chat: give the conversation the whole screen so the keyboard does not
+                // leave a two-line sliver.
+                const tag = (event.target as HTMLElement).tagName
+                if (mobileTab === 'chat' && (tag === 'TEXTAREA' || tag === 'INPUT')) settleTray('full')
+              }}
+            >
+              {mobileTab === 'players' && (
+                <div className="overflow-hidden" data-testid="draft-mobile-players-sheet">
+                  <div
+                    className="min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth"
+                    data-testid="draft-mobile-players-scroll"
+                  >
+                    {playerPanel}
+                  </div>
+                </div>
+              )}
+              {mobileTab === 'queue' && queuePanel}
+              {mobileTab === 'chat' && chatPanel}
+              {intelPanel && mobileTab === 'intel' && intelPanel}
+              {helperPanel && mobileTab === 'helper' && helperPanel}
+              {rosterPanel && mobileTab === 'roster' && rosterPanel}
+              {keeperPanel && mobileTab === 'keepers' && keeperPanel}
+            </div>
+          </div>
+          <div ref={trayChromeRef} className="shrink-0">
           {secondaryMobileTabs.length > 0 && mobileToolsOpen ? (
             <div
               id="draft-mobile-tools"
@@ -437,7 +586,7 @@ export function DraftRoomShell({
             </div>
           ) : null}
           <nav
-            className="safe-area-bottom flex shrink-0 border-t border-cyan-400/20 bg-[#070f21]/95"
+            className="safe-area-bottom flex shrink-0 border-t border-white/10 bg-[#070f21]/95"
             data-testid="draft-mobile-primary-nav"
             aria-label={t('draftRoom.shell.aria.draftSections')}
           >
@@ -473,7 +622,8 @@ export function DraftRoomShell({
               </button>
             )}
           </nav>
-        </div>
+          </div>
+        </section>
       </div>
     </div>
   )

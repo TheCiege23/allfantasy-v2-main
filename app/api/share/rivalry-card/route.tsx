@@ -12,6 +12,8 @@ import { getUpsetForCard } from '@/lib/share/weeklyUpset'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import { standingsCardRows } from '@/lib/share/standingsCard'
+import { getSeasonRecap } from '@/lib/season-recap/seasonRecapService'
+import { isSeasonRecapCardAward, seasonRecapCardView } from '@/lib/share/seasonRecapCard'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -33,6 +35,10 @@ export const runtime = 'nodejs'
  * `?kind=standings&leagueId=…` renders the league table as it stands — the top of it, the playoff line,
  * and your row even when it is below the fold (lib/share/standingsCard.ts). League membership
  * (`resolveLeagueMembership`) is the access check: `getLeagueStandings` itself checks nothing.
+ *
+ * `?kind=season_recap&leagueId=…&season=…&award=champion|mostPointsFor|…&lang=es?` renders the champion
+ * or one award from that season's recap (lib/share/seasonRecapCard.ts over lib/season-recap). League
+ * membership is the access check, as for the recap page itself; an award the recap does not have is a 404.
  */
 
 function initials(name: string): string {
@@ -409,6 +415,67 @@ async function standingsCard(req: NextRequest, userId: string) {
   )
 }
 
+async function seasonRecapCard(req: NextRequest, userId: string) {
+  const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
+  const season = Number.parseInt(req.nextUrl.searchParams?.get('season')?.trim() ?? '', 10)
+  const award = req.nextUrl.searchParams?.get('award')?.trim()
+  if (!leagueId || !Number.isFinite(season) || !isSeasonRecapCardAward(award)) {
+    return NextResponse.json({ error: 'Missing leagueId, season or a valid award' }, { status: 400 })
+  }
+  const membership = await resolveLeagueMembership(leagueId, userId)
+  if (!membership.ok) return NextResponse.json({ error: 'Not a member of this league' }, { status: membership.status })
+  const out = await getSeasonRecap(leagueId, season).catch(() => null)
+  const v = out ? seasonRecapCardView(out.recap, award, req.nextUrl.searchParams?.get('lang')) : null
+  if (!v) return NextResponse.json({ error: 'No such award in this season recap' }, { status: 404 })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true } }).catch(() => null)
+  const accent = v.champion ? 'linear-gradient(90deg,#f5c542,#ff8a3d)' : 'linear-gradient(90deg,#1e6cff,#34d399)'
+
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          height: '100%',
+          background: '#0b0e2a',
+          fontFamily: 'sans-serif',
+        }}
+      >
+        <div style={{ display: 'flex', height: 8, width: '100%', background: accent }} />
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '34px 48px', flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', fontSize: 40, fontWeight: 900, fontStyle: 'italic', color: v.champion ? '#f5c542' : '#f0f2ff', letterSpacing: 1 }}>
+              {v.kicker}
+            </div>
+            <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#c6cbf5' }}>{league?.name ?? 'League'}</div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 }}>
+            <div style={{ display: 'flex', fontSize: v.title.length > 24 ? 64 : 84, fontWeight: 900, color: '#f0f2ff', lineHeight: 1.05 }}>
+              {v.title}
+            </div>
+            {v.value ? (
+              <div style={{ display: 'flex', fontSize: 56, fontWeight: 900, fontStyle: 'italic', color: v.champion ? '#f5c542' : '#34d399', marginTop: 12 }}>
+                {v.value}
+              </div>
+            ) : null}
+            {v.detail ? <div style={{ display: 'flex', fontSize: 26, color: '#8b93cf', marginTop: 12 }}>{v.detail}</div> : null}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', fontSize: 15, color: '#5d64a3' }}>{v.footnote}</div>
+            <div style={{ display: 'flex', fontSize: 18, fontWeight: 800, color: '#c6cbf5' }}>
+              AllFantasy.ai · a Brown Pig LLC product
+            </div>
+          </div>
+        </div>
+      </div>
+    ),
+    { width: 1200, height: 630 },
+  )
+}
+
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
@@ -418,6 +485,7 @@ export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams?.get('kind')?.trim() === 'escape') return escapeCard(req, userId)
   if (req.nextUrl.searchParams?.get('kind')?.trim() === 'upset') return upsetCard(req, userId)
   if (req.nextUrl.searchParams?.get('kind')?.trim() === 'standings') return standingsCard(req, userId)
+  if (req.nextUrl.searchParams?.get('kind')?.trim() === 'season_recap') return seasonRecapCard(req, userId)
 
   const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
   const aId = req.nextUrl.searchParams?.get('a')?.trim()

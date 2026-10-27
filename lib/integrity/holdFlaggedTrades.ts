@@ -16,44 +16,68 @@ import "server-only"
  * finds the open flag and adds nothing. It FAILS OPEN: if the check cannot run, the trade proceeds
  * exactly as it would have — a broken check must never freeze a league's trading.
  *
- * Stored in League.settings (no migration); absent = off.
+ * Three settings, stored in League.settings under one key (no migration):
+ *   - `severe` — the DEFAULT (owner decision 2026-10-27): hold only the most serious flags, a heavily
+ *     lopsided trade or an eliminated team sending starters to a contender (`SEVERE_HOLD_CODES`);
+ *     every other flag still alerts the commissioner, and the trade goes through;
+ *   - `all` — hold every flagged trade (stored `true` before the default existed, still read as this);
+ *   - `off` — never hold (stored `false`).
+ * Only on the AF Commissioner plan, and only while collusion monitoring is on for the league.
  */
 import type { IntegrityJobPayload } from "@/lib/jobs/types"
 import { prisma } from "@/lib/prisma"
 import { checkLeagueCommissionerEntitlement } from "@/lib/integrity/leagueEntitlement"
 import { scanTradeForCollusion } from "@/lib/integrity/CollusionDetectionEngine"
 
-export const HOLD_FLAGGED_TRADES_KEY = "integrity_hold_flagged_trades"
+import { flagIsHeld, readHoldFlaggedTradesMode } from "@/lib/integrity/holdFlaggedTradesMode"
+
+export {
+  HOLD_FLAGGED_TRADES_KEY,
+  HOLD_FLAGGED_TRADES_MODES,
+  SEVERE_HOLD_CODES,
+  flagIsHeld,
+  parseHoldFlaggedTradesMode,
+  readHoldFlaggedTradesMode,
+  type HoldFlaggedTradesMode,
+} from "@/lib/integrity/holdFlaggedTradesMode"
 
 type TradeRef = NonNullable<IntegrityJobPayload["tradeRef"]>
 
-export function readHoldFlaggedTrades(settings: unknown): boolean {
-  const v = settings && typeof settings === "object" ? (settings as Record<string, unknown>)[HOLD_FLAGGED_TRADES_KEY] : undefined
-  return v === true
-}
+type ScanFlag = { evidence?: { flags?: Array<{ code: string }> } }
 
 export type HoldDeps = {
   entitled: (leagueId: string) => Promise<boolean>
-  scan: (leagueId: string, tradeId: string, ref: TradeRef) => Promise<{ flags: unknown[] }>
+  monitoringOn: (leagueId: string) => Promise<boolean>
+  scan: (leagueId: string, tradeId: string, ref: TradeRef) => Promise<{ flags: ScanFlag[] }>
+}
+
+async function collusionMonitoringOn(leagueId: string): Promise<boolean> {
+  const row = await prisma.leagueIntegritySettings.findUnique({ where: { leagueId }, select: { collusionMonitoringEnabled: true } })
+  return row?.collusionMonitoringEnabled !== false
 }
 
 const defaultDeps: HoldDeps = {
   entitled: checkLeagueCommissionerEntitlement,
+  monitoringOn: collusionMonitoringOn,
   scan: (leagueId, tradeId, ref) => scanTradeForCollusion(leagueId, tradeId, ref),
 }
+
+const codesOf = (flag: ScanFlag): string[] => (flag.evidence?.flags ?? []).map((f) => f.code)
 
 /** True when this accepted trade must wait for the commissioner. */
 export async function shouldHoldAcceptedTrade(
   input: { leagueId: string; settings: unknown; ref: TradeRef },
   deps: Partial<HoldDeps> = {},
 ): Promise<boolean> {
-  if (!readHoldFlaggedTrades(input.settings)) return false
+  const mode = readHoldFlaggedTradesMode(input.settings)
+  if (mode === "off") return false
   const d = { ...defaultDeps, ...deps }
   try {
     if (!(await d.entitled(input.leagueId))) return false
+    if (!(await d.monitoringOn(input.leagueId))) return false
     const tradeId = input.ref.kind === "af" ? input.ref.tradeId : input.ref.proposalId
     const result = await d.scan(input.leagueId, tradeId, input.ref)
-    return result.flags.length > 0
+    return result.flags.some((f) => flagIsHeld(mode, codesOf(f)))
   } catch (error) {
     console.error("[integrity] hold check failed; the trade proceeds", { leagueId: input.leagueId, error })
     return false
@@ -61,16 +85,30 @@ export async function shouldHoldAcceptedTrade(
 }
 
 /**
- * Trade ids that must NOT be auto-passed by a review window: an open collusion flag, in a league that
- * holds flagged trades. Read up front so a caller can leave them out of its query — a sweep that read
+ * Trade ids that must NOT be auto-passed by a review window: an open collusion flag that the league's
+ * setting holds (above). Read up front so a caller can leave them out of its query — a sweep that read
  * "the next N due" and skipped these would let N held trades starve every other trade forever.
+ *
+ * A league on the default holds only with AF Commissioner, as at acceptance; one that chose a mode
+ * keeps it. A plan that lapsed with a trade held therefore releases it to its window, which is what
+ * the trade would have had without the plan.
  */
-export async function heldTradeIds(): Promise<string[]> {
+export async function heldTradeIds(deps: Pick<Partial<HoldDeps>, "entitled"> = {}): Promise<string[]> {
+  const entitled = deps.entitled ?? defaultDeps.entitled
   const flags = await prisma.integrityFlag.findMany({
     where: { flagType: "collusion", status: "open", tradeTransactionId: { not: null } },
-    select: { tradeTransactionId: true, league: { select: { settings: true } } },
+    select: { leagueId: true, tradeTransactionId: true, evidenceJson: true, league: { select: { settings: true } } },
   })
-  return flags
-    .filter((f) => f.tradeTransactionId && readHoldFlaggedTrades(f.league?.settings))
-    .map((f) => f.tradeTransactionId as string)
+  const entitledByLeague = new Map<string, boolean>()
+  const held: string[] = []
+  for (const f of flags) {
+    if (!f.tradeTransactionId) continue
+    const codes = codesOf({ evidence: f.evidenceJson as ScanFlag["evidence"] })
+    if (!flagIsHeld(readHoldFlaggedTradesMode(f.league?.settings), codes)) continue
+    if (!entitledByLeague.has(f.leagueId)) {
+      entitledByLeague.set(f.leagueId, await entitled(f.leagueId).catch(() => false))
+    }
+    if (entitledByLeague.get(f.leagueId)) held.push(f.tradeTransactionId)
+  }
+  return held
 }

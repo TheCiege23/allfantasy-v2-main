@@ -719,6 +719,30 @@ function rankTeams(
   return rank(teams, 0)
 }
 
+/**
+ * The standings order under a tiebreaker list, by the SAME ranking the seeds use (`rankTeams`): record
+ * (exact win %) first, then `tiebreakers` exactly as given, then roster id. Returns roster ids, best
+ * first. lib/redraft/standingsEngine.ts calls this with the commissioner's order
+ * (lib/standings/tiebreakerOrder.ts), so the stored standings and the bracket break a tie the same way —
+ * head-to-head over the whole tied group, all-play from the regular-season weeks, and the coin flip
+ * seeded from `${leagueId}:${season}` as `buildNflRedraftPlayoffRuntimeState` seeds it.
+ */
+export function rankNflRedraftTeamsByTiebreakers(input: {
+  teams: NflRedraftPlayoffTeamInput[]
+  tiebreakers: readonly string[]
+  regularSeasonMatchups?: NflRedraftRegularSeasonMatchupInput[] | null
+  regularSeasonEndWeek: number | null
+  coinSeed: string
+}): string[] {
+  const keys = Array.from(new Set(['win_pct', ...input.tiebreakers.filter((key) => !RECORD_KEYS.has(key)), 'roster_id']))
+  const h2h = buildHeadToHeadIndex(input.regularSeasonMatchups, input.regularSeasonEndWeek)
+  const ctx: TiebreakerContext = {
+    allPlay: allPlayShares(regularSeasonWeekScores(input.regularSeasonMatchups, input.regularSeasonEndWeek)),
+    coinSeed: input.coinSeed,
+  }
+  return rankTeams(input.teams.map(normalizeTeam), keys, h2h, undefined, ctx).map((team) => team.rosterId)
+}
+
 function seedTeams(
   teams: NflRedraftPlayoffTeamState[],
   settings: NflRedraftPlayoffSettings,
@@ -1290,6 +1314,43 @@ function lockedSeedMap(state: NflRedraftPlayoffRuntimeState, rounds: NflRedraftP
   }
   for (const seed of state.seeds) if (!locked.has(seed.rosterId)) locked.set(seed.rosterId, seed.seed)
   return locked
+}
+
+/**
+ * The seeds the league is playing to: the ones stored on the bracket rows once a bracket is generated
+ * (the seeds reseeding reads), else `state.seeds` — the bracket the generator would
+ * build from the standings right now, divisions included. The seed preview reads this, so a preview can
+ * never show a seed the bracket would not give.
+ */
+export function currentNflRedraftPlayoffSeeds(state: NflRedraftPlayoffRuntimeState): {
+  locked: boolean
+  seeds: Array<{ seed: number; rosterId: string; displayName: string; qualifiedBy: NflRedraftPlayoffQualifiedBy | null }>
+} {
+  if (!state.bracket.generated) {
+    return {
+      locked: false,
+      seeds: state.seeds.map((s) => ({ seed: s.seed, rosterId: s.rosterId, displayName: s.displayName, qualifiedBy: s.qualifiedBy })),
+    }
+  }
+  // The seeds on the bracket rows; a seed no row holds yet (a commissioner bye plan's later entrant)
+  // falls back to `state.seeds`, as `lockedSeedMap` does — but never onto a seed number a row already holds.
+  const fromRows = lockedSeedMap({ ...state, seeds: [] }, state.bracket.rounds)
+  const taken = new Set(fromRows.values())
+  const locked = new Map(fromRows)
+  for (const s of state.seeds) if (!locked.has(s.rosterId) && !taken.has(s.seed)) locked.set(s.rosterId, s.seed)
+  const teamById = new Map(state.teams.map((team) => [team.rosterId, team]))
+  const qualifiedById = new Map(state.seeds.map((s) => [s.rosterId, s.qualifiedBy]))
+  return {
+    locked: true,
+    seeds: [...locked]
+      .sort((a, b) => a[1] - b[1])
+      .map(([rosterId, seed]) => ({
+        seed,
+        rosterId,
+        displayName: teamById.get(rosterId)?.displayName ?? rosterId,
+        qualifiedBy: qualifiedById.get(rosterId) ?? null,
+      })),
+  }
 }
 
 /**

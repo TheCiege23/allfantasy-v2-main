@@ -1235,6 +1235,17 @@ export async function executeLeagueSettingsPatch(
       ...(waiverOrderResetPolicy !== undefined ? { waiverOrderResetPolicy } : {}),
     })
     updatedFieldNames.push(...HUB_WAIVER_OPTION_KEYS.filter((k) => body[k] !== undefined))
+    // The free-agency mode moves a daily sport's run days (lib/waiver-wire/daily-sport-waiver-runs.ts):
+    // reschedule now rather than at the next run under the old days. The per-day schedule's own
+    // follow-up below refreshes it too when both change.
+    if (hubWaiver.options.freeAgencyMode !== undefined && !dailyWaiverScheduleToStore) {
+      try {
+        await refreshLeagueWaiverNextRunAt(leagueId)
+        updatedFieldNames.push('waiver_next_run_at')
+      } catch (e) {
+        console.warn('[executeLeagueSettingsPatch] free agency mode next run refresh', e)
+      }
+    }
   }
 
   if (dailyWaiverScheduleToStore) {

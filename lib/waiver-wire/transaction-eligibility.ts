@@ -20,6 +20,7 @@ import { assertWeeklyDropLimit } from './waiver-validation'
 import { commissionerOverrideAllowed, getCommissionerOverrides } from './commissioner-claim-override'
 import { assertCurrentNbaWaiverPlayer } from './current-nba-player-pool'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 
 export const WAIVER_TX_RESULT_CODES = [
   'won',
@@ -57,13 +58,25 @@ export type WaiverClaimEligibilityInput = {
 }
 
 /**
- * An IR finding the AF lineup template raises on an IMPORTED roster: a player whose IR row carries
- * no injury status (imports store bare ids, so every one reads as ineligible) or more IR players
- * than the template's spots. The provider owns an import's IR, and IR does not count against an
- * import's roster limit (lib/league/rosterLimit.ts), so these are reported, not enforced.
+ * A finding on an IMPORTED roster about state the provider owns, reported rather than enforced:
+ * - IR: a player whose IR row carries no injury status (imports store bare ids, so every one reads as
+ *   ineligible) or more IR players than the provider's spots. IR does not count against an import's
+ *   roster limit (lib/league/rosterLimit.ts).
+ * - The provider's starting lineup: a starter whose position no slot takes (or is unknown), or fewer
+ *   starters than slots (968 of 6,734 Sleeper rosters on 2026-10-27). An add lands on the bench and
+ *   never touches the lineup, and the lineup is set on the provider.
+ * - The template's whole-roster total. It counts IR spots, so an over-full provider IR read as an
+ *   over-full roster; an import's size rule is `leagueRosterLimit`, checked above.
+ * Bench and taxi overflow are still enforced against the provider's own slots.
  */
-function isImportedIrIssue(reason: RosterLegalityBlockingReason): boolean {
-  return reason.sourceIssueCode === 'ir_ineligible_status' || (reason.sourceIssueCode === 'section_overflow' && reason.section === 'ir')
+function isImportedProviderStateIssue(reason: RosterLegalityBlockingReason): boolean {
+  return (
+    reason.sourceIssueCode === 'ir_ineligible_status' ||
+    (reason.sourceIssueCode === 'section_overflow' && reason.section === 'ir') ||
+    reason.sourceIssueCode === 'starter_position_ineligible' ||
+    reason.sourceIssueCode === 'roster_total_over_limit' ||
+    reason.code === 'STARTER_SLOT_EMPTY_WHEN_REQUIRED'
+  )
 }
 
 function sectionForPlayerId(playerData: unknown, pid: string): RosterSectionKey | null {
@@ -145,7 +158,9 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   // The same limit trades and the draft use (lib/league/rosterLimit.ts): active spots, IR / taxi aside.
   const rosterLimit = leagueRosterLimit(league, 20)
   const { limit: rosterSizeLimit, counts: rosterCounts } = rosterLimit
-  const imported = rosterCounts === 'imported'
+  // By platform, not by `counts`: an import whose settings carry a saved layout counts 'active' but its
+  // lineup and IR are still the provider's (8 Sleeper leagues on 2026-10-27).
+  const imported = isImportedPlatform(league.platform)
   const notices: string[] = []
   const irOverflow = importedIrOverflow(roster.playerData, rosterLimit)
   if (irOverflow) {
@@ -230,7 +245,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
     // of whether the move ever touched a starter slot.
     const blocking = ev.result.blockingReasons.filter((r) => {
       if (r.code === 'LEAGUE_LINEUP_LOCK_ACTIVE') return false
-      if (imported && isImportedIrIssue(r)) {
+      if (imported && isImportedProviderStateIssue(r)) {
         notices.push(r.message)
         return false
       }

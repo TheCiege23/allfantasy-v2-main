@@ -76,23 +76,31 @@ export async function loadWeeklyMvp(userId: string, now: Date = new Date()): Pro
 
   const teams = await prisma.leagueTeam.findMany({
     where: { claimedByUserId: userId, externalId: { not: '' }, league: { platform: 'sleeper', sport: 'NFL', season } },
-    select: { leagueId: true, externalId: true, league: { select: { name: true } } },
+    select: { leagueId: true, externalId: true, league: { select: { name: true, platformLeagueId: true } } },
   })
-  const rosterByLeague = new Map<string, number>()
+  // ⚠ The scores table is keyed on SLEEPER's league id (`platformLeagueId`), not ours — see the
+  // model's note in schema.prisma. Querying it with `League.id` matched nothing, so the card never
+  // showed for anyone. Rows are read by platform id and mapped back to our id for the card's links.
+  const rosterByPlatform = new Map<string, number>()
+  const ourIdByPlatform = new Map<string, string>()
   const names = new Map<string, string>()
   for (const t of teams) {
     const roster = Number(t.externalId)
-    if (!Number.isInteger(roster)) continue
-    rosterByLeague.set(t.leagueId, roster)
+    const platformId = (t.league.platformLeagueId ?? '').trim()
+    if (!Number.isInteger(roster) || !platformId) continue
+    rosterByPlatform.set(platformId, roster)
+    ourIdByPlatform.set(platformId, t.leagueId)
     names.set(t.leagueId, (t.league.name ?? '').trim() || 'League')
   }
-  if (rosterByLeague.size === 0) return null
+  if (rosterByPlatform.size === 0) return null
 
   const rows = await prisma.leaguePlayerWeeklyScore.findMany({
-    where: { leagueId: { in: [...rosterByLeague.keys()] }, seasonYear: season, week, isStarter: true },
+    where: { leagueId: { in: [...rosterByPlatform.keys()] }, seasonYear: season, week, isStarter: true },
     select: { leagueId: true, playerId: true, rosterId: true, points: true },
   })
-  const mine = rows.filter((r) => r.rosterId != null && rosterByLeague.get(r.leagueId) === r.rosterId)
+  const mine = rows
+    .filter((r) => r.rosterId != null && rosterByPlatform.get(r.leagueId) === r.rosterId)
+    .map((r) => ({ leagueId: ourIdByPlatform.get(r.leagueId)!, playerId: r.playerId, points: r.points }))
   const mvp = pickMvp(mine, names)
   if (!mvp) return null
 

@@ -79,8 +79,8 @@ const DRAFT_ORDER_WORDS: Record<RenewDraftOrderMode, { en: string; es: string }>
   manual: { en: 'the order the commissioner set', es: 'el orden que fijó el comisionado' },
 }
 
-const money = (cents: number) => `$${(cents / 100).toFixed(cents % 100 ? 2 : 0)}`
-const ord = (n: number, es: boolean) =>
+export const money = (cents: number) => `$${(cents / 100).toFixed(cents % 100 ? 2 : 0)}`
+export const ord = (n: number, es: boolean) =>
   es ? `${n}.º` : `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
 
 /**
@@ -120,8 +120,16 @@ export function buildRolloverAnnouncement(input: {
       : `The draft goes by ${DRAFT_ORDER_WORDS[input.draftOrder].en}. Let us know you’re in.`,
   ].filter((p): p is string => Boolean(p))
 
+  return fitAnnouncement(parts, es ? 'Premios: ' : 'Payouts: ')
+}
+
+/**
+ * Joins an announcement's sentences within the broadcast limit: the payout line (the one starting
+ * `droppablePrefix`) goes first, then the last sentence, never mid-word.
+ */
+export function fitAnnouncement(parts: readonly string[], droppablePrefix: string): string {
   let text = parts.join(' ')
-  if (text.length > ANNOUNCEMENT_LIMIT) text = parts.filter((p) => !p.startsWith(es ? 'Premios: ' : 'Payouts: ')).join(' ')
+  if (text.length > ANNOUNCEMENT_LIMIT) text = parts.filter((p) => !p.startsWith(droppablePrefix)).join(' ')
   while (text.length > ANNOUNCEMENT_LIMIT) {
     const cut = text.lastIndexOf('. ', ANNOUNCEMENT_LIMIT - 1)
     text = cut > 0 ? text.slice(0, cut + 1) : text.slice(0, text.lastIndexOf(' ', ANNOUNCEMENT_LIMIT - 1))

@@ -20,6 +20,12 @@
 
 import { useEffect, useState } from 'react'
 import {
+  HOLD_FLAGGED_TRADES_LABELS,
+  HOLD_FLAGGED_TRADES_MODES,
+  holdModeFromResponse,
+  type HoldFlaggedTradesMode,
+} from '@/lib/integrity/holdFlaggedTradesMode'
+import {
   describeCollusionSensitivity,
   describeTankingSensitivity,
   INTEGRITY_SENSITIVITIES,
@@ -37,8 +43,11 @@ export type IntegritySettingsValue = {
   tankingWaiverPatternCheck: boolean
   /** Suspicious-trade alerts (League.settings, lib/integrity/tradeAlerts.ts). Absent = on. */
   tradeAlertsEnabled?: boolean
-  /** Hold flagged trades for commissioner review (League.settings, lib/integrity/holdFlaggedTrades.ts). Absent = off. */
+  /** Hold flagged trades for commissioner review (League.settings, lib/integrity/holdFlaggedTrades.ts). Default: serious flags only. */
   holdFlaggedTrades?: boolean
+  holdFlaggedTradesMode?: HoldFlaggedTradesMode
+  /** False in an imported league: its trades go through on the host, so there is nothing to hold. */
+  holdFlaggedTradesSupported?: boolean
 }
 
 type Draft = {
@@ -50,7 +59,7 @@ type Draft = {
   tankingBenchPatternCheck: boolean
   tankingWaiverPatternCheck: boolean
   tradeAlertsEnabled: boolean
-  holdFlaggedTrades: boolean
+  holdFlaggedTradesMode: HoldFlaggedTradesMode
 }
 
 function toDraft(v: IntegritySettingsValue): Draft {
@@ -63,7 +72,7 @@ function toDraft(v: IntegritySettingsValue): Draft {
     tankingBenchPatternCheck: v.tankingBenchPatternCheck !== false,
     tankingWaiverPatternCheck: Boolean(v.tankingWaiverPatternCheck),
     tradeAlertsEnabled: v.tradeAlertsEnabled !== false,
-    holdFlaggedTrades: v.holdFlaggedTrades === true,
+    holdFlaggedTradesMode: holdModeFromResponse(v),
   }
 }
 
@@ -152,22 +161,34 @@ export function IntegritySettings({
               {draft.tradeAlertsEnabled ? 'On' : 'Off'}
             </button>
           </div>
-          <div className="af-cm-setrow">
-            <span className="af-cm-setrow-label">Hold flagged trades for my review</span>
-            <button
-              type="button"
-              className="af-cm-toggle af-num"
-              aria-pressed={draft.holdFlaggedTrades}
-              aria-label="Hold flagged trades"
-              disabled={saving || readOnly}
-              onClick={() => set('holdFlaggedTrades', !draft.holdFlaggedTrades)}
-            >
-              {draft.holdFlaggedTrades ? 'On' : 'Off'}
-            </button>
-          </div>
-          <p className="af-cm-setgroup-note">
-            On: an accepted trade is checked before it goes through, and a flagged one waits for you to approve or veto it.
-          </p>
+          {value.holdFlaggedTradesSupported === false ? (
+            <p className="af-cm-setgroup-note" data-testid="integrity-hold-unsupported">
+              Holding flagged trades is not available in an imported league: its trades go through on the league&apos;s
+              own platform. Completed trades are still checked, and a flagged one alerts you.
+            </p>
+          ) : (
+            <>
+            <div className="af-cm-setrow">
+              <span className="af-cm-setrow-label">Hold flagged trades for my review</span>
+              <select
+                className="af-cm-toggle af-num"
+                aria-label="Hold flagged trades"
+                disabled={saving || readOnly}
+                value={draft.holdFlaggedTradesMode}
+                onChange={(e) => set('holdFlaggedTradesMode', e.target.value as HoldFlaggedTradesMode)}
+              >
+                {HOLD_FLAGGED_TRADES_MODES.map((m) => (
+                  <option key={m} value={m}>
+                    {HOLD_FLAGGED_TRADES_LABELS[m].label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="af-cm-setgroup-note">
+              An accepted trade is checked before it goes through. {HOLD_FLAGGED_TRADES_LABELS[draft.holdFlaggedTradesMode].detail}
+            </p>
+            </>
+          )}
           <div className="af-label">Sensitivity</div>
           <Segmented
             name="Collusion"

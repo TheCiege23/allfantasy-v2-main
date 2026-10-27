@@ -197,3 +197,55 @@ export function validateHookRewrite(
 
   return { passed: errors.length === 0, errors, warnings: [] }
 }
+
+/* ─── Season recap, written from the recap's facts (lib/season-recap) ──────────────────────── */
+
+/**
+ * Is a written season recap still the recap's facts? The same rules as a hook rewrite, for prose:
+ *
+ *   - every number in it must be one of the facts' numbers (rounded as the page rounds, or to a whole
+ *     number), after the fact strings — team and player names, which may carry digits — are removed;
+ *   - the names it is about (`requiredNames`, the champion) must survive;
+ *   - no invented or certain-outcome claim, no personal attack, no profanity;
+ *   - Spanish text never says «waiver»: a pickup is a «reclamo».
+ *
+ * Numbers are compared as numbers, so "142.30" is 142.3. English thousands separators ("1,234") and a
+ * Spanish decimal comma ("142,4") are read as the number they write.
+ */
+export function validateSeasonRecapText(
+  text: string,
+  facts: readonly HookRewriteFact[],
+  opts: { requiredNames?: readonly string[]; language?: 'en' | 'es'; hasProfanity?: (t: string) => boolean } = {},
+): StoryFactGuardResult {
+  const errors: string[] = []
+  const trimmed = text.trim()
+  if (!trimmed) errors.push('Recap is empty.')
+  for (const p of INVENTED_PATTERNS) if (p.test(trimmed)) errors.push('Recap contains an invented or certain-outcome claim.')
+  for (const p of PERSONAL_ATTACK_PATTERNS) if (p.test(trimmed)) errors.push('Recap attacks a person rather than a team.')
+  if (opts.hasProfanity?.(trimmed)) errors.push('Recap contains profanity.')
+  if (opts.language === 'es' && /\bwaivers?\b/i.test(trimmed)) errors.push('Spanish recap uses the English loanword for a claim; it must say reclamo.')
+
+  const strings = facts
+    .map((f) => (typeof f.value === 'string' ? f.value.trim() : ''))
+    .filter((s) => s.length > 0)
+  let rest = trimmed
+  for (const s of [...strings].sort((a, b) => b.length - a.length)) rest = rest.split(s).join(' ')
+  rest = opts.language === 'es' ? rest.replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2') : rest.replace(/(\d),(\d{3})(?!\d)/g, '$1$2')
+
+  const allowed = new Set<number>()
+  for (const f of facts) {
+    const values = typeof f.value === 'number' ? [f.value] : (f.value.match(/\d+(?:\.\d+)?/g) ?? []).map(Number)
+    for (const v of values) {
+      allowed.add(v)
+      allowed.add(Math.round(v))
+      allowed.add(Math.round(v * 10) / 10)
+      allowed.add(Math.round(v * 100) / 100)
+    }
+  }
+  const unknown = (rest.match(/\d+(?:\.\d+)?/g) ?? []).filter((n) => !allowed.has(Number(n)))
+  if (unknown.length > 0) errors.push(`Recap has numbers that are not in its facts: ${[...new Set(unknown)].join(', ')}`)
+
+  for (const n of opts.requiredNames ?? []) if (n && !trimmed.includes(n)) errors.push(`Recap dropped "${n}".`)
+
+  return { passed: errors.length === 0, errors, warnings: [] }
+}

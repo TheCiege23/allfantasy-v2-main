@@ -25,6 +25,8 @@ import {
   daysInWindow,
   daysOnRoster,
   droppedInWindow,
+  loadDailyLockStarts,
+  lockStartOnFor,
   isDailyLineupScoringEnabled,
   loadDailyLineups,
   loadPlayerDailyStats,
@@ -428,6 +430,8 @@ async function scoreRosterStartersDaily(args: {
   const players = await prisma.redraftRosterPlayer.findMany({ where: { rosterId: args.rosterId, ...droppedInWindow(window) } })
   const weekLineups = await loadWeekLineups(prisma, { redraftRosterIds: [args.rosterId], season: args.seasonYear, week: args.week })
   const dailyLineups = await loadDailyLineups(prisma, { redraftRosterIds: [args.rosterId], window })
+  // A drop or add day belongs to whoever held him at his game's lock (`daysOnRoster`).
+  const lockStarts = await loadDailyLockStarts(prisma, { sport, season: args.seasonYear, week: args.week })
   const days = daysInWindow(window)
   const playerIds = players.map((p: (typeof players)[number]) => p.playerId)
   // "Which games count" applies across the days he STARTED: only those days' games are eligible.
@@ -471,7 +475,7 @@ async function scoreRosterStartersDaily(args: {
   const gamesCountStats: TeamStatTotals[] = []
 
   for (const p of players) {
-    const onRoster = daysOnRoster(p, days)
+    const onRoster = daysOnRoster(p, days, lockStartOnFor(lockStarts, p))
     const slotOn = (day: Date) => dailySlotFor(dailyLineups, args.rosterId, p.playerId, day) ?? weekSlotType(p, weekLineups)
     const startedDays = onRoster.filter((d) => isScoringStarterSlot(slotOn(d)))
     const benchDays = args.includeBench

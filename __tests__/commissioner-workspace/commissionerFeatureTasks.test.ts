@@ -118,6 +118,13 @@ describe('detectRolloverDue', () => {
     expect(t.automationCandidate).toBe(false)
     expect(detectRolloverDue('L', null)).toBeNull()
   })
+  it('a dynasty league is walked through its own steps, and told its rosters carry over', () => {
+    const t = detectRolloverDue('L', { season: 2026, kind: 'dynasty' })!
+    expect(t.sourceKey).toBe('season-rollover:2026:v1')
+    expect(t.description).toContain('rookie draft order')
+    expect(t.description).toContain('Rosters carry over')
+    expect(detectRolloverDue('L', { season: 2026, kind: 'redraft' })!.description).toContain('renews the league')
+  })
 })
 
 describe('readCommissionerFeatureTasks', () => {

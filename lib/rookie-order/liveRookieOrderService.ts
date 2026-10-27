@@ -28,6 +28,7 @@ import {
   type WithinRoundOrder,
 } from './rookieOrderEngine'
 import { loadRookieOrderInput, type MaxPfInfo } from './loadRookieOrderInput'
+import { readLastRoundNotice, readRoundNoticeSettings, type LastRoundNotice, type RoundNoticeSettings } from './roundNotices'
 
 export const LIVE_ROOKIE_ORDER_FEATURE = 'commissioner_automation' as const
 
@@ -44,6 +45,10 @@ export type LiveRookieOrderSettings = {
   /** The season automation was switched on in while the league was entitled. */
   enabledForSeason: number | null
   finalOrder: SavedFinalOrder | null
+  /** After each playoff round: tell the commissioner, post in league chat (./roundNotices.ts). */
+  roundNotices: RoundNoticeSettings
+  /** What the last round notice covered; written by the hourly sweep only. */
+  lastRoundNotice: LastRoundNotice | null
 }
 
 const NON_PLAYOFF: readonly NonPlayoffOrderMethod[] = ['reverse_max_pf', 'reverse_points_for', 'reverse_record']
@@ -79,6 +84,8 @@ export function readLiveRookieOrderSettings(leagueSettings: unknown): LiveRookie
     config: parseRookieOrderConfig(live.config),
     enabledForSeason: typeof live.enabledForSeason === 'number' ? live.enabledForSeason : null,
     finalOrder,
+    roundNotices: readRoundNoticeSettings(leagueSettings),
+    lastRoundNotice: readLastRoundNotice(leagueSettings),
   }
 }
 
@@ -94,7 +101,8 @@ async function writeLiveSettings(leagueId: string, next: LiveRookieOrderSettings
   const rookie = asRecord(settings.rookie_draft_order)
   await prisma.league.update({
     where: { id: leagueId },
-    data: { settings: { ...settings, rookie_draft_order: { ...rookie, live: next } } as never },
+    // Merged onto what is stored, so a key this type does not know about is never dropped.
+    data: { settings: { ...settings, rookie_draft_order: { ...rookie, live: { ...asRecord(rookie.live), ...next } } } as never },
   })
 }
 
@@ -168,7 +176,7 @@ export async function refreshLiveRookieOrder(
 
 export async function saveLiveRookieOrderSettings(
   leagueId: string,
-  input: { enabled: boolean; config: RookieOrderConfig; season: number },
+  input: { enabled: boolean; config: RookieOrderConfig; season: number; roundNotices?: RoundNoticeSettings },
 ): Promise<LiveRookieOrderSettings> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   const current = readLiveRookieOrderSettings(league?.settings)
@@ -177,6 +185,7 @@ export async function saveLiveRookieOrderSettings(
     enabled: input.enabled,
     config: input.config,
     enabledForSeason: input.enabled ? input.season : current.enabledForSeason,
+    roundNotices: input.roundNotices ?? current.roundNotices,
   }
   await writeLiveSettings(leagueId, next)
   return next

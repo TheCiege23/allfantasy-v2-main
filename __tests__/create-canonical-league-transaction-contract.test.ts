@@ -537,3 +537,55 @@ describe('NHL category leagues are created as category leagues', () => {
     ).rejects.toThrow(/NHL category scoring requires redraft, dynasty or keeper/)
   })
 })
+
+/*
+ * Daily lineups are the default for a NEW NBA or NHL redraft points league (owner, 2026-10-27), and
+ * only once the per-day tables exist — the same gate the commissioner's switch uses.
+ */
+describe('new NBA and NHL redraft leagues start in daily lineups', () => {
+  const settingsOf = (tx: ReturnType<typeof buildTx>) => tx.league.create.mock.calls[0]?.[0].data.settings
+  const withTables = (ok: boolean) => Object.assign(buildTx(), { $queryRaw: vi.fn(async () => [{ ok }]) })
+
+  it.each([
+    ['NBA', 'nba_points'],
+    ['NHL', 'nhl_points'],
+  ])('%s points league is created daily', async (sport, scoringPreset) => {
+    const { readLineupMode } = await import('@/lib/redraft/lineupModeSwitch')
+    const tx = withTables(true)
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ sport, scoringPreset }), buildEngine())
+    expect(settingsOf(tx).sportConfig).toMatchObject({ lineupLockType: 'daily', dailyLineupsEnabled: true })
+    expect(readLineupMode(settingsOf(tx), sport)).toBe('daily')
+  })
+
+  it.each([
+    ['MLB', 'mlb_points', 'redraft'],
+    ['NFL', 'fb_half_ppr', 'redraft'],
+    ['NBA', 'nba_points', 'dynasty'],
+  ])('[control] %s %s %s stays weekly', async (sport, scoringPreset, concept) => {
+    const { readLineupMode } = await import('@/lib/redraft/lineupModeSwitch')
+    const tx = withTables(true)
+    await createCanonicalLeagueInTransaction(
+      tx as any,
+      'app-user-1',
+      buildBody({ sport, scoringPreset, concept }),
+      buildEngine({ leagueFormatId: concept }),
+    )
+    expect(settingsOf(tx).sportConfig?.dailyLineupsEnabled).not.toBe(true)
+    expect(readLineupMode(settingsOf(tx), sport)).toBe('weekly')
+  })
+
+  it('[control] an NHL category league keeps its weekly lock', async () => {
+    const tx = withTables(true)
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ sport: 'NHL', scoringPreset: 'nhl_cats_each' }), buildEngine())
+    expect(settingsOf(tx).sportConfig).toMatchObject({ lineupLockType: 'first_game_of_week' })
+    expect(settingsOf(tx).sportConfig?.dailyLineupsEnabled).not.toBe(true)
+  })
+
+  it('stays weekly while the per-day tables are missing', async () => {
+    const { readLineupMode } = await import('@/lib/redraft/lineupModeSwitch')
+    for (const tx of [withTables(false), buildTx()]) {
+      await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ sport: 'NBA', scoringPreset: 'nba_points' }), buildEngine())
+      expect(readLineupMode(settingsOf(tx), 'NBA')).toBe('weekly')
+    }
+  })
+})
