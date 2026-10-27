@@ -29,7 +29,10 @@ vi.mock('@/lib/prisma', () => {
         },
       },
     )
-  return { prisma: new Proxy({}, { get: (_t, prop: string) => model(prop) }) }
+  const prisma = new Proxy({}, { get: (_t, prop: string) => prop === '$transaction'
+    ? async (work: (tx: unknown) => Promise<unknown>) => work(prisma)
+    : model(prop) })
+  return { prisma }
 })
 vi.mock('@/lib/zombie/commissionerNotificationService', () => ({
   notifyCommissioner: vi.fn(async () => undefined),
@@ -57,7 +60,10 @@ const zombie = {
   teams: [],
 }
 
-const created = (key: string) => calls.filter((c) => c.key === key).map((c) => (c.args as { data: Record<string, unknown> }).data)
+const created = (key: string) => calls.filter((c) => c.key === key).map((c) => {
+  const args = c.args as { data?: Record<string, unknown>; create?: Record<string, unknown> }
+  return args.create ?? args.data
+})
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
@@ -73,26 +79,26 @@ afterEach(() => vi.useRealTimers())
 describe('scheduleWeeklyUpdate', () => {
   it('posts the latest PLAYED week in its hour, not the week the league has moved on to', async () => {
     await scheduleWeeklyUpdate('L1')
-    expect(created('zombieAnnouncement.create')).toEqual([expect.objectContaining({ type: 'weekly_update', week: 3 })])
-    expect(created('leagueChatMessage.create')).toHaveLength(1)
+    expect(created('zombieAnnouncement.upsert')).toEqual([expect.objectContaining({ type: 'weekly_update', week: 3 })])
+    expect(created('leagueChatMessage.upsert')).toHaveLength(1)
   })
 
   it('posts once: an update already posted for that week stops the next tick', async () => {
     overrides.set('zombieAnnouncement.findFirst', async () => ({ id: 'already' }))
     await scheduleWeeklyUpdate('L1')
-    expect(created('zombieAnnouncement.create')).toEqual([])
+    expect(created('zombieAnnouncement.upsert')).toEqual([])
   })
 
   it('waits for its hour', async () => {
     vi.setSystemTime(new Date('2026-10-08T19:05:00.000Z'))
     await scheduleWeeklyUpdate('L1')
-    expect(created('zombieAnnouncement.create')).toEqual([])
+    expect(created('zombieAnnouncement.upsert')).toEqual([])
   })
 
   it('posts nothing before any week has been resolved', async () => {
     overrides.set('zombieWeeklyResolution.findFirst', async () => null)
     await scheduleWeeklyUpdate('L1')
-    expect(created('zombieAnnouncement.create')).toEqual([])
+    expect(created('zombieAnnouncement.upsert')).toEqual([])
   })
 })
 
@@ -109,7 +115,7 @@ describe('runZombieHousekeeping', () => {
     const r = await runZombieHousekeeping()
     expect(r).toMatchObject({ leaguesChecked: 1, errors: [] })
     expect(created('zombieBashingEvent.update')).toEqual([expect.objectContaining({ decisionMade: 'spare', defaultedToRule: true })])
-    expect(created('zombieAnnouncement.create')).toEqual([expect.objectContaining({ week: 3 })])
+    expect(created('zombieAnnouncement.upsert')).toEqual([expect.objectContaining({ week: 3 })])
     expect(calls.some((c) => c.key === 'zombieEventAnimation.updateMany')).toBe(true)
   })
 
@@ -120,6 +126,6 @@ describe('runZombieHousekeeping', () => {
     const r = await runZombieHousekeeping()
     expect(r.errors).toEqual(['announcements: db blip'])
     // The weekly update still posted.
-    expect(created('zombieAnnouncement.create')).toEqual([expect.objectContaining({ week: 3 })])
+    expect(created('zombieAnnouncement.upsert')).toEqual([expect.objectContaining({ week: 3 })])
   })
 })
