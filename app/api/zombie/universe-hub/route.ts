@@ -14,6 +14,16 @@ export async function GET(req: Request) {
   const universeId = searchParams?.get('universeId')
   if (!universeId) return NextResponse.json({ error: 'universeId required' }, { status: 400 })
 
+  // This endpoint includes unredacted role records; only the universe commissioner may read it.
+  const owner = await prisma.zombieUniverse.findUnique({
+    where: { id: universeId },
+    select: { commissionedByUserId: true },
+  })
+  if (!owner) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (owner.commissionedByUserId !== session.user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const u = await prisma.zombieUniverse.findUnique({
     where: { id: universeId },
     include: {
@@ -22,6 +32,7 @@ export async function GET(req: Request) {
         include: {
           teams: true,
           whispererRecord: true,
+          coWhisperers: true,
           level: true,
         },
       },
@@ -34,6 +45,7 @@ export async function GET(req: Request) {
   let whispererCount = 0
   for (const z of u.leagues) {
     if (z.whispererRecord) whispererCount += 1
+    whispererCount += z.coWhisperers.length
     for (const t of z.teams) {
       const s = (t.status ?? '').toLowerCase()
       if (s.includes('zombie')) zombieCount += 1
