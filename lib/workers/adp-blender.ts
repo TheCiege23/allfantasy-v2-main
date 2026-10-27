@@ -6,6 +6,7 @@ import { resolveAiAdpFormatKeyFromSettings } from '@/lib/ai-adp-engine/segment-r
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueSport } from '@prisma/client'
 import { blendOne, normalizeBlendWeights } from '@/lib/adp/blendPolicy'
+import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 
 export type ADPSource = 'api' | 'global_app' | 'ai' | 'blended' | 'custom'
 
@@ -334,6 +335,32 @@ export async function getAdpRankings(
   return blendAdpRankings(leagueId, weights)
 }
 
+/**
+ * Index one source's rankings by `buildPlayerKey`. Two rows of the SAME source that land on one key
+ * (a pick stored under a Sleeper id and another under a name fallback, say) are merged with a
+ * sample-weighted mean rather than letting the later row silently overwrite the earlier one.
+ */
+function indexBySourceKey(rows: readonly ADPRanking[]): Map<string, ADPRanking> {
+  const out = new Map<string, ADPRanking>()
+  for (const row of rows) {
+    const key = buildPlayerKey(row.playerName, row.position)
+    const prev = out.get(key)
+    if (!prev) {
+      out.set(key, row)
+      continue
+    }
+    const wPrev = Math.max(1, prev.sampleSize ?? 1)
+    const wRow = Math.max(1, row.sampleSize ?? 1)
+    out.set(key, {
+      ...prev,
+      adp: Number(((prev.adp * wPrev + row.adp * wRow) / (wPrev + wRow)).toFixed(2)),
+      sampleSize: prev.sampleSize != null || row.sampleSize != null ? (prev.sampleSize ?? 0) + (row.sampleSize ?? 0) : undefined,
+      locked: Boolean(prev.locked || row.locked),
+    })
+  }
+  return out
+}
+
 export async function blendAdpRankings(
   leagueId: string,
   weights?: ADPWeights
@@ -346,10 +373,19 @@ export async function blendAdpRankings(
     getCustomAdpRankings(leagueId),
   ])
 
-  const apiMap = new Map(api.map((entry) => [playerKey(entry.playerId, entry.playerName, entry.position, entry.team), entry]))
-  const appMap = new Map(app.map((entry) => [playerKey(entry.playerId, entry.playerName, entry.position, entry.team), entry]))
-  const aiMap = new Map(ai.map((entry) => [playerKey(entry.playerId, entry.playerName, entry.position, entry.team), entry]))
-  const customMap = new Map(custom.map((entry) => [playerKey(entry.playerId, entry.playerName, entry.position, entry.team), entry]))
+  /*
+   * 🛑 THE SOURCES ARE JOINED ON NAME + POSITION, NOT ON `playerId`. Each source speaks its own
+   * id space — provider rows carry the writer's slug (`NFL:brian-thomas:WR:JAX`), our draft picks
+   * carry Sleeper ids, the AI board builds a third lowercase form — and this join used all of them
+   * plus team as the key. No two sources ever agreed, so every player came back as one row PER
+   * source, each holding a single number labelled "blended". `buildPlayerKey` is the key the
+   * AllFantasy ADP snapshots already use: suffix- and punctuation-insensitive, team-free (a traded
+   * or free-agent player keeps one row).
+   */
+  const apiMap = indexBySourceKey(api)
+  const appMap = indexBySourceKey(app)
+  const aiMap = indexBySourceKey(ai)
+  const customMap = indexBySourceKey(custom)
   const allKeys = new Set<string>([
     ...apiMap.keys(),
     ...appMap.keys(),
