@@ -324,6 +324,8 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
     // Activated players IR auto-move could not take off IR (lib/ir-activation); nothing unless the
     // AF Commissioner rule is on.
     const { readIrAutoMoveTasks } = await import('@/lib/ir-activation/irAutoMoveService')
+    // An open orphan auction, or one past its closing time (lib/orphan-auction).
+    const { readOrphanAuctionTasks } = await import('@/lib/orphan-auction/orphanAuctionService')
     return [
       ...(orphans ? [orphans] : []),
       ...await readOperationalTasks(leagueId, now),
@@ -331,6 +333,7 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
       ...await readCommissionerFeatureTasks(leagueId, now),
       ...await readEliminatedLineupTasks(leagueId),
       ...await readIrAutoMoveTasks(leagueId),
+      ...await readOrphanAuctionTasks(leagueId, now),
     ]
   }
 

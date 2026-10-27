@@ -17,8 +17,8 @@ export const AF_PLANS: Record<
       'User-facing AI tools',
       'Lineup & player insights',
       'Waiver / trade / draft assistants',
-      'Survivor: threat map, social pulse, challenge outlook, jury lens (player)',
-      'Survivor: mini-game helper, confessional polish, jury speech helper (token metered)',
+      'Survivor: threat map, social pulse, challenge outlook, jury projection, Exile status',
+      'Survivor: tribe, Tribal Council, Exile and best-ball AI help (token metered)',
     ],
   },
   af_commissioner: {
@@ -29,8 +29,7 @@ export const AF_PLANS: Record<
       'Anti-collusion & anti-tanking signals',
       'League health & fairness alerts',
       'Tournament automation & commissioner recommendations',
-      'Survivor: @Chimmy automation, vote/idol validation, mini-game grading, fairness radar',
-      'Survivor: weekly recap generator, challenge recommendation, inactivity alerts (token metered)',
+      'Survivor: challenge, merge, Tribal Council and jury narration (token metered)',
     ],
   },
   af_supreme: {
@@ -40,7 +39,7 @@ export const AF_PLANS: Record<
     unlocks: [
       'All AF Pro features',
       'All AF Commissioner features',
-      'Survivor: full premium command center + story mode controls',
+      'Survivor: every premium command center tile',
       'Best value for power users',
     ],
   },

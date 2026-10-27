@@ -26,6 +26,7 @@ export const SURVIVOR_AI_VALID_TYPES: readonly SurvivorAIType[] = [
   'bestball_help',
 ]
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
+import { SURVIVOR_AI_TYPE_RULE_CODE } from '@/lib/survivor/survivor-ai-token-catalog'
 import type { TokenSpendRuleCode } from '@/lib/tokens/constants'
 import type { TokenLedgerEntryView, TokenSpendPreview } from '@/lib/tokens/TokenSpendService'
 
@@ -46,20 +47,8 @@ const PLAYER_STRATEGY_TYPES: readonly SurvivorAIType[] = [
   'bestball_help',
 ]
 
-/** Token rule per AI type — must exist in `TOKEN_SPEND_RULE_MATRIX`. */
-export const SURVIVOR_AI_TYPE_RULE_CODE: Record<
-  Exclude<SurvivorAIType, (typeof SURVIVOR_AI_UNGATED_TYPES)[number]>,
-  TokenSpendRuleCode
-> = {
-  host_challenge: 'survivor_ai_host_weekly_recap',
-  host_merge: 'survivor_ai_host_minigame_grade',
-  host_council: 'survivor_ai_host_vote_processing',
-  host_jury: 'survivor_ai_host_story_mode',
-  tribe_help: 'survivor_ai_vote_risk_quick',
-  tribal_help: 'survivor_ai_blindside_risk',
-  exile_help: 'survivor_ai_recap_short',
-  bestball_help: 'survivor_ai_challenge_strategy',
-}
+/** Token rule per AI type — one table, shared with the command centre's price list. */
+export { SURVIVOR_AI_TYPE_RULE_CODE }
 
 function ruleCodeForType(type: SurvivorAIType): TokenSpendRuleCode | null {
   if (SURVIVOR_AI_UNGATED_TYPES.includes(type as (typeof SURVIVOR_AI_UNGATED_TYPES)[number])) return null
