@@ -1,6 +1,6 @@
 # Zombie League / Zombie Universe: four-sport build plan
 
-Status: implementation plan based on the current code, October 26, 2026. This document is the build contract for the next Zombie release; it does not mark unfinished mechanics as live.
+Status: build contract updated October 27, 2026. The foundation and selected weekly mechanics are implemented on draft PR #2823; the remaining release work is listed below.
 
 ## Product promise
 
@@ -14,10 +14,10 @@ The next release supports **NFL, NBA, NHL, and MLB**. Existing college and socce
 | --- | --- | --- |
 | Season calendars | `zombieSeasonSchedule.ts` defines NFL 17, NBA 21, NHL 23, MLB 23 scoring weeks. | Bind weeks to actual season and provider scoring periods. Treat All-Star breaks and postponed games as calendar data, not fixed week numbers. |
 | Draft and universe | League and universe setup, levels, and per-league drafts exist. | Certify create → draft → first week for all four sports and every level. |
-| Infection and serum | Native matchup infection, serum protection/revival, and winnings ledger exist. | Make settlement atomic and replay-safe for stat corrections; add a commissioner choice for automatic serum revival at threshold. |
+| Infection and serum | Native high-score and Bashing/Mauling serum awards now use stable award keys. Configured revival cost, exact spending, and optional automatic revival are wired. | Make the entire weekly settlement atomic and correction-safe, including status history and item transfers. |
 | Trade restriction | Server trade gate blocks Zombies. This branch blocks Whisperers from trading at all times, independent of the commissioner-controlled Zombie trade setting. | Lock and explain the rule in commissioner settings before the draft; review every trade execution path and pending offers. |
-| Weapons and Whisperer powers | Items and command parsing exist, but `chimmyActionHandler.ts` intentionally returns `not_active_this_season` for weapons, bombs, ambushes, and powers because their effects are not applied. | Implement and test the exact effect, eligibility, deadline, rollback, and audit trail before enabling each command. |
-| Weekly report | A report composer and chat posting exist. The money section still has placeholders, and the scheduler has no durable exactly-once claim. | Build a finalization-driven report with named awards, threat matchups, verified winnings, event graphics, and idempotent posting. |
+| Weapons and Whisperer powers | Knife, Bow, Axe, and Gun can now arm one infection shield; a Whisperer can swap two unscored matchups via `@Chimmy ambush swap <team name>`. Bombs and other powers remain disabled. | Add a provider-backed lineup lock time, finish bomb/power designs, and verify all four sports end to end. |
+| Weekly report | Report posts share a durable announcement/chat key, show named serum/weapon awards and threat matchups, and display commissioner-recorded external prize amounts. | Add full settlement snapshots, real win cards, provider confirmation, and universe rollup. |
 | Commissioner UI | Several Zombie modal panels still contain static controls. This branch wires Whisperer selection and replaces the placeholder structure controls with live league details. | Apply loaded settings, validated save actions, error feedback, and per-league/universe scope to the remaining panels. |
 | Two Whisperers | Team status can represent several Whisperers, but the selection, record, and UI paths assume one. | Migrate to a per-Whisperer record before enabling two in NBA, NHL, or MLB. |
 
@@ -66,9 +66,9 @@ Every step uses a stable event key, an audit record, and an idempotent retry pat
 
 Chimmy parses a manager's `@Chimmy` message, but the rules engine decides and executes it. A reply must show the target, cost, deadline, and effect before a consequential action is confirmed. Chat, direct messages, and in-app buttons use the same server command path.
 
-- **Human:** `@Chimmy use serum` and `@Chimmy use [weapon] on [target]` check role, inventory, target, scoring period, and lock time. Spend only after the effect is committed.
+- **Human:** `@Chimmy use serum` registers infection protection. `@Chimmy use knife/bow/axe/gun` arms one defensive shield. Both must be declared before scoring starts; they are spent only if they stop infection.
 - **Zombie:** `@Chimmy revive` uses enough serums to restore Human status if the commissioner allows it. With automatic revival enabled, settlement applies it when the configured count is reached and announces the result.
-- **Whisperer:** `@Chimmy ambush [manager]` previews a legal one-for-one matchup remap for that week. The atomic commit updates both affected pairings, spends one ambush, records the prior pairings, and posts an event card. No action after the earliest affected lineup lock.
+- **Whisperer:** `@Chimmy ambush swap <exact Survivor team name>` makes a one-for-one matchup remap before scoring starts. The atomic commit updates both affected pairings and spends one ambush. A provider-backed earliest lineup lock remains to be integrated.
 - Unknown or disabled commands receive truthful help. The UI and rules page must never advertise a command as live when its effect is disabled.
 
 ## Weekly report and visuals
@@ -103,9 +103,9 @@ Use at least 44 × 44 point touch controls and avoid horizontal page overflow, f
 
 1. **Foundation:** certify four-sport create/draft/season schedule, store the Simple/Enhanced snapshot, and enforce trades from the server. Acceptance: one league and a 3/6 league universe can all start their own drafts and weeks; a Whisperer trade is rejected before Week 1, and a Zombie trade is rejected on both create and accept after infection.
 2. **Settlement:** make infection, serum, inventory, and winnings transitions atomic and correction-safe. Acceptance: replaying a week produces identical state and one set of ledger rows.
-3. **Powers:** implement an ambush remap and one weapon at a time through the same command path. Acceptance: the published effect appears in the actual matchup or score, invalid commands spend nothing, and deadlines are enforced.
+3. **Powers:** the first ambush remap and defensive weapon shield are wired through the Chimmy path. Acceptance still requires live four-sport scoring and lineup-lock verification; bombs and other powers remain disabled.
 4. **Two Whisperers:** migrate record/card/selection assumptions and add NBA/NHL/MLB setup. Acceptance: two distinct Whisperers retain independent ambush counts and both appear in reports.
-5. **Reports and money:** named award recipients, threat matchup preview, external prize amounts, once-only chat posts, win cards. Acceptance: report values match settlement and external status is clearly labeled.
+5. **Reports and money:** named award recipients, threat matchup preview, external prize amounts, and once-only chat posts are wired. Acceptance still requires settlement reconciliation, provider confirmation, and win cards.
 6. **Commissioner and mobile:** live settings, universe operations view, Simple onboarding, iPhone accessibility and visual QA. Acceptance: a commissioner can run a normal week without manual status, inventory, or chat work.
 
 ## Improvements that preserve the game
