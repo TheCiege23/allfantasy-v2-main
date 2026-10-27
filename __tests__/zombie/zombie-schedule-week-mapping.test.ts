@@ -1,11 +1,24 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const h = vi.hoisted(() => ({ games: vi.fn(), fetch: vi.fn(), upsert: vi.fn(), ensure: vi.fn() }))
 vi.mock('server-only', () => ({}))
-vi.mock('@/lib/prisma', () => ({ prisma: {} }))
-vi.mock('@/lib/workers/api-chain', () => ({ apiChain: {} }))
+vi.mock('@/lib/prisma', () => ({ prisma: {
+  sportsGame: { findMany: h.games },
+  gameSchedule: { upsert: h.upsert },
+  $transaction: async (operations: Array<Promise<unknown>>) => Promise.all(operations),
+} }))
+vi.mock('@/lib/workers/api-chain', () => ({ apiChain: { fetch: h.fetch } }))
+vi.mock('@/lib/season-week/deriveDailySportSeasonStart', () => ({ ensureDailySportSeasonStart: h.ensure }))
 
-import { resolveImportedGameWeek } from '@/lib/workers/schedule-importer'
+import { resolveImportedGameWeek, runScheduleImporter } from '@/lib/workers/schedule-importer'
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  h.games.mockResolvedValue([])
+  h.upsert.mockResolvedValue({ id: 'stored' })
+  h.ensure.mockResolvedValue({ opener: '2026-10-20T00:00:00Z' })
+})
 
 describe('provider game to Zombie scoring week', () => {
   it('keeps a verified NFL provider week', () => {
@@ -20,6 +33,14 @@ describe('provider game to Zombie scoring week', () => {
   ])('maps %s games into full seven-day periods', (sport, first, second) => {
     expect(resolveImportedGameWeek(sport, 2026, new Date(first), 500)).toBe(1)
     expect(resolveImportedGameWeek(sport, 2026, new Date(second), 500)).toBe(2)
+  })
+
+  it('maps a date-only NBA game without inventing a lineup lock', async () => {
+    h.fetch.mockResolvedValue({ data: [{ id: 'nba-1', homeTeam: 'BOS', awayTeam: 'NYK', date: '2026-10-20' }] })
+    await runScheduleImporter({ sports: ['NBA'], season: 2026 })
+    expect(h.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ weekOrRound: 1, startTime: null }),
+    }))
   })
 
   it('does not turn preseason or unknown dates into a playable week', () => {
