@@ -321,12 +321,15 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
     // Eliminated teams short of the league's lineup minimum (lib/eliminated-lineups); nothing unless
     // the AF Commissioner rule is on.
     const { readEliminatedLineupTasks } = await import('@/lib/eliminated-lineups/eliminatedLineupService')
+    // An open orphan auction, or one past its closing time (lib/orphan-auction).
+    const { readOrphanAuctionTasks } = await import('@/lib/orphan-auction/orphanAuctionService')
     return [
       ...(orphans ? [orphans] : []),
       ...await readOperationalTasks(leagueId, now),
       ...await readLineupIntegrityTasks(leagueId),
       ...await readCommissionerFeatureTasks(leagueId, now),
       ...await readEliminatedLineupTasks(leagueId),
+      ...await readOrphanAuctionTasks(leagueId, now),
     ]
   }
 

@@ -13,6 +13,7 @@ import { processDueTradeReviews, type TradeReviewSweepResult } from '@/lib/redra
 import type { InactiveLineupRunResult } from '@/lib/inactive-manager/inactiveManagerService'
 import type { EliminatedLineupRunResult } from '@/lib/eliminated-lineups/eliminatedLineupService'
 import type { RookieOrderRoundNoticeRun } from '@/lib/rookie-order/roundNoticeService'
+import type { OrphanAuctionRunResult } from '@/lib/orphan-auction/orphanAuctionService'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -259,6 +260,29 @@ export async function GET(request: Request) {
     rookieOrderRounds = { error: e instanceof Error ? e.message : String(e) }
   }
 
+  /*
+   * Orphan team auctions (lib/orphan-auction): AF Commissioner. Every auction whose closing time has
+   * passed is awarded — players, picks and FAAB move in one transaction. Hourly, so an auction closes
+   * within the hour of its deadline; guarded and on its own job identity, like the sweeps above.
+   */
+  let orphanAuctions: OrphanAuctionRunResult | { error: string } | null = null
+  try {
+    const { runOrphanAuctionClose } = await import('@/lib/orphan-auction/orphanAuctionService')
+    orphanAuctions = await withSyncJobRun(
+      { jobName: 'cron-orphan-auction-close', trigger: 'cron' },
+      () => runOrphanAuctionClose(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.closed,
+        errors: r.failures.map((f) => `${f.leagueId}: ${f.error}`),
+        metadata: { leagues: r.leagues, closed: r.closed },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] orphan auction close failed', e)
+    orphanAuctions = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   const out = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
     () => processDueWaiverWindows(),
@@ -284,5 +308,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, rookieOrderRounds, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, rookieOrderRounds, orphanAuctions, exileRollover })
 }

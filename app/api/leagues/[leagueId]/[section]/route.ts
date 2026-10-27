@@ -69,6 +69,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'matchups': () => import('../matchups/handler'),
   'media': () => import('../media/handler'),
   'my-team': () => import('../my-team/handler'),
+  'orphan-auction': () => import('../orphan-auction/handler'),
   'orphaned-teams': () => import('../orphaned-teams/handler'),
   'partner-profiles': () => import('../partner-profiles/handler'),
   'payouts': () => import('../payouts/handler'),
