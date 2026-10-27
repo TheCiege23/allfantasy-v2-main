@@ -81,6 +81,7 @@ type Pack = {
       horde?: number
     } | null
     teams: TeamRow[]
+    coWhisperers?: Array<{ displayName: string | null; ambushesRemaining: number; isPubliclyRevealed: boolean }>
     whispererRecord: {
       displayName: string
       ambushesRemaining: number
@@ -339,12 +340,23 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
           riskScore={my?.riskScore}
           dangerLevel={myDanger}
           whispererPanel={
-            <ZombieWhispererCard
-              revealed={whispererRevealed}
-              displayName={z.whispererRecord?.displayName}
-              ambushesRemaining={z.whispererRecord?.ambushesRemaining ?? 0}
-              hordeSize={hordeCount}
-            />
+            <div className="space-y-3">
+              <ZombieWhispererCard
+                revealed={whispererRevealed}
+                displayName={z.whispererRecord?.displayName}
+                ambushesRemaining={z.whispererRecord?.ambushesRemaining ?? 0}
+                hordeSize={hordeCount}
+              />
+              {(z.coWhisperers ?? []).map((record, index) => (
+                <ZombieWhispererCard
+                  key={index}
+                  revealed={z.whispererIsPublic && record.isPubliclyRevealed}
+                  displayName={record.displayName ?? undefined}
+                  ambushesRemaining={record.ambushesRemaining}
+                  hordeSize={hordeCount}
+                />
+              ))}
+            </div>
           }
           quickActions={quickActions}
           sceneThemeId={zombieThemeForLeague(data?.league?.backgroundTheme, leagueId)}
