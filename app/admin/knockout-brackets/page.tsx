@@ -10,6 +10,8 @@ export default function KnockoutBracketAdminPage() {
   const [scheduleSport, setScheduleSport] = useState<"ncaaf" | "nba_cup">("nba_cup")
   const [scheduleGames, setScheduleGames] = useState<Array<{ startsAt: string; label: string; venue: string; location: string }>>(Array.from({ length: 7 }, () => ({ startsAt: "", label: "", venue: "", location: "" })))
   const [scheduleMessage, setScheduleMessage] = useState("")
+  const [eventIds, setEventIds] = useState<string[]>(Array.from({ length: 7 }, () => ""))
+  const [eventMessage, setEventMessage] = useState("")
   const [seriesNumber, setSeriesNumber] = useState(1)
   const [homeScore, setHomeScore] = useState("")
   const [awayScore, setAwayScore] = useState("")
@@ -51,6 +53,10 @@ export default function KnockoutBracketAdminPage() {
     if (!res.ok) return setScheduleMessage(String(data.error ?? "Could not load schedule."))
     if (data.schedule) {
       setScheduleGames(data.schedule.games.map((game: { startsAt: string; label?: string; venue?: string; location?: string }) => ({ startsAt: game.startsAt, label: game.label ?? "", venue: game.venue ?? "", location: game.location ?? "" })))
+      const eventRes = await fetch(`/api/admin/brackets/event-mapping?sport=${scheduleSport}&season=${season}`, { cache: "no-store" })
+      const eventData = await eventRes.json().catch(() => ({}))
+      const mapped = new Map<number, string>((eventData.mapping?.games ?? []).map((game: { seriesNumber: number; eventId: string }) => [game.seriesNumber, game.eventId]))
+      setEventIds(data.schedule.games.map((game: { seriesNumber: number }) => mapped.get(game.seriesNumber) ?? ""))
       setScheduleMessage("Saved schedule loaded.")
     } else setScheduleMessage("No schedule published for this season.")
   }
@@ -70,6 +76,23 @@ export default function KnockoutBracketAdminPage() {
       setScheduleMessage(res.ok
         ? `Published start times for ${data.pools ?? 0} pools.`
         : String(data.errors?.join(" ") ?? data.error ?? "Could not save schedule."))
+    } finally { setBusy(false) }
+  }
+
+  async function saveEventIds() {
+    setBusy(true)
+    setEventMessage("")
+    try {
+      const res = await fetch("/api/admin/brackets/event-mapping", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sport: scheduleSport, season,
+          games: eventIds.map((eventId, index) => ({ seriesNumber: index + 1, eventId: eventId.trim() })).filter((game) => game.eventId),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      setEventMessage(res.ok
+        ? `Saved ${data.mapping?.games?.length ?? 0} ESPN event IDs. Unmapped games remain manual.`
+        : String(data.errors?.join(" ") ?? data.error ?? "Could not save event IDs."))
     } finally { setBusy(false) }
   }
 
@@ -128,6 +151,8 @@ export default function KnockoutBracketAdminPage() {
               const next = e.target.value as "ncaaf" | "nba_cup"
               setScheduleSport(next)
               setScheduleGames(Array.from({ length: next === "ncaaf" ? 11 : 7 }, () => ({ startsAt: "", label: "", venue: "", location: "" })))
+              setEventIds(Array.from({ length: next === "ncaaf" ? 11 : 7 }, () => ""))
+              setEventMessage("")
             }}>
               <option value="nba_cup">NBA Cup</option>
               <option value="ncaaf">College Football Playoff</option>
@@ -150,6 +175,20 @@ export default function KnockoutBracketAdminPage() {
             <button className="rounded-xl bg-teal-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-50" onClick={saveSchedule} disabled={busy}>Publish schedule</button>
           </div>
           {scheduleMessage && <p role="status" className="mt-3 text-sm text-teal-200">{scheduleMessage}</p>}
+        </section>
+        <section className="rounded-2xl border border-white/15 bg-white/5 p-5">
+          <h2 className="text-xl font-bold">Connect game IDs</h2>
+          <p className="mt-1 text-sm text-slate-300">Copy each ESPN game ID from its game URL. Save IDs as official matchups become known, including after earlier rounds begin. The sync checks the event ID, teams, start time, and final status before scoring any league. A missing or mismatched ID leaves that game for manual review.</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {eventIds.map((eventId, index) => <label className="block text-sm" key={index}>
+              Game {index + 1} ESPN event ID
+              <input className={inputClass} inputMode="numeric" pattern="[0-9]*" value={eventId}
+                placeholder="ESPN event ID"
+                onChange={(e) => setEventIds(eventIds.map((item, i) => i === index ? e.target.value : item))} />
+            </label>)}
+          </div>
+          <button className="mt-4 rounded-xl bg-teal-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-50" onClick={saveEventIds} disabled={busy}>Save game IDs</button>
+          {eventMessage && <p role="status" className="mt-3 text-sm text-teal-200">{eventMessage}</p>}
         </section>
         <section className="rounded-2xl border border-white/15 bg-white/5 p-5">
           <h2 className="text-xl font-bold">Record a final result</h2>
