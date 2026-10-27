@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { logAction } from '@/server/services/auditService'
 import { loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
@@ -21,6 +22,15 @@ import {
 export const TANKING_WARNING_ACTION = 'integrity.tanking_warning'
 export const TANKING_STRIKE_ACTION = 'integrity.tanking_strike'
 export const TANKING_PICK_FORFEITED_ACTION = 'integrity.tanking_pick_forfeited'
+
+/**
+ * Penalties are for leagues run on AllFantasy. An imported league's draft picks and its managers live
+ * on the source platform: a confirmed tanking flag there is a finding for the commissioner, never a
+ * forfeited AllFantasy pick row or a warning that promises one (lib/integrity/scanImportedTanking.ts).
+ */
+function penaltiesApply(platform: string | null): boolean {
+  return resolveWriteAuthority(platform) === 'NATIVE'
+}
 
 /** The manager of a roster, when the seat belongs to a person (an abandoned team's `orphan-…` seat does not). */
 async function managerUserId(rosterId: string): Promise<string | null> {
@@ -55,9 +65,10 @@ async function tellManager(leagueId: string, rosterId: string, title: string, bo
 export async function onTankingFlagOpened(flagId: string): Promise<void> {
   const flag = await prisma.integrityFlag.findUnique({
     where: { id: flagId },
-    select: { leagueId: true, flagType: true, affectedRosterIds: true, league: { select: { settings: true } } },
+    select: { leagueId: true, flagType: true, affectedRosterIds: true, league: { select: { settings: true, platform: true } } },
   })
   if (!flag || flag.flagType !== 'tanking') return
+  if (!penaltiesApply(flag.league.platform)) return
   const policy = readTankingPenaltyPolicy(flag.league.settings)
   if (!policy.enabled) return
   for (const rosterId of flag.affectedRosterIds) {
@@ -102,9 +113,10 @@ export type TankingConfirmationResult = {
 export async function onTankingFlagConfirmed(flagId: string, commissionerUserId: string): Promise<TankingConfirmationResult[]> {
   const flag = await prisma.integrityFlag.findUnique({
     where: { id: flagId },
-    select: { leagueId: true, flagType: true, status: true, affectedRosterIds: true, league: { select: { settings: true } } },
+    select: { leagueId: true, flagType: true, status: true, affectedRosterIds: true, league: { select: { settings: true, platform: true } } },
   })
   if (!flag || flag.flagType !== 'tanking' || flag.status !== 'escalated') return []
+  if (!penaltiesApply(flag.league.platform)) return []
   const policy = readTankingPenaltyPolicy(flag.league.settings)
   const out: TankingConfirmationResult[] = []
   for (const rosterId of flag.affectedRosterIds) {
