@@ -90,6 +90,8 @@ export async function reconcileScoreOnlyCorrection(input: {
     return await prisma.$transaction(async tx => {
       const live = await tx.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId, week } } })
       if (!live || live.status !== 'complete' || live.resolvedAt?.getTime() !== previous.resolvedAt?.getTime()) return null
+      // External prizes may already have been assigned outside the app; require commissioner review.
+      if (await tx.zombieExternalWeeklyPayout.count({ where: { zombieLeagueId, week } })) return null
       const nowRows = await tx.redraftMatchup.findMany({ where: { seasonId, week }, select: { id: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true } })
       if (nowRows.length !== snapshot.length || nowRows.some(row => {
         const seen = snapshot.find(item => item.id === row.id)
