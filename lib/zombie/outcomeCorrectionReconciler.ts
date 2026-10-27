@@ -89,10 +89,7 @@ export async function reconcileOutcomeChangingCorrection(input: {
         tx.zombieTeamItem.findMany({ where: { zombieLeagueId } }),
         tx.zombieLeagueTeam.findMany({
           where: { leagueId },
-          select: {
-            id: true, rosterId: true, fantasyTeamName: true, displayName: true,
-            status: true, weekBecameZombie: true, killedByRosterId: true,
-          },
+          select: { id: true, rosterId: true, fantasyTeamName: true, displayName: true },
         }),
         tx.zombieInfectionLog.findMany({
           where: { leagueId, week }, select: { survivorRosterId: true, infectedByRosterId: true },
@@ -132,13 +129,8 @@ export async function reconcileOutcomeChangingCorrection(input: {
           item.usedAtWeek != null || item.activatesAtWeek != null) ||
           items.some(item => (item.usedAtWeek ?? 0) > week || (item.activatesAtWeek ?? 0) > week)) return null
       const teamByRoster = new Map(teams.map(team => [team.rosterId, team]))
-      if (snapshot.teams.length !== teams.length || snapshot.teams.some(team => {
-        const liveTeam = teamByRoster.get(team.rosterId)
-        const priorInfection = oldPlan.infections.find(infection => infection.victimRosterId === team.rosterId)
-        return liveTeam?.id !== team.id || liveTeam.status !== oldPlan.statusByRoster.get(team.rosterId) ||
-          liveTeam.weekBecameZombie !== (priorInfection ? week : team.weekBecameZombie) ||
-          liveTeam.killedByRosterId !== (priorInfection ? priorInfection.infectorRosterId : team.killedByRosterId)
-      })) return null
+      if (snapshot.teams.length !== teams.length || snapshot.teams.some(team =>
+        teamByRoster.get(team.rosterId)?.id !== team.id)) return null
       // Only replace awards that the original final scores prove this settlement created.
       // A commissioner grant or another item earned during the week requires review.
       const expectedAwards = [
