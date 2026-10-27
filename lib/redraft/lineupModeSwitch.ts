@@ -12,7 +12,8 @@ import { DAILY_LINEUP_LOCK_SPORTS } from './lineupLock'
  * Daily is the three-part gate `isDailyLineupScoringEnabled` reads — `sportConfig.lineupLockType:
  * 'daily'` AND `sportConfig.dailyLineupsEnabled: true` AND a daily sport. The switch writes BOTH
  * fields together (`withLineupMode`), so a league is never left with one half of the gate. Weekly is
- * every other state, and stays the default: nothing here turns a league daily on its own.
+ * every other state. A NEW NBA or NHL redraft points league is created daily (`defaultsToDailyLineups`,
+ * read by league creation); nothing turns an existing league daily on its own.
  *
  * 🛑 THE SWITCH IS REFUSED WHILE A SEASON IS UNDER WAY, NOT DEFERRED TO THE NEXT WEEK. Daily-sport
  * weeks are back to back (seven days from the opener), so "between weeks" is an instant, and a
@@ -41,6 +42,25 @@ export function parseLineupMode(raw: unknown): LineupMode | null {
 
 export function supportsDailyLineups(sport: string | null | undefined): boolean {
   return DAILY_LINEUP_LOCK_SPORTS.includes(String(sport ?? '').trim().toUpperCase())
+}
+
+/**
+ * Sports whose NEW native redraft points leagues start in daily lineups (owner, 2026-10-27). MLB
+ * stays weekly by default; a commissioner can still switch any of the three before the season.
+ * Category and roto leagues keep their one-lineup-a-week lock (a category week is one team total).
+ */
+export const DAILY_LINEUP_DEFAULT_SPORTS: readonly string[] = ['NBA', 'NHL']
+
+export function defaultsToDailyLineups(args: {
+  sport: string | null | undefined
+  leagueType: string | null | undefined
+  scoringMode: string | null | undefined
+}): boolean {
+  return (
+    DAILY_LINEUP_DEFAULT_SPORTS.includes(String(args.sport ?? '').trim().toUpperCase()) &&
+    String(args.leagueType ?? '').trim().toLowerCase() === 'redraft' &&
+    String(args.scoringMode ?? 'points').trim().toLowerCase() === 'points'
+  )
 }
 
 /** The mode a league is in now — exactly what the scorer and the lock read. */
@@ -117,11 +137,13 @@ type LineupSwitchDb = Pick<PrismaClient, 'redraftSeason' | '$queryRaw'>
 
 /** True when both per-day tables exist. `to_regclass` never throws on a missing table. */
 export async function dailyLineupTablesExist(db: Pick<LineupSwitchDb, '$queryRaw'>): Promise<boolean> {
-  const rows = await db
-    .$queryRaw<Array<{ ok: boolean }>>`SELECT (to_regclass('public.redraft_daily_lineups') IS NOT NULL
+  try {
+    const rows = await db.$queryRaw<Array<{ ok: boolean }>>`SELECT (to_regclass('public.redraft_daily_lineups') IS NOT NULL
         AND to_regclass('public.player_daily_scores') IS NOT NULL) AS ok`
-    .catch(() => [{ ok: false }])
-  return rows?.[0]?.ok === true
+    return rows?.[0]?.ok === true
+  } catch {
+    return false
+  }
 }
 
 /**
