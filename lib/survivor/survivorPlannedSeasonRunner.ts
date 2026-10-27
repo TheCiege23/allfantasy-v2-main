@@ -25,6 +25,7 @@ import { autoApplyPendingTribeRedraw, rebalanceTribesBeforeCouncil } from './sur
 import { dissolveSurpriseTribes, ensureSurpriseTribeWeek } from './survivorSurpriseTribes'
 import { loadWeekCouncilProgress } from './survivorWeekCouncilProgress'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
+import { reportSurvivorAutomationError } from './survivorAutomationReporting'
 
 export type PlannedWeekKind = 'opening' | 'elimination' | 'rest' | 'finale' | 'outside'
 
@@ -207,6 +208,7 @@ export async function runPlannedSurvivorSeasonBatch(now = new Date()) {
     } catch (error) {
       failed++
       const message = error instanceof Error ? error.message : String(error)
+      reportSurvivorAutomationError(error, { job: 'season_runner', leagueId: league.id })
       await prisma.survivorGameState.updateMany({ where: { leagueId: league.id }, data: { lastError: message } }).catch(() => {})
       // The dashboard shows lastError, but nobody opens the dashboard to find out. Once a day.
       await notifySurvivorCommissionerOnce(league.id, 'automation_error', {
