@@ -7,6 +7,7 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { loadNativeSeasonHistory } from '@/lib/redraft/offseason/nativeSeasonHistory'
 import { getSeasonRecap } from '@/lib/season-recap/seasonRecapService'
+import { generateSeasonRecapWriteup, seasonRecapWriteupView } from '@/lib/season-recap/seasonRecapAiService'
 import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
 
 type JsonRecord = Record<string, unknown>
@@ -288,7 +289,11 @@ export async function GET(
      */
     if (url.searchParams.get('view') === 'recap') {
       const out = await getSeasonRecap(id, season)
-      return out ? NextResponse.json(out) : NextResponse.json({ error: 'No recap for this season' }, { status: 404 })
+      if (!out) return NextResponse.json({ error: 'No recap for this season' }, { status: 404 })
+      // Chimmy's written recap, when one has been written, and whether this viewer may write it.
+      const lang = url.searchParams.get('lang') === 'es' ? 'es' : 'en'
+      const writeup = await seasonRecapWriteupView(id, season, out.recap, userId, lang).catch(() => null)
+      return NextResponse.json({ ...out, writeup })
     }
     const league = await prisma.league.findUnique({ where: { id }, select: { platform: true } })
     if (league && isNativePlatform(league.platform)) {
@@ -430,5 +435,41 @@ export async function GET(
   } catch (e) {
     console.error('[api/league/[leagueId]/season-history GET]', e)
     return NextResponse.json({ error: 'Failed to load season history' }, { status: 500 })
+  }
+}
+
+const WRITEUP_STATUS = { not_found: 404, commissioner_only: 403, not_entitled: 402, daily_cap: 429, no_text: 502, fact_guard: 422 } as const
+
+/**
+ * POST { season, lang?, regenerate? } — write Chimmy's season recap (lib/season-recap/seasonRecapAiService).
+ * Commissioner and co-commissioner only, AF Commissioner only — the Storyline Studio gate. The stored text
+ * comes back without a model call when it was written from the same facts; a text that fails the fact
+ * guard is refused (422) and not stored. Same route as the recap it is written from, for the same reason.
+ */
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ leagueId: string }> },
+) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id?.trim()
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const { leagueId } = await params
+  const id = leagueId?.trim()
+  if (!id) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+  const season = typeof body.season === 'number' ? body.season : Number.parseInt(String(body.season ?? ''), 10)
+  if (!Number.isFinite(season)) return NextResponse.json({ error: 'season (YYYY) required' }, { status: 400 })
+  try {
+    const result = await generateSeasonRecapWriteup({
+      leagueId: id,
+      season,
+      userId,
+      language: body.lang === 'es' ? 'es' : 'en',
+      regenerate: body.regenerate === true,
+    })
+    return NextResponse.json(result, { status: result.ok ? 200 : WRITEUP_STATUS[result.error] })
+  } catch (error) {
+    console.error('[season-history] season recap writeup failed', error instanceof Error ? error.message : error)
+    return NextResponse.json({ error: 'failed' }, { status: 500 })
   }
 }
