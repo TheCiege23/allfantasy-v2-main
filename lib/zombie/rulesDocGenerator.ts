@@ -277,6 +277,11 @@ export async function generateRulesDocument(zombieLeagueId: string): Promise<Zom
   return doc
 }
 
+function whispererRulesWithTradeLock(section: string): string {
+  const rule = 'Whisperers cannot trade players at any time.'
+  return section.includes(rule) ? section : `${section}\n${rule}`
+}
+
 export function getRulesDocAsHtml(doc: ZombieRulesDocument): string {
   const sec = (icon: string, title: string, body: string) =>
     `<section class="zombie-rules-section mb-6"><h2 class="zombie-rules-heading text-[14px] font-bold text-[var(--zombie-text-full)] mb-2"><span aria-hidden="true">${esc(icon)}</span> ${esc(title)}</h2><pre class="whitespace-pre-wrap text-[12px] leading-relaxed opacity-90">${esc(body)}</pre></section>`
@@ -285,7 +290,7 @@ export function getRulesDocAsHtml(doc: ZombieRulesDocument): string {
   ${doc.isPaid ? '<p class="zombie-rules-paid-badge mb-4 inline-block rounded-lg bg-amber-500/15 px-3 py-1 text-[12px] font-bold text-amber-200/90">PAID LEAGUE</p>' : '<p class="zombie-rules-threshold-badge mb-4 inline-block rounded-lg bg-sky-500/15 px-3 py-1 text-[12px] font-bold text-sky-200/80">FREE LEAGUE</p>'}
   ${sec('🧟', 'Overview', doc.sectionOverview)}
   ${sec('🩸', 'Infection', doc.sectionInfection)}
-  ${sec('🎭', 'The Whisperer', doc.sectionWhisperer)}
+  ${sec('🎭', 'The Whisperer', whispererRulesWithTradeLock(doc.sectionWhisperer))}
   ${sec('🧍', 'Survivors', doc.sectionSurvivor)}
   ${sec('🧟', 'The Horde', doc.sectionZombie)}
   ${sec('📊', 'Scoring', doc.sectionScoring)}
@@ -307,7 +312,7 @@ export function getRulesDocAsText(doc: ZombieRulesDocument): string {
   const parts = [
     doc.sectionOverview,
     doc.sectionInfection,
-    doc.sectionWhisperer,
+    whispererRulesWithTradeLock(doc.sectionWhisperer),
     doc.sectionSurvivor,
     doc.sectionZombie,
     doc.sectionScoring,
