@@ -157,14 +157,14 @@ export async function processRevive(leagueId: string, userId: string, week: numb
     if (!(await useSerumToRevive(leagueId, roster.id, z.id))) throw new Error('Serum balance changed during revival')
   }
 
-  await queueAnimation(leagueId, week, 'player_revived', userId, { revive: true })
+  await queueAnimation(leagueId, week, 'player_revived', userId, { revive: true }).catch(() => {})
   await notifyCommissioner(leagueId, 'revive_occurred', 'Zombie revived', `Week ${week} — player returned as revived survivor.`, {
     urgency: 'high', week, relatedUserId: userId,
-  })
+  }).catch(() => {})
   if (spentNativeItems) await appendZombieAudit({
     leagueId, zombieLeagueId: z.id, universeId: z.universeId,
     eventType: 'revive', metadata: { userId, week, serumCount: cost },
-  })
+  }).catch(() => {})
 }
 
 export async function autoReviveEligibleZombies(leagueId: string, week: number): Promise<number> {
