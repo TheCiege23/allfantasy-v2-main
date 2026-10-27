@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
+import { SURVIVOR_POOL_IDOL_ROSTER_ID } from './survivorIdolPoolPlacement'
 
 export type SurvivorDraftPreparation =
   | { ok: true; alreadyStarted: boolean; draftOrder: string[] }
@@ -83,7 +84,11 @@ export async function prepareSurvivorDraftParticipants(
   if (tribes.length > 0 && (tribes.length !== settings.tribeCount || tribeByRoster.size !== rosters.length)) {
     return { ok: false, code: 'existing_tribes_require_review', error: 'Existing tribes do not cover the configured cast. Complete the manual tribe assignments before retrying setup.' }
   }
-  const legacyIdols = await db.survivorIdol.count({ where: { leagueId } })
+  // Idols hidden on pool players at draft lock (survivorIdolPoolPlacement) are this engine's own
+  // inventory, waiting for the post-draft seed to hand them out. Counting them made every league
+  // with idols on refuse setup after its draft, so no tribes were ever built. Measured in the
+  // full-season rehearsal: NFL and NHL both drafted, then sat in pre_draft with 6-7 pool idols.
+  const legacyIdols = await db.survivorIdol.count({ where: { leagueId, rosterId: { not: SURVIVOR_POOL_IDOL_ROSTER_ID } } })
   if (legacyIdols > 0 && !await db.survivorAuditEntry.findFirst({ where: { leagueId, action: 'idols_seeded' }, select: { id: true } })) {
     return { ok: false, code: 'legacy_inventory_requires_review', error: 'This league has an older hidden inventory. Review its setup before starting the canonical Survivor engine; existing powers have been preserved.' }
   }

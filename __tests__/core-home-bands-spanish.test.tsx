@@ -416,6 +416,13 @@ describe('Drafts on the clock (DashDraftsBand)', () => {
     for (const s of ['Drafts on the clock', '2 drafts live now', 'DRAFTING', 'PAUSED', 'Your slot 4 · 22 picks made', '45 min on the pick clock', 'On the clock — no pick timer reported', 'Open draft room'])
       expect(out).toContain(s)
   })
+
+  it('"Open draft room" goes to the live room, not back to Draft HQ', () => {
+    lang.language = 'en'
+    const { container } = render(<DashDraftsBand data={{ rows: [draft()] } as never} now={D_NOW} />)
+    const open = Array.from(container.querySelectorAll('a')).find((a) => a.textContent === 'Open draft room')
+    expect(open?.getAttribute('href')).toBe('/league/l1/draft')
+  })
 })
 
 /* ── Game day ────────────────────────────────────────────────────────────────────────────────── */

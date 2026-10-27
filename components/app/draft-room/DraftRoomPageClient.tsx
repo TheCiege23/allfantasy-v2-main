@@ -28,6 +28,7 @@ import { DraftIntelQueuePanel } from '@/components/app/draft-room/DraftIntelQueu
 import { DraftChatPanel, type DraftChatMessage, type DraftChatSendPayload } from '@/components/app/draft-room/DraftChatPanel'
 import { DraftChatDock } from '@/components/app/draft-room/DraftChatDock'
 import { DraftHelperPanel } from '@/components/app/draft-room/DraftHelperPanel'
+import { currentChimmySurface } from '@/lib/draft-room/chimmySurface'
 import { DraftHelperFloatingBubble } from '@/components/app/draft-room/DraftHelperFloatingBubble'
 import { DraftHelperFloatingWindow } from '@/components/app/draft-room/DraftHelperFloatingWindow'
 import { DraftHelperCopilot } from '@/components/app/draft-room/DraftHelperCopilot'
@@ -36,7 +37,7 @@ import { calculateDraftHelperBadgeCount, hasDraftHelperContent } from '@/lib/dra
 import { useDraftHelperFloatingState } from '@/hooks/useDraftHelperFloatingState'
 import { DraftTeamPanel } from '@/components/app/draft-room/DraftTeamPanel'
 import { WarRoomPopup } from '@/components/app/draft-room/WarRoomPopup'
-import { DraftRightDockTabs } from '@/components/app/draft-room/DraftRightDockTabs'
+import { DraftRightDockTabs, type DraftRightDockTab } from '@/components/app/draft-room/DraftRightDockTabs'
 import { DraftPickActivityStrip } from '@/components/app/draft-room/DraftPickActivityStrip'
 import {
   ResultsRosterPanel,
@@ -414,6 +415,39 @@ export function DraftRoomPageClient({
     sendProductAnalyticsBeacon(DRAFT_ROOM.MOBILE_TAB, { tab, leagueId })
     setMobileTabState(tab)
   }, [leagueId])
+  /*
+   * Chimmy lives in a different place at each breakpoint: the phone tray's AI tab, the AI tab of
+   * the bottom dock below xl, and the right dock's Chimmy tab at xl+. Every "Ask Chimmy" button
+   * opens the ONE that is on screen: both layouts are always mounted and hidden by CSS, so opening
+   * all three mounted two invisible chats beside the visible one (see lib/draft-room/chimmySurface).
+   * These buttons used to call setMobileTab('helper') alone while no helper panel was mounted, so
+   * they did nothing anywhere.
+   */
+  const [rightDockOpenRequest, setRightDockOpenRequest] =
+    useState<{ tab: DraftRightDockTab; key: number } | null>(null)
+  const [dockChimmyOpen, setDockChimmyOpen] = useState(false)
+  const openChimmy = useCallback(() => {
+    const surface = currentChimmySurface()
+    if (surface === 'right_dock') {
+      setRightDockOpenRequest((prev) => ({ tab: 'chimmy', key: (prev?.key ?? 0) + 1 }))
+    } else if (surface === 'bottom_dock') {
+      setCenterDockTab('ai')
+      setDockChimmyOpen(true)
+    } else {
+      setMobileTab('helper')
+    }
+  }, [setMobileTab])
+  /*
+   * Warm the commissioner control center's chunk once the room is up. It is a lazy client chunk, so
+   * its first open waited on the network — behind whatever else the room had in flight. Opening the
+   * draft assistant fires about a dozen requests (Chimmy chat, entitlements, providers), and in the
+   * mobile Draft Room Regression run the control center then never finished loading. Warming it
+   * here makes the commissioner's first open instant and independent of that burst.
+   */
+  useEffect(() => {
+    if (!isCommissioner) return
+    void import('@/components/app/draft-room/CommissionerControlCenterModal').catch(() => {})
+  }, [isCommissioner])
   const [aiReorderLoading, setAiReorderLoading] = useState(false)
   const [aiReorderExplanation, setAiReorderExplanation] = useState<string | null>(null)
   const [aiReorderExecutionMode, setAiReorderExecutionMode] = useState<string | null>(null)
@@ -4081,7 +4115,7 @@ export function DraftRoomPageClient({
         leagueChatSync={chatSyncActive}
         isCommissioner={isCommissioner}
         onBroadcast={isCommissioner ? handleBroadcastOpen : undefined}
-        onAiSuggestionClick={() => setMobileTab('helper')}
+        onAiSuggestionClick={openChimmy}
         onReconnect={handleChatReconnect}
         onRefreshChat={fetchChat}
         currentUserId={viewerAppUserId}
@@ -4399,7 +4433,7 @@ export function DraftRoomPageClient({
           <button
             type="button"
             data-testid="draft-mobile-quick-helper"
-            onClick={() => setMobileTab('helper')}
+            onClick={openChimmy}
             className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[11px] text-white/75 whitespace-nowrap"
           >
             AI helper
@@ -4527,6 +4561,56 @@ export function DraftRoomPageClient({
       : (requestedOrphanDrafterMode === 'ai' && !resolvedOrphanAiProviderAvailable ? 'cpu' : requestedOrphanDrafterMode)
   const orphanDrafterFallbackActive =
     requestedOrphanDrafterMode === 'ai' && effectiveOrphanDrafterMode === 'cpu'
+  /*
+   * The draft assistant: the room's recommendation (from /api/draft/recommend), its reasoning, and
+   * Chimmy chat pre-filled with this draft's context. DraftHelperPanel was built for exactly this
+   * and imported here, but never rendered — so the phone's AI tab was hidden and every "Ask Chimmy"
+   * button opened nothing.
+   */
+  const helperPanelNode = (
+    <DraftHelperPanel
+      loading={recommendationLoading}
+      error={recommendationError}
+      recommendation={recommendationResult?.recommendation ?? null}
+      alternatives={recommendationResult?.alternatives ?? []}
+      reachWarning={recommendationResult?.reachWarning ?? null}
+      valueWarning={recommendationResult?.valueWarning ?? null}
+      scarcityInsight={recommendationResult?.scarcityInsight ?? null}
+      stackInsight={recommendationResult?.stackInsight ?? null}
+      correlationInsight={recommendationResult?.correlationInsight ?? null}
+      formatInsight={recommendationResult?.formatInsight ?? null}
+      byeNote={recommendationResult?.byeNote ?? null}
+      explanation={recommendationResult?.explanation ?? ''}
+      evidence={recommendationResult?.evidence ?? []}
+      caveats={recommendationResult?.caveats ?? []}
+      uncertainty={recommendationResult?.uncertainty ?? null}
+      executionMode={recommendationResult?.execution?.mode ?? null}
+      sport={effectiveDraftSport}
+      round={currentPick?.round ?? 1}
+      pick={currentPick?.slot ?? 1}
+      leagueId={leagueId}
+      leagueName={leagueName}
+      rosterSlots={effectiveRosterSlots}
+      queueLength={queueFiltered.length}
+      onRefresh={fetchRecommendation}
+      liveBrain={liveBrainEnvelope}
+      draftSessionId={session.id}
+      chimmyInitialPrompt={chimmyDraftPrompt}
+      chimmyToolSummary={chimmyToolSummary}
+      aiFeatureStatus={{
+        chimmyReady: hasAiAccess && resolvedOrphanAiProviderAvailable,
+        liveBrainReady: Boolean(liveBrainEnvelope),
+        aiAdpEnabled: Boolean(draftUISettings?.aiAdpEnabled),
+        queueReorderEnabled: Boolean(draftUISettings?.aiQueueReorderEnabled),
+        draftExplanationEnabled: draftAiExplanationEnabled,
+        orphanAiEnabled: Boolean(draftUISettings?.orphanTeamAiManagerEnabled),
+        commissionerAiManagersCount: (commissionerAiDraft?.assignedAiTeams ?? []).filter((team) => team.active)
+          .length,
+      }}
+      presentationVariant={presentationVariant}
+      userOnTheClock={isCurrentUserOnClock}
+    />
+  )
   const keeperPanel = showKeeperPanel ? (
     <KeeperPanel
       leagueId={leagueId}
@@ -4729,6 +4813,12 @@ export function DraftRoomPageClient({
                     <DraftTeamPanel {...draftTeamPanelProps} />
                   </div>
                 }
+                chimmyBody={
+                  <div className="h-full min-h-0 overflow-auto px-1 py-1" data-testid="draft-right-dock-chimmy-body">
+                    {helperPanelNode}
+                  </div>
+                }
+                openTabRequest={rightDockOpenRequest}
                 chatBody={<div className="flex h-full min-h-0 flex-col overflow-hidden">{chatPanelNode}</div>}
                 queueCount={draftIntel?.queue?.length ?? 0}
                 defaultTab="queue"
@@ -4957,7 +5047,7 @@ export function DraftRoomPageClient({
                           </p>
                           <button
                             type="button"
-                            onClick={() => setMobileTab('helper')}
+                            onClick={openChimmy}
                             className="rounded border border-cyan-300/35 bg-cyan-500/12 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/20"
                             data-testid="draft-bottom-ai-open-helper"
                           >
@@ -4971,6 +5061,22 @@ export function DraftRoomPageClient({
                           </p>
                         </div>
                       )}
+                      {dockChimmyOpen && hasAiAccess ? (
+                        <div className="mt-3 border-t border-white/10 pt-3" data-testid="draft-bottom-ai-chimmy">
+                          <div className="mb-2 flex items-center justify-between">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200/90">Chimmy</p>
+                            <button
+                              type="button"
+                              onClick={() => setDockChimmyOpen(false)}
+                              className="text-[11px] text-white/50 hover:text-white/80"
+                              data-testid="draft-bottom-ai-chimmy-close"
+                            >
+                              Hide
+                            </button>
+                          </div>
+                          {helperPanelNode}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -5403,7 +5509,7 @@ export function DraftRoomPageClient({
       // non-premium desktop layout) shows the recap, report card and share instead.
       playerPanel={isDraftCompleted ? <div className="min-h-[70vh]">{postDraftViewNode}</div> : playerPoolNode}
       queuePanel={queueStackNode}
-      helperPanel={undefined}
+      helperPanel={helperPanelNode}
       intelPanel={session.draftType !== 'auction' ? intelPanelNode : undefined}
       chatPanel={chatPanelNode}
       rosterPanel={rosterPanel}

@@ -11,6 +11,7 @@ import {
   generatePlayoffs,
   type RedraftPlayoffRuntimeClient,
 } from '@/lib/redraft/client'
+import { PlayoffSeriesLine } from '@/components/league/PlayoffSeriesStrip'
 
 export function StandingsView({
   rows,
@@ -453,6 +454,12 @@ function BracketRoundCard({
               <span className="text-white/35">{scoreLine(matchup)}</span>
               <span className="truncate text-right text-white/70">{teamName(runtime, matchup.awayRosterId, matchup.awaySeed)}</span>
             </div>
+            {/* Best-of-N series mode only (lib/playoff-runtime/playoffSeries.ts): the series record. */}
+            <PlayoffSeriesLine
+              seriesLengths={runtime.settings?.seriesLengths}
+              matchup={matchup}
+              nameOf={(rosterId) => teamName(runtime, rosterId, null)}
+            />
           </div>
         ))}
       </div>

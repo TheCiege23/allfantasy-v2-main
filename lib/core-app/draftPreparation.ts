@@ -109,6 +109,8 @@ export function unavailablePreparation(
     preferenceScope: null,
   };
 }
+const LIVE_DRAFT_STATUSES = new Set(["in_progress", "paused"]);
+
 export async function getDraftPreparationData(
   league: {
     id: string;
@@ -143,7 +145,16 @@ export async function getDraftPreparationData(
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { afterState: true },
     }) : null;
     const state = start?.afterState && typeof start.afterState === 'object' ? start.afterState as Record<string, unknown> : {};
-    context = state.context ? state.context as PreparationContext : null;
+    // A draft that is still running keeps the league's live settings as its context when no
+    // start snapshot was recorded (auto-started, mirrored, or started before the archive
+    // ledger existed). Without this an in-progress draft showed "Scoring and roster slots must
+    // be recorded" and no players at all — reported from an NBA draft on Android, 2026-10-26.
+    // A finished draft stays strict: its board must be the one that existed when it ran.
+    context = state.context
+      ? state.context as PreparationContext
+      : LIVE_DRAFT_STATUSES.has(session.status)
+        ? context
+        : null;
   }
   const base = {
     ...unavailablePreparation(
