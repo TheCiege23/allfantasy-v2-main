@@ -171,7 +171,11 @@ async function main() {
       advanceRehearsalClock(6 * 3_600_000)
       continue
     }
-    if (['council_opened', 'second_council_opened', 'ceremony_processed', 'scores_finalized', 'week_advanced', 'opening_started', 'exile_return_settled', 'final_three_preserved'].includes(outcome)) continue
+    // A read releases one ballot every 2.5 s (REVEAL_STEP_MS); a tied merge council of 10 needs ~25 s
+    // before its revote can open. Back-to-back ticks finish in milliseconds, so step the clock like a
+    // cron would (run 40565068405 hit the stall limit 14 s into a 25 s read).
+    if (outcome === 'ceremony_processed') { advanceRehearsalClock(5 * 60_000); continue }
+    if (['council_opened', 'second_council_opened', 'scores_finalized', 'week_advanced', 'opening_started', 'exile_return_settled', 'final_three_preserved'].includes(outcome)) continue
     advanceRehearsalClock(6 * 3_600_000)
   }
 
