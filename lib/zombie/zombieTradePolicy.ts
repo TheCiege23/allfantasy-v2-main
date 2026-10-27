@@ -33,6 +33,10 @@ export async function getZombieTradeRestriction(
   })
   if (!zombieLeague) return null
 
+  // A commissioner override or an in-flight infection can make a Zombie before its history row exists.
+  const activeZombies = await prisma.zombieLeagueTeam.count({ where: { leagueId, status: 'Zombie' } })
+  if (activeZombies > 0) return 'whisperer_trade_blocked'
+
   const infections = await prisma.zombieInfectionEvent.count({
     where: { zombieLeagueId: zombieLeague.id },
   })
