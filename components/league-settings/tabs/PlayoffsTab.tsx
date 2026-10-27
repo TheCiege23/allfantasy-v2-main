@@ -12,6 +12,8 @@ import { tryGetSportConfig } from '@/lib/sportConfig'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { MAX_PLAYOFF_TEAMS, maxPlayoffTeamsThatFit } from '@/lib/playoff-runtime/playoffFit'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { playoffSeriesSportSupported, readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
+import { PlayoffSeriesLengthsCard } from '@/components/league-settings/PlayoffSeriesLengthsCard'
 import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
 import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
@@ -104,8 +106,14 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
         playoffStartWeek,
         weeksPerRound: ctx.league.playoffWeeksPerRound,
         championshipLength: readChampionshipLength(ctx.league.settings),
+        seriesLengths: readPlayoffSeriesLengths(ctx.league.settings),
         leagueSize: leagueCap,
       })
+  // Best-of-N series (lib/playoff-runtime/playoffSeries.ts): native NBA / NHL / MLB redraft leagues only.
+  const offerSeries =
+    native &&
+    playoffSeriesSportSupported(ctx.league.sport) &&
+    String(ctx.league.leagueType ?? 'redraft').trim().toLowerCase() === 'redraft'
   const teamCap = Math.max(2, Math.min(leagueCap, fitCap))
 
   // A tournament conference league has no league playoffs; its fields would do nothing.
@@ -284,6 +292,18 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
         </label>
       ) : null}
       {native ? <PlayoffBracketFormatCard leagueId={leagueId} playoffTeams={playoffTeams} canEdit={canEdit} /> : null}
+      {offerSeries ? (
+        <PlayoffSeriesLengthsCard
+          leagueId={leagueId}
+          settings={ctx.league.settings}
+          playoffTeams={playoffTeams}
+          playoffStartWeek={playoffStartWeek}
+          seasonWeeks={ctx.league.isDynasty ? null : seasonWeeks}
+          canEdit={canEdit}
+          hasPlan={hasAfCommissionerSub || Boolean(ctx.hasAfCommissionerSub)}
+          queuePatch={queuePatch}
+        />
+      ) : null}
       {native ? (
         <TiebreakerOrderEditor
           leagueId={leagueId}

@@ -77,6 +77,16 @@ import {
   isTaxiIncreaseRefused,
 } from '@/lib/league-creation/prospectStashPolicy'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import {
+  PLAYOFF_SERIES_SETTINGS_KEY,
+  parsePlayoffSeriesLengths,
+  playoffSeriesChangeNeedsPlan,
+  playoffSeriesNeedsPlan,
+  playoffSeriesSettingsValue,
+  playoffSeriesSportSupported,
+  readPlayoffSeriesLengths,
+  samePlayoffSeriesLengths,
+} from '@/lib/playoff-runtime/playoffSeries'
 import { MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY } from '@/lib/redraft/medianGame'
 import { medianGameChangeRefusal } from '@/lib/redraft/medianGameSwitch'
 import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
@@ -613,6 +623,50 @@ export async function executeLeagueSettingsPatch(
   }
 
   /*
+   * Best-of-N playoff series (lib/playoff-runtime/playoffSeries.ts): `playoffSeriesLengths` is one
+   * length per round, each 1, 3, 5 or 7; null or all-1 turns series off (today's cumulative rounds).
+   *  - Native NBA / NHL / MLB redraft leagues only (400 elsewhere) — turning it OFF is never refused.
+   *  - Any N > 1 is AF Commissioner (403 without the plan), checked only when the lengths CHANGE: a
+   *    lapsed plan keeps the series it set and can always turn series off, never set a new one.
+   *  - Refused (409) while the playoffs are being played: the scorer reads it live, and a series
+   *    under way must finish as configured.
+   *  - Fit-checked below with the rest of the playoff window (a best-of-5 round is five weeks).
+   * `settingsMerge` would write `playoff_series` around all of that, so it is refused there.
+   */
+  {
+    const merge = body.settingsMerge
+    if (merge && typeof merge === 'object' && !Array.isArray(merge) && PLAYOFF_SERIES_SETTINGS_KEY in merge) {
+      return jsonError('Set playoff series lengths with playoffSeriesLengths, not settingsMerge.', 400)
+    }
+  }
+  let playoffSeriesToStore: { value: number[] | null } | null = null
+  if (body.playoffSeriesLengths !== undefined) {
+    const parsed = parsePlayoffSeriesLengths(body.playoffSeriesLengths)
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    const currentSeries = readPlayoffSeriesLengths(league.settings)
+    if (!samePlayoffSeriesLengths(parsed.value, currentSeries)) {
+      if (playoffSeriesNeedsPlan(parsed.value)) {
+        const leagueType = String(league.leagueType ?? 'redraft').trim().toLowerCase()
+        if (!isNativePlatform(league.platform) || !playoffSeriesSportSupported(league.sport) || leagueType !== 'redraft') {
+          return jsonError('Playoff series are available for AllFantasy NBA, NHL and MLB redraft leagues.', 400)
+        }
+      }
+      if (playoffSeriesChangeNeedsPlan(parsed.value, currentSeries) && !hasSub) {
+        return NextResponse.json(
+          { error: 'Best-of-3, 5 and 7 playoff series are part of AF Commissioner.', code: 'PLAYOFF_SERIES_REQUIRES_AF_COMMISSIONER' },
+          { status: 403 },
+        )
+      }
+      const inPlayoffs = await prisma.redraftSeason.findFirst({
+        where: { leagueId, status: REDRAFT_SEASON_STATUS.PLAYOFFS },
+        select: { id: true },
+      })
+      if (inPlayoffs) return jsonError('Playoff series lengths cannot change while the playoffs are being played.', 409)
+      playoffSeriesToStore = { value: parsed.value }
+    }
+  }
+
+  /*
    * Third-place game (lib/playoff-runtime/thirdPlaceGame.ts). A boolean only. Stored in
    * `settings.playoff_structure`, which the bracket reads when it is generated — so it is REFUSED
    * (409) once a bracket is being played: the game is in that bracket or it is not, and a save that
@@ -736,6 +790,7 @@ export async function executeLeagueSettingsPatch(
   if (championshipLengthToStore != null && championshipLengthToStore !== (readChampionshipLength(league.settings) ?? 1)) {
     fitChange.championshipLength = championshipLengthToStore
   }
+  if (playoffSeriesToStore) fitChange.seriesLengths = playoffSeriesToStore.value
   if (isNativePlatform(league.platform)) {
     const teams = changedNumber(body.playoffTeams, league.playoffTeams)
     const start = changedNumber(body.playoffStartWeek, league.playoffStartWeek)
@@ -1165,6 +1220,16 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push('championship_length')
+  }
+
+  if (playoffSeriesToStore) {
+    const { [PLAYOFF_SERIES_SETTINGS_KEY]: _previousSeries, ...rest } = await readCurrentLeagueSettings(leagueId)
+    const value = playoffSeriesSettingsValue(playoffSeriesToStore.value)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: (value ? { ...rest, [PLAYOFF_SERIES_SETTINGS_KEY]: value } : rest) as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(PLAYOFF_SERIES_SETTINGS_KEY)
   }
 
   if (thirdPlaceGameToStore != null) {
