@@ -49,6 +49,18 @@ describe('league creation concept choices', () => {
     expect(screen.queryByTestId('g30-league-type-idp')).toBeNull()
     expect(screen.queryByTestId('g30-league-type-guillotine')).toBeNull()
   })
+
+  it('offers Pirate creation for each supported sport and hides it elsewhere', () => {
+    for (const sport of ['NFL', 'NBA', 'MLB', 'NHL'] as const) {
+      const { unmount } = render(
+        <LeagueBasicsStep state={{ ...DEFAULT_V2_STATE, sport }} onChange={vi.fn()} fieldErrors={null} />,
+      )
+      expect(screen.getByTestId('g30-league-type-pirate')).toBeTruthy()
+      unmount()
+    }
+    render(<LeagueBasicsStep state={{ ...DEFAULT_V2_STATE, sport: 'SOCCER' }} onChange={vi.fn()} fieldErrors={null} />)
+    expect(screen.queryByTestId('g30-league-type-pirate')).toBeNull()
+  })
 })
 
 describe('league creation import choices', () => {

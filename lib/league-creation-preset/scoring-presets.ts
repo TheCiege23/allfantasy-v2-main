@@ -56,6 +56,7 @@ function fbPreset(
       !ctx.idpSelected &&
       [
         'redraft',
+        'pirate',
         'dynasty',
         'keeper',
         'best_ball',
@@ -259,7 +260,7 @@ const RULES: PresetRule[] = [
     id: `${preset}_${recordMode}`,
     label: `${preset === 'mlb_5x5' ? '5×5' : '6×6'} ${recordMode === 'roto' ? 'Rotisserie' : `H2H (${recordMode === 'each' ? 'each category' : 'most categories'})`}`,
     hint: 'Weekly lineups. AVG uses total hits / at bats; ERA and WHIP use total pitching outs. 6×6 adds total bases and holds.',
-    matches: (ctx: PresetCtx) => ctx.sport === 'MLB' && !ctx.idpSelected && ['redraft', 'dynasty', 'keeper'].includes(ctx.leagueType),
+    matches: (ctx: PresetCtx) => ctx.sport === 'MLB' && !ctx.idpSelected && ['redraft', 'pirate', 'dynasty', 'keeper'].includes(ctx.leagueType),
     build: () => ({ scoring: 'default', isSuperflex: false, scoringSettings: {
       preset, source: 'af', scoringMode: recordMode === 'roto' ? 'roto' : 'h2h_category', categoryPresetId: preset, categoryRecordMode: recordMode,
     } }),
@@ -270,7 +271,7 @@ const RULES: PresetRule[] = [
     id: `nhl_cats_${recordMode}`,
     label: recordMode === 'roto' ? 'Categories — Rotisserie' : `Categories H2H (${recordMode === 'each' ? 'each category' : 'most categories'})`,
     hint: 'Weekly lineups. G, A, +/-, PIM, PPP, SOG, HIT, BLK; goalies W, GAA, SV%, SO. GAA and SV% use team totals.',
-    matches: (ctx: PresetCtx) => ctx.sport === 'NHL' && !ctx.idpSelected && ['redraft', 'dynasty', 'keeper'].includes(ctx.leagueType),
+    matches: (ctx: PresetCtx) => ctx.sport === 'NHL' && !ctx.idpSelected && ['redraft', 'pirate', 'dynasty', 'keeper'].includes(ctx.leagueType),
     build: () => ({ scoring: 'default', isSuperflex: false, scoringSettings: {
       preset: `nhl_cats_${recordMode}`, source: 'af', scoringMode: recordMode === 'roto' ? 'roto' : 'h2h_category', categoryPresetId: 'nhl_standard', categoryRecordMode: recordMode,
     } }),
@@ -284,7 +285,7 @@ const RULES: PresetRule[] = [
     id: 'nba_9cat',
     label: '9-cat H2H',
     hint: 'Head-to-head categories: PTS, REB, AST, STL, BLK, TO, FG%, FT%, 3PM.',
-    matches: (ctx) => ctx.sport === 'NBA' && !ctx.idpSelected && ['redraft', 'dynasty', 'keeper'].includes(ctx.leagueType),
+    matches: (ctx) => ctx.sport === 'NBA' && !ctx.idpSelected && ['redraft', 'pirate', 'dynasty', 'keeper'].includes(ctx.leagueType),
     build: () => ({
       scoring: 'default',
       isSuperflex: false,
@@ -301,7 +302,7 @@ const RULES: PresetRule[] = [
     id: 'nba_8cat',
     label: '8-cat H2H',
     hint: 'Weekly head-to-head categories: PTS, REB, AST, STL, BLK, FG%, FT%, 3PM (no turnovers).',
-    matches: (ctx) => ctx.sport === 'NBA' && !ctx.idpSelected && ['redraft', 'dynasty', 'keeper'].includes(ctx.leagueType),
+    matches: (ctx) => ctx.sport === 'NBA' && !ctx.idpSelected && ['redraft', 'pirate', 'dynasty', 'keeper'].includes(ctx.leagueType),
     build: () => ({
       scoring: 'default',
       isSuperflex: false,
@@ -321,7 +322,7 @@ const RULES: PresetRule[] = [
     id: 'nba_9cat_roto',
     label: '9-cat Rotisserie',
     hint: 'Season-long category ranks: PTS, REB, AST, STL, BLK, 3PM, FG%, FT%, TO (fewer is better). No weekly matchups or playoffs.',
-    matches: (ctx) => ctx.sport === 'NBA' && !ctx.idpSelected && ['redraft', 'dynasty', 'keeper'].includes(ctx.leagueType),
+    matches: (ctx) => ctx.sport === 'NBA' && !ctx.idpSelected && ['redraft', 'pirate', 'dynasty', 'keeper'].includes(ctx.leagueType),
     build: () => ({
       scoring: 'default',
       isSuperflex: false,

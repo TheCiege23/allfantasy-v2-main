@@ -215,6 +215,10 @@ export const SPORT_MEDIA: Record<string, MediaAsset> = {
  * Per-league-type hero — prefers `/media/create-league/concept/videos`, then legacy intros.
  */
 export const LEAGUE_TYPE_MEDIA: Record<string, MediaAsset> = {
+  pirate: {
+    video: '/media/league-intros/pirate-claim.mp4',
+    poster: '/images/league-types/pirate-hero.png',
+  },
   redraft: {
     video: '/media/create-league/concept/videos/Redraft.mp4',
     poster: '/media/create-league/concept/thumbnails/Redraft.png',

@@ -89,7 +89,7 @@ const STEP_ORDER: readonly WizardStep[] = ['sport', 'basics', 'draft', 'review']
 /** The four familiar formats, shown as a compact row beneath the specialties. */
 const CLASSIC_FORMATS: readonly string[] = ['redraft', 'dynasty', 'keeper', 'best_ball']
 /** Specialty order on the Basics step: the elimination and social formats lead. */
-const SPECIALTY_ORDER: readonly string[] = ['survivor', 'guillotine', 'big_brother', 'zombie', 'salary_cap', 'devy', 'c2c', 'idp']
+const SPECIALTY_ORDER: readonly string[] = ['pirate', 'survivor', 'guillotine', 'big_brother', 'zombie', 'salary_cap', 'devy', 'c2c', 'idp']
 
 function specialtyRank(id: string): number {
   const index = SPECIALTY_ORDER.indexOf(id)
