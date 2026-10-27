@@ -141,12 +141,7 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
                 </select>
               }
             />
-          </SettingsSection>
-
-          {paid ? (
-            <>
-              <SettingsSection id="zm-buyin" title="Buy-in & links">
-                <SettingsRow
+            <SettingsRow
                   label="Buy-in ($)"
                   control={
                     <Input
@@ -157,10 +152,15 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
                       onChange={(e) => setBuyIn(Number(e.target.value) || 0)}
                       min={0.01}
                       step={0.01}
-                      onBlur={() => void saveZombie({ buyInAmount: buyIn, isPaid: true })}
+                      onBlur={() => void saveZombie({ buyInAmount: buyIn, isPaid: paid })}
                     />
                   }
                 />
+          </SettingsSection>
+
+          {paid ? (
+            <>
+              <SettingsSection id="zm-buyin" title="Buy-in & links">
                 <SettingsRow
                   label="Primary button"
                   control={
