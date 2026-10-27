@@ -15,7 +15,8 @@ describe('draft room ↔ Chimmy wiring', () => {
   it('mounts the helper panel in the phone tray', () => {
     expect(src).not.toMatch(/helperPanel=\{undefined\}/)
     expect(src).toMatch(/helperPanel=\{helperPanelNode\}/)
-    expect(src).toMatch(/const helperPanelNode = \(\s*<DraftHelperPanel/)
+    const node = src.slice(src.indexOf('const helperPanelNode = ('), src.indexOf('const keeperPanel ='))
+    expect(node).toMatch(/<DraftHelperPanel\s/)
   })
 
   it('gives the right dock a Chimmy tab and lets buttons open it', () => {
@@ -65,5 +66,14 @@ describe('draft room ↔ Chimmy AI manager slot', () => {
   it('reads the managed teams for every member, and tells the top bar Chimmy is picking', () => {
     expect(src).toMatch(/setChimmyManagedRosterIds\(/)
     expect(src).toMatch(/chimmyManagerOnClock=\{chimmyOnClock\}/)
+  })
+})
+
+describe('draft room ↔ Decision OS', () => {
+  it('puts the manager.draft.pick card on top of the assistant, refetching as the board moves', () => {
+    const panel = src.slice(src.indexOf('const helperPanelNode = ('), src.indexOf('const keeperPanel ='))
+    expect(panel.indexOf('<DraftDecisionOsCard')).toBeGreaterThan(-1)
+    expect(panel.indexOf('<DraftDecisionOsCard')).toBeLessThan(panel.indexOf('<DraftHelperPanel'))
+    expect(panel).toMatch(/refreshKey=\{`\$\{currentPick\?\.overall \?\? 'none'\}:\$\{session\.status\}:/)
   })
 })

@@ -29,6 +29,7 @@ import { DraftChatPanel, type DraftChatMessage, type DraftChatSendPayload } from
 import { DraftChatDock } from '@/components/app/draft-room/DraftChatDock'
 import { DraftHelperPanel } from '@/components/app/draft-room/DraftHelperPanel'
 import { currentChimmySurface } from '@/lib/draft-room/chimmySurface'
+import { DraftDecisionOsCard } from '@/components/app/draft-room/DraftDecisionOsCard'
 import { DraftHelperFloatingBubble } from '@/components/app/draft-room/DraftHelperFloatingBubble'
 import { DraftHelperFloatingWindow } from '@/components/app/draft-room/DraftHelperFloatingWindow'
 import { DraftHelperCopilot } from '@/components/app/draft-room/DraftHelperCopilot'
@@ -4622,7 +4623,16 @@ export function DraftRoomPageClient({
    * and imported here, but never rendered — so the phone's AI tab was hidden and every "Ask Chimmy"
    * button opened nothing.
    */
+  /*
+   * Decision OS sits on top of the assistant: the `manager.draft.pick` decision — the same engine's
+   * top choice, checked against the live pick rules — refetched as the board moves.
+   */
   const helperPanelNode = (
+    <>
+    <DraftDecisionOsCard
+      leagueId={leagueId}
+      refreshKey={`${currentPick?.overall ?? 'none'}:${session.status}:${session.picks?.length ?? 0}`}
+    />
     <DraftHelperPanel
       loading={recommendationLoading}
       error={recommendationError}
@@ -4665,6 +4675,7 @@ export function DraftRoomPageClient({
       presentationVariant={presentationVariant}
       userOnTheClock={isCurrentUserOnClock}
     />
+    </>
   )
   const keeperPanel = showKeeperPanel ? (
     <KeeperPanel
