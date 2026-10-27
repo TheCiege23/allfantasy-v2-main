@@ -140,6 +140,14 @@ export async function processAmbushFromChimmy(
 
   try {
     const action = await prisma.$transaction(async (tx) => {
+      const firstGame = await tx.gameSchedule.findFirst({
+        where: { sportType: z.sport.toUpperCase(), season: z.season, weekOrRound: week, startTime: { not: null } },
+        orderBy: { startTime: 'asc' },
+        select: { startTime: true },
+      })
+      if (!firstGame?.startTime || firstGame.startTime.getTime() <= Date.now()) {
+        throw new Error('The scoring period has locked.')
+      }
       const usedInTransaction = await tx.zombieAmbushAction.count({
         where: { zombieLeagueId: z.id, week, whispererUserId, status: 'executed' },
       })
