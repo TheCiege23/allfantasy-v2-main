@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { generateRulesDocument } from '@/lib/zombie/rulesDocGenerator'
+import { isZombieExperienceMode, zombieExperienceDefaults } from '@/lib/zombie/zombieExperience'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +33,14 @@ export async function PATCH(req: Request) {
   const num = (k: string) => (typeof body[k] === 'number' ? (body[k] as number) : undefined)
   const bool = (k: string) => (typeof body[k] === 'boolean' ? (body[k] as boolean) : undefined)
   const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string) : undefined)
+
+  const experienceModePatch = str('experienceMode')
+  if (experienceModePatch !== undefined && !isZombieExperienceMode(experienceModePatch)) {
+    return NextResponse.json({ error: 'experienceMode must be simple or enhanced.' }, { status: 400 })
+  }
+  if (experienceModePatch !== undefined && !['setup', 'registering'].includes(z.status)) {
+    return NextResponse.json({ error: 'Experience mode is locked once the season starts.' }, { status: 409 })
+  }
 
   const teamCountPatch = num('teamCount')
   if (
@@ -105,7 +114,7 @@ export async function PATCH(req: Request) {
   }
 
   const requestedSelection = whispererSelectionModePatch ?? configSelectionPatch
-  if (requestedSelection !== undefined || seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined) {
+  if (requestedSelection !== undefined || seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined || experienceModePatch !== undefined) {
     const selected = await prisma.whispererRecord.findUnique({
       where: { zombieLeagueId: z.id },
       select: { id: true },
@@ -122,6 +131,7 @@ export async function PATCH(req: Request) {
     ...(str('name') !== undefined ? { name: str('name') } : {}),
     ...(str('status') !== undefined ? { status: str('status') } : {}),
     ...(teamCountPatch !== undefined ? { teamCount: teamCountPatch } : {}),
+    ...(experienceModePatch !== undefined ? { experienceMode: experienceModePatch } : {}),
     ...(num('currentWeek') !== undefined ? { currentWeek: num('currentWeek') } : {}),
     ...(num('buyInAmount') !== undefined ? { buyInAmount: num('buyInAmount') } : {}),
     ...(bool('isPaid') !== undefined ? { isPaid: bool('isPaid') } : {}),
@@ -131,6 +141,7 @@ export async function PATCH(req: Request) {
       : {}),
     ...(bool('whispererIsPublic') !== undefined ? { whispererIsPublic: bool('whispererIsPublic') } : {}),
     ...(seasonAmbushPatch !== undefined ? { whispererAmbushCount: seasonAmbushPatch } : {}),
+    ...(experienceModePatch === 'simple' ? { whispererAmbushCount: 0 } : {}),
     ...(bool('weeklyPayoutEnabled') !== undefined ? { weeklyPayoutEnabled: bool('weeklyPayoutEnabled') } : {}),
     ...(bool('ultimateSurvivorPot') !== undefined ? { ultimateSurvivorPot: bool('ultimateSurvivorPot') } : {}),
     ...(weeklyUpdateDayPatch !== undefined ? { weeklyUpdateDay: weeklyUpdateDayPatch } : {}),
@@ -193,6 +204,7 @@ export async function PATCH(req: Request) {
     ...(bool('statCorrectionReversal') !== undefined ? { statCorrectionReversal: bool('statCorrectionReversal') } : {}),
     ...(bool('zombieTradeBlocked') !== undefined ? { zombieTradeBlocked: bool('zombieTradeBlocked') } : {}),
     ...(num('dangerousDropThreshold') !== undefined ? { dangerousDropThreshold: num('dangerousDropThreshold') } : {}),
+    ...(experienceModePatch !== undefined ? zombieExperienceDefaults(experienceModePatch) : {}),
   }
 
   let config = null
@@ -259,7 +271,7 @@ export async function PATCH(req: Request) {
 
   if (serumReviveCountPatch !== undefined || bool('autoSerumRevive') !== undefined ||
       bool('serumAwardHighScore') !== undefined || bool('serumAwardOnBashMaul') !== undefined ||
-      seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined) {
+      seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined || experienceModePatch !== undefined) {
     await generateRulesDocument(z.id)
   }
 
