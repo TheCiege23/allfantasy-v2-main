@@ -73,7 +73,7 @@ export async function reconcileOutcomeChangingCorrection(input: {
       })
       if (!live || live.status !== 'complete' || live.resolvedAt?.getTime() !== previous.resolvedAt?.getTime() ||
           JSON.stringify(live.matchupResults) !== JSON.stringify(previous.matchupResults)) return null
-      const [now, later, bashings, maulings, laterActions, owners, items, teams, oldLogs, oldEvents] = await Promise.all([
+      const [now, later, bashings, maulings, laterActions, payoutRecords, owners, items, teams, oldLogs, oldEvents] = await Promise.all([
         tx.redraftMatchup.findMany({
           where: { seasonId, week },
           select: { id: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true },
@@ -84,6 +84,7 @@ export async function reconcileOutcomeChangingCorrection(input: {
         tx.zombieChimmyAction.count({
           where: { leagueId, week: { gte: week }, isValid: true, createdAt: { gt: live.resolvedAt! } },
         }),
+        tx.zombieExternalWeeklyPayout.count({ where: { zombieLeagueId, week } }),
         tx.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }),
         tx.zombieTeamItem.findMany({ where: { zombieLeagueId } }),
         tx.zombieLeagueTeam.findMany({
@@ -97,7 +98,7 @@ export async function reconcileOutcomeChangingCorrection(input: {
           where: { zombieLeagueId, week }, select: { victimUserId: true, infectorUserId: true },
         }),
       ])
-      if (later || bashings || maulings || laterActions || now.length !== expected.size) return null
+      if (later || bashings || maulings || laterActions || payoutRecords || now.length !== expected.size) return null
       if (oldLogs.length !== oldPlan.infections.length || oldEvents.length !== oldPlan.infections.length ||
           oldPlan.infections.some(infection => !oldLogs.some(log =>
             log.survivorRosterId === infection.victimRosterId &&
