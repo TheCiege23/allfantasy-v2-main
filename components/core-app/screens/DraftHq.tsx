@@ -9,6 +9,7 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { DraftCompetitiveEdge, type DraftEdgeState } from '@/components/core-app/screens/DraftCompetitiveEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { draftHqUiCopy } from '@/lib/core-app/draftHqUiCopy'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
 
 /**
  * Screen 8 — Draft HQ.
@@ -71,7 +72,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
                   a deploy has rotated the client chunks under an open tab (Android PWA). */}
               <a
                 className="af-dh-enter"
-                href={`/league/${encodeURIComponent(data.league.id)}/draft`}
+                href={draftRoomHref(data.league.id)}
                 data-testid="draft-hq-enter-room"
                 data-live={LIVE_STATUSES.has(data.session.data.status) ? 'true' : 'false'}
               >

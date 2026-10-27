@@ -8,6 +8,7 @@ import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient";
 import type { DraftPreparationData } from "@/lib/core-app/draftPreparation";
 import "@/components/core-app/af-draft-preparation.css";
 import { DraftReferences } from './DraftReferences';
+import { draftRoomHref } from "@/lib/league-chat/draftChatLink";
 
 const spanish: Record<string, string> = {
   "Every available player is listed in the draft room.": "Todos los jugadores disponibles están en la sala del draft.",
@@ -356,7 +357,7 @@ export function DraftPreparation({
            Plain anchor: the room is a full navigation through the /draft resolver. */
         <p className="af-prep-pool-link">
           {t("Every available player is listed in the draft room.")}{" "}
-          <a href={"/league/" + encodeURIComponent(leagueId) + "/draft"} data-testid="draft-prep-room-link">
+          <a href={draftRoomHref(leagueId)} data-testid="draft-prep-room-link">
             {t("See the player pool")} →
           </a>
         </p>
