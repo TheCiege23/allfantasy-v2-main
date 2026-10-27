@@ -97,3 +97,16 @@ How many teams are chopped each week, and in which weeks.
    commissioner, and the trade goes through. The commissioner can switch holding off or hold
    every flag (`League.settings.integrity_hold_flagged_trades`: `off` / `severe` / `all`;
    `lib/integrity/holdFlaggedTradesMode.ts`).
+7. **The rookie draft opens itself on the Commissioner plan (2026-10-27).** Per §1.1, when the
+   commissioner holds AF Commissioner, the rookie draft is created automatically when the
+   sport's window opens (NFL May, NBA and NHL July, MLB November–January), with the order set
+   from the league's rule. The commissioner still starts it, and can switch auto-open off. Free
+   leagues create it with the button. A Commissioner league whose offseason had already begun
+   before 2026-10-28 is not switched on: its commissioner is told once and can turn it on
+   (`lib/dynasty-core/rookieDraftCalendar.ts`, `resolveRookieDraftAutoOpen`).
+8. **Taxi rules are enforced (2026-10-27).** In a league played on AllFantasy, every taxi rule in
+   the settings is now applied to roster saves (`lib/taxi/taxiRules.ts`): the taxi deadline (no
+   new arrivals after it), in-season and postseason moves (postseason is off by default), the
+   promotion deadline, and the lock rule (once promoted, a player cannot return to taxi). The
+   offseason is always open, drops are never refused, and the commissioner can override.
+   NHL and MLB still offer no taxi squads (decision of 2026-10-20, reconfirmed).
