@@ -26,6 +26,8 @@ export type LeagueOfficeInput = {
   eliminatedLineupRule?: string | null
   /** The live rookie order's round notices (lib/rookie-order/roundNotices.ts), in words; every member. */
   rookieOrderRounds?: string | null
+  /** An open orphan auction, already worded (lib/orphan-auction). Never anyone's bids. */
+  orphanAuction?: string | null
   /** The latest league-log lines the viewer may read; null when the log is hidden from them. */
   log: ReadonlyArray<{ at: string; title: string; detail: string | null }> | null
   /** The payout calculator (lib/payouts), when the commissioner has set a place split. */
@@ -39,6 +41,8 @@ export type LeagueOfficeInput = {
     /** Commissioners only. */
     collected: { cents: number; paidTeams: number } | null
   } | null
+  /** IR auto-move (lib/ir-activation) is running in this league. */
+  irAutoMove?: boolean
   /** Dynasty leagues between seasons: the rollover, already worded for this viewer (lib/season-rollover). */
   offseason?: readonly string[] | null
 }
@@ -118,7 +122,10 @@ export function buildLeagueOfficeSummary(input: LeagueOfficeInput): string | nul
   }
   if (input.viewerTeamManaged) lines.push('AllFantasy is setting your lineup while you are away; saving a lineup yourself stops it.')
   if (input.eliminatedLineupRule) lines.push(input.eliminatedLineupRule)
+  if (input.irAutoMove)
+    lines.push('IR auto-move is on: once a player on IR is activated, AllFantasy moves them to the bench within the hour, or tells the manager to make room when the bench or roster is full.')
   if (input.rookieOrderRounds) lines.push(input.rookieOrderRounds)
+  if (input.orphanAuction) lines.push(input.orphanAuction)
 
   if (input.log?.length) {
     lines.push('Latest league log:')

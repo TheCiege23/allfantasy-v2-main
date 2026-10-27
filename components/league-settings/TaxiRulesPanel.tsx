@@ -16,9 +16,10 @@ import type { TaxiRulesView } from '@/lib/taxi/taxiRulesService'
 const fill = (s: string, vars: Record<string, string | number>) =>
   Object.entries(vars).reduce((acc, [k, v]) => acc.split(`{{${k}}}`).join(String(v)), s)
 
-type Draft = { enforced: boolean; lockAfterWeek: string; promotionDeadlineWeek: string; lockBehavior: 'once_promoted_no_return' | 'free_move'; inSeasonMoves: boolean; postseasonMoves: boolean }
+type Draft = { maxYears: string; enforced: boolean; lockAfterWeek: string; promotionDeadlineWeek: string; lockBehavior: 'once_promoted_no_return' | 'free_move'; inSeasonMoves: boolean; postseasonMoves: boolean }
 
-const toDraft = (rules: TaxiMoveRules, enforced: boolean): Draft => ({
+const toDraft = (rules: TaxiMoveRules, enforced: boolean, maxYears: number | null): Draft => ({
+  maxYears: maxYears == null ? 'none' : String(maxYears),
   enforced,
   lockAfterWeek: rules.lockAfterWeek != null ? String(rules.lockAfterWeek) : '',
   promotionDeadlineWeek: rules.promotionDeadlineWeek != null ? String(rules.promotionDeadlineWeek) : '',
@@ -29,7 +30,7 @@ const toDraft = (rules: TaxiMoveRules, enforced: boolean): Draft => ({
 
 export function TaxiRulesPanel({ leagueId }: { leagueId: string }) {
   const { t } = useOptionalLanguage()
-  const ids = { enforce: useId(), lock: useId(), promo: useId(), behavior: useId(), inSeason: useId(), post: useId() }
+  const ids = { years: useId(), enforce: useId(), lock: useId(), promo: useId(), behavior: useId(), inSeason: useId(), post: useId() }
   const url = `/api/leagues/${encodeURIComponent(leagueId)}/taxi-rules`
   const [view, setView] = useState<TaxiRulesView | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -43,7 +44,7 @@ export function TaxiRulesPanel({ leagueId }: { leagueId: string }) {
       const data = (await res.json()) as TaxiRulesView | { applies: false }
       if (!data.applies) return
       setView(data)
-      setDraft(toDraft(data.rules, data.enforced))
+      setDraft(toDraft(data.rules, data.enforced, data.maxYears))
     } catch {
       // A settings card: the page renders without it.
     }
@@ -64,13 +65,19 @@ export function TaxiRulesPanel({ leagueId }: { leagueId: string }) {
       const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        // Max seasons on taxi is any commissioner's; the move rules are AF Commissioner.
         body: JSON.stringify({
-          enforced: draft.enforced,
-          lockAfterWeek: draft.lockAfterWeek.trim() || null,
-          promotionDeadlineWeek: draft.promotionDeadlineWeek.trim() || null,
-          lockBehavior: draft.lockBehavior,
-          inSeasonMoves: draft.inSeasonMoves,
-          postseasonMoves: draft.postseasonMoves,
+          maxYears: draft.maxYears === 'none' ? null : Number(draft.maxYears),
+          ...(editable
+            ? {
+                enforced: draft.enforced,
+                lockAfterWeek: draft.lockAfterWeek.trim() || null,
+                promotionDeadlineWeek: draft.promotionDeadlineWeek.trim() || null,
+                lockBehavior: draft.lockBehavior,
+                inSeasonMoves: draft.inSeasonMoves,
+                postseasonMoves: draft.postseasonMoves,
+              }
+            : {}),
         }),
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string }
@@ -116,6 +123,26 @@ export function TaxiRulesPanel({ leagueId }: { leagueId: string }) {
           {status}
         </span>
       </div>
+
+      <label htmlFor={ids.years} className="flex min-w-0 items-center justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block text-[13px] font-semibold text-white/90">{t('lsTaxiRules.maxYears')}</span>
+          <span className="block text-[11px] leading-snug text-white/40">{t('lsTaxiRules.maxYearsDesc')}</span>
+        </span>
+        <select
+          id={ids.years}
+          className="rounded-md border border-white/15 bg-white/[0.04] px-2 py-1 text-[13px] text-white disabled:opacity-60"
+          value={draft.maxYears}
+          disabled={!view.isCommissioner || saving}
+          onChange={(e) => set('maxYears', e.target.value)}
+          data-testid="taxi-rules-maxYears"
+        >
+          {[1, 2, 3, 4, 5].map((n) => (
+            <option key={n} value={String(n)}>{fill(t(n === 1 ? 'lsTaxiRules.maxYears.one' : 'lsTaxiRules.maxYears.other'), { n })}</option>
+          ))}
+          <option value="none">{t('lsTaxiRules.maxYears.none')}</option>
+        </select>
+      </label>
 
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -197,7 +224,7 @@ export function TaxiRulesPanel({ leagueId }: { leagueId: string }) {
         </p>
       ) : null}
 
-      {editable ? (
+      {view.isCommissioner ? (
         <button
           type="button"
           onClick={() => void save()}

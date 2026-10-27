@@ -150,10 +150,13 @@ describe('F.2 — DraftRightDockTabs is desktop-only on the mobile shell', () =>
     // Find the mobile layout block and assert it doesn't include the right
     // dock tabs (which are a desktop-only construct).
     const mobileMatch = shellSrc.match(
-      /data-testid="draft-mobile-layout"[\s\S]*?data-testid="draft-mobile-content"[\s\S]*?<\/nav>/,
+      // The tray mechanics moved to DraftMobileTray; the mobile block still spans layout → tray.
+      /data-testid="draft-mobile-layout"[\s\S]*?<\/DraftMobileTray>/,
     )
     expect(mobileMatch).not.toBeNull()
     const mobileBlock = mobileMatch![0]
+    expect(mobileBlock).toMatch(/data-testid="draft-mobile-content"/)
+    expect(mobileBlock).toMatch(/<\/nav>/)
     expect(mobileBlock).not.toMatch(/DraftRightDockTabs/)
   })
 })

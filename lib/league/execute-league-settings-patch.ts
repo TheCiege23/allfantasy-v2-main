@@ -44,6 +44,8 @@ import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThrea
 import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/league-log/leagueLog'
 import { ELIMINATED_LINEUP_RULE_KEY, parseEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLineups'
+import { IR_AUTO_MOVE_KEY, parseIrAutoMoveRule } from '@/lib/ir-activation/irAutoMove'
+import { ORPHAN_AUCTION_KEY } from '@/lib/orphan-auction/orphanAuction'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
@@ -538,12 +540,13 @@ export async function executeLeagueSettingsPatch(
    * `settingsMerge` can write. Refused only when the value CHANGES past the cap, so re-saving a league
    * as it stands never fails.
    */
-  if (regularSeasonCapApplies({ leagueType: typeof body.leagueType === 'string' ? body.leagueType : league.leagueType, sport: body.sport ?? league.sport })) {
+  const capSport = body.sport ?? league.sport
+  if (regularSeasonCapApplies({ leagueType: typeof body.leagueType === 'string' ? body.leagueType : league.leagueType, sport: capSport })) {
     if (body.playoffStartWeek != null && Number(body.playoffStartWeek) !== league.playoffStartWeek) {
-      const refusal = playoffStartWeekCapRefusal(body.playoffStartWeek)
+      const refusal = playoffStartWeekCapRefusal(body.playoffStartWeek, capSport)
       if (refusal) return jsonError(refusal, 400)
     }
-    const mergeRefusal = settingsMergeCapRefusal(body.settingsMerge, league.settings)
+    const mergeRefusal = settingsMergeCapRefusal(body.settingsMerge, league.settings, capSport)
     if (mergeRefusal) return jsonError(mergeRefusal, 400)
   }
 
@@ -794,6 +797,12 @@ export async function executeLeagueSettingsPatch(
     ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
   }
 
+  // The orphan auction (lib/orphan-auction) is state, not a setting: its assets, bids and result are
+  // written only by its own service, so a settings save could otherwise rewrite who won what.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && ORPHAN_AUCTION_KEY in merge) {
+    return jsonError('The orphan auction is run from the Commissioner Hub, not saved as a setting.', 400)
+  }
+
   // Lineup minimums for eliminated teams (lib/eliminated-lineups) — an AF Commissioner rule. Stored only
   // in the shape the reader knows, so a malformed value can never read as "on"; switching it off is free.
   if (merge && typeof merge === 'object' && !Array.isArray(merge) && ELIMINATED_LINEUP_RULE_KEY in merge) {
@@ -801,6 +810,15 @@ export async function executeLeagueSettingsPatch(
     if (!parsed.ok) return jsonError(parsed.error, 400)
     if (parsed.value.enabled && !hasSub) return jsonError('Lineup minimums for eliminated teams are part of the AF Commissioner plan.', 403)
     ;(merge as Record<string, unknown>)[ELIMINATED_LINEUP_RULE_KEY] = parsed.value
+  }
+
+  // IR auto-move (lib/ir-activation) — an AF Commissioner rule, stored only in the shape the reader
+  // knows; switching it off is free.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && IR_AUTO_MOVE_KEY in merge) {
+    const parsed = parseIrAutoMoveRule((merge as Record<string, unknown>)[IR_AUTO_MOVE_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value.enabled && !hasSub) return jsonError('IR auto-move is part of the AF Commissioner plan.', 403)
+    ;(merge as Record<string, unknown>)[IR_AUTO_MOVE_KEY] = parsed.value
   }
 
   // Who may read the league log (lib/league-log/leagueLog.ts). A value the reader does not know would

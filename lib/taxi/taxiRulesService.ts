@@ -22,6 +22,7 @@ import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import { ownerHasAfCommissionerPlan } from '@/lib/stat-corrections/applyStatCorrections'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
+import { hasUsedTaxiSeasons, loadTaxiSeasonsUsed, readTaxiMaxYears, storedTaxiMaxYears, TAXI_MAX_YEARS_CHOICES, TAXI_MAX_YEARS_KEY } from './taxiMaxYears'
 import {
   diffTaxiSquad,
   normalizeTaxiLockBehavior,
@@ -77,6 +78,8 @@ export type TaxiRulesView = {
   /** The viewer may change the rules (a commissioner with AF Commissioner). */
   canEdit: boolean
   isCommissioner: boolean
+  /** Max seasons on the taxi squad (./taxiMaxYears.ts), 2 by default; null is no limit. Any commissioner sets it. */
+  maxYears: number | null
   phase: TaxiSeasonPhase
   week: number
 }
@@ -105,6 +108,7 @@ export async function readTaxiRulesView(
     ownerEntitled,
     canEdit: viewer.isCommissioner && viewerEntitled,
     isCommissioner: viewer.isCommissioner,
+    maxYears: readTaxiMaxYears(league.settings),
     phase: taxiSeasonPhase(season, week),
     week,
   }
@@ -158,22 +162,44 @@ export async function checkTaxiSave(input: {
 }): Promise<TaxiSaveCheck> {
   const { arrivals, promotions } = diffTaxiSquad(input)
   if (arrivals.length === 0 && promotions.length === 0) return NONE
+
+  // Max seasons on taxi is on by default (2), so it is checked whether or not the move rules are.
+  const seasonsIssues: TaxiMoveIssue[] = []
+  if (arrivals.length) {
+    const league = await loadLeague(input.leagueId)
+    const maxYears = league && applies(league) ? readTaxiMaxYears(league.settings) : null
+    if (maxYears != null) {
+      const used = await loadTaxiSeasonsUsed(prisma, input.leagueId, arrivals)
+      for (const id of arrivals) {
+        if (hasUsedTaxiSeasons(used.get(id) ?? 0, maxYears))
+          seasonsIssues.push({
+            code: 'TAXI_MAX_YEARS',
+            playerId: id,
+            message: `${input.nameOf(id)} can't go onto the taxi squad: ${maxYears === 1 ? 'one season' : `${maxYears} seasons`} on it is this league's limit, and they are used.`,
+          })
+      }
+    }
+  }
+
   const enforcement = await loadTaxiEnforcement(input.leagueId)
-  if (!enforcement) return NONE
+  if (!enforcement) return { ...NONE, issues: seasonsIssues }
   const owner = await prisma.redraftRoster.findUnique({ where: { id: input.redraftRosterId }, select: { ownerId: true } })
   const promotedBefore =
     arrivals.length && enforcement.rules.lockBehavior === 'once_promoted_no_return' && owner
       ? await readPromotedPlayers(input.leagueId, owner.ownerId)
       : new Set<string>()
-  const issues = taxiMoveIssues({
-    rules: enforcement.rules,
-    phase: taxiSeasonPhase(enforcement.season, input.week),
-    week: input.week,
-    arrivals,
-    promotions,
-    promotedBefore,
-    nameOf: input.nameOf,
-  })
+  const issues = [
+    ...seasonsIssues,
+    ...taxiMoveIssues({
+      rules: enforcement.rules,
+      phase: taxiSeasonPhase(enforcement.season, input.week),
+      week: input.week,
+      arrivals: arrivals.filter((id) => !seasonsIssues.some((i) => i.playerId === id)),
+      promotions,
+      promotedBefore,
+      nameOf: input.nameOf,
+    }),
+  ]
   return { issues, promotions, seasonId: enforcement.season?.id ?? null, season: enforcement.season?.season ?? null }
 }
 
@@ -205,7 +231,11 @@ export type TaxiRulesSaveBody = {
   lockBehavior?: unknown
   inSeasonMoves?: unknown
   postseasonMoves?: unknown
+  /** Seasons on the taxi squad, 1–5, or null for no limit. Any commissioner, on any plan. */
+  maxYears?: unknown
 }
+
+const PLAN_FIELDS = ['enforced', 'lockAfterWeek', 'promotionDeadlineWeek', 'lockBehavior', 'inSeasonMoves', 'postseasonMoves'] as const
 
 const weekOrNull = (v: unknown): number | null | undefined | 'bad' => {
   if (v === undefined) return undefined
@@ -214,7 +244,10 @@ const weekOrNull = (v: unknown): number | null | undefined | 'bad' => {
   return Number.isInteger(n) && n >= 1 && n <= MAX_WEEK ? n : 'bad'
 }
 
-/** AF Commissioner, commissioner only (the caller checks the role). */
+/**
+ * Commissioner only (the caller checks the role). The move rules are AF Commissioner; max seasons
+ * on taxi is not, because it applies to every league by default.
+ */
 export async function saveTaxiRules(
   leagueId: string,
   userId: string,
@@ -223,8 +256,13 @@ export async function saveTaxiRules(
   const league = await loadLeague(leagueId)
   if (!league) return { ok: false, status: 404, error: 'League not found.' }
   if (!applies(league)) return { ok: false, status: 400, error: 'Taxi rules apply to dynasty leagues that play on AllFantasy.' }
-  const user = await prisma.appUser.findUnique({ where: { id: userId }, select: { id: true, email: true, username: true } })
-  if (!hasAfCommissionerPlan(user)) return { ok: false, status: 402, error: 'Taxi rules are part of AF Commissioner.' }
+  if (body.maxYears !== undefined && body.maxYears !== null && !(TAXI_MAX_YEARS_CHOICES as readonly unknown[]).includes(body.maxYears)) {
+    return { ok: false, status: 400, error: 'Seasons on the taxi squad is 1 to 5, or no limit.' }
+  }
+  if (PLAN_FIELDS.some((k) => body[k] !== undefined)) {
+    const user = await prisma.appUser.findUnique({ where: { id: userId }, select: { id: true, email: true, username: true } })
+    if (!hasAfCommissionerPlan(user)) return { ok: false, status: 402, error: 'Taxi move rules are part of AF Commissioner.' }
+  }
 
   const lockAfterWeek = weekOrNull(body.lockAfterWeek)
   const promotionDeadlineWeek = weekOrNull(body.promotionDeadlineWeek)
@@ -246,12 +284,18 @@ export async function saveTaxiRules(
   if (typeof body.postseasonMoves === 'boolean') payload.taxiPostseasonMoves = body.postseasonMoves
   if (Object.keys(payload).length) await upsertDynastyConfig(leagueId, payload)
 
-  if (typeof body.enforced === 'boolean' && body.enforced !== readTaxiRulesEnforced(league.settings)) {
+  const merge: Record<string, unknown> = {}
+  if (typeof body.enforced === 'boolean' && body.enforced !== readTaxiRulesEnforced(league.settings)) merge[TAXI_RULES_ENFORCED_KEY] = body.enforced
+  if (body.maxYears !== undefined) {
+    const choice = body.maxYears as number | null
+    if (choice !== readTaxiMaxYears(league.settings)) merge[TAXI_MAX_YEARS_KEY] = storedTaxiMaxYears(choice)
+  }
+  if (Object.keys(merge).length) {
     // Through the settings patch, so the settings lock and audit apply.
-    const res = await executeLeagueSettingsPatch(userId, { leagueId, settingsMerge: { [TAXI_RULES_ENFORCED_KEY]: body.enforced } })
+    const res = await executeLeagueSettingsPatch(userId, { leagueId, settingsMerge: merge })
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string }
-      return { ok: false, status: 400, error: data.error || 'The switch could not be saved.' }
+      return { ok: false, status: 400, error: data.error || 'The setting could not be saved.' }
     }
   }
   return { ok: true }
