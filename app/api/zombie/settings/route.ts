@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
+import { generateRulesDocument } from '@/lib/zombie/rulesDocGenerator'
 
 export const dynamic = 'force-dynamic'
 
@@ -238,6 +239,10 @@ export async function PATCH(req: Request) {
     })
   } else {
     freeRewardConfig = await prisma.zombieFreeRewardConfig.findUnique({ where: { zombieLeagueId: z.id } })
+  }
+
+  if (serumReviveCountPatch !== undefined) {
+    await generateRulesDocument(z.id)
   }
 
   return NextResponse.json({ zombieLeague: row, config, paidConfig, freeRewardConfig })
