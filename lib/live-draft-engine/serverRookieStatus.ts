@@ -132,7 +132,7 @@ export function isEligibleForPlayerPool(playerPool: unknown, rookie: boolean | n
 
 export async function loadServerRookieStatusResolver(leagueId: string): Promise<ServerRookieStatusResolver | null> {
   try {
-    const snapshot = await getWarmDraftPoolSnapshotFast(leagueId)
+    const snapshot = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
     if (!snapshot.warm || !snapshot.payload) return null
     const { entries, provenNonRookies } = snapshot.payload as { entries?: unknown; provenNonRookies?: unknown }
     if (!Array.isArray(entries)) return null
