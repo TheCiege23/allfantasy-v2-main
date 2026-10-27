@@ -355,6 +355,18 @@
 
 /* ── The tree ──────────────────────────────────────────────────────────── */
 
+.af-pb-scroll-cue {
+  margin: 12px 14px 0;
+  padding: 9px 12px;
+  border: 1px solid var(--pb-chip-line);
+  border-radius: 10px;
+  background: var(--pb-chip);
+  color: var(--pb-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .af-pb-scroller {
   overflow-x: auto;
   overflow-y: hidden;
