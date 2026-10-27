@@ -31,7 +31,7 @@ export async function PATCH(req: Request) {
   if (!z) return NextResponse.json({ error: 'Zombie league not found' }, { status: 404 })
 
   const competitiveKeys = [
-    'experienceMode', 'whispererSelectionMode', 'whispererSelection',
+    'experienceMode', 'whispererCount', 'whispererSelectionMode', 'whispererSelection',
     'whispererAmbushCount', 'ambushCountPerWeek', 'ambushRemapMatchup',
     'infectionLossToWhisperer', 'infectionLossToZombie', 'serumReviveCount',
     'autoSerumRevive', 'serumAwardHighScore', 'serumAwardOnBashMaul',
@@ -52,6 +52,16 @@ export async function PATCH(req: Request) {
   }
   if (experienceModePatch !== undefined && !['setup', 'registering'].includes(z.status)) {
     return NextResponse.json({ error: 'Experience mode is locked once the season starts.' }, { status: 409 })
+  }
+
+  const whispererCountPatch = num('whispererCount')
+  if (whispererCountPatch !== undefined &&
+      (whispererCountPatch !== 1 && whispererCountPatch !== 2 ||
+       whispererCountPatch === 2 && (z.sport.toUpperCase() === 'NFL' || (experienceModePatch ?? z.experienceMode) === 'simple'))) {
+    return NextResponse.json({ error: 'Two Whisperers require Enhanced NBA, NHL, or MLB.' }, { status: 400 })
+  }
+  if (experienceModePatch === 'simple' && z.whispererCount === 2 && whispererCountPatch !== 1) {
+    return NextResponse.json({ error: 'Set Whisperer count to one before choosing Simple Zombie.' }, { status: 400 })
   }
 
   const teamCountPatch = num('teamCount')
@@ -126,7 +136,7 @@ export async function PATCH(req: Request) {
   }
 
   const requestedSelection = whispererSelectionModePatch ?? configSelectionPatch
-  if (requestedSelection !== undefined || seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined || experienceModePatch !== undefined) {
+  if (requestedSelection !== undefined || seasonAmbushPatch !== undefined || weeklyAmbushPatch !== undefined || experienceModePatch !== undefined || whispererCountPatch !== undefined) {
     const selected = await prisma.whispererRecord.findUnique({
       where: { zombieLeagueId: z.id },
       select: { id: true },
@@ -144,6 +154,7 @@ export async function PATCH(req: Request) {
     ...(str('status') !== undefined ? { status: str('status') } : {}),
     ...(teamCountPatch !== undefined ? { teamCount: teamCountPatch } : {}),
     ...(experienceModePatch !== undefined ? { experienceMode: experienceModePatch } : {}),
+    ...(whispererCountPatch !== undefined ? { whispererCount: whispererCountPatch } : {}),
     ...(num('currentWeek') !== undefined ? { currentWeek: num('currentWeek') } : {}),
     ...(num('buyInAmount') !== undefined ? { buyInAmount: num('buyInAmount') } : {}),
     ...(bool('isPaid') !== undefined ? { isPaid: bool('isPaid') } : {}),
