@@ -57,6 +57,7 @@ export async function buildWeeklyUpdate(leagueId: string, week: number): Promise
     include: {
       teams: true,
       whispererRecord: true,
+      coWhisperers: true,
       level: true,
       universe: true,
     },
@@ -70,13 +71,13 @@ export async function buildWeeklyUpdate(leagueId: string, week: number): Promise
 ${tierLabel ? `${tierLabel} | ` : ''}${z.sport} | Season ${z.season}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
 
-  const wr = z.whispererRecord
-  const whispererName = z.whispererIsPublic ? (wr?.displayName ?? 'Unknown') : 'Identity hidden'
+  const whisperers = [z.whispererRecord, ...z.coWhisperers].filter((record): record is NonNullable<typeof record> => Boolean(record))
+  const hiddenIds = new Set(!z.whispererIsPublic ? whisperers.map((record) => record.userId) : [])
   const nameForUser = (userId: string) =>
-    !z.whispererIsPublic && wr?.userId === userId
-      ? Promise.resolve('Hidden Whisperer')
-      : displayNameForUser(leagueId, userId)
-  const ambushesLeft = wr?.ambushesRemaining ?? 0
+    hiddenIds.has(userId) ? Promise.resolve('Hidden Whisperer') : displayNameForUser(leagueId, userId)
+  const whispererLines = whisperers.map((record, index) =>
+    `${z.whispererIsPublic ? record.displayName : `Identity hidden #${index + 1}`} — ${record.ambushesRemaining} ambushes remaining`)
+  const ambushesLeft = whisperers.reduce((sum, record) => sum + record.ambushesRemaining, 0)
   const hordeSize = z.teams.filter((t) => t.status === 'Zombie').length
   const survivorCount = z.teams.filter((t) => t.status === 'Survivor').length
 
@@ -89,8 +90,8 @@ ${tierLabel ? `${tierLabel} | ` : ''}${z.sport} | Season ${z.season}
       ? 'None declared'
       : ambushes.map((a) => a.ambushType).join(', ')
 
-  const sectionWhisperer = `🎭 THE WHISPERER
-${whispererName} — ${ambushesLeft} ambushes remaining
+  const sectionWhisperer = `🎭 THE WHISPERERS (${whisperers.length})
+${whispererLines.join('\n') || 'None selected'}
 Horde under command: ${hordeSize} Zombies
 This week's ambush: ${ambushSummary}`
 
