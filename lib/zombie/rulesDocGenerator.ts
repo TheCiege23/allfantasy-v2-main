@@ -56,7 +56,7 @@ function buildSections(
   const sectionOverview = [
     `AllFantasy Zombie League — ${leagueName}`,
     `Sport: ${cfg.label} | Season: ${year} | Mode: ${mode === 'paid' ? 'PAID' : 'FREE'}`,
-    `${leagueName} is an asymmetrical fantasy league where one team begins as the Whisperer and everyone else begins as a Survivor.`,
+    `${leagueName} is an asymmetrical fantasy league where ${z.whispererCount === 2 ? 'two teams begin as Whisperers' : 'one team begins as the Whisperer'} and everyone else begins as a Survivor.`,
     'As the season progresses, infection spreads, the Horde grows, and Survivors fight to stay alive.',
     '',
     `This league plays ${cfg.label} fantasy with ${cfg.lineupFrequency} lineup management.`,
@@ -143,7 +143,9 @@ function buildSections(
     '@CHIMMY ACTIONS',
     'You can interact with @Chimmy for timed actions, status checks, inventory, and rules questions.',
     '@Chimmy will not reveal another player\'s private information.',
-    '@Chimmy can help with: status, inventory, serum protection/revival, defensive weapons, Whisperer matchup swaps, and rules.'
+    z.experienceMode === 'simple'
+      ? '@Chimmy can help with status, inventory, serum protection, and rules. Revival happens automatically when a Zombie has enough serums.'
+      : '@Chimmy can help with status, inventory, serum protection/revival, defensive weapons, Whisperer matchup swaps, and rules.'
   ].join('\n')
 
   const sectionWeeklyTiming = [
@@ -165,7 +167,7 @@ function buildSections(
 
   const sectionWhisperer = [
     'THE WHISPERER',
-    'One team is secretly (or publicly) designated as the Whisperer at the start of the season.',
+    `${z.whispererCount === 2 ? 'Two teams are' : 'One team is'} secretly (or publicly) designated as ${z.whispererCount === 2 ? 'Whisperers' : 'the Whisperer'} at the start of the season.`,
     'The Whisperer infects every Survivor it beats, and leads the Horde.',
     'Whisperers cannot trade players at any time.',
     `Selection mode: ${z.whispererSelectionMode ?? 'random'}`,
@@ -175,13 +177,13 @@ function buildSections(
     'SURVIVORS',
     'Survivors begin the season as the majority. Their goal: survive.',
     'Winning matchups keeps you alive. Losing to a Zombie or Whisperer turns you.',
-    'Serums bring a Zombie back. Weapons are earned by big weeks.',
+    z.experienceMode === 'simple' ? 'One serum automatically revives a Zombie.' : 'Serums bring a Zombie back. Weapons are earned by big weeks.',
     'The last Survivor(s) standing earn the Ultimate Survivor bonus (if enabled).',
   ].join('\n')
 
   const sectionZombie = [
     'THE HORDE (ZOMBIES)',
-    `Once turned, you stay in the Horde until you collect ${reviveSerums} serums and use them.`,
+    `Once turned, you stay in the Horde until you collect ${reviveSerums} serum${reviveSerums === 1 ? '' : 's'} and ${autoSerumRevive ? 'are automatically revived' : 'use them'}.`,
     'Zombies can infect Survivors by beating them in matchups.',
     'The Horde grows each week as more Survivors fall.',
     "An infection takes the victim's whole week to the team that turned them.",
@@ -189,7 +191,7 @@ function buildSections(
 
   const sectionAmbush = [
     'AMBUSHES',
-    `The Whisperer starts with ${z.whispererAmbushCount ?? 1} ambushes, at most ${ambushCountPerWeek} per week.`,
+    z.experienceMode === 'simple' ? 'Ambushes are disabled in Simple Zombie.' : `Each Whisperer starts with ${z.whispererAmbushCount ?? 1} ambushes, at most ${ambushCountPerWeek} per week.`,
     'Before weekly scoring begins, @Chimmy ambush swap <exact Survivor team name> swaps the Whisperer\'s opponent with that Survivor. Other ambush effects are inactive.',
   ].join('\n')
 
