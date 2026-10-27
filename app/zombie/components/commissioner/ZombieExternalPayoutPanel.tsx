@@ -61,10 +61,12 @@ export function ZombieExternalPayoutPanel({ leagueId, canEdit }: { leagueId: str
         method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leagueId, week, winnerRosterId, amountCents: Math.round(parsed * 100), providerName, status, reference }),
       })
-      const data = (await response.json()) as { error?: string; payout?: Payout }
+      const data = (await response.json()) as { error?: string; payout?: Payout; reportRefreshPending?: boolean }
       if (!response.ok || !data.payout) throw new Error(data.error ?? 'Could not record prize.')
       setPayouts((current) => [data.payout!, ...current.filter((p) => p.week !== week)])
-      setMessage('External prize recorded. The weekly report will show this amount when generated.')
+      setMessage(data.reportRefreshPending
+        ? 'Prize recorded, but the existing report could not refresh. Save again to retry.'
+        : 'External prize recorded. The weekly report shows this amount when generated.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not record prize.')
     } finally {
