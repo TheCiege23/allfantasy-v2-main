@@ -460,7 +460,7 @@ function DraftBoardCellInner({
                 </span>
               ) : null}
               {pick.experienceBadge ? (
-                <span className="shrink-0 rounded border border-cyan-400/30 bg-cyan-500/12 px-1 text-[10px] font-bold uppercase tracking-wide text-cyan-100/95">
+                <span className="shrink-0 rounded border border-cyan-400/30 bg-cyan-500/12 px-1 text-[11px] font-bold uppercase tracking-wide text-cyan-100/95">
                   {pick.experienceBadge}
                 </span>
               ) : null}
