@@ -77,7 +77,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     return myEntries.find((entry) => !entry.isComplete) ?? activeViewerEntry ?? myEntries[0] ?? null
   }, [myEntries, view.activeEntry, view?.viewerUserId])
   const primaryButtonLabel = !primaryEntry
-    ? tournamentLocked ? "Bracket entry closed" : "Create Your First Bracket"
+    ? tournamentLocked ? "Bracket entry closed" : !canCreateEntry ? "Bracket limit reached" : "Create Your First Bracket"
     : primaryEntry.isComplete
       ? "View/Edit Bracket"
       : "Complete Bracket"
@@ -272,7 +272,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                 }
                 openEntry(primaryEntry.id)
               }}
-              disabled={creatingEntry || (tournamentLocked && !primaryEntry)}
+              disabled={creatingEntry || (!canCreateEntry && !primaryEntry)}
               data-testid="playoff-fill-bracket-cta"
               className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
