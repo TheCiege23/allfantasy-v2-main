@@ -156,7 +156,7 @@ export default function ZombieArmoryPage() {
                   Register one before kickoff: if you lose to a Zombie or the Whisperer that week, you stay human and the
                   serum is spent. If you win, you keep it.
                 </p>
-                {canAct && readySerums.length ? (
+                {canAct && readySerums.length && !armedShield ? (
                   <button
                     type="button"
                     onClick={() => void run('@Chimmy use serum protect myself')}
