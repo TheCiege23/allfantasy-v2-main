@@ -230,7 +230,7 @@ Bomb status: ${bomb ? 'Held' : 'None'}\nThis week's awards: ${awardLines.join(';
       }
     }
     sectionDangerMatchups = `⚠️ DANGER MATCHUPS — WEEK ${nextWeek}
-${danger.slice(0, 3).join('\n') || '—'}`
+${danger.join('\n') || '—'}`
   }
 
   let sectionUniverseMovement: string | undefined
