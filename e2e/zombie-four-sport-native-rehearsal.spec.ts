@@ -135,7 +135,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       expect(hordeRosterId).toBeTruthy()
       await prisma.zombieLeagueTeam.update({
         where: { leagueId_rosterId: { leagueId, rosterId: hordeRosterId! } },
-        data: { status: 'Zombie', weekBecameZombie: week, killedByRosterId: hordeRoster.id },
+        data: { status: 'Zombie', weekBecameZombie: week, killedByRosterId: rosterIdByUser.get(whisperer.userId)! },
       })
       const pending = await runWeeklyResolution(active.id, week)
       expect(pending.reason).toBe('matchups_incomplete')
