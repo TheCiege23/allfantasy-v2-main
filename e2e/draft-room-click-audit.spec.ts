@@ -1851,7 +1851,7 @@ test.describe('@draft-room click audit', () => {
     await gotoDraftRoomHarness(page, `/e2e/draft-room?leagueId=${leagueId}&sport=NFL&e2eRoom=1`)
     await openDraftRoomHarness(page, { e2eRoom: true })
 
-    const intelligenceDetails = page.getByTestId('draft-right-dock-panel-queue').getByTestId('draft-queue-intelligence-details')
+    const intelligenceDetails = page.getByTestId('draft-right-dock-panel-queue').getByTestId('draft-queue-intelligence')
     await expect(intelligenceDetails).toBeVisible()
     await expect(intelligenceDetails).not.toHaveAttribute('open', '')
     await intelligenceDetails.locator('summary').click()
