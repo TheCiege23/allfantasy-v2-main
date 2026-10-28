@@ -68,6 +68,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       const rosters = await prisma.roster.findMany({ where: { leagueId }, orderBy: { id: 'asc' } })
       expect(rosters).toHaveLength(8)
       rosters.sort((a, b) => Number(b.platformUserId === userIds[0]) - Number(a.platformUserId === userIds[0]))
+      const rosterIdByUser = new Map(userIds.map((userId, index) => [userId, rosters[index].id]))
       for (let i = 0; i < 8; i++) {
         const oldUserId = rosters[i].platformUserId
         await prisma.leagueTeam.updateMany({
@@ -130,9 +131,10 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
         !whispererUsers.has(ownerBySeasonRoster.get(m.awayRosterId ?? '') ?? ''))
       expect(hordeMatchup).toBeTruthy()
       const hordeUserId = ownerBySeasonRoster.get(hordeMatchup!.homeRosterId)!
-      const hordeRoster = rosters.find(row => row.platformUserId === hordeUserId)!
+      const hordeRosterId = rosterIdByUser.get(hordeUserId)
+      expect(hordeRosterId).toBeTruthy()
       await prisma.zombieLeagueTeam.update({
-        where: { leagueId_rosterId: { leagueId, rosterId: hordeRoster.id } },
+        where: { leagueId_rosterId: { leagueId, rosterId: hordeRosterId! } },
         data: { status: 'Zombie', weekBecameZombie: week, killedByRosterId: hordeRoster.id },
       })
       const pending = await runWeeklyResolution(active.id, week)
@@ -164,7 +166,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       if (sport === 'NFL') {
         await prisma.zombieLeague.update({ where: { id: active.id }, data: { isPaid: true } })
         const paid = await page.request.put('/api/zombie/weekly-payout', { data: {
-          leagueId, week, winnerRosterId: rosters.find(r => r.platformUserId === whisperer.userId)!.id,
+          leagueId, week, winnerRosterId: rosterIdByUser.get(whisperer.userId)!,
           amountCents: 2750, providerName: 'Other', status: 'recorded', reference: `${marker}-external`,
         }, timeout: 120_000 })
         expect(paid.ok(), await paid.text()).toBeTruthy()
