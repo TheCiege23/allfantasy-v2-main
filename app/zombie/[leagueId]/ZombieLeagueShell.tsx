@@ -249,7 +249,8 @@ export default function ZombieLeagueShell({
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"
-                      className="rounded-md border border-emerald-300/40 bg-emerald-500/20 px-2 py-1 text-[11px] font-semibold text-emerald-100 disabled:opacity-50"
+                      className="min-h-11 min-w-11 rounded-md border border-emerald-300/40 bg-emerald-500/20 px-3 py-2 text-[11px] font-semibold text-emerald-100 disabled:opacity-50"
+                      aria-label="Accept horde sit-out nomination"
                       onClick={() => void submitSitOutDecision('yes')}
                       disabled={Boolean(submittingDecision)}
                     >
@@ -257,14 +258,15 @@ export default function ZombieLeagueShell({
                     </button>
                     <button
                       type="button"
-                      className="rounded-md border border-rose-300/40 bg-rose-500/20 px-2 py-1 text-[11px] font-semibold text-rose-100 disabled:opacity-50"
+                      className="min-h-11 min-w-11 rounded-md border border-rose-300/40 bg-rose-500/20 px-3 py-2 text-[11px] font-semibold text-rose-100 disabled:opacity-50"
+                      aria-label="Decline horde sit-out nomination"
                       onClick={() => void submitSitOutDecision('no')}
                       disabled={Boolean(submittingDecision)}
                     >
                       {submittingDecision === 'no' ? 'Submitting...' : 'No, keep me active'}
                     </button>
                   </div>
-                  {notificationError ? <p className="mt-2 text-rose-200">{notificationError}</p> : null}
+                  {notificationError ? <p className="mt-2 text-rose-200" role="status">{notificationError}</p> : null}
                 </div>
               ) : (
                 <p className="text-white/50">No personal horde alerts right now.</p>
@@ -376,7 +378,8 @@ export default function ZombieLeagueShell({
               <button
                 type="button"
                 onClick={() => setNotificationsOpen((value) => !value)}
-                className="relative rounded-xl border border-white/10 bg-white/5 p-2 text-white/85"
+                className="relative flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 p-2 text-white/85"
+                aria-expanded={notificationsOpen}
                 aria-label={notificationCount > 0 ? `Zombie notifications, ${notificationCount} items` : 'Zombie notifications'}
               >
                 <Bell className="h-4 w-4" />
