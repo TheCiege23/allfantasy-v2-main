@@ -6,7 +6,7 @@ Implementation and product-setup status reviewed October 28, 2026 (America/New_Y
 
 The Android distribution is a Bubblewrap Trusted Web Activity, package `ai.allfantasy.app`. The repository now implements Google Publisher verification, encrypted receipts with permanent ownership, token fulfillment/reversal, subscription lifecycle updates, authenticated Pub/Sub notifications, restore, native localized prices, renewal cancellation on account deletion and hourly reconciliation. Checkout is disabled by default. Web Stripe and Apple purchase paths remain available.
 
-**Not activated or device verified:** Play products, Publisher credentials and Pub/Sub must be configured, the additive receipt migration must be applied, and a signed internal-track app must pass the device matrix below. The checked-in wrapper template keeps billing disabled; the private `C:/af-twa` manifest already has billing enabled and version code 3, but no generated project or new signed bundle was inspected. Read the actual latest Play version code before building. A website deploy alone cannot complete the Play release.
+**Not activated or device verified:** The receipt migration is applied, existing Publisher catalog access works, and authenticated Pub/Sub delivery resources are created. Purchase/refund permissions, corrected subscription base plans, Play Console notification settings and hosting configuration still need verification; and a signed internal-track app must pass the device matrix below. The checked-in wrapper template keeps billing disabled; the private `C:/af-twa` manifest already has billing enabled and version code 3, but no generated project or new signed bundle was inspected. Read the actual latest Play version code before building. A website deploy alone cannot complete the Play release.
 
 The first claim of a stock TWA purchase requires the signed-in account's saved checkout authorization; every later restore must match its permanent owner. An unclaimed purchase with lost local authorization needs support review. The released TWA bridge does not sign an AllFantasy account ID, so first-claim binding cannot prove Google-account identity. See the [ownership decision](../architecture/google-play-billing.md).
 
@@ -14,7 +14,7 @@ Do not advertise Android purchases until setup and real device tests pass. Exist
 
 ## Expected Console catalog
 
-The owner confirmed on October 28 that the products are created. Their IDs, active states and exact prices still need verification through Publisher API. For the stock TWA bridge, use **eight subscription products**, one per billing interval. Each product should have one eligible auto-renewing base plan (`standard`) with the matching period and no introductory offers at launch. Map the verified product AND base-plan identifier to the internal SKU; never trust a SKU from a client request.
+Publisher API inspection on October 28 confirmed all eight existing subscription products and three token packs. The Legacy tier uses the stable `af_war_room` product IDs. All three pack prices match. The existing subscriptions use `monthly`/`yearly` base-plan IDs, and all four products named yearly incorrectly have a monthly billing duration (`P1M`). Replace these with one eligible `standard` base plan per product and verify `P1Y` on yearly products before enabling checkout. Deactivate superseded plans for new purchases; review any existing purchasers separately. For the stock TWA bridge, use **eight subscription products**, one per billing interval. Each product should have one eligible auto-renewing base plan (`standard`) with the matching period and no introductory offers at launch. Map the verified product AND base-plan identifier to the internal SKU; never trust a SKU from a client request.
 
 Do not combine monthly and yearly base plans under one product with this wrapper. The current Digital Goods bridge exposes the first eligible plan/offer, so it cannot reliably offer both intervals for one product. Verify the returned billing period before purchase. See [Google's Billing 8 migration guide](https://github.com/GoogleChrome/android-browser-helper/blob/main/playbilling/docs/play-billing-library-8-migration.md).
 
@@ -22,7 +22,7 @@ Do not combine monthly and yearly base plans under one product with this wrapper
 | --- | --- | --- | --- | --- |
 | `af_pro_monthly` / `af_pro_yearly` | AF Pro | `standard` | $9.99 / $79.99 | `af_pro_monthly` / `af_pro_yearly` |
 | `af_commissioner_monthly` / `af_commissioner_yearly` | AF Commissioner | `standard` | $14.99 / $129.99 | `af_commissioner_monthly` / `af_commissioner_yearly` |
-| `af_legacy_monthly` / `af_legacy_yearly` | AF Legacy | `standard` | $9.99 / $79.99 | `af_war_room_monthly` / `af_war_room_yearly` |
+| `af_war_room_monthly` / `af_war_room_yearly` | AF Legacy | `standard` | $9.99 / $79.99 | `af_war_room_monthly` / `af_war_room_yearly` |
 | `af_supreme_monthly` / `af_supreme_yearly` | AF Supreme | `standard` | $19.99 / $159.99 | `af_supreme_monthly` / `af_supreme_yearly` |
 
 Supreme includes Pro and Commissioner for new purchases. Legacy remains separate. Preserve benefits already grandfathered onto existing subscribers. Plans grant feature access and their published Chimmy allowance; they do not mint token packs each renewal.

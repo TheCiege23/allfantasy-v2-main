@@ -13,7 +13,7 @@ describe("Google Play authoritative billing state", () => {
     const all = playBillingCatalog()
     expect(all).toHaveLength(11)
     expect(new Set(all.map(p => p.productId)).size).toBe(11)
-    expect(all.find(p => p.productId === "af_legacy_yearly")?.sku).toBe("af_war_room_yearly")
+    expect(all.find(p => p.productId === "af_war_room_yearly")?.sku).toBe("af_war_room_yearly")
     expect(all.filter(p => p.type === "subscription").every(p => p.tokenAmount === null)).toBe(true)
   })
   it.each([["ACTIVE", "active"], ["CANCELED", "canceled"], ["IN_GRACE_PERIOD", "grace"], ["ON_HOLD", "expired"], ["PAUSED", "expired"], ["EXPIRED", "expired"], ["PENDING", "pending"], ["PENDING_PURCHASE_CANCELED", "expired"]])("maps %s to %s", (state, expected) => {
