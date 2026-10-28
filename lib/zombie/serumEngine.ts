@@ -33,7 +33,9 @@ async function rosterFacedInfectionRisk(leagueId: string, userId: string, week: 
   const status = await prisma.zombieLeagueTeam.findUnique({
     where: { leagueId_rosterId: { leagueId, rosterId: opponentRoster.id } }, select: { status: true },
   })
-  return status?.status === 'Zombie' || status?.status === 'Whisperer'
+  const config = await getZombieLeagueConfig(leagueId)
+  return (status?.status === 'Zombie' && config?.infectionLossToZombie === true) ||
+    (status?.status === 'Whisperer' && config?.infectionLossToWhisperer === true)
 }
 
 export async function processSerumAction(
@@ -265,6 +267,9 @@ export async function finalizePendingSerumsForWeek(leagueId: string, week: numbe
 
   const pending = await prisma.zombieTeamItem.findMany({
     where: {
+      itemType: { contains: 'serum' },
+      isUsed: false,
+      isExpired: false,
       activationState: 'pending_activation',
       activatesAtWeek: week,
       team: { zombieLeagueId: z.id },
