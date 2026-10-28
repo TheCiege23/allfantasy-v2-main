@@ -15,7 +15,7 @@ export function PirateRulesEditor({ leagueId, onSaved }: { leagueId: string; onS
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
-    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/pirate`, {
+    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/pirate?view=rules`, {
       credentials: 'include', cache: 'no-store', signal: controller.signal,
     })
       .then(async (response) => {

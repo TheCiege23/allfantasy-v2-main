@@ -15,13 +15,21 @@ async function userId() {
   return session?.user?.id ?? null
 }
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
   const actor = await userId()
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
   const access = await resolveLeagueMembership(leagueId, actor)
   if (!access.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   try {
+    if (req.nextUrl.searchParams.get('view') === 'rules') {
+      const league = await prisma.league.findUnique({
+        where: { id: leagueId },
+        select: { leagueType: true, leagueVariant: true, settings: true },
+      })
+      if (!league || !isPirateLeague(league)) return NextResponse.json({ error: 'Pirate League not found.' }, { status: 404 })
+      return NextResponse.json({ rules: readPirateRules(league.settings) })
+    }
     await seedPirateClaims(leagueId)
     return NextResponse.json(await getPirateDashboard(leagueId, actor))
   } catch (error) {
