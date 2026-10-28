@@ -87,6 +87,9 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  // Exact rehearsal origin used by the staging-only cron runner to invoke our authenticated
+  // import route. Provider reads remain inside that route's existing bounded importers.
+  { name: 'first-party', why: 'isolated Zombie rehearsal app — authenticated cron invocation', test: /^zombie-web-staging\.up\.railway\.app$/i },
   // Reviewed college/NFL biographies in verifiedNcaafReserves.ts are attribution
   // links returned with season-readiness evidence, never live provider reads.
   // The NEVER_FETCHED assertion below must continue to fail if a caller fetches them.
