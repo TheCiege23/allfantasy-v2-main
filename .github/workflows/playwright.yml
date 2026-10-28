@@ -319,7 +319,8 @@ jobs:
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         NEXTAUTH_SECRET: ci-nextauth-secret
         NEXTAUTH_URL: http://localhost:3000
-        NODE_OPTIONS: --max-old-space-size=8192
+        NODE_OPTIONS: --max-old-space-size=8192 --conditions=react-server
+        AF_ZOMBIE_REHEARSAL: '1'
         E2E_WARM_ROUTES: /api/auth/csrf,/api/auth/session,/api/leagues,/api/zombie/weekly-payout
       run: npx playwright test e2e/zombie-four-sport-native-rehearsal.spec.ts --project=chromium
     # The phone gate. Two device projects over the public routes only — no login,
