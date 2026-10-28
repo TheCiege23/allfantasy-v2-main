@@ -21,6 +21,8 @@ export type MobileDraftTab = 'board' | 'players' | 'queue' | 'intel' | 'helper' 
 export type DraftRoomShellProps = {
   /** Premium ambient gradient for `/draft/[id]/snake` redraft room. */
   surfaceVariant?: 'default' | 'redraft_snake'
+  /** Reserve usable desktop pool space for drafts with a pick-order board. */
+  playerSpacePriority?: boolean
   topBar: ReactNode
   managerStrip: ReactNode
   auctionStrip?: ReactNode
@@ -75,6 +77,7 @@ const MOBILE_TABS = [
 
 export function DraftRoomShell({
   surfaceVariant = 'default',
+  playerSpacePriority = false,
   topBar,
   managerStrip,
   draftBoard,
@@ -268,7 +271,7 @@ export function DraftRoomShell({
       : 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0b1020] text-white'
 
   return (
-    <div className={`draft-touch-room ${surfaceClass}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} data-testid="draft-room-shell" data-draft-surface={surfaceVariant}>
+    <div className={`draft-touch-room ${surfaceClass}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} data-testid="draft-room-shell" data-player-space-priority={playerSpacePriority ? 'true' : 'false'}>
       {topBar}
       {managerStrip}
 

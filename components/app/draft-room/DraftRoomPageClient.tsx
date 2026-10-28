@@ -4642,6 +4642,7 @@ export function DraftRoomPageClient({
     ) : null}
     <DraftRoomShell
       layout="premium"
+      playerSpacePriority={session.draftType !== 'auction'}
       surfaceVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
       // D.6 — War Room moved out of the left aside. teamPanel=null collapses the
       // aside; the WarRoomPopup below renders the same DraftTeamPanel content as
