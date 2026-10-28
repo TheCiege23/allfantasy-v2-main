@@ -841,6 +841,7 @@ function PlayerPanelInner({
       }
       data-testid="draft-player-panel"
       data-phone-layout={phoneLayout ? 'true' : 'false'}
+      data-filters-expanded={filtersOpen}
     >
       <div
         className={`pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r ${rs ? 'via-cyan-400/30' : 'via-violet-400/15'} from-transparent to-transparent`}
@@ -869,6 +870,12 @@ function PlayerPanelInner({
               data-testid="draft-player-search-input"
             />
           </div>
+          <button type="button" className="draft-filter-toggle rounded-lg border border-white/15 px-3 text-sm text-cyan-100 md:hidden"
+            data-testid="draft-player-filter-toggle" aria-expanded={filtersOpen} aria-controls={filterRegionId}
+            aria-label={`Filters, ${filtered.length} players`}
+            onClick={() => setFiltersOpen(open => !open)}>
+            {filtersOpen ? 'Done' : 'Filters'}
+          </button>
           {/* D.6.1 — position pills replacing the legacy <select>. Each pill shows the
               available pool count for that position; the active pill is highlighted with
               the cyan→violet gradient that matches the rest of the Sleeper-style chrome.
@@ -1013,11 +1020,7 @@ function PlayerPanelInner({
             Devy round — select a college/devy-eligible player.
           </div>
         )}
-        <button type="button" className="draft-filter-toggle mx-2 mb-1 rounded-lg border border-white/15 px-3 text-sm text-cyan-100 md:hidden"
-          data-testid="draft-player-filter-toggle" aria-expanded={filtersOpen} aria-controls={filterRegionId}
-          onClick={() => setFiltersOpen(open => !open)}>
-          {filtersOpen ? 'Hide filters' : `Filters · ${filtered.length} players`}
-        </button>
+
         <div data-testid="draft-extra-player-filters" data-expanded={filtersOpen} id={filterRegionId} className={filtersOpen ? 'block' : 'hidden md:block'}>
         <div
           className={`flex flex-wrap items-center gap-1 border-b border-white/[0.05] px-2 py-1 sm:px-3 ${rs ? 'bg-[#050c18]/95' : 'bg-black/10'}`}
