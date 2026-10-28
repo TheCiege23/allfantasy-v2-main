@@ -42,7 +42,8 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
       publishedLineup && typeof publishedLineup === 'object' &&
       Object.keys((publishedLineup as { positionConstraints?: Record<string, unknown> }).positionConstraints ?? {}).length > 0,
     )
-    const lineupNotMapped = hasPublishedLineup && !(league.roster_positions?.length)
+    const mappedPositions = (league as Record<string, unknown>).roster_positions
+    const lineupNotMapped = hasPublishedLineup && (!Array.isArray(mappedPositions) || mappedPositions.length === 0)
 
     const viewerTeam = raw.teams.find((t) => t.managerId.startsWith('fantrax-user:'))
 
