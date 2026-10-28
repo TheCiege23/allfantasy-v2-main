@@ -25,7 +25,7 @@ for (const job of jobs) {
       return counts
     }, {})
     console.log(JSON.stringify({ job, applied: result.applied, outcomes }))
-    if ((result.rows ?? []).some((row) => /^(team-mismatch|start-time-mismatch|not-cfp-postseason|wrong-cup-season|not-nba-cup-event|invalid-final-score)$/.test(row.outcome))) {
+    if ((result.rows ?? []).some((row) => /^(team-mismatch|start-time-mismatch|not-cfp-postseason|not-cfp-event|wrong-cup-season|not-nba-cup-event|invalid-final-score)$/.test(row.outcome))) {
       failed = true
     }
   } catch (error) {
