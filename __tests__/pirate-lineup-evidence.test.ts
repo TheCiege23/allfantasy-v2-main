@@ -95,6 +95,15 @@ describe('immutable Pirate lineup evidence', () => {
     expect(evaluatePirateEvidencePair(before, after).decision).toBe('review')
   })
 
+  it('does not penalize a possible secondary-position starter based on the stored primary position', () => {
+    const before = evidence('before', { sport: 'MLB', starterSlots: [['3B', 1]] })
+    before.players[0].position = '3B'
+    before.players.push({ ...before.players[0], playerId: 'multi', playerName: 'Multi-position starter',
+      position: '1B', slotType: '3B', lockedAtSnapshot: false })
+    const after = evidence('after', { sport: 'MLB', starterSlots: [['3B', 1]], players: before.players.map((p) => ({ ...p, lockedAtSnapshot: true })) })
+    expect(evaluatePirateEvidencePair(before, after)).toMatchObject({ decision: 'review', reason: expect.stringContaining('secondary positions') })
+  })
+
   it('can rule an inactive starter frozen at an earlier game, while an empty future slot still waits', () => {
     const before = evidence('before', { terminalEvent: false })
     before.players.push({ ...before.players[0], playerId: 'out', playerName: 'Inactive QB', slotType: 'QB',
@@ -174,6 +183,16 @@ describe('immutable Pirate lineup evidence', () => {
     }] as never)
     await capturePirateLineupEvidence({ ...input, week: 12 }, db as never)
     expect(createMany.mock.calls.at(-1)?.[0].data[0].metadata.players[0].availabilityKnown).toBe(false)
+    db.redraftRoster.findMany.mockResolvedValue([{ id: 'roster',
+      legacyRoster: { id: 'af-roster', playerData: { lineup_sections: { starters: [], bench: [{ id: 'bench', position: 'QB' }] } } },
+      players: [{ playerId: 'bench', playerName: 'Bench QB', position: 'QB', team: 'KC', sport: 'NFL', slotType: 'BENCH', byeWeek: null }],
+    }] as never)
+    for (const [week, status, expectedKnown] of [[13, 'OUT', false], [14, 'IR', true]] as const) {
+      db.sportsInjury.findMany.mockResolvedValue([{ playerId: 'bench', playerName: 'Bench QB', team: 'KC', position: 'QB', sport: 'NFL',
+        status, fetchedAt: new Date('2026-10-26T00:15:00Z'), date: new Date('2026-10-01T00:00:00Z'), source: 'fixture' }] as never)
+      await capturePirateLineupEvidence({ ...input, week }, db as never)
+      expect(createMany.mock.calls.at(-1)?.[0].data[0].metadata.players[0].availabilityKnown).toBe(expectedKnown)
+    }
   })
 
   it('captures a waiver witness only after the manager-specific add checks pass', async () => {

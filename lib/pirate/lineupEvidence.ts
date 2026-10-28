@@ -1,7 +1,9 @@
 import { Prisma, type PrismaClient } from '@prisma/client'
 import { createHash } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
-import { createInjuryRowMatcher } from '@/lib/injuries/matchInjuryRows'
+import { createInjuryRowMatcher, injuryClaimAsOf } from '@/lib/injuries/matchInjuryRows'
+import { injuryStaleAfterHours } from '@/lib/injuries/injuryRecency'
+import { isHealthyDesignation, isOutDesignation, isRuledOut } from '@/lib/core-app/injuryStatus'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
@@ -99,6 +101,9 @@ export async function capturePirateLineupEvidence(input: {
     now.getTime() >= injurySync.lastSuccessAt.getTime() && now.getTime() - injurySync.lastSuccessAt.getTime() <= INJURY_FRESH_MS &&
     (!injurySync.lastErrorAt || injurySync.lastErrorAt <= injurySync.lastSuccessAt) && !injurySync.recordsSkipped && injuries.length < 5000
   const injuryMatch = createInjuryRowMatcher(injuries, sport)
+  const reportKnown = (report: typeof injuries[number] | null | undefined) => !report || (knownStatus(report.status) &&
+    (isHealthyDesignation(report.status) || (isRuledOut(report.status) && !isOutDesignation(report.status)) ||
+      now.getTime() - injuryClaimAsOf(report).getTime() <= injuryStaleAfterHours(sport) * 60 * 60 * 1000))
   const reportedNames = new Set(injuries.map((row) => normalizeMatchName(row.playerName)))
   const injuryIdentityKnown = (name: string, match: ReturnType<typeof injuryMatch>) =>
     !(match && 'ambiguous' in match) && (!!match || !reportedNames.has(normalizeMatchName(name)))
@@ -170,7 +175,7 @@ export async function capturePirateLineupEvidence(input: {
           : weeklySlot
         const hit = injuryMatch({ name: p.playerName, team, position: p.position })
         const report = hit && 'rows' in hit ? hit.rows[0] : null
-        const availabilityKnown = injuryFeedFresh && injuryIdentityKnown(p.playerName, hit) && (!report || knownStatus(report.status)) &&
+        const availabilityKnown = injuryFeedFresh && injuryIdentityKnown(p.playerName, hit) && reportKnown(report) &&
           (sport !== 'NFL' || currentTeams.has(p.playerId) || p.position === 'DEF') && (!!kickoff || p.byeWeek === input.week) &&
           // A stored bye can belong to the player's former club. Conflicting
           // schedule evidence must be reviewed before any protection penalty.
@@ -200,7 +205,7 @@ export async function capturePirateLineupEvidence(input: {
         const report = match && 'rows' in match ? match.rows[0] : null
         const kickoff = lockTeamLookupKeys(sport, player.team).map((key) => schedule.byTeam.get(key)).find((d): d is Date => !!d)
         return { ...player, injuryStatus: report?.status ?? null,
-          availabilityKnown: injuryFeedFresh && injuryIdentityKnown(player.playerName, match) && (!report || knownStatus(report.status)) && kickoff?.toISOString() === player.kickoffAt,
+          availabilityKnown: injuryFeedFresh && injuryIdentityKnown(player.playerName, match) && reportKnown(report) && kickoff?.toISOString() === player.kickoffAt,
           addableBeforeLock: player.certifiedEventAt === eventAt && player.addableBeforeLock === true &&
             !(player.aliases ?? [player.playerId]).some((id) => rosteredIds.has(id)) }
       })
@@ -231,7 +236,7 @@ export async function capturePirateLineupEvidence(input: {
               const match = injuryMatch({ name: row.full_name, team, position: row.position })
               if (!injuryIdentityKnown(row.full_name, match)) continue
               const report = match && 'rows' in match ? match.rows[0] : null
-              if (report && !knownStatus(report.status)) continue
+              if (!reportKnown(report)) continue
               const candidate: EvidencePlayer = { playerId: unified.playerId, playerName: row.full_name, position: row.position,
                 slotType: 'WAIVER', injuryStatus: report?.status ?? null, team, kickoffAt: kickoff.toISOString(),
                 availabilityKnown: injuryFeedFresh, addableBeforeLock: true, lockedAtSnapshot: false, aliases, certifiedEventAt: eventAt }
@@ -319,6 +324,10 @@ export function evaluatePirateEvidencePair(before: PirateLineupEvidence, after: 
   const finding = evaluatePirateLineup({ sport: after.sport, week: after.week,
     rosterConfig: { starterCapacities: new Map(after.starterSlots), benchSlots: 0, irSlots: 0, taxiSlots: 0, maxRosterSize: 100, source: 'commissioner' },
     roster, waivers, lineupAtLockCertified: certified, availabilityAtLockCertified: certified, waiverPoolCertified: false })
+  if (finding.issues.some((issue) => issue.includes('position-ineligible') || issue.includes('extra starter'))) {
+    return { ...finding, decision: 'review' as const,
+      reason: 'Starter eligibility or slot counts need verification, including any secondary positions. Protections stay during review.' }
+  }
   if (finding.decision === 'forfeit') {
     const activeAtOwnGame = finding.replacementIds.every((id) => {
       const player = [...after.players, ...after.waivers ?? []].find((p) => p.playerId === id)
