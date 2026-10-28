@@ -112,4 +112,22 @@ describe('buildCanonicalImportBundle', () => {
     expect(b.settingsSnapshot.scoringSettings?.rules).toMatchObject({ rec: 1, idp_tkl: 0.5 })
     expect(b.warnings.some((warning) => warning.code === 'scoring_preset_inferred')).toBe(false)
   })
+
+  it('uses the NBA points preset and preserves a Fantrax league\'s actual stat weights', () => {
+    const b = buildCanonicalImportBundle(baseNormalized({
+      source: { source_provider: 'fantrax', source_league_id: 'nba-public', imported_at: new Date().toISOString() },
+      league: { ...baseNormalized().league, sport: 'NBA', scoring: 'HEAD_TO_HEAD_POINTS_BASED', rosterSize: 14 },
+      scoring: {
+        scoring_format: 'HEAD_TO_HEAD_POINTS_BASED',
+        rules: [
+          { stat_key: 'pts', points_value: 1 },
+          { stat_key: 'reb', points_value: 1.25 },
+          { stat_key: 'ast', points_value: 1.5 },
+        ],
+      },
+    }))
+    expect(b.scoringPresetId).toBe('nba_points')
+    expect(b.settingsSnapshot.scoringSettings?.rules).toMatchObject({ pts: 1, reb: 1.25, ast: 1.5 })
+    expect(b.warnings.some((warning) => warning.code === 'scoring_preset_inferred')).toBe(false)
+  })
 })
