@@ -575,7 +575,13 @@ async function zombieNotesFor(
     const survivors = teams.filter((t) => norm(t) === 'survivor').length
     const zombies = teams.filter((t) => norm(t) === 'zombie').length
 
-    const window = tradeWindow({ survivors, teamCount: teams.length })
+    const config = await prisma.zombieLeagueConfig.findUnique({
+      where: { leagueId }, select: { zombieTradeBlocked: true },
+    }).catch(() => null)
+    const window = tradeWindow({
+      survivors, zombies, teamCount: teams.length,
+      zombieTradeBlocked: config?.zombieTradeBlocked ?? false,
+    })
     if (window) notes.push(window.basis)
 
     const serum = serumValue({ zombieCount: zombies, teamCount: teams.length })
