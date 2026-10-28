@@ -21,9 +21,9 @@ import { SUPPORT_WIDGET_FEEDBACK_TYPE, SUPPORT_WIDGET_OPEN_EVENT, SUPPORT_WIDGET
  * - Positioned beside the existing Chimmy FAB (whose offsets already clear MobileBottomTabs) so
  *   the floating cluster stays deconflicted at every breakpoint.
  */
-export function SupportCrestWidget() {
+export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: string | null }) {
   const [open, setOpen] = useState(false)
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(defaultEmail ?? '')
   const [message, setMessage] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
