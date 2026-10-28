@@ -35,8 +35,12 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
     const bucket = byName.get(key) ?? []
     bucket.push(row); byName.set(key, bucket)
   }
+  const hasSleeperRoster = sport === 'NFL' && evidence.some((row) => row.source === 'sleeper' && fresh(row, now))
   const out: T[] = []
   for (const row of rows) {
+    if (currentOnly && ['NBA', 'NHL', 'MLB'].includes(sport) && row.source !== 'rolling_insights') continue
+    // A null Sleeper team is an authoritative free-agent/retired statement.
+    if (currentOnly && hasSleeperRoster && (row.source !== 'sleeper' || !live(row, now))) continue
     const matches = (byName.get(normalizeMatchName(row.name)) ?? []).filter((other) => verifiedRosterMatch(row, other))
     const verified = matches.length === 1 ? matches[0] : undefined
     if (currentOnly && !live(row, now) && !verified) continue

@@ -25,3 +25,8 @@ describe('draft reads stored RI season statistics', () => {
     expect(line?.wins).toBeUndefined(); expect(line?.shutouts).toBeUndefined()
   })
 })
+
+it('does not mistake unverified RI season units for minutes per game', async () => {
+  findMany.mockResolvedValue([{ playerId: '1975', season: '2026', gamesPlayed: 2, position: 'SG', stats: { games_played: 2, points: 0, minutes: 115 } }])
+  expect((await loadStoredDraftSeasonStats('NBA', ['1975'], 2026)).get('1975')?.nbaDraftStats?.minutesPerGame).toBeNull()
+})

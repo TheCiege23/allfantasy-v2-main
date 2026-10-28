@@ -31,3 +31,19 @@ describe('current pro roster reconciliation', () => {
     expect(reconcileCurrentProRows('NBA', [ri], [other], true, now)[0]?.position).toBe('C')
   })
 })
+
+it('never restores an NFL free agent team from another provider', () => {
+  const sleeper = row({ source: 'sleeper', team: null, status: 'Active', dob: '1990-01-01' })
+  const vendor = row({ source: 'thesportsdb', status: 'Active', dob: '1990-01-01' })
+  expect(reconcileCurrentProRows('NFL', [sleeper, vendor], [sleeper, vendor], true, now)).toHaveLength(0)
+})
+it('preserves generational suffixes when a birthday is unavailable', () => {
+  expect(verifiedRosterMatch(row({ name: 'Gary Trent' }), row({ name: 'Gary Trent Jr.' }))).toBe(false)
+})
+
+it('does not draft a second unscorable SportsDB identity in daily sports', () => {
+  const ri = row({ dob: '1990-01-01' })
+  const tsdb = row({ source: 'thesportsdb', status: 'Active', position: 'PF', dob: '1990-01-01' })
+  const result = reconcileCurrentProRows('NBA', [ri, tsdb], [ri, tsdb], true, now)
+  expect(result).toHaveLength(1); expect(result[0]?.source).toBe('rolling_insights')
+})

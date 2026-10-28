@@ -49,7 +49,7 @@ export function photoJobs() {
 export function qualityJobs(season) {
   return [
     ...profileJobs(),
-    { name: 'sleeper_rows_NFL', sport: 'NFL', kind: 'sleeper_rows', path: '/api/cron/import-players?sleeperRows=1&sport=NFL' },
+    ...[1, 2, 3].map(pass => ({ name: 'sleeper_rows_NFL_' + pass, sport: 'NFL', kind: 'sleeper_rows', path: '/api/cron/import-players?sleeperRows=1&sport=NFL' })),
     ...SPORTS.map(sport => ({ name: 'rosters_' + sport, sport, kind: 'rosters', path: '/api/cron/import-schedules?rosters=1&rosterSports=' + sport })),
     ...SPORTS.flatMap(sport => [season, season - 1].map(year => ({
       name: 'stats_' + sport + '_' + year, sport, kind: 'season_stats',
