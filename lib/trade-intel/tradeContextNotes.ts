@@ -573,10 +573,9 @@ async function zombieNotesFor(
   if (teams.length >= 2) {
     const norm = (t: { status: string }) => (t.status ?? '').toLowerCase()
     const survivors = teams.filter((t) => norm(t) === 'survivor').length
-    const whispererActive = teams.some((t) => norm(t) === 'whisperer')
-    const zombies = teams.length - survivors - (whispererActive ? 1 : 0)
+    const zombies = teams.filter((t) => norm(t) === 'zombie').length
 
-    const window = tradeWindow({ survivors, whispererActive, teamCount: teams.length })
+    const window = tradeWindow({ survivors, teamCount: teams.length })
     if (window) notes.push(window.basis)
 
     const serum = serumValue({ zombieCount: zombies, teamCount: teams.length })
