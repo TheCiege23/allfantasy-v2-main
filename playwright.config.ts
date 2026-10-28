@@ -28,9 +28,12 @@ const PLAYWRIGHT_DIST_DIR =
  */
 const MOBILE_SPECS = /[\\/]e2e[\\/]mobile[\\/].*\.spec\.ts$/;
 const NBA_SURVIVOR_OPT_IN_SPEC = /[\\/]e2e[\\/]nba-survivor-authenticated-rehearsal\.spec\.ts$/;
-const DESKTOP_TEST_IGNORE = process.env.AF_NBA_SURVIVOR_BROWSER_DB === '1'
-  ? MOBILE_SPECS
-  : [MOBILE_SPECS, NBA_SURVIVOR_OPT_IN_SPEC];
+const ZOMBIE_REHEARSAL_SPEC = /[\\/]e2e[\\/]zombie-four-sport-native-rehearsal\.spec\.ts$/;
+const DESKTOP_TEST_IGNORE = [
+  MOBILE_SPECS,
+  ...(process.env.AF_NBA_SURVIVOR_BROWSER_DB === '1' ? [] : [NBA_SURVIVOR_OPT_IN_SPEC]),
+  ...(process.env.AF_ZOMBIE_REHEARSAL === '1' ? [] : [ZOMBIE_REHEARSAL_SPEC]),
+];
 
 /**
  * NODE_OPTIONS for the `next dev` web server: the runner's own, with any
