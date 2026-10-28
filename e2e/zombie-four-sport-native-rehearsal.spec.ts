@@ -61,9 +61,26 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
 
       const zombie = await prisma.zombieLeague.findUniqueOrThrow({ where: { leagueId } })
       expect(zombie.sport).toBe(sport)
+      // Exercise the real commissioner API and persisted GET response before the draft.
+      const choices = {
+        leagueId, whispererCount: whisperers, whispererAmbushCount: 5,
+        ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true,
+        weeklyUpdateAutoPost: true, weeklyUpdateApproval: false,
+      }
+      const saved = await page.request.patch('/api/zombie/settings', { data: choices, timeout: 120_000 })
+      expect(saved.ok(), `${sport} settings: ${await saved.text()}`).toBeTruthy()
+      const loaded = await page.request.get(`/api/zombie/league?leagueId=${leagueId}`, { timeout: 120_000 })
+      expect(loaded.ok(), await loaded.text()).toBeTruthy()
+      const readback = await loaded.json()
+      expect(readback.league).toMatchObject({
+        whispererCount: whisperers, whispererAmbushCount: 5,
+        config: { ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true },
+      })
+      expect(await prisma.zombieLeagueConfig.findUniqueOrThrow({ where: { leagueId } })).toMatchObject({
+        ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true,
+      })
       await prisma.zombieLeague.update({ where: { id: zombie.id }, data: {
-        whispererCount: whisperers, weeklyUpdateAutoPost: true,
-        weeklyUpdateApproval: false, weeklyUpdateDay: null, weeklyUpdateHour: null,
+        weeklyUpdateDay: null, weeklyUpdateHour: null,
       } })
       const rosters = await prisma.roster.findMany({ where: { leagueId }, orderBy: { id: 'asc' } })
       expect(rosters).toHaveLength(8)
@@ -105,6 +122,11 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       expect(activated.ok, `${sport}: ${JSON.stringify(activated)}`).toBe(true)
       const active = await prisma.zombieLeague.findUniqueOrThrow({ where: { leagueId } })
       expect(active.status).toBe('active')
+      const lockedRules = await page.request.patch('/api/zombie/settings', {
+        data: { leagueId, serumReviveCount: 4 }, timeout: 120_000,
+      })
+      expect(lockedRules.status()).toBe(409)
+      expect((await prisma.zombieLeagueConfig.findUniqueOrThrow({ where: { leagueId } })).serumReviveCount).toBe(3)
       expect(active.season).toBe(season.season)
       expect(await prisma.zombieLeagueTeam.count({ where: { leagueId } })).toBe(8)
       const whisperer = await prisma.whispererRecord.findUniqueOrThrow({ where: { zombieLeagueId: active.id } })
