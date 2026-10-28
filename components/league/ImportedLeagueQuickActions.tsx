@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { useRouter } from 'next/navigation'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SUPPORT_WIDGET_OPEN_EVENT } from '@/lib/support/support-widget'
@@ -18,9 +19,18 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
   const router = useRouter()
   const { language } = useOptionalLanguage()
   const es = language === 'es'
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const cancelRef = useRef<HTMLButtonElement | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useOverlayContainment({
+    active: confirmOpen,
+    containerRef: dialogRef,
+    initialFocusRef: cancelRef,
+    onClose: () => { if (!removing) setConfirmOpen(false) },
+  })
 
   async function remove() {
     if (removing) return
@@ -79,6 +89,8 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
       {confirmOpen ? (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 p-0 sm:items-center sm:p-4" role="presentation" onClick={() => { if (!removing) setConfirmOpen(false) }}>
           <div
+            ref={dialogRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-imported-league-title"
@@ -95,7 +107,7 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
                 : `This removes your copy from AllFantasy. The original league on ${platform} and other members' copies are unaffected.`}
             </p>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row">
-              <button type="button" disabled={removing} onClick={() => setConfirmOpen(false)} className="min-h-11 flex-1 rounded-xl border border-white/20 px-4 text-sm font-semibold disabled:opacity-50">
+              <button ref={cancelRef} type="button" disabled={removing} onClick={() => setConfirmOpen(false)} className="min-h-11 flex-1 rounded-xl border border-white/20 px-4 text-sm font-semibold disabled:opacity-50">
                 {es ? 'Cancelar' : 'Cancel'}
               </button>
               <button type="button" disabled={removing} onClick={() => void remove()} className="min-h-11 flex-1 rounded-xl bg-rose-600 px-4 text-sm font-semibold disabled:opacity-50" data-testid="delete-imported-league-confirm">

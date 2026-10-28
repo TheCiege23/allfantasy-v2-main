@@ -1,5 +1,8 @@
 'use client'
 
+import { useDialogKeyboardViewport } from '@/components/shared/useDialogKeyboardViewport'
+import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X, Loader2, CheckCircle2, TriangleAlert } from 'lucide-react'
 import { SUPPORT_WIDGET_FEEDBACK_TYPE, SUPPORT_WIDGET_OPEN_EVENT, SUPPORT_WIDGET_TOOL } from '@/lib/support/support-widget'
@@ -27,6 +30,7 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
   const [message, setMessage] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const emailRef = useRef<HTMLInputElement | null>(null)
 
@@ -40,16 +44,14 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
     }
   }, [status])
 
+  useDialogKeyboardViewport(viewportRef, open)
+  useOverlayContainment({ active: open, containerRef: dialogRef, onClose: close })
+
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
-    }
-    window.addEventListener('keydown', onKey)
     // Focus the first field so keyboard users land inside the dialog.
     const id = window.setTimeout(() => emailRef.current?.focus(), 40)
     return () => {
-      window.removeEventListener('keydown', onKey)
       window.clearTimeout(id)
     }
   }, [open, close])
@@ -142,6 +144,8 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
 
       {open ? (
         <div
+          ref={viewportRef}
+          style={{ top: 'var(--af-dialog-top, 0px)', height: 'var(--af-dialog-height, 100dvh)', bottom: 'auto' }}
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
           role="presentation"
           onClick={close}
@@ -151,6 +155,7 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
             role="dialog"
             aria-modal="true"
             aria-labelledby="support-widget-title"
+            style={{ maxHeight: 'calc(var(--af-dialog-height, 100dvh) - 16px)' }}
             onClick={(e) => e.stopPropagation()}
             className="max-h-[90dvh] w-full max-w-[420px] overflow-y-auto rounded-t-[20px] border border-white/10 bg-[#0a0a1f] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.45)] sm:rounded-[20px] sm:pb-0"
           >
@@ -165,7 +170,7 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
                 type="button"
                 onClick={close}
                 aria-label="Close support form"
-                className="touch-manipulation inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white transition hover:bg-white/[0.08]"
+                className="touch-manipulation inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white transition hover:bg-white/[0.08]"
               >
                 <X className="h-4.5 w-4.5" aria-hidden />
               </button>
@@ -183,7 +188,7 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
                 <button
                   type="button"
                   onClick={close}
-                  className="mt-5 inline-flex h-10 items-center justify-center rounded-xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/25 to-violet-500/20 px-5 text-[13px] font-bold text-white transition hover:from-cyan-500/35 hover:to-violet-500/30"
+                  className="mt-5 inline-flex h-11 items-center justify-center rounded-xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/25 to-violet-500/20 px-5 text-[13px] font-bold text-white transition hover:from-cyan-500/35 hover:to-violet-500/30"
                 >
                   Done
                 </button>
@@ -220,7 +225,7 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-[14px] text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25"
+                    className="min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 sm:text-[14px]"
                   />
                 </div>
 
@@ -239,7 +244,7 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="Tell us what happened, or what you love."
-                    className="w-full resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-[14px] text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25"
+                    className="w-full resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 sm:text-[14px]"
                   />
                 </div>
 

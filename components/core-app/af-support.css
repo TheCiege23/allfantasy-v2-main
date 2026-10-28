@@ -14,12 +14,12 @@
 .af-sp {
   position: fixed;
   z-index: 71;
-  top: 50%;
+  top: calc(var(--af-dialog-top, 0px) + var(--af-dialog-height, 100dvh) / 2);
   left: 50%;
   transform: translate(-50%, -50%);
   width: min(460px, calc(100vw - 24px));
   max-height: calc(100vh - 48px);
-  max-height: calc(100dvh - 48px);
+  max-height: calc(var(--af-dialog-height, 100dvh) - 48px);
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line2);
@@ -256,4 +256,12 @@
   font-size: 11.5px;
   line-height: 1.55;
   color: var(--bad);
+}
+
+/* Touch controls need room for a thumb in both phone orientations. */
+@media (pointer: coarse) {
+  .af-core .af-sp-close { width: 44px; height: 44px; }
+  .af-core .af-sp-chip,
+  .af-core .af-sp-btn { min-height: 44px; min-width: 44px; }
+  .af-core .af-sp-diag-list label { min-height: 44px; }
 }
