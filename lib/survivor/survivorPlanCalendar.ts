@@ -1,6 +1,6 @@
 /**
  * The calendar a planned Survivor season runs on: which week an instant falls in, and the
- * `[start, end)` window of a week. NBA and NHL use the daily-sport calendar; NFL uses its own
+ * `[start, end)` window of a week. NBA, NHL and MLB use the daily-sport calendar; NFL uses its own
  * Tuesday-to-Monday scoring weeks.
  *
  * ── 🛑 THE NFL DATES ARE MEASURED, NOT ASSUMED ─────────────────────────────────────────────────
@@ -24,7 +24,7 @@
  */
 import { dailySportWeekForInstant, resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 
-export const SURVIVOR_PLAN_SPORTS = ['NBA', 'NHL', 'NFL'] as const
+export const SURVIVOR_PLAN_SPORTS = ['NBA', 'NHL', 'NFL', 'MLB'] as const
 export type SurvivorPlanSport = (typeof SURVIVOR_PLAN_SPORTS)[number]
 
 export function isSurvivorPlanSport(sport: unknown): sport is SurvivorPlanSport {
@@ -52,6 +52,9 @@ const LAST_DAY: Readonly<Record<SurvivorPlanSport, Readonly<Record<number, strin
   NHL: { 2026: '2027-04-10' },
   // Week 18's Sunday-night game, 2027-01-11T02:00Z, is Sunday January 10 Eastern.
   NFL: { 2026: '2027-01-10' },
+  // MLB's season is keyed by its own calendar year. The same published dates as
+  // MLB_REGULAR_SEASON_END in lib/season-week/leagueCreationSeason.ts.
+  MLB: { 2026: '2026-09-27', 2027: '2027-09-26' },
 }
 
 /** The regular season's last day, or null for a season not yet verified. */
