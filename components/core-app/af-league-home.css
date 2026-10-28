@@ -1563,3 +1563,10 @@
 .af-lh-predictions-table th { text-align: left; font-size: 11px; font-weight: 600; color: var(--faint); padding: 4px 6px; }
 .af-lh-predictions-table td { padding: 5px 6px; border-top: 1px solid var(--line); }
 .af-lh-predictions-table tr[data-me='true'] td { color: var(--accent); font-weight: 600; }
+.af-lh-team-directory { margin-bottom: 16px; }
+.af-lh-team-directory summary { cursor: pointer; font-weight: 700; }
+.af-lh-team-directory p { color: var(--text2); font-size: 13px; margin: 12px 0; }
+.af-lh-team-directory ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; list-style: none; padding: 0; margin: 14px 0 0; }
+.af-lh-team-directory li { display: flex; flex-direction: column; gap: 2px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.af-lh-team-directory li strong { overflow-wrap: anywhere; font-size: 13px; }
+.af-lh-team-directory li span, .af-lh-team-directory li small { color: var(--text2); font-size: 12px; }
