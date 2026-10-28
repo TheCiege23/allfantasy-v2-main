@@ -11,6 +11,7 @@ import { assertBracketOpen, firstGameDeadline, isSingleGameBracketSport, rankBra
 import { EntitlementResolver } from "@/lib/subscription/EntitlementResolver"
 import { planFlagsFromSnapshot } from "@/lib/subscription/livePlanFlags"
 import { loadBracketTeamProfiles } from "./teamIntelligence"
+import { loadDraftPoolTeamLogoResolver } from "@/lib/draft-room/draftPoolTeamLogos"
 import { defaultPlayoffChallengeConfig, sanitizePlayoffChallengeConfig } from "./playoffChallengeConfig"
 import { hasAfCommissionerPlan } from "@/lib/entitlements/afCommissionerPlan"
 import { getPlayoffCompletionSummary } from "./playoffCompletion"
@@ -344,8 +345,23 @@ export async function getPlayoffBracketView(input: {
 
   const challengeEntries = Array.isArray(challenge.entries) ? challenge.entries : []
   const challengeSeries = Array.isArray(challenge.series) ? challenge.series : []
-  const teamProfiles = singleGameSport ? await loadBracketTeamProfiles(challenge.sport, challenge.seasonYear,
-    challengeSeries.flatMap((game: any) => [game.homeTeamName, game.awayTeamName])) : {}
+  const teamNames = challengeSeries.flatMap((game: any) => [game.homeTeamName, game.awayTeamName]) as string[]
+  const [teamProfiles, teamLogos] = singleGameSport
+    ? await Promise.all([
+        loadBracketTeamProfiles(challenge.sport, challenge.seasonYear, teamNames),
+        (async (): Promise<Record<string, string>> => {
+          const resolveLogo = await loadDraftPoolTeamLogoResolver(challenge.sport === "nba_cup" ? "NBA" : "NCAAF")
+          const logos: Record<string, string> = {}
+          for (const name of new Set(teamNames)) {
+            // A seed slot or projected winner is not a team identity.
+            if (!isOfficialTeamName(name) || /^(?:CFP|EAST|WEST)\d+$/i.test(name)) continue
+            const url = resolveLogo(name)
+            if (url) logos[name] = url
+          }
+          return logos
+        })(),
+      ])
+    : [{}, {}]
   const totalSeries = challengeSeries.length
   const completionEntryId = activeEntry?.id ?? null
   const picks = activeEntry
@@ -516,6 +532,7 @@ export async function getPlayoffBracketView(input: {
       sourceSeriesAway: series.sourceSeriesAway,
     })),
     teamProfiles,
+    teamLogos,
     picks: picks.map((pick: any) => ({
       id: pick.id,
       entryId: pick.entryId,
