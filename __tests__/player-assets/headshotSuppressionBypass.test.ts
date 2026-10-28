@@ -28,6 +28,8 @@ const prismaMock = vi.hoisted(() => ({
   sportsPlayerRecord: { findMany: vi.fn(async () => [] as unknown[]) },
   teamAsset: { findMany: vi.fn(async () => [] as unknown[]) },
 }))
+const canonicalBackfill = vi.hoisted(() => vi.fn(async () => ({})))
+vi.mock('@/lib/canonical/backfillCanonical', () => ({ backfillCanonicalPlayers: canonicalBackfill }))
 const resolverResult = vi.hoisted(() => ({ value: {} as Record<string, unknown> }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -78,6 +80,7 @@ beforeEach(() => {
   prismaMock.playerImage.findFirst.mockResolvedValue(null)
   prismaMock.sportsPlayer.updateMany.mockResolvedValue({ count: 1 })
   prismaMock.player.update.mockResolvedValue({})
+  canonicalBackfill.mockClear()
   resetPlayerImageSuspicionCache()
   clearMediaCache()
 })
@@ -183,13 +186,14 @@ describe('image cron — mirrorToLegacy', () => {
       (args as { where: Record<string, unknown> }).where.imageUrl === null ? [camJackson] : [],
     )
     const req = new Request('https://worker.invalid/api/cron/sync-player-images?sport=NFL&scope=players&limit=10')
-    await syncPlayerImages(req as never)
+    return syncPlayerImages(req as never)
   }
 
   it('does not copy a cache hit from an unstamped pre-fix row into Player.imageUrl or SportsPlayer.imageUrl', async () => {
     resolverResult.value = { imageUrl: CAMERON_JACKSON_PHOTO, source: 'sportsdb', confidence: 'exact', cacheHit: true }
     prismaMock.playerImage.findFirst.mockResolvedValue({ provider: 'sportsdb', rawPayload: null })
-    await runOnce()
+    const response = await runOnce()
+    expect((await response.json()).totals.resolved).toBe(0)
     expect(prismaMock.player.update).not.toHaveBeenCalled()
     expect(prismaMock.sportsPlayer.updateMany).not.toHaveBeenCalled()
   })
@@ -242,5 +246,20 @@ describe('Player.imageUrl with no primary PlayerImage row — the canonical batc
       expect(map.get('6011')?.imageUrl).toBeNull()
       expect(map.get('7012')?.imageUrl).toBe(WINSTON_PHOTO)
     }
+  })
+})
+
+describe('image cron canonical initialization', () => {
+  it('requires exactly one supported pro sport before backfilling', async () => {
+    for (const sport of ['all', 'NBA,NHL', 'NCAAB']) {
+      const response = await syncPlayerImages(new Request('https://worker.invalid/api/cron/sync-player-images?scope=players&backfill=1&sport=' + sport) as never)
+      expect(response.status).toBe(400)
+    }
+    expect(canonicalBackfill).not.toHaveBeenCalled()
+  })
+  it('initializes only the requested sport from bounded stored profiles', async () => {
+    const response = await syncPlayerImages(new Request('https://worker.invalid/api/cron/sync-player-images?scope=players&backfill=1&sport=NBA') as never)
+    expect(response.status).toBe(200)
+    expect(canonicalBackfill).toHaveBeenCalledWith({ sport: 'NBA', limit: 10000, dryRun: false })
   })
 })

@@ -382,7 +382,7 @@ jobs:
 
   draft-room-regression:
     name: Draft Room Regression
-    timeout-minutes: 30
+    timeout-minutes: 35
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -435,6 +435,16 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
       run: node scripts/seed-e2e-tenant.mjs
+    - name: Verify usable NBA player space
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        NEXTAUTH_SECRET: ci-nextauth-secret
+        NEXTAUTH_URL: http://localhost:3000
+        NODE_OPTIONS: --max-old-space-size=8192
+        E2E_WARM_ROUTES: /,/e2e/draft-room
+        PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/player-space
+      run: npx playwright test e2e/draft-room-visual.spec.ts --grep "NBA draft keeps a usable player list" --project=chromium
     - name: Run draft-room regression
       env:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci

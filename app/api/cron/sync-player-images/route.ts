@@ -287,17 +287,15 @@ async function resolveBatch(
         skipCache: opts.skipCache,
       });
 
-      if (result.imageUrl) {
-        // Copied into the denormalised columns only when verified — see `isVerifiedResolution`.
-        if (await isVerifiedResolution(player, result)) {
-          await prisma.player.update({
-            where: { id: player.id },
-            data: { imageUrl: result.imageUrl, lastSeenAt: new Date() },
-          });
-          await mirrorToLegacy(player, result.imageUrl);
-        }
+      if (result.imageUrl && await isVerifiedResolution(player, result)) {
+        await prisma.player.update({
+          where: { id: player.id },
+          data: { imageUrl: result.imageUrl, lastSeenAt: new Date() },
+        });
+        await mirrorToLegacy(player, result.imageUrl);
         summary.resolved++;
       } else {
+        // A rejected/unpersisted candidate is not photo coverage.
         summary.failed++;
       }
     } catch (err) {
