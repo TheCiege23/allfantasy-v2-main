@@ -133,7 +133,7 @@ describe('serumValue: an asset that APPRECIATES as the season runs', () => {
     const early = serumValue({ zombieCount: 1, teamCount: 20 })!
     const late = serumValue({ zombieCount: 16, teamCount: 20 })!
     expect(late.expectedPoints).toBeGreaterThan(early.expectedPoints)
-    expect(late.basis).toContain('rising every week')
+    expect(late.basis).toContain('current Horde size')
   })
 
   it('is worth nothing before anyone is infected, and says so', () => {
@@ -152,23 +152,25 @@ describe('serumValue: an asset that APPRECIATES as the season runs', () => {
   })
 })
 
-describe('tradeWindow: the option to deal is a wasting asset', () => {
+describe('tradeWindow: current eligible partners', () => {
   it('⚠ counts only teams that can legally trade', () => {
     // Neither Zombies nor Whisperers can make deals. Six Survivors,
     // minus yourself, means five legal partners.
     const w = tradeWindow({ survivors: 6, teamCount: 20 })!
     expect(w.partners).toBe(5)
-    expect(w.basis).toContain('only ever falls')
+    expect(w.basis).toContain('Whisperers never trade')
   })
 
-  it('⚠ says a deal considered for "later" may not have a later', () => {
-    /*
-     * Infection is permanent and removes YOUR ability to trade too. Both sides
-     * of every deal hold a wasting option, which is not true in any other
-     * format.
-     */
-    const w = tradeWindow({ survivors: 3, teamCount: 20 })!
-    expect(w.basis).toContain('may not have a later')
+  it('counts Zombies only when their league permits trading', () => {
+    expect(tradeWindow({ survivors: 6, zombies: 5, teamCount: 20, zombieTradeBlocked: true })!.partners).toBe(5)
+    expect(tradeWindow({ survivors: 6, zombies: 5, teamCount: 20, zombieTradeBlocked: false })!.partners).toBe(10)
+  })
+
+  it('allows the Survivor partner pool to grow after a serum revival', () => {
+    const before = tradeWindow({ survivors: 3, zombies: 4, teamCount: 8 })!
+    const after = tradeWindow({ survivors: 4, zombies: 3, teamCount: 8 })!
+    expect(after.partners).toBe(before.partners + 1)
+    expect(after.basis).toContain('serum revivals can reopen it')
   })
 
   it('reports honestly when the Horde has everyone', () => {
@@ -219,7 +221,7 @@ describe('the zombie model is actually reachable', () => {
      */
     const r = readFormatRules({ leagueType: 'zombie' })
     expect(r.futurePicksTradeable).toBe(true)
-    expect(r.notes.join(' ')).toContain('only ever shrinks')
+    expect(r.notes.join(' ')).toContain('Whisperers never trade')
   })
 
   it('says replacement is close to free, because there are no waivers', () => {
@@ -234,7 +236,7 @@ describe('the zombie model is actually reachable', () => {
   it('reads survivor and horde counts from team status rather than assuming', () => {
     expect(SRC).toContain('prisma.zombieLeagueTeam')
     expect(SRC).toContain("norm(t) === 'survivor'")
-    expect(SRC).toContain("norm(t) === 'whisperer'")
+    expect(SRC).toContain("norm(t) === 'zombie'")
   })
 
   it('returns early rather than falling through to guillotine or keeper logic', () => {
