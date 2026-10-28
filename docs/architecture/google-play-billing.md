@@ -9,7 +9,7 @@ The Android app is a Bubblewrap Trusted Web Activity. Web Stripe purchases and A
 
 ## Decision
 
-- Use eight subscription product IDs (a separate monthly and yearly ID), one `standard` auto-renewing base plan each, and no introductory offers. Map Play Legacy IDs to the stable internal `af_war_room` SKUs. Three one-time products share the existing token SKUs.
+- Use eight subscription product IDs (a separate monthly and yearly ID), one `standard` auto-renewing base plan each, and no introductory offers. Use the existing Play `af_war_room` product IDs for the customer-facing Legacy tier; do not create duplicate products. Three one-time products share the existing token SKUs.
 - Verify every receipt against Publisher `subscriptionsv2` or `productsv2`. Product, type, quantity, base plan and current payment state must match. Never accept price, ownership, status or expiry from the client.
 - Store package-scoped receipt hashes with AES-256-GCM encrypted purchase tokens. Raw tokens never enter entitlement metadata, token history, logs or analytics. The encryption key must be retained; key rotation requires re-encryption.
 - Bind ownership permanently. The stock released TWA bridge cannot sign an AllFantasy account ID into BillingClient. Require an authenticated, persisted checkout authorization for the first claim, bound to one receipt; check purchase time and reject consumed unclaimed packs. If a native signed account ID is present, validate its hash. Existing receipt restores must match the owner. Linked subscription replacements inherit and verify the original owner.

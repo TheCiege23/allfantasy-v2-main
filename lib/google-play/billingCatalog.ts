@@ -7,7 +7,7 @@ export const PLAY_BASE_PLAN = "standard"
 // A separate product per interval avoids Billing 8's first-eligible-base-plan ambiguity.
 export function playBillingCatalog() {
   return getMonetizationCatalog().all.map(item => ({ ...item,
-    productId: item.sku.replace("af_war_room_", "af_legacy_"),
+    productId: item.sku,
     basePlanId: item.type === "subscription" ? PLAY_BASE_PLAN : null,
   }))
 }

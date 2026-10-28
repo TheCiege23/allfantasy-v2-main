@@ -21,6 +21,12 @@ describe("Play operator readiness checks", () => {
     const body = fixture(); body.basePlans[0].autoRenewingBasePlanType.billingPeriodDuration = "P1Y"; body.packageName = "other.app"; body.basePlans[0].state = "DRAFT"
     expect(inspectPlayCatalogProduct(monthly, body).ok).toBe(false)
   })
+  it("rejects a yearly product configured to renew monthly at the yearly price", () => {
+    const yearly = all.find(p => p.sku === "af_pro_yearly")!, body = fixture(yearly)
+    body.basePlans[0].autoRenewingBasePlanType.billingPeriodDuration = "P1M"
+    expect(inspectPlayCatalogProduct(yearly, body)).toMatchObject({ ok: false, actualUsdCents: 7999 })
+    expect(inspectPlayCatalogProduct(yearly, body).issues).toContain("Subscription billing interval does not match")
+  })
   it("rejects ambiguous plans and active introductory offers", () => {
     const body = fixture(); body.basePlans.push({ ...body.basePlans[0], basePlanId: "second" })
     expect(inspectPlayCatalogProduct(monthly, body).ok).toBe(false)
