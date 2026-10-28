@@ -23,6 +23,12 @@ import type {
 
 const NORMALIZATION_VERSION = '2'
 
+function importedReceptionPoints(normalized: NormalizedImportResult): number | null {
+  if (normalizeToSupportedSport(normalized.league.sport) !== 'NFL') return null
+  const reception = normalized.scoring?.rules.find((rule) => rule.stat_key === 'rec' && !rule.positions?.length)
+  return reception && Number.isFinite(reception.points_value) ? reception.points_value : null
+}
+
 function inferScoringPresetId(normalized: NormalizedImportResult): string {
   const fmt = String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '').toLowerCase()
   if (fmt.includes('idp')) return 'fb_idp'
@@ -40,6 +46,12 @@ function inferScoringPresetId(normalized: NormalizedImportResult): string {
   if (fmt.includes('half') || fmt.includes('0.5')) return 'fb_half_ppr'
   if (fmt.includes('std') || fmt.includes('non')) return 'fb_std'
   if (fmt.includes('ppr') || fmt.includes('reception')) return 'fb_ppr'
+  const receptionPoints = importedReceptionPoints(normalized)
+  if (receptionPoints != null) {
+    if (receptionPoints < 0.25) return 'fb_std'
+    if (receptionPoints < 0.75) return 'fb_half_ppr'
+    return 'fb_ppr'
+  }
   /*
    * 🛑 THE FALLBACK IS A GUESS, AND IT USED TO BE AN UNQUALIFIED ONE. Half-PPR is the
    * most common league shape, so it remains the least-wrong default — but the caller
@@ -57,6 +69,7 @@ function inferScoringPresetId(normalized: NormalizedImportResult): string {
  */
 function scoringPresetWasInferred(normalized: NormalizedImportResult): boolean {
   const fmt = String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '').toLowerCase()
+  if (importedReceptionPoints(normalized) != null) return false
   if (!fmt.trim()) return true
   return !(
     fmt.includes('idp') ||
@@ -232,10 +245,11 @@ function inferDerivedFlags(
     : []
   const idpPositions = ['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'DB', 'IDP_FLEX', 'IDP']
   const hasIdpSlot = rosterPositions.some((p) => idpPositions.some((x) => p.includes(x)))
+  const hasIdpScoring = normalized.scoring?.rules.some((rule) => rule.stat_key.startsWith('idp_')) ?? false
   const signals = collectConceptSignals(normalized)
 
   return {
-    idp: scoringPresetId === 'fb_idp' || hasIdpSlot,
+    idp: scoringPresetId === 'fb_idp' || hasIdpSlot || hasIdpScoring,
     salaryCap: inferredConcept === 'salary_cap' || /\bsalary[\s_]*cap\b|salarycap/.test(signals),
     devy: inferredConcept === 'devy' || signals.includes('taxi_devy') || /\bdevy\b/.test(signals),
     c2c: inferredConcept === 'c2c' || /\bc2c\b|campus\s*2\s*canton/.test(signals),
