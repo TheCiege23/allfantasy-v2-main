@@ -1690,7 +1690,7 @@ export function LeagueShell({
               capSummary={capSummary}
               capRosterId={capRosterId}
             />}
-            {!nativeWorkspace && !isAfHostedPlatform(league.platform) ? (
+            {!embedMode && !nativeWorkspace && !isAfHostedPlatform(league.platform) ? (
               <ImportedLeagueQuickActions
                 leagueId={league.id}
                 leagueName={selectedLeague.name ?? 'League'}
