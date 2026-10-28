@@ -1,4 +1,4 @@
-/* Railway cron service: use the app's private URL and a CRON_SECRET reference. */
+/* Railway cron service: use the Cloudflare URL in production and a CRON_SECRET reference. */
 const base = String(process.env.BRACKET_SYNC_URL ?? "").replace(/\/$/, "")
 const secret = String(process.env.CRON_SECRET ?? "").trim()
 if (!base || !secret) throw new Error("BRACKET_SYNC_URL and CRON_SECRET are required")
