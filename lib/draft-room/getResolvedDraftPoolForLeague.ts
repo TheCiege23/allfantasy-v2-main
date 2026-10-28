@@ -2042,6 +2042,7 @@ async function buildResolvedDraftPoolForLeague(
     perfAfProj()
   }
 
+  const perfEnrichRows = perfStart('12. per-player enrichment')
   const enrichedList = await cooperativeMap(rawListFiltered, (row) => {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
     const position = row.position ?? row.pos ?? ''
@@ -2612,6 +2613,7 @@ async function buildResolvedDraftPoolForLeague(
       ...(row.isDevy && !row.graduatedToNFL ? { isRookie: true } : {}),
     } as unknown as RawRow
   })
+  perfEnrichRows()
 
   /**
    * One batched write for every mismatch seen above. Previously this path issued one un-awaited
@@ -2661,8 +2663,10 @@ async function buildResolvedDraftPoolForLeague(
     }
   }
 
+  const perfNormalizeRows = perfStart('13. deduplicate + normalize player assets')
   const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[], sport)
   let entries: NormalizedDraftEntry[] = await cooperativeMap(dedupedEnrichedList, (row) => ({ ...normalizePlayer(row, sport), draftIdProvenance: row.draftIdProvenance }))
+  perfNormalizeRows()
   if (nbaSurvivorRoster) {
     const activeRoster = nbaSurvivorRoster
     entries = entries.filter((entry) =>
@@ -2717,12 +2721,14 @@ async function buildResolvedDraftPoolForLeague(
     return team !== null && String(team).trim() !== '' && String(team).trim().toUpperCase() !== 'FA'
   })
 
+  const perfProjectionFallbacks = perfStart('14. stored position projection fallbacks')
   const { entries: entriesWithProjectionFallbacks, diagnostics: projectionDiagnostics } =
     await applyPositionAwareProjectionFallbacks({
       sport,
       entries,
     })
   entries = entriesWithProjectionFallbacks
+  perfProjectionFallbacks()
 
   // Deterministic ranking: ADP-first when present, then AI ADP, then lexical tie-breakers.
   // This avoids visually jumbled boards when merged sources contribute mixed/null ADP values.

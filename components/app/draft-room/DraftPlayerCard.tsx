@@ -254,6 +254,9 @@ function DraftPlayerCardInner({
     assets?.headshotUrl ??
     unifiedProductView?.unified.headshotUrl ??
     null
+  // The caller chooses market/AI ADP. A display model's market ADP must not
+  // override that selection, and an explicit null must remain unavailable.
+  const displayedAdp = adp === undefined ? normalized.adp : adp
   const teamLogoUrl = normalized.teamLogoUrl ?? assets?.teamLogoUrl ?? null
   const rowHeadshotSize = 44
   const rowLogoSize = 16
@@ -276,7 +279,7 @@ function DraftPlayerCardInner({
         .join(' · ')
     : ''
   const storedSummary = normalized.stats?.summary
-  const meaningfulSummary = storedSummary && !/^No stats available$/i.test(storedSummary) ? storedSummary : null
+  const meaningfulSummary = storedSummary && !/^(No stats available$|(?:AI )?ADP\b|Bye\b)/i.test(storedSummary) ? storedSummary : null
   const statLine = meaningfulSummary ??
     (projectedPoints != null
       ? `Proj ${projectedPoints.toFixed(1)} pts`
@@ -360,7 +363,7 @@ function DraftPlayerCardInner({
               )}
             </div>
             <p className="mt-1 text-[11px] text-white/65">
-              {[`${adpMetricLabel} ${formatAdpDisplay(normalized.adp)}`, ...(isNfl ? [`Bye ${formatBye(normalized.byeWeek)}`] : [])].join(' · ')}
+              {[`${adpMetricLabel} ${formatAdpDisplay(displayedAdp)}`, ...(isNfl ? [`Bye ${formatBye(normalized.byeWeek)}`] : [])].join(' · ')}
             </p>
             {injuryStatus ? (
               <span className="mt-1 inline-flex max-w-full truncate rounded-md border border-rose-400/35 bg-rose-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-rose-100">
@@ -416,8 +419,8 @@ function DraftPlayerCardInner({
           </span>
         </button>
         <div className="draft-player-metrics text-right text-xs tabular-nums text-slate-300">
-          {normalized.adp != null ? <div>{adpMetricLabel}{' '}
-            <span className="font-semibold text-cyan-200" data-testid={testId ? `${testId}-adp` : 'draft-player-adp'}>{formatAdpDisplay(normalized.adp)}</span>
+          {displayedAdp != null ? <div>{adpMetricLabel}{' '}
+            <span className="font-semibold text-cyan-200" data-testid={testId ? `${testId}-adp` : 'draft-player-adp'}>{formatAdpDisplay(displayedAdp)}</span>
           </div> : null}
           {isNfl && normalized.byeWeek != null && normalized.byeWeek > 0 ? <div>Bye{' '}
             <span data-testid={testId ? `${testId}-bye` : 'draft-player-bye'}>{formatBye(normalized.byeWeek)}</span>

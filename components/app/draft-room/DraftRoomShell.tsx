@@ -6,6 +6,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cn } from '@/lib/utils'
 import type { TraySnap } from '@/lib/draft-room/mobileTraySnap'
 import { DraftMobileTray } from './DraftMobileTray'
+import { DRAFT_PHONE_LAYOUT_QUERY } from '@/lib/draft-room/phoneDraftLayout'
 import './draft-mobile.css'
 import './draft-desktop.css'
 import './draft-workspace.css'
@@ -110,7 +111,7 @@ export function DraftRoomShell({
     if (!viewport) return
     const root = layoutRef.current?.closest<HTMLElement>('[data-testid="draft-room-shell"]')
     const update = () => {
-      if (viewport.scale === 1 && window.matchMedia('(max-width: 767px)').matches) {
+      if (viewport.scale === 1 && window.matchMedia(DRAFT_PHONE_LAYOUT_QUERY).matches) {
         root?.style.setProperty('--draft-visible-height', `${viewport.height}px`)
       } else root?.style.removeProperty('--draft-visible-height')
     }
@@ -126,10 +127,10 @@ export function DraftRoomShell({
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
   useEffect(() => { setMobileToolsOpen(false) }, [mobileTab])
   useEffect(() => {
-    const desktop = window.matchMedia('(min-width: 768px)')
-    const closeOnDesktop = () => { if (desktop.matches) setMobileToolsOpen(false) }
-    desktop.addEventListener('change', closeOnDesktop)
-    return () => desktop.removeEventListener('change', closeOnDesktop)
+    const phone = window.matchMedia(DRAFT_PHONE_LAYOUT_QUERY)
+    const closeOnDesktop = () => { if (!phone.matches) setMobileToolsOpen(false) }
+    phone.addEventListener('change', closeOnDesktop)
+    return () => phone.removeEventListener('change', closeOnDesktop)
   }, [])
   const selectMobileTab = (tab: MobileDraftTab) => {
     setMobileToolsOpen(false)
@@ -239,6 +240,7 @@ export function DraftRoomShell({
                 value={boardSize} onChange={event => {
                   const value = event.target.value as typeof boardSize
                   setBoardSize(value)
+                  persistBottomDock(true)
                   try { localStorage.setItem('af:draft-board-size', value) } catch { /* optional */ }
                 }} className="min-h-9 rounded-lg border border-white/20 bg-[#111f34] px-2 text-sm text-white">
                 <option value="compact">Compact</option><option value="balanced">Balanced</option><option value="hidden">Hidden</option>

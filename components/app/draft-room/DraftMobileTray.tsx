@@ -70,6 +70,7 @@ export function DraftMobileTray({
   ariaLabel,
   onSnapChange,
 }: DraftMobileTrayProps) {
+  const handleRef = useRef<HTMLDivElement | null>(null)
   const chromeRef = useRef<HTMLDivElement | null>(null)
   const [snap, setSnap] = useState<TraySnap>(open ? preferredOpenSnap : 'peek')
   const [fullHeight, setFullHeight] = useState<number | null>(null)
@@ -92,7 +93,8 @@ export function DraftMobileTray({
     const measure = () => {
       const chrome = chromeRef.current?.offsetHeight ?? 0
       // Leave a sliver of board above a full tray so the sheet still reads as a sheet.
-      const full = layout.clientHeight - chrome - 8
+      const handle = handleRef.current?.offsetHeight ?? 32
+      const full = layout.clientHeight - chrome - handle - 8
       /*
        * ⚠ ZERO MEANS "NOT LAID OUT", NOT "NO ROOM". Mobile layouts are hidden at desktop widths, so
        * on a wide window — or a phone rotating through a breakpoint — this measures 0. Storing that
@@ -104,6 +106,8 @@ export function DraftMobileTray({
     if (typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(measure)
     observer.observe(layout)
+    if (chromeRef.current) observer.observe(chromeRef.current)
+    if (handleRef.current) observer.observe(handleRef.current)
     return () => observer.disconnect()
   }, [layoutRef])
 
@@ -170,6 +174,7 @@ export function DraftMobileTray({
         </div>
       ) : null}
       <div
+        ref={handleRef}
         role="button"
         tabIndex={0}
         aria-label={snap === 'full' ? 'Collapse draft tray' : 'Expand draft tray'}

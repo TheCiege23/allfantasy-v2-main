@@ -7,6 +7,7 @@ import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { applyDraftFilters, DRAFT_ROOM_I18N_KEYS, getPickConfirmationLabel, getPositionFilterOptionsForSport } from '@/lib/draft-room'
 import type { DraftStatPlayerSource } from '@/lib/draft-room/draftSportStatColumns'
+import { DRAFT_PHONE_LAYOUT_QUERY } from '@/lib/draft-room/phoneDraftLayout'
 import { compactDraftPlayerStats } from '@/lib/draft-room/compactDraftPlayerStats'
 import { DraftPlayerCard } from './DraftPlayerCard'
 import { SleeperPoolTable } from './SleeperPoolTable'
@@ -413,7 +414,7 @@ function PlayerPanelInner({
   const [filtersOpen, setFiltersOpen] = useState(false)
   const filterRegionId = React.useId()
   useEffect(() => {
-    const query = window.matchMedia('(max-width: 767px)')
+    const query = window.matchMedia(DRAFT_PHONE_LAYOUT_QUERY)
     const update = () => setPhoneLayout(query.matches)
     update()
     query.addEventListener('change', update)
@@ -1017,7 +1018,7 @@ function PlayerPanelInner({
           onClick={() => setFiltersOpen(open => !open)}>
           {filtersOpen ? 'Hide filters' : `Filters · ${filtered.length} players`}
         </button>
-        <div id={filterRegionId} className={filtersOpen ? 'block' : 'hidden md:block'}>
+        <div data-testid="draft-extra-player-filters" data-expanded={filtersOpen} id={filterRegionId} className={filtersOpen ? 'block' : 'hidden md:block'}>
         <div
           className={`flex flex-wrap items-center gap-1 border-b border-white/[0.05] px-2 py-1 sm:px-3 ${rs ? 'bg-[#050c18]/95' : 'bg-black/10'}`}
         >

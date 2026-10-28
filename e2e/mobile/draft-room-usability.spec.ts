@@ -55,7 +55,10 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB'] as const) {
     // Rotation must preserve access to the active workspace, then recover phone navigation.
     const original = page.viewportSize()!
     await page.setViewportSize({ width: original.height, height: original.width })
-    await expect(page.getByTestId('draft-desktop-layout').getByTestId('draft-player-panel')).toBeVisible()
+    await expect(page.getByTestId('draft-mobile-layout')).toBeVisible()
+    await expect(page.getByTestId('draft-desktop-layout')).toBeHidden()
+    const rotatedNav = await page.getByTestId('draft-mobile-primary-nav').boundingBox()
+    expect(rotatedNav!.y + rotatedNav!.height).toBeLessThanOrEqual(original.width + 1)
     await page.setViewportSize(original)
     await expect(page.getByTestId('draft-mobile-primary-nav')).toBeVisible()
   })
