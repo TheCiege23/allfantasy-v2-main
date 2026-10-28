@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
+  generateRulesDocument: vi.fn(),
   getServerSession: vi.fn(),
   requireCommissionerOnly: vi.fn(),
   zombieLeagueFindUnique: vi.fn(),
@@ -13,6 +14,7 @@ const h = vi.hoisted(() => ({
   zombieFreeRewardConfigFindUnique: vi.fn(),
 }))
 
+vi.mock('@/lib/zombie/rulesDocGenerator', () => ({ generateRulesDocument: h.generateRulesDocument }))
 vi.mock('next-auth', () => ({ getServerSession: h.getServerSession }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/league/permissions', () => ({
@@ -38,9 +40,10 @@ function patch(changes: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  h.generateRulesDocument.mockResolvedValue(undefined)
   h.getServerSession.mockResolvedValue({ user: { id: 'commissioner-1' } })
   h.requireCommissionerOnly.mockResolvedValue(undefined)
-  h.zombieLeagueFindUnique.mockResolvedValue({ id: 'zombie-1', leagueId: 'league-1', status: 'setup' })
+  h.zombieLeagueFindUnique.mockResolvedValue({ id: 'zombie-1', leagueId: 'league-1', status: 'setup', sport: 'NFL', experienceMode: 'enhanced', whispererCount: 1, whispererAmbushCount: 3 })
   h.zombieLeagueUpdate.mockResolvedValue({ id: 'zombie-1' })
   h.whispererRecordFindUnique.mockResolvedValue(null)
   h.zombieLeagueConfigUpsert.mockResolvedValue({ id: 'config-1' })
@@ -124,4 +127,47 @@ describe('PATCH /api/zombie/settings Whisperer selection', () => {
     expect(h.zombieLeagueUpdate).not.toHaveBeenCalled()
   })
 
+})
+
+describe('commissioner Zombie rule persistence contract', () => {
+  it.each(['NFL', 'NBA', 'NHL', 'MLB'])('saves ambush and serum settings for %s and regenerates rules', async sport => {
+    h.zombieLeagueFindUnique.mockResolvedValue({
+      id: 'zombie-1', leagueId: 'league-1', status: 'setup',
+      sport, experienceMode: 'enhanced', whispererCount: 1, whispererAmbushCount: 3,
+    })
+    const { PATCH } = await import('@/app/api/zombie/settings/route')
+    const response = await PATCH(patch({
+      whispererCount: sport === 'NFL' ? 1 : 2, whispererAmbushCount: 5,
+      ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true,
+    }))
+    expect(response.status).toBe(200)
+    expect(h.zombieLeagueUpdate).toHaveBeenCalledWith({
+      where: { id: 'zombie-1' },
+      data: { whispererCount: sport === 'NFL' ? 1 : 2, whispererAmbushCount: 5 },
+    })
+    expect(h.zombieLeagueConfigUpsert).toHaveBeenCalledWith({
+      where: { leagueId: 'league-1' },
+      create: { leagueId: 'league-1', ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true },
+      update: { ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true },
+    })
+    expect(h.generateRulesDocument).toHaveBeenCalledWith('zombie-1')
+  })
+
+  it.each([
+    ['NFL', 'enhanced'], ['NFL', 'simple'], ['NBA', 'simple'], ['NHL', 'simple'], ['MLB', 'simple'],
+  ])('rejects two Whisperers in %s %s without writes', async (sport, experienceMode) => {
+    h.zombieLeagueFindUnique.mockResolvedValue({ id: 'zombie-1', status: 'setup', sport, experienceMode })
+    const { PATCH } = await import('@/app/api/zombie/settings/route')
+    expect((await PATCH(patch({ whispererCount: 2 }))).status).toBe(400)
+    expect(h.zombieLeagueUpdate).not.toHaveBeenCalled()
+    expect(h.zombieLeagueConfigUpsert).not.toHaveBeenCalled()
+  })
+
+  it('locks serum rule changes once active', async () => {
+    h.zombieLeagueFindUnique.mockResolvedValue({ id: 'zombie-1', status: 'active' })
+    const { PATCH } = await import('@/app/api/zombie/settings/route')
+    expect((await PATCH(patch({ serumReviveCount: 3, autoSerumRevive: true }))).status).toBe(409)
+    expect(h.zombieLeagueUpdate).not.toHaveBeenCalled()
+    expect(h.zombieLeagueConfigUpsert).not.toHaveBeenCalled()
+  })
 })

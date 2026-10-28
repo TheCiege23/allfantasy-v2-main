@@ -147,4 +147,98 @@ test.describe('@zombie iPhone commissioner accessibility', () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     expect(overflow).toBeLessThanOrEqual(1)
   })
+  test('saves NBA Whisperer and serum choices and reads them back after reopening', async ({ page }) => {
+    test.setTimeout(120_000)
+    await installZombieLeagueE2EMocks(page, leagueId)
+    const state = {
+      whispererCount: 1, whispererSelectionMode: 'random', whispererAmbushCount: 3,
+      ambushCountPerWeek: 1, serumReviveCount: 2, autoSerumRevive: false,
+    }
+    const writes: Array<Record<string, unknown>> = []
+    await page.route('**/api/zombie/league**', async route => {
+      const url = new URL(route.request().url())
+      if (route.request().method() !== 'GET' || url.pathname !== '/api/zombie/league') {
+        await route.fallback()
+        return
+      }
+      const pack = buildZombieLeagueGetPayload(leagueId)
+      await route.fulfill({ status: 200, json: { ...pack, league: {
+        ...pack.league, status: 'setup', sport: 'NBA', experienceMode: 'enhanced',
+        whispererRecord: null, whispererCount: state.whispererCount,
+        whispererSelectionMode: state.whispererSelectionMode, whispererAmbushCount: state.whispererAmbushCount,
+        config: { whispererSelection: state.whispererSelectionMode, ambushCountPerWeek: state.ambushCountPerWeek,
+          serumReviveCount: state.serumReviveCount, autoSerumRevive: state.autoSerumRevive },
+      } } })
+    })
+    await page.route('**/api/zombie/settings', async route => {
+      expect(route.request().method()).toBe('PATCH')
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      expect(body.leagueId).toBe(leagueId)
+      writes.push(body)
+      Object.assign(state, body)
+      await route.fulfill({ status: 200, json: { zombieLeague: state, config: state } })
+    })
+    await page.goto(`/zombie/${leagueId}`)
+    const opener = page.getByTestId('zombie-mobile-ops')
+    await expect(opener).toBeVisible({ timeout: 30_000 })
+    await opener.click()
+    const dialog = page.getByRole('dialog', { name: /Commissioner settings/i })
+    const sections = dialog.locator('[aria-label="League settings sections"]')
+    await sections.getByRole('button', { name: /Whisperer/ }).click()
+    await expect(dialog.getByLabel('Selection mode', { exact: true })).toBeEnabled()
+    await dialog.getByLabel('Selection mode', { exact: true }).selectOption('veteran_priority')
+    await dialog.getByLabel('Whisperer seats', { exact: true }).selectOption('2')
+    await dialog.getByLabel('Season ambushes', { exact: true }).fill('5')
+    await dialog.getByLabel('Per-week cap', { exact: true }).fill('2')
+    await dialog.getByRole('button', { name: 'Save Whisperer settings' }).click()
+    await expect(dialog.getByRole('status').filter({ hasText: 'Whisperer settings saved' })).toBeVisible()
+    await expect.poll(() => writes).toContainEqual({
+      leagueId, whispererSelectionMode: 'veteran_priority', whispererCount: 2,
+      whispererAmbushCount: 5, ambushCountPerWeek: 2,
+    })
+
+    await sections.getByRole('button', { name: /Serums & Weapons/ }).click()
+    await expect(dialog.getByLabel('Serums to revive', { exact: true })).toBeEnabled()
+    await dialog.getByLabel('Serums to revive', { exact: true }).fill('3')
+    const automatic = dialog.getByLabel('Automatic revival', { exact: true })
+    await automatic.check()
+    expect(await automatic.locator('..').evaluate(label => label.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44)
+    await dialog.getByRole('button', { name: 'Save serum settings' }).click()
+    await expect(dialog.getByRole('status').filter({ hasText: 'Serum settings saved' })).toBeVisible()
+    await expect.poll(() => writes).toContainEqual({ leagueId, serumReviveCount: 3, autoSerumRevive: true })
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+    await opener.click()
+    await sections.getByRole('button', { name: /Whisperer/ }).click()
+    await expect(dialog.getByLabel('Selection mode', { exact: true })).toHaveValue('veteran_priority')
+    await expect(dialog.getByLabel('Whisperer seats', { exact: true })).toHaveValue('2')
+    await expect(dialog.getByLabel('Season ambushes', { exact: true })).toHaveValue('5')
+    await expect(dialog.getByLabel('Per-week cap', { exact: true })).toHaveValue('2')
+    await sections.getByRole('button', { name: /Serums & Weapons/ }).click()
+    await expect(dialog.getByLabel('Serums to revive', { exact: true })).toHaveValue('3')
+    await expect(dialog.getByLabel('Automatic revival', { exact: true })).toBeChecked()
+    expect(writes).toHaveLength(2)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1)
+  })
+
+  test('keeps active-season serum rules visibly locked without a save request', async ({ page }) => {
+    await installZombieLeagueE2EMocks(page, leagueId)
+    const writes: string[] = []
+    await page.route('**/api/zombie/settings', async route => {
+      writes.push(route.request().method())
+      await route.fulfill({ status: 409, json: { error: 'Competitive Zombie rules are locked for this season.' } })
+    })
+    await page.goto(`/zombie/${leagueId}`)
+    await expect(page.getByTestId('zombie-mobile-ops')).toBeVisible({ timeout: 30_000 })
+    await page.getByTestId('zombie-mobile-ops').click()
+    const dialog = page.getByRole('dialog', { name: /Commissioner settings/i })
+    await dialog.locator('[aria-label="League settings sections"]').getByRole('button', { name: /Serums & Weapons/ }).click()
+    await expect(dialog.getByText('Competitive Zombie rules are locked for this season.', { exact: true })).toBeVisible()
+    await expect(dialog.getByLabel('Serums to revive', { exact: true })).toBeDisabled()
+    await expect(dialog.getByLabel('Automatic revival', { exact: true })).toBeDisabled()
+    await expect(dialog.getByRole('button', { name: 'Save serum settings' })).toBeDisabled()
+    expect(writes).toEqual([])
+  })
+
 })

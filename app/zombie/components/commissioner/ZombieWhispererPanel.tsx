@@ -98,15 +98,15 @@ export function ZombieWhispererPanel({
             ? 'Locked after the draft assigns the Whisperer.'
             : 'Choose how the Whisperer is picked when the draft completes.'}
           control={
-            <Select value={selection} onChange={setSelection} disabled={!editable} className="min-h-[44px]">
+            <Select aria-label="Selection mode" value={selection} onChange={setSelection} disabled={!editable} className="min-h-[44px]">
               <option value="random">Random</option>
               <option value="veteran_priority">Veteran priority</option>
             </Select>
           }
         />
-        {allowsTwo && <SettingsRow label="Whisperer seats" description="Each Whisperer has a separate ambush balance." control={<Select value={String(whispererCount)} onChange={(value) => setWhispererCount(Number(value))} disabled={!editable} className="min-h-[44px]"><option value="1">One</option><option value="2">Two</option></Select>} />}
-        <SettingsRow label="Season ambushes" description="Total ambushes granted when the Whisperer is chosen." control={<input type="number" min={0} max={20} value={ambushCount} onChange={(event) => setAmbushCount(Number(event.target.value))} disabled={!editable} className="min-h-[44px] w-20 rounded-lg border border-white/15 bg-[#050a18] px-2" />} />
-        <SettingsRow label="Per-week cap" description="Maximum matchup swaps in one week." control={<input type="number" min={0} max={5} value={weeklyCap} onChange={(event) => setWeeklyCap(Number(event.target.value))} disabled={!editable} className="min-h-[44px] w-20 rounded-lg border border-white/15 bg-[#050a18] px-2" />} />
+        {allowsTwo && <SettingsRow label="Whisperer seats" description="Each Whisperer has a separate ambush balance." control={<Select aria-label="Whisperer seats" value={String(whispererCount)} onChange={(value) => setWhispererCount(Number(value))} disabled={!editable} className="min-h-[44px]"><option value="1">One</option><option value="2">Two</option></Select>} />}
+        <SettingsRow label="Season ambushes" description="Total ambushes granted when the Whisperer is chosen." control={<input aria-label="Season ambushes" type="number" min={0} max={20} value={ambushCount} onChange={(event) => setAmbushCount(Number(event.target.value))} disabled={!editable} className="min-h-[44px] w-20 rounded-lg border border-white/15 bg-[#050a18] px-2" />} />
+        <SettingsRow label="Per-week cap" description="Maximum matchup swaps in one week." control={<input aria-label="Per-week cap" type="number" min={0} max={5} value={weeklyCap} onChange={(event) => setWeeklyCap(Number(event.target.value))} disabled={!editable} className="min-h-[44px] w-20 rounded-lg border border-white/15 bg-[#050a18] px-2" />} />
       </SettingsSection>
 
       <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
