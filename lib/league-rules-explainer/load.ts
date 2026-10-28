@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getRosterEngineRegistry } from '@/lib/roster-engine'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
+import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { HEADLINE_STATS } from './explain'
 import { normalizeRosterSlots, ruleSnapshotFromLeague, type RulesLeagueRow } from './snapshot'
 import { parseSettingsChangeEvents } from './view'
@@ -18,7 +19,7 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
   const snapshot = ruleSnapshotFromLeague(row)
   const sport = snapshot.sport
 
-  const [slots, scoring, guillotine] = await Promise.all([
+  const [slots, scoring, guillotine, taxi] = await Promise.all([
     (async () => {
       const registry = getRosterEngineRegistry()
       if (!registry.isSupported(sport as never)) return null
@@ -26,7 +27,15 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
     })().catch(() => null),
     getLeagueScoringConfig(leagueId).catch(() => null),
     snapshot.format === 'guillotine' ? getGuillotineConfig(leagueId).catch(() => null) : Promise.resolve(null),
+    // The taxi squad lives in the dynasty config (Devy / C2C override the slot count), not on the row.
+    snapshot.format === 'dynasty' ? getEffectiveTaxiSettings(leagueId).catch(() => null) : Promise.resolve(null),
   ])
+
+  if (taxi) {
+    snapshot.taxiSlots = taxi.taxiSlotCount
+    snapshot.taxiEligibilityYears = taxi.taxiEligibilityYears
+    snapshot.taxiDeadlineWeek = taxi.taxiDeadlineWeek
+  }
 
   const rosterSlots = normalizeRosterSlots(slots)
   if (rosterSlots) snapshot.rosterSlots = rosterSlots

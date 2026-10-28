@@ -46,6 +46,17 @@ export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'dangerMarginPoints',
   'releaseTiming',
   'faabOnChop',
+  'keeperCount',
+  'keeperCost',
+  'keeperMaxYears',
+  'pickTrading',
+  'pickTradeDeadline',
+  'pickTerms',
+  'taxiSlots',
+  'taxiEligibilityYears',
+  'taxiDeadlineWeek',
+  'taxiMaxYears',
+  'taxiStealing',
 ]
 
 const CHANGEABLE = new Set<string>(CHANGEABLE_RULE_KEYS)

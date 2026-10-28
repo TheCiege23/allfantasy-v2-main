@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { getLeagueRole } from '@/lib/league/permissions'
 import { isLeaguePrefEnabled, parseLeagueNotificationPrefs } from '@/lib/league/league-notification-prefs'
-import { isRulesExplainerLeague } from '@/lib/league-rules-explainer/snapshot'
+import { importedRuleSnapshot, isImportedRulesLeague, isRulesExplainerLeague } from '@/lib/league-rules-explainer/snapshot'
 import { loadRuleSnapshot, loadSettingsChangeEvents } from '@/lib/league-rules-explainer/load'
 import { getLeagueRulesSeen, setLeagueRulesSeen } from '@/lib/league-rules-explainer/seenStore'
 import { buildRulesExplainerView, nextLeagueRulesSeen } from '@/lib/league-rules-explainer/view'
@@ -17,7 +17,8 @@ import { buildRulesExplainerView, nextLeagueRulesSeen } from '@/lib/league-rules
  *      `{ kind: 'changes', eventId }` (a "What changed" card was dismissed).
  *
  * Served through the [section] dispatcher (no new route file — the route-count ceiling).
- * Members only; database only — no provider is called on this path.
+ * Members only; database only — no provider is called on this path. An imported league gets the
+ * rules its import carries (snapshot.ts `importedRuleSnapshot`) and never a change card.
  */
 
 export const dynamic = 'force-dynamic'
@@ -47,6 +48,10 @@ const LEAGUE_SELECT = {
   waiverBudget: true,
   waiverMinBid: true,
   waiverHours: true,
+  keeperCount: true,
+  keeperCostSystem: true,
+  keeperMaxYears: true,
+  draftPickTrading: true,
   settings: true,
 } as const
 
@@ -69,11 +74,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ leagueId: stri
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: LEAGUE_SELECT })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (!isRulesExplainerLeague(league)) return NextResponse.json({ supported: false })
+  // An imported league's rules change on its platform: the rules it carries, and never a change card.
+  const imported = !isRulesExplainerLeague(league) && isImportedRulesLeague(league)
+  if (!imported && !isRulesExplainerLeague(league)) return NextResponse.json({ supported: false })
 
   const [snapshot, events, seen, role] = await Promise.all([
-    loadRuleSnapshot(leagueId, league),
-    loadSettingsChangeEvents(leagueId).catch(() => []),
+    imported ? importedRuleSnapshot(league) : loadRuleSnapshot(leagueId, league),
+    imported ? [] : loadSettingsChangeEvents(leagueId).catch(() => []),
     getLeagueRulesSeen(auth.userId, leagueId),
     getLeagueRole(leagueId, auth.userId).catch(() => null),
   ])
