@@ -269,7 +269,7 @@ export default function ZombieArmoryPage() {
       </section>
 
       <p className="text-center text-[12px] text-white/45">
-        Serum and defensive weapon actions go through @Chimmy.{' '}
+        {data.experienceMode === 'simple' ? 'Serum actions go through @Chimmy.' : 'Serum and defensive weapon actions go through @Chimmy.'}{' '}
         <Link href={`/zombie/${leagueId}/rules`} className="text-lime-300 underline">
           Full rules
         </Link>
