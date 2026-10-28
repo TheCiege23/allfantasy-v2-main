@@ -22,7 +22,34 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB'] as const) {
     const name = panel.getByTestId('draft-player-card-0-name')
     expect(await name.evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(14)
     const list = panel.getByTestId('draft-player-list-scroll')
-    expect((await list.boundingBox())!.height).toBeGreaterThan(180)
+    // data-snap updates before the sheet's 200ms height transition finishes.
+    // Wait for the actual browsing area, then retain geometry if a browser cannot reach it.
+    try {
+      await expect.poll(async () => (await list.boundingBox())?.height ?? 0, { timeout: 5_000 }).toBeGreaterThan(180)
+    } finally {
+      console.info('PHONE_DRAFT_GEOMETRY', JSON.stringify(await page.evaluate(() => {
+        const bounds = (selector: string) => {
+          const node = document.querySelector<HTMLElement>(selector)
+          if (!node) return null
+          const rect = node.getBoundingClientRect()
+          const css = getComputedStyle(node)
+          return { y: rect.y, height: rect.height, width: rect.width, display: css.display, overflow: css.overflow, flex: css.flex }
+        }
+        return {
+          viewport: { width: innerWidth, height: innerHeight, visualHeight: visualViewport?.height, scale: visualViewport?.scale },
+          shell: bounds('[data-testid="draft-room-shell"]'),
+          header: bounds('[data-testid="draft-room-shell"] header'),
+          layout: bounds('[data-testid="draft-mobile-layout"]'),
+          tray: bounds('[data-testid="draft-mobile-tray"]'),
+          trayContent: bounds('#draft-mobile-tray-content'),
+          nav: bounds('[data-testid="draft-mobile-primary-nav"]'),
+          panel: bounds('[data-testid="draft-mobile-layout"] [data-testid="draft-player-panel"]'),
+          toolbar: bounds('[data-testid="draft-mobile-layout"] [data-testid="draft-player-toolbar"]'),
+          filters: bounds('[data-testid="draft-mobile-layout"] [data-testid="draft-extra-player-filters"]'),
+          list: bounds('[data-testid="draft-mobile-layout"] [data-testid="draft-player-list-scroll"]'),
+        }
+      })))
+    }
     const first = panel.getByTestId('draft-player-card-0')
     const bounds = await first.boundingBox()
     const listBounds = await list.boundingBox()
