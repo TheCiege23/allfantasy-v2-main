@@ -175,12 +175,15 @@ import { PostCreateWelcomeSheet, type PostCreateWelcomeLeague } from '@/componen
 import {
   chooseWelcomeIntro,
   firstEntryIntroKinds,
+  isFirstEntryIntroSeen,
   markFirstEntryIntrosSeen,
   shouldStartPostCreateWelcome,
   stripPostCreateHandoff,
   type FirstEntryIntroKind,
 } from '@/lib/league/post-create-welcome'
 import { countClaimedSeats, leagueJoinUrl, nativeLeagueInviteCode } from '@/lib/league/league-invite-link'
+import { LeagueRulesSheet } from '@/components/league-rules/LeagueRulesSheet'
+import { isRulesSheetSeen, markRulesSheetSeen, shouldAutoOpenRulesSheet } from '@/lib/league-rules/rulesSheetSeen'
 import { getLeagueTypeMedia, resolveLeagueConceptIntroKey } from '@/lib/league-media/leagueTypeMedia'
 import { findScoringPresetRule } from '@/lib/league-creation-preset/scoring-presets'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
@@ -905,6 +908,10 @@ export function LeagueShell({
   /* Its code failed to load: every later open says so instead of silently doing nothing. */
   const [settingsLoadFailed, setSettingsLoadFailed] = useState(false)
   const [leaveLeagueHintOpen, setLeaveLeagueHintOpen] = useState(false)
+  /* The league rules sheet: the header's Rules button, and once by itself (below). */
+  const [rulesSheetOpen, setRulesSheetOpen] = useState(false)
+  /* Bumped each time an intro settles, so the rules sheet re-checks whether it is its turn. */
+  const [introSettledCount, setIntroSettledCount] = useState(0)
   const [portalMounted, setPortalMounted] = useState(false)
 
   /*
@@ -931,6 +938,7 @@ export function LeagueShell({
   }, [welcomeFlowUsed])
   const advanceWelcomeFromIntro = useCallback(() => {
     setWelcomeStage((stage) => (stage === 'intro' ? 'ready' : stage))
+    setIntroSettledCount((n) => n + 1)
   }, [])
   const finishWelcome = useCallback(() => {
     // Mark every format intro seen BEFORE they are re-enabled, so none pops up after the sheet.
@@ -1285,6 +1293,32 @@ export function LeagueShell({
   const blockConceptIntroForInvitePrefill =
     defaultShowInvite && inviteAutoOpenedForLeague.current !== league.id
 
+  /*
+   * The rules sheet opens by itself once per manager per league (lib/league-rules/rulesSheetSeen.ts),
+   * and only when nothing else is greeting them: the welcome is done, no concept intro is still to
+   * play, every format intro has been seen and no other sheet is open.
+   */
+  useEffect(() => {
+    const conceptIntroPending = !welcomeFlowUsed && shouldPlayIntro && !blockConceptIntroForInvitePrefill && introSettledCount === 0
+    if (conceptIntroPending || blockConceptIntroForInvitePrefill || settingsOpen || rulesSheetOpen) return
+    const open = shouldAutoOpenRulesSheet({
+      leagueId: league.id,
+      userId,
+      welcomeDone: welcomeStage === 'done',
+      introsSeen: firstEntryKinds.every((kind) => isFirstEntryIntroSeen(kind, league.id, userId ?? '')),
+      embedded: embedMode,
+      seen: userId ? isRulesSheetSeen(league.id, userId) : true,
+    })
+    if (!open) return
+    const timer = window.setTimeout(() => setRulesSheetOpen(true), 600)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [league.id, userId, welcomeStage, introSettledCount, settingsOpen, embedMode, blockConceptIntroForInvitePrefill])
+  const closeRulesSheet = useCallback(() => {
+    setRulesSheetOpen(false)
+    if (userId) markRulesSheetSeen(league.id, userId)
+  }, [league.id, userId])
+
   /**
    * `/league/[id]?view=settings` opens the modal (NFL redraft has no Settings tab) — except on a
    * native league, where it is the League Settings page.
@@ -1511,6 +1545,7 @@ export function LeagueShell({
           isCommissioner={isCommissioner}
           onSelectTab={handleUserTabChange}
           onOpenSettings={() => (nativeWorkspace ? handleUserTabChange('settings') : openLeagueSettingsModal(null))}
+          onOpenRules={() => setRulesSheetOpen(true)}
           onOpenChimmy={() => { setNativeChimmyOpen(true); setMobileLeftOpen(true) }}
           rail={leagueRail}
           guillotineBanner={guillotineAtmosphere ? { line: guillotineAtmosphere.line, mood: guillotineAtmosphere.mood } : null}
@@ -1670,6 +1705,7 @@ export function LeagueShell({
                     }
               }
               onGoHome={() => router.push('/core')}
+              onOpenRules={() => setRulesSheetOpen(true)}
               idpLeagueActive={idpLeagueActive}
               idpViewMode={idpViewMode}
               onIdpViewModeChange={setIdpViewMode}
@@ -1973,6 +2009,13 @@ export function LeagueShell({
       {portalMounted && league.guillotineMode
         ? createPortal(
             <GuillotineFirstEntryModal leagueId={league.id} show={firstEntryIntroEnabled('guillotine')} onClose={advanceWelcomeFromIntro} />,
+            document.body,
+          )
+        : null}
+
+      {portalMounted && rulesSheetOpen
+        ? createPortal(
+            <LeagueRulesSheet leagueId={league.id} open onClose={closeRulesSheet} isCommissioner={isCommissioner} />,
             document.body,
           )
         : null}
@@ -2690,6 +2733,7 @@ function LeagueHeader({
   onOpenLeagueSettingsModal,
   memberGearMenu,
   onGoHome,
+  onOpenRules,
   idpLeagueActive = false,
   idpViewMode = 'full',
   onIdpViewModeChange,
@@ -2724,6 +2768,8 @@ function LeagueHeader({
     onLeaveLeague: () => void
   }
   onGoHome: () => void
+  /** Opens the league rules sheet (components/league-rules/LeagueRulesSheet.tsx). */
+  onOpenRules?: () => void
   idpLeagueActive?: boolean
   idpViewMode?: 'offense' | 'defense' | 'full'
   onIdpViewModeChange?: (m: 'offense' | 'defense' | 'full') => void
@@ -3024,6 +3070,18 @@ function LeagueHeader({
             >
               <Home className="h-[18px] w-[18px]" strokeWidth={2} />
             </button>
+            {onOpenRules ? (
+              <button
+                type="button"
+                onClick={onOpenRules}
+                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/[0.12] bg-white/[0.04] text-white/60 transition hover:border-[#ff3d81]/40 hover:bg-[#ff3d81]/10 hover:text-[#ff9ec0]"
+                aria-label={t('rules.sheet.open')}
+                title={t('rules.sheet.open')}
+                data-testid="league-header-rules"
+              >
+                <ScrollText className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => {
