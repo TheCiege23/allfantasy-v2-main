@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       sport:
-        description: 'Sport (NFL, NBA or NHL; MLB is not a Survivor sport yet)'
+        description: 'Sport (NFL, NBA, NHL or MLB)'
         default: 'NFL'
       cast:
         description: 'Cast size'

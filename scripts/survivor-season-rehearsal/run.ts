@@ -227,7 +227,7 @@ async function main() {
     const players = await prisma.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { userId: true, redraftRosterId: true } })
     const results = await Promise.all(players.filter(p => p.redraftRosterId).map(async p => ({ p, r: await sumRedraftStartersFantasy(p.redraftRosterId!, week, season) })))
     const notFinal = results.filter(x => !x.r.allFinalized)
-    const window = planWeekWindow(SPORT as 'NBA' | 'NHL' | 'NFL', season.season, week)
+    const window = planWeekWindow(SPORT as 'NBA' | 'NHL' | 'NFL' | 'MLB', season.season, week)
     const games = window ? await readWeekGames(prisma, { sport: SPORT, season: season.season, week, seasonType: 'regular', dateWindow: window, now: rehearsalNow() }) : []
     const sample = notFinal[0]
     let detail = ''
