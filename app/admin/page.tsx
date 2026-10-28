@@ -80,6 +80,28 @@ function MetricCard({ item }: { item: AdminMetric }) {
   )
 }
 
+function AdminFocus({
+  eyebrow,
+  title,
+  description,
+  tone = "neutral",
+}: {
+  eyebrow: string
+  title: string
+  description: string
+  tone?: "neutral" | "good" | "warn"
+}) {
+  return (
+    <section className={`af-cc-focus af-cc-focus--${tone}`}>
+      <div>
+        <p className="af-cc-focus-eyebrow">{eyebrow}</p>
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </div>
+    </section>
+  )
+}
+
 function AccordionSection({
   id,
   title,
@@ -113,9 +135,9 @@ function AccordionSection({
   )
 }
 
-function Section({ id, title, items }: { id?: string; title: string; items: AdminMetric[] }) {
+function Section({ id, title, items, defaultOpen = true }: { id?: string; title: string; items: AdminMetric[]; defaultOpen?: boolean }) {
   return (
-    <AccordionSection id={id} title={title}>
+    <AccordionSection id={id} title={title} defaultOpen={defaultOpen}>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => (
           <MetricCard key={`${title}-${item.label}`} item={item} />
@@ -134,6 +156,17 @@ function formatDate(value: string | null) {
     hour: "numeric",
     minute: "2-digit",
   })
+}
+
+function waitlistSourceLabel(source: string) {
+  const labels: Record<string, string> = {
+    v1_waitlist: "Waitlist page",
+    account_signup: "Account sign-up",
+    v1_google_ads_landing: "Google Ads landing page",
+    v1_early_access_page: "Early access page",
+    v1_direct: "Direct visit",
+  }
+  return labels[source] ?? (source === "(none)" ? "No campaign tag" : source.replace(/_/g, " "))
 }
 
 function metricLookup(items: AdminMetric[]) {
@@ -553,13 +586,17 @@ function cronStatusLabel(status: CronReadinessStatus) {
 
 function ProductionReadinessPanel({ data }: { data: AdminProductionReadiness }) {
   const criticalMissing = data.env.filter((row) => row.status === "missing" && row.severity === "critical")
+  const cronGaps = data.crons.filter((row) => row.status !== "configured")
   return (
-    <AccordionSection title="Production Env & Cron Readiness" eyebrow="launch trust">
-      <div className="mb-4 rounded-2xl border border-amber-300/20 bg-amber-300/[0.08] p-4 text-sm text-amber-100">
-        {criticalMissing.length > 0
-          ? `${criticalMissing.length} critical production env groups are missing. Add them in Vercel before trusting live sync/AI.`
-          : "Critical production env groups are configured in this runtime."}
-      </div>
+    <AccordionSection title="Production readiness" eyebrow="settings and scheduled jobs">
+      <AdminFocus
+        eyebrow="What needs attention"
+        title={criticalMissing.length || cronGaps.length ? `${criticalMissing.length} critical setting gaps · ${cronGaps.length} schedule gaps` : "Critical settings and schedules are configured"}
+        description={criticalMissing.length || cronGaps.length ? "Open the details to see exactly which setting or scheduled job needs work. These checks show configuration, not whether a pipeline has written fresh data." : "Configuration is present in this runtime. Check pipeline freshness above to confirm jobs are writing data."}
+        tone={criticalMissing.length || cronGaps.length ? "warn" : "good"}
+      />
+      <details className="af-cc-drilldown">
+        <summary>Review environment groups and scheduled jobs</summary>
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-xs">
@@ -637,6 +674,7 @@ function ProductionReadinessPanel({ data }: { data: AdminProductionReadiness }) 
           </div>
         </div>
       </div>
+      </details>
     </AccordionSection>
   )
 }
@@ -666,8 +704,24 @@ function PipelineFreshnessPanel({ data }: { data: AdminPipelineFreshness | null 
   }
   const late = data.rows.filter((row) => row.trafficLight !== "healthy")
   return (
-    <AccordionSection id="pipeline-freshness" title="Pipeline Freshness" eyebrow="last write per pipeline">
-      <div className="af-cc-card" data-testid="pipeline-freshness" data-overall={data.overall}>
+    <AccordionSection id="pipeline-freshness" title="Pipeline freshness" eyebrow="last successful write">
+      <div data-testid="pipeline-freshness" data-overall={data.overall}>
+        <AdminFocus
+          eyebrow="What needs attention"
+          title={data.rows.length === 0 ? "No pipeline measurements returned" : late.length === 0 ? "All measured pipelines wrote on schedule" : `${late.length} of ${data.rows.length} pipelines need investigation`}
+          description={data.rows.length === 0 ? "The report cannot confirm data freshness yet." : late.length === 0 ? "This checks actual output, not only whether a job is scheduled." : "Start with the pipelines below. A configured schedule can still run without producing fresh rows."}
+          tone={data.rows.length > 0 && late.length === 0 ? "good" : "warn"}
+        />
+        {late.length > 0 ? (
+          <ul className="af-cc-record-list">
+            {late.slice(0, 3).map((row) => (
+              <li key={row.id}><strong>{row.label}</strong><span>{row.status === "query_failed" ? "Not measured" : formatPipelineAge(row.ageHours)} · {row.summary}</span></li>
+            ))}
+          </ul>
+        ) : null}
+        <details className="af-cc-drilldown">
+          <summary>View all pipeline timings and source tables</summary>
+      <div className="af-cc-card">
         <div className="af-cc-card-head">
           <div className="af-cc-card-title">
             {late.length === 0 ? "Every pipeline wrote on schedule" : `${late.length} of ${data.rows.length} need a look`}
@@ -711,13 +765,15 @@ function PipelineFreshnessPanel({ data }: { data: AdminPipelineFreshness | null 
           ))}
         </div>
       </div>
+        </details>
+      </div>
     </AccordionSection>
   )
 }
 
 function TrafficGeoPanel({ data, metrics }: { data: AdminProductionReadiness; metrics: AdminMetric[] }) {
   return (
-    <AccordionSection title="Traffic / Visitors / IP Geo" eyebrow="privacy-safe analytics">
+    <AccordionSection title="Visitor locations" eyebrow="privacy-safe aggregates" defaultOpen={false}>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((item) => <MetricCard key={`traffic-${item.label}`} item={item} />)}
       </div>
@@ -750,15 +806,8 @@ function TrafficGeoPanel({ data, metrics }: { data: AdminProductionReadiness; me
 
 function EmailCenterPanel({ status }: { status: AdminEmailStatus }) {
   return (
-    /*
-     * ⚠ OPEN BY DEFAULT, DELIBERATELY. This panel is the mass-email tool — 11
-     * audiences, compose, test-send, confirm-to-send — and it sat collapsed
-     * behind the words "Email Notifications", which read like a settings
-     * toggle. It was fully built and effectively undiscoverable, which is the
-     * 93KB single-scroll problem 29a exists to fix. The title says what it does
-     * now, and it opens.
-     */
-    <AccordionSection title="Email Center — send a broadcast" eyebrow="mass email · 11 audiences" defaultOpen>
+    /* Keep the send tool clearly named while letting an admin open it when needed. */
+    <AccordionSection title="Email center — send a broadcast" eyebrow="compose, test, and send" defaultOpen={false}>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard item={{ label: "Email provider", value: status.configured ? "Configured" : "Missing env", tracked: status.configured, note: status.missingEnv.join(", ") || "Resend ready" }} />
         <MetricCard item={{ label: "Users with email", value: status.totalUsersWithEmail, tracked: true }} />
@@ -785,26 +834,45 @@ function SportsOperatingSystemPanel({ audit }: { audit: SportsOperatingSystemAud
     { title: "Bracket Intelligence", rows: audit.bracketIntelligence },
     { title: "Freshness", rows: audit.dataFreshness },
   ]
+  const reviewFirst = phaseGroups.flatMap((group) => group.rows.map((row) => ({ ...row, group: group.title })))
+    .filter((row) => row.status !== "ready")
+    .sort((a, b) => (a.status === "missing" ? 0 : 1) - (b.status === "missing" ? 0 : 1))
+    .slice(0, 3)
 
   return (
-    <AccordionSection title="Sports OS / Chimmy Brain Readiness" eyebrow="master data and commissioner value">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <MetricCard item={{ label: "Ready signals", value: audit.summary.ready, tracked: true }} />
-        <MetricCard item={{ label: "Partial signals", value: audit.summary.partial, tracked: true }} />
-        <MetricCard item={{ label: "Missing signals", value: audit.summary.missing, tracked: true }} />
+    <AccordionSection title="Sports OS and Chimmy readiness" eyebrow="product operations">
+      <div className="af-cc-compact-stats">
+        <div><strong>{audit.summary.missing}</strong><span>Missing checks</span></div>
+        <div><strong>{audit.summary.partial}</strong><span>Partly ready</span></div>
+        <div><strong>{audit.summary.ready}</strong><span>Ready</span></div>
       </div>
-
-      <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/[0.08] p-4">
-        <h3 className="text-xs font-black uppercase tracking-[0.16em] text-amber-100/85">Biggest data holes</h3>
-        <div className="mt-3 grid gap-2 lg:grid-cols-2">
-          {audit.biggestDataHoles.map((hole) => (
-            <div key={hole} className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs font-semibold text-white/65">
-              {hole}
-            </div>
-          ))}
+      <AdminFocus
+        eyebrow="How to read this"
+        title={audit.summary.missing > 0 ? "Some capabilities need attention" : audit.summary.partial > 0 ? "Core coverage is incomplete" : "All audited signals are ready"}
+        description="These are capability checks, not a count of live incidents. Missing means a capability is unavailable or unproven; partial means it works with gaps. Review affected features before promising them to users."
+        tone={audit.summary.missing > 0 ? "warn" : "good"}
+      />
+      {reviewFirst.length > 0 ? (
+        <div className="af-cc-priority-list">
+          <h3>Review first</h3>
+          <ul>
+            {reviewFirst.map((row) => (
+              <li key={row.id}>
+                <span className={`rounded-full border px-2 py-1 text-[11px] font-black ${sportsOsStatusClass(row.status)}`}>{sportsOsStatusLabel(row.status)}</span>
+                <div><strong>{row.label}</strong><p>{row.recommendation}</p></div>
+              </li>
+            ))}
+          </ul>
         </div>
-      </div>
-
+      ) : null}
+      <details className="af-cc-drilldown">
+        <summary>View all findings, data gaps, and per-sport checks</summary>
+        {audit.biggestDataHoles.length > 0 ? (
+          <div className="af-cc-data-holes">
+            <h3>Data coverage gaps</h3>
+            <ul>{audit.biggestDataHoles.map((hole) => <li key={hole}>{hole}</li>)}</ul>
+          </div>
+        ) : null}
       <div className="mt-4 grid gap-3 xl:grid-cols-3">
         {phaseGroups.map((group) => (
           <div key={group.title} className="rounded-2xl border border-white/10 bg-black/25 p-4">
@@ -906,6 +974,7 @@ function SportsOperatingSystemPanel({ audit }: { audit: SportsOperatingSystemAud
           </div>
         </div>
       </div>
+      </details>
     </AccordionSection>
   )
 }
@@ -1824,11 +1893,16 @@ export default async function AdminPage(
         </div>
         <div data-admin-pane="data" className="af-cc-pane">
         <PipelineFreshnessPanel data={pipelineFreshness} />
+        <div id="stat-reingest">
+          <AccordionSection title="Re-ingest stats & rescore weeks" eyebrow="redraft scoring" defaultOpen={false}>
+            <StatReingestPanel />
+          </AccordionSection>
+        </div>
 
         {/* Growth and traffic belong with people, invitations, and email. */}
         </div>
         <div data-admin-pane="audience" className="af-cc-pane">
-        <div id="growth">{growth ? <GrowthSeriesPanel series={growth} /> : null}</div>
+        <div id="growth"><AccordionSection title="Growth trends" eyebrow="signups over time" defaultOpen={false}>{growth ? <GrowthSeriesPanel series={growth} /> : <p className="af-cc-empty-state">Growth data is unavailable for this refresh.</p>}</AccordionSection></div>
 
         {/*
           ⚠ THE VISITOR PANEL WAS BUILT AND NEVER MOUNTED HERE. VisitorAnalyticsService
@@ -1887,23 +1961,18 @@ export default async function AdminPage(
         <div data-admin-pane="audience" className="af-cc-pane">
         <TrafficGeoPanel data={data.productionReadiness} metrics={data.traffic} />
         <div id="highlight-analytics">
-          <AccordionSection title="Highlight Engagement" eyebrow="availability & returns">
+          <AccordionSection title="Highlight engagement" eyebrow="what viewers saw" defaultOpen={false}>
             <HighlightAnalyticsPanel />
           </AccordionSection>
         </div>
         <div id="social-campaigns">
-          <AccordionSection title="Social & Campaigns" eyebrow="attribution">
+          <AccordionSection title="Social & campaigns" eyebrow="attribution" defaultOpen={false}>
             <CampaignAttributionPanel />
           </AccordionSection>
         </div>
         <div id="beta-invites">
-          <AccordionSection title="Closed-Beta Invitations" eyebrow="access">
+          <AccordionSection title="Closed-beta invitations" eyebrow="access" defaultOpen={false}>
             <BetaInvitePanel />
-          </AccordionSection>
-        </div>
-        <div id="stat-reingest">
-          <AccordionSection title="Re-ingest Stats & Rescore Weeks" eyebrow="redraft scoring" defaultOpen={false}>
-            <StatReingestPanel />
           </AccordionSection>
         </div>
         <div id="email-center">
@@ -1962,7 +2031,7 @@ export default async function AdminPage(
 
         </div>
         <div data-admin-pane="audience" className="af-cc-pane af-cc-pane--people">
-        <section id="user-search" className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.75fr)]">
+        <section id="user-search" className="grid gap-4">
           {/*
             29a §5 — "Find a user". The handoff draws the search as a compact
             190px field in the card header rather than a full-width bar; the
@@ -1992,6 +2061,7 @@ export default async function AdminPage(
                 Masked email, subscription, token balance, and World Cup activity.
               </p>
             </div>
+            {q.trim().length >= 2 ? (
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[860px] text-left text-sm">
                 <thead className="text-[11px] uppercase tracking-[0.16em] text-white/45">
@@ -2031,17 +2101,23 @@ export default async function AdminPage(
                   ) : (
                     <tr>
                       <td className="py-5 text-white/45" colSpan={6}>
-                        Enter at least two characters to search users.
+                        No users matched this search.
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
+            ) : <p className="af-cc-empty-state" style={{ padding: "0 16px 16px" }}>Search by email or username to see a person’s plan, token balance, and World Cup activity.</p>}
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(251,191,36,0.55)]">
-            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-amber-100/80">Most Active World Cup Pools</h2>
+          <div className="af-cc-surface">
+            <div className="af-cc-surface-head">
+              <div><h2>World Cup pool activity</h2><p>Open this only when you need to inspect a specific active pool.</p></div>
+              <span className="af-cc-surface-meta">{data.activeWorldCupPools.length} pools in report</span>
+            </div>
+            <details className="af-cc-drilldown">
+              <summary>View active pools and participation</summary>
             <div className="mt-4 space-y-3">
               {data.activeWorldCupPools.length > 0 ? (
                 data.activeWorldCupPools.map((pool) => (
@@ -2061,6 +2137,7 @@ export default async function AdminPage(
                 </p>
               )}
             </div>
+            </details>
           </div>
         </section>
 
@@ -2081,41 +2158,29 @@ export default async function AdminPage(
           months-old list is one-way and belongs behind an explicit decision
           about recipients and copy, not a click on a dashboard.
         */}
-        <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">
-              Early-access waitlist
-            </h2>
-            <span className="text-[11px] text-white/45">
-              {data.waitlist.firstAt ? (
-                <>
-                  {formatDate(data.waitlist.firstAt)} &rarr; {formatDate(data.waitlist.lastAt ?? data.waitlist.firstAt)}
-                </>
-              ) : (
-                "no signups yet"
-              )}
+        <section id="waitlist" className="af-cc-surface">
+          <div className="af-cc-surface-head">
+            <div>
+              <h2>Early-access waitlist</h2>
+              <p>{data.waitlist.total} signups in the list. Confirmation is the stronger signal for future outreach.</p>
+            </div>
+            <span className="af-cc-surface-meta">
+              {data.waitlist.firstAt ? `${formatDate(data.waitlist.firstAt)} to ${formatDate(data.waitlist.lastAt ?? data.waitlist.firstAt)}` : "No signups yet"}
             </span>
           </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
-              <div className="text-2xl font-black text-white">{data.waitlist.total}</div>
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">Total signups</div>
-            </div>
-            <div className="rounded-2xl border border-emerald-300/20 bg-black/25 p-3">
-              <div className="text-2xl font-black text-emerald-300">{data.waitlist.confirmed}</div>
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">Confirmed</div>
-            </div>
-            <div className="rounded-2xl border border-amber-300/20 bg-black/25 p-3">
-              <div className="text-2xl font-black text-amber-300">{data.waitlist.unconfirmed}</div>
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">Never confirmed</div>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
-              <div className="text-2xl font-black text-white">{data.waitlist.last30Days}</div>
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">Last 30 days</div>
-            </div>
+          <div className="af-cc-compact-stats">
+            <div><strong>{data.waitlist.confirmed}</strong><span>Confirmed{data.waitlist.total > 0 ? ` · ${Math.round(data.waitlist.confirmed / data.waitlist.total * 100)}% of signups` : ""}</span></div>
+            <div><strong>{data.waitlist.unconfirmed}</strong><span>Never confirmed</span></div>
+            <div><strong>{data.waitlist.last30Days}</strong><span>Signed up in 30 days</span></div>
           </div>
-
+          <AdminFocus
+            eyebrow="What to do"
+            title={data.waitlist.total === 0 ? "No waitlist activity yet" : data.waitlist.unconfirmed > 0 ? "Check the confirmation path before outreach" : "The current list is fully confirmed"}
+            description={data.waitlist.total === 0 ? "Use the signup-source report once people begin joining." : data.waitlist.unconfirmed > 0 ? "Unconfirmed signups are not the same as confirmed recipients. Review the sign-up and confirmation journey before planning a campaign." : "Keep watching new signups and use the confirmed count when planning outreach."}
+            tone={data.waitlist.unconfirmed > 0 ? "warn" : "good"}
+          />
+          <details className="af-cc-drilldown">
+            <summary>View signup history, sources, and recent people</summary>
           {/* How old the list is, at a glance — a dormant list and a growing one
               call for completely different decisions. */}
           {data.waitlist.byMonth.length > 0 ? (
@@ -2138,7 +2203,7 @@ export default async function AdminPage(
                 <ul className="mt-2 space-y-1 text-sm text-white/70">
                   {data.waitlist.bySource.map((r) => (
                     <li key={r.source} className="flex justify-between gap-3">
-                      <span className="truncate">{r.source}</span>
+                      <span className="truncate">{waitlistSourceLabel(r.source)}</span>
                       <span className="font-black text-white">{r.count}</span>
                     </li>
                   ))}
@@ -2149,7 +2214,7 @@ export default async function AdminPage(
                 <ul className="mt-2 space-y-1 text-sm text-white/70">
                   {data.waitlist.byUtmSource.map((r) => (
                     <li key={r.source} className="flex justify-between gap-3">
-                      <span className="truncate">{r.source}</span>
+                      <span className="truncate">{waitlistSourceLabel(r.source)}</span>
                       <span className="font-black text-white">{r.count}</span>
                     </li>
                   ))}
@@ -2187,10 +2252,10 @@ export default async function AdminPage(
                               : "rounded-full border border-amber-300/30 px-2 py-0.5 text-[11px] font-black text-amber-300"
                           }
                         >
-                          {row.confirmed ? "YES" : "NO"}
+                          {row.confirmed ? "Confirmed" : "Unconfirmed"}
                         </span>
                       </td>
-                      <td className="py-3 text-xs text-white/55">{row.source ?? "—"}</td>
+                      <td className="py-3 text-xs text-white/55">{row.source ? waitlistSourceLabel(row.source) : "—"}</td>
                       <td className="py-3 text-xs text-white/55">{row.utmCampaign ?? row.utmSource ?? "—"}</td>
                       <td className="py-3 text-xs text-white/55">{formatDate(row.createdAt)}</td>
                     </tr>
@@ -2211,11 +2276,24 @@ export default async function AdminPage(
               Showing the {data.waitlist.recent.length} most recent of {data.waitlist.total}.
             </p>
           ) : null}
+          </details>
         </section>
 
-        <section className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2 [&>div]:min-w-0">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
-            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">Recent Users</h2>
+        <section className="af-cc-activity-grid" aria-label="Recent people">
+          <div className="af-cc-surface">
+            <div className="af-cc-surface-head">
+              <div><h2>New accounts</h2><p>A quick sample of recent signups. Search above to investigate a person.</p></div>
+              <span className="af-cc-surface-meta">{data.recentUsers.length} shown in report</span>
+            </div>
+            {data.recentUsers.length > 0 ? (
+              <ul className="af-cc-record-list">
+                {data.recentUsers.slice(0, 3).map((user) => (
+                  <li key={user.id}><strong>@{user.username}</strong><span>{formatDate(user.createdAt)}</span></li>
+                ))}
+              </ul>
+            ) : <p className="af-cc-empty-state">No recent account records were returned.</p>}
+            <details className="af-cc-drilldown">
+              <summary>View account details, plan, and token balance</summary>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="text-[11px] uppercase tracking-[0.16em] text-white/45">
@@ -2244,12 +2322,37 @@ export default async function AdminPage(
                 </tbody>
               </table>
             </div>
+            </details>
           </div>
+        </section>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(251,191,36,0.55)]">
-            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-amber-100/80">Recent Subscriptions</h2>
+        </div>
+        <div data-admin-pane="revenue" className="af-cc-pane">
+        <AdminFocus
+          eyebrow="Revenue at a glance"
+          title={`Revenue today: ${metricDisplay(data.subscriptions, "Revenue today")}`}
+          description={`Active subscribers: ${metricDisplay(data.subscriptions, "Active subscribers")}. Payment rows and token ledger entries below are separate operational records.`}
+          tone="neutral"
+        />
+        <Section title="Payment and subscription metrics" items={data.subscriptions} defaultOpen={false} />
+        <Section title="Token and AI metrics" items={[...data.tokens, ...data.ai]} defaultOpen={false} />
+        <section className="af-cc-activity-grid" aria-label="Recent subscription changes">
+          <div className="af-cc-surface">
+            <div className="af-cc-surface-head">
+              <div><h2>Subscription changes</h2><p>These are the most recent records, not the total subscriber count.</p></div>
+              <span className="af-cc-surface-meta">{data.recentSubscriptions.length} shown in report</span>
+            </div>
+            {data.recentSubscriptions.length > 0 ? (
+              <ul className="af-cc-record-list">
+                {data.recentSubscriptions.slice(0, 3).map((sub) => (
+                  <li key={sub.id}><strong>@{sub.username} · {sub.plan}</strong><span>{sub.status} · {formatDate(sub.createdAt)}</span></li>
+                ))}
+              </ul>
+            ) : <p className="af-cc-empty-state">No subscription records were returned. Check the revenue metrics for the overall picture.</p>}
+            <details className="af-cc-drilldown">
+              <summary>View plan, status, SKU, and dates</summary>
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[820px] text-left text-sm">
+              <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="text-[11px] uppercase tracking-[0.16em] text-white/45">
                   <tr>
                     <th className="py-2 pr-3">User</th>
@@ -2290,16 +2393,24 @@ export default async function AdminPage(
                 </tbody>
               </table>
             </div>
+            </details>
           </div>
         </section>
-
-        </div>
-        <div data-admin-pane="revenue" className="af-cc-pane">
-        <Section title="Payments & Subscriptions" items={data.subscriptions} />
-        <Section title="Tokens & AI" items={[...data.tokens, ...data.ai]} />
-        <section className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2 [&>div]:min-w-0">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
-            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">Recent Payments</h2>
+        <section className="af-cc-activity-grid" aria-label="Recent financial activity">
+          <div className="af-cc-surface">
+            <div className="af-cc-surface-head">
+              <div><h2>Payment records</h2><p>Recent recorded transactions. Use the metrics above for overall revenue.</p></div>
+              <span className="af-cc-surface-meta">{data.recentPayments.length} in this report</span>
+            </div>
+            {data.recentPayments.length > 0 ? (
+              <>
+                <ul className="af-cc-record-list">
+                  {data.recentPayments.slice(0, 3).map((payment) => (
+                    <li key={payment.id}><strong>@{payment.username} · {payment.amount}</strong><span>{payment.status} · {formatDate(payment.createdAt)}</span></li>
+                  ))}
+                </ul>
+                <details className="af-cc-drilldown">
+                  <summary>View all recorded payments and statuses</summary>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="text-[11px] uppercase tracking-[0.16em] text-white/45">
@@ -2339,10 +2450,24 @@ export default async function AdminPage(
                 </tbody>
               </table>
             </div>
+                </details>
+              </>
+            ) : <p className="af-cc-empty-state">No payment transactions were returned by this report. This does not establish zero sales; check the revenue metrics or payment provider for that answer.</p>}
           </div>
-
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
-            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">Recent Token Activity</h2>
+          <div className="af-cc-surface">
+            <div className="af-cc-surface-head">
+              <div><h2>Token usage</h2><p>Credits and spending are product activity, not payment revenue.</p></div>
+              <span className="af-cc-surface-meta">{data.recentTokenActivity.length} entries in report</span>
+            </div>
+            {data.recentTokenActivity.length > 0 ? (
+              <>
+                <ul className="af-cc-record-list">
+                  {data.recentTokenActivity.slice(0, 3).map((entry) => (
+                    <li key={entry.id}><strong>@{entry.username} · {entry.description || entry.entryType}</strong><span>{entry.tokenDelta >= 0 ? `+${entry.tokenDelta}` : entry.tokenDelta} tokens</span></li>
+                  ))}
+                </ul>
+                <details className="af-cc-drilldown">
+                  <summary>View full token ledger and balances</summary>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="text-[11px] uppercase tracking-[0.16em] text-white/45">
@@ -2383,6 +2508,9 @@ export default async function AdminPage(
                 </tbody>
               </table>
             </div>
+                </details>
+              </>
+            ) : <p className="af-cc-empty-state">No token ledger entries were returned for this report.</p>}
           </div>
         </section>
         </div>
