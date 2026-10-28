@@ -85,6 +85,10 @@ taxi/IR slot counts are not imported.
 **Needed:** `getTeamRosters` + `getLeagueInfo.rosterInfo` from a public dynasty league that uses
 minors and IR slots (any sport).
 
+**2026-10-26:** MLB `MINORS` is now carried as the taxi squad too (it was filed as bench, so a
+prospect counted against the roster limit). Still synthetic only — the committed MLB capture
+(`tests/fixtures/fantrax/mlb-points-public.json`) has `ACTIVE` and `RESERVE` and nothing else.
+
 ## F-05 — Future draft picks (dynasty)
 
 `getDraftPicks.futureDraftPicks` was EMPTY in the only league measured (see `fantraxApi.ts`), so its
@@ -148,3 +152,18 @@ mark them as prospects.
 **Needed, without a probe first:** read the `sportsDataCache['fantrax:mlb-identities:last-run']`
 marker (`provided` vs `unmatched`; `fantrax:nhl-identities:last-run` for NHL) to size it. If it is worth pursuing, capture one
 `getPlayerIds?sport=MLB` response as a committed fixture and check for a level/status field.
+
+## F-11 — `getAdp?sport=MLB` / `?sport=NHL` response shape (recorded 2026-10-27, no probe)
+
+The scheduled ADP import (`lib/workers/adp-importer.ts`, via `loadFantraxAdp` in
+`lib/adp/fantraxNbaAdp.ts`) now reads Fantrax ADP for MLB and NHL as well as NBA. Only
+`getAdp?sport=NBA` (and NCAAF) has a verified response. MLB/NHL are ASSUMED to return the same
+`[{ id, name: "Last, First", pos, ADP }]` array.
+
+Workaround: `getFantraxAdp` drops any row it cannot read and returns `api_error` on an empty board,
+which the `adp-refresh` heartbeat reports as `Fantrax MLB ADP: …` / `Fantrax NHL ADP: …`. Rows match
+on `PlayerIdentityMap.fantraxId` first, then on name. So a different shape costs rows, never wrong ADP.
+Out of season (MLB in October) the board may be stale or empty; that is reported the same way.
+
+**Needed:** a trimmed `getAdp?sport=MLB` and `?sport=NHL` capture (a few rows each, including a
+pitcher and a goalie), committed under `contracts/fantrax/fixtures/`.

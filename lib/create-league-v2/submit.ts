@@ -6,6 +6,7 @@
  *   - all other formats → POST /api/leagues (canonical preset engine + Prisma transaction)
  */
 
+import { isSurvivorTwistPresetId, SURVIVOR_TWIST_PRESET_DEFAULT } from '@/lib/survivor/survivorTwistPresets'
 import type { CreateLeagueV2State } from './state'
 import { getDefaultKeeperSetup } from './state'
 import { getEffectiveLeagueType, isFootballLike, isDynastyConcept, resolveBestBallSetupForWizard } from './state'
@@ -104,6 +105,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     conceptSetup.survivorTribeCount = state.survivorTribeCount
     conceptSetup.commissionerParticipationMode = state.survivorCommissionerParticipationMode ?? 'non_participating_host'
     conceptSetup.survivorEntryFeeMode = state.survivorEntryFeeMode === 'paid' ? 'paid' : 'free'
+    conceptSetup.survivorTwistPreset = isSurvivorTwistPresetId(state.survivorTwistPreset) ? state.survivorTwistPreset : SURVIVOR_TWIST_PRESET_DEFAULT
     if (state.survivorEntryFeeMode === 'paid') {
       const cents = parseSurvivorDuesUsd(state.survivorDuesUsd ?? '')
       if (typeof cents === 'number') conceptSetup.survivorEntryFeeAmountCents = cents

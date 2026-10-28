@@ -6,11 +6,14 @@ import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSecti
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
 import { PlayoffBracketFormatCard } from '@/components/league-settings/PlayoffBracketFormatCard'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
 import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { MAX_PLAYOFF_TEAMS, maxPlayoffTeamsThatFit } from '@/lib/playoff-runtime/playoffFit'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { playoffSeriesSportSupported, readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
+import { PlayoffSeriesLengthsCard } from '@/components/league-settings/PlayoffSeriesLengthsCard'
 import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
 import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
@@ -88,7 +91,10 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
   useEffect(() => setThirdPlace(storedThirdPlace), [storedThirdPlace])
 
   const seasonWeeks = tryGetSportConfig(String(ctx.league.sport ?? 'NFL'))?.defaultSeasonWeeks ?? 52
-  const startWeekMax = Math.max(18, seasonWeeks, chosenStartWeek)
+  // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts), so the
+  // playoffs start by week 25 there; the server refuses a later week.
+  const startWeekCap = maxPlayoffStartWeekFor({ leagueType: ctx.league.leagueType, sport: ctx.league.sport })
+  const startWeekMax = startWeekCap ?? Math.max(18, seasonWeeks, chosenStartWeek)
   const leagueCap = Math.min(ctx.league.leagueSize ?? ctx.league.teams?.length ?? 12, MAX_PLAYOFF_TEAMS)
   // A field whose final would land after the season's last week never completes, and the server refuses
   // it (lib/playoff-runtime/championshipLengthFit.ts) — so it is not offered. A dynasty season is sized
@@ -100,8 +106,14 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
         playoffStartWeek,
         weeksPerRound: ctx.league.playoffWeeksPerRound,
         championshipLength: readChampionshipLength(ctx.league.settings),
+        seriesLengths: readPlayoffSeriesLengths(ctx.league.settings),
         leagueSize: leagueCap,
       })
+  // Best-of-N series (lib/playoff-runtime/playoffSeries.ts): native NBA / NHL / MLB redraft leagues only.
+  const offerSeries =
+    native &&
+    playoffSeriesSportSupported(ctx.league.sport) &&
+    String(ctx.league.leagueType ?? 'redraft').trim().toLowerCase() === 'redraft'
   const teamCap = Math.max(2, Math.min(leagueCap, fitCap))
 
   // A tournament conference league has no league playoffs; its fields would do nothing.
@@ -280,6 +292,18 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
         </label>
       ) : null}
       {native ? <PlayoffBracketFormatCard leagueId={leagueId} playoffTeams={playoffTeams} canEdit={canEdit} /> : null}
+      {offerSeries ? (
+        <PlayoffSeriesLengthsCard
+          leagueId={leagueId}
+          settings={ctx.league.settings}
+          playoffTeams={playoffTeams}
+          playoffStartWeek={playoffStartWeek}
+          seasonWeeks={ctx.league.isDynasty ? null : seasonWeeks}
+          canEdit={canEdit}
+          hasPlan={hasAfCommissionerSub || Boolean(ctx.hasAfCommissionerSub)}
+          queuePatch={queuePatch}
+        />
+      ) : null}
       {native ? (
         <TiebreakerOrderEditor
           leagueId={leagueId}

@@ -11,6 +11,11 @@ import {
 } from '@/lib/redraft/tradeProposalExpiry'
 import { processDueTradeReviews, type TradeReviewSweepResult } from '@/lib/redraft/tradeReviewWindowSweep'
 import type { InactiveLineupRunResult } from '@/lib/inactive-manager/inactiveManagerService'
+import type { EliminatedLineupRunResult } from '@/lib/eliminated-lineups/eliminatedLineupService'
+import type { RookieOrderRoundNoticeRun } from '@/lib/rookie-order/roundNoticeService'
+import type { IrAutoMoveRunResult } from '@/lib/ir-activation/irAutoMoveService'
+import type { OrphanAuctionRunResult } from '@/lib/orphan-auction/orphanAuctionService'
+import type { TaxiStealRunResult } from '@/lib/taxi/taxiStealingService'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -120,10 +125,33 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Pending offers expire once a league's trade deadline passes, on both trade engines, and both sides are
+   * told (lib/trade-deadline/expireOffersAtDeadline.ts). Hourly is the deadline's granularity here; the
+   * engines refuse acceptance from the deadline itself, so nothing can complete in the gap.
+   */
+  let deadlineExpiry: unknown = null
+  try {
+    const { expirePendingOffersAtDeadline } = await import('@/lib/trade-deadline/expireOffersAtDeadline')
+    deadlineExpiry = await withSyncJobRun(
+      { jobName: 'cron-trade-deadline-expiry', trigger: 'cron' },
+      () => expirePendingOffersAtDeadline(),
+      (r) => ({
+        rowsRead: r.leaguesChecked,
+        rowsWritten: r.expiredAf + r.expiredRedraft,
+        errors: r.failures.map((f) => `${f.id}: ${f.error}`),
+        metadata: { leaguesPastDeadline: r.leaguesPastDeadline, expiredAf: r.expiredAf, expiredRedraft: r.expiredRedraft },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] trade deadline expiry sweep failed', e)
+    deadlineExpiry = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Accepted trades whose review window ended with no veto go through here (lib/redraft/tradeReviewWindow.ts),
    * guarded and on their own job identity for the same reasons as the expiry sweep above.
    */
-  let tradeReviews: TradeReviewSweepResult & { error?: string } = { due: 0, processed: 0, waitingOnLock: 0, skipped: 0, closed: 0, failures: [] }
+  let tradeReviews: TradeReviewSweepResult & { error?: string } = { due: 0, processed: 0, waitingOnLock: 0, held: 0, skipped: 0, closed: 0, failures: [] }
   try {
     tradeReviews = await withSyncJobRun(
       { jobName: 'cron-redraft-trade-review-window', trigger: 'cron' },
@@ -138,7 +166,7 @@ export async function GET(request: Request) {
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e)
     console.error('[redraft/waiver-process] trade review window sweep failed', e)
-    tradeReviews = { due: 0, processed: 0, waitingOnLock: 0, skipped: 0, closed: 0, failures: [], error }
+    tradeReviews = { due: 0, processed: 0, waitingOnLock: 0, held: 0, skipped: 0, closed: 0, failures: [], error }
   }
 
   /*
@@ -162,6 +190,168 @@ export async function GET(request: Request) {
   } catch (e) {
     console.error('[redraft/waiver-process] inactive manager lineups failed', e)
     inactiveLineups = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * The free "bench my starters on bye automatically" switch (lib/lineup-automation): hourly, swap a
+   * starter whose bye week is this week for the best bench player who can play. Guarded and on its own
+   * job identity, like the sweeps around it.
+   */
+  let autoBenchByes: unknown = null
+  try {
+    const { runAutoBenchByes } = await import('@/lib/lineup-automation/autoBenchByeService')
+    autoBenchByes = await withSyncJobRun(
+      { jobName: 'cron-auto-bench-bye', trigger: 'cron' },
+      () => runAutoBenchByes(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.swapped,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { unchanged: r.unchanged, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] auto bench bye failed', e)
+    autoBenchByes = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Chimmy autopilot (AF Commissioner): teams on autopilot claim a free agent for a starting slot
+   * nobody healthy on the roster can fill. Before the waiver window below, so a claim made now can be
+   * processed in the same run. Guarded and on its own job identity, like the sweeps above.
+   */
+  let autopilotWaivers: unknown = null
+  try {
+    const { runAutopilotWaivers } = await import('@/lib/inactive-manager/inactiveManagerService')
+    autopilotWaivers = await withSyncJobRun(
+      { jobName: 'cron-chimmy-autopilot-waivers', trigger: 'cron' },
+      () => runAutopilotWaivers(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.claims,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] chimmy autopilot waivers failed', e)
+    autopilotWaivers = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Lineup minimums for eliminated teams (lib/eliminated-lineups): an AF Commissioner rule. Fills only
+   * the short slots of a team out of the race, from its bench, and tells its manager once a week what is
+   * still short. Hourly for the same reason as inactive manager mode; guarded and on its own job identity.
+   */
+  let eliminatedLineups: EliminatedLineupRunResult | { error: string } | null = null
+  try {
+    const { runEliminatedLineupMinimums } = await import('@/lib/eliminated-lineups/eliminatedLineupService')
+    eliminatedLineups = await withSyncJobRun(
+      { jobName: 'cron-eliminated-lineup-minimums', trigger: 'cron' },
+      () => runEliminatedLineupMinimums(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.filled + r.notified,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, filled: r.filled, notified: r.notified, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] eliminated lineup minimums failed', e)
+    eliminatedLineups = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Live rookie order (lib/rookie-order/roundNoticeService): AF Commissioner automation. Refreshes the
+   * order of every league that automates it — saving the final order when the title game is decided —
+   * and tells the commissioner (and league chat, when chosen) which picks each playoff round locked.
+   * Hourly because playoff results land on the score sync's schedule; guarded and on its own job identity.
+   */
+  let rookieOrderRounds: RookieOrderRoundNoticeRun | { error: string } | null = null
+  try {
+    const { runRookieOrderRoundNotices } = await import('@/lib/rookie-order/roundNoticeService')
+    rookieOrderRounds = await withSyncJobRun(
+      { jobName: 'cron-rookie-order-round-notices', trigger: 'cron' },
+      () => runRookieOrderRoundNotices(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.announced,
+        errors: r.failures.map((f) => `${f.leagueId}: ${f.error}`),
+        metadata: { refreshed: r.refreshed, notified: r.notified, posted: r.posted, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] rookie order round notices failed', e)
+    rookieOrderRounds = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * IR auto-move (lib/ir-activation): AF Commissioner. An activated player on IR goes to the bench
+   * through the ordinary lineup save, or the manager is told why not. Hourly because designations land
+   * on the injury sync's schedule; guarded and on its own job identity, like the sweeps above.
+   */
+  let irAutoMove: IrAutoMoveRunResult | { error: string } | null = null
+  try {
+    const { runIrAutoMove } = await import('@/lib/ir-activation/irAutoMoveService')
+    irAutoMove = await withSyncJobRun(
+      { jobName: 'cron-ir-auto-move', trigger: 'cron' },
+      () => runIrAutoMove(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.moved + r.notified,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, moved: r.moved, notified: r.notified, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] IR auto-move failed', e)
+    irAutoMove = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Orphan team auctions (lib/orphan-auction): AF Commissioner. Every auction whose closing time has
+   * passed is awarded — players, picks and FAAB move in one transaction. Hourly, so an auction closes
+   * within the hour of its deadline; guarded and on its own job identity, like the sweeps above.
+   */
+  let orphanAuctions: OrphanAuctionRunResult | { error: string } | null = null
+  try {
+    const { runOrphanAuctionClose } = await import('@/lib/orphan-auction/orphanAuctionService')
+    orphanAuctions = await withSyncJobRun(
+      { jobName: 'cron-orphan-auction-close', trigger: 'cron' },
+      () => runOrphanAuctionClose(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.closed,
+        errors: r.failures.map((f) => `${f.leagueId}: ${f.error}`),
+        metadata: { leagues: r.leagues, closed: r.closed },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] orphan auction close failed', e)
+    orphanAuctions = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Taxi stealing (lib/taxi/taxiStealing.ts): AF Commissioner. Every claim whose protection window has
+   * closed is resolved — the player moves to the claiming team, or the claim ends if they left the
+   * taxi squad. Hourly, so a steal lands within the hour of its deadline; on its own job identity.
+   */
+  let taxiSteals: TaxiStealRunResult | { error: string } | null = null
+  try {
+    const { runTaxiStealResolution } = await import('@/lib/taxi/taxiStealingService')
+    taxiSteals = await withSyncJobRun(
+      { jobName: 'cron-taxi-steal-resolve', trigger: 'cron' },
+      () => runTaxiStealResolution(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.stolen + r.voided,
+        errors: r.failures.map((f) => `${f.leagueId}${f.claimId ? `/${f.claimId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, stolen: r.stolen, voided: r.voided },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] taxi steal resolution failed', e)
+    taxiSteals = { error: e instanceof Error ? e.message : String(e) }
   }
 
   const out = await withSyncJobRun(
@@ -189,5 +379,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, tradeReviews, inactiveLineups, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autoBenchByes, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

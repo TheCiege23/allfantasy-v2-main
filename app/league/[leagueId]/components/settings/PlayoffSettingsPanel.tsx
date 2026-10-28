@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { MAX_PLAYOFF_TEAMS, playoffFinalWeek } from '@/lib/playoff-runtime/playoffFit'
+import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
 import {
   SettingsPanelHeading,
   SettingsSectionLabel,
@@ -60,8 +61,14 @@ export function PlayoffSettingsPanel({
   const teamOptions = Array.from({ length: MAX_PLAYOFF_TEAMS - 2 }, (_, i) => i + 3).filter((n) => n <= leagueCap || n === teams)
   // The last eight weeks of the sport's season (weeks 11-18 when the sport is unknown), and the current one.
   const firstStartOption = seasonWeeks == null ? 11 : Math.max(2, seasonWeeks - 7)
+  // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts): no start
+  // after week 25 is offered there (the current week stays listed so the field shows what is saved).
+  const startWeekCap = maxPlayoffStartWeekFor({ leagueType: initialData.leagueType, sport: initialData.sport })
   const startWeekOptions = Array.from(
-    new Set([...Array.from({ length: 8 }, (_, i) => firstStartOption + i), startWeek]),
+    new Set([
+      ...Array.from({ length: 8 }, (_, i) => firstStartOption + i).filter((w) => startWeekCap == null || w <= startWeekCap),
+      startWeek,
+    ]),
   ).sort((a, b) => a - b)
   const startWeekFits = (w: number) => {
     if (initialData.isDynasty || seasonWeeks == null) return true

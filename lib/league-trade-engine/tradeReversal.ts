@@ -21,6 +21,7 @@
  * `reverseGenericTrade` refuses anything whose snapshot is not `af_league_generic`.
  */
 
+import { clearPickTermsForTrade } from '@/lib/league-trade-engine/pickTermsService'
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
@@ -41,6 +42,7 @@ import {
   parseRedraftPickId,
   transferRedraftDraftPick,
 } from '@/lib/league-trade-engine/redraftDraftPicks'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 
 export type ReversalBlocker =
   | 'TRADE_NOT_FOUND'
@@ -276,6 +278,7 @@ export async function reverseGenericTrade(
           },
         })
       }
+      await copyGenericFaabToRedraft(tx, before.map((state) => state.rosterId))
       // Native scoring reads `RedraftRosterPlayer`; move the players' rows back with their JSON.
       const after = readRosters(snapshot.afterState)
       const afterIds = new Map(after.map((r) => [r.rosterId, new Set(getRosterPlayerIds(r.playerData))]))
@@ -302,6 +305,8 @@ export async function reverseGenericTrade(
           tradeId: trade.id,
         })
       }
+      // The pick terms this trade gave (./pickTerms.ts) go back with the picks.
+      if (nativePickItems(trade.items).length) await clearPickTermsForTrade(tx, { leagueId: trade.leagueId, tradeId: trade.id })
       for (const p of redraftPickItems(trade.items)) {
         await transferRedraftDraftPick(tx, {
           leagueId: trade.leagueId,

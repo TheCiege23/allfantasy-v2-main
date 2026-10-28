@@ -94,6 +94,7 @@ export async function GET(req: NextRequest) {
       season: true,
       lifecycleState: true,
       leagueType: true,
+      taxiSlots: true,
       isDynasty: true,
       bestBallMode: true,
       guillotineMode: true,
@@ -212,7 +213,10 @@ export async function GET(req: NextRequest) {
       starterAllowedPositions = lockedRedraftLayout.starterAllowedPositions
       rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-${lockedRedraftLayout.source}`
     }
-const leagueWeek = weekFromLeagueSettings(league.settings)
+    // The lineup engine validates taxi against `League.taxiSlots`, so a league whose roster template
+    // carries no taxi count still has a squad; report the larger of the two.
+    if (slotLimits && (league.taxiSlots ?? 0) > slotLimits.taxi) slotLimits = { ...slotLimits, taxi: league.taxiSlots ?? 0 }
+    const leagueWeek = weekFromLeagueSettings(league.settings)
     const lockCtx = await resolveFullLineupLockContext({
       leagueId,
       rosterId: roster.id,

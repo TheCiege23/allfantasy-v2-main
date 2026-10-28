@@ -28,6 +28,7 @@ import {
   type PointsGradedSport,
   type SportPointsContext,
 } from './sportPointsValue'
+import { FULL_SEASON_GAMES, isDynastyGradedSport, isDynastyLeagueType } from './sportDynastyValue'
 
 /**
  * What a daily-sport points grade is priced from, read once per league — or once per request with no
@@ -43,6 +44,9 @@ export type SportPointsLeague = {
   settings: unknown
   leagueType: string | null
   leagueSize: number | null
+  /** The league's season and status: in a dynasty league they say which rookie draft is next. */
+  season?: number | null
+  status?: string | null
 }
 
 export type SportPointsBaseResult = { ok: true; ctx: SportPointsContext } | { ok: false; reason: string }
@@ -244,7 +248,96 @@ export async function loadSportPointsBase(args: {
   const source = sport === 'SOCCER' ? await loadSoccerLines(now) : await loadSnapshotLines(sport, normalize, now)
   if (!source.ok) return source
   const { season, games, lines } = source
-  return finishBoard({ sport, league, valuation, season, games, lines })
+  const finished = await finishBoard({ sport, league, valuation, season, games, lines })
+  if (!finished.ok || !league || !isDynastyGradedSport(sport) || !isDynastyLeagueType(league.leagueType)) return finished
+  // An NBA, NHL or MLB dynasty league: the multi-season grade also needs ages and the next draft.
+  const ages = await loadBoardAges(sport, finished.ctx.board.map((p) => p.id))
+  if (!ages) return { ok: false, reason: `The ${sport} players’ ages could not be read just now, so this dynasty deal cannot be graded.` }
+  return {
+    ok: true,
+    ctx: {
+      ...finished.ctx,
+      dynasty: { ages, nextDraftYear: nextRookieDraftYear(league, finished.ctx.window.season, finished.ctx.window.gamesRemaining, FULL_SEASON_GAMES[sport]) },
+    },
+  }
+}
+
+/** League statuses that mean this season's rookie draft has been held. */
+const DRAFT_HELD_STATUSES = new Set(['in_season', 'post_season', 'complete', 'completed'])
+
+/**
+ * The year of the next rookie draft: the league's season once its draft is behind it is next year's.
+ * With no season on the league, the priced season stands in — a season already under way (fewer games
+ * left than a full one) has had its draft.
+ */
+export function nextRookieDraftYear(
+  league: Pick<SportPointsLeague, 'season' | 'status'>,
+  pricedSeason: number,
+  gamesRemaining: number,
+  fullSeasonGames: number,
+): number {
+  const held = DRAFT_HELD_STATUSES.has(String(league.status ?? '').trim().toLowerCase())
+  if (league.season != null && Number.isFinite(league.season)) return held ? league.season + 1 : league.season
+  return gamesRemaining < fullSeasonGames ? pricedSeason + 1 : pricedSeason
+}
+
+/**
+ * Today's age for each board player, by identity id. Read from `SportsPlayer` through the ids the
+ * identity map was built on — the Rolling Insights id first, the Sleeper id second — and only when the
+ * two agree to within the year the Rolling Insights age is accurate to (`lib/sports-data/playerAge.ts`).
+ * Null when the read fails; a player missing from the map has no age on file.
+ */
+async function loadBoardAges(sport: PointsGradedSport, boardIds: readonly string[]): Promise<Map<string, number> | null> {
+  const ids = [...new Set(boardIds)]
+  if (ids.length === 0) return new Map()
+  const identities = await prisma.playerIdentityMap
+    .findMany({ where: { id: { in: ids } }, select: { id: true, rollingInsightsId: true, sleeperId: true } })
+    .catch(() => null)
+  if (!identities) return null
+  const riIds = identities.map((i) => i.rollingInsightsId).filter((v): v is string => Boolean(v))
+  const sleeperIds = identities.map((i) => i.sleeperId).filter((v): v is string => Boolean(v))
+  if (riIds.length === 0 && sleeperIds.length === 0) return new Map()
+  const rows = await prisma.sportsPlayer
+    .findMany({
+      where: {
+        sport: { in: [sport, sport.toLowerCase()] },
+        age: { not: null },
+        OR: [
+          ...(riIds.length ? [{ source: 'rolling_insights', externalId: { in: riIds } }] : []),
+          ...(sleeperIds.length ? [{ sleeperId: { in: sleeperIds } }] : []),
+        ],
+      },
+      select: { source: true, externalId: true, sleeperId: true, age: true },
+    })
+    .catch(() => null)
+  if (!rows) return null
+  return pickBoardAges(identities, rows)
+}
+
+/** Pure half of `loadBoardAges`: one age per identity, or none when its sources disagree. */
+export function pickBoardAges(
+  identities: ReadonlyArray<{ id: string; rollingInsightsId: string | null; sleeperId: string | null }>,
+  rows: ReadonlyArray<{ source: string | null; externalId: string | null; sleeperId: string | null; age: number | null }>,
+): Map<string, number> {
+  const riAge = new Map<string, Set<number>>()
+  const sleeperAge = new Map<string, Set<number>>()
+  const add = (m: Map<string, Set<number>>, key: string, age: number) => (m.get(key) ?? m.set(key, new Set()).get(key)!).add(age)
+  for (const r of rows) {
+    if (r.age == null || !Number.isFinite(r.age) || r.age < 14 || r.age > 60) continue
+    if (r.source === 'rolling_insights' && r.externalId) add(riAge, r.externalId, r.age)
+    if (r.sleeperId) add(sleeperAge, r.sleeperId, r.age)
+  }
+  const out = new Map<string, number>()
+  for (const i of identities) {
+    const fromSleeper = [...(i.sleeperId ? sleeperAge.get(i.sleeperId) ?? [] : [])]
+    const ages = [...(i.rollingInsightsId ? riAge.get(i.rollingInsightsId) ?? [] : []), ...fromSleeper]
+    if (ages.length === 0) continue
+    // Two sources a year apart is the birthday; further apart, one of them is wrong and neither is used.
+    if (Math.max(...ages) - Math.min(...ages) > 1) continue
+    // Sleeper's age is exact where Rolling Insights' is good to a year, so Sleeper's wins when both agree.
+    out.set(i.id, fromSleeper.length ? Math.min(...fromSleeper) : Math.min(...ages))
+  }
+  return out
 }
 
 type BoardLine = Omit<BoardPlayer, 'perGame'> & { stats: Record<string, number> }

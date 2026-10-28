@@ -3,9 +3,11 @@ import { resolveLeagueCategories } from '@/lib/category-scoring/leagueScoringTyp
 import { isPointsOnlySeeding, resolveConfiguredPlayoffSeedingRule } from '@/lib/playoff-defaults/seedingRule'
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
-import { computeWeeklyMedianResults, isMatchupComplete, medianEligibleRows, readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
+import { byeWeekMedianCredits, computeWeeklyMedianResults, isMatchupComplete, medianEligibleRows, readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { extraMatchupResults } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { readTiebreakerOrder, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
+import { rankNflRedraftTeamsByTiebreakers } from '@/lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime'
 
 /**
  * Recompute standings from matchup scores already written from PlayerWeeklyScore.
@@ -152,14 +154,19 @@ export async function updateStandings(
   let playoffStartWeek: number | null = null
   let pointsOnlySeeding = false
   let bracketExists = false
+  let customTiebreakers: TiebreakerKey[] | null = null
+  let coinSeed = ''
+  let pointsScoring = false
   try {
     const seasonRow = await prisma.redraftSeason.findUnique({
       where: { id: seasonId },
       select: {
+        leagueId: true,
+        season: true,
         medianGame: true,
         playoffStartWeek: true,
         playoffBracket: { select: { id: true } },
-        league: { select: { medianGame: true, settings: true, playoffSeedingRule: true } },
+        league: { select: { medianGame: true, settings: true, playoffSeedingRule: true, platform: true } },
       },
     })
     medianGameOn = seasonRow?.league?.medianGame ?? seasonRow?.medianGame ?? false
@@ -167,8 +174,23 @@ export async function updateStandings(
     playoffStartWeek = seasonRow?.playoffStartWeek ?? null
     bracketExists = Boolean(seasonRow?.playoffBracket)
     pointsOnlySeeding = isPointsOnlySeeding(resolveConfiguredPlayoffSeedingRule(seasonRow?.league ?? {}))
+    // The commissioner's tiebreaker order (lib/standings/tiebreakerOrder.ts), AllFantasy-run leagues only —
+    // the standings board reads it under the same gate, and an imported league follows its platform.
+    customTiebreakers = seasonRow?.league && isNativePlatform(seasonRow.league.platform) ? readTiebreakerOrder(seasonRow.league.settings) : null
+    coinSeed = `${seasonRow?.leagueId ?? ''}:${seasonRow?.season ?? ''}`
+    const mode = (seasonRow?.league?.settings as Record<string, unknown> | null | undefined)?.scoring_mode
+    pointsScoring = seasonRow != null && (mode == null || mode === 'points')
   } catch {
     medianGameOn = false
+  }
+
+  // A plain bye (no extra matchup) is credited the week's median team score as points for — see
+  // `byeWeekMedianCredits`. Points leagues only: a category or roto week has no comparable team score.
+  if (pointsScoring) {
+    for (const credit of byeWeekMedianCredits(matchups, { playoffStartWeek })) {
+      const row = rows.get(credit.rosterId)
+      if (row) row.pointsFor += credit.median
+    }
   }
   if (medianGameOn) {
     for (const weekResult of computeWeeklyMedianResults(medianEligibleRows(matchups, { playoffStartWeek, medianInPlayoffs }))) {
@@ -210,16 +232,57 @@ export async function updateStandings(
     const ranked=rankRotisserieTeams([...rows.keys()].map(id=>({id,stats:accumulateTeamTotals(rotoStats.get(id)??[])})),categories)
     for(const [id,value] of ranked) rows.get(id)!.pointsFor=value.total
   }
+  // The commissioner's own order, after record, ranked exactly as the bracket seeds it
+  // (canonicalNflRedraftPlayoffRuntime `rankTeams`). Points-only seeding and roto ignore it, as the
+  // bracket does. With no order chosen the comparator below is unchanged.
+  const customRank =
+    customTiebreakers && !pointsOnlySeeding && !rotoStats.size
+      ? new Map(
+          rankNflRedraftTeamsByTiebreakers({
+            teams: [...rows.entries()].map(([rosterId, r]) => ({
+              rosterId,
+              wins: r.wins,
+              losses: r.losses,
+              ties: r.ties,
+              pointsFor: Math.round(r.pointsFor * 100) / 100,
+              pointsAgainst: Math.round(r.pointsAgainst * 100) / 100,
+            })),
+            tiebreakers: customTiebreakers,
+            regularSeasonMatchups: matchups.map((m) => ({
+              week: m.week,
+              type: m.type,
+              homeRosterId: m.homeRosterId,
+              awayRosterId: m.awayRosterId,
+              homeScore: m.homeScore,
+              awayScore: m.awayScore,
+              status: m.status,
+              isMedianMatchup: m.isMedianMatchup,
+            })),
+            regularSeasonEndWeek: playoffStartWeek != null && playoffStartWeek > 1 ? playoffStartWeek - 1 : null,
+            coinSeed,
+          }).map((rosterId, index) => [rosterId, index]),
+        )
+      : null
   const ordered = [...rows.entries()].sort(([aId, a], [bId, b]) => {
     if (pointsOnlySeeding || rotoStats.size) return b.pointsFor - a.pointsFor || aId.localeCompare(bId)
+    if (customRank) return (customRank.get(aId) ?? 0) - (customRank.get(bId) ?? 0)
     // Win percentage first, ties as half a win. An odd-team league plays unequal numbers of games
     // (a bye week, or a week with an extra game), and counting wins would rank a team ahead for
     // having played more — the playoff seeding (`win_pct` first) and the schedule standings already
     // rank this way, so the stored seed now agrees with them.
+    //
+    // 🛑 THEN POINTS FOR — NOT WINS. Equal win percentage over the same games means equal wins + ties/2,
+    // so a wins key only ever separates teams by how many TIES they have: 14-29-3 went ahead of
+    // 11-26-9 on 61 fewer points, while the bracket (`win_pct`, then `points_for`, the league default)
+    // seeded them the other way. Measured on a simulated 11-team MLB season, where integer scoring
+    // makes ties common (__tests__/redraft/full-season-mlb-redraft.test.ts).
     const pct = (r: typeof a) => (r.wins + .5*r.ties) / Math.max(1,r.wins+r.losses+r.ties)
     if (pct(a) !== pct(b)) return pct(b)-pct(a)
-    if (b.wins !== a.wins) return b.wins - a.wins
-    if (a.losses !== b.losses) return a.losses - b.losses
+    // Then points for, as every sport's default tiebreakers and the bracket seeding have it
+    // (DEFAULT_TIEBREAKERS, canonicalNflRedraftPlayoffRuntime `normalizeTiebreakers`).
+    // 🛑 WINS, THEN LOSSES, USED TO COME FIRST, which brought back the rule the comment above retires:
+    // at an equal win % the team that had played more ranked ahead. 8-9 sat above 7-8-2 with more
+    // points (a league-median tie, or an odd-team bye), while the bracket seeded the other way.
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor
     return a.pointsAgainst - b.pointsAgainst
   })

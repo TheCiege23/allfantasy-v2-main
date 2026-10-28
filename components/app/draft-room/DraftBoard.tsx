@@ -663,7 +663,7 @@ function DraftBoardInner({
                   ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
                   : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
               }`}
-              style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(88px, 1fr))` }}
+              style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(104px, 1fr))` }}
               data-testid="draft-board-team-header"
             >
               <div
@@ -739,14 +739,14 @@ function DraftBoardInner({
                 <section key={round} data-testid={`draft-board-round-${round}`}>
                     <div
                       className="grid gap-[3px]"
-                      style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(88px, 1fr))` }}
+                      style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(104px, 1fr))` }}
                     >
                     {(() => {
                       const reversed = isSnakeRoundReversed(round, draftType, thirdRoundReversal)
                       const isSnake = draftType === 'snake'
                       return (
                         <div
-                          className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-xl border text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:min-h-[46px] ${
+                          className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-xl border text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:min-h-[60px] ${
                             round === 1
                               ? 'border-amber-300/35 bg-gradient-to-br from-amber-500/18 via-[#1d2236] to-[#0a1228] text-amber-100/95'
                               : 'border-white/[0.1] bg-gradient-to-br from-[#0d1629] to-[#0a1228] text-white/75'
@@ -777,7 +777,7 @@ function DraftBoardInner({
                         return (
                           <div
                             key={`${round}-${slotEntry.slot}-missing`}
-                            className="min-h-[44px] rounded-xl border border-dashed border-red-400/30 bg-red-500/8 sm:min-h-[46px]"
+                            className="min-h-[56px] rounded-xl border border-dashed border-red-400/30 bg-red-500/8 sm:min-h-[60px]"
                             title="Missing cell data for this slot"
                           />
                         )

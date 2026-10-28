@@ -269,6 +269,10 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
             {lockNote('publicMomentPages')}
             <SvkToggle label="Public moment pages" checked={draft.publicMomentPages} onChange={v => set('publicMomentPages', v)} disabled={disabled('publicMomentPages') || !draft.shareCardsEnabled} testId="survivor-settings-public-pages" />
           </SvkField>
+          <SvkField title="Watch page for fans" hint={<>Anyone with the link can follow the season: episodes, the tribe race and each Tribal Council as it is read. Display names only; never chats, idols or who voted for whom.{draft.spectatorPageEnabled ? <> <a href={`/l/${encodeURIComponent(leagueId)}/watch`} target="_blank" rel="noreferrer">Open the watch page</a></> : null}</>} testId="survivor-settings-spectator">
+            {lockNote('spectatorPageEnabled')}
+            <SvkToggle label="Watch page for fans" checked={draft.spectatorPageEnabled} onChange={v => set('spectatorPageEnabled', v)} disabled={disabled('spectatorPageEnabled')} testId="survivor-settings-spectator-toggle" />
+          </SvkField>
         </section>
       </div>
 

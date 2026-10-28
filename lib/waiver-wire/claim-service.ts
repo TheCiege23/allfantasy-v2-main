@@ -18,7 +18,7 @@ import { getLeagueWaiverState } from "./waiver-state-service"
 import { assertWaiverClaimEligibility } from "./transaction-eligibility"
 import { loadDailyTransactionPolicy } from "./daily-schedule-gate"
 import { loadWaiverPhasePolicy } from "./season-phase-gate"
-import { DROPPER_RECLAIM_MESSAGE, droppedPlayerWaiverHours, loadDroppedPlayerHold } from "./dropped-player-waivers"
+import { DROPPER_RECLAIM_MESSAGE, droppedPlayerHoldPolicy, loadDroppedPlayerHold, maxHoldHours } from "./dropped-player-waivers"
 
 /**
  * Create a waiver claim. Validates that roster exists and belongs to the league (data consistency).
@@ -117,15 +117,17 @@ export async function createClaim(
     select: { sport: true, waiverHours: true },
   })
 
-  // A player this team dropped is on waivers for the league's waiver period; it cannot claim him
-  // back until he clears (dropped-player-waivers.ts). A failed read lets the claim through — the
-  // processor checks again at the run.
-  const holdHours = droppedPlayerWaiverHours({
+  // A player this team dropped is on waivers for the league's waiver period (or his position's);
+  // it cannot claim him back until he clears (dropped-player-waivers.ts). A failed read lets the
+  // claim through — the processor checks again at the run.
+  const holdPolicy = droppedPlayerHoldPolicy({
     normalizedWaiverType: settings.normalizedWaiverType,
     waiverHours: league?.waiverHours ?? null,
+    waiverEngineConfig: settings.waiverEngineConfig,
+    sport: league?.sport ? String(league.sport) : null,
   })
-  if (holdHours > 0) {
-    const hold = await loadDroppedPlayerHold(leagueId, String(input.addPlayerId), holdHours).catch(() => null)
+  if (maxHoldHours(holdPolicy) > 0) {
+    const hold = await loadDroppedPlayerHold(leagueId, String(input.addPlayerId), holdPolicy).catch(() => null)
     if (hold && hold.droppedByRosterId === rosterId) throw new Error(DROPPER_RECLAIM_MESSAGE)
   }
 

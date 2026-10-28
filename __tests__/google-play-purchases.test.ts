@@ -198,7 +198,7 @@ describe("Google Play token packs", () => {
     const { applyGooglePlayPurchase, voidGooglePlayPurchase } = await load()
     await applyGooglePlayPurchase({ userId: alice, sku: "af_tokens_5", purchaseToken: "tok-a" })
     await expect(voidGooglePlayPurchase("tok-a")).resolves.toBe("voided")
-    expect(reverseGoogle).toHaveBeenCalledWith("GPA.TOK-1")
+    expect(reverseGoogle).toHaveBeenCalledWith("GPA.TOK-1", { userId: alice, packageSku: "af_tokens_5" })
   })
 
   it("rejects an unknown product before calling Google", async () => {

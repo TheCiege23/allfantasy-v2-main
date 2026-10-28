@@ -42,6 +42,10 @@ export async function settleVerifiedSlateChallenges(leagueId: string, week: numb
   const winners = verifiedSlateWinners(scores)
   if (!winners) throw new Error('Weekly slate scores are not finalized')
   if (challenges.some(challenge => challenge.scope === 'tribe') && !winners.tribeId) throw new Error('Tribe slate has no eligible scored tribe')
+  const [winnerTribe, winnerPlayer] = await Promise.all([
+    winners.tribeId ? prisma.survivorTribe.findUnique({ where: { id: winners.tribeId }, select: { name: true } }) : null,
+    prisma.survivorPlayer.findFirst({ where: { leagueId, userId: winners.individualUserId }, select: { displayName: true } }),
+  ])
   const now = new Date()
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivor-setup:${leagueId}`}, 0))::text`
@@ -52,7 +56,9 @@ export async function settleVerifiedSlateChallenges(leagueId: string, week: numb
       await tx.survivorChallenge.update({ where: { id: challenge.id }, data: { status: 'complete', lockAt: now, closesAt: now,
         winnerTribeId: isTribe ? winners.tribeId : null, winnerUserIds: isTribe ? [] : [winners.individualUserId],
         resultJson: { source: 'native_finalized_weekly_scores_v1', score: isTribe ? winners.tribePoints : winners.individualPoints, settledAt: now.toISOString() } as Prisma.InputJsonValue,
-        resultSummary: isTribe ? `Tribe ${winners.tribeId} wins the ${week} slate.` : `The weekly individual winner is ${winners.individualUserId}.`,
+        resultSummary: isTribe
+          ? `${winnerTribe?.name ?? 'A tribe'} won the week ${week} slate with ${winners.tribePoints?.toFixed(1) ?? '?'} points.`
+          : `${winnerPlayer?.displayName ?? 'A manager'} won the week ${week} slate with ${winners.individualPoints.toFixed(1)} points.`,
       } })
       await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'challenge', action: 'verified_slate_result', relatedEntityId: challenge.id, relatedEntityType: 'challenge', data: { scope: challenge.scope, winnerTribeId: isTribe ? winners.tribeId : null, winnerUserId: isTribe ? null : winners.individualUserId }, isVisibleToCommissioner: true, isVisibleToPublic: true } })
     }

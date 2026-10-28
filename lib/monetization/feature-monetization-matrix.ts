@@ -428,7 +428,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     accessType: "subscription_or_tokens",
     requiredPlanId: "pro",
     tokenRuleCode: "survivor_ai_vote_risk_quick",
-    lockedReason: "Player-facing Survivor AI (lineups, mini-games, jury hints, confessionals) is part of AF Pro; some runs also burn AF Tokens.",
+    lockedReason: "Player-facing Survivor AI (tribe, Tribal Council, Exile and best-ball help) runs on AF Tokens; the premium intel tiles are part of AF Pro.",
     backendEnforcement: "FeatureGate + token preflight for metered Survivor AI actions.",
     frontendGateBehavior: "Locked badge, tooltip, upgrade + token CTA.",
     unavailableBehavior: "disable_with_fallback",
@@ -445,7 +445,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     tokenRuleCode: "survivor_ai_host_fairness_report",
     lockedReason: "Host and commissioner Survivor automation requires AF Commissioner (or AF Supreme). Heavy scans burn AF Tokens.",
     backendEnforcement: "requireFeatureEntitlement(survivor_host_ai) with token preflight on host routes.",
-    frontendGateBehavior: "Premium command center tiles + upgrade CTA.",
+    frontendGateBehavior: "Host command-center tiles (mini-game planner, risk alerts, fairness radar) + upgrade CTA; tile locks enforced by GET survivor/premium.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
       routes: ["/survivor/[leagueId]/commissioner"],

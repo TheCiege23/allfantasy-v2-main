@@ -1,7 +1,9 @@
 /**
  * GET/PUT: Commissioner division settings.
- * Stores division config in League.settings JSON (division_config key).
- * Supports standard divisions (2/4/8) and Survivor tribes.
+ * Stores division config in League.settings JSON (division_config key), read back by the standings,
+ * the schedule and the playoff seeding (lib/league/divisions/leagueDivisions.ts).
+ * Standard leagues: no divisions or 2–4, split evenly or within one team, plus the division playoff
+ * rule. Survivor tribes keep 2/4/8 and are not validated as divisions.
  * Handles AI naming requests.
  */
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,28 +13,21 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
+import {
+  DIVISION_CONFIG_KEY,
+  DIVISION_NAME_MAX,
+  DIVISION_PLAYOFF_RULES,
+  STANDARD_DIVISION_COUNTS,
+  SURVIVOR_TRIBE_COUNTS,
+  readDivisionConfig,
+  validateDivisionSetup,
+  type DivisionPlayoffRule,
+  type LeagueDivisionConfig,
+} from '@/lib/league/divisions/leagueDivisions'
 
 export const dynamic = 'force-dynamic'
 
-interface DivisionConfig {
-  count: number // 0, 2, 4, 8
-  names: string[]
-  teamAssignments: Record<string, number> // teamId -> divisionIndex (0-based)
-  aiNamingEnabled: boolean
-  lastUpdatedAt: string | null
-  lastUpdatedBy: string | null
-}
-
-function defaultConfig(): DivisionConfig {
-  return {
-    count: 0,
-    names: [],
-    teamAssignments: {},
-    aiNamingEnabled: false,
-    lastUpdatedAt: null,
-    lastUpdatedBy: null,
-  }
-}
+type DivisionConfig = LeagueDivisionConfig
 
 function defaultNames(count: number, isSurvivor: boolean): string[] {
   const label = isSurvivor ? 'Tribe' : 'Division'
@@ -99,8 +94,7 @@ export async function GET(
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const settings = (league.settings as Record<string, unknown>) ?? {}
-  const raw = settings.division_config as DivisionConfig | undefined
-  const config: DivisionConfig = raw ?? defaultConfig()
+  const config: DivisionConfig = readDivisionConfig(settings)
   const isSurvivor = (league.leagueVariant ?? '').toLowerCase().includes('survivor')
     || (settings.league_type as string ?? '').toLowerCase().includes('survivor')
     || (settings.leagueType as string ?? '').toLowerCase().includes('survivor')
@@ -124,34 +118,63 @@ export async function PUT(
   const { leagueId } = await params
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { userId: true, settings: true, leagueVariant: true, teams: { select: { id: true, teamName: true, ownerName: true, avatarUrl: true } } },
+    select: { userId: true, settings: true, leagueVariant: true, teams: { select: { id: true, teamName: true, ownerName: true, avatarUrl: true, lifecycleState: true } } },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const body = await req.json().catch(() => ({}))
   const currentSettings = (league.settings as Record<string, unknown>) ?? {}
-  const existing = (currentSettings.division_config as DivisionConfig | undefined) ?? defaultConfig()
+  const existing = readDivisionConfig(currentSettings)
 
-  const count = typeof body.count === 'number' && [0, 2, 4, 8].includes(body.count) ? body.count : existing.count
-  const names = Array.isArray(body.names) ? body.names.map((n: unknown) => String(n ?? '').slice(0, 80)) : existing.names
-  const teamAssignments = (typeof body.teamAssignments === 'object' && body.teamAssignments !== null)
-    ? body.teamAssignments as Record<string, number>
-    : existing.teamAssignments
-  const aiNamingEnabled = typeof body.aiNamingEnabled === 'boolean' ? body.aiNamingEnabled : existing.aiNamingEnabled
-
-  // If count changed, reset names to defaults if names array doesn't match
   const isSurvivor = (league.leagueVariant ?? '').toLowerCase().includes('survivor')
     || (currentSettings.league_type as string ?? '').toLowerCase().includes('survivor')
     || (currentSettings.leagueType as string ?? '').toLowerCase().includes('survivor')
 
+  const allowedCounts = isSurvivor ? SURVIVOR_TRIBE_COUNTS : STANDARD_DIVISION_COUNTS
+  if (body.count !== undefined && !(typeof body.count === 'number' && allowedCounts.includes(body.count))) {
+    return NextResponse.json(
+      { error: isSurvivor ? 'Pick no tribes, or 2, 4 or 8 tribes.' : 'Pick no divisions, or 2, 3 or 4 divisions.', code: 'COUNT_NOT_ALLOWED' },
+      { status: 400 },
+    )
+  }
+  if (body.playoffRule !== undefined && !(DIVISION_PLAYOFF_RULES as readonly unknown[]).includes(body.playoffRule)) {
+    return NextResponse.json({ error: 'Unknown division playoff rule.', code: 'BAD_PLAYOFF_RULE' }, { status: 400 })
+  }
+  const count: number = typeof body.count === 'number' ? body.count : existing.count
+  const names: string[] = Array.isArray(body.names)
+    ? body.names.map((n: unknown) => String(n ?? '').trim().slice(0, DIVISION_NAME_MAX))
+    : existing.names
+  const rawAssignments = (typeof body.teamAssignments === 'object' && body.teamAssignments !== null && !Array.isArray(body.teamAssignments))
+    ? body.teamAssignments as Record<string, unknown>
+    : existing.teamAssignments
+  // A team that has left the league keeps no division; it neither counts toward the split nor blocks a save.
+  const archived = new Set(league.teams.filter((t) => t.lifecycleState === 'ARCHIVED').map((t) => t.id))
+  const currentTeamIds = league.teams.filter((t) => !archived.has(t.id)).map((t) => t.id)
+  const teamAssignments: Record<string, number> = {}
+  for (const [teamId, idx] of Object.entries(rawAssignments)) {
+    if (typeof idx === 'number' && !archived.has(teamId)) teamAssignments[teamId] = idx
+  }
+  const aiNamingEnabled = typeof body.aiNamingEnabled === 'boolean' ? body.aiNamingEnabled : existing.aiNamingEnabled
+  const playoffRule: DivisionPlayoffRule = body.playoffRule !== undefined ? body.playoffRule : existing.playoffRule
+
+  // If count changed, reset names to defaults if names array doesn't match
   const finalNames = names.length === count ? names : defaultNames(count, isSurvivor)
+
+  if (!isSurvivor) {
+    const check = validateDivisionSetup(
+      { count, names: finalNames, teamAssignments: count === 0 ? {} : teamAssignments, playoffRule },
+      currentTeamIds,
+    )
+    if (!check.ok) return NextResponse.json({ error: check.error, code: check.code }, { status: 400 })
+  }
 
   const updatedConfig: DivisionConfig = {
     count,
     names: finalNames,
     teamAssignments: count === 0 ? {} : teamAssignments,
     aiNamingEnabled,
+    playoffRule,
     lastUpdatedAt: new Date().toISOString(),
     lastUpdatedBy: session.user.id,
   }
@@ -161,7 +184,7 @@ export async function PUT(
     data: {
       settings: toPrismaJsonInput({
         ...currentSettings,
-        division_config: updatedConfig,
+        [DIVISION_CONFIG_KEY]: updatedConfig,
         // Also write num_divisions for backward compat
         num_divisions: count,
       }),
@@ -177,6 +200,11 @@ export async function PUT(
   if (JSON.stringify(existing.names) !== JSON.stringify(updatedConfig.names) && updatedConfig.count > 0) {
     const label = isSurvivor ? 'Tribe' : 'Division'
     changes.push({ field: `${label} Names`, oldValue: existing.names.join(', ') || '(none)', newValue: updatedConfig.names.join(', ') })
+  }
+  if (existing.playoffRule !== updatedConfig.playoffRule && updatedConfig.count > 0 && !isSurvivor) {
+    const label = (r: DivisionPlayoffRule) =>
+      r === 'top_seeds' ? 'Division winners take the top seeds' : r === 'guaranteed' ? 'Division winners guaranteed a spot, seeded by record' : 'No playoff advantage'
+    changes.push({ field: 'Division playoff rule', oldValue: label(existing.playoffRule), newValue: label(updatedConfig.playoffRule) })
   }
   if (changes.length > 0) {
     await notifyCommissionerChange(leagueId, session.user.id, isSurvivor ? 'Tribe Settings' : 'Division Settings', changes).catch(() => {})

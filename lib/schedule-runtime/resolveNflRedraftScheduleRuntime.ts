@@ -1,3 +1,4 @@
+import { loadSeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
 import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { applyWeeklyWaiverPriorityReset } from '@/lib/waiver-wire/weekly-priority-reset'
 import { assignExtraMatchupForWeek } from '@/lib/redraft/oddTeamExtraMatchup'
@@ -5,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime/resolveNflRedraftRosterRuntime'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { generateNflRedraftPlayoffRuntimeBracket } from '@/lib/playoff-runtime'
 import {
   buildCanonicalScheduleRuntimeState,
@@ -150,15 +152,22 @@ async function buildTeamsForRedraftRosters(leagueId: string, rosters: RedraftRos
       division: { select: { id: true, name: true, tierLevel: true } },
     },
   }) as LeagueTeamDivisionRow[]
+  // The commissioner's divisions (`settings.division_config`) win over the promotion tier column.
+  const commissionerDivisions = await loadSeasonRosterDivisions(leagueId, rosters)
 
   return rosters.map((roster) => {
     const team = findLeagueTeamForRoster(roster, leagueTeams)
+    const division = commissionerDivisions?.byRoster.get(roster.id)
     return {
       rosterId: roster.id,
       displayName: roster.teamName || roster.ownerName,
       ownerName: roster.ownerName,
-      divisionId: team?.divisionId ?? null,
-      divisionName: team?.division?.name ?? (team?.division ? `Division ${team.division.tierLevel}` : null),
+      divisionId: division ? division.key : commissionerDivisions ? null : team?.divisionId ?? null,
+      divisionName: division
+        ? division.name
+        : commissionerDivisions
+          ? null
+          : team?.division?.name ?? (team?.division ? `Division ${team.division.tierLevel}` : null),
     }
   })
 }
@@ -218,6 +227,7 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     include: {
       rosters: { orderBy: { id: 'asc' } },
       schedule: { orderBy: [{ week: 'asc' }, { id: 'asc' }] },
+      league: { select: { medianGame: true, settings: true } },
     },
   })
   if (!season) return { ok: false, reason: 'season_not_found' }
@@ -245,6 +255,9 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     playoffStartWeek: imported?.playoffStartWeek ?? season.playoffStartWeek,
     regularSeasonWeeks: imported?.regularSeasonWeeks,
     now: input.now,
+    // The same flags `updateStandings` reads: the league's current median setting over the season's copy.
+    medianGame: !imported && Boolean(season.league?.medianGame ?? season.medianGame),
+    medianInPlayoffs: readMedianGameInPlayoffs(season.league?.settings),
   })
 
   return {
@@ -284,6 +297,7 @@ function championshipWindowWarning(input: {
     weeksPerRound: input.rules.playoffs.weeksPerRound,
     finalRoundNumber: rounds,
     championshipLength: input.rules.playoffs.championshipLength,
+    seriesLengths: input.rules.playoffs.seriesLengths ?? null,
   })
   if (lastWeek <= input.totalWeeks) return null
   return `The playoffs as configured end in week ${lastWeek}, past the season's last week (${input.totalWeeks}). Shorten the final or move the playoffs earlier.`

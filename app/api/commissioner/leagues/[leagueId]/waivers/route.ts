@@ -5,7 +5,7 @@ import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { getEffectiveLeagueWaiverSettings, upsertLeagueWaiverSettings } from '@/lib/waiver-wire'
 import { getPendingClaims, getProcessedClaimsAndTransactions } from '@/lib/waiver-wire'
 import { processWaiverClaimsForLeague } from '@/lib/waiver-wire/process-engine'
-import { setWaiverProcessingLocked } from '@/lib/waiver-wire/waiver-state-service'
+import { refreshLeagueWaiverNextRunAt, setWaiverProcessingLocked } from '@/lib/waiver-wire/waiver-state-service'
 import { waiverSettingsRequestSchema } from '@/lib/waiver-wire/settings-request'
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
@@ -53,6 +53,11 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   const parsed = waiverSettingsRequestSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid waiver settings', details: parsed.error.flatten() }, { status: 400 })
   const settings = await upsertLeagueWaiverSettings(params.leagueId, parsed.data)
+  // The free-agency mode moves a daily sport's run days (lib/waiver-wire/daily-sport-waiver-runs.ts):
+  // reschedule now rather than at the next run under the old days.
+  if (parsed.data.waiverEngineConfig?.free_agency_mode !== undefined) {
+    await refreshLeagueWaiverNextRunAt(params.leagueId).catch((e) => console.warn('[commissioner/waivers] next run refresh', e))
+  }
   return NextResponse.json(settings)
 }
 

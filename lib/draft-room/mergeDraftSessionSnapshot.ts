@@ -1,5 +1,6 @@
 import { resolveCurrentOnTheClock } from '@/lib/live-draft-engine/CurrentOnTheClockResolver'
 import { isDraftBoardFull } from '@/lib/live-draft-engine/draftPickEmpty'
+import { applyTradedOwnerToCurrentPick } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { DraftPickSnapshot, DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
 
 function snapshotPicksToProgress(picks: DraftPickSnapshot[]) {
@@ -25,14 +26,20 @@ function inferCurrentPickFromSnapshot(s: DraftSessionSnapshot) {
   const tc = Math.max(1, s.teamCount)
   const rounds = Math.max(1, s.rounds ?? 1)
   const total = Math.max(0, rounds * tc)
-  return resolveCurrentOnTheClock({
-    totalPicks: total,
-    picks: snapshotPicksToProgress(s.picks ?? []),
-    teamCount: tc,
-    draftType: s.draftType,
-    thirdRoundReversal: s.thirdRoundReversal,
-    slotOrder: s.slotOrder ?? [],
-  })
+  const slotOrder = s.slotOrder ?? []
+  // A traded slot is on the clock for its NEW owner, the same as the server snapshot.
+  return applyTradedOwnerToCurrentPick(
+    resolveCurrentOnTheClock({
+      totalPicks: total,
+      picks: snapshotPicksToProgress(s.picks ?? []),
+      teamCount: tc,
+      draftType: s.draftType,
+      thirdRoundReversal: s.thirdRoundReversal,
+      slotOrder,
+    }),
+    slotOrder,
+    s.tradedPicks,
+  )
 }
 
 /** True when we have a usable clock anchor for an active draft that still needs picks. */

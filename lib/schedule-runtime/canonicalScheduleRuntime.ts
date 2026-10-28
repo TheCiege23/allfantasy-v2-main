@@ -1,4 +1,6 @@
-import { extraMatchupForRoster, readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
+import { extraMatchupForRoster, extraMatchupResults, readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
+// Pure, import-free: the same league-median rule `updateStandings` applies (see the standings below).
+import { computeWeeklyMedianResults, medianEligibleRows } from '@/lib/redraft/medianGame'
 import type {
   CanonicalLeagueRules,
   CanonicalLeagueRuntimeEvent,
@@ -158,6 +160,10 @@ type BuildScheduleInput = {
   currentWeek?: number | null
   status?: string | null
   now?: Date
+  /** The league plays a weekly game against the league median (`League.medianGame`). */
+  medianGame?: boolean | null
+  /** `settings.median_game_in_playoffs`; off unless the commissioner turned it on. */
+  medianInPlayoffs?: boolean | null
 } & ScheduleRuntimeShapeOverrides
 
 const BYE_ID = '__BYE__'
@@ -550,12 +556,29 @@ function recordString(row: Pick<CanonicalScheduleStanding, 'wins' | 'losses' | '
   return row.ties > 0 ? `${row.wins}-${row.losses}-${row.ties}` : `${row.wins}-${row.losses}`
 }
 
+/**
+ * Standings from the schedule's own rows — what the schedule tab's leader line and playoff picture read.
+ *
+ * 🛑 THEY MUST BE THE STANDINGS' RECORDS, NOT A HEAD-TO-HEAD-ONLY COPY. This counted head-to-head games
+ * alone, so in an odd-team league — where league median is on by default, and the extra matchup can
+ * replace the bye — the schedule tab printed 10-4-0 for a team the standings had at 23-5-1, and named a
+ * different leader. Measured on simulated 9-team NFL and 11-team MLB seasons
+ * (__tests__/redraft/full-season-*.test.ts). Pass the persisted rows (`rows`) and the median flags, and
+ * the median games and extra matchups are counted by the same pure rules `updateStandings` uses
+ * (lib/redraft/medianGame.ts, lib/redraft/oddTeamExtraMatchupRules.ts). The order is the stored seed's:
+ * win percentage, then points for, then points against.
+ */
 export function buildCanonicalScheduleStandings(input: {
   teams: ScheduleRuntimeTeamInput[]
   matchups: CanonicalScheduleRuntimeMatchup[]
+  /** The persisted rows the matchups came from: bye rows carry the extra-matchup pick. */
+  rows?: readonly ScheduleRuntimeMatchupInput[]
+  medianGame?: boolean | null
+  medianInPlayoffs?: boolean | null
+  playoffStartWeek?: number | null
 }): CanonicalScheduleStanding[] {
   const standingsByRosterId = new Map<string, CanonicalScheduleStanding>()
-  const outcomesByRosterId = new Map<string, Array<'W' | 'L' | 'T'>>()
+  const outcomesByRosterId = new Map<string, Array<{ week: number; result: 'W' | 'L' | 'T' }>>()
 
   for (const team of input.teams) {
     standingsByRosterId.set(team.rosterId, {
@@ -599,11 +622,12 @@ export function buildCanonicalScheduleStandings(input: {
     away.pointsAgainst = round1(away.pointsAgainst + homeScore)
 
     const divisionGame = Boolean(home.divisionId && home.divisionId === away.divisionId)
+    const week = matchup.week
     if (homeScore > awayScore) {
       home.wins += 1
       away.losses += 1
-      outcomesByRosterId.get(home.rosterId)?.push('W')
-      outcomesByRosterId.get(away.rosterId)?.push('L')
+      outcomesByRosterId.get(home.rosterId)?.push({ week, result: 'W' })
+      outcomesByRosterId.get(away.rosterId)?.push({ week, result: 'L' })
       if (divisionGame) {
         home.divisionWins += 1
         away.divisionLosses += 1
@@ -611,8 +635,8 @@ export function buildCanonicalScheduleStandings(input: {
     } else if (awayScore > homeScore) {
       away.wins += 1
       home.losses += 1
-      outcomesByRosterId.get(away.rosterId)?.push('W')
-      outcomesByRosterId.get(home.rosterId)?.push('L')
+      outcomesByRosterId.get(away.rosterId)?.push({ week, result: 'W' })
+      outcomesByRosterId.get(home.rosterId)?.push({ week, result: 'L' })
       if (divisionGame) {
         away.divisionWins += 1
         home.divisionLosses += 1
@@ -620,8 +644,8 @@ export function buildCanonicalScheduleStandings(input: {
     } else {
       home.ties += 1
       away.ties += 1
-      outcomesByRosterId.get(home.rosterId)?.push('T')
-      outcomesByRosterId.get(away.rosterId)?.push('T')
+      outcomesByRosterId.get(home.rosterId)?.push({ week, result: 'T' })
+      outcomesByRosterId.get(away.rosterId)?.push({ week, result: 'T' })
       if (divisionGame) {
         home.divisionTies += 1
         away.divisionTies += 1
@@ -629,11 +653,59 @@ export function buildCanonicalScheduleStandings(input: {
     }
   }
 
+  const tally = (row: CanonicalScheduleStanding | undefined, week: number, result: 'W' | 'L' | 'T') => {
+    if (!row) return
+    if (result === 'W') row.wins += 1
+    else if (result === 'L') row.losses += 1
+    else row.ties += 1
+    outcomesByRosterId.get(row.rosterId)?.push({ week, result })
+  }
+  const persisted = (input.rows ?? []).filter((row) => !row.isMedianMatchup)
+  const asRows = persisted.map((row) => ({
+    id: row.id ?? null,
+    week: row.week,
+    type: row.type ?? null,
+    homeRosterId: row.homeRosterId,
+    awayRosterId: row.awayRosterId ?? null,
+    homeScore: finiteScore(row.homeScore),
+    awayScore: finiteScore(row.awayScore),
+    status: row.status ?? null,
+    lineupSnapshots: row.lineupSnapshots,
+  }))
+
+  // The extra matchup an odd-team league plays instead of the bye: counted for the leftover team, and
+  // for the chosen team too under "both count"; PF/PA move for the leftover team alone.
+  for (const extra of extraMatchupResults(asRows)) {
+    const leftover = standingsByRosterId.get(extra.leftoverRosterId)
+    if (!leftover) continue
+    leftover.pointsFor = round1(leftover.pointsFor + extra.leftoverScore)
+    leftover.pointsAgainst = round1(leftover.pointsAgainst + extra.opponentScore)
+    tally(leftover, extra.week, extra.outcome)
+    if (extra.scoring === 'both') {
+      tally(standingsByRosterId.get(extra.opponentRosterId), extra.week, extra.outcome === 'W' ? 'L' : extra.outcome === 'L' ? 'W' : 'T')
+    }
+  }
+
+  // League median: a second game each week against the week's median score (never in playoff weeks
+  // unless the league kept it on there).
+  if (input.medianGame) {
+    const eligible = medianEligibleRows(asRows, {
+      playoffStartWeek: input.playoffStartWeek ?? null,
+      medianInPlayoffs: Boolean(input.medianInPlayoffs),
+    })
+    for (const weekResult of computeWeeklyMedianResults(eligible)) {
+      for (const [rosterId, outcome] of weekResult.outcomes) tally(standingsByRosterId.get(rosterId), weekResult.week, outcome)
+    }
+  }
+
   const rows = Array.from(standingsByRosterId.values())
+  const exactPct = new Map<string, number>()
   for (const row of rows) {
     const played = row.wins + row.losses + row.ties
-    row.winPct = played > 0 ? round3((row.wins + row.ties * 0.5) / played) : 0
-    const outcomes = outcomesByRosterId.get(row.rosterId) ?? []
+    exactPct.set(row.rosterId, played > 0 ? (row.wins + row.ties * 0.5) / played : 0)
+    row.winPct = round3(exactPct.get(row.rosterId)!)
+    // Week order; within a week the head-to-head game, then the extra game, then the median (stable sort).
+    const outcomes = (outcomesByRosterId.get(row.rosterId) ?? []).sort((a, b) => a.week - b.week).map((o) => o.result)
     if (outcomes.length) {
       const last = outcomes[outcomes.length - 1]!
       let count = 0
@@ -642,11 +714,11 @@ export function buildCanonicalScheduleStandings(input: {
     }
   }
 
+  // The stored seed's order (lib/redraft/standingsEngine.ts): the exact win percentage — the rounded one
+  // calls different records equal — then points for, then points against.
   return rows
     .sort((a, b) =>
-      b.winPct - a.winPct ||
-      b.wins - a.wins ||
-      b.divisionWins - a.divisionWins ||
+      exactPct.get(b.rosterId)! - exactPct.get(a.rosterId)! ||
       b.pointsFor - a.pointsFor ||
       a.pointsAgainst - b.pointsAgainst ||
       a.displayName.localeCompare(b.displayName) ||
@@ -714,7 +786,14 @@ export function buildCanonicalScheduleRuntimeState(input: BuildScheduleInput): C
     currentWeek: Math.max(1, currentWeek || 1),
     status,
   })
-  const standings = buildCanonicalScheduleStandings({ teams, matchups })
+  const standings = buildCanonicalScheduleStandings({
+    teams,
+    matchups,
+    rows: generated ? input.persistedMatchups : undefined,
+    medianGame: input.medianGame,
+    medianInPlayoffs: input.medianInPlayoffs,
+    playoffStartWeek: resolvedShape.playoffStartWeek,
+  })
   const validationIssues = [
     ...(generatedSchedule?.validationIssues ?? []),
     ...resolvedShape.issues,

@@ -124,7 +124,7 @@ export interface DraftSessionSnapshot {
   /** Viewer-specific auto-pick preference. Null when no authenticated viewer; populated from `LiveDraftAutopickPreference`. */
   viewerAutopick?: {
     enabled: boolean
-    mode: 'standard' | 'ai_queue'
+    mode: 'standard' | 'ai_queue' | 'draft_as_me'
     isProEligible: boolean
     updatedAt: string | null
   } | null

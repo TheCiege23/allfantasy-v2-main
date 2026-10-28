@@ -61,7 +61,8 @@ export async function POST(request: Request) {
         if (item.type === "subscription") {
           await expireAppleSubscription(transaction, "expired")
         } else {
-          await new TokenSpendService().reverseApplePackagePurchase(transaction.transactionId)
+          await new TokenSpendService().reverseApplePackagePurchase(transaction.transactionId,
+            transaction.appAccountToken ? { userId: transaction.appAccountToken, packageSku: item.sku } : undefined)
         }
         break
       default:

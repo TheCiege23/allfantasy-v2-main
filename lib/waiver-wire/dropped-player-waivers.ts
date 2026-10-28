@@ -17,8 +17,32 @@
  *
  * FCFS leagues — the "Free agency only" preset among them — and a 0-hour waiver period have no
  * waiver period at all: a dropped player is a free agent at once, exactly as before.
+ *
+ * PER PLAYER TYPE. A commissioner can give a position its own period
+ * (`waiverEngineConfig.dropped_player_hold_hours_by_position`, the hub's "Waiver period by
+ * position"), e.g. kickers and defenses clear in 0 hours while everyone else waits 24. A position
+ * not listed uses the league period; a position can be longer than it as well as shorter. In football
+ * leagues an IDP group key (DL, LB, DB) covers the detailed positions the canonical position service
+ * puts in it, and DST / D/ST read as DEF and PK as K.
+ * The position is read from the player tables; a player whose position cannot be found takes the
+ * league period. FCFS still has no hold for anyone.
  */
 import { prisma } from '@/lib/prisma'
+import { ourIdOrSleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
+import { droppedPlayerHoldPolicy, holdHoursForPosition, maxHoldHours, type DroppedPlayerHoldPolicy } from './hold-by-position'
+
+export {
+  HOLD_HOURS_BY_POSITION_KEY,
+  MAX_HOLD_HOURS,
+  droppedPlayerHoldPolicy,
+  droppedPlayerWaiverHours,
+  holdHoursForPosition,
+  maxHoldHours,
+  normalizeHoldPosition,
+  parseHoldHoursByPositionInput,
+  readHoldHoursByPosition,
+  type DroppedPlayerHoldPolicy,
+} from './hold-by-position'
 
 export const DROPPED_PLAYER_ON_WAIVERS_MESSAGE =
   'This player was dropped recently and is on waivers until he clears. Submit a claim; it runs at the first waiver run after he clears.'
@@ -35,16 +59,6 @@ export type DroppedPlayerHold = {
   droppedByRosterId: string
 }
 
-/** The league's after-drop waiver period in hours, or 0 when it has none (FCFS, or 0 hours). */
-export function droppedPlayerWaiverHours(input: {
-  normalizedWaiverType: string | null | undefined
-  waiverHours: number | null | undefined
-}): number {
-  if (input.normalizedWaiverType === 'fcfs') return 0
-  const h = Number(input.waiverHours)
-  return Number.isFinite(h) && h > 0 ? h : 0
-}
-
 /**
  * The live holds, one per player, from drop rows in any order: the LATEST drop of a player decides,
  * and a drop older than the period is no hold.
@@ -52,20 +66,22 @@ export function droppedPlayerWaiverHours(input: {
 export function activeDropHolds(
   rows: ReadonlyArray<{ dropPlayerId: string | null; processedAt: Date | string; rosterId: string }>,
   now: Date,
-  hours: number,
+  hours: number | ((playerId: string) => number),
 ): Map<string, DroppedPlayerHold> {
   const out = new Map<string, DroppedPlayerHold>()
-  if (!(hours > 0)) return out
+  const hoursFor = typeof hours === 'number' ? () => hours : hours
+  if (typeof hours === 'number' && !(hours > 0)) return out
   for (const row of rows) {
     if (!row.dropPlayerId) continue
     const droppedAt = new Date(row.processedAt)
     if (!Number.isFinite(droppedAt.getTime())) continue
     const prev = out.get(row.dropPlayerId)
     if (prev && prev.droppedAt >= droppedAt) continue
+    const h = hoursFor(row.dropPlayerId)
     out.set(row.dropPlayerId, {
       playerId: row.dropPlayerId,
       droppedAt,
-      until: new Date(droppedAt.getTime() + hours * 3_600_000),
+      until: new Date(droppedAt.getTime() + (h > 0 ? h : 0) * 3_600_000),
       droppedByRosterId: row.rosterId,
     })
   }
@@ -73,40 +89,96 @@ export function activeDropHolds(
   return out
 }
 
-/** The league's waiver period, read from the League column and the effective waiver type. */
-export async function loadDroppedPlayerWaiverHours(leagueId: string, normalizedWaiverType: string | null | undefined): Promise<number> {
-  if (normalizedWaiverType === 'fcfs') return 0
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { waiverHours: true } })
-  return droppedPlayerWaiverHours({ normalizedWaiverType, waiverHours: league?.waiverHours ?? null })
+/** The league's whole policy, from the League row and the effective waiver settings. */
+export async function loadDroppedPlayerHoldPolicy(
+  leagueId: string,
+  settings: { normalizedWaiverType: string | null | undefined; waiverEngineConfig?: unknown },
+): Promise<DroppedPlayerHoldPolicy> {
+  if (settings.normalizedWaiverType === 'fcfs') return droppedPlayerHoldPolicy({ normalizedWaiverType: 'fcfs', waiverHours: 0 })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { waiverHours: true, sport: true } })
+  return droppedPlayerHoldPolicy({
+    normalizedWaiverType: settings.normalizedWaiverType,
+    waiverHours: league?.waiverHours ?? null,
+    waiverEngineConfig: settings.waiverEngineConfig,
+    sport: league?.sport ? String(league.sport) : null,
+  })
 }
 
-/** The live holds in a league, optionally only for `playerIds`. */
+/**
+ * The positions of dropped players, by the id the drop recorded: our SportsPlayer row id or a Sleeper
+ * id (the two spellings a native league's player ids come in), then a Player id. Ids not found are
+ * absent (they take the league period). A failed read throws.
+ *
+ * ⚠ NEVER A BARE ID AGAINST `externalId`: there it is a Rolling Insights / CFBD number that collides
+ * with a Sleeper id for a different person (lib/player-identity/externalIdNamespace.ts), and the hold
+ * would take that person's position. `ourIdOrSleeperIdWhere` matches Sleeper ids by `sleeperId` or
+ * `sleeper:<id>` only.
+ */
+export async function loadDroppedPlayerPositions(ids: readonly string[], sport: string | null | undefined): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  if (ids.length === 0) return out
+  const list = [...ids]
+  const sportsRows = (await prisma.sportsPlayer.findMany({
+    where: ourIdOrSleeperIdWhere(list, sport ?? undefined),
+    select: { id: true, externalId: true, sleeperId: true, position: true },
+  })) as Array<{ id: string; externalId: string | null; sleeperId: string | null; position: string | null }>
+  const wanted = new Set(list)
+  for (const r of sportsRows) {
+    if (!r.position) continue
+    // Keyed by the row's own id and its Sleeper id (`sleeper:<id>` read as that id) — never a bare
+    // provider externalId.
+    const sleeper = r.sleeperId ?? (r.externalId?.startsWith('sleeper:') ? r.externalId.slice('sleeper:'.length) : null)
+    for (const key of [r.id, sleeper]) {
+      if (key && wanted.has(key) && !out.has(key)) out.set(key, r.position)
+    }
+  }
+  const missing = list.filter((id) => !out.has(id))
+  if (missing.length > 0) {
+    const players = (await prisma.player.findMany({ where: { id: { in: missing } }, select: { id: true, position: true } })) as Array<{
+      id: string
+      position: string | null
+    }>
+    for (const p of players) if (p.position) out.set(p.id, p.position)
+  }
+  return out
+}
+
+/**
+ * The live holds in a league, optionally only for `playerIds`. Takes the league period alone (every
+ * player alike) or the whole policy (per-position periods).
+ */
 export async function loadDroppedPlayerHolds(
   leagueId: string,
-  hours: number,
+  hoursOrPolicy: number | DroppedPlayerHoldPolicy,
   opts: { now?: Date; playerIds?: readonly string[] } = {},
 ): Promise<Map<string, DroppedPlayerHold>> {
   const now = opts.now ?? new Date()
-  if (!(hours > 0)) return new Map()
+  const policy: DroppedPlayerHoldPolicy =
+    typeof hoursOrPolicy === 'number' ? { hours: hoursOrPolicy, byPosition: {} } : hoursOrPolicy
+  const window = maxHoldHours(policy)
+  if (!(window > 0)) return new Map()
   if (opts.playerIds && opts.playerIds.length === 0) return new Map()
   const rows = await prisma.waiverTransaction.findMany({
     where: {
       leagueId,
       dropPlayerId: opts.playerIds ? { in: [...opts.playerIds] } : { not: null },
-      processedAt: { gte: new Date(now.getTime() - hours * 3_600_000) },
+      processedAt: { gte: new Date(now.getTime() - window * 3_600_000) },
     },
     select: { dropPlayerId: true, processedAt: true, rosterId: true },
   })
-  return activeDropHolds(rows, now, hours)
+  if (Object.keys(policy.byPosition).length === 0) return activeDropHolds(rows, now, policy.hours)
+  const ids = [...new Set(rows.map((r) => r.dropPlayerId).filter((id): id is string => Boolean(id)))]
+  const positions = await loadDroppedPlayerPositions(ids, policy.sport)
+  return activeDropHolds(rows, now, (id) => holdHoursForPosition(policy, positions.get(id)))
 }
 
 /** The hold on one player, or null when he is not on waivers. */
 export async function loadDroppedPlayerHold(
   leagueId: string,
   playerId: string,
-  hours: number,
+  hoursOrPolicy: number | DroppedPlayerHoldPolicy,
   now: Date = new Date(),
 ): Promise<DroppedPlayerHold | null> {
-  const holds = await loadDroppedPlayerHolds(leagueId, hours, { now, playerIds: [playerId] })
+  const holds = await loadDroppedPlayerHolds(leagueId, hoursOrPolicy, { now, playerIds: [playerId] })
   return holds.get(playerId) ?? null
 }

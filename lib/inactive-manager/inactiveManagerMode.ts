@@ -19,7 +19,26 @@ import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 
 export const AF_MANAGED_LINEUPS_KEY = 'af_managed_lineups'
 
-export type ManagedLineup = { since: string; byUserId: string }
+/**
+ * How Chimmy runs a team on autopilot (owner decision 2026-10-26, docs/AF_COMMISSIONER_SETTINGS_SPEC.md §5):
+ * `dynasty_owner` is the default — protect young players and picks, never sell the future for this
+ * week. The commissioner can choose another style per team.
+ */
+export const AUTOPILOT_STYLES = ['dynasty_owner', 'win_now', 'rebuild'] as const
+export type AutopilotStyle = (typeof AUTOPILOT_STYLES)[number]
+export const DEFAULT_AUTOPILOT_STYLE: AutopilotStyle = 'dynasty_owner'
+
+export function isAutopilotStyle(v: unknown): v is AutopilotStyle {
+  return typeof v === 'string' && (AUTOPILOT_STYLES as readonly string[]).includes(v)
+}
+
+/**
+ * Chimmy autopilot (AF Commissioner): everything inactive manager mode does, plus roster decisions in
+ * the chosen style. Lineup-only management stays free; `autopilot` marks the paid upgrade.
+ */
+export type ChimmyAutopilot = { style: AutopilotStyle; since: string; byUserId: string }
+
+export type ManagedLineup = { since: string; byUserId: string; autopilot?: ChimmyAutopilot }
 export type ManagedLineups = Record<string, ManagedLineup>
 
 /** Above this share of the open player pool without a projection, the lineup is left alone. */
@@ -31,7 +50,13 @@ export function readManagedLineups(settings: unknown): ManagedLineups {
   const out: ManagedLineups = {}
   for (const [rosterId, v] of Object.entries(raw as Record<string, unknown>)) {
     const o = v && typeof v === 'object' ? (v as Record<string, unknown>) : null
-    if (o && typeof o.since === 'string' && typeof o.byUserId === 'string') out[rosterId] = { since: o.since, byUserId: o.byUserId }
+    if (!o || typeof o.since !== 'string' || typeof o.byUserId !== 'string') continue
+    const entry: ManagedLineup = { since: o.since, byUserId: o.byUserId }
+    const ap = o.autopilot && typeof o.autopilot === 'object' ? (o.autopilot as Record<string, unknown>) : null
+    if (ap && typeof ap.since === 'string' && typeof ap.byUserId === 'string') {
+      entry.autopilot = { style: isAutopilotStyle(ap.style) ? ap.style : DEFAULT_AUTOPILOT_STYLE, since: ap.since, byUserId: ap.byUserId }
+    }
+    out[rosterId] = entry
   }
   return out
 }
@@ -50,6 +75,12 @@ export function planBestLineup(args: {
   playerData: unknown
   players: Record<string, LineupPlayerInfo | undefined>
   isLocked: (playerId: string) => boolean
+  /**
+   * Players whose team has no game this week. Each is projected at ZERO, so he is benched whenever a
+   * bench player can fill his slot — the weekly projection does not reliably say 0 for a bye (a season
+   * rate, or none), and a bye player kept in the lineup scores nothing (phase 6, 2026-10-27).
+   */
+  onBye?: (playerId: string) => boolean
 }): LineupPlan {
   const { slots, playerData, isLocked } = args
   if (slots.length === 0) return { kind: 'skip', reason: 'no_slots' }
@@ -62,7 +93,8 @@ export function planBestLineup(args: {
   const players: Record<string, LineupPlayerInfo | undefined> = {}
   for (const id of [...lists.starters, ...lists.bench].filter(Boolean)) {
     const p = args.players[id]
-    players[id] = { position: (rows.get(id)?.position as string | undefined) ?? p?.position ?? null, projectedPoints: p?.projectedPoints ?? null }
+    const projectedPoints = args.onBye?.(id) ? 0 : p?.projectedPoints ?? null
+    players[id] = { position: (rows.get(id)?.position as string | undefined) ?? p?.position ?? null, projectedPoints }
   }
 
   const open = [...lists.starters, ...lists.bench].filter((id) => id && !isLocked(id))
@@ -94,4 +126,9 @@ export type SuggestionInput = { rosterId: string; status: 'active' | 'at_risk' |
 /** Teams to suggest: inactive ones not already managed. AllFantasy never acts on these by itself. */
 export function suggestInactiveTeams(rows: readonly SuggestionInput[], managed: ManagedLineups): string[] {
   return rows.filter((r) => r.status === 'inactive' && !managed[r.rosterId]).map((r) => r.rosterId)
+}
+
+/** Roster ids Chimmy runs on autopilot in this league. */
+export function autopilotRosterIds(managed: ManagedLineups): string[] {
+  return Object.entries(managed).flatMap(([id, m]) => (m.autopilot ? [id] : []))
 }

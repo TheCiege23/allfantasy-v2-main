@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { DispersalDraftEngine } from './DispersalDraftEngine'
 import type { DispersalDraftState } from './types'
 
-const dispersalDraftClient = (prisma as typeof prisma & { dispersalDraft: any }).dispersalDraft
+const dispersalDraftClient = prisma.dispersalDraft
 
 export type DispersalDraftDetailApi = {
   draft: Record<string, unknown>

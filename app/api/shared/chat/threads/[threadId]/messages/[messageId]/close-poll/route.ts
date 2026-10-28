@@ -42,13 +42,18 @@ export async function POST(
 
     const row = await (prisma as any).leagueChatMessage.findUnique({
       where: { id: messageId },
-      select: { id: true, leagueId: true, senderUserId: true, metadata: true },
+      /*
+       * ⚠ `userId`, NOT `senderUserId`. `LeagueChatMessage` has no `senderUserId` column (that is the
+       * platform message's field name), and selecting it made Prisma reject the query — so closing
+       * a league poll by hand answered 500 for everyone, author and commissioner alike.
+       */
+      select: { id: true, leagueId: true, userId: true, metadata: true },
     })
     if (!row || row.leagueId !== leagueId) {
       return NextResponse.json({ error: "Message not found in this league" }, { status: 404 })
     }
 
-    const isAuthor = Boolean(row.senderUserId) && row.senderUserId === user.appUserId
+    const isAuthor = Boolean(row.userId) && row.userId === user.appUserId
     if (!isAuthor && !access.isCommissioner) {
       return NextResponse.json({ error: "Only the author or a commissioner can close this" }, { status: 403 })
     }

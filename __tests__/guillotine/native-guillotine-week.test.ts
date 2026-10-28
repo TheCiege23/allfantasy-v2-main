@@ -231,6 +231,55 @@ describe('runNativeGuillotineWeek', () => {
     expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 's1', week: 3 })
   })
 
+  describe('pre-chop stat refresh (a correction inside the window decides the chop)', () => {
+    it('re-pulls the week and re-seals it before any team is scored', async () => {
+      arrange()
+      const order: string[] = []
+      const syncWeekStats = vi.fn(async () => { order.push('sync') })
+      m.finalizeRedraftWeek.mockImplementation(async () => {
+        order.push('seal')
+        return { refusal: null, finalized: true, slate: { lastStartTime: LAST_KICKOFF } }
+      })
+      m.scoreRosterForWeek.mockImplementation(async ({ rosterId }: { rosterId: string }) => {
+        order.push('score')
+        return { points: POINTS[rosterId] }
+      })
+
+      expect((await run(4, { syncWeekStats })).outcome).toBe('chopped')
+      expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 's1', week: 3 })
+      expect(order.slice(0, 4)).toEqual(['seal', 'sync', 'seal', 'score'])
+    })
+
+    it('waits instead of chopping when the refreshed week will not re-seal', async () => {
+      arrange()
+      m.finalizeRedraftWeek
+        .mockResolvedValueOnce({ refusal: null, finalized: true, slate: { lastStartTime: LAST_KICKOFF } })
+        .mockResolvedValueOnce({ refusal: 'stat_coverage_below_floor', slate: null })
+      const r = await run(4, { syncWeekStats: vi.fn(async () => undefined) })
+      expect(r).toMatchObject({ outcome: 'waiting', week: 3, reason: 'pre_chop_refresh:stat_coverage_below_floor' })
+      expect(m.runElimination).not.toHaveBeenCalled()
+      expect(m.release).toHaveBeenCalled()
+    })
+
+    it('a refresh that throws chops on the sealed stats rather than stall the season', async () => {
+      arrange()
+      const r = await run(4, { syncWeekStats: vi.fn(async () => { throw new Error('provider down') }) })
+      expect(r.outcome).toBe('chopped')
+      expect(m.finalizeRedraftWeek).toHaveBeenCalledTimes(1)
+    })
+
+    it('an "immediate" league has no window, so nothing is re-pulled', async () => {
+      arrange()
+      m.getGuillotineConfig.mockResolvedValue({
+        eliminationStartWeek: 1, eliminationEndWeek: 17, teamsPerChop: 1, correctionWindow: 'immediate',
+        statCorrectionHours: null, customCutoffDayOfWeek: null, customCutoffTimeUtc: null,
+      })
+      const syncWeekStats = vi.fn(async () => undefined)
+      expect((await run(4, { syncWeekStats })).outcome).toBe('chopped')
+      expect(syncWeekStats).not.toHaveBeenCalled()
+    })
+  })
+
   it('waits inside the stat-correction window', async () => {
     arrange()
     const early = new Date(new Date(LAST_KICKOFF).getTime() + 10 * 3600 * 1000)

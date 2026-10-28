@@ -11,6 +11,7 @@ import {
   generatePlayoffs,
   type RedraftPlayoffRuntimeClient,
 } from '@/lib/redraft/client'
+import { PlayoffSeriesLine } from '@/components/league/PlayoffSeriesStrip'
 
 export function StandingsView({
   rows,
@@ -327,6 +328,15 @@ function PlayoffRuntimePanel({
               Locked
             </span>
           ) : null}
+          {runtime.settings.reseedAfterEachRound ? (
+            <span
+              data-testid="redraft-playoff-reseed-chip"
+              title="After each round the highest remaining seed plays the lowest remaining seed. Seeds stay as set at the playoff start."
+              className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-2 py-1 text-[11px] text-cyan-200"
+            >
+              Reseeds each round
+            </span>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -343,6 +353,11 @@ function PlayoffRuntimePanel({
               {runtime.seeds.map((seed) => (
                 <span key={seed.rosterId} className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-white/75">
                   {seed.seed}. {seed.displayName}
+                  {seed.qualifiedBy === 'division' ? (
+                    <span data-testid="redraft-playoff-division-winner" className="ml-1 text-emerald-200/80" title="Division winner">
+                      · Div
+                    </span>
+                  ) : null}
                 </span>
               ))}
             </div>
@@ -418,7 +433,14 @@ function BracketRoundCard({
   return (
     <div className="rounded-lg border border-white/[0.08] bg-black/15 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="font-semibold text-white/80">{title}</p>
+        <p className="font-semibold text-white/80">
+          {title}
+          {matchups.some((matchup) => matchup.metadata?.reseeded === true) ? (
+            <span data-testid="redraft-playoff-round-reseeded" className="ml-2 text-[11px] font-normal text-cyan-200/80">
+              Reseeded
+            </span>
+          ) : null}
+        </p>
         <span className="text-[11px] uppercase tracking-[0.14em] text-white/38">{status}</span>
       </div>
       <div className="grid gap-1.5">
@@ -432,6 +454,12 @@ function BracketRoundCard({
               <span className="text-white/35">{scoreLine(matchup)}</span>
               <span className="truncate text-right text-white/70">{teamName(runtime, matchup.awayRosterId, matchup.awaySeed)}</span>
             </div>
+            {/* Best-of-N series mode only (lib/playoff-runtime/playoffSeries.ts): the series record. */}
+            <PlayoffSeriesLine
+              seriesLengths={runtime.settings?.seriesLengths}
+              matchup={matchup}
+              nameOf={(rosterId) => teamName(runtime, rosterId, null)}
+            />
           </div>
         ))}
       </div>

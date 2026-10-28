@@ -21,6 +21,7 @@ import {
   type PositionRank,
 } from './dailySportForm'
 import { readDailySportForm, readPriorDailySportForm } from './dailySportFormStore'
+import { leagueAcceptsSeasonTotals } from './dailySportSeasonTotals'
 
 /**
  * The waiver and lineup screens' projection and position rank for NBA / NHL / MLB players, priced
@@ -106,8 +107,14 @@ export async function loadDailySportOutlook(
   const now = args.now ?? new Date()
   const blob = await readDailySportForm(db, sport, now)
   if (!blob) return empty('form_not_computed')
-  // Last season's lines (same table, keyed by season). None stored = this season alone.
-  const prior = await readPriorDailySportForm(db, sport, blob.season, now).catch(() => null)
+  // Last season's lines (same table, keyed by season). None stored = this season alone. A prior built
+  // from season totals is exact only under scoring it fully maps, so a league weighting anything else
+  // (an NHL hat-trick bonus) declines it rather than score that category as 0 (dailySportSeasonTotals.ts).
+  const stored = await readPriorDailySportForm(db, sport, blob.season, now).catch(() => null)
+  const prior =
+    stored?.basis === 'season_totals' && !leagueAcceptsSeasonTotals({ sport, settings: args.league.settings }, stored)
+      ? null
+      : stored
 
   const scored = scoreFormBlob(blob, scorer, prior)
   const ranks = positionRanks(scored.values())

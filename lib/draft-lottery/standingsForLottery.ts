@@ -16,7 +16,7 @@ export interface StandingsRow {
   losses: number
   ties: number
   pointsFor: number
-  /** Max PF if available (dynasty); else pointsFor. */
+  /** True Max PF when the league has it for every team (see `applyTrueMaxPf`); else points for. */
   maxPf: number
 }
 
@@ -96,7 +96,31 @@ export async function getStandingsForLottery(leagueId: string): Promise<Standing
   })
   for (const rosterId of unowned) rows.push(emptyRow(rosterId, rows.length))
 
+  await applyTrueMaxPf(leagueId, rows)
   return rows
+}
+
+/**
+ * The lottery's "max PF" weighting and tiebreak read true Max PF when the league has it for every team —
+ * the same values the live rookie order ranks by (lib/rookie-order/loadRookieOrderInput.ts: optimal
+ * lineups from native weeks, or the Sleeper freeze). Otherwise points for stays, as before: one team's
+ * Max PF beside another's points for would compare two different things. Never throws.
+ */
+async function applyTrueMaxPf(leagueId: string, rows: StandingsRow[]): Promise<void> {
+  try {
+    const { loadRookieOrderInput } = await import('@/lib/rookie-order/loadRookieOrderInput')
+    const loaded = await loadRookieOrderInput(leagueId)
+    if (!loaded) return
+    const byRoster = new Map<string, number>()
+    for (const t of loaded.input.teams) {
+      const rosterId = loaded.rosterIdForTeam.get(t.teamId)
+      if (rosterId && t.maxPf != null && Number.isFinite(t.maxPf)) byRoster.set(rosterId, t.maxPf)
+    }
+    if (byRoster.size === 0 || !rows.every((r) => byRoster.has(r.rosterId))) return
+    for (const r of rows) r.maxPf = byRoster.get(r.rosterId)!
+  } catch {
+    // Points for stays.
+  }
 }
 
 /** A roster with no team row: no standings to weigh, but it still holds a pick. */

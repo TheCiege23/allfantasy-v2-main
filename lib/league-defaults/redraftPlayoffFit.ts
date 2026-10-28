@@ -20,6 +20,7 @@
  * every team — and now follows `derivePlayoffTeams` like redraft (4 under ten teams, 6 from ten).
  */
 
+import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 import { derivePlayoffTeams } from '@/lib/league-concepts/redraftDefaults'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { resolveDefaultPlayoffConfig } from '@/lib/sport-defaults/DefaultPlayoffConfigResolver'
@@ -31,6 +32,7 @@ import {
   playoffBracketWeeks,
   playoffRoundsForTeams,
 } from '@/lib/playoff-runtime/playoffFit'
+import { cappedSeasonWeeks, maxPlayoffStartWeekForSport, maxRegularSeasonWeeksForSport } from '@/lib/redraft/regularSeasonCap'
 
 export const REDRAFT_PLAYOFF_FIT_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA', 'NHL', 'MLB'])
 /** League types whose default bracket is fitted to the season. */
@@ -93,17 +95,23 @@ export function redraftPlayoffShapeFor(input: {
   const championshipLength =
     input.championshipLength ?? resolveDefaultPlayoffConfig(sport as SportType).championship_length ?? null
   const shape = { teams: playoffTeams, weeksPerRound: input.weeksPerRound, championshipLength }
-  const playoffStartWeek = fittedPlayoffStartWeek({ ...shape, seasonWeeks })
-  if (playoffStartWeek == null) return null
+  const fitted = fittedPlayoffStartWeek({ ...shape, seasonWeeks })
+  if (fitted == null) return null
+  // At most a 24-week regular season (lib/redraft/regularSeasonCap.ts). Only an NHL bracket smaller than
+  // six teams, or an MLB two-team final, reaches past it; its season then ends with its final rather
+  // than at the sport's last week.
+  const playoffStartWeek = Math.min(fitted, maxPlayoffStartWeekForSport(sport))
+  const playoffWeeks = playoffBracketWeeks(shape)
+  const leagueSeasonWeeks = cappedSeasonWeeks(seasonWeeks, playoffWeeks, maxRegularSeasonWeeksForSport(sport))
   return {
     playoffTeams,
     firstRoundByes: firstRoundByesForTeams(playoffTeams),
     totalRounds: playoffRoundsForTeams(playoffTeams),
     playoffStartWeek,
     regularSeasonEndWeek: playoffStartWeek - 1,
-    championshipWeek: seasonWeeks,
-    playoffWeeks: playoffBracketWeeks(shape),
-    seasonWeeks,
+    championshipWeek: leagueSeasonWeeks,
+    playoffWeeks,
+    seasonWeeks: leagueSeasonWeeks,
   }
 }
 
@@ -207,7 +215,10 @@ export function resizedPlayoffColumns(input: {
   const teams = Number(input.playoffTeams)
   if (!Number.isInteger(teams) || teams < 2) return null
   const roto = (obj(input.settings)?.scoring_mode ?? null) === 'roto'
-  if (PLAYOFF_FIT_LEAGUE_TYPES.has(String(input.leagueType ?? '').toLowerCase()) && !roto) {
+  // A league in best-of-N series mode (lib/playoff-runtime/playoffSeries.ts) has a commissioner's own
+  // playoff window — the default shapes here assume one-week rounds — so it is never re-fitted as untouched.
+  const series = readPlayoffSeriesLengths(input.settings) != null
+  if (PLAYOFF_FIT_LEAGUE_TYPES.has(String(input.leagueType ?? '').toLowerCase()) && !roto && !series) {
     const shapeArgs = { sport: input.sport, leagueType: input.leagueType, weeksPerRound: input.weeksPerRound, championshipLength: input.championshipLength }
     const untouched = untouchedRedraftPlayoffDefaults({ ...shapeArgs, leagueSize: input.oldSize }).some(
       (d) => d.playoffTeams === teams && d.playoffStartWeek === input.playoffStartWeek,

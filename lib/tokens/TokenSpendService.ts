@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import { lockTokenWallet } from '@/lib/tokens/TokenWalletLock'
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
@@ -105,6 +107,12 @@ export type TokenLedgerEntryView = {
   description: string | null
   metadata: unknown
   createdAt: string
+}
+
+function packageReversalKey(purchaseKey: string): string {
+  // Keep historical Apple refunds idempotent across the shared implementation rollout.
+  if (purchaseKey.startsWith('apple_iap:')) return purchaseKey.replace('apple_iap:', 'apple_iap_refund:')
+  return `purchase_refund:${createHash('sha256').update(purchaseKey).digest('hex')}`
 }
 
 export class TokenSpendRuleNotFoundError extends Error {
@@ -508,11 +516,24 @@ export class TokenSpendService {
 
     return (prisma as any).$transaction(async (tx: any) => {
       if (idempotencyKey) {
+        // Share this lock with refunds: a refund delivered first leaves a durable tombstone.
+        await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${idempotencyKey}, 0))::text`)
+        const reversal = await tx.tokenLedger.findUnique({ where: { idempotencyKey: packageReversalKey(idempotencyKey) } })
+        if (reversal) {
+          if (reversal.userId !== input.userId || reversal.tokenPackageSku !== input.packageSku ||
+              reversal.entryType !== TOKEN_ENTRY_TYPES.ADJUSTMENT) throw new TokenSpendIdempotencyConflictError()
+          return toLedgerView(reversal as LedgerRow) // Never restore a refunded purchase.
+        }
         const existing = await tx.tokenLedger.findUnique({
           where: { idempotencyKey },
           include: { spendRule: { select: { featureLabel: true } } },
         })
-        if (existing) return toLedgerView(existing as LedgerRow)
+        if (existing) {
+          if (existing.userId !== input.userId || existing.tokenPackageSku !== input.packageSku ||
+              existing.entryType !== TOKEN_ENTRY_TYPES.PURCHASE || existing.sourceType !== input.sourceType ||
+              existing.sourceId !== (input.sourceId ?? null)) throw new TokenSpendIdempotencyConflictError()
+          return toLedgerView(existing as LedgerRow)
+        }
       }
 
       const tokenPackage = await tx.tokenPackage.findUnique({
@@ -572,77 +593,90 @@ export class TokenSpendService {
     })
   }
 
-  /** Reconcile an Apple refund once, without removing tokens already spent. */
-  async reverseApplePackagePurchase(transactionId: string): Promise<void> {
-    await this.reverseStorePackagePurchase({
-      purchaseKey: `apple_iap:${transactionId}`,
-      reversalKey: `apple_iap_refund:${transactionId}`,
-      purchaseSourceType: "apple_iap",
-      reversalSourceType: "apple_iap_refund",
-      sourceId: transactionId,
-      description: "App Store token pack refund",
+  /** Reverse unused purchased tokens once. Also records refunds received before fulfillment. */
+  async reversePackagePurchase(input: {
+    purchaseKey: string
+    userId: string
+    packageSku: string
+    sourceType: string
+    sourceId: string
+    reason: 'refund' | 'dispute'
+  }): Promise<void> {
+    await syncSeedDataIfNeeded()
+    const reversalKey = packageReversalKey(input.purchaseKey)
+    await (prisma as any).$transaction(async (tx: any) => {
+      await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.purchaseKey}, 0))::text`)
+      const existing = await tx.tokenLedger.findUnique({ where: { idempotencyKey: reversalKey } })
+      if (existing) {
+        if (existing.userId !== input.userId || existing.tokenPackageSku !== input.packageSku) throw new TokenSpendIdempotencyConflictError()
+        return
+      }
+      const purchase = await tx.tokenLedger.findUnique({ where: { idempotencyKey: input.purchaseKey } })
+      if (purchase && (purchase.userId !== input.userId || purchase.tokenPackageSku !== input.packageSku ||
+          purchase.sourceType !== input.sourceType || purchase.entryType !== TOKEN_ENTRY_TYPES.PURCHASE)) {
+        throw new TokenSpendIdempotencyConflictError()
+      }
+      const tokenPackage = await tx.tokenPackage.findUnique({ where: { sku: input.packageSku } })
+      if (!tokenPackage) throw new Error(`Unknown token package sku: ${input.packageSku}`)
+      await lockTokenWallet(tx, input.userId)
+      const wallet = await tx.userTokenBalance.upsert({ where: { userId: input.userId }, update: {}, create: { userId: input.userId } })
+      const rows = await tx.$queryRaw(Prisma.sql`
+        SELECT "balance", "reserved_balance" FROM "user_token_balances" WHERE "id" = ${wallet.id} FOR UPDATE`)
+      const balanceBefore = Number(rows[0].balance)
+      const originalAmount = purchase ? Number(purchase.tokenDelta) : 0
+      const reversed = Math.min(Math.max(0, balanceBefore), originalAmount)
+      const balanceAfter = balanceBefore - reversed
+      // A pending hold cannot outlive the funds backing it. All hold writers share the wallet
+      // advisory lock, so finalization/release cannot race these claims or deadlock on row order.
+      let reserved = Number(rows[0].reserved_balance)
+      let released = 0
+      if (reserved > balanceAfter) {
+        const holds = await tx.tokenReservation.findMany({
+          where: { userTokenBalanceId: wallet.id, status: 'reserved' }, orderBy: [{ reservedAt: 'asc' }, { id: 'asc' }],
+        })
+        for (const hold of holds) {
+          if (reserved <= balanceAfter) break
+          const claimed = await tx.tokenReservation.updateMany({
+            where: { id: hold.id, status: 'reserved' },
+            data: { status: 'released', releasedAt: new Date(), reason: 'purchase_reversed' },
+          })
+          if (claimed.count === 1) { reserved -= hold.amount; released += hold.amount }
+        }
+      }
+      if (reserved > balanceAfter) throw new Error('Wallet hold reconciliation failed')
+      await tx.userTokenBalance.update({ where: { id: wallet.id }, data: {
+        balance: { decrement: reversed }, reservedBalance: { decrement: released },
+      } })
+      await tx.tokenLedger.create({ data: {
+        userId: input.userId, userTokenBalanceId: wallet.id,
+        entryType: TOKEN_ENTRY_TYPES.ADJUSTMENT, tokenDelta: -reversed,
+        balanceBefore, balanceAfter, tokenPackageSku: input.packageSku,
+        sourceType: `${input.sourceType}_refund`, sourceId: input.sourceId, idempotencyKey: reversalKey,
+        description: 'Token pack payment reversed',
+        metadata: { reason: input.reason, purchaseKey: input.purchaseKey, originalTokenAmount: originalAmount,
+          alreadySpent: originalAmount - reversed, releasedHoldTokens: released, beforeFulfillment: !purchase },
+      } })
     })
+  }
+
+  /** Preserve the historical App Store reversal identity. */
+  async reverseApplePackagePurchase(transactionId: string, context?: { userId: string; packageSku: string }): Promise<void> {
+    const purchaseKey = `apple_iap:${transactionId}`
+    const purchase = context ?? await prisma.tokenLedger.findUnique({ where: { idempotencyKey: purchaseKey } })
+    const packageSku = context?.packageSku ?? (purchase as { tokenPackageSku?: string } | null)?.tokenPackageSku
+    if (!purchase || !packageSku) return
+    await this.reversePackagePurchase({ purchaseKey, userId: purchase.userId, packageSku,
+      sourceType: 'apple_iap', sourceId: transactionId, reason: 'refund' })
   }
 
   /**
-   * Reconcile a Google Play refund or chargeback once. `purchaseRef` is the same
-   * value the grant used after `google_play:` (the order id, or the token hash
-   * for purchases Google gave no order id).
+   * Reconcile a Google Play refund or chargeback once, without removing tokens already
+   * spent. `purchaseRef` is the value the grant used after `google_play:` (the order id,
+   * or the token hash for purchases Google gave no order id).
    */
-  async reverseGooglePlayPackagePurchase(purchaseRef: string): Promise<void> {
-    await this.reverseStorePackagePurchase({
-      purchaseKey: `google_play:${purchaseRef}`,
-      reversalKey: `google_play_refund:${purchaseRef}`,
-      purchaseSourceType: "google_play",
-      reversalSourceType: "google_play_refund",
-      sourceId: purchaseRef,
-      description: "Google Play token pack refund",
-    })
-  }
-
-  private async reverseStorePackagePurchase(input: {
-    purchaseKey: string
-    reversalKey: string
-    purchaseSourceType: string
-    reversalSourceType: string
-    sourceId: string
-    description: string
-  }): Promise<void> {
-    const { purchaseKey, reversalKey } = input
-    await (prisma as any).$transaction(async (tx: any) => {
-      const existing = await tx.tokenLedger.findUnique({ where: { idempotencyKey: reversalKey } })
-      if (existing) return
-      const purchase = await tx.tokenLedger.findUnique({ where: { idempotencyKey: purchaseKey } })
-      if (!purchase || purchase.sourceType !== input.purchaseSourceType || purchase.entryType !== TOKEN_ENTRY_TYPES.PURCHASE) {
-        return
-      }
-      const rows = await tx.$queryRaw(Prisma.sql`
-        SELECT "balance" FROM "user_token_balances"
-        WHERE "id" = ${purchase.userTokenBalanceId} FOR UPDATE`)
-      const balanceBefore = Number(rows?.[0]?.balance ?? 0)
-      const reversed = Math.min(Math.max(0, balanceBefore), Number(purchase.tokenDelta))
-      const balanceAfter = balanceBefore - reversed
-      await tx.userTokenBalance.update({
-        where: { id: purchase.userTokenBalanceId },
-        data: { balance: { decrement: reversed } },
-      })
-      await tx.tokenLedger.create({
-        data: {
-          userId: purchase.userId,
-          userTokenBalanceId: purchase.userTokenBalanceId,
-          entryType: TOKEN_ENTRY_TYPES.ADJUSTMENT,
-          tokenDelta: -reversed,
-          balanceBefore,
-          balanceAfter,
-          tokenPackageSku: purchase.tokenPackageSku,
-          sourceType: input.reversalSourceType,
-          sourceId: input.sourceId,
-          idempotencyKey: reversalKey,
-          description: input.description,
-          metadata: { originalTokenAmount: purchase.tokenDelta, alreadySpent: purchase.tokenDelta - reversed },
-        },
-      })
-    })
+  async reverseGooglePlayPackagePurchase(purchaseRef: string, context: { userId: string; packageSku: string }): Promise<void> {
+    await this.reversePackagePurchase({ purchaseKey: `google_play:${purchaseRef}`, userId: context.userId,
+      packageSku: context.packageSku, sourceType: 'google_play', sourceId: purchaseRef, reason: 'refund' })
   }
 
   /**
@@ -795,6 +829,7 @@ export class TokenSpendService {
         userId: input.userId,
         ruleCode: String(rule.code),
         baseTokenCost,
+        db: tx,
       })
       const tokenCost = Math.max(1, Number(decision.effectiveTokenCost || baseTokenCost))
       if (input.expectedTokenCost !== undefined && input.expectedTokenCost !== tokenCost) {

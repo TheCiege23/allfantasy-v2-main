@@ -1,3 +1,5 @@
+import { readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
+
 /**
  * League-median game: each week, every team also plays the week's median score.
  *
@@ -20,6 +22,7 @@ export type MedianMatchupRow = {
   lineupSnapshots?: unknown
   /** `RedraftMatchup.type`; a playoff, consolation or toilet-bowl type marks a playoff-phase game. */
   type?: string | null
+  isMedianMatchup?: boolean | null
 }
 
 export type MedianOutcome = 'W' | 'L' | 'T'
@@ -125,4 +128,56 @@ export function computeWeeklyMedianResults(rows: readonly MedianMatchupRow[]): W
     results.push({ week, median: Math.round(m * 100) / 100, outcomes })
   }
   return results
+}
+
+export type ByeWeekMedianCredit = { week: number; rosterId: string; median: number }
+
+/**
+ * Points-for credit for a team on a bye: the week's median team score.
+ *
+ * In an odd-team league one team sits out each regular-season week (a row with no `awayRosterId`). It
+ * used to score 0 points for that week, so every bye cost it a week of points for — the first
+ * tiebreaker after record — through no result of its own. It is now credited the median of the scores
+ * of the teams that played head-to-head that week. Points for only: a bye is no game, so no win, loss or
+ * points against.
+ *
+ * Credited only once every head-to-head game of the week is complete (the median's own rule, so a credit
+ * is never taken over a half-scored week), only in regular-season weeks (playoff-phase weeks are dropped
+ * as `medianEligibleRows` drops them), and never for a bye row carrying an extra matchup
+ * (lib/redraft/oddTeamExtraMatchupRules.ts): that team played a game, and its own score already counts.
+ * The bye team's own score, when its row was scored for the league median, is not part of the median it
+ * is credited — it played no one.
+ */
+export function byeWeekMedianCredits(
+  rows: readonly MedianMatchupRow[],
+  opts: { playoffStartWeek: number | null | undefined },
+): ByeWeekMedianCredit[] {
+  const eligible = medianEligibleRows(rows, { playoffStartWeek: opts.playoffStartWeek, medianInPlayoffs: false })
+  const byWeek = new Map<number, MedianMatchupRow[]>()
+  for (const row of eligible) {
+    if (row.isMedianMatchup) continue
+    const list = byWeek.get(row.week) ?? []
+    list.push(row)
+    byWeek.set(row.week, list)
+  }
+  const credits: ByeWeekMedianCredit[] = []
+  for (const [week, weekRows] of [...byWeek.entries()].sort(([a], [b]) => a - b)) {
+    const games = weekRows.filter((r) => r.awayRosterId)
+    if (games.length === 0 || !games.every(isMatchupComplete)) continue
+    const played = new Set<string>()
+    const scores: number[] = []
+    for (const g of games) {
+      played.add(g.homeRosterId)
+      played.add(g.awayRosterId!)
+      scores.push(Number(g.homeScore ?? 0), Number(g.awayScore ?? 0))
+    }
+    const m = Math.round(median(scores) * 100) / 100
+    for (const bye of weekRows) {
+      if (bye.awayRosterId || played.has(bye.homeRosterId)) continue
+      if (readExtraMatchupRecord(bye.lineupSnapshots)) continue
+      if (credits.some((c) => c.week === week && c.rosterId === bye.homeRosterId)) continue
+      credits.push({ week, rosterId: bye.homeRosterId, median: m })
+    }
+  }
+  return credits
 }

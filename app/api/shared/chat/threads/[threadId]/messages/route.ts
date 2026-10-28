@@ -34,6 +34,7 @@ import {
   sanitizeClientMessageType,
 } from '@/lib/chat-core/clientMessageInput'
 import { publishDraftIntelState } from '@/lib/draft-intelligence'
+import { redactPollForViewer } from '@/lib/chat-core/messagePolls'
 import { chatRateLimitResponse } from '@/lib/chat-core/chatRateLimits'
 import { DETERMINISTIC_SOURCE, tryDeterministicAnswer } from '@/lib/ai/deterministic'
 import {
@@ -185,7 +186,16 @@ export async function GET(req: NextRequest, props: { params: Promise<{ threadId:
         requestingUserId: user.appUserId,
       })
       /* A Big Brother league's private rooms: only the ones this member may read (same rule as league chat). */
-      const messages = await filterBbReadableMessages(leagueId, user.appUserId, allRooms)
+      const readable = await filterBbReadableMessages(leagueId, user.appUserId, allRooms)
+      /*
+       * Anonymous voters and an open poll's hidden tally are redacted on the way out, as
+       * `/api/league/chat` does — this branch used to hand the raw vote lists to tribe members.
+       */
+      const messages = readable.map((m) =>
+        m.metadata
+          ? { ...m, metadata: redactPollForViewer(m.metadata, user.appUserId) as PlatformChatMessage['metadata'] }
+          : m
+      )
       const visible = applyBlockedVisibility(messages, blockSet)
       return NextResponse.json({
         status: 'ok',

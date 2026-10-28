@@ -5,6 +5,7 @@ import { enterRedraftOffseason } from './RedraftOffseasonService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { effectiveFaabRolloverRule, faabBalanceAfterRollover, storedFaabRolloverRule, type RenewalFamily } from '@/lib/waiver-wire/faab-rollover'
 import { buildRenewalSlotOrder, resolveRenewDraftOrderMode, worstToFirstDraftRosterIds, draftOrderMethodForRenewMode } from './renewRedraftLeague'
 
 export class RedraftRenewalError extends Error {
@@ -12,7 +13,9 @@ export class RedraftRenewalError extends Error {
 }
 const object = (v: unknown): Record<string, any> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, any> : {}
 type Input = { leagueId: string; userId: string; expectedSeason: number; removeMemberIds?: string[];
-  duesEnabled?: boolean; duesAmount?: number; listInFinder?: boolean; draftOrder?: unknown; manualOrder?: unknown }
+  duesEnabled?: boolean; duesAmount?: number; listInFinder?: boolean; draftOrder?: unknown; manualOrder?: unknown
+  /** Whose default FAAB rollover applies when none is stored (faabRolloverFamilyForLeague); redraft when omitted. */
+  faabFamily?: RenewalFamily }
 
 /** Archive is committed first. The year, empty roster links and NEW draft then
  * commit together. A retry names the same completed season and returns its receipt. */
@@ -50,15 +53,19 @@ export async function renewNativeRedraft(input: Input) {
     const next = await tx.redraftSeason.create({ data: { leagueId: league.id, sport: completed.sport, season: input.expectedSeason + 1,
       status: 'setup', currentWeek: 0, totalWeeks: completed.totalWeeks, playoffStartWeek: completed.playoffStartWeek, medianGame: completed.medianGame } })
     const faab = league.waiverSettings?.faabBudget ?? league.waiverBudget ?? 100
+    // The commissioner's FAAB rollover rule (lib/waiver-wire/faab-rollover.ts); unset, a redraft resets
+    // and a keeper / dynasty league (the caller's `faabFamily`) carries its balances over.
+    const faabRule = effectiveFaabRolloverRule(storedFaabRolloverRule(league.waiverSettings?.waiverEngineConfig), input.faabFamily ?? 'redraft')
     const removed = new Set(input.removeMemberIds ?? [])
     for (const [index, generic] of league.rosters.entries()) {
       const team = league.teams.find(t => t.externalId === generic.id || t.platformUserId === generic.platformUserId || t.claimedByUserId === generic.platformUserId)
       const orphan = !!team && removed.has(team.id) && !team.isCommissioner
       const ownerId = orphan ? `roster:${generic.id}` : team?.claimedByUserId ?? team?.platformUserId ?? generic.platformUserId
+      const teamFaab = faabBalanceAfterRollover(faabRule, faab, generic.faabRemaining)
       const roster = await tx.redraftRoster.create({ data: { leagueId: league.id, seasonId: next.id, ownerId,
         ownerName: orphan ? 'Open team' : team?.ownerName ?? 'Manager', teamName: team?.teamName,
-        avatarUrl: team?.avatarUrl, faabBalance: faab, waiverPriority: index + 1 } })
-      await tx.roster.update({ where: { id: generic.id }, data: { redraftRosterId: roster.id, playerData: {}, faabRemaining: faab,
+        avatarUrl: team?.avatarUrl, faabBalance: teamFaab, waiverPriority: index + 1 } })
+      await tx.roster.update({ where: { id: generic.id }, data: { redraftRosterId: roster.id, playerData: {}, faabRemaining: teamFaab,
         waiverPriority: index + 1, ...(orphan ? { platformUserId: ownerId } : {}) } })
       if (orphan && team) await tx.leagueTeam.update({ where: { id: team.id }, data: { claimedByUserId: null, platformUserId: ownerId, isOrphan: true, ownerName: 'Open team' } })
     }
@@ -66,7 +73,11 @@ export async function renewNativeRedraft(input: Input) {
       currentRank: null, aiPowerScore: null, projectedWins: null } })
     const config = resolveRedraftRosterConfig(completed.sport, settings)
     const savedOrder = await tx.leagueSettings.findUnique({ where: { leagueId: league.id }, select: { draftOrderMethod: true } })
-    const mode = resolveRenewDraftOrderMode(input.draftOrder ?? savedOrder?.draftOrderMethod) ?? 'random'
+    // An explicit choice, else the saved method — except a saved `manual`, which carries no list through
+    // this call (the schema's and creation's default, so every league that never chose one): random, as
+    // `renewRedraftLeague` does. It used to resolve to manual with no order and refuse the renewal (400).
+    const savedMode = resolveRenewDraftOrderMode(savedOrder?.draftOrderMethod)
+    const mode = (input.draftOrder != null ? resolveRenewDraftOrderMode(input.draftOrder) : savedMode === 'manual' ? null : savedMode) ?? 'random'
     if (input.draftOrder != null && !resolveRenewDraftOrderMode(input.draftOrder)) throw new RedraftRenewalError('Invalid draft order.', 400)
     const order = buildRenewalSlotOrder({ mode, teams: league.rosters.map((r, index) => ({ rosterId: r.id,
       displayName: league.teams.find(t => t.externalId === r.id || t.platformUserId === r.platformUserId)?.teamName ?? 'Team ' + (index + 1) })),

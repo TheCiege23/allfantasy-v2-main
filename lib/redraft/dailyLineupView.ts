@@ -7,6 +7,8 @@ import {
   daysInWindow,
   daysOnRoster,
   droppedInWindow,
+  loadDailyLockStarts,
+  lockStartOnFor,
   isDailyLineupScoringEnabled,
   loadDailyLineups,
   loadPlayerDailyStats,
@@ -74,6 +76,8 @@ export async function loadDailyLineupView(
   })
   const weekLineups = await loadWeekLineups(db, { redraftRosterIds: [args.redraftRosterId], season: args.season, week: args.week })
   const dailyLineups = await loadDailyLineups(db, { redraftRosterIds: [args.redraftRosterId], window })
+  // The scorer's drop/add-day rule, so the view shows exactly the days the score counts.
+  const lockStarts = await loadDailyLockStarts(db, { sport, season: args.season, week: args.week })
   const statsBySport = new Map<string, Awaited<ReturnType<typeof loadPlayerDailyStats>>>()
   for (const s of new Set(players.map((p) => p.sport))) {
     statsBySport.set(s, await loadPlayerDailyStats(db, { playerIds: players.map((p) => p.playerId), sport: s, season: args.season, window }))
@@ -92,7 +96,7 @@ export async function loadDailyLineupView(
 
   for (const p of players) {
     const lines = statsBySport.get(p.sport)?.get(p.playerId)
-    for (const d of daysOnRoster(p, days)) {
+    for (const d of daysOnRoster(p, days, lockStartOnFor(lockStarts, p))) {
       const entry = byKey.get(dayKey(d))!
       const slot = dailySlotFor(dailyLineups, args.redraftRosterId, p.playerId, d) ?? weekSlotType(p, weekLineups)
       entry.slots[p.playerId] = slot

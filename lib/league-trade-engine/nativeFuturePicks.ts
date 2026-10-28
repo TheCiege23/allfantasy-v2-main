@@ -148,7 +148,16 @@ export async function loadNativeFuturePicks(leagueId: string, db: Db = prisma): 
     where: { leagueId, status: 'active', pickSeason: { in: seasons } },
     select: { pickSeason: true, round: true, originalRosterId: true, currentOwnerId: true },
   })
-  const picks = futurePickInventory({ teamIds: rosters.map((r) => r.id), seasons, rounds, stored })
+  // A pick forfeited as a penalty (lib/integrity/tankingPenaltyService.ts) is gone: not held, not
+  // tradeable. Without this, "no active row" would read as "still with its original team".
+  const forfeited = await db.futureDraftPick.findMany({
+    where: { leagueId, status: 'forfeited', pickSeason: { in: seasons } },
+    select: { pickSeason: true, round: true, originalRosterId: true },
+  })
+  const gone = new Set(forfeited.map((f) => `${f.pickSeason}:${f.round}:${f.originalRosterId}`))
+  const picks = futurePickInventory({ teamIds: rosters.map((r) => r.id), seasons, rounds, stored }).filter(
+    (p) => !gone.has(`${p.season}:${p.round}:${p.originalTeamId}`),
+  )
   const ownerByPickId = new Map(picks.map((p) => [inventoryPickId(p), p.ownerTeamId]))
   return { picks, seasons, rounds, ownerByPickId }
 }
@@ -207,19 +216,42 @@ export async function consumeNativeFuturePicksForDraft(
   tx: Db,
   args: { leagueId: string; season: number; draftSessionId: string; rounds: number; slotOrder: SlotOrderEntry[]; now?: Date },
 ): Promise<TradedPickRecord[]> {
+  // Picks forfeited as a penalty stay `forfeited`; tagging them with this draft is how the draft
+  // knows to skip them (lib/live-draft-engine/forfeitedPickSkips.ts).
+  await tx.futureDraftPick.updateMany({
+    where: { leagueId: args.leagueId, pickSeason: args.season, status: 'forfeited', usedInDraftSessionId: null },
+    data: { usedInDraftSessionId: args.draftSessionId },
+  })
   const rows = await tx.futureDraftPick.findMany({
     where: { leagueId: args.leagueId, pickSeason: args.season, status: 'active' },
     select: { id: true, round: true, originalRosterId: true, currentOwnerId: true },
   })
   if (rows.length === 0) return []
 
+  // Conditional and protected picks (./pickTerms.ts) settle here, on the order this draft seats:
+  // a protected pick stays, a conditional one may convey as another round. Imported lazily — the
+  // terms module reads this one.
+  const { settlePickTermsForDraft } = await import('./pickTermsService')
+  const overrides = await settlePickTermsForDraft(tx, {
+    leagueId: args.leagueId,
+    season: args.season,
+    rows,
+    slotOrder: args.slotOrder,
+    rounds: args.rounds,
+    draftSessionId: args.draftSessionId,
+    now: args.now ?? new Date(),
+  })
+
   const nameByRoster = new Map(args.slotOrder.map((e) => [e.rosterId, e.displayName]))
   const traded: TradedPickRecord[] = []
   for (const row of rows) {
-    if (row.currentOwnerId === row.originalRosterId || row.round > args.rounds) continue
+    const override = overrides.get(row.id)
+    if (override && 'skip' in override) continue
+    const round = override?.round ?? row.round
+    if (row.currentOwnerId === row.originalRosterId || round > args.rounds) continue
     if (!nameByRoster.has(row.originalRosterId) || !nameByRoster.has(row.currentOwnerId)) continue
     traded.push({
-      round: row.round,
+      round,
       originalRosterId: row.originalRosterId,
       previousOwnerName: nameByRoster.get(row.originalRosterId) ?? '',
       newRosterId: row.currentOwnerId,

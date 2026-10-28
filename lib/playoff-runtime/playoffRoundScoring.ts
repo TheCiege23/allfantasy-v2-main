@@ -31,6 +31,15 @@
  * The consolation bracket / toilet bowl (rounds at `100 + n`) used to be generated and never scored;
  * it is now its own group, scored over championship round `n`'s weeks and sealed separately.
  *
+ * ⚠ SERIES MODE (lib/playoff-runtime/playoffSeries.ts): when `settings.playoff_series` makes a round a
+ * best-of-N, each of its N weeks is one GAME, won by the higher points (a tie by the higher seed). A game
+ * counts once its week is sealed and both teams' rows are final, in week order. The series is written
+ * final the moment one team reaches ceil(N/2) wins — it can clinch before its last week — with
+ * `metadata.series` carrying the games and the record; the score columns hold the points over the games
+ * played (for display), and the advance decides the winner from the series, never from those points.
+ * Until it clinches, the running series goes to `metadata.series` and the columns stay null, exactly as
+ * a cumulative round's live totals do.
+ *
  * The score of each team is `scoreRosterForWeek`, the function the guillotine uses for a week
  * scored outside a head-to-head matchup: starter slots, best ball's optimal lineup, or the devy
  * engine, by the same rules as a regular-season matchup. Nothing is re-implemented here.
@@ -42,6 +51,7 @@ import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { finalizeWeekWithRefresh, type WeekFinalizerDeps } from '@/lib/redraft/weekFinalizer'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { CHAMPIONSHIP_ROUND_WHERE, CONSOLATION_ROUND_OFFSET, playoffRoundWeeks, readChampionshipLength } from './playoffRoundWeeks'
+import { readPlayoffSeriesLengths, resolvePlayoffSeries, seriesLengthForRound, type StoredPlayoffSeries } from './playoffSeries'
 
 export type PlayoffRoundScoreOutcome =
   /** The season is not in its playoffs (still regular season, or already complete). */
@@ -88,6 +98,8 @@ type PlayoffMatchupRow = {
   awayRosterId: string | null
   homeScore: number | null
   awayScore: number | null
+  homeSeed?: number | null
+  awaySeed?: number | null
   winnerRosterId: string | null
   status: string
   metadata: unknown
@@ -119,6 +131,8 @@ const ROUND_SELECT = {
       awayRosterId: true,
       homeScore: true,
       awayScore: true,
+      homeSeed: true,
+      awaySeed: true,
       winnerRosterId: true,
       status: true,
       metadata: true,
@@ -193,13 +207,16 @@ export async function scoreActivePlayoffRound(
       return { ...group, outcome: contested.length === 0 ? 'no_active_round' : 'already_scored', roundNumber: active.roundNumber }
     }
     const leagueRow = await league()
+    const seriesLengths = readPlayoffSeriesLengths(leagueRow?.settings)
     const weeks = playoffRoundWeeks({
       playoffStartWeek: season.playoffStartWeek,
       roundNumber: roundNumber(active),
       weeksPerRound: leagueRow?.playoffWeeksPerRound,
       finalRoundNumber,
       championshipLength: readChampionshipLength(leagueRow?.settings),
+      seriesLengths,
     })
+    const bestOf = seriesLengthForRound(seriesLengths, roundNumber(active))
     group.roundNumber = active.roundNumber
     group.weeks = weeks
     if (params.calendarWeek < weeks[0]) return { ...group, outcome: 'round_not_started' }
@@ -241,6 +258,100 @@ export async function scoreActivePlayoffRound(
     }
 
     const scoredAt = (deps.now?.() ?? new Date()).toISOString()
+
+    if (bestOf > 1) {
+      // Series mode: one game per week. A week's game counts once that week is sealed and both teams'
+      // rows are final; games count in week order, so a later week never jumps an unsettled earlier one.
+      const weekly = async (rosterId: string) => {
+        const rows: Array<{ week: number; points: number; allFinal: boolean }> = []
+        for (const week of playedWeeks) {
+          const summary = await scoreRoster({ leagueId: season.leagueId, rosterId, week, seasonYear: season.season })
+          rows.push({ week, points: Math.round(summary.points * 100) / 100, allFinal: summary.allFinal })
+        }
+        return rows
+      }
+      for (const matchup of contested) {
+        const home = await weekly(matchup.homeRosterId)
+        const away = await weekly(matchup.awayRosterId)
+        const games: Array<{ week: number; homePoints: number; awayPoints: number }> = []
+        const liveGames: Array<{ week: number; homePoints: number; awayPoints: number }> = []
+        let settled = true
+        home.forEach((h, i) => {
+          const a = away[i]
+          const game = { week: h.week, homePoints: h.points, awayPoints: a.points }
+          if (settled && sealed.has(h.week) && h.allFinal && a.allFinal) games.push(game)
+          else {
+            settled = false
+            liveGames.push(game)
+          }
+        })
+        const series = resolvePlayoffSeries({
+          bestOf,
+          homeRosterId: matchup.homeRosterId,
+          awayRosterId: matchup.awayRosterId,
+          homeSeed: matchup.homeSeed,
+          awaySeed: matchup.awaySeed,
+          games,
+        })
+        const metadata = asRecord(matchup.metadata)
+        const stored: StoredPlayoffSeries = {
+          bestOf: series.bestOf,
+          winsNeeded: series.winsNeeded,
+          homeWins: series.homeWins,
+          awayWins: series.awayWins,
+          games: series.games.map((g) => ({
+            week: g.week,
+            homePoints: g.homePoints,
+            awayPoints: g.awayPoints,
+            winnerRosterId: g.winnerRosterId,
+            ...(g.decidedBySeed ? { decidedBySeed: true } : {}),
+          })),
+          winnerRosterId: series.winnerRosterId,
+          clinchedWeek: series.clinchedWeek,
+        }
+        const sum = (xs: Array<{ homePoints: number; awayPoints: number }>, side: 'homePoints' | 'awayPoints') =>
+          Math.round(xs.reduce((t, g) => t + g[side], 0) * 100) / 100
+
+        if (series.winnerRosterId) {
+          delete metadata.live
+          const counted = series.games
+          await db.redraftPlayoffMatchup.update({
+            where: { id: matchup.id },
+            data: {
+              homeScore: sum(counted, 'homePoints'),
+              awayScore: sum(counted, 'awayPoints'),
+              status: 'final',
+              metadata: {
+                ...metadata,
+                series: stored,
+                scoredWeeks: counted.map((g) => g.week),
+                scoredAt,
+              } as Prisma.InputJsonObject,
+            },
+          })
+          group.matchupsScored += 1
+        } else {
+          // Not clinched: the record so far and the games being played, never the score columns.
+          const all = [...games, ...liveGames]
+          await db.redraftPlayoffMatchup.update({
+            where: { id: matchup.id },
+            data: {
+              metadata: {
+                ...metadata,
+                series: {
+                  ...stored,
+                  games: [...stored.games, ...liveGames.map((g) => ({ ...g, winnerRosterId: null, live: true }))],
+                },
+                live: { homeScore: sum(all, 'homePoints'), awayScore: sum(all, 'awayPoints'), weeks: playedWeeks, updatedAt: scoredAt },
+              } as Prisma.InputJsonObject,
+            },
+          })
+          group.matchupsLive += 1
+        }
+      }
+      return { ...group, outcome: group.matchupsLive === 0 ? 'scored' : 'live' }
+    }
+
     for (const matchup of contested) {
       const home = await totals(matchup.homeRosterId)
       const away = await totals(matchup.awayRosterId)

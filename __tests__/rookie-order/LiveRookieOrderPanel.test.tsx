@@ -51,6 +51,31 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('LiveRookieOrderPanel — where Max PF came from', () => {
+  const computed = {
+    kind: 'computed',
+    weeks: 13,
+    estimated: 2,
+    note: "Max PF is each team's best possible lineup in each of the 13 finished regular-season weeks, scored by the league's own rules. 2 team-weeks have no lineup saved for that week, so the team's previous lineup (or its current roster) stands in.",
+  }
+
+  it('says it in the viewer language, once — the English twin is not shown beside it', async () => {
+    lang.language = 'es'
+    fetchMock.mockReturnValueOnce(json(liveView({ source: 'native', platform: 'allfantasy', notes: [computed.note], maxPfInfo: computed })))
+    render(<LiveRookieOrderPanel leagueId="L1" />)
+    await screen.findByText('Gridiron Ghosts')
+    expect(screen.getByText(/mejor alineación posible de cada equipo en cada una de las 13 semanas.*2 semanas de equipo no tienen alineación guardada/)).toBeTruthy()
+    expect(screen.queryByText(/best possible lineup/)).toBeNull()
+  })
+
+  it('a league whose Max PF is not computed says why', async () => {
+    const info = { kind: 'unsupported', reason: 'daily_lineups', note: 'Max PF is not computed for daily-lineup leagues yet; points for is used.' }
+    fetchMock.mockReturnValueOnce(json(liveView({ source: 'native', notes: [info.note], maxPfInfo: info })))
+    render(<LiveRookieOrderPanel leagueId="L1" />)
+    expect(await screen.findByText(info.note)).toBeTruthy()
+  })
+})
+
 describe('LiveRookieOrderPanel', () => {
   it('shows each slot with its pick, reason, and locked or pending state', async () => {
     fetchMock.mockReturnValueOnce(json(liveView()))
@@ -110,7 +135,37 @@ describe('LiveRookieOrderPanel', () => {
     await screen.findByText('Rookie order settings saved')
     const [, init] = fetchMock.mock.calls[1]
     expect(init.method).toBe('PUT')
-    expect(JSON.parse(init.body)).toEqual({ enabled: true, config })
+    expect(JSON.parse(init.body)).toEqual({ enabled: true, config, roundNotices: { notify: true, chat: false } })
+  })
+
+  it('with automation on: round notices tell the commissioner by default, and the league chat on request', async () => {
+    const on = { enabled: true, config, enabledForSeason: 2026, finalOrder: null, roundNotices: { notify: true, chat: false },
+      lastRoundNotice: { season: 2026, phase: 'playoffs', lockedTeamIds: ['n1', 's3'], at: '2026-12-21T05:00:00.000Z' } }
+    fetchMock
+      .mockReturnValueOnce(json(liveView({ settings: on })))
+      .mockReturnValueOnce(json({ ok: true }))
+      .mockReturnValueOnce(json(liveView({ settings: { ...on, roundNotices: { notify: true, chat: true } } })))
+    render(<LiveRookieOrderPanel leagueId="L1" />)
+    await screen.findByText('Gridiron Ghosts')
+
+    expect(screen.getByTestId('rookie-order-round-notices')).toBeTruthy()
+    expect(screen.getByText('Last update: 2 picks locked on 2026-12-21.')).toBeTruthy()
+    const tell = screen.getByRole('switch', { name: 'Tell me which picks locked' })
+    const chat = screen.getByRole('switch', { name: 'Post the update in league chat' })
+    expect(tell.getAttribute('aria-checked')).toBe('true')
+    expect(chat.getAttribute('aria-checked')).toBe('false')
+
+    fireEvent.click(chat)
+    fireEvent.click(screen.getByText('Save rookie order settings'))
+    await screen.findByText('Rookie order settings saved')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).roundNotices).toEqual({ notify: true, chat: true })
+  })
+
+  it('with automation off there are no round notices to choose', async () => {
+    fetchMock.mockReturnValueOnce(json(liveView()))
+    render(<LiveRookieOrderPanel leagueId="L1" />)
+    await screen.findByText('Gridiron Ghosts')
+    expect(screen.queryByTestId('rookie-order-round-notices')).toBeNull()
   })
 
   it('without AF Commissioner the switch is off-limits and an upgrade link is shown', async () => {
@@ -130,11 +185,14 @@ describe('LiveRookieOrderPanel', () => {
 
   it('renders its own labels in Spanish', async () => {
     lang.language = 'es'
-    fetchMock.mockReturnValueOnce(json(liveView({ result: { ...liveView().result, phase: 'final' } })))
+    fetchMock.mockReturnValueOnce(json(liveView({
+      result: { ...liveView().result, phase: 'final' },
+      settings: { enabled: true, config, enabledForSeason: 2026, finalOrder: null, roundNotices: { notify: true, chat: false }, lastRoundNotice: null },
+    })))
     render(<LiveRookieOrderPanel leagueId="L1" />)
     await screen.findByText('Gridiron Ghosts')
 
-    for (const key of ['lsEd.dr.live.title', 'lsEd.dr.live.nonPlayoff', 'lsEd.dr.live.auto', 'lsEd.dr.live.phase.final', 'lsEd.dr.live.locked']) {
+    for (const key of ['lsEd.dr.live.title', 'lsEd.dr.live.nonPlayoff', 'lsEd.dr.live.auto', 'lsEd.dr.live.phase.final', 'lsEd.dr.live.locked', 'lsEd.dr.live.rn.title', 'lsEd.dr.live.rn.notify', 'lsEd.dr.live.rn.chat']) {
       const es = translations.es[key]
       expect(es, key).toBeTruthy()
       await waitFor(() => expect(screen.getAllByText(es).length).toBeGreaterThan(0))

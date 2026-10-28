@@ -24,7 +24,7 @@ import {
   buildSurvivorSettingsSnapshotPatch,
   normalizeSurvivorFoundationSettings,
 } from '@/lib/survivor/survivorSettings'
-import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
+import { effectiveExileBossMode, readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { readStoredTribePlan } from '@/lib/survivor/survivorTribePlan'
 import { defaultTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
@@ -74,12 +74,14 @@ export interface SurvivorSettingsScreenState {
 async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Promise<SurvivorSettingsScreenState | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { name: true, settings: true, survivorSwapWeek: true, survivorFinal3: true },
+    select: { name: true, settings: true, survivorSwapWeek: true, survivorFinal3: true, sport: true },
   })
   if (!league) return null
   const settings = rec(league.settings)
   const foundation = normalizeSurvivorFoundationSettings(settings)
-  const late = readSurvivorLateSeasonSettings(settings, { survivorFinal3: league.survivorFinal3 })
+  const stored = readSurvivorLateSeasonSettings(settings, { survivorFinal3: league.survivorFinal3 })
+  // Show the boss the league really plays: outside the NBA a legacy Chimmy value is the median.
+  const late = { ...stored, exileBossMode: effectiveExileBossMode(stored.exileBossMode, league.sport) }
   const plan = readSurvivorFullSeasonPlan(settings)
   const [draftStarted, assigned, idolView] = await Promise.all([
     isSurvivorDraftStarted(leagueId),
@@ -112,6 +114,7 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
       finalistCount: late.finalistCount,
       shareCardsEnabled: foundation.shareCardsEnabled,
       publicMomentPages: foundation.publicMomentPages,
+      spectatorPageEnabled: foundation.spectatorPageEnabled,
     },
     context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek },
     locks: { draftStarted, finalistLocked: Boolean(plan) || draftStarted, tribesLocked: assigned > 0 || Boolean(readStoredTribePlan(settings)?.lockedAt) },
@@ -179,6 +182,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (has('mergeActivePlayerCount')) foundationPatch.mergeActivePlayerCount = next.mergeActivePlayerCount
     if (has('shareCardsEnabled')) foundationPatch.shareCardsEnabled = next.shareCardsEnabled
     if (has('publicMomentPages')) foundationPatch.publicMomentPages = next.publicMomentPages
+    if (has('spectatorPageEnabled')) foundationPatch.spectatorPageEnabled = next.spectatorPageEnabled
     if (has('tribeCount')) {
       // Same reset the tribe panel does on a count change: default identities and capacities.
       foundationPatch.tribeCount = next.tribeCount

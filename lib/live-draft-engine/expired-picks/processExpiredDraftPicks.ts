@@ -191,6 +191,21 @@ export async function processExpiredDraftPickForLeague(
       slotOrder,
     })
     if (!current) {
+      /*
+       * 🛑 A FULL BOARD WITH NOBODY ON THE CLOCK IS A DRAFT WHOSE COMPLETION STEP FAILED. The last
+       * pick commits in its own transaction and `completeDraftSession` runs after it; when that one
+       * times out the board stays `in_progress` with an expired clock, and until now only a person
+       * opening the draft room or roster (`repairDraftCompletionIfBoardFull`) finished it. Measured
+       * in the full-season Survivor rehearsal (NHL 20, 2026-10-27): 320/320 picks, still in_progress,
+       * so a league nobody opened would never start. This tick is the one caller that is always
+       * there, so it finishes the draft here.
+       */
+      const { isDraftBoardFull } = await import('@/lib/live-draft-engine/draftPickEmpty')
+      if (isDraftBoardFull(progressPicks, totalPicks)) {
+        const { repairDraftCompletionIfBoardFull } = await import('@/lib/live-draft-engine/postDraftFinalizeArtifacts')
+        const completed = await repairDraftCompletionIfBoardFull(leagueId)
+        return { leagueId, outcome: 'skipped', reason: completed ? 'board_full_completed' : 'board_full_completion_pending' }
+      }
       return { leagueId, outcome: 'skipped', reason: 'no_current_pick' }
     }
     const resolvedOwner = resolvePickOwner(current.round, current.slot, slotOrder, tradedPicks)

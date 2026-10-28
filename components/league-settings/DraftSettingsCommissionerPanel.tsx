@@ -131,6 +131,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   const [isDynastyLike, setIsDynastyLike] = useState(false)
   const [rookieMode, setRookieMode] = useState<'worst_to_first' | 'reverse_max_pf'>('worst_to_first')
   const [rookieEnabled, setRookieEnabled] = useState(false)
+  // What is saved, and whether the owner's plan lets it be switched on (the route's `canAutomate`).
+  const [rookieEnabledSaved, setRookieEnabledSaved] = useState(false)
+  const [rookieCanAutomate, setRookieCanAutomate] = useState(false)
   const [rookieSlots, setRookieSlots] = useState<Array<{
     slot: number; teamName: string; ownerName: string; avatarUrl: string | null
     orderLabel: string; isPlayoffTeam: boolean; playoffFinish: string | null
@@ -202,6 +205,8 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
       setIsDynastyLike(true)
       setRookieMode(data.savedMode ?? data.mode ?? 'worst_to_first')
       setRookieEnabled(data.enabled ?? false)
+      setRookieEnabledSaved(data.enabled ?? false)
+      setRookieCanAutomate(data.canAutomate === true)
       setRookieSlots(data.slots ?? [])
       setRookieNextSeason(data.season ?? 0)
       setRookieWarning(data.warning ?? null)
@@ -210,7 +215,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
 
   useEffect(() => { loadRookieOrder() }, [loadRookieOrder])
 
-  // Save rookie draft order config. Free: both modes are a deterministic sort.
+  // Save rookie draft order config. Switching auto-ordering on is AF Commissioner; off is free.
   const saveRookieConfig = useCallback(async () => {
     setRookieSaving(true); setError(null)
     try {
@@ -223,7 +228,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
         }
       )
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? t('lsEd.saveFailed')); return }
+      if (!res.ok) { setError(data.errorCode === 'AF_COMMISSIONER_REQUIRED' ? t('lsEd.dr.rookieAutoPlan') : data.error ?? t('lsEd.saveFailed')); return }
       flash(t('lsEd.dr.saved'))
       await loadRookieOrder(rookieMode)
     } catch { setError(t('lsEd.requestFailed')) }
@@ -653,10 +658,20 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
           </div>
 
           {isCommissioner && (
-            <ToggleRow
-              id={ids.rookieAuto} label={t('draft.autoSetOrder')} description={t('draft.autoSetOrderDesc')}
-              enabled={rookieEnabled} onChange={setRookieEnabled}
-            />
+            <>
+              <ToggleRow
+                id={ids.rookieAuto} label={t('draft.autoSetOrder')} description={t('draft.autoSetOrderDesc')}
+                enabled={rookieEnabled} onChange={setRookieEnabled}
+                // Off can always be saved; on needs the owner's plan.
+                disabled={!rookieCanAutomate && !rookieEnabledSaved}
+              />
+              {!rookieCanAutomate ? (
+                <p className="text-[11px] leading-snug text-white/45" data-testid="rookie-auto-plan">
+                  {t('lsEd.dr.rookieAutoPlan')}{' '}
+                  <a href="/upgrade?plan=commissioner" className="font-semibold text-violet-300 underline">{t('lsEd.dr.rookieAutoUpgrade')}</a>
+                </p>
+              ) : null}
+            </>
           )}
 
           {rookieSlots.length > 0 && (

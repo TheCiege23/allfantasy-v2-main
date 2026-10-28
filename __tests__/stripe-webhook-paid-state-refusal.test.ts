@@ -4,7 +4,7 @@
  * purchase exactly as before. The refusal steps themselves are unit-tested in
  * paid-state-card-check.test.ts; this pins where the route calls them.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createMockNextRequest } from "@/__tests__/helpers/createMockNextRequest"
 
@@ -119,6 +119,8 @@ async function post() {
   const res = await POST(req as never)
   return { status: res.status, body: await res.json() }
 }
+
+beforeAll(async () => { await import('@/app/api/stripe/webhook/route') }, 120_000)
 
 describe("Stripe webhook: the paid-state card check", () => {
   beforeEach(() => {

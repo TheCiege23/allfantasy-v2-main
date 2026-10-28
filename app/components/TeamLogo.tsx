@@ -15,7 +15,7 @@ type TeamLogoProps = {
 function sportFallbackClass(sport: string): string {
   const s = sport.toUpperCase()
   if (s === 'NFL') return 'bg-blue-800'
-  if (s === 'NBA') return 'bg-red-800'
+  if (s === 'NBA' || s === 'NBA_CUP') return 'bg-red-800'
   if (s === 'MLB') return 'bg-blue-900'
   if (s === 'NHL') return 'bg-slate-700'
   if (s === 'NCAAF' || s === 'NCAAFB') return 'bg-amber-800'

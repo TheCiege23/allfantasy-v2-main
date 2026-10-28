@@ -71,6 +71,11 @@ function toDeterministicResponse(
     myIdols: deterministic.myIdols,
     myActiveEffects: deterministic.myActiveEffects,
     myExileStatus: deterministic.myExileStatus,
+    idolRules: {
+      playDeadlineAt: deterministic.idolRules.playDeadlineAt?.toISOString() ?? null,
+      cutoffText: deterministic.idolRules.cutoffText,
+      expiryText: deterministic.idolRules.expiryText,
+    },
     finale: deterministic.finale,
   }
 }

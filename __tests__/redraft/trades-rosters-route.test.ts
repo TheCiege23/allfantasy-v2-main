@@ -973,7 +973,8 @@ describe('🛑 an imported league lists its real draft picks', () => {
       { season: 2021, _max: { round: 20 }, _count: { _all: 40 } },
       { season: 2026, _max: { round: 2 }, _count: { _all: 4 } },
     ])
-    findManyFuturePick.mockResolvedValue([
+    // Only the `active` read returns rows; the `forfeited` read (penalty-lost picks) finds none.
+    findManyFuturePick.mockImplementation(async (args: { where: { status?: string } }) => args.where.status !== 'active' ? [] : [
       // Bravo's 2027 1st now belongs to Alpha.
       { pickSeason: 2027, round: 1, originalRosterId: '2', currentOwnerId: '1' },
       // A 2026 pick: that draft is over, so the pick is spent.
@@ -1116,7 +1117,8 @@ describe('🛑 a native dynasty league lists picks it can actually trade', () =>
     findFirstDraftSession.mockResolvedValue(null)
     findUniqueDynastyConfig.mockResolvedValue({ rookieDraftRounds: 2 })
     // Bravo's 2027 1st now belongs to Alpha.
-    findManyFuturePick.mockResolvedValue([{ pickSeason: 2027, round: 1, originalRosterId: 'R-2', currentOwnerId: 'R-1' }])
+    findManyFuturePick.mockImplementation(async (args: { where: { status?: string } }) =>
+      args.where.status !== 'active' ? [] : [{ pickSeason: 2027, round: 1, originalRosterId: 'R-2', currentOwnerId: 'R-1' }])
   })
 
   type Pick = { pickId: string; season: number; round: number; label: string; proposable?: boolean; fromTeam?: string | null }

@@ -4,6 +4,8 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { survivorIdolEnginePowerFor } from './survivorIdolEngines'
+import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
+import { SURVIVOR_TWIST_PRESET_SETTING, survivorTwistIdolConfig } from './survivorTwistPresets'
 import {
   BUNDLED_SURVIVOR_IDOL_TYPES,
   SURVIVOR_IDOL_CATEGORIES,
@@ -67,6 +69,19 @@ function clampCount(value: number | null | undefined, mode: SurvivorIdolDrawMode
   if (typeof value !== 'number' || !Number.isFinite(value)) return SURVIVOR_IDOL_COUNT_DEFAULT
   if (mode === 'pick') return Math.min(SURVIVOR_IDOL_PICK_COUNT_MAX, Math.max(SURVIVOR_IDOL_PICK_COUNT_MIN, Math.round(value)))
   return Math.min(8, Math.max(6, Math.round(value)))
+}
+
+/**
+ * The setup a league without a saved row uses. A Simple twist preset picks one idol per tribe; any
+ * other league draws at random with the league's count (6 to 8).
+ */
+export function survivorIdolConfigFallback(league: { survivorIdolCount?: number | null; settings?: unknown } | null): SurvivorIdolConfigValues {
+  const raw = league?.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? league.settings as Record<string, unknown> : {}
+  if (raw[SURVIVOR_TWIST_PRESET_SETTING] === 'simple') {
+    const preset = survivorTwistIdolConfig('simple', normalizeSurvivorFoundationSettings(raw).tribeCount)
+    return { ...SURVIVOR_IDOL_CONFIG_DEFAULTS, mode: 'pick', count: preset.count, pickedTypeIds: preset.pickedTypeIds }
+  }
+  return { ...SURVIVOR_IDOL_CONFIG_DEFAULTS, count: clampCount(league?.survivorIdolCount ?? null) }
 }
 
 type TypeRow = {
@@ -155,6 +170,8 @@ export function projectSurvivorIdolSetup(input: {
   types: SurvivorIdolTypeDef[]
   row: ConfigRow | null
   fallbackCount: number | null
+  /** The no-row setup (survivorIdolConfigFallback); defaults to a random draw of fallbackCount. */
+  fallback?: SurvivorIdolConfigValues
   isCommissioner: boolean
   /**
    * Whether the viewer may see the sealed draw (`resolvedTypeIds`). A commissioner who PLAYS is a
@@ -168,7 +185,7 @@ export function projectSurvivorIdolSetup(input: {
   const canSeeDraw = input.canSeeDraw ?? isCommissioner
   const values: SurvivorIdolConfigValues = row
     ? { mode: row.mode, count: row.count, hideFromCommish: row.hideFromCommish, pickedTypeIds: row.pickedTypeIds, pointSurgePct: row.pointSurgePct, tributePct: row.tributePct }
-    : { ...SURVIVOR_IDOL_CONFIG_DEFAULTS, count: clampCount(input.fallbackCount) }
+    : input.fallback ?? { ...SURVIVOR_IDOL_CONFIG_DEFAULTS, count: clampCount(input.fallbackCount) }
   const resolved = Boolean(row?.resolvedTypeIds.length)
   const canSeeTypes = canSeeDraw && !values.hideFromCommish
   return {
@@ -187,13 +204,13 @@ export async function getSurvivorIdolSetupView(leagueId: string, viewer: { isCom
   const [types, locked, league] = await Promise.all([
     loadSurvivorIdolTypes(db),
     isSurvivorDraftStarted(leagueId, db),
-    db.league.findUnique({ where: { id: leagueId }, select: { survivorIdolCount: true } }),
+    db.league.findUnique({ where: { id: leagueId }, select: { survivorIdolCount: true, settings: true } }),
   ])
   let row: ConfigRow | null = null
   if (await survivorIdolTablesReady(db)) {
     try { row = await readConfigRow(leagueId, db) } catch { row = null }
   }
-  return projectSurvivorIdolSetup({ types, row, fallbackCount: league?.survivorIdolCount ?? null, isCommissioner: viewer.isCommissioner, canSeeDraw: viewer.canSeeDraw, locked })
+  return projectSurvivorIdolSetup({ types, row, fallbackCount: league?.survivorIdolCount ?? null, fallback: survivorIdolConfigFallback(league), isCommissioner: viewer.isCommissioner, canSeeDraw: viewer.canSeeDraw, locked })
 }
 
 export type SaveSurvivorIdolConfigResult =
@@ -268,11 +285,10 @@ export async function lockSurvivorIdolDraw(leagueId: string, db: Db = prisma, rn
     if (!row) {
       const legacy = await db.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { idolPowerPool: true } })
       if (Array.isArray(legacy?.idolPowerPool) && legacy.idolPowerPool.length > 0) return null
-      const league = await db.league.findUnique({ where: { id: leagueId }, select: { survivorIdolCount: true } })
-      const count = clampCount(league?.survivorIdolCount ?? null)
+      const league = await db.league.findUnique({ where: { id: leagueId }, select: { survivorIdolCount: true, settings: true } })
       await (db as typeof prisma).survivorIdolConfig.upsert({
         where: { leagueId },
-        create: { leagueId, ...SURVIVOR_IDOL_CONFIG_DEFAULTS, count },
+        create: { leagueId, ...survivorIdolConfigFallback(league) },
         update: {},
       })
       row = await readConfigRow(leagueId, db)

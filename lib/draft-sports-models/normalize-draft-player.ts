@@ -52,6 +52,10 @@ export type RawDraftPlayerLike = {
   imageUrl?: string | null
   fantasyPointsPerGame?: number | null
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
+  /** MLB / NHL season line, spread into `display.stats` for the pool's stat columns. */
+  seasonStatLine?: Partial<Record<string, number>> | null
+  /** MLB / NHL: AF projection per game, exposed as `display.stats.projectedPointsPerGame`. */
+  afProjectionPerGame?: number | null
   lifetimeValue?: number | null
   rollingInsightsSupplemental?: {
     fantasyPointsPerGame?: number | null
@@ -197,6 +201,13 @@ export function normalizeDraftPlayer(
     byeWeek: bye ?? null,
     fantasyPointsPerGame: fppg,
     ...(sportNorm === 'NBA' && raw.nbaDraftStats ? raw.nbaDraftStats : {}),
+    ...((sportNorm === 'MLB' || sportNorm === 'NHL') && raw.seasonStatLine ? raw.seasonStatLine : {}),
+    ...((sportNorm === 'MLB' || sportNorm === 'NHL') &&
+    typeof raw.afProjectionPerGame === 'number' &&
+    Number.isFinite(raw.afProjectionPerGame) &&
+    raw.afProjectionPerGame > 0
+      ? { projectedPointsPerGame: Math.round(raw.afProjectionPerGame * 100) / 100 }
+      : {}),
     lifetimeValue: ltv,
   }
 

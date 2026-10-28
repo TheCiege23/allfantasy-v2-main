@@ -322,13 +322,16 @@ export async function refreshGooglePlaySubscription(purchaseToken: string): Prom
 export async function voidGooglePlayPurchase(purchaseToken: string): Promise<"voided" | "unknown"> {
   const record = await prisma.googlePlayPurchase.findUnique({
     where: { purchaseTokenHash: hashPurchaseToken(purchaseToken) },
-    select: { id: true, userId: true, kind: true, userSubscriptionId: true, latestOrderId: true, createdAt: true, purchaseTokenHash: true },
+    select: { id: true, userId: true, productId: true, kind: true, userSubscriptionId: true, latestOrderId: true, createdAt: true, purchaseTokenHash: true },
   })
   if (!record) return "unknown"
 
   if (record.kind === "product") {
     const purchaseRef = record.latestOrderId?.trim() || `t:${record.purchaseTokenHash.slice(0, 40)}`
-    await new TokenSpendService().reverseGooglePlayPackagePurchase(purchaseRef)
+    await new TokenSpendService().reverseGooglePlayPackagePurchase(purchaseRef, {
+      userId: record.userId,
+      packageSku: record.productId,
+    })
   } else if (record.userSubscriptionId) {
     const superseded = await prisma.googlePlayPurchase.findFirst({
       where: { userSubscriptionId: record.userSubscriptionId, createdAt: { gt: record.createdAt }, id: { not: record.id } },

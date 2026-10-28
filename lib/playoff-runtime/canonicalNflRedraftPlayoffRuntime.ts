@@ -1,11 +1,13 @@
 import { isPointsOnlySeeding } from '@/lib/playoff-defaults/seedingRule'
 import { checkByePlan, isNaturalByePlan, parseStoredByePlan } from '@/lib/playoff-brackets/byePlan'
+import { detectPlayIn } from '@/lib/playoff-brackets/playIn'
 import { allPlayShares, coinFlipDraw, parseTiebreakerOrder } from '@/lib/standings/tiebreakerOrder'
 import type {
   CanonicalLeagueRuntimeEvent,
   CanonicalLeagueRuntimeEventType,
 } from '@/lib/league-runtime/leagueRuntimeEvents'
 import { toCanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
+import { readStoredPlayoffSeries, resolvePlayoffSeries } from './playoffSeries'
 
 export type NflRedraftPlayoffRulesInput = {
   general?: {
@@ -28,6 +30,12 @@ export type NflRedraftPlayoffRulesInput = {
     byeRules?: string | null
     reseedBehavior?: string | null
     standingsTiebreakers?: string[] | null
+    /**
+     * The commissioner's divisions rule (lib/league/divisions/leagueDivisions.ts): division winners take
+     * the top seeds, are guaranteed a spot but seeded by record, or get nothing. Absent (every caller
+     * before divisions were wired) keeps the legacy reading of `seedingRules`: guaranteed, by record.
+     */
+    divisionPlayoffRule?: 'top_seeds' | 'guaranteed' | 'none' | null
     /** Rounds each seed sits out (`lib/playoff-brackets/byePlan.ts`). Null = the natural byes. */
     byePlan?: readonly number[] | null
     /**
@@ -35,6 +43,8 @@ export type NflRedraftPlayoffRulesInput = {
      * When set it is applied EXACTLY as chosen after record — none of the legacy reordering below.
      */
     customTiebreakers?: string[] | null
+    /** Best-of-N series per round (`settings.playoff_series`, ./playoffSeries.ts). Null = cumulative rounds. */
+    seriesLengths?: readonly number[] | null
   }
   schedule: {
     regularSeasonLength?: number | null
@@ -128,11 +138,18 @@ export type NflRedraftPlayoffSettings = {
   lowerBracket: NflRedraftLowerBracketMode
   thirdPlaceGameEnabled: boolean
   divisionWinnersEnabled: boolean
+  /** Division winners hold seeds 1..k (best winner first) ahead of every wildcard. Else seeded by record. */
+  divisionWinnersTopSeeds: boolean
   /** The league chose `points_only` seeding: record is NOT the primary sort. */
   pointsOnlySeeding: boolean
   tiebreakers: string[]
   /** The commissioner's own order when one applied (lib/standings/tiebreakerOrder.ts), else absent. */
   customTiebreakers?: string[] | null
+  /**
+   * Best-of-N series per round (./playoffSeries.ts), round 1 first; null in cumulative mode. Display
+   * only here — the scorer reads the league's settings, and the advance decides from `metadata.series`.
+   */
+  seriesLengths?: number[] | null
   supported: boolean
   supportWarnings: string[]
 }
@@ -427,6 +444,15 @@ function resolveSettings(input: {
   const planCheck = byePlan ? checkByePlan(playoffTeamCount, byePlan) : null
   const roundCount = planCheck?.ok ? planCheck.roundCount : Math.max(1, Math.ceil(Math.log2(bracketSize)))
   const tiebreakers = normalizeTiebreakers(input.rules)
+  const explicitDivisionRule = input.rules.playoffs.divisionPlayoffRule
+  const divisionRule: 'top_seeds' | 'guaranteed' | 'none' =
+    explicitDivisionRule === 'top_seeds' || explicitDivisionRule === 'guaranteed' || explicitDivisionRule === 'none'
+      ? explicitDivisionRule
+      : includesToken(input.rules.playoffs.seedingRules, 'division') ||
+          tiebreakers.includes('division_winners') ||
+          tiebreakers.includes('division_record')
+        ? 'guaranteed'
+        : 'none'
   // Toilet bowl first: the settings reader makes the two exclusive, and a ruleset carrying both is read
   // the way the standings screen labels it (`readPlayoffFormat`).
   const lowerBracket: NflRedraftLowerBracketMode = input.rules.playoffs.toiletBowlEnabled
@@ -445,18 +471,22 @@ function resolveSettings(input: {
     firstRoundByes: planCheck?.ok ? planCheck.byeSeeds.length : firstRoundByes,
     roundCount,
     byePlan,
-    reseedAfterEachRound: byePlan != null || includesToken(input.rules.playoffs.reseedBehavior, 'reseed'),
+    // `seedingRules: 'reseed'` is how the in-app playoff panel saves "Re-seed" (the `playoffSeedingRule`
+    // column); it used to be stored and read straight past, because only `reseedBehavior` was checked.
+    reseedAfterEachRound:
+      byePlan != null ||
+      includesToken(input.rules.playoffs.reseedBehavior, 'reseed') ||
+      normalizedText(input.rules.playoffs.seedingRules) === 'reseed',
     consolationEnabled: lowerBracket === 'consolation',
     toiletBowlEnabled: lowerBracket === 'toilet_bowl',
     lowerBracket,
     thirdPlaceGameEnabled: Boolean(input.rules.playoffs.thirdPlaceGameEnabled),
-    divisionWinnersEnabled:
-      includesToken(input.rules.playoffs.seedingRules, 'division') ||
-      tiebreakers.includes('division_winners') ||
-      tiebreakers.includes('division_record'),
+    divisionWinnersEnabled: divisionRule !== 'none',
+    divisionWinnersTopSeeds: divisionRule === 'top_seeds',
     pointsOnlySeeding: isPointsOnlySeeding(input.rules.playoffs.seedingRules),
     tiebreakers,
     customTiebreakers: customOrder(input.rules),
+    seriesLengths: input.rules.playoffs.seriesLengths ? [...input.rules.playoffs.seriesLengths] : null,
     supported: supportWarnings.length === 0,
     supportWarnings,
   }
@@ -502,6 +532,18 @@ function normalizeTeam(input: NflRedraftPlayoffTeamInput): NflRedraftPlayoffTeam
   }
 }
 
+/**
+ * Win percentage for RANKING: unrounded. `winPct` is rounded to three places for display, and ranking
+ * on it called two different records equal — in an odd-team median league, where teams play different
+ * numbers of games, 22-23 (.48889) and 22-23-1 (.48913) both read .489 and the next key (points for)
+ * seeded the worse record first, while the standings engine (exact) ranked them the right way round.
+ * Equal records still compare equal: the same ratio divides to the same double.
+ */
+function exactWinPct(team: Pick<NflRedraftPlayoffTeamState, 'wins' | 'losses' | 'ties'>): number {
+  const games = team.wins + team.losses + team.ties
+  return games > 0 ? (team.wins + team.ties * 0.5) / games : 0
+}
+
 /** Values that need more than the team row: the all-play share and the season's coin-flip draw. */
 type TiebreakerContext = { allPlay: Map<string, number>; coinSeed: string }
 
@@ -515,7 +557,7 @@ function tiebreakerValue(team: NflRedraftPlayoffTeamState, key: string, ctx: Tie
       return coinFlipDraw(ctx.coinSeed, team.rosterId)
     case 'win_pct':
     case 'winning_percentage':
-      return team.winPct
+      return exactWinPct(team)
     case 'wins':
       return team.wins
     case 'losses':
@@ -686,6 +728,30 @@ function rankTeams(
   return rank(teams, 0)
 }
 
+/**
+ * The standings order under a tiebreaker list, by the SAME ranking the seeds use (`rankTeams`): record
+ * (exact win %) first, then `tiebreakers` exactly as given, then roster id. Returns roster ids, best
+ * first. lib/redraft/standingsEngine.ts calls this with the commissioner's order
+ * (lib/standings/tiebreakerOrder.ts), so the stored standings and the bracket break a tie the same way —
+ * head-to-head over the whole tied group, all-play from the regular-season weeks, and the coin flip
+ * seeded from `${leagueId}:${season}` as `buildNflRedraftPlayoffRuntimeState` seeds it.
+ */
+export function rankNflRedraftTeamsByTiebreakers(input: {
+  teams: NflRedraftPlayoffTeamInput[]
+  tiebreakers: readonly string[]
+  regularSeasonMatchups?: NflRedraftRegularSeasonMatchupInput[] | null
+  regularSeasonEndWeek: number | null
+  coinSeed: string
+}): string[] {
+  const keys = Array.from(new Set(['win_pct', ...input.tiebreakers.filter((key) => !RECORD_KEYS.has(key)), 'roster_id']))
+  const h2h = buildHeadToHeadIndex(input.regularSeasonMatchups, input.regularSeasonEndWeek)
+  const ctx: TiebreakerContext = {
+    allPlay: allPlayShares(regularSeasonWeekScores(input.regularSeasonMatchups, input.regularSeasonEndWeek)),
+    coinSeed: input.coinSeed,
+  }
+  return rankTeams(input.teams.map(normalizeTeam), keys, h2h, undefined, ctx).map((team) => team.rosterId)
+}
+
 function seedTeams(
   teams: NflRedraftPlayoffTeamState[],
   settings: NflRedraftPlayoffSettings,
@@ -725,7 +791,15 @@ function seedTeams(
   }
 
   const selectedSet = new Set(selectedRosterIds)
-  const selected = ranked(sorted.filter((team) => selectedSet.has(team.rosterId)))
+  // Top seeds: the division winners first, ranked among themselves, then the wildcards by record.
+  // Guaranteed: the winners only had their place held; the whole field is seeded by record.
+  const winnersFirst = settings.divisionWinnersTopSeeds
+    ? [
+        ...ranked(sorted.filter((team) => qualifiedBy.get(team.rosterId) === 'division')),
+        ...ranked(sorted.filter((team) => selectedSet.has(team.rosterId) && qualifiedBy.get(team.rosterId) !== 'division')),
+      ]
+    : null
+  const selected = winnersFirst ?? ranked(sorted.filter((team) => selectedSet.has(team.rosterId)))
 
   const seededTeams = [...selected, ...sorted.filter((team) => !selectedSet.has(team.rosterId))]
   const teamsWithSeeds = seededTeams.map((team, index) => {
@@ -783,12 +857,29 @@ function normalizeStatus(value: unknown): NflRedraftPlayoffMatchupStatus {
   return 'scheduled'
 }
 
+/**
+ * A game whose result is settled: a bye, or a stored winner. A `final` row with scores but no winner is
+ * NOT — the advance writes the winner, and until it has run the round is still being played.
+ *
+ * 🛑 READING `complete` HERE STRANDED EVERY SHORT LOWER BRACKET. A lower bracket shorter than the title
+ * bracket (10 teams: 3 title rounds, 2 lower) starts at championship round 2, so its first round is
+ * stored `pending`. The round scorer writes its games `final` with scores and no winner, and on the next
+ * read `normalizeMatchup` calls a `final` row complete — so the pending round derived as `completed`
+ * with no winners, the advance skipped to the empty lower final, the finalizer refused with
+ * LOWER_BRACKET_INCOMPLETE, and the season never ended. Found by the NBA/NHL full-season simulation.
+ */
+function matchupDecided(matchup: NflRedraftPlayoffMatchupState): boolean {
+  return matchup.status === 'bye' || matchup.bye || Boolean(matchup.winnerRosterId)
+}
+
 function normalizeRoundStatus(value: unknown, matchups: NflRedraftPlayoffMatchupState[]): NflRedraftPlayoffRoundStatus {
   const raw = normalizedText(value)
   if (raw === 'active') return 'active'
   if (raw === 'completed' || raw === 'complete') return 'completed'
   if (raw === 'cancelled' || raw === 'canceled') return 'cancelled'
-  if (matchups.length > 0 && matchups.every((matchup) => matchup.complete || matchup.status === 'bye')) return 'completed'
+  // Derived only from settled games: a stored-`pending` round whose games were scored `final` but never
+  // advanced (the lower-bracket generation bug above) must read as still in play, or it is skipped for good.
+  if (matchups.length > 0 && matchups.every(matchupDecided)) return 'completed'
   return 'pending'
 }
 
@@ -992,8 +1083,15 @@ function buildByePlanRounds(input: {
 }): NflRedraftPlayoffRoundState[] {
   const plan = checkByePlan(input.byePlan.length, input.byePlan)
   if (!plan.ok) return []
+  // A play-in (lib/playoff-brackets/playIn.ts): round 1 is the play-in week, and the rounds after it
+  // keep the names of the normal bracket it leads into.
+  const playIn = detectPlayIn(input.byePlan.length, input.byePlan)
   return plan.rounds.map((planRound) => {
-    const roundName = roundNameFor(planRound.round, plan.roundCount)
+    const roundName = playIn
+      ? planRound.round === 1
+        ? 'Play-in'
+        : roundNameFor(planRound.round - 1, plan.roundCount - 1)
+      : roundNameFor(planRound.round, plan.roundCount)
     const firstPairs = planRound.round === 1 ? pairBestVsWorst(planRound.entering) : []
     const matchups: NflRedraftPlayoffMatchupState[] = Array.from({ length: planRound.games }, (_, index) => {
       const [homeSeed, awaySeed] = firstPairs[index] ?? [null, null]
@@ -1169,7 +1267,7 @@ function buildThirdPlaceMatchup(input: {
 }
 
 function activeChampionshipRound(rounds: NflRedraftPlayoffRoundState[]): NflRedraftPlayoffRoundState | null {
-  return rounds.find((round) => round.status === 'active') ?? rounds.find((round) => round.matchups.some((matchup) => !matchup.complete)) ?? null
+  return rounds.find((round) => round.status === 'active') ?? rounds.find((round) => round.matchups.some((matchup) => !matchupDecided(matchup))) ?? null
 }
 
 function resolveWinner(matchup: NflRedraftPlayoffMatchupState): {
@@ -1189,6 +1287,26 @@ function resolveWinner(matchup: NflRedraftPlayoffMatchupState): {
   if (matchup.homeScore == null || matchup.awayScore == null) {
     return { winnerRosterId: null, loserRosterId: null, blockedReason: 'Matchup scores are not complete.' }
   }
+  /*
+   * A best-of-N SERIES is decided by game wins, never by the points in the score columns (those are the
+   * points over the games played, for display). Re-derived from the stored games rather than trusting a
+   * stored winner: a tied game goes to the higher seed, the first to ceil(N/2) wins takes it.
+   */
+  const series = readStoredPlayoffSeries(matchup.metadata)
+  if (series) {
+    const decided = resolvePlayoffSeries({
+      bestOf: series.bestOf,
+      homeRosterId: matchup.homeRosterId,
+      awayRosterId: matchup.awayRosterId,
+      homeSeed: matchup.homeSeed,
+      awaySeed: matchup.awaySeed,
+      games: series.games.filter((g) => !g.live),
+    })
+    if (decided.winnerRosterId) {
+      return { winnerRosterId: decided.winnerRosterId, loserRosterId: decided.loserRosterId, blockedReason: null }
+    }
+    return { winnerRosterId: null, loserRosterId: null, blockedReason: decided.blockedReason ?? 'Playoff series is not decided yet.' }
+  }
   if (matchup.homeScore > matchup.awayScore) return { winnerRosterId: matchup.homeRosterId, loserRosterId: matchup.awayRosterId, blockedReason: null }
   if (matchup.awayScore > matchup.homeScore) return { winnerRosterId: matchup.awayRosterId, loserRosterId: matchup.homeRosterId, blockedReason: null }
   if (matchup.homeSeed != null && matchup.awaySeed != null && matchup.homeSeed !== matchup.awaySeed) {
@@ -1206,9 +1324,62 @@ function cloneRound(round: NflRedraftPlayoffRoundState): NflRedraftPlayoffRoundS
   return { ...round, matchups: round.matchups.map((matchup) => ({ ...matchup, metadata: { ...matchup.metadata } })) }
 }
 
-function seedForRoster(state: NflRedraftPlayoffRuntimeState, rosterId: string | null): number | null {
-  if (!rosterId) return null
-  return state.seeds.find((seed) => seed.rosterId === rosterId)?.seed ?? null
+/**
+ * The seed each team was given when the bracket was generated, read off the bracket's own rows.
+ *
+ * 🛑 SEEDS LOCK AT THE PLAYOFF START; RESEEDING ONLY RE-PAIRS. `state.seeds` is recomputed from the
+ * standings on every read, so a division reassignment or a tiebreaker edit mid-playoffs would quietly
+ * reorder it — and a reseed sorted on it would pair by seeds nobody was given. Every qualifier sits in
+ * round 1 (a bye too) with its seed stored at generation, so round order, first sighting wins. A team
+ * that first plays later (a commissioner bye plan) falls back to `state.seeds`.
+ */
+function lockedSeedMap(state: NflRedraftPlayoffRuntimeState, rounds: NflRedraftPlayoffRoundState[]): Map<string, number> {
+  const locked = new Map<string, number>()
+  for (const round of [...rounds].sort((a, b) => a.roundNumber - b.roundNumber)) {
+    for (const matchup of round.matchups) {
+      if (matchup.homeRosterId && matchup.homeSeed != null && !locked.has(matchup.homeRosterId)) locked.set(matchup.homeRosterId, matchup.homeSeed)
+      if (matchup.awayRosterId && matchup.awaySeed != null && !locked.has(matchup.awayRosterId)) locked.set(matchup.awayRosterId, matchup.awaySeed)
+    }
+  }
+  for (const seed of state.seeds) if (!locked.has(seed.rosterId)) locked.set(seed.rosterId, seed.seed)
+  return locked
+}
+
+/**
+ * The seeds the league is playing to: the ones stored on the bracket rows once a bracket is generated
+ * (the seeds reseeding reads), else `state.seeds` — the bracket the generator would
+ * build from the standings right now, divisions included. The seed preview reads this, so a preview can
+ * never show a seed the bracket would not give.
+ */
+export function currentNflRedraftPlayoffSeeds(state: NflRedraftPlayoffRuntimeState): {
+  locked: boolean
+  seeds: Array<{ seed: number; rosterId: string; displayName: string; qualifiedBy: NflRedraftPlayoffQualifiedBy | null }>
+} {
+  if (!state.bracket.generated) {
+    return {
+      locked: false,
+      seeds: state.seeds.map((s) => ({ seed: s.seed, rosterId: s.rosterId, displayName: s.displayName, qualifiedBy: s.qualifiedBy })),
+    }
+  }
+  // The seeds on the bracket rows; a seed no row holds yet (a commissioner bye plan's later entrant)
+  // falls back to `state.seeds`, as `lockedSeedMap` does — but never onto a seed number a row already holds.
+  const fromRows = lockedSeedMap({ ...state, seeds: [] }, state.bracket.rounds)
+  const taken = new Set(fromRows.values())
+  const locked = new Map(fromRows)
+  for (const s of state.seeds) if (!locked.has(s.rosterId) && !taken.has(s.seed)) locked.set(s.rosterId, s.seed)
+  const teamById = new Map(state.teams.map((team) => [team.rosterId, team]))
+  const qualifiedById = new Map(state.seeds.map((s) => [s.rosterId, s.qualifiedBy]))
+  return {
+    locked: true,
+    seeds: [...locked]
+      .sort((a, b) => a[1] - b[1])
+      .map(([rosterId, seed]) => ({
+        seed,
+        rosterId,
+        displayName: teamById.get(rosterId)?.displayName ?? rosterId,
+        qualifiedBy: qualifiedById.get(rosterId) ?? null,
+      })),
+  }
 }
 
 /**
@@ -1536,7 +1707,8 @@ function fillNextRound(input: {
 }) {
   const nextRound = input.rounds.find((round) => round.roundNumber === input.activeRound.roundNumber + 1)
   if (!nextRound) return null
-  const seedByRosterId = new Map(input.state.seeds.map((seed) => [seed.rosterId, seed.seed]))
+  const seedByRosterId = lockedSeedMap(input.state, input.rounds)
+  const lockedSeed = (rosterId: string | null) => (rosterId ? seedByRosterId.get(rosterId) ?? null : null)
   // A bye plan adds the seeds whose bye ends this round to the winners before pairing.
   const byePlan = input.state.settings.byePlan
   const entering = byePlan
@@ -1561,8 +1733,8 @@ function fillNextRound(input: {
       const [home, away] = pairs[index] ?? [null, null]
       matchup.homeRosterId = home
       matchup.awayRosterId = away
-      matchup.homeSeed = seedForRoster(input.state, home)
-      matchup.awaySeed = seedForRoster(input.state, away)
+      matchup.homeSeed = lockedSeed(home)
+      matchup.awaySeed = lockedSeed(away)
       matchup.status = home && !away ? 'bye' : 'scheduled'
       matchup.bye = Boolean(home && !away)
       matchup.winnerRosterId = matchup.bye ? home : null
@@ -1578,10 +1750,10 @@ function fillNextRound(input: {
       if (target.homeRosterId === winnerRosterId || target.awayRosterId === winnerRosterId) continue
       if (!target.homeRosterId) {
         target.homeRosterId = winnerRosterId
-        target.homeSeed = seedForRoster(input.state, winnerRosterId)
+        target.homeSeed = lockedSeed(winnerRosterId)
       } else if (!target.awayRosterId) {
         target.awayRosterId = winnerRosterId
-        target.awaySeed = seedForRoster(input.state, winnerRosterId)
+        target.awaySeed = lockedSeed(winnerRosterId)
       }
     }
   }
@@ -1619,17 +1791,23 @@ function applyResolutions(resolutions: GameResolution[]) {
 }
 
 /** The semifinal losers into the third-place game, the better seed at home. */
-function fillThirdPlace(thirdPlace: NflRedraftPlayoffMatchupState, semifinal: NflRedraftPlayoffRoundState, state: NflRedraftPlayoffRuntimeState) {
+function fillThirdPlace(
+  thirdPlace: NflRedraftPlayoffMatchupState,
+  semifinal: NflRedraftPlayoffRoundState,
+  state: NflRedraftPlayoffRuntimeState,
+  rounds: NflRedraftPlayoffRoundState[],
+) {
   const losers = semifinal.matchups
     .filter((matchup) => !matchup.bye)
     .map((matchup) => matchup.loserRosterId ?? loserFor(matchup))
     .filter((rosterId): rosterId is string => Boolean(rosterId))
   if (losers.length !== 2) return
-  const [home, away] = losers.sort((a, b) => (seedForRoster(state, a) ?? 999) - (seedForRoster(state, b) ?? 999))
+  const seeds = lockedSeedMap(state, rounds)
+  const [home, away] = losers.sort((a, b) => (seeds.get(a) ?? 999) - (seeds.get(b) ?? 999))
   thirdPlace.homeRosterId = home
   thirdPlace.awayRosterId = away
-  thirdPlace.homeSeed = seedForRoster(state, home)
-  thirdPlace.awaySeed = seedForRoster(state, away)
+  thirdPlace.homeSeed = seeds.get(home) ?? null
+  thirdPlace.awaySeed = seeds.get(away) ?? null
   thirdPlace.status = 'scheduled'
 }
 
@@ -1727,7 +1905,7 @@ export function advanceNflRedraftPlayoffRound(input: {
     }
     activeRound.status = 'completed'
     nextRound = fillNextRound({ state: input.state, rounds, activeRound, winners: advancedRosterIds })
-    if (thirdPlace && nextRound === finalRound) fillThirdPlace(thirdPlace, activeRound, input.state)
+    if (thirdPlace && nextRound === finalRound) fillThirdPlace(thirdPlace, activeRound, input.state, rounds)
   }
   let nextLowerRound: NflRedraftPlayoffRoundState | null = null
   if (lowerReady && activeLower && lower) {

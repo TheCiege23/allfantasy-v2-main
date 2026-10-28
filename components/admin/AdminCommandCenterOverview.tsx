@@ -170,20 +170,26 @@ export function AdminCommandCenterOverview({ metrics }: { metrics: AdminCommandC
               </div>
             </div>
             <div className="af-cc-card-body">
+              <p className="af-cc-card-intent">{group.hint}</p>
               {group.metrics.length ? (
-                group.metrics.map((item, i) => (
+                group.metrics.slice(0, 2).map((item, i) => (
                   <MetricRow key={`${group.id}-${item.label}-${i}`} item={item} lead={i === 0} group={group.id} />
                 ))
               ) : (
                 <div className="af-cc-empty">Nothing reported in this group.</div>
               )}
-
               {group.id === 'money' && untrackedMoney > 0 ? (
-                <p className="af-cc-footnote">
-                  {untrackedMoney} of these are not instrumented. They are shown as NOT TRACKED rather than as a
-                  zero on purpose — an unmeasured number and a real zero are different readings and must not look
-                  alike.
-                </p>
+                <p className="af-cc-footnote">{untrackedMoney} additional money readings are not tracked. Unmeasured is different from zero.</p>
+              ) : null}
+              {group.metrics.length > 2 ? (
+                <details className="af-cc-drilldown">
+                  <summary>View {group.metrics.length - 2} more readings</summary>
+                  <div className="af-cc-stack">
+                    {group.metrics.slice(2).map((item, i) => (
+                      <MetricRow key={`${group.id}-${item.label}-${i + 2}`} item={item} lead={false} group={group.id} />
+                    ))}
+                  </div>
+                </details>
               ) : null}
             </div>
           </section>

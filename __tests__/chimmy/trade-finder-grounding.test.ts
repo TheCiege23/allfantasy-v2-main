@@ -192,8 +192,13 @@ describe('buildTradeFinder', () => {
   })
 
   it('offers nothing in a league that does not allow trades', async () => {
-    h.leagueFindUnique.mockResolvedValue({ ...LEAGUE, leagueType: 'guillotine' })
+    h.leagueFindUnique.mockResolvedValue({ ...LEAGUE, leagueType: 'tournament' })
     expect(await find()).toEqual({ status: 'unavailable', reason: 'this league does not allow trades' })
+  })
+
+  it.each(['survivor', 'guillotine'])('a %s league trades, so it is not refused as a no-trade league', async (leagueType) => {
+    h.leagueFindUnique.mockResolvedValue({ ...LEAGUE, leagueType })
+    expect(await find()).not.toEqual({ status: 'unavailable', reason: 'this league does not allow trades' })
   })
 
   it('needs a claimed team to trade from', async () => {

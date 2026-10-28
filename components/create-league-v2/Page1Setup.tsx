@@ -36,6 +36,7 @@ import {
   GlassInput,
 } from './primitives'
 import { parseSurvivorDuesUsd, SURVIVOR_DUES_OFF_APP_NOTE } from '@/lib/survivor/survivorCreationAvailability'
+import { SURVIVOR_TWIST_PRESET_DEFAULT, SURVIVOR_TWIST_PRESET_IDS, SURVIVOR_TWIST_PRESETS } from '@/lib/survivor/survivorTwistPresets'
 
 // ── League type cards (12 format IDs + IDP pseudo-card) ─────────────
 
@@ -391,6 +392,23 @@ export function Page1Setup({ state, accent, onChange }: Page1SetupProps) {
           <p className="mt-3 text-[11px] text-white/40">
             Tribes shuffle automatically at the merge week (configurable after league creation).
           </p>
+        </GlassCard>
+      )}
+
+      {/* Survivor twists: one choice instead of every idol and Exile setting. */}
+      {isSurvivor && (
+        <GlassCard>
+          <SectionHeader title="Twists" hint="How much happens each week. Every rule can still be changed before the draft." />
+          <Segmented
+            options={SURVIVOR_TWIST_PRESET_IDS.map((id) => ({ value: id, label: SURVIVOR_TWIST_PRESETS[id].label, hint: SURVIVOR_TWIST_PRESETS[id].tagline }))}
+            value={state.survivorTwistPreset ?? SURVIVOR_TWIST_PRESET_DEFAULT}
+            onChange={(survivorTwistPreset) => onChange({ survivorTwistPreset })}
+            accent={accent}
+            ariaLabel="Survivor twists"
+          />
+          <ul className="mt-3 space-y-1 text-[11px] text-white/55" data-testid="survivor-twist-preset-bullets">
+            {SURVIVOR_TWIST_PRESETS[state.survivorTwistPreset ?? SURVIVOR_TWIST_PRESET_DEFAULT].bullets.map((bullet) => <li key={bullet}>• {bullet}</li>)}
+          </ul>
         </GlassCard>
       )}
 
