@@ -544,7 +544,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                     #{bestViewerRow.rank} <span className="text-base font-semibold text-slate-300">of {leaderboardRows.length} finalized brackets</span>
                   </h2>
                   <p className="mt-2 text-sm font-semibold text-slate-200">
-                    {bestViewerRow.totalScore} points · {bestViewerRow.potentialTotal} potential · {bestViewerRow.correctPicks} correct
+                    Best bracket: {bestViewerRow.name} · {bestViewerRow.totalScore} points · {bestViewerRow.potentialTotal} potential · {bestViewerRow.correctPicks} correct
                   </p>
                 </>
               ) : (
