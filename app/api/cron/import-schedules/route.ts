@@ -10,6 +10,8 @@
  *   sport   — "NFL" (default) or "NCAAF"
  *   season  — 4-digit year string (defaults to current season)
  *   source  — "rolling_insights" | "api_sports" | "all" (default: "all")
+ *   tsdbSports — optional comma-separated sport scope, only with source=tsdb-only;
+ *                omitted preserves the normal seven-sport sweep.
  *   rosters — "1" runs ONLY the TheSportsDB roster sweep and skips every other
  *             block. See the roster section below for why it is its own mode.
  *   riProfiles — "1" runs ONLY the Rolling Insights team + player profile sweep, for all seven
@@ -29,6 +31,7 @@ import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { createRunBudget, CRON_RUN_BUDGET_MS, rotateForFairness, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
 import { selectRiProfileSports } from "@/lib/cron/riProfileSports"
+import { resolveTsdbScheduleSports } from "@/lib/cron/tsdbScheduleSports"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import { prisma } from "@/lib/prisma"
 import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
@@ -158,6 +161,14 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
   const sport = sports[0]
   const season = url.searchParams.get("season") ?? undefined
   const source = (url.searchParams.get("source") ?? "all").toLowerCase()
+  const tsdbScope = url.searchParams.get("tsdbSports")
+  let tsdbSports: IngestSport[]
+  try {
+    if (tsdbScope !== null && source !== "tsdb-only") throw new Error("exclusive_scope_required")
+    tsdbSports = resolveTsdbScheduleSports(tsdbScope, TSDB_SPORTS)
+  } catch {
+    return NextResponse.json({ error: "tsdbSports requires source=tsdb-only and a comma-separated list of supported sports." }, { status: 400 })
+  }
   const rostersOnly = url.searchParams.get("rosters") === "1"
   /** Exclusive mode, like `?rosters=1` — see the block that reads it for why it gets its own fire. */
   const riProfilesOnly = url.searchParams.get("riProfiles") === "1"
@@ -312,7 +323,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         const deferred: string[] = []
         let gamesWritten = 0
         let failedSports = 0
-        for (const s of rotateForFairness(TSDB_SPORTS, 6 * 60 * 60 * 1000)) {
+        for (const s of rotateForFairness(tsdbSports, 6 * 60 * 60 * 1000)) {
         if (budget.exhausted()) {
           deferred.push(s)
           continue
@@ -350,7 +361,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       }
 
       const tsdbRun = await withSyncJobRun(
-        { jobName: JOB_TSDB, trigger: 'cron' },
+        { jobName: JOB_TSDB, trigger: 'cron', ...(tsdbScope === null ? {} : { jobScope: tsdbSports.join(',') }) },
         runTsdb,
         (r) => ({
           rowsWritten: r.gamesWritten,
