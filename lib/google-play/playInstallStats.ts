@@ -72,9 +72,11 @@ const INSTALL_COLUMNS = ["Daily User Installs", "Daily Device Installs", "Instal
 const ACTIVE_DEVICE_COLUMNS = ["Active Device Installs"]
 
 let cache: { result: PlayInstallStatsResult; expiresAt: number } | null = null
+let inflight: Promise<PlayInstallStatsResult> | null = null
 
 export function resetPlayInstallStatsCache(): void {
   cache = null
+  inflight = null
 }
 
 function parseServiceAccount(raw: string): ServiceAccount | null {
@@ -317,15 +319,19 @@ async function loadPlayInstallStats(): Promise<PlayInstallStatsResult> {
 /** Never throws. Safe to call on every admin page load. */
 export async function getPlayInstallStats(): Promise<PlayInstallStatsResult> {
   if (cache && cache.expiresAt > Date.now()) return cache.result
-  let result: PlayInstallStatsResult
-  try {
-    result = await loadPlayInstallStats()
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    // Never echo a key: messages above are built from status codes and names only.
-    result = { status: "error", reason: message.includes("abort") ? "Google did not respond in time" : message }
-  }
-  const ttl = result.status === "ok" ? SUCCESS_TTL_MS : result.status === "not_configured" ? 60_000 : FAILURE_TTL_MS
-  cache = { result, expiresAt: Date.now() + ttl }
-  return result
+  if (inflight) return inflight
+  inflight = (async () => {
+    let result: PlayInstallStatsResult
+    try {
+      result = await loadPlayInstallStats()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      // Never echo a key: messages above are built from status codes and names only.
+      result = { status: "error", reason: message.includes("abort") ? "Google did not respond in time" : message }
+    }
+    const ttl = result.status === "ok" ? SUCCESS_TTL_MS : result.status === "not_configured" ? 60_000 : FAILURE_TTL_MS
+    cache = { result, expiresAt: Date.now() + ttl }
+    return result
+  })().finally(() => { inflight = null })
+  return inflight
 }
