@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X, Loader2, CheckCircle2, TriangleAlert } from 'lucide-react'
-import { SUPPORT_WIDGET_FEEDBACK_TYPE, SUPPORT_WIDGET_TOOL } from '@/lib/support/support-widget'
+import { SUPPORT_WIDGET_FEEDBACK_TYPE, SUPPORT_WIDGET_OPEN_EVENT, SUPPORT_WIDGET_TOOL } from '@/lib/support/support-widget'
 
 /**
  * Global "contact support" entry point — the AF crest with an "S" glyph, mounted once in
@@ -21,9 +21,9 @@ import { SUPPORT_WIDGET_FEEDBACK_TYPE, SUPPORT_WIDGET_TOOL } from '@/lib/support
  * - Positioned beside the existing Chimmy FAB (whose offsets already clear MobileBottomTabs) so
  *   the floating cluster stays deconflicted at every breakpoint.
  */
-export function SupportCrestWidget() {
+export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: string | null }) {
   const [open, setOpen] = useState(false)
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(defaultEmail ?? '')
   const [message, setMessage] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -53,6 +53,12 @@ export function SupportCrestWidget() {
       window.clearTimeout(id)
     }
   }, [open, close])
+
+  useEffect(() => {
+    const openFromPage = () => setOpen(true)
+    window.addEventListener(SUPPORT_WIDGET_OPEN_EVENT, openFromPage)
+    return () => window.removeEventListener(SUPPORT_WIDGET_OPEN_EVENT, openFromPage)
+  }, [])
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   const canSubmit = emailValid && message.trim().length > 0 && status !== 'sending'
@@ -146,7 +152,7 @@ export function SupportCrestWidget() {
             aria-modal="true"
             aria-labelledby="support-widget-title"
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-[420px] overflow-hidden rounded-t-[20px] border border-white/10 bg-[#0a0a1f] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.45)] sm:rounded-[20px] sm:pb-0"
+            className="max-h-[90dvh] w-full max-w-[420px] overflow-y-auto rounded-t-[20px] border border-white/10 bg-[#0a0a1f] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.45)] sm:rounded-[20px] sm:pb-0"
           >
             <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
               <p

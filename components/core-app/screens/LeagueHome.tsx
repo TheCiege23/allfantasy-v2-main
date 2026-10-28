@@ -15,12 +15,13 @@ import '@/components/core-app/af-league-home.css'
 import type { LeagueHomeData, SectionState } from '@/lib/core-app/leagueHome'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'
-import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 import { ConnectedRoster } from './ConnectedRoster'
 import { PredictionLeaderboard } from '@/components/core-app/PredictionLeaderboard'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
 import { rosterLabel } from '@/lib/core-app/managerName'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -537,6 +538,16 @@ export function LeagueHome({
           </Link>
         </div>
       </header>
+
+      {!isNativePlatform(league.platform) ? (
+        <ImportedLeagueQuickActions
+          leagueId={league.id}
+          leagueName={league.name}
+          platform={platformLabel}
+          canRemove={data.league.canRemoveImported === true}
+          supportEvent={SUPPORT_OPEN_EVENT}
+        />
+      ) : null}
 
       {league.variant === 'survivor_guillotine' && (
         <section className="af-card" aria-label="Survivor Guilly league">
