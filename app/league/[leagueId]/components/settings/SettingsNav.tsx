@@ -45,6 +45,9 @@ export type SettingsNavTabId =
   | 'zombie_paid'
   | 'zombie_universe'
   | 'zombie_updates'
+  | 'zombie_automation'
+  | 'zombie_overrides'
+  | 'zombie_audit'
   | 'zombie_animations'
   | 'zombie_advanced'
   | 'zombie_ai'
@@ -103,6 +106,9 @@ const ZOMBIE_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'zombie_paid', label: '💰 Paid / Free' },
   { id: 'zombie_universe', label: '🌍 Universe' },
   { id: 'zombie_updates', label: '📋 Weekly Updates' },
+  { id: 'zombie_automation', label: '⚙️ Automation' },
+  { id: 'zombie_overrides', label: '🔧 Overrides' },
+  { id: 'zombie_audit', label: '📜 Audit Log' },
   { id: 'zombie_animations', label: '🎬 Animations' },
   { id: 'zombie_advanced', label: '⚙️ Advanced Rules' },
   { id: 'zombie_ai', label: '🤖 League Guide' },
@@ -206,9 +212,9 @@ export function SettingsNav({
 }) {
   const hint = statusLabel(saveStatus, savedLabel)
   const items = [
+    ...(showZombieTabs ? ZOMBIE_NAV : []),
     ...BASE_NAV,
     ...(showSurvivorTabs ? SURVIVOR_NAV : []),
-    ...(showZombieTabs ? ZOMBIE_NAV : []),
     ...(showIdpTabs ? IDP_NAV : []),
     ...(showDevyTabs ? DEVY_NAV : []),
     ...(showC2cTabs ? C2C_NAV : []),
