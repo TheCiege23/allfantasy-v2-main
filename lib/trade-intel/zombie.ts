@@ -154,31 +154,29 @@ export function serumValue(args: {
  * How many managers you can still legally trade with, and what that is worth
  * knowing.
  *
- * ⚠ THIS ONLY EVER GOES DOWN. Zombies cannot trade, infection is permanent
+ * ⚠ THIS ONLY EVER GOES DOWN. Zombies and Whisperers cannot trade, infection is permanent
  * within a season, and the moment you are infected you cannot trade either. So
  * the option to make a deal is a wasting asset held by both sides at once, and
  * "we can always do this later" is false in a way it is not in any other format.
  */
 export function tradeWindow(args: {
   survivors: number
-  /** Whether the Whisperer is still uninfected — they can trade. */
-  whispererActive: boolean
   teamCount: number
 }): { partners: number; basis: string } | null {
   const { survivors, teamCount } = args
   if (teamCount < 2 || survivors < 0 || survivors > teamCount) return null
 
   /* Everyone who can legally trade, minus yourself. */
-  const partners = Math.max(0, survivors + (args.whispererActive ? 1 : 0) - 1)
+  const partners = Math.max(0, survivors - 1)
 
   return {
     partners,
     basis:
       partners === 0
-        ? 'There is nobody left in this league who can legally trade. Zombies cannot make deals, and the Horde has everyone.'
+        ? 'There is nobody left in this league who can legally trade. Zombies and Whisperers cannot make deals, and no other Survivor remains.'
         : `${partners} team${
             partners === 1 ? '' : 's'
-          } in this league can still legally trade — Zombies cannot. That number only ever falls, and it reaches zero for you the week you are infected, so a deal you are considering for "later" may not have a later.`,
+          } in this league can still legally trade — Zombies and Whisperers cannot. That number only ever falls, and it reaches zero for you the week you are infected, so a deal you are considering for "later" may not have a later.`,
   }
 }
 
