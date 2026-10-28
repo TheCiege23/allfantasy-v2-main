@@ -151,7 +151,7 @@ export type LeagueHomeData = {
     variant: string | null
     name: string
     platform: string
-    canRemoveImported: boolean
+    canRemoveImported?: boolean
     format: string | null
     sport: string
     season: number | null
