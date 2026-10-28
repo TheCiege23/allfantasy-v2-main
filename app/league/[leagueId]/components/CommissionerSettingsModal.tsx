@@ -164,7 +164,10 @@ export function CommissionerSettingsModal({
   useEffect(() => {
     if (!isOpen || !leagueId) return
     fetch(`/api/zombie/league?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include' })
-      .then((r) => setZombieMode(r.ok))
+      .then((r) => {
+        setZombieMode(r.ok)
+        if (r.ok) setActiveTab((current) => current === 'league' ? 'zombie_setup' : current)
+      })
       .catch(() => setZombieMode(false))
   }, [isOpen, leagueId])
 
