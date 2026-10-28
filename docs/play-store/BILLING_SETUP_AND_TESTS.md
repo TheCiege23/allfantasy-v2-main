@@ -1,6 +1,6 @@
 # Google Play billing setup and acceptance tests
 
-Implementation reviewed October 26, 2026 (America/New_York).
+Implementation and product-setup status reviewed October 28, 2026 (America/New_York).
 
 ## Current state
 
@@ -12,9 +12,9 @@ The first claim of a stock TWA purchase requires the signed-in account's saved c
 
 Do not advertise Android purchases until setup and real device tests pass. Existing subscriptions grant no token bundle on renewal.
 
-## Proposed Console catalog
+## Expected Console catalog
 
-These identifiers are proposals, not configured products. For the stock TWA bridge, create **eight subscription products**, one per billing interval. Each product should have one eligible auto-renewing base plan (`standard`) with the matching period and no introductory offers at launch. Map the verified product AND base-plan identifier to the internal SKU; never trust a SKU from a client request.
+The owner confirmed on October 28 that the products are created. Their IDs, active states and exact prices still need verification through Publisher API. For the stock TWA bridge, use **eight subscription products**, one per billing interval. Each product should have one eligible auto-renewing base plan (`standard`) with the matching period and no introductory offers at launch. Map the verified product AND base-plan identifier to the internal SKU; never trust a SKU from a client request.
 
 Do not combine monthly and yearly base plans under one product with this wrapper. The current Digital Goods bridge exposes the first eligible plan/offer, so it cannot reliably offer both intervals for one product. Verify the returned billing period before purchase. See [Google's Billing 8 migration guide](https://github.com/GoogleChrome/android-browser-helper/blob/main/playbilling/docs/play-billing-library-8-migration.md).
 
@@ -95,3 +95,9 @@ Use the app installed through the internal Play track and Google's test payment 
 | Grace / hold / expiry / recovery | Entitlement follows authoritative state, recovers only after valid payment, and cannot be revived by stale notifications. |
 
 Official references: [TWA Play Billing integration](https://developer.chrome.com/docs/android/trusted-web-activity/receive-payments-play-billing), [Play billing tests](https://developer.android.com/google/play/billing/test), [subscription lifecycle](https://developer.android.com/google/play/billing/lifecycle/subscriptions), [one-time purchase lifecycle](https://developer.android.com/google/play/billing/lifecycle/one-time).
+
+## Read-only operator verification
+
+After Publisher access is granted, run `node --use-env-proxy --require ./scripts/_audit-preload.cjs --import tsx scripts/check-google-play-billing.ts --service-account-file=<private-json-path>`. It reads catalog metadata, checks the eight billing intervals and all 11 exact US prices, rejects ambiguous active plans/offers and multi-quantity token packs, and prints no private keys or raw purchase receipts.
+
+The deployed equivalent is `GET /api/cron/google-play-billing?check=readiness` with the existing cron bearer secret. It reports only service-account email/project ID, configuration presence and product/permission results. It changes no purchase or product. `SERVICE_DISABLED` means enable Android Publisher API in the service account's Google Cloud project. A permission denial after enabling requires app-scoped Play Console access for that service-account email. Product creation alone does not grant backend access.

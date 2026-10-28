@@ -3,14 +3,14 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { PLAY_PACKAGE } from "./billingCatalog"
 
 export class PlayBillingError extends Error {
-  constructor(message: string, readonly status = 400) { super(message) }
+  constructor(message: string, readonly status = 400, readonly providerStatus?: number, readonly providerReason?: string) { super(message) }
 }
 export function playServiceAccount() {
   const raw = (process.env.GOOGLE_PLAY_BILLING_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)?.trim()
   try {
     const value = JSON.parse(raw?.startsWith("{") ? raw : Buffer.from(raw || "", "base64").toString("utf8"))
     if (typeof value.client_email !== "string" || typeof value.private_key !== "string") throw new Error()
-    return { email: value.client_email as string, key: (value.private_key as string).replace(/\\n/g, "\n") }
+    return { email: value.client_email as string, projectId: typeof value.project_id === "string" ? value.project_id : null, key: (value.private_key as string).replace(/\\n/g, "\n") }
   } catch { throw new PlayBillingError("Google Play billing is not configured.", 503) }
 }
 function encryptionKey() {

@@ -8,6 +8,10 @@ export async function GET(request: NextRequest) {
   const expected = process.env.CRON_SECRET?.trim() || "", supplied = request.headers.get("authorization") || ""
   const a = Buffer.from(supplied), b = Buffer.from(`Bearer ${expected}`)
   if (!expected || a.length !== b.length || !timingSafeEqual(a, b)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (request.nextUrl.searchParams.get("check") === "readiness") {
+    const { checkGooglePlayReadiness } = await import("@/lib/google-play/billingReadiness")
+    return NextResponse.json(await checkGooglePlayReadiness(), { headers: { "cache-control": "no-store" } })
+  }
   if (!playServerConfigured()) return NextResponse.json({ skipped: true, reason: "Play billing is not configured." })
   try {
     const result = await reconcileGooglePlayBilling()

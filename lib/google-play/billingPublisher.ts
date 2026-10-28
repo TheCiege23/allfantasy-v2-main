@@ -26,7 +26,12 @@ export async function publisherRequest(path: string, method: "GET" | "POST" = "G
     headers: { authorization: `Bearer ${await playAccessToken()}`, "content-type": "application/json" },
     ...(body ? { body: JSON.stringify(body) } : {}) })
   // Never log provider bodies or request URLs: both may contain purchase tokens.
-  if (!r.ok) throw new PlayBillingError(r.status === 404 || r.status === 410 ? "Google Play receipt was not found." : "Google Play verification is temporarily unavailable.", r.status === 404 || r.status === 410 ? 400 : 502)
+  if (!r.ok) {
+    const failure = await r.json().catch(() => ({})) as { error?: { status?: unknown; details?: Array<{ reason?: unknown }> } }
+    const candidate = failure.error?.details?.find(d => typeof d.reason === "string")?.reason ?? failure.error?.status
+    const reason = typeof candidate === "string" && /^[A-Z_]{1,80}$/.test(candidate) ? candidate : undefined
+    throw new PlayBillingError(r.status === 404 || r.status === 410 ? "Google Play receipt was not found." : "Google Play verification is temporarily unavailable.", r.status === 404 || r.status === 410 ? 400 : 502, r.status, reason)
+  }
   return r.status === 204 ? {} : r.json().catch(() => ({}))
 }
 export const googlePlayPublisher = {

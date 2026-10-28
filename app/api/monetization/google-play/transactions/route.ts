@@ -1,3 +1,4 @@
+import { hasTrustedPlayOrigin } from "@/lib/google-play/billingRequest"
 import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
 import { authOptions } from "@/lib/auth"
@@ -8,7 +9,7 @@ export async function POST(request: Request) {
   const session = await getServerSession(authOptions as any) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (!playServerConfigured()) return NextResponse.json({ error: "Google Play verification is not configured." }, { status: 503 })
-  if (request.headers.get("origin") !== new URL(request.url).origin) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 })
+  if (!hasTrustedPlayOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 })
   try {
     const body = await request.json() as { purchaseToken?: string; productId?: string; intentId?: string }
     if (typeof body.productId !== "string" || typeof body.purchaseToken !== "string" || (body.intentId && !/^[a-f0-9-]{36}$/i.test(body.intentId))) throw new PlayBillingError("Invalid purchase receipt.")
