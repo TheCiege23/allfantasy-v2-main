@@ -7,7 +7,7 @@
  *
  * Goals locked here:
  *   1.  Active tab underline uses from-cyan-400 → to-violet-400 gradient (fixes d6-1).
- *   2.  Tab header button is compact (py-1).
+ *   2.  Tab header buttons have readable labels and a 44px minimum height.
  *   3.  Queue panel header padding is py-1 (reduced from py-1.5).
  *   4.  Queue filter bar uses p-1 gap-1 (reduced from p-1.5 gap-1.5).
  *   5.  Queue items use min-h-[44px] touch target (was min-h-[46px]).
@@ -59,15 +59,15 @@ describe('DraftRightDockTabs — active tab gradient underline (Commit 23)', () 
 // 2. Tab header compact padding
 // ---------------------------------------------------------------------------
 
-describe('DraftRightDockTabs — compact tab header (Commit 23)', () => {
+describe('DraftRightDockTabs — readable tab header', () => {
   /**
    * ⚠ THIS ASSERTION USED TO READ `/py-1 text-\[8px\] font-semibold/`, and the type-floor sweep
    * broke it — which it should not have, because this test is about the PADDING. Coupling a
    * padding invariant to whatever font size happens to sit next to it in the class list is what
    * turned an unrelated change into a failure here. It now asserts only its own subject.
    */
-  it('tab button has py-1 (no taller vertical padding)', () => {
-    expect(dockSrc).toMatch(/py-1 text-\[\d+(?:\.\d+)?px\] font-semibold/)
+  it('tab buttons leave room for usable hit targets', () => {
+    expect(dockSrc).toMatch(/min-h-\[44px\]/)
   })
 
   /**
@@ -77,7 +77,7 @@ describe('DraftRightDockTabs — compact tab header (Commit 23)', () => {
    * density, so this now pins the floor. Do not "restore" the 8px to make a diff smaller.
    */
   it('tab button font size respects the 11px floor, uppercase (was 8px for density)', () => {
-    expect(dockSrc).toMatch(/text-\[11px\] font-semibold uppercase tracking-\[0\.14em\]/)
+    expect(dockSrc).toMatch(/text-xs font-semibold uppercase tracking-\[0\.14em\]/)
   })
 })
 

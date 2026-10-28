@@ -3,7 +3,7 @@ import path from 'node:path'
 
 import { expect, test } from '@playwright/test'
 
-test.describe.configure({ mode: 'serial', timeout: 180_000 })
+test.describe.configure({ timeout: 180_000 })
 
 /**
  * A screenshot baseline is per-platform, and only Windows baselines are committed.
@@ -134,7 +134,7 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB'] as const) {
     const name = desktop.locator('[data-testid$="-name"]').filter({ hasText: /Atlas Runner|Hoops Floor General|Test Player/ }).first()
     await expect(name).toBeVisible()
     expect(await name.evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(14)
-    await expect(desktop.getByTestId('draft-queue-intelligence')).not.toHaveAttribute('open', '')
+    await expect(desktop.getByTestId('draft-right-dock-panel-queue').getByTestId('draft-queue-intelligence')).not.toHaveAttribute('open', '')
     await page.screenshot({ path: test.info().outputPath(sport + '-desktop-workspace.png') })
   })
 }

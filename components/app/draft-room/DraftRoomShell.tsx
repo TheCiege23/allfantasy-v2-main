@@ -413,6 +413,13 @@ export function DraftRoomShell({
         className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden md:hidden"
         data-testid="draft-mobile-layout"
         data-tray-snap={traySnap}
+        onKeyDown={event => {
+          if (event.key !== 'Escape' || !mobileToolsOpen) return
+          event.preventDefault()
+          event.stopPropagation()
+          setMobileToolsOpen(false)
+          event.currentTarget.querySelector<HTMLButtonElement>('[data-testid="draft-mobile-more"]')?.focus()
+        }}
       >
         {/*
           F.2 — mobile pane uses `overflow-y-auto` (NOT `overflow-auto`) so wide
@@ -452,7 +459,6 @@ export function DraftRoomShell({
           {secondaryMobileTabs.length > 0 && mobileToolsOpen ? (
             <div
               id="draft-mobile-tools"
-              onKeyDown={(event) => { if (event.key === 'Escape') { setMobileToolsOpen(false); event.currentTarget.parentElement?.querySelector<HTMLButtonElement>('[data-testid="draft-mobile-more"]')?.focus() } }}
               className="max-h-[35dvh] shrink-0 overflow-y-auto border-t border-white/10 bg-[#060d1f] px-2 py-2"
               data-testid="draft-mobile-quick-dock"
             >

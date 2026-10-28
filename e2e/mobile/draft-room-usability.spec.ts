@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { createLeagueId, gotoDraftRoomHarness, openDraftRoomHarness, mockDraftRoomApis, prepareDraftRoomUsability } from '../helpers/draftRoomUsability'
 
-test.describe.configure({ mode: 'serial', timeout: 180_000 })
+test.describe.configure({ timeout: 180_000 })
 test.beforeEach(async ({ page }) => {
   const size = page.viewportSize()
   await prepareDraftRoomUsability(page)

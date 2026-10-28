@@ -37,11 +37,13 @@ describe('mobile draft tray', () => {
     expect(mobile().getByText('Player list')).toBeTruthy()
   })
 
-  it('starts collapsed on the board tab and opens to half when a tab is chosen', () => {
+  it('starts on the board, opens queue halfway, and gives players the full tray', () => {
     render(<Room />)
     expect(tray().getAttribute('data-snap')).toBe('peek')
-    fireEvent.click(screen.getByTestId('draft-mobile-tab-players'))
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-queue'))
     expect(tray().getAttribute('data-snap')).toBe('half')
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-players'))
+    expect(tray().getAttribute('data-snap')).toBe('full')
     expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('players')
   })
 
@@ -66,6 +68,9 @@ describe('mobile draft tray', () => {
   it('the handle is keyboard-operable and announces its state', () => {
     render(<Room initial="players" />)
     expect(handle().getAttribute('aria-expanded')).toBe('true')
+    expect(tray().getAttribute('data-snap')).toBe('full')
+    fireEvent.keyDown(handle(), { key: 'ArrowDown' })
+    expect(tray().getAttribute('data-snap')).toBe('half')
     fireEvent.keyDown(handle(), { key: 'Enter' })
     expect(tray().getAttribute('data-snap')).toBe('full')
     fireEvent.keyDown(handle(), { key: 'Enter' })
