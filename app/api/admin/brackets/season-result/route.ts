@@ -26,5 +26,5 @@ export async function POST(request: Request) {
     targetType: "bracket_season_game", targetId: `${sport}:${season}:${seriesNumber}`,
     details: { sport, season, seriesNumber, homeScore, awayScore, updatedPools: result.updatedPools, totalPools: result.totalPools },
   })
-  return NextResponse.json({ ok: true, ...result })
+  return NextResponse.json(result)
 }
