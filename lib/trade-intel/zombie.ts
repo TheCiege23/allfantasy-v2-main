@@ -173,10 +173,10 @@ export function tradeWindow(args: {
     partners,
     basis:
       partners === 0
-        ? 'There is nobody left in this league who can legally trade. Zombies and Whisperers cannot make deals, and no other Survivor remains.'
+        ? 'There is nobody left for a Survivor to trade with. Zombies and Whisperers cannot make deals, and no other Survivor remains.'
         : `${partners} team${
             partners === 1 ? '' : 's'
-          } in this league can still legally trade — Zombies and Whisperers cannot. That number only ever falls, and it reaches zero for you the week you are infected, so a deal you are considering for "later" may not have a later.`,
+          } can trade with a Survivor — Zombies and Whisperers cannot. That number only ever falls, and it reaches zero for a Survivor the week they are infected, so a deal you are considering for "later" may not have a later.`,
   }
 }
 
