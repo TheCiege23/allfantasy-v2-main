@@ -61,6 +61,7 @@ import {
 import { normalizeDraftPoolInjuryStatus } from '@/lib/draft-room/injury-status-normalization'
 import { compareDraftEntriesByStableRank, resolvePreferredAdp } from '@/lib/draft-room/adp-ordering'
 import { dbFirstMode } from '@/lib/db-first-mode'
+import { DraftPoolMergeIndex } from './DraftPoolMergeIndex'
 import { draftPoolBuildKey, shareDraftPoolBuild } from './shareDraftPoolBuild'
 import { applyPositionAwareProjectionFallbacks, type ProjectionFallbackDiagnostics } from '@/lib/draft-room/position-aware-projection-fallback'
 import {
@@ -631,6 +632,18 @@ function mergeDbPoolIntoRawList(
   seenNames: Set<string>,
   idFor: PoolRowIdFor = externalSourceIdAsIs,
 ): void {
+  const perfMerge = perfStart(`5b. indexed pool merge (raw=${rawList.length}, pool=${poolRows.length})`)
+  const identityOf = (row: DraftPoolRawRow) => {
+    const name = row.name ?? row.playerName ?? row.full_name ?? ''
+    return {
+      name: normalizeDraftPoolNameForDedupe(name),
+      looseName: normalizeLooseName(name),
+      position: normalizeKeyPart(row.position ?? row.pos ?? ''),
+      team: normalizeKeyPart(row.team ?? row.teamAbbr ?? ''),
+    }
+  }
+  const index = new DraftPoolMergeIndex()
+  rawList.forEach((row, ordinal) => index.upsert(ordinal, identityOf(row)))
   for (const p of poolRows) {
     const norm = normalizeDraftPoolNameForDedupe(p.full_name ?? '')
     const looseNorm = normalizeLooseName(p.full_name ?? '')
@@ -638,23 +651,10 @@ function mergeDbPoolIntoRawList(
     const poolTeam = normalizeKeyPart(p.team_abbreviation ?? '')
     if (!norm) continue
 
-    const existingIdx = rawList.findIndex(
-      (r) => {
-        const rowName = r.name ?? r.playerName ?? r.full_name ?? ''
-        const rowNorm = normalizeDraftPoolNameForDedupe(rowName)
-        const rowLoose = normalizeLooseName(rowName)
-        const rowPos = normalizeKeyPart(r.position ?? r.pos ?? '')
-        const rowTeam = normalizeKeyPart(r.team ?? r.teamAbbr ?? '')
-
-        const posMatch = !poolPos || !rowPos || poolPos === rowPos
-        const teamMatch = !poolTeam || !rowTeam || poolTeam === rowTeam
-        if (!posMatch || !teamMatch) return false
-
-        return rowNorm === norm || (looseNorm && rowLoose === looseNorm)
-      },
-    )
+    const existingIdx = index.find({ name: norm, looseName: looseNorm, position: poolPos, team: poolTeam })
     if (existingIdx >= 0) {
       enrichRawRowFromDbPool(rawList[existingIdx], p, idFor)
+      index.upsert(existingIdx, identityOf(rawList[existingIdx]))
       seenNames.add(norm)
       continue
     }
@@ -676,7 +676,9 @@ function mergeDbPoolIntoRawList(
       age: p.age ?? null,
       ...(useMixedPoolTypeMarkers ? { poolType: 'pro' as const } : {}),
     })
+    index.upsert(rawList.length - 1, identityOf(rawList[rawList.length - 1]))
   }
+  perfMerge()
 }
 
 function hasHttpHeadshot(url: string | null | undefined): boolean {
