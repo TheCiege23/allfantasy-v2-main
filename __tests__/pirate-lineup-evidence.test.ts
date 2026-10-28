@@ -167,6 +167,13 @@ describe('immutable Pirate lineup evidence', () => {
     db.afRosterLineupAssignment.findMany.mockResolvedValue([{ rosterId: 'af-roster', playerId: 'bench', section: 'ir', slotIndex: 0 }])
     await capturePirateLineupEvidence({ ...input, week: 11 }, db as never)
     expect(createMany.mock.calls.at(-1)?.[0].data[0].metadata.players[0]).toMatchObject({ slotType: 'ir', addableBeforeLock: false })
+    db.afRosterLineupAssignment.findMany.mockResolvedValue([{ rosterId: 'af-roster', playerId: 'bench', section: 'bench', slotIndex: 0 }])
+    db.redraftRoster.findMany.mockResolvedValue([{ id: 'roster',
+      legacyRoster: { id: 'af-roster', playerData: { lineup_sections: { starters: [], bench: [{ id: 'bench', position: 'QB' }] } } },
+      players: [{ playerId: 'bench', playerName: 'Bench QB', position: 'QB', team: 'KC', sport: 'NFL', slotType: 'BENCH', byeWeek: 12 }],
+    }] as never)
+    await capturePirateLineupEvidence({ ...input, week: 12 }, db as never)
+    expect(createMany.mock.calls.at(-1)?.[0].data[0].metadata.players[0].availabilityKnown).toBe(false)
   })
 
   it('captures a waiver witness only after the manager-specific add checks pass', async () => {

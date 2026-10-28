@@ -171,7 +171,10 @@ export async function capturePirateLineupEvidence(input: {
         const hit = injuryMatch({ name: p.playerName, team, position: p.position })
         const report = hit && 'rows' in hit ? hit.rows[0] : null
         const availabilityKnown = injuryFeedFresh && injuryIdentityKnown(p.playerName, hit) && (!report || knownStatus(report.status)) &&
-          (sport !== 'NFL' || currentTeams.has(p.playerId) || p.position === 'DEF') && (!!kickoff || p.byeWeek === input.week)
+          (sport !== 'NFL' || currentTeams.has(p.playerId) || p.position === 'DEF') && (!!kickoff || p.byeWeek === input.week) &&
+          // A stored bye can belong to the player's former club. Conflicting
+          // schedule evidence must be reviewed before any protection penalty.
+          !(kickoff && p.byeWeek === input.week)
         return { playerId: p.playerId, playerName: p.playerName, position: p.position,
           slotType: effectiveSlot, team, byeWeek: p.byeWeek, availabilityKnown,
           starterSlotIndex: assignment?.section === 'starters' && lineupCertified ? assignment.slotIndex : null,
