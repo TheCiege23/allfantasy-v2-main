@@ -1,5 +1,6 @@
 import type { League, LeagueSport, Prisma } from '@prisma/client'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 import { capSlotTokens, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
 import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
 import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
@@ -32,6 +33,11 @@ export type CommissionerSettingsFormData = {
    * league never stored one. Not a column — PATCHed as `championshipLength` (execute-league-settings-patch).
    */
   championshipLength?: number | null
+  /**
+   * Best-of-N playoff series per round (`settings.playoff_series`, lib/playoff-runtime/playoffSeries.ts);
+   * null = cumulative rounds. PATCHed as `playoffSeriesLengths` (AF Commissioner for any N > 1).
+   */
+  playoffSeriesLengths?: number[] | null
   /**
    * Semifinal losers play for third (`settings.playoff_structure.third_place_game_enabled`, else the
    * sport default — lib/playoff-runtime/thirdPlaceGame.ts). Not a column — PATCHed as `thirdPlaceGameEnabled`.
@@ -200,6 +206,7 @@ export function commissionerLeagueFieldsFromRow(
     playoffTeams: league.playoffTeams,
     playoffWeeksPerRound: league.playoffWeeksPerRound,
     championshipLength: readChampionshipLength(league.settings),
+    playoffSeriesLengths: readPlayoffSeriesLengths(league.settings),
     thirdPlaceGameEnabled: readThirdPlaceGameEnabled(league.settings, league.sport),
     gamesLimits: readGamesLimits(league.settings, league.sport),
     dailyLineupsActive: isDailyLineupScoringEnabled(league.settings, league.sport),

@@ -166,7 +166,8 @@ async function loadWarmPoolCandidates(
   leagueId: string,
   draftedNames: Set<string>,
 ): Promise<AutopickFallbackPoolEntry[] | null> {
-  let snap = await getWarmDraftPoolSnapshotFast(leagueId)
+  // An expired snapshot is still the right pool mid-draft: take it and let the rebuild run behind.
+  let snap = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
   if (!snap.warm) {
     const ensured = await ensureDraftPoolReady(leagueId)
     if (!ensured.ok) return null
@@ -391,12 +392,14 @@ export async function resolveBestAvailableAutopickCandidate(
 
   let selected: BestAvailableAutopickResolved | null = null
 
-  // Draft as me (AF Commissioner): a live draft's missed pick is made the way this manager drafts.
+  // Draft as me (AF Commissioner league-wide, or the manager's own AF Pro "Draft like me"): a live
+  // draft's missed pick is made the way this manager drafts.
   // Any miss — no plan, no history, no board — falls through to the ordinary autopick below.
   if (draftSession.sessionKind !== 'mock') {
     const { tryDraftAsMePick } = await import('@/lib/draft-room/draftAsMeAutopick')
     const mine = await tryDraftAsMePick({
       leagueId,
+      draftSessionId: draftSession.id,
       rosterId: rid,
       overall: ctx.overallPick,
       board: fallbackPool,

@@ -35,6 +35,7 @@ import { fmt1, formatRecord, optimalLineupListsRespectingLocks, ordinal, project
 import { slotCategory } from '@/lib/league-runtime/redraftSlotType'
 import type { DailyLineupDay, DailyLineupView } from '@/lib/redraft/dailyLineupView'
 import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
+import { AutoBenchByeToggle } from './AutoBenchByeToggle'
 import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE } from '@/lib/projections/dailySportFormLabels'
 
 /**
@@ -674,6 +675,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                         : `${byeStarters.length} starters are on bye this week and will score 0: ${byeStarters.map((id) => players[id]?.name ?? 'Unknown').join(', ')}. Swap them out before lock.`}
                     </p>
                   ) : null}
+                  {data?.rosterId && !daily ? <AutoBenchByeToggle leagueId={league.id} /> : null}
                   <section className="nls-card nls-card-flush" aria-label="Starters">
                     <h3 className="nls-label nls-card-head"><span>Starters</span><span>{startersProj != null ? `Proj ${fmt1(startersProj)}` : ''}</span></h3>
                     <ul className="nls-rows">{slots.map((s, i) => renderRow(lists.starters[i] ?? '', s, 'starter', i))}</ul>

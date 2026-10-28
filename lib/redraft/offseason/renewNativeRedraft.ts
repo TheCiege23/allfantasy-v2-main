@@ -5,7 +5,7 @@ import { enterRedraftOffseason } from './RedraftOffseasonService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
-import { effectiveFaabRolloverRule, faabBalanceAfterRollover, storedFaabRolloverRule } from '@/lib/waiver-wire/faab-rollover'
+import { effectiveFaabRolloverRule, faabBalanceAfterRollover, storedFaabRolloverRule, type RenewalFamily } from '@/lib/waiver-wire/faab-rollover'
 import { buildRenewalSlotOrder, resolveRenewDraftOrderMode, worstToFirstDraftRosterIds, draftOrderMethodForRenewMode } from './renewRedraftLeague'
 
 export class RedraftRenewalError extends Error {
@@ -13,7 +13,9 @@ export class RedraftRenewalError extends Error {
 }
 const object = (v: unknown): Record<string, any> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, any> : {}
 type Input = { leagueId: string; userId: string; expectedSeason: number; removeMemberIds?: string[];
-  duesEnabled?: boolean; duesAmount?: number; listInFinder?: boolean; draftOrder?: unknown; manualOrder?: unknown }
+  duesEnabled?: boolean; duesAmount?: number; listInFinder?: boolean; draftOrder?: unknown; manualOrder?: unknown
+  /** Whose default FAAB rollover applies when none is stored (faabRolloverFamilyForLeague); redraft when omitted. */
+  faabFamily?: RenewalFamily }
 
 /** Archive is committed first. The year, empty roster links and NEW draft then
  * commit together. A retry names the same completed season and returns its receipt. */
@@ -51,8 +53,9 @@ export async function renewNativeRedraft(input: Input) {
     const next = await tx.redraftSeason.create({ data: { leagueId: league.id, sport: completed.sport, season: input.expectedSeason + 1,
       status: 'setup', currentWeek: 0, totalWeeks: completed.totalWeeks, playoffStartWeek: completed.playoffStartWeek, medianGame: completed.medianGame } })
     const faab = league.waiverSettings?.faabBudget ?? league.waiverBudget ?? 100
-    // The commissioner's FAAB rollover rule (lib/waiver-wire/faab-rollover.ts); unset, a redraft resets.
-    const faabRule = effectiveFaabRolloverRule(storedFaabRolloverRule(league.waiverSettings?.waiverEngineConfig), 'redraft')
+    // The commissioner's FAAB rollover rule (lib/waiver-wire/faab-rollover.ts); unset, a redraft resets
+    // and a keeper / dynasty league (the caller's `faabFamily`) carries its balances over.
+    const faabRule = effectiveFaabRolloverRule(storedFaabRolloverRule(league.waiverSettings?.waiverEngineConfig), input.faabFamily ?? 'redraft')
     const removed = new Set(input.removeMemberIds ?? [])
     for (const [index, generic] of league.rosters.entries()) {
       const team = league.teams.find(t => t.externalId === generic.id || t.platformUserId === generic.platformUserId || t.claimedByUserId === generic.platformUserId)

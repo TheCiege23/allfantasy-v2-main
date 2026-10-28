@@ -47,6 +47,7 @@ const {
     survivorIdol: { findMany: vi.fn() },
     survivorPlayer: { findMany: vi.fn() },
     adpDataRecord: { count: vi.fn() },
+    survivorAuditEntry: { findMany: vi.fn() },
   },
 }))
 
@@ -173,6 +174,7 @@ describe('survivor commissioner dashboard payload', () => {
     prisma.survivorIdol.findMany.mockResolvedValue([])
     prisma.survivorPlayer.findMany.mockResolvedValue([])
     prisma.adpDataRecord.count.mockResolvedValue(0)
+    prisma.survivorAuditEntry.findMany.mockResolvedValue([])
     getSurvivorAuditLog.mockResolvedValue([])
     resolveSnapshot.mockResolvedValue({ plans: ['pro'], status: 'active' })
     resolveForUser.mockResolvedValue({ balance: 42 })
@@ -188,6 +190,17 @@ describe('survivor commissioner dashboard payload', () => {
       error: 'Commissioner or co-commissioner access required',
       status: 403,
     })
+  })
+
+  it('carries the weekly to-do list, built from the same facts as the readiness list', async () => {
+    const result = await buildSurvivorCommissionerDashboard('league-1', 'user-1', 'u@example.com')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // 1 of 12 seats claimed before the draft: the one thing that needs the commissioner.
+    expect(result.todo.items.map(item => item.id)).toEqual(['fill_seats'])
+    expect(result.todo.items[0]).toMatchObject({ tone: 'action', title: 'Fill 11 open seats' })
+    expect(result.operations.readinessIssues[0]).toBe('11 manager seats still need to be claimed.')
+    expect(prisma.survivorAuditEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ leagueId: 'league-1', action: 'commissioner_alert_sent' }) }))
   })
 
   it('enriches tribes with extracted emoji and returns shell metadata', async () => {

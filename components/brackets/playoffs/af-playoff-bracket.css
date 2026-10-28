@@ -355,6 +355,18 @@
 
 /* ── The tree ──────────────────────────────────────────────────────────── */
 
+.af-pb-scroll-cue {
+  margin: 12px 14px 0;
+  padding: 9px 12px;
+  border: 1px solid var(--pb-chip-line);
+  border-radius: 10px;
+  background: var(--pb-chip);
+  color: var(--pb-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .af-pb-scroller {
   overflow-x: auto;
   overflow-y: hidden;
@@ -907,3 +919,11 @@
     animation: none;
   }
 }
+
+/* Single-game brackets keep metadata legible even in narrow tree columns. */
+.af-pb-game-meta { width: 100%; border: 0; border-bottom: 1px solid var(--pb-line); background: var(--pb-surface2); color: var(--pb-text); padding: 7px 8px; text-align: left; font-size: 11px; font-weight: 800; line-height: 1.35; cursor: pointer; }
+.af-pb-game-meta span { display: block; margin-top: 2px; color: var(--pb-muted); font-weight: 600; }
+.af-pb-game-meta:hover { color: var(--pb-accent); }
+.af-pb-tiebreaker { display: inline-flex; align-items: center; gap: 7px; color: var(--pb-text); font-size: 11px; font-weight: 700; }
+.af-pb-tiebreaker input { width: 72px; min-height: 38px; border: 1px solid var(--pb-line); border-radius: 9px; background: var(--pb-surface2); color: var(--pb-text); padding: 5px 8px; font: inherit; }
+@media (max-width: 640px) { .af-pb-tiebreaker { width: 100%; justify-content: space-between; } }

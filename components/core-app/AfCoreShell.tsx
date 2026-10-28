@@ -200,6 +200,7 @@ export type CoreNavKey =
   // not orphan them. No /core segment maps to these keys, so they are never the
   // active item — they are exits, not screens.
   | 'live-scores'
+  | 'brackets'
   | 'my-leagues'
   | 'settings'
   | 'plans'
@@ -542,6 +543,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
 
   return [
     { key: 'home', label: 'Home', glyph: '▣', href: inLeague('/core') },
+    { key: 'brackets', label: 'Brackets', glyph: '⚑', href: '/brackets' },
     // My team is league-scoped in the handoff, so the link carries the selected
     // league rather than dropping the user on a screen that has to ask which one.
     {
@@ -862,7 +864,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
  * a nav item can never silently drop it off the rail.
  */
 const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey[] }> = [
-  { id: 'top', heading: null, keys: ['home'] },
+  { id: 'top', heading: null, keys: ['home', 'brackets'] },
   {
     id: 'league',
     heading: 'This league',
@@ -2172,6 +2174,23 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             one remembering.
           */}
           <GeoRestrictionNotice />
+          {active === 'home' ? (
+            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry">
+              <div className="af-core-bracket-promo-copy">
+                <p className="af-core-bracket-promo-kicker">{language === 'es' ? 'LIGAS DE BRACKETS' : 'BRACKET LEAGUES'}</p>
+                <h2 id="af-core-bracket-promo-title">{language === 'es' ? 'Crea un bracket. Invita a tus amigos.' : 'Build a bracket. Bring your friends.'}</h2>
+                <p>{language === 'es' ? 'Elige ganadores, comparte tus picks y compite en la clasificación.' : 'Pick winners, share your bracket, and climb the leaderboard.'}</p>
+              </div>
+              <div className="af-core-bracket-promo-actions">
+                <Link href="/brackets" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
+                  {language === 'es' ? 'Explorar y crear' : 'Explore and create'}
+                </Link>
+                <Link href="/brackets/join" className="af-core-bracket-promo-browse">
+                  {language === 'es' ? 'Unirme a una liga' : 'Join a league'}
+                </Link>
+              </div>
+            </section>
+          ) : null}
           {/*
             Game-day nudge, in the shell for the same reason the notice above is: every
             /core screen inherits it rather than each one remembering. It renders itself to

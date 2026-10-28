@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
-export type DraftRightDockTab = 'queue' | 'intel' | 'roster' | 'war_room' | 'activity' | 'chat'
+export type DraftRightDockTab = 'queue' | 'intel' | 'chimmy' | 'roster' | 'war_room' | 'activity' | 'chat'
 
 const TAB_PREF_KEY = 'af:draft-right-dock-active-tab'
 
@@ -35,11 +35,21 @@ export interface DraftRightDockTabsProps {
    * same pattern warRoomBody already uses.
    */
   activityBody?: ReactNode
+  /**
+   * Chimmy, the draft assistant. Optional like the others, and mounted on first open rather than
+   * with the dock: it is a chat surface with its own requests, and most visits never open it.
+   */
+  chimmyBody?: ReactNode
   chatBody: ReactNode
   /** Default tab when no preference stored. Spec calls for "Queue". */
   defaultTab?: DraftRightDockTab
   /** Override active tab from outside (e.g. tests / programmatic switch). */
   activeTabOverride?: DraftRightDockTab | null
+  /**
+   * One-shot switch from outside (an "Ask Chimmy" button). Unlike `activeTabOverride` it does not
+   * pin the tab: the user can move away afterwards. Bump `key` to request the same tab again.
+   */
+  openTabRequest?: { tab: DraftRightDockTab; key: number } | null
   /** Optional badge counts surfaced on the tab labels (e.g. queue length). */
   queueCount?: number
   testIdBase?: string
@@ -47,6 +57,7 @@ export interface DraftRightDockTabsProps {
 
 const BASE_TABS: ReadonlyArray<{ id: DraftRightDockTab; label: string }> = [
   { id: 'queue', label: 'Queue' },
+  { id: 'chimmy', label: 'Chimmy' },
   { id: 'roster', label: 'Roster' },
   { id: 'chat', label: 'Chat' },
   { id: 'intel', label: 'Intel' },
@@ -60,9 +71,11 @@ export function DraftRightDockTabs({
   rosterBody,
   warRoomBody = null,
   activityBody = null,
+  chimmyBody = null,
   chatBody,
   defaultTab = 'queue',
   activeTabOverride = null,
+  openTabRequest = null,
   queueCount,
   testIdBase = 'draft-right-dock',
 }: DraftRightDockTabsProps) {
@@ -75,6 +88,7 @@ export function DraftRightDockTabs({
       if (
         v === 'queue' ||
         v === 'intel' ||
+        v === 'chimmy' ||
         v === 'roster' ||
         v === 'war_room' ||
         v === 'activity' ||
@@ -103,6 +117,7 @@ export function DraftRightDockTabs({
   const tabs = BASE_TABS.filter(
     (tab) =>
       (tab.id !== 'intel' || Boolean(intelBody)) &&
+      (tab.id !== 'chimmy' || Boolean(chimmyBody)) &&
       (tab.id !== 'war_room' || Boolean(warRoomBody)) &&
       (tab.id !== 'activity' || Boolean(activityBody)),
   )
@@ -117,6 +132,20 @@ export function DraftRightDockTabs({
   const onSelect = useCallback((id: DraftRightDockTab) => {
     setActiveTab(id)
   }, [])
+
+  const openTabKey = openTabRequest?.key
+  const openTabTarget = openTabRequest?.tab
+  useEffect(() => {
+    if (openTabKey == null || !openTabTarget) return
+    setActiveTab(openTabTarget)
+  }, [openTabKey, openTabTarget])
+
+  /* Chimmy mounts the first time its tab is shown and then stays mounted, so the conversation
+     survives switching away — the same reason the other bodies stay mounted. */
+  const [chimmyMounted, setChimmyMounted] = useState(false)
+  useEffect(() => {
+    if (effectiveTab === 'chimmy') setChimmyMounted(true)
+  }, [effectiveTab])
 
   return (
     <section
@@ -198,6 +227,18 @@ export function DraftRightDockTabs({
             className={effectiveTab === 'intel' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'hidden'}
           >
             {intelBody}
+          </div>
+        ) : null}
+        {chimmyBody ? (
+          <div
+            role="tabpanel"
+            id={`${testIdBase}-panel-chimmy`}
+            aria-labelledby={`${testIdBase}-tab-chimmy`}
+            data-testid={`${testIdBase}-panel-chimmy`}
+            aria-hidden={effectiveTab !== 'chimmy'}
+            className={effectiveTab === 'chimmy' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'hidden'}
+          >
+            {chimmyMounted || effectiveTab === 'chimmy' ? chimmyBody : null}
           </div>
         ) : null}
         <div

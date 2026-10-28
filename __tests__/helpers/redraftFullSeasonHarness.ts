@@ -1,6 +1,6 @@
 /**
  * A full redraft season, draft to renewal, driven through the REAL engines on the in-memory Prisma
- * (`./inMemoryPrisma`). Shared by the NFL and MLB full-season suites (and open to NBA/NHL).
+ * (`./inMemoryPrisma`). Shared by the NFL, MLB, NBA and NHL full-season suites.
  *
  * 🛑 THE TEST FILE MUST `vi.mock('@/lib/prisma', () => ({ prisma: inMemoryPrisma.client }))`. Every
  * engine below writes through `@/lib/prisma`; without the mock they would reach whatever database the
@@ -13,7 +13,8 @@
  *   - draft order: `getDraftOrderEntry` (snake); the schedule: `generateSchedule`, persisted the way
  *     `finalizeDraftToRedraftSeason` does (median rows dropped, byes kept);
  *   - every week: `processWaiverWindow`, `recalculateMatchupsForSeasonWeek` (weekly lineups for NFL,
- *     daily lineups and daily stats for MLB, bye rows for median / the extra matchup), `updateStandings`;
+ *     daily lineups and daily stats for MLB, NBA and NHL, bye rows for median / the extra matchup),
+ *     `updateStandings`;
  *   - playoffs: `generateNflRedraftPlayoffRuntimeBracket` (rules from `resolveCanonicalLeagueRules`),
  *     `scoreActivePlayoffRound`, `advanceNflRedraftPlayoffRuntimeRound`,
  *     `finalizeNflRedraftPlayoffRuntimeSeason`;
@@ -38,7 +39,7 @@ import { processWaiverWindow } from '@/lib/redraft/waiverEngine'
 import { EXTRA_MATCHUP_SETTINGS_KEY, type ExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { normalizeMlbGameStats } from '@/lib/scoring-runtime/mlbStatNormalization'
-import { aggregateWeeklyStats } from '@/lib/scoring-runtime/dailySportStatNormalization'
+import { aggregateWeeklyStats, normalizeNbaGameStats, normalizeNhlGameStats, type NormalizedGameStats } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import {
   advanceNflRedraftPlayoffRuntimeRound,
   finalizeNflRedraftPlayoffRuntimeSeason,
@@ -49,7 +50,7 @@ import { resolveNflRedraftScheduleRuntime } from '@/lib/schedule-runtime/resolve
 import { renewRedraftLeague } from '@/lib/redraft/offseason/renewRedraftLeague'
 import type { InMemoryPrisma } from './inMemoryPrisma'
 
-export type SimSport = 'NFL' | 'MLB'
+export type SimSport = 'NFL' | 'MLB' | 'NBA' | 'NHL'
 
 export type FullSeasonSimInput = {
   sport: SimSport
@@ -156,6 +157,20 @@ function positionFor(sport: SimSport, slot: string): string {
 }
 
 const PITCHERS = new Set(['SP', 'RP', 'P'])
+/** Positions a daily UTIL slot cannot take: pitchers, and NHL goalies. */
+const NOT_UTIL = new Set([...PITCHERS, 'G'])
+
+/** Every sport but NFL sets lineups and scores by the day (lib/redraft/dailyLineups.ts). */
+function isDailySport(sport: SimSport): boolean {
+  return sport !== 'NFL'
+}
+
+/** The calendar day in New York of an instant, as the UTC-midnight date key the daily rows use. */
+function easternDayKey(t: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(t)
+  const get = (type: string) => Number(parts.find((x) => x.type === type)?.value)
+  return Date.UTC(get('year'), get('month') - 1, get('day'))
+}
 
 /** One generated NFL week for a player. `skill` shifts the mean. */
 function nflWeekStats(position: string, rng: () => number, skill: number): Record<string, number> {
@@ -198,6 +213,82 @@ function mlbBoxLine(position: string, rng: () => number, skill: number, dayIndex
   return { group: 'batting', stats: { AB: 4, H: single + double + hr, '1B': single, '2B': double, '3B': 0, HR: hr, R: int(rng, 0, 2), RBI: int(rng, 0, 3), BB: int(rng, 0, 1), SO: int(rng, 0, 2), SB: rng() < 0.1 ? 1 : 0 } }
 }
 
+/** One generated NBA game line, in the feed's field names: four games a week, every other day. */
+function nbaBoxLine(position: string, rng: () => number, skill: number, dayIndex: number): { stats: Record<string, number> } | null {
+  if (dayIndex % 2 === 1) return null
+  const big = position === 'C' || position === 'PF'
+  const threes = big ? int(rng, 0, 1) : int(rng, 0, 5)
+  const fgm = int(rng, 3, 11) + Math.floor(skill / 5)
+  const ftm = int(rng, 0, 6)
+  return {
+    stats: {
+      points: fgm * 2 + threes + ftm,
+      total_rebounds: big ? int(rng, 5, 14) : int(rng, 1, 7),
+      assists: big ? int(rng, 0, 4) : int(rng, 2, 11),
+      steals: int(rng, 0, 3),
+      blocks: big ? int(rng, 0, 4) : int(rng, 0, 1),
+      turnovers: int(rng, 0, 5),
+      three_points_made: threes,
+      field_goals_made: fgm,
+      field_goals_attempted: fgm + int(rng, 3, 10),
+      free_throws_made: ftm,
+      free_throws_attempted: ftm + int(rng, 0, 2),
+    },
+  }
+}
+
+/**
+ * One generated NHL game line, as the ingest stores it (`{ group, stats }` plus the goalie context
+ * `normalizedStatMapFor` adds). Skaters play three games a week; a goalie starts two.
+ */
+function nhlBoxLine(position: string, rng: () => number, skill: number, dayIndex: number): Record<string, unknown> | null {
+  if (position === 'G') {
+    if (dayIndex !== 1 && dayIndex !== 4) return null
+    const shots = int(rng, 22, 38)
+    const allowed = rng() < 0.12 ? 0 : int(rng, 1, 5)
+    const won = rng() < 0.5 + skill / 100
+    return {
+      group: 'goalies',
+      gameFinal: true,
+      teamGoaliesUsed: 1,
+      teamWon: won,
+      stats: { saves: shots - allowed, goals_allowed: allowed, shots_against: shots, time_on_ice_minutes: 60, ...(won ? {} : { loss: 1 }) },
+    }
+  }
+  if (dayIndex !== 0 && dayIndex !== 2 && dayIndex !== 5) return null
+  const defense = position === 'D'
+  return {
+    group: 'skaters',
+    stats: {
+      goals: rng() < (defense ? 0.1 : 0.3) + skill / 200 ? 1 : 0,
+      assists: int(rng, 0, defense ? 1 : 2),
+      plus_minus: int(rng, -2, 2),
+      shots_on_goal: int(rng, 0, defense ? 3 : 5),
+      hits: int(rng, 0, 4),
+      blocks: defense ? int(rng, 0, 4) : int(rng, 0, 1),
+      penalty_minutes: rng() < 0.2 ? 2 : 0,
+      power_play_goals: 0,
+      power_play_assists: rng() < 0.15 ? 1 : 0,
+    },
+  }
+}
+
+/** A daily sport's generated line for one day, and the normalizer the ingest runs on it. */
+function dailyBoxLine(sport: SimSport, position: string, rng: () => number, skill: number, dayIndex: number): unknown | null {
+  if (sport === 'MLB') return mlbBoxLine(position, rng, skill, dayIndex)
+  if (sport === 'NBA') return nbaBoxLine(position, rng, skill, dayIndex)
+  return nhlBoxLine(position, rng, skill, dayIndex)
+}
+
+function dailyNormalizer(sport: SimSport): (raw: unknown) => NormalizedGameStats {
+  if (sport === 'MLB') return normalizeMlbGameStats
+  if (sport === 'NBA') return normalizeNbaGameStats
+  return normalizeNhlGameStats
+}
+
+const DAILY_BENCH: Partial<Record<SimSport, string[]>> = { MLB: ['OF', 'SP'], NBA: ['PG', 'C'], NHL: ['C', 'G'] }
+const FREE_AGENT_POSITION: Record<SimSport, string> = { NFL: 'WR', MLB: 'OF', NBA: 'PG', NHL: 'C' }
+
 export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: FullSeasonSimInput): Promise<FullSeasonSimResult> {
   db.reset()
   const p = db.client
@@ -207,6 +298,8 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
   const extraMatchup = input.extraMatchup ?? null
   const tieWeeks = input.tieWeeks ?? []
   const tiePlayoffs = input.tiePlayoffs ?? false
+  const daily = isDailySport(sport)
+  // The first season each daily sport's opener is recorded for (dailySportSeasonStarts.ts).
   const seasonYear = sport === 'MLB' ? 2027 : 2026
   const leagueId = `sim-${sport.toLowerCase()}-${teamCount}${medianGame ? '-median' : ''}${extraMatchup?.enabled ? '-extra' : ''}`
   const commissionerId = 'user-1'
@@ -215,8 +308,8 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
   const shape = redraftPlayoffShapeFor({ sport, leagueSize: teamCount, leagueType: 'redraft' })
   if (!shape) throw new Error(`no playoff shape for ${sport} ${teamCount}`)
   const concept =
-    sport === 'MLB'
-      ? buildDailyRedraftSettingsSnapshot({ sport, teamCount })
+    daily
+      ? buildDailyRedraftSettingsSnapshot({ sport: sport as Parameters<typeof buildDailyRedraftSettingsSnapshot>[0]['sport'], teamCount })
       : buildRedraftSettingsSnapshot({ sport, teamCount } as Parameters<typeof buildRedraftSettingsSnapshot>[0])
   const defaults = getDefaultLeagueSettings(sport) as unknown as Row
   let settings: Row = {
@@ -226,7 +319,7 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
     standings_tiebreakers: defaults.standings_tiebreakers,
   }
   settings = applyPlayoffShapeToSettings(settings, shape)
-  if (sport === 'MLB') settings.sportConfig = { ...(settings.sportConfig ?? {}), lineupLockType: 'daily', dailyLineupsEnabled: true }
+  if (daily) settings.sportConfig = { ...(settings.sportConfig ?? {}), lineupLockType: 'daily', dailyLineupsEnabled: true }
   if (extraMatchup) settings[EXTRA_MATCHUP_SETTINGS_KEY] = extraMatchup
 
   const league = await p.league.create({
@@ -304,13 +397,16 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
   rosterIds.forEach((rosterId, i) => {
     skillByRoster.set(rosterId, int(rngFor(seed, `skill:${i}`), 0, 20))
     const board = starterSlots.map((slot, k) => ({ playerId: `${sport}-t${i + 1}-p${k + 1}`, position: positionFor(sport, slot), slotType: slot }))
-    const benchPositions = sport === 'MLB' ? ['OF', 'SP'] : ['WR', 'RB']
+    const benchPositions = DAILY_BENCH[sport] ?? ['WR', 'RB']
     benchPositions.slice(0, benchCount).forEach((position, k) =>
       board.push({ playerId: `${sport}-t${i + 1}-bn${k + 1}`, position, slotType: 'BN' }),
     )
     boards.set(rosterId, board)
   })
 
+  // The draft happens before opening day. Left to the default (now), a daily sport whose season spans the
+  // real calendar would have no players for the days before the test ran (NHL scored nothing for four weeks).
+  const draftedAt = daily ? new Date(resolveDailySportWeekWindow(sport, seasonYear, 1)!.start.getTime() - 7 * DAY_MS) : undefined
   const picks: FullSeasonSimResult['draft']['picks'] = []
   const pickedByRoster = new Map<string, number>()
   for (let overall = 1; overall <= rounds * teamCount; overall++) {
@@ -330,6 +426,7 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
         sport,
         slotType: player.slotType,
         acquisitionType: 'drafted',
+        ...(draftedAt ? { addedAt: draftedAt } : {}),
       },
     })
   }
@@ -365,12 +462,12 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
   // Free agents for the waiver wire.
   const freeAgents = Array.from({ length: regularSeasonWeeks * 2 }, (_, i) => ({
     playerId: `${sport}-fa${i + 1}`,
-    position: sport === 'MLB' ? 'OF' : 'WR',
+    position: FREE_AGENT_POSITION[sport],
   }))
 
   /** Write a week of stats for every rostered player (and the free agents). */
   const writeWeekStats = async (week: number) => {
-    const window = sport === 'MLB' ? resolveDailySportWeekWindow(sport, seasonYear, week) : null
+    const window = daily ? resolveDailySportWeekWindow(sport, seasonYear, week) : null
     // Everyone rostered at any point of the week: a player dropped mid-week still played his games.
     const players = db
       .table('redraftRosterPlayer')
@@ -378,7 +475,7 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
     const ids = new Map<string, { position: string; rosterId: string | null }>()
     for (const pl of players) ids.set(pl.playerId, { position: pl.position, rosterId: pl.rosterId })
     for (const fa of freeAgents) if (!ids.has(fa.playerId)) ids.set(fa.playerId, { position: fa.position, rosterId: null })
-    if (sport === 'MLB' && !window) throw new Error(`no MLB week window for week ${week}`)
+    if (daily && !window) throw new Error(`no ${sport} week window for week ${week}`)
     const tie = tieWeeks.includes(week) || (tiePlayoffs && week >= shape.playoffStartWeek)
     for (const [playerId, info] of ids) {
       // A tie week: the line depends on the position alone, so every team's lineup scores the same.
@@ -388,18 +485,19 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
         await p.playerWeeklyScore.create({ data: { playerId, week, season: seasonYear, sport, stats: nflWeekStats(info.position, rng, skill), isFinalized: true } })
         continue
       }
+      const normalize = dailyNormalizer(sport)
       const lines: unknown[] = []
       for (let d = 0; d < 7; d++) {
-        const line = mlbBoxLine(info.position, rng, skill, d)
+        const line = dailyBoxLine(sport, info.position, rng, skill, d)
         if (!line) continue
         lines.push(line)
-        const normalized = normalizeMlbGameStats(line).stats
+        const normalized = normalize(line).stats
         await p.playerDailyScore.create({
           data: { playerId, sport, season: seasonYear, scoringDay: new Date(window!.start.getTime() + d * DAY_MS), stats: normalized, isFinalized: true },
         })
       }
       await p.playerWeeklyScore.create({
-        data: { playerId, week, season: seasonYear, sport, stats: aggregateWeeklyStats(lines, normalizeMlbGameStats).stats, isFinalized: true },
+        data: { playerId, week, season: seasonYear, sport, stats: aggregateWeeklyStats(lines, normalize).stats, isFinalized: true },
       })
     }
   }
@@ -423,8 +521,8 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
     }
     const window = resolveDailySportWeekWindow(sport, seasonYear, week)!
     const dailyRows = db.table('redraftDailyLineup').filter((r) => r.rosterId === rosterId)
-    // The Eastern calendar day of an instant (the MLB season is all daylight time: UTC-4).
-    const easternDay = (t: Date) => Math.floor((t.getTime() - 4 * 3_600_000) / DAY_MS) * DAY_MS
+    // The Eastern calendar day of an instant. NBA and NHL seasons cross both daylight-saving changes.
+    const easternDay = easternDayKey
     for (const pl of players) {
       for (let d = 0; d < 7; d++) {
         const day = new Date(window.start.getTime() + d * DAY_MS)
@@ -485,20 +583,28 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
         vi.useFakeTimers({ toFake: ['Date'] })
         vi.setSystemTime(new Date(window.start.getTime() + 3 * DAY_MS + 16 * 3_600_000)) // Thursday 12:00 ET
       }
+      // NBA / NHL: claims settle the evening before the week opens. Their seasons span the real
+      // calendar, so a wall-clock run would land a claim mid-season and make the result date-dependent.
+      const settleBeforeWeek = sport === 'NBA' || sport === 'NHL'
+      if (settleBeforeWeek) {
+        const window = resolveDailySportWeekWindow(sport, seasonYear, week)!
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date(window.start.getTime() - 6 * 3_600_000))
+      }
       try {
         waiverResults = await processWaiverWindow(leagueId, seasonId, new Date())
       } finally {
-        if (midWeekStarterDrop) vi.useRealTimers()
+        if (midWeekStarterDrop || settleBeforeWeek) vi.useRealTimers()
       }
     }
 
-    // MLB: a mid-week daily lineup change — a bench hitter starts at UTIL from day 4, the UTIL starter sits.
-    if (sport === 'MLB') {
+    // Daily sports: a mid-week lineup change — a bench player starts at UTIL from day 4, the UTIL starter sits.
+    if (daily) {
       const window = resolveDailySportWeekWindow(sport, seasonYear, week)!
       const rosterId = rosterIds[week % teamCount]!
       const roster = db.table('redraftRosterPlayer').filter((r) => r.rosterId === rosterId && r.droppedAt == null)
       const util = roster.find((r) => r.slotType === 'UTIL')
-      const benchHitter = roster.find((r) => /^bn$|^bench$/i.test(String(r.slotType)) && !PITCHERS.has(String(r.position)))
+      const benchHitter = roster.find((r) => /^bn$|^bench$/i.test(String(r.slotType)) && !NOT_UTIL.has(String(r.position)))
       if (util && benchHitter) {
         const day = new Date(window.start.getTime() + 3 * DAY_MS)
         await p.redraftDailyLineup.createMany({

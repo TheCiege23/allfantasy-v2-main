@@ -75,6 +75,12 @@ export function planBestLineup(args: {
   playerData: unknown
   players: Record<string, LineupPlayerInfo | undefined>
   isLocked: (playerId: string) => boolean
+  /**
+   * Players whose team has no game this week. Each is projected at ZERO, so he is benched whenever a
+   * bench player can fill his slot — the weekly projection does not reliably say 0 for a bye (a season
+   * rate, or none), and a bye player kept in the lineup scores nothing (phase 6, 2026-10-27).
+   */
+  onBye?: (playerId: string) => boolean
 }): LineupPlan {
   const { slots, playerData, isLocked } = args
   if (slots.length === 0) return { kind: 'skip', reason: 'no_slots' }
@@ -87,7 +93,8 @@ export function planBestLineup(args: {
   const players: Record<string, LineupPlayerInfo | undefined> = {}
   for (const id of [...lists.starters, ...lists.bench].filter(Boolean)) {
     const p = args.players[id]
-    players[id] = { position: (rows.get(id)?.position as string | undefined) ?? p?.position ?? null, projectedPoints: p?.projectedPoints ?? null }
+    const projectedPoints = args.onBye?.(id) ? 0 : p?.projectedPoints ?? null
+    players[id] = { position: (rows.get(id)?.position as string | undefined) ?? p?.position ?? null, projectedPoints }
   }
 
   const open = [...lists.starters, ...lists.bench].filter((id) => id && !isLocked(id))

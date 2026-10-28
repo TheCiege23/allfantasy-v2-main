@@ -42,8 +42,14 @@ import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
+import { parsePickTradeDeadline, PICK_TRADE_DEADLINE_KEY } from '@/lib/trade-deadline/pickTradeDeadline'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/league-log/leagueLog'
 import { ELIMINATED_LINEUP_RULE_KEY, parseEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLineups'
+import { IR_AUTO_MOVE_KEY, parseIrAutoMoveRule } from '@/lib/ir-activation/irAutoMove'
+import { ORPHAN_AUCTION_KEY } from '@/lib/orphan-auction/orphanAuction'
+import { parsePickTermsRule, PICK_TERMS_KEY, PICK_TERMS_RULE_KEY } from '@/lib/league-trade-engine/pickTerms'
+import { parseTaxiStealingRule, readTaxiStealingRule, TAXI_STEAL_CLAIMS_KEY, TAXI_STEALING_KEY } from '@/lib/taxi/taxiStealing'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
@@ -75,6 +81,16 @@ import {
   isTaxiIncreaseRefused,
 } from '@/lib/league-creation/prospectStashPolicy'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import {
+  PLAYOFF_SERIES_SETTINGS_KEY,
+  parsePlayoffSeriesLengths,
+  playoffSeriesChangeNeedsPlan,
+  playoffSeriesNeedsPlan,
+  playoffSeriesSettingsValue,
+  playoffSeriesSportSupported,
+  readPlayoffSeriesLengths,
+  samePlayoffSeriesLengths,
+} from '@/lib/playoff-runtime/playoffSeries'
 import { MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY } from '@/lib/redraft/medianGame'
 import { medianGameChangeRefusal } from '@/lib/redraft/medianGameSwitch'
 import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
@@ -105,6 +121,8 @@ import {
 } from '@/lib/redraft/lineupModeSwitch'
 import { gamesCountSportConfigError } from '@/lib/redraft/gamesCount'
 import { gamesCountChangeRefusal, gamesCountSettingOf, keepGamesCountFields } from '@/lib/redraft/gamesCountSwitch'
+import { ruleSnapshotFromLeague } from '@/lib/league-rules-explainer/snapshot'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -538,12 +556,13 @@ export async function executeLeagueSettingsPatch(
    * `settingsMerge` can write. Refused only when the value CHANGES past the cap, so re-saving a league
    * as it stands never fails.
    */
-  if (regularSeasonCapApplies({ leagueType: typeof body.leagueType === 'string' ? body.leagueType : league.leagueType, sport: body.sport ?? league.sport })) {
+  const capSport = body.sport ?? league.sport
+  if (regularSeasonCapApplies({ leagueType: typeof body.leagueType === 'string' ? body.leagueType : league.leagueType, sport: capSport })) {
     if (body.playoffStartWeek != null && Number(body.playoffStartWeek) !== league.playoffStartWeek) {
-      const refusal = playoffStartWeekCapRefusal(body.playoffStartWeek)
+      const refusal = playoffStartWeekCapRefusal(body.playoffStartWeek, capSport)
       if (refusal) return jsonError(refusal, 400)
     }
-    const mergeRefusal = settingsMergeCapRefusal(body.settingsMerge, league.settings)
+    const mergeRefusal = settingsMergeCapRefusal(body.settingsMerge, league.settings, capSport)
     if (mergeRefusal) return jsonError(mergeRefusal, 400)
   }
 
@@ -607,6 +626,50 @@ export async function executeLeagueSettingsPatch(
       if (inPlayoffs) return jsonError('Championship length cannot change while the playoffs are being played.', 409)
     }
     championshipLengthToStore = n
+  }
+
+  /*
+   * Best-of-N playoff series (lib/playoff-runtime/playoffSeries.ts): `playoffSeriesLengths` is one
+   * length per round, each 1, 3, 5 or 7; null or all-1 turns series off (today's cumulative rounds).
+   *  - Native NBA / NHL / MLB redraft leagues only (400 elsewhere) — turning it OFF is never refused.
+   *  - Any N > 1 is AF Commissioner (403 without the plan), checked only when the lengths CHANGE: a
+   *    lapsed plan keeps the series it set and can always turn series off, never set a new one.
+   *  - Refused (409) while the playoffs are being played: the scorer reads it live, and a series
+   *    under way must finish as configured.
+   *  - Fit-checked below with the rest of the playoff window (a best-of-5 round is five weeks).
+   * `settingsMerge` would write `playoff_series` around all of that, so it is refused there.
+   */
+  {
+    const merge = body.settingsMerge
+    if (merge && typeof merge === 'object' && !Array.isArray(merge) && PLAYOFF_SERIES_SETTINGS_KEY in merge) {
+      return jsonError('Set playoff series lengths with playoffSeriesLengths, not settingsMerge.', 400)
+    }
+  }
+  let playoffSeriesToStore: { value: number[] | null } | null = null
+  if (body.playoffSeriesLengths !== undefined) {
+    const parsed = parsePlayoffSeriesLengths(body.playoffSeriesLengths)
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    const currentSeries = readPlayoffSeriesLengths(league.settings)
+    if (!samePlayoffSeriesLengths(parsed.value, currentSeries)) {
+      if (playoffSeriesNeedsPlan(parsed.value)) {
+        const leagueType = String(league.leagueType ?? 'redraft').trim().toLowerCase()
+        if (!isNativePlatform(league.platform) || !playoffSeriesSportSupported(league.sport) || leagueType !== 'redraft') {
+          return jsonError('Playoff series are available for AllFantasy NBA, NHL and MLB redraft leagues.', 400)
+        }
+      }
+      if (playoffSeriesChangeNeedsPlan(parsed.value, currentSeries) && !hasSub) {
+        return NextResponse.json(
+          { error: 'Best-of-3, 5 and 7 playoff series are part of AF Commissioner.', code: 'PLAYOFF_SERIES_REQUIRES_AF_COMMISSIONER' },
+          { status: 403 },
+        )
+      }
+      const inPlayoffs = await prisma.redraftSeason.findFirst({
+        where: { leagueId, status: REDRAFT_SEASON_STATUS.PLAYOFFS },
+        select: { id: true },
+      })
+      if (inPlayoffs) return jsonError('Playoff series lengths cannot change while the playoffs are being played.', 409)
+      playoffSeriesToStore = { value: parsed.value }
+    }
   }
 
   /*
@@ -733,6 +796,7 @@ export async function executeLeagueSettingsPatch(
   if (championshipLengthToStore != null && championshipLengthToStore !== (readChampionshipLength(league.settings) ?? 1)) {
     fitChange.championshipLength = championshipLengthToStore
   }
+  if (playoffSeriesToStore) fitChange.seriesLengths = playoffSeriesToStore.value
   if (isNativePlatform(league.platform)) {
     const teams = changedNumber(body.playoffTeams, league.playoffTeams)
     const start = changedNumber(body.playoffStartWeek, league.playoffStartWeek)
@@ -794,6 +858,21 @@ export async function executeLeagueSettingsPatch(
     ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
   }
 
+  // A separate deadline for pick trades (lib/trade-deadline/pickTradeDeadline.ts) — dynasty-family
+  // leagues only, where the trade gates read it; anywhere else a stored value would do nothing. Free.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && PICK_TRADE_DEADLINE_KEY in merge) {
+    const parsed = parsePickTradeDeadline((merge as Record<string, unknown>)[PICK_TRADE_DEADLINE_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (!isDynastyFamilyLeague(league)) return jsonError('A separate pick trade deadline is for dynasty leagues.', 400)
+    ;(merge as Record<string, unknown>)[PICK_TRADE_DEADLINE_KEY] = parsed.value
+  }
+
+  // The orphan auction (lib/orphan-auction) is state, not a setting: its assets, bids and result are
+  // written only by its own service, so a settings save could otherwise rewrite who won what.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && ORPHAN_AUCTION_KEY in merge) {
+    return jsonError('The orphan auction is run from the Commissioner Hub, not saved as a setting.', 400)
+  }
+
   // Lineup minimums for eliminated teams (lib/eliminated-lineups) — an AF Commissioner rule. Stored only
   // in the shape the reader knows, so a malformed value can never read as "on"; switching it off is free.
   if (merge && typeof merge === 'object' && !Array.isArray(merge) && ELIMINATED_LINEUP_RULE_KEY in merge) {
@@ -801,6 +880,38 @@ export async function executeLeagueSettingsPatch(
     if (!parsed.ok) return jsonError(parsed.error, 400)
     if (parsed.value.enabled && !hasSub) return jsonError('Lineup minimums for eliminated teams are part of the AF Commissioner plan.', 403)
     ;(merge as Record<string, unknown>)[ELIMINATED_LINEUP_RULE_KEY] = parsed.value
+  }
+
+  // IR auto-move (lib/ir-activation) — an AF Commissioner rule, stored only in the shape the reader
+  // knows; switching it off is free.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && IR_AUTO_MOVE_KEY in merge) {
+    const parsed = parseIrAutoMoveRule((merge as Record<string, unknown>)[IR_AUTO_MOVE_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value.enabled && !hasSub) return jsonError('IR auto-move is part of the AF Commissioner plan.', 403)
+    ;(merge as Record<string, unknown>)[IR_AUTO_MOVE_KEY] = parsed.value
+  }
+
+  // Conditional and protected picks (lib/league-trade-engine/pickTerms.ts) — an AF Commissioner rule;
+  // switching it off is free. The terms themselves are written only by a settled trade.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && PICK_TERMS_KEY in merge) {
+    return jsonError('Pick terms are agreed in a trade, not saved as a setting.', 400)
+  }
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && PICK_TERMS_RULE_KEY in merge) {
+    const parsed = parsePickTermsRule((merge as Record<string, unknown>)[PICK_TERMS_RULE_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value.enabled && !hasSub) return jsonError('Conditional and protected picks are part of the AF Commissioner plan.', 403)
+    ;(merge as Record<string, unknown>)[PICK_TERMS_RULE_KEY] = parsed.value
+  }
+  // Taxi stealing (lib/taxi/taxiStealing.ts) — an AF Commissioner rule, stored only in the shape the
+  // reader knows; switching it off is free. Its claims are state written only by its own service.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TAXI_STEAL_CLAIMS_KEY in merge) {
+    return jsonError('Taxi steal claims are made on the Waivers page, not saved as a setting.', 400)
+  }
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TAXI_STEALING_KEY in merge) {
+    const parsed = parseTaxiStealingRule((merge as Record<string, unknown>)[TAXI_STEALING_KEY], readTaxiStealingRule(league.settings))
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value.enabled && !hasSub) return jsonError('Taxi stealing is part of the AF Commissioner plan.', 403)
+    ;(merge as Record<string, unknown>)[TAXI_STEALING_KEY] = parsed.value
   }
 
   // Who may read the league log (lib/league-log/leagueLog.ts). A value the reader does not know would
@@ -1149,6 +1260,16 @@ export async function executeLeagueSettingsPatch(
     updatedFieldNames.push('championship_length')
   }
 
+  if (playoffSeriesToStore) {
+    const { [PLAYOFF_SERIES_SETTINGS_KEY]: _previousSeries, ...rest } = await readCurrentLeagueSettings(leagueId)
+    const value = playoffSeriesSettingsValue(playoffSeriesToStore.value)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: (value ? { ...rest, [PLAYOFF_SERIES_SETTINGS_KEY]: value } : rest) as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(PLAYOFF_SERIES_SETTINGS_KEY)
+  }
+
   if (thirdPlaceGameToStore != null) {
     const prev = await readCurrentLeagueSettings(leagueId)
     const prevStructure =
@@ -1384,6 +1505,19 @@ export async function executeLeagueSettingsPatch(
     })
   }
 
+  /*
+   * Before/after for the rules this save changed, for the league home's "What changed" card
+   * (lib/league-rules-explainer). Only the explainer's own snapshot keys — non-secret league rules a
+   * member can already read — never the request body. Computed from the row read BEFORE the writes
+   * and the row read after them, with the same readers the rules popup uses.
+   */
+  let ruleChanges: ReturnType<typeof diffRuleSnapshots> = []
+  try {
+    if (fresh) ruleChanges = diffRuleSnapshots(ruleSnapshotFromLeague(league), ruleSnapshotFromLeague(fresh))
+  } catch (e) {
+    console.warn('[executeLeagueSettingsPatch] rule change diff', e instanceof Error ? e.message : 'unknown error')
+  }
+
   void import('@/lib/league-events/publisher')
     .then(({ publishLeagueFanoutEvent }) =>
       publishLeagueFanoutEvent({
@@ -1399,6 +1533,8 @@ export async function executeLeagueSettingsPatch(
         meta: {
           section: patchOptions?.section ?? null,
           updatedFields: [...new Set(updatedFieldNames)].slice(0, 40),
+          actorUserId,
+          ...(ruleChanges.length ? { ruleChanges } : {}),
         },
       }),
     )

@@ -18,6 +18,8 @@
  *   inactive managers    commissioners see which teams are managed or suggested; a member is told
  *                        only that their own lineup is being set
  *   eliminated lineups   every member: the league's lineup rule for teams out of the race
+ *   IR auto-move         every member: whether activated IR players are moved to the bench
+ *   orphan auction       every member: the open auction's assets, rules and closing time, never bids
  *   dynasty offseason    every member: the rookie draft, taxi moves and next season's dues; the
  *                        commissioner is also told what is left in the rollover wizard
  *
@@ -81,6 +83,10 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
         readPayoutsView(leagueId, request.userId).catch(() => null),
       ])
       const offseason = await this.dynastyOffseason(leagueId, request.userId, league, commissioner)
+      const { readIrAutoMoveActive } = await import('@/lib/ir-activation/irAutoMoveService')
+      const irAutoMove = await readIrAutoMoveActive(leagueId).catch(() => false)
+      const { readOrphanAuctionForChimmy } = await import('@/lib/orphan-auction/orphanAuctionService')
+      const orphanAuction = await readOrphanAuctionForChimmy(leagueId).catch(() => null)
       const pr = payoutView?.ok && payoutView.native ? payoutView.result : null
       const payouts: LeagueOfficeInput['payouts'] = pr && payoutView?.ok
         ? {
@@ -151,6 +157,8 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
         log: log?.ok && !log.hidden ? log.entries.map((e) => ({ at: e.at, title: e.title, detail: e.detail })) : null,
         payouts,
         offseason,
+        irAutoMove,
+        orphanAuction,
       })
       return done(summary ? { leagueId, viewerRole: commissioner ? 'commissioner' : 'member', summary } : null)
     } catch (err) {

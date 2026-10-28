@@ -31,7 +31,7 @@ export const SLEEPER_POOL_TABLE_COLUMNS: readonly (ColumnSpec & { statLabel?: st
   { key: 'rk', label: 'RK', width: 44, align: 'right', title: 'Current rank by selected sort (defaults to ADP rank)' },
   { key: 'player', label: 'PLAYER', width: 240, align: 'left', title: 'Player — click to sort alphabetically' },
   { key: 'adp', label: 'ADP', width: 60, align: 'right', title: 'Average Draft Position', statLabel: 'ADP' },
-  { key: 'aiAdp', label: 'AI ADP', width: 64, align: 'right', title: 'AllFantasy AI Draft Position', statLabel: 'AI ADP' },
+  { key: 'afAdp', label: 'AF ADP', width: 66, align: 'right', title: 'AllFantasy ADP — market ADP blended with imported-league and AllFantasy drafts', statLabel: 'AF ADP' },
   { key: 'bye', label: 'BYE', width: 44, align: 'right', title: 'NFL bye week', statLabel: 'bye week' },
   { key: 'pts', label: 'PTS', width: 60, align: 'right', title: 'Total fantasy points (season)', statLabel: 'fantasy points' },
   { key: 'avg', label: 'AVG', width: 56, align: 'right', title: 'Fantasy points per game', statLabel: 'fantasy points per game' },

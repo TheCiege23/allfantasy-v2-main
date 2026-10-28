@@ -8,6 +8,7 @@ import { postWeeklyRecap } from './leagueChatPoster'
 import { isCouncilReadComplete } from './survivorRevealGate'
 import { buildSurvivorEpisode } from './survivorEpisode'
 import { latestConfessional } from './survivorConfessionals'
+import { readSurvivorStoryMode } from './survivorStoryMode'
 
 export async function generateAndPostWeeklyRecap(
   leagueId: string,
@@ -26,8 +27,10 @@ export async function generateAndPostWeeklyRecap(
     select: { eliminatedName: true, eliminatedUserId: true, attendingTribeId: true, idolsPlayed: true, isTie: true, isRevealed: true, revealStartsAt: true, revealStep: true, revealSequence: true },
   })
   // A recap never names a voted-out manager before the council read has finished.
-  const league = found.length ? await prisma.league.findUnique({ where: { id: leagueId }, select: { survivorRevealMode: true } }) : null
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { survivorRevealMode: true, settings: true } })
   const councils = found.filter(row => isCouncilReadComplete(row, league?.survivorRevealMode))
+  // The commissioner's story mode (AF Supreme): tone, confessionals, and whether chat gets the post.
+  const story = readSurvivorStoryMode(league?.settings)
 
   // Get top scorer
   const topScore = await prisma.survivorWeeklyScore.findFirst({
@@ -97,7 +100,7 @@ export async function generateAndPostWeeklyRecap(
     ? await prisma.survivorTribe.findMany({ where: { id: { in: [...totalsByTribe.keys()] } }, select: { id: true, name: true } })
     : []
   // A manager voted out this week gets the last word: their latest confessional, if any.
-  const confessionals = (await Promise.all(councils.map(async council => {
+  const confessionals = !story.confessionals ? [] : (await Promise.all(councils.map(async council => {
     if (!council.eliminatedUserId || !council.eliminatedName) return null
     const text = await latestConfessional(leagueId, council.eliminatedUserId).catch(() => null)
     return text ? { name: council.eliminatedName, text } : null
@@ -119,6 +122,7 @@ export async function generateAndPostWeeklyRecap(
     remaining: typeof remaining === 'number' ? remaining : null,
     votedOutSoFar: typeof earlierEliminations === 'number' ? earlierEliminations + councils.length : null,
     confessionals,
+    tone: story.tone,
   })
 
   const recap = {
@@ -133,7 +137,8 @@ export async function generateAndPostWeeklyRecap(
     topScore: topScore?.finalScore,
   }
 
-  await postWeeklyRecap(leagueId, week, recap)
+  // Off: no chat post, but the episode is still stored below for the Episodes page and the watch page.
+  if (story.postToChat) await postWeeklyRecap(leagueId, week, recap)
 
   await prisma.survivorAuditEntry.upsert({
     where: { id: `survivor-weekly-recap-audit:${leagueId}:${week}` },

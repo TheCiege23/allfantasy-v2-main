@@ -16,6 +16,7 @@ import {
 } from '@/lib/guillotine/lateStartSeats'
 import { getSurvivorDraftStartReadiness } from './survivorDraftStartReadiness'
 import { notifySurvivorCommissionerOnce, SURVIVOR_SEATS_ALERT_LEAD_MS } from './survivorCommissionerAlerts'
+import { reportSurvivorAutomationError } from './survivorAutomationReporting'
 
 export interface ScheduledSurvivorDraftSummary {
   scanned: number
@@ -100,10 +101,13 @@ export async function startScheduledSurvivorDrafts(now: Date = new Date()): Prom
         summary.skipped++
         await noticeCastIncompleteOnce(leagueId, locked.value.error).catch(() => {})
       } else {
-        summary.errors.push({ leagueId, error: locked.value.error ?? locked.value.reason })
+        const failure = locked.value.error ?? locked.value.reason
+        summary.errors.push({ leagueId, error: failure })
+        reportSurvivorAutomationError(new Error(`Scheduled Survivor draft did not start: ${failure}`), { job: 'draft_start', leagueId })
       }
     } catch (error) {
       summary.errors.push({ leagueId, error: error instanceof Error ? error.message : String(error) })
+      reportSurvivorAutomationError(error, { job: 'draft_start', leagueId })
     }
   }
   // After the due drafts: a seat warning for tomorrow's drafts never delays today's start.

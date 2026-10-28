@@ -910,7 +910,10 @@ export async function fetchFantraxLeagueForImport(
       scoringType: sport === 'MLB' || splitSeason ? String(sourceSettings?.scoringSystem?.type ?? 'unknown') : leagueRecord.isDevy ? 'devy' : null,
       rosterPositions: proSlots ? proSlots.slots : buildRosterPositionCounts(),
       /* The real per-team size, so the mapper stops deriving it from the pool. */
-      rosterSize: medianRosterSize(rosterPlayers),
+      rosterSize: medianRosterSize(rosterPlayers) ?? (() => {
+        const total = sourceSettings?.rosterInfo?.maxTotalPlayers
+        return typeof total === 'number' && Number.isSafeInteger(total) && total > 0 ? total : null
+      })(),
       scoringRules: liveScoringRules.map((r) => ({ statKey: r.stat_key, points: r.points_value })),
       raw: {
         isDevy: leagueRecord.isDevy,

@@ -82,7 +82,7 @@ const input = (over: Partial<DynastyRolloverInput> = {}): DynastyRolloverInput =
   champion: 'Aces',
   rookieDraft: 'none',
   draftOrder: { source: 'max_pf', finalOrderSaved: false },
-  taxi: { slots: 3, yearsLimit: 2, allowNonRookies: false, toBench: 2, unverified: 1 },
+  taxi: { slots: 3, yearsLimit: 2, allowNonRookies: false, maxSeasons: 2, toBench: 2, unverified: 1 },
   contracts: null,
   dues: { enabled: true, amountDollars: 100, unpaidTeams: 0, setForNextSeason: false },
   schedule: { matchups: 0, weeks: 0 },
@@ -107,8 +107,8 @@ describe('the steps', () => {
     expect(states(input())).toEqual({
       season: 'done', draft_order: 'todo', taxi: 'todo', dues: 'optional', schedule: 'optional', start: 'todo',
     })
-    expect(states(input({ taxi: { slots: 3, yearsLimit: null, allowNonRookies: false, toBench: 0, unverified: 0 } })).taxi).toBe('done')
-    expect(states(input({ taxi: { slots: 0, yearsLimit: null, allowNonRookies: false, toBench: 0, unverified: 0 } })).taxi).toBe('optional')
+    expect(states(input({ taxi: { slots: 3, yearsLimit: null, allowNonRookies: false, maxSeasons: 2, toBench: 0, unverified: 0 } })).taxi).toBe('done')
+    expect(states(input({ taxi: { slots: 0, yearsLimit: null, allowNonRookies: false, maxSeasons: 2, toBench: 0, unverified: 0 } })).taxi).toBe('optional')
     expect(states(input({ dues: { enabled: true, amountDollars: 120, unpaidTeams: 0, setForNextSeason: true } })).dues).toBe('done')
     expect(states(input({ schedule: { matchups: 70, weeks: 14 } })).schedule).toBe('done')
   })
@@ -260,7 +260,7 @@ describe('the league read', () => {
       champion: 'Aces',
       rookieDraft: 'none',
       draftOrder: { source: 'live_order', finalOrderSaved: true },
-      taxi: { slots: 3, yearsLimit: 2, allowNonRookies: false, toBench: 1, unverified: 1 },
+      taxi: { slots: 3, yearsLimit: 2, allowNonRookies: false, maxSeasons: 2, toBench: 1, unverified: 1 },
       contracts: { active: 3, expiring: 2 },
       dues: { enabled: true, amountDollars: 100, unpaidTeams: 2, setForNextSeason: false },
       schedule: { matchups: 0, weeks: 17 },

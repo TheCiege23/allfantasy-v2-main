@@ -228,13 +228,30 @@ export async function consumeNativeFuturePicksForDraft(
   })
   if (rows.length === 0) return []
 
+  // Conditional and protected picks (./pickTerms.ts) settle here, on the order this draft seats:
+  // a protected pick stays, a conditional one may convey as another round. Imported lazily — the
+  // terms module reads this one.
+  const { settlePickTermsForDraft } = await import('./pickTermsService')
+  const overrides = await settlePickTermsForDraft(tx, {
+    leagueId: args.leagueId,
+    season: args.season,
+    rows,
+    slotOrder: args.slotOrder,
+    rounds: args.rounds,
+    draftSessionId: args.draftSessionId,
+    now: args.now ?? new Date(),
+  })
+
   const nameByRoster = new Map(args.slotOrder.map((e) => [e.rosterId, e.displayName]))
   const traded: TradedPickRecord[] = []
   for (const row of rows) {
-    if (row.currentOwnerId === row.originalRosterId || row.round > args.rounds) continue
+    const override = overrides.get(row.id)
+    if (override && 'skip' in override) continue
+    const round = override?.round ?? row.round
+    if (row.currentOwnerId === row.originalRosterId || round > args.rounds) continue
     if (!nameByRoster.has(row.originalRosterId) || !nameByRoster.has(row.currentOwnerId)) continue
     traded.push({
-      round: row.round,
+      round,
       originalRosterId: row.originalRosterId,
       previousOwnerName: nameByRoster.get(row.originalRosterId) ?? '',
       newRosterId: row.currentOwnerId,

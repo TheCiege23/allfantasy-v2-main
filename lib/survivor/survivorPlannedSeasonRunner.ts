@@ -21,10 +21,11 @@ import { ensureWeeklyCall, settleWeeklyCall } from './survivorWeeklyCall'
 import { generateAndPostWeeklyRecap } from './weeklyRecapGenerator'
 import { settleNbaTribeSitOutDeadline } from './SurvivorSitOutEngine'
 import { notifySurvivorCommissionerOnce, SURVIVOR_JURY_OVERDUE_MS, SURVIVOR_SCORES_OVERDUE_MS } from './survivorCommissionerAlerts'
-import { autoApplyPendingTribeRedraw, rebalanceTribesBeforeCouncil } from './survivorTribeRedrawDecision'
+import { autoApplyPendingTribeRedraw, rebalanceTribesBeforeCouncil, redrawTribesForSitOutBalance } from './survivorTribeRedrawDecision'
 import { dissolveSurpriseTribes, ensureSurpriseTribeWeek } from './survivorSurpriseTribes'
 import { loadWeekCouncilProgress } from './survivorWeekCouncilProgress'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
+import { reportSurvivorAutomationError } from './survivorAutomationReporting'
 
 export type PlannedWeekKind = 'opening' | 'elimination' | 'rest' | 'finale' | 'outside'
 
@@ -61,7 +62,12 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   if (kind === 'elimination' && normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown> | null).postMergeSurpriseTribeWeeks > 0) {
     await ensureSurpriseTribeWeek(leagueId, week, plan)
   }
-  const participation = await settleNbaTribeSitOutDeadline(leagueId, week, now)
+  let participation = await settleNbaTribeSitOutDeadline(leagueId, week, now)
+  // No fair NBA sit-out rotation exists for these tribes: redraw them (once a week) and settle again
+  // rather than wait for the commissioner.
+  if (participation === 'blocked' && (await redrawTribesForSitOutBalance(leagueId, week)).redrawn) {
+    participation = await settleNbaTribeSitOutDeadline(leagueId, week, now)
+  }
   if (participation === 'blocked') return 'awaiting_tribe_rebalance'
   if (participation === 'awaiting_schedule' || participation === 'before_deadline') return 'awaiting_tribe_sit_out_lock'
   await ensureVerifiedSlateChallenges(leagueId, week, plan.sport, ['pre_merge', 'post_swap'].includes(game.phase))
@@ -123,7 +129,7 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
       // A tribe-imbalance recommendation nobody answered gets its default, a random redraw, now:
       // the commissioner has had until this council to choose otherwise.
       await autoApplyPendingTribeRedraw(leagueId, week)
-      // A tribe left with one manager cannot vote anyone out: redraw or merge now rather than stall.
+      // A tribe of two or fewer cannot hold a real vote (two can only tie): redraw or merge now.
       await rebalanceTribesBeforeCouncil(leagueId, week)
       await tryAutomaticPhaseAdvance(leagueId)
       await triggerTribalOpen(leagueId)
@@ -207,6 +213,7 @@ export async function runPlannedSurvivorSeasonBatch(now = new Date()) {
     } catch (error) {
       failed++
       const message = error instanceof Error ? error.message : String(error)
+      reportSurvivorAutomationError(error, { job: 'season_runner', leagueId: league.id })
       await prisma.survivorGameState.updateMany({ where: { leagueId: league.id }, data: { lastError: message } }).catch(() => {})
       // The dashboard shows lastError, but nobody opens the dashboard to find out. Once a day.
       await notifySurvivorCommissionerOnce(league.id, 'automation_error', {

@@ -13,6 +13,8 @@ const db = vi.hoisted(() => ({
   rosters: [] as Array<{ playerData: unknown }>,
   // Soccer's per-match rows (`player_game_stats`), both seasons.
   matchRows: [] as Array<{ playerId: string; season: number; team: string; gameId: string; gameDate: Date; normalizedStatMap: unknown }>,
+  // `SportsPlayer` age rows, for a dynasty league's multi-season grade.
+  sportsPlayers: [] as Array<{ source: string; externalId: string; sleeperId: string | null; age: number | null }>,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -35,6 +37,7 @@ vi.mock('@/lib/prisma', () => ({
         db.games.filter((g) => (g.season == null || g.season === where.season) && g.startTime >= where.startTime.gte)),
     },
     playerIdentityMap: { findMany: vi.fn(async () => db.identities) },
+    sportsPlayer: { findMany: vi.fn(async () => db.sportsPlayers) },
     roster: { findMany: vi.fn(async () => db.rosters) },
     playerGameStat: {
       findFirst: vi.fn(async () => (db.matchRows.length ? { season: Math.max(...db.matchRows.map((r) => r.season)) } : null)),
@@ -69,6 +72,7 @@ beforeEach(() => {
   db.identities = []
   db.rosters = []
   db.matchRows = []
+  db.sportsPlayers = []
 })
 
 describe('loadSportPointsBase', () => {
@@ -111,11 +115,30 @@ describe('loadSportPointsBase', () => {
     expect(out.ctx.scoringBasis).toBe('league')
   })
 
-  it('refuses a category league and a dynasty league before reading anything', async () => {
+  it('refuses a category league and a keeper league before reading anything', async () => {
     const cat = await loadSportPointsBase({ sport: 'NBA', league: { id: 'L', settings: { scoring_mode: 'h2h_category' }, leagueType: 'redraft', leagueSize: 12 }, now: NOW })
     expect(cat).toMatchObject({ ok: false })
-    const dyn = await loadSportPointsBase({ sport: 'NBA', league: { id: 'L', settings: {}, leagueType: 'dynasty', leagueSize: 12 }, now: NOW })
-    expect(dyn).toMatchObject({ ok: false })
+    const kept = await loadSportPointsBase({ sport: 'NBA', league: { id: 'L', settings: {}, leagueType: 'keeper', leagueSize: 12 }, now: NOW })
+    expect(kept).toMatchObject({ ok: false, reason: expect.stringContaining('count this season only') })
+  })
+
+  it('loads an NBA dynasty league with each player’s age and the next rookie draft', async () => {
+    nbaPlayer('a', 'Alpha', 'C', { points: 40 })
+    nbaPlayer('b', 'Beta', 'C', { points: 30 })
+    nbaPlayer('c', 'Gamma', 'C', { points: 10 })
+    schedule(['T1', 'T2'], 10, null)
+    db.sportsPlayers = [
+      { source: 'rolling_insights', externalId: 'ri-a', sleeperId: null, age: 23 },
+      { source: 'rolling_insights', externalId: 'ri-b', sleeperId: null, age: 31 },
+    ]
+    const league = { id: 'L', settings: { scoring_mode: 'points' }, leagueType: 'dynasty', leagueSize: 2, season: 2026, status: 'in_season' }
+    const out = await loadSportPointsBase({ sport: 'NBA', league, now: NOW })
+    if (!out.ok) throw new Error(out.reason)
+    expect(out.ctx.dynasty?.ages).toEqual(new Map([['a', 23], ['b', 31]]))
+    expect(out.ctx.dynasty?.nextDraftYear).toBe(2027)
+    // A one-season league reads no ages at all.
+    const redraft = await loadSportPointsBase({ sport: 'NBA', league: { ...league, leagueType: 'redraft' }, now: NOW })
+    expect(redraft.ok && redraft.ctx.dynasty).toBeUndefined()
   })
 
   describe('soccer', () => {

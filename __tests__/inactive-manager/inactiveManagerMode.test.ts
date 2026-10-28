@@ -47,6 +47,25 @@ describe('planBestLineup', () => {
     expect(planBestLineup({ slots: SLOTS, playerData: pd, players: sparse, isLocked: unlocked })).toEqual({ kind: 'skip', reason: 'projections_missing' })
   })
 
+  it('benches a starter on bye even when his projection says he will score', () => {
+    // The best lineup on projections alone, except qb1 is on bye; the bench has a healthy QB.
+    const withQb = playerData([row('qb1', 'QB', 0), row('rb-good', 'RB', 1), row('wr-good', 'WR', 2)], [row('qb2', 'QB'), row('rb-hurt', 'RB')])
+    const p = proj({ qb1: 20, qb2: 11, 'rb-good': 12, 'wr-good': 14, 'rb-hurt': 0 })
+    expect(planBestLineup({ slots: SLOTS, playerData: withQb, players: p, isLocked: unlocked })).toEqual({ kind: 'skip', reason: 'already_best' })
+    const plan = planBestLineup({ slots: SLOTS, playerData: withQb, players: p, isLocked: unlocked, onBye: (id) => id === 'qb1' })
+    if (plan.kind !== 'set') throw new Error(`expected a lineup, got ${plan.reason}`)
+    expect(plan.changes).toEqual([{ slot: 'QB', in: 'qb2', out: 'qb1' }])
+  })
+
+  it('counts a bye player with no projection as known zero, not as missing', () => {
+    // Three of five open players have no projection: too many to guess — unless two are simply on bye.
+    const sparse = proj({ qb1: 20, 'rb-hurt': null, 'wr-meh': null, 'rb-good': 12, 'wr-good': null })
+    const onBye = (id: string) => id === 'rb-hurt' || id === 'wr-meh'
+    const plan = planBestLineup({ slots: SLOTS, playerData: pd, players: { ...sparse, 'wr-good': { projectedPoints: 14 } }, isLocked: unlocked, onBye })
+    if (plan.kind !== 'set') throw new Error(`expected a lineup, got ${plan.reason}`)
+    expect(plan.changes.map((c) => c.out).sort()).toEqual(['rb-hurt', 'wr-meh'])
+  })
+
   it('reports a league with no starter slots', () => {
     expect(planBestLineup({ slots: [], playerData: pd, players: pts, isLocked: unlocked })).toEqual({ kind: 'skip', reason: 'no_slots' })
   })

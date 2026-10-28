@@ -132,3 +132,29 @@ it('never reads a confessional for a council still being read', async () => {
   await generateAndPostWeeklyRecap('league-1', 7)
   expect(confessionals.latest).not.toHaveBeenCalled()
 })
+
+// Story mode (AF Supreme, the command center's Story mode controls) changes how the episode is told.
+it('tells the episode in the commissioner’s tone, and a league that never set one reads classic', async () => {
+  const { generateAndPostWeeklyRecap } = await import('@/lib/survivor/weeklyRecapGenerator')
+  await generateAndPostWeeklyRecap('league-1', 4)
+  expect(poster.postWeeklyRecap.mock.calls[0][2].episode.title).toBe('The Tribe Has Spoken')
+  poster.postWeeklyRecap.mockClear()
+  db.league.findUnique.mockResolvedValue({ survivorRevealMode: 'dramatic_sequential', settings: { survivorStoryMode: { tone: 'dramatic', confessionals: true, postToChat: true } } })
+  await generateAndPostWeeklyRecap('league-1', 4)
+  expect(poster.postWeeklyRecap.mock.calls[0][2].episode.title).toBe('The Torch Goes Dark')
+})
+
+it('leaves confessionals out, and skips the chat post while still storing the episode, when told to', async () => {
+  db.survivorTribalCouncil.findMany.mockResolvedValue([{
+    eliminatedName: 'Out Manager', eliminatedUserId: 'u-out', attendingTribeId: 'tribe-2', idolsPlayed: [], isTie: false, isRevealed: true,
+  }])
+  confessionals.latest.mockResolvedValue('I trusted the wrong people.')
+  db.league.findUnique.mockResolvedValue({ survivorRevealMode: 'dramatic_sequential', settings: { survivorStoryMode: { tone: 'classic', confessionals: false, postToChat: false } } })
+  const { generateAndPostWeeklyRecap } = await import('@/lib/survivor/weeklyRecapGenerator')
+  await generateAndPostWeeklyRecap('league-1', 4)
+  expect(confessionals.latest).not.toHaveBeenCalled()
+  expect(poster.postWeeklyRecap).not.toHaveBeenCalled()
+  const stored = db.survivorAuditEntry.upsert.mock.calls[0][0].create.data.episode
+  expect(stored.scenes.some((scene: { label: string }) => scene.label === 'Confessional')).toBe(false)
+  expect(stored.title).toBe('The Tribe Has Spoken')
+})

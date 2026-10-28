@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { currentNflRedraftPlayoffSeeds } from './canonicalNflRedraftPlayoffRuntime'
 import { resolveNflRedraftPlayoffRuntime, type PlayoffRuntimeDeps } from './resolveNflRedraftPlayoffRuntime'
+import { playoffRoundWeeks } from './playoffRoundWeeks'
+import { seriesLengthForRound, seriesWinsNeeded } from './playoffSeries'
 
 export type NativePlayoffSeedPreviewRow = {
   /** The generic `Roster.id` the standings rows are keyed on, or the season roster id when no link exists. */
@@ -15,6 +17,33 @@ export type NativePlayoffSeedPreview = {
   /** True once a bracket is generated: these are the seeds it was built with. Else "if the season ended today". */
   locked: boolean
   seeds: NativePlayoffSeedPreviewRow[]
+  /**
+   * Best-of-N series mode only (lib/playoff-runtime/playoffSeries.ts): each round's length and weeks,
+   * from the SAME rule the scorer and the window sizing use. Null in cumulative mode. Every series
+   * opens with the higher seed holding the tiebreak: a week of equal points goes to the lower seed number.
+   */
+  series: NativePlayoffSeriesRound[] | null
+}
+
+export type NativePlayoffSeriesRound = { roundNumber: number; bestOf: number; winsNeeded: number; weeks: number[] }
+
+/** The series schedule a bracket of `roundCount` rounds plays, or null when series mode is off. */
+export function playoffSeriesSchedule(input: {
+  playoffStartWeek: number
+  roundCount: number
+  seriesLengths: readonly number[] | null | undefined
+}): NativePlayoffSeriesRound[] | null {
+  if (!input.seriesLengths || input.roundCount < 1) return null
+  return Array.from({ length: input.roundCount }, (_, i) => {
+    const roundNumber = i + 1
+    const bestOf = seriesLengthForRound(input.seriesLengths, roundNumber)
+    return {
+      roundNumber,
+      bestOf,
+      winsNeeded: seriesWinsNeeded(bestOf),
+      weeks: playoffRoundWeeks({ playoffStartWeek: input.playoffStartWeek, roundNumber, seriesLengths: input.seriesLengths }),
+    }
+  })
 }
 
 /**
@@ -67,5 +96,10 @@ export async function loadNativePlayoffSeedPreview(
       displayName: s.displayName,
       qualifiedBy: s.qualifiedBy,
     })),
+    series: playoffSeriesSchedule({
+      playoffStartWeek: resolved.state.settings.playoffStartWeek,
+      roundCount: resolved.state.settings.roundCount,
+      seriesLengths: resolved.state.settings.seriesLengths,
+    }),
   }
 }

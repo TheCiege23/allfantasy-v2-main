@@ -30,6 +30,7 @@ import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerDa
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { getTeamLogo } from '@/lib/players/getTeamLogo'
 import { resolveRedraftRosterLookup } from '@/lib/redraft/redraftRosterIdentity'
+import { checkTaxiSave, logTaxiPromotions } from '@/lib/taxi/taxiRulesService'
 import { recordRedraftRosterMoveHistory } from '@/lib/redraft/rosterMoveHistory'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
 import { resolveEffectiveRedraftWeek } from '@/lib/season-week'
@@ -707,6 +708,25 @@ export async function PATCH(req: NextRequest) {
     )
   }
 
+  // The taxi move rules the commissioner switched on (lib/taxi/taxiMoveRules.ts), as on the lineup screen.
+  const onTaxi = (players: { playerId: string; slotType: string }[]) =>
+    players.filter((p) => String(p.slotType).toUpperCase() === 'TAXI').map((p) => p.playerId)
+  const taxiCheck = await checkTaxiSave({
+    leagueId: roster.leagueId,
+    redraftRosterId: roster.id,
+    week,
+    beforeTaxi: onTaxi(currentPlayers),
+    afterTaxi: onTaxi(applied.players),
+    afterRoster: applied.players.map((p) => p.playerId),
+    nameOf: (id) => currentPlayers.find((p) => p.playerId === id)?.playerName ?? `Player ${id}`,
+  })
+  if (taxiCheck.issues.length) {
+    return NextResponse.json(
+      { error: taxiCheck.issues.map((i) => i.message).join(' '), code: taxiCheck.issues[0].code },
+      { status: 422 },
+    )
+  }
+
   const dailyLineups = isDailyLineupScoringEnabled(leagueForLock?.settings ?? null, roster.season.sport)
   await prisma.$transaction(async (tx) => {
     for (const m of body.moves!) {
@@ -715,6 +735,7 @@ export async function PATCH(req: NextRequest) {
         data: { slotType: m.toSlot },
       })
     }
+    await logTaxiPromotions(tx, { leagueId: roster.leagueId, redraftRosterId: roster.id, week, actorUserId: userId, check: taxiCheck })
     // A daily-lineup league is scored per day: pin this lineup to every day the save decides.
     if (dailyLineups) {
       await writeDailyLineupForSave(tx, {

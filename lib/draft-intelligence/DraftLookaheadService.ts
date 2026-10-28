@@ -156,7 +156,7 @@ async function buildAvailablePlayers(
   draftedNames: Set<string>
 ): Promise<RecommendationPlayer[]> {
   if (sport === 'NBA') {
-    const warm = await getWarmDraftPoolSnapshotFast(leagueId)
+    const warm = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
     const entries = warm.warm && warm.payload.sport === 'NBA' && Array.isArray(warm.payload.entries)
       ? warm.payload.entries as NormalizedDraftEntry[]
       : (await getResolvedDraftPoolForLeague(leagueId, { limit: 500 })).entries

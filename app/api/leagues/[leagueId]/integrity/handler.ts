@@ -70,7 +70,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
       holdFlaggedTradesMode: readHoldFlaggedTradesMode(league.settings),
       // Holding needs the trade to execute in AllFantasy; an imported league's trades go through on its host.
       holdFlaggedTradesSupported: resolveWriteAuthority(league.platform) === "NATIVE",
-      tankingPenalties: readTankingPenaltyPolicy(league.settings),
+      // Penalties take an AllFantasy draft pick; an imported league's picks live on its host, so the
+      // control is not offered there (lib/integrity/tankingPenaltyService.ts refuses it too).
+      ...(resolveWriteAuthority(league.platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(league.settings) } : {}),
     },
     openFlags,
     recentDismissed,
@@ -115,7 +117,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   let penaltyPatch: ReturnType<typeof parseTankingPenaltyPolicyPatch> = null
   if (body.tankingPenalties !== undefined) {
     penaltyPatch = parseTankingPenaltyPolicyPatch(body.tankingPenalties)
-    if (!penaltyPatch) return NextResponse.json({ error: "tankingPenalties: enabled (true/false), pickAtStrike and pickRound (1-10)" }, { status: 400 })
+    if (!penaltyPatch) return NextResponse.json({ error: "tankingPenalties: enabled (true/false), penalty (forfeit_pick, lottery_odds, faab), pickAtStrike and pickRound (1-10), lotteryOddsCutPct (25, 50, 75, 100), faabPercent (10, 25, 50, 100)" }, { status: 400 })
   }
   if (typeof body.tradeAlertsEnabled === "boolean") settingsPatch[TRADE_ALERTS_KEY] = body.tradeAlertsEnabled
   // "Hold flagged trades": `off` / `severe` (the default) / `all`; the older on/off switch still works.
@@ -190,7 +192,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
       holdFlaggedTrades: readHoldFlaggedTradesMode(leagueSettings) !== "off",
       holdFlaggedTradesMode: readHoldFlaggedTradesMode(leagueSettings),
       holdFlaggedTradesSupported: resolveWriteAuthority(platform) === "NATIVE",
-      tankingPenalties: readTankingPenaltyPolicy(leagueSettings),
+      ...(resolveWriteAuthority(platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(leagueSettings) } : {}),
     },
   })
 }

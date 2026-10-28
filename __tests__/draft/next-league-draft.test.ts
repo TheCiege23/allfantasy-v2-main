@@ -30,7 +30,7 @@ const m = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => {
   const tx = {
     draftSession: { create: m.draftSessionCreate, update: m.draftSessionUpdate },
-    league: { update: m.leagueUpdate },
+    league: { update: m.leagueUpdate, findUnique: m.leagueFindUnique },
     futureDraftPick: { findMany: m.pickFindMany, updateMany: m.pickUpdateMany },
   }
   return {
