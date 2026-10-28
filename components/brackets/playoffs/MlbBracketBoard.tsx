@@ -25,6 +25,7 @@ import {
 import PlayoffLiveViewModal from "./PlayoffLiveViewModal"
 import SingleGameMatchupModal from "./SingleGameMatchupModal"
 import PlayoffDecisionRail from "./PlayoffDecisionRail"
+import { TeamLogo } from "@/app/components/TeamLogo"
 
 /**
  * Shared mirrored bracket for MLB, CFP and NBA Cup.
@@ -83,6 +84,8 @@ function TeamRow({
   locked,
   onPick,
   showProb,
+  sport,
+  teamLogos,
   openDetail = false,
 }: {
   series: PlayoffSeriesView
@@ -91,6 +94,8 @@ function TeamRow({
   locked: string | null
   onPick: (teamName: string) => void
   showProb: boolean
+  sport: string
+  teamLogos: Record<string, string>
   openDetail?: boolean
 }) {
   const name = side === "home" ? series.homeTeamName : series.awayTeamName
@@ -103,6 +108,8 @@ function TeamRow({
   const eliminated = decided && series.winnerTeamName !== name
   const colors = teamColors(abbreviate(name))
   const disabled = !openDetail && (!official || !!locked)
+  const tournamentLogoSport = sport === "ncaaf" ? "NCAAF" : sport === "nba_cup" ? "NBA_CUP" : null
+  const showTeamLogo = Boolean(tournamentLogoSport && official && !/^(?:CFP|EAST|WEST)\d+$/i.test(name))
 
   return (
     <button
@@ -121,14 +128,14 @@ function TeamRow({
       onClick={() => openDetail ? onPick(String(name)) : official && !locked && onPick(String(name))}
     >
       <span className="af-pb-team-seed af-pb-mono">{seed > 0 ? seed : ""}</span>
-      <span
-        className="af-pb-badge af-pb-badge--sm"
-        style={{ background: colors.bg, color: colors.fg }}
-        aria-hidden="true"
-      >
-        {official ? abbreviate(name) : "?"}
-      </span>
-      <span className="af-pb-team-name">{official ? abbreviate(name) : "TBD"}</span>
+      {showTeamLogo ? (
+        <TeamLogo teamAbbr={name} sport={tournamentLogoSport!} logoUrl={teamLogos[name] ?? null} size={22} />
+      ) : (
+        <span className="af-pb-badge af-pb-badge--sm" style={{ background: colors.bg, color: colors.fg }} aria-hidden="true">
+          {official ? abbreviate(name) : "?"}
+        </span>
+      )}
+      <span className="af-pb-team-name" title={official ? name : undefined}>{official ? tournamentLogoSport ? name : abbreviate(name) : "TBD"}</span>
       {official && isPlaceholderName(name) ? (
         <span className="af-pb-team-slot">slot</span>
       ) : null}
@@ -152,6 +159,8 @@ export default function MlbBracketBoard({
   const [liveNode, setLiveNode] = useState<string | null>(null)
 
   const sport = String(view.challenge.sport ?? "").toLowerCase()
+  const tournamentLogoSport = sport === "ncaaf" ? "NCAAF" : sport === "nba_cup" ? "NBA_CUP" : null
+  const teamLogos = view.teamLogos ?? {}
   const singleGame = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup")
   const firstStart = view.challenge.firstGameStartsAt ? Date.parse(view.challenge.firstGameStartsAt) : null
   const tournamentLocked = singleGame && firstStart != null && Date.now() >= firstStart
@@ -271,6 +280,8 @@ export default function MlbBracketBoard({
           locked={locked}
           onPick={(t) => singleGame ? setLiveNode(s.id) : void savePick(s, t)}
           showProb={kind !== "tbd"}
+          sport={sport}
+          teamLogos={teamLogos}
           openDetail={singleGame}
         />
         <TeamRow
@@ -280,6 +291,8 @@ export default function MlbBracketBoard({
           locked={locked}
           onPick={(t) => singleGame ? setLiveNode(s.id) : void savePick(s, t)}
           showProb={kind !== "tbd"}
+          sport={sport}
+          teamLogos={teamLogos}
           openDetail={singleGame}
         />
         {saving === s.id ? (
@@ -449,12 +462,13 @@ export default function MlbBracketBoard({
                       return (
                         <span className="af-pb-seed" key={seed}>
                           <span className="af-pb-seed-n af-pb-mono">{seed}</span>
-                          <span
-                            className="af-pb-badge af-pb-badge--sm"
-                            style={{ background: c.bg, color: c.fg }}
-                          >
-                            {name ? abbreviate(name) : "—"}
-                          </span>
+                          {tournamentLogoSport && name && !/^(?:CFP|EAST|WEST)\d+$/i.test(name) ? (
+                            <TeamLogo teamAbbr={name} sport={tournamentLogoSport} logoUrl={teamLogos[name] ?? null} size={22} />
+                          ) : (
+                            <span className="af-pb-badge af-pb-badge--sm" style={{ background: c.bg, color: c.fg }}>
+                              {name ? abbreviate(name) : "—"}
+                            </span>
+                          )}
                         </span>
                       )
                     })}
@@ -509,10 +523,12 @@ export default function MlbBracketBoard({
                       className="af-pb-badge af-pb-badge--champ"
                       style={{ background: champColors.bg, color: champColors.fg }}
                     >
-                      {abbreviate(champion)}
+                      {tournamentLogoSport ? (
+                        <TeamLogo teamAbbr={champion} sport={tournamentLogoSport} logoUrl={teamLogos[champion] ?? null} size={96} />
+                      ) : abbreviate(champion)}
                     </span>
                   ) : (
-                    <div className="af-pb-champ-empty">Pick both pennants to crown a champion</div>
+                    <div className="af-pb-champ-empty">{tournamentLogoSport ? "Pick both finalists to crown a champion" : "Pick both pennants to crown a champion"}</div>
                   )}
                   {finalNode ? renderMatch(finalNode) : null}
                 </div>
@@ -546,7 +562,7 @@ export default function MlbBracketBoard({
       {liveNode ? singleGame ? (() => {
         const modalSeries = projectedSeries.find((item) => item.id === liveNode)
         return modalSeries ? <SingleGameMatchupModal
-          series={modalSeries} sport={sport} profiles={view.teamProfiles ?? {}}
+          series={modalSeries} sport={sport} profiles={view.teamProfiles ?? {}} teamLogos={teamLogos}
           picked={picksBySeries.get(liveNode) ?? null}
           locked={!bracketReady || Boolean(lockedReasonFor(modalSeries))}
           saving={saving === liveNode}
