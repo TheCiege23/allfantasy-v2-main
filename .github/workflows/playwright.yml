@@ -341,7 +341,8 @@ jobs:
         PLAYWRIGHT_SERVER_NODE_OPTIONS: --max-old-space-size=8192
         E2E_WARM_ROUTES: /,/e2e/draft-room
         PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/phone-draft-usability
-      run: npx playwright test --project="Mobile Chrome" --project="Mobile Safari" --grep "usability: phone players" --reporter=line,html
+      run: >-
+        npx playwright test --project="Mobile Chrome" --project="Mobile Safari" --grep "usability: phone players" --reporter=line,html
     - name: Run Playwright tests (mobile smoke)
       if: matrix.lane == 'mobile-smoke'
       env:
