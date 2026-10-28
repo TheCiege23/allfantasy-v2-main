@@ -10,10 +10,11 @@ type Props = {
   leagueName: string
   platform: string
   canRemove: boolean
+  supportEvent?: string
 }
 
 /** A visible, mobile-sized path to the existing per-user import removal API. */
-export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, canRemove }: Props) {
+export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, canRemove, supportEvent = SUPPORT_WIDGET_OPEN_EVENT }: Props) {
   const router = useRouter()
   const { language } = useOptionalLanguage()
   const es = language === 'es'
@@ -56,7 +57,7 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            onClick={() => window.dispatchEvent(new Event(SUPPORT_WIDGET_OPEN_EVENT))}
+            onClick={() => window.dispatchEvent(new Event(supportEvent))}
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
           >
             {es ? 'Contactar a soporte' : 'Contact support'}
