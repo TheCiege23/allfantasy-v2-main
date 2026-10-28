@@ -330,6 +330,18 @@ jobs:
     # these two projects in playwright.config.ts and ignored by the desktop ones,
     # so naming the projects runs exactly the mobile specs and naming a path
     # would not. Do not "helpfully" add a path here.
+    - name: Verify four-sport phone draft usability
+      if: matrix.lane == 'mobile-smoke'
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        NEXTAUTH_SECRET: ci-nextauth-secret
+        NEXTAUTH_URL: http://localhost:3000
+        NODE_OPTIONS: --max-old-space-size=8192
+        PLAYWRIGHT_SERVER_NODE_OPTIONS: --max-old-space-size=8192
+        E2E_WARM_ROUTES: /,/e2e/draft-room
+        PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/phone-draft-usability
+      run: npx playwright test --project="Mobile Chrome" --project="Mobile Safari" --grep "usability: phone players" --reporter=line,html
     - name: Run Playwright tests (mobile smoke)
       if: matrix.lane == 'mobile-smoke'
       env:
@@ -343,7 +355,7 @@ jobs:
         PLAYWRIGHT_SERVER_NODE_OPTIONS: --max-old-space-size=8192
         # Audited phone routes only: keep unrelated admin/core bundles out of this server.
         E2E_WARM_ROUTES: /,/login,/pricing,/e2e/draft-room,/dev/league-mobile-preview,/dev/tournament-invite-readiness,/zombie/e2e-zombie-phone-league,/zombie/e2e-zombie-phone-league/items
-      run: npm run test:e2e:mobile
+      run: npm run test:e2e:mobile -- --reporter=line,html
     # ⚠ THE AUTHENTICATED PHONE LANE. Separate from mobile-smoke on purpose: it
     # seeds leagues and users and signs in, which is exactly what phone-smoke.spec.ts
     # refuses to do ("an authenticated phone journey ... belongs in its own lane").
