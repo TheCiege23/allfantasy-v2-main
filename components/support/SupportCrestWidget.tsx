@@ -116,9 +116,9 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
         /* Offsets are deconflicted from the other fixed controls in this corner, measured in-browser:
            mobile/tablet sits immediately LEFT of the Chimmy FAB (same bottom offset, right-4), which
            itself clears MobileBottomTabs — home indicator included, hence the env() term both share;
-           desktop stacks ABOVE both the Chimmy FAB (lg:bottom-6 right-6) and the dashboard's wide
-           "Open Communications" pill (bottom-5 right-5). */
-        className="group fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-[4.75rem] z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border border-cyan-400/30 bg-gradient-to-br from-cyan-500/25 to-violet-500/20 shadow-[0_8px_30px_-8px_rgba(34,211,238,0.6)] backdrop-blur-md transition hover:from-cyan-500/35 hover:to-violet-500/30 hover:shadow-[0_10px_36px_-8px_rgba(34,211,238,0.75)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 active:scale-95 lg:bottom-24 lg:right-6"
+           desktop also clears the fixed theme pill in slot 1, which otherwise covers this button.
+           Both stay above the Chimmy FAB and the dashboard's communications pill. */
+        className="group fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-[4.75rem] z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border border-cyan-400/30 bg-gradient-to-br from-cyan-500/25 to-violet-500/20 shadow-[0_8px_30px_-8px_rgba(34,211,238,0.6)] backdrop-blur-md transition hover:from-cyan-500/35 hover:to-violet-500/30 hover:shadow-[0_10px_36px_-8px_rgba(34,211,238,0.75)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 active:scale-95 lg:bottom-24 lg:right-28"
       >
         <span className="relative inline-flex h-7 w-7 items-center justify-center">
           {/* Plain <img>: matches GlobalTopNav's crest usage. /af-crest.svg is the

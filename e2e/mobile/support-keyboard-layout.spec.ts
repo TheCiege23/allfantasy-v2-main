@@ -100,3 +100,24 @@ test('sign-in account switch has a full touch target', async ({ page }) => {
   await expect(link).toBeVisible()
   expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44)
 })
+
+test('floating support clears the theme control on phones, tablets and desktop', async ({ page }) => {
+  await page.goto('/dev/league-mobile-preview?screen=support')
+  const opener = page.getByTestId('mobile-support-preview').getByTestId('open-support-widget')
+  const theme = page.locator('[data-af-mode-toggle]')
+  await expect(theme).toBeVisible()
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    const supportBox = await opener.boundingBox()
+    const themeBox = await theme.boundingBox()
+    const overlap = supportBox!.x < themeBox!.x + themeBox!.width &&
+      supportBox!.x + supportBox!.width > themeBox!.x &&
+      supportBox!.y < themeBox!.y + themeBox!.height &&
+      supportBox!.y + supportBox!.height > themeBox!.y
+    expect(overlap, `support and appearance controls overlap at ${width}px`).toBe(false)
+    await opener.click()
+    const dialog = page.getByRole('dialog', { name: 'Contact AllFantasy Support' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Close support form' }).click()
+  }
+})
