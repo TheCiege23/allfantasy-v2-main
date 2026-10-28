@@ -47,11 +47,14 @@ describe("season bracket provider result guard", () => {
     tied.competitions[0].competitors[1].score = "31"
     expect(verifyBracketEvent({ ...input, payload: { events: [tied] } })).toMatchObject({ reason: "invalid-final-score" })
   })
-  it("allows mapped NBA Cup finals on the NBA regular season feed", () => {
-    const cup = structuredClone(event)
-    cup.season = { year: 2027, type: 2 }
+  it("allows only marked NBA Cup finals on the NBA regular season feed", () => {
+    const cup = { ...structuredClone(event), season: { year: 2027, type: 2 }, competitions: [{
+      ...structuredClone(event.competitions[0]), notes: [{ type: "event", headline: "NBA Cup - Quarterfinals" }],
+    }] }
     const checked = verifyBracketEvent({ ...input, payload: { events: [cup] }, sport: "nba_cup", season: 2026 })
     expect(checked.ok).toBe(true)
+    const ordinary = verifyBracketEvent({ ...input, payload: { events: [event] }, sport: "nba_cup", season: 2026 })
+    expect(ordinary).toMatchObject({ reason: "not-nba-cup-event" })
   })
   it("rejects duplicate event assignments", () => {
     expect(validateBracketEventMaps("ncaaf", [
