@@ -10,7 +10,7 @@
  *   1. PositionChip renders sport-position-aware color badges in table rows.
  *   2. ADP delta badge surfaces the p.adp vs p.aiAdp difference (existing data).
  *   3. Null/missing stat cells use a dimmer color class for clear "no data" cues.
- *   4. Table row density is tighter (ROW_HEIGHT ≤ 32).
+ *   4. Rows leave room for readable player names and controls.
  *   5. Search control and position filter are preserved (no regression).
  *   6. Draft/queue/select handler wiring is preserved in PlayerPanel.
  *   7. No legacy draft endpoints introduced.
@@ -132,9 +132,10 @@ describe('null stat cells — dimmed for "no data" clarity (Commit 22)', () => {
 // 4. Table row density
 // ---------------------------------------------------------------------------
 
-describe('SleeperPoolTable row density — Commit 22', () => {
-  it('ROW_HEIGHT is at most 32 (reduced from previous 34)', () => {
-    expect(SLEEPER_POOL_TABLE_ROW_HEIGHT).toBeLessThanOrEqual(32)
+describe('SleeperPoolTable readable row density', () => {
+  it('leaves room for usable controls without making each row a large card', () => {
+    expect(SLEEPER_POOL_TABLE_ROW_HEIGHT).toBeGreaterThanOrEqual(44)
+    expect(SLEEPER_POOL_TABLE_ROW_HEIGHT).toBeLessThanOrEqual(72)
   })
 
   it('ROW_HEIGHT is still > 0 (sanity)', () => {
