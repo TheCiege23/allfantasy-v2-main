@@ -575,3 +575,26 @@ test('renders NBA player pool with AI ADP enabled', async ({ page }) => {
   skipWithoutBaseline('draft-room-nba-player-pool')
   await expect(playerPanel).toHaveScreenshot('draft-room-nba-player-pool.png')
 })
+for (const viewport of [{ width: 1280, height: 720 }, { width: 1589, height: 740 }]) {
+  test('@draft-room NBA draft keeps a usable player list at ' + viewport.width + 'x' + viewport.height, async ({ page }) => {
+    await page.setViewportSize(viewport)
+    const leagueId = createLeagueId('e2e-pool-height')
+    await mockDraftRoomApis(page, leagueId, 'NBA')
+    await gotoDraftRoomHarness(page, '/e2e/draft-room?leagueId=' + leagueId + '&sport=NBA&e2eRoom=1')
+    await openDraftRoomHarness(page)
+    const desktop = page.getByTestId('draft-desktop-layout')
+    const list = desktop.getByTestId('draft-player-list-scroll')
+    await expect(desktop.getByTestId('draft-player-card-0')).toBeVisible()
+    const visibleArea = await list.boundingBox()
+    expect(visibleArea).not.toBeNull()
+    expect(visibleArea!.height).toBeGreaterThanOrEqual(240)
+    expect(visibleArea!.y + visibleArea!.height).toBeLessThanOrEqual(viewport.height)
+    // Visibility alone accepts clipped rows; require two complete cards without scrolling.
+    for (const index of [0, 1]) {
+      const card = await desktop.getByTestId('draft-player-card-' + index).boundingBox()
+      expect(card).not.toBeNull()
+      expect(card!.y).toBeGreaterThanOrEqual(visibleArea!.y)
+      expect(card!.y + card!.height).toBeLessThanOrEqual(visibleArea!.y + visibleArea!.height)
+    }
+  })
+}

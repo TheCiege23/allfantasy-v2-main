@@ -15,7 +15,7 @@ export function readConfig(env) {
   const season = Number(env.ZOMBIE_STAGING_SEASON)
   if (!Number.isInteger(season) || season < 2020 || season > 2100) throw new Error('season_required')
   const mode = env.ZOMBIE_STAGING_IMPORT_MODE ?? 'schedules'
-  if (!['schedules', 'profiles'].includes(mode)) throw new Error('import_mode_invalid')
+  if (!['schedules', 'profiles', 'photos', 'profiles-and-photos'].includes(mode)) throw new Error('import_mode_invalid')
   return { baseUrl: STAGING_ORIGIN, secret: env.ZOMBIE_CRON_SECRET, season, mode }
 }
 
@@ -39,10 +39,30 @@ export function profileJobs() {
   }))
 }
 
+export function photoJobs() {
+  return ['NBA', 'NHL', 'MLB', 'NFL'].map((sport) => ({
+    name: 'photos_' + sport, sport, kind: 'photos',
+    path: '/api/cron/sync-player-images?scope=players&limit=100&backfill=1&sport=' + sport,
+  }))
+}
+
 /** Read only known count/flag fields. Provider errors can contain credential-bearing URLs. */
 export function summarizeResult(body, job) {
   if (body?.deferredForBudget) return { status: 'partial', rows: 0 }
   if (body?.ok !== true) return { status: 'failed', rows: 0 }
+  if (job.kind === 'photos') {
+    const row = body.bySport?.find((item) => item?.sport === job.sport)
+    if (!row || body.dryRun || !body.ran?.includes(job.sport)) return { status: 'failed', rows: 0 }
+    const passes = [row.players?.fill, row.players?.refresh]
+    if (passes.some((pass) => !pass || !Number.isInteger(pass.resolved) || pass.resolved < 0)) {
+      return { status: 'failed', rows: 0 }
+    }
+    const rows = passes.reduce((sum, pass) => sum + pass.resolved, 0)
+    const partial = passes.some((pass) => pass.timedOut)
+    // A fully populated pool can resolve zero new images. Lookup misses remain visible.
+    return { status: partial ? 'partial' : 'success', rows,
+      unresolved: passes.reduce((sum, pass) => sum + (Number(pass.failed) || 0), 0) }
+  }
   if (job.kind === 'ri_profiles') {
     const profiles = body.results?.rolling_insights_profiles
     const row = profiles?.[job.sport]
@@ -73,7 +93,9 @@ export function summarizeResult(body, job) {
 
 export async function runImports(config, fetchImpl = fetch, log = console.log) {
   const results = []
-  for (const job of (config.mode === 'profiles' ? profileJobs() : scheduleJobs(config.season))) {
+  const jobs = config.mode === 'profiles-and-photos' ? [...profileJobs(), ...photoJobs()]
+    : config.mode === 'profiles' ? profileJobs() : config.mode === 'photos' ? photoJobs() : scheduleJobs(config.season)
+  for (const job of jobs) {
     const started = Date.now()
     let result
     try {

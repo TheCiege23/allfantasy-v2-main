@@ -39,3 +39,33 @@ Verify `SportsGame` row counts by sport, source, and season and check `sync_job_
 Normal `prisma migrate deploy` does not install every object declared by the Prisma schema: some existing migrations are deliberately parked outside the deploy path. On October 28 the owner approved repairing the isolated staging schema. The repair installed the T-101 tenancy tables and League tenant column (the role ordering guard was explicitly omitted for this isolated single-tenant rehearsal), `leagues.lastViewedAt` and its partial index, and `rosters.redraftRosterId` with its unique index and foreign key. These repairs did not install Commissioner OS role isolation or mark its guarded migration as replayable.
 
 All four staging Zombie leagues were then created successfully. Do not move the guarded Commissioner OS migration into the common deploy directory to recreate this fixture. Provision a fresh environment explicitly, and compare its required models with the database before asking testers to create leagues.
+
+## Draft pool usability and photo follow-up (October 28)
+
+The owner confirmed live NBA/NHL pools appear, then reported cramped player space, missing
+photos, and a load exceeding 30 seconds. The matching proxy logs measured the first NBA/NHL
+pool responses at 7.99/9.10 seconds and later NHL cache hits at 0.36–0.44 seconds. These are
+server timings, not a measurement of total time to usable players. Logs showed overlapping
+prewarm/API cold builds. The isolated database had zero canonical Player rows and zero
+canonical player images despite its imported SportsPlayer profiles.
+
+The snake room now reserves 28dvh (maximum 320px) for the scrollable board and gives the
+remaining workspace to the player pane. The two reported desktop sizes have browser checks
+for a 240px list viewport and at least two wholly visible cards. Mobile trays retain their
+existing behavior. Concurrent pool callers share the same cold resolver build, partitioned
+by league and complete options, with no settled-result caching. Pool reads explicitly avoid
+on-demand ADP imports.
+
+The image cron accepts an opt-in `backfill=1` for one NFL/NBA/NHL/MLB sport. It uses the existing
+canonical identity backfill from stored profiles before the existing verified image resolver.
+No schema changes or inferred photo ids are introduced. The staging runner adds `photos`
+and `profiles-and-photos` modes. Combined mode refreshes profiles first and resolves up to
+100 missing/stale photos per sport per pass; it reports misses and budget exhaustion. It is
+incremental coverage, not a promise that every player has a vendor photo. Daily wiring and
+actual persisted photos must be verified after the new web deployment is live.
+
+Regression coverage includes concurrent-build sharing/config isolation/retry, the existing
+credential variable plus `thesports_api_key` compatibility, the photo job contract, ordering,
+partial work and credential-safe errors. The updated runtime and browser changes are pending
+CI and staging rollout at this commit. Keep the overall estimate at 87% until verified; the
+four provider-scored weekly journeys, correction acceptance, and iOS device review remain.

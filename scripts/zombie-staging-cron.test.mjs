@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readConfig, scheduleJobs, profileJobs, summarizeResult, runImports, STAGING_PROJECT, STAGING_ORIGIN } from './zombie-staging-cron.mjs'
+import { readConfig, scheduleJobs, profileJobs, photoJobs, summarizeResult, runImports, STAGING_PROJECT, STAGING_ORIGIN } from './zombie-staging-cron.mjs'
 
 const env = {
   RAILWAY_PROJECT_ID: STAGING_PROJECT, RAILWAY_ENVIRONMENT_NAME: 'staging',
@@ -110,4 +110,60 @@ test('profile runs continue each sport and log only safe player counts even on p
   assert.deepEqual(results.map(r => r.status), ['success', 'failed', 'success', 'success'])
   assert.equal(logs.join('').includes(env.ZOMBIE_CRON_SECRET), false)
   assert.equal(logs.join('').includes('private'), false)
+})
+
+test('photo jobs initialize canonical identities and stay within one requested sport', () => {
+  assert.equal(readConfig({ ...env, ZOMBIE_STAGING_IMPORT_MODE: 'photos' }).mode, 'photos')
+  assert.deepEqual(photoJobs().map(job => job.sport), ['NBA', 'NHL', 'MLB', 'NFL'])
+  for (const job of photoJobs()) {
+    const url = new URL(job.path, STAGING_ORIGIN)
+    assert.equal(url.pathname, '/api/cron/sync-player-images')
+    assert.equal(url.searchParams.get('sport'), job.sport)
+    assert.equal(url.searchParams.get('backfill'), '1')
+    assert.equal(url.searchParams.get('scope'), 'players')
+    assert.equal(url.searchParams.get('limit'), '100')
+  }
+})
+
+test('photo runs distinguish partial work, missing results and clean zero-write runs', () => {
+  const job = photoJobs()[0]
+  const body = (fill = {}, extra = {}) => ({ ok: true, ran: ['NBA'], bySport: [{
+    sport: 'NBA', players: {
+      fill: { resolved: 0, failed: 0, timedOut: false, ...fill },
+      refresh: { resolved: 0, failed: 0, timedOut: false },
+    },
+  }], ...extra })
+  assert.equal(summarizeResult(body(), job).status, 'success')
+  assert.equal(summarizeResult(body({ resolved: 4, failed: 2 }), job).unresolved, 2)
+  assert.equal(summarizeResult(body({ resolved: 4, timedOut: true }), job).status, 'partial')
+  assert.equal(summarizeResult(body({}, { ran: [] }), job).status, 'failed')
+  assert.equal(summarizeResult(body({}, { dryRun: true }), job).status, 'failed')
+})
+
+test('photo runs continue after failures and do not log raw provider diagnostics', async () => {
+  const logs = []
+  const results = await runImports(readConfig({ ...env, ZOMBIE_STAGING_IMPORT_MODE: 'photos' }),
+    async url => {
+      const sport = url.searchParams.get('sport')
+      if (sport === 'NHL') throw new Error(env.ZOMBIE_CRON_SECRET)
+      return { ok: true, json: async () => ({ ok: true, ran: [sport], bySport: [{
+        sport, players: { fill: { resolved: 10, failed: 2, timedOut: false },
+          refresh: { resolved: 0, failed: 0, timedOut: false } },
+      }], diagnostics: env.ZOMBIE_CRON_SECRET }) }
+    }, line => logs.push(line))
+  assert.deepEqual(results.map(row => row.status), ['success', 'failed', 'success', 'success'])
+  assert.equal(logs.join('').includes(env.ZOMBIE_CRON_SECRET), false)
+})
+
+test('combined mode refreshes profiles before photographs', async () => {
+  const calls = []
+  const config = readConfig({ ...env, ZOMBIE_STAGING_IMPORT_MODE: 'profiles-and-photos' })
+  await runImports(config, async url => {
+    calls.push(url.pathname)
+    return { ok: false, status: 503 }
+  }, () => {})
+  assert.deepEqual(calls, [
+    ...['NFL', 'NBA', 'NHL', 'MLB'].map(() => '/api/cron/import-schedules'),
+    ...['NFL', 'NBA', 'NHL', 'MLB'].map(() => '/api/cron/sync-player-images'),
+  ])
 })

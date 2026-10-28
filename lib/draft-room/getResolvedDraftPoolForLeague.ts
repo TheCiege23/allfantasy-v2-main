@@ -61,6 +61,7 @@ import {
 import { normalizeDraftPoolInjuryStatus } from '@/lib/draft-room/injury-status-normalization'
 import { compareDraftEntriesByStableRank, resolvePreferredAdp } from '@/lib/draft-room/adp-ordering'
 import { dbFirstMode } from '@/lib/db-first-mode'
+import { draftPoolBuildKey, shareDraftPoolBuild } from './shareDraftPoolBuild'
 import { applyPositionAwareProjectionFallbacks, type ProjectionFallbackDiagnostics } from '@/lib/draft-room/position-aware-projection-fallback'
 import {
   loadSportsPlayerRecordMapsForDraftPool,
@@ -1044,9 +1045,20 @@ function perfStart(label: string): () => void {
 /**
  * Builds the same normalized draft pool as GET `/api/leagues/[leagueId]/draft/pool`.
  */
-export async function getResolvedDraftPoolForLeague(
+export function getResolvedDraftPoolForLeague(
   leagueId: string,
   options: GetResolvedDraftPoolOptions = {},
+): Promise<GetResolvedDraftPoolResult> {
+  const normalizedOptions = { ...options, limit: options.limit ?? 300, poolType: options.poolType ?? null }
+  return shareDraftPoolBuild(
+    draftPoolBuildKey(leagueId, normalizedOptions),
+    () => buildResolvedDraftPoolForLeague(leagueId, normalizedOptions),
+  )
+}
+
+async function buildResolvedDraftPoolForLeague(
+  leagueId: string,
+  options: GetResolvedDraftPoolOptions,
 ): Promise<GetResolvedDraftPoolResult> {
   const _coldBuildStartMs = Date.now()
   const perfTotal = perfStart(`TOTAL leagueId=${leagueId.slice(0, 8)}`)
@@ -1114,8 +1126,7 @@ export async function getResolvedDraftPoolForLeague(
   const limit = Math.min(Math.max(Number(rawLimit) || DEFAULT_LIMIT, 1), 500)
   let poolType = options.poolType ?? null
   const perfDevyC2C = perfStart('3. isDevyLeague + isC2CLeague')
-  const isDevyDynasty = await isDevyLeague(leagueId)
-  const isC2C = await isC2CLeague(leagueId)
+  const [isDevyDynasty, isC2C] = await Promise.all([isDevyLeague(leagueId), isC2CLeague(leagueId)])
   perfDevyC2C()
   const rawDevyConfig = draftSession?.devyConfig as { enabled?: boolean; devyRounds?: number[] } | null
   const rawC2cConfig = draftSession?.c2cConfig as { enabled?: boolean; collegeRounds?: number[] } | null
@@ -1138,7 +1149,7 @@ export async function getResolvedDraftPoolForLeague(
       : 'redraft'
   const perfAdpRows = perfStart('4. loadLatestAveragedAdpRowsFromDb')
   const twoQuarterbacks = sport === 'NFL' ? await leagueStartsTwoQuarterbacks(leagueId) : false
-  const averagedAdpRows = await loadLatestAveragedAdpRowsFromDb(sport, adpFormat, twoQuarterbacks, league ? { season: league.season, scoring: league.scoring } : undefined).catch(
+  const averagedAdpRows = await loadLatestAveragedAdpRowsFromDb(sport, adpFormat, twoQuarterbacks, league ? { season: league.season, scoring: league.scoring } : undefined, { allowLiveImport: false }).catch(
     () => [] as AveragedAdpRow[],
   )
   perfAdpRows()

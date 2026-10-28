@@ -24,6 +24,7 @@
  *   sport   — sport code to sync (default "NFL")
  *   limit   — max players to resolve per pass (default 50, cap 500)
  *   scope   — "players" | "teams" | "all" (default "all")
+ *   backfill — "1" initializes canonical identities from imported profiles (one pro sport only)
  *   dryRun  — "true" to report candidate counts without writing
  */
 
@@ -45,6 +46,7 @@ import {
   writePrimaryTeamImage,
 } from "@/lib/sport-teams/teamImageStore";
 import { recordSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry";
+import { backfillCanonicalPlayers } from "@/lib/canonical/backfillCanonical";
 
 /**
  * ⚠ THE HEARTBEAT IS PER SPORT, AND THAT IS THE ENTIRE POINT OF IT.
@@ -464,6 +466,12 @@ async function handle(req: NextRequest) {
     MAX_LIMIT,
   );
 
+  const initializeIdentities = url.searchParams.get("backfill") === "1";
+  if (initializeIdentities &&
+      (sports.length !== 1 || !["NFL", "NBA", "NHL", "MLB"].includes(sports[0]))) {
+    return NextResponse.json({ error: "backfill_requires_one_pro_sport" }, { status: 400 });
+  }
+
   const jobName = jobNameForSport(url.searchParams.get("sport"));
 
   const startedAt = Date.now();
@@ -487,6 +495,13 @@ async function handle(req: NextRequest) {
        * discovering there is no time to use the results.
        */
       if (Date.now() > deadline) break;
+      // A profile-only import populates SportsPlayer, while the image resolver requires
+      // canonical Player ids. Reuse the existing deterministic backfill before resolving.
+      // No provider requests or schema changes happen during this bounded DB pass.
+      if (initializeIdentities && doPlayers) {
+        await backfillCanonicalPlayers({ sport, limit: 10_000, dryRun });
+        if (Date.now() > deadline) break;
+      }
 
       let fill: PassSummary = {
         considered: 0,
