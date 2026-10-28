@@ -9,6 +9,7 @@ import {
 } from '../lib/league-concepts/survivorDefaults'
 import { resolveConceptPreset, mergeConceptPresetSettings } from '../lib/league-concepts/resolveConceptPreset'
 import { CONCEPT_PRESET_CATALOG } from '../lib/league-concepts/conceptPresetCatalog'
+import { resolveMlbRosterTemplate } from '../lib/mlb-roster/MlbRosterTemplates'
 
 // ── isSurvivorEligibleSport ───────────────────────────────────────────────────
 
@@ -222,6 +223,13 @@ describe('getSurvivorDefaultContract — MLB', () => {
   it('drafts one round per roster spot', () => {
     expect(contract.rosterTemplate.benchSlots).toBe(5)
     expect(contract.rosterTemplate.draftRounds).toBe(18)
+  })
+  // The roster engine saves its own survivor template over the creation roster. The MLB rehearsal
+  // ran with that template's SP / RP slots, which no MLB pitcher (stored as P) can fill.
+  it('the roster engine survivor template is the same roster', () => {
+    const { BN, ...starters } = resolveMlbRosterTemplate('survivor').slots
+    expect(starters).toEqual(contract.rosterTemplate.starterSlots)
+    expect(BN).toBe(contract.rosterTemplate.benchSlots)
   })
 })
 
