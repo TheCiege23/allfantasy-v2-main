@@ -5,6 +5,7 @@ import { validateBracketEventMaps } from "@/lib/playoffs/bracketEventMaps"
 const event = {
   id: "401234567", date: "2026-12-20T00:00:00Z", season: { year: 2026, type: 3 },
   competitions: [{
+    notes: [{ type: "event", headline: "College Football Playoff First Round Game" }],
     status: { type: { state: "post", completed: true } },
     competitors: [
       { homeAway: "home", team: { displayName: "Georgia Bulldogs", location: "Georgia" }, score: "31" },
@@ -29,6 +30,9 @@ describe("season bracket provider result guard", () => {
     expect(verifyBracketEvent({ ...input, awayTeam: "Texas" })).toMatchObject({ reason: "team-mismatch" })
     expect(verifyBracketEvent({ ...input, scheduledAt: "2026-12-19T18:00:00Z" })).toMatchObject({ reason: "start-time-mismatch" })
     expect(verifyBracketEvent({ ...input, season: 2025 })).toMatchObject({ reason: "not-cfp-postseason" })
+    const bowl = structuredClone(event)
+    bowl.competitions[0].notes[0].headline = "Ordinary bowl game"
+    expect(verifyBracketEvent({ ...input, payload: { events: [bowl] } })).toMatchObject({ reason: "not-cfp-event" })
   })
   it("aligns neutral-site scores when ESPN reverses bracket sides", () => {
     const reversed = structuredClone(event)
