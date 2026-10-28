@@ -10,6 +10,7 @@ import { LeagueHealthPanel } from '@/components/league/native/LeagueHealthPanel'
 import { LeagueSeatTracker } from '@/components/league/native/LeagueSeatTracker'
 import { LeagueStakesCard, stakesFormatFor } from '@/components/league/native/LeagueStakesCard'
 import { LeagueYourWeekStrip } from '@/components/league/native/LeagueYourWeekStrip'
+import { LeagueRulesHomeHost } from '@/components/league/native/LeagueRulesHomeHost'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { describeEliminationSchedule } from '@/lib/survivor/survivorEliminationSchedule'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
@@ -62,7 +63,9 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
   const draftLabel = date && Number.isFinite(date.getTime()) ? date.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Schedule or start manually'
   return <div className="nl-home" data-testid="native-league-home">
     <div className="nl-home-primary">
-      {inSeason && <LeagueYourWeekStrip leagueId={league.id} week={typeof league.currentWeek === 'number' ? league.currentWeek : null} onSelectTab={onSelectTab} />}
+      {/* League rules: the button, the first-time popup and the "What changed" card. League home only. */}
+      <LeagueRulesHomeHost leagueId={league.id} blocked={settingsOpen} />
+      {inSeason &&<LeagueYourWeekStrip leagueId={league.id} week={typeof league.currentWeek === 'number' ? league.currentWeek : null} onSelectTab={onSelectTab} />}
       <section className="nl-card nl-next"><div className="nl-card-label"><span>Next up</span><span>{predraft ? 'Draft HQ' : survivor ? 'Survivor' : phase}</span></div>
         <h2>{predraft ? `Draft · ${draftLabel}` : survivor ? 'Your island this week' : phase === 'Offseason' ? 'Your season archive' : `Week ${league.currentWeek ?? '—'}`}</h2>
         <p>{predraft ? `${league.teamCount}-team ${league.format}. Review your settings and queue before the draft.` : survivor ? 'Check the challenge, immunity, Elimination Council, and your private powers.' : phase === 'Offseason' ? 'Review final standings and prepare for the next season.' : 'Set your lineup and follow the latest matchup scores.'}</p>

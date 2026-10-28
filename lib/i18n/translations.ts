@@ -1,7 +1,10 @@
 import { translationsEsParity } from "./translations-es-parity"
+import { leagueRulesCopyEn, leagueRulesCopyEs } from "./league-rules-copy"
 
 export const translations: Record<string, Record<string, string>> = {
   en: {
+    // League rules popup + "What changed" card (lib/league-rules-explainer/). Copy in ./league-rules-copy.ts.
+    ...leagueRulesCopyEn,
     // Conditional and protected picks (lib/league-trade-engine/pickTerms.ts): Trade Center, Trades page, Trade settings.
     "pickTerms.title": "Pick terms (optional)",
     "pickTerms.intro": "Give a future pick in this deal protection or a condition. Terms are settled on the final draft order when that rookie draft is created, and travel with the pick if it is traded again.",
@@ -5863,6 +5866,7 @@ export const translations: Record<string, Record<string, string>> = {
   },
   es: {
     ...translationsEsParity,
+    ...leagueRulesCopyEs,
 
     // Qué partidos cuentan: NBA/NHL/MLB (lib/redraft/gamesCount.ts).
     "gamesCount.title": "Qué partidos cuentan",

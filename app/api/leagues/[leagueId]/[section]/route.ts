@@ -92,6 +92,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'reputation': () => import('../reputation/handler'),
   'rivalries': () => import('../rivalries/handler'),
   'rollover': () => import('../rollover/handler'),
+  'rules-explainer': () => import('../rules-explainer/handler'),
   'roster-config': () => import('../roster-config/handler'),
   'season-forecast': () => import('../season-forecast/handler'),
   'season-results': () => import('../season-results/handler'),
