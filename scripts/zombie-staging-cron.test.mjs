@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readConfig, scheduleJobs, summarizeResult, runImports, STAGING_PROJECT, STAGING_ORIGIN } from './zombie-staging-cron.mjs'
+import { readConfig, scheduleJobs, profileJobs, summarizeResult, runImports, STAGING_PROJECT, STAGING_ORIGIN } from './zombie-staging-cron.mjs'
 
 const env = {
   RAILWAY_PROJECT_ID: STAGING_PROJECT, RAILWAY_ENVIRONMENT_NAME: 'staging',
@@ -54,6 +54,60 @@ test('continues other sports after a failure, does not follow redirects, and nev
   assert.equal(calls.length, 5)
   assert.equal(cancelled, true)
   assert.deepEqual(results.map((r) => r.status), ['success', 'failed', 'failed', 'success', 'success'])
+  assert.equal(logs.join('').includes(env.ZOMBIE_CRON_SECRET), false)
+  assert.equal(logs.join('').includes('private'), false)
+})
+
+test('profile mode explicitly scopes one Rolling Insights player pass per requested sport', () => {
+  assert.equal(readConfig(env).mode, 'schedules')
+  assert.equal(readConfig({ ...env, ZOMBIE_STAGING_IMPORT_MODE: 'profiles' }).mode, 'profiles')
+  assert.throws(() => readConfig({ ...env, ZOMBIE_STAGING_IMPORT_MODE: 'all' }))
+  assert.deepEqual(profileJobs().map(job => job.sport), ['NFL', 'NBA', 'NHL', 'MLB'])
+  for (const job of profileJobs()) {
+    const url = new URL(job.path, STAGING_ORIGIN)
+    assert.equal(url.searchParams.get('riProfiles'), '1')
+    assert.equal(url.searchParams.get('sport'), job.sport)
+    assert.equal(url.searchParams.size, 2)
+  }
+})
+
+test('team success does not hide missing, errored, malformed or deferred player imports', () => {
+  const job = profileJobs()[0]
+  const body = (row, extra = {}) => ({ ok: true, results: {
+    rolling_insights_profiles: { [job.sport]: row, ...extra },
+  } })
+  for (const row of [
+    { teams: 32, players: 0 }, { teams: 32, players: 0, notModified: true },
+  ]) assert.equal(summarizeResult(body(row), job).status, 'empty')
+  for (const row of [
+    { teams: 32 }, { players: null }, { players: '200' }, { players: -1 },
+    { players: 200, errors: ['private provider URL'] }, { error: 'private' },
+  ]) assert.equal(summarizeResult(body(row), job).status, 'failed')
+  for (const row of [
+    { players: 200, playersDeferredForBudget: true },
+    { players: 200, deferredLeagues: ['all (100 players unwritten)'] },
+    { players: 200, deferred: true },
+  ]) assert.equal(summarizeResult(body(row), job).status, 'partial')
+  assert.equal(summarizeResult(body({ players: 200 }, { deferredSports: ['NFL'] }), job).status, 'partial')
+  assert.equal(summarizeResult(body({ players: 200, errors: [] }), job).status, 'success')
+})
+
+test('profile runs continue each sport and log only safe player counts even on provider errors', async () => {
+  const logs = []
+  const sports = []
+  const results = await runImports(readConfig({ ...env, ZOMBIE_STAGING_IMPORT_MODE: 'profiles' }),
+    async (url) => {
+      const sport = url.searchParams.get('sport')
+      sports.push(sport)
+      return { ok: true, json: async () => ({ ok: true, results: {
+        rolling_insights_profiles: { [sport]: {
+          teams: 32, players: 100,
+          ...(sport === 'NBA' ? { errors: ['private ' + env.ZOMBIE_CRON_SECRET] } : {}),
+        } },
+      } }) }
+    }, line => logs.push(line))
+  assert.deepEqual(sports, ['NFL', 'NBA', 'NHL', 'MLB'])
+  assert.deepEqual(results.map(r => r.status), ['success', 'failed', 'success', 'success'])
   assert.equal(logs.join('').includes(env.ZOMBIE_CRON_SECRET), false)
   assert.equal(logs.join('').includes('private'), false)
 })

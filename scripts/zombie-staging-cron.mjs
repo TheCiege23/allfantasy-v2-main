@@ -14,7 +14,9 @@ export function readConfig(env) {
   }
   const season = Number(env.ZOMBIE_STAGING_SEASON)
   if (!Number.isInteger(season) || season < 2020 || season > 2100) throw new Error('season_required')
-  return { baseUrl: STAGING_ORIGIN, secret: env.ZOMBIE_CRON_SECRET, season }
+  const mode = env.ZOMBIE_STAGING_IMPORT_MODE ?? 'schedules'
+  if (!['schedules', 'profiles'].includes(mode)) throw new Error('import_mode_invalid')
+  return { baseUrl: STAGING_ORIGIN, secret: env.ZOMBIE_CRON_SECRET, season, mode }
 }
 
 export function scheduleJobs(season) {
@@ -30,10 +32,35 @@ export function scheduleJobs(season) {
   ]
 }
 
+export function profileJobs() {
+  return SPORTS.map((sport) => ({
+    name: 'players_' + sport, sport, kind: 'ri_profiles',
+    path: '/api/cron/import-schedules?riProfiles=1&sport=' + sport,
+  }))
+}
+
 /** Read only known count/flag fields. Provider errors can contain credential-bearing URLs. */
 export function summarizeResult(body, job) {
   if (body?.deferredForBudget) return { status: 'partial', rows: 0 }
   if (body?.ok !== true) return { status: 'failed', rows: 0 }
+  if (job.kind === 'ri_profiles') {
+    const profiles = body.results?.rolling_insights_profiles
+    const row = profiles?.[job.sport]
+    if (!row || typeof row !== 'object' || row.error) return { status: 'failed', rows: 0 }
+    const rows = row.players
+    if (!Number.isInteger(rows) || rows < 0) return { status: 'failed', rows: 0 }
+    if (row.errors != null && (!Array.isArray(row.errors) || row.errors.length > 0)) {
+      return { status: 'failed', rows }
+    }
+    if (row.playersDeferredForBudget || row.deferred ||
+        (Array.isArray(row.deferredLeagues) && row.deferredLeagues.length > 0) ||
+        (Array.isArray(profiles.deferredSports) && profiles.deferredSports.includes(job.sport))) {
+      return { status: 'partial', rows }
+    }
+    // notModified is combined across teams AND players by this route. It cannot prove
+    // that a zero-player response has an existing usable pool; keep it visible as empty.
+    return { status: rows > 0 ? 'success' : 'empty', rows }
+  }
   const row = job.kind === 'tsdb'
     ? body.results?.thesportsdb?.[job.sport]
     : body.results?.['api_sports_' + job.sport]
@@ -46,7 +73,7 @@ export function summarizeResult(body, job) {
 
 export async function runImports(config, fetchImpl = fetch, log = console.log) {
   const results = []
-  for (const job of scheduleJobs(config.season)) {
+  for (const job of (config.mode === 'profiles' ? profileJobs() : scheduleJobs(config.season))) {
     const started = Date.now()
     let result
     try {

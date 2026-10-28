@@ -24,7 +24,13 @@ On October 28 all four Node tests passed in the Railway Docker build. The `ed53a
 
 The six-hour schedule is restored and `ZOMBIE_STAGING_CRON_ENABLED=1`. To bootstrap another run through this connector, temporarily clear the cron schedule and deploy the pinned source with the current settings. A replay of an older cron deployment did not start a task with the new run settings, so inspect runtime logs and stored rows rather than assuming a successful deployment executed an import. Restore the six-hour schedule and deploy the current settings after the task completes. Runtime JSON logs expose their safe job/status/count fields as structured Railway attributes; the runner also supplies a readable message.
 
-Player tables remain empty; this service imports game calendars and teams. Draft-pool/player ingestion and provider fantasy scoring still need a separate acceptance pass.
+## Player profiles
+
+A separate `zombie-player-cron` uses the same small Dockerfile with `ZOMBIE_STAGING_IMPORT_MODE=profiles`. It runs the existing authenticated Rolling Insights team/player importer once per sport, explicitly scoped to NFL, NBA, NHL, and MLB. Its daily schedule is 04:45 UTC. The game-calendar service keeps its six-hour schedule and defaults to `schedules` mode.
+
+The profile importer writes `SportsPlayer`, which the draft pool resolver reads directly. `sports_players` is a separate analytics/enrichment table; a populated profile pool does not establish scoring or projection coverage. Imported profiles can include inactive or historical players, so raw provider totals are not draftable-player totals.
+
+The profile worker treats HTTP-200 error arrays, missing player counts, zero-player responses, and deferred work as failures/empty/partial outcomes. Team counts alone cannot mark a player import successful. The route combines team/player `notModified` flags, so that flag does not turn zero players into success. Read stored player counts and profile job telemetry after the initial bootstrap. Do not auto-fill seats, start drafts, or alter league settings as part of the import.
 
 Verify `SportsGame` row counts by sport, source, and season and check `sync_job_runs` for `cron-import-schedules-tsdb` with a single-sport scope. Stored game coverage establishes calendar/lock readiness. Provider player scores, a completed fantasy draft, weekly settlement, and corrections still need their own acceptance run.
 
