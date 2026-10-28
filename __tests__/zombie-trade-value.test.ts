@@ -176,7 +176,7 @@ describe('tradeWindow: current eligible partners', () => {
   it('reports honestly when the Horde has everyone', () => {
     const w = tradeWindow({ survivors: 1, teamCount: 20 })!
     expect(w.partners).toBe(0)
-    expect(w.basis).toContain('nobody left')
+    expect(w.basis).toContain('nobody eligible')
   })
 })
 
