@@ -45,8 +45,8 @@ export function planZombieOutcomeReplay(
   const protectedRosters = new Set<string>()
   for (const item of snapshot.items) {
     const rosterId = byTeamId.get(item.teamStatusId)
-    if (!rosterId || item.activatesAtWeek !== week || item.activationState !== 'pending_activation') continue
-    if (item.itemType === 'serum' ||
+    if (!rosterId || item.isUsed || item.isExpired || item.activatesAtWeek !== week || item.activationState !== 'pending_activation') continue
+    if (item.itemType.includes('serum') ||
         (['weapon_knife', 'weapon_bow', 'weapon_axe', 'weapon_gun'].includes(item.itemType) &&
           item.usedEffect === 'infection_shield')) protectedRosters.add(rosterId)
   }
@@ -88,9 +88,9 @@ export function planZombieOutcomeReplay(
     const infectionEnabled = threatStatus === 'Zombie'
       ? snapshot.config.infectionLossToZombie
       : threatStatus === 'Whisperer' && snapshot.config.infectionLossToWhisperer
-    if (rosterId && threatened.has(rosterId) && item.activatesAtWeek === week &&
-        item.activationState === 'pending_activation' &&
-        (item.itemType === 'serum' || (infectionEnabled && item.usedEffect === 'infection_shield' &&
+    if (rosterId && threatened.has(rosterId) && infectionEnabled && !item.isUsed && !item.isExpired &&
+        item.activatesAtWeek === week && item.activationState === 'pending_activation' &&
+        (item.itemType.includes('serum') || (item.usedEffect === 'infection_shield' &&
           ['weapon_knife', 'weapon_bow', 'weapon_axe', 'weapon_gun'].includes(item.itemType)))) {
       spentItemIds.add(item.id)
     }
