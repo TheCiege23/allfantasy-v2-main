@@ -118,14 +118,31 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       })
       const threat = matchups.find(m => m.homeRosterId === whispererRoster.id || m.awayRosterId === whispererRoster.id)
       expect(threat).toBeTruthy()
+      // Seed an existing Horde member in a separate pairing. Randomly selected
+      // co-Whisperers can face the primary in Week 1, so a second threat keeps
+      // infection coverage deterministic while still testing both role counts.
+      const co = await prisma.zombieCoWhisperer.findMany({ where: { zombieLeagueId: active.id } })
+      const whispererUsers = new Set([whisperer.userId, ...co.map(record => record.userId)])
+      const seasonRosters = await prisma.redraftRoster.findMany({ where: { seasonId: season.id } })
+      const ownerBySeasonRoster = new Map(seasonRosters.map(row => [row.id, row.ownerId]))
+      const hordeMatchup = matchups.find(m =>
+        !whispererUsers.has(ownerBySeasonRoster.get(m.homeRosterId) ?? '') &&
+        !whispererUsers.has(ownerBySeasonRoster.get(m.awayRosterId ?? '') ?? ''))
+      expect(hordeMatchup).toBeTruthy()
+      const hordeUserId = ownerBySeasonRoster.get(hordeMatchup!.homeRosterId)!
+      const hordeRoster = rosters.find(row => row.platformUserId === hordeUserId)!
+      await prisma.zombieLeagueTeam.update({
+        where: { leagueId_rosterId: { leagueId, rosterId: hordeRoster.id } },
+        data: { status: 'Zombie', weekBecameZombie: week, killedByRosterId: hordeRoster.id },
+      })
       const pending = await runWeeklyResolution(active.id, week)
       expect(pending.reason).toBe('matchups_incomplete')
       for (const matchup of matchups) {
         const homeIsWhisperer = matchup.homeRosterId === whispererRoster.id
         const awayIsWhisperer = matchup.awayRosterId === whispererRoster.id
         await prisma.redraftMatchup.update({ where: { id: matchup.id }, data: {
-          homeScore: homeIsWhisperer ? 150 : awayIsWhisperer ? 50 : 105,
-          awayScore: awayIsWhisperer ? 150 : homeIsWhisperer ? 50 : 95,
+          homeScore: homeIsWhisperer || matchup.id === hordeMatchup!.id ? 150 : awayIsWhisperer ? 50 : 105,
+          awayScore: awayIsWhisperer ? 150 : homeIsWhisperer || matchup.id === hordeMatchup!.id ? 50 : 95,
           status: 'final',
         } })
       }
