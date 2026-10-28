@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { buildZombieInventoryPayload, installZombieLeagueE2EMocks } from '../helpers/mockZombieLeagueE2E'
+import { buildZombieInventoryPayload, buildZombieLeagueGetPayload, installZombieLeagueE2EMocks } from '../helpers/mockZombieLeagueE2E'
 
 test.describe('@zombie iPhone commissioner accessibility', () => {
   const leagueId = 'e2e-zombie-phone-league'
@@ -81,4 +81,50 @@ test.describe('@zombie iPhone commissioner accessibility', () => {
     expect(overflow).toBeLessThanOrEqual(1)
   })
 
+  test('keeps horde alerts touchable and victory cards readable with reduced motion', async ({ page }) => {
+    test.setTimeout(120_000)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await installZombieLeagueE2EMocks(page, leagueId)
+    await page.route('**/api/zombie/league**', async route => {
+      const url = new URL(route.request().url())
+      if (route.request().method() !== 'GET' || url.pathname !== '/api/zombie/league') {
+        await route.fallback()
+        return
+      }
+      await route.fulfill({ status: 200, json: {
+        ...buildZombieLeagueGetPayload(leagueId),
+        hordeSitOuts: { myPendingResponse: { sitOutId: 'sit-out-1', week: 3 } },
+        winCards: [{
+          role: 'Whisperer', winnerName: 'Whisperer E2E', opponentName: 'E2E Survivors',
+          winnerScore: 105, opponentScore: 97, week: 3,
+        }],
+      } })
+    })
+    await page.goto(`/zombie/${leagueId}`)
+    const bell = page.getByRole('button', { name: /Zombie notifications/ })
+    await expect(bell).toBeVisible({ timeout: 30_000 })
+    expect(await bell.evaluate(button => button.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44)
+    expect(await bell.evaluate(button => button.getBoundingClientRect().width)).toBeGreaterThanOrEqual(44)
+    await bell.click()
+    await expect(bell).toHaveAttribute('aria-expanded', 'true')
+    const accept = page.getByRole('button', { name: 'Accept horde sit-out nomination' })
+    const decline = page.getByRole('button', { name: 'Decline horde sit-out nomination' })
+    await expect(accept).toBeVisible()
+    await expect(decline).toBeVisible()
+    for (const button of [accept, decline]) {
+      const size = await button.evaluate(element => {
+        const rect = element.getBoundingClientRect()
+        return { width: rect.width, height: rect.height }
+      })
+      expect(size.width).toBeGreaterThanOrEqual(44)
+      expect(size.height).toBeGreaterThanOrEqual(44)
+    }
+    const cards = page.getByRole('region', { name: 'Horde wins' })
+    await expect(cards.getByText('Whisperer E2E wins')).toBeVisible()
+    await expect(cards.getByText(/105\.0–97\.0/)).toBeVisible()
+    const decoration = cards.locator('article [aria-hidden="true"]')
+    expect(await decoration.evaluate(element => getComputedStyle(element).animationName)).toBe('none')
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(overflow).toBeLessThanOrEqual(1)
+  })
 })
