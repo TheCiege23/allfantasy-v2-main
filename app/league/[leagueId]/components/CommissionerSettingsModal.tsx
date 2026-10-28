@@ -50,6 +50,9 @@ import { ZombieItemsPanel } from '@/app/zombie/components/commissioner/ZombieIte
 import { ZombiePaidPanel } from '@/app/zombie/components/commissioner/ZombiePaidPanel'
 import { ZombieUniversePanel } from '@/app/zombie/components/commissioner/ZombieUniversePanel'
 import { ZombieUpdatesPanel } from '@/app/zombie/components/commissioner/ZombieUpdatesPanel'
+import { ZombieAutomationPanel } from '@/app/zombie/components/commissioner/ZombieAutomationPanel'
+import { ZombieOverridePanel } from '@/app/zombie/components/commissioner/ZombieOverridePanel'
+import { ZombieAuditLogPanel } from '@/app/zombie/components/commissioner/ZombieAuditLogPanel'
 import { ZombieAIPanel } from '@/app/zombie/components/commissioner/ZombieAIPanel'
 import { ZombieAnimationsPanel } from '@/app/zombie/components/commissioner/ZombieAnimationsPanel'
 import { ZombieAdvancedPanel } from '@/app/zombie/components/commissioner/ZombieAdvancedPanel'
@@ -555,6 +558,12 @@ export function CommissionerSettingsModal({
             <ZombieUniversePanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_updates' ? (
             <ZombieUpdatesPanel leagueId={leagueId} canEdit={canEdit} />
+          ) : activeTab === 'zombie_automation' ? (
+            <ZombieAutomationPanel leagueId={leagueId} canEdit={canEdit} />
+          ) : activeTab === 'zombie_overrides' ? (
+            <ZombieOverridePanel leagueId={leagueId} canEdit={canEdit} />
+          ) : activeTab === 'zombie_audit' ? (
+            <ZombieAuditLogPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_animations' ? (
             <ZombieAnimationsPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'zombie_advanced' ? (
