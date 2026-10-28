@@ -171,6 +171,14 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
   }
   const rostersOnly = url.searchParams.get("rosters") === "1"
   /** Exclusive mode, like `?rosters=1` — see the block that reads it for why it gets its own fire. */
+  const rosterScope = url.searchParams.get("rosterSports")
+  let selectedRosterSports: IngestSport[]
+  try {
+    if (rosterScope !== null && (!rostersOnly || url.searchParams.get("riProfiles") === "1" || url.searchParams.get("odds") === "1" || source !== "all" || tsdbScope !== null)) throw new Error("exclusive_scope_required")
+    selectedRosterSports = resolveTsdbScheduleSports(rosterScope, TSDB_SPORTS.filter((s) => LEAGUES[s].hasPlayers))
+  } catch {
+    return NextResponse.json({ error: "rosterSports requires rosters=1 and supported roster sports." }, { status: 400 })
+  }
   const riProfilesOnly = url.searchParams.get("riProfiles") === "1"
   /** Exclusive mode — see the header. Runs 6-hourly while the schedule blocks run weekly. */
   const oddsOnly = url.searchParams.get("odds") === "1"
@@ -404,7 +412,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     if (rostersOnly) {
       const rosters: Record<string, unknown> = {}
       const deferred: string[] = []
-      const rosterSports = TSDB_SPORTS.filter((s) => LEAGUES[s].hasPlayers)
+      const rosterSports = selectedRosterSports
 
       /*
        * ⚠ A HEARTBEAT, BECAUSE A TABLE PROBE ON THIS JOB WOULD BE A FALSE GREEN.

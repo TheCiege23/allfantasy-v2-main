@@ -1,3 +1,4 @@
+import { loadStoredDraftSeasonStats } from './storedDraftSeasonStats'
 /**
  * Single server source for normalized draft pool rows (same enrichment as GET /draft/pool).
  * Use from API route, DraftWorker, autopick fallback, and tests.
@@ -134,6 +135,7 @@ export type DraftPoolRawRow = {
   imageUrl?: string | null
   age?: number | null
   fantasyPointsPerGame?: number | null
+  statSeason?: string | null
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
   /** MLB / NHL season line (`extractMlbDraftSeasonStats` / `extractNhlDraftSeasonStats`). */
   seasonStatLine?: DraftSeasonStatLine | null
@@ -1154,6 +1156,9 @@ async function buildResolvedDraftPoolForLeague(
     isDynasty: Boolean(league?.isDynasty) || String(effectiveLeagueTemplate.formatType).toUpperCase().includes('DYNASTY'),
     isDevy: isDevyDynasty, isC2C, mergeCollegePool,
   })
+  const currentRosterOnly = ['NFL', 'NBA', 'NHL', 'MLB'].includes(String(sport)) &&
+      !league?.isDynasty && !String(effectiveLeagueTemplate.formatType).toUpperCase().includes('DYNASTY') &&
+      !String(league?.leagueVariant ?? '').toLowerCase().includes('dynasty') && !isDevyDynasty && !isC2C && !mergeCollegePool
   const strictPoolSeparation = (isDevyDynasty && poolType != null) || (isC2C && poolType != null)
   const useMixedPoolTypeMarkers = mergeCollegePool || c2cEnabled || devyEnabled
   const adpFormat: 'redraft' | 'dynasty' =
@@ -1219,6 +1224,7 @@ async function buildResolvedDraftPoolForLeague(
   const perfPlayerPool = perfStart(`5. getPlayerPoolForLeague (limit=${poolFetchLimit})`)
   const poolRows: SportPoolRow[] = await getPlayerPoolForLeague(leagueId, sport, {
     limit: poolFetchLimit,
+    currentRosterOnly,
   }).catch(() => [] as SportPoolRow[])
   perfPlayerPool()
   const poolByStrictKey = new Map<string, (typeof poolRows)[number]>()
@@ -1611,6 +1617,12 @@ async function buildResolvedDraftPoolForLeague(
     )
   }
 
+  if (currentRosterOnly) {
+    const currentKeys = new Set(poolRows.map((row) => strictIdentityKey(row.full_name ?? '', row.position ?? '')))
+    rawListFiltered = rawListFiltered.filter((row) => currentKeys.has(strictIdentityKey(
+      row.name ?? row.playerName ?? row.full_name ?? '', row.position ?? row.pos ?? '',
+    )))
+  }
   let nbaSurvivorRoster: NbaRosterEligibility | null = null
   if (verifyCurrentNbaRoster) {
     const requiredPlayers = (draftSession?.teamCount ?? league?.leagueSize ?? 20) * (draftSession?.rounds ?? 12)
@@ -2020,6 +2032,10 @@ async function buildResolvedDraftPoolForLeague(
     mismatchCollector,
   )
   perfSprMaps()
+  const storedSeasonStats = await loadStoredDraftSeasonStats(String(sport),
+    poolRows.flatMap((row) => { const id = rollingInsightsIdOfPoolRow(row); return id ? [id] : [] }),
+    Number.isInteger(league?.season) ? Number(league?.season) : new Date().getUTCFullYear(),
+  )
 
   /*
    * MLB / NHL projections. `AFProjectionSnapshot` is written daily for both (compute-projections),
@@ -2167,6 +2183,7 @@ async function buildResolvedDraftPoolForLeague(
       team,
       sprPoolRecordId,
     )
+    const storedSeason = storedSeasonStats.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')
     const sprAug = sprLookup.augment
     const sprMeta = sprLookup.meta
 
@@ -2498,8 +2515,9 @@ async function buildResolvedDraftPoolForLeague(
         sprSupplementFppg ??
         (row as RawRow).fantasyPointsPerGame ??
         undefined,
-      nbaDraftStats: sport === 'NBA' ? (sprAug?.nbaDraftStats ?? null) : null,
-      seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (sprAug?.seasonStatLine ?? null) : null,
+      nbaDraftStats: sport === 'NBA' ? (storedSeason?.nbaDraftStats ?? sprAug?.nbaDraftStats ?? null) : null,
+      statSeason: storedSeason?.statSeason ?? null,
+      seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (storedSeason?.seasonStatLine ?? sprAug?.seasonStatLine ?? null) : null,
       afProjectionPerGame: afProjectionsByRiId?.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null,
       lifetimeValue:
         resolvedAnalytics?.lifetimeValue ??

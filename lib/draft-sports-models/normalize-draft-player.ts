@@ -51,6 +51,7 @@ export type RawDraftPlayerLike = {
   /** Pre-resolved image URL from TheSportsDB/DB ingestion (used for NCAAF, Soccer, etc.) */
   imageUrl?: string | null
   fantasyPointsPerGame?: number | null
+  statSeason?: string | null
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
   /** MLB / NHL season line, spread into `display.stats` for the pool's stat columns. */
   seasonStatLine?: Partial<Record<string, number>> | null
@@ -174,6 +175,7 @@ export function normalizeDraftPlayer(
     raw.lifetimeValue != null && Number.isFinite(Number(raw.lifetimeValue)) ? Number(raw.lifetimeValue) : null
 
   const stats: PlayerStatSnapshotModel = {
+    seasonLabel: raw.statSeason ?? null,
     rollingInsightsSupplemental: raw.rollingInsightsSupplemental ?? undefined,
     primaryStatLabel: adp != null ? 'ADP' : fppg != null ? 'PPG' : ltv != null ? 'Val' : null,
     primaryStatValue: adp ?? fppg ?? ltv ?? null,

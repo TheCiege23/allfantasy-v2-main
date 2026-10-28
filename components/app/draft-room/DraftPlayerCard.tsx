@@ -284,7 +284,10 @@ function DraftPlayerCardInner({
     (projectedPoints != null
       ? `Proj ${projectedPoints.toFixed(1)} pts`
       : '')
-  const displayStatLine = compactStats || nbaRates || statLine
+  const boxScoreLine = compactStats || nbaRates
+  const displayStatLine = boxScoreLine
+    ? [display?.stats?.seasonLabel, boxScoreLine].filter(Boolean).join(' · ')
+    : statLine
   const headshotTestBase = testId ? `${testId}-headshot` : 'draft-player-headshot'
   const teamLogoTestBase = testId ? `${testId}-team-logo` : 'draft-player-team-logo'
 

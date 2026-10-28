@@ -43,6 +43,8 @@ export interface PlayerAssetModel {
 
 /** Key stat summary for draft panels (sport-appropriate). */
 export interface PlayerStatSnapshotModel {
+  /** Actual stored season, including a previous-season fallback. */
+  seasonLabel?: string | null
   /** e.g. "ADP 12" or "PPG 22.1" */
   primaryStatLabel?: string | null
   primaryStatValue?: number | null
