@@ -57,6 +57,12 @@ export function verifyBracketEvent(input: {
   if (input.sport === "nba_cup" && new Date(actualAt).getUTCFullYear() !== input.season) {
     return { ok: false, reason: "wrong-cup-season" }
   }
+  if (input.sport === "nba_cup") {
+    const notes = Array.isArray(competition.notes) ? competition.notes : []
+    if (!notes.some((note: unknown) => /\bNBA Cup\b/i.test(String(object(note).headline ?? "")))) {
+      return { ok: false, reason: "not-nba-cup-event" }
+    }
+  }
   const status = object(object(competition.status).type)
   if (status.state !== "post" || status.completed !== true) return { ok: false, reason: "not-final" }
   const homeScore = score(object(direct ? home[0] : away[0]).score)
