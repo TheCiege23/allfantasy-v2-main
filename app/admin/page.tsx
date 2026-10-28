@@ -1772,17 +1772,11 @@ export default async function AdminPage(
   }
 
   const q = Array.isArray(searchParams?.q) ? searchParams?.q[0] ?? "" : searchParams?.q ?? ""
-  let data: AdminCommandCenterMetrics
-  try {
-    data = await getAdminCommandCenterMetrics(q)
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown admin data failure"
-    return <AdminPageLoadFailure message={message} />
-  }
+  const dataPromise = getAdminCommandCenterMetrics(q)
 
   /*
    * ⚠ GROWTH IS SUPPLEMENTARY AND MUST NOT BE ABLE TO HOLD THE PAGE. The metrics
-   * fetch above owns /admin — if it dies there is nothing to show. This one must
+   * fetch owns /admin — if it dies there is nothing to show. This one must
    * not inherit that power: an operator opening /admin during an incident needs
    * the verdict and the provider table far more than a chart.
    *
@@ -1816,6 +1810,13 @@ export default async function AdminPage(
   const PIPELINE_BUDGET_MS = 6000
   const pipelineWork = getAdminPipelineFreshness().catch(() => null)
   const pipelineBudget = new Promise<null>((resolve) => setTimeout(() => resolve(null), PIPELINE_BUDGET_MS))
+  let data: AdminCommandCenterMetrics
+  try {
+    data = await dataPromise
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown admin data failure"
+    return <AdminPageLoadFailure message={message} />
+  }
   const [growth, pipelineFreshness]: [
     Awaited<ReturnType<typeof getAdminGrowthSeries>> | null,
     AdminPipelineFreshness | null,
