@@ -5,7 +5,7 @@ The isolated Railway project `allfantasy-zombie-rehearsal` has a separate `zombi
 ## Configuration
 
 - Source: the reviewed Zombie PR commit, pinned alongside `zombie-web`.
-- Railway config file: `railway.zombie-staging-cron.json`.
+- Settings reference: `railway.zombie-staging-cron.json`. The connector rejected the custom config-file path, so its Dockerfile, start command, restart policy, and cron fields were applied directly to this service.
 - `ZOMBIE_STAGING_BASE_URL=https://zombie-web-staging.up.railway.app`.
 - `ZOMBIE_STAGING_SEASON=2026`.
 - `ZOMBIE_CRON_SECRET=${{zombie-web.CRON_SECRET}}` uses a reference inside this isolated project.
@@ -19,6 +19,10 @@ Generate a distinct cron secret for this staging service in Railway. Do not copy
 The small Docker build executes `node --test zombie-staging-cron.test.mjs` in its copied working directory. Tests cover isolation guards, the four sport scopes, partial/empty provider responses, continuing after a failed sport, redirect refusal, and credential-safe logging. `__tests__/cron/tsdb-schedule-sports.test.ts` covers the optional scope allow-list; omitted scope preserves existing production behavior.
 
 The runner logs job name, HTTP status where relevant, row counts, partial/failure state, and elapsed time. It does not log headers, provider response bodies, URLs containing credentials, or raw exception messages. HTTP 200 with a provider error, no games, or deferred work is not reported as a successful import. Requests are sequential, bounded, and not retried automatically. The next six-hour run can continue a partial schedule sweep.
+
+On October 28 all four Node tests passed in the Railway Docker build. The disabled runtime deployment completed with no service warnings and no running process left. The web build at `ed53a33` compiled and passed its CSS gate, but rollout is pending during Railway's [US East / EU West build incident](https://status.railway.com/incident/TX3M5SWF). The six-hour schedule is restored; `ZOMBIE_STAGING_CRON_ENABLED` remains `0`. No first import has been certified.
+
+To finish: wait for the matching web deployment, temporarily clear the cron schedule, set the enable flag to `1`, and redeploy the existing small runner image for one bootstrap run. Inspect job results and stored rows, then restore the six-hour schedule and redeploy that same image. Do not enable against an older web version: the old route ignores the new scope parameter.
 
 Verify `SportsGame` row counts by sport, source, and season and check `sync_job_runs` for `cron-import-schedules-tsdb` with a single-sport scope. Stored game coverage establishes calendar/lock readiness. Provider player scores, a completed fantasy draft, weekly settlement, and corrections still need their own acceptance run.
 
