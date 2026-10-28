@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-28T20:56:03.811Z",
+  "checkedAt": "2026-10-28T21:28:54.247Z",
   "scope": "Live provider ingestion into verified isolated staging. No notification delivery.",
   "results": [
     {
@@ -11,7 +11,7 @@
         "unparseableStatuses": 25,
         "completeForLineup": false,
         "completeCoverageForLineup": true,
-        "attestedAt": "2026-10-28T20:56:03.652Z"
+        "attestedAt": "2026-10-28T21:28:54.083Z"
       },
       "schedule": {
         "fetched": false,
@@ -23,13 +23,13 @@
     {
       "sport": "NBA",
       "injuries": {
-        "fetched": 187,
-        "written": 187,
+        "fetched": 186,
+        "written": 186,
         "providerErrored": false,
         "unparseableStatuses": 0,
         "completeForLineup": true,
         "completeCoverageForLineup": true,
-        "attestedAt": "2026-10-28T20:55:41.294Z"
+        "attestedAt": "2026-10-28T21:28:26.753Z"
       },
       "schedule": {
         "fetched": true,
@@ -47,7 +47,7 @@
         "unparseableStatuses": 0,
         "completeForLineup": true,
         "completeCoverageForLineup": true,
-        "attestedAt": "2026-10-28T20:55:43.754Z"
+        "attestedAt": "2026-10-28T21:28:33.222Z"
       },
       "schedule": {
         "fetched": true,
@@ -59,13 +59,13 @@
     {
       "sport": "NHL",
       "injuries": {
-        "fetched": 245,
-        "written": 245,
+        "fetched": 244,
+        "written": 244,
         "providerErrored": false,
         "unparseableStatuses": 0,
         "completeForLineup": true,
         "completeCoverageForLineup": true,
-        "attestedAt": "2026-10-28T20:55:41.803Z"
+        "attestedAt": "2026-10-28T21:28:27.801Z"
       },
       "schedule": {
         "fetched": true,

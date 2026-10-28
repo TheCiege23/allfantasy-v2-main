@@ -26,13 +26,17 @@ async function run() {
     (!coverage.lastErrorAt || coverage.lastErrorAt <= coverage.lastSuccessAt), 'Fresh real NFL provider coverage required; never fabricate a feed attestation')
   const { capturePirateLineupEvidence } = await import('../lib/pirate/lineupEvidence')
   const { seedPirateClaims } = await import('../lib/pirate/service')
+  const { createActorContext } = await import('../lib/domain/actorContext')
+  const { createStagingLeagueFixture } = await import('../lib/domain/stagingLeagueFixture')
   for (let i = 0; i < 4; i++) {
     const user = await db.appUser.create({ data: { email: `${tag}-${i}@example.invalid`, username: `${tag}_${i}`, displayName: `Capture QA ${i}` } })
     ids.users.push(user.id)
   }
-  const league = await db.league.create({ data: { userId: ids.users[0], platform: 'manual', platformLeagueId: tag,
+  const actor = createActorContext({ userId: ids.users[0], tenantId: tag, actorLabel: 'Pirate staging capture rehearsal' })
+  assert(actor.ok, 'Valid fixture actor required')
+  const league = await createStagingLeagueFixture(db, actor.value, { platform: 'manual', platformLeagueId: tag,
     name: tag, sport: 'NFL', season: 2097, leagueType: 'pirate', leagueVariant: 'pirate', leagueSize: 4, rosterSize: 2,
-    settings: { starter_slots: { QB: 1, BN: 1 }, nfl_roster_config: { slots: { QB: 1, BN: 1 } } } } })
+    settings: { starter_slots: { QB: 1, BN: 1 }, nfl_roster_config: { slots: { QB: 1, BN: 1 } } } })
   ids.leagues.push(league.id)
   const season = await db.redraftSeason.create({ data: { leagueId: league.id, sport: 'NFL', season: 2097,
     status: 'active', totalWeeks: 2, playoffStartWeek: 3, currentWeek: 1 } })
@@ -101,7 +105,8 @@ async function run() {
   assert.equal(await db.redraftLeagueTransaction.count({ where: { leagueId: league.id, type: 'pirate_lineup_evidence' } }), 8)
   const report = { checkedAt: new Date().toISOString(), scope: 'Synthetic NFL matchups and rosters on actual staging DB, actual wall-clock lock boundary, real provider coverage marker. This is not a live NFL scoring period.',
     realCapturePipeline: true, beforeAfterSnapshots: 8, repeatedTicksDeduplicated: true, automaticForfeit: true,
-    originalLocksRetained: true, uncertainRosterKeptLocks: true, returnWeekReportNotDiscarded: true, fixturesRemoved: false }
+    originalLocksRetained: true, uncertainRosterKeptLocks: true, returnWeekReportNotDiscarded: true,
+    tenantScopedFixture: true, fixturesRemoved: false }
   return report
 }
 let report: Awaited<ReturnType<typeof run>> | undefined
@@ -116,6 +121,7 @@ run().then(value => { report = value }).catch(error => {
     await db.sportsPlayer.deleteMany({ where: { id: { in: ids.players } } })
     await db.sportsInjury.deleteMany({ where: { id: { in: ids.injuries } } })
     await db.appUser.deleteMany({ where: { id: { in: ids.users } } })
+    await db.tenant.deleteMany({ where: { id: tag } })
     if (report) {
       report.fixturesRemoved = true
       fs.writeFileSync('docs/pirate-validation/capture-rehearsal-staging.json', JSON.stringify(report, null, 2))

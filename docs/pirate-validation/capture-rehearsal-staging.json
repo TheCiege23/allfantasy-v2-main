@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-28T21:03:31.668Z",
+  "checkedAt": "2026-10-28T21:30:34.628Z",
   "scope": "Synthetic NFL matchups and rosters on actual staging DB, actual wall-clock lock boundary, real provider coverage marker. This is not a live NFL scoring period.",
   "realCapturePipeline": true,
   "beforeAfterSnapshots": 8,
@@ -8,5 +8,6 @@
   "originalLocksRetained": true,
   "uncertainRosterKeptLocks": true,
   "returnWeekReportNotDiscarded": true,
+  "tenantScopedFixture": true,
   "fixturesRemoved": true
 }
