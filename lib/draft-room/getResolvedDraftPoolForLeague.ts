@@ -1980,12 +1980,10 @@ async function buildResolvedDraftPoolForLeague(
   let nflRookieLookup: NflRookieLookup | null = null
   let nflRookieFetchSource: NflRookieFetchSource | null = null
   if (sport === 'NFL') {
-    // DB-FIRST NOTE: loadNflRookieLookup calls the Sleeper /players/nfl endpoint
-    // (24h in-process memory cache). A future hardening pass should back this
-    // with a DB-persisted SleeperPlayersCache table so no cold-start API call
-    // is made from the pool read path. Failures degrade silently to hasData=false.
-    const perfRookie = perfStart('11. loadNflRookieLookup (Sleeper API â 24h cache)')
-    const rookieBundle = await loadNflRookieLookup().catch(() => null)
+    // A draft read never waits for a provider. Ingestion/audit callers may still refresh
+    // the compact map; missing or expired experience remains unknown here.
+    const perfRookie = perfStart('11. loadNflRookieLookup (stored metadata only)')
+    const rookieBundle = await loadNflRookieLookup({ allowLive: false }).catch(() => null)
     nflRookieLookup = rookieBundle?.lookup ?? null
     nflRookieFetchSource = rookieBundle?.fetchSource ?? null
     perfRookie()

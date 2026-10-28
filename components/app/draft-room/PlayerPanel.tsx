@@ -6,6 +6,8 @@ import { Search, User, Plus, GitCompare, LayoutGrid, Rows3, X } from 'lucide-rea
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { applyDraftFilters, DRAFT_ROOM_I18N_KEYS, getPickConfirmationLabel, getPositionFilterOptionsForSport } from '@/lib/draft-room'
+import type { DraftStatPlayerSource } from '@/lib/draft-room/draftSportStatColumns'
+import { compactDraftPlayerStats } from '@/lib/draft-room/compactDraftPlayerStats'
 import { DraftPlayerCard } from './DraftPlayerCard'
 import { SleeperPoolTable } from './SleeperPoolTable'
 import {
@@ -278,6 +280,7 @@ function PlayerListCards({
               graduatedToNFL={p.graduatedToNFL}
               poolType={p.poolType}
               isRookie={p.isRookie ?? false}
+              compactStats={compactDraftPlayerStats(p as unknown as DraftStatPlayerSource, draftSport, p.position)}
               nflDraftProjectionSplits={p.nflDraftProjectionSplits ?? null}
               testId={`draft-player-card-${index}`}
               onSelect={() => onPlayerSelect(p)}
@@ -401,6 +404,16 @@ function PlayerPanelInner({
   const draftedIdsForRows = draftedPlayerIds?.size ? draftedPlayerIds : undefined
   const { t } = useLanguage()
   const compareUi = usePlayerComparisonUIOptional()
+  const [phoneLayout, setPhoneLayout] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const filterRegionId = React.useId()
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px)')
+    const update = () => setPhoneLayout(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
   const [compareAnchor, setCompareAnchor] = useState<PlayerEntry | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   /** User-facing view-mode override; null defers to the auto rule below. */
@@ -821,6 +834,7 @@ function PlayerPanelInner({
           : 'relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-gradient-to-b from-[#070f22] via-[#060d1e] to-[#050a14] shadow-[0_16px_48px_rgba(0,0,0,0.4)]'
       }
       data-testid="draft-player-panel"
+      data-phone-layout={phoneLayout ? 'true' : 'false'}
     >
       <div
         className={`pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r ${rs ? 'via-cyan-400/30' : 'via-violet-400/15'} from-transparent to-transparent`}
@@ -829,7 +843,7 @@ function PlayerPanelInner({
       <div
         className={`sticky top-0 z-20 shrink-0 border-b shadow-[0_8px_28px_rgba(0,0,0,0.4)] backdrop-blur-xl ${rs ? 'border-cyan-500/12 bg-[rgba(6,14,28,0.97)]' : 'border-white/[0.08] bg-[#060d1e]/92'}`}
       >
-        <div className={`flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] px-2 py-1 ${rs ? 'gap-y-1' : ''}`}>
+        <div data-testid="draft-player-toolbar" className={`flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] px-2 py-1 ${rs ? 'gap-y-1' : ''}`}>
           <div
             className={`flex min-h-[30px] flex-1 items-center gap-1.5 rounded-full border px-2.5 py-1 shadow-inner touch-manipulation transition duration-150 focus-within:border-cyan-400/45 focus-within:ring-2 focus-within:ring-cyan-400/20 ${
               rs
@@ -843,8 +857,8 @@ function PlayerPanelInner({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={rs ? 'Search name, team, school…' : 'Search players...'}
-              className="min-w-0 flex-1 bg-transparent text-[12px] text-white placeholder:text-white/40 focus:outline-none"
+              placeholder="Search players, teams…"
+              className="min-w-0 flex-1 bg-transparent text-base md:text-sm text-white placeholder:text-white/40 focus:outline-none"
               aria-label="Search players"
               data-testid="draft-player-search-input"
             />
@@ -993,6 +1007,12 @@ function PlayerPanelInner({
             Devy round — select a college/devy-eligible player.
           </div>
         )}
+        <button type="button" className="draft-filter-toggle mx-2 mb-1 rounded-lg border border-white/15 px-3 text-sm text-cyan-100 md:hidden"
+          data-testid="draft-player-filter-toggle" aria-expanded={filtersOpen} aria-controls={filterRegionId}
+          onClick={() => setFiltersOpen(open => !open)}>
+          {filtersOpen ? 'Hide filters' : `Filters · ${filtered.length} players`}
+        </button>
+        <div id={filterRegionId} className={filtersOpen ? 'block' : 'hidden md:block'}>
         <div
           className={`flex flex-wrap items-center gap-1 border-b border-white/[0.05] px-2 py-1 sm:px-3 ${rs ? 'bg-[#050c18]/95' : 'bg-black/10'}`}
         >
@@ -1129,6 +1149,7 @@ function PlayerPanelInner({
           >
             Clear filters
           </button>
+        </div>
         </div>
       </div>
       {compareAnchor && (
@@ -1384,11 +1405,11 @@ function PlayerPanelInner({
              * The horizontal-scroll container honors small viewports — on mobile,
              * the table scrolls sideways rather than squishing column widths.
              */
-            const useTable =
+            const useTable = !phoneLayout && (
               viewModeOverride === 'sleeper_table' ||
               (viewModeOverride === null &&
                 (poolLayout === 'sleeper_table' ||
-                  (poolLayout === 'auto' && sport === 'NFL')))
+                  (poolLayout === 'auto' && sport === 'NFL'))))
 
             if (!useTable) {
               return (

@@ -139,7 +139,7 @@ export function buildSleeperPoolTableLayout(
   const actions: SleeperColumnSpec = {
     key: 'actions',
     label: '',
-    width: 124,
+    width: 160,
     align: 'right',
   }
 

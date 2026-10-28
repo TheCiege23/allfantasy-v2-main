@@ -7,8 +7,8 @@
  * what keeps the test side fast + transform-safe.
  */
 
-export const SLEEPER_POOL_TABLE_ROW_HEIGHT = 32
-export const SLEEPER_POOL_TABLE_HEADER_HEIGHT = 26
+export const SLEEPER_POOL_TABLE_ROW_HEIGHT = 60
+export const SLEEPER_POOL_TABLE_HEADER_HEIGHT = 40
 
 export interface ColumnSpec {
   key: string
@@ -45,7 +45,7 @@ export const SLEEPER_POOL_TABLE_COLUMNS: readonly (ColumnSpec & { statLabel?: st
   { key: 'pa_yds', label: 'PA YDS', width: 68, align: 'right', title: 'Passing yards', statLabel: 'passing yards' },
   { key: 'pa_td', label: 'PA TD', width: 56, align: 'right', title: 'Passing touchdowns', statLabel: 'passing touchdowns' },
   { key: 'pa_int', label: 'PA INT', width: 60, align: 'right', title: 'Passing interceptions', statLabel: 'passing interceptions' },
-  { key: 'actions', label: '', width: 124, align: 'right' },
+  { key: 'actions', label: '', width: 160, align: 'right' },
 ] as const
 
 /**

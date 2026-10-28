@@ -67,6 +67,7 @@ export type DraftPlayerCardProps = {
   /** Label for the ADP column (e.g. AI ADP when sorting by AI ADP). */
   adpMetricLabel?: string
   /** NFL redraft pool: projection + split stats (from `/draft/pool`). */
+  compactStats?: string | null
   nflDraftProjectionSplits?: NflDraftProjectionSplits | null
 }
 
@@ -183,6 +184,7 @@ function DraftPlayerCardInner({
   isQueued = false,
   adpMetricLabel = 'ADP',
   nflDraftProjectionSplits = null,
+  compactStats = null,
 }: DraftPlayerCardProps) {
   const rs = presentationVariant === 'redraft_snake'
   const posU = position.trim().toUpperCase()
@@ -196,8 +198,10 @@ function DraftPlayerCardInner({
   const displayName = display?.displayName ?? name
   const primaryStat = display?.stats?.primaryStatValue ?? adp
   const bye = display?.metadata?.byeWeek ?? display?.stats?.byeWeek ?? byeWeek
-  const injuryStatus =
+  const rawInjuryStatus =
     display?.metadata?.injuryStatus ?? unifiedProductView?.unified.injuryStatus ?? unifiedProductView?.injuryStatus ?? null
+  const injuryStatus = rawInjuryStatus && !/^(unknown|none|n\/a|healthy|active|act|available)$/i.test(rawInjuryStatus.trim())
+    ? rawInjuryStatus : null
   const resolvedSchool = school ?? display?.metadata?.collegeOrPipeline ?? null
   const resolvedClassYearLabel = display?.metadata?.classYearLabel ?? classYearLabel
   const resolvedDraftGrade = display?.metadata?.draftGrade ?? draftGrade
@@ -251,8 +255,8 @@ function DraftPlayerCardInner({
     unifiedProductView?.unified.headshotUrl ??
     null
   const teamLogoUrl = normalized.teamLogoUrl ?? assets?.teamLogoUrl ?? null
-  const rowHeadshotSize = rs ? 36 : 32
-  const rowLogoSize = rs ? 16 : 14
+  const rowHeadshotSize = 44
+  const rowLogoSize = 16
   // Commit P — surface the explicit `projection` field as a stat-line
   // fallback when the upstream summary is absent. Pre-Commit-P the row
   // showed "No stats available" even when the resolver had a projected-
@@ -271,11 +275,13 @@ function DraftPlayerCardInner({
         .map(([label, value]) => `${label} ${value.toFixed(1)}`)
         .join(' · ')
     : ''
-  const statLine = normalized.stats?.summary ??
+  const storedSummary = normalized.stats?.summary
+  const meaningfulSummary = storedSummary && !/^No stats available$/i.test(storedSummary) ? storedSummary : null
+  const statLine = meaningfulSummary ??
     (projectedPoints != null
       ? `Proj ${projectedPoints.toFixed(1)} pts`
-      : 'No stats available')
-  const displayStatLine = nbaRates || statLine
+      : '')
+  const displayStatLine = compactStats || nbaRates || statLine
   const headshotTestBase = testId ? `${testId}-headshot` : 'draft-player-headshot'
   const teamLogoTestBase = testId ? `${testId}-team-logo` : 'draft-player-team-logo'
 
@@ -354,7 +360,7 @@ function DraftPlayerCardInner({
               )}
             </div>
             <p className="mt-1 text-[11px] text-white/65">
-              {[adpMetricLabel, formatAdpDisplay(normalized.adp), 'Bye', formatBye(normalized.byeWeek)].join(' · ')}
+              {[`${adpMetricLabel} ${formatAdpDisplay(normalized.adp)}`, ...(isNfl ? [`Bye ${formatBye(normalized.byeWeek)}`] : [])].join(' · ')}
             </p>
             {injuryStatus ? (
               <span className="mt-1 inline-flex max-w-full truncate rounded-md border border-rose-400/35 bg-rose-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-rose-100">
@@ -382,197 +388,71 @@ function DraftPlayerCardInner({
   }
 
   return (
-    <li
-      data-draft-player-card="true"
-      data-variant="row"
-      data-drafted={isDrafted ? 'true' : 'false'}
-      data-testid={testId}
-      onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') onSelect?.()
-      }}
-      role={onSelect ? 'button' : undefined}
-      tabIndex={onSelect ? 0 : undefined}
-      className={`group flex min-w-0 flex-col gap-0.5 rounded-xl border px-2 py-1.5 text-[11px] backdrop-blur-sm transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 active:scale-[0.98] ${
-        rs
-          ? `shadow-[0_8px_28px_rgba(0,0,0,0.35)] ${
-              isDrafted
-                ? 'border-white/10 bg-black/40 opacity-50 saturate-50 hover:translate-y-0 hover:scale-100'
-                : isSelected
-                  ? 'border-cyan-300/55 bg-[linear-gradient(118deg,rgba(24,52,78,0.98)_0%,rgba(12,28,48,0.96)_100%)] ring-2 ring-cyan-400/35 ring-offset-2 ring-offset-[#040915] shadow-[0_12px_44px_rgba(34,211,238,0.15)]'
-                  : 'border-cyan-500/25 bg-[linear-gradient(118deg,rgba(18,36,58,0.95)_0%,rgba(8,16,32,0.92)_55%,rgba(6,12,24,0.96)_100%)] hover:-translate-y-0.5 hover:scale-[1.01] hover:border-cyan-400/45 hover:shadow-[0_12px_40px_rgba(34,211,238,0.12)]'
-            }`
-          : `shadow-md transition duration-200 hover:-translate-y-1.5 hover:scale-[1.03] hover:border-cyan-300/70 hover:bg-[#1f3a52] hover:shadow-lg hover:shadow-cyan-500/20 ${
-              isDrafted ? 'border-cyan-400/20 bg-[#0a1228]/70 opacity-60' : 'border-cyan-400/40 bg-gradient-to-r from-[#1a2f48] via-[#142438] to-[#0a1228] shadow-cyan-500/10'
-            }`
-      } ${isDevy ? 'border-l-[3px] border-l-violet-500/70' : ''}`}
+    <article
+      data-draft-player-card="true" data-variant="row"
+      data-drafted={isDrafted ? 'true' : 'false'} data-testid={testId}
+      className={`draft-readable-player rounded-xl border px-3 py-2 transition-colors focus-within:ring-2 focus-within:ring-cyan-300/70 ${isDrafted ? 'border-white/10 bg-black/25 opacity-60' : isSelected ? 'border-cyan-300/65 bg-cyan-950/60' : 'border-white/10 bg-[#0b1628] hover:border-cyan-400/40'}`}
     >
-      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
-      <div className={`relative shrink-0 ${rs ? 'h-9 w-9' : 'h-8 w-8'}`}>
-        <HeadshotOrFallback
-          headshotUrl={headshotUrl}
-          displayName={displayName}
-          size={rowHeadshotSize}
-          testIdBase={headshotTestBase}
-        />
-        <div className="absolute -bottom-0.5 -right-0.5 rounded border border-white/15 bg-[#0a1228] p-px shadow-md">
-          <TeamLogoOrFallback logoUrl={teamLogoUrl} teamAbbr={teamAbbr} size={rowLogoSize} testIdBase={teamLogoTestBase} />
-        </div>
-      </div>
-
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <p
-            className={`truncate font-bold text-white ${rs ? 'text-[13px] tracking-tight' : ''}`}
-            data-testid={testId ? `${testId}-name` : 'draft-player-name'}
-          >
-            {displayName}
-          </p>
-          {rs && (
-            <span className="shrink-0 rounded-md border border-white/15 bg-black/35 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-100/90">
-              {position}
+      <div className="draft-player-identity">
+        <button type="button" onClick={onSelect} disabled={!onSelect}
+          className="draft-player-detail flex min-w-0 items-center gap-3 text-left"
+          aria-label={`View ${displayName} player details`}>
+          <span className="relative shrink-0">
+            <HeadshotOrFallback headshotUrl={headshotUrl} displayName={displayName}
+              size={rowHeadshotSize} testIdBase={headshotTestBase} />
+            <span className="absolute -bottom-0.5 -right-0.5 rounded bg-[#0a1228] p-px">
+              <TeamLogoOrFallback logoUrl={teamLogoUrl} teamAbbr={teamAbbr} size={rowLogoSize} testIdBase={teamLogoTestBase} />
             </span>
-          )}
-          {!rs ? (
-            <span className="shrink-0 rounded-md border border-cyan-300/30 bg-cyan-500/12 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-100/90">
-              {position}
-            </span>
-          ) : null}
-          <span className="shrink-0 rounded-md border border-white/16 bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/88">
-            {teamAbbr ?? 'FA'}
           </span>
-          <DraftPlayerLabelBadge player={labelInput} className="shrink-0" />
-          {isQueued && (
-            <span
-              className="shrink-0 rounded-full border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-100"
-              title="On your queue"
-            >
-              Queued
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold leading-5 text-white"
+              data-testid={testId ? `${testId}-name` : 'draft-player-name'}>{displayName}</span>
+            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-slate-300">
+              <span className="shrink-0 rounded bg-cyan-400/10 px-1.5 py-0.5 font-semibold text-cyan-100">{position}</span>
+              <span className="truncate">{teamAbbr ?? 'Free agent'}</span>
+              <DraftPlayerLabelBadge player={labelInput} className="shrink-0" />
+              {isQueued ? <span className="shrink-0 text-amber-200">Queued</span> : null}
             </span>
-          )}
-          {showProBadge && (
-            <span className="rounded bg-gradient-to-r from-cyan-500/40 to-cyan-400/25 px-1 py-0.5 text-[11px] font-medium text-cyan-100 shrink-0 border border-cyan-400/40 shadow-sm shadow-cyan-500/15" title="Pro / NFL">
-              Pro
-            </span>
-          )}
-          {showCollegeBadge && devyLabel && (
-            <span className="rounded bg-violet-500/25 px-1 py-0.5 text-[11px] font-medium text-violet-200 shrink-0" title="College / devy">
-              {devyLabel}
-            </span>
-          )}
-          {resolvedDraftGrade && (
-            <span className="rounded bg-amber-500/20 px-1 py-0.5 text-[11px] font-medium text-amber-100 shrink-0" title="Draft grade">
-              {resolvedDraftGrade}
-            </span>
-          )}
-          {showPromoted && (
-            <span className="rounded bg-emerald-500/25 px-1 py-0.5 text-[11px] font-medium text-emerald-200 shrink-0" title="Promoted to NFL">
-              Promoted
-            </span>
-          )}
-          {aiWarRoomBadge === 'ai_pick' && (
-            <span className="rounded bg-emerald-500/30 px-1 py-0.5 text-[11px] font-semibold text-emerald-100 shrink-0" title="AI recommendation">
-              AI Pick
-            </span>
-          )}
-          {aiWarRoomBadge === 'value' && (
-            <span className="rounded bg-amber-500/28 px-1 py-0.5 text-[11px] font-semibold text-amber-100 shrink-0" title="Strong value">
-              Great Value
-            </span>
-          )}
-          {aiWarRoomBadge === 'risky' && (
-            <span className="rounded bg-rose-500/30 px-1 py-0.5 text-[11px] font-semibold text-rose-100 shrink-0" title="Elevated risk">
-              Risky
-            </span>
-          )}
-        </div>
-        <p className={`${rs ? 'text-[11px] text-white/75' : 'text-[11px] text-cyan-100/75'}`}>
-          <span className="font-medium text-white/88">{teamAbbr ?? '—'}</span>
-          {!rs ? ` · ${position}` : ''}
-          {resolvedClassYearLabel ? ` · ${resolvedClassYearLabel}` : ''}
-          {resolvedProjectedLandingSpot ? ` · ${resolvedProjectedLandingSpot}` : ''}
-        </p>
-        {injuryStatus ? (
-          <span
-            data-testid={testId ? `${testId}-injury-status` : 'draft-player-injury-status'}
-            className={`mt-0.5 inline-block max-w-full truncate rounded border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-              rs ? 'border-rose-400/35 bg-rose-500/15 text-rose-100' : 'border-rose-400/25 bg-rose-500/10 text-rose-100/90'
-            }`}
-          >
-            {injuryStatus}
           </span>
-        ) : null}
-        <p
-          data-testid={testId ? `${testId}-stats-summary` : 'draft-player-stats-summary'}
-          className={`truncate ${rs ? 'mt-1 text-[11px] text-emerald-100/80' : 'text-[11px] text-cyan-100/55'}`}
-          title={displayStatLine}
-        >
-          {displayStatLine}
-        </p>
-        {rs &&
-        display?.stats?.secondaryStatLabel != null &&
-        display.stats.secondaryStatValue != null ? (
-          <p
-            className="text-[11px] text-emerald-200/75 truncate"
-            title={`${display.stats.secondaryStatLabel} ${display.stats.secondaryStatValue}`}
-          >
-            {display.stats.secondaryStatLabel} {display.stats.secondaryStatValue}
-          </p>
-        ) : null}
-      </div>
-
-      <div
-        className="flex shrink-0 flex-col items-end gap-1.5"
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
-      >
-        <div
-          className={`text-right text-[11px] tabular-nums font-semibold ${rs ? 'rounded-lg border border-white/10 bg-black/25 px-1.5 py-1 text-cyan-50' : 'text-cyan-100'}`}
-        >
-          <div>
-            <span className={rs ? 'text-[11px] font-medium text-white/45' : ''}>{adpMetricLabel}</span>{' '}
-            <span
-              className="text-cyan-300"
-              data-testid={testId ? `${testId}-adp` : 'draft-player-adp'}
-            >
-              {formatAdpDisplay(normalized.adp)}
-            </span>
-          </div>
-          <div className={rs ? 'mt-0.5' : ''}>
-            Bye{' '}
-            <span
-              className="text-cyan-300"
-              data-testid={testId ? `${testId}-bye` : 'draft-player-bye'}
-            >
-              {formatBye(normalized.byeWeek)}
-            </span>
-          </div>
+        </button>
+        <div className="draft-player-metrics text-right text-xs tabular-nums text-slate-300">
+          {normalized.adp != null ? <div>{adpMetricLabel}{' '}
+            <span className="font-semibold text-cyan-200" data-testid={testId ? `${testId}-adp` : 'draft-player-adp'}>{formatAdpDisplay(normalized.adp)}</span>
+          </div> : null}
+          {isNfl && normalized.byeWeek != null && normalized.byeWeek > 0 ? <div>Bye{' '}
+            <span data-testid={testId ? `${testId}-bye` : 'draft-player-bye'}>{formatBye(normalized.byeWeek)}</span>
+          </div> : null}
         </div>
-        <div className="flex items-center gap-1">{compareAction}{secondaryAction}{primaryAction}</div>
       </div>
+      <div className="draft-player-actions flex shrink-0 items-center gap-1.5">
+        {compareAction}{secondaryAction}{primaryAction}
       </div>
+      {(injuryStatus || displayStatLine || devyLabel || resolvedDraftGrade || showPromoted || aiWarRoomBadge) ? (
+        <div className="draft-player-context flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          {injuryStatus ? <span className="rounded border border-rose-400/30 bg-rose-500/10 px-1.5 py-0.5 text-rose-200"
+            data-testid={testId ? `${testId}-injury-status` : 'draft-player-injury-status'}>{injuryStatus}</span> : null}
+          {displayStatLine ? <span className="truncate text-emerald-100/80" title={displayStatLine}
+            data-testid={testId ? `${testId}-stats-summary` : 'draft-player-stats-summary'}>{displayStatLine}</span> : null}
+          {devyLabel ? <span className="text-violet-200">{devyLabel}</span> : null}
+          {resolvedDraftGrade ? <span className="text-amber-200">{resolvedDraftGrade}</span> : null}
+          {resolvedClassYearLabel ? <span className="text-slate-300">{resolvedClassYearLabel}</span> : null}
+          {resolvedProjectedLandingSpot ? <span className="text-slate-300">{resolvedProjectedLandingSpot}</span> : null}
+          {showPromoted ? <span className="text-emerald-200">Promoted</span> : null}
+          {aiWarRoomBadge ? <span className="text-cyan-200">{aiWarRoomBadge === 'ai_pick' ? 'AI Pick' : aiWarRoomBadge === 'value' ? 'Great Value' : 'Risky'}</span> : null}
+        </div>
+      ) : null}
       {showNflKickerSplits && nflDraftProjectionSplits?.kicking ? (
-        <div className="border-t border-white/[0.06] pt-1.5 pl-2 sm:pl-[52px]">
-          <p className="text-[11px] tabular-nums text-emerald-100/75">
-            FG {formatNflStatCell(nflDraftProjectionSplits.kicking.fg)} · XP{' '}
-            {formatNflStatCell(nflDraftProjectionSplits.kicking.xpt)}
-          </p>
+        <div className="draft-player-context text-xs text-emerald-100/75">
+          FG {formatNflStatCell(nflDraftProjectionSplits.kicking.fg)} · XP {formatNflStatCell(nflDraftProjectionSplits.kicking.xpt)}
         </div>
       ) : null}
       {showNflSplitGrid && nflDraftProjectionSplits ? (
-        // Slice D.1.5: the per-row stat strip used to be hidden behind `max-sm:hidden sm:block`,
-        // which meant any pool panel narrower than 640px (the typical draft layout) had no visible
-        // stats and the column header at the top of the panel had nothing aligned beneath it.
-        // Now we always render it; the inner div allows horizontal scroll on narrow widths.
-        // mt-2 + bg accent gives the strip its own visual band so 13 dashes don't blend into the
-        // 1px border above.
-        <div className="mt-2 rounded-md bg-white/[0.03] border border-white/[0.06] py-1 px-2 sm:pl-[52px]">
-          <div className="-mx-1 overflow-x-auto overscroll-x-contain px-1 [scrollbar-color:rgba(56,189,248,0.35)_rgba(15,23,42,0.5)]">
-            <NflDraftPoolStatsRow splits={nflDraftProjectionSplits} />
-          </div>
-        </div>
+        <details className="draft-player-context min-w-0 border-t border-white/10 pt-1 text-xs">
+          <summary className="cursor-pointer py-1 text-slate-300">Projection details</summary>
+          <div className="overflow-x-auto overscroll-x-contain py-2"><NflDraftPoolStatsRow splits={nflDraftProjectionSplits} /></div>
+        </details>
       ) : null}
-    </li>
+    </article>
   )
 }
 

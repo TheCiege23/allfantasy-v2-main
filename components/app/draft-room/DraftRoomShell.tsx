@@ -13,6 +13,7 @@ import {
 } from '@/lib/draft-room/mobileTraySnap'
 import './draft-mobile.css'
 import './draft-desktop.css'
+import './draft-workspace.css'
 
 const BOTTOM_DOCK_PREF_KEY = 'af:draft-premium-bottom-dock-expanded'
 
@@ -100,6 +101,33 @@ export function DraftRoomShell({
 }: DraftRoomShellProps) {
   const { t } = useLanguage()
   const [bottomDockExpanded, setBottomDockExpanded] = useState(true)
+  const [boardSize, setBoardSize] = useState<'compact' | 'balanced' | 'hidden'>('compact')
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('af:draft-board-size')
+      if (saved === 'compact' || saved === 'balanced' || saved === 'hidden') setBoardSize(saved)
+    } catch { /* Storage is optional in private browsing. */ }
+  }, [])
+  // iOS's keyboard changes the visual viewport independently of layout viewport units.
+  // Keep the bottom navigation above it, without blocking pinch zoom.
+  useEffect(() => {
+    const viewport = window.visualViewport
+    if (!viewport) return
+    const root = layoutRef.current?.closest<HTMLElement>('[data-testid="draft-room-shell"]')
+    const update = () => {
+      if (viewport.scale === 1 && window.matchMedia('(max-width: 767px)').matches) {
+        root?.style.setProperty('--draft-visible-height', `${viewport.height}px`)
+      } else root?.style.removeProperty('--draft-visible-height')
+    }
+    update()
+    viewport.addEventListener('resize', update)
+    window.addEventListener('resize', update)
+    return () => {
+      viewport.removeEventListener('resize', update)
+      window.removeEventListener('resize', update)
+      root?.style.removeProperty('--draft-visible-height')
+    }
+  }, [])
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
   useEffect(() => { setMobileToolsOpen(false) }, [mobileTab])
   useEffect(() => {
@@ -110,6 +138,7 @@ export function DraftRoomShell({
   }, [])
   const selectMobileTab = (tab: MobileDraftTab) => {
     setMobileToolsOpen(false)
+    if (tab === 'players') setTraySnap('full')
     onMobileTabChange(tab)
   }
   const allowPremiumDockCollapse = surfaceVariant !== 'redraft_snake'
@@ -125,7 +154,7 @@ export function DraftRoomShell({
    */
   const layoutRef = useRef<HTMLDivElement | null>(null)
   const trayChromeRef = useRef<HTMLDivElement | null>(null)
-  const [traySnap, setTraySnap] = useState<TraySnap>(mobileTab === 'board' ? 'peek' : 'half')
+  const [traySnap, setTraySnap] = useState<TraySnap>(mobileTab === 'board' ? 'peek' : 'full')
   const [trayFullHeight, setTrayFullHeight] = useState<number | null>(null)
   const [trayDragHeight, setTrayDragHeight] = useState<number | null>(null)
   const lastTrayTabRef = useRef<MobileDraftTab>(mobileTab === 'board' ? 'players' : mobileTab)
@@ -247,8 +276,8 @@ export function DraftRoomShell({
       (tab.id !== 'roster' || rosterPanel) &&
       (tab.id !== 'keepers' || keeperPanel)
   )
-  const primaryMobileTabs = visibleTabs.filter((tab) => ['board', 'players', 'queue', 'chat'].includes(tab.id))
-  const secondaryMobileTabs = visibleTabs.filter((tab) => !['board', 'players', 'queue', 'chat'].includes(tab.id))
+  const primaryMobileTabs = ['players', 'board', 'queue', 'roster', 'chat'].flatMap(id => visibleTabs.filter(tab => tab.id === id))
+  const secondaryMobileTabs = visibleTabs.filter((tab) => !['board', 'players', 'queue', 'roster', 'chat'].includes(tab.id))
 
   /**
    * D.6 — when `layout='premium'` is set, we render the premium grid even if
@@ -271,7 +300,7 @@ export function DraftRoomShell({
       : 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0b1020] text-white'
 
   return (
-    <div className={`draft-touch-room ${surfaceClass}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} data-testid="draft-room-shell" data-player-space-priority={playerSpacePriority ? 'true' : 'false'}>
+    <div data-board-size={boardSize} className={`draft-touch-room ${surfaceClass}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} data-testid="draft-room-shell" data-player-space-priority={playerSpacePriority ? 'true' : 'false'}>
       {topBar}
       {managerStrip}
 
@@ -290,6 +319,21 @@ export function DraftRoomShell({
           {auctionStrip && (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f]">{auctionStrip}</div>
           )}
+          <div className="draft-board-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0a1425] px-3"
+            data-testid="draft-board-size-controls">
+            <span className="text-sm font-semibold text-slate-200">Draft workspace</span>
+            <label className="flex items-center gap-2 text-xs text-slate-300">
+              Board
+              <select aria-label="Draft board size" data-testid="draft-board-size"
+                value={boardSize} onChange={event => {
+                  const value = event.target.value as typeof boardSize
+                  setBoardSize(value)
+                  try { localStorage.setItem('af:draft-board-size', value) } catch { /* optional */ }
+                }} className="min-h-9 rounded-lg border border-white/20 bg-[#111f34] px-2 text-sm text-white">
+                <option value="compact">Compact</option><option value="balanced">Balanced</option><option value="hidden">Hidden</option>
+              </select>
+            </label>
+          </div>
           {/* D.6.2 — board zone grows when the bottom dock is collapsed.
               Expanded:  ~52vh cap so dock has ~48vh; matches Sleeper proportions.
               Collapsed: flex-1 — board fills the entire screen below the top bar. */}
@@ -500,7 +544,7 @@ export function DraftRoomShell({
             onPointerDown={onTrayPointerDown}
             onPointerMove={onTrayPointerMove}
             onPointerUp={onTrayPointerEnd}
-            onPointerCancel={onTrayPointerEnd}
+            onPointerCancel={() => { dragRef.current = null; setTrayDragHeight(null) }}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault()
@@ -535,13 +579,13 @@ export function DraftRoomShell({
                 // Typing in chat: give the conversation the whole screen so the keyboard does not
                 // leave a two-line sliver.
                 const tag = (event.target as HTMLElement).tagName
-                if (mobileTab === 'chat' && (tag === 'TEXTAREA' || tag === 'INPUT')) settleTray('full')
+                if (tag === 'TEXTAREA' || tag === 'INPUT') settleTray('full')
               }}
             >
               {mobileTab === 'players' && (
-                <div className="overflow-hidden" data-testid="draft-mobile-players-sheet">
+                <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="draft-mobile-players-sheet">
                   <div
-                    className="min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth"
+                    className="h-full min-h-0 min-w-0 overflow-hidden"
                     data-testid="draft-mobile-players-scroll"
                   >
                     {playerPanel}

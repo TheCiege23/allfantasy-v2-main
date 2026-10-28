@@ -47,11 +47,11 @@ export interface DraftRightDockTabsProps {
 
 const BASE_TABS: ReadonlyArray<{ id: DraftRightDockTab; label: string }> = [
   { id: 'queue', label: 'Queue' },
-  { id: 'intel', label: 'Intel' },
   { id: 'roster', label: 'Roster' },
+  { id: 'chat', label: 'Chat' },
+  { id: 'intel', label: 'Intel' },
   { id: 'war_room', label: 'AF Legacy' },
   { id: 'activity', label: 'Activity' },
-  { id: 'chat', label: 'Chat' },
 ]
 
 export function DraftRightDockTabs({
@@ -132,8 +132,8 @@ export function DraftRightDockTabs({
         data-testid={`${testIdBase}-tablist`}
         /* Column count follows the tabs actually rendered — it was hardcoded 3-or-4 and would
            have squeezed or stranded a column as soon as a fifth tab existed. */
-        style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
-        className="grid shrink-0 border-b border-white/[0.05] bg-[#101a30]" 
+        style={{}}
+        className="flex shrink-0 overflow-x-auto border-b border-white/[0.05] bg-[#101a30]" 
       >
         {tabs.map((tab) => {
           const isActive = effectiveTab === tab.id
@@ -147,7 +147,7 @@ export function DraftRightDockTabs({
               id={`${testIdBase}-tab-${tab.id}`}
               data-testid={`${testIdBase}-tab-${tab.id}`}
               onClick={() => onSelect(tab.id)}
-              className={`relative flex items-center justify-center gap-1 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] transition ${
+              className={`relative flex min-h-[44px] min-w-[80px] flex-1 shrink-0 items-center justify-center gap-1 px-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
                 isActive
                   ? 'text-cyan-100'
                   : 'text-white/50 hover:bg-white/[0.04] hover:text-white/85'
