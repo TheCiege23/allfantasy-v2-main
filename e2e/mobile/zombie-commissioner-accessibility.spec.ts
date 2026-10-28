@@ -6,6 +6,15 @@ test.describe('@zombie iPhone commissioner accessibility', () => {
 
   test('keeps sections labeled, reachable, and within the phone viewport', async ({ page }) => {
     await installZombieLeagueE2EMocks(page, leagueId)
+    const overrideWrites: string[] = []
+    await page.route('**/api/zombie/commissioner**', async route => {
+      if (route.request().method() !== 'GET') {
+        overrideWrites.push(route.request().method())
+        await route.fulfill({ status: 400, json: { error: 'Viewing controls must not mutate the league.' } })
+        return
+      }
+      await route.fulfill({ status: 200, json: { entries: [] } })
+    })
     await page.goto(`/zombie/${leagueId}`)
     await expect(page.getByRole('main').getByRole('heading', { name: 'E2E Zombie League' })).toBeVisible({ timeout: 30_000 })
 
@@ -18,6 +27,17 @@ test.describe('@zombie iPhone commissioner accessibility', () => {
     await expect(dialog).toHaveAttribute('aria-modal', 'true')
 
     const sections = dialog.locator('[aria-label="League settings sections"]')
+    await expect(sections.getByRole('button').first()).toHaveText(/Zombie Setup/)
+    await expect(dialog.getByRole('heading', { name: 'League structure' })).toBeVisible()
+    for (const [section, content] of [
+      ['Automation', 'Weekly Automation Pipeline'],
+      ['Overrides', 'Override Player Status'],
+      ['Audit Log', 'No audit entries match your filters.'],
+    ]) {
+      await sections.getByRole('button', { name: new RegExp(section) }).click()
+      await expect(dialog.getByText(content, { exact: true })).toBeVisible()
+    }
+    expect(overrideWrites).toEqual([])
     const setup = sections.getByRole('button', { name: /General/ })
     const paid = sections.getByRole('button', { name: /Paid \/ Free/ })
     await expect(setup).toBeVisible()
