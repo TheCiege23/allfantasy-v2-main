@@ -68,12 +68,25 @@ export function evaluatePirateLineup(input: {
     (input.rosterConfig.starterCapacities.has(normalizeToken(player.slotType)) || player.addableBeforeLock === true))
   const waiverCandidates = input.waivers.filter((player) => active(player) && player.addableBeforeLock === true)
   function legalAssignment(candidates: PirateLineupPlayer[]): string[] | null {
+    // A locked starter occupies his exact slot. He cannot be silently replaced
+    // by the matching algorithm, even by a better eligible bench player.
+    const remainingSlots = [...slots]
+    const reserved = input.roster.filter((player) => player.lockedAtSnapshot &&
+      input.rosterConfig.starterCapacities.has(normalizeToken(player.slotType)))
+    for (const player of reserved) {
+      const slot = normalizeToken(player.slotType)
+      const index = remainingSlots.indexOf(slot)
+      if (index < 0 || !active(player) || !allowedPositionsForSlot(input.sport, slot).includes(normalizeToken(player.position))) return null
+      remainingSlots.splice(index, 1)
+    }
+    const reservedIds = new Set(reserved.map((player) => player.playerId))
+    const movable = candidates.filter((player) => !reservedIds.has(player.playerId))
     const assigned = new Map<string, number>()
     function place(slotIndex: number, seen: Set<string>): boolean {
-      for (const player of candidates) {
+      for (const player of movable) {
         if (seen.has(player.playerId)) continue
-        if (!allowedPositionsForSlot(input.sport, slots[slotIndex]).includes(normalizeToken(player.position))) continue
-        if (player.lockedAtSnapshot && normalizeToken(player.slotType) !== slots[slotIndex]) continue
+        if (!allowedPositionsForSlot(input.sport, remainingSlots[slotIndex]).includes(normalizeToken(player.position))) continue
+        if (player.lockedAtSnapshot && normalizeToken(player.slotType) !== remainingSlots[slotIndex]) continue
         seen.add(player.playerId)
         const previous = assigned.get(player.playerId)
         if (previous == null || place(previous, seen)) {
@@ -83,14 +96,13 @@ export function evaluatePirateLineup(input: {
       }
       return false
     }
-    const feasible = slots.every((_, index) => place(index, new Set()))
-    return feasible ? [...assigned.keys()] : null
+    const feasible = remainingSlots.every((_, index) => place(index, new Set()))
+    return feasible ? [...reservedIds, ...assigned.keys()] : null
   }
   const rosterAssignment = legalAssignment(rosterCandidates)
   if (rosterAssignment) return { decision: 'forfeit', issues, replacementIds: rosterAssignment, reason: 'A complete legal lineup was available on the roster before lock.' }
-  if (!input.waiverPoolCertified) return { decision: 'review', issues, replacementIds: [], reason: 'The historical addable waiver pool is incomplete.' }
   const waiverAssignment = legalAssignment([...rosterCandidates, ...waiverCandidates])
-  return waiverAssignment
-    ? { decision: 'forfeit', issues, replacementIds: waiverAssignment, reason: 'A complete legal lineup was available through addable waivers before lock.' }
-    : { decision: 'excused', issues, replacementIds: [], reason: 'No complete legal lineup was available on the roster or addable waivers before lock.' }
+  if (waiverAssignment) return { decision: 'forfeit', issues, replacementIds: waiverAssignment, reason: 'A complete legal lineup was available through addable waivers before lock.' }
+  if (!input.waiverPoolCertified) return { decision: 'review', issues, replacementIds: [], reason: 'The historical addable waiver pool is incomplete.' }
+  return { decision: 'excused', issues, replacementIds: [], reason: 'No complete legal lineup was available on the roster or addable waivers before lock.' }
 }

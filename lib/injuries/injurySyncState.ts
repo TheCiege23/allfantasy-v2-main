@@ -160,6 +160,8 @@ export async function recordInjurySyncRun(args: {
   fetched: number
   failed: boolean
   error?: string | null
+  /** All configured providers answered cleanly and all returned statuses were parsed. */
+  completeForLineup?: boolean
 }): Promise<void> {
   const now = new Date()
   const error = args.error ? String(args.error).slice(0, MAX_ERROR) : null
@@ -208,6 +210,18 @@ export async function recordInjurySyncRun(args: {
       update,
       create: { ...base(args.sport), ...update, lastError: args.failed ? error : null },
     })
+    if (args.completeForLineup !== undefined) {
+      // General feed freshness can succeed with a partial provider response.
+      // Automated protection penalties need a separate, stricter attestation.
+      const certification = args.completeForLineup && !args.failed
+        ? { lastStartedAt: now, lastCompletedAt: now, lastSuccessAt: now, recordsUpdated: args.written, recordsSkipped: 0 }
+        : { lastStartedAt: now, lastCompletedAt: now, lastErrorAt: now, lastError: 'Incomplete injury evidence for automatic lineup rulings.', recordsSkipped: 0 }
+      await prisma.providerSyncState.upsert({
+        where: { provider_entityType_sport_key: { ...base(args.sport), key: 'lineup-evidence' } },
+        update: certification,
+        create: { ...base(args.sport), key: 'lineup-evidence', ...certification },
+      })
+    }
   } catch {
     // See the header: telemetry never breaks the job it measures.
   }

@@ -22,6 +22,8 @@ import { checkStatCorrectionsForSeason } from '@/lib/stat-corrections/statCorrec
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
 import { maintainPirateClaims, queuePirateProtectionReminders, seedPirateClaims } from '@/lib/pirate/service'
+import { capturePirateLineupEvidence } from '@/lib/pirate/lineupEvidence'
+import { isPirateLeague } from '@/lib/pirate/rules'
 import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSeasonRunner'
@@ -470,6 +472,28 @@ async function runRedraftReconciliation() {
   }
 }
 
+async function runPirateLineupEvidenceCapture() {
+  const seasons = await prisma.redraftSeason.findMany({ where: { AND: [
+    engineSeasonScope({ statuses: [...SCORING_SEASON_STATUSES] }),
+    { league: { OR: [{ leagueType: 'pirate' }, { leagueVariant: 'pirate' }] } },
+  ] }, select: { id: true, leagueId: true, season: true, league: { select: { leagueType: true, leagueVariant: true } } } })
+  // Capture every Pirate league before the rotating scoring batch and slower
+  // automation bridges: a lock snapshot cannot be reconstructed on a later tick.
+  const results = await Promise.allSettled(seasons.map(async (season) => {
+    if (!season.league || !isPirateLeague(season.league)) return 0
+    const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
+    if (!resolved.ok) return 0
+    let captured = 0
+    for (const week of [resolved.fantasyWeek, resolved.fantasyWeek + 1]) {
+      captured += await capturePirateLineupEvidence({ leagueId: season.leagueId,
+        seasonId: season.id, season: season.season, week })
+    }
+    return captured
+  }))
+  return { considered: seasons.length, captured: results.reduce((count, r) => count + (r.status === 'fulfilled' ? r.value : 0), 0),
+    failed: results.filter((r) => r.status === 'rejected').length }
+}
+
 // This branch added its own cron GET here. #284 landed an equivalent one further down
 // (kept), so both would have exported `GET` from the same module. Dropped this copy rather
 // than main's: main's is the shipped, reviewed version, and it sidesteps the build bug
@@ -549,6 +573,7 @@ export async function GET(request: Request) {
   const bridge = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron', sport: 'NFL' },
     async () => {
+      const pirateEvidence = await runPirateLineupEvidenceCapture().catch(() => ({ considered: 0, captured: 0, failed: 1 }))
       // Both halves, and the redraft half is the one this job advertised and
       // never ran. Legacy first so a redraft failure cannot cost the
       // survivor/zombie/C2C sweep that has been working all along.
@@ -574,7 +599,7 @@ export async function GET(request: Request) {
         return { leagues: 0, sent: 0, failed: 1 }
       })
       const redraft = await runRedraftReconciliation()
-      return { ...legacy, redraft, survivorSeason, survivorSitOuts, survivorNotifications, updated: redraft.reconciled }
+      return { ...legacy, redraft, pirateEvidence, survivorSeason, survivorSitOuts, survivorNotifications, updated: redraft.reconciled }
     },
     (r) => ({
       rowsWritten: r.matchupsRecalculated + r.redraft.matchupsRecalculated,
@@ -592,6 +617,7 @@ export async function GET(request: Request) {
         r.redraft.finalizeFailed > 0 ||
         r.redraft.guillotineFailed > 0 ||
         r.redraft.pirateSeedFailed > 0 ||
+        r.pirateEvidence.failed > 0 ||
         r.redraft.pirateSettlements.failed > 0 ||
         r.redraft.tournamentFailed > 0 ||
         r.redraft.playoffFailed > 0
@@ -613,6 +639,7 @@ export async function GET(request: Request) {
         zombieHousekeepingErrors: r.zombieHousekeepingErrors.slice(0, 10),
         c2cLeaguesSynced: r.c2cLeaguesSynced,
         redraft: r.redraft,
+        pirateEvidence: r.pirateEvidence,
       },
     }),
   )

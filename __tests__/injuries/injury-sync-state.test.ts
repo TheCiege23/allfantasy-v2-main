@@ -41,6 +41,24 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('injury sync telemetry', () => {
+  it('records a separate complete-feed attestation for automatic lineup evidence', async () => {
+    const { recordInjurySyncRun } = await subject()
+    await recordInjurySyncRun({ sport: 'NFL', written: 120, fetched: 120, failed: false, completeForLineup: true })
+    expect(upsert).toHaveBeenCalledTimes(2)
+    expect(upsert.mock.calls[1][0]).toMatchObject({
+      where: { provider_entityType_sport_key: { provider: 'injuries-cron', entityType: 'injuries', sport: 'NFL', key: 'lineup-evidence' } },
+      update: { lastSuccessAt: expect.any(Date) },
+    })
+  })
+
+  it.each([{ failed: false, completeForLineup: false }, { failed: true, completeForLineup: true }])('never certifies partial or failed injury evidence: %j', async (flags) => {
+    const { recordInjurySyncRun } = await subject()
+    await recordInjurySyncRun({ sport: 'NBA', written: 10, fetched: 12, ...flags })
+    const certification = upsert.mock.calls[1][0]
+    expect(certification.update.lastErrorAt).toBeInstanceOf(Date)
+    expect(certification.update.lastSuccessAt).toBeUndefined()
+  })
+
   it('records a successful run with its written count', async () => {
     const { recordInjurySyncRun } = await subject()
     await recordInjurySyncRun({ sport: 'NFL', written: 1225, fetched: 1300, failed: false })

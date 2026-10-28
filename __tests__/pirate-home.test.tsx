@@ -1,6 +1,6 @@
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { PirateHome } from '@/components/pirate/PirateHome'
 
 afterEach(() => {
@@ -28,6 +28,13 @@ describe('Pirate Deck', () => {
         ] },
       ],
       protections: [],
+      lineupRulings: [{ claimId: 'claim', source: 'automatic', decision: 'forfeit', reason: 'A legal lineup was available from a verified pickup.' }],
+      lineupEvidence: { claim: { decision: 'forfeit', reason: 'One verified pickup could complete the lineup.', issues: ['QB: 1 empty'],
+        eventAt: '2026-10-26T00:20:00Z', snapshotCount: 2, snapshot: { capturedAt: '2026-10-26T00:22:00Z',
+          injurySyncAt: '2026-10-26T00:15:00Z', lineupCertified: true, waiverWitnessCount: 1, players: [
+            { playerId: 'free-qb', playerName: 'Verified Free QB', slotType: 'WAIVER', injuryStatus: null,
+              kickoffAt: '2026-10-26T00:20:00Z', availabilityKnown: true, waiverVerified: true },
+          ] } } },
       claims: [{ id: 'claim', week: 8, winnerRosterId: 'winner', loserRosterId: 'loser', playerId: null,
         offeredPlayerId: null, counterPlayerId: null, status: 'awaiting_selection', deadlineAt: null,
         transferredAt: null, resolutionNote: null }],
@@ -38,5 +45,9 @@ describe('Pirate Deck', () => {
     expect(screen.getByText('Commissioner review')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Start response window' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Void claim' })).toBeTruthy()
+    expect(screen.getByText(/Automatic lineup ruling/)).toBeTruthy()
+    fireEvent.click(screen.getByText(/Captured lineup evidence/))
+    expect(screen.getByText('Verified Free QB')).toBeTruthy()
+    expect(screen.getByText(/Verified immediate pickup before this lock/)).toBeTruthy()
   })
 })

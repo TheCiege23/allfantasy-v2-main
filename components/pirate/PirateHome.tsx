@@ -6,7 +6,12 @@ import { Anchor, Clock3, LockKeyhole, Shield, Skull, Sparkles, Trophy, X } from 
 type Player = { id: string; playerId: string; playerName: string; position: string; team: string | null; slotType: string }
 type Roster = { id: string; ownerId: string; ownerName: string; teamName: string | null; players: Player[] }
 type Protection = { rosterId: string; week: number; playerIds: string[]; status: string; voidReason: string | null }
-type LineupRuling = { claimId: string; decision: 'forfeit' | 'excused'; reason: string; createdAt: string }
+type LineupRuling = { claimId: string; decision: 'forfeit' | 'excused'; reason: string; createdAt: string; source?: 'automatic' | 'commissioner' }
+type LineupEvidence = {
+  decision: string; reason: string; issues: string[]; eventAt: string; snapshotCount: number
+  snapshot: { capturedAt: string; injurySyncAt: string | null; lineupCertified: boolean; waiverWitnessCount: number
+    players: Array<{ playerId: string; playerName: string; slotType: string; injuryStatus: string | null; kickoffAt: string | null; availabilityKnown: boolean; waiverVerified: boolean }> }
+}
 type Claim = {
   id: string; week: number; winnerRosterId: string; loserRosterId: string
   playerId: string | null; offeredPlayerId: string | null; counterPlayerId: string | null
@@ -25,6 +30,7 @@ type Data = {
   protections: Protection[]
   lineupRulings: LineupRuling[]
   lineupPreviews: Record<string, { issues: string[]; reason: string }>
+  lineupEvidence?: Record<string, LineupEvidence | null>
   claims: Claim[]
 }
 
@@ -232,6 +238,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                   const isLoser = data.myRosterId === claim.loserRosterId
                   const protection = data.protections.find((set) => set.rosterId === claim.loserRosterId && set.week === claim.week)
                   const lineupRuling = data.lineupRulings?.find((ruling) => ruling.claimId === claim.id)
+                  const evidence = data.lineupEvidence?.[claim.id]
                   const locked = new Set(protection?.status === 'active' ? protection.playerIds : [])
                   const claimable = loser?.players.filter((player) => !locked.has(player.playerId)) ?? []
                   return (
@@ -241,7 +248,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                         <Skull size={17} className="text-amber-300/70" />
                       </div>
                       <p className="mt-2 text-sm font-semibold text-white">{nameOf(winner)} <span className="text-amber-300">→</span> {nameOf(loser)}</p>
-                      {lineupRuling && <p className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">Lineup ruling: <strong>{lineupRuling.decision === 'forfeit' ? 'protections forfeited' : 'protections kept'}</strong>. {lineupRuling.reason}</p>}
+                      {lineupRuling && <p className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">{lineupRuling.source === 'automatic' ? 'Automatic lineup ruling' : 'Lineup ruling'}: <strong>{lineupRuling.decision === 'forfeit' ? 'protections forfeited' : 'protections kept'}</strong>. {lineupRuling.reason}</p>}
                       {claim.playerId && <p className="mt-2 text-xs text-slate-300">Claimed: <strong className="text-white">{playerName(loser, claim.playerId)}</strong></p>}
                       {claim.deadlineAt && <p className="mt-1 text-xs text-slate-400">Automatic transfer: {dateText(claim.deadlineAt)}</p>}
                       {claim.selectionDeadlineAt && claim.status === 'awaiting_selection' && <p className="mt-1 text-xs text-slate-400">Choose by: {dateText(claim.selectionDeadlineAt)}</p>}
@@ -281,7 +288,22 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                       {isCommissioner && (
                         <div className="mt-4 border-t border-white/10 pt-4">
                           <p className="text-[11px] font-bold uppercase tracking-[.15em] text-cyan-300">Commissioner review</p>
-                          {data.lineupPreviews?.[claim.id]?.issues.length > 0 && <p className="mt-2 rounded-lg border border-amber-300/25 bg-amber-300/5 px-3 py-2 text-xs leading-5 text-amber-100">Current roster flags: {data.lineupPreviews[claim.id].issues.join('; ')}. {data.lineupPreviews[claim.id].reason}</p>}
+                          {!evidence && data.lineupPreviews?.[claim.id]?.issues.length > 0 && <p className="mt-2 rounded-lg border border-amber-300/25 bg-amber-300/5 px-3 py-2 text-xs leading-5 text-amber-100">Current roster flags: {data.lineupPreviews[claim.id].issues.join('; ')}. {data.lineupPreviews[claim.id].reason}</p>}
+                          {evidence && <details className="mt-3 rounded-xl border border-cyan-300/25 bg-cyan-300/5 p-3">
+                            <summary className="min-h-[44px] cursor-pointer text-sm font-bold text-cyan-200">Captured lineup evidence · {evidence.snapshotCount} snapshots</summary>
+                            <p className="text-xs leading-5 text-slate-300">{evidence.reason}</p>
+                            {evidence.issues.length > 0 && <p className="mt-2 text-xs text-amber-200">{evidence.issues.join('; ')}</p>}
+                            <p className="mt-2 text-xs leading-5 text-slate-400">Game lock: {dateText(evidence.eventAt)}. Captured: {dateText(evidence.snapshot.capturedAt)}. Injury feed checked: {evidence.snapshot.injurySyncAt ? dateText(evidence.snapshot.injurySyncAt) : 'Unverified'}.</p>
+                            {!evidence.snapshot.lineupCertified && <p className="mt-2 text-xs text-amber-200">The saved starting slots need commissioner verification.</p>}
+                            <ul className="mt-3 divide-y divide-white/10">
+                              {evidence.snapshot.players.map((player) => <li key={player.playerId} className="py-2 text-xs leading-5">
+                                <span className="font-semibold text-white">{player.playerName}</span><span className="ml-2 text-cyan-200">{player.slotType}</span>
+                                <p className="text-slate-400">{player.availabilityKnown ? player.injuryStatus || 'No reported restriction' : 'Availability unverified'} · {dateText(player.kickoffAt)}</p>
+                                {player.slotType === 'WAIVER' && <p className="text-cyan-200">{player.waiverVerified ? 'Verified immediate pickup before this lock; no drop required.' : 'Pickup availability needs verification for this lock.'}</p>}
+                              </li>)}
+                            </ul>
+                            <p className="mt-2 text-xs leading-5 text-slate-400">{evidence.snapshot.waiverWitnessCount > 0 ? 'The recorded pickup passed the league’s add checks before lock. ' : ''}Other waiver options, pickups requiring a drop, and daily lineup cases need commissioner review.</p>
+                          </details>}
                           {['awaiting_selection', 'selection_expired', 'pending', 'countered'].includes(claim.status) && (
                             <div className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/5 p-3">
                               <p className="text-xs font-bold text-amber-200">Legal-lineup protection rule</p>

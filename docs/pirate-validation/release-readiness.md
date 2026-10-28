@@ -1,5 +1,13 @@
 # Pirate League release readiness — 2026-10-27
 
+## Legal-lineup evidence update — 2026-10-28
+
+- Immutable lock snapshots and evidence-linked automatic rulings are implemented without a schema migration. The pass runs before slower score-sync bridges and outside the scoring batch rotation. Captured evidence and automatic/commissioner ruling labels are visible on the Pirate Deck.
+- Automatic cases require exact saved starter slots, a complete recent injury-ingestion attestation, known identities and game times, a full distinct-player legal replacement lineup, and confirmation from the final saved week lineup. Future participants require activity evidence at their own game starts. Roster locks, emergency overrides, missing data, daily lineups, reserve/taxi activations, and acquisitions requiring drops remain commissioner reviews with protections intact.
+- A single immediate pickup requiring no drop can serve as waiver evidence only after the actual lifecycle, roster, waiver-window, hold, pending-claim, and transaction gates accept it. Bounded witness search does not certify an entire empty waiver pool or several combined transactions.
+- Focused evidence, injury, commissioner, Pirate Deck, and score-sync regressions passed. The synthetic staging lifecycle passed NFL, NBA, MLB, and NHL: automatic forfeiture, retained original lock IDs, missing-evidence protection retention, linked audits, commissioner restoration, reopened winner selection, and repeated-tick override precedence. See `lineup-evidence-staging.json`; the runner removed its fixture leagues, users, and schedule rows.
+- The commissioner previously confirmed iPhone Home Screen push delivery, Pirate league creation, and saved rule defaults. Physical Android verification and a real scoring-period rehearsal remain release checks. Production has not been deployed from this update.
+
 ## Completed checks
 
 - The four Pirate migrations are applied to the separate staging Neon database. The staging lifecycle exercise passed NFL, NBA, MLB, and NHL, including protection locks, regular-season and playoff claims, automatic transfers, overflow, counteroffers, and score-correction reversals. See `staging-lifecycle.json`.

@@ -6,6 +6,7 @@ import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { lastWeekOfPlayoffRound, readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { isPirateLeague, isProtectionLocked, protectedIds, readPirateRules } from './rules'
 import { evaluatePirateLineup } from './lineupLegality'
+import { assessPirateLineupEvidence } from './lineupEvidence'
 
 type Db = PrismaClient
 
@@ -181,8 +182,12 @@ export async function seedPirateClaims(leagueId: string, db: Db = prisma) {
       selectionDeadlineAt: new Date(now.getTime() + rules.selectionHours * 60 * 60 * 1000),
     }]
   })
-  if (!rows.length) return 0
+  if (!rows.length) {
+    await applyAutomaticPirateLineupRulings(leagueId, db)
+    return 0
+  }
   const created = await db.pirateClaim.createMany({ data: rows, skipDuplicates: true })
+  await applyAutomaticPirateLineupRulings(leagueId, db)
   if (created.count) await queuePirateClaimReminders(leagueId, db).catch((error) => console.warn('[pirate] claim reminder queue failed', error))
   return created.count
 }
@@ -241,7 +246,8 @@ export async function getPirateDashboard(leagueId: string, actorUserId: string, 
     const item = event.metadata && typeof event.metadata === 'object' && !Array.isArray(event.metadata)
       ? event.metadata as Record<string, unknown> : {}
     return typeof item.claimId === 'string' && (item.decision === 'forfeit' || item.decision === 'excused')
-      ? [{ claimId: item.claimId, decision: item.decision, reason: String(item.reason ?? ''), createdAt: event.createdAt }]
+      ? [{ claimId: item.claimId, decision: item.decision, reason: String(item.reason ?? ''), createdAt: event.createdAt,
+        source: item.source === 'automatic' ? 'automatic' : 'commissioner' }]
       : []
   }).filter((event, index, rows) => rows.findIndex((other) => other.claimId === event.claimId) === index)
   const config = resolveRedraftRosterConfig(String(state.league.sport), state.league.settings)
@@ -254,6 +260,13 @@ export async function getPirateDashboard(leagueId: string, actorUserId: string, 
     })
     return [claim.id, { issues: finding.issues, reason: 'Current stored roster only; verify the actual lineup and available players at lock.' }]
   }))
+  const evidenceByPeriod = new Map<string, ReturnType<typeof assessPirateLineupEvidence>>()
+  const lineupEvidence = Object.fromEntries(await Promise.all(claims.map(async (claim) => {
+    const key = `${claim.loserRosterId}:${claim.week}`
+    if (!evidenceByPeriod.has(key)) evidenceByPeriod.set(key, assessPirateLineupEvidence({ leagueId,
+      seasonId: state.season.id, rosterId: claim.loserRosterId, week: claim.week }, db))
+    return [claim.id, await evidenceByPeriod.get(key)]
+  })))
   return {
     league: { id: state.league.id, name: (await db.league.findUnique({ where: { id: leagueId }, select: { name: true } }))?.name, sport: state.league.sport, rosterLimit },
     rules: state.rules,
@@ -266,6 +279,7 @@ export async function getPirateDashboard(leagueId: string, actorUserId: string, 
     protections,
     lineupRulings,
     lineupPreviews,
+    lineupEvidence,
     claims: displayedClaims,
   }
 }
@@ -282,6 +296,7 @@ async function managedRoster(seasonId: string, rosterId: string, actorUserId: st
 export async function commissionerRulePirateLineup(input: {
   leagueId: string; claimId: string; actorUserId: string
   decision: 'forfeit' | 'excused'; reason: string; now?: Date
+  automaticEvidenceIds?: string[]
 }, db: Db = prisma) {
   const reason = input.reason.trim()
   if (reason.length < 10 || reason.length > 1000) refusal('Explain the lock-time lineup and replacement evidence in 10–1000 characters.')
@@ -303,6 +318,13 @@ export async function commissionerRulePirateLineup(input: {
   return db.$transaction(async (tx) => {
     const current = await tx.pirateClaim.findUnique({ where: { id: claim.id }, select: { status: true, playerId: true, resolutionNote: true } })
     if (!current || !['awaiting_selection', 'selection_expired', 'pending', 'countered'].includes(current.status)) refusal('The claim changed while you were ruling.')
+    if (input.automaticEvidenceIds) {
+      const ruled = await tx.redraftLeagueTransaction.findFirst({ where: {
+        leagueId: claim.leagueId, seasonId: claim.seasonId, rosterId: claim.loserRosterId, type: 'pirate_lineup_ruling',
+        metadata: { path: ['week'], equals: claim.week },
+      }, select: { id: true } })
+      if (ruled) return { decision: input.decision, reason: 'A recorded ruling already takes precedence.', reopenedSelection: false }
+    }
     const set = await tx.pirateProtectionSet.findUnique({ where: { leagueId_seasonId_week_rosterId: key } })
     if (set?.status === 'void' && set.voidReason !== 'illegal_lineup') refusal('This protection set was voided for another rule; a lineup ruling cannot restore it.')
     let reopened = false
@@ -333,10 +355,33 @@ export async function commissionerRulePirateLineup(input: {
       type: 'pirate_lineup_ruling',
       metadata: { claimId: claim.id, week: claim.week, decision: input.decision, reason,
         actorUserId: input.actorUserId, recordedAt: (input.now ?? new Date()).toISOString(),
+        source: input.automaticEvidenceIds ? 'automatic' : 'commissioner', evidenceIds: input.automaticEvidenceIds ?? [],
         previousProtectionStatus: set?.status ?? null, previousVoidReason: set?.voidReason ?? null, reopenedSelection: reopened },
     } })
     return { decision: input.decision, reason, reopenedSelection: reopened }
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+}
+
+/** Automatic evidence never replaces a commissioner's recorded ruling. */
+async function applyAutomaticPirateLineupRulings(leagueId: string, db: Db) {
+  const claims = await db.pirateClaim.findMany({ where: { leagueId,
+    status: { in: ['awaiting_selection', 'selection_expired', 'pending', 'countered'] } },
+    orderBy: { createdAt: 'desc' }, take: 50 })
+  for (const claim of claims) {
+    const ruled = await db.redraftLeagueTransaction.findFirst({ where: { leagueId, seasonId: claim.seasonId,
+      rosterId: claim.loserRosterId, type: 'pirate_lineup_ruling', metadata: { path: ['week'], equals: claim.week } }, select: { id: true } })
+    if (ruled) continue
+    const protection = await db.pirateProtectionSet.findUnique({ where: { leagueId_seasonId_week_rosterId: {
+      leagueId, seasonId: claim.seasonId, week: claim.week, rosterId: claim.loserRosterId,
+    } }, select: { status: true, voidReason: true } })
+    if (protection?.status === 'void') continue
+    const finding = await assessPirateLineupEvidence({ leagueId, seasonId: claim.seasonId,
+      rosterId: claim.loserRosterId, week: claim.week }, db)
+    if (finding?.decision !== 'forfeit') continue
+    await commissionerRulePirateLineup({ leagueId, claimId: claim.id, actorUserId: 'system:pirate-lineup', decision: 'forfeit',
+      reason: `${finding.reason} Lock evidence: ${finding.eventAt}. ${finding.issues.join('; ')}`.slice(0, 1000),
+      automaticEvidenceIds: finding.evidenceIds }, db)
+  }
 }
 
 async function assertClaimablePlayer(claim: {

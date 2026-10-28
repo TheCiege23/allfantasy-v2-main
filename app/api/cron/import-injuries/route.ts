@@ -324,6 +324,7 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
       fetched: result.fetched + espn.fetched,
       failed,
       error: [...result.errors, ...espn.errors, ...apiSports.errors][0] ?? null,
+      completeForLineup: !failed && !noCoverage && !providerErrored && (result.unparseableStatus ?? 0) === 0,
     })
 
     const notifications = !failed && !noCoverage
@@ -374,7 +375,7 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[cron/import-injuries] ${sport} failed:`, message)
-    await recordInjurySyncRun({ sport, written: 0, fetched: 0, failed: true, error: message })
+    await recordInjurySyncRun({ sport, written: 0, fetched: 0, failed: true, error: message, completeForLineup: false })
     return {
       body: { ok: false, sport, error: message.slice(0, 240), durationMs: Date.now() - startedAt },
       failed: true,

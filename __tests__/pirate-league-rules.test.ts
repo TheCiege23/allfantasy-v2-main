@@ -54,13 +54,16 @@ describe('Pirate League rules', () => {
       fantasyScheduleGame: { findFirst: vi.fn().mockResolvedValue(null) },
       pirateClaim: { findFirst: vi.fn().mockResolvedValue(claim), findUnique: vi.fn().mockResolvedValue(claim) },
       pirateProtectionSet: { findUnique: vi.fn().mockImplementation(async () => set), update },
-      redraftLeagueTransaction: { create },
+      redraftLeagueTransaction: { create, findFirst: vi.fn().mockResolvedValue({ id: 'existing-ruling' }) },
       $transaction: vi.fn().mockImplementation(async (fn) => fn(db)),
     }
     const base = { leagueId: 'league', claimId: 'claim', actorUserId: 'commish', reason: 'The QB was out, and an active bench QB could start before kickoff.' }
     await commissionerRulePirateLineup({ ...base, decision: 'forfeit' }, db as never)
     expect(set).toMatchObject({ status: 'void', voidReason: 'illegal_lineup', playerIds: ['star'] })
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'pirate_lineup_ruling', metadata: expect.objectContaining({ decision: 'forfeit', claimId: 'claim' }) }) }))
+    await commissionerRulePirateLineup({ ...base, actorUserId: 'system:pirate-lineup', decision: 'forfeit', automaticEvidenceIds: ['before', 'after'] }, db as never)
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(create).toHaveBeenCalledTimes(1)
     await commissionerRulePirateLineup({ ...base, decision: 'excused', reason: 'No eligible QB was available from the roster or addable waivers.' }, db as never)
     expect(set).toMatchObject({ status: 'active', voidReason: null, playerIds: ['star'] })
     expect(update).toHaveBeenCalledTimes(2)
