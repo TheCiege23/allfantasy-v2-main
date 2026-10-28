@@ -20,7 +20,7 @@ import {
 /**
  * Rules from the Beta Level 2025 document. Twenty teams — one Whisperer and
  * nineteen Survivors — on EIGHT-man rosters. No waivers, only free agents,
- * addable during games. Zombies cannot trade.
+ * addable during games. Whisperers cannot trade players; Zombies cannot trade when blocked.
  */
 
 /** 1 superflex, 4 flex, 3 bench. */
@@ -154,10 +154,10 @@ describe('serumValue: an asset that APPRECIATES as the season runs', () => {
 
 describe('tradeWindow: the option to deal is a wasting asset', () => {
   it('⚠ counts only teams that can legally trade', () => {
-    // Zombies cannot make deals. 6 survivors plus an active Whisperer, minus
-    // yourself, is 6 legal partners.
-    const w = tradeWindow({ survivors: 6, whispererActive: true, teamCount: 20 })!
-    expect(w.partners).toBe(6)
+    // Neither Zombies nor Whisperers can make deals. Six Survivors,
+    // minus yourself, means five legal partners.
+    const w = tradeWindow({ survivors: 6, teamCount: 20 })!
+    expect(w.partners).toBe(5)
     expect(w.basis).toContain('only ever falls')
   })
 
@@ -167,12 +167,12 @@ describe('tradeWindow: the option to deal is a wasting asset', () => {
      * of every deal hold a wasting option, which is not true in any other
      * format.
      */
-    const w = tradeWindow({ survivors: 3, whispererActive: false, teamCount: 20 })!
+    const w = tradeWindow({ survivors: 3, teamCount: 20 })!
     expect(w.basis).toContain('may not have a later')
   })
 
   it('reports honestly when the Horde has everyone', () => {
-    const w = tradeWindow({ survivors: 1, whispererActive: false, teamCount: 20 })!
+    const w = tradeWindow({ survivors: 1, teamCount: 20 })!
     expect(w.partners).toBe(0)
     expect(w.basis).toContain('nobody left')
   })
