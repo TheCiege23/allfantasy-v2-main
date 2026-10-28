@@ -6,6 +6,7 @@ import { isPirateLeague } from '@/lib/pirate/rules'
 import {
   commissionerRetryPirateClaim,
   commissionerReversePirateClaim,
+  commissionerRulePirateLineup,
   commissionerSelectPirateClaim,
   commissionerVoidPirateClaim,
 } from '@/lib/pirate/service'
@@ -34,6 +35,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     } else if (body.action === 'reverse') {
       if (typeof body.reason !== 'string') throw new Error('A score correction reason is required.')
       claim = await commissionerReversePirateClaim({ leagueId, claimId, actorUserId, reason: body.reason })
+    } else if (body.action === 'lineup_ruling') {
+      if (body.decision !== 'forfeit' && body.decision !== 'excused') throw new Error('Choose forfeit or keep protections.')
+      if (typeof body.reason !== 'string') throw new Error('A lock-time evidence reason is required.')
+      claim = await commissionerRulePirateLineup({ leagueId, claimId, actorUserId, decision: body.decision, reason: body.reason })
     } else {
       throw new Error('Unknown commissioner claim action.')
     }

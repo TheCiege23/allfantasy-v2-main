@@ -5,7 +5,7 @@ import { nativeCreationRoster } from '@/lib/redraft/nativeCreationRoster'
 import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
 import { assertNotReservedByPirateClaim } from '@/lib/pirate/claimReservation'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
-import { commissionerRetryPirateClaim, commissionerSelectPirateClaim, commissionerVoidPirateClaim, queuePirateClaimReminders, savePirateProtections } from '@/lib/pirate/service'
+import { commissionerRetryPirateClaim, commissionerRulePirateLineup, commissionerSelectPirateClaim, commissionerVoidPirateClaim, queuePirateClaimReminders, savePirateProtections } from '@/lib/pirate/service'
 
 const now = new Date('2026-10-27T18:00:00.000Z')
 
@@ -40,6 +40,58 @@ function protectionDb(existing: { status: string; playerIds: string[]; lockAt: D
 }
 
 describe('Pirate League rules', () => {
+  it('audits a commissioner lineup forfeiture, preserves locks for reversal, and can excuse it before selection', async () => {
+    const claim = { id: 'claim', leagueId: 'league', seasonId: 'season', week: 8, matchupId: 'matchup', playoffMatchupId: null,
+      loserRosterId: 'loser', winnerRosterId: 'winner', status: 'awaiting_selection' }
+    const set = { id: 'set', status: 'active', voidReason: null as string | null, playerIds: ['star'] }
+    const update = vi.fn().mockImplementation(async ({ data }) => { Object.assign(set, data); return set })
+    const create = vi.fn().mockResolvedValue({ id: 'audit' })
+    const db = {
+      league: { findUnique: vi.fn().mockResolvedValue({ id: 'league', platform: 'manual', leagueType: 'pirate', sport: 'NFL', settings: null }) },
+      redraftSeason: { findUnique: vi.fn().mockResolvedValue({ season: 2026 }) },
+      redraftMatchup: { findUnique: vi.fn().mockResolvedValue({ status: 'final', homeRosterId: 'winner', awayRosterId: 'loser', homeScore: 100, awayScore: 90 }) },
+      gameSchedule: { findFirst: vi.fn().mockResolvedValue({ startTime: new Date('2026-10-25T17:00:00Z') }) },
+      fantasyScheduleGame: { findFirst: vi.fn().mockResolvedValue(null) },
+      pirateClaim: { findFirst: vi.fn().mockResolvedValue(claim), findUnique: vi.fn().mockResolvedValue(claim) },
+      pirateProtectionSet: { findUnique: vi.fn().mockImplementation(async () => set), update },
+      redraftLeagueTransaction: { create },
+      $transaction: vi.fn().mockImplementation(async (fn) => fn(db)),
+    }
+    const base = { leagueId: 'league', claimId: 'claim', actorUserId: 'commish', reason: 'The QB was out, and an active bench QB could start before kickoff.' }
+    await commissionerRulePirateLineup({ ...base, decision: 'forfeit' }, db as never)
+    expect(set).toMatchObject({ status: 'void', voidReason: 'illegal_lineup', playerIds: ['star'] })
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'pirate_lineup_ruling', metadata: expect.objectContaining({ decision: 'forfeit', claimId: 'claim' }) }) }))
+    await commissionerRulePirateLineup({ ...base, decision: 'excused', reason: 'No eligible QB was available from the roster or addable waivers.' }, db as never)
+    expect(set).toMatchObject({ status: 'active', voidReason: null, playerIds: ['star'] })
+    expect(update).toHaveBeenCalledTimes(2)
+  })
+
+  it('reopens an active claim when an excused ruling restores the selected player', async () => {
+    const claim = { id: 'claim', leagueId: 'league', seasonId: 'season', week: 8, matchupId: 'matchup', playoffMatchupId: null,
+      loserRosterId: 'loser', winnerRosterId: 'winner', status: 'pending', playerId: 'star', resolutionNote: null }
+    const set = { id: 'set', status: 'void', voidReason: 'illegal_lineup', playerIds: ['star'] }
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 })
+    const db = {
+      league: { findUnique: vi.fn().mockResolvedValue({ id: 'league', platform: 'manual', leagueType: 'pirate', sport: 'NFL', settings: null }) },
+      redraftSeason: { findUnique: vi.fn().mockResolvedValue({ season: 2026 }) },
+      redraftMatchup: { findUnique: vi.fn().mockResolvedValue({ status: 'final', homeRosterId: 'winner', awayRosterId: 'loser', homeScore: 100, awayScore: 90 }) },
+      gameSchedule: { findFirst: vi.fn().mockResolvedValue({ startTime: new Date('2026-10-25T17:00:00Z') }) },
+      fantasyScheduleGame: { findFirst: vi.fn().mockResolvedValue(null) },
+      pirateClaim: { findFirst: vi.fn().mockResolvedValue(claim), findUnique: vi.fn().mockResolvedValue(claim), updateMany },
+      pirateProtectionSet: { findUnique: vi.fn().mockResolvedValue(set), update: vi.fn().mockResolvedValue({ ...set, status: 'active' }) },
+      redraftLeagueTransaction: { create: vi.fn().mockResolvedValue({ id: 'audit' }) },
+      $transaction: vi.fn().mockImplementation(async (fn) => fn(db)),
+    }
+    const result = await commissionerRulePirateLineup({ leagueId: 'league', claimId: 'claim', actorUserId: 'commish',
+      decision: 'excused', reason: 'There was no addable active replacement before the slot lock.', now }, db as never)
+    expect(result.reopenedSelection).toBe(true)
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'claim', status: 'pending' },
+      data: expect.objectContaining({ status: 'awaiting_selection', playerId: null, deadlineAt: null,
+        selectionDeadlineAt: new Date('2026-10-28T18:00:00.000Z') }),
+    }))
+  })
+
   it('tags claim reminders so push respects league notification preferences', async () => {
     const createMany = vi.fn().mockResolvedValue({ count: 2 })
     const db = {

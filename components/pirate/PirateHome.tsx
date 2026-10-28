@@ -6,6 +6,7 @@ import { Anchor, Clock3, LockKeyhole, Shield, Skull, Sparkles, Trophy, X } from 
 type Player = { id: string; playerId: string; playerName: string; position: string; team: string | null; slotType: string }
 type Roster = { id: string; ownerId: string; ownerName: string; teamName: string | null; players: Player[] }
 type Protection = { rosterId: string; week: number; playerIds: string[]; status: string; voidReason: string | null }
+type LineupRuling = { claimId: string; decision: 'forfeit' | 'excused'; reason: string; createdAt: string }
 type Claim = {
   id: string; week: number; winnerRosterId: string; loserRosterId: string
   playerId: string | null; offeredPlayerId: string | null; counterPlayerId: string | null
@@ -22,6 +23,8 @@ type Data = {
   myRosterId: string | null
   rosters: Roster[]
   protections: Protection[]
+  lineupRulings: LineupRuling[]
+  lineupPreviews: Record<string, { issues: string[]; reason: string }>
   claims: Claim[]
 }
 
@@ -45,6 +48,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
   const [offered, setOffered] = useState<Record<string, string>>({})
   const [counter, setCounter] = useState<Record<string, string>>({})
   const [reviewReason, setReviewReason] = useState<Record<string, string>>({})
+  const [lineupReason, setLineupReason] = useState<Record<string, string>>({})
   const [settings, setSettings] = useState<Data['rules'] | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -183,7 +187,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                 <p className="p-6 text-sm text-slate-300">Claim a team in this league to set its protections.</p>
               ) : (
                 <div className="p-4 sm:p-6">
-                  {mySet?.status === 'void' && <p className="mb-4 rounded-xl border border-rose-400/35 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">All locks were voided for this week: {mySet.voidReason === 'over_limit' ? 'too many players were submitted' : 'a change was attempted after games began'}.</p>}
+                  {mySet?.status === 'void' && <p className="mb-4 rounded-xl border border-rose-400/35 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">All locks were voided for this week: {mySet.voidReason === 'over_limit' ? 'too many players were submitted' : mySet.voidReason === 'illegal_lineup' ? 'the commissioner ruled the lineup illegal with an available replacement' : 'a change was attempted after games began'}.</p>}
                   <div className="grid gap-2">
                     {myRoster.players.map((player) => {
                       const locked = selectedSet.has(player.playerId)
@@ -227,6 +231,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                   const isWinner = data.myRosterId === claim.winnerRosterId
                   const isLoser = data.myRosterId === claim.loserRosterId
                   const protection = data.protections.find((set) => set.rosterId === claim.loserRosterId && set.week === claim.week)
+                  const lineupRuling = data.lineupRulings?.find((ruling) => ruling.claimId === claim.id)
                   const locked = new Set(protection?.status === 'active' ? protection.playerIds : [])
                   const claimable = loser?.players.filter((player) => !locked.has(player.playerId)) ?? []
                   return (
@@ -236,6 +241,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                         <Skull size={17} className="text-amber-300/70" />
                       </div>
                       <p className="mt-2 text-sm font-semibold text-white">{nameOf(winner)} <span className="text-amber-300">→</span> {nameOf(loser)}</p>
+                      {lineupRuling && <p className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">Lineup ruling: <strong>{lineupRuling.decision === 'forfeit' ? 'protections forfeited' : 'protections kept'}</strong>. {lineupRuling.reason}</p>}
                       {claim.playerId && <p className="mt-2 text-xs text-slate-300">Claimed: <strong className="text-white">{playerName(loser, claim.playerId)}</strong></p>}
                       {claim.deadlineAt && <p className="mt-1 text-xs text-slate-400">Automatic transfer: {dateText(claim.deadlineAt)}</p>}
                       {claim.selectionDeadlineAt && claim.status === 'awaiting_selection' && <p className="mt-1 text-xs text-slate-400">Choose by: {dateText(claim.selectionDeadlineAt)}</p>}
@@ -275,6 +281,18 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                       {isCommissioner && (
                         <div className="mt-4 border-t border-white/10 pt-4">
                           <p className="text-[11px] font-bold uppercase tracking-[.15em] text-cyan-300">Commissioner review</p>
+                          {data.lineupPreviews?.[claim.id]?.issues.length > 0 && <p className="mt-2 rounded-lg border border-amber-300/25 bg-amber-300/5 px-3 py-2 text-xs leading-5 text-amber-100">Current roster flags: {data.lineupPreviews[claim.id].issues.join('; ')}. {data.lineupPreviews[claim.id].reason}</p>}
+                          {['awaiting_selection', 'selection_expired', 'pending', 'countered'].includes(claim.status) && (
+                            <div className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/5 p-3">
+                              <p className="text-xs font-bold text-amber-200">Legal-lineup protection rule</p>
+                              <p className="mt-1 text-xs leading-5 text-slate-300">Rule only with evidence from before the relevant lineup lock. If the losing team could not fill every required starter slot with active roster players or players actually addable from waivers, keep its locks. Missing historical evidence means keep locks while you review. If an open claim selected a newly restored protected player, the winner gets a new selection window.</p>
+                              <textarea aria-label="Lock-time lineup and replacement evidence" maxLength={1000} placeholder="Which slot was empty or inactive? Which eligible replacement was available before lock? Or why was none available?" value={lineupReason[claim.id] ?? ''} onChange={(e) => setLineupReason({ ...lineupReason, [claim.id]: e.target.value })} className="mt-2 min-h-[88px] w-full rounded-lg border border-white/20 bg-[#061421] px-3 py-2 text-sm text-white placeholder:text-slate-500" />
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <button disabled={busy || (lineupReason[claim.id] ?? '').trim().length < 10} onClick={() => mutate(commissionerUrl(claim.id), { action: 'lineup_ruling', decision: 'excused', reason: lineupReason[claim.id] })} className="min-h-[44px] rounded-lg border border-emerald-300/45 px-3 text-xs font-bold text-emerald-200 disabled:opacity-45">Keep protections</button>
+                                <button disabled={busy || (lineupReason[claim.id] ?? '').trim().length < 10} onClick={() => mutate(commissionerUrl(claim.id), { action: 'lineup_ruling', decision: 'forfeit', reason: lineupReason[claim.id] })} className="min-h-[44px] rounded-lg border border-rose-300/45 px-3 text-xs font-bold text-rose-200 disabled:opacity-45">Forfeit protections</button>
+                              </div>
+                            </div>
+                          )}
                           {['awaiting_selection', 'selection_expired'].includes(claim.status) && (
                             <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
                               <select aria-label="Commissioner player selection" value={chosen[claim.id] ?? ''} onChange={(e) => setChosen({ ...chosen, [claim.id]: e.target.value })} className="min-h-[44px] rounded-lg border border-white/20 bg-[#061421] px-3 text-sm text-white">
