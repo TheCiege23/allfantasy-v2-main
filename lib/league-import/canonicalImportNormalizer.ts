@@ -30,7 +30,16 @@ function importedReceptionPoints(normalized: NormalizedImportResult): number | n
 }
 
 function inferScoringPresetId(normalized: NormalizedImportResult): string {
+  const sport = normalizeToSupportedSport(normalized.league.sport)
   const fmt = String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '').toLowerCase()
+  // Non-football points leagues carry their own stat rules. A football PPR preset
+  // would label an NBA/NHL/MLB import with the wrong sport and mislead valuations.
+  const pointsPresetBySport: Partial<Record<LeagueSport, string>> = {
+    NBA: 'nba_points', NHL: 'nhl_points', MLB: 'mlb_points',
+    NCAAB: 'ncaab_points', SOCCER: 'soc_points',
+  }
+  const sportPointsPreset = pointsPresetBySport[sport as LeagueSport]
+  if (sportPointsPreset) return sportPointsPreset
   if (fmt.includes('idp')) return 'fb_idp'
   if (fmt.includes('te') && fmt.includes('prem')) return 'fb_te_premium'
   if (fmt.includes('super')) return 'fb_superflex'
@@ -68,7 +77,9 @@ function inferScoringPresetId(normalized: NormalizedImportResult): string {
  * become an unqualified exact valuation (audit IMP-03).
  */
 function scoringPresetWasInferred(normalized: NormalizedImportResult): boolean {
+  const sport = normalizeToSupportedSport(normalized.league.sport)
   const fmt = String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '').toLowerCase()
+  if (sport !== 'NFL' && sport !== 'NCAAF') return !fmt.includes('points')
   if (importedReceptionPoints(normalized) != null) return false
   if (!fmt.trim()) return true
   return !(
@@ -607,7 +618,7 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
       code: 'scoring_preset_inferred',
       message: `Source reported scoring format "${
         normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '(none)'
-      }", which did not match a known preset — defaulted to half-PPR. Confirm in League Settings before trusting valuations.`,
+      }", which did not match a known preset — used ${scoringPresetId} as a fallback. Confirm in League Settings before trusting valuations.`,
       severity: 'warn',
       metadata: {
         rawFormat: String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? ''),
