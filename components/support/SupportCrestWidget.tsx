@@ -145,8 +145,18 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
       {open ? (
         <div
           ref={viewportRef}
-          style={{ top: 'var(--af-dialog-top, 0px)', height: 'var(--af-dialog-height, 100dvh)', bottom: 'auto' }}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+          style={{
+            top: 'var(--af-dialog-top, 0px)',
+            height: 'var(--af-dialog-height, 100dvh)',
+            bottom: 'auto',
+            // Safari's viewport includes the notch and home indicator. Subtract
+            // any keyboard pan already accounted for by the viewport hook.
+            paddingTop: 'max(8px, calc(env(safe-area-inset-top, 0px) - var(--af-dialog-top, 0px)))',
+            paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))',
+            paddingLeft: 'env(safe-area-inset-left, 0px)',
+            paddingRight: 'env(safe-area-inset-right, 0px)',
+          }}
+          className="fixed inset-0 z-50 box-border flex items-end justify-center bg-black/50 backdrop-blur-[2px] sm:items-center"
           role="presentation"
           onClick={close}
         >
@@ -155,9 +165,9 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
             role="dialog"
             aria-modal="true"
             aria-labelledby="support-widget-title"
-            style={{ maxHeight: 'calc(var(--af-dialog-height, 100dvh) - 16px)' }}
+            style={{ maxHeight: '100%' }}
             onClick={(e) => e.stopPropagation()}
-            className="max-h-[90dvh] w-full max-w-[420px] overflow-y-auto rounded-t-[20px] border border-white/10 bg-[#0a0a1f] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.45)] sm:rounded-[20px] sm:pb-0"
+            className="min-h-0 w-full max-w-[420px] overflow-y-auto rounded-t-[20px] border border-white/10 bg-[#0a0a1f] pb-3 shadow-[0_-12px_48px_rgba(0,0,0,0.45)] sm:rounded-[20px] sm:pb-0"
           >
             <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
               <p
