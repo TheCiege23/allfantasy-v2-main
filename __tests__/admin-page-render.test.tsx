@@ -486,8 +486,8 @@ describe("/admin page render states", () => {
     expect(screen.getAllByText("Total accounts").length).toBeGreaterThan(0)
     expect(screen.getByText("World Cup pools")).toBeInTheDocument()
     expect(screen.getAllByText(/Provider Health/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/Production Env/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/Traffic \/ Visitors/i)).toBeInTheDocument()
+    expect(screen.getByText(/Production readiness/i)).toBeInTheDocument()
+    expect(screen.getByText(/Visitor locations/i)).toBeInTheDocument()
     /*
      * Renamed from "Email Notifications" to "Email Center — send a broadcast".
      * Not cosmetic: the panel IS the mass-email tool (11 audiences, compose,
@@ -496,7 +496,7 @@ describe("/admin page render states", () => {
      * assertion tracks the copy because the copy is the fix.
      */
     expect(screen.getByText(/Email Center/i)).toBeInTheDocument()
-    expect(screen.getByText(/Sports OS \/ Chimmy Brain/i)).toBeInTheDocument()
+    expect(screen.getByText(/Sports OS and Chimmy readiness/i)).toBeInTheDocument()
     expect(screen.getByText(/Sports OS Identity/i)).toBeInTheDocument()
     expect(screen.getByText(/Provider mapping counts/i)).toBeInTheDocument()
     expect(screen.getAllByText("Sleeper").length).toBeGreaterThan(0)
@@ -507,9 +507,12 @@ describe("/admin page render states", () => {
     // back to "No waitlist signups recorded." still fails here.
     expect(screen.getByText(/Early-access waitlist/i)).toBeInTheDocument()
     expect(screen.getByText("dynasty-fan@example.com")).toBeInTheDocument()
-    expect(screen.getByText(/Recent Users/i)).toBeInTheDocument()
+    const waitlistDetails = screen.getByText(/View signup history, sources, and recent people/i).closest("details")
+    expect(waitlistDetails).not.toHaveAttribute("open")
+    expect(screen.getByText(/New accounts/i)).toBeInTheDocument()
+    expect(screen.getByText(/does not establish zero sales/i)).toBeInTheDocument()
     // P0-1: the Closed-Beta Invitations panel renders on the healthy admin page.
-    expect(screen.getByText(/Closed-Beta Invitations/i)).toBeInTheDocument()
+    expect(screen.getByText(/Closed-beta invitations/i)).toBeInTheDocument()
     expect(mocks.getAdminCommandCenterMetrics).toHaveBeenCalledWith("ciege")
   })
 
@@ -556,7 +559,7 @@ describe("/admin page render states", () => {
     expect(panel).toHaveAttribute("data-overall", "failed")
     expect(screen.getByText("1 of 2 need a look")).toBeInTheDocument()
     expect(panel.querySelector('[data-pipeline="rosters"]')).toHaveAttribute("data-light", "failed")
-    expect(screen.getByText(/Rosters is very stale/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Rosters is very stale/).length).toBeGreaterThan(0)
     // The Freshness tab must point at a rendered id.
     expect(document.getElementById("pipeline-freshness")).not.toBeNull()
   })

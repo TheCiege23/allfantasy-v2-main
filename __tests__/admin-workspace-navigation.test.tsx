@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 import { AdminWorkspace } from "@/components/admin/AdminWorkspace"
 
@@ -39,6 +39,24 @@ describe("admin workspace navigation", () => {
       expect(container.querySelector("#admin-workspace")).toHaveAttribute("data-view", "data")
       expect(container.querySelector("details")).toHaveAttribute("open")
     })
+  })
+
+  it("routes waitlist and stat recovery links to their areas", async () => {
+    window.history.replaceState(null, "", "/#waitlist")
+    const { container } = render(
+      <AdminWorkspace>
+        <div data-admin-pane="audience"><details><summary>Waitlist detail</summary><span id="waitlist">Signups</span></details></div>
+        <div data-admin-pane="data"><span id="stat-reingest">Stats recovery</span></div>
+      </AdminWorkspace>,
+    )
+
+    await waitFor(() => expect(container.querySelector("#admin-workspace")).toHaveAttribute("data-view", "audience"))
+    await waitFor(() => expect(container.querySelector("details")).toHaveAttribute("open"))
+    act(() => {
+      window.history.replaceState(null, "", "/#stat-reingest")
+      window.dispatchEvent(new Event("hashchange"))
+    })
+    await waitFor(() => expect(container.querySelector("#admin-workspace")).toHaveAttribute("data-view", "data"))
   })
 
   it("opens user search after a search request", () => {

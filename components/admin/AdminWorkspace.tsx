@@ -6,10 +6,10 @@ export type AdminView = "overview" | "audience" | "revenue" | "operations" | "da
 
 const views: { id: AdminView; label: string; description: string }[] = [
   { id: "overview", label: "Overview", description: "What needs attention right now" },
-  { id: "audience", label: "People & growth", description: "Users, traffic, invitations, and email" },
-  { id: "revenue", label: "Revenue", description: "Subscriptions, payments, and tokens" },
-  { id: "operations", label: "Product operations", description: "Sports OS, Chimmy, and platform tools" },
-  { id: "data", label: "Data & reliability", description: "Providers, freshness, sync, and readiness" },
+  { id: "audience", label: "People & growth", description: "Who is joining, confirming, and returning?" },
+  { id: "revenue", label: "Revenue", description: "What is earning, and what is only usage?" },
+  { id: "operations", label: "Product operations", description: "Which capabilities are ready or need work?" },
+  { id: "data", label: "Data & reliability", description: "Are the jobs configured and writing fresh data?" },
 ]
 
 const anchorViews: Record<string, AdminView> = {
@@ -19,8 +19,11 @@ const anchorViews: Record<string, AdminView> = {
   "user-search": "audience",
   "email-center": "audience",
   "social-campaigns": "audience",
+  "highlight-analytics": "audience",
+  waitlist: "audience",
   "beta-invites": "audience",
   "pipeline-freshness": "data",
+  "stat-reingest": "data",
   providers: "data",
   "provider-health": "data",
   "production-readiness": "data",
