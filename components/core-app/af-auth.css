@@ -55,6 +55,15 @@
   color: var(--accent);
 }
 
+@media (pointer: coarse) {
+  .af-core .af-au-switch a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 /* ── Card ────────────────────────────────────────────────────────────── */
 
 .af-au-card {
