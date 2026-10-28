@@ -57,11 +57,13 @@ export function verifyBracketEvent(input: {
   if (input.sport === "nba_cup" && new Date(actualAt).getUTCFullYear() !== input.season) {
     return { ok: false, reason: "wrong-cup-season" }
   }
-  if (input.sport === "nba_cup") {
-    const notes = Array.isArray(competition.notes) ? competition.notes : []
-    if (!notes.some((note: unknown) => /\bNBA Cup\b/i.test(String(object(note).headline ?? "")))) {
-      return { ok: false, reason: "not-nba-cup-event" }
-    }
+  const notes = Array.isArray(competition.notes) ? competition.notes : []
+  const headlines = notes.map((note: unknown) => String(object(note).headline ?? ""))
+  if (input.sport === "ncaaf" && !headlines.some((headline: string) => /College Football Playoff/i.test(headline))) {
+    return { ok: false, reason: "not-cfp-event" }
+  }
+  if (input.sport === "nba_cup" && !headlines.some((headline: string) => /\bNBA Cup\b/i.test(headline))) {
+    return { ok: false, reason: "not-nba-cup-event" }
   }
   const status = object(object(competition.status).type)
   if (status.state !== "post" || status.completed !== true) return { ok: false, reason: "not-final" }
