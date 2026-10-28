@@ -133,7 +133,7 @@ export function LeagueRulesSheet({
                               <span className="text-[13px] font-semibold text-white">
                                 {rule.value}
                                 {rule.source ? (
-                                  <span className="ml-2 rounded-full border border-white/15 px-1.5 py-px text-[10px] font-medium text-white/50" data-testid="league-rule-source">
+                                  <span className="ml-2 rounded-full border border-white/15 px-1.5 py-px text-[11px] font-medium text-white/50" data-testid="league-rule-source">
                                     {t(`rules.sheet.source.${rule.source}`)}
                                   </span>
                                 ) : null}
