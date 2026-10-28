@@ -2,13 +2,14 @@
  * AF league trade orchestration — create, accept, reject, counter, veto, commissioner, process.
  */
 
+import { checkOfferPickTerms } from '@/lib/league-trade-engine/pickTermsService'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assertLifecycleActionAllowed } from '@/server/services/leagueLifecycleService'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
-import { resolveTradeDeadlineStatus, serverWeekForTradeDeadline, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import { resolveTradeDeadlineStatus, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
 import { loadNativeFuturePicks, parseInventoryPickId } from '@/lib/league-trade-engine/nativeFuturePicks'
 import {
@@ -531,6 +532,13 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   if (!rosterTxGate.ok) throw new Error(rosterTxGate.error)
 
   const settings = resolveLeagueTradeSettings(league)
+  /*
+   * A picks-only offer in a league whose pick trades have their own deadline is held to that one
+   * (lib/trade-deadline/pickTradeDeadline.ts), so the validator is given no week and checks no
+   * deadline. Every other offer: the validator's check, at the server's week.
+   */
+  const deadline = await resolveTradeDeadlineStatus(league, settings.tradeDeadlineWeek, {}, { items: input.assets })
+  if (deadline.scope === 'picks' && deadline.passed) throw new CodedTradeError('TRADE_DEADLINE', tradeDeadlinePassedMessage(deadline))
   // A native dynasty league's future picks are checked against its inventory, not `playerData`.
   const offersNativePick = input.assets.some((a) => parseInventoryPickId(String(a.itemReference ?? '')) != null)
   const nativePicks = offersNativePick ? await loadNativeFuturePicks(input.leagueId).catch(() => null) : null
@@ -544,12 +552,15 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     receiver,
     participants,
     assets: input.assets,
-    currentWeek: await serverWeekForTradeDeadline(league, settings.tradeDeadlineWeek),
+    currentWeek: deadline.scope === 'picks' || !deadline.window?.inSeason ? null : deadline.window.week,
     nativeFuturePickOwners: nativePicks?.ownerByPickId ?? null,
     redraftDraftPicks: redraftPicks,
   })
   // The code rides on the error so the route can return it (e.g. `future_picks_not_allowed_in_redraft`).
   if (!v.ok) throw new CodedTradeError(v.code, v.message)
+  // Conditional and protected picks (./pickTerms.ts): checked against the league, stored in the shape
+  // the settlement reads. An offer without terms is returned as it came.
+  const offerAssets = await checkOfferPickTerms(input.leagueId, input.assets)
 
   const expiresHours = input.expiresInHours ?? 48
   const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000)
@@ -601,7 +612,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
         multiTeam: participantRosterIds.length > 2,
       } as Prisma.InputJsonValue,
       items: {
-        create: input.assets.map((a) => {
+        create: offerAssets.map((a) => {
           // A native future pick's item carries its own season and round, read from its id, so
           // every reader of the item (grades, history, notices) can price it without the id format.
           const nativePick = parseInventoryPickId(String(a.itemReference ?? ''))
@@ -848,7 +859,7 @@ export async function acceptAfLeagueTrade(input: {
    * acceptance leaves the offer exactly as it was. Once accepted, the review period (commissioner,
    * league vote, processing delay) may finish after the deadline — see `finalizeAfLeagueTradeProcessing`.
    */
-  const deadline = await resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek)
+  const deadline = await resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek, {}, { items: trade.items })
   if (deadline.passed) throw new CodedTradeError('TRADE_DEADLINE', tradeDeadlinePassedMessage(deadline))
 
   const metadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
@@ -1065,7 +1076,7 @@ export async function finalizeAfLeagueTradeProcessing(input: {
    * to the deadline like a new proposal.
    */
   if (trade.status === 'pending' && !input.deadlineChecked && !input.commissionerOverride) {
-    const deadline = await resolveTradeDeadlineStatus(league, settings.tradeDeadlineWeek)
+    const deadline = await resolveTradeDeadlineStatus(league, settings.tradeDeadlineWeek, {}, { items: trade.items })
     if (deadline.passed) throw new CodedTradeError('TRADE_DEADLINE', tradeDeadlinePassedMessage(deadline))
   }
   const delayH = settings.processingDelayHours ?? trade.processingDelayHours ?? 0

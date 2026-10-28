@@ -8,7 +8,7 @@ import OpenAI from 'openai'
 import { withOfficialTimeUserMessage } from '@/lib/time-engine/chimmyPromptPrefix'
 import type { SurvivorAIDeterministicContext } from './SurvivorAIContext'
 import type { SurvivorAIType } from './SurvivorAIContext'
-import { buildSurvivorAIPrompt } from './SurvivorAIPrompts'
+import { SURVIVOR_AI_MAX_TOKENS, buildSurvivorAIPrompt } from './SurvivorAIPrompts'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
 let openai: OpenAI | null = null
@@ -73,6 +73,9 @@ export interface SurvivorAiCacheContextSummary {
     eligibleToReturn: boolean
     reason: string | null
   } | null
+  /** In the cache key, so a changed idol deadline or rule never serves an old plan. */
+  idolPlayDeadlineAt: string | null
+  idolRuleText: string
   finale: {
     open: boolean
     closed: boolean
@@ -131,6 +134,8 @@ export function buildSurvivorAiCacheContextSummary(
       .map((effect) => `${effect.rewardType}:${effect.appliedMode}:w${effect.week}`)
       .sort(),
     myExileStatus: ctx.myExileStatus,
+    idolPlayDeadlineAt: ctx.idolRules.playDeadlineAt?.toISOString() ?? null,
+    idolRuleText: `${ctx.idolRules.cutoffText ?? ''} ${ctx.idolRules.expiryText}`.trim(),
     finale: ctx.finale
       ? {
           open: ctx.finale.open,
@@ -167,7 +172,7 @@ export async function generateSurvivorAI(
       { role: 'system', content: system },
       { role: 'user', content: userContent },
     ],
-    max_tokens: 600,
+    max_tokens: SURVIVOR_AI_MAX_TOKENS[type] ?? 600,
     temperature: 0.6,
   })
   const narrative = completion.choices[0]?.message?.content?.trim() ?? 'No narrative generated.'

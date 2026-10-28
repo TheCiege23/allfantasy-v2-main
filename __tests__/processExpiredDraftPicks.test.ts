@@ -16,6 +16,11 @@ const hm = vi.hoisted(() => ({
   invalidateLeagueDraftCaches: vi.fn(),
   buildSessionSnapshot: vi.fn(),
   auctionTick: vi.fn(),
+  repairDraftCompletionIfBoardFull: vi.fn(),
+}))
+
+vi.mock('@/lib/live-draft-engine/postDraftFinalizeArtifacts', () => ({
+  repairDraftCompletionIfBoardFull: hm.repairDraftCompletionIfBoardFull,
 }))
 
 vi.mock('@/lib/live-draft-engine/auction', () => ({
@@ -173,6 +178,33 @@ describe('processExpiredDraftPicks', () => {
       expect.objectContaining({ position: 'K' }),
     )
     expect(hm.invalidateLeagueDraftCaches).toHaveBeenCalledWith('league-1')
+  })
+
+  /*
+   * A full board left in_progress (its completion step failed) used to be skipped as
+   * no_current_pick forever; only a person opening the draft room healed it.
+   */
+  it('finishes a full board left in_progress instead of skipping it', async () => {
+    const picks = Array.from({ length: 4 }, (_, i) => ({ overall: i + 1, playerName: `P${i + 1}`, position: 'RB', pickMetadata: null }))
+    hm.draftSessionFindMany.mockResolvedValue([{ leagueId: 'league-1' }])
+    hm.draftSessionFindUnique.mockResolvedValue(baseSession({ rounds: 2, teamCount: 2, picks }))
+    hm.repairDraftCompletionIfBoardFull.mockResolvedValue(true)
+    const { processExpiredDraftPicks } = await import('@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks')
+    const summary = await processExpiredDraftPicks({ now, maxLeagues: 10 })
+    expect(hm.repairDraftCompletionIfBoardFull).toHaveBeenCalledWith('league-1')
+    expect(summary.details[0]).toEqual({ leagueId: 'league-1', outcome: 'skipped', reason: 'board_full_completed' })
+    expect(hm.submitBestAvailableAutopickForExpiredTimer).not.toHaveBeenCalled()
+  })
+
+  it('a board with an open slot still autopicks and never runs the completion repair', async () => {
+    const picks = Array.from({ length: 3 }, (_, i) => ({ overall: i + 1, playerName: `P${i + 1}`, position: 'RB', pickMetadata: null }))
+    hm.draftSessionFindMany.mockResolvedValue([{ leagueId: 'league-1' }])
+    hm.draftSessionFindUnique
+      .mockResolvedValueOnce(baseSession({ rounds: 2, teamCount: 2, picks }))
+      .mockResolvedValue({ version: 0, status: 'in_progress', timerEndAt: new Date('2026-01-15T11:55:00.000Z'), _count: { picks: 3 } })
+    const { processExpiredDraftPicks } = await import('@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks')
+    await processExpiredDraftPicks({ now, maxLeagues: 10 })
+    expect(hm.repairDraftCompletionIfBoardFull).not.toHaveBeenCalled()
   })
 
   it('skips non-expired drafts (none returned from findMany)', async () => {

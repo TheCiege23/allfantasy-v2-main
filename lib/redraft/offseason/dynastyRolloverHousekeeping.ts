@@ -14,6 +14,8 @@
  *           `taxiYearsLimit`), plus "taxi is not enabled". Ineligible → bench.
  *   IR    → re-checked with `validateIrSectionAgainstLeague` against the row's injury status.
  *           Ineligible → bench.
+ *           Also off the squad: a player who has used the league's max seasons on taxi
+ *           (`lib/taxi/taxiMaxYears.ts`, 2 by default), counted over completed seasons.
  *   size  → over `maxRosterSize` is FLAGGED, never cut. Dropping a player is a manager's decision;
  *           the existing lineup validation (`roster_over_max`) already refuses a lineup save from
  *           an over-limit roster, and that is the only block applied.
@@ -37,6 +39,7 @@ import type { LineupValidationContext } from '@/lib/roster-lineup-engine/types'
 import { normalizeToken } from '@/lib/redraft/lineupValidation'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { isDynastyFamilyLeague } from './carryDynastyRosters'
+import { hasUsedTaxiSeasons, loadTaxiSeasonsUsed, readTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
 
 type ValidationLeague = LineupValidationContext['league']
 
@@ -95,6 +98,10 @@ export function planRolloverHousekeeping(input: {
   rosters: HousekeepingRoster[]
   yearsExpByPlayerId: Map<string, number>
   maxRosterSize: number
+  /** Max seasons on the taxi squad (lib/taxi/taxiMaxYears.ts); null is no limit. Omitted: none. */
+  taxiMaxYears?: number | null
+  /** Completed seasons each player already spent on a taxi squad in this league. */
+  taxiSeasonsUsed?: Map<string, number>
 }): HousekeepingPlan {
   const { league } = input
   const taxiEnabled = (league.taxiSlots ?? 0) > 0
@@ -124,6 +131,10 @@ export function planRolloverHousekeeping(input: {
       })
       const issues = validateTaxiSectionAgainstLeague(league, { lineup_sections: { taxi: rows } })
       const reasonByPlayer = new Map<string, string>()
+      // Seasons used up first: it is the reason a manager can act on before the next stash.
+      for (const p of taxi) {
+        if (hasUsedTaxiSeasons(input.taxiSeasonsUsed?.get(p.playerId) ?? 0, input.taxiMaxYears ?? null)) reasonByPlayer.set(p.playerId, 'taxi_max_years')
+      }
       for (const issue of issues) if (issue.playerId && !reasonByPlayer.has(issue.playerId)) reasonByPlayer.set(issue.playerId, issue.code)
       for (const p of taxi) {
         const reason = reasonByPlayer.get(p.playerId)
@@ -167,15 +178,8 @@ export type RolloverHousekeepingResult = {
 /** The key under `League.lifecycleMetadata` the commissioner surface reads. */
 export const DYNASTY_ROLLOVER_METADATA_KEY = 'dynastyRollover'
 
-/**
- * Apply the plan to one season's rosters and record the outcome on the league, where the
- * commissioner's "Start new season" panel reads it.
- */
-export async function runDynastyRolloverHousekeeping(
-  leagueId: string,
-  seasonId: string,
-  now: Date = new Date(),
-): Promise<RolloverHousekeepingResult | null> {
+/** One season's rosters, read and planned. Shared by the run and the rollover wizard's preview. */
+async function loadHousekeepingPlan(leagueId: string, seasonId: string) {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: {
@@ -224,13 +228,44 @@ export async function runDynastyRolloverHousekeeping(
     [...new Set(taxiIds)],
   )
   const { maxRosterSize } = resolveRedraftRosterConfig(season.sport, league.settings)
+  const taxiMaxYears = readTaxiMaxYears(league.settings)
+  const taxiSeasonsUsed = taxiMaxYears != null ? await loadTaxiSeasonsUsed(prisma, leagueId, taxiIds) : new Map<string, number>()
 
   const plan = planRolloverHousekeeping({
     league: league as unknown as ValidationLeague,
     rosters: rosters.map((r) => ({ rosterId: r.id, ownerId: r.ownerId, teamName: r.teamName, players: r.players })),
     yearsExpByPlayerId,
     maxRosterSize,
+    taxiMaxYears,
+    taxiSeasonsUsed,
   })
+  return { league, plan, maxRosterSize }
+}
+
+/**
+ * What the start would do to one season's rosters, without doing it: the rollover wizard's
+ * preview (lib/season-rollover/dynastyRolloverService.ts). Null when the league or season is gone.
+ */
+export async function previewDynastyRolloverHousekeeping(
+  leagueId: string,
+  seasonId: string,
+): Promise<(HousekeepingPlan & { maxRosterSize: number }) | null> {
+  const loaded = await loadHousekeepingPlan(leagueId, seasonId)
+  return loaded ? { ...loaded.plan, maxRosterSize: loaded.maxRosterSize } : null
+}
+
+/**
+ * Apply the plan to one season's rosters and record the outcome on the league, where the
+ * commissioner's "Start new season" panel reads it.
+ */
+export async function runDynastyRolloverHousekeeping(
+  leagueId: string,
+  seasonId: string,
+  now: Date = new Date(),
+): Promise<RolloverHousekeepingResult | null> {
+  const loaded = await loadHousekeepingPlan(leagueId, seasonId)
+  if (!loaded) return null
+  const { league, plan, maxRosterSize } = loaded
 
   const applied: HousekeepingMove[] = []
   for (const m of plan.moves) {

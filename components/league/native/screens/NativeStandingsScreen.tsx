@@ -14,7 +14,8 @@ import { groupStandingsByDivision } from '@/lib/league/divisions/leagueDivisions
  * Order and tiebreaks come from `/api/leagues/[id]/scoring/standings` (finalized AF results; the
  * server ranks). Playoff odds are the stored `SeasonForecastSnapshot` for this week
  * (`/api/leagues/[id]/season-forecast`, GET only — this screen never triggers a simulation).
- * Seeds are `fantasyStanding.playoffSeed` from `/scoring/playoff-seeds`. "Power" is an all-play
+ * Seeds come from `/scoring/playoff-seeds`: for an AllFantasy season, the playoff runtime's own seeding
+ * (divisions included), live until the bracket is generated; otherwise `fantasyStanding.playoffSeed`. "Power" is an all-play
  * ranking from the same standings read. All DB reads; no provider call.
  */
 type Row = { rosterId: string; teamName: string; wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number | null; rank: number | null; streak?: string | null; allPlay?: string | null }
@@ -40,6 +41,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   const [data, setData] = useState<StandingsData | null>(null)
   const [forecast, setForecast] = useState<Forecast[] | null>(null)
   const [seeds, setSeeds] = useState<Seed[]>([])
+  const [seedsProjected, setSeedsProjected] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const season = Number(league.season) || new Date().getFullYear()
@@ -61,8 +63,9 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
         setData((await s.json()) as StandingsData)
         const fj = f && f.ok ? ((await f.json().catch(() => null)) as { teamForecasts?: Forecast[] | null } | null) : null
         setForecast(Array.isArray(fj?.teamForecasts) ? fj!.teamForecasts! : null)
-        const pj = p && p.ok ? ((await p.json().catch(() => null)) as { seeds?: Seed[] } | null) : null
+        const pj = p && p.ok ? ((await p.json().catch(() => null)) as { seeds?: Seed[]; projected?: boolean } | null) : null
         setSeeds(Array.isArray(pj?.seeds) ? pj!.seeds! : [])
+        setSeedsProjected(pj?.projected === true)
       } catch {
         if (!ac.signal.aborted) setError('We could not load standings. Please retry.')
       } finally {
@@ -288,7 +291,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
                     ))}
                   </tbody>
                 </table>
-                <p className="nls-table-note">{seeds.length ? 'Seeds as set by the league.' : 'If the season ended today. Seeds lock when the commissioner sets them.'}</p>
+                <p className="nls-table-note">{seeds.length && !seedsProjected ? 'Seeds as set by the league.' : 'If the season ended today. Seeds lock when the commissioner sets them.'}</p>
               </>
             ) : (
               <>

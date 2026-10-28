@@ -32,10 +32,15 @@ vi.mock('@/lib/survivor/survivorVerifiedSlateChallenges', () => ({ ensureVerifie
 const weeklyCall = vi.hoisted(() => ({ ensure: vi.fn(async () => undefined), settle: vi.fn(async () => undefined) }))
 vi.mock('@/lib/survivor/survivorWeeklyCall', () => ({ ensureWeeklyCall: weeklyCall.ensure, settleWeeklyCall: weeklyCall.settle }))
 vi.mock('@/lib/survivor/weeklyRecapGenerator', () => ({ generateAndPostWeeklyRecap: vi.fn() }))
-const redraw = vi.hoisted(() => ({ autoApply: vi.fn(), guard: vi.fn() }))
-vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply, rebalanceTribesBeforeCouncil: redraw.guard }))
+const redraw = vi.hoisted(() => ({ autoApply: vi.fn(), guard: vi.fn(), sitOut: vi.fn() }))
+vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply, rebalanceTribesBeforeCouncil: redraw.guard, redrawTribesForSitOutBalance: redraw.sitOut }))
+// The real settle answers 'not_nba' for these leagues (no survivorPhase), so that is the default.
+const sitOut = vi.hoisted(() => ({ settle: vi.fn() }))
+vi.mock('@/lib/survivor/SurvivorSitOutEngine', () => ({ settleNbaTribeSitOutDeadline: sitOut.settle }))
 const surprise = vi.hoisted(() => ({ ensure: vi.fn(), dissolve: vi.fn() }))
 vi.mock('@/lib/survivor/survivorSurpriseTribes', () => ({ ensureSurpriseTribeWeek: surprise.ensure, dissolveSurpriseTribes: surprise.dissolve }))
+const reported = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/survivor/survivorAutomationReporting', () => ({ reportSurvivorAutomationError: reported }))
 
 const start = new Date('2026-09-01T12:00:00Z')
 const later = new Date('2027-03-01T12:00:00Z')
@@ -60,6 +65,30 @@ beforeEach(() => {
   vi.clearAllMocks()
   state.resolved = false
   state.active = 20
+  sitOut.settle.mockReset().mockResolvedValue('not_nba')
+})
+
+describe('NBA sit-out block', () => {
+  it('redraws the tribes and settles again instead of waiting for the commissioner', async () => {
+    const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+    const plan = await setup('NBA', 7, { now: start })
+    state.game.currentWeek = plan.startWeek + 1
+    sitOut.settle.mockResolvedValueOnce('blocked').mockResolvedValueOnce('locked')
+    redraw.sitOut.mockResolvedValue({ redrawn: true })
+    expect(await runPlannedSurvivorLeague('league-1', later)).not.toBe('awaiting_tribe_rebalance')
+    expect(redraw.sitOut).toHaveBeenCalledWith('league-1', plan.startWeek + 1)
+    expect(sitOut.settle).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits for the commissioner only when no redraw can run', async () => {
+    const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+    const plan = await setup('NBA', 7, { now: start })
+    state.game.currentWeek = plan.startWeek + 1
+    sitOut.settle.mockResolvedValue('blocked')
+    redraw.sitOut.mockResolvedValue({ redrawn: false, reason: 'already_redrawn_this_week' })
+    expect(await runPlannedSurvivorLeague('league-1', later)).toBe('awaiting_tribe_rebalance')
+    expect(sitOut.settle).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe.each(['NBA', 'NHL', 'NFL'] as const)('%s Survivor planned season tick', sport => {
@@ -301,4 +330,21 @@ it('freezes a league the commissioner paused, even though its phase is unchanged
   expect(engine.processTribalDeadline).not.toHaveBeenCalled()
   expect(engine.advanceWeek).not.toHaveBeenCalled()
   expect(engine.syncWeeklyScores).not.toHaveBeenCalled()
+})
+
+it('reports a league whose season tick throws to Sentry, tagged with the league, and keeps the batch going', async () => {
+  const { runPlannedSurvivorSeasonBatch } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+  const plan = await setup('NBA', 1)
+  db.league.findMany.mockResolvedValue([{ id: 'league-1', settings: { survivor_full_season_plan: plan } }])
+  const boom = new Error('provider feed down')
+  engine.getOrCreateSurvivorGameState.mockRejectedValue(boom)
+  db.survivorGameState.updateMany.mockResolvedValue({ count: 1 })
+  process.env.SURVIVOR_PLANNED_SEASON_AUTOMATION_ENABLED = 'true'
+  try {
+    expect(await runPlannedSurvivorSeasonBatch(later)).toMatchObject({ failed: 1 })
+  } finally {
+    delete process.env.SURVIVOR_PLANNED_SEASON_AUTOMATION_ENABLED
+  }
+  expect(reported).toHaveBeenCalledWith(boom, { job: 'season_runner', leagueId: 'league-1' })
+  expect(db.survivorGameState.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { lastError: 'provider feed down' } }))
 })

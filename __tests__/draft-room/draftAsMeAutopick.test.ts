@@ -6,8 +6,11 @@ const m = vi.hoisted(() => ({
   league: vi.fn(),
   hasAccess: vi.fn(async () => ({ hasAccess: true })),
   pastPicks: vi.fn(),
+  roster: vi.fn(async () => ({ platformUserId: 'manager-1' })),
+  pref: vi.fn(async () => ({ enabled: false, mode: 'standard', isProEligible: false, updatedAt: null })),
 }))
-vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: m.league } } }))
+vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: m.league }, roster: { findUnique: m.roster } } }))
+vi.mock('@/lib/live-draft-engine/LiveDraftAutopickPreferenceService', () => ({ getViewerAutopickPreference: m.pref }))
 vi.mock('@/lib/subscription/EntitlementResolver', () => ({ EntitlementResolver: class { resolveForUser = m.hasAccess } }))
 vi.mock('@/lib/draft-room/managerHistoryReads', () => ({ loadManagerPastPicks: m.pastPicks }))
 
@@ -43,6 +46,27 @@ describe('tryDraftAsMePick', () => {
     expect(await tryDraftAsMePick(args)).toBeNull()
     m.pastPicks.mockResolvedValueOnce(history.slice(0, 3))
     expect(await tryDraftAsMePick(args)).toBeNull()
+  })
+})
+
+describe('a manager’s own "Draft like me" (AF Pro)', () => {
+  const withSession = { ...args, draftSessionId: 'S' }
+
+  it('picks like them even when the league has no AF Commissioner plan', async () => {
+    m.hasAccess.mockResolvedValue({ hasAccess: false })
+    m.pref.mockResolvedValue({ enabled: true, mode: 'draft_as_me', isProEligible: true, updatedAt: null })
+    expect(await tryDraftAsMePick(withSession)).toMatchObject({ playerName: 'B' })
+    expect(m.pref).toHaveBeenCalledWith('S', 'manager-1')
+  })
+
+  it('is off when they chose another mode, have auto-pick off, or the seat has no person', async () => {
+    m.hasAccess.mockResolvedValue({ hasAccess: false })
+    m.pref.mockResolvedValueOnce({ enabled: true, mode: 'ai_queue', isProEligible: true, updatedAt: null })
+    expect(await tryDraftAsMePick(withSession)).toBeNull()
+    m.pref.mockResolvedValueOnce({ enabled: false, mode: 'draft_as_me', isProEligible: true, updatedAt: null })
+    expect(await tryDraftAsMePick(withSession)).toBeNull()
+    m.roster.mockResolvedValueOnce({ platformUserId: 'orphan-x' })
+    expect(await tryDraftAsMePick(withSession)).toBeNull()
   })
 })
 

@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { countdownParts, type TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
+import type { PickTradeDeadlineView } from '@/lib/trade-deadline/pickTradeDeadline'
 
 export function useTradeDeadlineCountdownText(countdown: TradeDeadlineCountdown | null | undefined): string | null {
   const { tInterpolate } = useOptionalLanguage()
@@ -66,6 +67,27 @@ export function TradeDeadlineCountdownChip(props: {
       role="status"
       style={{ fontSize: 12 }}
     >
+      {text}
+    </span>
+  )
+}
+
+/**
+ * A dynasty league's separate pick-trade rule (lib/trade-deadline/pickTradeDeadline.ts), beside the trade
+ * deadline chip: "Pick trades open all season", "Pick trades through Week 16", "Pick trades closed".
+ * Renders nothing when pick trades follow the trade deadline.
+ */
+export function PickTradeDeadlineChip(props: { view: PickTradeDeadlineView | null | undefined; className?: string }) {
+  const { tInterpolate } = useOptionalLanguage()
+  const v = props.view
+  if (!v) return null
+  const text = v.passed
+    ? tInterpolate('tradeDeadline.picks.closed')
+    : v.mode === 'open'
+      ? tInterpolate('tradeDeadline.picks.open')
+      : tInterpolate('tradeDeadline.picks.through', { week: v.week ?? '?' })
+  return (
+    <span className={props.className} data-deadline-state={v.passed ? 'closed' : v.mode} role="status" style={{ fontSize: 12 }} data-testid="pick-trade-deadline-chip">
       {text}
     </span>
   )

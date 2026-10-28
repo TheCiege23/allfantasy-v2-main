@@ -46,7 +46,7 @@ import { ensureNextRedraftSeasonShell } from '@/lib/redraft/offseason/ensureNext
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { logAction } from '@/server/services/auditService'
-import { effectiveFaabRolloverRule, storedFaabRolloverRule } from '@/lib/waiver-wire/faab-rollover'
+import { effectiveFaabRolloverRule, storedFaabRolloverRule, type RenewalFamily } from '@/lib/waiver-wire/faab-rollover'
 
 export type RenewDraftOrderMode = 'random' | 'standings' | 'reverse_standings' | 'manual'
 
@@ -189,6 +189,8 @@ export type RenewRedraftLeagueOptions = {
   manualOrder?: unknown
   /** Test seam for the shuffle; production uses crypto. */
   random?: () => number
+  /** Whose default FAAB rollover applies when none is stored (faabRolloverFamilyForLeague); redraft when omitted. */
+  faabFamily?: RenewalFamily
 }
 
 const ALREADY_RENEWED_MESSAGE = 'This league has already been renewed into its next season.'
@@ -334,8 +336,9 @@ export async function renewRedraftLeague(
 
   const faab =
     typeof league.waiverBudget === 'number' && Number.isFinite(league.waiverBudget) ? league.waiverBudget : 100
-  // The commissioner's FAAB rollover rule (lib/waiver-wire/faab-rollover.ts); unset, a redraft resets.
-  const faabRule = effectiveFaabRolloverRule(storedFaabRolloverRule(league.waiverSettings?.waiverEngineConfig), 'redraft')
+  // The commissioner's FAAB rollover rule (lib/waiver-wire/faab-rollover.ts); unset, a redraft resets
+  // and a keeper / dynasty league (the caller's `faabFamily`) carries its balances over.
+  const faabRule = effectiveFaabRolloverRule(storedFaabRolloverRule(league.waiverSettings?.waiverEngineConfig), opts.faabFamily ?? 'redraft')
   const now = new Date()
   const fromState = league.lifecycleState
 

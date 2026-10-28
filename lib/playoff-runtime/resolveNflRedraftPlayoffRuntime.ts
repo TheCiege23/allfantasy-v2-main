@@ -438,6 +438,7 @@ export function rulesWithPlayoffTeamOverride(
       byePlan: state.settings.byePlan,
       // Without this the override would re-run the legacy head-to-head-before-points reorder on it.
       customTiebreakers: state.settings.customTiebreakers ?? null,
+      seriesLengths: state.settings.seriesLengths ?? null,
     },
     schedule: {
       regularSeasonLength: state.settings.regularSeasonEndWeek,

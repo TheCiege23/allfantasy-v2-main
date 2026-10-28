@@ -55,7 +55,8 @@ describe('F.2 — DraftRoomShell mobile structure', () => {
   it('mobile content div has min-w-0 + a stable testid + active-tab data attr', () => {
     expect(src).toMatch(/data-testid="draft-mobile-content"/)
     expect(src).toMatch(/data-active-tab=\{mobileTab\}/)
-    expect(src).toMatch(/min-h-\[220px\] min-w-0 p-2 pb-3/)
+    // Inside the tray the content area is sized by the tray's snap height and scrolls itself.
+    expect(src).toMatch(/h-full min-h-0 min-w-0 overflow-y-auto overscroll-contain/)
   })
 
   it('Board tab wraps its content in an overflow-x-auto scroll container', () => {
@@ -149,10 +150,13 @@ describe('F.2 — DraftRightDockTabs is desktop-only on the mobile shell', () =>
     // Find the mobile layout block and assert it doesn't include the right
     // dock tabs (which are a desktop-only construct).
     const mobileMatch = shellSrc.match(
-      /data-testid="draft-mobile-layout"[\s\S]*?data-testid="draft-mobile-content"[\s\S]*?<\/nav>/,
+      // The tray mechanics moved to DraftMobileTray; the mobile block still spans layout → tray.
+      /data-testid="draft-mobile-layout"[\s\S]*?<\/DraftMobileTray>/,
     )
     expect(mobileMatch).not.toBeNull()
     const mobileBlock = mobileMatch![0]
+    expect(mobileBlock).toMatch(/data-testid="draft-mobile-content"/)
+    expect(mobileBlock).toMatch(/<\/nav>/)
     expect(mobileBlock).not.toMatch(/DraftRightDockTabs/)
   })
 })

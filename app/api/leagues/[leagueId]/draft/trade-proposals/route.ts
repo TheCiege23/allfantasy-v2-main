@@ -123,7 +123,7 @@ export async function POST(
    * it never trips this; a draft held mid-season (a supplemental or dispersal draft) would otherwise
    * be a way to trade after trades closed. Same verdict as every other trade path.
    */
-  const deadlineRefusal = await tradeDeadlineRefusal(leagueId)
+  const deadlineRefusal = await tradeDeadlineRefusal(leagueId, {}, { picksOnly: true })
   if (deadlineRefusal) return NextResponse.json({ error: deadlineRefusal, code: 'TRADE_DEADLINE_PASSED' }, { status: 409 })
 
   const draftSession = await getDraftSessionByLeague(leagueId)

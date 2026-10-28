@@ -1,6 +1,7 @@
 'use client'
 
 import '@/components/core-app/af-trades.css'
+import { PickTermsCard } from '@/components/core-app/PickTermsCard'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { PlayerImage } from '@/app/components/PlayerImage'
@@ -407,6 +408,9 @@ export function Trades({ data, hidePending = false }: TradesProps) {
           <span className="af-tr-deadline-why">{copy(data.deadline.reason)}</span>
         )}
       </div>
+
+      {/* ── Conditional and protected picks: every pick carrying terms (lib/league-trade-engine/pickTerms.ts) ── */}
+      <PickTermsCard leagueId={data.league.id} />
 
       {/* ── Nightly trade ideas (absent until the agent's table exists) ── */}
       {data.agentIdeas ? <AgentIdeas state={data.agentIdeas} /> : null}

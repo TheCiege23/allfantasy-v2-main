@@ -65,7 +65,12 @@ import { applyPositionAwareProjectionFallbacks, type ProjectionFallbackDiagnosti
 import {
   loadSportsPlayerRecordMapsForDraftPool,
   lookupSportsPlayerRecordAugmentDetailed,
+  type DraftSeasonStatLine,
 } from '@/lib/draft-room/sportsPlayerRecordDraftEnrichment'
+import {
+  loadAfBaselineProjectionsByRollingInsightsIds,
+  type AfBaselineProjection,
+} from '@/lib/af-projections/readAfProjections'
 import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
@@ -78,6 +83,8 @@ import {
 import { rookieClassYear } from '@/lib/draft-room/rookieFilterPredicate'
 import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { computeAfAdp } from '@/lib/adp/afAdp'
+import type { AdpCorpusSplit } from '@/lib/adp/loadAdpBoard'
 import { shouldVerifyCurrentNbaRoster, loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches, nbaSurvivorPlayerIsEligible, type NbaRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
 const DEFAULT_LIMIT = 300
@@ -126,6 +133,10 @@ export type DraftPoolRawRow = {
   age?: number | null
   fantasyPointsPerGame?: number | null
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
+  /** MLB / NHL season line (`extractMlbDraftSeasonStats` / `extractNhlDraftSeasonStats`). */
+  seasonStatLine?: DraftSeasonStatLine | null
+  /** MLB / NHL: AF projection, PER GAME (DraftKings-style), from `AFProjectionSnapshot`. */
+  afProjectionPerGame?: number | null
   lifetimeValue?: number | null
   nflDraftProjectionSplits?: NflDraftProjectionSplits
   /** D.7 â Sleeper years_exp; 0 = rookie. Only attached for NFL pools. */
@@ -1875,6 +1886,8 @@ export async function getResolvedDraftPoolForLeague(
    * `aiAdpByPlayerKey.get('<lowercased name>|<lowercased position>')` returns
    *   { adp, sampleSize, lowSample, sevenDayTrend, thirtyDayTrend, standardDeviation }
    */
+  /** Own vs imported corpora per player key, for the three-factor AF ADP. See lib/adp/afAdp.ts. */
+  let afAdpCorpora: Map<string, AdpCorpusSplit> = new Map()
   const aiAdpByPlayerKey = new Map<
     string,
     {
@@ -1928,6 +1941,7 @@ export async function getResolvedDraftPoolForLeague(
       const board = await loadAdpBoard(ctx, { draftMode: 'real' })
       perfAiAdp()
       const LOW_SAMPLE_THRESHOLD = 10
+      afAdpCorpora = board.corpora
       for (const row of board.entries) {
         aiAdpByPlayerKey.set(row.playerKey, {
           adp: row.adp,
@@ -1995,6 +2009,29 @@ export async function getResolvedDraftPoolForLeague(
     mismatchCollector,
   )
   perfSprMaps()
+
+  /*
+   * MLB / NHL projections. `AFProjectionSnapshot` is written daily for both (compute-projections),
+   * but nothing in the pool read it, so their Proj column was always empty. Joined by Rolling
+   * Insights id only — a pool row without one gets no projection rather than a name guess. A
+   * failure leaves the column empty, never the draft broken.
+   */
+  let afProjectionsByRiId: Map<string, AfBaselineProjection> | null = null
+  if ((sport === 'MLB' || sport === 'NHL') && poolRows.length > 0) {
+    const perfAfProj = perfStart('11c. AF projections (MLB/NHL)')
+    afProjectionsByRiId = await loadAfBaselineProjectionsByRollingInsightsIds({
+      sport,
+      rollingInsightsIds: poolRows.flatMap((p) => {
+        const riId = rollingInsightsIdOfPoolRow(p)
+        return riId ? [riId] : []
+      }),
+      season: Number.isInteger(league?.season) ? Number(league?.season) : null,
+    }).catch((err) => {
+      console.warn('[draft-pool] AF projections unavailable:', err instanceof Error ? err.message : String(err))
+      return null
+    })
+    perfAfProj()
+  }
 
   const enrichedList = await cooperativeMap(rawListFiltered, (row) => {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
@@ -2450,6 +2487,8 @@ export async function getResolvedDraftPoolForLeague(
         (row as RawRow).fantasyPointsPerGame ??
         undefined,
       nbaDraftStats: sport === 'NBA' ? (sprAug?.nbaDraftStats ?? null) : null,
+      seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (sprAug?.seasonStatLine ?? null) : null,
+      afProjectionPerGame: afProjectionsByRiId?.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null,
       lifetimeValue:
         resolvedAnalytics?.lifetimeValue ??
         analytics?.lifetimeValue ??
@@ -2471,6 +2510,25 @@ export async function getResolvedDraftPoolForLeague(
             aiAdpTeamCounts: aiAdpHit.contributingTeamCounts,
           }
         : { aiAdp: null }),
+      /**
+       * AF ADP — market + imported real-league drafts + AllFantasy drafts, each AF-drafted input
+       * shrunk by its own sample size (lib/adp/afAdp.ts). Additive: `adp` (market) and `aiAdp`
+       * keep their meaning, so no existing column changes underneath a reader.
+       */
+      ...(() => {
+        const af = computeAfAdp({
+          marketAdp: resolvedAdp,
+          split: afAdpCorpora.get(buildPlayerKey(name ?? '', position ?? '')),
+        })
+        return af
+          ? {
+              afAdp: af.afAdp,
+              afAdpContributions: af.contributions,
+              afAdpImportedSampleSize: af.importedSampleSize,
+              afAdpOwnSampleSize: af.afSampleSize,
+            }
+          : { afAdp: null }
+      })(),
       /** D.7 â attach Sleeper years_exp for NFL rows. Devy rows that have not
        * been promoted to the NFL retain `isRookie=true` regardless of yearsExp
        * (their Sleeper match is typically absent). Promoted rows fall through

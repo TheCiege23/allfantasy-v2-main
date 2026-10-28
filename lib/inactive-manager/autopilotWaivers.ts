@@ -133,3 +133,35 @@ export function planAutopilotWaivers(args: {
   }
   return { claims, unfilled }
 }
+
+/**
+ * Share of the league's FAAB budget Chimmy bids per claim, by style. Every autopilot claim fills a
+ * starting slot nobody healthy can fill, so it is worth a real bid — but a team with no manager should
+ * not outbid managers who are paying attention: these are deliberately modest.
+ */
+export const AUTOPILOT_FAAB_SHARE: Record<AutopilotStyle, number> = { win_now: 0.08, dynasty_owner: 0.04, rebuild: 0.02 }
+
+/**
+ * 🛑 A NULL BID IS A $0 BID, AND MANY FAAB LEAGUES REFUSE ONE. Autopilot claims went in with
+ * `faabBid: null`; the waiver run reads that as 0 and fails it wherever the league disallows $0 bids
+ * or sets a minimum — so in those leagues Chimmy's claims never landed (found 2026-10-27).
+ *
+ * The bid for one claim: the style's share of the budget, never below the league's minimum (or $1
+ * where $0 is refused), never above what the team has left. Null outside a FAAB league; `unaffordable`
+ * when the team cannot meet the minimum — the claim would only fail, so it is not made.
+ */
+export function autopilotFaabBid(args: {
+  style: AutopilotStyle
+  faab: boolean
+  budget: number | null
+  remaining: number | null
+  minBid: number | null
+  allowZero: boolean
+}): number | null | 'unaffordable' {
+  if (!args.faab) return null
+  const remaining = Math.max(0, Math.floor(args.remaining ?? 0))
+  const floor = Math.max(Math.ceil(args.minBid ?? 0), args.allowZero ? 0 : 1)
+  if (remaining < floor) return 'unaffordable'
+  const budget = args.budget != null && args.budget > 0 ? args.budget : remaining
+  return Math.min(remaining, Math.max(floor, Math.round(budget * AUTOPILOT_FAAB_SHARE[args.style])))
+}

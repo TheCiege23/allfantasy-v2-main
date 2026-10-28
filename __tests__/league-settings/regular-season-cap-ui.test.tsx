@@ -1,6 +1,6 @@
 /**
  * The settings UI never offers a playoff start past week 25 to a redraft or keeper league — a regular
- * season of at most 24 weeks (lib/redraft/regularSeasonCap.ts). Covered: the native settings hub
+ * season of at most 24 weeks (soccer: week 35, 34 weeks; lib/redraft/regularSeasonCap.ts). Covered: the native settings hub
  * (Playoffs tab) and the commissioner settings modal. Dynasty is not capped.
  */
 import React from 'react'
@@ -44,6 +44,8 @@ describe('settings hub — Playoffs tab: start week max', () => {
     ['MLB', 'keeper', 25],
     ['NBA', 'redraft', 25],
     ['NFL', 'redraft', 25],
+    ['SOCCER', 'redraft', 35],
+    ['SOCCER', 'keeper', 35],
   ])('%s %s: at most week %i', (sport, leagueType, max) => {
     render(<PlayoffsTab ctx={hubCtx({ sport, leagueType, playoffStartWeek: 22 })} canEdit hasAfCommissionerSub={false} />)
     expect(Number(startWeekInput().max)).toBe(max)
@@ -81,6 +83,16 @@ describe('commissioner modal — Playoffs start week', () => {
   it('a legacy week past the cap stays listed so the field shows what is saved', () => {
     render(<PlayoffSettingsPanel initialData={{ sport: 'NHL', leagueType: 'redraft', leagueSize: 8, playoffTeams: 4, playoffStartWeek: 26, championshipLength: 2 } as never} canEdit debouncedSave={vi.fn()} />)
     expect(offered()).toEqual([21, 22, 23, 24, 25, 26])
+  })
+
+  it('soccer redraft (38-week season): weeks 31–35 — its cap is 34 regular weeks, not 24', () => {
+    render(<PlayoffSettingsPanel initialData={{ sport: 'SOCCER', leagueType: 'redraft', leagueSize: 12, playoffTeams: 6, playoffStartWeek: 35 } as never} canEdit debouncedSave={vi.fn()} />)
+    expect(offered()).toEqual([31, 32, 33, 34, 35])
+  })
+
+  it('soccer dynasty is not capped: weeks 31–38', () => {
+    render(<PlayoffSettingsPanel initialData={{ sport: 'SOCCER', leagueType: 'dynasty', isDynasty: true, leagueSize: 12, playoffTeams: 6, playoffStartWeek: 35 } as never} canEdit debouncedSave={vi.fn()} />)
+    expect(offered()).toEqual([31, 32, 33, 34, 35, 36, 37, 38])
   })
 
   it('NHL dynasty is not capped: weeks 21–28', () => {

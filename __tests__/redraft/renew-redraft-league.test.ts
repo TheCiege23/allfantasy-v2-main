@@ -309,6 +309,21 @@ describe('renewRedraftLeague', () => {
     expect(m.txRosterUpdateMany).toHaveBeenNthCalledWith(2, { where: { leagueId: 'L1', faabRemaining: null }, data: { faabRemaining: 250 } })
   })
 
+  it("no rule, a keeper / dynasty caller (faabFamily 'carry_rosters'): balances carry over by default", async () => {
+    m.leagueFindUnique.mockResolvedValue(league({ waiverBudget: 250 }))
+    const r = await renewRedraftLeague('L1', 'commish', { draftOrder: 'standings', faabFamily: 'carry_rosters' })
+    expect(r).toMatchObject({ ok: true })
+    expect(m.txRosterUpdateMany).toHaveBeenNthCalledWith(1, { where: { leagueId: 'L1' }, data: { playerData: {} } })
+    expect(m.txRosterUpdateMany).toHaveBeenNthCalledWith(2, { where: { leagueId: 'L1', faabRemaining: null }, data: { faabRemaining: 250 } })
+  })
+
+  it("a keeper caller whose commissioner chose 'reset' still resets: an explicit choice beats the default", async () => {
+    m.leagueFindUnique.mockResolvedValue(league({ waiverBudget: 250, waiverSettings: { waiverEngineConfig: { faab_rollover_rule: 'reset' } } }))
+    await renewRedraftLeague('L1', 'commish', { draftOrder: 'standings', faabFamily: 'carry_rosters' })
+    expect(m.txRosterUpdateMany).toHaveBeenCalledTimes(1)
+    expect(m.txRosterUpdateMany).toHaveBeenCalledWith({ where: { leagueId: 'L1' }, data: { playerData: {}, faabRemaining: 250 } })
+  })
+
   it("FAAB 'reset' chosen explicitly: the same single write as the default", async () => {
     m.leagueFindUnique.mockResolvedValue(league({ waiverBudget: 250, waiverSettings: { waiverEngineConfig: { faab_rollover_rule: 'reset' } } }))
     await renewRedraftLeague('L1', 'commish', { draftOrder: 'standings' })

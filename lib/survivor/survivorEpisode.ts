@@ -2,8 +2,11 @@
  * The free weekly recap as a TV episode: a title, then the scores, the challenge, Tribal Council,
  * any twist, and who is left. Pure: built from facts the recap generator already gathers, and
  * spoiler-safe by construction (it only ever names managers from councils whose read finished, and
- * never says who voted for whom).
+ * never says who voted for whom). The commissioner's story mode tone (survivorStoryMode.ts) changes
+ * only the narration: the title and the closing line.
  */
+
+import { storyClosingLine, storyEpisodeTitle, type SurvivorStoryTone } from './survivorStoryMode'
 
 export type SurvivorEpisodeFacts = {
   week: number
@@ -28,6 +31,8 @@ export type SurvivorEpisodeFacts = {
   votedOutSoFar?: number | null
   /** The latest confessional of each manager voted out this week, when they recorded one. */
   confessionals?: Array<{ name: string; text: string }>
+  /** Story mode narration; classic when absent. */
+  tone?: SurvivorStoryTone
 }
 
 export type SurvivorEpisodeScene = { label: string; text: string }
@@ -44,12 +49,12 @@ function names(list: string[]): string {
   return list.length <= 1 ? list[0] ?? '' : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`
 }
 
+function toneFacts(facts: SurvivorEpisodeFacts) {
+  return { idolsPlayed: facts.idolsPlayed.length, tie: facts.tie, eliminated: facts.eliminated.length, merged: facts.merged, remaining: facts.remaining ?? null }
+}
+
 export function episodeTitle(facts: SurvivorEpisodeFacts): string {
-  if (facts.idolsPlayed.length) return 'Idol in Play'
-  if (facts.tie) return 'Deadlock'
-  if (facts.eliminated.length > 1) return 'Double Trouble'
-  if (facts.eliminated.length === 1) return 'The Tribe Has Spoken'
-  return 'A Quiet Week on the Island'
+  return storyEpisodeTitle(facts.tone ?? 'classic', toneFacts(facts))
 }
 
 export function buildSurvivorEpisode(facts: SurvivorEpisodeFacts): SurvivorEpisode {
@@ -92,9 +97,8 @@ export function buildSurvivorEpisode(facts: SurvivorEpisodeFacts): SurvivorEpiso
     scenes.push({ label: 'Confessional', text: `${confessional.name}, before the vote: “${confessional.text}”` })
   }
   if (facts.twist) scenes.push({ label: 'Twist', text: facts.twist })
-  if (facts.remaining != null && facts.remaining > 0) {
-    scenes.push({ label: 'Next time', text: `${facts.remaining} managers remain${facts.merged ? '' : '. The merge is getting closer'}.` })
-  }
+  const closing = storyClosingLine(facts.tone ?? 'classic', toneFacts(facts))
+  if (closing) scenes.push({ label: 'Next time', text: closing })
 
   return { week: facts.week, title: episodeTitle(facts), scenes }
 }

@@ -19,7 +19,7 @@ import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { collapseMirroredTradeRows } from './tradeHistorySelection'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
-import { loadTradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import { loadPickTradeDeadlineView, loadTradeDeadlineCountdown, type PickTradeDeadlineView } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
 
 /**
@@ -423,6 +423,8 @@ export type TradesData = {
    * not be read — the chip then falls back to `deadline`.
    */
   deadlineCountdown?: TradeDeadlineCountdown | null
+  /** A dynasty league's separate rule for pick-only trades (lib/trade-deadline/pickTradeDeadline.ts); null when they follow the deadline. */
+  pickTradeDeadline?: PickTradeDeadlineView | null
   /**
    * The nightly trade agent's ideas for this manager (design step 9): deals the one grade reads C for
    * both sides, on which both rosters gain. Suggest only — nothing is sent, and the partner is not told.
@@ -767,6 +769,7 @@ export async function getTradesData(
     grades,
     deadline: resolveDeadline(league.settings),
     deadlineCountdown: await loadTradeDeadlineCountdown(league.id).catch(() => null),
+    pickTradeDeadline: await loadPickTradeDeadlineView(league.id).catch(() => null),
     ...agentIdeas,
   }
 

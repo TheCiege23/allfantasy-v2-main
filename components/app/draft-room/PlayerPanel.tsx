@@ -88,6 +88,11 @@ export type PlayerEntry = {
   aiAdpSource?: 'exact' | 'cross_size' | null
   /** Cross-size only: the league sizes the projection drew on. */
   aiAdpTeamCounts?: number[] | null
+  /** AF ADP: market + imported-league drafts + AllFantasy drafts (lib/adp/afAdp.ts). */
+  afAdp?: number | null
+  afAdpContributions?: { market: number; imported: number; af: number } | null
+  afAdpImportedSampleSize?: number | null
+  afAdpOwnSampleSize?: number | null
   /** Normalized display model for player image, team logo, stats */
   display?: PlayerDisplayModel | null
   /** Devy: true when from college/devy pool */

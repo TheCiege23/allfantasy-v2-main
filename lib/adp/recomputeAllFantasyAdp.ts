@@ -135,6 +135,8 @@ export interface RecomputeAllFantasyAdpReport {
   importedPicksKept: number
   importedDraftsCovered: number
   importedSkippedUnresolvedPlayer: number
+  /** `importedSkippedUnresolvedPlayer` split by import platform (Yahoo has no id column yet). */
+  importedSkippedUnresolvedByPlatform: Record<string, number>
   uniquePlayers: number
   uniqueContexts: number
   snapshotsWritten: number
@@ -244,6 +246,7 @@ export async function recomputeAllFantasyAdp(
     importedPicksKept: 0,
     importedDraftsCovered: 0,
     importedSkippedUnresolvedPlayer: 0,
+    importedSkippedUnresolvedByPlatform: {},
     uniquePlayers: 0,
     uniqueContexts: 0,
     snapshotsWritten: 0,
@@ -380,6 +383,7 @@ export async function recomputeAllFantasyAdp(
         report.importedFactsScanned = imported.factsScanned
         report.importedDraftsCovered = imported.draftsCovered
         report.importedSkippedUnresolvedPlayer = imported.skippedUnresolvedPlayer
+        report.importedSkippedUnresolvedByPlatform = imported.skippedUnresolvedByPlatform
 
         const usable = imported.picks.filter((p) => {
           if (options.leagueType && p.context.leagueType !== options.leagueType.toLowerCase()) return false

@@ -6,6 +6,12 @@ import { postChimmyRequest } from '@/lib/chimmy/postRequest'
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { getMockDraftTeamCountOptions } from '@/lib/mock-draft/mockTeamCount'
+import { LayoutGrid, MessageCircle, User, Users } from 'lucide-react'
+import { DraftMobileTray } from '@/components/app/draft-room/DraftMobileTray'
+import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
+import { mockPlayerAssetUrls } from '@/lib/mock-draft/mockPlayerAssets'
+import { parseAfAdpContributions, sortByAfAdp, type MockPoolSort } from '@/lib/mock-draft/mockAfAdpSort'
+import { ADP_LABEL_AF, AF_BLUE, TOOLTIP_AF_ADP, afAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
 
 type EntryStep = 'entry' | 'league' | 'open' | 'draft' | 'complete'
 type DraftMode = 'league' | 'open'
@@ -14,6 +20,14 @@ type DraftScoring = 'PPR' | 'Half PPR' | 'Standard' | 'Points' | 'Categories'
 type DraftSpeed = 30 | 15 | 5 | 0
 type DraftStatus = 'setup' | 'drafting' | 'paused' | 'complete'
 type MobilePanel = 'players' | 'roster' | 'chat' | null
+
+/** Tray tabs. 'board' is not a panel: it collapses the tray so the whole board shows. */
+const MOCK_MOBILE_TABS = [
+  { id: 'board' as const, label: 'Board', icon: LayoutGrid },
+  { id: 'players' as const, label: 'Players', icon: User },
+  { id: 'roster' as const, label: 'Roster', icon: Users },
+  { id: 'chat' as const, label: 'Chat', icon: MessageCircle },
+]
 
 interface LeagueListItem {
   id: string
@@ -91,6 +105,9 @@ interface DraftPick {
   team: string
   adp: number | null
   projectedPts: number
+  /* Optional so a mock saved before headshots existed still restores. */
+  headshotUrl?: string | null
+  teamLogoUrl?: string | null
   aiReason?: string
   isUser: boolean
   managerName: string
@@ -118,12 +135,20 @@ interface AvailablePlayer {
   position: string
   team: string
   adp: number | null
+  /* AF ADP (lib/adp/afAdp.ts) beside market ADP. Optional so a mock saved before it still restores. */
+  afAdp?: number | null
+  afAdpContributions?: { market: number; imported: number; af: number } | null
+  afAdpImportedSampleSize?: number | null
+  afAdpOwnSampleSize?: number | null
   projectedPts: number
   ownership: number
   injuryStatus: string | null
   tier: number
   posRank: string
   isRookie: boolean
+  /* Optional so a mock saved before headshots existed still restores. */
+  headshotUrl?: string | null
+  teamLogoUrl?: string | null
 }
 
 interface ChatMessage {
@@ -557,10 +582,17 @@ export default function MockDraftSleeperRoomClient({
   const [filter, setFilter] = useState('All')
   const [showDrafted, setShowDrafted] = useState(false)
   const [rookiesOnly, setRookiesOnly] = useState(false)
+  const [poolSort, setPoolSort] = useState<MockPoolSort>('adp')
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null)
+  /** The tray reopens on whichever panel was last showing; Players before anything was chosen. */
+  const lastMobilePanelRef = useRef<Exclude<MobilePanel, null>>('players')
+  useEffect(() => {
+    if (mobilePanel) lastMobilePanelRef.current = mobilePanel
+  }, [mobilePanel])
+  const mobileLayoutRef = useRef<HTMLDivElement | null>(null)
   const [draftId, setDraftId] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
   const [teamGrade, setTeamGrade] = useState<string | null>(null)
@@ -696,7 +728,7 @@ export default function MockDraftSleeperRoomClient({
   const filteredPlayers = useMemo(() => {
     if (!draftState) return []
 
-    return draftState.availablePlayers.filter((player) => {
+    const visible = draftState.availablePlayers.filter((player) => {
       if (!showDrafted && draftedIds.has(player.id)) return false
       if (rookiesOnly && !player.isRookie) return false
       if (filter !== 'All' && player.position.toUpperCase() !== filter.toUpperCase()) return false
@@ -706,7 +738,8 @@ export default function MockDraftSleeperRoomClient({
       }
       return true
     })
-  }, [draftState, draftedIds, filter, rookiesOnly, search, showDrafted])
+    return poolSort === 'afAdp' ? sortByAfAdp(visible) : visible
+  }, [draftState, draftedIds, filter, poolSort, rookiesOnly, search, showDrafted])
 
   const onTheClockTeam = useMemo(
     () => draftState?.teams.find((team) => team.slot === draftState.onTheClock) ?? null,
@@ -827,6 +860,8 @@ export default function MockDraftSleeperRoomClient({
           team: player.team,
           adp: player.adp,
           projectedPts: player.projectedPts,
+          headshotUrl: player.headshotUrl ?? null,
+          teamLogoUrl: player.teamLogoUrl ?? null,
           aiReason: isAiPick ? generatePickReason(player, team, team.rosterNeeds, round) : undefined,
           isUser: team.isUser,
           managerName: team.managerName,
@@ -1054,7 +1089,7 @@ export default function MockDraftSleeperRoomClient({
     }
 
     const mapped = arrayFromUnknown(payload.entries)
-      .map((entry, index) => {
+      .map((entry, index): AvailablePlayer | null => {
         const raw = recordFromUnknown(entry)
         if (!raw) return null
 
@@ -1062,12 +1097,29 @@ export default function MockDraftSleeperRoomClient({
         const position = stringFromUnknown(raw.position)
         if (!name || !position) return null
 
+        const id = stringFromUnknown(raw.playerId) ?? stringFromUnknown(raw.sleeperId) ?? `${name}-${position}-${index}`
+        const team = stringFromUnknown(raw.team) ?? ''
+        const { headshotUrl, teamLogoUrl } = mockPlayerAssetUrls({
+          id,
+          name,
+          team,
+          sport: nextSettings.sport,
+          headshotUrl: stringFromUnknown(raw.headshotUrl),
+          teamLogoUrl: stringFromUnknown(raw.teamLogoUrl),
+        })
+
         return {
-          id: stringFromUnknown(raw.playerId) ?? stringFromUnknown(raw.sleeperId) ?? `${name}-${position}-${index}`,
+          id,
           name,
           position,
-          team: stringFromUnknown(raw.team) ?? '',
+          team,
+          headshotUrl,
+          teamLogoUrl,
           adp: numberFromUnknown(raw.adp) ?? (nextSettings.sport === 'NBA' ? null : index + 1),
+          afAdp: numberFromUnknown(raw.afAdp),
+          afAdpContributions: parseAfAdpContributions(raw.afAdpContributions),
+          afAdpImportedSampleSize: numberFromUnknown(raw.afAdpImportedSampleSize),
+          afAdpOwnSampleSize: numberFromUnknown(raw.afAdpOwnSampleSize),
           projectedPts: numberFromUnknown(raw.value) ?? (nextSettings.sport === 'NBA' ? 0 : Math.max(0, 250 - index)),
           ownership: numberFromUnknown(raw.timesDrafted) ?? Math.max(10, 95 - index / 4),
           injuryStatus: stringFromUnknown(raw.injuryStatus),
@@ -1742,6 +1794,14 @@ export default function MockDraftSleeperRoomClient({
                     <span className={`rounded px-1.5 py-0.5 text-[11px] font-black ${positionLabelColor(player.position)}`}>
                       {player.position}
                     </span>
+                    <PlayerAvatar
+                      headshotUrl={player.headshotUrl}
+                      displayName={player.name}
+                      teamLogoUrl={player.teamLogoUrl}
+                      teamAbbr={player.team}
+                      position={player.position}
+                      size={24}
+                    />
                     <span className="truncate font-semibold text-white">{player.name}</span>
                   </div>
                   <div className="mt-2 flex gap-2">
@@ -1821,6 +1881,15 @@ export default function MockDraftSleeperRoomClient({
               <input type="checkbox" checked={rookiesOnly} onChange={(event) => setRookiesOnly(event.target.checked)} />
               Rookies Only
             </label>
+            <label className="inline-flex items-center gap-2" title={TOOLTIP_AF_ADP}>
+              <input
+                type="checkbox"
+                checked={poolSort === 'afAdp'}
+                onChange={(event) => setPoolSort(event.target.checked ? 'afAdp' : 'adp')}
+                data-testid="mock-draft-sort-af-adp"
+              />
+              Sort by <span style={{ color: AF_BLUE }}>{ADP_LABEL_AF}</span>
+            </label>
           </div>
         </div>
 
@@ -1850,6 +1919,15 @@ export default function MockDraftSleeperRoomClient({
                 <div className={`w-8 rounded px-1 py-0.5 text-center text-[11px] font-black ${positionLabelColor(player.position)}`}>
                   {player.position}
                 </div>
+                <PlayerAvatar
+                  headshotUrl={player.headshotUrl}
+                  displayName={player.name}
+                  teamLogoUrl={player.teamLogoUrl}
+                  teamAbbr={player.team}
+                  position={player.position}
+                  size={32}
+                  testIdBase={`mock-draft-player-avatar-${player.id}`}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-semibold text-white/85">{player.name}</div>
                   <div className="text-[11px] text-white/30">
@@ -1864,7 +1942,28 @@ export default function MockDraftSleeperRoomClient({
                 {player.injuryStatus ? (
                   <span className="text-[11px] font-black text-red-300">{player.injuryStatus}</span>
                 ) : null}
-                <div className="text-[11px] font-mono text-white/40">{player.adp?.toFixed(1) ?? '\u2014'}</div>
+                <div className="flex shrink-0 flex-col items-end leading-tight">
+                  <span
+                    className="text-[11px] font-mono text-white/40"
+                    title={systemAdpCellTitle(player.adp != null)}
+                    data-testid={`mock-draft-player-adp-${player.id}`}
+                  >
+                    {player.adp?.toFixed(1) ?? '\u2014'}
+                  </span>
+                  <span
+                    className="text-[11px] font-mono font-semibold"
+                    style={player.afAdp != null ? { color: AF_BLUE } : { color: 'rgba(255,255,255,0.3)' }}
+                    title={afAdpCellTitle({
+                      hasValue: player.afAdp != null,
+                      contributions: player.afAdpContributions ?? null,
+                      importedSampleSize: player.afAdpImportedSampleSize ?? null,
+                      ownSampleSize: player.afAdpOwnSampleSize ?? null,
+                    })}
+                    data-testid={`mock-draft-player-af-adp-${player.id}`}
+                  >
+                    AF {player.afAdp != null ? player.afAdp.toFixed(1) : '\u2014'}
+                  </span>
+                </div>
               </button>
               <button
                 type="button"
@@ -1955,8 +2054,13 @@ export default function MockDraftSleeperRoomClient({
     )
 
     return (
-      <div className="min-h-screen bg-[#0a0a18] text-white">
-        <div className="border-b border-white/6 bg-[#070b16]/95 backdrop-blur-xl">
+      /*
+       * Below lg the room is a fixed-height column — header, board, tray — so the Sleeper-style tray
+       * (DraftMobileTray, shared with the live room) can sit over an always-visible board. Desktop
+       * keeps the scrolling page it always had.
+       */
+      <div className="min-h-screen bg-[#0a0a18] text-white max-lg:flex max-lg:h-[100dvh] max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden">
+        <div className="shrink-0 border-b border-white/6 bg-[#070b16]/95 backdrop-blur-xl">
           <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6">
             <div className="flex flex-wrap items-center gap-3">
               <div>
@@ -2027,8 +2131,8 @@ export default function MockDraftSleeperRoomClient({
           </div>
         </div>
 
-        <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6">
-          {recoveredDraft && draftState.status === 'paused' ? <p role="status" className="mb-3 text-sm text-cyan-200">Recovered your mock draft. Review your picks and queue, then tap Resume.</p> : null}
+        <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 max-lg:flex max-lg:min-h-0 max-lg:w-full max-lg:flex-1 max-lg:flex-col max-lg:px-0 max-lg:pb-0 max-lg:pt-2">
+          {recoveredDraft && draftState.status === 'paused' ? <p role="status" className="mb-3 text-sm text-cyan-200 max-lg:px-3">Recovered your mock draft. Review your picks and queue, then tap Resume.</p> : null}
           <div className="hidden gap-0 overflow-hidden rounded-3xl border border-white/8 bg-[#0c0c1e] lg:grid lg:grid-cols-[260px_minmax(0,1fr)_240px]">
             <div className="min-h-[78vh] border-r border-white/8">{playerPanel}</div>
             <div className="min-h-[78vh] overflow-auto">
@@ -2091,8 +2195,18 @@ export default function MockDraftSleeperRoomClient({
                             </div>
                             {pick ? (
                               <div>
-                                <div className={`mb-0.5 inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
-                                  {pick.position}
+                                <div className="mb-0.5 flex items-center gap-1.5">
+                                  <PlayerAvatar
+                                    headshotUrl={pick.headshotUrl}
+                                    displayName={pick.playerName}
+                                    teamLogoUrl={pick.teamLogoUrl}
+                                    teamAbbr={pick.team}
+                                    position={pick.position}
+                                    size={24}
+                                  />
+                                  <div className={`inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
+                                    {pick.position}
+                                  </div>
                                 </div>
                                 <div className="truncate text-[11px] font-semibold leading-tight text-white/85">
                                   {pick.playerName}
@@ -2120,7 +2234,12 @@ export default function MockDraftSleeperRoomClient({
             <div className="min-h-[78vh] border-l border-white/8">{rosterAndChatPanel}</div>
           </div>
 
-          <div className="lg:hidden">
+          <div
+            ref={mobileLayoutRef}
+            className="relative flex min-h-0 flex-1 flex-col lg:hidden"
+            data-testid="mock-draft-mobile-layout"
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3">
             <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-4">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-white/50">
                 <span data-testid="mock-draft-current-pick">
@@ -2164,8 +2283,18 @@ export default function MockDraftSleeperRoomClient({
                               </div>
                               {pick ? (
                                 <>
-                                  <div className={`inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
-                                    {pick.position}
+                                  <div className="flex items-center gap-1.5">
+                                    <PlayerAvatar
+                                      headshotUrl={pick.headshotUrl}
+                                      displayName={pick.playerName}
+                                      teamLogoUrl={pick.teamLogoUrl}
+                                      teamAbbr={pick.team}
+                                      position={pick.position}
+                                      size={24}
+                                    />
+                                    <div className={`inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
+                                      {pick.position}
+                                    </div>
                                   </div>
                                   <div className="truncate text-[11px] font-semibold text-white/85">{pick.playerName}</div>
                                 </>
@@ -2180,55 +2309,71 @@ export default function MockDraftSleeperRoomClient({
               </div>
             </div>
 
-            <div className="sticky bottom-4 mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setMobilePanel('players')}
-                className="flex-1 rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-black text-black"
-              >
-                Players
-              </button>
-              <button
-                type="button"
-                onClick={() => setMobilePanel('roster')}
-                className="flex-1 rounded-2xl border border-white/10 bg-[#0c1224] px-4 py-3 text-sm font-black text-white"
-              >
-                Roster
-              </button>
-              <button
-                type="button"
-                onClick={() => setMobilePanel('chat')}
-                className="flex-1 rounded-2xl border border-white/10 bg-[#0c1224] px-4 py-3 text-sm font-black text-white"
-              >
-                Chat
-              </button>
             </div>
+
+            <DraftMobileTray
+              open={mobilePanel != null}
+              onRequestCollapse={() => setMobilePanel(null)}
+              onRequestExpand={() => setMobilePanel(lastMobilePanelRef.current)}
+              layoutRef={mobileLayoutRef}
+              fullOnInputFocus={mobilePanel === 'chat'}
+              testIdPrefix="mock-draft-mobile"
+              ariaLabel="Draft tray"
+              chrome={
+                <nav
+                  className="safe-area-bottom flex shrink-0 border-t border-white/10 bg-[#070f21]/95"
+                  aria-label="Draft sections"
+                  data-testid="mock-draft-mobile-nav"
+                >
+                  {MOCK_MOBILE_TABS.map(({ id, label, icon: Icon }) => {
+                    const active = id === 'board' ? mobilePanel == null : mobilePanel === id
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setMobilePanel(id === 'board' ? null : id)}
+                        data-testid={`mock-draft-mobile-tab-${id}`}
+                        aria-pressed={active}
+                        aria-label={label}
+                        className={`flex min-h-[48px] flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 py-2 text-[11px] active:scale-[0.98] ${
+                          active
+                            ? 'bg-cyan-500/12 text-cyan-100 shadow-[inset_0_1px_0_rgba(34,211,238,0.2)]'
+                            : 'text-white/65 hover:text-white/85'
+                        }`}
+                      >
+                        <Icon className="h-5 w-5 shrink-0" aria-hidden />
+                        <span>{label}</span>
+                      </button>
+                    )
+                  })}
+                </nav>
+              }
+            >
+              {mobilePanel ? (
+                <div
+                  key={mobilePanel}
+                  role="region"
+                  aria-label={mobilePanel === 'players' ? 'Players' : mobilePanel === 'roster' ? 'Current Roster' : 'Draft Chat'}
+                  className="flex h-full min-h-0 flex-col"
+                  data-testid="mock-draft-mobile-content"
+                  data-active-tab={mobilePanel}
+                >
+                  <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-4 py-2">
+                    <div className="text-sm font-bold text-white">
+                      {mobilePanel === 'players' ? 'Players' : mobilePanel === 'roster' ? 'Current Roster' : 'Draft Chat'}
+                    </div>
+                    <button type="button" onClick={() => setMobilePanel(null)} className="text-white/60">
+                      Close
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                    {mobilePanel === 'players' ? playerPanel : rosterAndChatPanel}
+                  </div>
+                </div>
+              ) : null}
+            </DraftMobileTray>
           </div>
         </div>
-
-        {mobilePanel ? (
-          <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setMobilePanel(null)}>
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-label={mobilePanel === 'players' ? 'Players' : mobilePanel === 'roster' ? 'Current Roster' : 'Draft Chat'}
-              className="absolute bottom-0 left-0 right-0 max-h-[82dvh] overflow-hidden rounded-t-[28px] border border-white/8 bg-[#0c1224]"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
-                <div className="text-sm font-bold text-white">
-                  {mobilePanel === 'players' ? 'Players' : mobilePanel === 'roster' ? 'Current Roster' : 'Draft Chat'}
-                </div>
-                <button type="button" onClick={() => setMobilePanel(null)} className="text-white/60">
-                  Close
-                </button>
-              </div>
-              <div className="max-h-[72dvh] overflow-y-auto">
-                {mobilePanel === 'players' ? playerPanel : mobilePanel === 'roster' || mobilePanel === 'chat' ? rosterAndChatPanel : null}
-              </div>
-            </div>
-          </div>
-        ) : null}
 
         {settingsOpen && draftState ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -2339,6 +2484,14 @@ export default function MockDraftSleeperRoomClient({
                   <div key={pick.overall} className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
                     <div className="mb-2 text-[11px] text-white/35">#{pick.overall}</div>
                     <div className="flex items-center gap-2">
+                      <PlayerAvatar
+                        headshotUrl={pick.headshotUrl}
+                        displayName={pick.playerName}
+                        teamLogoUrl={pick.teamLogoUrl}
+                        teamAbbr={pick.team}
+                        position={pick.position}
+                        size={36}
+                      />
                       <span className={`rounded px-1.5 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
                         {pick.position}
                       </span>

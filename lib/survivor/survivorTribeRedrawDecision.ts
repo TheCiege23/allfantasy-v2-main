@@ -12,6 +12,7 @@ import {
   TRIBE_REDRAW_RECOMMENDATION_ACTION,
   TRIBE_REDRAW_RESPONSE_ACTION,
   TRIBE_REDRAW_RESPONSE_ACTIONS,
+  SURVIVOR_REDRAW_MIN_TRIBE_SIZE,
   survivorRedrawTribeCount,
   type TribeRedrawDecision,
 } from './survivorTribeRedrawActions'
@@ -153,17 +154,22 @@ export async function autoApplyPendingTribeRedraw(leagueId: string, week: number
   return result.ok ? { applied: true } : { applied: false, reason: result.error }
 }
 
-/** A tribe below this many active managers cannot hold a council: nobody is left to vote. */
-export const SURVIVOR_COUNCIL_MIN_TRIBE_SIZE = 2
+/**
+ * A tribe below this many active managers cannot hold a real council. One manager has nobody to
+ * vote for; two can only vote for each other (self-votes are off), so every such council is a
+ * tie settled by rocks or season points. The season rehearsal hit that in weeks 5, 7 and 11.
+ */
+export const SURVIVOR_COUNCIL_MIN_TRIBE_SIZE = 3
 
 export type CouncilTribeGuardResult = { action: 'none' | 'redrawn' | 'merged'; reason?: string; tribeCount?: number }
 
 /**
- * Never freeze. Called by the season runner just before it opens a pre-merge council: when any
- * tribe is down to one manager (or none), the council cannot run, so the commissioner's window is
- * over and Chimmy acts now. The default is a random redraw into as many tribes as the cast can
- * fill; when no fair redraw is possible, the merge starts early. Either way the commissioner hears
- * about it once and the season carries on.
+ * Never freeze, never coin-flip. Called by the season runner just before it opens a pre-merge
+ * council: when any tribe is down to two managers or fewer, that council would be a tie or could
+ * not run, so the commissioner's window is over and Chimmy acts now. The default is a random
+ * redraw into as many tribes of three or more as the cast can fill; when the cast cannot fill two
+ * such tribes, the merge starts early. Either way the commissioner hears about it once and the
+ * season carries on.
  */
 export async function rebalanceTribesBeforeCouncil(leagueId: string, week: number): Promise<CouncilTribeGuardResult> {
   const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { phase: true, mergeTriggeredAt: true, activeCouncilId: true } })
@@ -176,7 +182,8 @@ export async function rebalanceTribesBeforeCouncil(leagueId: string, week: numbe
   if (smallest >= SURVIVOR_COUNCIL_MIN_TRIBE_SIZE) return { action: 'none' }
 
   const pending = await getPendingTribeRedraw(leagueId)
-  const tribeCount = survivorRedrawTribeCount(players.length, tribes.length)
+  // A redraw must leave every tribe at the minimum, or the next council lands right back here.
+  const tribeCount = players.length >= 2 * SURVIVOR_REDRAW_MIN_TRIBE_SIZE ? survivorRedrawTribeCount(players.length, tribes.length) : null
   let action: CouncilTribeGuardResult['action'] = 'none'
   let reason: string | undefined
   if (tribeCount != null) {
@@ -205,9 +212,46 @@ export async function rebalanceTribesBeforeCouncil(leagueId: string, week: numbe
     urgency: 'medium',
     title: action === 'redrawn' ? 'Tribes redrawn so the season keeps moving' : 'The merge started early so the season keeps moving',
     body: action === 'redrawn'
-      ? `A tribe was down to ${smallest} manager${smallest === 1 ? '' : 's'}, too few for Tribal Council. Chimmy redrew the cast into ${tribeCount} tribes before this week's council. Nothing for you to do.`
+      ? `A tribe was down to ${smallest} manager${smallest === 1 ? '' : 's'}, too few for a real Tribal Council vote. Chimmy redrew the cast into ${tribeCount} tribes before this week's council. Nothing for you to do.`
       : `A tribe was down to ${smallest} manager${smallest === 1 ? '' : 's'} and the cast was too small to redraw fairly, so Chimmy started the merge before this week's council. Nothing for you to do.`,
     deepLinkPath: `/survivor/${leagueId}/commissioner?tab=tribes`,
   }).catch(() => {})
   return { action, ...(action === 'redrawn' && tribeCount != null ? { tribeCount } : {}) }
+}
+
+/** Audit action for the once-a-week redraw that unblocks NBA sit-outs. */
+export const SIT_OUT_BALANCE_REDRAW_ACTION = 'tribe_redraw_sit_out_balance'
+
+/**
+ * NBA tribes stay fair by benching managers on the bigger tribes each week, and nobody sits out
+ * two weeks running. Once the tribes drift far enough apart no rotation satisfies both, and
+ * `settleNbaTribeSitOutDeadline` reports `blocked`. The season used to wait there for the
+ * commissioner indefinitely; measured in the full-season rehearsal (NBA 20, 2026-10-27), it stalled
+ * at week 7 with 17 managers left. Chimmy now redraws the tribes, once per week, as the council
+ * guard above already does, and tells the commissioner afterwards. Pre-merge only, never while a
+ * council is open; a redraw that cannot run is left for the commissioner.
+ */
+export async function redrawTribesForSitOutBalance(leagueId: string, week: number): Promise<{ redrawn: boolean; reason?: string }> {
+  const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { phase: true, mergeTriggeredAt: true, activeCouncilId: true } })
+  if (!game || game.mergeTriggeredAt || game.activeCouncilId || !['pre_merge', 'active', 'tribe', 'post_swap'].includes(game.phase)) return { redrawn: false, reason: 'not_pre_merge' }
+  const done = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, week, action: SIT_OUT_BALANCE_REDRAW_ACTION }, select: { id: true } })
+  if (done) return { redrawn: false, reason: 'already_redrawn_this_week' }
+  const pending = await getPendingTribeRedraw(leagueId)
+  const redraw = pending
+    ? await respondToTribeRedraw(leagueId, SURVIVOR_HOST_USER_ID, pending.id, 'approve', { automatic: true })
+    : await runShuffle(leagueId, { actorUserId: SURVIVOR_HOST_USER_ID })
+  if (!redraw.ok) return { redrawn: false, reason: redraw.error }
+  await prisma.survivorAuditEntry.create({ data: {
+    leagueId, week, category: 'automation', action: SIT_OUT_BALANCE_REDRAW_ACTION, actorUserId: SURVIVOR_HOST_USER_ID,
+    data: { reason: 'no_fair_sit_out_rotation' }, isVisibleToCommissioner: true, isVisibleToPublic: true,
+  } })
+  await notifySurvivorCommissionerOnce(leagueId, 'tribes_rebalanced', {
+    dedupeKey: `${week}:sit_out_redraw`,
+    week,
+    urgency: 'medium',
+    title: 'Tribes redrawn so NBA sit-outs stay fair',
+    body: `No sit-out rotation could even out this week's tribe totals without someone sitting out twice in a row, so Chimmy redrew the tribes before the first tipoff. Nothing for you to do.`,
+    deepLinkPath: `/survivor/${leagueId}/commissioner?tab=tribes`,
+  }).catch(() => {})
+  return { redrawn: true }
 }

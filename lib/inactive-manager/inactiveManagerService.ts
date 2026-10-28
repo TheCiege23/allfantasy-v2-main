@@ -16,6 +16,8 @@ import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineup
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import type { LineupPlayerInfo } from '@/lib/league/native/nativeScreenModels'
+import { startersOnBye } from '@/lib/league/native/lineupMoves'
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { DRAFT_AS_ME_FEATURE, DRAFT_AS_ME_SETTING } from '@/lib/draft-room/draftAsMeAutopick'
 import {
@@ -288,7 +290,8 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
     try {
       const league = await prisma.league.findUnique({ where: { id: leagueId } })
       if (!league) continue
-      const managed = Object.keys(readManagedLineups(league.settings))
+      const managedEntries = readManagedLineups(league.settings)
+      const managed = Object.keys(managedEntries)
       const status = String(league.status ?? league.lifecycleState ?? '').toLowerCase()
       const week = leagueWeekFromSettings(league.settings)
       const season = league.season
@@ -341,9 +344,15 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
           }
           const rows = await getNormalizedPlayerData({ surface: 'roster', leagueId, userId: roster.platformUserId, limit: 200 })
           const players: Record<string, LineupPlayerInfo> = {}
-          for (const p of rows.map(serializeUnifiedPlayerForApi)) players[p.id] = { position: p.position, projectedPoints: p.projectedPoints }
+          const byeFacts: Record<string, { byeWeek: number | null }> = {}
+          for (const p of rows.map(serializeUnifiedPlayerForApi)) {
+            players[p.id] = { position: p.position, projectedPoints: p.projectedPoints }
+            byeFacts[p.id] = { byeWeek: p.product?.byeWeek ?? p.nflRedraftGameContext?.byeWeek ?? null }
+          }
+          // The lineup screen's own bye test: a starter whose bye week is this week.
+          const onBye = new Set(startersOnBye(Object.keys(byeFacts), (id) => byeFacts[id], week))
           const locked = new Set(lock.lockedPlayerIds)
-          const plan = planBestLineup({ slots, playerData: roster.playerData, players, isLocked: (id) => locked.has(id) })
+          const plan = planBestLineup({ slots, playerData: roster.playerData, players, isLocked: (id) => locked.has(id), onBye: (id) => onBye.has(id) })
           if (plan.kind === 'skip') {
             if (plan.reason === 'already_best') result.unchanged += 1
             else skip(plan.reason)
@@ -363,7 +372,8 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
             automationAudit: {
               id: `inactive-manager-lineup:${JSON.stringify([leagueId, rosterId, season, week, Date.now()])}`,
               action: 'inactive_manager.lineup_set',
-              message: `AllFantasy set the best lineup while the manager is away: ${plan.changes.map((c) => `${c.slot} ${c.out ?? 'empty'} → ${c.in}`).join('; ')}.`,
+              // A team on Chimmy autopilot is Chimmy's to run; the free lineup mode is AllFantasy's.
+              message: `${managedEntries[rosterId]?.autopilot ? 'Chimmy' : 'AllFantasy'} set the best lineup while the manager is away: ${plan.changes.map((c) => `${c.slot} ${c.out ?? 'empty'} → ${c.in}`).join('; ')}.`,
               metadata: { season, week, changes: plan.changes },
             },
           })
@@ -406,7 +416,8 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
     WHERE settings ? ${AF_MANAGED_LINEUPS_KEY} AND settings -> ${AF_MANAGED_LINEUPS_KEY} <> '{}'::jsonb
     ORDER BY id LIMIT ${Math.max(1, Math.min(opts?.limit ?? DEFAULT_LEAGUE_LIMIT, 100))}`
 
-  const { planAutopilotWaivers } = await import('./autopilotWaivers')
+  const { planAutopilotWaivers, autopilotFaabBid } = await import('./autopilotWaivers')
+  const { getEffectiveLeagueWaiverSettings } = await import('@/lib/waiver-wire/settings-service')
   const { createClaim, getClaimsByRoster } = await import('@/lib/waiver-wire/claim-service')
   const { buildLineupListsFromPlayerData } = await import('@/lib/league/lineup-swap')
   const { assertLifecycleActionAllowed } = await import('@/server/services/leagueLifecycleService')
@@ -442,6 +453,8 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
       const benchCapacity = template ? template.slots.reduce((sum, s) => sum + (s.benchCount ?? 0), 0) || null : null
       const pool = (await getNormalizedPlayerData({ surface: 'waivers', leagueId, limit: 300 })).map(serializeUnifiedPlayerForApi)
       const freeAgents = pool.map((p) => ({ id: p.id, position: p.position, projectedPoints: p.projectedPoints, injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }))
+      const playerNames = new Map(pool.map((p) => [p.id, p.name]))
+      const waiverSettings = await getEffectiveLeagueWaiverSettings(leagueId)
 
       for (const rosterId of autopilot) {
         if (Date.now() >= deadline) break
@@ -469,6 +482,7 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
           const players: Record<string, { id: string; position: string | null; projectedPoints: number | null; injuryStatus: string | null; yearsExp: number | null }> = {}
           for (const p of rows.map(serializeUnifiedPlayerForApi)) {
             players[p.id] = { id: p.id, position: p.position, projectedPoints: p.projectedPoints, injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }
+            playerNames.set(p.id, p.name)
           }
           const pending = ((await getClaimsByRoster(rosterId, 'pending')) as Array<{ addPlayerId: string }>).map((c) => String(c.addPlayerId))
           const style = managed[rosterId]!.autopilot!.style
@@ -477,24 +491,55 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
             skip(plan.unfilled.length ? 'no_fitting_free_agent' : 'no_holes')
             continue
           }
+          // FAAB left for this run's claims: each bid comes out of it, so two claims cannot overspend.
+          let faabLeft = roster.faabRemaining ?? null
           for (const c of plan.claims) {
+            const bid = autopilotFaabBid({
+              style,
+              faab: waiverSettings.normalizedWaiverType === 'faab',
+              budget: waiverSettings.faabBudget,
+              remaining: faabLeft,
+              minBid: waiverSettings.faabMinBid,
+              allowZero: waiverSettings.allowZeroFaabBid,
+            })
+            if (bid === 'unaffordable') {
+              skip('faab_unaffordable')
+              continue
+            }
             try {
               await createClaim(leagueId, rosterId, {
                 addPlayerId: c.addPlayerId,
                 dropPlayerId: c.dropPlayerId,
-                faabBid: null,
+                faabBid: bid,
                 userId: roster.platformUserId,
                 metadata: { source: 'chimmy_autopilot', style, slot: c.slot },
               })
               result.claims += 1
+              if (bid != null && faabLeft != null) faabLeft -= bid
+              const addPlayerName = playerNames.get(c.addPlayerId) ?? null
+              const dropPlayerName = c.dropPlayerId ? playerNames.get(c.dropPlayerId) ?? null : null
               await logAction({
                 leagueId,
                 userId: managed[rosterId]!.autopilot!.byUserId,
                 actionType: AUTOPILOT_CLAIM_ACTION,
                 entityType: 'roster',
                 entityId: rosterId,
-                metadata: { rosterId, style, slot: c.slot, addPlayerId: c.addPlayerId, dropPlayerId: c.dropPlayerId },
+                metadata: { rosterId, style, slot: c.slot, addPlayerId: c.addPlayerId, dropPlayerId: c.dropPlayerId, addPlayerName, dropPlayerName },
               })
+              // The commissioner who handed the team to Chimmy hears about each move it makes. Never the
+              // bid: bids are sealed, and the commissioner usually manages a team in this league too.
+              await dispatchNotification({
+                userIds: [managed[rosterId]!.autopilot!.byUserId],
+                category: 'commissioner_alerts',
+                type: 'chimmy_autopilot_claim',
+                title: `Chimmy made a waiver claim · ${league.name ?? 'your league'}`,
+                body: `${addPlayerName ?? 'A player'} for ${c.slot}${dropPlayerName ? `, dropping ${dropPlayerName}` : ''}.`,
+                severity: 'low',
+                leagueId,
+                actionHref: `/league/${leagueId}`,
+                dedupePrefix: `chimmy-autopilot-claim:${leagueId}:${rosterId}:${c.addPlayerId}`,
+                meta: { leagueId, rosterId, addPlayerId: c.addPlayerId },
+              }).catch(() => {})
             } catch {
               // A league rule said no (waivers closed, roster full, a hold on the player): normal, not a fault.
               skip('claim_refused')

@@ -2,7 +2,7 @@ import type { Prisma, PrismaClient } from '@prisma/client'
 
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
-import { readLineupLockSettings } from './lineupLock'
+import { buildWeekKickoffMap, lockTeamLookupKeys, readLineupLockSettings } from './lineupLock'
 
 /**
  * DAILY LINEUPS — phases B and C of docs/DAILY_LINEUPS_DESIGN.md.
@@ -197,14 +197,73 @@ export function dailySlotFor(lineups: DailyLineups, rosterId: string, playerId: 
  * take Tuesday off the score — the B5 exploit reached through a drop instead of a bench move.
  * Callers load rows dropped inside the window as well (`droppedInWindow`), and this decides which
  * of his days still count.
+ *
+ * THE DAY OF A DROP OR AN ADD IS DECIDED BY HIS GAME'S LOCK (owner's delegate, 2026-10-27), when
+ * `lockStartOn` names it — his team's first game start that Eastern day (`loadDailyLockStarts`):
+ *   - dropped AT OR AFTER the lock: the day stays the dropping team's — earned points never move;
+ *   - dropped BEFORE the lock: the day is not the dropping team's — his points count for nobody,
+ *     unless another team adds and starts him before the lock;
+ *   - added AT OR AFTER the lock: the day is not the adding team's, so a game is never scored twice.
+ * No known lock (no game that day, an unresolved team, an unread schedule) keeps the whole-day rule
+ * above: a day without a game carries no points either way, and an unread schedule must never take
+ * an earned game off a score.
  */
 export function daysOnRoster(
   player: { addedAt?: Date | null; droppedAt?: Date | null },
   days: readonly Date[],
+  lockStartOn?: (day: Date) => Date | null,
 ): Date[] {
   const joined = player.addedAt ? easternCalendarDay(player.addedAt) : null
   const left = player.droppedAt ? easternCalendarDay(player.droppedAt) : null
-  return days.filter((d) => (!joined || d.getTime() >= joined.getTime()) && (!left || d.getTime() <= left.getTime()))
+  return days.filter((d) => {
+    if (joined && d.getTime() < joined.getTime()) return false
+    if (left && d.getTime() > left.getTime()) return false
+    const addDay = joined != null && d.getTime() === joined.getTime()
+    const dropDay = left != null && d.getTime() === left.getTime()
+    const lock = lockStartOn && (addDay || dropDay) ? lockStartOn(d) : null
+    if (!lock) return true
+    if (addDay && player.addedAt!.getTime() >= lock.getTime()) return false
+    if (dropDay && player.droppedAt!.getTime() < lock.getTime()) return false
+    return true
+  })
+}
+
+/** `(team, day)` → his team's first game start that Eastern day, or null when none is known. */
+export type DailyLockStarts = (team: string | null | undefined, day: Date) => Date | null
+
+/**
+ * The per-day lock instants the daily lineup lock enforces (`buildWeekKickoffMap(...).byTeamDay`,
+ * looked up under the same team keys), for `daysOnRoster`'s drop/add-day rule. Null when the
+ * schedule cannot be read: the callers then keep the whole-day rule rather than fail a score.
+ */
+export async function loadDailyLockStarts(
+  db: unknown,
+  args: { sport: string; season: number; week: number },
+): Promise<DailyLockStarts | null> {
+  try {
+    const kickoffs = await buildWeekKickoffMap(db as PrismaClient, args)
+    const byTeamDay = kickoffs?.byTeamDay
+    if (!byTeamDay || byTeamDay.size === 0) return null
+    return (team, day) => {
+      const key = dayKey(day)
+      for (const k of lockTeamLookupKeys(args.sport, team)) {
+        const start = byTeamDay.get(k)?.get(key)
+        if (start) return start
+      }
+      return null
+    }
+  } catch (err) {
+    console.warn(`[dailyLineups] ${args.sport} ${args.season} week ${args.week}: lock starts unreadable, drop and add days count whole`, err)
+    return null
+  }
+}
+
+/** `daysOnRoster`'s third argument for one roster row, or undefined without lock starts. */
+export function lockStartOnFor(
+  lockStarts: DailyLockStarts | null | undefined,
+  player: { team?: string | null },
+): ((day: Date) => Date | null) | undefined {
+  return lockStarts ? (day) => lockStarts(player.team ?? null, day) : undefined
 }
 
 /** The roster-player filter for a daily week: still rostered, or dropped during the window. */

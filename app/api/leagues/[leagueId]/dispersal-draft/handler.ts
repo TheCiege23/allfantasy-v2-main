@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
   try {
-    const dispersalDraftClient = (prisma as any).dispersalDraft
+    const dispersalDraftClient = prisma.dispersalDraft
     const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
     const userId = session?.user?.id
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

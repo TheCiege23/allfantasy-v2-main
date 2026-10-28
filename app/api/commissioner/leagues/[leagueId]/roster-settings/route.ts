@@ -13,6 +13,10 @@ import {
   updateLeagueRosterConfig,
 } from '@/lib/roster-engine'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
+import { normalizeRosterSlots } from '@/lib/league-rules-explainer/snapshot'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
+import { RULES_EXPLAINER_SPORTS } from '@/lib/league-rules-explainer/types'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
@@ -165,6 +169,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
       await notifyCommissionerChange(leagueId, session.user.id, 'Roster Settings', changes)
     }
   } catch { /* non-fatal */ }
+
+  // Before/after for the league home's "What changed" card (lib/league-rules-explainer, NFL/NBA/NHL).
+  // Never throws.
+  if ((RULES_EXPLAINER_SPORTS as readonly string[]).includes(String(league.sport))) {
+    await publishRuleChangesEvent({
+      leagueId,
+      actorUserId: session.user.id,
+      section: 'roster',
+      changes: diffRuleSnapshots(
+        { rosterSlots: normalizeRosterSlots(previousSlots) },
+        { rosterSlots: normalizeRosterSlots(config.slots) },
+      ),
+    })
+  }
 
   await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings', detail: { templateKey } })
   return NextResponse.json({ ok: true, config, unifiedConfig, draftRounds })

@@ -4046,6 +4046,7 @@ model AppUser {
   legalAcceptances                         LegalAcceptance[]
   coreBracketPicks                         CoreBracketPick[]
 
+  dispersalDraftsCreated DispersalDraft[] @relation("DispersalDraftCreatedBy")
   @@map("app_users")
 }
 
@@ -4620,10 +4621,12 @@ model PlayoffBracketChallenge {
 }
 
 model PlayoffBracketEntry {
-  id          String                  @id @default(cuid())
-  challengeId String                  @map("challenge_id")
-  userId      String                  @map("user_id")
-  name        String
+  id                    String                  @id @default(cuid())
+  challengeId           String                  @map("challenge_id")
+  userId                String                  @map("user_id")
+  name                  String
+  finalizedAt           DateTime?               @map("finalized_at")
+  tiebreakerTotalScore  Int?                    @map("tiebreaker_total_score")
   createdAt   DateTime                @default(now()) @map("created_at")
   updatedAt   DateTime                @updatedAt @map("updated_at")
   challenge   PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -4633,6 +4636,7 @@ model PlayoffBracketEntry {
   @@index([challengeId])
   @@index([userId])
   @@index([challengeId, userId])
+  @@index([challengeId, finalizedAt])
   @@map("playoff_bracket_entries")
 }
 
@@ -6529,6 +6533,7 @@ model League {
   /// Every draft this league has run, oldest to newest. Was `DraftSession?` (one-to-one) until
   /// 2026-09-24; read the current one with `orderBy: CURRENT_DRAFT_SESSION_ORDER, take: 1`.
   draftSessions                         DraftSession[]
+  dispersalDrafts                       DispersalDraft[]
   dynastyConfig                         DynastyLeagueConfig?
   findLeagueListings                    FindLeagueListing[]
   guillotineAiInsights                  GuillotineAIInsight[]
@@ -19705,4 +19710,125 @@ model GooglePlayCheckoutIntent {
   @@index([userId, createdAt])
   @@index([expiresAt])
   @@map("google_play_checkout_intents")
+}
+
+/// Dispersal draft (lib/dispersal-draft): an orphaned or dissolved team's assets drafted by the rest of
+/// the league. These models describe tables that already exist — created by migration
+/// 20260410143800_fix_schema_drift under their older "supplemental" names — and were missing from this
+/// schema, so the generated client had no `dispersalDraft` and every call to the engine threw.
+model DispersalDraft {
+  id                   String                      @id @default(cuid())
+  leagueId             String
+  scenario             String                      @db.VarChar(32)
+  status               String                      @default("pending") @db.VarChar(24)
+  participantRosterIds String[]                    @default([])
+  passedRosterIds      String[]                    @default([])
+  draftOrder           String[]                    @default([])
+  currentPickIndex     Int                         @default(0)
+  totalRounds          Int                         @default(0)
+  picksPerRound        Int                         @default(0)
+  sourceRosterIds      String[]                    @default([])
+  assetPool            Json                        @default("[]")
+  orderMode            String                      @default("randomized") @db.VarChar(24)
+  draftType            String                      @default("linear") @db.VarChar(16)
+  pickTimeSeconds      Int                         @default(120)
+  autoPickOnTimeout    Boolean                     @default(true)
+  createdByUserId      String
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @default(now()) @updatedAt
+  league               League                      @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  createdBy            AppUser                     @relation("DispersalDraftCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  picks                DispersalDraftPick[]
+  rosters              DispersalDraftRoster[]
+  /// The asset-pool rows. `assetPool` above is the JSON copy the engine reads.
+  assetPoolRows        DispersalAssetPool[]
+  participants         DispersalDraftParticipant[]
+
+  @@index([leagueId, status])
+  @@map("supplemental_drafts")
+}
+
+model DispersalDraftPick {
+  id               String         @id @default(cuid())
+  dispersalDraftId String         @map("supplementalDraftId")
+  pickNumber       Int
+  round            Int
+  pickInRound      Int
+  rosterId         String
+  assetType        String?        @db.VarChar(24)
+  assetId          String?        @db.VarChar(128)
+  assetDisplayName String?        @db.VarChar(256)
+  isPassed         Boolean        @default(false)
+  isAutoPick       Boolean        @default(false)
+  pickedAt         DateTime?
+  draft            DispersalDraft @relation(fields: [dispersalDraftId], references: [id], onDelete: Cascade)
+
+  @@unique([dispersalDraftId, pickNumber], map: "supplemental_draft_picks_draftId_pickNumber_key")
+  @@index([dispersalDraftId, rosterId], map: "supplemental_draft_picks_draftId_rosterId_idx")
+  @@map("supplemental_draft_picks")
+}
+
+model DispersalDraftRoster {
+  id                  String         @id @default(cuid())
+  draftId             String
+  leagueId            String
+  userId              String
+  teamId              String?
+  players             Json           @default("[]")
+  draftSlot           Int?
+  isEligible          Boolean        @default(true)
+  ineligibilityReason String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @default(now()) @updatedAt
+  draft               DispersalDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, userId])
+  @@index([draftId])
+  @@map("dispersal_draft_rosters")
+}
+
+model DispersalAssetPool {
+  id             String         @id @default(cuid())
+  draftId        String
+  leagueId       String
+  playerId       String
+  playerName     String
+  playerPosition String?
+  playerTeam     String?
+  playerAge      Int?
+  sourceRosterId String?
+  sourcePlatform String?
+  isAvailable    Boolean        @default(true)
+  pickedInPickId String?
+  metadata       Json?          @default("{}")
+  createdAt      DateTime       @default(now())
+  draft          DispersalDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, playerId])
+  @@index([draftId])
+  @@index([isAvailable])
+  @@map("dispersal_asset_pool")
+}
+
+model DispersalDraftParticipant {
+  id             String         @id @default(cuid())
+  draftId        String
+  leagueId       String
+  userId         String
+  displayName    String?
+  teamName       String?
+  draftSlot      Int?
+  isCommissioner Boolean        @default(false)
+  isReady        Boolean        @default(false)
+  isOnTheClock   Boolean        @default(false)
+  isConnected    Boolean        @default(false)
+  lastSeenAt     DateTime?
+  joinedAt       DateTime       @default(now())
+  draft          DispersalDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, userId])
+  @@index([draftId])
+  @@map("dispersal_draft_participants")
 }

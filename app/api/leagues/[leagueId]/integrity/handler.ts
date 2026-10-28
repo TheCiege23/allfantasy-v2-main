@@ -10,7 +10,7 @@ import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
 import { buildIntegrityCoverage } from "@/lib/integrity/coverage"
 import { resolveWriteAuthority } from "@/lib/league/write-authority"
 import { readTradeAlertsEnabled, TRADE_ALERTS_KEY } from "@/lib/integrity/tradeAlerts"
-import { HOLD_FLAGGED_TRADES_KEY, readHoldFlaggedTrades } from "@/lib/integrity/holdFlaggedTrades"
+import { HOLD_FLAGGED_TRADES_KEY, parseHoldFlaggedTradesMode, readHoldFlaggedTradesMode } from "@/lib/integrity/holdFlaggedTrades"
 import { parseTankingPenaltyPolicyPatch, readTankingPenaltyPolicy, TANKING_PENALTIES_KEY } from "@/lib/integrity/tankingPenalties"
 
 export const dynamic = "force-dynamic"
@@ -66,10 +66,13 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     settings: {
       ...settings,
       tradeAlertsEnabled: readTradeAlertsEnabled(league.settings),
-      holdFlaggedTrades: readHoldFlaggedTrades(league.settings),
+      holdFlaggedTrades: readHoldFlaggedTradesMode(league.settings) !== "off",
+      holdFlaggedTradesMode: readHoldFlaggedTradesMode(league.settings),
       // Holding needs the trade to execute in AllFantasy; an imported league's trades go through on its host.
       holdFlaggedTradesSupported: resolveWriteAuthority(league.platform) === "NATIVE",
-      tankingPenalties: readTankingPenaltyPolicy(league.settings),
+      // Penalties take an AllFantasy draft pick; an imported league's picks live on its host, so the
+      // control is not offered there (lib/integrity/tankingPenaltyService.ts refuses it too).
+      ...(resolveWriteAuthority(league.platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(league.settings) } : {}),
     },
     openFlags,
     recentDismissed,
@@ -107,6 +110,25 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
+  // Suspicious-trade alerts and "hold flagged trades": League.settings keys, merged inside a row lock
+  // like other settings writes (lib/integrity/tradeAlerts.ts, lib/integrity/holdFlaggedTrades.ts).
+  const settingsPatch: Record<string, unknown> = {}
+  // Anti-tanking penalties (lib/integrity/tankingPenalties.ts): a partial edit, merged onto the current policy.
+  let penaltyPatch: ReturnType<typeof parseTankingPenaltyPolicyPatch> = null
+  if (body.tankingPenalties !== undefined) {
+    penaltyPatch = parseTankingPenaltyPolicyPatch(body.tankingPenalties)
+    if (!penaltyPatch) return NextResponse.json({ error: "tankingPenalties: enabled (true/false), penalty (forfeit_pick, lottery_odds, faab), pickAtStrike and pickRound (1-10), lotteryOddsCutPct (25, 50, 75, 100), faabPercent (10, 25, 50, 100)" }, { status: 400 })
+  }
+  if (typeof body.tradeAlertsEnabled === "boolean") settingsPatch[TRADE_ALERTS_KEY] = body.tradeAlertsEnabled
+  // "Hold flagged trades": `off` / `severe` (the default) / `all`; the older on/off switch still works.
+  const holdInput = body.holdFlaggedTradesMode !== undefined ? body.holdFlaggedTradesMode : body.holdFlaggedTrades
+  if (holdInput !== undefined) {
+    const mode = parseHoldFlaggedTradesMode(holdInput)
+    if (!mode) return NextResponse.json({ error: "holdFlaggedTradesMode: off, severe or all" }, { status: 400 })
+    settingsPatch[HOLD_FLAGGED_TRADES_KEY] = mode
+  }
+  // Validated above, before anything is written, so a refused request changes nothing.
+
   const updated = await prisma.leagueIntegritySettings.upsert({
     where: { leagueId },
     create: {
@@ -143,17 +165,6 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     },
   })
 
-  // Suspicious-trade alerts and "hold flagged trades": League.settings keys, merged inside a row lock
-  // like other settings writes (lib/integrity/tradeAlerts.ts, lib/integrity/holdFlaggedTrades.ts).
-  const settingsPatch: Record<string, unknown> = {}
-  // Anti-tanking penalties (lib/integrity/tankingPenalties.ts): a partial edit, merged onto the current policy.
-  let penaltyPatch: ReturnType<typeof parseTankingPenaltyPolicyPatch> = null
-  if (body.tankingPenalties !== undefined) {
-    penaltyPatch = parseTankingPenaltyPolicyPatch(body.tankingPenalties)
-    if (!penaltyPatch) return NextResponse.json({ error: "tankingPenalties: enabled (true/false), pickAtStrike and pickRound (1-10)" }, { status: 400 })
-  }
-  if (typeof body.tradeAlertsEnabled === "boolean") settingsPatch[TRADE_ALERTS_KEY] = body.tradeAlertsEnabled
-  if (typeof body.holdFlaggedTrades === "boolean") settingsPatch[HOLD_FLAGGED_TRADES_KEY] = body.holdFlaggedTrades
   let leagueSettings: unknown
   if (Object.keys(settingsPatch).length > 0 || penaltyPatch) {
     leagueSettings = await prisma.$transaction(async (tx) => {
@@ -178,9 +189,10 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     settings: {
       ...updated,
       tradeAlertsEnabled: readTradeAlertsEnabled(leagueSettings),
-      holdFlaggedTrades: readHoldFlaggedTrades(leagueSettings),
+      holdFlaggedTrades: readHoldFlaggedTradesMode(leagueSettings) !== "off",
+      holdFlaggedTradesMode: readHoldFlaggedTradesMode(leagueSettings),
       holdFlaggedTradesSupported: resolveWriteAuthority(platform) === "NATIVE",
-      tankingPenalties: readTankingPenaltyPolicy(leagueSettings),
+      ...(resolveWriteAuthority(platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(leagueSettings) } : {}),
     },
   })
 }

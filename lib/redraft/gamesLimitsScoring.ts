@@ -3,7 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import { normalizeToken } from '@/lib/redraft/lineupValidation'
-import { dailySlotFor, dayKey, daysInWindow, daysOnRoster, loadDailyLineups } from './dailyLineups'
+import { dailySlotFor, dayKey, daysInWindow, daysOnRoster, loadDailyLineups, loadDailyLockStarts, lockStartOnFor } from './dailyLineups'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 import type { LimitLedgerEntry } from './gamesLimits'
 
@@ -90,8 +90,9 @@ export async function loadPriorSeasonLedger(
     if (!window) continue
     const weekLineups = await loadWeekLineups(db, { redraftRosterIds: [args.rosterId], season: args.season, week: w })
     const days = daysInWindow(window)
+    const lockStarts = await loadDailyLockStarts(db, { sport: args.sport, season: args.season, week: w })
     for (const p of players) {
-      for (const day of daysOnRoster(p, days)) {
+      for (const day of daysOnRoster(p, days, lockStartOnFor(lockStarts, p))) {
         const line = games.get(p.sport)?.get(p.playerId)?.get(dayKey(day))
         if (!line || line.gamesPlayed <= 0) continue
         const slot = dailySlotFor(dailyLineups, args.rosterId, p.playerId, day) ?? weekSlotType(p, weekLineups)
