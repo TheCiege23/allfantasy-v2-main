@@ -15,7 +15,7 @@ export function readConfig(env) {
   const season = Number(env.ZOMBIE_STAGING_SEASON)
   if (!Number.isInteger(season) || season < 2020 || season > 2100) throw new Error('season_required')
   const mode = env.ZOMBIE_STAGING_IMPORT_MODE ?? 'schedules'
-  if (!['schedules', 'profiles', 'photos', 'profiles-and-photos'].includes(mode)) throw new Error('import_mode_invalid')
+  if (!['schedules', 'profiles', 'photos', 'profiles-and-photos', 'player-quality'].includes(mode)) throw new Error('import_mode_invalid')
   return { baseUrl: STAGING_ORIGIN, secret: env.ZOMBIE_CRON_SECRET, season, mode }
 }
 
@@ -46,10 +46,39 @@ export function photoJobs() {
   }))
 }
 
+export function qualityJobs(season) {
+  return [
+    ...profileJobs(),
+    { name: 'sleeper_rows_NFL', sport: 'NFL', kind: 'sleeper_rows', path: '/api/cron/import-players?sleeperRows=1&sport=NFL' },
+    ...SPORTS.map(sport => ({ name: 'rosters_' + sport, sport, kind: 'rosters', path: '/api/cron/import-schedules?rosters=1&rosterSports=' + sport })),
+    ...SPORTS.flatMap(sport => [season, season - 1].map(year => ({
+      name: 'stats_' + sport + '_' + year, sport, kind: 'season_stats',
+      path: sport === 'NFL' ? '/api/cron/import-season-stats?season=' + year + '&tsdb=0'
+        : '/api/cron/import-stat-lines?sport=' + sport + '&season=' + year,
+    }))),
+    ...photoJobs(),
+  ]
+}
+
 /** Read only known count/flag fields. Provider errors can contain credential-bearing URLs. */
 export function summarizeResult(body, job) {
   if (body?.deferredForBudget) return { status: 'partial', rows: 0 }
   if (body?.ok !== true) return { status: 'failed', rows: 0 }
+  if (job.kind === 'sleeper_rows') {
+    const row = body.sleeperRows
+    if (!row || row.feedUnavailable || !Number.isInteger(row.updated) || !Number.isInteger(row.created)) return { status: 'failed', rows: 0 }
+    return { status: 'success', rows: row.updated + row.created }
+  }
+  if (job.kind === 'rosters') {
+    const row = body.results?.thesportsdb_rosters?.[job.sport]
+    if (!row || row.error || !Number.isInteger(row.players) || row.players < 0) return { status: 'failed', rows: 0 }
+    return { status: row.deferredTeams > 0 ? 'partial' : row.players > 0 ? 'success' : 'empty', rows: row.players, deferredTeams: Number(row.deferredTeams) || 0 }
+  }
+  if (job.kind === 'season_stats') {
+    if (!Number.isInteger(body.written) || body.written < 0 || (Array.isArray(body.errors) && body.errors.length) || body.identityBackfill?.errors?.length) return { status: 'failed', rows: 0 }
+    return { status: body.written > 0 ? 'success' : 'empty', rows: body.written,
+      unresolved: Number(body.unresolved) || 0 }
+  }
   if (job.kind === 'photos') {
     const row = body.bySport?.find((item) => item?.sport === job.sport)
     if (!row || body.dryRun || !body.ran?.includes(job.sport)) return { status: 'failed', rows: 0 }
@@ -93,7 +122,7 @@ export function summarizeResult(body, job) {
 
 export async function runImports(config, fetchImpl = fetch, log = console.log) {
   const results = []
-  const jobs = config.mode === 'profiles-and-photos' ? [...profileJobs(), ...photoJobs()]
+  const jobs = config.mode === 'player-quality' ? qualityJobs(config.season) : config.mode === 'profiles-and-photos' ? [...profileJobs(), ...photoJobs()]
     : config.mode === 'profiles' ? profileJobs() : config.mode === 'photos' ? photoJobs() : scheduleJobs(config.season)
   for (const job of jobs) {
     const started = Date.now()

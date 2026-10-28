@@ -629,3 +629,6 @@ the meantime. When the fix email arrives: (1) re-run the 2025 NHL season sync
 should be ~1,280, shutouts ~115–150); (3) only then consider letting goalies back into the
 prior-season blend (`lib/projections/dailySportSeasonTotals.ts`) and mapping `so_g`. The
 derivations take max(vendor, derived), so a vendor fix can never double-count.
+
+## NBA season minutes unit (2026-10-28, stored-data audit; no provider probe)
+The existing season-stat mirror stores a numeric `minutes` field. Units are not specified by a committed season fixture. A 2026 row for RI 319 has 5463 across 3 games; RI 1975 has 115 across 2 games. Do not divide this field by games and label it MPG: the latter would silently display 57.5 MPG for a low-minute player. Ask the provider to confirm season units and capture a fixture through the approved contract workflow. The draft's direct RI reader omits that field while retaining explicit documented rate fields, points and rebounds.

@@ -11,7 +11,10 @@ export async function loadStoredDraftSeasonStats(sport: string, ids: string[], s
     select: { playerId: true, season: true, gamesPlayed: true, stats: true, position: true },
   })
   for (const [id, row] of selectDraftSeasonRows(rows, season)) {
-    const nbaDraftStats = sport === 'NBA' ? extractNbaDraftSeasonRates(row.stats) : null
+    // RI's season field named "minutes" has unverified units; never label it MPG.
+    const nbaBlob = row.stats && typeof row.stats === 'object' && !Array.isArray(row.stats) ? { ...row.stats } : {}
+    delete (nbaBlob as Record<string, unknown>).minutes
+    const nbaDraftStats = sport === 'NBA' ? extractNbaDraftSeasonRates(nbaBlob) : null
     const seasonStatLine = sport === 'MLB' ? extractMlbDraftSeasonStats(row.stats) : sport === 'NHL' ? extractNhlDraftSeasonStats(row.stats) : null
     // RI acknowledges incomplete NHL goalie decisions/shutouts. Omit those metrics until its backfill is verified.
     if (sport === 'NHL' && seasonStatLine && (row.position === 'G' || 'savePercentage' in seasonStatLine || 'goalsAgainstAverage' in seasonStatLine)) {

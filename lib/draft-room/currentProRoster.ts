@@ -1,4 +1,4 @@
-import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import { canonicalName as normalizeMatchName } from './player-canonical-identity'
 import { providerPositionCode } from '@/lib/sports-data/providerPositionCode'
 
 export type CurrentProRow = {

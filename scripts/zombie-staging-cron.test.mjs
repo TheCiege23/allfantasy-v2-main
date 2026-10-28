@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readConfig, scheduleJobs, profileJobs, photoJobs, summarizeResult, runImports, STAGING_PROJECT, STAGING_ORIGIN } from './zombie-staging-cron.mjs'
+import { readConfig, scheduleJobs, profileJobs, photoJobs, qualityJobs, summarizeResult, runImports, STAGING_PROJECT, STAGING_ORIGIN } from './zombie-staging-cron.mjs'
 
 const env = {
   RAILWAY_PROJECT_ID: STAGING_PROJECT, RAILWAY_ENVIRONMENT_NAME: 'staging',
@@ -166,4 +166,18 @@ test('combined mode refreshes profiles before photographs', async () => {
     ...['NFL', 'NBA', 'NHL', 'MLB'].map(() => '/api/cron/import-schedules'),
     ...['NFL', 'NBA', 'NHL', 'MLB'].map(() => '/api/cron/sync-player-images'),
   ])
+})
+
+test('quality maintenance scopes roster and stats calls without changing league state', () => {
+  const jobs = qualityJobs(2026)
+  assert.equal(readConfig({ ...env, ZOMBIE_STAGING_IMPORT_MODE: 'player-quality' }).mode, 'player-quality')
+  assert.equal(jobs.filter(j => j.kind === 'rosters').length, 4)
+  assert.equal(jobs.filter(j => j.kind === 'season_stats').length, 8)
+  for (const job of jobs) {
+    assert.ok(['NFL', 'NBA', 'NHL', 'MLB'].includes(job.sport))
+    assert.ok(job.path.startsWith('/api/cron/'))
+    if (job.kind === 'rosters') assert.equal(new URL(job.path, STAGING_ORIGIN).searchParams.get('rosterSports'), job.sport)
+  }
+  assert.equal(summarizeResult({ ok: true, written: 5, unresolved: 1 }, jobs.find(j => j.kind === 'season_stats')).unresolved, 1)
+  assert.equal(summarizeResult({ ok: true, results: { thesportsdb_rosters: { NBA: { players: 5, deferredTeams: 2 } } } }, { kind: 'rosters', sport: 'NBA' }).status, 'partial')
 })
