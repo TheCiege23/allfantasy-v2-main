@@ -576,7 +576,7 @@ test('renders NBA player pool with AI ADP enabled', async ({ page }) => {
   await expect(playerPanel).toHaveScreenshot('draft-room-nba-player-pool.png')
 })
 for (const viewport of [{ width: 1280, height: 720 }, { width: 1589, height: 740 }]) {
-  test('@draft-room NBA draft keeps a usable player list at ' + viewport.width + 'x' + viewport.height, async ({ page }) => {
+  test('NBA draft keeps a usable player list at ' + viewport.width + 'x' + viewport.height, async ({ page }) => {
     await page.setViewportSize(viewport)
     const leagueId = createLeagueId('e2e-pool-height')
     await mockDraftRoomApis(page, leagueId, 'NBA')

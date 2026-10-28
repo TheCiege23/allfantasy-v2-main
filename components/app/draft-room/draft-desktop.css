@@ -1,0 +1,15 @@
+/* Reserve space for browsing players in snake rooms at laptop and desktop heights.
+ * A scrollable board retains every round; mobile uses its existing full-height tray.
+ */
+@media (min-width: 768px) {
+  .draft-touch-room[data-draft-surface="redraft_snake"] [data-testid="draft-premium-board-zone"][data-dock-expanded="true"] {
+    height: 28dvh;
+    min-height: 120px;
+    max-height: 320px;
+    flex-shrink: 1;
+  }
+
+  .draft-touch-room[data-draft-surface="redraft_snake"] [data-testid="draft-premium-main-zones"][data-dock-expanded="true"] {
+    min-height: min(360px, 55dvh);
+  }
+}

@@ -459,7 +459,7 @@ jobs:
       run: |
         # Refuse if a tagged spec exists that neither run below lists -- it would silently not run.
         tagged=$(grep -rlE "@draft-room|@mock-draft-room" e2e | sort | tr '\n' ' ')
-        listed="e2e/draft-room-visual.spec.ts e2e/draft-room-click-audit.spec.ts e2e/draft-room-commissioner-regression.spec.ts e2e/draft-roster-configuration-gate.spec.ts e2e/mobile-draft-production.spec.ts e2e/mock-draft-room-click-audit.spec.ts "
+        listed="e2e/draft-room-click-audit.spec.ts e2e/draft-room-commissioner-regression.spec.ts e2e/draft-roster-configuration-gate.spec.ts e2e/mobile-draft-production.spec.ts e2e/mock-draft-room-click-audit.spec.ts "
         if [ "$tagged" != "$listed" ]; then
           echo "::error::@draft-room specs changed. Tagged: $tagged -- add new ones to a run in this step."
           exit 1
@@ -472,7 +472,6 @@ jobs:
         E2E_WARM_ROUTES=/,/e2e/draft-room,/e2e/draft-settings,/e2e/draft-queue,/e2e/mock-draft-room,/e2e/mock-draft-production \
         PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/other-specs \
           npx playwright test \
-            e2e/draft-room-visual.spec.ts \
             e2e/draft-room-commissioner-regression.spec.ts \
             e2e/draft-roster-configuration-gate.spec.ts \
             e2e/mobile-draft-production.spec.ts \

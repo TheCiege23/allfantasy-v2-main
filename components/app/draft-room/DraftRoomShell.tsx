@@ -12,6 +12,7 @@ import {
   type TraySnap,
 } from '@/lib/draft-room/mobileTraySnap'
 import './draft-mobile.css'
+import './draft-desktop.css'
 
 const BOTTOM_DOCK_PREF_KEY = 'af:draft-premium-bottom-dock-expanded'
 
@@ -267,7 +268,7 @@ export function DraftRoomShell({
       : 'flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0b1020] text-white'
 
   return (
-    <div className={`draft-touch-room ${surfaceClass}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} data-testid="draft-room-shell">
+    <div className={`draft-touch-room ${surfaceClass}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} data-testid="draft-room-shell" data-draft-surface={surfaceVariant}>
       {topBar}
       {managerStrip}
 
@@ -287,8 +288,7 @@ export function DraftRoomShell({
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f]">{auctionStrip}</div>
           )}
           {/* D.6.2 — board zone grows when the bottom dock is collapsed.
-              Expanded snake rooms reserve 28dvh for the board so the player list remains usable.
-              Other draft formats retain their existing dock proportions.
+              Expanded:  ~52vh cap so dock has ~48vh; matches Sleeper proportions.
               Collapsed: flex-1 — board fills the entire screen below the top bar. */}
           <div
             className={cn(
@@ -303,11 +303,7 @@ export function DraftRoomShell({
                * The board now yields space down to a floor instead of starving it.
                */
               'min-h-[160px] overflow-auto overscroll-contain [overflow-anchor:none] border-b',
-              bottomDockExpanded
-                ? surfaceVariant === 'redraft_snake'
-                  ? 'h-[28dvh] max-h-[320px] shrink-0'
-                  : 'max-h-[min(60vh,720px)]'
-                : 'min-h-0 max-h-[unset] flex-1',
+              bottomDockExpanded ? 'max-h-[min(60vh,720px)]' : 'min-h-0 max-h-[unset] flex-1',
               surfaceVariant === 'redraft_snake'
                 ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(10,22,44,0.98),rgba(6,12,22,0.99))] shadow-[inset_0_-1px_0_rgba(34,211,238,0.06)]'
                 : 'border-white/[0.06] bg-[#0d1428]',
@@ -343,8 +339,7 @@ export function DraftRoomShell({
                * collapse measured above — it is the standard flexbox escape hatch, and
                * here it was the thing letting a sibling squeeze this to 20px.
                */
-              'flex overflow-hidden',
-              surfaceVariant === 'redraft_snake' ? 'min-h-[min(360px,55dvh)]' : 'min-h-[300px]',
+              'flex min-h-[300px] overflow-hidden',
               bottomDockExpanded ? 'flex-1' : 'hidden',
             )}
             data-testid="draft-premium-main-zones"
