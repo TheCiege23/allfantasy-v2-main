@@ -410,7 +410,8 @@ export default function ZombieLeagueShell({
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"
-                      className="rounded-md border border-emerald-300/40 bg-emerald-500/20 px-2 py-1 text-[11px] font-semibold text-emerald-100 disabled:opacity-50"
+                      className="min-h-11 min-w-11 rounded-md border border-emerald-300/40 bg-emerald-500/20 px-3 py-2 text-[11px] font-semibold text-emerald-100 disabled:opacity-50"
+                      aria-label="Accept horde sit-out nomination"
                       onClick={() => void submitSitOutDecision('yes')}
                       disabled={Boolean(submittingDecision)}
                     >
@@ -418,7 +419,8 @@ export default function ZombieLeagueShell({
                     </button>
                     <button
                       type="button"
-                      className="rounded-md border border-rose-300/40 bg-rose-500/20 px-2 py-1 text-[11px] font-semibold text-rose-100 disabled:opacity-50"
+                      className="min-h-11 min-w-11 rounded-md border border-rose-300/40 bg-rose-500/20 px-3 py-2 text-[11px] font-semibold text-rose-100 disabled:opacity-50"
+                      aria-label="Decline horde sit-out nomination"
                       onClick={() => void submitSitOutDecision('no')}
                       disabled={Boolean(submittingDecision)}
                     >
