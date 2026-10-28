@@ -528,7 +528,7 @@ export default function MlbBracketBoard({
                       ) : abbreviate(champion)}
                     </span>
                   ) : (
-                    <div className="af-pb-champ-empty">Pick both pennants to crown a champion</div>
+                    <div className="af-pb-champ-empty">{tournamentLogoSport ? "Pick both finalists to crown a champion" : "Pick both pennants to crown a champion"}</div>
                   )}
                   {finalNode ? renderMatch(finalNode) : null}
                 </div>
