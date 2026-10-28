@@ -65,7 +65,7 @@ export async function runImports(config, fetchImpl = fetch, log = console.log) {
     } catch {
       result = { status: 'failed', rows: 0, transportFailure: true }
     }
-    const safe = { job: job.name, ...result, durationMs: Date.now() - started }
+    const safe = { message: job.name + ': ' + result.status + ' (' + result.rows + ' rows)', job: job.name, ...result, durationMs: Date.now() - started }
     results.push(safe)
     log(JSON.stringify(safe))
   }
