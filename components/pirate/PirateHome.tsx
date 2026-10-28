@@ -10,7 +10,7 @@ type LineupRuling = { claimId: string; decision: 'forfeit' | 'excused'; reason: 
 type LineupEvidence = {
   decision: string; reason: string; issues: string[]; eventAt: string; snapshotCount: number
   snapshot: { capturedAt: string; injurySyncAt: string | null; lineupCertified: boolean; waiverWitnessCount: number
-    players: Array<{ playerId: string; playerName: string; slotType: string; injuryStatus: string | null; kickoffAt: string | null; availabilityKnown: boolean; waiverVerified: boolean }> }
+    players: Array<{ playerId: string; playerName: string; slotType: string; injuryStatus: string | null; kickoffAt: string | null; availabilityKnown: boolean; waiverVerified: boolean; dropPlayerName?: string | null }> }
 }
 type Claim = {
   id: string; week: number; winnerRosterId: string; loserRosterId: string
@@ -299,10 +299,12 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                               {evidence.snapshot.players.map((player) => <li key={player.playerId} className="py-2 text-xs leading-5">
                                 <span className="font-semibold text-white">{player.playerName}</span><span className="ml-2 text-cyan-200">{player.slotType}</span>
                                 <p className="text-slate-400">{player.availabilityKnown ? player.injuryStatus || 'No reported restriction' : 'Availability unverified'} · {dateText(player.kickoffAt)}</p>
-                                {player.slotType === 'WAIVER' && <p className="text-cyan-200">{player.waiverVerified ? 'Verified immediate pickup before this lock; no drop required.' : 'Pickup availability needs verification for this lock.'}</p>}
+                                {player.slotType === 'WAIVER' && <p className="text-cyan-200">{player.waiverVerified
+                                  ? player.dropPlayerName ? `Verified option before lock: add this player and drop ${player.dropPlayerName}.` : 'Verified immediate pickup before this lock; no drop required.'
+                                  : 'Pickup availability needs verification for this lock.'}</p>}
                               </li>)}
                             </ul>
-                            <p className="mt-2 text-xs leading-5 text-slate-400">{evidence.snapshot.waiverWitnessCount > 0 ? 'The recorded pickup passed the league’s add checks before lock. ' : ''}Other waiver options, pickups requiring a drop, and daily lineup cases need commissioner review.</p>
+                            <p className="mt-2 text-xs leading-5 text-slate-400">{evidence.snapshot.waiverWitnessCount > 0 ? 'The recorded option passed the league’s add and drop checks before lock. No roster move was made. ' : ''}Multiple pickups, reserve activations, and daily lineup cases need commissioner review.</p>
                           </details>}
                           {['awaiting_selection', 'selection_expired', 'pending', 'countered'].includes(claim.status) && (
                             <div className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/5 p-3">

@@ -1,12 +1,12 @@
 import { prisma } from '@/lib/prisma'
 
 /**
- * Read-only proof of one immediate, no-drop pickup. These are the same gates
+ * Read-only proof of one immediate pickup, optionally with one specified drop. These are the same gates
  * used by the add/drop route. A competitive pending claim is never proof that
  * this manager could have acquired the player. Any unreadable gate fails closed.
  */
 export async function certifyPirateWaiverWitness(input: {
-  leagueId: string; rosterId: string; actorUserId: string; playerId: string; now?: Date
+  leagueId: string; rosterId: string; actorUserId: string; playerId: string; dropPlayerId?: string | null; now?: Date
 }): Promise<boolean> {
   try {
     // The transaction validator loads the specialty registry, which also
@@ -56,7 +56,7 @@ export async function certifyPirateWaiverWitness(input: {
       }
     }
     await eligibility.assertWaiverClaimEligibility({ leagueId: input.leagueId, rosterId: input.rosterId,
-      addPlayerId: input.playerId, dropPlayerId: null, faabBid: null, claimMetadata: { source: 'free_agent_immediate' },
+      addPlayerId: input.playerId, dropPlayerId: input.dropPlayerId ?? null, faabBid: null, claimMetadata: { source: 'free_agent_immediate' },
       ...(phase.firstComeAdds ? { offseasonFreeAgency: true } : {}) })
     return true
   } catch {

@@ -1,0 +1,78 @@
+{
+  "checkedAt": "2026-10-28T20:56:03.811Z",
+  "scope": "Live provider ingestion into verified isolated staging. No notification delivery.",
+  "results": [
+    {
+      "sport": "NFL",
+      "injuries": {
+        "fetched": 1256,
+        "written": 1256,
+        "providerErrored": false,
+        "unparseableStatuses": 25,
+        "completeForLineup": false,
+        "completeCoverageForLineup": true,
+        "attestedAt": "2026-10-28T20:56:03.652Z"
+      },
+      "schedule": {
+        "fetched": false,
+        "gamesImported": 0,
+        "providerErrored": false,
+        "upcomingGames": 14
+      }
+    },
+    {
+      "sport": "NBA",
+      "injuries": {
+        "fetched": 187,
+        "written": 187,
+        "providerErrored": false,
+        "unparseableStatuses": 0,
+        "completeForLineup": true,
+        "completeCoverageForLineup": true,
+        "attestedAt": "2026-10-28T20:55:41.294Z"
+      },
+      "schedule": {
+        "fetched": true,
+        "gamesImported": 1266,
+        "providerErrored": false,
+        "upcomingGames": 51
+      }
+    },
+    {
+      "sport": "MLB",
+      "injuries": {
+        "fetched": 408,
+        "written": 408,
+        "providerErrored": false,
+        "unparseableStatuses": 0,
+        "completeForLineup": true,
+        "completeCoverageForLineup": true,
+        "attestedAt": "2026-10-28T20:55:43.754Z"
+      },
+      "schedule": {
+        "fetched": true,
+        "gamesImported": 2965,
+        "providerErrored": false,
+        "upcomingGames": 3
+      }
+    },
+    {
+      "sport": "NHL",
+      "injuries": {
+        "fetched": 245,
+        "written": 245,
+        "providerErrored": false,
+        "unparseableStatuses": 0,
+        "completeForLineup": true,
+        "completeCoverageForLineup": true,
+        "attestedAt": "2026-10-28T20:55:41.803Z"
+      },
+      "schedule": {
+        "fetched": true,
+        "gamesImported": 1405,
+        "providerErrored": false,
+        "upcomingGames": 48
+      }
+    }
+  ]
+}

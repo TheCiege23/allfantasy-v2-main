@@ -41,6 +41,24 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('injury sync telemetry', () => {
+  it('versions complete report coverage separately from parsed designations', async () => {
+    const { recordInjurySyncRun } = await subject()
+    await recordInjurySyncRun({ sport: 'NFL', written: 120, fetched: 120, failed: false,
+      completeForLineup: false, completeCoverageForLineup: true })
+    expect(upsert).toHaveBeenCalledTimes(3)
+    expect(upsert.mock.calls[1][0].update.lastSuccessAt).toBeUndefined()
+    expect(upsert.mock.calls[2][0]).toMatchObject({
+      where: { provider_entityType_sport_key: { key: 'lineup-evidence-v2' } }, update: { lastSuccessAt: expect.any(Date) },
+    })
+  })
+
+  it.each([false, true])('never certifies v2 coverage on incomplete data or failure (failed: %s)', async (failed) => {
+    const { recordInjurySyncRun } = await subject()
+    await recordInjurySyncRun({ sport: 'NFL', written: 2, fetched: 3, failed, completeCoverageForLineup: failed })
+    expect(upsert.mock.calls[1][0].update.lastSuccessAt).toBeUndefined()
+    expect(upsert.mock.calls[1][0].update.lastErrorAt).toBeInstanceOf(Date)
+  })
+
   it('records a separate complete-feed attestation for automatic lineup evidence', async () => {
     const { recordInjurySyncRun } = await subject()
     await recordInjurySyncRun({ sport: 'NFL', written: 120, fetched: 120, failed: false, completeForLineup: true })

@@ -29,6 +29,7 @@ vi.mock('@/lib/injuries/injurySyncState', () => ({ recordInjurySyncRun: vi.fn(as
 
 import { kickoffRangeForWindow, inNflInjuryGameWindow } from '@/lib/injuries/injuryGameWindow'
 import { GET } from '@/app/api/cron/import-injuries/route'
+import { recordInjurySyncRun } from '@/lib/injuries/injurySyncState'
 
 const req = (qs: string) => new NextRequest(`http://localhost/api/cron/import-injuries${qs}`)
 
@@ -63,6 +64,15 @@ describe('inNflInjuryGameWindow', () => {
 })
 
 describe('import-injuries ?gameWindow=1', () => {
+  it.each([0, 1])('records complete v2 coverage with unknown designations only when no reports were skipped (skipped: %s)', async skipped => {
+    mockRi.mockResolvedValue({ fetched: 10, written: 10, unparseableStatus: 2, legacyExpired: 0, unsupported: false, notModified: false, errors: [] })
+    mockEspn.mockResolvedValue({ sport: 'NFL', fetched: 300, written: 300 - skipped, skippedNoPlayer: skipped, errors: [] })
+    await GET(req('?sport=NFL'))
+    expect(recordInjurySyncRun).toHaveBeenCalledWith(expect.objectContaining({
+      completeForLineup: false, completeCoverageForLineup: skipped === 0,
+    }))
+  })
+
   it('outside a window: no provider is called and the run says it skipped', async () => {
     mockGameFindFirst.mockResolvedValue(null)
     const res = await GET(req('?sport=NFL&gameWindow=1'))

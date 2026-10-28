@@ -325,6 +325,8 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
       failed,
       error: [...result.errors, ...espn.errors, ...apiSports.errors][0] ?? null,
       completeForLineup: !failed && !noCoverage && !providerErrored && (result.unparseableStatus ?? 0) === 0,
+      completeCoverageForLineup: !failed && !noCoverage && !providerErrored && !result.notModified &&
+        espn.skippedNoPlayer === 0,
     })
 
     const notifications = !failed && !noCoverage

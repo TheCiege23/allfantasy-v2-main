@@ -57,8 +57,9 @@ async function main() {
     for (const index of [0, 2]) await db.redraftMatchup.create({ data: { leagueId: league.id, seasonId: season.id,
       week: 1, homeRosterId: rosters[index].id, awayRosterId: rosters[index + 1].id, homeScore: 100, awayScore: 80, status: 'final' } })
     const evidenceIds: string[] = []
+    const captured: PirateLineupEvidence[] = []
     for (const phase of ['before', 'after'] as const) {
-      const snapshot: PirateLineupEvidence = { version: 1, week: 1, sport, eventAt: event.toISOString(), scoringDay: null, phase,
+      const snapshot: PirateLineupEvidence = { version: 2, week: 1, sport, eventAt: event.toISOString(), scoringDay: null, phase,
         capturedAt: new Date(event.getTime() + (phase === 'before' ? -120000 : 120000)).toISOString(),
         mode: 'per_player_kickoff', terminalEvent: true, lineupCertified: true, starterSlots: [[slot, 1]], rulesHash: `${tag}-${sport}`,
         scheduleWarnings: [], injuryFeedFresh: true, injurySyncAt: new Date(event.getTime() - 180000).toISOString(), injuryReports: [],
@@ -71,6 +72,7 @@ async function main() {
       const row = await db.redraftLeagueTransaction.create({ data: { leagueId: league.id, seasonId: season.id,
         rosterId: rosters[1].id, type: 'pirate_lineup_evidence', metadata: snapshot as unknown as Prisma.InputJsonValue } })
       evidenceIds.push(row.id)
+      captured.push(snapshot)
     }
     assert.equal(await service.seedPirateClaims(league.id, db), 2)
     const automatic = await db.pirateProtectionSet.findFirstOrThrow({ where: { leagueId: league.id, rosterId: rosters[1].id } })
@@ -94,8 +96,30 @@ async function main() {
     assert.equal(reopened.playerId, null)
     assert(reopened.selectionDeadlineAt && reopened.selectionDeadlineAt > new Date())
     assert.equal(await db.redraftLeagueTransaction.count({ where: { leagueId: league.id, type: 'pirate_lineup_ruling' } }), 2)
+    const benchPosition = { NFL: 'WR', NBA: 'C', MLB: 'C', NHL: 'G' }[sport]
+    await db.redraftRosterPlayer.updateMany({ where: { rosterId: rosters[3].id, playerId: rosters[3].bench }, data: { position: benchPosition } })
+    const dropEvidenceIds: string[] = []
+    for (const original of captured) {
+      const snapshot: PirateLineupEvidence = { ...original, players: original.players.map(p => ({ ...p,
+        playerId: p.playerId === rosters[1].star ? rosters[3].star : rosters[3].bench,
+        ...(p.slotType === 'BENCH' ? { position: benchPosition, playerName: 'Legal bench drop' } : {}),
+      })), waivers: [{ playerId: `${tag}-${sport}-free`, playerName: 'Verified waiver replacement', position: slot,
+        slotType: 'WAIVER', team: 'QA', kickoffAt: event.toISOString(), availabilityKnown: true, injuryStatus: null,
+        addableBeforeLock: true, dropPlayerId: rosters[3].bench, certifiedEventAt: event.toISOString(),
+        checkedAt: new Date(event.getTime() - 120000).toISOString() }] }
+      const row = await db.redraftLeagueTransaction.create({ data: { leagueId: league.id, seasonId: season.id,
+        rosterId: rosters[3].id, type: 'pirate_lineup_evidence', metadata: snapshot as unknown as Prisma.InputJsonValue } })
+      dropEvidenceIds.push(row.id)
+    }
+    await service.seedPirateClaims(league.id, db)
+    assert.equal((await db.pirateProtectionSet.findFirstOrThrow({ where: { leagueId: league.id, rosterId: rosters[3].id } })).voidReason, 'illegal_lineup')
+    const dropAudit = await db.redraftLeagueTransaction.findFirstOrThrow({ where: { leagueId: league.id,
+      rosterId: rosters[3].id, type: 'pirate_lineup_ruling' } })
+    assert.deepEqual(new Set((dropAudit.metadata as Record<string, unknown>).evidenceIds as string[]), new Set(dropEvidenceIds))
+    assert.equal(await db.redraftRosterPlayer.count({ where: { rosterId: rosters[3].id, droppedAt: null } }), 2)
     results.push({ sport, automaticForfeit: true, originalLocksRetained: true, missingEvidenceKeptLocks: true,
-      evidenceAuditLinked: true, commissionerRestored: true, winnerSelectionReopened: true, repeatedTickHonoredOverride: true })
+      evidenceAuditLinked: true, commissionerRestored: true, winnerSelectionReopened: true, repeatedTickHonoredOverride: true,
+      singleDropForfeit: true, dropEvidenceAuditLinked: true, noRosterMoveMade: true })
     console.log(`${sport}: automatic lineup evidence lifecycle passed`)
   }
   fs.writeFileSync('docs/pirate-validation/lineup-evidence-staging.json', JSON.stringify({ tag, runAt: new Date().toISOString(),

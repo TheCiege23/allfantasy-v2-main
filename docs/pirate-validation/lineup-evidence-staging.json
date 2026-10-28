@@ -1,6 +1,6 @@
 {
-  "tag": "pirate-lineup-91f6a0f2",
-  "runAt": "2026-10-28T18:42:45.514Z",
+  "tag": "pirate-lineup-4f27f854",
+  "runAt": "2026-10-28T20:53:14.334Z",
   "scope": "Synthetic lock snapshots on isolated staging; fixture leagues and users removed after validation.",
   "results": [
     {
@@ -11,7 +11,10 @@
       "evidenceAuditLinked": true,
       "commissionerRestored": true,
       "winnerSelectionReopened": true,
-      "repeatedTickHonoredOverride": true
+      "repeatedTickHonoredOverride": true,
+      "singleDropForfeit": true,
+      "dropEvidenceAuditLinked": true,
+      "noRosterMoveMade": true
     },
     {
       "sport": "NBA",
@@ -21,7 +24,10 @@
       "evidenceAuditLinked": true,
       "commissionerRestored": true,
       "winnerSelectionReopened": true,
-      "repeatedTickHonoredOverride": true
+      "repeatedTickHonoredOverride": true,
+      "singleDropForfeit": true,
+      "dropEvidenceAuditLinked": true,
+      "noRosterMoveMade": true
     },
     {
       "sport": "MLB",
@@ -31,7 +37,10 @@
       "evidenceAuditLinked": true,
       "commissionerRestored": true,
       "winnerSelectionReopened": true,
-      "repeatedTickHonoredOverride": true
+      "repeatedTickHonoredOverride": true,
+      "singleDropForfeit": true,
+      "dropEvidenceAuditLinked": true,
+      "noRosterMoveMade": true
     },
     {
       "sport": "NHL",
@@ -41,7 +50,10 @@
       "evidenceAuditLinked": true,
       "commissionerRestored": true,
       "winnerSelectionReopened": true,
-      "repeatedTickHonoredOverride": true
+      "repeatedTickHonoredOverride": true,
+      "singleDropForfeit": true,
+      "dropEvidenceAuditLinked": true,
+      "noRosterMoveMade": true
     }
   ]
 }

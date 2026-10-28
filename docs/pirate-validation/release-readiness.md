@@ -1,5 +1,15 @@
 # Pirate League release readiness — 2026-10-27
 
+## Single-drop proof and live-data preparation — 2026-10-28
+
+- A single immediate acquisition may now include one specified unlocked bench drop. The exact transaction must pass canonical eligibility, undroppable and weekly drop limits; the dropped player is removed before full-lineup matching. Separate transaction plans are never combined. The Deck names the option and states that evidence collection makes no roster move.
+- Live staging ingestion initially found 25 unparsed NFL statuses. Version 2 separates complete provider coverage from each player's certainty. Every matching report for a needed player must be known, current, and agree on activity. Unrelated unknown reports no longer disable all rosters; unknown or conflicting relevant reports retain protections. Version 1 snapshots remain review-only. Expected return weeks do not remove current injury reports from consideration.
+- With explicit user authorization, Rolling Insights credentials were copied directly from the local main configuration into the isolated staging service, with values kept out of output. The first output-based transfer was rejected by automatic approval review; the successful direct transfer used the refreshed Railway CLI session and official API. Production configuration was not edited.
+- Notification-free live ingestion refreshed all four sports. See `live-rehearsal-readiness.json` for actual counts and timestamps. These are one-time checks; the isolated project currently has only its web service, so unattended live rehearsal still needs scheduled data refresh and score/capture jobs.
+- `test-pirate-capture-staging.ts` exercises the actual database capture and automatic claim pipeline across a real clock boundary with synthetic NFL games and rosters and a real provider coverage marker. It checks exact starter slots, immutable deduplicated snapshots, automatic forfeiture, retained original locks, and an unknown expected-return report preserving protections. This is distinct from a live NFL scoring period; fixture cleanup is recorded in `capture-rehearsal-staging.json`.
+- The expanded four-sport synthetic lifecycle checks single-drop forfeitures, linked audits, and that the proposed drop makes no actual roster move. The focused suite passed 102 tests, including versioned feed, per-player uncertainty, and mobile commissioner controls. Chromium Pixel 7/iPhone 13 and WebKit iPhone 13 emulations passed. Scoped type checking found no changed-source diagnostics; ESLint had no errors (two existing apostrophe warnings).
+- Remaining legal-lineup automation: opt-in daily lineups, reserve/taxi activations, and several combined acquisitions. Remaining release checks: unattended live scoring-period rehearsal, physical Android QA, human PR review, and guarded production release after sign-off.
+
 ## Legal-lineup evidence update — 2026-10-28
 
 - Immutable lock snapshots and evidence-linked automatic rulings are implemented without a schema migration. The pass runs before slower score-sync bridges and outside the scoring batch rotation. Captured evidence and automatic/commissioner ruling labels are visible on the Pirate Deck.
@@ -16,13 +26,13 @@
 - The commissioner confirmed 24 hours for winner selection and 24 hours of roster-drop grace. The existing claim response default is also 24 hours. These match `lib/pirate/rules.ts`.
 - Four staged fixture leagues have queued Pirate push and in-app events. Their QA accounts have no push subscriptions, so delivery to a physical phone remains unverified.
 - A local staging-backed full-page browser attempt signed in successfully, but the cold Next.js `/league/[leagueId]` route did not finish rendering before Playwright's five-minute navigation timeout. The full app UI remains unverified; the component viewport checks above do not replace it.
-- Draft PR #2852 is open. The branch was updated with the latest `main`, and 82 focused Pirate and trade tests passed on that merged branch. GitHub Actions remains the release gate.
+- PR #2852 is open. Earlier integration verification passed 82 focused Pirate and trade tests; the current update's 102 focused tests and rehearsal reports are recorded above. GitHub Actions remains the release gate for every new commit.
 
 ## Hosting and staging
 
 - Production runs on Railway in the `AllFantasy` project, `production` environment, `allfantasy-v2-main` service. It tracks `main`; `.github/workflows/railway-deploy.yml` batches production deployments. The Vercel PR check reports `Account is blocked`, and no Vercel Preview is available. Vercel is not the current production deployment path.
 - The existing Railway `highlights-preview` environment hosts only its highlights service. The separate `Guilly Staging Web` project uses a different repository. Neither is a full-app Preview for Pirate League.
-- Full-page QA needs an isolated Railway staging app deployed from the exact PR commit, with its database URLs pointed only at the verified separate staging Neon database. Set staging-specific app URLs, auth, and notification settings before connecting the source; verify the target host before any migration or traffic. Keep production variables and services unchanged.
+- The isolated Railway **AllFantasy Pirate Staging** project now serves `https://pirate-web-staging.up.railway.app` against the verified separate staging Neon database, with staging-specific URLs, auth, and push configuration. The commissioner tested the physical iPhone flows above. Pin and verify each update's exact PR commit; refresh live data and configure the bounded rehearsal jobs before unattended scoring-period QA.
 
 ## Production preflight
 

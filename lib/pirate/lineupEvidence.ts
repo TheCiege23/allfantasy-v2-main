@@ -22,7 +22,7 @@ import { isPirateLeague } from './rules'
 type Db = PrismaClient
 type EvidencePlayer = PirateLineupPlayer & { team: string | null; kickoffAt: string | null; availabilityKnown: boolean; starterSlotIndex?: number | null; aliases?: string[]; certifiedEventAt?: string; checkedAt?: string }
 export type PirateLineupEvidence = {
-  version: 1; week: number; eventAt: string; scoringDay: string | null; phase: 'before' | 'after'
+  version: 1 | 2; week: number; eventAt: string; scoringDay: string | null; phase: 'before' | 'after'
   capturedAt: string; sport: string; starterSlots: Array<[string, number]>; rulesHash: string
   mode: string; terminalEvent: boolean; lineupCertified: boolean; scheduleWarnings: string[]; injuryFeedFresh: boolean
   injurySyncAt: string | null
@@ -40,7 +40,7 @@ const knownStatus = (status: string | null | undefined) => !!status?.trim() &&
 function asEvidence(value: unknown): PirateLineupEvidence | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const row = value as Partial<PirateLineupEvidence>
-  return row.version === 1 && typeof row.eventAt === 'string' && Array.isArray(row.players) && Array.isArray(row.starterSlots)
+  return (row.version === 1 || row.version === 2) && typeof row.eventAt === 'string' && Array.isArray(row.players) && Array.isArray(row.starterSlots)
     ? row as PirateLineupEvidence : null
 }
 
@@ -87,13 +87,15 @@ export async function capturePirateLineupEvidence(input: {
     leagueId: input.leagueId, id: { in: Object.keys(rosterLocks) },
   }, select: { externalId: true, platformUserId: true, claimedByUserId: true } }) : []
   const [injuries, waiverSettings, waiverState, injurySync, currentTeams] = await Promise.all([
+    // A report's week can be an expected return week. Include every unexpired
+    // season report so an unknown return date cannot vanish and imply health.
     db.sportsInjury.findMany({ where: { sport, expiresAt: { gt: now },
-      AND: [{ OR: [{ season: input.season }, { season: null }] }, { OR: [{ week: input.week }, { week: null }] }] },
+      OR: [{ season: input.season }, { season: null }] },
       orderBy: { fetchedAt: 'desc' }, take: 5000,
       select: { playerId: true, playerName: true, team: true, position: true, sport: true, status: true, date: true, fetchedAt: true, source: true } }),
     db.leagueWaiverSettings.findUnique({ where: { leagueId: input.leagueId }, select: { waiverType: true } }),
     db.leagueWaiverState.findUnique({ where: { leagueId: input.leagueId }, select: { nextRunAt: true, processingLocked: true } }),
-    db.providerSyncState.findFirst({ where: { provider: 'injuries-cron', entityType: 'injuries', sport, key: 'lineup-evidence' },
+    db.providerSyncState.findFirst({ where: { provider: 'injuries-cron', entityType: 'injuries', sport, key: 'lineup-evidence-v2' },
       select: { lastSuccessAt: true, lastErrorAt: true, recordsSkipped: true } }),
     resolveCurrentLockTeams(db, { sport, platform: league.platform, playerIds: allPlayers.map((p) => p.playerId) }),
   ])
@@ -107,6 +109,12 @@ export async function capturePirateLineupEvidence(input: {
   const reportedNames = new Set(injuries.map((row) => normalizeMatchName(row.playerName)))
   const injuryIdentityKnown = (name: string, match: ReturnType<typeof injuryMatch>) =>
     !(match && 'ambiguous' in match) && (!!match || !reportedNames.has(normalizeMatchName(name)))
+  const reportsCertified = (match: ReturnType<typeof injuryMatch>) => {
+    const reports = match && 'rows' in match ? match.rows : []
+    // All matching providers must be understandable and agree on activity.
+    // An unrelated player's unknown report does not invalidate this roster.
+    return reports.every(reportKnown) && new Set(reports.map(row => cannotStart({ injuryStatus: row.status }))).size <= 1
+  }
   const starterSlots = [...resolveRedraftRosterConfig(sport, league.settings).starterCapacities.entries()]
   const template = await getRosterTemplateForLeague(league.sport, getFormatTypeForVariant(league.sport, league.leagueVariant), input.leagueId)
   const expanded = resolveLineupStarterSlots(league, template)
@@ -175,7 +183,7 @@ export async function capturePirateLineupEvidence(input: {
           : weeklySlot
         const hit = injuryMatch({ name: p.playerName, team, position: p.position })
         const report = hit && 'rows' in hit ? hit.rows[0] : null
-        const availabilityKnown = injuryFeedFresh && injuryIdentityKnown(p.playerName, hit) && reportKnown(report) &&
+        const availabilityKnown = injuryFeedFresh && injuryIdentityKnown(p.playerName, hit) && reportsCertified(hit) &&
           (sport !== 'NFL' || currentTeams.has(p.playerId) || p.position === 'DEF') && (!!kickoff || p.byeWeek === input.week) &&
           // A stored bye can belong to the player's former club. Conflicting
           // schedule evidence must be reviewed before any protection penalty.
@@ -205,13 +213,13 @@ export async function capturePirateLineupEvidence(input: {
         const report = match && 'rows' in match ? match.rows[0] : null
         const kickoff = lockTeamLookupKeys(sport, player.team).map((key) => schedule.byTeam.get(key)).find((d): d is Date => !!d)
         return { ...player, injuryStatus: report?.status ?? null,
-          availabilityKnown: injuryFeedFresh && injuryIdentityKnown(player.playerName, match) && reportKnown(report) && kickoff?.toISOString() === player.kickoffAt,
+          availabilityKnown: injuryFeedFresh && injuryIdentityKnown(player.playerName, match) && reportsCertified(match) && kickoff?.toISOString() === player.kickoffAt,
           addableBeforeLock: player.certifiedEventAt === eventAt && player.addableBeforeLock === true &&
             !(player.aliases ?? [player.playerId]).some((id) => rosteredIds.has(id)) }
       })
       const limit = leagueRosterLimit(league, 20)
       const hasRoom = countTowardRosterLimit(roster.legacyRoster?.playerData, limit.counts) < limit.limit
-      if (phase === 'before' && lineupCertified && !rosterLocked && roster.legacyRoster && hasRoom &&
+      if (phase === 'before' && lineupCertified && !rosterLocked && roster.legacyRoster &&
           (lock.mode !== 'first_game_of_week' || time === schedule.firstKickoff?.getTime()) &&
           !waivers.some((p) => p.addableBeforeLock) && players.every((p) => p.availabilityKnown)) {
         const evaluateWith = (candidates: EvidencePlayer[]) => evaluatePirateLineup({ sport, week: input.week,
@@ -236,19 +244,25 @@ export async function capturePirateLineupEvidence(input: {
               const match = injuryMatch({ name: row.full_name, team, position: row.position })
               if (!injuryIdentityKnown(row.full_name, match)) continue
               const report = match && 'rows' in match ? match.rows[0] : null
-              if (!reportKnown(report)) continue
+              if (!reportsCertified(match)) continue
               const candidate: EvidencePlayer = { playerId: unified.playerId, playerName: row.full_name, position: row.position,
                 slotType: 'WAIVER', injuryStatus: report?.status ?? null, team, kickoffAt: kickoff.toISOString(),
                 availabilityKnown: injuryFeedFresh, addableBeforeLock: true, lockedAtSnapshot: false, aliases, certifiedEventAt: eventAt }
-              if (evaluateWith([candidate]).decision !== 'forfeit') continue
-              // One no-drop pickup proves the complete legal lineup without
-              // assuming that independent adds or drops can be combined.
-              if (++probed > 4) break
-              if (await certifyPirateWaiverWitness({ leagueId: input.leagueId, rosterId: roster.legacyRoster.id,
-                actorUserId: roster.ownerId, playerId: candidate.playerId, now: input.now })) {
-                waivers = [{ ...candidate, checkedAt: (input.now ?? new Date()).toISOString() }]
-                break
+              const drops = hasRoom ? [null] : players.filter((p) => normalizeToken(p.slotType) === 'BENCH' &&
+                !p.lockedAtSnapshot && p.addableBeforeLock === true).map((p) => p.playerId)
+              for (const dropPlayerId of drops) {
+                const option = { ...candidate, dropPlayerId }
+                if (evaluateWith([option]).decision !== 'forfeit') continue
+                // Prove the entire lineup after this exact move; independent
+                // successful transactions cannot be assumed combinable.
+                if (++probed > 8) break
+                if (await certifyPirateWaiverWitness({ leagueId: input.leagueId, rosterId: roster.legacyRoster.id,
+                  actorUserId: roster.ownerId, playerId: candidate.playerId, dropPlayerId, now: input.now })) {
+                  waivers = [{ ...option, checkedAt: (input.now ?? new Date()).toISOString() }]
+                  break
+                }
               }
+              if (waivers.some((p) => p.certifiedEventAt === eventAt && p.addableBeforeLock) || probed > 8) break
             }
           } catch {
             // An unavailable pool leaves the waiver evidence incomplete.
@@ -261,7 +275,7 @@ export async function capturePirateLineupEvidence(input: {
         (lock.mode === 'per_player_kickoff' && time === Math.max(...[...schedule.byTeam.values()].map((at) => at.getTime()))) ||
         (lock.mode === 'daily' && scoringDay != null && time === Math.max(...[...schedule.byTeamDay?.values() ?? []]
           .map((days) => days.get(scoringDay)?.getTime() ?? -Infinity)))
-      const evidence: PirateLineupEvidence = { version: 1, week: input.week, eventAt, scoringDay, phase, terminalEvent, lineupCertified,
+      const evidence: PirateLineupEvidence = { version: 2, week: input.week, eventAt, scoringDay, phase, terminalEvent, lineupCertified,
         capturedAt: snapshotAt.toISOString(), mode: lock.mode, sport, starterSlots, rulesHash,
         scheduleWarnings: [...schedule.warnings, ...(league.lockAllMoves ? ['Commissioner locked roster moves.'] : []),
           ...(rosterLocked ? ['Commissioner locked this roster.'] : [])], injuryFeedFresh,
@@ -286,6 +300,7 @@ export async function capturePirateLineupEvidence(input: {
 /** A missing or uncertain fact always leaves the protections for commissioner review. */
 export function evaluatePirateEvidencePair(before: PirateLineupEvidence, after: PirateLineupEvidence, laterEvidence: PirateLineupEvidence[] = []) {
   const review = (reason: string) => ({ decision: 'review' as const, issues: [] as string[], replacementIds: [] as string[], reason })
+  if (before.version !== 2 || after.version !== 2) return review('Older snapshots lack per-player provider agreement checks. Protections stay for commissioner review.')
   const at = new Date(after.eventAt).getTime()
   const beforeAt = new Date(before.capturedAt).getTime(), afterAt = new Date(after.capturedAt).getTime()
   if (!Number.isFinite(at) || !Number.isFinite(beforeAt) || !Number.isFinite(afterAt) || before.phase !== 'before' || after.phase !== 'after' ||
@@ -316,7 +331,13 @@ export function evaluatePirateEvidencePair(before: PirateLineupEvidence, after: 
   const waiverBefore = new Map((before.waivers ?? []).map((p) => [p.playerId, p]))
   const waivers = (after.waivers ?? []).filter((p) => {
     const prior = waiverBefore.get(p.playerId)
+    const dropBefore = prior?.dropPlayerId ? beforePlayers.get(prior.dropPlayerId) : null
+    const dropAfter = p.dropPlayerId ? after.players.find((player) => player.playerId === p.dropPlayerId) : null
+    const dropCertified = p.dropPlayerId == null || (!!dropBefore && !!dropAfter &&
+      normalizeToken(dropBefore.slotType) === 'BENCH' && normalizeToken(dropAfter.slotType) === 'BENCH' &&
+      dropBefore.addableBeforeLock === true && !dropBefore.lockedAtSnapshot)
     return prior?.certifiedEventAt === after.eventAt && prior.addableBeforeLock === true && p.addableBeforeLock === true &&
+      (prior.dropPlayerId ?? null) === (p.dropPlayerId ?? null) && dropCertified &&
       prior.availabilityKnown && p.availabilityKnown && prior.team === p.team && prior.position === p.position &&
       prior.kickoffAt === p.kickoffAt && prior.injuryStatus === p.injuryStatus &&
       !!prior.checkedAt && new Date(prior.checkedAt).getTime() < at && at - new Date(prior.checkedAt).getTime() <= WINDOW_MS
@@ -336,7 +357,7 @@ export function evaluatePirateEvidencePair(before: PirateLineupEvidence, after: 
       return laterEvidence.some((e) => {
         const actual = [...e.players, ...e.waivers ?? []].find((p) => p.playerId === id)
         const captured = new Date(e.capturedAt).getTime(), gameAt = new Date(player.kickoffAt!).getTime()
-        return e.week === after.week && e.sport === after.sport && e.mode === after.mode && e.phase === 'after' &&
+        return e.version === 2 && e.week === after.week && e.sport === after.sport && e.mode === after.mode && e.phase === 'after' &&
           e.eventAt === player.kickoffAt && captured >= gameAt && captured - gameAt <= WINDOW_MS &&
           e.injuryFeedFresh && !e.scheduleWarnings.length && actual?.availabilityKnown === true &&
           actual.kickoffAt === player.kickoffAt && actual.team === player.team && actual.byeWeek !== after.week && !cannotStart(actual)
@@ -395,6 +416,7 @@ export async function assessPirateLineupEvidence(input: {
           playerId: p.playerId, playerName: p.playerName, slotType: p.slotType,
           injuryStatus: p.injuryStatus ?? null, kickoffAt: p.kickoffAt, availabilityKnown: p.availabilityKnown,
           waiverVerified: p.slotType === 'WAIVER' && p.addableBeforeLock === true && p.certifiedEventAt === latest.data.eventAt,
+          dropPlayerName: p.dropPlayerId ? latest.data.players.find((player) => player.playerId === p.dropPlayerId)?.playerName ?? null : null,
         })) } }
   }
   for (const pair of ordered) {

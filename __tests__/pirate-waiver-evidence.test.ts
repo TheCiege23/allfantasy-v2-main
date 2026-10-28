@@ -47,6 +47,15 @@ describe('Pirate waiver evidence uses real immediate-add gates', () => {
     expect(assertWaiverClaimEligibility).not.toHaveBeenCalled()
   })
 
+  it('certifies only the specified add-and-drop pair, including canonical drop limits and undroppable checks', async () => {
+    expect(await certifyPirateWaiverWitness({ ...input, dropPlayerId: 'bench-drop' })).toBe(true)
+    expect(assertWaiverClaimEligibility).toHaveBeenLastCalledWith(expect.objectContaining({ addPlayerId: 'candidate', dropPlayerId: 'bench-drop' }))
+    for (const message of ['Weekly drop limit reached', 'Player is undroppable', 'This bench player is locked']) {
+      vi.mocked(assertWaiverClaimEligibility).mockRejectedValueOnce(new Error(message))
+      expect(await certifyPirateWaiverWitness({ ...input, dropPlayerId: 'bench-drop' })).toBe(false)
+    }
+  })
+
   it('refuses pending claims, processing locks, and closed season phases', async () => {
     vi.mocked(prisma.waiverClaim.findFirst).mockResolvedValue({ id: 'pending' } as never)
     expect(await certifyPirateWaiverWitness(input)).toBe(false)

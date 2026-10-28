@@ -9,7 +9,7 @@ afterEach(() => {
 })
 
 describe('Pirate Deck', () => {
-  it('shows a roster overflow warning and commissioner recovery controls', async () => {
+  it.each([null, 'Bench Player'])('shows commissioner recovery and the exact verified pickup option (drop: %s)', async (dropPlayerName) => {
     const dashboard = {
       league: { id: 'league', name: 'Sea Wolves', sport: 'NFL', rosterLimit: 1 },
       rules: { protectionLimit: 3, claimHours: 24, playoffClaims: false },
@@ -33,7 +33,7 @@ describe('Pirate Deck', () => {
         eventAt: '2026-10-26T00:20:00Z', snapshotCount: 2, snapshot: { capturedAt: '2026-10-26T00:22:00Z',
           injurySyncAt: '2026-10-26T00:15:00Z', lineupCertified: true, waiverWitnessCount: 1, players: [
             { playerId: 'free-qb', playerName: 'Verified Free QB', slotType: 'WAIVER', injuryStatus: null,
-              kickoffAt: '2026-10-26T00:20:00Z', availabilityKnown: true, waiverVerified: true },
+              kickoffAt: '2026-10-26T00:20:00Z', availabilityKnown: true, waiverVerified: true, dropPlayerName },
           ] } } },
       claims: [{ id: 'claim', week: 8, winnerRosterId: 'winner', loserRosterId: 'loser', playerId: null,
         offeredPlayerId: null, counterPlayerId: null, status: 'awaiting_selection', deadlineAt: null,
@@ -48,6 +48,7 @@ describe('Pirate Deck', () => {
     expect(screen.getByText(/Automatic lineup ruling/)).toBeTruthy()
     fireEvent.click(screen.getByText(/Captured lineup evidence/))
     expect(screen.getByText('Verified Free QB')).toBeTruthy()
-    expect(screen.getByText(/Verified immediate pickup before this lock/)).toBeTruthy()
+    expect(screen.getByText(dropPlayerName ? /add this player and drop Bench Player/ : /Verified immediate pickup before this lock/)).toBeTruthy()
+    expect(screen.getByText(/No roster move was made/)).toBeTruthy()
   })
 })

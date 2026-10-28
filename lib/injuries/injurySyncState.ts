@@ -162,6 +162,8 @@ export async function recordInjurySyncRun(args: {
   error?: string | null
   /** All configured providers answered cleanly and all returned statuses were parsed. */
   completeForLineup?: boolean
+  /** V2: every provider answered and every report was stored; consumers must verify each player's status. */
+  completeCoverageForLineup?: boolean
 }): Promise<void> {
   const now = new Date()
   const error = args.error ? String(args.error).slice(0, MAX_ERROR) : null
@@ -210,16 +212,17 @@ export async function recordInjurySyncRun(args: {
       update,
       create: { ...base(args.sport), ...update, lastError: args.failed ? error : null },
     })
-    if (args.completeForLineup !== undefined) {
+    for (const [key, complete] of [['lineup-evidence', args.completeForLineup], ['lineup-evidence-v2', args.completeCoverageForLineup]] as const) {
+      if (complete === undefined) continue
       // General feed freshness can succeed with a partial provider response.
       // Automated protection penalties need a separate, stricter attestation.
-      const certification = args.completeForLineup && !args.failed
+      const certification = complete && !args.failed
         ? { lastStartedAt: now, lastCompletedAt: now, lastSuccessAt: now, recordsUpdated: args.written, recordsSkipped: 0 }
         : { lastStartedAt: now, lastCompletedAt: now, lastErrorAt: now, lastError: 'Incomplete injury evidence for automatic lineup rulings.', recordsSkipped: 0 }
       await prisma.providerSyncState.upsert({
-        where: { provider_entityType_sport_key: { ...base(args.sport), key: 'lineup-evidence' } },
+        where: { provider_entityType_sport_key: { ...base(args.sport), key } },
         update: certification,
-        create: { ...base(args.sport), key: 'lineup-evidence', ...certification },
+        create: { ...base(args.sport), key, ...certification },
       })
     }
   } catch {

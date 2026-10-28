@@ -16,7 +16,7 @@ vi.mock('@/lib/multi-sport/MultiSportRosterService', () => ({ getRosterTemplateF
 const lockAt = '2026-10-26T00:20:00.000Z'
 
 function evidence(phase: 'before' | 'after', extra: Partial<PirateLineupEvidence> = {}): PirateLineupEvidence {
-  return { version: 1, week: 8, sport: 'NFL', eventAt: lockAt, scoringDay: null, phase,
+  return { version: 2, week: 8, sport: 'NFL', eventAt: lockAt, scoringDay: null, phase,
     capturedAt: phase === 'before' ? '2026-10-26T00:18:00.000Z' : '2026-10-26T00:22:00.000Z',
     mode: 'per_player_kickoff', terminalEvent: true, lineupCertified: true, starterSlots: [['QB', 1]], rulesHash: 'same-rules',
     scheduleWarnings: [], injuryFeedFresh: true, injurySyncAt: '2026-10-26T00:15:00.000Z', injuryReports: [], waiverPoolCertified: false,
@@ -38,6 +38,34 @@ describe('immutable Pirate lineup evidence', () => {
 
   it('keeps protections for review when historical addable waivers are unknown', () => {
     expect(evaluatePirateEvidencePair(evidence('before', { players: [] }), evidence('after', { players: [] })).decision).toBe('review')
+  })
+
+  it('keeps older snapshots for review because they lack provider agreement checks', () => {
+    expect(evaluatePirateEvidencePair(evidence('before', { version: 1 }), evidence('after', { version: 1 })).decision).toBe('review')
+  })
+
+  it('uses a certified single-drop plan without counting the dropped player in its legal lineup', () => {
+    const drop = { ...evidence('before').players[0], playerId: 'drop', playerName: 'Bench receiver', position: 'WR' }
+    const waiver = { ...drop, playerId: 'waiver', playerName: 'Available quarterback', position: 'QB', slotType: 'WAIVER',
+      dropPlayerId: 'drop', certifiedEventAt: lockAt, checkedAt: '2026-10-26T00:18:00.000Z' }
+    const before = evidence('before', { players: [drop], waivers: [waiver] })
+    const after = evidence('after', { players: [{ ...drop, lockedAtSnapshot: true }], waivers: [{ ...waiver }] })
+    expect(evaluatePirateEvidencePair(before, after)).toMatchObject({ decision: 'forfeit', replacementIds: ['waiver'] })
+    after.waivers[0].dropPlayerId = 'another-drop'
+    expect(evaluatePirateEvidencePair(before, after).decision).toBe('review')
+    after.waivers[0].dropPlayerId = 'drop'
+    before.players[0].lockedAtSnapshot = true
+    expect(evaluatePirateEvidencePair(before, after).decision).toBe('review')
+  })
+
+  it('does not drop a needed flex replacement or combine separate single-drop plans', () => {
+    const drop = { ...evidence('before').players[0], playerId: 'only-wr', playerName: 'Only active receiver', position: 'WR' }
+    const waiver = { ...drop, playerId: 'waiver-qb', position: 'QB', slotType: 'WAIVER', dropPlayerId: 'only-wr',
+      certifiedEventAt: lockAt, checkedAt: '2026-10-26T00:18:00.000Z' }
+    const before = evidence('before', { starterSlots: [['QB', 1], ['WR', 1]], players: [drop], waivers: [waiver,
+      { ...waiver, playerId: 'waiver-wr', position: 'WR' }] })
+    const after = evidence('after', { ...before, phase: 'after', capturedAt: '2026-10-26T00:22:00.000Z' })
+    expect(evaluatePirateEvidencePair(before, after).decision).toBe('review')
   })
 
   it('uses one proven no-drop waiver pickup and rejects a held or previously checked candidate', () => {
@@ -159,12 +187,23 @@ describe('immutable Pirate lineup evidence', () => {
     const metadata = createMany.mock.calls[0][0].data[0].metadata
     expect(metadata).toMatchObject({ phase: 'before', lineupCertified: true, injuryFeedFresh: true, waiverPoolCertified: false })
     expect(metadata.players[0]).toMatchObject({ availabilityKnown: true, addableBeforeLock: true })
-    expect(db.providerSyncState.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ key: 'lineup-evidence' }) }))
+    expect(db.providerSyncState.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ key: 'lineup-evidence-v2' }) }))
     expect(createMany.mock.calls[0][0].skipDuplicates).toBe(true)
     db.sportsInjury.findMany.mockResolvedValue([{ playerId: 'other-person', playerName: 'Bench QB', team: 'DEN', position: 'QB',
       sport: 'NFL', status: 'OUT', fetchedAt: new Date('2026-10-26T00:15:00Z'), date: null, source: 'fixture' }] as never)
     await capturePirateLineupEvidence({ ...input, week: 9 }, db as never)
     expect(createMany.mock.calls.at(-1)?.[0].data[0].metadata.players[0].availabilityKnown).toBe(false)
+    const report = { playerId: 'bench', playerName: 'Bench QB', team: 'KC', position: 'QB', sport: 'NFL',
+      fetchedAt: new Date('2026-10-26T00:15:00Z'), date: new Date('2026-10-26T00:15:00Z'), source: 'fixture' }
+    for (const [week, reports, known] of [
+      [15, [{ ...report, playerName: 'Unrelated Player', status: null }], true],
+      [16, [{ ...report, status: 'Active' }, { ...report, status: null }], false],
+      [17, [{ ...report, status: 'Active' }, { ...report, status: 'OUT' }], false],
+    ] as const) {
+      db.sportsInjury.findMany.mockResolvedValue(reports as never)
+      await capturePirateLineupEvidence({ ...input, week }, db as never)
+      expect(createMany.mock.calls.at(-1)?.[0].data[0].metadata.players[0].availabilityKnown).toBe(known)
+    }
     db.sportsInjury.findMany.mockResolvedValue([])
     db.league.findUnique.mockResolvedValue({ platform: 'manual', leagueType: 'pirate', sport: 'NFL',
       settings: { starter_slots: { QB: 1 }, commissionerRosterLocks: { team: true } }, lockAllMoves: false } as never)
@@ -195,7 +234,7 @@ describe('immutable Pirate lineup evidence', () => {
     }
   })
 
-  it('captures a waiver witness only after the manager-specific add checks pass', async () => {
+  it.each([false, true])('captures a waiver witness only after manager-specific checks (full roster: %s)', async (full) => {
     const kickoff = new Date(lockAt)
     vi.mocked(buildWeekKickoffMap).mockResolvedValue({ byTeam: new Map([['KC', kickoff]]), firstKickoff: kickoff, warnings: [] })
     vi.mocked(resolveCurrentLockTeams).mockResolvedValue(new Map([['receiver', 'KC']]))
@@ -206,9 +245,9 @@ describe('immutable Pirate lineup evidence', () => {
     vi.mocked(certifyPirateWaiverWitness).mockResolvedValueOnce(false).mockResolvedValueOnce(true)
     const createMany = vi.fn().mockResolvedValue({ count: 1 })
     const db = {
-      league: { findUnique: vi.fn().mockResolvedValue({ platform: 'manual', leagueType: 'pirate', sport: 'NFL', settings: { starter_slots: { QB: 1 } }, lockAllMoves: false }) },
+      league: { findUnique: vi.fn().mockResolvedValue({ platform: 'manual', leagueType: 'pirate', sport: 'NFL', settings: { starter_slots: { QB: 1, BENCH: full ? 0 : 1 } }, lockAllMoves: false }) },
       redraftRoster: { findMany: vi.fn().mockResolvedValue([{ id: 'roster', ownerId: 'manager',
-        legacyRoster: { id: 'af-roster', playerData: { lineup_sections: { starters: [], bench: [{ id: 'receiver', position: 'WR' }] } } },
+        legacyRoster: { id: 'af-roster', playerData: { players: ['receiver'], lineup_sections: { starters: [], bench: [{ id: 'receiver', position: 'WR' }] } } },
         players: [{ playerId: 'receiver', playerName: 'Receiver', position: 'WR', team: 'KC', sport: 'NFL', slotType: 'BENCH', byeWeek: null }],
       }]) },
       sportsInjury: { findMany: vi.fn().mockResolvedValue([]) },
@@ -221,7 +260,7 @@ describe('immutable Pirate lineup evidence', () => {
     await capturePirateLineupEvidence({ leagueId: 'league', seasonId: 'season', season: 2026, week: 8,
       now: new Date('2026-10-26T00:18:00Z') }, db as never)
     expect(certifyPirateWaiverWitness).toHaveBeenCalledTimes(2)
-    expect(certifyPirateWaiverWitness).toHaveBeenLastCalledWith(expect.objectContaining({ actorUserId: 'manager', rosterId: 'af-roster' }))
+    expect(certifyPirateWaiverWitness).toHaveBeenLastCalledWith(expect.objectContaining({ actorUserId: 'manager', rosterId: 'af-roster', dropPlayerId: full ? 'receiver' : null }))
     expect(createMany.mock.calls[0][0].data[0].metadata.waivers).toEqual([expect.objectContaining({
       playerName: 'free QB', addableBeforeLock: true, certifiedEventAt: lockAt, checkedAt: '2026-10-26T00:18:00.000Z',
     })])

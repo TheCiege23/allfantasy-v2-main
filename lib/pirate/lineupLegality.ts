@@ -12,6 +12,8 @@ export type PirateLineupPlayer = {
   addableBeforeLock?: boolean
   /** An active starter already locked in place can remain, but cannot be rearranged. */
   lockedAtSnapshot?: boolean
+  /** This certified waiver option requires this specific bench drop. Never combine independent plans. */
+  dropPlayerId?: string | null
 }
 
 export type PirateLineupFinding = {
@@ -101,8 +103,15 @@ export function evaluatePirateLineup(input: {
   }
   const rosterAssignment = legalAssignment(rosterCandidates)
   if (rosterAssignment) return { decision: 'forfeit', issues, replacementIds: rosterAssignment, reason: 'A complete legal lineup was available on the roster before lock.' }
-  const waiverAssignment = legalAssignment([...rosterCandidates, ...waiverCandidates])
+  const waiverAssignment = legalAssignment([...rosterCandidates, ...waiverCandidates.filter((p) => p.dropPlayerId == null)])
   if (waiverAssignment) return { decision: 'forfeit', issues, replacementIds: waiverAssignment, reason: 'A complete legal lineup was available through addable waivers before lock.' }
+  for (const candidate of waiverCandidates.filter((p) => p.dropPlayerId != null)) {
+    const drop = input.roster.find((p) => p.playerId === candidate.dropPlayerId)
+    if (!drop || normalizeToken(drop.slotType) !== 'BENCH' || drop.lockedAtSnapshot || !drop.addableBeforeLock) continue
+    const assignment = legalAssignment([...rosterCandidates.filter((p) => p.playerId !== drop.playerId), candidate])
+    if (assignment) return { decision: 'forfeit', issues, replacementIds: assignment,
+      reason: `A complete legal lineup was available through one verified pickup and a legal drop of ${drop.playerName} before lock.` }
+  }
   if (!input.waiverPoolCertified) return { decision: 'review', issues, replacementIds: [], reason: 'The historical addable waiver pool is incomplete.' }
   return { decision: 'excused', issues, replacementIds: [], reason: 'No complete legal lineup was available on the roster or addable waivers before lock.' }
 }
