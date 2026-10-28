@@ -477,6 +477,8 @@ export function LeagueHome({
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const { league } = data
+  const teamDirectory = data.teamDirectory ?? []
+  const rosteredPlayerCount = data.rosteredPlayerCount ?? 0
   const platformLabel = league.platform === 'manual' ? copy('your platform') : league.platform
 
   /*
@@ -558,19 +560,19 @@ export function LeagueHome({
 
       <section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
         <div className="af-lh-week-summary-head">
-          <div><span className="af-label">{copy('Your next steps')}</span><h2 id="af-lh-week-summary-title">{copy('This week')}</h2></div>
+          <div><span className="af-label">{copy('Your next steps')}</span><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
           <span className="af-lh-week-summary-fresh" data-stale={data.syncAge.stale}>{data.syncAge.label}</span>
         </div>
         <div className="af-lh-week-summary-grid">
           <Link href={`/core/my-team?league=${league.id}`}>
             <span className="af-label">{copy('Lineup')}</span>
-            <strong>{urgent ? urgent.title : copy('Review your starters')}</strong>
-            <span>{urgent ? urgent.meta : copy('Check before the first kickoff')} →</span>
+            <strong>{data.preSeason && rosteredPlayerCount === 0 ? copy('Your roster is awaiting the draft') : urgent ? urgent.title : copy('Review your starters')}</strong>
+            <span>{data.preSeason && rosteredPlayerCount === 0 ? `${teamDirectory.length} ${copy('teams imported')}` : urgent ? urgent.meta : copy('Check before the first kickoff')} →</span>
           </Link>
           <Link href={`/core/matchup?league=${league.id}`}>
             <span className="af-label">{copy('Matchup')}</span>
-            <strong>{data.matchup?.available ? `${data.matchup.data.you.name} vs ${data.matchup.data.opponent.name}` : copy('Open matchup')}</strong>
-            <span>{data.matchup?.available ? `Week ${data.matchup.data.week} · ${copy('league scoring')}` : copy('Matchup data is not ready')} →</span>
+            <strong>{data.matchup?.available ? `${data.matchup.data.you.name} vs ${data.matchup.data.opponent.name}` : data.preSeason ? copy('Matchups begin after the draft') : copy('Open matchup')}</strong>
+            <span>{data.matchup?.available ? `Week ${data.matchup.data.week} · ${copy('league scoring')}` : data.preSeason ? copy('No games have been scored yet') : copy('Matchup data is not ready')} →</span>
           </Link>
           <div className="af-lh-week-summary-moves">
             <span className="af-label">{copy('Moves')}</span>
@@ -605,6 +607,24 @@ export function LeagueHome({
           </span>
           <p className="af-lh-coverage-text">{data.importCoverage.sentence}</p>
         </section>
+      ) : null}
+
+      {teamDirectory.length > 0 ? (
+        <details className="af-card af-lh-team-directory" open={data.preSeason}>
+          <summary>{copy('Teams in this league')} · {teamDirectory.length}</summary>
+          {rosteredPlayerCount === 0 ? (
+            <p>{copy('All teams are on file. Player rosters are empty until the draft or a later sync, so player trades cannot be analyzed yet.')}</p>
+          ) : null}
+          <ol>
+            {teamDirectory.map((team) => (
+              <li key={team.id}>
+                <strong>{team.name}</strong>
+                {team.ownerName && team.ownerName !== team.name ? <span>{team.ownerName}</span> : null}
+                {team.isYou ? <small>{copy('you')}</small> : null}
+              </li>
+            ))}
+          </ol>
+        </details>
       ) : null}
 
       {/* ── The other half of this franchise ────────────────────────── */}

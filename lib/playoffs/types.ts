@@ -184,6 +184,8 @@ export type PlayoffChallengeView = {
   }>
   series: PlayoffSeriesView[]
   teamProfiles?: Record<string, BracketTeamProfile>
+  /** Published-team crest URLs, resolved from ingested team rows at request time. */
+  teamLogos?: Record<string, string>
   picks: PlayoffPickView[]
   rounds: PlayoffRoundKey[]
   lockDiagnostics?: PlayoffLockDiagnostics | null

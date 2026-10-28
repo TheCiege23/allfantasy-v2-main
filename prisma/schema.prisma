@@ -19676,6 +19676,42 @@ model RookieEligibilityRecord {
   @@map("rookie_eligibility_records")
 }
 
+/// Private Play receipt store. Tokens are AES-GCM encrypted; identity is package-scoped SHA-256.
+/// Ownership survives account deletion to prevent reassigning a previously fulfilled purchase.
+model GooglePlayPurchase {
+  checkoutIntentId String? @unique
+  tokenHash       String @id @db.VarChar(64)
+  tokenCiphertext String
+  ownerId         String?
+  productId       String @db.VarChar(64)
+  sku             String @db.VarChar(64)
+  purchaseType    String @db.VarChar(32)
+  state           String @db.VarChar(64)
+  orderId         String? @db.VarChar(256)
+  revokedAt       DateTime?
+  finalizedAt     DateTime?
+  lastCheckedAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([lastCheckedAt])
+  @@map("google_play_purchases")
+}
+
+/// Checkout authorization retained for delayed payments and interrupted verification.
+model GooglePlayCheckoutIntent {
+  id        String @id @default(uuid())
+  userId    String
+  sku       String @db.VarChar(64)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("google_play_checkout_intents")
+}
+
 /// Dispersal draft (lib/dispersal-draft): an orphaned or dissolved team's assets drafted by the rest of
 /// the league. These models describe tables that already exist — created by migration
 /// 20260410143800_fix_schema_drift under their older "supplemental" names — and were missing from this

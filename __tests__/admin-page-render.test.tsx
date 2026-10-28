@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -440,6 +440,21 @@ describe("/admin page render states", () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+  })
+
+  it("starts the supplementary freshness report while core metrics are pending", async () => {
+    mocks.getAdminAccessState.mockResolvedValueOnce({
+      status: "admin",
+      user: { id: "admin-1", email: "founder@example.com", role: "admin" },
+    })
+    let resolveMetrics!: (value: ReturnType<typeof metricsFixture>) => void
+    mocks.getAdminCommandCenterMetrics.mockReturnValueOnce(new Promise((resolve) => { resolveMetrics = resolve }))
+
+    const { default: AdminPage } = await import("@/app/admin/page")
+    const page = AdminPage({ searchParams: {} })
+    await waitFor(() => expect(mocks.getAdminPipelineFreshness).toHaveBeenCalled())
+    resolveMetrics(metricsFixture())
+    render(await page)
   })
 
   it("redirects unauthenticated users to admin login", async () => {
