@@ -61,7 +61,7 @@ describe('snapshot-based outcome correction plan', () => {
     const snapshot = {
       ...base,
       items: [{
-        id: 's', teamStatusId: 'th', userId: 'h', itemType: 'serum',
+        id: 's', teamStatusId: 'th', userId: 'h', itemType: 'serum_antidote',
         itemLabel: '🧪 Serum', isUsed: false, isExpired: false,
         activationState: 'pending_activation', activatesAtWeek: 3,
         usedAtWeek: null, usedOnUserId: null, usedEffect: null,
@@ -73,6 +73,8 @@ describe('snapshot-based outcome correction plan', () => {
     expect(threatened?.spentItemIds).toEqual(['s'])
     expect(threatened?.weaponAwards).toEqual([])
     expect(planZombieOutcomeReplay(row(90, 101), snapshot, 3, 'simple')?.spentItemIds).toEqual([])
+    const disabled = { ...snapshot, config: { ...base.config!, infectionLossToZombie: false } }
+    expect(planZombieOutcomeReplay(row(101, 90), disabled, 3, 'simple')?.spentItemIds).toEqual([])
   })
 
   it('returns an armed weapon when that infection rule is disabled', () => {
