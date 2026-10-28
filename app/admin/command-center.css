@@ -967,3 +967,237 @@ html[data-mode='af'] .af-cc--adaptive {
 .af-cc-partial-tag {
   color: var(--accent);
 }
+
+/* Focused admin workspace: the reports remain mounted, but only the selected
+   area is visible. This keeps data and existing deep links available. */
+.af-cc-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scroll-margin-top: 24px;
+}
+
+.af-cc-workspace-intro {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 8px 2px 2px;
+}
+
+.af-cc-eyebrow {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font: 800 11px/1.2 var(--af-cc-mono);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.af-cc-workspace-intro h2 {
+  margin: 0;
+  color: var(--text);
+  font: 800 clamp(24px, 3vw, 36px)/1.1 var(--af-cc-sans);
+  letter-spacing: -.035em;
+}
+
+.af-cc-workspace-intro p:not(.af-cc-eyebrow) {
+  margin: 8px 0 0;
+  color: var(--text2);
+  font-size: 14px;
+}
+
+.af-cc-workspace-help {
+  max-width: 300px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.af-cc-workspace-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--surface2);
+  box-shadow: 0 16px 40px -30px rgba(0, 0, 0, .8);
+}
+
+.af-cc-workspace-link {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text2);
+  font: 700 12px/1.2 var(--af-cc-sans);
+  cursor: pointer;
+}
+
+.af-cc-workspace-link:hover,
+.af-cc-workspace-link:focus-visible {
+  color: var(--text);
+  background: var(--chip);
+  outline: none;
+}
+
+.af-cc-workspace-link:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.af-cc-workspace-link--active,
+.af-cc-workspace-link--active:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-cc-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.af-cc-shortcuts a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.af-cc-shortcuts a:hover,
+.af-cc-shortcuts a:focus-visible {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.af-cc-workspace-content,
+.af-cc-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.af-cc-workspace-content > [data-admin-pane] {
+  display: none;
+}
+
+.af-cc-workspace[data-view="overview"] [data-admin-pane="overview"],
+.af-cc-workspace[data-view="audience"] [data-admin-pane="audience"],
+.af-cc-workspace[data-view="revenue"] [data-admin-pane="revenue"],
+.af-cc-workspace[data-view="operations"] [data-admin-pane="operations"],
+.af-cc-workspace[data-view="data"] [data-admin-pane="data"] {
+  display: flex;
+}
+
+.af-cc-archive {
+  padding: 16px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.af-cc-archive > summary {
+  cursor: pointer;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.af-cc-archive > .af-cc-pane {
+  margin-top: 16px;
+}
+
+.af-cc [id] {
+  scroll-margin-top: 84px;
+}
+
+@media (max-width: 820px) {
+  .af-cc-workspace-intro {
+    align-items: start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .af-cc-workspace-help {
+    display: none;
+  }
+
+  .af-cc-shortcuts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.af-cc-pane--people {
+  order: -1;
+}
+
+.af-cc-archive > summary::marker {
+  color: var(--accent);
+}
+
+.af-cc-archive > summary:hover,
+.af-cc-archive > summary:focus-visible {
+  color: var(--accent);
+}
+
+.af-cc .af-cc-report {
+  border-color: var(--line2);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.af-cc .af-cc-report > summary h2 {
+  color: var(--text);
+  font-size: 14px;
+  letter-spacing: -.01em;
+  line-height: 1.35;
+  text-transform: none;
+}
+
+.af-cc .af-cc-report > summary p {
+  color: var(--muted);
+  letter-spacing: .1em;
+}
+
+.af-cc .af-cc-report > summary span {
+  border-color: var(--line2);
+  background: var(--chip);
+  color: var(--text2);
+}
+
+.af-cc .af-cc-stat {
+  border-color: var(--line2);
+  border-radius: 10px;
+  background: var(--surface2);
+  box-shadow: none;
+}
+
+.af-cc .af-cc-stat > div:first-child {
+  color: var(--muted);
+  letter-spacing: .06em;
+}
+
+@media (max-width: 520px) {
+  .af-cc-shortcuts {
+    grid-template-columns: 1fr;
+  }
+}
