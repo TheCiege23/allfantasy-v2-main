@@ -96,8 +96,8 @@ export default function ZombieArmoryPage() {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-lime-300">The Armory</h1>
           <p className="text-[13px] text-white/60">
-            {serums.length} serum{serums.length === 1 ? '' : 's'} · {held.length - serums.length} weapon
-            {held.length - serums.length === 1 ? '' : 's'}
+            {serums.length} serum{serums.length === 1 ? '' : 's'}
+            {data.experienceMode === 'simple' ? ' · Simple Zombie' : ` · ${held.length - serums.length} weapon${held.length - serums.length === 1 ? '' : 's'}`}
             {data.isCommissionerView ? ' · commissioner view of another manager' : ''}
           </p>
         </div>
@@ -178,7 +178,11 @@ export default function ZombieArmoryPage() {
         ) : null}
       </section>
 
-      {/* Defensive weapons — live in Enhanced Zombie */}
+      {data.experienceMode === 'simple' ? (
+        <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-[13px] text-white/65" data-testid="armory-simple-note">
+          Simple Zombie keeps the armory focused on serums. Weapons are available in Enhanced Zombie.
+        </p>
+      ) : (
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="armory-weapons">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-lg font-bold text-white">Weapons</h2>
@@ -219,6 +223,7 @@ export default function ZombieArmoryPage() {
           </p>
         ) : null}
       </section>
+      )}
 
       {/* Ledger */}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
