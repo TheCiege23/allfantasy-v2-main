@@ -94,6 +94,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         .map((entry, index) => ({
           rank: singleGameSport ? entry.rank ?? index + 1 : index + 1,
           id: entry.id,
+          userId: entry.userId,
           name: entry.name || `Bracket ${index + 1}`,
           picks: entry.pickCount,
           totalScore: entry.totalScore ?? 0,
@@ -105,6 +106,15 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     },
     [entries, singleGameSport]
   )
+  const bestViewerRow = singleGameSport && view.viewerUserId
+    ? leaderboardRows.find((row) => row.userId === view.viewerUserId) ?? null
+    : null
+  const nearbyRivals = bestViewerRow
+    ? leaderboardRows
+      .filter((row) => row.userId !== view.viewerUserId)
+      .sort((a, b) => Math.abs(a.rank - bestViewerRow.rank) - Math.abs(b.rank - bestViewerRow.rank) || a.rank - b.rank)
+      .slice(0, 2)
+    : []
   const hasScoredLeaderboard = leaderboardRows.some((row) => row.hasScoredResults)
   const hasClientAdminAccess = hasPoolAdminAccess(session?.user)
   const hasServerAdminAccess = view.lockDiagnostics?.hasPoolAdminAccess === true
@@ -197,6 +207,17 @@ export default function PlayoffBracketShell({ initialView }: Props) {
       toast.success("Invite link copied")
     } catch {
       toast.error("Could not copy invite link")
+    }
+  }
+
+  async function copyBestBracket() {
+    if (!bestViewerRow) return
+    try {
+      const path = `/brackets/leagues/${safeChallenge.id}/entries/${bestViewerRow.id}/view`
+      await navigator.clipboard.writeText(`${window.location.origin}${path}`)
+      toast.success("Read-only bracket link copied. Private leagues require membership to view it.")
+    } catch {
+      toast.error("Could not copy bracket link")
     }
   }
 
@@ -508,6 +529,69 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           )}
         </article>
       </section>
+
+      {singleGameSport && myEntries.length > 0 ? (
+        <section
+          data-testid="playoff-dashboard-your-race"
+          className="rounded-3xl border border-teal-300/30 bg-slate-950 p-5 text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)] sm:p-6"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-5">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-300">Your league race</p>
+              {bestViewerRow ? (
+                <>
+                  <h2 className="mt-2 text-3xl font-black tracking-tight">
+                    #{bestViewerRow.rank} <span className="text-base font-semibold text-slate-300">of {leaderboardRows.length} finalized brackets</span>
+                  </h2>
+                  <p className="mt-2 text-sm font-semibold text-slate-200">
+                    {bestViewerRow.totalScore} points · {bestViewerRow.potentialTotal} potential · {bestViewerRow.correctPicks} correct
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="mt-2 text-xl font-black">Finish your picks to join the board</h2>
+                  <p className="mt-2 text-sm text-slate-300">Finalize before the first game to see your rank and nearby competitors.</p>
+                </>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {bestViewerRow ? (
+                <button
+                  type="button"
+                  onClick={copyBestBracket}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-300 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-teal-200"
+                >
+                  <Clipboard className="h-4 w-4" />
+                  Share your bracket
+                </button>
+              ) : null}
+              {canManagePlayoffPool && safeChallenge.inviteCode ? (
+                <button
+                  type="button"
+                  onClick={copyInvite}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/30 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/10"
+                >
+                  <Link2 className="h-4 w-4" />
+                  Copy league invite
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {nearbyRivals.length > 0 ? (
+            <div className="mt-5 border-t border-white/15 pt-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Closest competitors</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {nearbyRivals.map((row) => (
+                  <div key={row.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm">
+                    <span className="truncate font-semibold">#{row.rank} {row.name}</span>
+                    <span className="shrink-0 text-teal-200">{row.totalScore} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="playoff-dashboard-leaderboard">
         <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Leaderboard</h2>
