@@ -32,7 +32,7 @@ import {
   isDynastyFootballSport,
 } from '@/lib/dynasty-core/constants'
 import { TAXI_ELIGIBILITY_YEARS_OPTIONS, TAXI_LOCK_BEHAVIOR_OPTIONS } from '@/lib/taxi/constants'
-import { ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY, normalizeCustomOpenDate } from '@/lib/dynasty-core/rookieDraftCalendar'
+import { ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY, normalizeAutoStartDays, normalizeCustomOpenDate } from '@/lib/dynasty-core/rookieDraftCalendar'
 import { getDynastySportPresets } from '@/lib/dynasty-core/DynastySportPresets'
 import { applyDynastySportPresetToLeague, isLeagueBeforeDraft } from '@/lib/dynasty-core/applyDynastySportPreset'
 import {
@@ -188,7 +188,7 @@ export async function PUT(
     settingsPatch.playoff_structure = body.playoff_structure
 
   // Rookie-draft calendar: auto-open on the sport's window, and an optional custom open date.
-  if (body.rookieDraftAutoOpen !== undefined || body.rookieDraftCustomOpenDate !== undefined) {
+  if (body.rookieDraftAutoOpen !== undefined || body.rookieDraftCustomOpenDate !== undefined || body.rookieDraftAutoStartDays !== undefined) {
     // Only the keys sent are written, so an unset auto-open keeps following the platform default.
     const stored = ((league.settings as Record<string, unknown> | null)?.[ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY] ?? {}) as Record<string, unknown>
     const calendar: Record<string, unknown> = { ...(typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) }
@@ -205,6 +205,15 @@ export async function PUT(
         return NextResponse.json({ error: 'rookieDraftCustomOpenDate must be a date (YYYY-MM-DD) or empty.' }, { status: 400 })
       }
       calendar.customOpenDate = date
+    }
+    // Start an automatically opened draft by itself N days later (null: the commissioner presses Start).
+    if (body.rookieDraftAutoStartDays !== undefined) {
+      const raw = body.rookieDraftAutoStartDays
+      const days = raw === null || raw === 0 ? null : normalizeAutoStartDays(raw)
+      if (raw !== null && raw !== 0 && days == null) {
+        return NextResponse.json({ error: 'rookieDraftAutoStartDays must be 3, 7, 14 or empty.' }, { status: 400 })
+      }
+      calendar.autoStartDays = days
     }
     settingsPatch[ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY] = calendar
   }
