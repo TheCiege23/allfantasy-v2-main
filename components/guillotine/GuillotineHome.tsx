@@ -14,6 +14,7 @@ import { GuillotineChopAnimation } from './GuillotineChopAnimation'
 import { GuillotineAIPanel } from './GuillotineAIPanel'
 import { shareCardImage } from '@/components/decide/shareCard'
 import { GuillotineSpecialtyHome } from './GuillotineSpecialtyHome'
+import { GuillotineSurvivalHistory } from './GuillotineSurvivalHistory'
 import type { GuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 
 function leagueQueryPath(leagueId: string, params: Record<string, string>) {
@@ -209,13 +210,20 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         </section>
       ) : null}
 
-      {/* Chopped History */}
+      {/* Survival history: each chop and every team's path (lib/guillotine/survivalHistory.ts). */}
       <section id="guillotine-history" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
           <Skull className="h-5 w-5 text-rose-400" />
-          Chopped History
+          Survival history
         </h2>
-        {!summary?.recentChopEvents?.length ? (
+        {summary?.home?.history ? (
+          <GuillotineSurvivalHistory
+            history={summary.home.history}
+            myRosterId={summary.myRosterId}
+            closeCallMargin={summary.config?.dangerMarginPoints ?? 10}
+            onReplay={(week) => setReplayChop({ play: true, name: `Week ${week}` })}
+          />
+        ) : !summary?.recentChopEvents?.length ? (
           <p className="text-sm text-white/50">No eliminations yet.</p>
         ) : (
           <ul className="space-y-2">
