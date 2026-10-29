@@ -38,6 +38,7 @@ const SETTINGS_KEYS = [
   "leagueChatThreadId",
   "tradeReviewType",
   "vetoThreshold",
+  "vetoThresholdMode",
   "benchSize",
   "rosterPositions",
 ] as const
