@@ -52,6 +52,9 @@ vi.mock('@/lib/redraft/scoringEngine', () => ({ recalculateMatchupsForSeasonWeek
 vi.mock('@/lib/redraft/standingsEngine', () => ({ updateStandings: h.standings }))
 
 import { GET, PUT } from '@/app/api/commissioner/leagues/[leagueId]/scoring-type/route'
+import { groupSettingsChanges } from '@/lib/league-rules-explainer/explain'
+import { renderChangeLine } from '@/lib/league-rules-explainer/render'
+import { translations } from '@/lib/i18n/translations'
 
 const MLB_POINTS = { scoring_mode: 'points', unrelated: 'kept' }
 const NBA_CATS = { scoring_mode: 'h2h_category', category_preset_id: 'nba_9cat', category_record_mode: 'each' }
@@ -207,6 +210,54 @@ describe('lifecycle gate and data rule', () => {
     h.leagueRow.userId = 'someone-else'
     const res = await put({ mode: 'points' })
     expect(res.status).toBe(403)
+  })
+})
+
+describe('the "What changed" card', () => {
+  type Pub = { eventType: string; skipNotifications?: boolean; meta?: { ruleChanges?: Array<{ key: string; before: unknown; after: unknown }> } }
+  const cardEvents = () => (h.publish.mock.calls as unknown as Array<[Pub]>).map((c) => c[0]).filter((e) => e.meta?.ruleChanges)
+  const render = (changes: Array<{ key: string; before: unknown; after: unknown }>, lang: 'en' | 'es') => {
+    const [group] = groupSettingsChanges([{ id: 'e1', createdAt: '2026-10-29T12:00:00.000Z', actorUserId: 'u1', changes }], { sport: 'MLB' })
+    return (group?.lines ?? []).map((l) => renderChangeLine(l, (k) => translations[lang][k] ?? k, lang)).join(' ')
+  }
+
+  it('a switch publishes one silent card with the scoring type and category results it changed', async () => {
+    setLeague('MLB', 'pre_draft', MLB_POINTS)
+    await put({ mode: 'h2h_category', presetId: 'mlb_5x5' })
+    const cards = cardEvents()
+    expect(cards).toHaveLength(1)
+    expect(cards[0]).toMatchObject({ eventType: 'settings_changed', skipNotifications: true })
+    expect(cards[0]!.meta!.ruleChanges).toEqual([
+      { key: 'scoringMode', before: 'points', after: 'h2h_category' },
+      { key: 'categoryRecordMode', before: null, after: 'most' },
+    ])
+    const en = render(cards[0]!.meta!.ruleChanges!, 'en')
+    const es = render(cards[0]!.meta!.ruleChanges!, 'es')
+    expect(en).toMatch(/^Scoring type: /)
+    expect(es).toMatch(/^Tipo de puntuación: /)
+    expect(es).not.toMatch(/waiver/i)
+  })
+
+  it('back to points: the category results line goes with it', async () => {
+    setLeague('NBA', 'pre_draft', NBA_CATS)
+    await put({ mode: 'points' })
+    expect(cardEvents()[0]!.meta!.ruleChanges).toEqual([
+      { key: 'scoringMode', before: 'h2h_category', after: 'points' },
+      { key: 'categoryRecordMode', before: 'each', after: null },
+    ])
+  })
+
+  it('a category-list edit that keeps the type and results publishes no card', async () => {
+    setLeague('NBA', 'pre_draft', NBA_CATS)
+    await put({ mode: 'h2h_category', presetId: 'nba_8cat' })
+    expect(saved()).toBeTruthy()
+    expect(cardEvents()).toEqual([])
+  })
+
+  it('an unchanged request publishes no card', async () => {
+    setLeague('NBA', 'in_season', NBA_CATS)
+    await put({ mode: 'h2h_category', presetId: 'nba_9cat', confirmMidSeasonChange: true })
+    expect(cardEvents()).toEqual([])
   })
 })
 
