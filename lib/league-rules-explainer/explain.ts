@@ -616,6 +616,9 @@ export function explainRuleChange(change: RuleChange, snapshot: Pick<RuleSnapsho
   const before = describeValue(key, change.before ?? null, snapshot)
   const after = describeValue(key, change.after ?? null, snapshot)
   if (!before || !after) return null
+  // A change that reads the same on both sides tells members nothing — e.g. roster slots that differ
+  // only in a taxi / devy stash, which the roster sentence leaves to its own line.
+  if (sameRuleValue(before, after)) return null
   return { key, label: text(`label.${key}`), before, after, consequence: consequenceFor(key, change.before ?? null, change.after ?? null) }
 }
 
