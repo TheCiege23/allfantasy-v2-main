@@ -3,7 +3,7 @@
  * the engine's `getDangerTiers` (summary.dangerTiers) exactly as served.
  */
 
-export type DangerTierRow = { rosterId: string; displayName?: string; tier: string; pointsFromChopZone: number }
+export type DangerTierRow = { rosterId: string; displayName?: string; tier: string; pointsFromChopZone: number; immune?: boolean }
 
 export interface ChopLineRow {
   rosterId: string
@@ -14,6 +14,8 @@ export interface ChopLineRow {
   /** Points above the cut (lowest score); 0 for the chop zone. */
   margin: number
   tier: 'safe' | 'danger' | 'chop_zone'
+  /** Last week's top scorer: this week's chop cannot take it (Chop Watch, lib/guillotine/chopWatch.ts). */
+  immune: boolean
   isMe: boolean
   /** Bar width, 0–100, relative to the top score. */
   barPct: number
@@ -62,6 +64,7 @@ export function buildChopLine(
       points: scoreOf(t),
       margin: t.pointsFromChopZone,
       tier,
+      immune: t.immune === true,
       isMe: !!myRosterId && t.rosterId === myRosterId,
       barPct: top > 0 ? Math.max(4, Math.min(100, (barValue(t) / top) * 100)) : 4,
       cutAbove,
