@@ -1,4 +1,4 @@
-import { readHiddenLeagueSections } from '@/lib/league/leagueSections'
+import { readHiddenLeagueSections, type LeagueSectionId } from '@/lib/league/leagueSections'
 import LeagueSchedule from '@/components/core-app/screens/LeagueSchedule'
 import { loadTradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import LeagueMoves from '@/components/core-app/screens/LeagueMoves'
@@ -1346,6 +1346,7 @@ export default async function AfCorePage({
    * Same row as the SMS nudge above, so it costs no query. A failed read hides nothing.
    */
   const hiddenHomeSections = resolveHiddenHomeSections(shellUser?.profile?.notificationPreferences)
+  const hiddenLeagueSections = readHiddenLeagueSections(shellUser?.profile?.notificationPreferences)
 
   /*
    * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never
@@ -1619,6 +1620,7 @@ export default async function AfCorePage({
           ? { byLeague: railMatchups.byLeague, projectionWeek: railMatchups.projectionWeek }
           : null,
         hiddenHomeSections,
+        hiddenLeagueSections,
       }}
     />
   )
@@ -1946,6 +1948,7 @@ type CoreScreenContext = {
   weekLineups: WeekLineups | null
   /** Home sections switched off in Settings → Home page — lib/core-app/homeSections.ts. */
   hiddenHomeSections: ReadonlySet<HomeSectionId>
+  hiddenLeagueSections: LeagueSectionId[]
 }
 
 /**
@@ -1998,6 +2001,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     homeScope,
     favoriteIds,
     hiddenHomeSections,
+    hiddenLeagueSections,
   } = ctx
 
   /*
@@ -4476,7 +4480,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         <>
         {chimmyMovesCard}
         {segment === 'schedule' ? <LeagueSchedule data={leagueHome} /> : segment === 'moves' ? <LeagueMoves data={leagueHome} /> :         <LeagueHome
-          hiddenSections={readHiddenLeagueSections(shellUser?.profile?.notificationPreferences)}
+          hiddenSections={hiddenLeagueSections}
           data={leagueHome}
           identityInShell={leagueHeaderShown}
           tradeDeadline={homeTradeDeadline}

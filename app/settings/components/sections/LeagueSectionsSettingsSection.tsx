@@ -47,7 +47,7 @@ export function LeagueSectionsSettingsSection({ profile, onRefetch }: { profile:
 
   return <div className="space-y-5" data-testid="settings-league-sections">
     <div className="space-y-2">
-      <h2 className="text-lg font-semibold">{t('settings.leagues.title')}</h2>
+      <h2 className="text-lg font-semibold">{t('settings.leagues.displayTitle')}</h2>
       <p className="text-sm" style={{ color: 'var(--muted)' }}>{t('settings.leagues.intro')}</p>
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm font-semibold">{tInterpolate('settings.home.count', { shown: LEAGUE_SECTIONS.length - hidden.length, total: LEAGUE_SECTIONS.length })}</span>
