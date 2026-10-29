@@ -131,6 +131,11 @@ export type RuleSnapshot = {
   rookieDraftType?: string | null
   /** Days after an automatic open that the rookie draft starts by itself; null = the commissioner starts it. */
   rookieDraftAutoStartDays?: number | null
+  /**
+   * The weighted lottery that orders the rookie draft, as the engine runs it (lib/draft-lottery/): set
+   * only when `rookieDraftOrder` is `weighted_lottery`, null otherwise. Audit seeds are never here.
+   */
+  rookieDraftLottery?: RookieDraftLotteryRule | null
   /** Dynasty: what a confirmed tanking strike costs (lib/integrity/tankingPenalties.ts). */
   tankingPenalty?: TankingPenaltyRule | null
   /*
@@ -169,6 +174,21 @@ export type RuleSnapshot = {
 
 export type DraftStatus = 'scheduled' | 'in_progress' | 'completed'
 export type DraftOvernightPause = { from: string; to: string; picksAllowed: boolean }
+
+/**
+ * The rookie lottery as it actually draws (WeightedDraftLotteryEngine / standingsForLottery), not as
+ * the config spells it: `bottom_n`, `all_teams` and `custom` eligibility all take the worst `teams` of
+ * the whole league, `custom_weights` gives every team the same weight, and a `manual` fallback seats
+ * the rest in reverse standings. `picks` is capped at `teams` — the draw cannot place more.
+ */
+export type RookieDraftLotteryRule = {
+  teams: number
+  picks: number
+  /** `non_playoff`: the worst teams that missed the playoffs; `worst`: the worst teams overall. */
+  pool: 'non_playoff' | 'worst'
+  odds: 'record' | 'points_for' | 'max_pf' | 'equal'
+  rest: 'reverse_standings' | 'reverse_max_pf'
+}
 
 /** A dynasty league's tanking penalty as a rule, non-secret. */
 export type TankingPenaltyRule = {

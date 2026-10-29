@@ -583,6 +583,9 @@ export async function PATCH(
   // lazily and best-effort (lib/league-rules-explainer/loadDraftRules.ts): it never fails the save.
   const draftRules = await import('@/lib/league-rules-explainer/loadDraftRules').catch(() => null)
   const draftRulesBefore = draftRules ? await draftRules.loadDraftRulesSafe(leagueId) : null
+  // The rookie lottery's own settings, only when this save writes them (the same keys the lottery
+  // config PUT diffs). Not suppressed by a completed draft: they govern the NEXT draw.
+  const lotteryRulesBefore = draftRules && orderModePatch?.lotteryConfig ? await draftRules.loadRookieLotteryRulesSafe(leagueId) : null
 
   try {
     if (hasOrderMode && orderModePatch) {
@@ -654,7 +657,12 @@ export async function PATCH(
       leagueId,
       actorUserId: userId,
       section: 'draft',
-      changes: draftRules ? draftRules.draftRuleChanges(draftRulesBefore, await draftRules.loadDraftRulesSafe(leagueId)) : [],
+      changes: draftRules
+        ? [
+            ...draftRules.draftRuleChanges(draftRulesBefore, await draftRules.loadDraftRulesSafe(leagueId)),
+            ...(lotteryRulesBefore ? draftRules.rookieLotteryRuleChanges(lotteryRulesBefore, await draftRules.loadRookieLotteryRulesSafe(leagueId)) : []),
+          ]
+        : [],
     })
     if (orphanManagerSettingTouched) {
       const orphanModeChanged = current.draftUISettings.orphanDrafterMode !== updated.draftUISettings.orphanDrafterMode

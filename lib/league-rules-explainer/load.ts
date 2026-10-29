@@ -6,7 +6,8 @@ import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConf
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { HEADLINE_STATS } from './explain'
-import { dynastyRulesFromConfig, normalizeRosterSlots, ruleSnapshotFromLeague, taxiRulesFromEffective, type RulesLeagueRow } from './snapshot'
+import { readDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
+import { dynastyRulesFromConfig, normalizeRosterSlots, rookieDraftLotteryRule, ruleSnapshotFromLeague, taxiRulesFromEffective, type RulesLeagueRow } from './snapshot'
 import { parseSettingsChangeEvents } from './view'
 import { loadDraftRulesSafe } from './loadDraftRules'
 import type { RuleSnapshot, SettingsChangeEvent } from './types'
@@ -34,7 +35,12 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
     snapshot.format === 'dynasty' && !snapshot.importedFrom
       ? prisma.dynastyLeagueConfig
           .findUnique({ where: { leagueId }, select: { rookiePickOrderMethod: true, rookieDraftRounds: true, rookieDraftType: true } })
-          .then(dynastyRulesFromConfig)
+          .then((c) => {
+            const rules = dynastyRulesFromConfig(c)
+            // The lottery that orders it, when it does (the config lives in League.settings).
+            const lottery = rookieDraftLotteryRule(rules.rookieDraftOrder, readDraftOrderModeAndLotteryConfig(row.settings).lotteryConfig)
+            return { ...rules, rookieDraftLottery: lottery }
+          })
           .catch(() => null)
       : Promise.resolve(null),
     // The main draft: its session and settings stores (./loadDraftRules.ts). An import drafts on its platform.
