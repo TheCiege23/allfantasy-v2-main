@@ -12,6 +12,14 @@
  * The system auto-calculates using end-of-regular-season data (before playoffs start)
  * for non-playoff teams and playoff seeding/results for playoff teams.
  *
+ * 🛑 PLAYOFF TEAMS WERE ORDERED BY REGULAR-SEASON RANK, NOT BY HOW THE PLAYOFFS ENDED. The top seed was
+ * labelled "Champion" and picked last whoever won the title; the dynasty full-season simulation
+ * (phase 8, 2026-10-29) caught a 4th seed who won the final picking 6th of 9. For a league played on
+ * AllFantasy whose season bracket is complete, the playoff field and its order now come from the
+ * bracket's final standings (`RedraftPlayoffBracket.structure.finalStandings`): worst finish first,
+ * the runner-up second to last, the champion last. Without a finished bracket (an imported league,
+ * a season still being played) the older read stands.
+ *
  * AF Commissioner Subscription required.
  */
 
@@ -59,7 +67,7 @@ export async function computeRookieDraftOrder(
         select: {
           id: true, teamName: true, ownerName: true, avatarUrl: true,
           wins: true, losses: true, ties: true, pointsFor: true,
-          currentRank: true, isOrphan: true,
+          currentRank: true, isOrphan: true, claimedByUserId: true,
         },
         orderBy: { pointsFor: 'desc' },
       },
@@ -89,7 +97,9 @@ export async function computeRookieDraftOrder(
     return (b.pointsFor ?? 0) - (a.pointsFor ?? 0)
   })
 
-  const playoffTeamIds = new Set(sorted.slice(0, playoffTeamCount).map(t => t.id))
+  // The finished bracket, when there is one: who made the field, and where each team finished.
+  const finish = await loadBracketFinish(leagueId, activeTeams)
+  const playoffTeamIds = finish ? new Set(finish.keys()) : new Set(sorted.slice(0, playoffTeamCount).map(t => t.id))
 
   // Separate into non-playoff and playoff groups
   const nonPlayoff = activeTeams.filter(t => !playoffTeamIds.has(t.id))
@@ -109,7 +119,10 @@ export async function computeRookieDraftOrder(
 
   // ─── Sort playoff teams by seeding (worst seed first, champion last) ───
   // Use currentRank if available, otherwise wins desc
-  playoff.sort((a, b) => {
+  if (finish) {
+    // Worst finish first; the champion (finish 1) last.
+    playoff.sort((a, b) => finish.get(b.id)!.finish - finish.get(a.id)!.finish)
+  } else playoff.sort((a, b) => {
     const rankA = a.currentRank ?? 999
     const rankB = b.currentRank ?? 999
     // Higher rank number = worse seed = picks earlier
@@ -145,7 +158,9 @@ export async function computeRookieDraftOrder(
     const isSecondLast = i === playoff.length - 2
 
     let playoffFinish: string
-    if (isLast) playoffFinish = 'Champion'
+    const done = finish?.get(team.id)
+    if (done) playoffFinish = done.champion ? 'Champion' : done.runnerUp ? 'Runner-Up' : `Finished ${ordinal(done.finish)}`
+    else if (isLast) playoffFinish = 'Champion'
     else if (isSecondLast) playoffFinish = 'Runner-Up'
     else playoffFinish = `Seed ${team.currentRank ?? (playoffTeamCount - i)}`
 
@@ -236,4 +251,44 @@ function resolvePlayoffTeamCount(settings: Record<string, unknown>, teamCount: n
 
 function emptyResult(mode: RookieDraftOrderMode, season: number, warning: string): RookieDraftOrderResult {
   return { mode, season, basedOnSeason: season - 1, slots: [], playoffTeamCount: 0, nonPlayoffTeamCount: 0, warning }
+}
+
+const ordinal = (n: number) => {
+  const v = n % 100
+  const suffix = v >= 11 && v <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'
+  return `${n}${suffix}`
+}
+
+type BracketFinish = { finish: number; champion: boolean; runnerUp: boolean }
+
+/**
+ * League team id → its playoff finish, from the most recent completed season's finished bracket. Null
+ * unless EVERY playoff team in the bracket maps to one of this league's teams (by owner) — a partial
+ * map would order some playoff teams by the bracket and leave others out of the field.
+ */
+async function loadBracketFinish(
+  leagueId: string,
+  teams: ReadonlyArray<{ id: string; claimedByUserId: string | null }>,
+): Promise<Map<string, BracketFinish> | null> {
+  const season = await prisma.redraftSeason
+    .findFirst({
+      where: { leagueId, status: 'complete', playoffBracket: { status: 'complete' } },
+      orderBy: { season: 'desc' },
+      select: { id: true, playoffBracket: { select: { structure: true } } },
+    })
+    .catch(() => null)
+  const rows = (season?.playoffBracket?.structure as { finalStandings?: unknown } | null)?.finalStandings
+  if (!season || !Array.isArray(rows) || rows.length === 0) return null
+  const rosters = await prisma.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true, ownerId: true } })
+  const ownerOf = new Map(rosters.map((r) => [r.id, r.ownerId]))
+  const teamOfOwner = new Map(teams.filter((t) => t.claimedByUserId).map((t) => [t.claimedByUserId!, t.id]))
+  const out = new Map<string, BracketFinish>()
+  for (const raw of rows as Array<Record<string, unknown>>) {
+    // Only the playoff field: a final standing with a seed. Non-playoff teams keep the record order.
+    if (raw.seed == null || typeof raw.rosterId !== 'string' || typeof raw.finish !== 'number') continue
+    const teamId = teamOfOwner.get(ownerOf.get(raw.rosterId) ?? '')
+    if (!teamId) return null
+    out.set(teamId, { finish: raw.finish, champion: raw.champion === true, runnerUp: raw.runnerUp === true })
+  }
+  return out.size > 0 ? out : null
 }
