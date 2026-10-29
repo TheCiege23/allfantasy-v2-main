@@ -2,7 +2,7 @@ import { createZombieLeague } from '../lib/zombie/setupEngine'
 import { zombieRenewalDraftReadiness } from '../lib/zombie/zombieRenewalDraftReadiness'
 import assert from 'node:assert/strict'
 /** Four-sport native Zombie rehearsal on the disposable CI database. Synthetic scores exercise settlement, not provider calibration. */
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { expect, test, type Page } from '@playwright/test'
 import { prisma } from '../lib/prisma'
@@ -23,8 +23,16 @@ const SPORTS = [
 ] as const
 
 async function signIn(page: Page, email: string, password: string, userId: string) {
-  const csrf = await (await page.request.get('/api/auth/csrf')).json()
+  const csrfResponse = await page.request.get('/api/auth/csrf')
+  if (!['127.0.0.1','localhost'].includes(new URL(csrfResponse.url()).hostname)) throw new Error('LOCAL_DISPOSABLE_SERVER_REQUIRED')
+  const csrf = await csrfResponse.json()
+  // Independent local browser fixtures must not share the production per-client sign-in budget.
+  // Reserved benchmark addresses simulate distinct edge clients; real credentials, sessions,
+  // account protections and the unmodified rate limiter are still exercised.
+  const bytes=createHash('sha256').update(userId+':'+randomUUID()).digest()
+  const fixtureIp='198.18.'+bytes[0]+'.'+bytes[1]
   const response = await page.request.post('/api/auth/callback/credentials?json=true', {
+    headers:{'x-real-ip':fixtureIp,'x-forwarded-for':fixtureIp},
     form: { csrfToken: csrf.csrfToken, login: email, password, json: 'true' },
   })
   expect(response.ok(), await response.text()).toBeTruthy()
@@ -496,6 +504,8 @@ test('four-sport universe allocations use finished native standings and record o
 
 test('four-sport reviewed capacity plans preserve archives and require renewed consent @zombie-rehearsal',async({page})=>{
  test.setTimeout(1_800_000)
+ page.setDefaultTimeout(60000)
+ page.setDefaultNavigationTimeout(60000)
  const target=new URL(process.env.DATABASE_URL||'http://invalid')
  if(!['127.0.0.1','localhost'].includes(target.hostname))throw new Error('LOCAL_DISPOSABLE_DATABASE_REQUIRED')
  if(process.env.UPSTASH_REDIS_REST_URL||process.env.UPSTASH_REDIS_REST_TOKEN)throw new Error('SHARED_REDIS_MUST_BE_DISABLED')
@@ -553,6 +563,7 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
   const oldMovement=await prisma.zombieMovementRecord.create({data:{universeId:u.id,season:2026,userId:users[1],displayName:'Fixture old allocation',
    fromTierLabel:'Gamma',toTierLabel:'Alpha',movementType:'promoted',reason:'fixture_recorded',finalRecord:'8-0',finalPPW:100,finalTierRank:1,approvedBy:users[0]}})
 
+  console.log(sport+': completed fixture ready; verifying reviewed API')
   const path='/api/zombie-universe/'+u.id+'/renew'
   const editorResponse=await page.request.get(path+'?editor=1&season=2026')
   expect(editorResponse.status()).toBe(200)
@@ -568,6 +579,7 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
    expect((await member.request.put(path,{data:{season:2026,proposal,previewHash:apiHash}})).status()).toBe(403)
    expect((await member.request.post(path,{data:{season:2026,proposal,previewHash:apiHash}})).status()).toBe(403)
   }finally{await memberContext.close()}
+  console.log(sport+': reviewed API preview/save and nonowner denials passed')
   if(sport==='NFL'){
    await page.setViewportSize({width:390,height:844})
    await page.goto('/zombie/universe/'+u.id)

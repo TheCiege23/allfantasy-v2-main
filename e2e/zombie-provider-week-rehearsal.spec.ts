@@ -2,7 +2,7 @@
  * Player names, IDs, lines and complete week slates are recorded facts. Fixture ownership,
  * one-player lineups and the pre-existing Horde member are controlled test setup.
  */
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { expect, test, type Page } from '@playwright/test'
 import { prisma } from '../lib/prisma'
@@ -18,8 +18,16 @@ import { identityNameKey } from '../lib/redraft/rosterGameLogIdBridge'
 import recorded from './fixtures/zombie-provider-week-2026.json'
 
 async function signIn(page: Page, email: string, password: string, userId: string) {
-  const csrf = await (await page.request.get('/api/auth/csrf')).json()
+  const csrfResponse = await page.request.get('/api/auth/csrf')
+  if (!['127.0.0.1','localhost'].includes(new URL(csrfResponse.url()).hostname)) throw new Error('LOCAL_DISPOSABLE_SERVER_REQUIRED')
+  const csrf = await csrfResponse.json()
+  // Independent local browser fixtures must not share the production per-client sign-in budget.
+  // Reserved benchmark addresses simulate distinct edge clients; real credentials, sessions,
+  // account protections and the unmodified rate limiter are still exercised.
+  const bytes=createHash('sha256').update(userId+':'+randomUUID()).digest()
+  const fixtureIp='198.18.'+bytes[0]+'.'+bytes[1]
   const response = await page.request.post('/api/auth/callback/credentials?json=true', {
+    headers:{'x-real-ip':fixtureIp,'x-forwarded-for':fixtureIp},
     form: { csrfToken: csrf.csrfToken, login: email, password, json: 'true' },
   })
   expect(response.ok(), await response.text()).toBeTruthy()
