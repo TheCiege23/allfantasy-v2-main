@@ -218,11 +218,14 @@ export async function setAutoHandover(leagueId: string, userId: string, input: u
 export type AutoHandoverRunResult = { leagues: number; handedOver: number; failures: { leagueId: string; error: string }[] }
 
 /** Hourly: in leagues that opted in, hand each team idle for the chosen number of days to AllFantasy. */
-export async function runAutoHandovers(opts?: { now?: Date; limit?: number; deadline?: number }): Promise<AutoHandoverRunResult> {
+export async function runAutoHandovers(opts?: { now?: Date; limit?: number; deadline?: number; leagueIds?: string[] }): Promise<AutoHandoverRunResult> {
   const now = opts?.now ?? new Date()
   const deadline = opts?.deadline ?? Date.now() + 15_000
   const result: AutoHandoverRunResult = { leagues: 0, handedOver: 0, failures: [] }
-  const ids = await prisma.$queryRaw<Array<{ id: string }>>`
+  // `leagueIds` names the leagues to check (a single league, or a test); otherwise every league with a rule.
+  const ids = opts?.leagueIds
+    ? opts.leagueIds.map((id) => ({ id }))
+    : await prisma.$queryRaw<Array<{ id: string }>>`
     SELECT id FROM leagues WHERE settings ? ${AUTO_HANDOVER_KEY}
     ORDER BY id LIMIT ${Math.max(1, Math.min(opts?.limit ?? 200, 1000))}`
   for (const { id: leagueId } of ids) {
