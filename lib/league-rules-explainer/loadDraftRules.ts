@@ -86,12 +86,12 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
     (await lotterySeatsDraftOrder(leagueId, league))
       ? 'weighted_lottery'
       : resolveRenewDraftOrderMode(ls?.draftOrderMethod) ??
-        (rawMode === 'randomize'
-          ? 'random'
-          : // `weighted_lottery` with no lottery behind it seats exactly what `manual` does (below).
-            rawMode === 'manual' || rawMode === 'weighted_lottery'
-            ? 'manual'
-            : null)
+        // 🛑 NO SEATING PATH READS `draft_order_mode`. `buildSlotOrderForLeague` seats the saved
+        // `LeagueSettings.draftOrderSlots`, else the seat order; a random order exists only once the
+        // commissioner presses Randomize, which shuffles, saves the slots and records
+        // `draftOrderMethod: 'randomized'` (read above). So `randomize` here — the storage default —
+        // and a `weighted_lottery` with no lottery behind it both seat what `manual` does.
+        (rawMode === 'randomize' || rawMode === 'manual' || rawMode === 'weighted_lottery' ? 'manual' : null)
 
   return draftRulesFromInputs({
     sessionLabel: session?.draftModeLabel ?? null,

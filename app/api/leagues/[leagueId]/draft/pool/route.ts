@@ -39,6 +39,7 @@ import {
   readStaleDraftPoolRow,
   resolveDraftPoolCacheContext,
   triggerDraftPoolPrewarmBackground,
+  waitForInFlightDraftPoolBuild,
 } from '@/lib/draft-room/ensureDraftPoolReady'
 
 export const dynamic = 'force-dynamic'
@@ -332,6 +333,36 @@ export async function GET(
       }
     } catch (err) {
       console.warn('[draft/pool GET] stale cache read failed (non-fatal):', (err as Error).message)
+    }
+  }
+
+  // Cold: no fresh, memory or stale pool. If this process is already building the pool (the page's
+  // prewarm, which fires just before the room's first request), wait for it and serve the row it
+  // writes instead of running a second full build of the same pool alongside it.
+  if (draftPoolCacheModel?.findFirst && (await waitForInFlightDraftPoolBuild(leagueId))) {
+    try {
+      const built = await draftPoolCacheModel.findFirst({
+        where: { leagueId, sourceFingerprint: rosterFp, expiresAt: { gt: new Date() } },
+        orderBy: { syncedAt: 'desc' },
+        select: { payload: true, entryCount: true, syncedAt: true },
+      })
+      if (built?.payload && typeof built.payload === 'object') {
+        const payload = stripPoolEntryFallbacks(withDraftPoolMeta(built.payload as DraftPoolResponseBody, {
+          source: 'db-cache',
+          entryCount: Number(built.entryCount ?? 0),
+          elapsedMs: Date.now() - routeStartedAt,
+          cacheKey,
+          cachedAt: built.syncedAt instanceof Date ? built.syncedAt.toISOString() : null,
+        }))
+        console.info('[draft/pool GET] cache hit', { layer: 'joined-prewarm', leagueId, cacheKey, elapsedMs: Date.now() - routeStartedAt })
+        const outward = { ...payload } as DraftPoolResponseBody
+        await injectDraftPoolDiagnosticsIfRequested(outward, leagueId, req)
+        const response = NextResponse.json(outward, { status: 200 })
+        response.headers.set('Cache-Control', DRAFT_POOL_CACHE_CONTROL)
+        return response
+      }
+    } catch (err) {
+      console.warn('[draft/pool GET] read after joined prewarm failed (non-fatal):', (err as Error).message)
     }
   }
 

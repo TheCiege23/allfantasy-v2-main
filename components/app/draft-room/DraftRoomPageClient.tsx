@@ -105,9 +105,7 @@ import { LEAGUE_DRAFT_ROOM_REVALIDATE } from '@/lib/draft-room/emitLeagueDraftRo
 import { filterPlayersAvailableForDraftAi } from '@/lib/draft-room/availableForDraftAi'
 import { buildDraftRoomClientDiagnostics } from '@/lib/draft-room/player-pool-audit'
 import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
-import { detectSnakeBackToBackSoon, computeRedraftStarterHints } from '@/lib/draft-room/redraftPlanningHints'
-import { RedraftPlanningRibbon } from '@/components/app/draft-room/RedraftPlanningRibbon'
-import { DraftPulseStrip } from '@/components/app/draft-room/DraftPulseStrip'
+import { computeRedraftStarterHints } from '@/lib/draft-room/redraftPlanningHints'
 import { DraftIntelPanel } from '@/components/app/draft-room/DraftIntelPanel'
 import { buildDraftLookahead } from '@/lib/draft-room/draftIntelLookahead'
 import type { ManagerHistorySummary } from '@/lib/draft-room/managerDraftHistory'
@@ -612,7 +610,7 @@ export function DraftRoomPageClient({
         : ''
     return `${session.version}-${session.picks.length}-${traded}-${session.updatedAt}${onClock}`
   }, [session, currentPick])
-  /** Fallback when Chimmy SSE has not emitted (no roster yet) or intel is idle — drives RedraftPlanningRibbon. */
+  /** Fallback when Chimmy SSE has not emitted (no roster yet) or intel is idle: picks until the viewer's turn. */
   const ribbonPicksUntilUser = useMemo(() => {
     if (draftIntel?.picksUntilUser != null) return draftIntel.picksUntilUser
     if (!session || (session.status !== 'in_progress' && session.status !== 'paused')) return null
@@ -3190,36 +3188,6 @@ export function DraftRoomPageClient({
     [session?.picks, currentUserRosterId],
   )
 
-  const redraftRibbonOnDeck = useMemo(() => {
-    if (!session) return []
-    if (session.status === 'pre_draft') {
-      const order = session.slotOrder ?? []
-      return order.slice(0, 4).map((s) => ({
-        slot: s.slot,
-        displayName: s.displayName?.trim() ? s.displayName : `Team ${s.slot}`,
-      }))
-    }
-    if (!currentPick || (session.status !== 'in_progress' && session.status !== 'paused')) return []
-    const total = session.rounds * session.teamCount
-    const next = currentPick.overall + 1
-    if (next > total) return []
-    return getUpcomingPickOwners(
-      next,
-      4,
-      session.teamCount,
-      session.draftType,
-      session.thirdRoundReversal,
-      session.slotOrder,
-      total,
-    )
-  }, [session, currentPick])
-
-  const redraftBackToBackSoon = useMemo(
-    () =>
-      session ? detectSnakeBackToBackSoon(session as DraftSessionSnapshot, currentUserRosterId ?? null) : false,
-    [session, currentUserRosterId],
-  )
-
   const redraftStarterHints = useMemo(
     () =>
       presentationVariant === 'redraft_snake' && !isDynasty
@@ -5395,39 +5363,10 @@ export function DraftRoomPageClient({
           className="flex min-h-0 flex-col gap-1.5 p-1.5 lg:gap-2.5 lg:p-2.5"
           style={draftBoardSurfaceStyle}
         >
-          {/*
-            Full-width chrome stays above the lg:flex-row (LiveDraftStatusColumn + board).
-            Mount for pre_draft too on redraft_snake so Start does not jump the board stack height.
-          */}
-          {presentationVariant === 'redraft_snake' && !isDynasty && !isDraftCompleted ? (
-            <div className="w-full shrink-0">
-              <RedraftPlanningRibbon
-                preDraft={session.status === 'pre_draft'}
-                survivor={formatType === 'SURVIVOR'}
-                picksUntilUser={ribbonPicksUntilUser}
-                userOnClock={isCurrentUserOnClock}
-                onDeck={redraftRibbonOnDeck}
-                thirdRoundReversal={session.thirdRoundReversal}
-                backToBackSoon={redraftBackToBackSoon}
-                viewerRosterMissing={
-                  (session.status === 'in_progress' || session.status === 'paused') &&
-                  !(session as DraftSessionSnapshot & { currentUserRosterId?: string }).currentUserRosterId
-                }
-              />
-            </div>
-          ) : null}
-          {session.draftType !== 'auction' ? (
-            <DraftPulseStrip
-              picks={session.picks ?? []}
-              pool={players}
-              available={pulseAvailablePlayers}
-              teamCount={safeBoardTeamCount}
-              currentOverall={currentPick?.overall ?? null}
-              viewerRosterId={currentUserRosterId ?? null}
-              sport={effectiveDraftSport}
-              formatPickLabel={(overall) => formatPickLabel(overall, safeBoardTeamCount)}
-            />
-          ) : null}
+          {/* Two strips used to sit above the board: "Your pick in ~N / Next up" (RedraftPlanningRibbon)
+              and Recent picks / Position run / Your picks vs ADP (DraftPulseStrip). Both removed at the
+              user's request (2026-10-29) to match Sleeper, which shows nothing between the top bar and
+              the board. The top bar already shows the pick on the clock. */}
           {draftUISettings?.executionMode === 'offline' ? (
             <div
               className="w-full shrink-0 rounded-lg border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"

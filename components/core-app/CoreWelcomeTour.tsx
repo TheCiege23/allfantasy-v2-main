@@ -10,6 +10,17 @@ import '@/components/core-app/core-welcome-tour.css'
 
 const STORAGE_KEY = 'af-core-welcome-v1'
 
+/*
+ * ⚠ THE LAST STEP USED TO SEND EVERY NEW USER TO /core/hubs — the multi-format commissioner hubs
+ * (Zombie, Guillotine, C2C…), a screen most managers never need. It now goes where the step's own
+ * copy points: the lineup check when there are leagues, the import when there are none. Step 1 told
+ * people to "Open Leagues", a label nothing on screen carries; it names the league switcher instead,
+ * and the finish button no longer says "Core", which is our name for the app, not theirs.
+ *
+ * Shown on the home screen only (AfCoreShell) — opening it over a lineup or a trade interrupted the
+ * very task it was introducing.
+ */
+
 type Step = {
   kicker: string
   title: string
@@ -55,7 +66,9 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
       kicker: m.playKicker,
       title: m.playTitle,
       body: m.playBody,
-      action: { label: m.playAction, href: '/core/hubs' },
+      action: leagueCount > 0
+        ? { label: m.playActionReady, href: '/core/my-team' }
+        : { label: m.connectAction, href: '/import' },
     },
   ]
 
@@ -70,8 +83,15 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
   }
 
   return (
-    <aside className="af-welcome" role="dialog" aria-modal="false" aria-labelledby="af-welcome-title">
-      <div className="af-welcome-progress" aria-label={m.progress(step + 1, steps.length)}>
+    <section className="af-welcome" aria-labelledby="af-welcome-title">
+      <div
+        className="af-welcome-progress"
+        role="progressbar"
+        aria-valuemin={1}
+        aria-valuemax={steps.length}
+        aria-valuenow={step + 1}
+        aria-label={m.progress(step + 1, steps.length)}
+      >
         {steps.map((_, index) => <i key={index} data-active={index <= step} />)}
       </div>
       <button type="button" className="af-welcome-close" aria-label={m.dismiss} onClick={finish}>×</button>
@@ -87,6 +107,6 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
           <button type="button" className="af-welcome-next" onClick={finish}>{m.start}</button>
         )}
       </div>
-    </aside>
+    </section>
   )
 }
