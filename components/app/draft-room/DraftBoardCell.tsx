@@ -356,6 +356,8 @@ function DraftBoardCellInner({
             {firstName ? (
               <span className="block truncate pr-7 text-[11px] font-medium leading-[12px] opacity-80" title={pick.playerName ?? undefined}>
                 {firstName}
+                {/* The two name lines are separate blocks; keep a space so the tile's text (and a
+                    screen reader) reads "Atlas Runner", not "AtlasRunner". */}{' '}
               </span>
             ) : null}
             <span className="block truncate text-[12px] font-extrabold leading-[14px] tracking-tight" title={pick.playerName ?? undefined}>
