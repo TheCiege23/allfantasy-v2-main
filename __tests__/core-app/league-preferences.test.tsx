@@ -142,9 +142,26 @@ describe('the /core rail', () => {
     expect(container.textContent).toMatch(/4 leagues · 2 hidden/)
   })
 
+  it('links the hidden count to Settings, where unhiding lives', () => {
+    render(shell({ hiddenLeagueIds: ['b', 'c'] }))
+    const link = screen.getByTestId('rail-hidden-leagues-link')
+    expect(link.getAttribute('href')).toBe('/settings?tab=preferences&returnTo=%2Fcore#your-leagues')
+    expect(link.textContent).toMatch(/Show 2 hidden leagues/)
+    expect(link.getAttribute('data-all-hidden')).toBeNull()
+  })
+
+  it('every league hidden: the tray is not a dead end', () => {
+    const { container } = render(shell({ hiddenLeagueIds: ['a', 'b', 'c', 'd'] }))
+    expect(rowNames(container)).toEqual([])
+    const link = screen.getByTestId('rail-hidden-leagues-link')
+    expect(link.textContent).toMatch(/Show 4 hidden leagues/)
+    expect(link.getAttribute('data-all-hidden')).toBe('true')
+  })
+
   it('CONTROL: no hidden ids, every row', () => {
     const { container } = render(shell())
     expect(rowNames(container)).toEqual(['Alpha', 'Bravo', 'Charlie', 'Delta'])
+    expect(screen.queryByTestId('rail-hidden-leagues-link')).toBeNull()
   })
 })
 

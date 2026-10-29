@@ -2527,6 +2527,54 @@ html[data-mode='light'] .af-core {
   }
 }
 
+/*
+ * "Show N hidden leagues" — the last row of the scroller, not the foot: it belongs with the leagues
+ * it stands in for. It borrows the foot tiles' icon + two-line copy, so it repeats their expanded
+ * layout here (those rules are scoped to `.af-rail-foot`). Collapsed, it is a square showing the count.
+ */
+.af-core .af-rail-tile.af-rail-hidden-link {
+  flex: 0 0 auto;
+  margin-top: 6px;
+  background: var(--chip);
+  border-color: var(--chip-line);
+  color: var(--muted);
+}
+
+.af-core .af-rail-hidden-link .af-rail-foot-icon {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+@media (min-width: 721px) {
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-tile.af-rail-hidden-link,
+  .af-core.af-shell[data-rail-open='true'] .af-rail-tile.af-rail-hidden-link {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    padding: 6px 8px;
+  }
+}
+
+@media (max-width: 720px) {
+  .af-core .af-rail-tile.af-rail-hidden-link {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;
+    padding: 8px 12px;
+  }
+}
+
+/* Every league hidden: this row is the whole tray, so it reads as the primary thing to do. */
+.af-core .af-rail-tile.af-rail-hidden-link[data-all-hidden='true'] {
+  border-color: var(--accent);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .af-core .af-rail-live-state::before {
     animation: af-rail-live-pulse 1.8s ease-out infinite;
