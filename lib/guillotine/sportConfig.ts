@@ -115,16 +115,21 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     defaultTeamCount: 25,     // 26 - 1 = 25 teams
     minTeams: GUILLOTINE_MIN_TEAMS,
     maxTeams: GUILLOTINE_MAX_TEAMS,
-    scoringWindowStartDay: 1, // Monday
-    scoringWindowEndDay: 0,   // Sunday
+    // MLB periods are 7 Eastern days from the opener (lib/season-week/dailySportSeasonStarts.ts), and the
+    // 2026 and 2027 openers are both Wednesdays, so a week runs Wednesday–Tuesday — the same correction
+    // the NBA entry carries, one day later. These labels said "Monday 11am", before the week had ended.
+    // A year whose opener falls on another weekday is still covered by the hold anchored on the chop
+    // itself (getChopHoldStart below).
+    scoringWindowStartDay: 3, // Wednesday
+    scoringWindowEndDay: 2,   // Tuesday
     dailyGames: true,
     primaryGameDays: [0, 1, 2, 3, 4, 5, 6],
-    chopDay: 1,               // Monday
-    chopHourUtc: 15,          // Monday 11am ET
-    chopLabel: 'Monday 11:00 AM ET',
-    waiverDay: 2,             // Tuesday
-    waiverHourUtc: 10,        // Tuesday 6am ET
-    waiverLabel: 'Tuesday 6:00 AM ET',
+    chopDay: 4,               // Thursday (UTC) — the chop lands Wednesday night ET
+    chopHourUtc: 11,          // by Thursday 7am ET (EDT, the season's clock)
+    chopLabel: 'By Thursday 7:00 AM ET',
+    waiverDay: 5,             // Friday — a full day to bid on the chopped team's players
+    waiverHourUtc: 11,        // Friday 7am ET (EDT)
+    waiverLabel: 'Friday 7:00 AM ET',
     correctionWindowHours: 24,
     rosterSize: 23,
     notes: 'MLB: 6-7 games per team per week. Pitcher/hitter splits crucial. High game volume = depth is king. Off-days and doubleheaders add variance.',
@@ -135,16 +140,19 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     defaultTeamCount: 23,     // 24 - 1 = 23 teams
     minTeams: GUILLOTINE_MIN_TEAMS,
     maxTeams: GUILLOTINE_MAX_TEAMS,
-    scoringWindowStartDay: 1, // Monday
-    scoringWindowEndDay: 0,   // Sunday
+    // NHL periods are 7 Eastern days from the Tuesday opener (2026-09-29), so a week runs Tuesday–Monday,
+    // exactly like NBA, and the chop lands the same way. These labels said "Monday noon", a day before
+    // the week even ended, and a Tuesday waiver run fell before the chop it was meant to follow.
+    scoringWindowStartDay: 2, // Tuesday
+    scoringWindowEndDay: 1,   // Monday
     dailyGames: true,
     primaryGameDays: [1, 2, 3, 4, 5, 6],
-    chopDay: 1,               // Monday
-    chopHourUtc: 16,          // Monday noon ET
-    chopLabel: 'Monday 12:00 PM ET',
-    waiverDay: 2,             // Tuesday
-    waiverHourUtc: 12,        // Tuesday 7am ET
-    waiverLabel: 'Tuesday 7:00 AM ET',
+    chopDay: 3,               // Wednesday (UTC) — the chop lands Tuesday night ET
+    chopHourUtc: 11,          // by Wednesday 7am ET
+    chopLabel: 'By Wednesday 7:00 AM ET',
+    waiverDay: 4,             // Thursday — a full day to bid on the chopped team's players
+    waiverHourUtc: 12,        // Thursday 7am ET
+    waiverLabel: 'Thursday 7:00 AM ET',
     correctionWindowHours: 24,
     rosterSize: 16,
     notes: 'NHL: 3-4 games per team per week. Goalie starts are volatile. Back-to-backs matter for goaltender scoring.',

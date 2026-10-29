@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useRouter } from 'next/navigation'
@@ -46,6 +47,7 @@ import {
   portfolioSubtitleText,
   rivalLastText,
 } from '@/lib/core-app/dashboard3aCopy'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 3a — Dashboard, all leagues.
@@ -584,7 +586,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
             {tokensLeft != null ? (
               <>
                 <i />
-                <span className="af3a-mono">{tokensLeft.toLocaleString()}</span> TOKENS LEFT
+                <span className="af3a-mono">{tokensLeft.toLocaleString(getAppIntlLocale())}</span> TOKENS LEFT
               </>
             ) : null}
           </span>
@@ -1025,14 +1027,14 @@ export function Dash3ACareer({ career, freshness = null }: { career: CareerData 
                           {es ? 'XP de rango' : 'Rank XP'}
                           {career.levelName ? ` · ${career.levelName}` : ''}
                         </span>
-                        <b className="af3a-mono">{career.xp.total.toLocaleString()}</b>
+                        <b className="af3a-mono">{career.xp.total.toLocaleString(getAppIntlLocale())}</b>
                       </div>
                       <div className="af3a-xp-bar">
                         <span style={{ width: `${Math.max(0, Math.min(100, career.xp.progressPct ?? 0))}%` }} />
                       </div>
                       {career.xp.toNext != null && career.nextLevelName ? (
                         <p className="af3a-xp-note">
-                          {career.xp.toNext.toLocaleString()} XP {es ? 'para' : 'to'} {career.nextLevelName}
+                          {career.xp.toNext.toLocaleString(getAppIntlLocale())} XP {es ? 'para' : 'to'} {career.nextLevelName}
                         </p>
                       ) : null}
                     </div>
@@ -1276,7 +1278,7 @@ export function Dash3ALeagues({
                     key={l.id}
                     className="af3a-league"
                     /* Straight to /core — /dashboard only redirects here, a round trip per tap. */
-                    href={`/core?league=${encodeURIComponent(l.id)}`}
+                    href={leagueEntryHref(l)}
                   >
                     <span className={`af3a-tile ${platformClass(l.platform)}`}>
                       <Mark src={l.imageUrl} alt={l.name ?? (es ? 'Liga' : 'League')} letter={Array.from(l.name?.trim() || "L")[0]} />

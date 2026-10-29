@@ -26,7 +26,7 @@ export function buildSurvivorFullSeasonPlan(input: {
   sport: string; season: number; castSize: number; draftAt?: Date; now?: Date; endWeek?: number; exileEnabled?: boolean; exileReturnWeek?: number; finalistCount?: 2 | 3
 }): SurvivorFullSeasonPlan {
   const sport = input.sport.toUpperCase()
-  if (!isSurvivorPlanSport(sport)) throw new Error('Full-season planning currently supports NFL, NBA and NHL.')
+  if (!isSurvivorPlanSport(sport)) throw new Error('Full-season planning currently supports NFL, NBA, NHL and MLB.')
   const opener = planSeasonOpener(sport, input.season)
   const lastDay = planRegularSeasonLastDay(sport, input.season)
   if (!opener || !lastDay) throw new Error(`The ${sport} ${input.season} season calendar has not been verified yet.`)

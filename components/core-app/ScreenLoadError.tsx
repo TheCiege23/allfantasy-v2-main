@@ -1,3 +1,5 @@
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+
 /**
  * "This screen's data did not load" — for a league-scoped /core screen whose
  * read FAILED, as distinct from one with no league in context.
@@ -23,15 +25,27 @@
  * request — a plain link does that, needs no client bundle, and cannot itself
  * fail to hydrate. Two surfaces, two genuinely different jobs.
  */
-export function ScreenLoadError({ screen, retryHref }: { screen: string; retryHref: string }) {
+export function ScreenLoadError({
+  screen,
+  retryHref,
+  language = 'en',
+}: {
+  screen: string
+  retryHref: string
+  /** Server-rendered, so it cannot read the client provider; page.tsx passes the cookie's language. */
+  language?: string
+}) {
+  const es = language === 'es'
+  const name = coreUiCopy(screen, language)
   return (
     <div className="af-card" role="alert" style={{ padding: 24, maxWidth: 720 }}>
       <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-        {screen} did not load
+        {es ? `${name}: no se pudo cargar` : `${name} did not load`}
       </h1>
       <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-        Something failed on our side while reading this league. Your league and its settings are
-        untouched — nothing has changed.
+        {es
+          ? 'Algo falló de nuestra parte al leer esta liga. Tu liga y su configuración no se han tocado: no cambió nada.'
+          : 'Something failed on our side while reading this league. Your league and its settings are untouched — nothing has changed.'}
       </p>
       {/*
         A plain link, not a button: this is a server component, and re-requesting
@@ -40,7 +54,7 @@ export function ScreenLoadError({ screen, retryHref }: { screen: string; retryHr
         behaviour this component exists to stop.
       */}
       <a className="af-btn" href={retryHref} style={{ marginTop: 14, display: 'inline-flex' }}>
-        Try again
+        {coreUiCopy('Try again', language)}
       </a>
     </div>
   )

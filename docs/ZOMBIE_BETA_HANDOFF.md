@@ -107,3 +107,31 @@ A reason of 10-1,000 characters is required. Preview is read-only. Saving a revi
 No schema migration, provider requests, external messages, money transfers or production changes are involved. Additional current NFL ADP access remains deferred by the owner. Physical iPhone acceptance and a real-manager scoring window remain open beta requirements. Engineering completion remains an estimate of about 96%; this is not a production release or live beta acceptance.
 
 Implementation references: Sleeper [league resizing](https://support.sleeper.com/en/articles/4000484-how-to-decrease-league-size) and [nonplaying commissioners](https://support.sleeper.com/en/articles/3231520-can-i-commish-a-league-without-owning-a-team). AllFantasy explicitly reviews every returning manager before changing the next-season field and preserves the completed season.
+
+
+## Completed-season iPhone renewal fixture — October 29
+
+The isolated Railway staging database now contains **SYNTHETIC Renewal QA - NFL**, a two-level, two-league completed one-week fixture owned by the existing staging commissioner. It was built with canonical league creation on disposable localhost PostgreSQL, validated with the real editor and expansion preview, then inserted as one transaction through the staging Neon connection. No schema changes or existing-account updates were used.
+
+- [Open the synthetic universe](https://zombie-web-staging.up.railway.app/zombie/universe/c5f33250-3aa8-42f9-8f93-243da15f63a7).
+- Gamma source league: `1e71282a-e249-49ba-b16e-f976a50e76e9`; Alpha: `6bde01d8-951c-4c0f-b02a-5bc9649ffa74`.
+- Sixteen distinct fixture managers, including the existing commissioner. Fifteen synthetic accounts have `.invalid` email addresses and no passwords. They are fixture identities, not recruited beta participants.
+- Eight synthetic final matchups and two completed fixture-week records. The season, announcement and audit records explicitly label the data synthetic. No provider-scored week, real draft, buy-in, winning amount or payout is implied.
+- Private league settings; no league listings or active invite records were copied. No next-season league has been created yet.
+- Original NFL/NBA/NHL/MLB test leagues remain setup/week zero with unstarted drafts.
+
+### Safari rehearsal
+
+1. Sign in on the owner's iPhone and open the universe above. Select **Edit placements and capacity**.
+2. Change both destination leagues from eight to ten seats, enter a reason, and preview. Expect 16 returning managers, 20 seats and four open seats.
+3. Save the review, refresh and restore it. Search for a manager, move a manager between leagues and preview again. Edits must remove prior approval.
+4. Check the keyboard, scrolling, destination selectors and buttons in portrait and landscape. Report iPhone/iOS version, load time and any clipped control or error.
+5. Creation is optional and limited to this synthetic universe. Review every placement before creating 2027. Inspect the new separate leagues: open expansion seats, empty player rosters, unscheduled/unstarted drafts and preserved 2026 sources. Expansion drafts must remain blocked while seats are open.
+
+Physical-device acceptance is pending the owner's report. Live-manager scoring acceptance remains pending real participants. Current NFL ADP provider access remains deferred.
+
+### CI follow-up
+
+The 8d789a5 rehearsal passed the native lifecycle and automatic/standalone renewal cases but exposed two remaining failures: an optional age-confirmation dialog covered renewal controls, and shared scoring loaded the campus module before checking whether the league was football C2C. The follow-up exercises the dialog's actual **Not now** action, waits for the editor response, and applies the existing pure C2C predicate before the lazy campus import. It retains the real authentication, approval, capacity and scoring assertions. Final hosted verification must be recorded separately; do not present a queued run or partial pass as a complete gate.
+
+Local follow-up verification passed **79 tests in 12 files**, including the 53 Zombie renewal/access/approval cases and campus matchup/scoring regressions, on the integrated source with the format guard. The localhost browser re-run and new hosted verdict are tracked separately.

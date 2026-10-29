@@ -25,6 +25,7 @@ import {
   autopilotRosterIds,
   DEFAULT_AUTOPILOT_STYLE,
   isAutopilotStyle,
+  managedForOwner,
   planBestLineup,
   readManagedLineups,
   suggestInactiveTeams,
@@ -116,7 +117,7 @@ export async function setInactiveManagerMode(leagueId: string, userId: string, r
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'AllFantasy can only set lineups in leagues it runs.' }
-  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true } })
+  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true } })
   if (!roster) return { ok: false, status: 404, error: 'That team is not in this league.' }
 
   let changed = false
@@ -124,7 +125,7 @@ export async function setInactiveManagerMode(leagueId: string, userId: string, r
     if (Boolean(current[rosterId]) === on) return null
     changed = true
     const next = { ...current }
-    if (on) next[rosterId] = { since: new Date().toISOString(), byUserId: userId }
+    if (on) next[rosterId] = { since: new Date().toISOString(), byUserId: userId, ownerUserId: roster.platformUserId ?? null }
     else delete next[rosterId]
     return next
   })
@@ -151,7 +152,7 @@ export async function setChimmyAutopilot(leagueId: string, userId: string, roste
   if (nextStyle !== null && !(await autopilotEntitled(league.userId))) {
     return { ok: false, status: 402, error: 'Chimmy autopilot is part of the AF Commissioner plan.' }
   }
-  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true } })
+  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true } })
   if (!roster) return { ok: false, status: 404, error: 'That team is not in this league.' }
 
   let changed = false
@@ -166,7 +167,7 @@ export async function setChimmyAutopilot(leagueId: string, userId: string, roste
     }
     if (entry?.autopilot?.style === nextStyle) return null
     changed = true
-    const base = entry ?? { since: now, byUserId: userId }
+    const base = entry ?? { since: now, byUserId: userId, ownerUserId: roster.platformUserId ?? null }
     return { ...current, [rosterId]: { ...base, autopilot: { style: nextStyle, since: entry?.autopilot?.since ?? now, byUserId: userId } } }
   })
   if (changed) {
@@ -224,10 +225,76 @@ export async function setDraftAsMe(leagueId: string, userId: string, on: unknown
  */
 export async function isOwnerOnAutopilot(leagueId: string, ownerId: string): Promise<boolean> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-  const ids = autopilotRosterIds(readManagedLineups(league?.settings))
+  const managed = readManagedLineups(league?.settings)
+  const ids = autopilotRosterIds(managed)
   if (ids.length === 0) return false
   const hit = await prisma.roster.findFirst({ where: { leagueId, id: { in: ids }, platformUserId: ownerId }, select: { id: true } })
-  return Boolean(hit)
+  // Autopilot switched on for a previous owner does not speak for this one: their trades go through.
+  return Boolean(hit) && managedForOwner(managed[hit!.id]!, ownerId) !== 'new_owner'
+}
+
+export const NEW_OWNER_ENDED_ACTION = 'inactive_manager_mode.ended_new_owner'
+
+/**
+ * A team that changed hands since its mode was switched on is its new owner's now: end the mode and tell
+ * the commissioner who switched it on (and the league owner). Entries from before owners were recorded
+ * are stamped with the current owner, so a later change is caught. Returns the roster ids ended.
+ */
+export async function endManagedForNewOwners(leagueId: string, commissionerId: string | null, leagueName: string | null): Promise<string[]> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const managed = readManagedLineups(league?.settings)
+  const ids = Object.keys(managed)
+  if (ids.length === 0) return []
+  const rosters = await prisma.roster.findMany({ where: { leagueId, id: { in: ids } }, select: { id: true, platformUserId: true } })
+  const owner = new Map(rosters.map((r) => [r.id, r.platformUserId ?? null]))
+  const changed = ids.filter((id) => owner.has(id) && managedForOwner(managed[id]!, owner.get(id)) === 'new_owner')
+  const unstamped = ids.filter((id) => owner.has(id) && managedForOwner(managed[id]!, owner.get(id)) === 'unstamped')
+  if (changed.length === 0 && unstamped.length === 0) return []
+  const ended: Array<{ rosterId: string; entry: ManagedLineup }> = []
+  await updateManaged(leagueId, (current) => {
+    const next = { ...current }
+    let touched = false
+    for (const id of ids) {
+      const entry = next[id]
+      if (!entry || !owner.has(id)) continue
+      const state = managedForOwner(entry, owner.get(id))
+      if (state === 'new_owner') {
+        ended.push({ rosterId: id, entry })
+        delete next[id]
+        touched = true
+      } else if (state === 'unstamped') {
+        next[id] = { ...entry, ownerUserId: owner.get(id) ?? null }
+        touched = true
+      }
+    }
+    return touched ? next : null
+  })
+  for (const { rosterId, entry } of ended) {
+    const wasAutopilot = Boolean(entry.autopilot)
+    await logAction({
+      leagueId,
+      userId: entry.byUserId,
+      actionType: NEW_OWNER_ENDED_ACTION,
+      entityType: 'roster',
+      entityId: rosterId,
+      metadata: { rosterId, reason: 'new_owner', previousOwnerId: entry.ownerUserId ?? null, newOwnerId: owner.get(rosterId) ?? null, autopilot: wasAutopilot },
+    }).catch(() => {})
+    const to = [...new Set([entry.byUserId, commissionerId].filter((v): v is string => Boolean(v)))]
+    await dispatchNotification({
+      userIds: to,
+      category: 'commissioner_alerts',
+      type: 'inactive_manager_new_owner',
+      title: `A team has a new owner · ${leagueName ?? 'your league'}`,
+      body: `${wasAutopilot ? 'Chimmy autopilot' : 'AllFantasy lineup management'} was switched on for a team that now has a new owner, so it has been turned off. The new owner runs the team from here, and trades offered to them go through as normal.`,
+      severity: 'low',
+      leagueId,
+      actionHref: `/league/${leagueId}`,
+      actionLabel: 'Open league',
+      dedupePrefix: `inactive-manager-new-owner:${leagueId}:${rosterId}:${entry.since}`,
+      meta: { leagueId, rosterId },
+    }).catch(() => {})
+  }
+  return ended.map((e) => e.rosterId)
 }
 
 /**
@@ -290,8 +357,14 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
     try {
       const league = await prisma.league.findUnique({ where: { id: leagueId } })
       if (!league) continue
+      // A team that has changed hands is its new owner's: end its mode before anything acts on it.
+      const endedForNewOwner = new Set(await endManagedForNewOwners(leagueId, league.userId, league.name ?? null).catch((e) => {
+        console.warn('[inactive-manager] new-owner sweep skipped', { leagueId, error: String(e) })
+        return [] as string[]
+      }))
+      for (const _ of endedForNewOwner) skip('new_owner')
       const managedEntries = readManagedLineups(league.settings)
-      const managed = Object.keys(managedEntries)
+      const managed = Object.keys(managedEntries).filter((id) => !endedForNewOwner.has(id))
       const status = String(league.status ?? league.lifecycleState ?? '').toLowerCase()
       const week = leagueWeekFromSettings(league.settings)
       const season = league.season
@@ -429,7 +502,14 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
       const league = await prisma.league.findUnique({ where: { id: leagueId } })
       if (!league) continue
       const managed = readManagedLineups(league.settings)
-      const autopilot = autopilotRosterIds(managed)
+      // A team that has changed hands is its new owner's: Chimmy claims nothing for it.
+      const endedForNewOwner = autopilotRosterIds(managed).length
+        ? new Set(await endManagedForNewOwners(leagueId, league.userId, league.name ?? null).catch((e) => {
+        console.warn('[inactive-manager] new-owner sweep skipped', { leagueId, error: String(e) })
+        return [] as string[]
+      }))
+        : new Set<string>()
+      const autopilot = autopilotRosterIds(managed).filter((id) => !endedForNewOwner.has(id))
       if (autopilot.length === 0) continue
       result.leagues += 1
       const status = String(league.status ?? league.lifecycleState ?? '').toLowerCase()

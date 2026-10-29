@@ -4,6 +4,7 @@ import { useTradeVisualCopy } from "./useTradeVisualCopy"
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Offers across your leagues — the strip above the Trade Center's league
@@ -102,7 +103,7 @@ function deadlineLine(league: StripLeague): string {
 function lastOfferLine(last: LastOffer | null): string {
   if (!last) return 'No recent offer in this feed'
   const date = last.at && Number.isFinite(Date.parse(last.at))
-    ? ` · ${new Date(last.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''
+    ? ` · ${new Date(last.at).toLocaleDateString(getAppIntlLocale(), { month: 'short', day: 'numeric' })}` : ''
   if (last.direction === 'outgoing') return `Last sent offer${last.partner ? ` · to ${last.partner}` : ''}${date}`
   return `Last received offer${last.partner ? ` · from ${last.partner}` : ''}${date}`
 }

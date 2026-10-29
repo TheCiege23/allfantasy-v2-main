@@ -32,6 +32,7 @@ function fakeDb(opts: { sealed?: boolean } = {}) {
         season: 2026,
         sport: 'NHL',
         status: 'in_season',
+        currentWeek: 5,
         league: { platform: 'allfantasy', sport: 'NHL', settings: {}, bestBallMode: false, leagueVariant: null, leagueType: 'redraft' },
       })),
     },
@@ -185,7 +186,10 @@ describe('runStatReingest', () => {
     const [params, finalizeDeps] = (d.finalizeWeek as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(params).toEqual({ seasonId: 'season1', week: 1 })
     expect(typeof finalizeDeps.notifyResults).toBe('function')
-    expect(d.standings).toHaveBeenCalledWith('season1', 1)
+    // Through the season's live week, never the rescored week: weeks 2-4 would drop out of the record.
+    expect(d.standings).toHaveBeenCalledTimes(1)
+    expect(d.standings).toHaveBeenCalledWith('season1', 5)
+    expect(out.rescore?.standingsThroughWeek).toBe(5)
     expect(out.rescore?.applied[0]).toMatchObject({ week: 1, scoresUpserted: 4, reSeal: { finalized: true } })
     expect(fx.db.leagueAuditLog.create).toHaveBeenCalledTimes(1)
   })
@@ -196,6 +200,22 @@ describe('runStatReingest', () => {
     expect(out.rescore?.wrote).toBe(true)
     expect(d.syncWeek).toHaveBeenCalledTimes(2)
     expect(d.recalcWeek).toHaveBeenCalledTimes(2)
+    // One standings rebuild for the whole run, through the live week (5), not once per week.
+    expect(d.standings).toHaveBeenCalledTimes(1)
+    expect(d.standings).toHaveBeenCalledWith('season1', 5)
+  })
+
+  it('a standings failure is reported and makes the run not ok', async () => {
+    const d = deps(fx.db, {
+      loadWeekStats: vi.fn(async () => new Map(['r1', 'r2', 'r3', 'r4'].map((r) => [`g-${r}`, { g_win: 0 }]))),
+      standings: vi.fn(async () => {
+        throw new Error('standings exploded')
+      }),
+    })
+    const out = await runStatReingest(req({ dryRun: false, confirm: true, skipIngest: true }), 'admin:x', d)
+    expect(out.rescore?.wrote).toBe(true)
+    expect(out.rescore?.standingsError).toBe('standings exploded')
+    expect(out.ok).toBe(false)
   })
 
   it('does not re-seal a week that was not sealed', async () => {

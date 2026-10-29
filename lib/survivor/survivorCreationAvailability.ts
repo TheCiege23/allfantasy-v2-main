@@ -1,5 +1,5 @@
 /** New Survivor league creation rollout. Existing leagues remain playable in every sport. */
-export const SURVIVOR_CREATION_SPORTS = ['NBA', 'NFL', 'NHL'] as const
+export const SURVIVOR_CREATION_SPORTS = ['NBA', 'NFL', 'NHL', 'MLB'] as const
 
 export function isSurvivorCreationSportAvailable(sport: string): boolean {
   return (SURVIVOR_CREATION_SPORTS as readonly string[]).includes(sport.trim().toUpperCase())
@@ -13,7 +13,7 @@ export function isSurvivorDefaultFormatSport(sport: string): boolean {
 }
 
 export const SURVIVOR_CREATION_UNAVAILABLE_MESSAGE =
-  'New Survivor leagues are available for NBA, NFL and NHL. Other sports will be added after their season flows are ready.'
+  'New Survivor leagues are available for NBA, NFL, NHL and MLB. Other sports will be added after their season flows are ready.'
 
 /**
  * ⚠ ALLFANTASY TAKES NO PAYMENTS OF ANY KIND. Every Survivor league is free to create and run.

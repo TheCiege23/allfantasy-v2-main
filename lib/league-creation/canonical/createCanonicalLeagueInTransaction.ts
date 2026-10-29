@@ -503,10 +503,10 @@ export async function createCanonicalLeagueInTransaction(
       endWeek: typeof setup.survivorSeasonEndWeek === 'number' ? setup.survivorSeasonEndWeek : undefined })
     // Persist the same slots consumed by the draft, lineup, waivers, and readiness resolver. NFL
     // keeps its existing roster path; only the daily sports carry this per-sport slot record.
-    if (sport === 'NBA' || sport === 'NHL') mergedSettings[sport.toLowerCase() + '_roster_config'] = { slots: {
+    if (sport === 'NBA' || sport === 'NHL' || sport === 'MLB') mergedSettings[sport.toLowerCase() + '_roster_config'] = { slots: {
       ...(foundationDefaults.rosterSettings.starter_slots as Record<string, number>),
       BN: readNumber(foundationDefaults.rosterSettings, 'benchSlots', 0),
-      [sport === 'NBA' ? 'IL' : 'IR']: readNumber(foundationDefaults.rosterSettings, 'irSlots', 0),
+      [sport === 'NHL' ? 'IR' : 'IL']: readNumber(foundationDefaults.rosterSettings, 'irSlots', 0),
     } }
     // Keep creation-time Exile choices consistent with the saved season calendar.
     Object.assign(mergedSettings, { exileIslandEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: plan.exileReturnWeek ?? exileSettings.exileReturnWeek, exileReturnTokens: exileSettings.exileReturnTokens })

@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
     appUser: { findUnique: vi.fn().mockResolvedValue(null) },
   },
   publish: vi.fn(),
+  draftReads: [] as Array<Record<string, unknown> | null>,
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
@@ -34,12 +35,18 @@ vi.mock('@/lib/league/settingsLifecycleGate', () => ({
   recordMidSeasonSettingsChange: vi.fn(),
 }))
 
+vi.mock('@/lib/league-rules-explainer/loadDraftRules', async (importActual) => {
+  const actual = await importActual<typeof import('@/lib/league-rules-explainer/loadDraftRules')>()
+  return { ...actual, loadDraftRulesSafe: vi.fn(async () => m.draftReads.shift() ?? null) }
+})
+
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 
 let row: Record<string, unknown>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  m.draftReads = []
   row = {
     id: 'L',
     platform: 'allfantasy',
@@ -83,5 +90,25 @@ describe('executeLeagueSettingsPatch → settings_changed.meta.ruleChanges', () 
     expect(res.status).toBe(200)
     const meta = await publishedMeta()
     expect(meta).not.toHaveProperty('ruleChanges')
+  })
+
+  it('a draft field adds the main draft\'s before/after, read from the draft stores (loadDraftRules)', async () => {
+    m.prisma.leagueSettings.upsert.mockResolvedValue({ draftDateUtc: null })
+    m.draftReads = [
+      { draftStatus: 'scheduled', draftType: 'snake', draftPickSeconds: 90 },
+      { draftStatus: 'scheduled', draftType: 'snake', draftPickSeconds: 28800 },
+    ]
+    const res = await executeLeagueSettingsPatch('commish', { leagueId: 'L', pickTimerPreset: '8h' })
+    expect(res.status).toBe(200)
+    const meta = await publishedMeta()
+    expect(meta.ruleChanges).toEqual([{ key: 'draftPickSeconds', before: 90, after: 28800 }])
+  })
+
+  it('a save with no draft field never reads the draft stores', async () => {
+    m.draftReads = [{ draftPickSeconds: 90 }, { draftPickSeconds: 60 }]
+    await executeLeagueSettingsPatch('commish', { leagueId: 'L', tradeDeadlineWeek: 13 })
+    const meta = await publishedMeta()
+    expect(meta.ruleChanges).toEqual([{ key: 'tradeDeadlineWeek', before: 12, after: 13 }])
+    expect(m.draftReads).toHaveLength(2)
   })
 })

@@ -95,6 +95,8 @@ export interface DynastySettingsEffectiveDto {
   rookieDraftAutoOpenSource: 'commissioner' | 'plan_default' | 'plan_default_predates' | 'free_default'
   /** `YYYY-MM-DD` overriding the sport's window for one offseason; null = sport default. */
   rookieDraftCustomOpenDate: string | null
+  /** Days after an automatic open that the rookie draft starts by itself; null = the commissioner presses Start. */
+  rookieDraftAutoStartDays: 3 | 7 | 14 | null
   /** The sport's default window in words ("May", "November–January"); null when the sport has none. */
   rookieDraftWindowLabel: string | null
 }

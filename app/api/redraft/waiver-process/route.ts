@@ -216,6 +216,76 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Fill an empty starting spot before lock (lib/lineup-automation/fillEmptyStartersService): on by
+   * default in every weekly-lineup league played on AllFantasy, unless the commissioner switched it off.
+   * Fills only empty spots from the bench and tells the commissioner about a spot nobody can play.
+   * Guarded and on its own job identity, like the sweeps around it.
+   */
+  let fillEmptyStarters: unknown = null
+  try {
+    const { runFillEmptyStarters } = await import('@/lib/lineup-automation/fillEmptyStartersService')
+    fillEmptyStarters = await withSyncJobRun(
+      { jobName: 'cron-fill-empty-starters', trigger: 'cron' },
+      () => runFillEmptyStarters(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.filled,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, flagged: r.flagged, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] fill empty starters failed', e)
+    fillEmptyStarters = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Taxi deadline notices (lib/taxi/taxiDeadlineNoticeService): in the week a taxi promotion deadline
+   * or lock week closes, every owner is told before it does and the commissioner gets a summary. Leagues
+   * with taxi enforcement on (AF Commissioner). Guarded and on its own job identity, like the sweeps around it.
+   */
+  let taxiDeadlines: unknown = null
+  try {
+    const { runTaxiDeadlineNotices } = await import('@/lib/taxi/taxiDeadlineNoticeService')
+    taxiDeadlines = await withSyncJobRun(
+      { jobName: 'cron-taxi-deadline-notices', trigger: 'cron' },
+      () => runTaxiDeadlineNotices(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.notified,
+        errors: r.failures.map((f) => `${f.leagueId}: ${f.error}`),
+        metadata: { skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] taxi deadline notices failed', e)
+    taxiDeadlines = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * "What AllFantasy did this week" (lib/commissioner-hub/weeklyAutomationRecapService): on Mondays,
+   * one message per league to its commissioner summing up the automations' own actions last week.
+   * Guarded and on its own job identity, like the sweeps around it.
+   */
+  let automationRecaps: unknown = null
+  try {
+    const { runWeeklyAutomationRecaps } = await import('@/lib/commissioner-hub/weeklyAutomationRecapService')
+    automationRecaps = await withSyncJobRun(
+      { jobName: 'cron-weekly-automation-recap', trigger: 'cron' },
+      () => runWeeklyAutomationRecaps(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.sent,
+        errors: r.failures.map((f) => `${f.leagueId}: ${f.error}`),
+        metadata: { nothing: r.nothing, alreadySent: r.alreadySent },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] weekly automation recap failed', e)
+    automationRecaps = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Chimmy autopilot (AF Commissioner): teams on autopilot claim a free agent for a starting slot
    * nobody healthy on the roster can fill. Before the waiver window below, so a claim made now can be
    * processed in the same run. Guarded and on its own job identity, like the sweeps above.
@@ -379,5 +449,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autoBenchByes, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autoBenchByes, fillEmptyStarters, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

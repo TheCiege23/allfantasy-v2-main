@@ -242,6 +242,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: ['ncaaf_half_ppr'],
       NBA: ['nba_points'],
       NHL: ['nhl_points'],
+      MLB: ['mlb_points'],
     },
     tournament: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
@@ -343,6 +344,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: [...SURVIVOR_CREATE_CAST_SIZES],
       NBA: [...SURVIVOR_CREATE_CAST_SIZES],
       NHL: [...SURVIVOR_CREATE_CAST_SIZES],
+      MLB: [...SURVIVOR_CREATE_CAST_SIZES],
     },
     tournament: {
       NFL: [32, 64, 96, 128, 160, 192, 224],

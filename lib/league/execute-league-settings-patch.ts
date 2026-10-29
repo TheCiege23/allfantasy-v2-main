@@ -47,6 +47,7 @@ import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/league-log/leagueLog'
 import { ELIMINATED_LINEUP_RULE_KEY, parseEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLineups'
 import { IR_AUTO_MOVE_KEY, parseIrAutoMoveRule } from '@/lib/ir-activation/irAutoMove'
+import { FILL_EMPTY_STARTERS_KEY } from '@/lib/lineup-automation/fillEmptyStarters'
 import { ORPHAN_AUCTION_KEY } from '@/lib/orphan-auction/orphanAuction'
 import { parsePickTermsRule, PICK_TERMS_KEY, PICK_TERMS_RULE_KEY } from '@/lib/league-trade-engine/pickTerms'
 import { parseTaxiStealingRule, readTaxiStealingRule, TAXI_STEAL_CLAIMS_KEY, TAXI_STEALING_KEY } from '@/lib/taxi/taxiStealing'
@@ -891,6 +892,12 @@ export async function executeLeagueSettingsPatch(
     ;(merge as Record<string, unknown>)[IR_AUTO_MOVE_KEY] = parsed.value
   }
 
+  // Fill an empty starting spot before lock (lib/lineup-automation/fillEmptyStarters.ts) — free, on by
+  // default; the commissioner can switch it off. Only a true/false is stored, so nothing else reads as off.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && FILL_EMPTY_STARTERS_KEY in merge) {
+    if (typeof (merge as Record<string, unknown>)[FILL_EMPTY_STARTERS_KEY] !== 'boolean') return jsonError('Send true or false to fill empty starting spots.', 400)
+  }
+
   // Conditional and protected picks (lib/league-trade-engine/pickTerms.ts) — an AF Commissioner rule;
   // switching it off is free. The terms themselves are written only by a settled trade.
   if (merge && typeof merge === 'object' && !Array.isArray(merge) && PICK_TERMS_KEY in merge) {
@@ -991,6 +998,15 @@ export async function executeLeagueSettingsPatch(
     }
     dailyWaiverScheduleToStore = schedule
   }
+
+  /*
+   * The main draft's rules before the writes (lib/league-rules-explainer/loadDraftRules.ts), when this
+   * save can move one: they live on LeagueSettings and the draft session, which the league-row diff
+   * below cannot see. Dynamic import, best-effort: a failed read only drops the draft lines.
+   */
+  const draftRulesModule = await import('@/lib/league-rules-explainer/loadDraftRules').catch(() => null)
+  const draftRules = draftRulesModule?.patchTouchesDraftRules(body) ? draftRulesModule : null
+  const draftRulesBefore = draftRules ? await draftRules.loadDraftRulesSafe(leagueId) : null
 
   const updatedFieldNames: string[] = []
 
@@ -1514,6 +1530,9 @@ export async function executeLeagueSettingsPatch(
   let ruleChanges: ReturnType<typeof diffRuleSnapshots> = []
   try {
     if (fresh) ruleChanges = diffRuleSnapshots(ruleSnapshotFromLeague(league), ruleSnapshotFromLeague(fresh))
+    if (draftRules && draftRulesBefore) {
+      ruleChanges = [...ruleChanges, ...draftRules.draftRuleChanges(draftRulesBefore, await draftRules.loadDraftRulesSafe(leagueId))]
+    }
   } catch (e) {
     console.warn('[executeLeagueSettingsPatch] rule change diff', e instanceof Error ? e.message : 'unknown error')
   }

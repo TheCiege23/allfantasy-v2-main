@@ -11,10 +11,12 @@ vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 import {
   DYNASTY_SEASONS,
   FULL_SEASON_GAMES,
+  DEEP_PICK_ROUND_SHARE,
   FUTURE_DISCOUNT,
   PROSPECT_WAIT_SEASONS,
   gradeSportDynastyDeal,
   isDynastyLeagueType,
+  missingAgeAssumption,
   pickDynastyValue,
   pickSlotInRound,
   playerDynastyValue,
@@ -103,9 +105,24 @@ describe('draft picks', () => {
     expect(nhl.ok && nhl.value).toBeCloseTo(100 * FUTURE_DISCOUNT ** PROSPECT_WAIT_SEASONS.NHL, 6)
   })
 
-  it('refuses a pick for a draft already held, and one deeper than the young players on file', () => {
+  it('refuses a pick for a draft already held, and any pick when no young player has a projection', () => {
     expect(pickDynastyValue({ sport: 'MLB', pick: pick(2026, 1), pool: [50], teams: 12, nextDraftYear: 2027 })).toMatchObject({ ok: false, reason: expect.stringContaining('The 2026 draft has already been held') })
-    expect(pickDynastyValue({ sport: 'NBA', pick: pick(2027, 3), pool: [50, 40], teams: 12, nextDraftYear: 2027 })).toMatchObject({ ok: false, reason: expect.stringContaining('deeper than the 2 young NBA players') })
+    expect(pickDynastyValue({ sport: 'NBA', pick: pick(2027, 1), pool: [], teams: 12, nextDraftYear: 2027 })).toMatchObject({ ok: false, reason: expect.stringContaining('No young NBA player') })
+  })
+
+  it('prices a pick deeper than the young players as a long shot: the weakest of them, cut for each round deeper', () => {
+    const pool = [100, 90, 80, 70, 60, 50]
+    // 4 teams: the 2nd round's last pick is spot 7, one past the pool's end — one round deeper.
+    expect(pickDynastyValue({ sport: 'NBA', pick: pick(2027, 2, 'late'), pool, teams: 4, nextDraftYear: 2027 })).toEqual({ ok: true, value: 50 * DEEP_PICK_ROUND_SHARE, deep: true })
+    // The 4th round's last pick is spot 15, ten past the end: three rounds deeper.
+    expect(pickDynastyValue({ sport: 'NBA', pick: pick(2027, 4, 'late'), pool, teams: 4, nextDraftYear: 2027 })).toEqual({ ok: true, value: 50 * DEEP_PICK_ROUND_SHARE ** 3, deep: true })
+    // Inside the pool nothing changes, and a deeper pick is never worth more than a shallower one.
+    expect(pickDynastyValue({ sport: 'NBA', pick: pick(2027, 2, 'early'), pool, teams: 4, nextDraftYear: 2027 })).toEqual({ ok: true, value: 60 })
+    const values = [1, 2, 3, 4, 5].map((round) => {
+      const v = pickDynastyValue({ sport: 'MLB', pick: pick(2027, round), pool, teams: 4, nextDraftYear: 2027 })
+      return v.ok ? v.value : NaN
+    })
+    for (let i = 1; i < values.length; i++) expect(values[i]).toBeLessThan(values[i - 1]!)
   })
 
   it('prices from players at or under the young age only, best first', () => {
@@ -134,11 +151,20 @@ describe('the grade', () => {
     expect(view.graded && view.percentDiff).toBeGreaterThan(0)
   })
 
-  it('withholds when a player has no age on file, or the deal carries FAAB', () => {
-    expect(gradeSportDynastyDeal({ give: [player('noage')], get: [player('young')], ctx: ctx(), dynasty: dynasty() })).toMatchObject({
-      graded: false,
-      reason: expect.stringContaining('Ageless Guard has no age on file'),
-    })
+  it('values a player with no age on file as one at the end of his peak, and says so', () => {
+    const view = gradeSportDynastyDeal({ give: [player('noage')], get: [player('young')], ctx: ctx(), dynasty: dynasty() })
+    expect(view.graded).toBe(true)
+    if (!view.graded) return
+    expect(view.basis).toContain('Ageless Guard has no age on file')
+    const line = view.lines.find((l) => l.name === 'Ageless Guard')!
+    const assumed = playerDynastyValue({ sport: 'NBA', player: board.find((b) => b.id === 'noage')!, age: missingAgeAssumption('NBA', 'PG'), replacementPerGame: 18, gamesRemaining: 79 })
+    expect(line.marketValue).toBeCloseTo(assumed, 0)
+    // Never more than the same player at his prime with no decline ahead.
+    const flat = (35 - 18) * 79 + [1, 2, 3, 4].reduce((s, y) => s + (35 - 18) * 82 * FUTURE_DISCOUNT ** y, 0)
+    expect(assumed).toBeLessThan(flat)
+  })
+
+  it('withholds when the deal carries FAAB', () => {
     expect(gradeSportDynastyDeal({ give: [{ kind: 'faab', amount: 10 }], get: [player('young')], ctx: ctx(), dynasty: dynasty() })).toMatchObject({ graded: false })
   })
 })

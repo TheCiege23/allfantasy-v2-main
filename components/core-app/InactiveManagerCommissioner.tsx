@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 type AutopilotStyle = 'dynasty_owner' | 'win_now' | 'rebuild'
 
@@ -160,7 +161,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
           <li key={team.rosterId} data-testid="inactive-manager-team">
             <strong>{name(team)}</strong>{' '}
             {team.managed
-              ? t(`· AllFantasy sets this lineup since ${new Date(team.managed.since).toLocaleDateString()}`, `· AllFantasy pone esta alineación desde el ${new Date(team.managed.since).toLocaleDateString()}`)
+              ? t(`· AllFantasy sets this lineup since ${new Date(team.managed.since).toLocaleDateString(getAppIntlLocale())}`, `· AllFantasy pone esta alineación desde el ${new Date(team.managed.since).toLocaleDateString(getAppIntlLocale())}`)
               : t('· Suggested: no activity for a while', '· Sugerido: sin actividad hace tiempo')}{' '}
             <button type="button" className="af-btn" disabled={busy !== null} onClick={() => void toggle(team)}>
               {busy === team.rosterId ? t('Saving…', 'Guardando…') : team.managed ? t('Stop', 'Detener') : t('Let AllFantasy set lineups', 'Que AllFantasy ponga alineaciones')}

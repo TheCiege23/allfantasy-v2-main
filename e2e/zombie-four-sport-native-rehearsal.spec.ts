@@ -583,8 +583,19 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
   console.log(sport+': reviewed API preview/save and nonowner denials passed')
   if(sport==='NFL'){
    await page.setViewportSize({width:390,height:844})
+   // Fixture accounts have no age attestation. Exercise the product's optional
+   // dismissal so the real dialog cannot cover the commissioner controls.
+   const ageCheck=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/auth/confirm-age'&&response.request().method()==='GET')
    await page.goto('/zombie/universe/'+u.id)
+   expect((await (await ageCheck).json()).confirmed).toBe(false)
+   const agePrompt=page.getByRole('dialog',{name:'Quick confirmation'})
+   await agePrompt.getByRole('button',{name:'Not now',exact:true}).click()
+   await expect(agePrompt).toBeHidden()
+   const editorLoaded=page.waitForResponse(response=>response.url().includes(path+'?editor=1&season=2026')&&response.request().method()==='GET')
    await page.getByRole('button',{name:'Edit placements and capacity',exact:true}).click()
+   const editorResponse=await editorLoaded
+   expect(editorResponse.status()).toBe(200)
+   expect((await editorResponse.json()).savedProposal).toEqual(proposal)
    await expect(page.getByRole('button',{name:'Restore saved review draft'})).toBeVisible()
    await page.getByRole('button',{name:'Restore saved review draft'}).click()
    await page.getByRole('button',{name:'Preview this proposal',exact:true}).click()
