@@ -1,8 +1,9 @@
 import { canonicalName as normalizeMatchName } from './player-canonical-identity'
+import { verifiedMediaAliasPeerId, verifiedMediaAliasMatches } from './verifiedMediaAliases'
 import { providerPositionCode } from '@/lib/sports-data/providerPositionCode'
 
 export type CurrentProRow = {
-  name: string; source: string; status: string | null; team: string | null; position: string | null
+  externalId?: string; name: string; source: string; status: string | null; team: string | null; position: string | null
   dob?: string | null; imageUrl?: string | null; fetchedAt?: Date | string; expiresAt?: Date | string
 }
 const date = (value: Date | string | undefined) => value == null ? NaN : new Date(value).getTime()
@@ -32,8 +33,10 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
 ): T[] {
   if (!['NFL', 'NBA', 'NHL', 'MLB'].includes(sport)) return [...rows]
   const byName = new Map<string, T[]>()
+  const byExternalId = new Map<string, T>()
   for (const row of evidence) {
     if (!['thesportsdb', 'sleeper'].includes(row.source) || !fresh(row, now)) continue
+    if (row.source === 'thesportsdb' && row.externalId) byExternalId.set(row.externalId, row)
     const key = normalizeMatchName(row.name)
     const bucket = byName.get(key) ?? []
     bucket.push(row); byName.set(key, bucket)
@@ -47,7 +50,13 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
     const matches = (byName.get(normalizeMatchName(row.name)) ?? []).filter((other) => verifiedRosterMatch(row, other))
     const verified = matches.length === 1 ? matches[0] : undefined
     if (currentOnly && !live(row, now) && !(verified && live(verified, now))) continue
-    if (sport === 'NFL' || row.source !== 'rolling_insights' || !verified) { out.push(row); continue }
+    const peerId = verifiedMediaAliasPeerId(sport, row)
+    const peer = peerId ? byExternalId.get(peerId) : undefined
+    const aliasPhoto = peer && verifiedMediaAliasMatches(sport, row, peer) ? peer.imageUrl : null
+    // Media aliases never authorize a status/position/team change.
+    if (sport === 'NFL' || row.source !== 'rolling_insights' || !verified) {
+      out.push(!row.imageUrl && aliasPhoto ? { ...row, imageUrl: aliasPhoto } : row); continue
+    }
     const explicitMlbRole = sport === 'MLB'
       ? ({ 'STARTING PITCHER': 'SP', 'RELIEF PITCHER': 'RP' } as Record<string, string>)[String(verified.position ?? '').trim().toUpperCase()]
       : undefined
@@ -57,7 +66,7 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
       NBA: ['PG', 'SG', 'SF', 'PF', 'C'], NHL: ['C', 'LW', 'RW', 'D', 'G'],
       MLB: ['P', 'SP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'TWP'],
     } as Record<string, string[]>)[sport]?.includes(position)
-    out.push({ ...row, position: row.position === 'TWP' ? row.position : specific && live(verified, now) && team(row.team) === team(verified.team) ? position : row.position, imageUrl: row.imageUrl || verified.imageUrl || null })
+    out.push({ ...row, position: row.position === 'TWP' ? row.position : specific && live(verified, now) && team(row.team) === team(verified.team) ? position : row.position, imageUrl: row.imageUrl || verified.imageUrl || aliasPhoto || null })
   }
   return out
 }
