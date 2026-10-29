@@ -9,6 +9,7 @@ import { createMockNextRequest } from '../helpers/createMockNextRequest'
 
 const m = vi.hoisted(() => ({
   reads: [] as Array<Record<string, unknown> | null>,
+  lotteryReads: [] as Array<Record<string, unknown> | null>,
   publish: vi.fn(async (_input: unknown) => undefined),
   variant: { config: { timer_seconds: 90, rounds: 15, draft_type: 'snake' }, draftUISettings: { timerMode: 'per_pick', orphanDrafterMode: 'cpu', orphanTeamAiManagerEnabled: false }, leagueSize: 12, sessionVariant: null },
 }))
@@ -49,7 +50,11 @@ vi.mock('@/lib/tournament/divisions/leagueDraftTimeToTournament', () => ({ copyL
 vi.mock('@/lib/league-rules-explainer/publishRuleChanges', () => ({ publishRuleChangesEvent: m.publish }))
 vi.mock('@/lib/league-rules-explainer/loadDraftRules', async (importActual) => {
   const actual = await importActual<typeof import('@/lib/league-rules-explainer/loadDraftRules')>()
-  return { ...actual, loadDraftRulesSafe: vi.fn(async () => m.reads.shift() ?? null) }
+  return {
+    ...actual,
+    loadDraftRulesSafe: vi.fn(async () => m.reads.shift() ?? null),
+    loadRookieLotteryRulesSafe: vi.fn(async () => m.lotteryReads.shift() ?? null),
+  }
 })
 
 import { PATCH } from '@/app/api/leagues/[leagueId]/draft/settings/route'
@@ -62,6 +67,11 @@ const draft = (over: Record<string, unknown> = {}) => ({ draftStatus: 'scheduled
 beforeEach(() => {
   vi.clearAllMocks()
   m.reads = []
+  m.lotteryReads = []
+})
+
+const lottery = (over: Record<string, unknown> = {}) => ({
+  rookieDraftLottery: { teams: 6, picks: 6, pool: 'non_playoff', odds: 'record', rest: 'reverse_max_pf', ...over },
 })
 
 describe('PATCH /draft/settings (Settings › Draft)', () => {
@@ -84,5 +94,24 @@ describe('PATCH /draft/settings (Settings › Draft)', () => {
     m.reads = [null, draft({ draftPickSeconds: 60 })]
     await patch({ timer_seconds: 60 })
     expect(m.publish).toHaveBeenCalledWith(expect.objectContaining({ changes: [] }))
+  })
+
+  it('a lotteryConfig save diffs the rookie lottery keys too — even after the main draft is complete', async () => {
+    m.reads = [draft({ draftStatus: 'completed' }), draft({ draftStatus: 'completed' })]
+    m.lotteryReads = [lottery(), lottery({ picks: 4 })]
+    expect((await patch({ lotteryConfig: { lotteryPickCount: 4 } })).status).toBe(200)
+    expect(m.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        changes: [{ key: 'rookieDraftLottery', before: lottery().rookieDraftLottery, after: lottery({ picks: 4 }).rookieDraftLottery }],
+      }),
+    )
+  })
+
+  it('a save without lotteryConfig never reads the lottery', async () => {
+    m.reads = [draft(), draft({ draftPickSeconds: 60 })]
+    m.lotteryReads = [lottery(), lottery({ picks: 4 })]
+    await patch({ timer_seconds: 60 })
+    expect(m.publish).toHaveBeenCalledWith(expect.objectContaining({ changes: [{ key: 'draftPickSeconds', before: 90, after: 60 }] }))
+    expect(m.lotteryReads).toHaveLength(2)
   })
 })

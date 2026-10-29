@@ -11,7 +11,7 @@ import { resolveRenewDraftOrderMode } from '@/lib/redraft/offseason/renewRedraft
 import { startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { diffRuleSnapshots } from './changeKeys'
-import { draftRulesFromInputs } from './snapshot'
+import { draftRulesFromInputs, dynastyRulesFromConfig, resolveRulesFormat, rookieDraftLotteryRule } from './snapshot'
 import type { RuleChange, RuleSnapshot } from './types'
 
 /**
@@ -127,6 +127,57 @@ export async function loadDraftRulesSafe(leagueId: string): Promise<Partial<Rule
  */
 export function draftRuleChanges(before: Partial<RuleSnapshot> | null, after: Partial<RuleSnapshot> | null): RuleChange[] {
   if (!before || !after || before.draftStatus === 'completed') return []
+  return diffRuleSnapshots(before, after)
+}
+
+/**
+ * The rookie lottery's rules (`rookieDraftLottery`, the Dynasty section) for the lottery config saves'
+ * "What changed" card. Database only.
+ *
+ * ⚠ THE LOTTERY ORDERS THE DYNASTY ROOKIE DRAFT, NOT THE MAIN DRAFT. Every engine path that seats a
+ * lottery draw — `ensureRookieDraftLottery` (createNextLeagueDraft) and
+ * `resolveWeightedLotterySlotOrderForLeague` (DraftSessionService) — returns nothing unless the league
+ * is dynasty and `DynastyLeagueConfig.rookiePickOrderMethod` is `weighted_lottery`. So these lines
+ * belong beside the rookie order in the Dynasty section, which a dynasty league always shows; the
+ * Draft section is hidden while the current draft is a rookie draft anyway (draftRulesFromInputs).
+ *
+ * Empty (key absent, so nothing diffs) for a league that is not an AllFantasy-hosted dynasty league.
+ */
+export async function loadRookieLotteryRules(leagueId: string): Promise<Partial<RuleSnapshot>> {
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: {
+      platform: true, sport: true, leagueType: true, leagueVariant: true, isDynasty: true, guillotineMode: true,
+      bestBallMode: true, survivorMode: true, settings: true,
+      dynastyConfig: { select: { rookiePickOrderMethod: true } },
+    },
+  })
+  if (!league || !isNativePlatform(league.platform) || resolveRulesFormat(league) !== 'dynasty') return {}
+  const { rookieDraftOrder } = dynastyRulesFromConfig(league.dynastyConfig ?? null)
+  return { rookieDraftLottery: rookieDraftLotteryRule(rookieDraftOrder, readDraftOrderModeAndLotteryConfig(league.settings).lotteryConfig) }
+}
+
+/** loadRookieLotteryRules, or null when it cannot be read — a save never fails over its change card. */
+export async function loadRookieLotteryRulesSafe(leagueId: string): Promise<Partial<RuleSnapshot> | null> {
+  try {
+    return await loadRookieLotteryRules(leagueId)
+  } catch (e) {
+    console.warn('[loadRookieLotteryRules]', e instanceof Error ? e.message : 'unknown error')
+    return null
+  }
+}
+
+/**
+ * The rookie lottery rules a save changed. Nothing when either side could not be read.
+ *
+ * 🛑 NOT SUPPRESSED BY A COMPLETED DRAFT, UNLIKE draftRuleChanges. The config never reorders a draft
+ * that already has its order: it governs the NEXT draw — the next rookie draft's lottery, run when that
+ * draft is created (or when the commissioner presses "Run"). A completed startup or rookie draft is
+ * therefore exactly when this setting is still to come, and hiding the card then would hide the only
+ * moment it matters.
+ */
+export function rookieLotteryRuleChanges(before: Partial<RuleSnapshot> | null, after: Partial<RuleSnapshot> | null): RuleChange[] {
+  if (!before || !after) return []
   return diffRuleSnapshots(before, after)
 }
 

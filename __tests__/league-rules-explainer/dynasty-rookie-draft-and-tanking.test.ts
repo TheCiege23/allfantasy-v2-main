@@ -55,7 +55,7 @@ describe('the dynasty section names the rookie draft and the tanking penalty', (
     expectClean(lines, 'en')
     expect(lines).toEqual(
       expect.arrayContaining([
-        'The rookie draft order is set by a weighted lottery: teams with worse records get better odds at the top picks.',
+        'The rookie draft order is set by a weighted lottery.',
         'The rookie draft has 4 rounds, in the same order every round.',
         'The rookie draft starts by itself 7 days after it opens.',
         'Tanking: when the commissioner confirms a team lost on purpose, that is a strike. Strike 2 costs the team 50% of its rookie-lottery odds; strikes before that are warnings.',

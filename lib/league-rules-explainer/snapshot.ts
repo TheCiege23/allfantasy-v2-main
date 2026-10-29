@@ -39,7 +39,8 @@ import { supportsDailyLineups } from '@/lib/redraft/lineupModeSwitch'
 import { readPlayoffFormat } from '@/lib/core-app/outlookFormat'
 import { readTankingPenaltyPolicy } from '@/lib/integrity/tankingPenalties'
 import { readRookieDraftCalendarSettings } from '@/lib/dynasty-core/rookieDraftCalendar'
-import { RULES_EXPLAINER_SPORTS, type RuleSnapshot, type RulesConcept, type RulesFormat, type TankingPenaltyRule } from './types'
+import type { WeightedLotteryConfig } from '@/lib/draft-lottery/types'
+import { RULES_EXPLAINER_SPORTS, type RookieDraftLotteryRule, type RuleSnapshot, type RulesConcept, type RulesFormat, type TankingPenaltyRule } from './types'
 
 /** The `League` columns a snapshot reads. A full Prisma `League` row satisfies it. */
 export type RulesLeagueRow = {
@@ -390,6 +391,51 @@ export function dynastyRulesFromConfig(
     rookieDraftRounds: c?.rookieDraftRounds ?? 4,
     rookieDraftType: c?.rookieDraftType ?? 'linear',
   }
+}
+
+// Maps, not object literals: a stored `constructor` must not read as a known value.
+const LOTTERY_ODDS = new Map<string, RookieDraftLotteryRule['odds']>([
+  ['inverse_standings', 'record'],
+  ['inverse_points_for', 'points_for'],
+  ['inverse_max_pf', 'max_pf'],
+  ['custom_weights', 'equal'], // computeWeight gives every team weight 1
+])
+const LOTTERY_POOLS = new Map<string, RookieDraftLotteryRule['pool']>([
+  ['non_playoff', 'non_playoff'],
+  ['bottom_n', 'worst'],
+  ['all_teams', 'worst'],
+  ['custom', 'worst'], // selectEligibleTeams reads `custom` as `all_teams`
+])
+const LOTTERY_REST = new Map<string, RookieDraftLotteryRule['rest']>([
+  ['reverse_standings', 'reverse_standings'],
+  ['reverse_max_pf', 'reverse_max_pf'],
+  ['manual', 'reverse_standings'], // buildFullSlotOrder has no commissioner order to read
+])
+
+/**
+ * The rookie lottery as a rule, from the parsed `draft_lottery_config` (readDraftOrderModeAndLotteryConfig)
+ * and the rookie order. Null unless the rookie draft is ordered by the lottery
+ * (`ensureRookieDraftLottery` runs it only then), or when any part of the config has no reading in
+ * the engine — a rule the popup cannot state exactly is not stated at all.
+ *
+ * Each field is mapped to what the draw DOES (see RookieDraftLotteryRule), so a save that changes a
+ * stored value without changing the draw — `custom` → `all_teams`, `manual` → `reverse_standings`,
+ * `bottomN` (which the engine never reads) — publishes no change. `tiebreakMode` and
+ * `allowCommissionerOverride` are not described: no engine path reads the latter, and the former only
+ * reorders teams on an exactly equal rank.
+ */
+export function rookieDraftLotteryRule(
+  rookieOrder: string | null | undefined,
+  c: Pick<WeightedLotteryConfig, 'lotteryTeamCount' | 'lotteryPickCount' | 'eligibilityMode' | 'weightingMode' | 'fallbackOrder'> | null | undefined,
+): RookieDraftLotteryRule | null {
+  if (rookieOrder !== 'weighted_lottery' || !c) return null
+  const teams = posInt(c.lotteryTeamCount)
+  const picks = posInt(c.lotteryPickCount)
+  const pool = LOTTERY_POOLS.get(String(c.eligibilityMode))
+  const odds = LOTTERY_ODDS.get(String(c.weightingMode))
+  const rest = LOTTERY_REST.get(String(c.fallbackOrder))
+  if (!teams || !picks || !pool || !odds || !rest) return null
+  return { teams, picks: Math.min(picks, teams), pool, odds, rest }
 }
 
 /**

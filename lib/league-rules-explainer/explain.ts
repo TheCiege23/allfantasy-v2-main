@@ -8,6 +8,7 @@
 
 import type {
   ChangeGroup,
+  RookieDraftLotteryRule,
   ChangeLine,
   RuleChange,
   RuleKey,
@@ -283,6 +284,10 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? text('v.date', { date: { date: value } }) : null
     case 'draftOrphanPicks':
       return typeof value === 'string' && ORPHAN_DRAFTERS.has(value) ? text(`v.orphan.${value}`) : null
+    case 'rookieDraftLottery': {
+      const l = lotteryOf(value)
+      return l ? text('v.lottery', { pool: lotteryPool('v.lottery.pool', l), picks: lotteryPicks(l), odds: text(`v.lottery.odds.${l.odds}`), rest: text(`v.lottery.rest.${l.rest}`) }) : null
+    }
     case 'tankingPenalty': {
       if (!value || typeof value !== 'object') return null
       if ((value as { enabled?: unknown }).enabled === false) return text('v.off')
@@ -293,6 +298,26 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       return null
   }
 }
+
+const LOTTERY_POOLS = new Set(['non_playoff', 'worst'])
+const LOTTERY_ODDS = new Set(['record', 'points_for', 'max_pf', 'equal'])
+const LOTTERY_REST = new Set(['reverse_standings', 'reverse_max_pf'])
+
+/** A stored rookie-lottery value this module has sentences for, or null (an unknown part drops it whole). */
+function lotteryOf(value: unknown): RookieDraftLotteryRule | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const v = value as Record<string, unknown>
+  if (!isPosInt(v.teams) || !isPosInt(v.picks) || v.picks > v.teams) return null
+  if (typeof v.pool !== 'string' || !LOTTERY_POOLS.has(v.pool)) return null
+  if (typeof v.odds !== 'string' || !LOTTERY_ODDS.has(v.odds)) return null
+  if (typeof v.rest !== 'string' || !LOTTERY_REST.has(v.rest)) return null
+  return value as RookieDraftLotteryRule
+}
+
+const lotteryPicks = (l: RookieDraftLotteryRule): RuleText => plural('lottery.picks', l.picks)
+const lotteryPool = (k: string, l: RookieDraftLotteryRule): RuleText => plural(`${k}.${l.pool}`, l.teams)
+/** "The 6 worst teams that missed the playoffs draw for the first 6 picks." */
+const lotteryDraw = (l: RookieDraftLotteryRule): RuleText => plural(`dynasty.lottery.draw.${l.pool}`, l.teams, { picks: lotteryPicks(l) })
 
 /** What a confirmed tanking strike costs, as a phrase ("its round 1 draft pick"), or null. */
 function tankingCost(value: unknown): RuleText | null {
@@ -484,6 +509,8 @@ function dynastyLines(s: RuleSnapshot): RuleLine[] {
       slots && steal ? (steal.claims > 0 ? plural('dynasty.taxiStealing', steal.claims, { hours: steal.hours }) : text('dynasty.taxiStealingUnlimited', { hours: steal.hours })) : null,
     ),
     line('dynasty-rookie-order', s.rookieDraftOrder && ROOKIE_ORDERS.has(s.rookieDraftOrder) ? text(`dynasty.order.${s.rookieDraftOrder}`) : null),
+    // The lottery's own settings, only while it is what orders the rookie draft.
+    ...lotteryLines(s.rookieDraftOrder === 'weighted_lottery' ? lotteryOf(s.rookieDraftLottery) : null),
     line(
       'dynasty-rookie-rounds',
       isPosInt(s.rookieDraftRounds)
@@ -493,6 +520,15 @@ function dynastyLines(s: RuleSnapshot): RuleLine[] {
     line('dynasty-rookie-start', isPosInt(s.rookieDraftAutoStartDays) ? text('dynasty.autoStart', { n: s.rookieDraftAutoStartDays }) : null),
     line('dynasty-tanking', tankingLine(s.tankingPenalty)),
   ])
+}
+
+function lotteryLines(l: RookieDraftLotteryRule | null): Array<RuleLine | null> {
+  if (!l) return []
+  return [
+    line('dynasty-lottery-draw', lotteryDraw(l)),
+    line('dynasty-lottery-odds', text(`dynasty.lottery.odds.${l.odds}`)),
+    line('dynasty-lottery-rest', text(`dynasty.lottery.rest.${l.rest}`)),
+  ]
 }
 
 /**
@@ -685,6 +721,17 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       return typeof after === 'string' && ROOKIE_ORDERS.has(after) ? text(`dynasty.order.${after}`) : null
     case 'rookieDraftAutoStartDays':
       return isPosInt(after) ? text('dynasty.autoStart', { n: after }) : after == null ? text('change.autoStart.off') : null
+    case 'rookieDraftLottery': {
+      // The one part that moved, as its popup sentence; several at once read best from the values.
+      const b = lotteryOf(before)
+      const a = lotteryOf(after)
+      if (!b || !a) return null
+      const drawMoved = b.teams !== a.teams || b.picks !== a.picks || b.pool !== a.pool
+      const moved = [drawMoved, b.odds !== a.odds, b.rest !== a.rest].filter(Boolean).length
+      if (moved !== 1) return null
+      if (drawMoved) return lotteryDraw(a)
+      return b.odds !== a.odds ? text(`dynasty.lottery.odds.${a.odds}`) : text(`dynasty.lottery.rest.${a.rest}`)
+    }
     case 'tankingPenalty':
       return tankingLine(after)
     case 'draftType':
