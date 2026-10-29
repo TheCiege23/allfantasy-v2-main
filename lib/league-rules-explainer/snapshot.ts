@@ -257,7 +257,7 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
     snapshot.endgame = resolveGuillotineEndgame({ settings: row.settings, guillotineEndgame: row.guillotineEndgame ?? null }).format
     snapshot.faabOnChop = readFaabOnChop(row.settings)
     // The waiver rule the claims hold enforces (lib/guillotine/blindWaiverCutoff.ts); the sport decides it.
-    snapshot.blindAuction = isBlindAuctionLeague({ sport: row.sport, guillotineMode: true, leagueVariant: 'guillotine' })
+    snapshot.blindAuction = isBlindAuctionLeague({ sport: row.sport ?? null, guillotineMode: true, leagueVariant: 'guillotine' })
     Object.assign(snapshot, guillotineAdvancedSnapshot(readAdvanced(row.settings)))
   } else if (format === 'redraft' || format === 'keeper' || format === 'dynasty') {
     snapshot.medianGame = row.medianGame === true
