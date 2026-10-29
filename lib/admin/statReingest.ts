@@ -11,7 +11,13 @@
  *            read-only comparison: the week re-summed from `player_game_stats` by the sync's rules,
  *            scored by the league's scorer, against the `PlayerWeeklyScore` lines the week was
  *            scored on. Starters are chosen exactly as the detector chooses them.
- *   write    `syncPlayerWeeklyScoresForRedraftSeason` → `recalculateMatchupsForSeasonWeek` →
+ *   preview  DAILY-LINEUP leagues (NBA/NHL/MLB): `loadDailyWeekDayStats` rebuilds the week's per-day
+ *   (daily)  lines from `player_game_stats` with the sync's own builder (`playerDailyStatLines.ts`), and
+ *            `scoreRosterStartersDaily` — the matchup engine's daily scorer — scores each roster on
+ *            them IN MEMORY (`inject`). "Before" is the stored matchup score; "after" is that score
+ *            recomputed, plus any commissioner adjustment, exactly as `updateMatchupScores` stores it.
+ *            Nothing is written: `player_daily_scores` still holds the old lines until the sync runs.
+ *   write   `syncPlayerWeeklyScoresForRedraftSeason` → `recalculateMatchupsForSeasonWeek` →
  *            `updateStandings` — what the admin POST /api/redraft/score-sync runs for a
  *            league+week — and, for a week that WAS sealed, `finalizeRedraftWeek` to seal it again.
  *
@@ -25,8 +31,8 @@
  * WHY IT IS GUARDED. A rescore of a finished week can change who won. The preview reports every
  * matchup's before/after, and nothing is written unless the caller sends `confirm: true` — or
  * `confirm: "allow-flips"` when any result would flip, or when the preview could not be computed
- * for this league's format (best ball, devy, category, daily lineups…), because then no flip can
- * be ruled out.
+ * for this league's format (best ball, devy, category, games count, daily games limits…), because
+ * then no flip can be ruled out.
  *
  * ⚠ NFL is accepted but neither step applies: NFL game stats are week-ingested from Sleeper by the
  * default mode of the same cron, not swept by date, and its fresh week stats need a provider pull.
@@ -42,7 +48,11 @@ import { readScoringType, settingsForScoringWeek } from '@/lib/category-scoring/
 import { leagueUsesDevyEngine } from '@/lib/devy/scoringEligibilityEngine'
 import { leagueUsesC2CEngine } from '@/lib/c2c/scoringEngine'
 import { gamesCountActive } from '@/lib/redraft/gamesCount'
-import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { droppedInWindow, isDailyLineupScoringEnabled, loadPlayerDailyStats } from '@/lib/redraft/dailyLineups'
+import { readGamesLimits } from '@/lib/redraft/gamesLimits'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
+import { adjustedScore, readScoreAdjustments } from '@/lib/score-adjustments/scoreAdjustments'
 import { isSealedWeek } from '@/lib/redraft/weekSealed'
 import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
 import {
@@ -50,13 +60,24 @@ import {
   isScoringStarterSlot,
   leagueIsBestBall,
   recalculateMatchupsForSeasonWeek,
+  scoreRosterStartersDaily,
+  type RosterScoreSummary,
 } from '@/lib/redraft/scoringEngine'
 import { isTeamDefenseRow } from '@/lib/scoring-runtime/nflStatNormalization'
 import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeeklyScoreService'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { finalizeRedraftWeek } from '@/lib/redraft/weekFinalizer'
-import { loadDailyWeekStats, type DailyWeekStatsFetcher } from '@/lib/stat-corrections/dailyWeekStats'
-import { reviewStatCorrections, type PlayerCorrection } from '@/lib/stat-corrections/statCorrectionReview'
+import {
+  loadDailyWeekDayStats,
+  loadDailyWeekStats,
+  type DailyWeekDayStatsFetcher,
+  type DailyWeekStatsFetcher,
+} from '@/lib/stat-corrections/dailyWeekStats'
+import {
+  reviewStatCorrections,
+  STAT_CORRECTION_MIN_DELTA,
+  type PlayerCorrection,
+} from '@/lib/stat-corrections/statCorrectionReview'
 
 // ---------------------------------------------------------------------------------------------
 // Request validation
@@ -146,6 +167,10 @@ export type StatReingestDeps = {
   prisma?: Db
   ingest?: typeof ingestRollingInsightsGameLogs
   loadWeekStats?: DailyWeekStatsFetcher
+  /** Daily-lineup leagues: the week's per-day lines, rebuilt in memory (never written). */
+  loadWeekDayStats?: DailyWeekDayStatsFetcher
+  /** Daily-lineup leagues: the matchup engine's daily scorer, called with `inject`. */
+  scoreDaily?: typeof scoreRosterStartersDaily
   syncWeek?: typeof syncPlayerWeeklyScoresForRedraftSeason
   recalcWeek?: typeof recalculateMatchupsForSeasonWeek
   standings?: typeof updateStandings
@@ -214,6 +239,13 @@ export type WeekPreview = {
   unchecked: number
   /** Largest per-player point changes (top 25). */
   changes: PlayerCorrection[]
+  /**
+   * Daily-lineup leagues only. Per-player `changes` compare each starter's started days scored on the
+   * STORED daily lines with the same days on the fresh ones. A starter with no stored daily line (a week
+   * played before daily lineups were turned on) has no per-player "before" and is counted here instead;
+   * the matchup before/after does not depend on it.
+   */
+  daily?: { startersWithoutStoredDailyLines: number; playersWithFreshDailyLines: number }
 }
 
 type SeasonRow = {
@@ -242,7 +274,9 @@ async function formatRefusal(season: SeasonRow, sport: string, week: number, dep
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return 'not_native_league'
   if (leagueIsBestBall(league)) return 'best_ball'
   if (gamesCountActive(league.settings, sport)) return 'games_count_scoring'
-  if (isDailyLineupScoringEnabled(league.settings, sport)) return 'daily_lineup_scoring'
+  // Daily lineups are previewed (`previewDailyWeekRescore`), but not their games limits: the caps read
+  // the season's stored ledger of earlier weeks, which a re-ingest can change too.
+  if (isDailyLineupScoringEnabled(league.settings, sport) && readGamesLimits(league.settings, sport)) return 'daily_games_limits'
   if (readScoringType(settingsForScoringWeek(league.settings, season.season, week)).mode !== 'points') return 'not_points_scoring'
   if (await (deps.usesDevyEngine ?? leagueUsesDevyEngine)(season.leagueId)) return 'devy_engine'
   if (await (deps.usesC2CEngine ?? leagueUsesC2CEngine)(season.leagueId)) return 'c2c_engine'
@@ -269,6 +303,9 @@ export async function previewWeekRescore(season: SeasonRow, sport: string, week:
 
   const refusal = await formatRefusal(season, sport, week, deps)
   if (refusal) return { ...base, supported: false, reason: refusal, matchups: unchanged() }
+  if (isDailyLineupScoringEnabled(season.league!.settings, sport)) {
+    return previewDailyWeekRescore(season, sport, week, deps, { pairs, base, unchanged })
+  }
 
   // The detector's starter set: current roster rows, placed by the lineup saved for THAT week.
   const rosterIds = [...new Set(pairs.flatMap((m) => [m.homeRosterId, m.awayRosterId!]))]
@@ -328,6 +365,134 @@ export async function previewWeekRescore(season: SeasonRow, sport: string, week:
     startersConsidered: starters.length,
     unchecked: review.unchecked,
     changes: review.changes.slice(0, 25),
+  }
+}
+
+type MatchupRow = {
+  id: string
+  status: string | null
+  homeRosterId: string
+  awayRosterId: string | null
+  homeScore: number
+  awayScore: number
+}
+type PreviewBase = Omit<WeekPreview, 'supported' | 'reason' | 'matchups'>
+
+/**
+ * A DAILY-LINEUP week's before→after, with no database write. The week's per-day lines are rebuilt from
+ * the fresh `player_game_stats` rows by the sync's own builder, and each roster is scored by the matchup
+ * engine's own daily scorer with those lines injected — so this preview and the confirmed write share one
+ * scoring path and differ only in where the daily lines come from.
+ *
+ * "After" is ABSOLUTE (the recomputed roster score plus any commissioner adjustment), not stored + delta:
+ * a week played before daily lineups were turned on was stored by the weekly scorer, and the confirmed
+ * write rescores it with the daily one (each day falling back to the weekly slot when no daily lineup
+ * was saved), so that is the number the write will store.
+ */
+async function previewDailyWeekRescore(
+  season: SeasonRow,
+  sport: string,
+  week: number,
+  deps: StatReingestDeps,
+  ctx: { pairs: MatchupRow[]; base: PreviewBase; unchanged: () => MatchupPreview[] },
+): Promise<WeekPreview> {
+  const db = deps.prisma ?? defaultPrisma
+  const { pairs, base, unchanged } = ctx
+  await ensureDailySportSeasonStart(sport, season.season, { db: db as never })
+  const window = resolveDailySportWeekWindow(sport, season.season, week)
+  if (!window) return { ...base, supported: false, reason: 'no_week_window', matchups: unchanged() }
+
+  const rosterIds = [...new Set(pairs.flatMap((m) => [m.homeRosterId, m.awayRosterId!]))]
+  // Every player the daily scorer can count: still rostered, or dropped during the week.
+  const players = await db.redraftRosterPlayer.findMany({
+    where: { rosterId: { in: rosterIds }, ...droppedInWindow(window) },
+    select: { rosterId: true, playerId: true, playerName: true, position: true, sport: true },
+  })
+  const playerIds = [...new Set(players.map((p) => p.playerId))]
+  const fresh = await (deps.loadWeekDayStats ?? loadDailyWeekDayStats)({
+    sport,
+    season: season.season,
+    week,
+    players: playerIds.map((id) => ({ playerId: id, playerName: players.find((p) => p.playerId === id)?.playerName ?? null })),
+  })
+  // The lines the week is stored on now — read for the per-player "before" only. Keyed by each roster
+  // row's own sport, as the scorer reads them.
+  const stored: typeof fresh = new Map()
+  for (const playerSport of new Set(players.map((p) => p.sport || sport))) {
+    const bySport = await loadPlayerDailyStats(db, { playerIds, sport: playerSport, season: season.season, window })
+    for (const [id, days] of bySport) stored.set(id, days)
+  }
+
+  const scoreDaily = deps.scoreDaily ?? scoreRosterStartersDaily
+  const scoreWith = (rosterId: string, dailyStats: typeof fresh) =>
+    scoreDaily({ leagueId: season.leagueId, rosterId, week, seasonYear: season.season, collectPlayerPoints: true }, { db, dailyStats })
+  const after = new Map<string, RosterScoreSummary>()
+  const before = new Map<string, RosterScoreSummary>()
+  for (const rosterId of rosterIds) {
+    const a = await scoreWith(rosterId, fresh)
+    const b = await scoreWith(rosterId, stored)
+    if (!a || !b) return { ...base, supported: false, reason: 'daily_scoring_unavailable', matchups: unchanged() }
+    after.set(rosterId, a)
+    before.set(rosterId, b)
+  }
+
+  // Commissioner adjustments ride on top of the computed score, as `updateMatchupScores` stores it.
+  const adjustments = readScoreAdjustments(settingsForScoringWeek(season.league!.settings, season.season, week))
+  const sideAfter = (matchupId: string, rosterId: string) =>
+    round2(adjustedScore(after.get(rosterId)!.points, adjustments, matchupId, rosterId))
+  const matchups: MatchupPreview[] = pairs.map((r) => {
+    const home = { rosterId: r.homeRosterId, before: round2(r.homeScore), after: sideAfter(r.id, r.homeRosterId) }
+    const away = { rosterId: r.awayRosterId!, before: round2(r.awayScore), after: sideAfter(r.id, r.awayRosterId!) }
+    return {
+      matchupId: r.id,
+      status: r.status,
+      home,
+      away,
+      resultFlipped: outcome(home.before, away.before) !== outcome(home.after, away.after),
+    }
+  })
+
+  const info = new Map(players.map((p) => [`${p.rosterId}:${p.playerId}`, p]))
+  const changes: PlayerCorrection[] = []
+  let withoutStored = 0
+  for (const rosterId of rosterIds) {
+    const beforeBy = new Map(
+      (before.get(rosterId)!.playerPoints ?? []).filter((x) => x.isStarter).map((x) => [x.playerId, x.points]),
+    )
+    for (const x of after.get(rosterId)!.playerPoints ?? []) {
+      if (!x.isStarter) continue
+      if (!stored.has(x.playerId)) {
+        withoutStored += 1
+        continue
+      }
+      const b = round2(beforeBy.get(x.playerId) ?? 0)
+      const a = round2(x.points)
+      const delta = round2(a - b)
+      if (Math.abs(delta) < STAT_CORRECTION_MIN_DELTA) continue
+      const p = info.get(`${rosterId}:${x.playerId}`)
+      changes.push({
+        rosterId,
+        playerId: x.playerId,
+        playerName: p?.playerName ?? x.playerId,
+        position: p?.position ?? null,
+        before: b,
+        after: a,
+        delta,
+      })
+    }
+  }
+  changes.sort((a, z) => Math.abs(z.delta) - Math.abs(a.delta) || a.playerId.localeCompare(z.playerId))
+
+  const summaries = [...after.values()]
+  return {
+    ...base,
+    supported: true,
+    matchups,
+    flips: matchups.filter((m) => m.resultFlipped).length,
+    startersConsidered: summaries.reduce((n, s) => n + s.starterCount, 0),
+    unchecked: summaries.reduce((n, s) => n + s.missingPlayerIds.length, 0),
+    changes: changes.slice(0, 25),
+    daily: { startersWithoutStoredDailyLines: withoutStored, playersWithFreshDailyLines: fresh.size },
   }
 }
 
