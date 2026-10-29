@@ -11,7 +11,7 @@ import { ValuesPageLink } from '@/components/values/ValuesPageLink'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
 import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
-import { shouldApplyIncomingView } from '@/lib/league/leagueTabSync'
+import { shouldApplyIncomingView, shouldMirrorActiveView } from '@/lib/league/leagueTabSync'
 import { LeagueLiveStrip } from '@/components/sports/LeagueLiveStrip'
 import { LeagueStoryCard } from '@/components/sports/LeagueStoryCard'
 import { createPortal } from 'react-dom'
@@ -628,12 +628,14 @@ export function LeagueShell({
     predraftLandingApplied.current = false
     userPickedTabRef.current = false
     lastSyncedViewRef.current = null
+    pendingIncomingTabRef.current = null
   }, [league.id])
 
   /** Explicit tab selection (user click). Records the choice so auto-landing
    * defaults below stop firing, then updates the active tab. */
   const handleUserTabChange = useCallback((t: string) => {
     userPickedTabRef.current = true
+    pendingIncomingTabRef.current = null
     setActiveTab(t)
   }, [])
 
@@ -882,12 +884,21 @@ export function LeagueShell({
      * holds the waiver experience) is now only the fallback for a tab set without one.
      */
     if (target === 'waivers' && !ids.has('waivers')) target = 'players'
-    if (ids.has(target)) setActiveTab(target)
+    if (ids.has(target)) {
+      userPickedTabRef.current = true
+      pendingIncomingTabRef.current = target
+      setActiveTab(target)
+    }
   }, [searchParams, tabDefs, league.sport, shouldUseMatchupPrimary, nflRedraftCore, nativeWorkspace])
 
   useEffect(() => {
+    if (!searchParams) return
     const ids = new Set(tabDefs.map((t) => t.id))
     if (!ids.has(activeTab)) return
+    // The incoming effect queues state; this effect still sees the previous tab in that commit.
+    // Keep the requested URL intact until the queued tab is actually rendered.
+    if (!shouldMirrorActiveView(activeTab, pendingIncomingTabRef.current)) return
+    pendingIncomingTabRef.current = null
 
     // Redraft Settings is modal-driven. Do not persist it as ?view=settings,
     // because the settings deep-link effect treats that URL as "open modal".
@@ -908,7 +919,7 @@ export function LeagueShell({
     // bounced the user to a different tab. Tab switching is pure client state;
     // the URL mirror is only for shareable deep links and back/forward.
     window.history.replaceState(null, '', `${pathname}?${next.toString()}`)
-  }, [activeTab, nflRedraftCore, pathname, searchParams, tabDefs])
+  }, [activeTab, nflRedraftCore, nativeWorkspace, pathname, searchParams, tabDefs])
 
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)

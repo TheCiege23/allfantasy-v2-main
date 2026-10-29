@@ -11,6 +11,7 @@ The owner confirmed that the Android sign-in alert flow and test notification wo
 - The category layout measures available space inside the league chrome. A constrained 820 px tablet initially left a 35 px input; container-based switching keeps the editor usable when the league sidebars occupy part of the screen.
 - Pirate rules joins the existing Save bar and unsaved-change confirmation. Edits are not sent until Save; rejected saves retain the edits and show the server error. The editor explains protections, winner selection, automatic claim settlement, overflow deadlines and playoff steals.
 - General settings suppresses its old Auto-save badge inside the shared manual Save page. The older autosaving modal keeps its existing label.
+- The incoming tab handoff preserves explicit Commissioner/Settings URLs while React applies the requested tab. An old default tab cannot overwrite that URL during the initial effect commit; explicit links also prevent later automatic landing effects from replacing the chosen view. This addresses an intermittent live Core-entry reload returning to league home even though the rule itself had saved.
 - The welcome guide waits for the sign-in alert prompt to close. Its card cannot shrink in the shell's flex layout, has a labeled Close guide action, and moves into view after the alert flow. The alert sheet fits the dynamic viewport, scrolls internally when needed, and keeps keyboard focus within its actions with Escape support.
 
 ## Verification and limits
