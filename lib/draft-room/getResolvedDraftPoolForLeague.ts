@@ -210,7 +210,7 @@ export type GetResolvedDraftPoolResult = {
   provenNonRookies?: ProvenNonRookie[]
 }
 
-type SportPoolRow = {
+export type SportPoolRow = {
   full_name: string
   position: string
   team_abbreviation: string | null
@@ -659,7 +659,25 @@ function enrichRawRowFromDbPool(existing: DraftPoolRawRow, p: SportPoolRow, idFo
   }
 }
 
-function mergeDbPoolIntoRawList(
+function rawRowName(r: DraftPoolRawRow): string {
+  return r.name ?? r.playerName ?? r.full_name ?? ''
+}
+
+/**
+ * Folds DB pool rows into `rawList`: a row that matches an existing entry enriches it, anything
+ * else is appended (up to `mergeCap`).
+ *
+ * ⚠ INDEXED BY CANONICAL NAME, NOT SCANNED. This used `rawList.findIndex` per pool row and
+ * re-ran `canonicalName` (NFKD + five regexes) on every comparison: O(pool × list) with no
+ * yield, ~2,400 × ~2,400 for an NHL pool, and it ran in two concurrent builds on a new league's
+ * first open (reported as 30s+ to load, 2026-10-28). A match requires equal canonical names
+ * (`normalizeDraftPoolNameForDedupe` and `normalizeLooseName` are both `canonicalName`), so only
+ * same-name rows can match. Candidates are checked in insertion order, which returns the same
+ * row `findIndex` did. Position and team are still read from the row at match time because
+ * `enrichRawRowFromDbPool` can fill in a row's team mid-loop.
+ */
+/** Exported for the equivalence test only. */
+export function mergeDbPoolIntoRawList(
   rawList: DraftPoolRawRow[],
   poolRows: SportPoolRow[],
   mergeCap: number,
@@ -669,7 +687,7 @@ function mergeDbPoolIntoRawList(
 ): void {
   const perfMerge = perfStart(`5b. indexed pool merge (raw=${rawList.length}, pool=${poolRows.length})`)
   const identityOf = (row: DraftPoolRawRow) => {
-    const name = row.name ?? row.playerName ?? row.full_name ?? ''
+    const name = rawRowName(row)
     return {
       name: normalizeDraftPoolNameForDedupe(name),
       looseName: normalizeLooseName(name),

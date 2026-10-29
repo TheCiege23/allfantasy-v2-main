@@ -28,6 +28,7 @@ import { isWaiverProcessingMode, readDailyWaiverScheduleFromSettings, WAIVER_DAY
 import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
 import { readAdvanced, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { readFaabOnChop } from '@/lib/guillotine/faabOnChop'
+import { isBlindAuctionLeague } from '@/lib/guillotine/blindWaiverCutoff'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
@@ -255,6 +256,8 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
   if (format === 'guillotine') {
     snapshot.endgame = resolveGuillotineEndgame({ settings: row.settings, guillotineEndgame: row.guillotineEndgame ?? null }).format
     snapshot.faabOnChop = readFaabOnChop(row.settings)
+    // The waiver rule the claims hold enforces (lib/guillotine/blindWaiverCutoff.ts); the sport decides it.
+    snapshot.blindAuction = isBlindAuctionLeague({ sport: row.sport ?? null, guillotineMode: true, leagueVariant: 'guillotine' })
     Object.assign(snapshot, guillotineAdvancedSnapshot(readAdvanced(row.settings)))
   } else if (format === 'redraft' || format === 'keeper' || format === 'dynasty') {
     snapshot.medianGame = row.medianGame === true
@@ -380,6 +383,23 @@ export function tankingPenaltyRule(settings: unknown): TankingPenaltyRule {
 }
 
 /**
+ * The rookie draft order the draft ENGINE seats from, which is not always the dynasty config's method.
+ * The engine (`lib/live-draft-engine/DraftSessionService.ts`) applies, highest first: the weighted
+ * lottery (`rookiePickOrderMethod: 'weighted_lottery'`); the live rookie order
+ * (`settings.rookie_draft_order.live`, AF Commissioner); the automatic order the commissioner switched
+ * on (`settings.rookie_draft_order {enabled, mode}`). The popup used to print the dynasty config's
+ * method whatever the engine did, so it could say "reverse max PF" over a draft seated worst record
+ * first. Only when none of those is on does the config's own method stand.
+ */
+export function effectiveRookieDraftOrder(configMethod: string | null | undefined, leagueSettings: unknown): string | null {
+  if (configMethod === 'weighted_lottery') return configMethod
+  const rookie = record(record(leagueSettings).rookie_draft_order)
+  if (record(rookie.live).enabled === true) return 'live'
+  if (rookie.enabled === true) return rookie.mode === 'reverse_max_pf' ? 'auto_reverse_max_pf' : 'auto_worst_to_first'
+  return configMethod ?? null
+}
+
+/**
  * A dynasty league's rookie-draft rules from its DynastyLeagueConfig row. No row reads the same
  * defaults the dynasty settings page shows. Shared by the popup and the dynasty settings save.
  */
@@ -391,6 +411,15 @@ export function dynastyRulesFromConfig(
     rookieDraftRounds: c?.rookieDraftRounds ?? 4,
     rookieDraftType: c?.rookieDraftType ?? 'linear',
   }
+}
+
+/** `dynastyRulesFromConfig` with the rookie order the draft engine seats from (`effectiveRookieDraftOrder`). */
+export function effectiveDynastyRules(
+  c: Parameters<typeof dynastyRulesFromConfig>[0],
+  leagueSettings: unknown,
+): ReturnType<typeof dynastyRulesFromConfig> {
+  const rules = dynastyRulesFromConfig(c)
+  return { ...rules, rookieDraftOrder: effectiveRookieDraftOrder(rules.rookieDraftOrder, leagueSettings) }
 }
 
 // Maps, not object literals: a stored `constructor` must not read as a known value.

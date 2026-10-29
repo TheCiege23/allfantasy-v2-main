@@ -44,7 +44,7 @@ const FAAB_ON_CHOP = new Set(['keep', 'split'])
 const IMMUNITY = new Set(['off', 'top_scorer'])
 const TIEBREAKS = new Set(['bench_points', 'season_points', 'previous_period', 'draft_slot', 'commissioner', 'random'])
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
-const ROOKIE_ORDERS = new Set(['max_pf', 'reverse_standings', 'commissioner', 'weighted_lottery'])
+const ROOKIE_ORDERS = new Set(['max_pf', 'reverse_standings', 'commissioner', 'weighted_lottery', 'live', 'auto_worst_to_first', 'auto_reverse_max_pf'])
 const DRAFT_TYPES = new Set(['linear', 'snake'])
 /** The main draft (./loadDraftRules.ts). */
 const MAIN_DRAFT_TYPES = new Set(['snake', 'linear', 'auction'])
@@ -488,6 +488,7 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
     line('guillotine-stat-correction', isNum(s.statCorrectionHours) && s.statCorrectionHours > 0 ? plural('guillotine.statCorrection', s.statCorrectionHours) : null),
     line('guillotine-danger', isNum(s.dangerMarginPoints) && s.dangerMarginPoints > 0 ? plural('guillotine.danger', s.dangerMarginPoints) : null),
     line('guillotine-faab', s.faabOnChop && FAAB_ON_CHOP.has(s.faabOnChop) ? text(`guillotine.faab.${s.faabOnChop}`) : null),
+    line('guillotine-blind-auction', s.blindAuction === true ? text('guillotine.blindAuction') : null),
   ])
 }
 

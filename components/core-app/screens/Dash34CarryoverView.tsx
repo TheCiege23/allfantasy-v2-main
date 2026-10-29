@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { ClubLogo } from '@/components/core-app/ClubLogo'
 import { Dash34When } from '@/components/core-app/screens/Dashboard34Live'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { dashCarryoverMessages } from '@/lib/core-app/messages/dashCarryover'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 import {
   briefCaveatText,
@@ -49,12 +51,13 @@ export function Dash34CarryoverView({
 }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
+  const m = useMessages(dashCarryoverMessages)
   const lock = firstLock ? (es ? firstLockText(firstLock) : null) : null
 
   return (
     <div className="af-core af-carry">
       {firstLock ? (
-        <section className="af-carry-lock" aria-label={es ? 'Lo más urgente' : 'Most urgent'}>
+        <section className="af-carry-lock" aria-label={m.mostUrgent}>
           <div className="af-carry-count">
             <span className="af-carry-count-l">{fixed(firstLock.countdownLabel ?? 'FIRST KICKOFF', es)}</span>
             <span className="af-carry-count-v af-num">
@@ -116,7 +119,7 @@ export function Dash34CarryoverView({
       ) : null}
 
       {chimmyBrief ? (
-        <section className="af-carry-brief" aria-label={es ? 'Resumen de Chimmy' : 'Chimmy brief'}>
+        <section className="af-carry-brief" aria-label={m.chimmyBrief}>
           <span className="af-carry-brief-l">{fixed(chimmyBrief.label, es)}</span>
           <h2 className="af-carry-brief-h">{es ? (briefHeadlineText(chimmyBrief) ?? chimmyBrief.headline) : chimmyBrief.headline}</h2>
           <ul className="af-carry-brief-lines">
@@ -164,11 +167,12 @@ export function Dash34CarryoverView({
 export function Dash34CoverageView({ coverage }: { coverage: NonNullable<Dash34Data['coverage']> }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
+  const m = useMessages(dashCarryoverMessages)
   return (
     <div className="af-core af-carry">
       <details className="af-carry-coverage">
         <summary>
-          {es ? 'Lo que esta pantalla no vigila' : 'What this screen is not watching'} ({coverage.length})
+          {m.notWatching} ({coverage.length})
         </summary>
         <ul>
           {coverage.map((c) => {
