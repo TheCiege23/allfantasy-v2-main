@@ -1,3 +1,4 @@
+import { reconcileCurrentDraftSeeds } from './reconcileCurrentDraftSeeds'
 import { loadStoredDraftSeasonStats } from './storedDraftSeasonStats'
 /**
  * Single server source for normalized draft pool rows (same enrichment as GET /draft/pool).
@@ -1618,10 +1619,14 @@ async function buildResolvedDraftPoolForLeague(
   }
 
   if (currentRosterOnly) {
-    const currentKeys = new Set(poolRows.map((row) => strictIdentityKey(row.full_name ?? '', row.position ?? '')))
-    rawListFiltered = rawListFiltered.filter((row) => currentKeys.has(strictIdentityKey(
-      row.name ?? row.playerName ?? row.full_name ?? '', row.position ?? row.pos ?? '',
-    )))
+    const idFor = sport === 'NFL' ? nflPoolRowIdResolver(poolRows) : externalSourceIdAsIs
+    const currentPlayers = poolRows.filter(row => !eligiblePositions?.size || draftPoolRowMatchesEligiblePositions(row.position, eligiblePositions))
+      .map(row => ({
+        name: row.full_name, position: row.position, team: row.team_abbreviation ?? null,
+        playerId: idFor(row) ?? row.player_id, imageUrl: row.image_url ?? null,
+        age: row.age ?? null, injuryStatus: row.injury_status ?? null, status: row.status ?? null,
+      }))
+    rawListFiltered = reconcileCurrentDraftSeeds(rawListFiltered, currentPlayers)
   }
   let nbaSurvivorRoster: NbaRosterEligibility | null = null
   if (verifyCurrentNbaRoster) {
