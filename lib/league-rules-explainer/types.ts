@@ -90,6 +90,12 @@ export type RuleSnapshot = {
   waiverProcessHour?: number | null
   /** NBA / NHL only. */
   lineupMode?: 'daily' | 'weekly' | null
+  /**
+   * When a weekly lineup locks, as the lock enforces it (`readLineupLockSettings`): each player at his
+   * team's first game of the week, the whole lineup at the week's first game, or by the commissioner.
+   * Null for daily lineups (their own line says it) and where no lock is enforced (soccer).
+   */
+  lineupLock?: 'per_player' | 'first_game' | 'manual' | null
   teamsPerChop?: number | null
   chopStartWeek?: number | null
   chopEndWeek?: number | null

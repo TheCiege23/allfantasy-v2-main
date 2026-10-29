@@ -168,8 +168,8 @@ describe('full rules — NFL redraft', () => {
     expect(lines).toContain('The minimum bid is $1.')
     expect(lines).toContain('A dropped player stays on waivers for 48 hours before anyone can add him freely.')
     expect(lines.some((l) => l.includes('median'))).toBe(true)
-    // NFL has no daily/weekly switch: no lineups section, no series.
-    expect(sections.map((s) => s.id)).not.toContain('lineups')
+    // NFL has no daily/weekly switch, so its lineups section is only the lock (2026-10-29); no series.
+    expect(sections.find((s) => s.id === 'lineups')?.lines.map((l) => l.id)).toEqual(['lineups-lock'])
     expect(sections.map((s) => s.id)).not.toContain('guillotine')
   })
 
@@ -216,9 +216,11 @@ describe('full rules — NBA redraft (daily lineups, series, daily claim schedul
     expect(lines.join(' ')).not.toMatch(/waiver/i)
   })
 
-  it('weekly NBA lineups say so', () => {
+  it('weekly NBA lineups say so, and when each player locks', () => {
     const weekly = explainLeagueRules(ruleSnapshotFromLeague({ ...NBA_REDRAFT, settings: { scoring_mode: 'points' } }))
-    expect(render(weekly, 'en')).toContain('Weekly lineups: your lineup locks for the whole scoring week.')
+    const en = render(weekly, 'en')
+    expect(en).toContain('Weekly lineups: you set one lineup for the whole scoring week.')
+    expect(en).toContain('Each player locks when his team’s first game of the week starts. Until then you can still swap him out.')
   })
 })
 
@@ -235,6 +237,43 @@ describe('full rules — NHL categories redraft', () => {
     expectClean(es)
     expect(es).toContain('Cuentan 4 categorías: G, A, SOG, SV%.')
     expect(es).toContain('Los reclamos siguen la clasificación inversa: reclama primero el equipo más bajo de la clasificación.')
+  })
+})
+
+/*
+ * The lineup lock (2026-10-29): when a weekly lineup locks, read exactly as the lock reads it
+ * (`readLineupLockSettings`). A football league had no lineup line at all, and the weekly sentence
+ * said the lineup "locks for the whole week", which is wrong for the default per-player lock.
+ */
+describe('the lineup lock', () => {
+  const nfl = (sportConfig: Record<string, unknown> = {}) =>
+    ruleSnapshotFromLeague({ platform: 'allfantasy', sport: 'NFL', leagueType: 'redraft', leagueVariant: 'redraft', leagueSize: 12, settings: { sportConfig } })
+  const lines = (snap: RuleSnapshot, lang: 'en' | 'es' = 'en') => render(explainLeagueRules(snap), lang)
+
+  it('the default: each player locks at his own team’s first game', () => {
+    expect(nfl().lineupLock).toBe('per_player')
+    expect(lines(nfl())).toContain('Each player locks when his team’s first game of the week starts. Until then you can still swap him out.')
+    const es = lines(nfl(), 'es')
+    expectClean(es)
+    expect(es).toContain('Cada jugador se bloquea cuando empieza el primer partido de su equipo en la semana. Hasta entonces todavía puedes cambiarlo.')
+  })
+
+  it('the whole lineup at the week’s first game, or by the commissioner', () => {
+    expect(lines(nfl({ lineupLockType: 'first_game_of_week' }))).toContain('Your whole lineup locks when the first game of the week starts.')
+    expect(lines(nfl({ lineupLockType: 'manual' }))).toContain('Your commissioner locks lineups each week.')
+  })
+
+  it('daily lineups say it once, in their own line; soccer is not locked, so says nothing', () => {
+    const daily = ruleSnapshotFromLeague({ ...NBA_REDRAFT, settings: { scoring_mode: 'points', sportConfig: { lineupLockType: 'daily', dailyLineupsEnabled: true } } })
+    expect(daily.lineupMode).toBe('daily')
+    const en = lines(daily)
+    expect(en.some((l) => l.includes('locks when'))).toBe(false)
+    const soccer = ruleSnapshotFromLeague({ platform: 'allfantasy', sport: 'SOCCER', leagueType: 'redraft', leagueVariant: 'redraft', leagueSize: 10, settings: {} })
+    expect(soccer.lineupLock).toBeNull()
+  })
+
+  it('is not a rule a change card names: it is explained, not announced', () => {
+    expect(CHANGEABLE_RULE_KEYS).not.toContain('lineupLock' as never)
   })
 })
 
@@ -268,10 +307,12 @@ describe.each(['NFL', 'NBA', 'NHL'])('full rules — %s guillotine', (sport) => 
     expect(es.join(' ')).not.toMatch(/waiver/i)
   })
 
-  it('NBA/NHL guillotine leagues still explain their lineup mode; NFL has none', () => {
-    const ids = sections.map((s) => s.id)
-    if (sport === 'NFL') expect(ids).not.toContain('lineups')
-    else expect(ids).toContain('lineups')
+  it('every Guilly league explains its lineups: NBA/NHL their mode, NFL (since 2026-10-29) its lock', () => {
+    const lineups = sections.find((s) => s.id === 'lineups')
+    expect(lineups).toBeDefined()
+    const ids = lineups!.lines.map((l) => l.id)
+    if (sport === 'NFL') expect(ids).toEqual(['lineups-lock'])
+    else expect(ids).toContain('lineups-mode')
   })
 })
 

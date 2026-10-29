@@ -84,7 +84,10 @@ export const leagueRulesCopyEn: Record<string, string> = {
   'leagueRules.roster.reserve.other': '{{n}} injured reserve spots for players who are hurt.',
 
   'leagueRules.lineups.daily': 'Daily lineups: you can change your starters every day, until each player’s game starts.',
-  'leagueRules.lineups.weekly': 'Weekly lineups: your lineup locks for the whole scoring week.',
+  'leagueRules.lineups.weekly': 'Weekly lineups: you set one lineup for the whole scoring week.',
+  'leagueRules.lineups.lock.per_player': 'Each player locks when his team’s first game of the week starts. Until then you can still swap him out.',
+  'leagueRules.lineups.lock.first_game': 'Your whole lineup locks when the first game of the week starts.',
+  'leagueRules.lineups.lock.manual': 'Your commissioner locks lineups each week.',
 
   'leagueRules.playoffs.none': 'This league has no playoffs.',
   'leagueRules.playoffs.field': 'The top {{teams}} teams make the playoffs, which start in week {{week}}.',
@@ -613,7 +616,10 @@ export const leagueRulesCopyEs: Record<string, string> = {
   'leagueRules.roster.reserve.other': '{{n}} puestos de lesionados para jugadores que no pueden jugar.',
 
   'leagueRules.lineups.daily': 'Alineaciones diarias: puedes cambiar a tus titulares cada día, hasta que empiece el partido de cada jugador.',
-  'leagueRules.lineups.weekly': 'Alineaciones semanales: tu alineación se bloquea durante toda la semana de puntuación.',
+  'leagueRules.lineups.weekly': 'Alineaciones semanales: fijas una sola alineación para toda la semana de puntuación.',
+  'leagueRules.lineups.lock.per_player': 'Cada jugador se bloquea cuando empieza el primer partido de su equipo en la semana. Hasta entonces todavía puedes cambiarlo.',
+  'leagueRules.lineups.lock.first_game': 'Toda tu alineación se bloquea cuando empieza el primer partido de la semana.',
+  'leagueRules.lineups.lock.manual': 'Tu comisionado bloquea las alineaciones cada semana.',
 
   'leagueRules.playoffs.none': 'Esta liga no tiene playoffs.',
   'leagueRules.playoffs.field': 'Los {{teams}} mejores equipos se clasifican para los playoffs, que empiezan en la semana {{week}}.',
