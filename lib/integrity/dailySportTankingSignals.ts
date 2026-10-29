@@ -8,7 +8,8 @@
  *
  *   - DAILY lineups (`isDailyLineupScoringEnabled`): each day is scored on that day's starters. An
  *     IDLE START is a starter whose team has no game that day while a bench player of the same
- *     team, eligible for that slot, does play. One is ordinary carelessness; the scan counts them
+ *     team, eligible for that slot, does play — has a stat line that day, not merely a team game —
+ *     and each such bench player accounts for one idle start a day at most. One is ordinary carelessness; the scan counts them
  *     over the week and the caller flags at the commissioner's sensitivity
  *     (`TANKING_IDLE_STARTS_PER_WEEK`).
  *   - WEEKLY lineups: a starter scores every game his team plays that week, so the idle starter is
@@ -61,6 +62,11 @@ export function findIdleStarts(input: {
   days: readonly string[]
   players: readonly DailySportPlayer[]
   teamPlays: (team: string | null, day: string | null) => boolean | null
+  /**
+   * Daily lineups: did this player actually play on `day`? A team game is not enough — a bench player
+   * listed Out, or one who never got in, could not have taken the slot. Only `true` counts.
+   */
+  played: (playerId: string, day: string) => boolean | null
   isStarterSlot: (slot: string) => boolean
   slotAccepts: (slot: string, position: string) => boolean
 }): IdleStart[] {
@@ -79,14 +85,21 @@ export function findIdleStarts(input: {
     const present = input.players.filter((p) => p.daysOnTeam.includes(day))
     const bench = present.filter((p) => {
       const slot = p.slotOn(day)
-      return slot != null && BENCH.has(slot.trim().toLowerCase()) && input.teamPlays(p.team, day) === true
+      return slot != null && BENCH.has(slot.trim().toLowerCase()) && input.teamPlays(p.team, day) === true && input.played(p.playerId, day) === true
     })
+    /*
+     * ⚠ ONE BENCH PLAYER FIXES ONE SLOT. Two idle starters and a single eligible bench player are one
+     * swap the manager missed, not two — counting both doubled the evidence toward a penalty.
+     */
+    const used = new Set<string>()
     for (const p of present) {
       const slot = p.slotOn(day)
       if (!slot || !input.isStarterSlot(slot)) continue
       if (input.teamPlays(p.team, day) !== false) continue
-      const alternative = bench.find((b) => positions(b.position).some((pos) => input.slotAccepts(slot, pos)))
-      if (alternative) out.push({ day, playerId: p.playerId, slot, benchPlayerId: alternative.playerId })
+      const alternative = bench.find((b) => !used.has(b.playerId) && positions(b.position).some((pos) => input.slotAccepts(slot, pos)))
+      if (!alternative) continue
+      used.add(alternative.playerId)
+      out.push({ day, playerId: p.playerId, slot, benchPlayerId: alternative.playerId })
     }
   }
   return out
