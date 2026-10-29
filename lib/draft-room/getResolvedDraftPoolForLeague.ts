@@ -1623,7 +1623,7 @@ async function buildResolvedDraftPoolForLeague(
     const currentPlayers = poolRows.filter(row => !eligiblePositions?.size || draftPoolRowMatchesEligiblePositions(row.position, eligiblePositions))
       .map(row => ({
         name: row.full_name, position: row.position, team: row.team_abbreviation ?? null,
-        playerId: idFor(row) ?? row.player_id, imageUrl: row.image_url ?? null,
+        playerId: (idFor(row) ?? row.player_id)!, imageUrl: row.image_url ?? null,
         age: row.age ?? null, injuryStatus: row.injury_status ?? null, status: row.status ?? null,
       }))
     rawListFiltered = reconcileCurrentDraftSeeds(rawListFiltered, currentPlayers)
