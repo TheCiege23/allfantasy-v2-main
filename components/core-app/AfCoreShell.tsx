@@ -2280,15 +2280,14 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           */}
           {/*
             The optional prompts queue for ONE slot on home (HomePromptSlot) instead of stacking
-            up to four deep above the content. Off home the slot is disabled and the tour renders
-            as it always has.
+            up to four deep above the content. Off home the slot is disabled; the tour shows on home only.
           */}
           <HomePromptSlot enabled={active === 'home'}>
             {active === 'home' ? <GameDayAlertsBanner /> : null}
             {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
             {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
             {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
-            <CoreWelcomeTour leagueCount={leagues.length} />
+            {active === 'home' ? <CoreWelcomeTour leagueCount={leagues.length} /> : null}
           </HomePromptSlot>
           {/*
             The VISIBLE button, on the /core home screen: a real action row

@@ -9,6 +9,17 @@ import '@/components/core-app/core-welcome-tour.css'
 
 const STORAGE_KEY = 'af-core-welcome-v1'
 
+/*
+ * ⚠ THE LAST STEP USED TO SEND EVERY NEW USER TO /core/hubs — the multi-format commissioner hubs
+ * (Zombie, Guillotine, C2C…), a screen most managers never need. It now goes where the step's own
+ * copy points: the lineup check when there are leagues, the import when there are none. Step 1 told
+ * people to "Open Leagues", a label nothing on screen carries; it names the league switcher instead,
+ * and the finish button no longer says "Core", which is our name for the app, not theirs.
+ *
+ * Shown on the home screen only (AfCoreShell) — opening it over a lineup or a trade interrupted the
+ * very task it was introducing.
+ */
+
 type Step = {
   kicker: string
   title: string
@@ -37,14 +48,14 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
       kicker: '1 · Conecta',
       title: leagueCount > 0 ? `${leagueCount} ${leagueCount === 1 ? 'liga lista' : 'ligas listas'}` : 'Reúne tus ligas',
       body: leagueCount > 0
-        ? 'Abre Ligas para cambiar de liga. AllFantasy muestra tus datos sin modificar tu plataforma original.'
+        ? 'Usa el selector de ligas de arriba para cambiar entre ellas. AllFantasy muestra tus datos sin modificar tu plataforma original.'
         : `Importa desde ${availableImportPlatformsPhrase()}. AllFantasy lee tu liga sin modificar la plataforma original.`,
       action: leagueCount > 0 ? undefined : { label: 'Importar una liga', href: '/import' },
     },
     {
       kicker: '2 · Elige',
       title: 'Una liga o todas',
-      body: 'Elige una liga para mantenerla seleccionada al cambiar de sección. También puedes ver todas tus ligas juntas.',
+      body: 'Elige una liga para mantenerla seleccionada al cambiar de sección, o «Todas las ligas» para verlas juntas.',
     },
     {
       kicker: '3 · Consulta',
@@ -55,21 +66,23 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
       kicker: '4 · Juega',
       title: 'Organiza tu semana aquí',
       body: 'Sincroniza cambios, revisa tu alineación y agentes libres, analiza intercambios y usa las herramientas del comisionado.',
-      action: { label: 'Abrir centro de ligas', href: '/core/hubs' },
+      action: leagueCount > 0
+        ? { label: 'Revisar mis alineaciones', href: '/core/my-team' }
+        : { label: 'Importar una liga', href: '/import' },
     },
   ] : [
     {
       kicker: '1 · Connect',
       title: leagueCount > 0 ? `${leagueCount} ${leagueCount === 1 ? 'league ready' : 'leagues ready'}` : 'Bring your leagues together',
       body: leagueCount > 0
-        ? 'Open Leagues to switch between them. AllFantasy shows your data without changing the original platform.'
+        ? 'Use the league switcher at the top to move between them. AllFantasy shows your data without changing the original platform.'
         : `Import from ${availableImportPlatformsPhrase()}. AllFantasy reads the league and leaves the original platform unchanged.`,
       action: leagueCount > 0 ? undefined : { label: 'Import a league', href: '/import' },
     },
     {
       kicker: '2 · Choose',
       title: 'One league or all leagues',
-      body: 'Choose a league and it stays selected as you move between tabs. You can also see all your leagues together.',
+      body: 'Choose a league and it stays selected as you move between tabs, or pick “All leagues” to see them together.',
     },
     {
       kicker: '3 · Ask',
@@ -80,7 +93,9 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
       kicker: '4 · Play',
       title: 'Run the week from one place',
       body: 'Sync changes, check your lineup and waivers, review trades, and use commissioner tools when you run the league.',
-      action: { label: 'Open the league hub', href: '/core/hubs' },
+      action: leagueCount > 0
+        ? { label: 'Check my lineups', href: '/core/my-team' }
+        : { label: 'Import a league', href: '/import' },
     },
   ]
 
@@ -95,8 +110,15 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
   }
 
   return (
-    <aside className="af-welcome" role="dialog" aria-modal="false" aria-labelledby="af-welcome-title">
-      <div className="af-welcome-progress" aria-label={spanish ? `Paso ${step + 1} de ${steps.length}` : `Step ${step + 1} of ${steps.length}`}>
+    <section className="af-welcome" aria-labelledby="af-welcome-title">
+      <div
+        className="af-welcome-progress"
+        role="progressbar"
+        aria-valuemin={1}
+        aria-valuemax={steps.length}
+        aria-valuenow={step + 1}
+        aria-label={spanish ? `Paso ${step + 1} de ${steps.length}` : `Step ${step + 1} of ${steps.length}`}
+      >
         {steps.map((_, index) => <i key={index} data-active={index <= step} />)}
       </div>
       <button type="button" className="af-welcome-close" aria-label={spanish ? 'Cerrar guía de bienvenida' : 'Dismiss welcome guide'} onClick={finish}>×</button>
@@ -109,9 +131,9 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
         {step < steps.length - 1 ? (
           <button type="button" className="af-welcome-next" onClick={() => setStep((value) => value + 1)}>{spanish ? 'Siguiente' : 'Next'}</button>
         ) : (
-          <button type="button" className="af-welcome-next" onClick={finish}>{spanish ? 'Empezar' : 'Start using Core'}</button>
+          <button type="button" className="af-welcome-next" onClick={finish}>{spanish ? 'Empezar' : 'Get started'}</button>
         )}
       </div>
-    </aside>
+    </section>
   )
 }
