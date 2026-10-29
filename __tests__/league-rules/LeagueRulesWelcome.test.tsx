@@ -31,11 +31,31 @@ const responses: Record<string, unknown> = {
   },
 }
 
+/** The account's saved snapshots, keyed by league — what /api/core/league-preferences stores. */
+let server: Record<string, unknown>
+let prefsDown = false
 let fetchMock: ReturnType<typeof vi.fn>
+const posts = () =>
+  fetchMock.mock.calls
+    .filter(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
+    .map(([, init]) => JSON.parse(String((init as RequestInit).body)))
 
 beforeEach(() => {
   window.localStorage.clear()
-  fetchMock = vi.fn(async (url: string) => {
+  window.sessionStorage.clear()
+  server = {}
+  prefsDown = false
+  fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.startsWith('/api/core/league-preferences')) {
+      if (prefsDown) return { ok: false, json: async () => ({}) }
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body))
+        server[body.leagueId] = body.snapshot
+        return { ok: true, json: async () => ({ ok: true }) }
+      }
+      const id = new URL(url, 'http://x').searchParams.get('rulesSeen')!
+      return { ok: true, json: async () => ({ rulesSeen: server[id] ?? null }) }
+    }
     const key = Object.keys(responses).find((k) => url.includes(k))
     return { ok: Boolean(key), json: async () => (key ? responses[key] : {}) }
   })
@@ -44,8 +64,10 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('LeagueRulesWelcome', () => {
-  it('opens once the rules have loaded, leads with the Guilly rules, and is not shown again after "Got it"', async () => {
+const settle = () => new Promise((r) => setTimeout(r, 30))
+
+describe('LeagueRulesWelcome — first visit', () => {
+  it('opens once the rules have loaded, leads with the Guilly rules, and "Got it" saves what was shown to the account', async () => {
     const { unmount } = render(<LeagueRulesWelcome league={league} userId="u1" onSeeAllRules={vi.fn()} />)
     await screen.findByTestId('league-rules-welcome')
     expect(screen.getByText('How Ciege NBA Guilly works')).toBeTruthy()
@@ -53,37 +75,117 @@ describe('LeagueRulesWelcome', () => {
     expect(screen.getByTestId('league-rules-welcome-blind-auction')).toBeTruthy()
     fireEvent.click(screen.getByTestId('league-rules-welcome-close'))
     await waitFor(() => expect(screen.queryByTestId('league-rules-welcome')).toBeNull())
-    expect(window.localStorage.getItem(rulesWelcomeStorageKey('lg1', 'u1'))).toBe('1')
+    expect(posts()).toHaveLength(1)
+    expect(posts()[0]).toMatchObject({ field: 'rulesSeen', leagueId: 'lg1', snapshot: { rules: { waivers: { value: 'FAAB · $1,000' } } } })
     unmount()
 
+    // Next visit, from any device: nothing changed, nothing shown, nothing saved.
+    window.sessionStorage.clear()
     fetchMock.mockClear()
     render(<LeagueRulesWelcome league={league} userId="u1" onSeeAllRules={vi.fn()} />)
-    await new Promise((r) => setTimeout(r, 20))
+    await settle()
     expect(screen.queryByTestId('league-rules-welcome')).toBeNull()
-    // A manager who has seen it costs no requests.
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('league-rules-changed')).toBeNull()
+    expect(posts()).toHaveLength(0)
   })
 
-  it('"See all rules" marks it seen and opens the rules page', async () => {
+  it('"See all rules" saves it as seen and opens the rules page', async () => {
     const onSeeAllRules = vi.fn()
     render(<LeagueRulesWelcome league={league} userId="u2" onSeeAllRules={onSeeAllRules} />)
     fireEvent.click(await screen.findByTestId('league-rules-welcome-see-all'))
     expect(onSeeAllRules).toHaveBeenCalledTimes(1)
-    expect(window.localStorage.getItem(rulesWelcomeStorageKey('lg1', 'u2'))).toBe('1')
+    expect(posts()).toHaveLength(1)
   })
 
   it('waits while another sheet or intro is showing, then opens', async () => {
     const { rerender } = render(<LeagueRulesWelcome league={league} userId="u3" blocked onSeeAllRules={vi.fn()} />)
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
-    await new Promise((r) => setTimeout(r, 20))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4))
+    await settle()
     expect(screen.queryByTestId('league-rules-welcome')).toBeNull()
     rerender(<LeagueRulesWelcome league={league} userId="u3" blocked={false} onSeeAllRules={vi.fn()} />)
     await screen.findByTestId('league-rules-welcome')
   })
 
-  it('each manager sees it once per league', () => {
-    expect(rulesWelcomeStorageKey('lg1', 'u1')).not.toBe(rulesWelcomeStorageKey('lg1', 'u2'))
-    expect(rulesWelcomeStorageKey('lg1', 'u1')).not.toBe(rulesWelcomeStorageKey('lg2', 'u1'))
+  it('someone who saw the part-1 welcome in this browser is not welcomed again; their snapshot is saved quietly', async () => {
+    window.localStorage.setItem(rulesWelcomeStorageKey('lg1', 'u4'), '1')
+    render(<LeagueRulesWelcome league={league} userId="u4" onSeeAllRules={vi.fn()} />)
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    expect(screen.queryByTestId('league-rules-welcome')).toBeNull()
+  })
+
+  it('when the account cannot be read, nothing is shown', async () => {
+    prefsDown = true
+    render(<LeagueRulesWelcome league={league} userId="u5" onSeeAllRules={vi.fn()} />)
+    await settle()
+    expect(screen.queryByTestId('league-rules-welcome')).toBeNull()
+    // And no rules are fetched for a sheet that will not open.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('LeagueRulesWelcome — the rules changed (2026-10-29)', () => {
+  it('switching back to the league home within a few minutes does not check again', async () => {
+    const r = render(<LeagueRulesWelcome league={league} userId="u9" onSeeAllRules={vi.fn()} />)
+    fireEvent.click(await screen.findByTestId('league-rules-welcome-close'))
+    r.unmount()
+    fetchMock.mockClear()
+    render(<LeagueRulesWelcome league={league} userId="u9" onSeeAllRules={vi.fn()} />)
+    await settle()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  async function seeOnce(userId: string) {
+    const r = render(<LeagueRulesWelcome league={league} userId={userId} onSeeAllRules={vi.fn()} />)
+    fireEvent.click(await screen.findByTestId('league-rules-welcome-close'))
+    await waitFor(() => expect(server.lg1).toBeTruthy())
+    r.unmount()
+    // A later visit from another tab or device (this tab would skip the check for a few minutes).
+    window.sessionStorage.clear()
+    fetchMock.mockClear()
+  }
+
+  it('shows only what changed — before, after, what it means now — and "Got it" makes it the new baseline', async () => {
+    await seeOnce('u6')
+    const changed = { ...league as object, waiverBudget: 500 } as never
+    const { unmount } = render(<LeagueRulesWelcome league={changed} userId="u6" onSeeAllRules={vi.fn()} />)
+    await screen.findByTestId('league-rules-changed')
+    expect(screen.getByText('Rules changed in Ciege NBA Guilly')).toBeTruthy()
+    expect(screen.getByText('Your commissioner changed a rule since you last looked.')).toBeTruthy()
+    const row = screen.getByTestId('league-rules-changed-waivers')
+    expect(row.textContent).toContain('FAAB · $1,000')
+    expect(row.textContent).toContain('FAAB · $500')
+    expect(row.textContent).toContain('Each team has $500 for the season')
+    // Only the change, not the whole rulebook.
+    expect(screen.queryByTestId('league-rules-changed-how-guilly-works')).toBeNull()
+    fireEvent.click(screen.getByTestId('league-rules-welcome-close'))
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    expect(posts()[0].snapshot.rules.waivers.value).toBe('FAAB · $500')
+    unmount()
+
+    window.sessionStorage.clear()
+    fetchMock.mockClear()
+    render(<LeagueRulesWelcome league={changed} userId="u6" onSeeAllRules={vi.fn()} />)
+    await settle()
+    expect(screen.queryByTestId('league-rules-changed')).toBeNull()
+  })
+
+  it('the draft time is saved and compared in one zone, so another device\'s clock is not a "change"', async () => {
+    responses['draft/settings'] = { draftDate: '2026-11-01T00:00:00.000Z', config: { draft_type: 'snake', rounds: 9, timer_seconds: 60 }, autostartEnabled: true }
+    try {
+      await seeOnce('u8')
+      expect((server.lg1 as { rules: Record<string, { value: string }> }).rules['draft-date']!.value).toBe('Sat Oct 31, 8:00 PM ET')
+    } finally {
+      responses['draft/settings'] = { draftDate: null, config: { draft_type: 'snake', rounds: 9, timer_seconds: 60 }, autostartEnabled: false }
+    }
+  })
+
+  it('the commissioner is not shown their own changes; their baseline moves quietly', async () => {
+    await seeOnce('u7')
+    const changed = { ...league as object, waiverBudget: 500 } as never
+    render(<LeagueRulesWelcome league={changed} userId="u7" isCommissioner onSeeAllRules={vi.fn()} />)
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    expect(posts()[0].snapshot.rules.waivers.value).toBe('FAAB · $500')
+    expect(screen.queryByTestId('league-rules-changed')).toBeNull()
   })
 })
 

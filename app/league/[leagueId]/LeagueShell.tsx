@@ -1768,6 +1768,7 @@ export function LeagueShell({
               <LeagueRulesWelcome
                 league={league}
                 userId={userId}
+                isCommissioner={isCommissioner}
                 blocked={rulesWelcomeBlocked}
                 onSeeAllRules={() => {
                   setSettingsHomeRequest((prev) => ({ subPage: 'rulebook', nonce: prev.nonce + 1 }))
