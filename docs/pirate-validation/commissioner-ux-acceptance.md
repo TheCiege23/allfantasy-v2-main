@@ -10,6 +10,7 @@ The owner confirmed that the Android sign-in alert flow and test notification wo
 - Desktop has a category sidebar and focused editor. Mobile has a labeled category picker plus a dedicated Pirate rules shortcut. League, Roster, Scoring, Draft and Playoff settings use those precise names. Setup guidance and additional commissioner tools are collapsed below the editor.
 - The category layout measures available space inside the league chrome. A constrained 820 px tablet initially left a 35 px input; container-based switching keeps the editor usable when the league sidebars occupy part of the screen.
 - Pirate rules joins the existing Save bar and unsaved-change confirmation. Edits are not sent until Save; rejected saves retain the edits and show the server error. The editor explains protections, winner selection, automatic claim settlement, overflow deadlines and playoff steals.
+- General settings suppresses its old Auto-save badge inside the shared manual Save page. The older autosaving modal keeps its existing label.
 - The welcome guide waits for the sign-in alert prompt to close. Its card cannot shrink in the shell's flex layout, has a labeled Close guide action, and moves into view after the alert flow. The alert sheet fits the dynamic viewport, scrolls internally when needed, and keeps keyboard focus within its actions with Escape support.
 
 ## Verification and limits
@@ -19,6 +20,8 @@ Actual React commissioner, Pirate editor, welcome and sign-in alert components p
 Constrained browser checks reserve the actual space taken by the surrounding league chrome. At an 820 px viewport with 512 px available, the input increased from 35 to 170 px and the category picker replaced the sidebar. At 1024 px with 716 px available it measured 272 px; at 1365 px with 965 px available the desktop sidebar remained and the input measured 261.5 px. All three had no document overflow. The phone/WebKit and desktop save/reload checks passed again after this correction.
 
 The focused tests cover the real editor's shared Save integration, server rejection, unsaved-change cancellation/discard, explicit Pirate deep links, and prompt sequencing. Staging deployment and its exact commit must be verified separately. No production deployment or migration is authorized by this document.
+
+The main UI commit `6b5c89cba8f426de1e9e09e01232ccc3bcf3fd5b` became healthy on isolated Railway staging at 13:07 UTC. A real authenticated Pixel 7 Chromium browser check passed at 13:13 UTC using a disposable synthetic account and seasonless league: normal credentials sign-in, deferral of the account's age prompt through Not now, Pirate rules discovery, save 2, reload 2, restore 3, no page errors and no horizontal overflow (412/412 px; input 292 px). The temporary league, tenant and account were removed. This verifies the deployed mobile editor and seasonless API; the tablet-width and save-label follow-up deployment and physical-device acceptance remain separate checks.
 
 ## Owner acceptance after deployment
 
