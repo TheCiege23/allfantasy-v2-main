@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+import { readPhotoSweepCursor, readPhotoSweepPage, advancePhotoSweepCursor } from '@/lib/player-assets/photoSweepProgress';
 /**
  * GET/POST /api/cron/sync-player-images
  *
@@ -139,6 +141,7 @@ const PROVIDER_DELAY_MS = 250;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface PassSummary {
+  lastAttemptedId?: string;
   considered: number;
   resolved: number;
   failed: number;
@@ -306,6 +309,7 @@ async function resolveBatch(
       );
     }
 
+    summary.lastAttemptedId = player.id;
     await sleep(PROVIDER_DELAY_MS);
   }
 
@@ -563,36 +567,26 @@ async function handle(req: NextRequest) {
          */
         const priorityPositions = FANTASY_POSITIONS_BY_SPORT[sport];
 
+        // This mode is scoped to the four pro sports and explicitly requested backfills.
+        const resumePhotos = initializeIdentities && ['NFL', 'NBA', 'NHL', 'MLB'].includes(sport);
+        const photoCursorKey = 'player-photo-sweep:v1:' + sport;
+        const cursorRow = resumePhotos ? await prisma.sportsDataCache.findUnique({ where: { cacheKey: photoCursorKey } }).catch(() => null) : null;
+        const savedCursor = readPhotoSweepCursor(cursorRow && cursorRow.expiresAt > new Date() ? cursorRow.data : null);
+        const page = (where: Prisma.PlayerWhereInput, cursor: string | null, take: number, excluded: string[] = []) =>
+          readPhotoSweepPage(cursor, take, (range, pageTake) => prisma.player.findMany({
+            where: { ...where, id: { ...range, ...(excluded.length ? { notIn: excluded } : {}) } },
+            take: pageTake, orderBy: { id: 'asc' }, select: canonicalSelect,
+          }));
+        const priorityWhere = { sport, imageUrl: null, active: true, team: { not: null }, position: { in: priorityPositions ?? [] } };
         const priority = priorityPositions
-          ? await prisma.player.findMany({
-              where: {
-                sport,
-                imageUrl: null,
-                active: true,
-                team: { not: null },
-                position: { in: priorityPositions },
-              },
-              take: limit,
-              orderBy: { lastSyncedAt: "asc" },
-              select: canonicalSelect,
-            })
+          ? resumePhotos ? await page(priorityWhere, savedCursor.priority, limit)
+            : await prisma.player.findMany({ where: priorityWhere, take: limit, orderBy: { lastSyncedAt: 'asc' }, select: canonicalSelect })
           : [];
-
-        /* Top up with the general population only if the priority tier did not fill the budget. */
         const backfillRoom = limit - priority.length;
-        const backfill =
-          backfillRoom > 0
-            ? await prisma.player.findMany({
-                where: {
-                  sport,
-                  imageUrl: null,
-                  ...(priority.length ? { id: { notIn: priority.map((p) => p.id) } } : {}),
-                },
-                take: backfillRoom,
-                orderBy: { lastSyncedAt: "asc" },
-                select: canonicalSelect,
-              })
-            : [];
+        const backfill = backfillRoom > 0
+          ? resumePhotos ? await page({ sport, imageUrl: null }, savedCursor.general, backfillRoom, priority.map(p => p.id))
+            : await prisma.player.findMany({ where: { sport, imageUrl: null, ...(priority.length ? { id: { notIn: priority.map(p => p.id) } } : {}) }, take: backfillRoom, orderBy: { lastSyncedAt: 'asc' }, select: canonicalSelect })
+          : [];
 
         const missing = [...priority, ...backfill];
 
@@ -657,6 +651,15 @@ async function handle(req: NextRequest) {
           fill = await resolveBatch(missing, sport, deadline, {
             skipCache: false,
           });
+          if (resumePhotos && fill.lastAttemptedId) {
+            const data = advancePhotoSweepCursor(savedCursor, priority.map(p => p.id), missing.map(p => p.id), fill.lastAttemptedId);
+            const expiresAt = new Date(Date.now() + 30 * 86400000);
+            await prisma.sportsDataCache.upsert({
+              where: { cacheKey: photoCursorKey },
+              create: { cacheKey: photoCursorKey, data, expiresAt },
+              update: { data, expiresAt },
+            });
+          }
           const rest = await resolveBatch(stalePlayers, sport, deadline, {
             skipCache: true,
           });
