@@ -135,3 +135,21 @@ Physical-device acceptance is pending the owner's report. Live-manager scoring a
 The 8d789a5 rehearsal passed the native lifecycle and automatic/standalone renewal cases but exposed two remaining failures: an optional age-confirmation dialog covered renewal controls, and shared scoring loaded the campus module before checking whether the league was football C2C. The follow-up exercises the dialog's actual **Not now** action, waits for the editor response, and applies the existing pure C2C predicate before the lazy campus import. It retains the real authentication, approval, capacity and scoring assertions. Final hosted verification must be recorded separately; do not present a queued run or partial pass as a complete gate.
 
 Local follow-up verification passed **79 tests in 12 files**, including the 53 Zombie renewal/access/approval cases and campus matchup/scoring regressions, on the integrated source with the format guard. The localhost browser re-run and new hosted verdict are tracked separately.
+
+
+## Owner renewal report and visual polish — October 29
+
+The owner reported that the requested synthetic iPhone Safari renewal workflow “seems to have worked,” while describing its visuals as very simple. This records reported success for the requested capacity expansion, preview, save and restore exercise. No iPhone model, iOS version, timing measurement or detailed orientation results were supplied; this does not certify every physical-device scenario, all four draft rooms or a real-manager scoring week.
+
+The renewal panel and placement editor now use the existing Zombie emerald/cyan surfaces, tier badge tokens and icon language. The panel shows a Plan → Review → Create progression, a compact season transition, expandable archive/reset rules, destination occupancy bars, numeric manager/open-seat summaries, movement badges with text, readable manager rows and a distinct approval area. Destination tier colors retain the shared Gamma/Beta/Alpha definitions. Controls retain their existing names, 44px minimum targets, 16px inputs and visible focus rings. Grids stack on phones; long names wrap. Decorative icons and occupancy bars are hidden from screen readers because adjacent text supplies the values. Color is accompanied by text. Reduced-motion settings disable control transitions.
+
+Shared presentation: `ZombieRenewalVisuals.tsx` exports `RenewalSummary` (manager/league/open-seat counts and optional unassigned count), `RenewalTierBadge` (existing level name), `RenewalCapacity` (assigned/seats, including an explicit over-capacity warning), and the shared control style. Counts use the current proposal or the server preview; no provider calls, new schema, invented data or role/trade changes are involved. The existing state/effect/request sections of both screens remain byte-equivalent to the preceding commit.
+
+Verification on the polish candidate:
+
+- 27 existing approval, commissioner-page, reviewed-proposal and API regression tests passed across four files.
+- A local visual harness rendered the actual components with synthetic responses in Chromium and WebKit. At 320×740, 390×844, 844×390 and 1440×1000, no page-width overflow or non-checkbox input/button/select/textarea below 44px was found after viewport layout settled.
+- The harness exercised two 8→10 seat changes, 16-manager/20-seat payload, hash-bound review save, restore, and removal of executable approval after another edit. No season creation or network database/provider action occurred in this harness. This is component/browser-engine evidence, separate from authenticated staging or physical-iPhone acceptance.
+- Phone and desktop screenshots were visually inspected. Full hosted unit/browser CI and staging deployment status must be recorded separately.
+
+Remaining acceptance: latest hosted CI, owner review of the polished staging screen, the remaining four-sport physical-device checks, and a real-manager live scoring window after recruitment. Current NFL ADP provider access remains deferred by the owner.
