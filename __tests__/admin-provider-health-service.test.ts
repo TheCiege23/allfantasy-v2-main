@@ -115,6 +115,11 @@ const ENV_KEYS = [
   "TWILIO_ACCOUNT_SID",
   "TWILIO_AUTH_TOKEN",
   "TWILIO_VERIFY_SERVICE_SID",
+  "NEXT_PUBLIC_GTM_ID",
+  "NEXT_PUBLIC_GA_MEASUREMENT_ID",
+  "META_PIXEL_ID",
+  "NEXT_PUBLIC_META_PIXEL_ID",
+  "NEXT_PUBLIC_ANALYTICS_ENABLED",
 ]
 
 function resetEnv() {
@@ -188,6 +193,32 @@ describe("AdminProviderHealthService", () => {
       configured: true,
     })
     fetchSpy.mockRestore()
+  })
+
+  it("analytics: the GTM container alone counts as configured (production carries no pixel env vars)", async () => {
+    process.env.NEXT_PUBLIC_GTM_ID = "GTM-TEST123"
+    const { getAdminProviderHealthRows } = await import("@/lib/admin-dashboard/AdminProviderHealthService")
+
+    const rows = await getAdminProviderHealthRows()
+
+    expect(rows.find((row) => row.id === "analytics")).toMatchObject({ status: "configured", configured: true })
+  })
+
+  it("analytics: no tag env var at all is still missing_env", async () => {
+    const { getAdminProviderHealthRows } = await import("@/lib/admin-dashboard/AdminProviderHealthService")
+
+    const rows = await getAdminProviderHealthRows()
+
+    expect(rows.find((row) => row.id === "analytics")).toMatchObject({ status: "missing_env", configured: false })
+  })
+
+  it("analytics: NEXT_PUBLIC_ANALYTICS_ENABLED=false reports disabled, not a fault", async () => {
+    process.env.NEXT_PUBLIC_ANALYTICS_ENABLED = "false"
+    const { getAdminProviderHealthRows } = await import("@/lib/admin-dashboard/AdminProviderHealthService")
+
+    const rows = await getAdminProviderHealthRows()
+
+    expect(rows.find((row) => row.id === "analytics")).toMatchObject({ status: "disabled" })
   })
 
   it("reports configured World Cup provider, request telemetry, rate window, and sync errors", async () => {
