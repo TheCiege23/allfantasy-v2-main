@@ -360,7 +360,7 @@ jobs:
       # Give each route family a fresh server, as the draft regression lane does.
       # Every mobile spec stays assigned once; both devices and @db exclusion stay intact.
       run: |
-        mapfile -t all_specs < <(rg --files e2e/mobile | rg '\.spec\.ts$' | sort)
+        mapfile -t all_specs < <(git ls-files -- e2e/mobile | grep -E '\.spec\.ts$' | sort)
         draft_specs=()
         layout_specs=()
         general_specs=()
