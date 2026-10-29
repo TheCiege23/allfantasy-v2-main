@@ -47,6 +47,7 @@ import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/league-log/leagueLog'
 import { ELIMINATED_LINEUP_RULE_KEY, parseEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLineups'
 import { IR_AUTO_MOVE_KEY, parseIrAutoMoveRule } from '@/lib/ir-activation/irAutoMove'
+import { FILL_EMPTY_STARTERS_KEY } from '@/lib/lineup-automation/fillEmptyStarters'
 import { ORPHAN_AUCTION_KEY } from '@/lib/orphan-auction/orphanAuction'
 import { parsePickTermsRule, PICK_TERMS_KEY, PICK_TERMS_RULE_KEY } from '@/lib/league-trade-engine/pickTerms'
 import { parseTaxiStealingRule, readTaxiStealingRule, TAXI_STEAL_CLAIMS_KEY, TAXI_STEALING_KEY } from '@/lib/taxi/taxiStealing'
@@ -889,6 +890,12 @@ export async function executeLeagueSettingsPatch(
     if (!parsed.ok) return jsonError(parsed.error, 400)
     if (parsed.value.enabled && !hasSub) return jsonError('IR auto-move is part of the AF Commissioner plan.', 403)
     ;(merge as Record<string, unknown>)[IR_AUTO_MOVE_KEY] = parsed.value
+  }
+
+  // Fill an empty starting spot before lock (lib/lineup-automation/fillEmptyStarters.ts) — free, on by
+  // default; the commissioner can switch it off. Only a true/false is stored, so nothing else reads as off.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && FILL_EMPTY_STARTERS_KEY in merge) {
+    if (typeof (merge as Record<string, unknown>)[FILL_EMPTY_STARTERS_KEY] !== 'boolean') return jsonError('Send true or false to fill empty starting spots.', 400)
   }
 
   // Conditional and protected picks (lib/league-trade-engine/pickTerms.ts) — an AF Commissioner rule;

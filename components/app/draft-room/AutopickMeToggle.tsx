@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react'
 
-/** `draft_as_me` (AF Pro): if the clock runs out, the queue goes first, then Chimmy picks the way this manager drafts. */
+/** `draft_as_me` (AF Pro): as soon as the manager is on the clock, the queue goes first, then Chimmy picks the way they draft. */
 export type AutopickMode = 'standard' | 'ai_queue' | 'draft_as_me'
 
 export type ViewerAutopickData = {
@@ -88,7 +88,10 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
       data-testid="autopick-me-toggle"
       className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-3 py-1"
     >
-      <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-white/70">
+      <label
+        className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-white/70"
+        title="Picks for you as soon as you are on the clock, instead of waiting for your timer to run out."
+      >
         <input
           type="checkbox"
           checked={localEnabled}
@@ -141,7 +144,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
             disabled={saving}
             aria-disabled={!isProEligible || saving}
             data-testid="autopick-mode-draft-as-me"
-            title={isProEligible ? 'If your clock runs out, your queue goes first, then Chimmy picks the way you draft.' : 'AF Pro required'}
+            title={isProEligible ? 'As soon as you are on the clock, your queue goes first, then Chimmy picks the way you draft.' : 'AF Pro required'}
             onClick={() => {
               if (!isProEligible) {
                 setError('AF Pro required to have Chimmy draft like you.')

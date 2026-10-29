@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { buildDraftStyle, pickLikeManager, type DraftStyle } from './draftAsMe'
 import { loadManagerPastPicks } from './managerHistoryReads'
+import { isAutopilotRoster } from '@/lib/live-draft-engine/instantAutopick'
 import { getViewerAutopickPreference } from '@/lib/live-draft-engine/LiveDraftAutopickPreferenceService'
 import type { AutopickFallbackPoolEntry } from '@/lib/live-draft-engine/autopickBestAvailableSubmit'
 
@@ -13,7 +14,8 @@ import type { AutopickFallbackPoolEntry } from '@/lib/live-draft-engine/autopick
  *     league with `League.settings.draft_as_me = false`; otherwise it is on for every entitled league;
  *   - for one manager's own team, on THEIR AF Pro plan (phase 6, 2026-10-27): the "Draft like me" mode
  *     of their auto-pick setting in the draft room (`LiveDraftAutopickPreference.mode = 'draft_as_me'`),
- *     whatever the league's plan or switch.
+ *     whatever the league's plan or switch;
+ *   - for a team Chimmy runs on autopilot (`draftAsMeEnabledForLeague` with its roster).
  * Returns null — and the ordinary autopick runs — whenever neither applies, or there is no history or
  * no board to judge.
  */
@@ -33,8 +35,15 @@ export function describeDraftStyle(style: DraftStyle): string {
   return `Picked the way you draft: ${timing}${lean ? `, and ${Math.round(lean[1] * 100)}% of your picks are ${lean[0]}s` : ''}.`
 }
 
-export async function draftAsMeEnabledForLeague(leagueId: string): Promise<boolean> {
+/**
+ * On for the league (the owner's AF Commissioner plan and the commissioner's switch), or — given a
+ * roster — for a team Chimmy runs on autopilot (phase 7, 2026-10-29). Autopilot is already AF
+ * Commissioner, and keeping the team its owner built is its whole job, so it drafts the way the owner
+ * did whatever the league-wide switch says. With no draft history to read, the ordinary autopick runs.
+ */
+export async function draftAsMeEnabledForLeague(leagueId: string, rosterId?: string): Promise<boolean> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, settings: true } })
+  if (rosterId && isAutopilotRoster(league?.settings, rosterId)) return true
   if (!league?.userId) return false
   const settings = league.settings && typeof league.settings === 'object' ? (league.settings as Record<string, unknown>) : {}
   if (settings[DRAFT_AS_ME_SETTING] === false) return false
@@ -71,7 +80,7 @@ export async function tryDraftAsMePick(args: {
 }): Promise<DraftAsMePick | null> {
   const on =
     (args.draftSessionId ? await personalDraftAsMeOn(args.draftSessionId, args.rosterId).catch(() => false) : false) ||
-    (await draftAsMeEnabledForLeague(args.leagueId))
+    (await draftAsMeEnabledForLeague(args.leagueId, args.rosterId))
   if (!on) return null
   const style = buildDraftStyle(await loadManagerPastPicks(args.leagueId, args.rosterId))
   if (!style) return null

@@ -22,6 +22,7 @@ import { resolveCurrentOnTheClock } from '@/lib/live-draft-engine/CurrentOnTheCl
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import { tryQueueAutoPick } from '@/lib/live-draft-engine/slow-draft/SlowDraftRuntimeService'
 import { submitBestAvailableAutopickForExpiredTimer } from '@/lib/live-draft-engine/autopickBestAvailableSubmit'
+import { instantAutopickReason, shouldPickNow } from '@/lib/live-draft-engine/instantAutopick'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
 import { isLeagueRosterDraftReady } from '@/lib/league/league-roster-draft-gate'
 import {
@@ -144,10 +145,6 @@ export async function processExpiredDraftPickForLeague(
     if (session.cpuAutoPick === false) {
       return { leagueId, outcome: 'skipped', reason: 'cpu_autopick_disabled' }
     }
-    if (!session.timerEndAt || session.timerEndAt > now) {
-      return { leagueId, outcome: 'skipped', reason: 'timer_not_expired' }
-    }
-
     const pauseWindow =
       uiSettings.timerMode === 'overnight_pause' && uiSettings.slowDraftPauseWindow
         ? uiSettings.slowDraftPauseWindow
@@ -163,12 +160,14 @@ export async function processExpiredDraftPickForLeague(
       now,
       pauseWindow,
     )
-    if (timer.status !== 'expired') {
+    // Paused (by the commissioner or overnight): nobody picks. A clock still running — or no clock
+    // at all — only for a team that picks without waiting (../instantAutopick.ts), checked below.
+    if (timer.status !== 'expired' && timer.status !== 'running' && timer.status !== 'none') {
       return { leagueId, outcome: 'skipped', reason: `timer_${timer.status}` }
     }
 
     const versionAtEntry = session.version
-    const timerEndAtEntry = session.timerEndAt.getTime()
+    const timerEndAtEntry = session.timerEndAt?.getTime() ?? null
 
     const slotOrder = (session.slotOrder as unknown as SlotOrderEntry[]) ?? []
     const tradedPicks = Array.isArray(session.tradedPicks)
@@ -213,6 +212,13 @@ export async function processExpiredDraftPickForLeague(
     if (!onClockRosterId) {
       return { leagueId, outcome: 'skipped', reason: 'no_on_clock_roster' }
     }
+    const instant =
+      timer.status === 'expired'
+        ? null
+        : await instantAutopickReason({ leagueId, draftSessionId: session.id, rosterId: onClockRosterId }).catch(() => null)
+    if (!shouldPickNow(timer.status, instant)) {
+      return { leagueId, outcome: 'skipped', reason: 'timer_not_expired' }
+    }
 
     const fresh = await prisma.draftSession.findFirst({
       where: { leagueId },
@@ -227,8 +233,7 @@ export async function processExpiredDraftPickForLeague(
       !fresh ||
       fresh.status !== 'in_progress' ||
       fresh.version !== versionAtEntry ||
-      !fresh.timerEndAt ||
-      fresh.timerEndAt.getTime() !== timerEndAtEntry
+      (fresh.timerEndAt?.getTime() ?? null) !== timerEndAtEntry
     ) {
       return { leagueId, outcome: 'skipped', reason: 'stale_session' }
     }
@@ -284,7 +289,7 @@ export async function processExpiredDraftPickForLeague(
     if (mid.version !== versionAtEntry) {
       return { leagueId, outcome: 'skipped', reason: 'stale_after_queue' }
     }
-    if (mid.timerEndAt && mid.timerEndAt > now) {
+    if (!instant && mid.timerEndAt && mid.timerEndAt > now) {
       return { leagueId, outcome: 'skipped', reason: 'timer_advanced' }
     }
 
@@ -297,7 +302,8 @@ export async function processExpiredDraftPickForLeague(
     // to the commit.
     const expectedOverall = session.picks.length + 1
 
-    if (autoPickBehavior === 'skip') {
+    // A team that asked for a pick is never skipped (../instantAutopick.ts).
+    if (autoPickBehavior === 'skip' && !instant) {
       const skip = await submitPick({
         leagueId,
         playerName: '(Skipped)',
@@ -415,7 +421,7 @@ export async function processExpiredDraftPicks(
   const now = options.now ?? new Date()
   const maxLeagues = Math.min(Math.max(options.maxLeagues ?? 40, 1), 200)
 
-  const candidates = await prisma.draftSession.findMany({
+  const candidates: Array<{ leagueId: string; draftType: string }> = await prisma.draftSession.findMany({
     where: {
       status: 'in_progress',
       draftType: { in: ['snake', 'linear', 'auction'] },
@@ -430,6 +436,26 @@ export async function processExpiredDraftPicks(
     orderBy: { timerEndAt: 'asc' },
     take: maxLeagues,
   })
+  // Drafts whose clock has NOT run out (or is untimed), for a team on the clock that picks without
+  // waiting — an autopilot team, or a manager on "Auto-pick me" (../instantAutopick.ts). Each is
+  // checked per league and skipped as `timer_not_expired` when the team on the clock is neither.
+  const seen = new Set(candidates.map((c) => c.leagueId))
+  const running = await prisma.draftSession.findMany({
+    where: {
+      status: 'in_progress',
+      draftType: { in: ['snake', 'linear'] },
+      sleeperDraftId: null,
+      OR: [{ timerEndAt: null }, { timerEndAt: { gt: now } }],
+    },
+    select: { leagueId: true, draftType: true },
+    orderBy: { updatedAt: 'asc' },
+    take: maxLeagues,
+  })
+  for (const row of running) {
+    if (seen.has(row.leagueId)) continue
+    seen.add(row.leagueId)
+    candidates.push(row)
+  }
 
   const details: ExpiredPickProcessDetail[] = []
   const errors: Array<{ leagueId: string; message: string }> = []
