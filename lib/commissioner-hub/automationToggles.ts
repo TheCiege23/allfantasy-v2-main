@@ -4,7 +4,7 @@
  * same permission checks, validation and audit apply; nothing here writes settings itself. Paid
  * automations keep their link: their switches carry plan checks and choices of their own.
  */
-export const TOGGLEABLE_AUTOMATIONS = ['fill_empty_starters', 'auto_handover', 'rookie_draft_opens', 'rookie_draft_starts'] as const
+export const TOGGLEABLE_AUTOMATIONS = ['fill_empty_starters', 'auto_handover', 'rookie_draft_opens', 'rookie_draft_starts', 'trade_review_auto_approve'] as const
 export type ToggleableAutomation = (typeof TOGGLEABLE_AUTOMATIONS)[number]
 
 export function isToggleableAutomation(key: string): key is ToggleableAutomation {
@@ -23,5 +23,7 @@ export function automationToggleRequest(leagueId: string, key: ToggleableAutomat
       return { url: `${base}/dynasty-settings`, method: 'PUT', body: { rookieDraftAutoOpen: on } }
     case 'rookie_draft_starts':
       return { url: `${base}/dynasty-settings`, method: 'PUT', body: { rookieDraftAutoStartDays: on ? 7 : null } }
+    case 'trade_review_auto_approve':
+      return { url: `${base}/trade-review-auto-approve`, method: 'POST', body: { on } }
   }
 }

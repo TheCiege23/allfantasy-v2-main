@@ -31,6 +31,7 @@ const LABELS_ES: Record<string, string> = {
   rookie_draft_starts: 'El draft de novatos empieza solo',
   live_rookie_order: 'Orden del draft de novatos siempre al día',
   tanking: 'Monitor anti-tanking',
+  trade_review_auto_approve: 'Aprobar intercambios sin alertas tras 48 horas sin revisión',
   hold_flagged_trades: 'Retener cambios sospechosos para revisión',
   taxi_rules: 'Reglas del taxi squad aplicadas',
 }
