@@ -321,7 +321,7 @@ jobs:
         NEXTAUTH_URL: http://localhost:3000
         NODE_OPTIONS: --max-old-space-size=8192 --conditions=react-server
         AF_ZOMBIE_REHEARSAL: '1'
-        E2E_WARM_ROUTES: /api/auth/csrf,/api/auth/session,/api/leagues,/api/zombie/weekly-payout
+        E2E_WARM_ROUTES: /api/auth/csrf,/api/auth/session,/api/leagues,/api/zombie/weekly-payout,/api/auth/confirm-age,/zombie/universe/e2e-renewal-warmup
       run: npx playwright test e2e/zombie-four-sport-native-rehearsal.spec.ts e2e/zombie-provider-week-rehearsal.spec.ts --project=chromium
     # The phone gate. Two device projects over the public routes only — no login,
     # no fixture league, nothing that makes the core shards slow and flaky.

@@ -31,7 +31,18 @@ async function signIn(page: Page, email: string, password: string, userId: strin
     form: { csrfToken: csrf.csrfToken, login: email, password, json: 'true' },
   })
   expect(response.ok(), await response.text()).toBeTruthy()
-  await expect.poll(async () => (await (await page.request.get('/api/auth/session')).json()).user?.id).toBe(userId)
+  // NextAuth can return HTTP 200 with a failed-login redirect. Check the actual
+  // callback result before waiting for a session; never mistake that for success.
+  const callback=await response.json()
+  expect(typeof callback.url).toBe('string')
+  const redirect=new URL(callback.url,csrfResponse.url())
+  expect(redirect.searchParams.get('error'),'credential callback error').toBeNull()
+  expect(redirect.searchParams.get('csrf'),'credential callback CSRF rejection').toBeNull()
+  // The credential callback has completed and set its cookie. Assert the real
+  // session response directly; a cold HTTP request must not outlive a 5s poll.
+  const session=await page.request.get('/api/auth/session')
+  expect(session.ok(),await session.text()).toBeTruthy()
+  expect((await session.json()).user?.id).toBe(userId)
 }
 
 

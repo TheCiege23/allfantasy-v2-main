@@ -37,7 +37,18 @@ async function signIn(page: Page, email: string, password: string, userId: strin
     form: { csrfToken: csrf.csrfToken, login: email, password, json: 'true' },
   })
   expect(response.ok(), await response.text()).toBeTruthy()
-  await expect.poll(async () => (await (await page.request.get('/api/auth/session')).json()).user?.id).toBe(userId)
+  // NextAuth can return HTTP 200 with a failed-login redirect. Check the actual
+  // callback result before waiting for a session; never mistake that for success.
+  const callback=await response.json()
+  expect(typeof callback.url).toBe('string')
+  const redirect=new URL(callback.url,csrfResponse.url())
+  expect(redirect.searchParams.get('error'),'credential callback error').toBeNull()
+  expect(redirect.searchParams.get('csrf'),'credential callback CSRF rejection').toBeNull()
+  // The credential callback has completed and set its cookie. Assert the real
+  // session response directly; a cold HTTP request must not outlive a 5s poll.
+  const session=await page.request.get('/api/auth/session')
+  expect(session.ok(),await session.text()).toBeTruthy()
+  expect((await session.json()).user?.id).toBe(userId)
 }
 
 test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zombie-rehearsal', async ({ page }) => {
@@ -516,8 +527,8 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
  const password=randomUUID(),passwordHash=await bcrypt.hash(password,6)
  const users=Array.from({length:17},(_,i)=>marker+'-'+i)
  await prisma.appUser.createMany({data:users.map(id=>({id,username:id,email:id+'@example.invalid',emailVerified:new Date(),passwordHash}))})
- await signIn(page,users[0]+'@example.invalid',password,users[0])
  try {
+ await signIn(page,users[0]+'@example.invalid',password,users[0])
  for(const [sport,preset] of [['NFL','fb_half_ppr'],['NBA','nba_points'],['NHL','nhl_points'],['MLB','mlb_points']] as const){
   const u=await prisma.zombieUniverse.create({data:{name:marker+' '+sport,sport,commissionedByUserId:users[0],createdByUserId:users[0],promotionCount:2,relegationCount:2}})
   const originals:string[]=[]
@@ -585,9 +596,11 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
    await page.setViewportSize({width:390,height:844})
    // Fixture accounts have no age attestation. Exercise the product's optional
    // dismissal so the real dialog cannot cover the commissioner controls.
-   const ageCheck=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/auth/confirm-age'&&response.request().method()==='GET')
-   await page.goto('/zombie/universe/'+u.id)
-   expect((await (await ageCheck).json()).confirmed).toBe(false)
+   const [ageResponse]=await Promise.all([
+    page.waitForResponse(response=>new URL(response.url()).pathname==='/api/auth/confirm-age'&&response.request().method()==='GET'),
+    page.goto('/zombie/universe/'+u.id,{waitUntil:'domcontentloaded'}),
+   ])
+   expect((await ageResponse.json()).confirmed).toBe(false)
    const agePrompt=page.getByRole('dialog',{name:'Quick confirmation'})
    await agePrompt.getByRole('button',{name:'Not now',exact:true}).click()
    await expect(agePrompt).toBeHidden()
