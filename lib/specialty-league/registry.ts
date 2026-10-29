@@ -104,7 +104,7 @@ function registerGuillotine(): void {
   registerSpecialtyLeague({
     id: 'guillotine',
     leagueVariant: 'guillotine',
-    label: 'Guillotine',
+    label: 'Guilly',
     wizardLeagueTypeId: 'guillotine',
 
     detect: isGuillotineLeague,

@@ -101,7 +101,7 @@ describe('loadGuillotineContext', () => {
     const out = await loadGuillotineContext(league)
     if (!out.ok) throw new Error(out.reason)
     expect(out.ctx.board.map((p) => p.name).sort()).toEqual(['A', 'B'])
-    expect(out.ctx.nflWeeksLeft).toBe(13)
+    expect(out.ctx.weeksLeft).toBe(13)
   })
 
   it('refuses rosters it cannot match, an unreadable lineup, and a league with one team left', async () => {

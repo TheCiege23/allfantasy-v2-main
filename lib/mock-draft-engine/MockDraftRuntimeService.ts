@@ -4,6 +4,7 @@ import { loadSportAwareDraftPlayerPool } from '@/lib/mock-draft/sport-player-poo
 import { makeAIPick } from '@/lib/mock-draft-simulator/DraftAIManager'
 import type { DraftPlayer } from '@/lib/mock-draft-simulator/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { mockPlayerKey } from './mockPlayerIdentity'
 import type {
   MockDraftPickSnapshot,
   MockDraftProgressSnapshot,
@@ -13,6 +14,7 @@ import type {
   MockRoomMode,
   MockSlotConfigEntry,
 } from './types'
+import { normalizeMockDraftTeamCount } from '@/lib/mock-draft/mockTeamCount'
 
 type MockDraftRow = {
   id: string
@@ -32,7 +34,8 @@ const CPU_LOOP_LIMIT = 250
 
 function parseSettings(metadata: unknown): MockDraftSettings {
   const raw = (metadata || {}) as Record<string, unknown>
-  const numTeams = Math.min(16, Math.max(8, Number(raw.numTeams) || 12))
+  // Any size a league of this sport and type accepts (lib/mock-draft/mockTeamCount.ts).
+  const numTeams = normalizeMockDraftTeamCount(raw.numTeams, raw.sport, raw.leagueType)
   const roomModeRaw = String(raw.roomMode ?? 'solo')
   const roomMode: MockRoomMode =
     roomModeRaw === 'cpu_only' || roomModeRaw === 'mixed' || roomModeRaw === 'linked_public'
@@ -164,7 +167,7 @@ function isParticipant(draft: MockDraftRow, userId?: string): boolean {
   return draft.slotConfig.some((slot: any) => slot?.userId === userId)
 }
 
-function getSlotForOverall(overall: number, numTeams: number, draftType: string): number {
+export function getSlotForOverall(overall: number, numTeams: number, draftType: string): number {
   const round = Math.floor((overall - 1) / numTeams) + 1
   const pickInRound = ((overall - 1) % numTeams) + 1
   if (draftType === 'linear' || draftType === 'auction') return pickInRound
@@ -287,10 +290,6 @@ function toSnapshot(draft: MockDraftRow, viewerUserId?: string): MockDraftSessio
   }
 }
 
-function playerKey(playerName: string, position: string) {
-  return `${playerName.trim().toLowerCase()}|${position.trim().toUpperCase()}`
-}
-
 async function loadPool(settings: MockDraftSettings): Promise<DraftPlayer[]> {
   const target = settings.numTeams * settings.rounds + 120
   const sport = normalizeToSupportedSport(settings.sport)
@@ -322,8 +321,10 @@ async function chooseCpuPlayer(
   overall: number
 ): Promise<DraftPlayer> {
   const pool = await loadPool(settings)
-  const drafted = new Set(results.map((pick) => playerKey(pick.playerName, pick.position)))
-  const available = pool.filter((player) => !drafted.has(playerKey(player.name, player.position)))
+  const drafted = new Set(results.map((pick) => mockPlayerKey(settings.sport, pick.playerName, pick.position)))
+  const draftedIds = new Set(results.flatMap(p => p.playerId ? [p.playerId] : []))
+  const available = pool.filter(player => !drafted.has(mockPlayerKey(settings.sport, player.name, player.position)) &&
+    !(player.playerId && draftedIds.has(player.playerId)))
   if (available.length === 0) {
     return {
       name: `CPU Prospect ${overall}`,
@@ -522,7 +523,8 @@ export async function submitMockDraftPickRuntime(
   const playerName = String(input.playerName || '').trim()
   const position = String(input.position || '').trim().toUpperCase()
   if (!playerName || !position) return { ok: false, error: 'playerName and position required' }
-  const duplicate = results.some((pick) => playerKey(pick.playerName, pick.position) === playerKey(playerName, position))
+  const duplicate = results.some(pick => (input.playerId && pick.playerId === input.playerId) ||
+    mockPlayerKey(settings.sport, pick.playerName, pick.position) === mockPlayerKey(settings.sport, playerName, position))
   if (duplicate) return { ok: false, error: 'Player already drafted' }
 
   const nextResults = [

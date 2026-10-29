@@ -154,7 +154,10 @@ export async function runNewsImporter(options?: {
     })
 
     await prisma.playerNewsRecord.createMany({
-      data: attributed,
+      // Keep the original team for identity resolution above, but do not let an
+      // unrecognized provider label exceed player_news.team's varchar(32).
+      // Null preserves the story without inventing a truncated team identity.
+      data: attributed.map(r => ({ ...r, team: r.team && Array.from(r.team).length > 32 ? null : r.team })),
       skipDuplicates: true,
     })
     imported += attributed.length

@@ -1,6 +1,12 @@
 /**
  * Shared lineup payload builder for `/api/leagues/roster/save` and AI apply-lineup.
+ *
+ * A STARTER row may carry `slotIndex` — the expanded starter slot he holds (QB, RB1, …, FLEX), so a
+ * lineup saved with an empty slot reloads with the hole where it was. Kept only when it is a
+ * non-negative integer, and only on starters. See lib/league/lineupSlotPositions.ts.
  */
+import { starterSlotIndexOf } from '@/lib/league/lineupSlotPositions'
+
 export type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 
 function toPlayerId(raw: unknown): string | null {
@@ -13,7 +19,7 @@ function toPlayerId(raw: unknown): string | null {
   return null
 }
 
-function normalizeLineupSection(section: unknown): Array<Record<string, unknown>> {
+function normalizeLineupSection(section: unknown, keepSlotIndex = false): Array<Record<string, unknown>> {
   if (!Array.isArray(section)) return []
   const out: Array<Record<string, unknown>> = []
   const seen = new Set<string>()
@@ -33,6 +39,8 @@ function normalizeLineupSection(section: unknown): Array<Record<string, unknown>
       actual: obj.actual == null ? null : Number(obj.actual),
       status: String(obj.status ?? obj.injury_status ?? 'healthy').toLowerCase(),
     })
+    const slotIndex = keepSlotIndex ? starterSlotIndexOf(obj) : null
+    if (slotIndex != null) out[out.length - 1].slotIndex = slotIndex
   }
   return out
 }
@@ -51,7 +59,7 @@ export function buildPersistedRosterDataFromRosterState(
       : {}
 
   const lineupSections: Record<RosterSectionKey, Array<Record<string, unknown>>> = {
-    starters: normalizeLineupSection(rawObj.starters),
+    starters: normalizeLineupSection(rawObj.starters, true),
     bench: normalizeLineupSection(rawObj.bench),
     ir: normalizeLineupSection(rawObj.ir),
     taxi: normalizeLineupSection(rawObj.taxi),

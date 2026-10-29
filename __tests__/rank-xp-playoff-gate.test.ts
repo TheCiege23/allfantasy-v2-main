@@ -70,7 +70,7 @@ describe('seasons vs leagues counting', () => {
 
 describe('isEliminationFormat', () => {
   it('flags guillotine and survivor leagues', () => {
-    for (const t of ['guillotine', 'Guillotine', 'GUILLOTINE', 'survivor', 'Survivor Pool']) {
+    for (const t of ['guillotine', 'Guillotine', 'Guilly', 'GUILLOTINE', 'survivor', 'Survivor Pool']) {
       expect(isEliminationFormat(t)).toBe(true)
     }
   })

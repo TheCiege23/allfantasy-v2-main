@@ -63,8 +63,8 @@ describe('BoardKit monograms', () => {
    * characters renders four identical marks and the rail becomes unreadable.
    */
   it('takes the first and last word, so near-identical names differ', () => {
-    expect(leagueMark('Guillotine League 26 ($20/1)')).toBe('G1')
-    expect(leagueMark('Guillotine League 26 ($20/2)')).toBe('G2')
+    expect(leagueMark('Guilly League 26 ($20/1)')).toBe('G1')
+    expect(leagueMark('Guilly League 26 ($20/2)')).toBe('G2')
     expect(leagueMark('Dynasty Dragons')).toBe('DD')
   })
 

@@ -13,6 +13,7 @@ import {
   formatAllPlay,
   formatStreak,
 } from '@/lib/standings/seasonForm'
+import { parseActiveLeagueDivisions, resolveRosterDivisions, type LeagueTeamIdentity } from '@/lib/league/divisions/leagueDivisions'
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -133,5 +134,41 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       : NaN
   const playoffCut = Number.isFinite(playoffTeams) && playoffTeams > 0 ? playoffTeams : null
 
-  return NextResponse.json({ season, standings, scoringMode, viewerRosterId, playoffCut, source: 'native', sourcePlatform: 'AllFantasy', scoredWeeks: new Set(weekResults.map(r => r.week)).size, cumulative: league.bestBallMode && league.bbMatchupFormat === 'cumulative' }, { headers: { 'Cache-Control': 'private, no-store' } })
+  /*
+   * The commissioner's divisions (`settings.division_config`, keyed by `LeagueTeam.id`). A standings
+   * row is a generic `Roster.id`, which is its team's `externalId`. Best-effort: a failed read shows the
+   * overall table alone, as before divisions were read here.
+   */
+  let divisions: Array<{ key: string; name: string; rosterIds: string[] }> | null = null
+  const activeDivisions = parseActiveLeagueDivisions(league.settings)
+  if (activeDivisions && standings.length > 0) {
+    try {
+      const [teams, rosters] = await Promise.all([
+        prisma.leagueTeam.findMany({
+          where: { leagueId },
+          select: { id: true, externalId: true, claimedByUserId: true, platformUserId: true },
+        }) as Promise<LeagueTeamIdentity[]>,
+        prisma.roster.findMany({
+          where: { leagueId, id: { in: standings.map((r) => r.rosterId) } },
+          select: { id: true, platformUserId: true },
+        }),
+      ])
+      const byRoster = resolveRosterDivisions(
+        activeDivisions,
+        teams,
+        rosters.map((r) => ({ rosterId: r.id, ids: [r.platformUserId] })),
+      )
+      if (byRoster.size > 0) {
+        divisions = activeDivisions.divisions.map((d) => ({
+          key: d.key,
+          name: d.name,
+          rosterIds: standings.filter((r) => byRoster.get(r.rosterId)?.key === d.key).map((r) => r.rosterId),
+        }))
+      }
+    } catch {
+      divisions = null
+    }
+  }
+
+  return NextResponse.json({ season, standings, scoringMode, viewerRosterId, playoffCut, divisions, divisionPlayoffRule: divisions ? activeDivisions?.playoffRule ?? null : null, source: 'native', sourcePlatform: 'AllFantasy', scoredWeeks: new Set(weekResults.map(r => r.week)).size, cumulative: league.bestBallMode && league.bbMatchupFormat === 'cumulative' }, { headers: { 'Cache-Control': 'private, no-store' } })
 }

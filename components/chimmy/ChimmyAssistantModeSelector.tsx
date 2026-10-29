@@ -18,8 +18,8 @@ const MODE_CONFIG: Record<
 > = {
   fast_take: {
     icon: Zap,
-    label: 'Fast Take',
-    description: 'Quick verdict',
+    label: 'Free summary',
+    description: 'Keeps included answers',
   },
   deep_analysis: {
     icon: BarChart3,

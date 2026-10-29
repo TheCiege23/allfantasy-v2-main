@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect } from 'react'
 import * as Sentry from '@sentry/nextjs'
+import posthog from 'posthog-js'
 import { isNavigationSignal } from '@/components/core-app/CoreScreenErrorBoundary'
 
 /**
@@ -48,6 +49,19 @@ export default function AfCoreError({
       })
     } catch {
       // Reporting must never turn a contained failure into an uncontained one.
+    }
+    /*
+     * PostHog autocaptures this error with no stack and no digest, because production strips both
+     * from a Server Components error. The digest is the only key to the server log line that holds
+     * the real stack, so it goes to PostHog as a property.
+     */
+    try {
+      posthog.captureException(error, {
+        digest: error?.digest ?? null,
+        'af.boundary': 'core-segment',
+      })
+    } catch {
+      // Same rule as above.
     }
   }, [error])
 

@@ -10,6 +10,7 @@ import { postChimmyMoment } from '@/lib/league-chat/chimmyMoments'
 import { commissionerAlertsText } from '@/lib/league-chat/chimmyCommissionerNotices'
 import { openaiChatText } from '@/lib/openai-client'
 import { buildAiCacheKey, readAiResultCache, writeAiResultCache } from '@/lib/ai-result-cache'
+import { deskActions, deskAnswer, deskFingerprint, relevantDeskTasks, type CommissionerDesk, type DeskAction } from './commissionerDesk'
 import { analyzeLeagueGovernance } from './LeagueGovernanceAnalyzer'
 import { generateCommissionerAlerts } from './CommissionerAlertGenerator'
 import { generateLeagueInsights } from './LeagueInsightGenerator'
@@ -488,17 +489,24 @@ export async function answerAICommissionerQuestion(input: {
   sport?: string | null
   season?: number | null
   networkContext?: { name: string; leagues: Array<{ id: string; name: string }> } | null
-}): Promise<{ answer: string; source: 'ai' | 'template'; insights: LeagueInsightReport }> {
+  /** The commissioner's desk (./commissionerDesk.ts): open tasks and the league office. */
+  desk?: CommissionerDesk | null
+}): Promise<{ answer: string; source: 'ai' | 'template'; insights: LeagueInsightReport; actions: DeskAction[] }> {
   const insights = await getAICommissionerInsights({
     leagueId: input.leagueId,
     sport: input.sport ?? null,
     season: input.season ?? null,
   })
-  const fallback = buildDeterministicCommissionerAnswer({
-    question: input.question,
-    insights,
-    networkContext: input.networkContext,
-  })
+  // The tasks this question is about; their screens are the only links shown under the answer.
+  const relevant = input.desk ? relevantDeskTasks(input.question, input.desk.tasks) : []
+  const actions = deskActions(relevant)
+  const fallback =
+    (input.question.toLowerCase().includes('network') && input.networkContext ? null : deskAnswer(relevant)) ??
+    buildDeterministicCommissionerAnswer({
+      question: input.question,
+      insights,
+      networkContext: input.networkContext,
+    })
 
   // ── AiResult cache gate ───────────────────────────────────────────────────
   const cacheInputs = {
@@ -507,12 +515,14 @@ export async function answerAICommissionerQuestion(input: {
     sport: insights.sport ?? null,
     season: insights.season ?? null,
     networkContext: input.networkContext ?? null,
+    // A cached answer about the desk must not outlive the desk it described.
+    desk: deskFingerprint(input.desk),
   }
   const { resultKey, inputHash } = buildAiCacheKey('commissioner-question', cacheInputs)
   const cached = await readAiResultCache(resultKey)
   if (cached?.resultText) {
     console.log(`[ai-commissioner] AiResult cache hit { key: '${resultKey.slice(0, 48)}...' }`)
-    return { answer: cached.resultText, source: 'ai', insights }
+    return { answer: cached.resultText, source: 'ai', insights, actions }
   }
 
   const aiResult = await openaiChatText({
@@ -520,7 +530,10 @@ export async function answerAICommissionerQuestion(input: {
       {
         role: 'system',
         content:
-          'You are the AllFantasy AI League Commissioner assistant. Use only supplied league context. Network context establishes membership names only, not facts about other leagues. Keep answers concise and actionable. Do not invent facts or perform commissioner actions.',
+          'You are the AllFantasy AI League Commissioner assistant, answering the league\'s commissioner. Use only supplied league context. ' +
+          'commissionerDesk.openTasks is what is waiting on the commissioner and commissionerDesk.office is the league office (corrections, trades in review, inactive teams, prizes, payouts); ' +
+          'when the question is about the commissioner\'s work, answer from those first and name the task to act on. The app shows a link to each task\'s screen under your answer: never write a link or URL yourself. ' +
+          'Network context establishes membership names only, not facts about other leagues. Keep answers concise and actionable. Do not invent facts, and never say an action has been taken: you cannot change the league.',
       },
       {
         role: 'user',
@@ -536,6 +549,13 @@ export async function answerAICommissionerQuestion(input: {
           draftCommentary: insights.draftCommentary,
           controversialTrades: insights.controversialTrades,
           suggestedRuleAdjustments: insights.suggestedRuleAdjustments,
+          commissionerDesk: input.desk
+            ? {
+                office: input.desk.office,
+                openTasks: input.desk.tasks.map((t) => ({ task: t.title, detail: t.description })),
+                mostRelevant: relevant.map((t) => t.title),
+              }
+            : null,
         }),
       },
     ],
@@ -561,5 +581,5 @@ export async function answerAICommissionerQuestion(input: {
     }).catch(() => undefined)
   }
 
-  return { answer, source, insights }
+  return { answer, source, insights, actions }
 }

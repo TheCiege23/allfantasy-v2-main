@@ -15,7 +15,7 @@ function row(over: Partial<TriageBookRow> = {}): TriageBookRow {
     sleeperId: '12500',
     imageUrl: null,
     leagues: [
-      { id: 'g26', name: 'Guillotine League 26', platform: 'sleeper', imageUrl: null, slot: 'starter', bench: [{ name: 'Tyler Allgeier', position: 'RB', points: 11.2 }] },
+      { id: 'g26', name: 'Guilly League 26', platform: 'sleeper', imageUrl: null, slot: 'starter', bench: [{ name: 'Tyler Allgeier', position: 'RB', points: 11.2 }] },
     ],
     note: 'RB · Out',
     position: 'RB',
@@ -69,7 +69,7 @@ describe('the triage card asks for the best add on demand', () => {
     const fetchMock = okBoard([{ sleeperId: '9493', name: 'Puka Nacua', position: 'WR', gain: 6.1 }])
     vi.stubGlobal('fetch', fetchMock)
     const { container } = render(<Dash3ATriage book={[row()]} now={NOW} />)
-    await waitFor(() => expect(container.textContent).toContain('Add Puka Nacua (WR, +6.1 pts) in Guillotine League 26'))
+    await waitFor(() => expect(container.textContent).toContain('Add Puka Nacua (WR, +6.1 pts) in Guilly League 26'))
     const url = boardCalls(fetchMock)[0]
     expect(url).toContain('leagueId=g26')
     expect(url).toContain('unavailable=12500')

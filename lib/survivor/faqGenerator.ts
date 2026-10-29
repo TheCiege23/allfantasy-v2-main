@@ -5,8 +5,33 @@
 
 import { prisma } from '@/lib/prisma'
 import { getSurvivorConfig } from './SurvivorLeagueConfig'
-import { EXILE_KEY_POSITION_BY_SPORT, IDOL_POWER_DESCRIPTIONS } from './constants'
-import { getSportSchedule } from './sportScheduleEngine'
+import { EXILE_KEY_POSITION_BY_SPORT } from './constants'
+import { createSurvivorChatMessage } from './survivorChatBridge'
+import { buildSurvivorRulebook, type SurvivorRulesContext } from './survivorRulesAnswers'
+import { loadSurvivorRulesContext } from './survivorRulesContext'
+
+/**
+ * The pinned Main Island FAQ: the league's rulebook (built from its settings, the same source as
+ * the Rules page and Chimmy's answers) plus the @Chimmy commands. The Rules page is the copy that
+ * is always current; this pin is a snapshot from when it was last written.
+ */
+export function buildMainIslandFaq(leagueId: string, ctx: SurvivorRulesContext): string {
+  const sections = buildSurvivorRulebook(ctx).map(section => `**${section.title.toUpperCase()}**\n${section.lines.map(line => `• ${line}`).join('\n')}`)
+  return [
+    '**SURVIVOR LEAGUE — RULES & FAQ**',
+    `Always-current rules: /survivor/${leagueId}/rules`,
+    ...sections,
+    [
+      '**@CHIMMY COMMANDS (private)**',
+      '• "@Chimmy vote @manager": cast your Tribal Council vote',
+      '• "@Chimmy use my idol": play your idol before votes are read',
+      '• "@Chimmy do I have an idol?": check your own idols',
+      '• "@Chimmy shot in the dark": give up your vote for a chance to be safe',
+      '• "@Chimmy how does voting work?": any rules question, answered for this league',
+      '• "@Chimmy what\'s my status?": safe, immune, on Exile, or on the jury',
+    ].join('\n'),
+  ].join('\n\n---\n\n')
+}
 
 /**
  * Generate and pin the Main Island FAQ in the league chat channel.
@@ -14,109 +39,9 @@ import { getSportSchedule } from './sportScheduleEngine'
 export async function generateAndPinMainIslandFAQ(leagueId: string): Promise<void> {
   const config = await getSurvivorConfig(leagueId)
   if (!config) return
-
-  const league = await (prisma as any).league.findUnique({
-    where: { id: leagueId },
-    select: {
-      sport: true, survivorPlayerCount: true, survivorTribeCount: true,
-      survivorMergeTrigger: true, survivorMergeWeek: true, survivorMergeAtCount: true,
-      survivorJuryStart: true, survivorIdolsEnabled: true, survivorIdolCount: true,
-      survivorIdolExpiryWeek: true, survivorExileEnabled: true,
-      survivorSelfVoteAllowed: true, survivorRocksEnabled: true, survivorTieRule: true,
-      survivorRevealMode: true, survivorChallengeMode: true, survivorTokenEnabled: true,
-      survivorBossResetEnabled: true,
-    },
-  })
-  if (!league) return
-
-  const sport = league.sport ?? 'NFL'
-  const schedule = getSportSchedule(sport)
-  const keyPos = EXILE_KEY_POSITION_BY_SPORT[sport] ?? 'QB'
-
-  const faq = `**SURVIVOR LEAGUE — RULES & FAQ**
-
-**Format:** Survivor-style fantasy ${sport} league
-**Players:** ${league.survivorPlayerCount ?? 20} managers split into ${league.survivorTribeCount ?? 4} tribes
-**Sport Schedule:** ${schedule.scheduleNote}
-
----
-
-**HOW IT WORKS**
-• Tribes compete weekly through fantasy ${sport} scoring
-• The tribe with the lowest combined score goes to Elimination Council
-• At Elimination Council, tribe members vote someone out privately via @Chimmy
-• Voted-out players are sent to Exile Island
-• At a configured point, tribes merge into one — individual immunity begins
-• After merge, the highest individual scorer each week wins immunity
-• Late-game eliminated players become the Jury
-• The Final 3 face the Jury — Jury votes for the Sole Survivor
-
----
-
-**VOTING**
-• Vote privately by messaging @Chimmy: "I vote for [player name]"
-• Self-voting: ${league.survivorSelfVoteAllowed ? 'Allowed' : 'Not allowed'}
-• Late votes: Recorded as "Does Not Count"
-• Tie resolution: ${(league.survivorTieRule ?? 'rocks').replace(/_/g, ' ')}
-• Go to Rocks: ${league.survivorRocksEnabled !== false ? 'Enabled' : 'Disabled'}
-• Vote reveal: ${(league.survivorRevealMode ?? 'dramatic').replace(/_/g, ' ')}
-
----
-
-**IDOLS & POWERS**
-• Idols: ${league.survivorIdolsEnabled !== false ? `Enabled (${league.survivorIdolCount ?? 9} in pool)` : 'Disabled'}
-• ~30-35% of the league receives a hidden idol after the draft
-• Each idol is unique — no two managers get the same power
-• Idols must be played BEFORE votes are counted
-• To play: message @Chimmy "I want to use my idol"
-• To check your idols: message @Chimmy "Do I have an idol?"
-• Idols are attached to PLAYERS — if a player is traded or picked up from waivers, the idol goes with them
-• ${league.survivorIdolExpiryWeek ? `Idols expire after Week ${league.survivorIdolExpiryWeek}` : 'Idols expire when 5 players remain (default)'}
-• When an idol is played, it is announced in league chat
-
----
-
-**MERGE**
-• Merge trigger: ${league.survivorMergeTrigger === 'week' ? `At Week ${league.survivorMergeWeek}` : `When ${league.survivorMergeAtCount ?? 10} players remain`}
-• After merge: individual immunity begins (highest scorer wins)
-• Pre-merge idols may expire at merge (check commissioner settings)
-
----
-
-**JURY & FINALE**
-• Jury begins: ${(league.survivorJuryStart ?? 'after merge').replace(/_/g, ' ')}
-• Eliminated players after jury start join the Jury
-• Final 3 face Jury questions and closing statements
-• Jury votes privately for the winner — the Sole Survivor
-
----
-
-**EXILE ISLAND**
-• ${league.survivorExileEnabled !== false ? 'Enabled' : 'Disabled'}
-• Voted-out players are sent to Exile Island
-• On Exile: claim real ${sport} teams via waiver system
-• Claim the **${keyPos}** (key position) to win the entire team's roster
-• Team with most fantasy points each week earns a token
-• ${league.survivorBossResetEnabled !== false ? 'Boss (commissioner) can play on Exile — if Boss scores highest, ALL tokens reset to 0' : 'Boss reset: Disabled'}
-• Manager with the most tokens at the return week goes back to the main island
-• Random mini-games appear on Exile for bonus tokens
-
----
-
-**CHALLENGES & MINI-GAMES**
-• Challenge mode: ${(league.survivorChallengeMode ?? 'automatic').replace(/_/g, ' ')}
-• ${schedule.minigamesPerWeek} mini-game(s) per scoring period on Main Island
-• Mini-games on Exile are random — not every week
-
----
-
-**@CHIMMY COMMANDS (Private Chat)**
-• "I vote for [name]" — cast your tribal vote
-• "I want to use my idol" — play your idol before votes are counted
-• "Do I have an idol?" — check your idol inventory
-• "What are the rules?" — get a rules summary
-• "When is the deadline?" — check current deadlines
-• "What's my status?" — check if you're safe, vulnerable, immune, etc.`
+  const ctx = await loadSurvivorRulesContext(leagueId)
+  if (!ctx) return
+  const faq = buildMainIslandFaq(leagueId, ctx)
 
   // Find or create league chat channel
   const channel = await (prisma as any).survivorChatChannel.findFirst({
@@ -136,7 +61,7 @@ export async function generateAndPinMainIslandFAQ(leagueId: string): Promise<voi
       data: { content: faq, pinnedAt: new Date() },
     })
   } else {
-    await (prisma as any).survivorChatMessage.create({
+    await createSurvivorChatMessage(prisma, {
       data: {
         leagueId,
         channelId: channel.id,
@@ -249,7 +174,7 @@ Welcome to Exile Island. Your main island journey is over — but the game isn't
       data: { content: faq, pinnedAt: new Date() },
     })
   } else {
-    await (prisma as any).survivorChatMessage.create({
+    await createSurvivorChatMessage(prisma, {
       data: {
         leagueId,
         channelId: channel.id,

@@ -106,17 +106,19 @@ export async function updateLeagueAISettings(
   if (patch.aiChatChimmyEnabled !== undefined)
     next[SETTINGS_KEYS.aiChatChimmyEnabled] = patch.aiChatChimmyEnabled
 
+  await prisma.league.update({
+    where: { id: leagueId },
+    data: { settings: next as any, updatedAt: new Date() },
+  })
+
+  // AFTER the write above, not before: `next` was built from the settings read at the top, and
+  // writing it after this call put the old orphan keys straight back. This call re-reads.
   if (patch.aiDraftManagerOrphanEnabled !== undefined) {
     await updateDraftUISettings(leagueId, {
       orphanTeamAiManagerEnabled: patch.aiDraftManagerOrphanEnabled,
       orphanDrafterMode: patch.aiDraftManagerOrphanEnabled ? 'ai' : 'cpu',
     })
   }
-
-  await prisma.league.update({
-    where: { id: leagueId },
-    data: { settings: next as any, updatedAt: new Date() },
-  })
 
   const draftUI = await getDraftUISettingsForLeague(leagueId)
   return fromStorage(next, {

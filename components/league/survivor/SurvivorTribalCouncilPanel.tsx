@@ -30,7 +30,11 @@ export type TribalCouncilView = {
     isSafeFromVote: boolean
   }
   host: { eligibleVoterCount: number; submittedCount: number; missingVoteCount: number } | null
-  reveal: { revealSequence: RevealScroll[]; countsByTargetName: Record<string, number>; eliminatedName: string | null; isTie: boolean; tiePhase: string | null } | null
+  /** Server-gated read (lib/survivor/survivorRevealGate.ts): released steps only; verdict once complete. */
+  reveal: {
+    revealSequence: RevealScroll[]; countsByTargetName: Record<string, number>; eliminatedName: string | null; isTie: boolean; tiePhase: string | null
+    mode?: 'one_at_a_time' | 'all_at_once'; totalSteps?: number; visibleSteps?: number; complete?: boolean; nextStepAt?: string | null; exileEnabled?: boolean
+  } | null
 }
 
 type Access = {
@@ -178,10 +182,17 @@ export function SurvivorTribalCouncilPanel({
             <div className="space-y-2">
               <div className="text-xs font-medium uppercase tracking-wide text-neutral-400">The votes</div>
               <SurvivorVoteRevealScrolls
+                key={council.councilId ?? 'council'}
                 scrolls={council.reveal.revealSequence}
+                totalSteps={council.reveal.totalSteps}
                 eliminatedName={council.reveal.eliminatedName}
                 isTie={council.reveal.isTie}
                 tiePhase={council.reveal.tiePhase}
+                revealMode={council.reveal.mode}
+                nextStepAt={council.reveal.nextStepAt}
+                onRequestMore={onRefresh}
+                exileEnabled={council.reveal.exileEnabled}
+                week={council.week}
                 autoPlay={council.isRevealed}
                 isPublished={council.isRevealed}
               />

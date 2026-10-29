@@ -45,7 +45,7 @@ beforeEach(() => {
   db.rows = []
 })
 
-describe('frozen originals in a guillotine league', () => {
+describe('frozen originals in a Guilly league', () => {
   it('skips the market-chart original and shows the guillotine one frozen after it', async () => {
     db.league = GUILLOTINE
     row(original('fantasycalc', 'F', '2026-10-11T04:00:00Z'), '2026-10-11T04:00:00Z')
@@ -54,7 +54,7 @@ describe('frozen originals in a guillotine league', () => {
     expect(frozen?.grade.letter).toBe('D')
   })
 
-  it('treats a guillotine league holding only market originals as having none, so the next read freezes anew', async () => {
+  it('treats a Guilly league holding only market originals as having none, so the next read freezes anew', async () => {
     db.league = GUILLOTINE
     row(original('fantasycalc', 'F', '2026-10-11T04:00:00Z'), '2026-10-11T04:00:00Z')
     expect((await loadFrozenCompletedGrades('L', ['T1'])).has('T1')).toBe(false)

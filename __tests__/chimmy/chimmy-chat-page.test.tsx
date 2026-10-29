@@ -27,6 +27,7 @@ vi.mock('@/lib/tokens/client-confirm', () => ({
   previewTokenSpend: vi.fn(),
 }))
 
+import posthog from 'posthog-js'
 import { ChimmyChatPageClient } from '@/app/chimmy/chat/ChimmyChatPageClient'
 import CommsDrawer from '@/components/core-app/comms/CommsDrawer'
 
@@ -50,6 +51,19 @@ const LINEUP_CARD = {
     moveOut: [{ name: 'Tony Pollard', position: 'RB', team: 'TEN' }],
   },
   warnings: [],
+}
+
+const EMOJI_CATALOG = {
+  emojis: [
+    { id: '1F525', char: '🔥', name: 'fire', shortcode: 'fire', category: 'travel', keywords: 'fire lit' },
+    { id: '1F3C8', char: '🏈', name: 'american football', shortcode: 'football', category: 'activities', keywords: 'american football' },
+  ],
+  categories: [
+    { key: 'fantasy', label: 'Fantasy', icon: '🏈' },
+    { key: 'travel', label: 'Travel & places', icon: '✈️' },
+    { key: 'activities', label: 'Sports & activities', icon: '🏆' },
+  ],
+  fantasy: ['1F3C8', '1F525'],
 }
 
 function json(body: unknown, status = 200) {
@@ -77,6 +91,7 @@ function routeFetch(routes: Routes = {}) {
       return routes.chimmy ? routes.chimmy(init!.body as FormData) : json({ response: 'Start him.' })
     }
     if (url === '/api/push/subscribe') return json({ configured: false, vapidPublicKey: null })
+    if (url === '/api/chat/emojis') return json(EMOJI_CATALOG)
     return json({})
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -120,10 +135,10 @@ describe('/chimmy/chat is the drawer\'s Chimmy tab, full screen', () => {
     expect(screen.getByRole('heading', { name: 'Chimmy' })).toBeInTheDocument()
     expect(screen.getByText('Who sees this: Just you')).toBeInTheDocument()
     expect(screen.getByLabelText('League scope')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Fast' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Summary' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Deep' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Which league needs me most\?/ })).toBeInTheDocument()
-    expect(screen.getByText('Chimmy answers may cost 9 tokens. Under 2 answers\' worth, your balance tops back up to 2 once a day. Free lookups and typing cost nothing.')).toBeInTheDocument()
+    expect(screen.getByText('Free summaries and lookups cost nothing. Detailed answers use your daily allowance first; review the price before spending tokens.')).toBeInTheDocument()
 
     // What the hands-on test saw on the old page, none of which the drawer has.
     // The right-rail headings were relabelled Chimmy Quick Ask / Chimmy Hub / Chimmy Status (brand
@@ -177,7 +192,7 @@ describe('/chimmy/chat is the drawer\'s Chimmy tab, full screen', () => {
 
   it('asks /api/chat/chimmy in multipart, as this page, with the URL\'s sport while no league is picked', async () => {
     openPage({ sport: 'NBA' })
-    fireEvent.click(screen.getByRole('button', { name: 'Fast' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Summary' }))
     await ask('Who are the best waiver adds tonight?')
 
     await waitFor(() => expect(screen.getByText('Start him.')).toBeInTheDocument())
@@ -261,6 +276,40 @@ describe('/chimmy/chat is the drawer\'s Chimmy tab, full screen', () => {
     expect(screen.getByText('Hold. His usage is climbing.')).toBeInTheDocument()
   })
 
+  it('a failed first question says it went unanswered, not "Nothing asked yet.", and is counted', async () => {
+    const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => undefined)
+    routeFetch({ chimmy: () => json({ error: 'boom', code: 'internal_error' }, 500) })
+    openPage()
+    await ask('Who should I start?')
+
+    expect(await screen.findByText('Chimmy did not answer that question.')).toBeInTheDocument()
+    expect(screen.queryByText('Nothing asked yet.')).toBeNull()
+    expect(screen.getByText('Chimmy hit a snag on our side.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('Who should I start?')
+    expect(capture).toHaveBeenCalledWith(
+      'chimmy_request_failed',
+      expect.objectContaining({ status: 500, code: 'internal_error', retryable: true, scope_changed: false }),
+    )
+  })
+
+  it('still shows the failure when the league scope changed while Chimmy was answering', async () => {
+    const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => undefined)
+    let fail: (r: Response) => void = () => {}
+    routeFetch({ chimmy: () => new Promise<Response>((resolve) => { fail = resolve }) as unknown as Response })
+    openPage({ leagueId: 'L1' })
+    await ask('How does my matchup look?')
+    await waitFor(() => expect(chimmyPosts()).toHaveLength(1))
+
+    fireEvent.change(screen.getByLabelText('League scope'), { target: { value: 'L2' } })
+    await act(async () => fail(json({ error: 'boom' }, 500)))
+
+    expect(await screen.findByText('Chimmy did not answer your question in KBFL. Chimmy hit a snag on our side.')).toBeInTheDocument()
+    // Try again here would send the question to the wrong league.
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    expect(capture).toHaveBeenCalledWith('chimmy_request_failed', expect.objectContaining({ status: 500, scope_changed: true }))
+  })
+
   /*
    * 🛑 "MY QUESTION APPEARED TWICE" (owner's report, 2026-09-25). Turn ids were `you-${t.length}` and
    * the thread is capped at 80, so once a thread was full — and the saved conversation arrives FULL
@@ -294,6 +343,40 @@ describe('/chimmy/chat is the drawer\'s Chimmy tab, full screen', () => {
     expect(new Set(ids).size).toBe(ids.length)
     expect(keyWarnings.mock.calls.some((c) => /same key/i.test(String(c[0])))).toBe(false)
     keyWarnings.mockRestore()
+  })
+})
+
+/*
+ * The emoji button is the league/DM composer's own EmojiPicker, not a copy. It inserts at the cursor —
+ * not at the end — because a reaction typed mid-sentence is the case an append gets wrong silently.
+ */
+describe('the emoji picker in the Chimmy composer', () => {
+  it('inserts the tapped emoji at the cursor and sends it as ordinary text', async () => {
+    openPage()
+    const box = screen.getByLabelText('Message') as HTMLTextAreaElement
+    fireEvent.change(box, { target: { value: 'Start him tonight' } })
+    box.setSelectionRange(9, 9)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Emoji' }))
+    expect(screen.getByRole('button', { name: 'Emoji' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(await screen.findByRole('button', { name: 'fire' }))
+
+    await waitFor(() => expect(box.value).toBe('Start him🔥 tonight'))
+    // The picker stays open for a second emoji, and the caret follows the first one.
+    await waitFor(() => expect(box.selectionStart).toBe(9 + '🔥'.length))
+    fireEvent.click(screen.getByRole('button', { name: 'american football' }))
+    await waitFor(() => expect(box.value).toBe('Start him🔥🏈 tonight'))
+
+    fireEvent.submit(box.closest('form')!)
+    await waitFor(() => expect(chimmyPosts()).toHaveLength(1))
+    expect(postedForm().get('message')).toBe('Start him🔥🏈 tonight')
+    // Sending closes the picker.
+    expect(screen.queryByPlaceholderText('Search emojis...')).toBeNull()
+  })
+
+  it('offers no GIF button: /api/chat/chimmy cannot carry one', () => {
+    openPage()
+    expect(screen.queryByRole('button', { name: 'GIF' })).toBeNull()
   })
 })
 

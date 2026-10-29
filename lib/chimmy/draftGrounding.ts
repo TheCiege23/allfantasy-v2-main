@@ -9,6 +9,7 @@ import {
 import type { DraftType, SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import type { RecommendationResult } from '@/lib/draft-helper/RecommendationEngine'
 
 /**
  * THE DRAFT — live, scheduled, or finished.
@@ -29,6 +30,81 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
  * reports what has been bought and stays silent on "who is next", rather than
  * inventing a clock nobody is on.
  */
+
+/**
+ * Draft OS has to answer inside a chat turn. It assembles the league's pool (up to 800 players),
+ * the AF ADP snapshot and the roster template; past this budget Chimmy answers from board state
+ * alone rather than making the user wait.
+ */
+const DRAFT_OS_BUDGET_MS = 2500
+const ALTERNATIVES = 3
+
+/**
+ * Draft OS's recommendation for one roster, as prompt lines.
+ *
+ * Draft OS (`lib/shared-services/draft`) rebuilds the engine input server-side from the draft
+ * session, AF ADP and roster template, then runs the same `computeDraftRecommendation` the draft
+ * room's /api/draft/recommend uses — so Chimmy and the board recommend the same player. It is
+ * deliberately not `evaluateDraftShadow`, which also runs the legacy grader and writes to the
+ * shadow store. Null on timeout, error, or no recommendation: an absent block is the honest answer.
+ */
+export async function buildDraftOsRecommendationLines(
+  leagueId: string,
+  rosterId: string,
+  deps: {
+    buildContext?: (input: { leagueId: string; rosterId: string }) => Promise<{ engineInput: unknown }>
+    recommend?: (input: unknown) => RecommendationResult
+    budgetMs?: number
+  } = {},
+): Promise<string[] | null> {
+  const buildContext =
+    deps.buildContext ??
+    (async (input: { leagueId: string; rosterId: string }) => {
+      const { buildDraftDecisionContext } = await import('@/lib/shared-services/draft/DraftContextAssembler')
+      return buildDraftDecisionContext(input)
+    })
+  let result: RecommendationResult | null
+  try {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), deps.budgetMs ?? DRAFT_OS_BUDGET_MS)
+    })
+    const work = (async () => {
+      const ctx = await buildContext({ leagueId, rosterId })
+      const recommend =
+        deps.recommend ??
+        (await import('@/lib/draft-helper/RecommendationEngine')).computeDraftRecommendation as (
+          input: unknown,
+        ) => RecommendationResult
+      return recommend(ctx.engineInput)
+    })()
+    result = await Promise.race([work, timeout])
+    if (timer) clearTimeout(timer)
+  } catch {
+    return null
+  }
+  const top = result?.recommendation
+  if (!result || !top) return null
+
+  const describe = (p: { name: string; position: string; team?: string | null; adp?: number | null }) =>
+    `${p.name} (${p.position}${p.team ? `, ${p.team}` : ''}${p.adp != null ? `, ADP ${Math.round(p.adp * 10) / 10}` : ''})`
+  const lines = [
+    `DRAFT OS RECOMMENDATION for THIS USER's pick (the same engine as their draft room): ${describe(top.player)} — ${top.reason}`,
+  ]
+  const alternatives = result.alternatives.slice(0, ALTERNATIVES)
+  if (alternatives.length > 0) {
+    lines.push(`Alternatives: ${alternatives.map((a) => `${describe(a.player)} — ${a.reason}`).join('; ')}.`)
+  }
+  const notes = [result.scarcityInsight, result.reachWarning, result.valueWarning, result.byeNote].filter(
+    (n): n is string => Boolean(n && n.trim()),
+  )
+  if (notes.length > 0) lines.push(`Draft OS notes: ${notes.join(' ')}`)
+  if (!top.adpIsReal) {
+    lines.push('Market ADP is missing for this player, so do not describe the pick as a reach or a value against ADP.')
+  }
+  lines.push('Present this as a recommendation the user can take or leave; they make the pick.')
+  return lines
+}
 
 /** Enough to establish where the board is without flooding the prompt. */
 const RECENT_PICKS = 8
@@ -259,6 +335,16 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
      * id. Saying nothing beats attributing somebody else's slot to them.
      */
     lines.push('This user could not be matched to a draft slot, so do not tell them when they pick.')
+  }
+
+  /*
+   * Who to take. Only for a running snake/linear draft and a matched roster: an auction needs
+   * budget logic this engine does not apply, a paused draft has no pick to make, and an unmatched
+   * viewer would be advised from someone else's roster.
+   */
+  if (mine && viewerRosterId && !isAuction && !paused && nextOverall <= totalPicks) {
+    const draftOsLines = await buildDraftOsRecommendationLines(leagueId, viewerRosterId)
+    if (draftOsLines) lines.push(...draftOsLines)
   }
 
   lines.push(

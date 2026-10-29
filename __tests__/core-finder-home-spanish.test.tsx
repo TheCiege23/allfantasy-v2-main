@@ -353,7 +353,9 @@ describe('Home — CardFreshness, from freshnessStamp / leagueDataStamp’s real
       leagueDataStamp({ oldestAt: ago(3 * 3_600_000), neverSynced: 1, syncable: 3, paused: 2 }, NOW),
       freshnessStamp('Injury feed checked', ago(7 * 60_000), NOW, { staleRule: 'injuries', parts: { kind: 'injuries' } }),
     ])
-    expect(container.textContent).toBe(
+    expect(container.querySelector('summary')?.textContent).toBe('Actualizaciones retrasadas')
+    expect(container.querySelector('details')?.open).toBe(false)
+    expect(container.querySelector('.af-cardfresh')?.textContent).toBe(
       '⚠ 1 liga nunca leída · Datos de ligas activas más antiguos actualizados hace 3 h · 2 conexiones en pausa excluidas (desactualizado)' +
         ' · Parte de lesiones revisado hace 7 min',
     )
@@ -361,8 +363,8 @@ describe('Home — CardFreshness, from freshnessStamp / leagueDataStamp’s real
 
   it('a stamp without parts stays whole English', () => {
     lang.language = 'es'
-    const { container } = renderAt([freshnessStamp('Rosters', ago(7 * 60_000), NOW)])
-    expect(container.textContent).toBe('Rosters updated 7 min ago')
+    const { container } = renderAt([freshnessStamp('Rosters', ago(3 * 3_600_000), NOW, { staleRule: 'injuries' })])
+    expect(container.querySelector('.af-cardfresh')?.textContent).toBe('⚠ Rosters updated 3h ago (out of date)')
   })
 
   it('English is unchanged, byte for byte', () => {
@@ -373,7 +375,8 @@ describe('Home — CardFreshness, from freshnessStamp / leagueDataStamp’s real
       missingLabel: 'history retained',
     })
     const { container } = renderAt([stamp, freshnessStamp('Scores', null, NOW, { missing: 'none-yet', parts: { kind: 'scores' } })])
-    expect(container.textContent).toBe(
+    expect(container.querySelector('summary')?.textContent).toBe('Updates delayed')
+    expect(container.querySelector('.af-cardfresh')?.textContent).toBe(
       '⚠ 1 league never read · Oldest active league data · 2 paused connections excluded updated 3h ago (out of date) · Scores none yet',
     )
   })

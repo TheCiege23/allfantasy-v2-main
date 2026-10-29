@@ -19,6 +19,7 @@ export type StoryVariant = "short" | "social" | "long"
 
 /** Structured narrative sections for every story. */
 export interface StoryOutput {
+  source?: 'ai' | 'template'
   headline: string
   whatHappened: string
   whyItMatters: string

@@ -4,24 +4,23 @@ import { getFormatTypeForVariant } from '@/lib/sport-defaults/LeagueVariantRegis
 import type { LineupValidationContext } from '@/lib/roster-lineup-engine/types'
 import { loadLeagueWeekContext, type LineupLockResolveArgs } from '@/lib/roster-lineup-engine/lineupLockService'
 import { evaluateFullRosterLegalityAsync } from './evaluateFullRosterLegality'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
+import { withImportedPlayerPositions } from '@/lib/league/importedLineupTemplate'
 import type { RosterLegalityFullResult } from './types'
-
-function weekFromSettings(settings: unknown): number {
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return 1
-  const o = settings as Record<string, unknown>
-  const w = o.currentWeek ?? o.current_week ?? o.week
-  if (typeof w === 'number' && Number.isFinite(w)) return Math.max(1, w)
-  if (typeof w === 'string') {
-    const n = parseInt(w, 10)
-    return Number.isFinite(n) ? Math.max(1, n) : 1
-  }
-  return 1
-}
 
 export type PersistedRosterRef = {
   id: string
   leagueId: string
   playerData: unknown
+}
+
+/**
+ * An imported roster's lineup rows are bare ids; their positions come from the import's
+ * `player_metadata` (lib/league/importedLineupTemplate.ts). Only what is validated changes — nothing is
+ * written. Native rosters are passed through untouched.
+ */
+function rowsWithPositions(platform: string | null | undefined, playerData: unknown): unknown {
+  return isImportedPlatform(platform) ? withImportedPlayerPositions(playerData) : playerData
 }
 
 /**
@@ -43,8 +42,7 @@ export async function evaluateLegalityForPersistedRoster(
     return null
   }
 
-  const { season } = await loadLeagueWeekContext(roster.leagueId, league.settings, league.season)
-  const leagueWeek = weekFromSettings(league.settings)
+  const { season, week: leagueWeek } = await loadLeagueWeekContext(roster.leagueId, league.settings, league.season)
   const editingWeek = leagueWeek
 
   const ctx: LineupValidationContext = {
@@ -87,7 +85,7 @@ export async function evaluateLegalityForPersistedRoster(
   }
 
   const result = await evaluateFullRosterLegalityAsync({
-    playerData: roster.playerData,
+    playerData: rowsWithPositions(league.platform, roster.playerData),
     ctx,
     lockArgs,
   })
@@ -115,8 +113,7 @@ export async function evaluateLegalityForProjectedRoster(
     return null
   }
 
-  const { season } = await loadLeagueWeekContext(roster.leagueId, league.settings, league.season)
-  const leagueWeek = weekFromSettings(league.settings)
+  const { season, week: leagueWeek } = await loadLeagueWeekContext(roster.leagueId, league.settings, league.season)
   const editingWeek = leagueWeek
 
   const ctx: LineupValidationContext = {
@@ -159,7 +156,7 @@ export async function evaluateLegalityForProjectedRoster(
   }
 
   const result = await evaluateFullRosterLegalityAsync({
-    playerData: projectedPlayerData,
+    playerData: rowsWithPositions(league.platform, projectedPlayerData),
     ctx,
     lockArgs,
   })

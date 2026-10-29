@@ -20,7 +20,11 @@ import { receivedValueSplit } from './tankingCalibration'
 import { signedGapPct, type TradeGradeView } from './tradeGrade'
 import { gradeInputsFromNativeItems, gradeInputsFromRedraftAssets } from './tradeGradeInputs'
 import type { LoadedTrade, TradeRef, TradeSide } from './tradeRecord'
-import { buildTradeReview, type Known, type ReviewSideLineup, type TradeReview, type TradeReviewFacts } from './tradeReview'
+import { buildTradeReview, type Known, type ReviewSideLineup, type ReviewStanding, type TradeReview, type TradeReviewFacts } from './tradeReview'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { readPlayoffFormat } from '@/lib/core-app/outlookFormat'
+import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
+import { eliminatedTeams } from '@/lib/eliminated-lineups/eliminatedLineups'
 import { getDivisionsForUsers } from '@/lib/class-rating/reads'
 
 /**
@@ -55,6 +59,8 @@ export type TradeReviewDeps = {
   deadlineKickoff: (args: { sport: string; season: number; week: number }) => Promise<Date | null>
   /** Class division (1–5) per AllFantasy user id, ESTABLISHED ratings only; anyone else is absent. */
   managerDivisions: (userIds: string[]) => Promise<Map<string, number>>
+  /** A league played on AllFantasy: each team's standing, keyed by its redraft AND its league roster id. */
+  nativeStandings: (league: League) => Promise<Known<Map<string, ReviewStanding>>>
   now: () => Date
 }
 
@@ -324,7 +330,43 @@ export const defaultTradeReviewDeps: TradeReviewDeps = {
       .findFirst({ where: { leagueId: { in: leagueIds }, season }, orderBy: { week: 'desc' }, select: { week: true, teamForecasts: true } })
       .catch(() => null),
   deadlineKickoff: async (args) => (await buildWeekKickoffMap(prisma, args).catch(() => null))?.firstKickoff ?? null,
+  nativeStandings: (league) => defaultNativeStandings(league).catch(() => ({ ok: false as const, reason: 'The standings could not be read.' })),
   now: () => new Date(),
+}
+
+/**
+ * Who is out of the race, from a native league's own standings — the rule the eliminated-team lineup
+ * minimums already apply (`eliminatedTeams`): a team that cannot reach the playoff line even by winning
+ * every regular-season game left (or, once the playoffs start, one without a seed). A team "holds a
+ * playoff spot" at or above that line, or with a seed once the playoffs start.
+ *
+ * Every sport the redraft engine plays, which is the point: the season forecast exists only for
+ * imported Sleeper NFL leagues, so in every native league the elimination check never ran.
+ */
+export async function defaultNativeStandings(league: League): Promise<Known<Map<string, ReviewStanding>>> {
+  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, reason: 'Standings are read from the season forecast in an imported league.' }
+  const season =
+    (await prisma.redraftSeason.findFirst({ where: { leagueId: league.id, season: league.season ?? undefined }, select: { id: true, currentWeek: true, playoffStartWeek: true } })) ??
+    (await prisma.redraftSeason.findFirst({ where: { leagueId: league.id }, orderBy: { season: 'desc' }, select: { id: true, currentWeek: true, playoffStartWeek: true } }))
+  if (!season) return { ok: false, reason: 'This league has no season on record.' }
+  const rows = await prisma.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true, wins: true, losses: true, ties: true, playoffSeed: true } })
+  const format = readPlayoffFormat(league.settings, rows.length, league.playoffTeams)
+  if (format.playoffTeamsSource !== 'league') return { ok: false, reason: 'This league’s playoff size is not set, so who is out of the race cannot be told.' }
+  const week = leagueWeekFromSettings(league.settings) ?? season.currentWeek
+  const teams = rows.map((r) => ({ rosterId: r.id, wins: r.wins, losses: r.losses, ties: r.ties, playoffSeed: r.playoffSeed }))
+  const out = eliminatedTeams({ teams, playoffTeams: format.playoffTeams, playoffStartWeek: season.playoffStartWeek, currentWeek: week })
+  const line = (t: (typeof teams)[number]) => t.wins + t.ties / 2
+  const cutoff = [...teams].map(line).sort((a, b) => b - a)[format.playoffTeams - 1]
+  if (cutoff == null) return { ok: false, reason: 'The standings are too short to place a playoff line.' }
+  const inPlayoffs = week >= season.playoffStartWeek
+  const links = await prisma.roster.findMany({ where: { redraftRosterId: { in: rows.map((r) => r.id) } }, select: { id: true, redraftRosterId: true } })
+  const byRedraft = new Map<string, ReviewStanding>()
+  for (const t of teams) {
+    byRedraft.set(t.rosterId, { eliminated: out.has(t.rosterId), holdsPlayoffSpot: inPlayoffs ? t.playoffSeed != null : line(t) >= cutoff })
+  }
+  const all = new Map(byRedraft)
+  for (const l of links) if (l.redraftRosterId && byRedraft.has(l.redraftRosterId)) all.set(l.id, byRedraft.get(l.redraftRosterId)!)
+  return { ok: true, value: all }
 }
 
 // ─── Pure helpers (exported for tests) ──────────────────────────────────────
@@ -342,7 +384,22 @@ export function sideLineup(args: {
   if (!side.rosterId) return null
   const participant = receipt.canonical?.participants.find((p) => p.rosterId === side.rosterId)
   const ri = participant?.rosterImpact
-  if (!ri || ri.startingPointsBefore == null || ri.startingPointsDelta == null || !ri.startersAfter) return null
+  const actual = world?.rosters.find((r) => r.rosterId === side.rosterId)?.starterIds ?? []
+  if (!ri || ri.startingPointsBefore == null || ri.startingPointsDelta == null || !ri.startersAfter) {
+    /*
+     * No projected lineup points — the weekly projection feed is NFL's, so this is every other sport.
+     * Who starts is still known from the saved lineup, and that is all the elimination check needs.
+     */
+    if (actual.length === 0) return null
+    const startersNow = new Set(actual)
+    return {
+      startingBefore: null,
+      startingDelta: null,
+      receivedValue: null,
+      receivedBenchValue: null,
+      sentStarterNames: side.gives.flatMap((g) => (g.kind === 'player' && startersNow.has(g.playerId) ? [g.name] : [])),
+    }
+  }
 
   // What this side RECEIVES is what the other side gives; its league value is on the receipt's lines.
   const receivedLines = receipt.assets.filter((l) => l.side === (isGradedSide ? 'get' : 'give'))
@@ -354,7 +411,6 @@ export function sideLineup(args: {
     return asset?.kind === 'player' && startersAfter.has(asset.playerId)
   })
 
-  const actual = world?.rosters.find((r) => r.rosterId === side.rosterId)?.starterIds ?? []
   const startersNow = new Set(actual.length ? actual : ri.startersBefore ?? [])
   const sentStarterNames = side.gives.flatMap((g) => (g.kind === 'player' && startersNow.has(g.playerId) ? [g.name] : []))
 
@@ -413,7 +469,7 @@ export async function reviewStoredTrade(
   const lineup: TradeReviewFacts['lineup'] =
     trade.status !== 'proposed'
       ? { ok: false, reason: 'Lineup effect is only measured while a trade is still pending.' }
-      : !receipt.canonical
+      : !receipt.canonical && !world
         ? { ok: false, reason: receipt.canonicalError ?? 'The lineup effect could not be computed for this league.' }
         : {
             ok: true,
@@ -477,6 +533,19 @@ export async function reviewStoredTrade(
     return { ok: true as const, value: [pa, pb] as const }
   })()
 
+  // Standing — a native league's own standings, read only when there is no current forecast.
+  const standing: TradeReviewFacts['standing'] = playoffPct.ok
+    ? undefined
+    : await (async () => {
+        if (!league) return { ok: false as const, reason: 'The league could not be read.' }
+        const table = await d.nativeStandings(league)
+        if (!table.ok) return table
+        const a = sideA.rosterId ? table.value.get(sideA.rosterId) : undefined
+        const b = sideB.rosterId ? table.value.get(sideB.rosterId) : undefined
+        if (!a || !b) return { ok: false as const, reason: 'The standings have no row for both teams.' }
+        return { ok: true as const, value: [a, b] as const }
+      })()
+
   // Deadline — the first kickoff of the league's deadline week (Guap, 2026-09-27).
   const deadlineAt: TradeReviewFacts['deadlineAt'] = await (async () => {
     if (!league) return { ok: false as const, reason: 'The league could not be read.' }
@@ -509,6 +578,7 @@ export async function reviewStoredTrade(
     history,
     inactiveDays,
     playoffPct,
+    ...(standing ? { standing } : {}),
     deadlineAt,
     now: now.toISOString(),
     // The type the one grade priced the trade on — so "tanking" and "rebuild" follow the grade's own format.

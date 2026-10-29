@@ -1,3 +1,4 @@
+import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 /**
  * Chimmy route alias. Accepts the legacy JSON contract and maps it into the dedicated handler.
  *
@@ -39,6 +40,7 @@ import { resolveLeagueIntelligenceGrounding } from '@/lib/intelligence/chimmy/le
 import { resolvePortfolioGrounding } from '@/lib/intelligence/chimmy/portfolioGrounding'
 import { z } from 'zod'
 
+import { readDeepAnalysisPreview } from '@/lib/chimmy/deepAnalysisPreview'
 import { POST as postChatChimmy } from '@/app/api/chat/chimmy/route'
 import {
   runAgentPipeline,
@@ -58,10 +60,11 @@ import {
 } from '@/lib/chimmy-chat/response-copy'
 import { buildChimmyResponseStructure } from '@/lib/chimmy-chat/presentation'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
+import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 import { checkDailyCap, incrementDailyCap } from '@/lib/ai/dailyCaps'
 import {
-  readChimmyPlanAllowance,
+  readChimmyAnswerAllowance,
   releaseChimmyPlanAllowance,
   takeChimmyPlanAllowance,
   type ChimmyPlanAllowanceState,
@@ -99,6 +102,10 @@ const ChimmyJsonRequestSchema = z.object({
   message: z.string().trim().max(MAX_MESSAGE_CHARS).default(''),
   stream: z.boolean().optional(),
   confirmTokenSpend: z.boolean().optional(),
+  analysisPreviewVersion: z.literal('1').optional(),
+  requestId: z.string().trim().min(8).max(120).optional(),
+  tokenQuote: z.string().max(2048).optional(),
+  analysisUnlock: z.boolean().optional(),
   conversation: z.array(ConversationTurnSchema).max(MAX_CONVERSATION_TURNS).optional(),
   image: ChimmyImageSchema.optional(),
   userContext: z.object({
@@ -153,6 +160,11 @@ function resolveCapTier(plans: readonly string[]): 'free' | 'pro' | 'admin' {
 
 function buildCompatibilityPayload(body: unknown, status: number) {
   const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+  const analysisPreview = readDeepAnalysisPreview(record.analysisPreview)
+  if (analysisPreview) return {
+    code: 'token_confirmation_required', response: analysisPreview.summary, result: analysisPreview.summary,
+    analysisPreview, meta: { free: true, mode: 'fast_take', analysisPreview }, upgradeRequired: false,
+  }
   const upgradeRequired = isChimmyPremiumGateResponse({
     status,
     code: record.code,
@@ -399,6 +411,9 @@ function buildForwardedRequest(
 ) {
   const formData = new FormData()
   formData.append('message', payload.message)
+  for (const key of ['analysisPreviewVersion', 'requestId', 'tokenQuote', 'analysisUnlock'] as const) {
+    if (payload[key] != null) formData.append(key, String(payload[key]))
+  }
 
   if (typeof payload.confirmTokenSpend === 'boolean') {
     formData.append('confirmTokenSpend', String(payload.confirmTokenSpend))
@@ -493,7 +508,7 @@ function buildForwardedRequest(
   })
 }
 
-export async function POST(req: NextRequest) {
+async function paidToolPost(req: NextRequest) {
   if (!shouldTreatAsJson(req)) {
     return postChatChimmy(req)
   }
@@ -526,6 +541,11 @@ export async function POST(req: NextRequest) {
       },
       { status: 400 }
     )
+  }
+
+  // Versioned clients share the canonical preview, authorization and durable receipt path.
+  if (parseResult.data.analysisPreviewVersion === '1') {
+    return toCompatibilityResponse(await postChatChimmy(buildForwardedRequest(req, parseResult.data) as any))
   }
 
   let cookieStore: Awaited<ReturnType<typeof cookies>> | null = null
@@ -618,9 +638,20 @@ export async function POST(req: NextRequest) {
    * It now uses the same allowance as /api/chat/chimmy: answers left are included and counted; none
    * left sends the plan holder down the token path a free account takes (`forceTokenFallback`).
    */
-  const planState = await readChimmyPlanAllowance({ userId, email: session?.user?.email }).catch(() => null)
+  let planState: ChimmyPlanAllowanceState
+  try {
+    planState = await readChimmyAnswerAllowance({ userId, email: session?.user?.email })
+  } catch {
+    return NextResponse.json({ error: 'Unable to check your included Chimmy answers. Please try again.',
+      code: 'chimmy_allowance_unavailable' }, { status: 503 })
+  }
 
-  const gate = await requireFeatureEntitlement({
+  const gate = planState.remaining > 0 ? {
+    ok: true as const,
+    decision: await new FeatureGateService().evaluateUserFeatureAccess(userId, 'ai_chat', session?.user?.email),
+    tokenSpend: null,
+    tokenPreview: null,
+  } : await requireFeatureEntitlement({
     userId,
     userEmail: session?.user?.email,
     featureId: 'ai_chat',
@@ -641,7 +672,8 @@ export async function POST(req: NextRequest) {
     return toCompatibilityResponse(gate.response)
   }
 
-  const resolvedTier = resolveServerTier(gate.decision.entitlement.plans)
+  const resolvedTier = planState.remaining > 0 || gate.tokenSpend
+    ? 'pro' : resolveServerTier(gate.decision.entitlement.plans)
   const anthropicContext = buildAnthropicUserContext(parseResult.data, userId, resolvedTier, afLang, anthropicImage)
   // G15.10 — attach commissioner grounding (gated inside; null if not a commissioner/intent miss).
   anthropicContext.commissionerGrounding = await resolveChimmyCommissionerGrounding({
@@ -676,7 +708,12 @@ export async function POST(req: NextRequest) {
    */
   let planIncluded: ChimmyPlanAllowanceState | null = null
   if (planState && !tokenSpendId) {
-    planIncluded = await takeChimmyPlanAllowance({ userId, state: planState })
+    try {
+      planIncluded = await takeChimmyPlanAllowance({ userId, state: planState })
+    } catch {
+      return NextResponse.json({ error: 'Unable to reserve your included Chimmy answer. Please try again.',
+        code: 'chimmy_allowance_unavailable' }, { status: 503 })
+    }
     if (!planIncluded) {
       /* Another request took the last included answer since the read above. The next send pays tokens. */
       return NextResponse.json(
@@ -840,3 +877,5 @@ export async function POST(req: NextRequest) {
 }
 
 export const dynamic = 'force-dynamic'
+
+export const POST = withPaidToolBilling(paidToolPost)

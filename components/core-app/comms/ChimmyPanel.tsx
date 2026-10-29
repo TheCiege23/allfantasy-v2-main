@@ -1,10 +1,14 @@
 'use client'
 
+import posthog from 'posthog-js'
+import { ChimmyAnalysisPreview } from '@/components/chimmy/ChimmyAnalysisPreview'
+import { readDeepAnalysisPreview, type DeepAnalysisPreview } from '@/lib/chimmy/deepAnalysisPreview'
 import { ChimmyTrades } from './ChimmyTrades'
 import { LeagueScopePicker } from './LeagueScopePicker'
 import { readScreenshotPreview } from '@/lib/chimmy-chat/screenshotPreview'
 import { useScopedConversation } from './useScopedConversation'
-import { ArrowUpRight, ImagePlus, PencilLine, RotateCcw, Send, Sparkles, X } from 'lucide-react'
+import { ArrowUpRight, ImagePlus, PencilLine, RotateCcw, Send, Smile, Sparkles, X } from 'lucide-react'
+import { EmojiPicker } from '@/app/dashboard/components/chat/EmojiPicker'
 import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
 import { ChimmyRichText } from './ChimmyRichText'
 import { ChimmyScreenshot } from './ChimmyScreenshot'
@@ -40,7 +44,6 @@ import { isInIosAppWithoutIapClient } from '@/lib/platform/iosApp'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { confirmTokenSpend } from '@/lib/tokens/client-confirm'
-import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
 import '@/components/core-app/af-comms.css'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
@@ -149,6 +152,7 @@ function platformHandoffHref(league: CommsLeague): string {
 }
 
 type ChatTurn = {
+  analysisPreview?: DeepAnalysisPreview | null
   id: string
   role: 'you' | 'chimmy'
   imagePreview?: string | null
@@ -326,14 +330,16 @@ export function describeChimmyFailure(status: number | null, code: unknown): { m
   return { message: describeChimmyError(code), retryable: false }
 }
 
-/** A failed ask, carrying whether a retry is worth offering. */
+/** A failed ask, carrying whether a retry is worth offering and what the route answered. */
 class ChimmyAskError extends Error {
   readonly retryable: boolean
+  readonly status: number | null
   /** The route's own code, when it sent one — VERIFICATION_REQUIRED opens the verify card. */
   readonly code: string | null
-  constructor(failure: { message: string; retryable: boolean }, code: unknown = null) {
+  constructor(failure: { message: string; retryable: boolean }, status: number | null = null, code: unknown = null) {
     super(failure.message)
     this.retryable = failure.retryable
+    this.status = status
     this.code = typeof code === 'string' && code ? code : null
   }
 }
@@ -396,6 +402,7 @@ function PlayerChips({ players }: { players: ChimmyPlayerCard[] }) {
  * what happened.
  */
 type ChimmyEnvelope = {
+  analysisPreview?: unknown
   response?: string
   error?: string
   /** Machine-readable reason. `error` is a sentence; this is the map key. */
@@ -636,6 +643,8 @@ export function ChimmyPanel({
    * resend under a sentence about something else.
    */
   const [retryAsk, setRetryAsk] = useState<{ message: string; question: string } | null>(null)
+  /* The last question in this scope came back without an answer: an empty thread is not "Nothing asked yet." */
+  const [unanswered, setUnanswered] = useState(false)
   /*
    * ⚠ AN UNVERIFIED ACCOUNT CANNOT USE CHIMMY AT ALL, AND THIS WAS A SENTENCE. "Verify your email to
    * use Chimmy — open Settings, or go to /verify" sent the person somewhere else at the moment they
@@ -653,6 +662,32 @@ export function ChimmyPanel({
   const endRef = useRef<HTMLDivElement | null>(null)
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const screenshotRef = useRef<HTMLInputElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const [emojiOpen, setEmojiOpen] = useState(false)
+  /*
+   * The league/DM composer's emoji picker, reused as is (ChatComposer.insertChar): the emoji goes in
+   * at the cursor, replacing any selection, and the caret lands after it. Emoji is just text to the
+   * route, so nothing about the request changes.
+   */
+  const insertEmoji = useCallback(
+    (char: string) => {
+      const box = inputRef.current
+      setDraft((prev) => {
+        const start = box?.selectionStart ?? prev.length
+        const end = box?.selectionEnd ?? prev.length
+        const pos = start + char.length
+        if (box) {
+          queueMicrotask(() => {
+            box.setSelectionRange(pos, pos)
+            box.focus()
+          })
+        }
+        return prev.slice(0, start) + char + prev.slice(end)
+      })
+    },
+    [setDraft],
+  )
+  const analysisRequestRef = useRef<{ turnId: string; form: FormData; question: string } | null>(null)
   const retryRequestRef = useRef<{key:string;file:File|null;form:FormData}|null>(null)
   const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null)
   useEffect(() => {
@@ -669,6 +704,7 @@ export function ChimmyPanel({
     setScreenshot(null)
     setError(null)
     setOutOfAnswers(null)
+    setUnanswered(false)
     if (screenshotRef.current) screenshotRef.current.value = ''
   }, [scopeId])
 
@@ -706,24 +742,28 @@ export function ChimmyPanel({
   }, [initialDraft, initialDraftScopeId, draftRequestKey, scopeId, userId, conversationReady, draft, setDraft, threadKey])
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, options?: { unlock?: { turnId: string; form: FormData }; summaryOnly?: boolean }) => {
       const question = text.trim()
+      const selectedMode = options?.summaryOnly ? 'fast_take' : answerMode
+      const unlocking = options?.unlock
       /* Captured once: the retry after a consent prompt must send the same file. */
       const attached = screenshot
-      const requestKey = JSON.stringify([question,scopeId,answerMode,funMode,publicMode,source,sport])
+      const requestKey = JSON.stringify([question,scopeId,selectedMode,funMode,publicMode,source,sport])
       const retained = retryRequestRef.current
-      const retryForm = retained?.key === requestKey && retained.file === attached ? retained.form : null
+      const retryForm = unlocking?.form ?? (retained?.key === requestKey && retained.file === attached ? retained.form : null)
       const requestId = String(retryForm?.get('requestId') ?? crypto.randomUUID())
       if ((!question && !attached) || busy) return
+      if (!unlocking) analysisRequestRef.current = null
       setDraft('')
       setError(null)
       setOutOfAnswers(null)
+      setUnanswered(false)
       setBusy(true)
       setScreenshot(null)
       const imagePreview = attached ? await readScreenshotPreview(attached) : null
       if (activeScope.current !== scopeId) { setBusy(false); return }
       if (screenshotRef.current) screenshotRef.current.value = ''
-      setTurns((t) => [
+      if (!unlocking) setTurns((t) => [
         ...t,
         { id: newTurnId('you'), role: 'you', text: question || `Screenshot: ${attached?.name ?? 'image'}`, imagePreview, imageName: attached?.name },
       ])
@@ -739,6 +779,7 @@ export function ChimmyPanel({
           if (retryForm) { if (confirmed) retryForm.set('confirmTokenSpend','true'); return retryForm }
           const form = new FormData()
           form.append('requestId', requestId)
+          form.append('analysisPreviewVersion', '1')
           form.append('message', question)
           if (confirmed) form.append('confirmTokenSpend', 'true')
           /* The route validates it (validateScreenshotFile); the 5 MB cap is also checked at pick time. */
@@ -758,7 +799,7 @@ export function ChimmyPanel({
           /* Page-only context (see the props). Neither is ever set by the drawer. */
           if (source) form.append('source', source)
           if (sport && !scopeId) form.append('sport', sport)
-          form.append('assistantMode', answerMode)
+          form.append('assistantMode', selectedMode)
           if (funMode) form.append('tone', FUN_MODE_TONE)
           form.append(
             'conversation',
@@ -778,7 +819,7 @@ export function ChimmyPanel({
           import('@/lib/chimmy/postRequest').then(({ postChimmyRequest }) => postChimmyRequest(buildForm(confirmed))).catch(() => {
             throw new ChimmyAskError(describeChimmyFailure(null, null))
           })
-        let res = await post(false)
+        let res = await post(Boolean(unlocking))
         /*
          * ⚠ READ THE WHOLE ENVELOPE. This used to destructure `response` and
          * `error` alone and drop the rest, so `meta.leagueGrounding` — the only
@@ -787,6 +828,26 @@ export function ChimmyPanel({
          * from the UI if the UI never looks.
          */
         let payload = (await res.json().catch(() => ({}))) as ChimmyEnvelope
+
+        const showAnalysisPreview = (from: ChimmyEnvelope): boolean => {
+          const preview = readDeepAnalysisPreview(from.analysisPreview)
+          if (!preview) return false
+          const id = unlocking?.turnId ?? newTurnId('chimmy')
+          const form = buildForm(false)
+          form.set('tokenQuote', preview.quote)
+          form.set('analysisUnlock', 'true')
+          analysisRequestRef.current = { turnId: id, form, question }
+          retryRequestRef.current = null
+          setTurns(all => [...all.filter(turn => turn.id !== id), {
+            id, role: 'chimmy', text: preview.summary, analysisPreview: preview,
+            retryQuestion: question, isPublic: publicMode, cost: null, handoff: null,
+          }])
+          const plan = readPlanAllowanceView(from.planAllowance)
+          if (plan) setPlanStatus(plan)
+          setUnanswered(false)
+          return true
+        }
+        if (res.status === 409 && showAnalysisPreview(payload)) return
 
         /*
          * Out of tokens is not a failure to report, it is a choice to offer: the question goes back
@@ -800,6 +861,7 @@ export function ChimmyPanel({
           setDraft(question)
           if (activeScope.current === scopeId) {
             setScreenshot(attached)
+            setUnanswered(true)
             setOutOfAnswers(
               describeOutOfAnswers(readPlanAllowanceView(from.planAllowance) ?? planStatus, {
                 // Only a build that sells nothing drops the buy offer; an IAP build sells tokens.
@@ -822,7 +884,7 @@ export function ChimmyPanel({
          * says whether a prompt is even needed) and retrying ONCE with the flag.
          * A decline spends nothing and hands the question back unsent.
          */
-        if (res.status === 409 && payload.code === 'token_confirmation_required') {
+        if (res.status === 409 && payload.code === 'token_confirmation_required' && !unlocking) {
           const consent = await confirmTokenSpend(payload.preview?.ruleCode ?? 'ai_chimmy_chat_message')
           if (!consent.preview.canSpend) {
             outOfTokens(payload)
@@ -832,18 +894,24 @@ export function ChimmyPanel({
             setTurns((t) => (t.length && t[t.length - 1].role === 'you' ? t.slice(0, -1) : t))
             setDraft(question)
             setError('No tokens were spent — your question was not sent.')
+            setUnanswered(true)
             return
           }
           res = await post(true)
           payload = (await res.json().catch(() => ({}))) as typeof payload
         }
 
+        if (res.status === 409 && showAnalysisPreview(payload)) return
+
         if (res.status === 402 && payload.code === 'insufficient_token_balance') {
           outOfTokens(payload)
           return
         }
 
-        if (payload.code !== 'chimmy_request_recovery_pending') retryRequestRef.current = null
+        if (payload.code !== 'chimmy_request_recovery_pending') {
+          retryRequestRef.current = null
+          analysisRequestRef.current = null
+        }
 
         if (!res.ok) {
           /*
@@ -880,7 +948,7 @@ export function ChimmyPanel({
             ])
             return
           }
-          throw new ChimmyAskError(describeChimmyFailure(res.status, payload.code ?? payload.error), payload.code ?? payload.error)
+          throw new ChimmyAskError(describeChimmyFailure(res.status, payload.code ?? payload.error), res.status, payload.code ?? payload.error)
         }
         // Answered: any verify card from an earlier refusal has done its job.
         setVerifyAsk(null)
@@ -907,6 +975,7 @@ export function ChimmyPanel({
           const stored = payload.meta.screenshotAttachment
           setTurns(all => all.map((turn, index) => index === all.length - 1 && turn.role === 'you' ? { ...turn, imagePreview: stored.url, imageName: stored.name } : turn))
         }
+        analysisRequestRef.current = null
         const answer = payload.response ?? 'Chimmy did not return a message.'
 
         /*
@@ -933,7 +1002,7 @@ export function ChimmyPanel({
         const answeredPlan = readPlanAllowanceView(payload.meta?.planAllowance)
         const polish = readAnswerPolish(payload.meta)
         setTurns((t) => [
-          ...t,
+          ...t.filter(turn => turn.id !== unlocking?.turnId),
           {
             id: newTurnId('chimmy'),
             role: 'chimmy',
@@ -947,11 +1016,11 @@ export function ChimmyPanel({
              * answer, the league-data-usage answer, and the empty-message
              * prompt. All of them were being billed 10 tokens on screen.
              *
-             * Now it prints what the server says it spent, and nothing when it
-             * spent nothing. `tokenCost` remains only as the composer's
+             * Now it prints what the server says it spent, or Not charged when
+             * the server explicitly marks the answer free. `tokenCost` remains only as the composer's
              * "an answer costs this much" estimate, which is a different claim.
              */
-            cost: payload.meta?.tokenSpend?.tokenCost ?? null,
+            cost: payload.meta?.tokenSpend?.tokenCost ?? (payload.meta?.free ? 0 : null),
             grounding,
             connectedScope: payload.meta?.connectedFranchise ?? null,
             players: payload.meta?.players ?? null,
@@ -965,7 +1034,8 @@ export function ChimmyPanel({
             advice: readAdvice(payload),
             mode: answeredMode(payload.meta),
             followUps: scenarioFollowUps(readReadyScenario(payload.meta?.scenario)) ?? readFollowUps(payload.meta?.followUps),
-            plan: answeredPlan,
+            // A free engine summary may report the quota without using it.
+            plan: payload.meta?.free && !answeredPlan?.included && !answeredPlan?.released ? null : answeredPlan,
             answerId: newAnswerId(),
             tools: readToolsUsed(payload.meta?.toolsUsed),
             actionCards: readActionCards(payload.meta),
@@ -985,25 +1055,43 @@ export function ChimmyPanel({
          * A failed send hands the question back rather than losing what was typed — and takes it out
          * of the transcript, as the decline and out-of-tokens paths already do. Left in, it printed
          * twice (bubble and box), Try again added a third copy, and the next question sent it to the
-         * model as an unanswered turn. Only when the thread still ends on THIS question: a scope
-         * switch mid-request means the last turn is someone else's.
+         * model as an unanswered turn. Only when the thread still ends on THIS question.
+         *
+         * 🛑 A SCOPE SWITCH MID-REQUEST USED TO DROP THE ERROR, so the question left the thread and
+         * nothing said why. `setTurns` and `setDraft` here belong to the scope the question was asked
+         * in, so that thread is still cleaned up; the scope on screen now gets a line naming where the
+         * question was asked, but no Try again — that would send it to the wrong league.
          */
+        const sameScope = activeScope.current === scopeId
+        const shown = question || `Screenshot: ${attached?.name ?? 'image'}`
         setDraft(question)
-        if (activeScope.current === scopeId) {
-          const shown = question || `Screenshot: ${attached?.name ?? 'image'}`
-          setTurns((t) => (t.length && t[t.length - 1].role === 'you' && t[t.length - 1].text === shown ? t.slice(0, -1) : t))
+        setTurns((t) => (t.length && t[t.length - 1].role === 'you' && t[t.length - 1].text === shown ? t.slice(0, -1) : t))
+        const asked = e instanceof ChimmyAskError ? e : null
+        const failure = asked ?? { message: 'Chimmy hit a snag on that one.', retryable: true }
+        if (sameScope) {
           setScreenshot(attached)
-          if (e instanceof ChimmyAskError && e.code === 'VERIFICATION_REQUIRED') {
+          setUnanswered(true)
+          if (asked?.code === 'VERIFICATION_REQUIRED') {
             setError(null)
             setRetryAsk(null)
             setVerifyAsk({ question })
           } else {
-            const failure =
-              e instanceof ChimmyAskError ? e : { message: 'Chimmy hit a snag on that one.', retryable: true }
             setError(failure.message)
             setRetryAsk(failure.retryable ? { message: failure.message, question } : null)
           }
+        } else {
+          setError(`Chimmy did not answer your question in ${scope?.name ?? 'All leagues'}. ${failure.message}`)
         }
+        posthog.capture('chimmy_request_failed', {
+          status: asked?.status ?? null,
+          code: asked?.code ?? null,
+          retryable: failure.retryable,
+          unexpected: !asked,
+          scope: scopeId ? 'league' : 'global',
+          scope_changed: !sameScope,
+          public_mode: publicMode,
+          source: source ?? 'drawer',
+        })
       } finally {
         setBusy(false)
       }
@@ -1131,6 +1219,12 @@ export function ChimmyPanel({
               </button>
             </div>
           </div>
+        ) : turns.length === 0 && unanswered ? (
+          /* A failed or unsent first question is not "Nothing asked yet." — say it went unanswered. */
+          <div className="af-cm-empty" role="alert">
+            <p className="af-cm-empty-t">Chimmy did not answer that question.</p>
+            <p className="af-cm-empty-b">Your question is back in the box below.</p>
+          </div>
         ) : turns.length === 0 ? (
           <div className="af-cm-empty">
             <Sparkles className="af-cm-welcome-icon" size={28} aria-hidden />
@@ -1176,7 +1270,15 @@ export function ChimmyPanel({
               {t.role === 'chimmy' && readChimmyFaabCard(t.faabPlan) ? <ChimmyFaabBidCard card={readChimmyFaabCard(t.faabPlan)!} /> : null}
 
               {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
-              {t.role === 'chimmy' ? (
+              {t.role === 'chimmy' && readDeepAnalysisPreview(t.analysisPreview) ? (
+                <ChimmyAnalysisPreview preview={readDeepAnalysisPreview(t.analysisPreview)!} busy={busy}
+                  onUnlock={analysisRequestRef.current?.turnId === t.id ? () => {
+                    const pending = analysisRequestRef.current
+                    if (pending) void send(pending.question, { unlock: { turnId: pending.turnId, form: pending.form } })
+                  } : undefined}
+                  onRefresh={t.retryQuestion ? () => void send(t.retryQuestion!, { summaryOnly: true }) : undefined}
+                />
+              ) : t.role === 'chimmy' ? (
                 <>
                   <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
                   {readChimmyGif(t.gif) ? <ChimmyGif gif={readChimmyGif(t.gif)!} /> : null}
@@ -1445,10 +1547,12 @@ export function ChimmyPanel({
           <button type="button" className="af-cm-quickbtn" onClick={() => setPendingScreenQuestion(null)}>Keep current message</button>
         </aside>
       )}
+      {emojiOpen ? <EmojiPicker onSelect={insertEmoji} onClose={() => setEmojiOpen(false)} /> : null}
       <form
         className="af-cm-composer"
         onSubmit={(e) => {
           e.preventDefault()
+          setEmojiOpen(false)
           send(draft)
         }}
       >
@@ -1479,10 +1583,26 @@ export function ChimmyPanel({
           <ImagePlus size={18} aria-hidden />
         </button>
         {/*
+          No GIF button, on purpose: a GIF picked here is a remote URL, and /api/chat/chimmy takes text
+          plus an uploaded screenshot file. A GIF-only turn would still be a paid question with nothing
+          for Chimmy to read, and the saved conversation (GET /api/chat/chimmy) would drop it on reload.
+        */}
+        <button
+          type="button"
+          className="af-cm-icon"
+          aria-label="Emoji"
+          title="Emoji"
+          aria-pressed={emojiOpen}
+          onClick={() => setEmojiOpen((open) => !open)}
+        >
+          <Smile size={18} aria-hidden />
+        </button>
+        {/*
           One line that grows as you type (CSS `field-sizing: content`, capped), not a two-line box
           with a resize grip — the grip was the only thing in the composer that looked broken.
         */}
         <textarea
+          ref={inputRef}
           rows={1}
           className="af-cm-input"
           value={draft}
@@ -1495,7 +1615,7 @@ export function ChimmyPanel({
             else { setScreenshot(file); setError(null) }
           }}
           onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(draft) }
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); setEmojiOpen(false); send(draft) }
           }}
           placeholder={publicMode ? 'Ask the league, or @chimmy…' : 'Ask Chimmy…'}
           aria-label="Message"
@@ -1521,14 +1641,11 @@ export function ChimmyPanel({
         paths in the route answer for free, so "each answer costs" was untrue.
       */}
       <p className="af-cm-costnote">
-        {planStatus
-          ? describeAllowanceNote(planStatus, tokenCost)
-          : tokenCost != null
-            ? // The daily floor, said up front: a balance under two answers' worth is topped back
-              // up to two once a UTC day (lib/tokens/dailyFreeTokens.ts). A top-up TO a floor, not a
-              // gift on top — so "two free questions" would be untrue for anyone holding tokens.
-              `Chimmy answers may cost ${tokenCost} tokens. Under ${FREE_CHIMMY_QUESTIONS_PER_DAY} answers' worth, your balance tops back up to ${FREE_CHIMMY_QUESTIONS_PER_DAY} once a day. Free lookups and typing cost nothing.`
-            : 'Chimmy answers are included in your plan.'}
+        {answerMode === 'fast_take'
+          ? 'Summaries and free lookups cost nothing. Your included detailed answers are kept for when you want more.'
+          : planStatus
+            ? describeAllowanceNote(planStatus, tokenCost)
+            : 'Free summaries and lookups cost nothing. Detailed answers use your daily allowance first; review the price before spending tokens.'}
       </p>
     </div>
   )

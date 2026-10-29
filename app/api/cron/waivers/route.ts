@@ -5,6 +5,7 @@ import { toErrorMessage } from "@/lib/automation/errors"
 import { discoverDueWaiverLeagues } from "@/lib/automation/jobs/waivers/discoverDueWaiverLeagues"
 import { processLeagueWaiversJob } from "@/lib/automation/jobs/waivers/processLeagueWaiversJob"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { isRedraftLeagueMovesLocked } from "@/lib/redraft/tradeMoveLock"
 import { runSGAutomaticChopNight } from "@/lib/survivor-guillotine/live"
 import { runSGDueAuctions, runSGSelectionDeadlines } from "@/lib/survivor-guillotine/operations"
 
@@ -85,6 +86,7 @@ type SweepResult =
       discovered: number
       processed: number
       failed: number
+      skippedLocked: number
       results: Array<Record<string, unknown>>
     }
 
@@ -97,9 +99,26 @@ async function sweepDueWaiverLeagues(args: { limit: number; leagueId?: string })
   const results: Array<Record<string, unknown>> = []
   let processed = 0
   let failed = 0
+  let skippedLocked = 0
 
   for (const row of discovered.rows) {
     try {
+      // 🛑 The commissioner's "Lock all roster moves", read now rather than when the claims were filed.
+      // Skipped here BEFORE the automation job, so a locked day takes no attempt against the league's
+      // idempotency key; its claims stay pending for the first run after the lift. The engine re-checks
+      // (lib/waiver-wire/process-engine.ts) for a lock that lands between this read and the run.
+      // An unreadable lock falls through to the job: the engine's own read fails closed.
+      if (await isRedraftLeagueMovesLocked(row.leagueId).catch(() => false)) {
+        skippedLocked += 1
+        console.info(`[cron/waivers] league ${row.leagueId} skipped: all roster moves locked; ${row.pendingClaimCount} pending claim(s) stay pending`)
+        results.push({
+          leagueId: row.leagueId,
+          ok: true,
+          skipped: "league_moves_locked",
+          message: "League skipped: the commissioner has locked all roster moves. Pending claims stay pending.",
+        })
+        continue
+      }
       const out = await processLeagueWaiversJob({
         leagueId: row.leagueId,
         scheduledFor: row.scheduledFor,
@@ -135,7 +154,7 @@ async function sweepDueWaiverLeagues(args: { limit: number; leagueId?: string })
     }
   }
 
-  return { kind: "swept", discovered: discovered.rows.length, processed, failed, results }
+  return { kind: "swept", discovered: discovered.rows.length, processed, failed, skippedLocked, results }
 }
 
 export async function GET(request: Request) {
@@ -190,19 +209,19 @@ export async function GET(request: Request) {
       error: error instanceof Error ? error.message : 'Auction sweep failed' }],
   }))
   const auctionFailures = auctions.results.filter(result => result.status === 'failed')
-  if (auctionFailures.length) console.error('[cron/waivers] Survivor Guillotine auction failed:', auctionFailures)
+  if (auctionFailures.length) console.error('[cron/waivers] Survivor Guilly auction failed:', auctionFailures)
   const selections = await runSGSelectionDeadlines(new Date(), 10).catch(error => ({
     scanned: 0, due: 0, results: [{ leagueId: '', status: 'failed',
       error: error instanceof Error ? error.message : 'Selection fallback failed' }],
   }))
   const selectionFailures = selections.results.filter(result => result.status === 'failed')
-  if (selectionFailures.length) console.error('[cron/waivers] Survivor Guillotine selection failed:', selectionFailures)
+  if (selectionFailures.length) console.error('[cron/waivers] Survivor Guilly selection failed:', selectionFailures)
   const chopNight = await runSGAutomaticChopNight(new Date(), 10).catch(error => ({
     scanned: 0, due: 0, results: [{ leagueId: '', status: 'failed',
       error: error instanceof Error ? error.message : 'Chop Night sweep failed' }],
   }))
   const chopFailures = chopNight.results.filter(result => result.status === 'failed')
-  if (chopFailures.length) console.error('[cron/waivers] Survivor Guillotine Chop Night failed:', chopFailures)
+  if (chopFailures.length) console.error('[cron/waivers] Survivor Guilly Chop Night failed:', chopFailures)
   const outcome = await withSyncJobRun(
     { jobName: JOB, trigger: "cron" },
     () => sweepDueWaiverLeagues({ limit, leagueId }),
@@ -213,7 +232,7 @@ export async function GET(request: Request) {
             rowsRead: r.discovered,
             rowsWritten: r.processed,
             status: r.failed > 0 ? "partial" : "success",
-            metadata: { discovered: r.discovered, processed: r.processed, failed: r.failed },
+            metadata: { discovered: r.discovered, processed: r.processed, failed: r.failed, skippedLocked: r.skippedLocked },
           },
   )
 
@@ -227,6 +246,7 @@ export async function GET(request: Request) {
     discovered: outcome.discovered,
     processed: outcome.processed,
     failed: outcome.failed,
+    skippedLocked: outcome.skippedLocked,
     results: outcome.results,
   })
 }

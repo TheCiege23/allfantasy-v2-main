@@ -40,6 +40,8 @@ export async function resyncImportedLeague(input: {
     provider: input.provider,
     sourceId: input.sourceId,
     userId: input.userId,
+    /* A re-sync of a league already imported: the import-time sport gate must not strand it. */
+    refreshOfImportedLeague: true,
   })
   if (!result.success) {
     return { ok: false, error: result.error }

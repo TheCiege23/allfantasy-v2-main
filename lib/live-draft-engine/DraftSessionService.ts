@@ -1,4 +1,5 @@
 import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
+import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { controlSeasonDraft } from '@/lib/tournament/seasonDraftControls'
 import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
@@ -22,7 +23,7 @@ import {
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
 import { resolveCurrentOnTheClock } from './CurrentOnTheClockResolver'
 import { isDraftPickRowEmpty, resolveNextOpenPickOverall } from './draftPickEmpty'
-import { resolvePickOwner } from './PickOwnershipResolver'
+import { applyTradedOwnerToCurrentPick } from './PickOwnershipResolver'
 import {
   computeTimerState,
   computeTimerStateWithPauseWindow,
@@ -55,6 +56,13 @@ import { DRAFT_ROSTER_CONFIGURATION_CLIENT_MESSAGE } from '@/lib/league/roster-c
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { COMPLETED_DRAFT_SESSION_STATUS, CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
+
+/** `pickMetadata.adpAtPick` when it is a positive number (recorded at pick time since #2475). */
+function adpAtPickFromMetadata(meta: unknown): number | null {
+  if (!meta || typeof meta !== 'object') return null
+  const v = (meta as { adpAtPick?: unknown }).adpAtPick
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
+}
 
 /**
  * Same rules as session creation: LeagueSettings pick timer wins when present; else draft config + UI slow-draft mode.
@@ -406,7 +414,11 @@ export async function buildSessionSnapshot(
   const effectiveRoster = await getEffectiveLeagueRosterTemplate(leagueId).catch(() => null)
   const rosterConfigurationIncomplete = effectiveRoster ? !effectiveRoster.hasPersistedRosterSchema : false
 
-  const slotOrder = (session.slotOrder as unknown as SlotOrderEntry[]) ?? []
+  // Survivor tribe badges ride on the slot entries so every room surface (strip, board, big
+  // screen) can show a seat's tribe without a second fetch. Never a reason for a snapshot to fail.
+  const slotOrder = await attachSurvivorTribeBadges(leagueId, (session.slotOrder as unknown as SlotOrderEntry[]) ?? []).catch(
+    () => (session.slotOrder as unknown as SlotOrderEntry[]) ?? [],
+  )
   const teamCount = session.teamCount
   const totalPicks = session.rounds * teamCount
   const picksCount = session.picks.length
@@ -427,12 +439,7 @@ export async function buildSessionSnapshot(
     thirdRoundReversal: session.thirdRoundReversal,
     slotOrder,
   })
-  if (currentPick && tradedPicks.length > 0) {
-    const resolved = resolvePickOwner(currentPick.round, currentPick.slot, slotOrder, tradedPicks)
-    if (resolved) {
-      currentPick = { ...currentPick, rosterId: resolved.rosterId, displayName: resolved.displayName }
-    }
-  }
+  currentPick = applyTradedOwnerToCurrentPick(currentPick, slotOrder, tradedPicks)
 
   const uiSettings = await getDraftUISettingsForLeague(leagueId)
   const pauseWindow = uiSettings.timerMode === 'overnight_pause' && uiSettings.slowDraftPauseWindow
@@ -495,6 +502,9 @@ export async function buildSessionSnapshot(
     source: p.source ?? 'user',
     pickLabel: formatPickLabel(p.overall, teamCount),
     amount: (p as any).amount ?? undefined,
+    ...(adpAtPickFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) != null
+      ? { adpAtPick: adpAtPickFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) }
+      : {}),
     createdAt: p.createdAt.toISOString(),
     }
   })
@@ -649,6 +659,21 @@ export type StartDraftSessionResult =
   | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' | 'SURVIVOR_CAST_INCOMPLETE'; error?: string }
 
 export async function startDraftSession(leagueId: string): Promise<StartDraftSessionResult> {
+  const started = await startDraftSessionCore(leagueId)
+  // A forfeited pick at the very top of the board is skipped before anyone is put on the clock for it
+  // (./forfeitedPickSkips.ts); every later one is skipped as picks are made.
+  if (started.ok) {
+    await import('./forfeitedPickSkips')
+      .then(async ({ skipForfeitedPicksOnClock }) => {
+        const { submitPick } = await import('./PickSubmissionService')
+        return skipForfeitedPicksOnClock(leagueId, submitPick)
+      })
+      .catch((err) => console.error('[draft] forfeited pick skip at start failed', err))
+  }
+  return started
+}
+
+async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessionResult> {
   const seasonSettings = (await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))?.settings
   if (seasonSetupBlocked(seasonSettings)) {
     if (!(await hasSeasonDraftRelease(leagueId, seasonSettings))) return { ok: false, reason: 'session_not_ready' }
@@ -677,19 +702,25 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
     getDraftConfigForLeague(leagueId),
     getDraftUISettingsForLeague(leagueId),
   ])
-  if (ls) {
-    await prisma.draftSession.update({
-      where: { id: session.id },
-      data: {
-        aiAutoPick: ls.aiAutoPick,
-        cpuAutoPick: ls.cpuAutoPick,
-        playerPool: ls.playerPool,
-        alphabeticalSort: ls.alphabeticalSort,
-        startedAt: startedAtNow,
-        version: { increment: 1 },
-      },
-    })
-  }
+  /*
+   * CLAIM THE SESSION BEFORE STARTING IT: a conditional update on status AND the version just read.
+   * Only one caller can match, so two overlapping draft ticks, a tick and the commissioner's Start
+   * button, or a double click cannot both start the draft. The control lock callers take is not
+   * enough on its own: it fails open on a lock-store outage and its TTL is shorter than a start.
+   * Every later write below is pinned to the claimed version.
+   */
+  const claim = await prisma.draftSession.updateMany({
+    where: { id: session.id, status: 'pre_draft', version: session.version },
+    data: {
+      ...(ls
+        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
+        : {}),
+      startedAt: startedAtNow,
+      version: { increment: 1 },
+    },
+  })
+  if (claim.count !== 1) return { ok: false, reason: 'session_not_ready' }
+  const claimedVersion = session.version + 1
 
   // G15.2b — best-effort emit (never throws). Past the pre_draft guard above, so the
   // draft is committing to start; deterministic key → exactly one event per session.
@@ -716,10 +747,10 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
     } catch (e) {
       console.warn('[startDraftSession] Salary cap startup ledger init non-fatal:', e)
     }
-    await updateSessionWithArchive(session, {
+    if (!(await startClaimedSession(session, {
       status: 'in_progress', pausedRemainingSeconds: null, overnightFrozenPickSeconds: null,
       startedAt: startedAtNow, completedAt: null, version: { increment: 1 },
-    }, 'start')
+    }, claimedVersion))) return { ok: false, reason: 'session_not_ready' }
     await ensureDraftingLifecycleForActiveSession(leagueId)
     return { ok: true }
   }
@@ -727,13 +758,31 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
   const timerSeconds = computeEffectivePickTimerSeconds(ls, config, uiSettings)
   const timerEndAt =
     timerSeconds != null && timerSeconds > 0 ? new Date(Date.now() + timerSeconds * 1000) : null
-  await updateSessionWithArchive(session, {
+  if (!(await startClaimedSession(session, {
     status: 'in_progress', timerSeconds, timerEndAt, pausedRemainingSeconds: null,
     overnightFrozenPickSeconds: null, startedAt: startedAtNow, completedAt: null,
     version: { increment: 1 },
-  }, 'start')
+  }, claimedVersion))) return { ok: false, reason: 'session_not_ready' }
   await ensureDraftingLifecycleForActiveSession(leagueId)
   return { ok: true }
+}
+
+/**
+ * The in_progress transition, pinned to the version `startDraftSession` claimed. A P2025 means
+ * another writer moved the session after the claim; that start lost, and it is not an error.
+ */
+async function startClaimedSession(
+  session: Parameters<typeof updateSessionWithArchive>[0],
+  data: Prisma.DraftSessionUpdateInput,
+  claimedVersion: number,
+): Promise<boolean> {
+  try {
+    await updateSessionWithArchive(session, data, 'start', {}, claimedVersion)
+    return true
+  } catch (error) {
+    if ((error as { code?: unknown } | null)?.code === 'P2025') return false
+    throw error
+  }
 }
 
 export async function pauseDraftSession(leagueId: string, pausedByUserId?: string | null): Promise<boolean> {
@@ -1205,7 +1254,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     const { bootstrapSGAfterDraft } = await import('@/lib/survivor-guillotine/operations')
     await bootstrapSGAfterDraft(leagueId)
   } catch (err) {
-    console.error('[completeDraftSession] Survivor Guillotine bootstrap failed', {
+    console.error('[completeDraftSession] Survivor Guilly bootstrap failed', {
       leagueId, error: err instanceof Error ? err.message : String(err),
     })
   }

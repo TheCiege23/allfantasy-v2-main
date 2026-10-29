@@ -16,8 +16,19 @@ import { setErrorReporter } from './capture'
 type SentryCapture = (error: unknown, ctx?: Record<string, unknown>) => void
 type SentryModuleLike = {
   init: (options: Record<string, unknown>) => void
-  captureException: (error: unknown, context?: { extra?: Record<string, unknown> }) => void
+  captureException: (error: unknown, context?: { extra?: Record<string, unknown>; tags?: Record<string, string> }) => void
   requestDataIntegration?: (options: { include?: Record<string, boolean> }) => unknown
+}
+
+/** `CaptureContext.tags` as real Sentry tags, so an alert rule can filter on them (`extra` cannot be filtered). */
+export function sentryTags(ctx?: Record<string, unknown>): Record<string, string> | undefined {
+  const tags = ctx?.tags
+  if (!tags || typeof tags !== 'object') return undefined
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(tags as Record<string, unknown>)) {
+    if (typeof value === 'string' && value) out[key] = value
+  }
+  return Object.keys(out).length ? out : undefined
 }
 
 let clientInitDone = false
@@ -68,7 +79,7 @@ export function initSentryClient(): void {
       replaysOnErrorSampleRate: 0.1,
     })
     const capture: SentryCapture = (error, ctx) => {
-      Sentry.captureException(error, { extra: ctx })
+      Sentry.captureException(error, { extra: ctx, tags: sentryTags(ctx) })
     }
     setErrorReporter(capture)
   })()
@@ -156,7 +167,7 @@ export function initSentryServer(): void {
       }
       Sentry.init(await buildServerInitOptions(Sentry, dsn))
       const capture: SentryCapture = (error, ctx) => {
-        Sentry.captureException(error, { extra: ctx })
+        Sentry.captureException(error, { extra: ctx, tags: sentryTags(ctx) })
       }
       setErrorReporter(capture)
       console.info(`[Sentry] server error reporting active (environment: ${process.env.NODE_ENV})`)

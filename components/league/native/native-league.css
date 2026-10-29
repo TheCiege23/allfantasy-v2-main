@@ -1,61 +1,86 @@
-/* Native league handoff, 2026-10-11. Scoped tokens; source mockups are not shipped. */
+/* Native league handoff, 2026-10-11. Source mockups are not shipped.
+ * 2026-10-18: the workspace takes /core's tokens (af-core.css) instead of its own palette, so the
+ * league page and /core read as one product (user report: "the league dashboard does not match the
+ * visuals from the core page") and light mode follows /core's. Only the two names /core does not
+ * define are set here, derived from its tokens. Rail column is /core's open rail: 300px, 68px closed. */
 .af-core.nl-workspace {
-  --bg:#07080d;--surface2:#0b0d14;--surface:#10131c;--raised:#151926;
-  --line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.10);
-  --text:#e8eaf2;--text2:#a3a9c2;--muted:#a3a9c2;--faint:#6f7590;
-  --accent:#22d3ee;--accent-ink:#04050c;--gold:#d9b45a;
-  --good:#3fbf95;--warn:#e0a84a;--bad:#e5728a;
-  display:grid;grid-template-columns:72px 232px minmax(0,1fr);height:100dvh;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-size:14px;
+  --raised:color-mix(in srgb,var(--text) 6%,var(--surface));--gold:var(--p-gold-fg);
+  display:grid;grid-template-columns:300px 232px minmax(0,1fr);height:100vh;height:100dvh;overflow:hidden;background:var(--bg);background-image:var(--hero);background-repeat:no-repeat;color:var(--text);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-size:14px;
 }
+.af-core.nl-workspace[data-rail-collapsed=true]{grid-template-columns:68px 232px minmax(0,1fr)}
 .nl-workspace *{box-sizing:border-box}
-.nl-workspace :is(h1,h2,h3,strong){font-weight:600;font-style:normal}
+.nl-workspace :is(h1,h2,h3){font-weight:800;font-style:normal}
+.nl-workspace strong{font-weight:700;font-style:normal}
 .nl-workspace :is(a,button,input):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .nl-workspace button{cursor:pointer;font:inherit}
 .nl-workspace :is(a,button){touch-action:manipulation}
 .nl-workspace a{text-decoration:none;color:inherit}
-.nl-workspace p{color:var(--text2);line-height:1.6}
-.nl-rail{display:flex;align-items:center;flex-direction:column;gap:18px;padding:12px 5px;border-right:1px solid var(--line);overflow-y:auto}
-.nl-workspace .nl-brand{display:grid;place-items:center;min-height:44px;width:44px;border-radius:6px;background:var(--accent);color:var(--accent-ink);font-weight:700}
-.nl-rail-leagues{display:flex;flex-direction:column;gap:16px;width:100%}
-.nl-league-tile{display:flex;align-items:center;flex-direction:column;gap:7px;min-height:62px;position:relative}
-.nl-league-tile[aria-current=page]::before{content:'';position:absolute;left:-5px;top:8px;width:3px;height:32px;background:var(--accent);border-radius:2px}
-.nl-avatar{position:relative;display:grid;place-items:center;width:44px;height:44px;flex:none;border:1px solid var(--line2);border-radius:14px;background:var(--surface);color:var(--accent);font-size:16px;font-weight:600}
-.nl-avatar[data-needs-setup=true]{border-color:var(--warn)}
-.nl-platform{position:absolute;bottom:-4px;right:-5px;padding:1px 3px;border:2px solid var(--bg);border-radius:3px;background:var(--raised);font-size:11px;color:var(--text2)}
-.nl-league-meta{font:11px var(--font-jetbrains-mono,'JetBrains Mono',monospace);text-transform:uppercase;color:var(--faint);text-align:center}
-.nl-add{display:grid;place-items:center;min-height:44px;width:44px;border:1px dashed var(--line2);border-radius:10px;color:var(--muted)}
-.nl-sidebar{padding:12px;overflow-y:auto;border-right:1px solid var(--line)}
+:where(.nl-workspace) p{color:var(--text2);line-height:1.6}
+.nl-rail{display:flex;flex-direction:column;gap:10px;min-height:0;padding:14px 10px;background:var(--rail);border-right:1px solid var(--line);overflow:hidden}
+.nl-rail-head{display:flex;align-items:center;gap:8px;flex:none}
+.nl-workspace .nl-brand{display:grid;place-items:center;flex:none;min-height:42px;width:42px;border-radius:12px;background:var(--accent);color:var(--accent-ink);font-weight:900}
+.nl-workspace .nl-rail-toggle{flex:1;min-width:0;min-height:42px}
+.nl-rail-toggle-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nl-rail-leagues{display:flex;flex-direction:column;gap:4px;flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+/* One row = /core's open-rail tile (af-core-shell.css `.af-shell[data-rail-open='true'] .af-rail-tile`). */
+.nl-rail-tile{position:relative;display:flex;align-items:center;gap:10px;flex:none;min-height:44px;padding:7px 8px;border:1px solid transparent;border-radius:10px;color:var(--text)}
+.nl-rail-tile:hover{background:var(--chip)}
+.nl-rail-tile[data-active=true]{background:var(--accent-soft);border-color:var(--accent-line)}
+.nl-workspace .nl-rail-tile .af-rail-row{display:flex;flex:1}
+.nl-workspace .nl-rail-tile .af-rail-row-headline{flex-wrap:wrap;row-gap:4px}
+.nl-workspace .nl-rail-tile .af-rail-row-headline .af-rail-row-name{flex:1 1 100%}
+.nl-workspace .nl-rail-tile .af-rail-live-state{margin-left:0}
+.nl-rail-art{align-self:flex-start;font-weight:900;font-size:15px;background:var(--chip);color:var(--muted)}
+.nl-rail-live-dot{position:absolute;top:3px;right:3px;width:9px;height:9px;border-radius:999px;background:var(--good);box-shadow:0 0 0 2px var(--rail)}
+.nl-rail-week{color:var(--faint);font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.nl-add{display:flex;align-items:center;justify-content:center;gap:8px;flex:none;min-height:44px;border:1px dashed var(--line2);border-radius:10px;color:var(--muted);font-size:12px;font-weight:700}
+.nl-add svg{flex:none;width:18px;height:18px}
+.nl-rail:not([data-expanded=true]){align-items:center;padding:14px 0}
+.nl-rail:not([data-expanded=true]) .nl-rail-head{flex-direction:column}
+.nl-rail:not([data-expanded=true]) .nl-rail-toggle{flex:none;width:42px;justify-content:center;padding:0}
+.nl-rail:not([data-expanded=true]) :is(.nl-rail-toggle-text){display:none}
+.nl-rail:not([data-expanded=true]) .nl-rail-leagues{align-items:center;width:100%}
+.nl-rail:not([data-expanded=true]) .nl-rail-tile{padding:4px}
+.nl-rail:not([data-expanded=true]) .nl-add{width:42px}
+.nl-switcher-list .nl-rail-tile{border-top-color:var(--line);border-radius:0;padding:12px 4px;min-height:64px}
+.nl-switcher-list .nl-rail-tile[data-active=true]{border-radius:10px}
+.nl-sidebar{padding:14px 12px;overflow-y:auto;background:var(--surface2);border-right:1px solid var(--line)}
 .nl-back{display:flex;align-items:center;gap:8px;min-height:44px;color:var(--muted)!important;font-size:12px}
-.nl-nav-league{display:flex;align-items:center;gap:14px;padding:18px 14px;margin:8px 0;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.nl-nav-league{display:flex;align-items:center;gap:14px;padding:16px 14px;margin:8px 0;background:var(--surface);border:1px solid var(--line);border-radius:12px}
 .nl-nav-league strong{display:block;overflow-wrap:anywhere}
 .nl-initial{color:var(--accent);font-weight:700}
-.nl-eyebrow,.nl-nav-group h2,.nl-card-label{color:var(--faint);font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase}
+/* /core's `.af-label`: mono, 700, 11px, .12em. */
+.nl-eyebrow,.nl-nav-group h2,.nl-card-label{color:var(--faint);font-family:var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
 .nl-nav-league .nl-eyebrow{display:block;margin-top:4px;color:var(--warn)}
 .nl-nav-group{margin-top:20px}
 .nl-nav-group h2{padding:0 12px;margin-bottom:9px}
-.nl-nav-group button{display:flex;align-items:center;gap:10px;text-align:left;width:100%;min-height:38px;padding:9px 12px;border-radius:5px;color:var(--text2)}
-.nl-nav-group button:hover{background:var(--surface)}
-.nl-nav-group button[aria-current=page]{background:var(--raised);box-shadow:inset 2px 0 var(--accent);color:var(--text)}
+/* /core's `.af-nav-item`. */
+.nl-nav-group button{display:flex;align-items:center;gap:10px;text-align:left;width:100%;min-height:40px;padding:0 10px;border:1px solid transparent;border-radius:10px;color:var(--text2);font-size:13.5px;font-weight:700}
+.nl-nav-group button:hover{background:var(--chip)}
+.nl-nav-group button[aria-current=page]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
 .nl-main{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
-.nl-topbar{display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 24px;border-bottom:1px solid var(--line);flex:none}
-.nl-viewing,.nl-search{display:flex;align-items:center;gap:10px;min-height:40px;border:1px solid var(--line2);border-radius:5px;padding:0 12px;background:var(--surface);min-width:0}
+.nl-topbar{display:flex;align-items:center;gap:14px;min-height:60px;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--surface);flex:none}
+.nl-viewing,.nl-search{display:flex;align-items:center;gap:10px;min-height:40px;border:1px solid var(--line2);border-radius:10px;padding:0 12px;background:var(--surface2);min-width:0}
 .nl-viewing>span{font-size:11px;text-transform:uppercase;color:var(--faint)}
 .nl-viewing strong{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nl-search{flex:1;max-width:520px;background:var(--surface2);color:var(--faint);font-size:12px!important;text-align:left}
-.nl-search kbd{margin-left:auto;border:1px solid var(--line2);border-radius:3px;font-size:11px;padding:2px 4px}
-.nl-chip{display:inline-flex;align-items:center;min-height:23px;padding:2px 8px;border:1px solid var(--line2);border-radius:4px;font-size:11px;white-space:nowrap}
-.nl-accent{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+.nl-search kbd{margin-left:auto;border:1px solid var(--line2);border-radius:6px;font-size:11px;padding:2px 5px}
+/* /core's `.af-chip`: a pill, 700. */
+.nl-chip{display:inline-flex;align-items:center;min-height:23px;padding:4px 10px;border:1px solid var(--chip-line);border-radius:999px;background:var(--chip);font-size:11px;font-weight:700;white-space:nowrap}
+.nl-accent{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
 .nl-gold{color:var(--gold);border-color:color-mix(in srgb,var(--gold) 30%,transparent)}
 .nl-sport-week{font:11px var(--font-jetbrains-mono,'JetBrains Mono',monospace);color:var(--faint);white-space:nowrap}
 .nl-content{overflow:auto;min-height:0;padding:24px;scrollbar-gutter:stable;flex:1}
-.nl-league-heading{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:24px;background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:24px}
-.nl-heading-avatar{display:grid;place-items:center;flex:none;width:64px;height:64px;border:1px solid var(--line2);border-radius:10px;background:var(--surface2);color:var(--accent);font-size:26px;font-weight:600}
+/* /core's `.af-frame`: 16px radius, the hero wash. */
+.nl-league-heading{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:24px;background:var(--surface);background-image:var(--hero);border:1px solid var(--line);border-radius:16px;margin-bottom:24px}
+.nl-heading-avatar{display:grid;place-items:center;flex:none;width:64px;height:64px;border:1px solid var(--accent-line);border-radius:14px;background:var(--accent-soft);color:var(--accent);font-size:26px;font-weight:900}
 .nl-heading-name{min-width:0;flex:1}
-.nl-heading-name h1{font-size:30px;line-height:1.2;letter-spacing:-.025em;margin:6px 0}
+.nl-heading-name h1{font-size:30px;font-weight:900;line-height:1.2;letter-spacing:-.03em;margin:6px 0}
 .nl-heading-name p{font-size:11px;margin:0}
 .nl-badges{display:flex;flex-wrap:wrap;gap:8px}
-.nl-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:9px 15px;border:1px solid var(--line2);border-radius:5px;font-size:12px!important;font-weight:600!important;color:var(--text2)!important;background:transparent}
-.nl-button:hover{background:var(--raised)}
+/* /core's `.af-btn` geometry; the ghost colours of its secondary button. */
+.nl-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:9px 15px;border:1px solid var(--line2);border-radius:10px;font-size:13px!important;font-weight:800!important;color:var(--text2)!important;background:transparent}
+.nl-button:hover{background:var(--chip)}
 .nl-workspace .nl-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)!important}
 .nl-phase{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));width:100%;gap:6px;list-style:none;padding:0;margin:4px 0 0}
 .nl-phase li{position:relative;padding-top:13px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint)}
@@ -64,19 +89,20 @@
 .nl-phase li[aria-current=step]::before{background:var(--accent)}
 .nl-home{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(240px,1fr);gap:24px}
 .nl-home-primary,.nl-home-secondary{display:flex;flex-direction:column;gap:24px;min-width:0}
-.nl-card{padding:24px;border:1px solid var(--line);background:var(--surface);border-radius:10px;min-width:0}
+/* /core's `.af-card`. */
+.nl-card{padding:24px;border:1px solid var(--line);background:var(--surface);border-radius:14px;min-width:0}
 .nl-card-label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px}
 .nl-next .nl-card-label>span:first-child{color:var(--accent)}
-.nl-card h2{font-size:18px;letter-spacing:-.02em;margin:0 0 10px}
+.nl-card h2{font-size:18px;font-weight:800;letter-spacing:-.02em;margin:0 0 10px}
 .nl-card p{font-size:13px;margin:0 0 16px}
 .nl-next h2{font-size:28px}
 .nl-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:20px}
 .nl-quick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:20px}
-.nl-quick-grid>:is(a,button){padding:16px 12px;border:1px solid var(--line);border-radius:8px;background:var(--raised);text-align:left}
+.nl-quick-grid>:is(a,button,div){padding:16px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);text-align:left}
 .nl-quick-grid h3{font-size:13px;margin:0 0 8px}
 .nl-quick-grid p{font-size:12px;margin:0}
 .nl-team-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:20px}
-.nl-team-stats>div{padding:12px;background:var(--surface2);border-radius:6px}
+.nl-team-stats>div{padding:12px;background:var(--surface2);border-radius:10px}
 .nl-team-stats dt{font-size:11px;text-transform:uppercase;color:var(--faint)}
 .nl-team-stats dd{margin:6px 0 0;font:16px var(--font-jetbrains-mono,'JetBrains Mono',monospace);font-variant-numeric:tabular-nums}
 .nl-home-secondary .nl-actions>*{flex:1}
@@ -87,32 +113,28 @@
 .nl-standings-preview strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nl-standings-preview li>span{font:11px var(--font-jetbrains-mono,'JetBrains Mono',monospace);color:var(--faint)}
 .nl-standings-preview [data-own-team=true] strong{color:var(--accent)}
-.nl-workspace .af-setup-checklist{margin:0;border-radius:10px;padding:24px}
+.nl-workspace .af-setup-checklist{margin:0;border-radius:14px;padding:24px}
 .nl-workspace .af-setup-steps li{padding:16px 0}
 .nl-workspace [data-testid=league-command-center-surface]{background:var(--bg);border:0;overflow:visible}
 .nl-workspace [data-testid=league-command-center-surface]>div:first-child{overflow:visible}
 .nl-workspace .nl-tab-content{min-height:0;display:flex;flex-direction:column}
 .nl-workspace .nl-tab-content :is(input,select,textarea){color-scheme:dark}
 .nl-mobile-top,.nl-mobile-rail,.nl-bottom-nav,.nl-mobile-tabs,.nl-mobile-chimmy{display:none}
-.nl-switcher{background:var(--bg);color:var(--text);width:min(560px,calc(100vw - 32px));max-height:85dvh;padding:24px;border:1px solid var(--line2);border-radius:10px;overflow:auto;font-family:inherit}
+.nl-switcher{background:var(--surface);color:var(--text);width:min(560px,calc(100vw - 32px));max-height:85dvh;padding:24px;border:1px solid var(--line2);border-radius:16px;overflow:auto;font-family:inherit}
 .nl-switcher::backdrop{background:rgba(0,0,0,.7)}
 .nl-switcher-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
 .nl-switcher-title h2{font-size:22px;margin:0}
 .nl-switcher-title button{display:grid;place-items:center;min-width:44px;min-height:44px}
-.nl-switcher-search{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line2);border-radius:6px;background:var(--surface2)}
+.nl-switcher-search{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line2);border-radius:10px;background:var(--surface2)}
 .nl-switcher-search input{background:transparent;border:0;width:100%;min-height:24px;color:var(--text)}
 .nl-switcher-filters{display:flex;gap:8px;margin:16px 0}
-.nl-switcher-filters button{min-height:44px;padding:8px 14px;border:1px solid var(--line2);border-radius:5px;font-size:12px}
-.nl-switcher-filters [aria-pressed=true]{color:var(--accent);border-color:var(--accent)}
-.nl-switcher-list>a{display:flex;align-items:center;gap:14px;min-height:88px;border-top:1px solid var(--line);padding:12px 0}
-.nl-switcher-list>a>div{flex:1;min-width:0}
+.nl-switcher-filters button{min-height:44px;padding:8px 14px;border:1px solid var(--line2);border-radius:999px;font-size:12px;font-weight:700}
+.nl-switcher-filters [aria-pressed=true]{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
 .nl-switcher-list strong{overflow-wrap:anywhere}
-.nl-switcher-list p{margin:4px 0;font-size:12px}
-.nl-switcher-list div>span{font-size:11px;color:var(--faint);text-transform:uppercase}
 .nl-switcher footer{display:flex;gap:10px;margin-top:20px}
 .nl-switcher footer>*{flex:1}
 .nl-workspace.nl-embedded{grid-template-columns:minmax(0,1fr)}
-@media(min-width:768px) and (max-width:1199px){.af-core.nl-workspace{grid-template-columns:64px 200px minmax(0,1fr)}.nl-content{padding:20px}.nl-home{grid-template-columns:minmax(0,1fr)}.nl-home-secondary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.nl-search{display:none}.nl-topbar{padding:10px 20px}.nl-home-secondary>:last-child{grid-column:1/-1}}
+@media(min-width:768px) and (max-width:1199px){.af-core.nl-workspace,.af-core.nl-workspace[data-rail-collapsed=true]{grid-template-columns:68px 200px minmax(0,1fr)}.nl-content{padding:20px}.nl-home{grid-template-columns:minmax(0,1fr)}.nl-home-secondary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.nl-search{display:none}.nl-topbar{padding:10px 20px}.nl-home-secondary>:last-child{grid-column:1/-1}}
 @media(max-width:767px){
   .af-core.nl-workspace{display:flex;flex-direction:column;height:100dvh;font-size:14px}
   .nl-rail,.nl-sidebar,.nl-topbar{display:none}
@@ -120,9 +142,8 @@
   .nl-mobile-top>button{min-width:44px;min-height:44px;border:1px solid var(--line2);border-radius:6px;display:flex;align-items:center;justify-content:center}
   .nl-mobile-top .nl-mobile-league{flex:1;min-width:0;gap:10px;color:var(--accent)}
   .nl-mobile-league>span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--text)}
-  .nl-mobile-rail{display:flex;gap:18px;padding:10px 20px;overflow-x:auto;flex:none}
-  .nl-mobile-rail .nl-league-tile{min-width:44px}
-  .nl-mobile-rail .nl-league-tile::before{display:none}
+  .nl-mobile-rail{display:flex;gap:8px;padding:8px 16px;overflow-x:auto;flex:none}
+  .nl-mobile-rail .nl-rail-tile{min-width:52px;padding:4px}
   .nl-content{padding:14px 16px 24px;scrollbar-gutter:auto}
   .nl-league-heading{padding:10px 0 0;background:transparent;border:0;margin-bottom:20px;gap:12px}
   .nl-heading-avatar{width:48px;height:48px;font-size:22px;border-radius:10px}
@@ -147,7 +168,7 @@
   .nl-actions{gap:8px;margin-top:16px}
   .nl-actions>.nl-button{flex:1}
   .nl-quick-grid{grid-template-columns:minmax(0,1fr);gap:8px}
-  .nl-quick-grid>:is(a,button){padding:12px}
+  .nl-quick-grid>:is(a,button,div){padding:12px}
   .nl-workspace .af-setup-checklist{padding:16px}
   .nl-home-secondary{display:flex}
   .nl-bottom-nav{display:flex;justify-content:space-around;min-height:72px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--surface2);flex:none}
@@ -235,3 +256,108 @@
 .nl-activity-picker{display:inline-flex;gap:4px;padding:2px;border:1px solid var(--line2);border-radius:999px;background:var(--raised)}
 .nl-activity-picker button{border:0!important;padding:0 6px!important}
 .nl-activity-error{color:var(--bad)!important;font-size:12px}
+/* Rail ring, record line, platform tag and unread badge (2026-10-18, handoff §2). All colours are
+ * /core tokens: green = --good, red = --bad, amber (needs you) = --warn. */
+.nl-rail-crest{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;flex:none;align-self:flex-start}
+.nl-workspace .nl-rail-art{position:relative;display:grid;place-items:center;flex:none;width:42px;height:42px;min-width:42px;max-width:42px;border-radius:12px;overflow:visible}
+/* This rail also mounts without AfCoreShell's stylesheet (a direct phone invite). */
+.nl-workspace .nl-rail-art>img{display:block;width:42px;height:42px;max-width:42px;object-fit:cover}
+.nl-workspace .nl-rail-crest{width:52px;max-width:52px}
+.nl-workspace .nl-mobile-rail{max-height:88px;min-height:76px}
+.nl-workspace .nl-mobile-rail .nl-rail-tile{width:60px;max-width:60px;min-width:60px;flex:0 0 60px}
+.nl-workspace .nl-rail-art>img{border-radius:inherit}
+.nl-workspace .nl-rail-art[data-ring]{outline:2px solid var(--line2);outline-offset:2px}
+.nl-workspace .nl-rail-art[data-ring=good]{outline-color:var(--good)}
+.nl-workspace .nl-rail-art[data-ring=bad]{outline-color:var(--bad)}
+.nl-workspace .nl-rail-art[data-ring=needs]{outline-color:var(--warn)}
+.nl-rail-unread{position:absolute;top:-7px;right:-7px;display:grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--bad);color:var(--accent-ink);font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums;box-shadow:0 0 0 2px var(--rail)}
+.nl-rail-tag{position:absolute;right:-6px;bottom:-5px;padding:1px 3px;border-radius:4px;background:var(--surface2);border:1px solid var(--line2);color:var(--muted);font:700 11px/1.1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:0}
+.nl-rail-tag[data-platform=native]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.nl-rail-mini{max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint);font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.nl-rail-mini[data-tone=good]{color:var(--good)}
+.nl-rail-mini[data-tone=bad]{color:var(--bad)}
+.nl-rail-mini[data-tone=needs]{color:var(--warn)}
+.nl-rail:not([data-expanded=true]) .nl-rail-tile{padding:8px 4px 4px}
+.nl-rail-leagues{padding-top:6px}
+/* Nav: unread count beside League chat, and the "Your record" links (handoff §2 nav groups). */
+.nl-nav-count{margin-left:auto;min-width:22px;padding:2px 6px;border:1px solid var(--line2);border-radius:6px;color:var(--text2);font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums;text-align:center}
+.nl-nav-group>a{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;padding:0 10px;border:1px solid transparent;border-radius:10px;color:var(--text2);font-size:13.5px;font-weight:700}
+.nl-nav-group>a:hover{background:var(--chip)}
+/* Phone pill: ‹ league › (handoff §2 phone). */
+.nl-mobile-pill{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.nl-mobile-step{display:grid;place-items:center;flex:none;min-width:44px;min-height:44px;border:1px solid var(--line2);border-radius:6px;color:var(--text2)}
+.nl-workspace .nl-mobile-top .nl-mobile-league{display:flex;align-items:center;gap:10px;flex:1;min-width:0;min-height:44px;padding:0 10px;border:1px solid var(--line2);border-radius:10px;color:var(--text)}
+.nl-mobile-crest{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700;outline:2px solid var(--line2);outline-offset:1px}
+.nl-mobile-crest[data-ring=good]{outline-color:var(--good)}
+.nl-mobile-crest[data-ring=bad]{outline-color:var(--bad)}
+.nl-mobile-crest[data-ring=needs]{outline-color:var(--warn)}
+.nl-mobile-name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:left}
+.nl-workspace .nl-mobile-tag{position:static}
+/* Switcher sheet groups: Needs you / Live now · Wk N (handoff MobileSwitcher). */
+.nl-switcher-brand{display:grid;place-items:center;flex:none;width:40px;height:40px;margin-right:12px;border-radius:10px;background:var(--accent);color:var(--accent-ink);font-weight:700}
+.nl-switcher-title{justify-content:flex-start}
+.nl-switcher-title button{margin-left:auto}
+.nl-switcher-group{margin-top:14px}
+.nl-switcher-group h3{margin:0 0 6px;color:var(--faint);font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.12em;text-transform:uppercase}
+.nl-switcher-group[data-group=needs] h3{color:var(--warn)}
+.nl-switcher-group[data-group=live] h3{color:var(--good)}
+/* Guillotine league (2026-10-18): the ember atmosphere (globals.css `.af-atmo-guillotine`) shows
+ * through the content column, and the header becomes the guillotine banner. The banner is always
+ * dark, like the format hub heroes, so it re-scopes /core's text tokens to the dark cut locally —
+ * every colour inside it then clears AA on the scrim in light mode too. */
+.af-core.nl-workspace[data-format=guillotine]{position:relative;z-index:1;background:transparent}
+.nl-workspace[data-format=guillotine] [data-testid=league-command-center-surface]{background:transparent}
+.nl-league-heading[data-format=guillotine]{position:relative;isolation:isolate;overflow:hidden;background:#140707;border-color:rgba(255,122,69,.34);--text:#f7f0ea;--text2:#eadcd3;--faint:#d2bdb0;--line2:rgba(255,255,255,.24);--chip:rgba(12,4,5,.55);--chip-line:rgba(255,255,255,.2);--accent:#ff8a5c;--accent-soft:rgba(255,122,69,.16);--accent-line:rgba(255,122,69,.45);--gold:#f5c451;color:var(--text)}
+.nl-guillotine-art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:60% 45%;z-index:-2;pointer-events:none}
+.nl-league-heading[data-format=guillotine]::before{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(12,4,5,.93) 0%,rgba(12,4,5,.84) 50%,rgba(12,4,5,.6) 100%);pointer-events:none}
+.nl-league-heading[data-format=guillotine]>.nl-button{background:rgba(12,4,5,.6)}
+.nl-league-heading[data-format=guillotine]>.nl-button:hover{background:rgba(255,255,255,.1)}
+.nl-league-heading[data-format=guillotine] .nl-heading-avatar{background:rgba(12,4,5,.6)}
+.nl-workspace .nl-guillotine-chip{color:#ffb08f;border-color:rgba(255,122,69,.45);background:rgba(255,122,69,.14)}
+.nl-heading-name .nl-guillotine-line{margin:0 0 6px;color:#ffb08f;font:700 13px/1.4 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.nl-workspace[data-guillotine-mood=chop_week] .nl-league-heading[data-format=guillotine]{border-color:rgba(248,113,113,.5)}
+.nl-workspace[data-guillotine-mood=chop_week] .nl-guillotine-line{color:#fca5a5}
+.nl-workspace[data-guillotine-mood=final] .nl-league-heading[data-format=guillotine]{border-color:rgba(245,196,81,.5)}
+.nl-workspace[data-guillotine-mood=final] .nl-guillotine-line{color:#f5c451}
+.nl-workspace[data-guillotine-mood=eliminated] .nl-guillotine-art{filter:grayscale(.85) brightness(.8)}
+.nl-workspace[data-guillotine-mood=eliminated] .nl-guillotine-line{color:#d2bdb0}
+@media(max-width:767px){
+  .nl-league-heading[data-format=guillotine]{padding:14px;border:1px solid rgba(255,122,69,.34);border-radius:12px;margin-bottom:16px}
+  .nl-league-heading[data-format=guillotine] .nl-heading-name h1{font-size:22px;margin:0 0 4px}
+  .nl-heading-name .nl-guillotine-line{order:2;font-size:12px;margin:0 0 4px}
+  .nl-league-heading[data-format=guillotine] .nl-heading-name>p:not(.nl-guillotine-line){order:2}
+  .nl-league-heading[data-format=guillotine] .nl-badges{margin-top:8px}
+}
+
+/* Phone workspace: one compact section picker, with the daily actions in the bottom bar. */
+.nl-section-picker{display:none}
+.nl-workspace{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+@media(max-width:767px){
+  .nl-workspace .nl-mobile-top{padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top));min-height:60px;flex-shrink:0}
+  .nl-workspace .nl-content{padding:12px 14px 20px;overscroll-behavior-y:contain;scrollbar-gutter:auto}
+  .nl-workspace .nl-league-heading{gap:10px;margin-bottom:14px;padding-top:0}
+  .nl-workspace .nl-heading-avatar{width:36px;height:36px;flex-basis:36px;font-size:12px}
+  .nl-workspace .nl-heading-name h1{font-size:20px;line-height:1.25;margin:0 0 4px;overflow-wrap:anywhere}
+  .nl-workspace .nl-heading-name>p{font-size:12px;line-height:1.5}
+  .nl-workspace .nl-badges>.nl-accent{display:none}
+  .nl-workspace .nl-badges{margin-top:6px;gap:6px}
+  .nl-workspace .nl-badges .nl-chip{font-size:11px;padding:3px 6px}
+  .nl-workspace .nl-mobile-tabs{display:none}
+  .nl-section-picker{display:flex;align-items:center;gap:12px;margin-bottom:14px;color:var(--faint);font-size:12px}
+  .nl-section-picker select{flex:1;min-width:0;min-height:44px;border:1px solid var(--line2);border-radius:10px;background:var(--surface2);color:var(--text);padding:0 12px;font-size:16px}
+  .nl-workspace .nl-card{border-radius:14px;padding:16px}
+  .nl-workspace .nl-actions{margin-top:14px}
+  .nl-workspace .nl-next h2{font-size:20px;line-height:1.35}
+  .nl-workspace .nl-bottom-nav{min-height:60px;padding-top:4px;padding-bottom:max(4px,env(safe-area-inset-bottom));flex-shrink:0}
+  .nl-workspace :is(button,.nl-text-link,.nl-back,.nl-nav-group>a){min-height:44px;min-width:44px;touch-action:manipulation}
+  .nl-workspace :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px}
+  .nl-workspace .nl-sidebar.nl-menu-open{top:calc(60px + env(safe-area-inset-top,0px));bottom:calc(60px + env(safe-area-inset-bottom,0px));overflow-y:auto;overscroll-behavior:contain;border-right:1px solid var(--line2);box-shadow:12px 0 32px #0006}
+  .nl-workspace .nl-switcher{padding:16px;padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom));overscroll-behavior:contain}
+  .nl-workspace .nl-switcher-title{position:sticky;top:0;background:var(--surface);z-index:1}
+  .nl-workspace :is(button,a,select,input):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+}
+
+.nl-heading-image{display:block;width:100%;height:100%;border-radius:inherit;object-fit:cover}
+
+.nl-home-secondary:empty { display: none; }
+.nl-home:has(> .nl-home-secondary:empty) { grid-template-columns: minmax(0, 1fr); }

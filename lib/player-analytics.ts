@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { boundMap } from "@/lib/ttl-memo";
 
 export interface PlayerAnalytics {
   name: string;
@@ -86,6 +87,12 @@ function parseComparables(raw: string | null | undefined): string[] {
 
 const cache = new Map<string, { data: PlayerAnalytics | null; ts: number }>();
 const CACHE_TTL = 5 * 60 * 1000;
+// Keyed by player name and season; bounded so names looked up once do not stay forever.
+const CACHE_MAX_ENTRIES = 5_000;
+function setCached(key: string, data: PlayerAnalytics | null) {
+  boundMap(cache, (e) => Date.now() - e.ts >= CACHE_TTL, CACHE_MAX_ENTRIES);
+  cache.set(key, { data, ts: Date.now() });
+}
 
 export async function getPlayerAnalytics(
   name: string,
@@ -106,7 +113,7 @@ export async function getPlayerAnalytics(
   });
 
   if (!row) {
-    cache.set(cacheKey, { data: null, ts: Date.now() });
+    setCached(cacheKey, null);
     return null;
   }
 
@@ -170,7 +177,7 @@ export async function getPlayerAnalytics(
     rawData: row.rawData as Record<string, any> | null,
   };
 
-  cache.set(cacheKey, { data: result, ts: Date.now() });
+  setCached(cacheKey, result);
   return result;
 }
 
@@ -272,13 +279,13 @@ export async function getPlayerAnalyticsBatch(
 
     result.set(originalName, analytics);
     const cacheKey = `${row.normalizedName}|${season || "latest"}`;
-    cache.set(cacheKey, { data: analytics, ts: Date.now() });
+    setCached(cacheKey, analytics);
   }
 
   for (const norm of uncached) {
     if (!seen.has(norm)) {
       const cacheKey = `${norm}|${season || "latest"}`;
-      cache.set(cacheKey, { data: null, ts: Date.now() });
+      setCached(cacheKey, null);
     }
   }
 

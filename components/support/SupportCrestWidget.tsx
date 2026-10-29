@@ -1,8 +1,11 @@
 'use client'
 
+import { useDialogKeyboardViewport } from '@/components/shared/useDialogKeyboardViewport'
+import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X, Loader2, CheckCircle2, TriangleAlert } from 'lucide-react'
-import { SUPPORT_WIDGET_FEEDBACK_TYPE, SUPPORT_WIDGET_TOOL } from '@/lib/support/support-widget'
+import { SUPPORT_WIDGET_FEEDBACK_TYPE, SUPPORT_WIDGET_OPEN_EVENT, SUPPORT_WIDGET_TOOL } from '@/lib/support/support-widget'
 
 /**
  * Global "contact support" entry point — the AF crest with an "S" glyph, mounted once in
@@ -21,12 +24,13 @@ import { SUPPORT_WIDGET_FEEDBACK_TYPE, SUPPORT_WIDGET_TOOL } from '@/lib/support
  * - Positioned beside the existing Chimmy FAB (whose offsets already clear MobileBottomTabs) so
  *   the floating cluster stays deconflicted at every breakpoint.
  */
-export function SupportCrestWidget() {
+export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: string | null }) {
   const [open, setOpen] = useState(false)
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(defaultEmail ?? '')
   const [message, setMessage] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const emailRef = useRef<HTMLInputElement | null>(null)
 
@@ -40,19 +44,23 @@ export function SupportCrestWidget() {
     }
   }, [status])
 
+  useDialogKeyboardViewport(viewportRef, open)
+  useOverlayContainment({ active: open, containerRef: dialogRef, onClose: close })
+
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
-    }
-    window.addEventListener('keydown', onKey)
     // Focus the first field so keyboard users land inside the dialog.
     const id = window.setTimeout(() => emailRef.current?.focus(), 40)
     return () => {
-      window.removeEventListener('keydown', onKey)
       window.clearTimeout(id)
     }
   }, [open, close])
+
+  useEffect(() => {
+    const openFromPage = () => setOpen(true)
+    window.addEventListener(SUPPORT_WIDGET_OPEN_EVENT, openFromPage)
+    return () => window.removeEventListener(SUPPORT_WIDGET_OPEN_EVENT, openFromPage)
+  }, [])
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   const canSubmit = emailValid && message.trim().length > 0 && status !== 'sending'
@@ -108,9 +116,9 @@ export function SupportCrestWidget() {
         /* Offsets are deconflicted from the other fixed controls in this corner, measured in-browser:
            mobile/tablet sits immediately LEFT of the Chimmy FAB (same bottom offset, right-4), which
            itself clears MobileBottomTabs — home indicator included, hence the env() term both share;
-           desktop stacks ABOVE both the Chimmy FAB (lg:bottom-6 right-6) and the dashboard's wide
-           "Open Communications" pill (bottom-5 right-5). */
-        className="group fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-[4.75rem] z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border border-cyan-400/30 bg-gradient-to-br from-cyan-500/25 to-violet-500/20 shadow-[0_8px_30px_-8px_rgba(34,211,238,0.6)] backdrop-blur-md transition hover:from-cyan-500/35 hover:to-violet-500/30 hover:shadow-[0_10px_36px_-8px_rgba(34,211,238,0.75)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 active:scale-95 lg:bottom-24 lg:right-6"
+           desktop also clears the fixed theme pill in slot 1, which otherwise covers this button.
+           Both stay above the Chimmy FAB and the dashboard's communications pill. */
+        className="group fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-[4.75rem] z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border border-cyan-400/30 bg-gradient-to-br from-cyan-500/25 to-violet-500/20 shadow-[0_8px_30px_-8px_rgba(34,211,238,0.6)] backdrop-blur-md transition hover:from-cyan-500/35 hover:to-violet-500/30 hover:shadow-[0_10px_36px_-8px_rgba(34,211,238,0.75)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 active:scale-95 lg:bottom-24 lg:right-28"
       >
         <span className="relative inline-flex h-7 w-7 items-center justify-center">
           {/* Plain <img>: matches GlobalTopNav's crest usage. /af-crest.svg is the
@@ -136,7 +144,19 @@ export function SupportCrestWidget() {
 
       {open ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+          ref={viewportRef}
+          style={{
+            top: 'var(--af-dialog-top, 0px)',
+            height: 'var(--af-dialog-height, 100dvh)',
+            bottom: 'auto',
+            // Safari's viewport includes the notch and home indicator. Subtract
+            // any keyboard pan already accounted for by the viewport hook.
+            paddingTop: 'max(8px, calc(env(safe-area-inset-top, 0px) - var(--af-dialog-top, 0px)))',
+            paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))',
+            paddingLeft: 'env(safe-area-inset-left, 0px)',
+            paddingRight: 'env(safe-area-inset-right, 0px)',
+          }}
+          className="fixed inset-0 z-50 box-border flex items-end justify-center bg-black/50 backdrop-blur-[2px] sm:items-center"
           role="presentation"
           onClick={close}
         >
@@ -145,8 +165,9 @@ export function SupportCrestWidget() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="support-widget-title"
+            style={{ maxHeight: '100%' }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-[420px] overflow-hidden rounded-t-[20px] border border-white/10 bg-[#0a0a1f] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.45)] sm:rounded-[20px] sm:pb-0"
+            className="min-h-0 w-full max-w-[420px] overflow-y-auto rounded-t-[20px] border border-white/10 bg-[#0a0a1f] pb-3 shadow-[0_-12px_48px_rgba(0,0,0,0.45)] sm:rounded-[20px] sm:pb-0"
           >
             <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
               <p
@@ -159,7 +180,7 @@ export function SupportCrestWidget() {
                 type="button"
                 onClick={close}
                 aria-label="Close support form"
-                className="touch-manipulation inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white transition hover:bg-white/[0.08]"
+                className="touch-manipulation inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white transition hover:bg-white/[0.08]"
               >
                 <X className="h-4.5 w-4.5" aria-hidden />
               </button>
@@ -177,7 +198,7 @@ export function SupportCrestWidget() {
                 <button
                   type="button"
                   onClick={close}
-                  className="mt-5 inline-flex h-10 items-center justify-center rounded-xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/25 to-violet-500/20 px-5 text-[13px] font-bold text-white transition hover:from-cyan-500/35 hover:to-violet-500/30"
+                  className="mt-5 inline-flex h-11 items-center justify-center rounded-xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/25 to-violet-500/20 px-5 text-[13px] font-bold text-white transition hover:from-cyan-500/35 hover:to-violet-500/30"
                 >
                   Done
                 </button>
@@ -214,7 +235,7 @@ export function SupportCrestWidget() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-[14px] text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25"
+                    className="min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 sm:[@media(pointer:fine)]:text-[14px]"
                   />
                 </div>
 
@@ -233,7 +254,7 @@ export function SupportCrestWidget() {
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="Tell us what happened, or what you love."
-                    className="w-full resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-[14px] text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25"
+                    className="w-full resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 sm:[@media(pointer:fine)]:text-[14px]"
                   />
                 </div>
 

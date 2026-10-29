@@ -44,6 +44,23 @@ export type ViewerPoll = {
   allowMultiple: boolean
   /** Voter identities are redacted server-side; only counts are knowable. */
   anonymous: boolean
+  /** The author chose to show results only once the poll closes. */
+  resultsAfterClose: boolean
+  /**
+   * The server withheld everyone else's votes because the poll is still open and its results are
+   * shown only after close. Counts in `options` are then the viewer's own vote alone.
+   */
+  resultsHidden: boolean
+  /** Set on a prediction poll (lib/league-chat/predictionPolls.ts) — tied to one matchup. */
+  prediction: ViewerPrediction | null
+}
+
+export type ViewerPrediction = {
+  week: number
+  resolved: boolean
+  /** null while unresolved, and on a tie. */
+  winningOptionId: string | null
+  tie: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -105,6 +122,21 @@ export function readViewerPoll(
     closedByHand: raw.closed === true,
     allowMultiple: raw.allowMultiple === true,
     anonymous: raw.anonymous === true,
+    resultsAfterClose: raw.resultsVisibility === 'after_close',
+    resultsHidden: raw.resultsHidden === true,
+    prediction: readViewerPrediction(raw.prediction),
+  }
+}
+
+function readViewerPrediction(raw: unknown): ViewerPrediction | null {
+  if (!isRecord(raw) || raw.kind !== 'matchup') return null
+  const week = Number(raw.week)
+  const resolved = typeof raw.resolvedAt === 'string'
+  return {
+    week: Number.isFinite(week) ? week : 0,
+    resolved,
+    winningOptionId: resolved && typeof raw.winningOptionId === 'string' ? raw.winningOptionId : null,
+    tie: resolved && raw.outcome === 'tie',
   }
 }
 
@@ -157,6 +189,49 @@ export function votePollLocally(poll: ViewerPoll, optionId: string): ViewerPoll 
   })
 
   return { ...poll, options, totalVotes: options.reduce((n, o) => n + o.count, 0) }
+}
+
+/**
+ * Hide an open poll's results from a viewer when its author chose "results after close".
+ *
+ * ⚠ THE SAME RULE AS ANONYMITY: A REDACTION, NOT A RENDERING CHOICE. Every option's vote list
+ * reaches the browser with the message, so a poll that merely did not DRAW its bars would still
+ * ship the running tally to anyone who opens devtools. While the poll is open, every vote but the
+ * viewer's own is removed and `resultsHidden` is set, so the UI can say why there are no numbers.
+ * The viewer keeps their own vote — that is what lets them see and change their pick.
+ *
+ * `now` is the server's clock: the deadline is the server's to judge, as in the vote route.
+ */
+export function redactHiddenPollResults(
+  metadata: unknown,
+  viewerUserId: string | null | undefined,
+  now: number = Date.now(),
+): unknown {
+  if (!isRecord(metadata) || !isRecord(metadata.poll)) return metadata
+  const poll = metadata.poll
+  if (poll.resultsVisibility !== 'after_close' || !Array.isArray(poll.options)) return metadata
+  const closeAt = typeof poll.closeAt === 'string' ? Date.parse(poll.closeAt) : NaN
+  const closed = poll.closed === true || (Number.isFinite(closeAt) && closeAt <= now)
+  if (closed) return metadata
+
+  const options = poll.options.map((entry) => {
+    if (!isRecord(entry)) return entry
+    const votes = Array.isArray(entry.votes) ? entry.votes : []
+    return { ...entry, votes: viewerUserId && votes.includes(viewerUserId) ? [viewerUserId] : [] }
+  })
+  return { ...metadata, poll: { ...poll, options, resultsHidden: true } }
+}
+
+/**
+ * Everything a viewer may not see on a poll, removed — hidden results first, then anonymity.
+ * The one call read paths make, so a new rule lands everywhere at once.
+ */
+export function redactPollForViewer(
+  metadata: unknown,
+  viewerUserId: string | null | undefined,
+  now: number = Date.now(),
+): unknown {
+  return redactAnonymousPollVotes(redactHiddenPollResults(metadata, viewerUserId, now), viewerUserId)
 }
 
 /**

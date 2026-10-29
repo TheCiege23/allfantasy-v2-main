@@ -92,4 +92,43 @@ describe('waiverPlayerAdapter', () => {
     expect(row.dataQualityLabels).toContain('Fallback projection')
     expect(row.seasonStatsSummary).toEqual([])
   })
+
+  it('a missing fantasy PPG is not printed as "PPG 0"', () => {
+    const row = adaptWaiverWirePlayer(wire({ normalizedStats: { fantasyPointsPerGame: null, adp: null } }))
+    expect(row.seasonStatsSummary).toEqual([])
+  })
+
+  it('NBA: reads sports_players season totals as per-game lines', () => {
+    const row = adaptWaiverWirePlayer(
+      wire({
+        sport: 'NBA',
+        position: 'PG',
+        normalizedStats: { fantasyPointsPerGame: null, cacheStats: { points: 865, total_rebounds: 245, assists: 322, games_played: 54 } },
+      }),
+    )
+    expect(row.seasonStatsSummary).toEqual(['PTS/G 16', 'REB/G 4.5', 'AST/G 6'])
+  })
+
+  it('NBA: no games played means no per-game line, never a total labelled as a rate', () => {
+    const row = adaptWaiverWirePlayer(wire({ sport: 'NBA', normalizedStats: { cacheStats: { points: 865 } } }))
+    expect(row.seasonStatsSummary).toEqual([])
+  })
+
+  it('NFL: reads sports_players season totals, skipping zeros and summing touchdowns', () => {
+    const row = adaptWaiverWirePlayer(
+      wire({
+        sport: 'NFL',
+        position: 'QB',
+        normalizedStats: {
+          cacheStats: { passing_yards: 3800, passing_touchdowns: 28, rushing_yards: 0, rushing_touchdowns: 2, receiving_yards: 0, games_played: 17 },
+        },
+      }),
+    )
+    expect(row.seasonStatsSummary).toEqual(['PASS YDS 3800', 'TD 30'])
+  })
+
+  it('NHL and MLB lines use each sport\'s own headline counts', () => {
+    expect(adaptWaiverWirePlayer(wire({ sport: 'NHL', normalizedStats: { cacheStats: { goals: 31, assists: 40, shots_on_goal: 210 } } })).seasonStatsSummary).toEqual(['G 31', 'A 40', 'SOG 210'])
+    expect(adaptWaiverWirePlayer(wire({ sport: 'MLB', position: 'SP', normalizedStats: { cacheStats: { 'pitching.ERA': 3.214, 'pitching.K': 190, 'pitching.W': 12 } } })).seasonStatsSummary).toEqual(['ERA 3.21', 'K 190', 'W 12'])
+  })
 })

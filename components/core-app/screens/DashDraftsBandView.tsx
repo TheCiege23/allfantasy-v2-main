@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
 
 /**
  * The words of DashDraftsBand, in the reader's language (2026-10-04).
@@ -106,9 +107,11 @@ export function DashDraftsBandView({ liveCount, visible, overflow }: { liveCount
                 {clock ?? (es ? 'En el reloj: no se informó un tiempo para elegir' : 'On the clock — no pick timer reported')}
               </p>
 
-              <Link className="af-drafts-open" href={`/core/draft-hq?league=${encodeURIComponent(row.leagueId)}`}>
+              {/* Straight into the room: this band only shows live drafts, and Draft HQ is a planning
+                  screen — sending a phone user there on the clock was the 2026-10-26 report. */}
+              <a className="af-drafts-open" href={draftRoomHref(row.leagueId)}>
                 {es ? 'Abrir la sala del draft' : 'Open draft room'}
-              </Link>
+              </a>
             </article>
           )
         })}

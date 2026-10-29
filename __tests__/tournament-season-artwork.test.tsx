@@ -13,7 +13,7 @@ describe('supplied tournament identity', () => {
     expect(seasonBlueprintSchema.parse(config)).not.toHaveProperty('artwork')
     expect(seasonContractHash(seasonBlueprintSchema.parse(config))).toBe(seasonContractHash(config))
     expect(seasonArtCatalog.pairs).toHaveLength(20)
-    expect(seasonArtCatalog.library).toHaveLength(48)
+    expect(seasonArtCatalog.library).toHaveLength(50)
     expect(seasonArtPath('library', '../../private')).toBe('/artwork/tournaments/identity/library/basketball.svg')
     expect(seasonLeaguePresentation({ seasonTournament: { contract: config, key: 'stage-1-league-1' } })).toBeUndefined()
   })

@@ -42,6 +42,7 @@ export type SubscriptionFeatureId =
   | 'zombie_ai'
   // UI / monetization catalog keys (same strings as former FeatureKey — unified with matrix IDs)
   | 'commissioner_ai_tools'
+  | 'commissioner_draft_as_me'
   | 'commissioner_ai_narration'
   | 'commissioner_ai_recap'
   | 'commissioner_ai_copilot'
@@ -58,6 +59,7 @@ export type SubscriptionFeatureId =
   | 'commissioner_weather_projections'
   | 'commissioner_dispersal_draft'
   | 'commissioner_integrity_monitoring'
+  | 'commissioner_chimmy_autopilot'
   | 'pro_draft_ai'
   | 'pro_waiver_ai'
   | 'pro_trade_ai'

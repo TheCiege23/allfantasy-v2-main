@@ -23,12 +23,14 @@ const m = vi.hoisted(() => ({
   pickFindMany: vi.fn(),
   pickUpdateMany: vi.fn(),
   draftSessionUpdate: vi.fn(),
+  liveRookieSlots: vi.fn(),
+  lotterySlots: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => {
   const tx = {
     draftSession: { create: m.draftSessionCreate, update: m.draftSessionUpdate },
-    league: { update: m.leagueUpdate },
+    league: { update: m.leagueUpdate, findUnique: m.leagueFindUnique },
     futureDraftPick: { findMany: m.pickFindMany, updateMany: m.pickUpdateMany },
   }
   return {
@@ -52,8 +54,16 @@ vi.mock('@/lib/redraft/offseason/carryDynastyRosters', async (importOriginal) =>
   carryDynastyRostersForward: m.carry,
 }))
 vi.mock('@/server/services/auditService', () => ({ logAction: m.logAction }))
+vi.mock('@/lib/rookie-order/liveRookieOrderService', () => ({ resolveLiveRookieDraftSlots: m.liveRookieSlots }))
+vi.mock('@/lib/draft-lottery/rookieDraftLottery', () => ({
+  ensureRookieDraftLottery: async (input: unknown) => {
+    const slotOrder = await m.lotterySlots(input)
+    return slotOrder ? { slotOrder, ranNow: false, seed: 'seed' } : null
+  },
+}))
 
 import {
+  championAndRunnerUp,
   createNextLeagueDraft,
   draftRosterIdForOwner,
   placeKeeperRounds,
@@ -128,6 +138,8 @@ beforeEach(() => {
   m.pickFindMany.mockResolvedValue([])
   m.pickUpdateMany.mockResolvedValue({ count: 0 })
   m.draftSessionUpdate.mockResolvedValue({})
+  m.liveRookieSlots.mockResolvedValue(null)
+  m.lotterySlots.mockResolvedValue(null)
 })
 
 describe('rookie order', () => {
@@ -306,5 +318,95 @@ describe('createNextLeagueDraft', () => {
     const r = await createNextLeagueDraft('L1', 'commish')
 
     expect(r).toMatchObject({ ok: false, code: 'NEEDS_DATABASE_UPDATE' })
+  })
+})
+
+/*
+ * 🛑 THE DEFAULT `max_pf` METHOD WENT STRAIGHT TO STANDINGS. A saved live rookie order
+ * (`liveRookieOrderService.ts`: "the next rookie draft is seated from it automatically") and a stored
+ * weighted-lottery result were both ignored on exactly the draft they exist for. They now win, in
+ * `buildSlotOrderForLeague`'s precedence: lottery, then the live order, then worst-to-first.
+ */
+describe('a saved rookie order wins over standings', () => {
+  const seat = (ids: string[]) => ids.map((rosterId, i) => ({ slot: i + 1, rosterId, displayName: `T${i + 1}` }))
+  const rookieLeague = () => {
+    m.leagueFindUnique.mockResolvedValue(league())
+    m.seasonFindMany.mockResolvedValue([{ id: 'season-1', season: 2026, status: 'complete' }])
+    m.ensureShell.mockResolvedValue({ id: 'season-2', season: 2027 })
+    m.redraftRosterFindMany.mockResolvedValue(lastSeason)
+    m.dynastyFindUnique.mockResolvedValue({ rookieDraftRounds: 4, rookieDraftType: 'linear', rookiePickOrderMethod: 'max_pf' })
+  }
+  const seated = () => m.draftSessionCreate.mock.calls[0]![0].data.slotOrder.map((e: { rosterId: string }) => e.rosterId)
+
+  it('max_pf with a saved live order seats the live order', async () => {
+    rookieLeague()
+    m.liveRookieSlots.mockResolvedValue(seat(['R-c', 'R-a', 'R-d', 'R-b']))
+    const r = await createNextLeagueDraft('L1', 'commish')
+    expect(r).toMatchObject({ ok: true, orderSource: 'live_rookie_order' })
+    expect(seated()).toEqual(['R-c', 'R-a', 'R-d', 'R-b'])
+  })
+
+  it('an enabled lottery result wins over the live order too', async () => {
+    rookieLeague()
+    m.lotterySlots.mockResolvedValue(seat(['R-d', 'R-b', 'R-a', 'R-c']))
+    m.liveRookieSlots.mockResolvedValue(seat(['R-c', 'R-a', 'R-d', 'R-b']))
+    const r = await createNextLeagueDraft('L1', 'commish')
+    expect(r).toMatchObject({ ok: true, orderSource: 'lottery' })
+    expect(seated()).toEqual(['R-d', 'R-b', 'R-a', 'R-c'])
+  })
+
+  it('a stored order that does not seat every draft roster falls through to standings', async () => {
+    rookieLeague()
+    m.liveRookieSlots.mockResolvedValue(seat(['R-c', 'R-a', 'R-gone', 'R-b']))
+    const r = await createNextLeagueDraft('L1', 'commish')
+    expect(r).toMatchObject({ ok: true, orderSource: 'standings' })
+  })
+
+  it('asks for THIS draft\'s lottery: one drawn after the previous draft finished', async () => {
+    rookieLeague()
+    const completedAt = new Date('2026-09-01T02:00:00Z')
+    m.draftSessionFindFirst.mockResolvedValue({ ...completedDraft, completedAt, updatedAt: new Date('2026-09-02T00:00:00Z') })
+    await createNextLeagueDraft('L1', 'commish')
+    expect(m.lotterySlots).toHaveBeenCalledWith({ leagueId: 'L1', season: 2027, previousDraftEndedAt: completedAt, actorUserId: 'commish' })
+  })
+
+  it('a lottery league whose draw cannot run falls back to worst-to-first, never to a stale stored draw', async () => {
+    rookieLeague()
+    m.dynastyFindUnique.mockResolvedValue({ rookieDraftRounds: 4, rookieDraftType: 'linear', rookiePickOrderMethod: 'weighted_lottery' })
+    const r = await createNextLeagueDraft('L1', 'commish')
+    expect(r).toMatchObject({ ok: true, orderSource: 'standings' })
+    expect(m.buildSlotOrder).not.toHaveBeenCalled()
+    expect(seated()[0]).toBe('R-b')
+    expect(seated().at(-1)).toBe('R-a')
+  })
+
+  it('[control] with neither, max_pf is still worst-to-first from standings', async () => {
+    rookieLeague()
+    const r = await createNextLeagueDraft('L1', 'commish')
+    expect(r).toMatchObject({ ok: true, orderSource: 'standings' })
+    expect(seated()[0]).toBe('R-b') // 2-11, the worst team, picks first
+    expect(seated().at(-1)).toBe('R-a') // the champion picks last
+  })
+})
+
+describe('championAndRunnerUp', () => {
+  it('reads the title game, never the third-place game that shares its round', async () => {
+    m.playoffRoundFindFirst.mockResolvedValue({
+      matchups: [
+        { homeRosterId: 's-a', awayRosterId: 's-b', winnerRosterId: null, nextMatchupId: null, metadata: { bracketType: 'championship' } },
+        { homeRosterId: 's-c', awayRosterId: 's-d', winnerRosterId: 's-c', nextMatchupId: null, metadata: { bracketType: 'third_place' } },
+      ],
+    })
+    expect(await championAndRunnerUp('season-1')).toEqual({ championId: null, runnerUpId: null })
+  })
+
+  it('[control] once the title game has a winner it is the one read', async () => {
+    m.playoffRoundFindFirst.mockResolvedValue({
+      matchups: [
+        { homeRosterId: 's-a', awayRosterId: 's-b', winnerRosterId: 's-b', nextMatchupId: null, metadata: { bracketType: 'championship' } },
+        { homeRosterId: 's-c', awayRosterId: 's-d', winnerRosterId: 's-c', nextMatchupId: null, metadata: { bracketType: 'third_place' } },
+      ],
+    })
+    expect(await championAndRunnerUp('season-1')).toEqual({ championId: 's-b', runnerUpId: 's-a' })
   })
 })

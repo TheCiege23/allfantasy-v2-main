@@ -14,6 +14,7 @@ import { logAuditEntry } from '@/lib/zombie/auditService'
 import { getLeagueMode } from '@/lib/zombie/zombieLeagueMode'
 import { applyZombieHordeSitOutToScoring } from '@/lib/zombie/ZombieHordeSitOutEngine'
 import { settleWeeklyWinnings } from '@/lib/zombie/weeklyWinningsEngine'
+import { syncZombieTeamNames } from '@/lib/zombie/zombieTeamNames'
 
 export type WeeklyResolutionOptions = {
   /** Re-run infections + recap even if this week already resolved (stat corrections / commissioner). */
@@ -95,6 +96,9 @@ export async function runWeeklyResolution(
   }
 
   const mode = getLeagueMode(z)
+
+  // Before anything below names a team: a seat claimed or a team renamed since last week catches up here.
+  await syncZombieTeamNames(z.leagueId).catch(() => 0)
 
   const infection = await resolveWeeklyInfections(zombieLeagueId, week)
 

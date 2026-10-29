@@ -31,9 +31,14 @@ export function SurvivorAIHostPanel({
     <p className="text-[11px] text-amber-200/80">These controls save to league settings. Private vote handling and official ceremony results remain system-run regardless of AI narration preferences.</p>
     <SettingsSection id="sv-ai-host" title="Chimmy">
       <SettingsRow label="AI host enabled" control={<Toggle checked={hostOn} disabled={!canEdit} onChange={(value) => { setHostOn(value); debouncedSave({ aiChimmyEnabled: value }) }} />} />
+      {/* Episode recaps (`aiRecaps`): after each Tribal Council, Chimmy posts the episode recap to league
+          chat (lib/survivor/episodeRecap.ts). AF Commissioner, which the post itself checks too. */}
       <SettingsRow label="Episode recaps" control={<div className="flex items-center gap-2"><Toggle checked={recaps} disabled={!canEdit} onChange={(value) => { if (!hasAfCommissionerSub) { subscriptionGate?.gate('commissioner_ai_recap', { highlightParam: 'ai_recap' }); return } setRecaps(value); debouncedSave({ aiRecaps: value }) }} />{!hasAfCommissionerSub && <SubscriptionGateBadge featureId="commissioner_ai_recap" onClick={() => subscriptionGate?.gate('commissioner_ai_recap', { highlightParam: 'ai_recap' })} />}</div>} />
-      <SettingsRow label="Commissioner AI alerts" control={<Toggle checked={alerts} disabled={!canEdit} onChange={(value) => { setAlerts(value); debouncedSave({ leagueAiCommissionerAlerts: value }) }} />} />
+      <p className="text-[11px] text-white/45">After each Tribal Council, Chimmy posts the episode recap to league chat. Votes are told as counts, never who voted for whom.</p>
+      {/* The server refuses `leagueAiCommissionerAlerts` without AF Commissioner (execute-league-settings-patch);
+          gate it here too, so a free commissioner sees why instead of a toggle that silently fails to save. */}
+      <SettingsRow label="Commissioner AI alerts" control={<div className="flex items-center gap-2"><Toggle checked={alerts} disabled={!canEdit} onChange={(value) => { if (!hasAfCommissionerSub) { subscriptionGate?.gate('commissioner_ai_tools'); return } setAlerts(value); debouncedSave({ leagueAiCommissionerAlerts: value }) }} />{!hasAfCommissionerSub && <SubscriptionGateBadge featureId="commissioner_ai_tools" onClick={() => subscriptionGate?.gate('commissioner_ai_tools')} />}</div>} />
     </SettingsSection>
-    <p className="text-xs text-white/50">Automated announcement approvals, custom story arcs and confessionals are not configurable in the NBA pilot yet.</p>
+    <p className="text-xs text-white/50">Automated announcement approvals, custom story arcs and confessionals are not configurable yet.</p>
   </div>
 }

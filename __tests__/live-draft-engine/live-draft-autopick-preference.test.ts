@@ -112,6 +112,14 @@ describe('getViewerAutopickPreference', () => {
       expect(result.enabled).toBe(true)
     })
 
+    it('keeps draft_as_me for a Pro user and downgrades it when Pro lapses', async () => {
+      ctx.findUnique.mockResolvedValue({ enabled: true, mode: 'draft_as_me', updatedAt: new Date('2026-10-27T01:00:00.000Z') })
+      entitlement.resolveForUser.mockResolvedValue({ hasAccess: true } as { hasAccess: boolean })
+      expect((await getViewerAutopickPreference('session-1', 'user-1')).mode).toBe('draft_as_me')
+      entitlement.resolveForUser.mockResolvedValue({ hasAccess: false } as { hasAccess: boolean })
+      expect((await getViewerAutopickPreference('session-1', 'user-1')).mode).toBe('standard')
+    })
+
     it('queries with the correct unique key shape', async () => {
       await getViewerAutopickPreference('session-xyz', 'user-abc')
       expect(ctx.findUnique).toHaveBeenCalledWith(

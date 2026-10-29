@@ -172,6 +172,10 @@ function ThresholdsTab({ cfg, isPaid }: { cfg: ReturnType<typeof getZombieSportC
             <span className="mt-0.5 text-teal-400">●</span>
             <p>Collect serums = a Zombie can return as a Survivor</p>
           </div>
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 text-teal-400">●</span>
+            <p>Register a serum before kickoff = you stay human if you lose that week</p>
+          </div>
         </div>
         <p className="mt-3 text-[11px] text-[var(--zombie-text-dim)]">
           {cfg.infectionTiming}

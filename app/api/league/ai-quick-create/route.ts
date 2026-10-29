@@ -94,7 +94,7 @@ function parseLeaguePrompt(prompt: string): {
   if (lower.includes('dynasty')) leagueType = 'dynasty'
   else if (lower.includes('keeper')) leagueType = 'keeper'
   else if (lower.includes('best ball') || lower.includes('bestball')) leagueType = 'best_ball'
-  else if (lower.includes('guillotine')) leagueType = 'guillotine'
+  else if (lower.includes('guillotine') || lower.includes('guilly')) leagueType = 'guillotine'
   else if (lower.includes('survivor')) leagueType = 'survivor'
   else if (lower.includes('tournament')) leagueType = 'tournament'
   else if (lower.includes('zombie')) leagueType = 'zombie'

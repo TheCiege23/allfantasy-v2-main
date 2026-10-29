@@ -1,5 +1,11 @@
 # Survivor tribe emblems — Codex handoff
 
+> **Shipped.** The mascot sources now live in `lib/survivor/tribe-art/mascots/` (the runtime reads them).
+> `compose.py` is ported to `lib/survivor/tribeEmblemComposer.ts` and served by
+> `/api/survivor/tribe-emblem/{crest,mark}`; `__tests__/survivor-tribe-emblems.test.ts` checks the
+> port against all 350 pre-built crests and 250 marks. Paths below that say `mascots/` refer to the
+> handoff layout.
+
 There are 50 tribes, each with an original Survivor-style name and a mascot. The crest is a sports badge whose **gear changes with the league's sport**:
 
 - **NFL / NCAAF:** helmet, facemask, eye black, football

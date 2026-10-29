@@ -1375,6 +1375,7 @@ export async function fetchEspnLeagueForImport(
     draftFetched: draftRaw != null,
     previousSeasons,
     viewerTeamId,
+    viewerEspnConnected: buildEspnCookieHeader(auth) !== null,
     commissionerTeamIds,
   }
 }

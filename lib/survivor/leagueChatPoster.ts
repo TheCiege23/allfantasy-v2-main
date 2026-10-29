@@ -4,13 +4,15 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { createSurvivorChatMessage, upsertSurvivorChatMessage } from './survivorChatBridge'
+import { survivorEpisodeText, type SurvivorEpisode } from './survivorEpisode'
 
 const AI_HOST_ID = 'survivor-ai-host'
 const AI_HOST_NAME = '@Chimmy'
 
 async function getTribeChatChannelId(leagueId: string, tribeId: string): Promise<string | null> {
   const channel = await (prisma as any).survivorChatChannel.findFirst({
-    where: { leagueId, channelType: 'tribe', tribeId },
+    where: { leagueId, channelType: 'tribe', tribeId, isArchived: false },
     select: { id: true },
   })
   return channel?.id ?? null
@@ -48,9 +50,9 @@ async function postToChannel(
     isPinned: contentType === 'announcement',
   }
   if (messageId) {
-    await (prisma as any).survivorChatMessage.upsert({ where: { id: messageId }, create: data, update: {} })
+    await upsertSurvivorChatMessage(prisma, { where: { id: messageId }, create: data, update: {} })
   } else {
-    await (prisma as any).survivorChatMessage.create({ data })
+    await createSurvivorChatMessage(prisma, { data })
   }
 }
 
@@ -135,6 +137,8 @@ export async function postWeeklyRecap(
   leagueId: string,
   week: number,
   recap: {
+    /** When present the post reads as the episode (lib/survivor/survivorEpisode.ts). */
+    episode?: SurvivorEpisode
     challengeWinner?: string
     tribalLoser?: string
     eliminatedPlayer?: string
@@ -145,6 +149,14 @@ export async function postWeeklyRecap(
     topScore?: number
   },
 ): Promise<void> {
+  if (recap.episode) {
+    await postToLeagueChat(leagueId, survivorEpisodeText(recap.episode), 'card', {
+      type: 'weekly_recap',
+      week,
+      ...recap,
+    }, `survivor-weekly-recap:${leagueId}:${week}`)
+    return
+  }
   const lines: string[] = [`**Week ${week} Recap**`]
 
   if (recap.challengeWinner) lines.push(`Challenge won by ${recap.challengeWinner}`)
@@ -233,7 +245,7 @@ export async function postWinnerAnnouncement(
   voteCount: number,
   totalJurors: number,
 ): Promise<void> {
-  const content = `**The Sole Survivor is ${winnerName}!**\nWinning with ${voteCount} out of ${totalJurors} jury votes.`
+  const content = `**${winnerName} is the last one standing.**\nWinning with ${voteCount} out of ${totalJurors} jury votes.`
 
   await postToLeagueChat(leagueId, content, 'announcement', {
     type: 'winner',
@@ -241,6 +253,24 @@ export async function postWinnerAnnouncement(
     voteCount,
     totalJurors,
   })
+}
+
+/**
+ * Weekly immunity system line ("{Manager} won immunity") in the winner's tribe channel and league
+ * chat. Deterministic message ids keep a re-run from posting twice.
+ */
+export async function postImmunityWinLine(
+  leagueId: string,
+  winner: { tribeId: string; userId: string; displayName: string; score: number },
+  week: number,
+): Promise<void> {
+  const content = `${winner.displayName} won immunity`
+  const cardData = { type: 'immunity_won', userId: winner.userId, displayName: winner.displayName, tribeId: winner.tribeId, score: winner.score, week }
+  const baseId = `survivor-immunity:${leagueId}:${week}:${winner.tribeId}:${winner.userId}`
+  const tribeChannelId = winner.tribeId && winner.tribeId !== 'merge' ? await getTribeChatChannelId(leagueId, winner.tribeId) : null
+  if (tribeChannelId) await postToChannel(leagueId, tribeChannelId, 'tribe', content, 'system', cardData, `${baseId}:tribe`)
+  const leagueChannelId = await getLeagueChatChannelId(leagueId)
+  if (leagueChannelId) await postToChannel(leagueId, leagueChannelId, 'league', content, 'system', cardData, `${baseId}:league`)
 }
 
 /**

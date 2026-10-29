@@ -6,10 +6,13 @@ import { ExileTokenWallet } from '@/components/league/survivor/ExileTokenWallet'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
+import { ExileBossBoard } from '@/components/survivor/late/ExileBossBoard'
 
 type ExileGet = {
-  island?: { isActive?: boolean; currentWeek?: number; bossName?: string | null } | null
+  island?: { isActive?: boolean; currentWeek?: number; bossName?: string | null; bossWinsEnabled?: boolean; bossTokenResetOnWin?: boolean } | null
   user?: { tokenBalance?: number; playerState?: string } | null
+  bossMode?: 'median' | 'fixed' | 'topN' | 'chimmy_roster'
+  bossContest?: { status: 'pending' | 'locked' | 'final'; week: number; team?: string; players?: { name: string; position: string; slot: string }[]; score?: number } | null
   returnRules?: { enabled: boolean; week: number; tokensRequired: number; resolved: boolean; slots: number }
   error?: string
 }
@@ -53,9 +56,15 @@ export default function SurvivorExilePage() {
         <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-violet-300/90">🏚 Exile Island</p>
         <h1 className="mt-1 text-2xl font-black uppercase tracking-wide text-white/90">Isolation · Grind · Return</h1>
         <p className="mt-2 text-[13px] text-white/50">
-          {exiledCount} players marooned · Week {island?.currentWeek ?? ctx.currentWeek}
+          {exiledCount} players marooned · Week {data?.bossContest?.week ?? island?.currentWeek ?? ctx.currentWeek}
         </p>
       </header>
+
+      {!isExile && ctx.isCommissioner && !ctx.survivorFairPlayActive && island?.bossWinsEnabled && data?.bossMode !== 'chimmy_roster' ? (
+        <section className="relative mt-6" aria-label="Exile board">
+          <ExileBossBoard leagueId={leagueId} />
+        </section>
+      ) : null}
 
       {viewerSummary ? (
         <section className="relative mt-6 survivor-panel p-5">
@@ -68,6 +77,43 @@ export default function SurvivorExilePage() {
         <>
           <div className="relative mt-6"><ExileTokenWallet leagueId={leagueId} /></div>
           <ExileRosterWaivers leagueId={leagueId} />
+
+          {island?.bossWinsEnabled && data?.bossMode !== 'chimmy_roster' ? (
+            <section className="relative mt-6" aria-label="Exile board">
+              <ExileBossBoard leagueId={leagueId} />
+            </section>
+          ) : null}
+
+          {island?.bossWinsEnabled && data?.bossMode === 'chimmy_roster' ? <section className="relative mt-6 rounded-2xl border border-violet-400/30 bg-violet-950/20 p-4" aria-live="polite">
+            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-violet-200">Chimmy score to beat · Week {data?.bossContest?.week ?? island?.currentWeek ?? ctx.currentWeek}</p>
+            {data?.bossContest?.status === 'pending' ? (
+              <p className="mt-2 text-[13px] text-white/70">Chimmy&apos;s NBA roster has not locked yet. The contest starts once a verified lineup is set before the week&apos;s first game.</p>
+            ) : data?.bossContest ? (
+              <>
+                <p className="mt-2 text-[13px] text-white/80">
+                  {data.bossContest.status === 'final'
+                    ? `Final score: ${data.bossContest.score?.toFixed(2) ?? '—'} points.`
+                    : 'Lineup locked before tipoff. The score appears when the week’s results are final.'}
+                </p>
+                {data.bossContest.team ? <p className="mt-2 text-[12px] text-violet-200">NBA team: {data.bossContest.team}</p> : null}
+                {data.bossContest.players?.length ? (
+                  <ul className="mt-3 grid gap-2 sm:grid-cols-2" aria-label="Chimmy locked lineup">
+                    {data.bossContest.players.map((player, index) => (
+                      <li key={`${player.name}-${index}`} className="rounded-lg border border-violet-400/20 bg-black/20 px-3 py-2 text-[12px] text-white/75">
+                        <span className="font-semibold text-white">{player.slot}</span> · {player.name} ({player.position})
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <p className="mt-3 text-[12px] text-white/50">
+                  The top Exile score above Chimmy earns one token.
+                  {island.bossTokenResetOnWin ? ' A Chimmy win or tie resets unprotected Exile tokens.' : ' A Chimmy win or tie awards no token.'}
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-[13px] text-white/60">Loading the weekly contest…</p>
+            )}
+          </section> : null}
 
           <section className="relative mt-6 rounded-2xl border border-violet-500/25 bg-black/30 p-4">
             <p className="text-[11px] font-bold uppercase text-violet-200">Exile challenges</p>
