@@ -279,6 +279,7 @@ test('four-sport universe allocations use finished native standings and record o
         const z = await prisma.zombieLeague.update({ where: { leagueId }, data: {
           universeId: u.id, levelId: level.id, season: 2026, status: 'complete', totalWeeks: 1, currentWeek: 1,
         } })
+        await prisma.leagueWaiverSettings.update({where:{leagueId},data:{faabBudget:100,waiverEngineConfig:{faab_rollover_rule:levelIndex===1?'carry_over':'reset'}}})
         // Controlled completed-season fixture: this test checks allocation and access, not live provider scoring.
         const season = await prisma.redraftSeason.create({ data: {
           leagueId, sport, season: 2026, status: 'complete', totalWeeks: 1, currentWeek: 1, playoffStartWeek: 2,
@@ -287,7 +288,7 @@ test('four-sport universe allocations use finished native standings and record o
         expect(rosters).toHaveLength(8)
         for (let i = 0; i < rosters.length; i++) {
           const owner = userIds[1 + levelIndex * 8 + i]
-          await prisma.roster.update({ where: { id: rosters[i].id }, data: { platformUserId: owner } })
+          await prisma.roster.update({ where: { id: rosters[i].id }, data: { platformUserId: owner, faabRemaining: i+13 } })
           await prisma.zombieLeagueTeam.upsert({
             where: { leagueId_rosterId: { leagueId, rosterId: rosters[i].id } },
             create: { leagueId, rosterId: rosters[i].id, zombieLeagueId: z.id, displayName: owner },
@@ -382,6 +383,7 @@ test('four-sport universe allocations use finished native standings and record o
         expect(roster).toHaveLength(8)
         expect(new Set(roster.map(r=>r.platformUserId))).toEqual(new Set(expected.map((m:{userId:string})=>m.userId)))
         expect(roster.every(r=>(r.playerData as {players:string[]}).players.length===0)).toBe(true)
+        for(const r of roster) expect(r.faabRemaining).toBe(expected.find((m:{userId:string})=>m.userId===r.platformUserId).nextFaab)
         const draft=await prisma.draftSession.findUniqueOrThrow({where:{id:next.draftId}})
         expect(draft).toMatchObject({status:'pre_draft',startedAt:null,sportType:sport,teamCount:8})
         expect((draft.slotOrder as unknown[]).length).toBe(8)

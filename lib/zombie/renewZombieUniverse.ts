@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { effectiveFaabRolloverRule, storedFaabRolloverRule, faabBalanceAfterRollover } from '@/lib/waiver-wire/faab-rollover'
 import { runPresetEngine } from '@/lib/league-creation/preset-engine/runPresetEngine'
 import { createCanonicalLeagueInTransaction } from '@/lib/league-creation/canonical/createCanonicalLeagueInTransaction'
 import type { ValidatedCreateLeagueBody } from '@/lib/league-creation/canonical/validateCreateLeague'
@@ -100,7 +101,13 @@ async function loadPlan(tx: Tx, universeId: string, season: number, actor: strin
     snapshot: await tx.scoringSettingsSnapshot.findFirst({ where: { leagueId: z.leagueId }, orderBy: { createdAt: 'desc' } }),
     paid: z.paidConfig, free: z.freeRewardConfig, extended: z.league.redraftExtendedSettings,
   })))
-  const plan = { version: 1, universeId, season, nextSeason: season+1, ...placement! }
+  const assignments = placement!.assignments.map(m => {
+    const destination = sources.find(z=>z.leagueId===m.destinationLeagueId)!.league
+    const previous = sources.flatMap(z=>z.league.rosters).find(r=>r.id===m.rosterId)!
+    const faabRule = effectiveFaabRolloverRule(storedFaabRolloverRule(destination.waiverSettings?.waiverEngineConfig),'redraft')
+    return { ...m, faabRule, nextFaab: faabBalanceAfterRollover(faabRule,destination.waiverSettings?.faabBudget ?? destination.waiverBudget ?? 0,previous.faabRemaining) }
+  })
+  const plan = { version: 1, universeId, season, nextSeason: season+1, ...placement!, assignments }
   return { universe, sources, policies, drafts, plan, prior: null,
     previewHash: renewalFingerprint({ plan, policies }),
   }
@@ -194,7 +201,7 @@ export async function renewZombieUniverse(universeId: string, season: number, ac
         const m=members[i], rosterId=seats[i].rosterId!
         await tx.roster.update({ where: { id: rosterId }, data: {
           platformUserId: m.userId, playerData: { players: [], draftPicks: [], foundation: { slotNumber: i+1, openTeam: false, createdBy: 'zombie_universe_renewal' } },
-          faabRemaining: old.waiverSettings?.faabBudget ?? old.waiverBudget ?? 0, waiverPriority: members.length-i,
+          faabRemaining: m.nextFaab, waiverPriority: members.length-i,
           settings: { openSlot: false, commissioner: m.userId === actor },
         } })
         await tx.leagueTeam.update({ where: { leagueId_externalId: { leagueId, externalId: rosterId } }, data: {
