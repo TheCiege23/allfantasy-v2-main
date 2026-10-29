@@ -35,6 +35,7 @@ import {
   IMPORT_PROVIDER_UI_OPTIONS,
   getImportProviderLabel,
 } from '@/lib/league-import/provider-ui-config'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 type AuthRow = {
   platform: string
@@ -368,7 +369,7 @@ function PlatformRow({
         <span className="af-ca-method">
           {method}
           {since && status === 'connected'
-            ? ` · ${tInterpolate('import.platforms.since', { date: new Date(since).toLocaleDateString() })}`
+            ? ` · ${tInterpolate('import.platforms.since', { date: new Date(since).toLocaleDateString(getAppIntlLocale()) })}`
             : ''}
         </span>
       </span>

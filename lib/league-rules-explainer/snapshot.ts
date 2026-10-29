@@ -39,7 +39,8 @@ import { supportsDailyLineups } from '@/lib/redraft/lineupModeSwitch'
 import { readPlayoffFormat } from '@/lib/core-app/outlookFormat'
 import { readTankingPenaltyPolicy } from '@/lib/integrity/tankingPenalties'
 import { readRookieDraftCalendarSettings } from '@/lib/dynasty-core/rookieDraftCalendar'
-import { RULES_EXPLAINER_SPORTS, type RuleSnapshot, type RulesConcept, type RulesFormat, type TankingPenaltyRule } from './types'
+import type { WeightedLotteryConfig } from '@/lib/draft-lottery/types'
+import { RULES_EXPLAINER_SPORTS, type RookieDraftLotteryRule, type RuleSnapshot, type RulesConcept, type RulesFormat, type TankingPenaltyRule } from './types'
 
 /** The `League` columns a snapshot reads. A full Prisma `League` row satisfies it. */
 export type RulesLeagueRow = {
@@ -392,6 +393,58 @@ export function dynastyRulesFromConfig(
   }
 }
 
+// Maps, not object literals: a stored `constructor` must not read as a known value.
+const LOTTERY_ODDS = new Map<string, RookieDraftLotteryRule['odds']>([
+  ['inverse_standings', 'record'],
+  ['inverse_points_for', 'points_for'],
+  ['inverse_max_pf', 'max_pf'],
+  ['custom_weights', 'equal'], // computeWeight gives every team weight 1
+])
+const LOTTERY_POOLS = new Map<string, RookieDraftLotteryRule['pool']>([
+  ['non_playoff', 'non_playoff'],
+  ['bottom_n', 'worst'],
+  ['all_teams', 'worst'],
+  ['custom', 'worst'], // selectEligibleTeams reads `custom` as `all_teams`
+])
+const LOTTERY_REST = new Map<string, RookieDraftLotteryRule['rest']>([
+  ['reverse_standings', 'reverse_standings'],
+  ['reverse_max_pf', 'reverse_max_pf'],
+  ['manual', 'reverse_standings'], // buildFullSlotOrder has no commissioner order to read
+])
+const LOTTERY_TIEBREAKS = new Map<string, NonNullable<RookieDraftLotteryRule['tiebreak']>>([
+  ['lower_points_for', 'points_for'],
+  ['lower_max_pf', 'max_pf'],
+  ['seeded_random', 'random'],
+])
+
+/**
+ * The rookie lottery as a rule, from the parsed `draft_lottery_config` (readDraftOrderModeAndLotteryConfig)
+ * and the rookie order. Null unless the rookie draft is ordered by the lottery
+ * (`ensureRookieDraftLottery` runs it only then), or when any part of the config has no reading in
+ * the engine — a rule the popup cannot state exactly is not stated at all.
+ *
+ * Each field is mapped to what the draw DOES (see RookieDraftLotteryRule), so a save that changes a
+ * stored value without changing the draw — `custom` → `all_teams`, `manual` → `reverse_standings`,
+ * `bottomN` (which the engine never reads) — publishes no change. `allowCommissionerOverride` is not
+ * described: no engine path reads it. `tiebreakMode` is, now that a tie has one meaning everywhere the
+ * engine reads it (`applyTiebreak`); a value it does not know is sorted as `lower_points_for`, so it
+ * reads as that here.
+ */
+export function rookieDraftLotteryRule(
+  rookieOrder: string | null | undefined,
+  c: Pick<WeightedLotteryConfig, 'lotteryTeamCount' | 'lotteryPickCount' | 'eligibilityMode' | 'weightingMode' | 'fallbackOrder' | 'tiebreakMode'> | null | undefined,
+): RookieDraftLotteryRule | null {
+  if (rookieOrder !== 'weighted_lottery' || !c) return null
+  const teams = posInt(c.lotteryTeamCount)
+  const picks = posInt(c.lotteryPickCount)
+  const pool = LOTTERY_POOLS.get(String(c.eligibilityMode))
+  const odds = LOTTERY_ODDS.get(String(c.weightingMode))
+  const rest = LOTTERY_REST.get(String(c.fallbackOrder))
+  if (!teams || !picks || !pool || !odds || !rest) return null
+  const tiebreak = LOTTERY_TIEBREAKS.get(String(c.tiebreakMode)) ?? 'points_for'
+  return { teams, picks: Math.min(picks, teams), pool, odds, rest, tiebreak }
+}
+
 /**
  * A dynasty league's taxi squad from getEffectiveTaxiSettings (lib/taxi/TaxiSettingsService), which
  * applies the Devy / C2C slot override. Shared by the popup and the dynasty settings save, so a save
@@ -401,4 +454,85 @@ export function taxiRulesFromEffective(
   t: { taxiSlotCount: number; taxiEligibilityYears: number; taxiDeadlineWeek: number | null },
 ): Pick<RuleSnapshot, 'taxiSlots' | 'taxiEligibilityYears' | 'taxiDeadlineWeek'> {
   return { taxiSlots: t.taxiSlotCount, taxiEligibilityYears: t.taxiEligibilityYears, taxiDeadlineWeek: t.taxiDeadlineWeek }
+}
+
+/**
+ * The main draft's rules, already read from their stores by ./loadDraftRules.ts. Pure: this decides
+ * what each value MEANS (a setting that changes nothing is not stated), the loader decides where it
+ * lives.
+ */
+export type DraftRuleInputs = {
+  /** `DraftSession.draftModeLabel` of the current draft; `rookie` = a dynasty rookie draft. */
+  sessionLabel: string | null
+  /** `DraftSession.status`; null before a session exists. */
+  sessionStatus: string | null
+  /** Engine type: snake, linear or auction. */
+  draftType: string | null
+  rounds: number | null
+  /** Seconds per pick (an auction: per bid), as the room runs it; null = no clock. */
+  pickSeconds: number | null
+  thirdRoundReversal: boolean | null
+  /** `draftUISettings.timerMode`: per_pick, soft_pause, overnight_pause, none. */
+  timerMode: string | null
+  pauseWindow: { start?: unknown; end?: unknown } | null
+  picksDuringPause: boolean
+  /** `draftUISettings.autoPickEnabled` — gates every expired-clock pick. */
+  autoPickEnabled: boolean
+  /** The session's (else LeagueSettings') CPU autopick for an absent manager. */
+  cpuAutoPick: boolean
+  /** `config.autopick_behavior`: `skip` skips a pick with nothing usable in the queue. */
+  autopickBehavior: string | null
+  /** Resolved order method: weighted_lottery, random, manual, standings, reverse_standings. */
+  orderMethod: string | null
+  /** The auction engine's budget and minimum bid (getAuctionConfigFromSession). */
+  auction: { budget: number; minBid: number } | null
+  startAt: string | null
+  /** `LeagueSettings.autostart`, or a league whose scheduled draft starts at its time regardless. */
+  autostart: boolean
+  orphanEnabled: boolean
+  orphanMode: string | null
+}
+
+const MAIN_DRAFT_TYPES = new Set(['snake', 'linear', 'auction'])
+const MAIN_DRAFT_ORDERS = new Set(['weighted_lottery', 'random', 'manual', 'standings', 'reverse_standings'])
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+
+function draftStatusOf(status: string | null): RuleSnapshot['draftStatus'] {
+  if (status === 'completed') return 'completed'
+  if (status === 'in_progress' || status === 'paused') return 'in_progress'
+  return 'scheduled'
+}
+
+export function draftRulesFromInputs(i: DraftRuleInputs): Partial<RuleSnapshot> {
+  // A dynasty rookie draft is the Dynasty section's (rookieDraft* keys), never this one.
+  if (lower(i.sessionLabel) === 'rookie') return {}
+  const type = MAIN_DRAFT_TYPES.has(lower(i.draftType)) ? lower(i.draftType) : null
+  const seconds = i.timerMode === 'none' ? null : posInt(i.pickSeconds)
+  const from = typeof i.pauseWindow?.start === 'string' ? i.pauseWindow.start : ''
+  const to = typeof i.pauseWindow?.end === 'string' ? i.pauseWindow.end : ''
+  let onTimeout: string | null = null
+  if ((type === 'snake' || type === 'linear') && seconds) {
+    // processExpiredDraftPicks: no pick when auto-pick is off, the clock is soft, or the session's
+    // CPU autopick is off; `skip` skips a pick whose queue has nothing usable; else queue → best.
+    if (!i.autoPickEnabled || i.timerMode === 'soft_pause' || !i.cpuAutoPick) onTimeout = 'wait'
+    else onTimeout = lower(i.autopickBehavior) === 'skip' ? 'skip' : 'autopick'
+  }
+  const startAt = typeof i.startAt === 'string' && Number.isFinite(Date.parse(i.startAt)) ? i.startAt : null
+  return {
+    draftStatus: draftStatusOf(i.sessionStatus),
+    draftType: type,
+    draftRounds: posInt(i.rounds),
+    draftPickSeconds: seconds,
+    draftOvernightPause:
+      seconds && i.timerMode === 'overnight_pause' && HHMM.test(from) && HHMM.test(to) ? { from, to, picksAllowed: i.picksDuringPause === true } : null,
+    draftOnTimeout: onTimeout,
+    // An auction has no pick order: the nomination order is not what this setting decides.
+    draftOrderMethod: type !== 'auction' && MAIN_DRAFT_ORDERS.has(lower(i.orderMethod)) ? lower(i.orderMethod) : null,
+    draftThirdRoundReversal: type === 'snake' ? i.thirdRoundReversal === true : null,
+    draftAuctionBudget: type === 'auction' ? posInt(i.auction?.budget) : null,
+    draftAuctionMinBid: type === 'auction' ? posInt(i.auction?.minBid) : null,
+    draftStartAt: startAt,
+    draftAutostart: startAt ? i.autostart === true : null,
+    draftOrphanPicks: i.orphanEnabled ? (i.orphanMode === 'ai' ? 'ai' : 'cpu') : null,
+  }
 }

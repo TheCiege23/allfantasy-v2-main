@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { weekdayEs } from '@/lib/core-app/kickoffText'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The two pieces of Dashboard 34a that cannot be rendered on the server.
@@ -69,7 +70,7 @@ export function Dash34Time({ iso }: { iso: string }) {
   useEffect(() => {
     const d = new Date(iso)
     if (Number.isNaN(d.getTime())) return
-    setLabel(d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }))
+    setLabel(d.toLocaleTimeString(getAppIntlLocale(), { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }))
   }, [iso])
 
   return <>{label}</>

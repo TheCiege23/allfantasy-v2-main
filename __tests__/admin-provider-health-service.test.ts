@@ -185,7 +185,7 @@ describe("AdminProviderHealthService", () => {
       configured: false,
     })
     expect(rows.find((row) => row.id === "sportsdata_world_cup")).toMatchObject({
-      status: "scaffold_only",
+      status: "disabled",
       configured: false,
     })
     expect(rows.find((row) => row.id === "sleeper")).toMatchObject({
@@ -193,6 +193,15 @@ describe("AdminProviderHealthService", () => {
       configured: true,
     })
     fetchSpy.mockRestore()
+  })
+
+  it("sportsdata scaffold warns only when it is the selected World Cup provider", async () => {
+    process.env.WORLD_CUP_DATA_PROVIDER = "sportsdata"
+    const { getAdminProviderHealthRows } = await import("@/lib/admin-dashboard/AdminProviderHealthService")
+
+    const rows = await getAdminProviderHealthRows()
+
+    expect(rows.find((row) => row.id === "sportsdata_world_cup")).toMatchObject({ status: "scaffold_only" })
   })
 
   it("analytics: the GTM container alone counts as configured (production carries no pixel env vars)", async () => {

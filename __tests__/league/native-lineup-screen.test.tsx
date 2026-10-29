@@ -333,3 +333,64 @@ describe('NativeLineupScreen', () => {
     expect(ids(saves(calls)[0].roster.bench)).toEqual(['rb2', 'rb3'])
   })
 })
+
+describe('NativeLineupScreen — tap to swap', () => {
+  const routes = (r = roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)])) => ({
+    '/api/league/roster': r,
+    '/claims': { claims: [] },
+    '/state': { state: {} },
+    '/settings': {},
+    '/api/leagues/roster/save': { ok: true },
+  })
+  const tapOn = (name: string) => fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }))
+  const saves = (calls: Array<{ url: string; init?: RequestInit }>) =>
+    calls.filter((c) => c.url === '/api/leagues/roster/save').map((c) => JSON.parse(String(c.init!.body)) as { roster: Record<string, Array<{ id: string }>> })
+
+  it('tap a bench player, then the starter he replaces: they swap and the lineup saves', async () => {
+    const calls = stubFetch(routes())
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Bijan Robinson')
+    tapOn('Bijan Robinson')
+    expect(screen.getByRole('button', { name: /^Bijan Robinson.*Selected/ }).getAttribute('aria-pressed')).toBe('true')
+    // While he waits, the RB row says it can take him and the QB row says it cannot.
+    expect(screen.getByRole('button', { name: /^Tyjae Spears.*Tap to move here/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Jalen Hurts.*Not a legal move/ })).toBeTruthy()
+    tapOn('Tyjae Spears')
+    await waitFor(() => expect(saves(calls)).toHaveLength(1))
+    const sent = saves(calls)[0].roster
+    expect(sent.starters.map((p) => p.id)).toEqual(['qb1', 'rb2'])
+    expect(sent.bench.map((p) => p.id)).toEqual(['rb1'])
+  })
+
+  it('an illegal second tap saves nothing and says why; tapping the same player twice lets go', async () => {
+    const calls = stubFetch(routes())
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Bijan Robinson')
+    tapOn('Bijan Robinson')
+    tapOn('Jalen Hurts')
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith('Not eligible for QB.')
+    expect(saves(calls)).toHaveLength(0)
+    tapOn('Tyjae Spears')
+    tapOn('Tyjae Spears')
+    expect(screen.queryByRole('button', { name: /Selected/ })).toBeNull()
+    expect(saves(calls)).toHaveLength(0)
+  })
+
+  it('taxi squad: tap a taxi player, then "Move to bench" in the bench header', async () => {
+    const r = {
+      ...roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2), wire('tx1', 'Rookie Back', 'RB', 3.1)]),
+      slotLimits: { starters: 2, bench: 5, ir: 0, taxi: 3, devy: 0 },
+      roster: { lineup_sections: { starters: [{ id: 'qb1' }, { id: 'rb1' }], bench: [{ id: 'rb2' }], ir: [], taxi: [{ id: 'tx1' }], devy: [] } },
+    }
+    const calls = stubFetch(routes(r))
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Rookie Back')
+    tapOn('Rookie Back')
+    fireEvent.click(screen.getByRole('button', { name: 'Move to bench' }))
+    await waitFor(() => expect(saves(calls)).toHaveLength(1))
+    const sent = saves(calls)[0].roster
+    expect(sent.taxi).toEqual([])
+    expect(sent.bench.map((p) => p.id)).toEqual(['rb2', 'tx1'])
+  })
+})
+

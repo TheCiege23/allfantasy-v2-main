@@ -39,6 +39,7 @@ import { AutomationRecipes } from '@/components/core-app/commissioner/Automation
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
 import { EliminatedLineups } from '@/components/core-app/commissioner/EliminatedLineups'
 import { FillEmptyStarters } from '@/components/core-app/commissioner/FillEmptyStarters'
+import { AutomationOverview } from '@/components/core-app/commissioner/AutomationOverview'
 import { IrAutoMove } from '@/components/core-app/commissioner/IrAutoMove'
 import { OrphanAuction } from '@/components/core-app/commissioner/OrphanAuction'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
@@ -263,6 +264,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       <TaskCards data={data} language={language} />
       {data.role === 'commissioner' && <CommissionerActionQueue leagueId={league.id} />}
       {data.role === 'commissioner' && <CommissionerWeeklyPlan key={league.id} leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <AutomationOverview leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <NativeAutoSubsCommissioner leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <InactiveManagerCommissioner leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <FillEmptyStarters leagueId={league.id} />}

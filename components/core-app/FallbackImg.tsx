@@ -15,10 +15,16 @@ import { useEffect, useRef, useState, type ImgHTMLAttributes, type ReactNode } f
  * `naturalWidth` — the browser's own record that the load already failed.
  *
  * Client-only by necessity, but its `fallback` is plain JSX, so server components use it.
+ *
+ * Lazy and async-decoded by default: most callers are rows of headshots and logos, and only 28
+ * of /core's ~99 `<img>`s opted into `loading="lazy"`, so a long roster fetched every image on
+ * first paint on a phone. Pass `loading="eager"` for an image that must arrive with the page.
  */
 export function FallbackImg({
   src,
   fallback,
+  loading = 'lazy',
+  decoding = 'async',
   ...img
 }: Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'onError'> & {
   src: string
@@ -29,18 +35,34 @@ export function FallbackImg({
 
   useEffect(() => {
     const el = ref.current
+    if (!el || !el.complete || el.naturalWidth !== 0) return
+    if (el.loading !== 'lazy') {
+      setFailedSrc(src)
+      return
+    }
     /*
-     * ⚠ NOT FOR A LAZY IMAGE. One still deferred off-screen has not been requested, and some
-     * engines report it `complete` with no `naturalWidth` — reading that as a failure would
-     * pin initials on every row below the fold. A lazy image loads after hydration anyway,
-     * so its `onError` is already listening.
+     * ⚠ A LAZY `complete` WITH NO `naturalWidth` IS AMBIGUOUS. One still deferred off-screen has
+     * not been requested, and some engines report it that way — reading it as a failure would pin
+     * initials on every row below the fold. But a lazy image that IS on screen loads at parse time
+     * and can fail before React is listening, leaving a broken-image glyph. A probe settles it:
+     * it errors only for a URL that is really dead. (Where an engine reports deferred images this
+     * way, the probe fetches them early — correctness over laziness, in those engines only.)
      */
-    if (el && el.loading !== 'lazy' && el.complete && el.naturalWidth === 0) setFailedSrc(src)
+    let live = true
+    const probe = new Image()
+    probe.onerror = () => {
+      if (live) setFailedSrc(src)
+    }
+    probe.src = src
+    return () => {
+      live = false
+      probe.onerror = null
+    }
   }, [src])
 
   if (failedSrc === src) return <>{fallback}</>
   // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
-  return <img {...img} ref={ref} src={src} onError={() => setFailedSrc(src)} />
+  return <img {...img} loading={loading} decoding={decoding} ref={ref} src={src} onError={() => setFailedSrc(src)} />
 }
 
 export default FallbackImg

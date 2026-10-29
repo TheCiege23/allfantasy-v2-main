@@ -254,3 +254,26 @@ not 0), and the taxi PLAYERS come only from `FetchRoster`'s `TAXI` group, as bef
 **Needed:** `FetchLeagueRules` + one `FetchRoster` from a public MLB or NHL dynasty league
 that uses a taxi/minors squad, via `scripts/probe.sh`, committed with the change that
 reads it.
+
+### `G-13` — the trade parser runs on an UNCAPTURED response, so its trades cannot back a collusion flag
+
+**Status: OPEN, blocked on `G-07`.** Recorded 2026-10-27, without probing.
+
+`FetchLeagueTransactions` is uncaptured (`G-07`), but production code already calls it:
+`FleaflickerLeagueFetchService` pages it during import and sync, and
+`normalizeFleaflickerTransactions` (lib/league-import/fleaflicker/fleaflickerTransactions.ts)
+turns it into trades written to `LeagueTrade`. That parser was built from the vendor's
+Swagger types, not from a response. Two consequences, before anyone builds on it:
+
+- It records only where each asset WENT (`adds`, and a pick's `toRosterId`). It has no
+  `drops`, so where a player came from is unknown, and a traded pick's original owner is
+  never recorded.
+- Whether real responses even match that shape has never been checked.
+
+That is why the collusion check for imported leagues stays Sleeper-only for Fleaflicker
+(see docs/integrity/IMPORTED_LEAGUE_INTEGRITY.md). A collusion flag names two managers, and
+it should not rest on a guessed shape.
+
+**Needed:** the `G-07` decision (whose league's activity this public repo may publish),
+then one `FetchLeagueTransactions` capture with a completed trade via `scripts/probe.sh`.
+Commit it with the parser fix that reads it.

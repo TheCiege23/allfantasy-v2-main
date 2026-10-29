@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { CUSTOM_KINDS, CUSTOM_MAX, LABEL_MAX, type CustomKind } from '@/lib/deadline-autopilot/autopilot'
 import type { AutopilotView } from '@/lib/deadline-autopilot/autopilotService'
 
@@ -171,7 +172,7 @@ export function DeadlineAutopilot({ leagueId }: { leagueId: string }) {
                   {d.targeted
                     ? t(`${d.recipients} still to submit`, `${d.recipients} sin enviar`)
                     : t(`${d.recipients} managers`, `${d.recipients} mánagers`)}
-                  {d.lastSent ? t(` · last reminder ${new Date(d.lastSent).toLocaleString()}`, ` · último recordatorio ${new Date(d.lastSent).toLocaleString('es')}`) : ''}
+                  {d.lastSent ? t(` · last reminder ${new Date(d.lastSent).toLocaleString(getAppIntlLocale())}`, ` · último recordatorio ${new Date(d.lastSent).toLocaleString('es')}`) : ''}
                 </p>
               </div>
               <button type="button" className="af-btn" disabled={busy || !d.manualAllowed || d.recipients === 0} onClick={() => remindNow(d.key)}>

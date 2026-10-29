@@ -30,6 +30,7 @@ import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
 // equivalent note. This screen was simply missed when those two were repaired.
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-pricing.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 18a — pricing.
@@ -513,7 +514,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           {packs.map((pack) => (
             <div key={pack.sku} className="af-pr-pack">
               <span className="af-pr-pack-tokens">
-                {pack.tokenAmount != null ? pack.tokenAmount.toLocaleString() : '—'}
+                {pack.tokenAmount != null ? pack.tokenAmount.toLocaleString(getAppIntlLocale()) : '—'}
               </span>
               <span className="af-pr-pack-label">tokens</span>
               <span className="af-pr-pack-price">{nativeApp ? (nativePrices[pack.sku] ?? 'Loading store price…') : money(pack.amountUsd)}</span>

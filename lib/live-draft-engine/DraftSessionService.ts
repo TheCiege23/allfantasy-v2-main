@@ -312,6 +312,18 @@ async function repairDraftSessionSlotOrderIfNeeded(leagueId: string): Promise<vo
   })
 }
 
+/**
+ * The session's draft type and 3RR flag when it is created from `LeagueSettings.draftType`. Shared
+ * with the rules popup (lib/league-rules-explainer/loadDraftRules.ts), which describes a draft that
+ * has no session yet exactly as this will create it.
+ */
+export function sessionDraftTypeFromLeagueSettings(dt: string | null | undefined): { draftType: string; thirdRoundReversal: boolean } {
+  if (dt === '3rd_reversal') return { draftType: 'snake', thirdRoundReversal: true }
+  if (dt === 'auction') return { draftType: 'auction', thirdRoundReversal: false }
+  if (dt === 'linear') return { draftType: 'linear', thirdRoundReversal: false }
+  return { draftType: 'snake', thirdRoundReversal: false }
+}
+
 export async function getOrCreateDraftSession(leagueId: string): Promise<{
   session: { id: string; leagueId: string; status: string; slotOrder: unknown; teamCount: number; rounds: number; draftType: string; thirdRoundReversal: boolean; timerSeconds: number | null; timerEndAt: Date | null; pausedRemainingSeconds: number | null; version: number; updatedAt: Date }
   created: boolean
@@ -344,20 +356,7 @@ export async function getOrCreateDraftSession(leagueId: string): Promise<{
   let alphabeticalSort = false
   if (ls) {
     rounds = Math.max(1, Math.min(50, ls.rounds))
-    const dt = ls.draftType
-    if (dt === '3rd_reversal') {
-      draftType = 'snake'
-      thirdRoundReversal = true
-    } else if (dt === 'auction') {
-      draftType = 'auction'
-      thirdRoundReversal = false
-    } else if (dt === 'linear') {
-      draftType = 'linear'
-      thirdRoundReversal = false
-    } else {
-      draftType = 'snake'
-      thirdRoundReversal = false
-    }
+    ;({ draftType, thirdRoundReversal } = sessionDraftTypeFromLeagueSettings(ls.draftType))
     aiAutoPick = ls.aiAutoPick
     cpuAutoPick = ls.cpuAutoPick
     playerPool = ls.playerPool

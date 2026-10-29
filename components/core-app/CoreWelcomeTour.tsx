@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useEffect, useState } from 'react'
+import { useHomePromptTurn } from '@/components/core-app/HomePromptSlot'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import '@/components/core-app/core-welcome-tour.css'
 
@@ -83,7 +84,9 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
     },
   ]
 
-  if (!open) return null
+  // One optional prompt at a time on the /core home (HomePromptSlot).
+  const turn = useHomePromptTurn('welcome-tour', open)
+  if (!turn) return null
   const current = steps[step]
 
   function finish() {
