@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   lang: 'en' as string | null,
   health: vi.fn(async () => ({ rows: [] as Array<Record<string, unknown>> })),
   prisma: {
+    $queryRaw: vi.fn(async () => [] as Array<{ id: string }>),
     automationAuditLog: {
       findMany: vi.fn(async () => [{ leagueId: 'L' }]),
       groupBy: vi.fn(async () => [{ action: 'fill_empty_starters.applied', _count: { _all: 2 } }]),
@@ -79,6 +80,15 @@ describe('runWeeklyAutomationRecaps', () => {
     m.health.mockResolvedValueOnce({ rows: [{ rosterId: 'r1', teamName: 'Ghosts', managerName: null, status: 'inactive' }] })
     expect(await runWeeklyAutomationRecaps({ now: MONDAY })).toMatchObject({ sent: 1 })
     expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({ body: 'One team looks inactive: Ghosts. You can hand it to AllFantasy from the Commissioner Hub.' }))
+  })
+
+  it('finds an in-season league where no automation acted at all, for its quiet teams', async () => {
+    m.prisma.automationAuditLog.findMany.mockResolvedValueOnce([])
+    m.prisma.automationAuditLog.groupBy.mockResolvedValueOnce([])
+    m.prisma.leagueAuditLog.groupBy.mockResolvedValueOnce([])
+    m.prisma.$queryRaw.mockResolvedValueOnce([{ id: 'L' }])
+    m.health.mockResolvedValueOnce({ rows: [{ rosterId: 'r1', teamName: 'Ghosts', managerName: null, status: 'inactive' }] })
+    expect(await runWeeklyAutomationRecaps({ now: MONDAY })).toMatchObject({ leagues: 1, sent: 1 })
   })
 
   it('leaves quiet teams out when the league already hands them over by itself', async () => {

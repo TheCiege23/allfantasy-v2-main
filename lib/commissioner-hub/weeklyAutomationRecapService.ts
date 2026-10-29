@@ -31,13 +31,21 @@ export async function runWeeklyAutomationRecaps(opts?: { now?: Date; limit?: num
     prisma.leagueAuditLog.findMany({ where: { actionType: { in: ACTIONS }, createdAt: { gte: start, lt: end } }, select: { leagueId: true }, distinct: ['leagueId'] }),
     prisma.draftPick.findMany({ where: { source: 'auto', createdAt: { gte: start, lt: end } }, select: { session: { select: { leagueId: true } } }, distinct: ['sessionId'] }),
   ])
+  // And in-season leagues without an auto-handover rule, where the recap's only news may be a quiet team.
+  // Ordered differently each week; the hourly Monday runs, with "already sent", work through them.
+  const inSeason = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM leagues
+    WHERE (LOWER(status) IN ('active', 'in_season') OR (status IS NULL AND "lifecycleState"::text = 'in_season'))
+      AND NOT (COALESCE(settings, '{}'::jsonb) ? 'inactive_auto_handover')
+    ORDER BY md5(id || ${key}) LIMIT ${Math.max(1, Math.min(opts?.limit ?? 300, 2000))}`.catch(() => [] as Array<{ id: string }>)
   const leagueIds = [
     ...new Set([
       ...fromAutomation.map((r) => r.leagueId),
       ...fromAudit.map((r) => r.leagueId),
       ...fromPicks.map((r) => r.session?.leagueId ?? null),
+      ...inSeason.map((r) => r.id),
     ].filter((v): v is string => Boolean(v))),
-  ].slice(0, Math.max(1, Math.min(opts?.limit ?? 300, 2000)))
+  ].slice(0, Math.max(1, Math.min(opts?.limit ?? 300, 2000)) * 2)
 
   for (const leagueId of leagueIds) {
     if (Date.now() >= deadline) break
