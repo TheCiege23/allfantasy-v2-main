@@ -68,6 +68,15 @@ const nextConfig = {
     // everywhere except where it was silently wrong.
     config.resolve = { ...config.resolve, roots: [] };
 
+    // The e2e dev server keeps webpack's cache in memory only. Its filesystem cache reached 1.4GB
+    // for the server compiler in one Draft Room Regression run, and webpack writes it out about a
+    // minute after the builds go quiet. Measured 2026-10-29, that write took next-server from 7.9GB
+    // to 13.5GB in 50s with nothing compiling, and the kernel killed it mid-run (ERR_CONNECTION_REFUSED
+    // for every later test). Nothing reads that cache back: each run starts from a clean dist dir.
+    if (dev && process.env.AF_PLAYWRIGHT_SERVER === '1') {
+      config.cache = { type: 'memory' };
+    }
+
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,

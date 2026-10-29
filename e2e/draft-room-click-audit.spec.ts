@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { openCommissionerControls } from './helpers/commissioner-controls'
 import { answerCspReportsInBrowser } from './helpers/csp-report-sink'
+import { computeUpcomingOwnedPicks } from '@/lib/live-draft-engine/draftPickTradeInventory'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -464,6 +465,38 @@ async function mockDraftRoomApis(
       orphanDrafterMode: settings.orphanDrafterMode,
     }
   }
+
+  // The trade builder only offers rounds this endpoint lists, so without it the offer form reads
+  // "No tradable picks". Built with the route's own helper from the same mock state as the session.
+  await page.route(`**/api/leagues/*/draft/trade-builder/inventory**`, async (route) => {
+    const teamCount = slotOrder.length
+    const ownedBy = (ownerRosterId: string) =>
+      computeUpcomingOwnedPicks({
+        totalPicks: teamCount * 4,
+        pickedOverall: new Set(state.picks.map((pick) => Number(pick.overall))),
+        teamCount,
+        draftType: 'snake',
+        thirdRoundReversal: false,
+        slotOrder,
+        tradedPicks: state.tradedPicks,
+        ownerRosterId,
+      })
+    const byRosterId = Object.fromEntries(slotOrder.map((entry) => [entry.rosterId, ownedBy(entry.rosterId)]))
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        draftInProgress: state.sessionStatus === 'in_progress',
+        draftType: 'snake',
+        rounds: 4,
+        teamCount,
+        thirdRoundReversal: false,
+        myRosterId: 'roster-2',
+        mine: byRosterId['roster-2'],
+        byRosterId,
+      }),
+    })
+  })
 
   await page.route(`**/api/leagues/*/draft/session**`, async (route) => {
     if (route.request().method() === 'GET') {
@@ -1561,31 +1594,43 @@ test.describe('@draft-room click audit', () => {
     await expect(desktop.getByTestId('draft-board-cell-8')).toContainText(/2\.4|Alpha/)
 
     await openDraftTradesPanel(page)
-    let tradeWorkflowRan = false
     const tradeOfferToggle = page.getByTestId('draft-trade-offer-toggle')
-    if (await tradeOfferToggle.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      tradeWorkflowRan = true
-      await tradeOfferToggle.click()
-      await page.getByTestId('draft-trade-offer-receiver').selectOption('roster-3')
-      await page.getByTestId('draft-trade-offer-give-round').selectOption('2')
-      await page.getByTestId('draft-trade-offer-receive-round').selectOption('3')
-      await page.getByTestId('draft-trade-send-offer').click()
-      await expect.poll(() => mocks.getTradeOfferRequests().length).toBeGreaterThan(0)
+    /*
+     * Always run. This was `if (toggle visible within 5s)`, so which path ran depended on how fast
+     * the server was: on a loaded one it was skipped, and the steps below had gone stale unseen
+     * (a <select> that became a manager menu, a new Pending offers tab, an unmocked inventory).
+     */
+    await expect(tradeOfferToggle).toBeVisible({ timeout: 30_000 })
+    await tradeOfferToggle.click()
+    // The partner field is a searchable menu of managers now, not a <select>: pick Gamma (roster-3).
+    // Menu rows read "<name> Slot <n>"; the field itself never shows a slot, so this can't match it.
+    const partnerPicker = page.getByTestId('draft-trade-offer-receiver')
+    await partnerPicker.click()
+    await partnerPicker.locator('..').getByRole('button', { name: /Gamma.*Slot 3/ }).click()
+    await expect(partnerPicker).toContainText('Gamma')
+    await page.getByTestId('draft-trade-offer-give-round').selectOption('2')
+    await page.getByTestId('draft-trade-offer-receive-round').selectOption('3')
+    await page.getByTestId('draft-trade-send-offer').click()
+    await expect.poll(() => mocks.getTradeOfferRequests().length).toBeGreaterThan(0)
 
-      await page.getByTestId('draft-trade-review-tp-1').click()
-      await expect(page.getByTestId('draft-trade-review-panel-tp-1')).toBeVisible()
-      await page.getByTestId('draft-trade-ai-review-tp-1').click()
-      await expect(page.getByText(/Private review context/i)).toBeVisible()
-      await expect(page.getByText(/Counter ideas/i).first()).toBeVisible()
-      expect(mocks.getTradeReviewRequests()).toContain('tp-1')
+    // Offers live on their own tab now; the builder above is the "Compose offer" tab.
+    const pendingOffersTab = page.getByTestId('draft-trade-panel-overlay').getByRole('button', { name: /^Pending offers/ })
+    await pendingOffersTab.click()
+    await page.getByTestId('draft-trade-review-tp-1').click()
+    await expect(page.getByTestId('draft-trade-review-panel-tp-1')).toBeVisible()
+    await page.getByTestId('draft-trade-ai-review-tp-1').click()
+    await expect(
+      page.getByTestId('draft-trade-review-panel-tp-1').getByText('Private review', { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText(/Counter ideas/i).first()).toBeVisible()
+    expect(mocks.getTradeReviewRequests()).toContain('tp-1')
 
-      await page.getByTestId('draft-trade-review-tp-2').click()
-      await page.getByTestId('draft-trade-counter-tp-2').click()
-      await page.getByTestId('draft-trade-review-tp-3').click()
-      await page.getByTestId('draft-trade-reject-tp-3').click()
-      await page.getByTestId('draft-trade-review-tp-1').click()
-      await page.getByTestId('draft-trade-accept-tp-1').click()
-    }
+    await page.getByTestId('draft-trade-review-tp-2').click()
+    await page.getByTestId('draft-trade-counter-tp-2').click()
+    await page.getByTestId('draft-trade-review-tp-3').click()
+    await page.getByTestId('draft-trade-reject-tp-3').click()
+    await page.getByTestId('draft-trade-review-tp-1').click()
+    await page.getByTestId('draft-trade-accept-tp-1').click()
     /*
      * Close with the panel's own button, once. The loop this replaces also pressed Escape (the panel
      * has no Escape handler) and then clicked draft-open-trades-button, which only ever OPENS it — so
@@ -1598,16 +1643,14 @@ test.describe('@draft-room click audit', () => {
     }
     await expect(tradeOverlay).not.toBeVisible({ timeout: 10_000 })
 
-    if (tradeWorkflowRan) {
-      await desktop.getByTestId('draft-board-round-selector').selectOption('2')
-      await expect(desktop.getByTestId('draft-board-cell-8')).toContainText('Beta')
-      await desktop.getByTestId('draft-board-round-selector').selectOption('3')
-      await expect(desktop.getByTestId('draft-board-cell-10')).toContainText('Alpha')
-      const tradeRespondActions = mocks.getTradeRespondRequests().map((entry) => entry.action)
-      expect(tradeRespondActions).toContain('accept')
-      expect(tradeRespondActions).toContain('reject')
-      expect(tradeRespondActions).toContain('counter')
-    }
+    await desktop.getByTestId('draft-board-round-selector').selectOption('2')
+    await expect(desktop.getByTestId('draft-board-cell-8')).toContainText('Beta')
+    await desktop.getByTestId('draft-board-round-selector').selectOption('3')
+    await expect(desktop.getByTestId('draft-board-cell-10')).toContainText('Alpha')
+    const tradeRespondActions = mocks.getTradeRespondRequests().map((entry) => entry.action)
+    expect(tradeRespondActions).toContain('accept')
+    expect(tradeRespondActions).toContain('reject')
+    expect(tradeRespondActions).toContain('counter')
 
     /*
      * The draft chat composer is the shared chat composer now: GIF opens GIF search (through
