@@ -2,31 +2,34 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { coercePlayerAge } from '@/lib/sports-data/playerAge'
+import { ourIdOrSleeperIdWhere, playerRowKeys } from '@/lib/player-identity/externalIdNamespace'
 
 /**
  * Ages for draft-room player ids, for draft as me's youth lean (./draftAsMe.ts). A draft pick's or a
- * pool entry's `playerId` is a provider id — a Sleeper id or a Rolling Insights external id — so both
- * are tried. Two sources more than a year apart give no age: an unknown age is honest, a wrong one
- * tilts a pick. Best-effort: a failed read returns an empty map and draft as me runs without the lean.
+ * pool entry's `playerId` is a Sleeper id or our own `SportsPlayer.id` — the two spellings a native
+ * league's player ids come in — so it is looked up through `ourIdOrSleeperIdWhere` and keyed by
+ * `playerRowKeys`, never by `externalId`: a bare Sleeper id against `externalId` names a Rolling
+ * Insights row for a different person (lib/player-identity/externalIdNamespace.ts).
+ * Rows more than a year apart give no age: an unknown age is honest, a wrong one tilts a pick.
+ * Best-effort: a failed read returns an empty map and draft as me runs without the lean.
  */
 export async function loadDraftPlayerAges(sport: string | null | undefined, playerIds: readonly (string | null | undefined)[]): Promise<Map<string, number>> {
-  const ids = [...new Set(playerIds.filter((v): v is string => typeof v === 'string' && v.trim() !== ''))]
+  const ids = [...new Set(playerIds.filter((v): v is string => typeof v === 'string' && v.trim() !== '').map((v) => v.trim()))]
   const out = new Map<string, number>()
   if (ids.length === 0) return out
-  const s = String(sport ?? 'NFL').trim()
   const rows = await prisma.sportsPlayer
     .findMany({
-      where: { sport: { in: [s.toUpperCase(), s.toLowerCase()] }, age: { not: null }, OR: [{ externalId: { in: ids } }, { sleeperId: { in: ids } }] },
-      select: { externalId: true, sleeperId: true, age: true },
+      where: { ...ourIdOrSleeperIdWhere(ids, sport ?? 'NFL'), age: { not: null } },
+      select: { id: true, sleeperId: true, age: true },
     })
-    .catch(() => [] as Array<{ externalId: string; sleeperId: string | null; age: number | null }>)
+    .catch(() => [] as Array<{ id: string; sleeperId: string | null; age: number | null }>)
   const seen = new Map<string, number[]>()
   const wanted = new Set(ids)
   for (const r of rows) {
     const age = coercePlayerAge(r.age)
     if (age == null) continue
-    for (const key of [r.externalId, r.sleeperId]) {
-      if (!key || !wanted.has(key)) continue
+    for (const key of playerRowKeys(r)) {
+      if (!wanted.has(key)) continue
       seen.set(key, [...(seen.get(key) ?? []), age])
     }
   }
