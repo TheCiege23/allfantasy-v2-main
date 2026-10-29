@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  alternateTheSportsDbImageUrl,
   isApiSportsImageUrl,
   normalizeTheSportsDbImageUrl,
 } from '@/lib/player-assets/imageUrlHygiene'
@@ -87,5 +88,19 @@ describe('isPlaceholderHeadshot', () => {
     expect(
       await isPlaceholderHeadshot(url, vi.fn(async () => { throw new Error('ECONNRESET') }) as never),
     ).toBeNull()
+  })
+})
+
+describe('alternateTheSportsDbImageUrl', () => {
+  it('retries only the same image path on the other known host', () => {
+    const path = '/images/media/player/cutout/76jpuo1792493279.png'
+    expect(alternateTheSportsDbImageUrl('https://r2.thesportsdb.com' + path)).toBe('https://www.thesportsdb.com' + path)
+    expect(alternateTheSportsDbImageUrl('https://www.thesportsdb.com' + path)).toBe('https://r2.thesportsdb.com' + path)
+    expect(alternateTheSportsDbImageUrl('https://r2.thesportsdb.com' + path + '?preview=1')).toBe('https://www.thesportsdb.com' + path + '?preview=1')
+  })
+  it('never rewrites other providers, pages, insecure URLs or lookalike hosts', () => {
+    for (const url of ['https://sleepercdn.com/a.jpg', 'https://www.thesportsdb.com/player/1', 'http://r2.thesportsdb.com/images/a.png', 'https://r2.thesportsdb.com.evil.example/images/a.png']) {
+      expect(alternateTheSportsDbImageUrl(url)).toBeNull()
+    }
   })
 })
