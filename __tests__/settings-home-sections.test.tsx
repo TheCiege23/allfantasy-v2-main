@@ -97,6 +97,8 @@ describe('default layout keeps alerts', () => {
     fetchMock.mockResolvedValue({ ok: true })
     render(<HomeSectionsSettingsSection profile={{ notificationPreferences: {} } as never} onRefetch={vi.fn()} />)
     expect(switchOf('drafts').checked).toBe(false)
+    expect(row('drafts').textContent).not.toContain('{list}')
+    expect(row('drafts').textContent).toContain('Draft alerts')
     expect(switchOf('streak').checked).toBe(true)
     expect(screen.queryByTestId('home-section-warn-drafts')).toBeNull()
     expect(row('drafts').textContent).toContain('notification settings are unchanged')

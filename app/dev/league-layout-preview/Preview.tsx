@@ -17,7 +17,7 @@ export default function Preview() {
   const refetch = () => { void fetch('/api/user/profile').then(r => r.json()).then(body => setProfile(body.profile)) }
   useEffect(refetch, [])
   if (!profile) return <p>Loading preview</p>
-  return <div className="nocturne-settings" style={{ minHeight: '100dvh', padding: 16 }}>
+  return <div className={view === 'settings' || view === 'home' ? 'nocturne-settings' : 'af-core nl-workspace'} style={{ display: 'block', height: 'auto', minHeight: '100dvh', overflow: 'visible', padding: 16 }}>
     <nav className="mb-4 flex flex-wrap gap-3">{['settings', 'league', 'home'].map(id => <button key={id} className="min-h-[44px] rounded-lg border px-4" onClick={() => setView(id)}>{id}</button>)}</nav>
     {view === 'settings' ? <LeagueSectionsSettingsSection profile={profile as never} onRefetch={refetch} />
       : view === 'home' ? <HomeSectionsSettingsSection profile={profile as never} onRefetch={refetch} />

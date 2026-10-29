@@ -18,6 +18,7 @@ test('league display choices save, survive reload, and leave draft entry tappabl
   await expect(page.getByRole('status')).toHaveText(/Saved/)
   await page.reload()
   await expect(chat).not.toBeChecked()
+  await testInfo.attach('league-page-settings', { body: await page.screenshot(), contentType: 'image/png' })
   await page.getByRole('button', { name: 'league', exact: true }).tap()
   // Hide the optional chat card; the activity feed keeps its own chat action.
   await expect(page.locator('.nl-chat-preview')).toHaveCount(0)
@@ -36,6 +37,7 @@ test('league display choices save, survive reload, and leave draft entry tappabl
   await page.getByRole('button', { name: 'home', exact: true }).tap()
   await expect(page.locator('[data-home-section="drafts"] input')).not.toBeChecked()
   await expect(page.locator('[data-home-section="streak"] input')).toBeChecked()
+  await expect(page.getByTestId('settings-home-sections')).not.toContainText('{list}')
   expect(preferences.categories).toEqual({ draft_alerts: { enabled: true } })
   await testInfo.attach('layout-settings', { body: await page.screenshot(), contentType: 'image/png' })
 })

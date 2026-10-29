@@ -5,7 +5,7 @@ export const translationsEsParity: Record<string, string> = {
     "settings.leagues.displayTitle": "Tus páginas de ligas",
     "settings.leagues.intro": "Conserva las tarjetas que usas. Estas opciones se aplican a tus ligas de AF y a los paneles de ligas importadas en todos tus dispositivos. Cada página muestra solo las tarjetas disponibles para esa liga.",
     "settings.leagues.footnote": "Estos controles solo cambian tu vista. La navegación, el acceso al draft, las reglas, los permisos y las notificaciones siguen disponibles. Cada mánager conserva su propio diseño.",
-    "settings.home.defaultAlertsUnchanged": "Oculto por el diseño predeterminado. Tus notificaciones no cambian: {list}",
+    "settings.home.defaultAlertsUnchanged": "Oculto por el diseño predeterminado. Tus notificaciones no cambian: {{list}}",
     "settings.leagues.section.week.title": "Tu semana",
     "settings.leagues.section.week.desc": "Resumen semanal y próximas acciones.",
     "settings.leagues.section.team.title": "Tu equipo",

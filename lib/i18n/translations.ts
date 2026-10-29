@@ -8,7 +8,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.leagues.displayTitle": "Your league pages",
     "settings.leagues.intro": "Keep the cards you use. These choices apply to your AF league homes and imported league dashboards on every device. Each page shows only the cards available for that league.",
     "settings.leagues.footnote": "These switches change only your view. League navigation, draft entry, rules, permissions and notifications stay available. Other managers keep their own layout.",
-    "settings.home.defaultAlertsUnchanged": "Hidden by the default layout. Your notification settings are unchanged: {list}",
+    "settings.home.defaultAlertsUnchanged": "Hidden by the default layout. Your notification settings are unchanged: {{list}}",
     "settings.leagues.section.week.title": "Your week",
     "settings.leagues.section.week.desc": "Your weekly overview and next actions.",
     "settings.leagues.section.team.title": "Your team",
