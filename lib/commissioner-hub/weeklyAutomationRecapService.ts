@@ -9,7 +9,10 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
-import { countRecapActions, isRecapDay, previousRecapWeek, RECAP_ACTIONS, recapLines, recapMessage } from './weeklyAutomationRecap'
+import { countRecapActions, isRecapDay, previousRecapWeek, quietTeamsSentence, RECAP_ACTIONS, recapLines, recapMessage } from './weeklyAutomationRecap'
+import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
+import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+import { readAutoHandover } from '@/lib/inactive-manager/autoHandover'
 
 export type WeeklyRecapRunResult = { leagues: number; sent: number; nothing: number; alreadySent: number; failures: { leagueId: string; error: string }[] }
 
@@ -40,7 +43,7 @@ export async function runWeeklyAutomationRecaps(opts?: { now?: Date; limit?: num
     if (Date.now() >= deadline) break
     result.leagues += 1
     try {
-      const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, name: true, platform: true } })
+      const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, name: true, platform: true, settings: true } })
       if (!league?.userId || resolveWriteAuthority(league.platform) !== 'NATIVE') continue
       const sourceKey = `automation-recap:${leagueId}:${key}`
       const sent = await prisma.platformNotification.findUnique({ where: { sourceKey: `${sourceKey}:${league.userId}` }, select: { id: true } })
@@ -63,11 +66,19 @@ export async function runWeeklyAutomationRecaps(opts?: { now?: Date; limit?: num
       const profile = await prisma.userProfile.findUnique({ where: { userId: league.userId }, select: { preferredLanguage: true } }).catch(() => null)
       const lang = profile?.preferredLanguage?.toLowerCase().startsWith('es') ? 'es' : 'en'
       const lines = recapLines(counts, lang)
-      if (lines.length === 0) {
+      // Quiet teams nothing covers: listed only when the league has no auto-handover rule.
+      let quietNames: string[] = []
+      if (!readAutoHandover(league.settings)) {
+        const managed = readManagedLineups(league.settings)
+        const health = await getLeagueManagerHealth(leagueId).catch(() => null)
+        quietNames = (health?.rows ?? []).filter((r) => r.status === 'inactive' && !managed[r.rosterId]).map((r) => r.teamName || r.managerName || (lang === 'es' ? 'Un equipo' : 'A team'))
+      }
+      const quiet = quietTeamsSentence(quietNames, lang)
+      if (lines.length === 0 && !quiet) {
         result.nothing += 1
         continue
       }
-      const msg = recapMessage(league.name ?? (lang === 'es' ? 'tu liga' : 'your league'), lines, lang)
+      const msg = recapMessage(league.name ?? (lang === 'es' ? 'tu liga' : 'your league'), lines, lang, quiet)
       await dispatchNotification({
         userIds: [league.userId],
         category: 'commissioner_alerts',
@@ -76,10 +87,11 @@ export async function runWeeklyAutomationRecaps(opts?: { now?: Date; limit?: num
         body: msg.body,
         severity: 'low',
         leagueId,
-        actionHref: `/league/${encodeURIComponent(leagueId)}/log`,
-        actionLabel: lang === 'es' ? 'Abrir registro de la liga' : 'Open league log',
+        // With quiet teams, the button opens the card that hands them over; otherwise the league log.
+        actionHref: quiet ? `/core/commissioner?league=${encodeURIComponent(leagueId)}#ch-inactive-managers` : `/league/${encodeURIComponent(leagueId)}/log`,
+        actionLabel: quiet ? (lang === 'es' ? 'Pasar a AllFantasy' : 'Hand to AllFantasy') : lang === 'es' ? 'Abrir registro de la liga' : 'Open league log',
         dedupePrefix: sourceKey,
-        meta: { leagueId, week: key, counts },
+        meta: { leagueId, week: key, counts, quietTeams: quietNames.length },
       })
       result.sent += 1
     } catch (e) {
