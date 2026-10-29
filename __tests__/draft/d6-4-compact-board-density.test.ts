@@ -114,24 +114,24 @@ describe('DraftManagerStrip — label column width (Commit 21)', () => {
 // 6. DraftBoardCell height — tighter tiles
 // ---------------------------------------------------------------------------
 
-describe('DraftBoardCell — square tiles (2026-10-28, supersedes the 56px tiles)', () => {
-  // 56/60px-tall tiles in a `1fr` column stretched to ~190px wide on an 8-team board: wide
-  // rectangles. Tiles are now square, and columns are capped so they stay square.
-  it('cell is aspect-square and has no fixed pixel height', () => {
-    expect(cellSrc).toMatch(/flex aspect-square w-full flex-col/)
-    expect(cellSrc).not.toMatch(/flex h-\[56px\] min-h-\[56px\]/)
-    expect(cellSrc).not.toMatch(/sm:h-\[60px\] sm:min-h-\[60px\]/)
+describe('DraftBoardCell — Sleeper-style tiles (2026-10-28)', () => {
+  // Matched to Sleeper's board at the user's request: short, wide, flat tiles across the full
+  // width, solid position colours once filled. (A square-tile version shipped first and was
+  // replaced the same day.)
+  it('tiles are short and wide: a fixed 50px height, full column width', () => {
+    expect(cellSrc).toMatch(/flex h-\[50px\] w-full flex-col/)
+    expect(cellSrc).not.toMatch(/aspect-square/)
   })
 
-  it('board columns are capped at 96–124px instead of stretching with 1fr', () => {
-    expect(boardSrc).toMatch(/const BOARD_COLUMN = 'minmax\(96px, 124px\)'/)
-    expect(boardSrc).not.toMatch(/minmax\(104px, 1fr\)/)
-    expect(boardSrc).not.toMatch(/minmax\(88px, 1fr\)/)
+  it('board columns fill the width with a 84px floor, and gaps are 2px', () => {
+    expect(boardSrc).toMatch(/const BOARD_COLUMN = 'minmax\(84px, 1fr\)'/)
+    expect(boardSrc).toMatch(/grid gap-\[2px\]/)
   })
 
-  it('filled tiles take their position color', () => {
+  it('filled tiles are solid position colours with dark text', () => {
     expect(cellSrc).toMatch(/positionTintHex\(pick\.position\)/)
-    expect(cellSrc).toMatch(/style=\{tint \?\? positionTint \?\? managerTint\}/)
+    expect(cellSrc).toMatch(/\{ backgroundColor: fillHex \}/)
+    expect(cellSrc).toMatch(/text-\[#14172a\]/)
   })
 })
 
