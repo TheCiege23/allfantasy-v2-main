@@ -9,6 +9,7 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isDevyLeague, getDevyConfig, upsertDevyConfig } from '@/lib/devy/DevyLeagueConfig'
+import { publishVariantConfigChange, readVariantConfigRules } from '@/lib/league-rules-explainer/variantConfigChange'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,6 +93,8 @@ export async function PUT(
   if (!isDevy) return NextResponse.json({ error: 'Not a devy dynasty league' }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
+  // The popup's rookie-draft and taxi rules, before the write, for the "What changed" card.
+  const rulesBefore = await readVariantConfigRules(leagueId)
   const updated = await upsertDevyConfig(leagueId, {
     ...(body.devySlotCount != null && { devySlotCount: Number(body.devySlotCount) }),
     ...(body.taxiSize != null && { taxiSize: Number(body.taxiSize) }),
@@ -117,5 +120,6 @@ export async function PUT(
     ...(body.bestBallSuperflex != null && { bestBallSuperflex: Boolean(body.bestBallSuperflex) }),
   })
   if (!updated) return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+  await publishVariantConfigChange({ leagueId, actorUserId: userId, section: 'devy', before: rulesBefore })
   return NextResponse.json({ ok: true, config: updated })
 }
