@@ -12,6 +12,7 @@ import {
   ProfileSettingsSection,
   PreferencesSettingsSection,
   HomeSectionsSettingsSection,
+  LeagueSectionsSettingsSection,
   SecuritySettingsSection,
   NotificationsSettingsSection,
   ConnectedAccountsSettingsSection,
@@ -157,6 +158,7 @@ export default function SettingsApp({
         <PreferencesSettingsSection profile={profile} saving={saving} onSave={updateProfile} />
       )}
       {activeTab === "home" && <HomeSectionsSettingsSection profile={profile} onRefetch={fetchProfile} />}
+      {activeTab === "leagues" && <LeagueSectionsSettingsSection profile={profile} onRefetch={fetchProfile} />}
       {activeTab === "security" && <SecuritySettingsSection profile={profile} onRefetch={fetchProfile} />}
       {activeTab === "notifications" && (
         <NotificationsSettingsSection profile={profile} onRefetch={fetchProfile} />

@@ -54,7 +54,7 @@ describe('Settings → Home page', () => {
     expect(url).toBe('/api/user/profile')
     expect(init.method).toBe('PATCH')
     expect(JSON.parse(init.body)).toEqual({
-      notificationPreferences: { hiddenHomeSections: ['league-trades', 'rivals'] },
+      notificationPreferences: { homeLayoutHiddenSections: ['league-trades', 'rivals'], hiddenHomeSections: ['league-trades', 'rivals'] },
     })
   })
 
@@ -88,5 +88,23 @@ describe('Settings → Home page', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).notificationPreferences.hiddenHomeSections).toEqual([])
     expect(switchOf('streak').checked).toBe(true)
+  })
+})
+
+
+describe('default layout keeps alerts', () => {
+  it('uses the reference layout without creating any mutes when a visible-only card changes', async () => {
+    fetchMock.mockResolvedValue({ ok: true })
+    render(<HomeSectionsSettingsSection profile={{ notificationPreferences: {} } as never} onRefetch={vi.fn()} />)
+    expect(switchOf('drafts').checked).toBe(false)
+    expect(switchOf('streak').checked).toBe(true)
+    expect(screen.queryByTestId('home-section-warn-drafts')).toBeNull()
+    expect(row('drafts').textContent).toContain('notification settings are unchanged')
+    fireEvent.click(switchOf('rivals'))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    const prefs = JSON.parse(fetchMock.mock.calls[0][1].body).notificationPreferences
+    expect(prefs.homeLayoutHiddenSections).toContain('drafts')
+    expect(prefs.homeLayoutHiddenSections).toContain('rivals')
+    expect(prefs.hiddenHomeSections).toEqual(['rivals'])
   })
 })

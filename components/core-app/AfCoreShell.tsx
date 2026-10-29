@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
@@ -1015,7 +1017,7 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
   function go(hit: TopSearchHit) {
     setOpen(false)
     setQ('')
-    router.push(hit.kind === 'league' ? `/core?league=${encodeURIComponent(hit.id)}` : `/players/${hit.slug}`)
+    router.push(hit.kind === 'league' ? leagueEntryHref(leagues.find(row => row.id === hit.id) ?? { id: hit.id, platform: 'unknown' }) : `/players/${hit.slug}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -1281,7 +1283,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     if (!speculationGate.tryAcquire()) return
     railWarmedRef.current.add(leagueId)
     /* FULL by default — `router.prefetch` is the only path that warms the data. */
-    router.prefetch(`/core?league=${encodeURIComponent(leagueId)}`)
+    const league = props.leagues.find(row => row.id === leagueId)
+    if (league) router.prefetch(leagueEntryHref(league))
   }
   /*
    * A warm needs the pointer (or focus) to REST on a crest for `RAIL_WARM_DWELL_MS`; leaving
@@ -1784,9 +1787,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             const careerLine = careerRaw ? careerLineText(careerRaw, language) : null
             /* League-first opens a league on its matchup when it has a head-to-head this week —
                the same rule the /core landing uses (resolveLeagueFirstLanding). */
-            const leagueHref = props.leagueFirst && m && !m.unpaired
+            const leagueHref = !isNativePlatform(l.platform) && props.leagueFirst && m && !m.unpaired
               ? `/core/matchup?league=${encodeURIComponent(l.id)}`
-              : `/core?league=${encodeURIComponent(l.id)}`
+              : leagueEntryHref(l)
             return (
               <Link
                 key={l.id}

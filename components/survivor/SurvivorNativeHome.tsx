@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { LeagueSection, CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import { ArrowRight, MessageSquare, PlayCircle, Settings, Shield } from 'lucide-react'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { CommissionerSetupChecklist } from '@/components/league/CommissionerSetupChecklist'
@@ -164,6 +165,7 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
   const spectator = Boolean(summary?.myRosterId && votedOut.has(summary.myRosterId) && summary.config?.exileReturnEnabled === false)
 
   return <div className="svh" data-testid="survivor-native-home">
+    <CustomizeLeagueLink returnTo={`/league/${encodeURIComponent(league.id)}`} className="svh-link" />
     {revealOpen && myTribe && <SurvivorTribeReveal
       leagueId={league.id}
       sport={league.sport}
@@ -221,8 +223,8 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
           <SvkSkeleton height={12} width="70%" />
           {[0, 1, 2].map(i => <div key={i} className="svh-row"><SvkSkeleton height={44} width={44} radius={99} /><SvkSkeleton height={12} /><SvkSkeleton height={22} width={28} /></div>)}
         </div> : draftPending ? <>
-          <LeagueSeatTracker teams={teams} teamCount={league.teamCount} userTeamId={userTeamId} leagueName={league.name} inviteCode={inviteCode} canInvite={isCommissioner} onOpenInviteSettings={() => onOpenSettings('invite')} />
-          <div className="svh-card svh-pad">
+          <LeagueSection id="managers"><LeagueSeatTracker teams={teams} teamCount={league.teamCount} userTeamId={userTeamId} leagueName={league.name} inviteCode={inviteCode} canInvite={isCommissioner} onOpenInviteSettings={() => onOpenSettings('invite')} /></LeagueSection>
+          <LeagueSection id="format"><div className="svh-card svh-pad">
             <div className="svh-row"><span className="svh-lbl svh-grow">The season</span><span className="svh-faint svh-sm">{plan ? `Weeks ${plan.startWeek}–${plan.endWeek}` : 'Full NBA season'}</span></div>
             <ol className="svh-steps">
               <li><strong>Draft</strong><span>{league.teamCount}-team snake draft. Build your queue; autopick uses it when your clock runs out.</span></li>
@@ -231,17 +233,17 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
               <li><strong>Tribal Council</strong><span>{plan ? `${describeEliminationSchedule(plan.eliminationWeeks)}, the first in week ${plan.eliminationWeeks[0]}.` : 'The lowest-scoring tribe votes someone out.'} Vote privately on the ballot screen or with @Chimmy. The top score in each tribe going to Tribal Council wins immunity.</span></li>
               <li><strong>Exile, merge, jury</strong><span>{plan ? `One exile returns in week ${plan.exileReturnWeek}. The jury crowns a winner from the final ${plan.finalistCount} in week ${plan.finaleWeek}.` : 'Voted-out managers fight on from Exile Island; the jury picks the winner.'}</span></li>
             </ol>
-          </div>
-          {isCommissioner && <CommissionerSetupChecklist leagueId={league.id} settingsOpen={settingsOpen} onOpenSettings={onOpenSettings} />}
+          </div></LeagueSection>
+          <LeagueSection id="commissioner">{isCommissioner && <CommissionerSetupChecklist leagueId={league.id} settingsOpen={settingsOpen} onOpenSettings={onOpenSettings} />}</LeagueSection>
         </> : <>
-          {summary?.weekAdvice?.length ? <div className="svh-card svh-pad svh-advice" data-testid="survivor-week-advice">
+          <LeagueSection id="week">{summary?.weekAdvice?.length ? <div className="svh-card svh-pad svh-advice" data-testid="survivor-week-advice">
             <span className="svh-lbl">Your week · private</span>
             <ul>{summary.weekAdvice.map(item => <li key={item.id} className={`svh-advice-item svh-advice-${item.tone}`} data-testid={`survivor-advice-${item.id}`}>
               <strong>{item.title}</strong>
               <span className="svh-sub svh-sm">{item.body}</span>
             </li>)}</ul>
-          </div> : null}
-          <SurvivorWeeklyMoments leagueId={league.id} exileHref={`/survivor/${encodeURIComponent(league.id)}/exile`} />
+          </div> : null}</LeagueSection>
+          <LeagueSection id="week"><SurvivorWeeklyMoments leagueId={league.id} exileHref={`/survivor/${encodeURIComponent(league.id)}/exile`} /></LeagueSection>
           {raced.length > 1 && <div className="svh-card svh-pad svh-race-card" data-testid="survivor-tribe-race">
             <div className="svh-row"><span className="svh-lbl svh-grow">Tribe race · week {week}</span><span className="svh-faint svh-sm">Lowest tribe total goes to Tribal Council</span></div>
             <div className="svh-race-legend">{raced.map((tribe, index) => <span key={tribe.id} style={{ color: tribeColor(tribe, index) }}><b className="svh-tribe-name">{tribeName(tribe)}</b> <span className="svh-num">{(scores[tribe.id] ?? 0).toFixed(1)}</span></span>)}</div>
@@ -332,6 +334,7 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
               : <SurvivorStateCard state="exile_empty" compact />}
         </div>
 
+        <LeagueSection id="activity">
         <div className="svh-card svh-pad svh-feed-card">
           <span className="svh-lbl">Latest</span>
           {feed.length
@@ -342,10 +345,11 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
             </div>)
             : <p className="svh-sub svh-sm">Immunity wins, torches snuffed and Exile tokens show up here as the season plays out.</p>}
           <div className="svh-actions svh-actions-tight">
-            <button type="button" className="svh-btn svh-btn-sm" onClick={() => onSelectTab('league_chat')}><MessageSquare size={15} aria-hidden />League chat</button>
+            <LeagueSection id="chat"><button type="button" className="svh-btn svh-btn-sm" onClick={() => onSelectTab('league_chat')}><MessageSquare size={15} aria-hidden />League chat</button></LeagueSection>
             <button type="button" className="svh-link" onClick={() => window.dispatchEvent(new CustomEvent('af:replay-league-intro', { detail: { leagueId: league.id } }))}><PlayCircle size={15} aria-hidden /> Watch the intro</button>
           </div>
         </div>
+        </LeagueSection>
       </aside>
     </div>
   </div>

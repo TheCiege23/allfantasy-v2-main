@@ -1,3 +1,4 @@
+import { readHiddenLeagueSections } from '@/lib/league/leagueSections'
 import LeagueSchedule from '@/components/core-app/screens/LeagueSchedule'
 import { loadTradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import LeagueMoves from '@/components/core-app/screens/LeagueMoves'
@@ -67,6 +68,7 @@ import {
   LEAGUE_DATA_COVERAGE_ANCHOR,
 } from '@/components/core-app/LeagueDataCoverage'
 import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core-app/leagueDataCoverage'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
@@ -299,7 +301,7 @@ import {
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { leagueDataFreshness } from '@/lib/core-app/cardFreshness'
 import { CARD_USE_COOKIE, orderHomeCards, parseCardUsage, timeSensitiveCards } from '@/lib/core-app/homeCardOrder'
-import { readHiddenHomeSections, type HomeSectionId } from '@/lib/core-app/homeSections'
+import { resolveHiddenHomeSections, type HomeSectionId } from '@/lib/core-app/homeSections'
 
 export const dynamic = 'force-dynamic'
 
@@ -837,6 +839,11 @@ export default async function AfCorePage({
     redirect(`/core${segment ? `/${segment}` : ''}${query ? `?${query}` : ''}`)
   }
 
+  // Canonical entry for AF-hosted leagues, after the membership check and before dashboard reads.
+  if (activeKey === 'home' && selectedLeagueRow && !isImportedPlatform(selectedLeagueRow.platform?.trim())) {
+    redirect(leagueEntryHref(selectedLeagueRow))
+  }
+
   // This demand signal moves the league into the five-minute active import
   // lane. The helper ignores prefetches and swallows write failures.
   if (selectedLeagueRow) void touchLeagueViewed(selectedLeagueRow.id)
@@ -1338,7 +1345,7 @@ export default async function AfCorePage({
    * The home sections this viewer switched off in Settings → Home page (lib/core-app/homeSections.ts).
    * Same row as the SMS nudge above, so it costs no query. A failed read hides nothing.
    */
-  const hiddenHomeSections = readHiddenHomeSections(shellUser?.profile?.notificationPreferences)
+  const hiddenHomeSections = resolveHiddenHomeSections(shellUser?.profile?.notificationPreferences)
 
   /*
    * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never
@@ -4469,6 +4476,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         <>
         {chimmyMovesCard}
         {segment === 'schedule' ? <LeagueSchedule data={leagueHome} /> : segment === 'moves' ? <LeagueMoves data={leagueHome} /> :         <LeagueHome
+          hiddenSections={readHiddenLeagueSections(shellUser?.profile?.notificationPreferences)}
           data={leagueHome}
           identityInShell={leagueHeaderShown}
           tradeDeadline={homeTradeDeadline}
