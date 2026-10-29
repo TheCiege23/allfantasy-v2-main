@@ -34,7 +34,7 @@ import type { SwapCandidate } from '@/components/league/TeamLineupSwapModal'
 import { StartVsComparisonLauncher } from '@/components/app/player-comparison/StartVsComparisonLauncher'
 import {
   applyLineupPick,
-  buildPlayerRow,
+  buildLineupSaveRoster,
   buildReserveSwapCandidates,
   buildSwapCandidates,
   initOrSyncLineupLists,
@@ -1456,15 +1456,9 @@ const maxWeekMenu = useMemo(() => {
       if (!dbRosterMeta?.rosterId || !lineupEditable) return false
       setSavingLineup(true)
       try {
-        const roster = {
-          starters: next.starters
-            .map((id) => (id ? buildPlayerRow(id, players) : null))
-            .filter((x): x is Record<string, unknown> => x != null),
-          bench: next.bench.map((id) => buildPlayerRow(id, players)),
-          ir: next.ir.map((id) => buildPlayerRow(id, players)),
-          taxi: next.taxi.map((id) => buildPlayerRow(id, players)),
-          devy: next.devy.map((id) => buildPlayerRow(id, players)),
-        }
+        // Each starter carries his slot index, so FLEX vs RB2 (or UTIL 2) is still his after a reload.
+        // IR rows carry the player's real designation; the save route refuses an IR row marked healthy.
+        const roster = buildLineupSaveRoster(next, players, payload && payload.source !== 'sleeper' ? payload.roster : null)
         const res = await fetch('/api/leagues/roster/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1502,7 +1496,7 @@ const maxWeekMenu = useMemo(() => {
         setSavingLineup(false)
       }
     },
-    [dbRosterMeta, lineupEditable, players, league.id, week, load, lineupWriteCopy],
+    [dbRosterMeta, lineupEditable, players, payload, league.id, week, load, lineupWriteCopy],
   )
 
   const replacementContextsByPlayer = useMemo(() => {

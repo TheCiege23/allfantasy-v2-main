@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { ExternalLink, ShoppingBag } from 'lucide-react'
+import { ETSY_SHOP_URL } from '@/lib/merch/drop1'
 
 interface Product {
   name: string
@@ -172,7 +173,7 @@ export default function EtsyShop() {
 
       <div className="text-center pt-4">
         <a
-          href="https://artbyciege.etsy.com"
+          href={ETSY_SHOP_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold text-sm hover:shadow-lg hover:shadow-orange-500/30 transition-all hover:scale-105"

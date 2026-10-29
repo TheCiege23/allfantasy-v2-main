@@ -378,6 +378,12 @@
   white-space: nowrap;
 }
 
+/* The sport on a row's meta line (ALL view, multi-sport accounts only). */
+.af-core .af-d2-row-sport {
+  font-weight: 700;
+  color: var(--muted);
+}
+
 /* ── State chips ─────────────────────────────────────────────────────── */
 
 .af-core .af-d2-chip {

@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
     week?: number | string
     regenerate?: boolean
     commissionerOverride?: boolean
+    confirmMidSeasonChange?: boolean
   }
   try {
     body = (await req.json()) as typeof body
@@ -114,6 +115,7 @@ export async function POST(req: NextRequest) {
       seasonId: gate.season.id,
       regenerate: action === 'regenerate' || body.regenerate === true,
       commissionerOverride: body.commissionerOverride === true,
+      confirmMidSeasonChange: body.confirmMidSeasonChange === true,
       actorUserId: userId,
     })
     if (!generated.ok) return NextResponse.json({ error: generated.message, code: generated.code }, { status: 409 })

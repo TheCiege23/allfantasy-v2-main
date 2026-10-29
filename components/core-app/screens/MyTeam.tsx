@@ -1687,6 +1687,7 @@ export function MyTeam({ data }: MyTeamProps) {
   // "Sleeper", not "sleeper": the raw id read as a typo in "Fix in sleeper" and "Lineup from sleeper".
   const platform = data.league.platform === 'manual' ? copy('your platform') : platformLabel(data.league.platform)
   const bestBall = data.bestBall === true || data.league.bestBall === true
+  const footballScoring = ['NFL', 'NCAAF'].includes((data.league.sport ?? '').toUpperCase())
 
   if (data.preDraft || data.eliminated || data.completed) return <OffseasonView data={data} />
 
@@ -2040,7 +2041,11 @@ export function MyTeam({ data }: MyTeamProps) {
       {proj ? (
         <section className="af-frame af-mt-basis">
           <div className="af-mt-basis-text">
-            {data.projectionBasis.scoringKnown ? (
+            {data.projectionBasis.scoringKnown && !footballScoring ? (
+              <p className="af-mt-basis-lead">
+                {copy('This league’s scoring rules are saved. Projection totals appear when a compatible player stat feed is available.')}
+              </p>
+            ) : data.projectionBasis.scoringKnown ? (
               data.projectionBasis.notes.length > 0 ? (
                 <>
                   <p className="af-mt-basis-lead">

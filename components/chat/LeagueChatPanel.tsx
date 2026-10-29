@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
@@ -16,6 +16,8 @@ import type { AIChatContext } from "@/lib/chimmy-chat"
 import { buildChimmyToolDisplayContext } from "@/lib/chimmy-interface"
 import { useAIAssistantAvailability } from "@/hooks/useAIAssistantAvailability"
 import "@/components/core-app/af-comms.css"
+import "./league-chat-channels.css"
+import { LEAGUE_CHAT_CHANNELS, type LeagueChatChannelId } from "@/lib/league-chat/leagueChatChannels"
 
 /**
  * The league page's chat: League chat · Messages · Chimmy.
@@ -44,6 +46,11 @@ type Props = {
   defaultOpen?: boolean
   onClose?: () => void
   className?: string
+  /**
+   * Native league handoff §6: the channel strip (#general, #trash-talk, #trades, #waivers, and the
+   * gold #chimmy that opens the Chimmy thread). Opt-in so the dock and harnesses are unchanged.
+   */
+  channels?: boolean
 }
 
 function buildDmChimmyPrompt(ask: ThreadAskChimmy): string {
@@ -67,6 +74,7 @@ export default function LeagueChatPanel({
   isCommissioner = false,
   onClose,
   className = "",
+  channels = false,
 }: Props) {
   const { data: session } = useSession()
   const { enabled: aiAssistantEnabled, loading: aiAvailabilityLoading } = useAIAssistantAvailability()
@@ -81,6 +89,7 @@ export default function LeagueChatPanel({
    * shows it straight away instead of on the next poll.
    */
   const [conversationEpoch, setConversationEpoch] = useState(0)
+  const [channel, setChannel] = useState<LeagueChatChannelId>("general")
 
   const chatSource = useMemo(() => {
     const value = searchParams?.get("source")?.trim()
@@ -88,6 +97,21 @@ export default function LeagueChatPanel({
   }, [searchParams])
   /* A Survivor tribe channel. Read and posted through the shared thread route, which checks membership. */
   const tribeSource = chatSource?.startsWith("tribe_") ? chatSource : null
+  /* Tribe channel icon: the tribe's round emblem mark, read from the Survivor summary (membership-checked). */
+  const [tribeIcon, setTribeIcon] = useState<{ name: string; markUrl: string } | null>(null)
+  useEffect(() => {
+    if (!tribeSource) { setTribeIcon(null); return }
+    const tribeId = tribeSource.slice("tribe_".length)
+    let cancelled = false
+    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/summary`, { cache: "no-store" })
+      .then(res => (res.ok ? res.json() : null))
+      .then((data: { tribes?: Array<{ id: string; name: string; markUrl?: string | null }> } | null) => {
+        const tribe = data?.tribes?.find(t => t.id === tribeId)
+        if (!cancelled) setTribeIcon(tribe?.markUrl ? { name: tribe.name, markUrl: tribe.markUrl } : null)
+      })
+      .catch(() => { if (!cancelled) setTribeIcon(null) })
+    return () => { cancelled = true }
+  }, [leagueId, tribeSource])
 
   const aiContextFromUrl = useMemo(() => readAIContextFromSearchParams(searchParams ?? undefined), [searchParams])
   const aiContext = useMemo<AIChatContext>(
@@ -134,13 +158,18 @@ export default function LeagueChatPanel({
     >
       <header className="flex items-center justify-between gap-2 border-b px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
         <div className="flex min-w-0 items-center gap-2">
-          <MessageCircle className="h-5 w-5 shrink-0" style={{ color: "var(--accent-cyan-strong)" }} />
+          {tribeIcon ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={tribeIcon.markUrl} alt="" width={28} height={28} className="h-7 w-7 shrink-0 rounded-full" data-testid="tribe-chat-channel-icon" />
+          ) : (
+            <MessageCircle className="h-5 w-5 shrink-0" style={{ color: "var(--accent-cyan-strong)" }} />
+          )}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold" style={{ color: "var(--text)" }}>
               {leagueName}
             </p>
             <p className="text-[11px]" style={{ color: "var(--muted2)" }}>
-              {tribeSource ? "Tribe chat · Messages · Chimmy" : "League chat · Messages · Chimmy"}
+              {tribeSource ? `${tribeIcon ? `${tribeIcon.name} tribe chat` : "Tribe chat"} · Messages · Chimmy` : "League chat · Messages · Chimmy"}
             </p>
           </div>
         </div>
@@ -196,16 +225,48 @@ export default function LeagueChatPanel({
         ))}
       </div>
 
+      {channels && !tribeSource && (activeTab === "league" || activeTab === "ai") ? (
+        <nav className="lcc-strip" aria-label="Chat channels" data-testid="league-chat-channels">
+          {LEAGUE_CHAT_CHANNELS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className="lcc-chip"
+              aria-pressed={activeTab === "league" && channel === c.id}
+              title={c.description}
+              onClick={() => {
+                setChannel(c.id)
+                setActiveTab("league")
+              }}
+              data-testid={`league-chat-channel-${c.id}`}
+            >
+              <span aria-hidden>#</span> {c.id}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="lcc-chip lcc-chimmy"
+            aria-pressed={activeTab === "ai"}
+            title="Chimmy, the AF assistant — private to you"
+            onClick={() => setActiveTab("ai")}
+            data-testid="league-chat-channel-chimmy"
+          >
+            <span aria-hidden>#</span> chimmy
+          </button>
+        </nav>
+      ) : null}
+
       {activeTab === "league" ? (
         <div className="af-cm af-cm-embed" data-testid="league-chat-conversation">
           <LeagueConversation
-            key={`${leagueId}:${tribeSource ?? ""}:${conversationEpoch}`}
+            key={`${leagueId}:${tribeSource ?? ""}:${channels ? channel : ""}:${conversationEpoch}`}
             leagueId={leagueId}
             leagueName={leagueName}
             isCommissioner={isCommissioner}
             viewerId={currentUserId}
             surface="page"
             source={tribeSource}
+            channel={channels && !tribeSource ? channel : null}
           />
         </div>
       ) : null}

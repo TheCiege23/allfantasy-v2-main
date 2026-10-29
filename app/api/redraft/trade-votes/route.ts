@@ -3,28 +3,32 @@ import type { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { hasLeagueCommissionerRights } from '@/lib/league/permissions'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import {
-  applyRedraftTradeCapTransfersInTransaction,
-  refreshCapProjections,
-  validateRedraftTradeCap,
-  validateRedraftTradeCapInTransaction,
-  type RedraftTradeCapTransferResult,
-} from '@/lib/idp/capEngine'
-import { settleRedraftTradeAssets } from '@/lib/redraft/tradeSettlement'
-import {
-  captureRedraftRosterState,
-  writeRedraftTradeExecutionSnapshot,
-} from '@/lib/redraft/tradeExecutionSnapshot'
+import { refreshCapProjections } from '@/lib/idp/capEngine'
 import { evaluateNativeTradeReversalReadiness, reverseNativeTrade } from '@/lib/redraft/tradeReversal'
 import { publishTradeReversalNotice } from '@/lib/trade-reversal/notice'
-import { getPlatformEvents, EVENT } from '@/lib/events'
-import { recordRedraftTradeMarketEvent, type RedraftMarketEventType } from '@/lib/trade-market/redraftTradeMarketEvents'
-import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
+import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
+import { evaluateRedraftTradeDeadline, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import {
+  REDRAFT_MOVES_LOCKED_CODE,
+  REDRAFT_MOVES_LOCKED_MESSAGE,
+  REDRAFT_MOVES_LOCKED_STATUS,
+  isRedraftLeagueMovesLocked,
+} from '@/lib/redraft/tradeMoveLock'
+import { postDraftRosterMoveRefusal } from '@/server/services/postDraftRosterLockService'
+import {
+  finalizeRedraftTrade,
+  snapshotObject,
+  upsertRedraftTradeDecision as upsertDecision,
+  type ProposalWithAssets,
+} from '@/lib/redraft/finalizeRedraftTrade'
+import { reviewWindowEndsAt, reviewWindowEnded, tradeReviewWindowHours } from '@/lib/redraft/tradeReviewWindow'
+import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,374 +43,35 @@ type TradeAction =
   | 'commissioner_reverse_preflight'
   | 'commissioner_reverse'
 
-type TradeAssetRow = {
-  fromRosterId: string
-  toRosterId: string
-  assetType: string
-  playerId: string | null
-  playerName: string | null
-  pickSeason: number | null
-  pickRound: number | null
-  pickNumber: number | null
-  metadata: unknown
+async function finalizeAcceptedTrade(...args: Parameters<typeof finalizeRedraftTrade>) {
+  const r = await finalizeRedraftTrade(...args)
+  return r.ok ? NextResponse.json({ proposal: r.proposal, resolved: true }) : NextResponse.json({ error: r.error }, { status: r.status })
 }
 
-type ProposalWithAssets = {
-  id: string
-  leagueId: string
-  seasonId: string
-  proposerRosterId: string
-  receiverRosterId: string
-  status: string
-  vetoMode?: string | null
-  vetoThreshold: number | null
-  expiresAt: Date | null
-  assets: TradeAssetRow[]
+/** Owner, team commissioner / co-commissioner, or tournament co-commissioner (no team needed). */
+function isCommissionerOrCo(leagueId: string, userId: string): Promise<boolean> {
+  return hasLeagueCommissionerRights(leagueId, userId, 'trades')
 }
 
-function mapLegacyOffers(assets: TradeAssetRow[], fromRosterId: string, toRosterId: string) {
-  return assets
-    .filter((a) => a.fromRosterId === fromRosterId && a.toRosterId === toRosterId)
-    .map((a) => {
-      if (a.assetType === 'player' && a.playerId) {
-        return {
-          playerId: a.playerId,
-          playerName: a.playerName ?? null,
-        }
-      }
-      return {
-        assetType: a.assetType,
-        pickSeason: a.pickSeason,
-        pickRound: a.pickRound,
-        pickNumber: a.pickNumber,
-      }
-    })
-}
-
-/**
- * Who executed the trade, for the snapshot's `executedByActorRole`.
- *
- * ⚠ PASSED EXPLICITLY, NOT DERIVED FROM `terminalEventType`. The first version of this derived the
- * role from that argument and could not work: there is no `vote_passed` market event, and the
- * league-vote path calls `finalizeAcceptedTrade` without a terminal type at all — so a trade voted
- * through by the league would have been recorded as an ordinary `user` accept. That is precisely
- * the governance blurring the execution-evidence ADR complains about.
- */
-type SnapshotActorRole = 'user' | 'commissioner' | 'league_vote'
-
-async function finalizeAcceptedTrade(
-  proposal: ProposalWithAssets,
-  proposerOwnerId: string | undefined,
-  receiverOwnerId: string | undefined,
-  decidedByUserId: string,
-  decisionReason?: string,
-  terminalEventType: RedraftMarketEventType = 'proposal_accepted',
-  executedByRole: SnapshotActorRole = 'user',
-) {
-  const failEvent = () =>
-    recordRedraftTradeMarketEvent({
-      leagueId: proposal.leagueId,
-      seasonId: proposal.seasonId,
-      tradeProposalId: proposal.id,
-      eventType: 'trade_failed',
-      actorUserId: decidedByUserId,
-    })
-  const proposerOffers = mapLegacyOffers(proposal.assets ?? [], proposal.proposerRosterId, proposal.receiverRosterId)
-  const receiverOffers = mapLegacyOffers(proposal.assets ?? [], proposal.receiverRosterId, proposal.proposerRosterId)
-
-  // A cheap early refusal, NOT the verdict that decides. The cap numbers it reads can change before
-  // the transaction below opens, so the check is repeated on `tx` after the claim — see there.
-  const cap = await validateRedraftTradeCap(
-    proposal.leagueId,
-    proposal.proposerRosterId,
-    proposal.receiverRosterId,
-    proposerOffers,
-    receiverOffers,
-  )
-  if (!cap.ok) {
-    await failEvent()
-    return NextResponse.json({ error: cap.message }, { status: 409 })
-  }
-
-  // Settle the trade for real, in ONE transaction: claim the proposal, move the IDP salary records,
-  // move RedraftRosterPlayer rows, transfer faabBalance. Either all of it happens or none of it does.
-  //
-  // 🛑 THE CAP TRANSFER USED TO RUN HERE, BEFORE THIS TRANSACTION OPENED, AND IT BROKE TWO WAYS.
-  // `applyRedraftTradeCapTransfers` opens its own transaction, so the cap moves were atomic among
-  // themselves and atomic with nothing else:
-  //   - A settlement that then threw (bad ownership, insufficient FAAB) left the IDP cap saying the
-  //     trade happened while the rosters said it had not. Nothing rolled the salary records back.
-  //   - Worse, the claim that decides which of two racing finalizers wins lived in THIS transaction,
-  //     below — so both racers ran the cap transfer first and moved salary TWICE, and the loser then
-  //     returned 409 having already written.
-  // Running it after the claim, on the same `tx`, closes both: the loser never reaches it, and a
-  // later throw rolls it back with everything else.
-  let updated
-  let capTransfer: RedraftTradeCapTransferResult = { moved: 0, transactionIds: [] }
-  try {
-    updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // Concurrency guard: atomically claim the proposal BEFORE moving any rosters.
-      // A conditional update on status='pending' ensures only one of two racing
-      // finalizers (double-click, vote-threshold vs. commissioner-approve) settles.
-      const claimed = await tx.redraftTradeProposal.updateMany({
-        where: { id: proposal.id, status: 'pending' },
-        data: { status: 'accepted', acceptedAt: new Date(), processedAt: new Date() },
-      })
-      if (claimed.count === 0) {
-        throw new Error('PROPOSAL_ALREADY_RESOLVED')
-      }
-      // 🛑 THE CAP CHECK THAT DECIDES, ON THE SETTLEMENT'S OWN TRANSACTION.
-      //
-      // The only cap check used to be the one above, run before this transaction existed. Anything
-      // that changed committed salary in between — another settlement, a cut, an extension — was
-      // invisible to it, so a trade could settle on a verdict computed against numbers that were no
-      // longer true. #742 moved the cap TRANSFER in here and named this as the gap it left.
-      //
-      // After the claim (only the race winner pays for the reads), before the transfer (so what it
-      // approves is exactly what then moves). A refusal throws, the transaction rolls back including
-      // the claim, and the catch below answers 409 with the message — the same shape as the early one.
-      const capInTx = await validateRedraftTradeCapInTransaction(
-        tx,
-        proposal.leagueId,
-        proposal.proposerRosterId,
-        proposal.receiverRosterId,
-        proposerOffers,
-        receiverOffers,
-      )
-      if (!capInTx.ok) {
-        throw new Error(capInTx.message)
-      }
-      // ⚠ BEFORE-STATE IS READ HERE AND NOWHERE LATER. Inside one transaction these rows stop
-      // being "before" the moment the settlement writes them, so the evidence has to be taken
-      // after the claim (only the race winner gets this far) and before anything moves.
-      const beforeState = await captureRedraftRosterState(tx, [
-        proposal.proposerRosterId,
-        proposal.receiverRosterId,
-      ])
-      capTransfer = await applyRedraftTradeCapTransfersInTransaction(
-        tx,
-        proposal.leagueId,
-        proposal.proposerRosterId,
-        proposal.receiverRosterId,
-        proposerOffers,
-        receiverOffers,
-      )
-      const settlement = await settleRedraftTradeAssets(tx, {
-        leagueId: proposal.leagueId,
-        proposerRosterId: proposal.proposerRosterId,
-        receiverRosterId: proposal.receiverRosterId,
-        assets: proposal.assets ?? [],
-      })
-
-      // IMMUTABLE EVIDENCE, WRITTEN WITH THE TRADE RATHER THAN AFTER IT.
-      //
-      // 🛑 `TradeExecutionSnapshot` had NO writer anywhere in this codebase — the model, its
-      // `TradeReversal` counterpart and the documents describing both were all on main, and not one
-      // row was ever created. A reversal had nothing to restore to.
-      //
-      // ⚠ This also MOVES the `TRADE_PROCESSED` emit into the transaction (same deterministic
-      // idempotency key), because the snapshot's `eventId` is NOT NULL and unique: evidence that
-      // points at an event which may never have been written is not evidence. The post-commit emit
-      // below now sends only TRADE_ACCEPTED.
-      await writeRedraftTradeExecutionSnapshot(tx, {
-        proposalId: proposal.id,
-        leagueId: proposal.leagueId,
-        seasonId: proposal.seasonId,
-        proposerRosterId: proposal.proposerRosterId,
-        receiverRosterId: proposal.receiverRosterId,
-        executedByActorId: decidedByUserId,
-        executedByActorRole: executedByRole,
-        governance: {
-          vetoMode: proposal.vetoMode ?? null,
-          vetoThreshold: proposal.vetoThreshold ?? null,
-          terminalEventType,
-          decisionReason: decisionReason ?? null,
-        },
-        validations: { idpCap: 'ok', capTransfersApplied: capTransfer.moved },
-        assetSummary: {
-          proposerOffers,
-          receiverOffers,
-          playersMoved: settlement.playersMoved,
-          faabTransferred: settlement.faabTransferred,
-          picksRecorded: settlement.picksRecorded,
-        },
-        sourceTransactionIds: capTransfer.transactionIds,
-        beforeState,
-        afterState: await captureRedraftRosterState(tx, [
-          proposal.proposerRosterId,
-          proposal.receiverRosterId,
-        ]),
-        executedAt: new Date(),
-      })
-
-      return tx.redraftTradeProposal.findUniqueOrThrow({ where: { id: proposal.id } })
-    })
-  } catch (e) {
-    // Lost the race — another finalizer already settled this proposal. Do not
-    // record a spurious failure or re-settle.
-    if (e instanceof Error && e.message === 'PROPOSAL_ALREADY_RESOLVED') {
-      return NextResponse.json({ error: 'Proposal already resolved' }, { status: 409 })
-    }
-    await failEvent()
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Trade settlement failed' },
-      { status: 409 },
-    )
-  }
-  await upsertDecision(proposal.id, 'accepted', decidedByUserId, decisionReason)
-
-  // POST-COMMIT, and deliberately not inside the transaction above. `IDPCapProjection` is a derived
-  // view; recomputing it from inside would publish projections for a settlement that can still roll
-  // back. `applyRedraftTradeCapTransfers` — the non-transactional version this path used to call —
-  // refreshed post-commit for the same reason, so omitting it here would silently regress projection
-  // freshness on every redraft trade while the ledger stayed correct and nothing went red.
-  //
-  // Best-effort: the trade is already committed and a stale projection must not turn a settled trade
-  // into an error response.
-  if (capTransfer.moved > 0) {
-    for (const rosterId of new Set([proposal.proposerRosterId, proposal.receiverRosterId])) {
-      await refreshCapProjections(proposal.leagueId, rosterId).catch((e) =>
-        console.error('[redraft/trade-votes] cap projection refresh failed', rosterId, e),
-      )
-    }
-  }
-
-  // G15.2b — best-effort emit (never throws; only the race-winning finalizer reaches here,
-  // and deterministic keys dedupe → exactly one accepted+processed event per trade).
-  {
-    const events = getPlatformEvents()
-    const ctx = {
-      leagueId: proposal.leagueId,
-      seasonId: proposal.seasonId,
-      leagueConcept: 'redraft' as const,
-      actor: { type: 'user' as const, id: decidedByUserId ?? null },
-      source: 'route:trade-votes',
-      subjects: [{ kind: 'trade', id: proposal.id }],
-    }
-    await events.emit(EVENT.TRADE_ACCEPTED, { ...ctx, idempotencyKey: `trade.accepted:${proposal.id}`, payload: { tradeId: proposal.id } })
-    // ⚠ TRADE_PROCESSED IS NO LONGER EMITTED HERE. It moved into the settlement transaction, under
-    // the SAME deterministic key, because `TradeExecutionSnapshot.eventId` is NOT NULL and unique —
-    // the snapshot cannot reference an event that a best-effort post-commit emit might never write.
-    // Re-adding it here would either duplicate the event or, worse, look like the only emit.
-  }
-
-  if (proposerOwnerId && receiverOwnerId) {
-    void recordTradeOutcomeForBothManagers({
-      leagueId: proposal.leagueId,
-      eventType: 'trade_accepted',
-      proposerUserId: proposerOwnerId,
-      receiverUserId: receiverOwnerId,
-      payload: { proposalId: proposal.id, source: 'redraft_trade_proposal' },
-    })
-  }
-
-  if (proposerOwnerId && receiverOwnerId) {
-    await prisma.redraftLeagueTrade.create({
-      data: {
-        leagueId: proposal.leagueId,
-        seasonId: proposal.seasonId,
-        proposerId: proposerOwnerId,
-        proposerRosterId: proposal.proposerRosterId,
-        receiverId: receiverOwnerId,
-        receiverRosterId: proposal.receiverRosterId,
-        proposerOffers,
-        receiverOffers,
-        status: 'accepted',
-        processedAt: new Date(),
-        expiresAt: proposal.expiresAt ?? new Date(),
-        notes: 'Normalized proposal accepted and mirrored for legacy readers (the redraft trades list)',
-      },
-    })
-  }
-  // The integrity scan reviews the proposal itself — the real trade, through the one trade engine.
-  // Wrapped so neither a sync throw nor a rejection can reach a trade that has already settled.
-  void Promise.resolve()
-    .then(() => enqueueCollusionScan(proposal.leagueId, { kind: 'redraft', proposalId: proposal.id }, [proposal.proposerRosterId, proposal.receiverRosterId]))
-    .catch((e) => console.error('[redraft/trade-votes] enqueueCollusionScan failed', e))
-
-  // Market ledger: terminal acceptance event + processed event (best-effort, idempotent).
-  await recordRedraftTradeMarketEvent({
-    leagueId: proposal.leagueId, seasonId: proposal.seasonId, tradeProposalId: proposal.id,
-    eventType: terminalEventType, actorUserId: decidedByUserId,
-  })
-  await recordRedraftTradeMarketEvent({
-    leagueId: proposal.leagueId, seasonId: proposal.seasonId, tradeProposalId: proposal.id,
-    eventType: 'trade_processed', actorUserId: decidedByUserId,
-  })
-
-  // The result, under the offer card in the two managers' DM. Fire-and-forget; no-op when there is no card.
-  // A receiver's own accept names them; a commissioner approval or a passed league vote says who decided.
-  queueTradeStatusInDm(
-    executedByRole === 'user'
-      ? { source: 'redraft', tradeId: proposal.id, status: 'accepted', actorUserId: decidedByUserId, detail: 'Rosters are updated.' }
-      : {
-          source: 'redraft',
-          tradeId: proposal.id,
-          status: 'processed',
-          detail: executedByRole === 'commissioner' ? 'The commissioner approved it.' : 'The league vote approved it.',
-        },
-  )
-
-  return NextResponse.json({ proposal: updated, resolved: true })
-}
-
-async function isCommissionerOrCo(leagueId: string, userId: string): Promise<boolean> {
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: {
-      userId: true,
-      teams: {
-        where: { claimedByUserId: userId },
-        select: { isCommissioner: true, isCoCommissioner: true },
-      },
-    },
-  })
-  if (!league) return false
-  if (league.userId === userId) return true
-  return league.teams.some((t) => t.isCommissioner || t.isCoCommissioner)
-}
-
-/** A decision snapshot as an object, whatever was stored. */
-function snapshotObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
-}
 
 /** A receipt id the client echoes back: kept only if it looks like one, never trusted as anything else. */
 function reviewIdFrom(value: unknown): string | null {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : null
 }
 
-async function upsertDecision(
-  proposalId: string,
-  decision: 'accepted' | 'rejected' | 'vetoed' | 'cancelled' | 'expired' | 'processed',
-  decidedByUserId: string,
-  decisionReason?: string,
-  /** Merged into the decision's snapshot — e.g. the commissioner review that was shown. */
-  snapshotExtra?: Record<string, unknown>,
-) {
-  const existing = await prisma.redraftTradeDecision.findFirst({ where: { proposalId } })
-  if (existing) {
-    return prisma.redraftTradeDecision.update({
-      where: { proposalId },
-      data: {
-        decision,
-        decidedByUserId,
-        decisionReason: decisionReason ?? null,
-        ...(snapshotExtra ? { snapshot: { ...snapshotObject(existing.snapshot), ...snapshotExtra } as Prisma.InputJsonValue } : {}),
-      },
-    })
-  }
-
-  return prisma.redraftTradeDecision.create({
-    data: {
-      id: crypto.randomUUID(),
-      proposalId,
-      decision,
-      decidedByUserId,
-      decisionReason: decisionReason ?? null,
-      snapshot: (snapshotExtra ?? {}) as Prisma.InputJsonValue,
-    },
-  })
+/**
+ * 🛑 THE COMMISSIONER'S MOVE LOCK (`League.lockAllMoves`) — this route never read it, for any sport.
+ *
+ * Unlike the deadline, it binds at SETTLEMENT as well as at acceptance: a trade accepted before the lock may
+ * not be approved or voted through while moves are frozen. Rejections and vetoes move nothing and stay open.
+ * The code is the NFL trade runtime's `MOVE_LOCKED`. See lib/redraft/tradeMoveLock.ts.
+ */
+async function refuseIfMovesLocked(leagueId: string): Promise<NextResponse | null> {
+  if (!(await isRedraftLeagueMovesLocked(leagueId))) return null
+  return NextResponse.json(
+    { error: REDRAFT_MOVES_LOCKED_MESSAGE, code: REDRAFT_MOVES_LOCKED_CODE },
+    { status: REDRAFT_MOVES_LOCKED_STATUS },
+  )
 }
 
 /** Record the commissioner review a decision was made with (design step 6: "decision logged"). */
@@ -522,7 +187,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Proposal is not pending', proposal }, { status: 409 })
   }
 
-  if (proposal.expiresAt && proposal.expiresAt.getTime() < Date.now()) {
+  /*
+   * AN ACCEPTED TRADE PAST ITS REVIEW WINDOW IS GOING THROUGH (lib/redraft/tradeReviewWindow.ts).
+   *
+   * 🛑 THIS BRANCH USED TO EXPIRE IT. Below, any pending proposal past `expiresAt` is expired on the
+   * next click — which, for a trade both managers had agreed to, meant a late veto vote or even an idle
+   * click killed it. The window closing with no veto is the decision; the hourly sweep executes it. Until
+   * then the commissioner may still approve (it settles now) — nothing else may change the outcome.
+   */
+  if (reviewWindowEnded(proposal, Date.now())) {
+    if (action !== 'commissioner_approve') {
+      return NextResponse.json(
+        { error: 'The review window has ended with no veto. This trade is going through.', code: 'REVIEW_WINDOW_ENDED' },
+        { status: 409 },
+      )
+    }
+  } else if (proposal.expiresAt && proposal.expiresAt.getTime() < Date.now()) {
     const expired = await prisma.redraftTradeProposal.update({
       where: { id: proposal.id },
       data: { status: 'expired' },
@@ -623,6 +303,55 @@ export async function POST(req: NextRequest) {
         )
       }
 
+      // The move lock first, as the trade runtime orders it ahead of the deadline.
+      const lockedAtAccept = await refuseIfMovesLocked(proposal.leagueId)
+      if (lockedAtAccept) return lockedAtAccept
+
+      /*
+       * 🛑 THE DEADLINE BINDS AT ACCEPTANCE, AND THIS PATH NEVER CHECKED IT. A proposal made before the
+       * deadline could be accepted — and, under `no_veto`, settled — any week after it.
+       *
+       * ⚠ ONLY HERE, NOT AT SETTLEMENT. Commissioner approval and a league vote both require
+       * `acceptedAt`, which only this gate writes, so a trade accepted before the deadline may finish
+       * its review after it — what Sleeper and ESPN do. See lib/trade-deadline/tradeDeadlineWindow.ts.
+       */
+      const deadline = await evaluateRedraftTradeDeadline(proposal.leagueId)
+      if (deadline.passed) {
+        return NextResponse.json(
+          { error: tradeDeadlinePassedMessage(deadline), code: 'TRADE_DEADLINE_PASSED' },
+          { status: 409 },
+        )
+      }
+
+      // Post-draft roster lock: an offer made before the draft ended cannot settle during it.
+      // After the existing refusals (already accepted, deadline) so their behaviour is unchanged.
+      const postDraftLock = await postDraftRosterMoveRefusal(proposal.leagueId, 'trade')
+      if (postDraftLock) {
+        return NextResponse.json(
+          { error: postDraftLock.error, code: postDraftLock.code, unlocksAt: postDraftLock.unlocksAt },
+          { status: postDraftLock.status },
+        )
+      }
+
+      /*
+       * "Hold flagged trades" (lib/integrity/holdFlaggedTrades.ts): checked now, before anything
+       * settles. A flagged trade becomes a commissioner-review trade whatever the league's mode, and
+       * the review sweep will not auto-pass it while its flag is open — the commissioner decides.
+       */
+      const holdLeague = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { settings: true } })
+      const held = await shouldHoldAcceptedTrade({
+        leagueId: proposal.leagueId,
+        settings: holdLeague?.settings,
+        ref: { kind: 'redraft', proposalId: proposal.id },
+      })
+      if (held && proposal.vetoMode !== 'commissioner') {
+        await prisma.redraftTradeProposal.updateMany({
+          where: { id: proposal.id, status: 'pending', acceptedAt: null },
+          data: { vetoMode: 'commissioner' },
+        })
+        proposal.vetoMode = 'commissioner'
+      }
+
       if (proposal.vetoMode === 'no_veto') {
         return finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'proposal_accepted')
       }
@@ -631,9 +360,15 @@ export async function POST(req: NextRequest) {
        * Conditional on BOTH the status and `acceptedAt` being unset, so two simultaneous accepts
        * cannot both record one — the same reason the settlement claim is conditional.
        */
+      /*
+       * Acceptance opens the review window: `expiresAt` stops being the offer's deadline and becomes the
+       * review's end. When it passes with no veto the sweep executes the trade (lib/redraft/tradeReviewWindowSweep.ts).
+       */
+      const acceptedAt = new Date()
+      const windowLeague = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { tradeReviewHours: true } })
       const claimedAccept = await prisma.redraftTradeProposal.updateMany({
         where: { id: proposal.id, status: 'pending', acceptedAt: null },
-        data: { acceptedAt: new Date() },
+        data: { acceptedAt, expiresAt: reviewWindowEndsAt(acceptedAt, tradeReviewWindowHours(windowLeague?.tradeReviewHours)) },
       })
       if (claimedAccept.count === 0) {
         return NextResponse.json({ error: 'This trade is no longer awaiting your acceptance.' }, { status: 409 })
@@ -663,10 +398,11 @@ export async function POST(req: NextRequest) {
         tradeId: proposal.id,
         status: 'accepted',
         actorUserId: userId,
-        detail:
-          proposal.vetoMode === 'league_vote'
-            ? 'It goes to a league vote before it processes.'
-            : 'It goes to commissioner review before it processes.',
+        detail: held
+          ? 'The league integrity check flagged it, so it is held until the commissioner approves or vetoes it.'
+          : proposal.vetoMode === 'league_vote'
+            ? 'It goes to a league vote, and goes through when the review window ends unless the league vetoes it.'
+            : 'It goes to commissioner review, and goes through when the review window ends unless the commissioner vetoes it.',
       })
       return NextResponse.json({
         proposal: awaitingReview,
@@ -723,6 +459,8 @@ export async function POST(req: NextRequest) {
           { status: 409 },
         )
       }
+      const lockedAtApproval = await refuseIfMovesLocked(proposal.leagueId)
+      if (lockedAtApproval) return lockedAtApproval
       const approved = await finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'commissioner_approved', 'commissioner')
       await noteCommissionerReview(proposal.id, { commissionerDecision: 'approve', reviewId: reviewIdFrom(body.reviewId) })
       return approved
@@ -771,6 +509,13 @@ export async function POST(req: NextRequest) {
     }
     if (isProposerOwner || isReceiverOwner) {
       return NextResponse.json({ error: 'Trade parties cannot vote on their own proposal' }, { status: 403 })
+    }
+
+    // An approve vote can be the one that settles the trade, so it is refused before it is recorded. A veto
+    // vote moves nothing and stays open.
+    if (action === 'vote_approve') {
+      const lockedAtVote = await refuseIfMovesLocked(proposal.leagueId)
+      if (lockedAtVote) return lockedAtVote
     }
 
     const voteValue = action === 'vote_approve' ? 'approve' : 'veto'

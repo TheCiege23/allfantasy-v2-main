@@ -10,7 +10,7 @@
  *   3. Manager avatar inner circle shrank: h-8 w-8 / sm:h-9 sm:w-9.
  *   4. Manager slot min-width tightened: min-w-[56px] / sm:min-w-[64px].
  *   5. Manager label column narrowed: w-[62px] / sm:w-[70px].
- *   6. Board cell height reduced: h-[42px] / sm:h-[44px].
+ *   6. Board cell height: h-[56px] / sm:h-[60px] (was 42/44px — raised for readability).
  *   7. data-testid="draft-manager-strip" wrapper is present.
  *   8. Amber glow (draft-live-current-pick) class on current-pick cell.
  */
@@ -26,6 +26,7 @@ function read(rel: string): string {
 
 const stripSrc = read('components/app/draft-room/DraftManagerStrip.tsx')
 const cellSrc = read('components/app/draft-room/DraftBoardCell.tsx')
+const boardSrc = read('components/app/draft-room/DraftBoard.tsx')
 
 // ---------------------------------------------------------------------------
 // 1. Strip outer wrapper — compact padding
@@ -113,25 +114,26 @@ describe('DraftManagerStrip — label column width (Commit 21)', () => {
 // 6. DraftBoardCell height — tighter tiles
 // ---------------------------------------------------------------------------
 
-describe('DraftBoardCell — compact height (Commit 21)', () => {
-  it('cell base height is h-[42px] (reduced from h-[44px])', () => {
-    expect(cellSrc).toMatch(/h-\[42px\]/)
+describe('DraftBoardCell — tile height (56px readability redesign, supersedes Commit 21)', () => {
+  // Commit 21 shrank tiles to 42/44px; at that height and an 88px column the player name
+  // truncated to a few characters and the team/bye line clipped. Tiles are now 56/60px.
+  it('cell base height is h-[56px]', () => {
+    expect(cellSrc).toMatch(/flex h-\[56px\] min-h-\[56px\]/)
   })
 
-  it('cell min-height is min-h-[42px]', () => {
-    expect(cellSrc).toMatch(/min-h-\[42px\]/)
+  it('cell sm height is sm:h-[60px] sm:min-h-[60px]', () => {
+    expect(cellSrc).toMatch(/sm:h-\[60px\] sm:min-h-\[60px\]/)
   })
 
-  it('cell sm height is sm:h-[44px] (reduced from sm:h-[46px])', () => {
-    expect(cellSrc).toMatch(/sm:h-\[44px\]/)
+  it('old 42px / 44px tile heights are gone', () => {
+    expect(cellSrc).not.toMatch(/flex h-\[42px\] min-h-\[42px\]/)
+    expect(cellSrc).not.toMatch(/sm:h-\[44px\] sm:min-h-\[44px\]/)
   })
 
-  it('cell sm min-height is sm:min-h-[44px]', () => {
-    expect(cellSrc).toMatch(/sm:min-h-\[44px\]/)
-  })
-
-  it('old h-[44px] base height is gone', () => {
-    expect(cellSrc).not.toMatch(/flex h-\[44px\] min-h-\[44px\]/)
+  it('board columns are at least 104px and round labels match the tile height', () => {
+    expect(boardSrc).toMatch(/minmax\(104px, 1fr\)/)
+    expect(boardSrc).not.toMatch(/minmax\(88px, 1fr\)/)
+    expect(boardSrc).toMatch(/min-h-\[56px\][^`"]*sm:min-h-\[60px\]/)
   })
 })
 

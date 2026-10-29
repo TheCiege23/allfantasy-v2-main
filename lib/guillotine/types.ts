@@ -117,4 +117,6 @@ export type GuillotineEventType =
   | 'weekly_recap'
   | 'chop_animation_trigger'
   | 'roster_released'
+  /** A chopped team's unspent FAAB was split among the survivors (./faabOnChop.ts). */
+  | 'faab_split'
   | 'removal_request'

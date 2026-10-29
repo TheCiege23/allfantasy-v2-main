@@ -27,6 +27,10 @@ import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { processExpiredDraftPicks } from '@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks'
 import { mirrorActiveSleeperDrafts } from '@/lib/draft/mirrorActiveSleeperDrafts'
 import { startScheduledSurvivorDrafts } from '@/lib/survivor/startScheduledSurvivorDrafts'
+import { reportSurvivorAutomationError } from '@/lib/survivor/survivorAutomationReporting'
+import { startScheduledDynastyDrafts, startScheduledRedraftDrafts } from '@/lib/draft/startScheduledRedraftDrafts'
+import { fillAutoDraftBoards, type FillAutoDraftBoardsSummary } from '@/lib/live-draft-engine/autoDraftFill'
+import { processExpiredDispersalPicks, type ExpiredDispersalPicksSummary } from '@/lib/dispersal-draft/expiredDispersalPicks'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +39,14 @@ const DEFAULT_MAX_LEAGUES = 40
 
 function isEnabled(): boolean {
   return process.env.DRAFT_TICK_CRON_ENABLED?.trim().toLowerCase() === 'true'
+}
+
+function dispersalMeta(summary: ExpiredDispersalPicksSummary) {
+  return { scanned: summary.scanned, advanced: summary.advanced, errors: summary.errors.slice(0, 10) }
+}
+
+function autoDraftsMeta(summary: FillAutoDraftBoardsSummary) {
+  return { scanned: summary.scanned, filled: summary.filled, picks: summary.picks, completed: summary.completed, errors: summary.errors.slice(0, 10) }
 }
 
 export async function GET(request: NextRequest) {
@@ -96,15 +108,43 @@ export async function GET(request: NextRequest) {
 
         // A scheduled Survivor draft is an explicit league setting. Start it on
         // the server even when browser-driven autopick is disabled.
-        const survivorStarts = await startScheduledSurvivorDrafts().catch((error) => ({
-          scanned: 0, started: 0, skipped: 0,
+        const survivorStarts = await startScheduledSurvivorDrafts().catch((error) => {
+          reportSurvivorAutomationError(error, { job: 'draft_start' })
+          return {
+            scanned: 0, started: 0, skipped: 0,
+            errors: [{ leagueId: '', error: error instanceof Error ? error.message : String(error) }],
+          }
+        })
+
+        // Same for a redraft league (NFL/NBA/NHL/MLB) whose commissioner turned on Autostart Draft:
+        // the scheduled time is the commissioner's instruction, not a pick made on anyone's behalf.
+        const redraftStarts = await startScheduledRedraftDrafts().catch((error) => ({
+          scanned: 0, started: 0, skipped: 0, skips: [] as Array<{ leagueId: string; reason: string }>,
           errors: [{ leagueId: '', error: error instanceof Error ? error.message : String(error) }],
         }))
+        // And a dynasty league (startup or rookie draft) whose commissioner turned on Autostart Draft,
+        // including a rookie draft the calendar opened with "start it N days after it opens".
+        const dynastyStarts = await startScheduledDynastyDrafts().catch((error) => ({
+          scanned: 0, started: 0, skipped: 0, skips: [] as Array<{ leagueId: string; reason: string }>,
+          errors: [{ leagueId: '', error: error instanceof Error ? error.message : String(error) }],
+        }))
+        // An auto draft is the commissioner's instruction that the computer drafts every seat, so
+        // like a scheduled start it runs whether or not server-side autopick is enabled.
+        const autoDrafts: FillAutoDraftBoardsSummary = await fillAutoDraftBoards({ maxLeagues: 10, budgetMs: 40_000 }).catch((error) => ({
+          scanned: 0, filled: 0, picks: 0, completed: 0, outcomes: [],
+          errors: [{ leagueId: '', message: error instanceof Error ? error.message : String(error) }],
+        }))
+        // A dispersal draft's clock (lib/dispersal-draft/expiredDispersalPicks.ts): its commissioner switched
+        // "Auto-pick on timeout" on and set the clock, so like an auto draft it runs whatever the flag says.
+        const dispersal: ExpiredDispersalPicksSummary = await processExpiredDispersalPicks({ maxDrafts: 25 }).catch((error) => ({
+          scanned: 0, advanced: 0, errors: [{ draftId: '', error: error instanceof Error ? error.message : String(error) }],
+        }))
+        const startErrors = survivorStarts.errors.length + redraftStarts.errors.length + dynastyStarts.errors.length + autoDrafts.errors.length + dispersal.errors.length
 
         // Autopick is inert until deliberately enabled — see SAFETY above.
-        if (!isEnabled()) return { disabled: true as const, mirror, survivorStarts, summary: null }
+        if (!isEnabled()) return { disabled: true as const, mirror, survivorStarts, redraftStarts, dynastyStarts, autoDrafts, dispersal, startErrors, summary: null }
 
-        return { disabled: false as const, mirror, survivorStarts, summary: await processExpiredDraftPicks({ maxLeagues }) }
+        return { disabled: false as const, mirror, survivorStarts, redraftStarts, dynastyStarts, autoDrafts, dispersal, startErrors, summary: await processExpiredDraftPicks({ maxLeagues }) }
       },
       (r) =>
         r.summary
@@ -114,7 +154,7 @@ export async function GET(request: NextRequest) {
               rowsSkipped: r.summary.skipped,
               // A per-league autopick failure must not fail the whole tick — the next
               // tick retries that league. Surface it as a degraded run instead.
-              status: r.summary.errors.length > 0 || r.survivorStarts.errors.length > 0 ? 'partial' : 'success',
+              status: r.summary.errors.length > 0 || r.startErrors > 0 ? 'partial' : 'success',
               metadata: {
                 scanned: r.summary.scanned,
                 processed: r.summary.processed,
@@ -122,12 +162,23 @@ export async function GET(request: NextRequest) {
                 errorCount: r.summary.errors.length,
                 errors: r.summary.errors.slice(0, 10),
                 survivorStarts: r.survivorStarts,
+                redraftStarts: { ...r.redraftStarts, skips: r.redraftStarts.skips.slice(0, 10) },
+                dynastyStarts: { ...r.dynastyStarts, skips: r.dynastyStarts.skips.slice(0, 10) },
+                autoDrafts: autoDraftsMeta(r.autoDrafts),
+                dispersal: dispersalMeta(r.dispersal),
               },
             }
           : // Deliberately inert, not broken. `success` keeps the run out of the failure
             // telemetry while the heartbeat still proves the scheduler fired.
-            { status: r.survivorStarts.errors.length > 0 ? 'partial' : 'success',
-              metadata: { autopickDisabled: true, survivorStarts: r.survivorStarts } },
+            { status: r.startErrors > 0 ? 'partial' : 'success',
+              metadata: {
+                autopickDisabled: true,
+                survivorStarts: r.survivorStarts,
+                redraftStarts: { ...r.redraftStarts, skips: r.redraftStarts.skips.slice(0, 10) },
+                dynastyStarts: { ...r.dynastyStarts, skips: r.dynastyStarts.skips.slice(0, 10) },
+                autoDrafts: autoDraftsMeta(r.autoDrafts),
+                dispersal: dispersalMeta(r.dispersal),
+              } },
     )
 
     if (tick.disabled) {
@@ -137,11 +188,15 @@ export async function GET(request: NextRequest) {
         reason: 'DRAFT_TICK_CRON_ENABLED is not "true" — autopick skipped, mirror still ran',
         mirror: tick.mirror,
         survivorStarts: tick.survivorStarts,
+        redraftStarts: tick.redraftStarts,
+        dynastyStarts: tick.dynastyStarts,
+        autoDrafts: autoDraftsMeta(tick.autoDrafts),
+        dispersal: dispersalMeta(tick.dispersal),
         ranAt: new Date().toISOString(),
       })
     }
 
-    return NextResponse.json({ ok: true, ...tick.summary, mirror: tick.mirror, survivorStarts: tick.survivorStarts, ranAt: new Date().toISOString() })
+    return NextResponse.json({ ok: true, ...tick.summary, mirror: tick.mirror, survivorStarts: tick.survivorStarts, redraftStarts: tick.redraftStarts, dynastyStarts: tick.dynastyStarts, autoDrafts: autoDraftsMeta(tick.autoDrafts), dispersal: dispersalMeta(tick.dispersal), ranAt: new Date().toISOString() })
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'draft-tick failed' },

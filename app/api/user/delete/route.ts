@@ -1,3 +1,4 @@
+import { cancelGooglePlayOnDelete } from "@/lib/google-play/billingCancellation"
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -70,6 +71,7 @@ export async function POST(req: Request) {
           select: { stripeSubscriptionId: true, stripeCustomerId: true, source: true, status: true },
         }),
       getStripe: getStripeClient,
+      cancelGooglePlay: cancelGooglePlayOnDelete,
     })
   } catch (error) {
     console.error("[user/delete] subscription cancel failed:", error instanceof Error ? error.message : error)

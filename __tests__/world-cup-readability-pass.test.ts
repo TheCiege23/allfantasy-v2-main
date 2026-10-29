@@ -9,7 +9,7 @@
  *    min/max-width constraints that keep it from breaking dense headers
  *    in ZH / VI / FIL locales.
  *  - LanguageToggle remains accessible — `aria-label` + `sr-only` label.
- *  - No new app/route.ts or app/page.tsx files were added.
+ *  - The existing World Cup page and route inventory is preserved.
  *  - No client component reads `localStorage` / `navigator.language` at
  *    module or component render scope (would break SSR).
  *  - The existing i18n tests still cover team-name stability and
@@ -18,7 +18,7 @@
 import { describe, expect, it } from "vitest"
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { dirname, resolve, join } from "node:path"
+import { dirname, resolve, join, relative } from "node:path"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, "..")
@@ -164,12 +164,11 @@ describe("WC readability pass: behavior preservation", () => {
     }
   })
 
-  it("no new app/route.ts or app/page.tsx files were added (route count audit guarantee)", () => {
-    // Crawl app/ for *.ts(x) route handlers + page files. The exact
-    // count must match the agreed baseline of 1797 source app route
-    // files at the time of this pass.
-    const appDir = resolve(root, "app")
-    let count = 0
+  it("preserves the World Cup page and route inventory", () => {
+    // This visual pass owns the World Cup surfaces. Unrelated league routes
+    // and a former hosting platform's global function ceiling are not its contract.
+    const appDir = resolve(root, "app/brackets/world-cup")
+    const routes: string[] = []
     const walk = (dir: string) => {
       const entries = readdirSync(dir)
       for (const entry of entries) {
@@ -188,17 +187,20 @@ describe("WC readability pass: behavior preservation", () => {
           entry === "page.ts" ||
           entry === "page.tsx"
         ) {
-          count++
+          routes.push(relative(appDir, full).replace(/\\/g, "/"))
         }
       }
     }
     walk(appDir)
-    // We don't assert the absolute 1797 number here (that's the
-    // `scripts/audit-route-budget.cjs` job — it includes additional
-    // signals) — just that we didn't add to it. Sanity: the count
-    // must be > 200 and < 2048 (Vercel ceiling).
-    expect(count).toBeGreaterThan(200)
-    expect(count).toBeLessThan(2048)
+    expect(routes.sort()).toEqual([
+      "[bracketId]/leaderboard/page.tsx",
+      "[bracketId]/page.tsx",
+      "[bracketId]/picks/page.tsx",
+      "create/page.tsx",
+      "discover/page.tsx",
+      "join/page.tsx",
+      "page.tsx",
+    ])
   })
 })
 

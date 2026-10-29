@@ -1,5 +1,4 @@
 import 'server-only'
-import { survivorPublicCouncil } from './survivorPublicCouncil'
 
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
@@ -19,6 +18,9 @@ import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { getPendingTribeRedraw } from './survivorTribeRedrawDecision'
+import { SURVIVOR_COMMISSIONER_ALERT_AUDIT_ACTION } from './survivorCommissionerAlerts'
+import { buildSurvivorCommissionerTodo, type SurvivorCommissionerTodo } from './survivorCommissionerTodo'
 
 export type SurvivorCommissionerDashboardResult =
   | {
@@ -58,9 +60,16 @@ export type SurvivorCommissionerDashboardResult =
       } | null
       config: Awaited<ReturnType<typeof getSurvivorConfig>>
       week: number
-      tribes: Awaited<ReturnType<typeof getTribesWithMembers>>
-      council: Awaited<ReturnType<typeof getCouncil>>
-      privateBallots: { voterName: string; targetName: string; submittedAt: string; doesNotCount: boolean }[]
+      tribes: Array<Awaited<ReturnType<typeof getTribesWithMembers>>[number] & {
+        emoji: ReturnType<typeof extractLeadingTribeIcon>
+        /** Members carry the manager behind the roster so the host can move them by name. */
+        members: Array<Awaited<ReturnType<typeof getTribesWithMembers>>[number]['members'][number] & { userId: string | null; displayName: string | null }>
+      }>
+      tribeRedraw: Awaited<ReturnType<typeof getPendingTribeRedraw>>
+      /** The weekly to-do list: usually "nothing needed". */
+      todo: SurvivorCommissionerTodo
+      council: { id: string; week: number; status: string; isRevealed: boolean } | null
+      privateBallots: []
       privateIdols: { id: string; ownerName: string; powerLabel: string }[]
       juryCount: number
       merged: boolean
@@ -137,6 +146,8 @@ export async function buildSurvivorCommissionerDashboard(
     exileIsland,
     activeChallenges,
     nbaAdpRows,
+    tribeRedraw,
+    sentAlerts,
   ] = await Promise.all([
     getSurvivorConfig(leagueId),
     getTribesWithMembers(leagueId),
@@ -158,11 +169,26 @@ export async function buildSurvivorCommissionerDashboard(
     prisma.exileIsland.findUnique({ where: { leagueId }, select: { isActive: true } }),
     prisma.survivorChallenge.count({ where: { leagueId, status: { in: ['active', 'open'] } } }),
     league.sport === 'NBA' ? prisma.adpDataRecord.count({ where: { sport: 'NBA', season: nbaSeason } }) : Promise.resolve(null),
+    getPendingTribeRedraw(leagueId),
+    // Alerts the runner raised that the to-do list keeps showing while the condition holds.
+    prisma.survivorAuditEntry.findMany({
+      where: { leagueId, action: SURVIVOR_COMMISSIONER_ALERT_AUDIT_ACTION, OR: [{ relatedEntityId: { startsWith: 'scores_overdue:' } }, { relatedEntityId: { startsWith: 'jury_overdue:' } }] },
+      orderBy: { createdAt: 'desc' }, take: 20, select: { relatedEntityId: true },
+    }),
   ])
 
+  const activeCast = tribeRows.length
+    ? await prisma.survivorPlayer.findMany({ where: { leagueId, playerState: 'active' }, select: { userId: true, displayName: true, redraftRosterId: true } })
+    : []
+  const castByRoster = new Map(activeCast.filter(player => player.redraftRosterId).map(player => [player.redraftRosterId as string, player]))
   const tribes = tribeRows.map((tribe: Awaited<ReturnType<typeof getTribesWithMembers>>[number]) => ({
     ...tribe,
     emoji: extractLeadingTribeIcon(tribe.name),
+    members: tribe.members.map(member => ({
+      ...member,
+      userId: castByRoster.get(member.rosterId)?.userId ?? null,
+      displayName: castByRoster.get(member.rosterId)?.displayName ?? null,
+    })),
   }))
 
   const afPlan = resolveAfPlanFromEntitlement(entitlementSnapshot.plans, entitlementSnapshot.status)
@@ -172,7 +198,7 @@ export async function buildSurvivorCommissionerDashboard(
   }
 
   const gs = gameState
-  const privateIdolRows = access.isNonParticipatingCommissionerHost
+  const privateIdolRows = access.decisions.canSeeHiddenIdolAssignments
     ? await prisma.survivorIdol.findMany({
         where: { leagueId, status: { in: ['hidden', 'revealed'] }, isUsed: false },
         select: { id: true, currentOwnerUserId: true, powerLabel: true, powerType: true },
@@ -185,17 +211,37 @@ export async function buildSurvivorCommissionerDashboard(
       })
     : []
   const ownerNames = new Map(idolOwners.map(owner => [owner.userId, owner.displayName]))
-  const readinessIssues: string[] = []
-  if (league.leagueSize && claimedManagers < league.leagueSize) readinessIssues.push(`${league.leagueSize - claimedManagers} manager seats still need to be claimed.`)
-  if (!draftRow) readinessIssues.push('No current draft session is available.')
-  if (draftRow && ['pre_draft', 'scheduled'].includes(draftRow.status) && nbaAdpRows === 0) readinessIssues.push('NBA ADP is unavailable. Verify the player pool and autopick order before starting the draft.')
-  if (!exileId && access.settings.exileIslandEnabled) readinessIssues.push('Exile is enabled but its side league is not linked.')
-  if (config.exileReturnEnabled !== access.settings.exileIslandEnabled) readinessIssues.push('Exile return rules disagree between league settings and the Survivor engine.')
-  if (config.idolCount !== access.settings.idolCount) readinessIssues.push('Idol inventory disagrees between league settings and the Survivor engine.')
-  if (config.mergeTrigger !== (access.settings.mergeTriggerType === 'active_player_count' ? 'player_count' : 'week')) readinessIssues.push('Merger trigger disagrees between league settings and the Survivor engine.')
+  // Setup gaps other than open seats and automation, which the to-do list words on its own.
+  const setupIssues: string[] = []
+  if (!draftRow) setupIssues.push('No current draft session is available.')
+  if (draftRow && ['pre_draft', 'scheduled'].includes(draftRow.status) && nbaAdpRows === 0) setupIssues.push('NBA ADP is unavailable. Verify the player pool and autopick order before starting the draft.')
+  if (!exileId && access.settings.exileIslandEnabled) setupIssues.push('Exile is enabled but its side league is not linked.')
+  if (config.exileReturnEnabled !== access.settings.exileIslandEnabled) setupIssues.push('Exile return rules disagree between league settings and the Survivor engine.')
+  if (config.idolCount !== access.settings.idolCount) setupIssues.push('Idol inventory disagrees between league settings and the Survivor engine.')
+  if (config.mergeTrigger !== (access.settings.mergeTriggerType === 'active_player_count' ? 'player_count' : 'week')) setupIssues.push('Merger trigger disagrees between league settings and the Survivor engine.')
   const nestedWaivers = savedSettings.waiverSettings && typeof savedSettings.waiverSettings === 'object' && !Array.isArray(savedSettings.waiverSettings) ? savedSettings.waiverSettings as Record<string, unknown> : {}
-  if (typeof nestedWaivers.waiverType === 'string' && nestedWaivers.waiverType !== league.waiverType) readinessIssues.push('Waiver method disagrees between the saved league and waiver settings.')
-  if (gs?.lastError && !gs.lastError.startsWith('PAUSED:')) readinessIssues.push('Season automation reported an error; review the runtime before resuming.')
+  if (typeof nestedWaivers.waiverType === 'string' && nestedWaivers.waiverType !== league.waiverType) setupIssues.push('Waiver method disagrees between the saved league and waiver settings.')
+  const readinessIssues: string[] = [
+    ...(league.leagueSize && claimedManagers < league.leagueSize ? [`${league.leagueSize - claimedManagers} manager seats still need to be claimed.`] : []),
+    ...setupIssues,
+    ...(gs?.lastError && !gs.lastError.startsWith('PAUSED:') ? ['Season automation reported an error; review the runtime before resuming.'] : []),
+  ]
+  const todo = buildSurvivorCommissionerTodo({
+    leagueId,
+    week: gs?.currentWeek && gs.currentWeek > 0 ? gs.currentWeek : null,
+    phase: gs?.phase ?? null,
+    draftStatus: draftRow?.status ?? null,
+    leagueSize: league.leagueSize,
+    claimedManagers,
+    setupIssues,
+    lastError: gs?.lastError ?? null,
+    paused: gs?.pausedSnapshot != null || Boolean(gs?.lastError?.startsWith('PAUSED:')),
+    autoReveal: access.settings.autoReveal,
+    council: council ? { week: council.week, status: council.status, isRevealed: council.isRevealed, tiePhase: council.tiePhase ?? null } : null,
+    scoresPending: !gs?.weekScoringFinalAt,
+    sentAlertKeys: sentAlerts.map(row => row.relatedEntityId).filter((key): key is string => Boolean(key)),
+    tribeRedrawPending: Boolean(tribeRedraw),
+  })
   return {
     ok: true,
     role,
@@ -241,15 +287,11 @@ export async function buildSurvivorCommissionerDashboard(
     config,
     week,
     tribes,
-    council: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes),
-    privateBallots: access.isNonParticipatingCommissionerHost
-      ? (council?.votes ?? []).map(vote => ({
-          voterName: vote.voterName ?? vote.voterUserId ?? 'Manager',
-          targetName: vote.targetName ?? vote.targetUserId ?? 'Manager',
-          submittedAt: vote.submittedAt.toISOString(),
-          doesNotCount: vote.doesNotCount,
-        }))
-      : [],
+    tribeRedraw,
+    todo,
+    // This dashboard embeds Council control. It never transports individual choices.
+    council: council ? { id: council.id, week: council.week, status: !council.isRevealed && council.status === 'tie_pending' ? 'closed' : council.status, isRevealed: council.isRevealed } : null,
+    privateBallots: [],
     privateIdols: privateIdolRows.map(idol => ({
       id: idol.id,
       ownerName: ownerNames.get(idol.currentOwnerUserId ?? '') ?? 'Manager',
@@ -259,13 +301,13 @@ export async function buildSurvivorCommissionerDashboard(
     merged,
     rosterCount,
     eliminatedCount: eliminatedIds.size,
-    auditTail,
+    auditTail: auditTail.map(entry => ({ eventType: entry.eventType, createdAt: entry.createdAt, metadata: {} })),
     privacy: {
       commissionerParticipationMode: access.settings.commissionerParticipationMode,
       blindModeActive: access.isParticipatingCommissioner,
       canSeeHiddenIdolAssignments: access.decisions.canSeeHiddenIdolAssignments,
-      canSeePrivateVotes: access.decisions.canSeePrivateVotes,
-      canSeeVoteTallyBeforeReveal: access.decisions.canSeeVoteTallyBeforeReveal,
+      canSeePrivateVotes: false,
+      canSeeVoteTallyBeforeReveal: false,
       warnings: access.privacyWarnings,
     },
     monetization: {

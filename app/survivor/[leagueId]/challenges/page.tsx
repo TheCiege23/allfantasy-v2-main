@@ -4,7 +4,9 @@ import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
-import { ChallengePickCard } from '@/app/survivor/components/chimmy/ChallengePickCard'
+import { WeeklyCallCard } from '@/app/survivor/components/WeeklyCallCard'
+
+type PastChallenge = { id: string; week: number; title: string; scope: string; status: string; challengeType: string; resultSummary: string | null }
 
 function formatDurationMs(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '0m'
@@ -33,6 +35,21 @@ export default function SurvivorChallengesPage() {
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [])
+
+  const [past, setPast] = useState<PastChallenge[] | null>(null)
+  useEffect(() => {
+    if (!leagueId) return
+    let live = true
+    fetch(`/api/survivor/challenge?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include', cache: 'no-store' })
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error('challenges'))))
+      .then((json: { challenges?: PastChallenge[] }) => {
+        // The weekly call has its own card; settled slates and graded challenges are the history.
+        if (live) setPast((json.challenges ?? []).filter(row => row.challengeType !== 'weekly_call' && ['complete', 'graded', 'resolved'].includes(row.status)))
+      })
+      .catch(() => { if (live) setPast([]) })
+    return () => { live = false }
+  }, [leagueId])
+  const automatic = ch?.submissionMode === 'automatic'
 
   const end = parseDeadlineMs(ch?.locksAt ?? ch?.lockAt ?? null)
   const remaining = end ? end - now : null
@@ -75,8 +92,8 @@ export default function SurvivorChallengesPage() {
             </p>
 
             <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/25 p-4">
-              <p className="text-[11px] font-bold uppercase text-white/45">Where to submit</p>
-              <p className="mt-1 text-[13px] text-white/80">{submitWhere}</p>
+              <p className="text-[11px] font-bold uppercase text-white/45">{automatic ? 'How it works' : 'Where to submit'}</p>
+              <p className="mt-1 text-[13px] text-white/80">{automatic ? 'Nothing to submit: set your best lineup. Chimmy settles it from the final scores.' : submitWhere}</p>
             </div>
 
             <div className="mt-4 rounded-xl border border-orange-500/25 bg-orange-500/5 p-4">
@@ -100,44 +117,28 @@ export default function SurvivorChallengesPage() {
               </div>
             ) : null}
 
-            {ctx.canSubmitChallenge ? (
-              <div className="mt-6 md:max-w-md">
-                <ChallengePickCard
-                  title={ch.title ?? 'Challenge'}
-                  instructions={ch.instructions ?? 'Describe your pick in one line.'}
-                  onLock={() => {}}
-                >
-                  <p className="text-[11px] text-white/40">Confirmation step can live in @Chimmy private chat.</p>
-                </ChallengePickCard>
-                <p className="mt-2 text-[11px] text-white/35">
-                  Wire-up: this card is a UI shell — your league may collect picks in chat instead.
-                </p>
-              </div>
-            ) : (
-              <p className="mt-6 text-[13px] text-amber-200/90">
-                {ch.status !== 'open'
-                  ? 'Submissions are closed for this challenge.'
-                  : 'You cannot submit from this account state right now.'}
-              </p>
-            )}
+            {!automatic && ch.status !== 'open' ? (
+              <p className="mt-6 text-[13px] text-amber-200/90">Submissions are closed for this challenge.</p>
+            ) : null}
           </>
         ) : (
           <p className="mt-3 text-[14px] text-white/50">No active challenge on the board. Check back after the host posts.</p>
         )}
       </div>
 
+      {leagueId ? <WeeklyCallCard leagueId={leagueId} /> : null}
+
       <section className="mt-8">
         <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-text-dim)]">
           Past challenges
         </h2>
+        {past && past.length === 0 ? <p className="text-[13px] text-white/50">No challenge results yet.</p> : null}
         <div className="space-y-2">
-          {[3, 2, 1].map((w) => (
-            <details key={w} className="survivor-panel rounded-xl p-3">
-              <summary className="cursor-pointer text-[13px] font-semibold text-white/80">
-                Week {ctx.currentWeek - w} · Logged results appear here
-              </summary>
-              <p className="mt-2 text-[12px] text-white/45">Winner, reward, and tribal fallout will populate from season data.</p>
-            </details>
+          {(past ?? []).slice(0, 12).map((row) => (
+            <div key={row.id} className="survivor-panel rounded-xl p-3">
+              <p className="text-[13px] font-semibold text-white/85">Week {row.week} · {row.title || 'Challenge'}</p>
+              <p className="mt-1 text-[12px] text-white/60">{row.resultSummary ?? 'Settled.'}</p>
+            </div>
           ))}
         </div>
       </section>

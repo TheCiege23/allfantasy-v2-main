@@ -1,0 +1,84 @@
+/* Survivor late season (late-season handoff): tribe swap, merge, Final Tribal Council, Exile boss.
+   Prefix .svl-. Every animation has a prefers-reduced-motion fallback that shows the end state. */
+.svl{--svl-gold:#f1d58a;--svl-gold2:#d9b45a;--svl-ink:#e8eaf2;--svl-t2:#a9aec4;--svl-t3:#6f7590;--svl-card:#0b0d14;--svl-line:rgba(255,255,255,.06);--svl-red:#ff4a2f;--svl-green:#7ad68c;color:var(--svl-ink);font-family:'Archivo',system-ui,sans-serif}
+.svl *{box-sizing:border-box}
+.svl p{margin:0}
+.svl-h1{margin:0;font:700 clamp(22px,3vw,28px)/1.15 'Archivo',sans-serif;color:#f4f5fa}
+.svl-display{margin:0;font:700 clamp(22px,3.4vw,34px)/1.12 'Cinzel',Georgia,serif;color:var(--svl-gold);letter-spacing:.02em;text-wrap:balance;overflow-wrap:anywhere}
+.svl-lbl{font:700 11px/1.3 'Archivo',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--svl-t3)}
+.svl-t2{color:var(--svl-t2);font-size:14px;line-height:1.45}
+.svl-t3{color:var(--svl-t3);font-size:12.5px}
+.svl-num{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.svl-card{background:var(--svl-card);border:1px solid var(--svl-line);border-radius:12px}
+.svl-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.14);font-size:12.5px;color:#d6d9e6;background:rgba(7,8,13,.45)}
+.svl-btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:#121520;color:#f4f5fa;font:600 14px 'Archivo',sans-serif;cursor:pointer}
+.svl-btn:hover{background:#181c2a}
+.svl-btn:disabled{opacity:.5;cursor:not-allowed}
+.svl-btn-gold{background:var(--svl-gold2);border-color:var(--svl-gold2);color:#1a1206}
+.svl-btn-gold:hover{background:#e6c46d}
+.svl-btn:focus-visible,.svl-seg button:focus-visible,.svl-name:focus-visible{outline:2px solid var(--svl-gold);outline-offset:2px}
+.svl-seg{display:inline-flex;gap:4px;padding:4px;border-radius:10px;border:1px solid var(--svl-line);background:#0a0c12}
+.svl-seg button{min-height:40px;padding:0 16px;border:0;border-radius:7px;background:transparent;color:var(--svl-t2);font:600 13.5px 'Archivo',sans-serif;cursor:pointer;border-bottom:2px solid transparent}
+.svl-seg button[aria-selected="true"]{background:#141826;color:#fff;border-bottom-color:var(--svl-gold2)}
+.svl-av{width:44px;height:44px;flex:none;border-radius:999px;display:grid;place-items:center;font:700 13px 'Archivo',sans-serif;color:#fff;border:2px solid rgba(255,255,255,.18)}
+.svl-av-sm{width:36px;height:36px;font-size:12px}
+/* jurors: desaturated per spec, without depending on the weekly-loop avatar component */
+.svl-juror{filter:saturate(.35) brightness(.85)}
+@keyframes svlPop{0%{opacity:0;transform:scale(.6)}70%{transform:scale(1.06)}100%{opacity:1;transform:scale(1)}}
+@keyframes svlFade{from{opacity:0}to{opacity:1}}
+
+/* ---------- Exile boss ---------- */
+@keyframes svlHover{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes svlEyes{0%,100%{filter:drop-shadow(0 0 18px rgba(255,74,47,.35))}50%{filter:drop-shadow(0 0 34px rgba(255,74,47,.7))}}
+.svl-boss-mask{width:min(230px,60vw);height:auto;animation:svlHover 5s ease-in-out infinite,svlEyes 2.6s ease-in-out infinite}
+.svl-boss-card{flex:1 1 380px;max-width:520px;padding:26px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;background:radial-gradient(ellipse at 50% 35%,rgba(255,74,47,.16),transparent 60%),var(--svl-card)}
+.svl-boss-score{font-size:52px;font-weight:700;color:#ffd0c0;line-height:1}
+.svl-eb-row{display:grid;grid-template-columns:minmax(0,220px) 1fr 150px;gap:16px;align-items:center;padding:12px 14px;border-radius:10px;background:var(--svl-card);border:1px solid var(--svl-line)}
+.svl-eb-track{position:relative;height:16px;border-radius:99px;background:#151926}
+.svl-eb-fill{position:absolute;left:0;top:0;bottom:0;border-radius:99px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.svl-eb-line{position:absolute;top:-8px;bottom:-8px;width:3px;margin-left:-1.5px;background:var(--svl-red);border-radius:2px;box-shadow:0 0 10px rgba(255,74,47,.7)}
+.svl-stamp{display:inline-block;white-space:nowrap;padding:4px 10px;border:3px double;font:700 12px 'Cinzel',serif;letter-spacing:.14em;text-transform:uppercase;transform:rotate(-4deg);border-radius:4px;animation:svlPop .45s ease-out both}
+.svl-toast{flex:1 1 260px;padding:16px;display:flex;gap:12px;align-items:center;border-radius:12px;background:#0e1018;border:1px solid var(--svl-line);animation:svlPop .5s ease-out both}
+@media (max-width:760px){.svl-eb-row{grid-template-columns:1fr}.svl-eb-row>:last-child{text-align:left!important}}
+
+/* ---------- Swap / merge ---------- */
+@keyframes svlBuffDrop{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(46px) rotate(18deg)}}
+@keyframes svlBuffOn{0%{opacity:0;transform:translateY(-36px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes svlCrestL{0%{transform:translateX(0);opacity:1}100%{transform:translateX(70px);opacity:0}}
+@keyframes svlCrestR{0%{transform:translateX(0);opacity:1}100%{transform:translateX(-70px);opacity:0}}
+.svl-buff-drop{animation:svlBuffDrop .7s ease-in both}
+.svl-buff-on{animation:svlBuffOn .5s cubic-bezier(.2,.8,.2,1) both}
+.svl-card-pop{animation:svlPop .45s ease-out both}
+.svl-crest-l{animation:svlCrestL .9s ease-in both}
+.svl-crest-r{animation:svlCrestR .9s ease-in both}
+.svl-banner-pop{animation:svlPop .6s cubic-bezier(.2,.8,.2,1) both}
+.svl-member{display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:10px;background:#0f1119;border:1px solid var(--svl-line);min-height:72px}
+.svl-member-buff{width:96px;flex:none;margin-left:auto}
+.svl-name{min-height:48px;padding:0 18px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:#10131c;color:#d6d9e6;font:700 18px 'Cinzel',serif;letter-spacing:.06em;cursor:pointer}
+.svl-name[aria-pressed="true"],.svl-name[aria-checked="true"]{border-color:var(--svl-gold2);color:var(--svl-gold);box-shadow:inset 0 0 0 1px rgba(217,180,90,.35)}
+
+/* ---------- Final Tribal Council ---------- */
+@keyframes svlGlow{0%,100%{filter:drop-shadow(0 0 18px rgba(255,214,107,.35))}50%{filter:drop-shadow(0 0 40px rgba(255,214,107,.75))}}
+.svl-trophy{width:min(220px,55vw);height:auto;animation:svlGlow 2.8s ease-in-out infinite}
+.svl-bench{position:relative;padding:22px 18px 28px;background:radial-gradient(ellipse at 50% 85%,rgba(122,69,32,.25),transparent 60%),var(--svl-card)}
+.svl-bench-row{display:flex;flex-wrap:wrap;justify-content:center;gap:12px 18px;position:relative;z-index:1}
+.svl-bench-art{display:block;width:min(660px,100%);height:auto;margin:-46px auto 0;opacity:.95}
+.svl-juror-seat{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:96px;text-align:center}
+.svl-juror-badge{position:absolute;right:-6px;bottom:-4px;width:24px;height:24px}
+.svl-parchment{position:relative;padding:22px 20px 26px;color:#3b2a14;background:linear-gradient(180deg,#efe0bd,#e3cd9c 60%,#d8bd84);border-radius:6px;clip-path:polygon(0 1%,4% 0,12% 1.2%,22% 0,34% .9%,48% 0,60% 1.1%,72% 0,86% 1%,100% 0,99.2% 12%,100% 26%,99% 40%,100% 56%,99.1% 72%,100% 88%,99% 100%,86% 99%,70% 100%,54% 99.2%,38% 100%,22% 99%,8% 100%,0 99%,.9% 84%,0 66%,1% 48%,0 30%,.8% 14%)}
+.svl-parchment-title{text-align:center;font:600 14px 'Cinzel',serif;letter-spacing:.24em;text-transform:uppercase;color:#7a5a2a}
+.svl-slip{display:flex;align-items:center;gap:16px;padding:12px 18px;border-radius:4px;background:linear-gradient(180deg,#fbf3dc,#f1e3bc);box-shadow:0 2px 6px rgba(60,40,10,.25);animation:svlPop .4s ease-out both}
+.svl-slip-lbl{flex:none;min-width:96px;font:600 11.5px 'Cinzel',serif;letter-spacing:.18em;text-transform:uppercase;color:#7a5a2a}
+.svl-hand{font:600 26px/1.1 'Caveat','Segoe Print','Bradley Hand',cursive;color:#1f1408;overflow-wrap:anywhere}
+.svl-tally{font:600 30px/1 'Caveat','Segoe Print',cursive;color:var(--svl-gold);letter-spacing:.08em}
+.svl-champ{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:24px 40px;padding:28px;border-color:rgba(217,180,90,.45);animation:svlPop .7s cubic-bezier(.2,.8,.2,1) both;background:radial-gradient(ellipse at 25% 50%,rgba(255,214,107,.14),transparent 55%),var(--svl-card)}
+.svl-finalist{padding:18px;display:flex;flex-direction:column;gap:12px}
+.svl-finalist[data-winner="true"]{border-color:rgba(217,180,90,.6);background:#10131d}
+.svl-stat{display:flex;justify-content:space-between;gap:12px;font-size:14px;color:var(--svl-t2)}
+.svl-stat b{font-weight:500;color:var(--svl-ink)}
+.svl-sticky{position:sticky;bottom:0;padding:12px 0;background:linear-gradient(0deg,#07080d 70%,transparent)}
+
+@media (prefers-reduced-motion:reduce){
+  .svl *,.svl-boss-mask,.svl-trophy{animation:none!important;transition:none!important}
+  .svl-buff-drop{opacity:0}
+}

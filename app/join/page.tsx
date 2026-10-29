@@ -11,8 +11,9 @@ import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/co
 import { SurvivorJoin, type SurvivorJoinPreview } from '@/components/survivor/SurvivorJoin'
 import { ZombieJoin, type ZombieJoinPreview } from '@/components/zombie/ZombieJoin'
 import { SleeperTeamClaim } from '@/components/league-join/SleeperTeamClaim'
+import { formatGuillotineSeatLine, type GuillotineSeatSummary } from '@/lib/guillotine/lateStartSeatMath'
 
-type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean; survivor?: SurvivorJoinPreview | null; zombie?: ZombieJoinPreview | null }
+type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean; survivor?: SurvivorJoinPreview | null; zombie?: ZombieJoinPreview | null; guillotineSeats?: GuillotineSeatSummary | null }
 
 
 export default function JoinByCodePage() {
@@ -60,6 +61,7 @@ export default function JoinByCodePage() {
             requiresPassword: !!data.requiresPassword,
             survivor: data.survivor ?? null,
             zombie: data.zombie ?? null,
+            guillotineSeats: data.guillotineSeats ?? null,
           })
           setPreviewError(typeof data.error === 'string' ? data.error : null)
           setPreviewErrorCode(typeof data.errorCode === 'string' ? data.errorCode : null)
@@ -269,6 +271,11 @@ export default function JoinByCodePage() {
               {preview.name} · {preview.sport}
             </p>
           )}
+          {preview.guillotineSeats ? (
+            <p className="text-xs mb-4" style={{ color: 'var(--muted)' }} data-testid="guillotine-seat-line">
+              {formatGuillotineSeatLine(preview.guillotineSeats)}
+            </p>
+          ) : null}
           <button
             type="button"
             onClick={() => join(codeFromUrl, '')}

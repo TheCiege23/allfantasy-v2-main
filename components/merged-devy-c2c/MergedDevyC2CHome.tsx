@@ -12,7 +12,8 @@ import { C2CPromotionPanel } from './C2CPromotionPanel'
 import { C2CCommissionerTools } from './C2CCommissionerTools'
 import { C2CDraftCenter } from './C2CDraftCenter'
 import { C2CBoard } from './C2CBoard'
-import { Calendar, Trophy, GraduationCap, TrendingUp } from 'lucide-react'
+import { SpecialtyShell } from '@/components/league/specialty/SpecialtyShell'
+import { C2CSpecialtyHome, type C2CHomeBlock } from '@/components/league/specialty/c2c/C2CSpecialtyHome'
 
 interface C2CSummary {
   leagueId: string
@@ -38,6 +39,10 @@ interface C2CSummary {
   draftPhase: string | null
   draftPhaseInfo: { phase: string; status: string; description: string } | null
   sessionId: string | null
+  /** Specialty home blocks (absent on older responses). */
+  league?: C2CHomeBlock['league']
+  my?: C2CHomeBlock['my']
+  feed?: C2CHomeBlock['feed']
 }
 
 interface MergedDevyC2CHomeProps {
@@ -93,94 +98,24 @@ export function MergedDevyC2CHome({ leagueId, isCommissioner }: MergedDevyC2CHom
   const { config, draftPhaseInfo, sport } = summary
   const adapterLabel = summary.sportAdapterId === 'nfl_c2c' ? 'NCAA Football' : summary.sportAdapterId === 'nba_c2c' ? 'NCAA Basketball' : 'College'
 
-  return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-white/10 bg-white/5 p-4 sm:p-6">
-        <h2 className="text-lg font-semibold text-white">Merged Devy / Campus to Canton (C2C)</h2>
-        <p className="mt-1 text-sm text-white/70">
-          {sport} league with pro and {adapterLabel} college assets. Dynasty only; merged or separate startup, rookie and college drafts.
-        </p>
-        <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-          <div className="rounded-lg bg-white/5 p-2">
-            <span className="text-white/50">College roster</span>
-            <p className="font-medium text-white">{config.collegeRosterSize}</p>
-          </div>
-          <div className="rounded-lg bg-white/5 p-2">
-            <span className="text-white/50">Taxi</span>
-            <p className="font-medium text-white">{config.taxiSize}</p>
-          </div>
-          <div className="rounded-lg bg-white/5 p-2">
-            <span className="text-white/50">Rookie rounds</span>
-            <p className="font-medium text-white">{config.rookieDraftRounds}</p>
-          </div>
-          <div className="rounded-lg bg-white/5 p-2">
-            <span className="text-white/50">College rounds</span>
-            <p className="font-medium text-white">{config.collegeDraftRounds}</p>
-          </div>
-        </div>
-        <p className="mt-2 text-xs text-white/50">
-          Startup: {config.mergedStartupDraft ? 'Merged (pro + college)' : config.separateStartupCollegeDraft ? 'Separate pro then college' : 'Merged'}.
-          {config.bestBallPro && ' Best ball enabled for pro.'}
-          {config.bestBallCollege && ' Best ball enabled for college.'}
-        </p>
-        <p className="mt-1 text-xs text-white/50">
-          College assets score only in college contests until promotion; pro assets score in pro contests.
-        </p>
-        <p className="mt-1 text-xs text-cyan-200/80">
-          Best Ball auto-optimizes your highest scoring legal lineup for each enabled competition.
-        </p>
-      </div>
+  const home: C2CHomeBlock = { league: summary.league ?? null, my: summary.my ?? null, feed: summary.feed ?? [] }
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="flex items-center gap-2 text-amber-300">
-            <Calendar className="h-4 w-4" />
-            <span className="text-xs font-medium">College Draft Countdown</span>
-          </div>
-          <p className="mt-1 text-xs text-white/50">Next college draft date set in league settings.</p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="flex items-center gap-2 text-cyan-300">
-            <Calendar className="h-4 w-4" />
-            <span className="text-xs font-medium">Rookie Draft Countdown</span>
-          </div>
-          <p className="mt-1 text-xs text-white/50">Next rookie draft after pro draft.</p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="flex items-center gap-2 text-emerald-300">
-            <GraduationCap className="h-4 w-4" />
-            <span className="text-xs font-medium">Promotion Window</span>
-          </div>
-          <p className="mt-1 text-xs text-white/50">Promote college assets when eligible.</p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="flex items-center gap-2 text-fuchsia-300">
-            <Trophy className="h-4 w-4" />
-            <span className="text-xs font-medium">College / Pro Power Rank</span>
-          </div>
-          <p className="mt-1 text-xs text-white/50">Separate or hybrid per standings mode.</p>
-        </div>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="flex items-center gap-2 text-white/90">
-            <TrendingUp className="h-4 w-4" />
-            <span className="text-xs font-medium">Future Class Strength</span>
-          </div>
-          <p className="mt-1 text-xs text-white/50">Class depth by year; view in draft and board.</p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="flex items-center gap-2 text-white/90">
-            <GraduationCap className="h-4 w-4" />
-            <span className="text-xs font-medium">Upcoming Graduates</span>
-          </div>
-          <p className="mt-1 text-xs text-white/50">Declared / drafted college assets in Promotion Center.</p>
-        </div>
-      </div>
-      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-        <span className="text-xs font-medium text-white">College-to-Pro Pipeline Health</span>
-        <p className="mt-1 text-xs text-white/50">Track rights-held college players and promotion eligibility. Commissioner audit timeline available in Promotion Center.</p>
-      </div>
+  return (
+    <SpecialtyShell format="c2c" testId="c2c-specialty">
+    <div className="space-y-4">
+      <C2CSpecialtyHome
+        sport={sport}
+        standingsModel={config.standingsModel}
+        mergedStartupDraft={config.mergedStartupDraft}
+        home={home}
+        lineupHref={`/league/${leagueId}?tab=Roster`}
+        draftHref={`/league/${leagueId}?tab=Draft`}
+      />
+      <p className="text-xs text-white/50">
+        {adapterLabel} college roster {config.collegeRosterSize} · taxi {config.taxiSize} · {config.rookieDraftRounds} rookie rounds · {config.collegeDraftRounds} college rounds
+        {config.bestBallPro ? ' · best ball (pro)' : ''}
+        {config.bestBallCollege ? ' · best ball (college)' : ''}. College assets score only in college contests until promotion.
+      </p>
 
       {draftPhaseInfo && (
         <div className="rounded-xl border border-white/10 bg-white/5 p-4">
@@ -234,5 +169,6 @@ export function MergedDevyC2CHome({ leagueId, isCommissioner }: MergedDevyC2CHom
         League settings
       </Link>
     </div>
+    </SpecialtyShell>
   )
 }

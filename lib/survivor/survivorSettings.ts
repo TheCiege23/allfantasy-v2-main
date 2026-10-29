@@ -1,14 +1,29 @@
 import { readTribeSlots, type SurvivorTribeSlot } from './survivorTribeIdentity'
+import { SURVIVOR_CAST_SIZE_MAX, SURVIVOR_CAST_SIZE_MIN, SURVIVOR_CAST_SIZE_OPTIONS } from '@/lib/league-creation-wizard/sport-team-limits'
 export type SurvivorTribeAssignmentMode = 'random' | 'commissioner_manual' | 'draft_pattern'
 export type SurvivorCommissionerParticipationMode = 'non_participating_host' | 'participating_player'
 export type SurvivorCoCommissionerMode = 'disabled' | 'non_participating_host' | 'same_privacy_as_commissioner'
 export type SurvivorMergeTriggerType = 'week' | 'active_player_count'
 export type SurvivorVoteChangePolicy = 'first_valid_locks' | 'allow_until_close'
-export type SurvivorTieRule = 'revote_then_season_points' | 'season_points_only'
+/**
+ * How a tied council resolves (owner's call, 2026-10-20): revote, then rocks — a seeded draw among
+ * the still-tied managers — or rocks straight away. The two season-points rules remain readable for
+ * leagues created before this.
+ */
+export type SurvivorTieRule = 'revote_then_rocks' | 'rocks_immediately' | 'revote_then_season_points' | 'season_points_only'
+export const SURVIVOR_TIE_RULES = ['revote_then_rocks', 'rocks_immediately', 'revote_then_season_points', 'season_points_only'] as const
 export type SurvivorEliminationOutcome = 'removed_to_waivers' | 'exile_island'
 export type SurvivorScreenshotsPolicy = 'host_dm_private' | 'allowed_except_host_ai_dms'
 export type SurvivorConductPolicy = 'game_deception_allowed_platform_abuse_banned'
 export type SurvivorNbaWeeklyScoringMode = 'all_games' | 'one_game_per_player'
+/** When hidden idols stop being playable: at the merge, once fewer than N managers remain, or after week N. */
+export type SurvivorIdolExpiryMode = 'merge' | 'players_left' | 'week'
+export const SURVIVOR_IDOL_EXPIRY_MODES = ['merge', 'players_left', 'week'] as const
+/** Shot in the Dark: one safe draw in this many (owner's call, 2026-10-20; default 1 in 6). */
+export const SURVIVOR_SHOT_IN_THE_DARK_ODDS = [4, 5, 6] as const
+/** Longest idol play cutoff a commissioner can set, in hours before votes close. */
+export const SURVIVOR_IDOL_PLAY_CUTOFF_MAX_HOURS = 72
+export type SurvivorShotInTheDarkOdds = (typeof SURVIVOR_SHOT_IN_THE_DARK_ODDS)[number]
 
 export interface SurvivorFoundationSettings {
   tribeCount: number
@@ -32,13 +47,34 @@ export interface SurvivorFoundationSettings {
   selfVotesAllowed: boolean
   voteChangePolicy: SurvivorVoteChangePolicy
   tieRule: SurvivorTieRule
+  /** A missing ballot is cast for the voter's lowest-scoring eligible target that week. */
+  nonVoterAutoCast: boolean
+  /**
+   * The two highest-scoring tribes are safe from Tribal Council (three or more tribes). Off: only
+   * the highest tribe is safe. The lowest-scoring tribe that is not safe attends either way.
+   */
+  twoHighestTribesImmune: boolean
+  /**
+   * Post-merge weeks (0–3) where the cast splits into two surprise tribes for one council. The
+   * weeks are drawn and sealed at the merge; nobody learns them until each one arrives.
+   */
+  postMergeSurpriseTribeWeeks: number
   autoReveal: boolean
   eliminationOutcome: SurvivorEliminationOutcome
   sitOutsEnabled: boolean
   noConsecutiveSitOuts: boolean
   nbaWeeklyScoringMode: SurvivorNbaWeeklyScoringMode
+  /** `players_left` mode: idols stay playable while at least this many managers remain. */
   idolExpiryRemainingPlayers: number
+  /** Legacy mirror of the players-left rule (invalid once this many remain); readers use survivorIdolExpiry. */
   idolInvalidRemainingPlayers: number
+  /** One league rule for idol expiry, shown in the reveal DM and the vault. */
+  idolExpiryMode: SurvivorIdolExpiryMode
+  /** `week` mode: the last scoring week an idol may be played. */
+  idolExpiryWeek: number
+  /** Hours before votes close after which no idol can be played; 0 = right up to the close. Votes still run to the close. */
+  idolPlayCutoffHours: number
+  shotInTheDarkOdds: SurvivorShotInTheDarkOdds
   idolCount: number
   idolsEnabled: boolean
   powerupsEnabled: boolean
@@ -53,19 +89,30 @@ export interface SurvivorFoundationSettings {
   survivorDraftVideoEnabled: boolean
   screenshotsPolicy: SurvivorScreenshotsPolicy
   conductPolicy: SurvivorConductPolicy
+  /** Share cards (images + public moment pages). A private league can turn them off. */
+  shareCardsEnabled: boolean
+  /**
+   * Public moment pages (survivor-core, Sharing). Off: a shared link shows the private-league page
+   * instead of the moment. Share cards still work inside the league.
+   */
+  publicMomentPages: boolean
+  /**
+   * The public watch page (/l/<league>/watch): anyone with the link can follow the season, with
+   * display names only. Off by default; the commissioner opts in.
+   */
+  spectatorPageEnabled: boolean
 }
 
 type SettingsRecord = Record<string, unknown>
 
 export const SURVIVOR_FOUNDATION_SETTINGS_VERSION = 1
 
-export const SURVIVOR_TEAM_COUNT_OPTIONS = [16, 17, 18, 19, 20] as const
+export const SURVIVOR_TEAM_COUNT_OPTIONS = SURVIVOR_CAST_SIZE_OPTIONS
+/** Survivor drafts: a live snake, linear or auction room, the computer drafting every seat, or in person. */
 export const SURVIVOR_CANONICAL_DRAFT_TYPE_IDS = [
   'snake',
-  'auction',
   'linear',
-  'real_time',
-  'by_team',
+  'auction',
   'offline',
   'auto',
 ] as const
@@ -74,8 +121,8 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   tribeCount: 4,
   survivorTribeSlots: readTribeSlots({}, 20, 4),
   defaultTeamCount: 20,
-  minTeamCount: 16,
-  maxTeamCount: 20,
+  minTeamCount: SURVIVOR_CAST_SIZE_MIN,
+  maxTeamCount: SURVIVOR_CAST_SIZE_MAX,
   tribeAssignmentMode: 'random',
   commissionerParticipationMode: 'non_participating_host',
   hideIdolsFromCommissioner: false,
@@ -90,8 +137,11 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   voteCloseOffset: 24,
   lateVotesAllowed: false,
   selfVotesAllowed: false,
-  voteChangePolicy: 'first_valid_locks',
-  tieRule: 'revote_then_season_points',
+  voteChangePolicy: 'allow_until_close',
+  tieRule: 'revote_then_rocks',
+  nonVoterAutoCast: true,
+  twoHighestTribesImmune: false,
+  postMergeSurpriseTribeWeeks: 0,
   autoReveal: true,
   eliminationOutcome: 'removed_to_waivers',
   sitOutsEnabled: true,
@@ -99,6 +149,10 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   nbaWeeklyScoringMode: 'all_games',
   idolExpiryRemainingPlayers: 5,
   idolInvalidRemainingPlayers: 4,
+  idolExpiryMode: 'players_left',
+  idolExpiryWeek: 10,
+  idolPlayCutoffHours: 0,
+  shotInTheDarkOdds: 6,
   idolCount: 7,
   idolsEnabled: true,
   powerupsEnabled: true,
@@ -113,6 +167,9 @@ export const SURVIVOR_DEFAULT_FOUNDATION_SETTINGS: SurvivorFoundationSettings = 
   survivorDraftVideoEnabled: true,
   screenshotsPolicy: 'host_dm_private',
   conductPolicy: 'game_deception_allowed_platform_abuse_banned',
+  shareCardsEnabled: true,
+  publicMomentPages: true,
+  spectatorPageEnabled: false,
 }
 
 function readNumber(input: SettingsRecord, keys: string[], fallback: number): number {
@@ -125,6 +182,14 @@ function readNumber(input: SettingsRecord, keys: string[], fallback: number): nu
     }
   }
   return fallback
+}
+
+function normalizeIdolExpiryMode(value: string): SurvivorIdolExpiryMode {
+  return (SURVIVOR_IDOL_EXPIRY_MODES as readonly string[]).includes(value) ? value as SurvivorIdolExpiryMode : 'players_left'
+}
+
+function normalizeShotOdds(value: number): SurvivorShotInTheDarkOdds {
+  return (SURVIVOR_SHOT_IN_THE_DARK_ODDS as readonly number[]).includes(value) ? value as SurvivorShotInTheDarkOdds : 6
 }
 
 function readBoolean(input: SettingsRecord, keys: string[], fallback: boolean): boolean {
@@ -179,6 +244,10 @@ function normalizeMergeTrigger(value: string): SurvivorMergeTriggerType {
   return 'week'
 }
 
+function normalizeTieRule(value: string): SurvivorTieRule {
+  return (SURVIVOR_TIE_RULES as readonly string[]).includes(value) ? value as SurvivorTieRule : 'revote_then_rocks'
+}
+
 function normalizeVoteChangePolicy(value: string): SurvivorVoteChangePolicy {
   const raw = value.trim().toLowerCase()
   if (raw === 'allow_until_close' || raw === 'unlocked_until_close') return 'allow_until_close'
@@ -203,8 +272,8 @@ export function normalizeSurvivorFoundationSettings(
       : {}
   const s = { ...nested, ...raw }
   const base = SURVIVOR_DEFAULT_FOUNDATION_SETTINGS
-  const minTeamCount = clampInt(readNumber(s, ['minTeamCount', 'survivor_min_team_count'], base.minTeamCount), 16, 20)
-  const maxTeamCount = clampInt(readNumber(s, ['maxTeamCount', 'survivor_max_team_count'], base.maxTeamCount), minTeamCount, 20)
+  const minTeamCount = clampInt(readNumber(s, ['minTeamCount', 'survivor_min_team_count'], base.minTeamCount), SURVIVOR_CAST_SIZE_MIN, SURVIVOR_CAST_SIZE_MAX)
+  const maxTeamCount = clampInt(readNumber(s, ['maxTeamCount', 'survivor_max_team_count'], base.maxTeamCount), minTeamCount, SURVIVOR_CAST_SIZE_MAX)
   const defaultTeamCount = clampInt(
     readNumber(s, ['defaultTeamCount', 'default_team_count', 'teams', 'survivorPlayerCount', 'cast_size'], base.defaultTeamCount),
     minTeamCount,
@@ -258,7 +327,10 @@ export function normalizeSurvivorFoundationSettings(
     lateVotesAllowed: readBoolean(s, ['lateVotesAllowed'], base.lateVotesAllowed),
     selfVotesAllowed: readBoolean(s, ['selfVotesAllowed', 'survivorSelfVoteAllowed'], base.selfVotesAllowed),
     voteChangePolicy: normalizeVoteChangePolicy(readString(s, ['voteChangePolicy'], base.voteChangePolicy)),
-    tieRule: readString(s, ['tieRule'], base.tieRule) === 'season_points_only' ? 'season_points_only' : 'revote_then_season_points',
+    tieRule: normalizeTieRule(readString(s, ['tieRule'], base.tieRule)),
+    nonVoterAutoCast: readBoolean(s, ['nonVoterAutoCast'], base.nonVoterAutoCast),
+    twoHighestTribesImmune: readBoolean(s, ['twoHighestTribesImmune'], base.twoHighestTribesImmune),
+    postMergeSurpriseTribeWeeks: clampInt(readNumber(s, ['postMergeSurpriseTribeWeeks'], base.postMergeSurpriseTribeWeeks), 0, 3),
     autoReveal: readBoolean(s, ['autoReveal'], base.autoReveal),
     eliminationOutcome: normalizeEliminationOutcome(readString(s, ['eliminationOutcome'], readBoolean(s, ['exileIslandEnabled', 'exile_enabled', 'survivorExileEnabled'], base.exileIslandEnabled) ? 'exile_island' : 'removed_to_waivers')),
     sitOutsEnabled: readBoolean(s, ['sitOutsEnabled'], base.sitOutsEnabled),
@@ -274,6 +346,10 @@ export function normalizeSurvivorFoundationSettings(
       1,
       defaultTeamCount,
     ),
+    idolExpiryMode: normalizeIdolExpiryMode(readString(s, ['idolExpiryMode'], base.idolExpiryMode)),
+    idolExpiryWeek: clampInt(readNumber(s, ['idolExpiryWeek'], base.idolExpiryWeek), 1, 52),
+    idolPlayCutoffHours: clampInt(readNumber(s, ['idolPlayCutoffHours'], base.idolPlayCutoffHours), 0, SURVIVOR_IDOL_PLAY_CUTOFF_MAX_HOURS),
+    shotInTheDarkOdds: normalizeShotOdds(readNumber(s, ['shotInTheDarkOdds'], base.shotInTheDarkOdds)),
     idolCount: clampInt(readNumber(s, ['idolCount', 'survivorIdolCount'], Math.ceil(defaultTeamCount / 3)), 1, 40),
     idolsEnabled: readBoolean(s, ['idolsEnabled', 'survivorIdolsEnabled'], base.idolsEnabled),
     powerupsEnabled: readBoolean(s, ['powerupsEnabled'], base.powerupsEnabled),
@@ -288,6 +364,9 @@ export function normalizeSurvivorFoundationSettings(
     survivorDraftVideoEnabled: readBoolean(s, ['survivorDraftVideoEnabled'], base.survivorDraftVideoEnabled),
     screenshotsPolicy: readString(s, ['screenshotsPolicy'], base.screenshotsPolicy) as SurvivorScreenshotsPolicy,
     conductPolicy: readString(s, ['conductPolicy'], base.conductPolicy) as SurvivorConductPolicy,
+    shareCardsEnabled: readBoolean(s, ['shareCardsEnabled'], base.shareCardsEnabled),
+    publicMomentPages: readBoolean(s, ['publicMomentPages'], base.publicMomentPages),
+    spectatorPageEnabled: readBoolean(s, ['spectatorPageEnabled'], base.spectatorPageEnabled),
   }
 }
 

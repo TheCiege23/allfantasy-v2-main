@@ -5,6 +5,7 @@
  * On submit, translates into `POST /api/leagues` (canonical) or `POST /api/tournament/create`.
  */
 
+import { SURVIVOR_TWIST_PRESET_DEFAULT, type SurvivorTwistPresetId } from '@/lib/survivor/survivorTwistPresets'
 import type { LeagueTypeId, DraftTypeId } from '@/lib/league-creation-wizard/types'
 import { analyzeCreateLeagueCompletion } from '@/lib/create-league-v2/form-completion'
 import {
@@ -158,6 +159,12 @@ export interface CreateLeagueV2State {
   survivorTribeCount: number
   /** Whether the creator occupies one of the Survivor cast seats. */
   survivorCommissionerParticipationMode: 'participating_player' | 'non_participating_host'
+  /** Survivor-only: a LABEL. Dues are collected off the app; AllFantasy takes no payments. */
+  survivorEntryFeeMode: 'free' | 'paid'
+  /** Survivor-only: how many twists (idols, Exile, surprise tribes). See lib/survivor/survivorTwistPresets. */
+  survivorTwistPreset: SurvivorTwistPresetId
+  /** Survivor-only: optional dues per manager as typed (USD), shown in League Dues. */
+  survivorDuesUsd: string
   draftType: WizardDraftType
   /** Third-round reversal — snake drafts only. */
   thirdRoundReversal: boolean
@@ -200,10 +207,12 @@ function defaultDynastyBySport(sport: SupportedSport): Pick<DynastySetupState, '
   switch (sport) {
     case 'NBA':
       return { benchCount: 8, irCount: 3, taxiSlotCount: 4, regularSeasonLength: 20, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 24 }
+    // MLB / NHL: no taxi squad. There is no prospect pool to stash from (lib/league-creation/prospectStashPolicy.ts).
+    // The former taxi depth is on the bench (MLB 12+6, NHL 9+4), matching each sport's first dynasty preset.
     case 'MLB':
-      return { benchCount: 12, irCount: 4, taxiSlotCount: 6, regularSeasonLength: 21, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 34 }
+      return { benchCount: 18, irCount: 4, taxiSlotCount: 0, regularSeasonLength: 21, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 34 }
     case 'NHL':
-      return { benchCount: 9, irCount: 3, taxiSlotCount: 4, regularSeasonLength: 21, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 26 }
+      return { benchCount: 13, irCount: 3, taxiSlotCount: 0, regularSeasonLength: 21, playoffTeamCount: 6, playoffByeCount: 2, startupRosterDepth: 26 }
     case 'NCAAF':
       return { benchCount: 10, irCount: 2, taxiSlotCount: 4, regularSeasonLength: 12, playoffTeamCount: 4, playoffByeCount: 0, startupRosterDepth: 24 }
     case 'NCAAB':
@@ -347,6 +356,9 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   tournamentPoolSize: 32,
   survivorTribeCount: 4,
   survivorCommissionerParticipationMode: 'non_participating_host',
+  survivorEntryFeeMode: 'free',
+  survivorTwistPreset: SURVIVOR_TWIST_PRESET_DEFAULT,
+  survivorDuesUsd: '',
   draftType: 'snake',
   thirdRoundReversal: false,
   name: '',

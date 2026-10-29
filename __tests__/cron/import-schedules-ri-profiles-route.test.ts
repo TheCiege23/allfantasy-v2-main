@@ -17,6 +17,20 @@ const h = vi.hoisted(() => ({
   playersCalls: [] as string[],
   /** Sports allowed to start before the budget reads exhausted. */
   sportsBeforeExhausted: Infinity,
+  /** The previous fire's heartbeat row, as `readLastSixSportDeferral` finds it. */
+  lastRun: null as { metadata: unknown } | null,
+  lastRunQueries: [] as unknown[],
+}))
+
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    syncJobRun: {
+      findFirst: vi.fn(async (q: unknown) => {
+        h.lastRunQueries.push(q)
+        return h.lastRun
+      }),
+    },
+  },
 }))
 
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
@@ -76,6 +90,8 @@ beforeEach(() => {
   h.teamsCalls.length = 0
   h.playersCalls.length = 0
   h.sportsBeforeExhausted = Infinity
+  h.lastRun = null
+  h.lastRunQueries.length = 0
 })
 afterEach(() => {
   vi.useRealTimers()
@@ -106,5 +122,29 @@ describe('import-schedules ?riProfiles=1', () => {
     expect(outcome.status).toBe('partial')
     expect((outcome.metadata as { deferredSports: string[] }).deferredSports).toHaveLength(4)
     expect(body.results.rolling_insights_profiles.deferredSports).toHaveLength(4)
+  })
+
+  /*
+   * 🛑 Production 2026-10-16 deferred SOCCER and 10-17 deferred SOCCER and NFL: rotation moves one
+   * place a day, so a sport deferred off the end is still near the end tomorrow.
+   */
+  it('what the previous six-sport fire deferred leads this one, so it cannot be deferred twice', async () => {
+    // 2026-10-17's rotation puts SOCCER and NFL last.
+    await fireAt('2026-10-17T09:10:00Z')
+    expect(h.teamsCalls.slice(-2)).toEqual(['SOCCER', 'NFL'])
+
+    h.teamsCalls.length = 0
+    h.lastRun = { metadata: { deferredSports: ['SOCCER', 'NFL'] } }
+    h.sportsBeforeExhausted = 2
+    vi.resetModules()
+    await fireAt('2026-10-17T09:10:00Z')
+    expect(h.teamsCalls).toEqual(['SOCCER', 'NFL'])
+  })
+
+  it('reads only completed multi-sport fires, so the NCAAF half cannot reset the list', async () => {
+    await fireAt('2026-10-17T09:10:00Z')
+    expect(h.lastRunQueries[0]).toMatchObject({
+      where: { jobName: 'cron-import-schedules-ri-profiles', completedAt: { not: null }, jobScope: { contains: ',' } },
+    })
   })
 })

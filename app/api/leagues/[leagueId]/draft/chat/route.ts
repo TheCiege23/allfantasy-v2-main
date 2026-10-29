@@ -231,22 +231,28 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     (hasRich && richMeta.attachments ? '📎 Media' : '')
   if (!text) return NextResponse.json({ error: 'Message required' }, { status: 400 })
   if (text.length > 1000) return NextResponse.json({ error: 'Message too long' }, { status: 400 })
-  if (!hasRich && /^@chimmy\b/i.test(text)) {
+  /*
+   * A typed "@chimmy …" is a private question whatever else rides with it. This tested `!hasRich`, so
+   * "@chimmy who should I take" sent with a GIF or photo was posted PUBLICLY to the draft room and never
+   * answered — the same prompt league and huddle chats route privately. Chimmy reads text only, so the
+   * private prompt is the typed text; the media is not posted.
+   */
+  if (typedText && /^@chimmy\b/i.test(typedText)) {
     const source = syncOn ? null : 'draft'
-    const prompt = await createLeagueChatMessage(leagueId, userId, text, {
+    const prompt = await createLeagueChatMessage(leagueId, userId, typedText, {
       type: 'text', source, isPrivate: true, visibleToUserId: userId,
       messageSubtype: 'chimmy_private', parentMessageId,
     })
     if (!prompt) return NextResponse.json({ error: 'Failed to send privately' }, { status: 500 })
-    const voteAttempt = parseSurvivorCommand(text).intent === 'vote' || /^@chimmy\s+vote(?:\s|$)/i.test(text)
+    const voteAttempt = ['vote', 'shot_in_the_dark'].includes(parseSurvivorCommand(typedText).intent) || /^@chimmy\s+vote(?:\s|$)/i.test(typedText)
     const voteResult = voteAttempt && await isSurvivorLeague(leagueId)
-      ? await processSurvivorOfficialCommand({ leagueId, userId, command: text, source: 'private_chimmy' })
+      ? await processSurvivorOfficialCommand({ leagueId, userId, command: typedText, source: 'private_chimmy' })
       : null
     const replyText = voteResult?.handled
       ? voteResult.ok
         ? voteResult.message ?? 'Your vote was recorded privately.'
         : `${voteResult.error ?? 'Vote was not recorded.'} To vote, send @Chimmy @manager or @Chimmy vote @manager.`
-      : await generateChimmyPrivateReply(text, { leagueId, userId }).catch(() => 'Chimmy is unavailable right now. Please try again.')
+      : await generateChimmyPrivateReply(typedText, { leagueId, userId }).catch(() => 'Chimmy is unavailable right now. Please try again.')
     const reply = await createLeagueChatMessage(leagueId, userId, replyText, {
       type: 'system', source, isPrivate: true, visibleToUserId: userId,
       messageSubtype: 'chimmy_private_response', parentMessageId: prompt.id,

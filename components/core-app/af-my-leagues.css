@@ -254,6 +254,17 @@
   color: var(--faint);
 }
 
+/* Sport tabs sit directly above the status chips, so they take a tighter gap. */
+.af-ml-sports {
+  margin-bottom: 10px;
+}
+
+/* The sport on a card's meta line — the one word that tells an NFL and an NBA league apart. */
+.af-ml-sport {
+  font-weight: 700;
+  color: var(--text);
+}
+
 /* ── Account-wide notice ────────────────────────────────────────────────── */
 .af-ml-notice {
   display: flex;

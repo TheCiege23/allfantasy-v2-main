@@ -264,6 +264,32 @@ async function persistTokenPurchaseFromCheckout(
   })
 }
 
+/** Resolve a one-time payment back to its authoritative Checkout Session, never charge metadata. */
+async function reverseTokenPurchaseForPayment(
+  stripe: Stripe, paymentIntentId: string | null, sourceId: string, reason: 'refund' | 'dispute'
+): Promise<boolean> {
+  if (!paymentIntentId) return false
+  const sessions = await stripe.checkout.sessions.list({ payment_intent: paymentIntentId, limit: 100 })
+  if (sessions.has_more) throw new Error('Payment has too many checkout sessions to reconcile safely')
+  let reversed = false
+  for (const session of sessions.data) {
+    if (session.mode !== 'payment') continue
+    const context = resolveCheckoutContext(session)
+    const item = context && getMonetizationCatalogItemBySku(context.sku)
+    if (!context || !item || item.type !== 'token_pack') continue
+    if (context.source === 'client_reference') {
+      const verified = await verifyClientReferenceSkuPurchase(stripe, session, context.sku)
+      if (!verified.ok) throw new Error(`Token reversal refused: ${verified.reason}`)
+    }
+    await new TokenSpendService().reversePackagePurchase({
+      purchaseKey: `stripe_checkout:${session.id}:${item.sku}`, userId: context.userId,
+      packageSku: item.sku, sourceType: 'stripe_checkout', sourceId, reason,
+    })
+    reversed = true
+  }
+  return reversed
+}
+
 function resolveStripeCheckoutEmail(session: Stripe.Checkout.Session): string | null {
   return (
     session.customer_details?.email ??
@@ -564,7 +590,10 @@ export async function POST(req: NextRequest) {
             customerId: typeof charge.customer === "string" ? charge.customer : charge.customer?.id ?? null,
             sourceId: charge.id,
           })
-          purchaseType = reversal.outcome === "revoked" ? "refund_revoked" : "refund_no_subscription"
+          const tokenReversed = reversal.outcome === "no_subscription" && await reverseTokenPurchaseForPayment(
+            stripe, typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id ?? null,
+            charge.id, 'refund')
+          purchaseType = reversal.outcome === "revoked" ? "refund_revoked" : tokenReversed ? "refund_tokens_revoked" : "refund_no_subscription"
           break
         }
         case "charge.dispute.created": {
@@ -577,7 +606,10 @@ export async function POST(req: NextRequest) {
             customerId: null,
             sourceId: dispute.id,
           })
-          purchaseType = reversal.outcome === "revoked" ? "dispute_revoked" : "dispute_no_subscription"
+          const tokenReversed = reversal.outcome === "no_subscription" && await reverseTokenPurchaseForPayment(
+            stripe, typeof dispute.payment_intent === 'string' ? dispute.payment_intent : dispute.payment_intent?.id ?? null,
+            dispute.id, 'dispute')
+          purchaseType = reversal.outcome === "revoked" ? "dispute_revoked" : tokenReversed ? "dispute_tokens_revoked" : "dispute_no_subscription"
           break
         }
         default:

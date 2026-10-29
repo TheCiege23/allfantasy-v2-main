@@ -27,25 +27,27 @@
 /** Sleeper's thumbnail CDN. The full-size path is `/avatars/<id>`; thumbs are enough at 22–36px. */
 const SLEEPER_AVATAR_CDN = 'https://sleepercdn.com/avatars/thumbs/'
 
+function imageUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const url = value.trim()
+  if (/^https?:\/\//i.test(url) || (/^\/(?![\/\\])/.test(url) && !url.includes('\\'))) return url
+  return null
+}
+
 export function leagueArtUrl(input: {
   logoUrl?: string | null
   avatarUrl?: string | null
   platform?: string | null
+  settings?: unknown
 }): string | null {
-  const logo = input.logoUrl?.trim()
-  if (logo && /^https?:\/\//i.test(logo)) return logo
-
-  const avatar = input.avatarUrl?.trim()
-  if (!avatar) return null
-  if (/^https?:\/\//i.test(avatar)) return avatar
-
-  /*
-   * A bare id is only meaningful against a platform that issues them. For
-   * anybody else it is a value we cannot interpret, and guessing a CDN for it
-   * would produce a 404 rather than a monogram.
-   */
-  if (String(input.platform ?? '').toLowerCase() === 'sleeper') {
-    return `${SLEEPER_AVATAR_CDN}${encodeURIComponent(avatar)}`
+  const settings = input.settings && typeof input.settings === 'object' && !Array.isArray(input.settings)
+    ? input.settings as Record<string, unknown> : {}
+  for (const value of [input.logoUrl, input.avatarUrl, settings.logoUrl, settings.avatarUrl, settings.imageUrl, settings.avatar]) {
+    const resolved = imageUrl(value)
+    if (resolved) return resolved
+    if (typeof value === 'string' && String(input.platform ?? '').trim().toLowerCase() === 'sleeper' && /^[a-zA-Z0-9_-]+$/.test(value.trim())) {
+      return `${SLEEPER_AVATAR_CDN}${encodeURIComponent(value.trim())}`
+    }
   }
   return null
 }

@@ -28,7 +28,7 @@ const TOOL_CATEGORIES: Record<ToolSlug, ToolCategoryId[]> = {
   'career-share': ['ai'],
   'season-strategy': ['ai'],
   'ai-draft-assistant': ['ai'],
-  'matchup-simulator': ['simulate'],
+  'simulation-lab': ['simulate'],
   'bracket-challenge': ['bracket'],
   'power-rankings': ['rankings'],
   'legacy-dynasty': ['legacy'],
@@ -51,7 +51,7 @@ const FEATURED_SLUGS: ToolSlug[] = [
 
 /** Trending tool slugs (shown in separate momentum rail). */
 const TRENDING_SLUGS: ToolSlug[] = [
-  'matchup-simulator',
+  'simulation-lab',
   'bracket-challenge',
   'power-rankings',
   'legacy-dynasty',

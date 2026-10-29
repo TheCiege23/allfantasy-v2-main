@@ -3,6 +3,7 @@ import { requireVerifiedUser } from '@/lib/auth-guard'
 import { prisma } from '@/lib/prisma'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import {
+  checkImportSportSupported,
   getImportProviderLabel,
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
@@ -120,15 +121,32 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  /*
+   * The sport asked for must be one this provider imports (`supportedSports`), or the list
+   * would offer leagues the import then refuses. Every caller today asks for `nfl`.
+   */
+  const requestedSportCheck = provider === 'yahoo' ? checkImportSportSupported(provider, sport) : { ok: true as const }
+  if (!requestedSportCheck.ok) {
+    return NextResponse.json({ error: requestedSportCheck.message }, { status: 400 })
+  }
+
   // ── Yahoo: discovery reads the CONNECTED Yahoo account (OAuth use_login=1).
   // No accountIdentifier is needed or used — Yahoo scopes the list to the
   // logged-in session, so we never enumerate someone else's account.
   if (provider === 'yahoo') {
     try {
       const leagues = await listYahooLeaguesForAccount(auth.userId)
+      /*
+       * ⚠ A LEAGUE WITH NO SPORT USED TO PASS THIS FILTER, so an unreadable sport was listed
+       * under whatever sport was asked for. It now has to name the requested sport AND be one
+       * Yahoo's import supports — the same check the import itself runs.
+       */
       const filtered = leagues
         .filter(
-          (league) => !league.sport || league.sport.toLowerCase() === sport,
+          (league) =>
+            !!league.sport &&
+            league.sport.toLowerCase() === sport &&
+            checkImportSportSupported('yahoo', league.sport).ok,
         )
         .sort((a, b) => (b.season ?? 0) - (a.season ?? 0))
       /*

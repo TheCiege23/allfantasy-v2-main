@@ -71,7 +71,7 @@ export default async function MockDraftPage(props: MockDraftPageProps) {
               Run a full Sleeper-style AI mock room with league import, real manager slots, and shareable results.
             </p>
           </div>
-          <MockDraftSleeperRoomClient initialLeagueId={initialLeagueId} initialSport={initialSport} />
+          <MockDraftSleeperRoomClient key={`${session.user.id}:${initialLeagueId}`} viewerId={session.user.id} initialLeagueId={initialLeagueId} initialSport={initialSport} />
         </div>
       </div>
     </>

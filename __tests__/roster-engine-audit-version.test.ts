@@ -71,6 +71,23 @@ describe('roster-engine audit and versioning', () => {
           },
         },
       })
+      // The re-read after saveConfig: the settings now carry the slots saveConfig just wrote.
+      .mockResolvedValueOnce({
+        settings: {
+          roster: {
+            version: 1,
+            auditLog: [
+              {
+                timestamp: '2026-01-01T00:00:00.000Z',
+                userId: 'system',
+                action: 'created',
+                templateKey: 'redraft',
+              },
+            ],
+          },
+          nfl_roster_config: { slots: { QB: 2, RB: 2 }, isCustom: true },
+        },
+      })
       .mockResolvedValueOnce({
         sport: 'NFL',
         leagueType: 'redraft',
@@ -92,6 +109,8 @@ describe('roster-engine audit and versioning', () => {
     expect(updatePayload.auditLog).toHaveLength(2)
     expect(updatePayload.auditLog[1]?.action).toBe('updated')
     expect(updatePayload.auditLog[1]?.changedKeys).toContain('QB')
+    // The write must keep what saveConfig saved, not restore the settings read before it.
+    expect(leagueUpdateMock.mock.calls[0]?.[0]?.data?.settings?.nfl_roster_config).toEqual({ slots: { QB: 2, RB: 2 }, isCustom: true })
 
     registrySpy.mockRestore()
   })

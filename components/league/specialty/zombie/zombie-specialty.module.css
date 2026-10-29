@@ -1,0 +1,66 @@
+/* Zombie specialty layer on top of components/league/specialty/specialty.module.css.
+ * Child selectors only (handoff README gotcha). */
+.levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.level { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.levelHead { display: flex; align-items: baseline; gap: 8px; }
+.levelHead>strong { font: 800 16px 'Archivo', sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+.levelHead>span { font-size: 12px; color: #7d84a3; }
+.lAlpha { color: #f2c94c; }
+.lBeta { color: #b69cff; }
+.lGamma { color: #7fd4e8; }
+.league { background: #0b0d14; border: 1px solid rgba(255, 255, 255, .07); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.leagueMine { border-color: rgba(127, 180, 255, .55); background: #0e1424; }
+.leagueHead { display: flex; justify-content: space-between; gap: 8px; }
+.leagueHead>strong { font-size: 14px; color: #e8eaf2; overflow-wrap: anywhere; }
+.leagueHead>span { font-family: 'JetBrains Mono', monospace; color: var(--acc2); font-size: 13px; flex: none; }
+.strip { display: flex; gap: 3px; flex-wrap: wrap; }
+.strip>i { width: 12px; height: 14px; border-radius: 3px; display: block; }
+.cWhisperer { background: #a77bff; }
+.cZombie { background: #8be03a; }
+.cSurvivor { background: #3b5fa8; }
+.leagueNote { font-size: 12px; color: #7d84a3; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: #a3a9c2; }
+.legend>span { display: inline-flex; align-items: center; gap: 6px; }
+.legend>span>i { width: 10px; height: 10px; border-radius: 99px; display: block; }
+
+/* Infection night (signature moment) */
+.night { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.result {
+  flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center;
+  padding: 28px 20px; border-radius: 16px; border: 1px solid rgba(139, 224, 58, .35);
+  background: radial-gradient(ellipse at center, rgba(80, 30, 30, .35), rgba(7, 8, 13, .95) 70%);
+}
+.scores { display: flex; align-items: baseline; gap: 12px; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+.scores>b { font-size: 36px; color: #e8eaf2; }
+.scores>b.win { color: var(--acc2); }
+.scores>span { font-size: 13px; color: #7d84a3; }
+.avatar {
+  width: 110px; height: 110px; border-radius: 999px; display: grid; place-items: center; font: 700 30px 'Archivo', sans-serif;
+  color: #fff; background: #22314f; box-shadow: 0 0 0 4px #07080d, 0 0 0 8px var(--ring, #4a6fb0);
+}
+.turning { animation: zbTurn .9s ease-out both; }
+@keyframes zbTurn {
+  0% { filter: none; }
+  50% { filter: hue-rotate(90deg) saturate(2) brightness(1.2); }
+  100% { filter: hue-rotate(60deg) saturate(.6) brightness(.85); }
+}
+.turned { filter: hue-rotate(60deg) saturate(.6) brightness(.85); }
+.head { font-family: 'Creepster', 'Archivo', sans-serif; font-size: 44px; line-height: 1; letter-spacing: .02em; color: var(--acc2); text-transform: uppercase; margin: 0; overflow-wrap: anywhere; }
+.headTurned { color: #8be03a; }
+.headRevived { color: #ffd66b; }
+.log { flex: 1 1 480px; min-width: 0; }
+.logRow { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: #10131c; border: 1px solid rgba(255, 255, 255, .06); min-width: 0; flex-wrap: wrap; }
+.logRowMine { border-color: rgba(127, 180, 255, .45); }
+.logRow>strong { flex: 1 1 140px; min-width: 0; font-size: 14px; color: #e8eaf2; overflow-wrap: anywhere; }
+.logRow>.logScore { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #a3a9c2; }
+.logRow>.logBy { font-size: 12px; color: #7d84a3; }
+.logList { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .turning { animation: none; filter: hue-rotate(60deg) saturate(.6) brightness(.85); }
+}
+@container (max-width: 640px) {
+  .head { font-size: 34px; }
+  .scores>b { font-size: 28px; }
+  .avatar { width: 88px; height: 88px; font-size: 24px; }
+}

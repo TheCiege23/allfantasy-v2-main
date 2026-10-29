@@ -94,13 +94,13 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
             redraftSeasonId: summary.seasonId,
           })
           if (guillotine.ok && guillotine.created) {
-            console.info('[postDraftFinalizeArtifacts] guillotine season created', {
+            console.info('[postDraftFinalizeArtifacts] Guilly season created', {
               leagueId,
               guillotineSeasonId: guillotine.seasonId,
             })
           }
         } catch (guillotineErr) {
-          console.error('[postDraftFinalizeArtifacts] guillotine season ensure failed', {
+          console.error('[postDraftFinalizeArtifacts] Guilly season ensure failed', {
             leagueId,
             error: guillotineErr instanceof Error ? guillotineErr.message : String(guillotineErr),
           })

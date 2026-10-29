@@ -51,6 +51,8 @@ import LanguageToggle from '@/components/i18n/LanguageToggle'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { ThemeModeSelect } from '@/components/theme/ThemeModeSelect'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { resolveLegacySettingsPanel } from '@/lib/league-settings-home/settingsEntryRouting'
+import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import {
   initialsFromName,
   leagueAvatarSrc,
@@ -148,6 +150,13 @@ export type LeagueSettingsModalProps = {
   onGoToDraftTab: () => void
   /** When set on open, opens this sub-panel immediately (e.g. member gear menu → Edit Team). */
   initialActivePanel?: string | null
+  /**
+   * Native leagues only: league settings live on the League Settings page, so a card that is a
+   * league setting (General, Draft, Roster, Scoring, Playoffs, Members, Divisions, Controls, Dues…)
+   * goes there instead of opening a second editor here, and the commissioner control center is not
+   * rendered. Omitted (imported leagues), the modal behaves exactly as before.
+   */
+  onOpenSettingsHome?: (subPage: SettingsSubPageId | null) => void
 }
 
 /**
@@ -255,6 +264,7 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
     sleeperMemberMap,
     onGoToDraftTab,
     initialActivePanel = null,
+    onOpenSettingsHome,
   } = props
 
   const { t } = useLanguage()
@@ -586,7 +596,7 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                     platform={importedPlatform}
                     sleeperLeagueId={sleeperLeagueId}
                   />
-                ) : isCommissioner && mainTab === 'general' ? (
+                ) : isCommissioner && mainTab === 'general' && !onOpenSettingsHome ? (
                   <CommissionerLeagueSettingsShell
                     key={`${league.id}-${initialActivePanel ?? 'hub'}`}
                     ctx={subCtx}
@@ -601,7 +611,12 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                         <button
                           key={card.id}
                           type="button"
-                          onClick={() => setActivePanel(card.id)}
+                          onClick={() => {
+                            const settingsTarget = onOpenSettingsHome ? resolveLegacySettingsPanel(card.id) : undefined
+                            if (onOpenSettingsHome && settingsTarget !== undefined) onOpenSettingsHome(settingsTarget)
+                            else setActivePanel(card.id)
+                          }}
+                          data-testid={`ls-modal-card-${card.id}`}
                           className={`rounded-xl border p-3 text-left transition ${
                             ai
                               ? 'border-violet-500/25 bg-gradient-to-br from-violet-950/80 via-[#1a1f3a] to-fuchsia-950/50 hover:border-violet-400/35'

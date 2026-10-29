@@ -99,7 +99,7 @@ const TEAM_FANS: Record<string, string[]> = {
 
 beforeEach(() => {
   h.dispatch.mockReset()
-  h.dispatch.mockResolvedValue(undefined)
+  h.dispatch.mockResolvedValue({ requested: 1, delivered: 1, suppressed: 0, failed: 0 })
   // The real resolver maps a team string onto a followable team; for these clubs that is the code.
   h.resolveNewsTeam.mockReset()
   h.resolveNewsTeam.mockImplementation(async (_s: string, team: string | null) => (team && TEAM_FANS[team.trim().toUpperCase()] ? team.trim().toUpperCase() : null))
@@ -209,7 +209,7 @@ describe('🛑 a follow is keyed on the Sleeper id, not the name', () => {
 
   it("…and IS told the QB's news", async () => {
     h.follows = [{ user_id: 'qb-fan', sleeper_id: '4984', name: 'Josh Allen', position: 'QB', team: 'Buffalo Bills' }]
-    h.news = [story('n-qb', 'Josh Allen', 'BUF', 'Bills QB Josh Allen (hand) limited at practice')]
+    h.news = [story('n-qb', 'Josh Allen', 'BUF', 'Bills QB Josh Allen (hand) ruled out for Sunday')]
     await dispatchPendingPlayerNewsNotifications()
     expect(toldUnder('followed_players')).toEqual(['qb-fan'])
   })

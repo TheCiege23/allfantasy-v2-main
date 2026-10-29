@@ -95,7 +95,8 @@ export function GlobalBroadcastModal({ isOpen, onClose, commissionerLeagues, onS
               poll: {
                 question: pollDraft.question,
                 options: pollDraft.options.map((o) => o.trim()).filter(Boolean),
-                closeAt: pollDraft.closeAt,
+                // This composer never offers "no deadline"; the fallback only satisfies the type.
+                closeAt: pollDraft.closeAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000),
                 allowMultiple: pollDraft.allowMultiple,
               },
             }

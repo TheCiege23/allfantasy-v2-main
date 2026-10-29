@@ -11,6 +11,8 @@ import { DEFAULT_IDOL_POWER_POOL } from './constants'
 import { getEligibleRosterIdsForCouncil } from './SurvivorCouncilEligibility'
 import { applyIdolPowerEffect } from './SurvivorEffectEngine'
 import { getFinaleState } from './SurvivorFinaleEngine'
+import { survivorIdolPlayCutoffText, survivorIdolPlayDeadline } from './survivorIdolExpiry'
+import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { getCouncil } from './SurvivorTribalCouncilService'
 import { resolveSurvivorCurrentWeek } from './SurvivorTimelineResolver'
 import type { IdolPowerType } from './types'
@@ -184,6 +186,10 @@ export async function applyIdolPower(
   if (council) {
     if (council.closedAt) return { ok: false, error: 'This Elimination Council is already closed' }
     if (new Date() > council.voteDeadlineAt) return { ok: false, error: 'The Elimination Council deadline has passed' }
+    // The league's idol play cutoff applies on this path too (Chimmy, official commands).
+    const cutoffLeague = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const cutoff = normalizeSurvivorFoundationSettings((cutoffLeague?.settings as Record<string, unknown> | null) ?? {}).idolPlayCutoffHours
+    if (cutoff > 0 && new Date() > survivorIdolPlayDeadline(council, cutoff)) return { ok: false, error: survivorIdolPlayCutoffText(cutoff) ?? 'Idols can no longer be played at this council.' }
 
     const eligibleRosterIds = await getEligibleRosterIdsForCouncil(council.id)
     if (!eligibleRosterIds.includes(rosterId)) {

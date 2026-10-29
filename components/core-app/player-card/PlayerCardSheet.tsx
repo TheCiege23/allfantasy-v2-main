@@ -32,6 +32,8 @@ import {
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { PlayerValueHistoryChart } from './PlayerValueHistoryChart'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import GamesCountWeekPanel from './GamesCountWeekPanel'
+import { isGamesCountSport } from '@/lib/redraft/gamesCount'
 
 /**
  * STATE 6 / STATE 7 of the design handoff, in one component.
@@ -758,6 +760,11 @@ export default function PlayerCardSheet({
             <p className="af-pc-basis">{c.marketBasis(market.data.format, market.data.qbFormat, market.data.source)}</p>
           ) : null}
           {data && !market?.available ? <Absent reason={market?.reason ? reason(market.reason) : c.noMarketPrice} /> : null}
+
+          {/* "Which games count" (NBA/NHL/MLB): renders nothing unless the league uses best-N or lock-in. */}
+          {data && league?.isYours && isGamesCountSport(p?.sport ?? subject.sport) ? (
+            <GamesCountWeekPanel leagueId={league.leagueId} playerIds={[followExternalId, followSleeperId]} />
+          ) : null}
 
           {/* two columns ───────────────────────────────────────── */}
           {data ? <PlayerValueHistoryChart sleeperId={p?.sleeperId ?? subject.sleeperId} sport={p?.sport ?? subject.sport} leagueId={league?.leagueId} unlocked={!depthLocked} /> : null}

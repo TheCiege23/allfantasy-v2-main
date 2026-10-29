@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -17,6 +18,7 @@ async function buildCommentary(leagueId: string, week: number | undefined) {
     );
   }
   const commentary = await getPowerRankingsCommentary(result);
+  if (!commentary.formulaExplanation && !commentary.narrativeExplanation && !commentary.rankingSummary) paidToolNotDelivered();
   return NextResponse.json(commentary);
 }
 
@@ -68,7 +70,7 @@ export async function GET(
   }
 }
 
-export async function POST(
+async function paidToolPost(
   req: NextRequest,
   { params }: { params: Promise<{ leagueId: string }> }
 ) {
@@ -91,12 +93,13 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const body = await req.json().catch(() => ({}));
     const gate = await requireFeatureEntitlement({
       userId,
       userEmail,
       featureId: 'league_rankings',
       allowTokenFallback: true,
-      confirmTokenSpend: true,
+      confirmTokenSpend: body.confirmTokenSpend === true,
       tokenRuleCode: 'ai_league_rankings_explanation',
       tokenSourceType: 'league_rankings_commentary',
       tokenSourceId: `${leagueId}:${week ?? 'current'}:${Date.now()}`,
@@ -111,6 +114,7 @@ export async function POST(
     }
 
     const response = await buildCommentary(leagueId, week);
+    if (!response.ok) return response;
     if (gate.tokenSpend) {
       const payload = await response.json().catch(() => ({}));
       return NextResponse.json({
@@ -132,3 +136,5 @@ export async function POST(
     );
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

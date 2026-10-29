@@ -34,7 +34,7 @@ export const survivorModel: FormatValueModel = {
 }
 
 export const survivorGuillotineModel: FormatValueModel = {
-  formatId: 'survivor_guillotine', label: 'Survivor Guillotine', extraAssetKinds: ['idol', 'immunity', 'faab'],
-  adjust(input) { return survivalFit(input, 'Survivor Guillotine') },
+  formatId: 'survivor_guillotine', label: 'Survivor Guilly', extraAssetKinds: ['idol', 'immunity', 'faab'],
+  adjust(input) { return survivalFit(input, 'Survivor Guilly') },
   canTrade: legality,
 }

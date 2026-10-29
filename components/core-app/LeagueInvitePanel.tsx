@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import '@/components/core-app/af-invite.css'
+import { formatGuillotineSeatLine, type GuillotineSeatSummary } from '@/lib/guillotine/lateStartSeatMath'
 
 /**
  * The commissioner's invite link, and how many teams are still unclaimed.
@@ -19,7 +20,13 @@ import '@/components/core-app/af-invite.css'
  * wrong answer when someone is trying to fill a league.
  */
 
-type InviteInfo = { inviteLink: string; teamCount: number; claimedCount: number }
+type InviteInfo = {
+  inviteLink: string
+  teamCount: number
+  claimedCount: number
+  /** Native guillotine only: seats the remaining season supports and what a not-full draft does. */
+  guillotineSeats: GuillotineSeatSummary | null
+}
 
 export function LeagueInvitePanel({
   leagueId,
@@ -47,6 +54,7 @@ export function LeagueInvitePanel({
             inviteLink: String(d.inviteLink),
             teamCount: Number(d.claim?.teamCount ?? 0),
             claimedCount: Number(d.claim?.claimedCount ?? 0),
+            guillotineSeats: d.guillotineSeats && typeof d.guillotineSeats === 'object' ? (d.guillotineSeats as GuillotineSeatSummary) : null,
           })
         } else {
           setFailed(true)
@@ -122,6 +130,11 @@ export function LeagueInvitePanel({
           ) : (
             <p className="af-inv-note af-inv-note--done">Every team is claimed.</p>
           )}
+          {info.guillotineSeats ? (
+            <p className="af-inv-note" data-testid="guillotine-seat-line">
+              {formatGuillotineSeatLine(info.guillotineSeats)}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

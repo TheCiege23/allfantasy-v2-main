@@ -11,6 +11,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const { findUnique } = vi.hoisted(() => ({ findUnique: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique } } }))
+// The live rookie order's teams (lib/rookie-order/loadRookieOrderInput.ts): null = no order to read.
+const rookie = vi.hoisted(() => ({ load: vi.fn(async () => null as unknown) }))
+vi.mock('@/lib/rookie-order/loadRookieOrderInput', () => ({ loadRookieOrderInput: rookie.load }))
 
 import { getStandingsForLottery } from '@/lib/draft-lottery/standingsForLottery'
 
@@ -153,3 +156,33 @@ describe('getStandingsForLottery — each team keeps its own roster', () => {
     expect(select.teams.select).toMatchObject({ id: true, externalId: true, claimedByUserId: true, platformUserId: true })
   })
 })
+
+describe('getStandingsForLottery — the max PF the lottery weighs', () => {
+  const league = {
+    leagueSize: 2,
+    rosters: [{ id: 'r1', platformUserId: 'u1' }, { id: 'r2', platformUserId: 'u2' }],
+    teams: [team('t1', { externalId: 'r1' }, { wins: 2, pointsFor: 900 }), team('t2', { externalId: 'r2' }, { wins: 3, pointsFor: 1000 })],
+  }
+  const loaded = (maxPf: Record<string, number | null>) => ({
+    input: { teams: Object.entries(maxPf).map(([teamId, v]) => ({ teamId, maxPf: v })) },
+    rosterIdForTeam: new Map([['rr1', 'r1'], ['rr2', 'r2']]),
+  })
+
+  it('is true Max PF when the league has it for every team', async () => {
+    findUnique.mockResolvedValue(league)
+    rookie.load.mockResolvedValueOnce(loaded({ rr1: 1500, rr2: 1100 }))
+    expect((await getStandingsForLottery('L1')).map((r) => [r.rosterId, r.pointsFor, r.maxPf])).toEqual([
+      ['r1', 900, 1500],
+      ['r2', 1000, 1100],
+    ])
+  })
+
+  it('stays points for when any team lacks it, or the read fails — never a mix', async () => {
+    findUnique.mockResolvedValue(league)
+    rookie.load.mockResolvedValueOnce(loaded({ rr1: 1500, rr2: null }))
+    expect((await getStandingsForLottery('L1')).map((r) => r.maxPf)).toEqual([900, 1000])
+    rookie.load.mockRejectedValueOnce(new Error('db down'))
+    expect((await getStandingsForLottery('L1')).map((r) => r.maxPf)).toEqual([900, 1000])
+  })
+})
+

@@ -1,3 +1,4 @@
+import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 /**
  * GET: Big Brother AI context (deterministic). POST: Generate AI narrative (host, challenge, recap, game theory, social, finale).
  * Entitlements: `big_brother_ai` (player), `big_brother_host_ai` (commissioner host). AF Tokens meter deeper runs.
@@ -72,7 +73,7 @@ export async function GET(
   })
 }
 
-export async function POST(
+async function paidToolPost(
   req: NextRequest,
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
@@ -167,3 +168,5 @@ export async function POST(
     )
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

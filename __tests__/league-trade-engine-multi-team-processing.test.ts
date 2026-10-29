@@ -10,7 +10,9 @@ describe('multi-team trade processing', () => {
     ]
     const saved = new Map<string, { playerData: unknown; faabRemaining: number }>()
     const tx = {
-      league: { findUnique: vi.fn().mockResolvedValue({ sport: 'NFL', leagueVariant: null }) },
+      // A dynasty league: a redraft league refuses future picks (redraftDraftPicks.ts), and this
+      // suite is about moving a future pick across three rosters, not about that rule.
+      league: { findUnique: vi.fn().mockResolvedValue({ sport: 'NFL', leagueVariant: null, leagueType: 'dynasty', isDynasty: true }) },
       salaryCapLeagueConfig: { findUnique: vi.fn().mockResolvedValue(null) },
       roster: {
         findMany: vi.fn().mockResolvedValue(rosters),

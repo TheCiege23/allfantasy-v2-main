@@ -11,6 +11,8 @@ import { SettingsChrome, isSettingsTabId, type SettingsTabId } from "./SettingsC
 import {
   ProfileSettingsSection,
   PreferencesSettingsSection,
+  HomeSectionsSettingsSection,
+  LeagueSectionsSettingsSection,
   SecuritySettingsSection,
   NotificationsSettingsSection,
   ConnectedAccountsSettingsSection,
@@ -57,6 +59,12 @@ export default function SettingsApp({
   useEffect(() => {
     setActiveTab(isSettingsTabId(tabFromQuery) ? tabFromQuery : null)
   }, [tabFromQuery])
+
+  const refreshLayout = useCallback(() => {
+    void fetchProfile()
+    // Clear cached server pages so returning to a league uses the just-saved layout.
+    router.refresh()
+  }, [fetchProfile, router])
 
   const handleTabSelect = (tabId: SettingsTabId) => {
     const fromHub = activeTab == null
@@ -155,6 +163,8 @@ export default function SettingsApp({
       {activeTab === "preferences" && (
         <PreferencesSettingsSection profile={profile} saving={saving} onSave={updateProfile} />
       )}
+      {activeTab === "home" && <HomeSectionsSettingsSection profile={profile} onRefetch={refreshLayout} />}
+      {activeTab === "leagues" && <LeagueSectionsSettingsSection profile={profile} onRefetch={refreshLayout} />}
       {activeTab === "security" && <SecuritySettingsSection profile={profile} onRefetch={fetchProfile} />}
       {activeTab === "notifications" && (
         <NotificationsSettingsSection profile={profile} onRefetch={fetchProfile} />

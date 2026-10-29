@@ -9,6 +9,8 @@ import { advanceSGHostedCeremony, advanceSGPeriod, auditSGHistoricalCorrections,
   voteSGCaptain } from '@/lib/survivor-guillotine/operations'
 import type { SGCalendarEntry } from '@/lib/survivor-guillotine/operations'
 import type { SGTribeMember } from '@/lib/survivor-guillotine/live'
+import { FAAB_ON_CHOP_KEY, readFaabOnChop } from '@/lib/guillotine/faabOnChop'
+import { viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 
 export const dynamic = 'force-dynamic'
 type Context = { params: Promise<{ leagueId: string }> }
@@ -19,11 +21,17 @@ export async function GET(_req: NextRequest, context: Context) {
   const { leagueId } = await context.params
   const access = await assertLeagueCommissioner(leagueId, userId)
   if (!access.ok) return NextResponse.json({ error: 'Commissioner access required' }, { status: access.status })
-  const season = await prisma.survivorGuillotineLeague.findUnique({ where: { leagueId },
-    select: { periodCalendar: true, currentPeriod: true, captainElectionDeadlineAt: true } })
+  const [season, league, canEditPaid] = await Promise.all([
+    prisma.survivorGuillotineLeague.findUnique({ where: { leagueId },
+      select: { periodCalendar: true, currentPeriod: true, captainElectionDeadlineAt: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
+    viewerCanEditPaidGuillotineRules(userId),
+  ])
   if (!season) return NextResponse.json({ error: 'Season not configured' }, { status: 404 })
   return NextResponse.json({ calendar: season.periodCalendar, currentPeriod: season.currentPeriod,
-    captainElectionDeadlineAt: season.captainElectionDeadlineAt })
+    captainElectionDeadlineAt: season.captainElectionDeadlineAt,
+    // What happens to a chopped team's unspent FAAB (lib/survivor-guillotine/faabSplit.ts).
+    faabOnChop: readFaabOnChop(league?.settings), canEditPaid })
 }
 
 export async function POST(req: NextRequest, context: Context) {
@@ -33,7 +41,7 @@ export async function POST(req: NextRequest, context: Context) {
   if (!await resolveLeagueAccess(leagueId, userId)) return NextResponse.json({ error: 'League access required' }, { status: 403 })
   const body = await req.json().catch(() => null) as Record<string, unknown> | null
   if (!body || typeof body.action !== 'string') return NextResponse.json({ error: 'Action required' }, { status: 400 })
-  const commissionerActions = new Set(['set_tribes', 'finalize_captains', 'save_calendar', 'advance', 'advance_hosted_ceremony', 'restart_hosted_ceremony', 'settle_auction', 'commissioner_choice', 'resolve_tie', 'audit_corrections', 'review_correction', 'award_correction_compensation', 'start_captain_draft', 'commissioner_draft_pick'])
+  const commissionerActions = new Set(['set_tribes', 'finalize_captains', 'save_calendar', 'advance', 'advance_hosted_ceremony', 'restart_hosted_ceremony', 'settle_auction', 'commissioner_choice', 'resolve_tie', 'audit_corrections', 'review_correction', 'award_correction_compensation', 'start_captain_draft', 'commissioner_draft_pick', 'set_faab_on_chop'])
   if (commissionerActions.has(body.action)) {
     const access = await assertLeagueCommissioner(leagueId, userId)
     if (!access.ok) return NextResponse.json({ error: 'Commissioner access required' }, { status: access.status })
@@ -95,6 +103,20 @@ export async function POST(req: NextRequest, context: Context) {
           (body.decision !== 'keep_played_result' && body.decision !== 'manual_followup') ||
           typeof body.reason !== 'string') throw new Error('Period, review decision, and reason required.')
       result = await reviewSGHistoricalCorrection(leagueId, userId, Number(body.period), body.decision, body.reason)
+    } else if (body.action === 'set_faab_on_chop') {
+      // The Guilly rule (lib/guillotine/faabOnChop.ts): "split" is AF Commissioner, "keep" is always allowed.
+      if (body.value !== 'keep' && body.value !== 'split') throw new Error("Pick what happens to a chopped team's FAAB.")
+      if (body.value === 'split' && !(await viewerCanEditPaidGuillotineRules(userId))) {
+        return NextResponse.json({ error: "Splitting a chopped team's FAAB is part of AF Commissioner." }, { status: 402 })
+      }
+      const value = body.value
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
+        const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+        const current = (row?.settings as Record<string, unknown> | null) ?? {}
+        await tx.league.update({ where: { id: leagueId }, data: { settings: { ...current, [FAAB_ON_CHOP_KEY]: value } } })
+      })
+      result = { faabOnChop: value }
     } else if (body.action === 'award_correction_compensation') {
       if (!Number.isInteger(body.period) || typeof body.recipientRosterId !== 'string' ||
           !Number.isInteger(body.amount) || typeof body.reason !== 'string') {

@@ -55,9 +55,35 @@ export function pickMyMatchup(results: readonly NativeWeekResult[] | null, myRos
   return null
 }
 
+/** Report detail attached by the summary route: the scores, and the points the engine moved. */
+export type ZombieBoardDetail = { winnerScore?: number; loserScore?: number; amount?: number }
+
 export type ZombieBoardEntry =
-  | { kind: 'infection'; victimRosterId: string; infectorRosterId: string | null }
-  | { kind: 'mauling' | 'bashing'; winnerRosterId: string; loserRosterId: string; margin: number }
+  | ({ kind: 'infection'; victimRosterId: string; infectorRosterId: string | null } & ZombieBoardDetail)
+  | ({ kind: 'mauling' | 'bashing'; winnerRosterId: string; loserRosterId: string; margin: number } & ZombieBoardDetail)
+
+/**
+ * The board with each entry's scores and points moved, read off the week's matchup views (the winnings
+ * engine's own transfers). An entry whose matchup cannot be found is returned unchanged.
+ */
+export function withBoardDetail(
+  board: readonly ZombieBoardEntry[],
+  views: ReadonlyArray<{
+    home: { rosterId: string; score: number }
+    away: { rosterId: string; score: number }
+    transfer: { fromRosterId: string; toRosterId: string; amount: number } | null
+  }>,
+): ZombieBoardEntry[] {
+  return board.map((e) => {
+    const loser = e.kind === 'infection' ? e.victimRosterId : e.loserRosterId
+    const v = views.find((x) => x.home.rosterId === loser || x.away.rosterId === loser)
+    if (!v) return e
+    const loserSide = v.home.rosterId === loser ? v.home : v.away
+    const winnerSide = v.home.rosterId === loser ? v.away : v.home
+    const amount = v.transfer && v.transfer.fromRosterId === loser ? v.transfer.amount : undefined
+    return { ...e, winnerScore: winnerSide.score, loserScore: loserSide.score, ...(amount != null ? { amount } : {}) }
+  })
+}
 
 /**
  * What happened in a week, in roster ids, from the week's final results and the teams' own records:
@@ -124,4 +150,57 @@ export function zombieRosterDisplayNames(rosters: readonly NamedRoster[], teams:
     out[roster.id] = name
   })
   return out
+}
+
+export type ZombieTurnMoment = {
+  kind: 'turned' | 'survived' | 'revived'
+  /** The resolved week it happened in (revived: the latest resolved week when it was seen). */
+  week: number
+  /** Null when the opponent is someone this viewer may not know (a hidden Whisperer) or unknown. */
+  opponentName: string | null
+  myScore: number | null
+  opponentScore: number | null
+  /** Stable per moment, so the overlay shows each one once. */
+  key: string
+}
+
+/**
+ * The status change the ZombieTurn overlay announces, for the latest resolved week — or null.
+ * Priority: turned (you became a Zombie that week), revived (you came back from the dead), survived (you
+ * beat an infected opponent). Statuses passed in are already redacted, so "survived" never fires against a
+ * hidden Whisperer — that would announce one exists in your matchup.
+ */
+export function pickTurnMoment(input: {
+  lastResolvedWeek: number | null
+  me: { rosterId: string; status: string; weekBecameZombie: number | null; killedByRosterId: string | null; revivedAt: Date | null } | null
+  results: readonly NativeWeekResult[] | null
+  statusOf: (rosterId: string) => string
+  nameOf: (rosterId: string) => string
+  hiddenRoster: (rosterId: string) => boolean
+}): ZombieTurnMoment | null {
+  const { lastResolvedWeek: week, me } = input
+  if (week == null || !me) return null
+  const game = pickMyMatchup(input.results, me.rosterId)
+  const scores = { myScore: game?.myScore ?? null, opponentScore: game?.opponentScore ?? null }
+
+  if (/zombie/i.test(me.status) && me.weekBecameZombie === week) {
+    const by = me.killedByRosterId ?? game?.opponentRosterId ?? null
+    return {
+      kind: 'turned',
+      week,
+      opponentName: by && !input.hiddenRoster(by) ? input.nameOf(by) : null,
+      ...scores,
+      key: `turned:${week}`,
+    }
+  }
+  if (/survivor/i.test(me.status) && me.revivedAt) {
+    return { kind: 'revived', week, opponentName: null, myScore: null, opponentScore: null, key: `revived:${me.revivedAt.toISOString()}` }
+  }
+  if (/survivor/i.test(me.status) && game?.final && game.myScore >= game.opponentScore) {
+    const opp = input.statusOf(game.opponentRosterId)
+    if (/zombie|whisperer/i.test(opp)) {
+      return { kind: 'survived', week, opponentName: input.nameOf(game.opponentRosterId), ...scores, key: `survived:${week}` }
+    }
+  }
+  return null
 }

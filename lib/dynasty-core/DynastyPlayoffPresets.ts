@@ -1,7 +1,7 @@
 /**
  * Dynasty playoff presets (4/6/8/10 team). Avoid Week 18 title; 13–14 week regular season.
  */
-import { DYNASTY_PLAYOFF_PRESETS, DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS } from './constants'
+import { DYNASTY_PLAYOFF_PRESETS, DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS, isDynastyFootballSport } from './constants'
 import type { DynastyPlayoffPresetDto } from './types'
 
 /** NFL: title week 17 so playoff start 15; 14-week regular season default. */
@@ -20,7 +20,9 @@ export function getDynastyPlayoffPresetList(sport: string = 'NFL'): DynastyPlayo
       label: p.label,
       firstRoundByes: byes,
       playoffWeeks: weeks,
-      playoffStartWeek: sport === 'NFL' ? NFL_PLAYOFF_START_WEEK : 15,
+      // Was `sport === 'NFL' ? 15 : 15`: every sport got week 15, and the settings PUT wrote it into
+      // NBA/MLB/NHL leagues whose regular seasons run 20+ weeks — starting playoffs mid-season.
+      playoffStartWeek: isDynastyFootballSport(sport) ? NFL_PLAYOFF_START_WEEK : null,
     }
   })
 }

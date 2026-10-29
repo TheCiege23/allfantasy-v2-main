@@ -41,6 +41,9 @@ vi.mock('@/lib/survivor/gameStateMachine', () => ({ syncWeeklyScores: vi.fn() })
 vi.mock('@/lib/survivor/SurvivorSitOutEngine', () => ({
   runNbaTribeSitOutDeadlineBatch: vi.fn(async () => ({ considered: 0, failed: 0, outcomes: {} })),
 }))
+vi.mock('@/lib/survivor/notificationEngine', () => ({
+  processDueSurvivorNotifications: vi.fn(async () => ({ leagues: 0, sent: 0, failed: 0 })),
+}))
 vi.mock('@/lib/zombie/matchupCompletion', () => ({ getZombieWeekReadiness: m.readiness }))
 vi.mock('@/lib/zombie/weeklyResolutionEngine', () => ({ runWeeklyResolution: m.resolve }))
 vi.mock('@/lib/zombie/ZombieLeagueConfig', () => ({ getZombieLeagueConfig: vi.fn(async () => null) }))

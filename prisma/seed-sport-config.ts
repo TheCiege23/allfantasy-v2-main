@@ -6,6 +6,11 @@
  */
 
 import { PrismaClient, Prisma } from '@prisma/client'
+import {
+  DAILY_REDRAFT_ROSTER_LAYOUTS,
+  dailyRedraftReserveCount,
+  type DailyRedraftRosterLayout,
+} from '../lib/sportConfig/dailySportRedraftRoster'
 
 const prisma = new PrismaClient()
 
@@ -28,6 +33,32 @@ interface RosterSlotRow {
   devyCount: number
   isFlexibleSlot: boolean
   slotOrder: number
+}
+
+/**
+ * NBA / NHL / MLB template rows are the one redraft layout (lib/sportConfig/dailySportRedraftRoster.ts).
+ * These rows used to restate it and disagreed (NBA bench 6 / no IR, NHL D 3, MLB OF 4 + SP 4).
+ * Re-running the seed rewrites the rows; it never touches a league's own stored roster.
+ */
+function dailyLayoutSlotRows(layout: DailyRedraftRosterLayout): RosterSlotRow[] {
+  const rows: RosterSlotRow[] = layout.starters.map((slot, i) => ({
+    slotName: slot.key,
+    allowedPositions: [...slot.eligiblePositions],
+    starterCount: slot.count,
+    benchCount: 0,
+    reserveCount: 0,
+    taxiCount: 0,
+    devyCount: 0,
+    isFlexibleSlot: slot.flex,
+    slotOrder: i,
+  }))
+  const pool = [...layout.draftablePlayerPositions]
+  rows.push({ slotName: 'BENCH', allowedPositions: pool, starterCount: 0, benchCount: layout.benchSlots, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: rows.length })
+  const reserve = dailyRedraftReserveCount(layout)
+  if (reserve > 0) {
+    rows.push({ slotName: 'IR', allowedPositions: pool, starterCount: 0, benchCount: 0, reserveCount: reserve, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: rows.length })
+  }
+  return rows
 }
 
 async function upsertScoringTemplate(
@@ -429,18 +460,7 @@ async function main() {
   ]
   await upsertScoringTemplate('MLB', 'yahoo_default', 'MLB_YAHOO_DEFAULT', mlbYahooRules)
 
-  const mlbSlots: RosterSlotRow[] = [
-    { slotName: 'C', allowedPositions: ['C'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 0 },
-    { slotName: '1B', allowedPositions: ['1B'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 1 },
-    { slotName: '2B', allowedPositions: ['2B'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 2 },
-    { slotName: '3B', allowedPositions: ['3B'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 3 },
-    { slotName: 'SS', allowedPositions: ['SS'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 4 },
-    { slotName: 'OF', allowedPositions: ['OF'], starterCount: 4, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 5 },
-    { slotName: 'UTIL', allowedPositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'DH'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: true, slotOrder: 6 },
-    { slotName: 'SP', allowedPositions: ['SP'], starterCount: 4, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 7 },
-    { slotName: 'RP', allowedPositions: ['RP'], starterCount: 2, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 8 },
-    { slotName: 'BENCH', allowedPositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'DH', 'SP', 'RP'], starterCount: 0, benchCount: 6, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 9 },
-  ]
+  const mlbSlots: RosterSlotRow[] = dailyLayoutSlotRows(DAILY_REDRAFT_ROSTER_LAYOUTS.MLB)
   await upsertRosterTemplate('MLB', 'standard', 'MLB_DEFAULT', mlbSlots)
   await upsertSportFeatureFlags('MLB', {
     supportsBestBall: true,
@@ -494,15 +514,7 @@ async function main() {
     { statKey: 'shutout', pointsValue: 5 },
   ]
   await upsertScoringTemplate('NHL', 'standard', 'NHL_POINTS_DEFAULT', nhlRules)
-  const nhlSlots: RosterSlotRow[] = [
-    { slotName: 'C', allowedPositions: ['C'], starterCount: 2, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 0 },
-    { slotName: 'LW', allowedPositions: ['LW'], starterCount: 2, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 1 },
-    { slotName: 'RW', allowedPositions: ['RW'], starterCount: 2, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 2 },
-    { slotName: 'D', allowedPositions: ['D'], starterCount: 3, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 3 },
-    { slotName: 'G', allowedPositions: ['G'], starterCount: 2, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 4 },
-    { slotName: 'UTIL', allowedPositions: ['C', 'LW', 'RW', 'D'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: true, slotOrder: 5 },
-    { slotName: 'BENCH', allowedPositions: ['C', 'LW', 'RW', 'D', 'G'], starterCount: 0, benchCount: 5, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 6 },
-  ]
+  const nhlSlots: RosterSlotRow[] = dailyLayoutSlotRows(DAILY_REDRAFT_ROSTER_LAYOUTS.NHL)
   await upsertRosterTemplate('NHL', 'standard', 'NHL_DEFAULT', nhlSlots)
   await upsertSportFeatureFlags('NHL', {
     supportsBestBall: true,
@@ -596,17 +608,7 @@ async function main() {
   ]
   await upsertScoringTemplate('NBA', 'yahoo_default', 'NBA_YAHOO_DEFAULT', nbaYahooRules)
 
-  const nbaSlots: RosterSlotRow[] = [
-    { slotName: 'PG', allowedPositions: ['PG'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 0 },
-    { slotName: 'SG', allowedPositions: ['SG'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 1 },
-    { slotName: 'SF', allowedPositions: ['SF'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 2 },
-    { slotName: 'PF', allowedPositions: ['PF'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 3 },
-    { slotName: 'C', allowedPositions: ['C'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 4 },
-    { slotName: 'G', allowedPositions: ['PG', 'SG'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: true, slotOrder: 5 },
-    { slotName: 'F', allowedPositions: ['SF', 'PF'], starterCount: 1, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: true, slotOrder: 6 },
-    { slotName: 'UTIL', allowedPositions: ['PG', 'SG', 'SF', 'PF', 'C'], starterCount: 2, benchCount: 0, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: true, slotOrder: 7 },
-    { slotName: 'BENCH', allowedPositions: ['PG', 'SG', 'SF', 'PF', 'C'], starterCount: 0, benchCount: 6, reserveCount: 0, taxiCount: 0, devyCount: 0, isFlexibleSlot: false, slotOrder: 8 },
-  ]
+  const nbaSlots: RosterSlotRow[] = dailyLayoutSlotRows(DAILY_REDRAFT_ROSTER_LAYOUTS.NBA)
   await upsertRosterTemplate('NBA', 'points', 'NBA_DEFAULT', nbaSlots)
   await upsertSportFeatureFlags('NBA', {
     supportsBestBall: true,

@@ -1,4 +1,7 @@
 import "server-only"
+import { recordSportsDelivery } from "./sportsDeliveryAudit"
+import { deliverDurably } from "./durableTransport"
+import { allowsLeagueSms } from "./channelPolicy"
 import { createPlatformNotification } from "@/lib/platform/notification-service"
 import { getSettingsProfile } from "@/lib/user-settings"
 import { resolveNotificationPreferences } from "@/lib/notification-settings/NotificationPreferenceResolver"
@@ -8,6 +11,7 @@ import { sendNotificationEmail, sendTemplatedEmail } from "@/lib/resend-client"
 import { sendSms } from "@/lib/twilio-client"
 import { hasSmsConsent } from "@/lib/sms/smsConsent"
 import { reserveSmsToday } from "@/lib/notifications/smsDailyCap"
+import { gameAlertDeadline } from "./gameAlertFreshness"
 import { sendPushToUser } from "@/lib/push-notifications"
 import { decidePush } from "@/lib/notifications/pushGate"
 import { retryWithBackoff } from "@/lib/error-handling"
@@ -15,8 +19,10 @@ import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { shouldSuppressTokenMonetizationNotification } from "@/lib/notifications/tokenMonetizationNotificationBypass"
 import { quietHoursSuppression } from "@/lib/notifications/quietHours"
 import { isCategoryAllowedForLeague } from "@/lib/notifications/leagueOverrides"
+import { isCategoryHiddenByHomeSection } from "@/lib/core-app/homeSections"
 import { pushTagFor } from "@/lib/notifications/pushTag"
 import { emailWithheldByUnsubscribe } from "@/lib/email/emailSubscription"
+import { prisma } from "@/lib/prisma"
 
 import type { NotificationDeliveryReceipt, DeliveryChannelOutcome } from './deliveryReceipt'
 export type DispatchNotificationParams = {
@@ -31,6 +37,7 @@ export type DispatchNotificationParams = {
   actionHref?: string
   actionLabel?: string
   /** When set, stored on `PlatformNotification.leagueId` for filtering and analytics. */
+  leagueIds?: string[]
   leagueId?: string | null
   meta?: Record<string, unknown>
   severity?: "low" | "medium" | "high"
@@ -60,11 +67,26 @@ export type DispatchNotificationParams = {
   smsBody?: string
 }
 
+/** One `sent` row per text in notification_outbox, for lib/admin-dashboard/NotificationVolumeService. Best effort. */
+async function recordSmsSent(input: { userId: string; leagueId: string | null; type: string; title: string; category: NotificationCategoryId }): Promise<void> {
+  try {
+    const now = new Date()
+    await prisma.notificationOutbox.create({ data: {
+      userId: input.userId, leagueId: input.leagueId, channel: "sms", eventType: input.type, title: input.title.slice(0, 200), body: "",
+      status: "sent", sentAt: now, attemptCount: 1, metadata: { notificationCategory: input.category, loggedOnly: true },
+    } })
+  } catch {
+    console.warn("[NotificationDispatcher] SMS log write failed", { type: input.type })
+  }
+}
+
 /**
  * Single entry point for notifications: in-app + optional email and SMS
  * per user preferences and delivery availability (email/phone).
  */
-export async function dispatchNotification(params: DispatchNotificationParams): Promise<void> {
+export type DispatchNotificationResult = { requested: number; suppressed: number; delivered: number; failed: number }
+export async function dispatchNotification(params: DispatchNotificationParams): Promise<DispatchNotificationResult> {
+  const tally = { requested: new Set(params.userIds).size, suppressed: 0, delivered: 0, failed: 0 }
   const {
     userIds,
     category,
@@ -82,7 +104,10 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
     emailOverride,
   } = params
 
-  for (const userId of userIds) {
+  const detectedAt = typeof meta?.detectedAt === "string" ? meta.detectedAt : new Date().toISOString()
+  const recipients = [...new Set(userIds)]
+  const dispatchToUser = async (userId: string) => {
+    let transportFailed = false
     const channels: NotificationDeliveryReceipt['channels'] = {
       inApp: {status:'unknown',reason:'evaluation_incomplete'}, email: {status:'unknown',reason:'evaluation_incomplete'},
       sms: {status:'unknown',reason:'evaluation_incomplete'}, push: {status:'unknown',reason:'evaluation_incomplete'},
@@ -98,28 +123,32 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           category,
         })
       ) {
-        suppressAll('policy_bypass'); continue
+        suppressAll('policy_bypass'); return
       }
 
       const profile = await getSettingsProfile(userId)
-      if (!profile) { suppressAll('no_profile'); continue }
+      if (!profile) { suppressAll('no_profile'); return }
 
       const prefs = resolveNotificationPreferences(
         profile.notificationPreferences as NotificationPreferences | null
       )
-      if ((profile.notificationPreferences as NotificationPreferences | null)?.globalEnabled === false || !prefs.globalEnabled) { suppressAll('global_off'); continue }
+      if ((profile.notificationPreferences as NotificationPreferences | null)?.globalEnabled === false || !prefs.globalEnabled) { suppressAll('global_off'); return }
 
       const catPrefs = prefs.categories?.[category]
-      if (!catPrefs?.enabled) { suppressAll('category_off'); continue }
+      if (!catPrefs?.enabled) { suppressAll('category_off'); return }
+      // Settings → Home page: a hidden home section silences its alerts too (lib/core-app/homeSections.ts).
+      if (isCategoryHiddenByHomeSection(profile.notificationPreferences, category)) { suppressAll('home_section_hidden'); return }
 
       /*
        * Per-league override (spec item 15: global by default, per-league where wanted).
        * Absence inherits the global answer — see leagueOverrides.ts, where treating a
        * missing entry as a decision would have silenced every league on deploy.
        */
-      const effectiveLeagueId =
+      const eligibleLeagueIds = params.leagueIds?.filter(id => isCategoryAllowedForLeague(prefs, category, id))
+      if (params.leagueIds?.length && !eligibleLeagueIds?.length) { suppressAll('league_muted'); return }
+      const effectiveLeagueId = eligibleLeagueIds?.[0] ??
         leagueId ?? (meta && typeof meta.leagueId === "string" ? meta.leagueId : null)
-      if (!isCategoryAllowedForLeague(prefs, category, effectiveLeagueId)) { suppressAll('league_muted'); continue }
+      if (!isCategoryAllowedForLeague(prefs, category, effectiveLeagueId)) { suppressAll('league_muted'); return }
 
       const availability = getDeliveryMethodAvailability({
         hasEmail: !!profile.email,
@@ -130,7 +159,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       /*
        * Quiet hours (spec item 16), evaluated in the USER's timezone.
        *
-       * ⚠ THIS SUPPRESSES PUSH AND SMS ONLY. The in-app row below is a log; dropping it
+       * ⚠ THIS SUPPRESSES EXTERNAL ALERTS (PUSH, EMAIL AND SMS). The in-app row below is a log; dropping it
        * would mean the user wakes to no record that anything happened and the unread
        * badge — which counts stored rows — under-reports their night. Quiet hours defer
        * a buzz, they do not delete history.
@@ -149,7 +178,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       if (catPrefs.inApp && availability.inApp) {
         const stored = await createPlatformNotification({
           userId,
-          leagueId: leagueId ?? (meta && typeof meta.leagueId === "string" ? meta.leagueId : undefined),
+          leagueId: effectiveLeagueId,
           productType,
           type,
           title,
@@ -158,12 +187,67 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           sourceKey: dedupePrefix ? `${dedupePrefix}:${userId}` : undefined,
           meta: {
             ...(meta ?? {}),
+            ...(eligibleLeagueIds ? { leagueIds: eligibleLeagueIds } : {}),
             notificationCategory: category,
             ...(actionHref && { actionHref, actionLabel: actionLabel ?? "Open" }),
           },
         })
         set('inApp',{status:stored?'stored':'failed',reason:stored?'in_app_saved':'storage_failed'})
       } else set('inApp',{status:'suppressed',reason:'channel_off'})
+
+      const deadline = gameAlertDeadline(type, new Date(), meta?.expiresAt)
+      const transportMessage = {
+        userId, leagueId: effectiveLeagueId, eventType: type, title, body: body ?? title,
+        eventKey: dedupePrefix ?? (typeof meta?.eventKey === 'string' ? meta.eventKey : undefined),
+        metadata: { ...(meta ?? {}), notificationCategory: category, severity, actionHref, actionLabel,
+          ...(deadline !== undefined ? { expiresAt: new Date(deadline).toISOString() } : {}),
+          ...(emailOverride ? { emailOverride } : {}) },
+      }
+      const pushDelivery = (async () => {
+      /*
+       * Push goes through pushGate's rule, the same one every direct push sender uses, so a
+       * switch honoured here cannot be ignored elsewhere. Since 2026-09-14 push has its own
+       * per-category switch; a row without one follows in-app, as push always did.
+       */
+      const push = decidePush(profile.notificationPreferences as NotificationPreferences | null, {
+        category,
+        leagueId: effectiveLeagueId,
+        severity,
+        fallbackTimezone: profile.timezone,
+      })
+      if (push.allowed && !skipChannels?.push) {
+        const payload = {
+          title,
+          body: body ?? undefined,
+          href: actionHref,
+          // One tag per category unless the caller names one per event — see pushTagFor.
+          tag: pushTagFor(category, meta),
+          type,
+          expiresAt: transportMessage.metadata.expiresAt,
+          // The service worker builds league-scoped action buttons from this; it was dropped here.
+          leagueId: effectiveLeagueId,
+          // A producer that has a picture (headshot, trade card) names it in meta.imageUrl.
+          imageUrl: typeof meta?.imageUrl === "string" ? meta.imageUrl : null,
+          // A producer with a face for it (a DM's sender) names it in meta.iconUrl.
+          iconUrl: typeof meta?.iconUrl === "string" ? meta.iconUrl : null,
+        }
+        try {
+          const outcome = await deliverDurably({ ...transportMessage, channel: 'push' }, async () => {
+            const results = await sendPushToUser(userId, payload, { strictSubscriptionRead: true })
+            const accepted = results.filter(r => r.ok).length
+            set('push', results.length === 0 ? { status: 'suppressed', reason: 'no_subscriptions' } : {
+              status: accepted === results.length ? 'accepted' : accepted > 0 ? 'partial' : 'failed',
+              reason: accepted > 0 ? 'provider_accepted' : 'provider_failed', endpoints: results.length, acceptedEndpoints: accepted,
+            })
+            if (!results.length) return 'unavailable' as const
+            if (results.some(r => !r.ok && r.error !== 'Subscription expired')) throw new Error('Push device handoff failed')
+          })
+          if (outcome === 'queued') set('push', { ...channels.push, status: 'delayed', reason: 'queued_for_retry' })
+          if (outcome === 'existing') set('push', { status: 'unknown', reason: 'existing_transport_record' })
+        } catch { transportFailed = true; set('push', {status:'failed',reason:'push_persistence_failed'}) }
+
+      } else set('push',{status:'suppressed',reason:skipChannels?.push?'caller_excluded':!push.allowed?push.reason:'channel_off'})
+      })()
 
       // Undeliverable domains (RFC-reserved fixture rows, example.com seeds)
       // never get a send — they only bounce and burn the sending domain.
@@ -174,6 +258,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       // notices (`system_account`) still send, as the unsubscribe page says; a failed read withholds.
       if (
         catPrefs.email &&
+        !quiet.push &&
         availability.email &&
         profile.email &&
         !skipChannels?.email &&
@@ -182,7 +267,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       ) {
         let attempts=0,providerId:string|undefined
         try {
-          await retryWithBackoff(
+          const outcome = await deliverDurably({ ...transportMessage, channel: 'email' }, () => retryWithBackoff(
             async () => {
               attempts++
               const result = emailOverride
@@ -206,15 +291,16 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
               }
             },
             { maxAttempts: 2, baseMs: 500, maxMs: 2000 }
-          )
-          set('email',{status:'accepted',reason:'provider_accepted',attempts,...(providerId?{providerId}:{})})
+          ))
+          set('email',{status:outcome === 'queued' ? 'delayed' : outcome === 'existing' ? 'unknown' : 'accepted',reason:outcome === 'queued' ? 'queued_for_retry' : outcome === 'existing' ? 'existing_transport_record' : 'provider_accepted',attempts,...(providerId?{providerId}:{})})
         } catch (e) {
-          set('email',{status:'failed',reason:'provider_failed',attempts})
+          transportFailed = true
+          set('email',{status:'failed',reason:'persistence_failed',attempts})
           console.warn("[NotificationDispatcher] email send failed after retry for user", userId, e)
         }
-      } else set('email',{status:'suppressed',reason:!catPrefs.email?'channel_off':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
+      } else set('email',{status:'suppressed',reason:!catPrefs.email?'channel_off':quiet.push?'quiet_hours':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
 
-      if (catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms && !quiet.sms) {
+      if (allowsLeagueSms(category, effectiveLeagueId) && catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms && !quiet.sms) {
         // A Twilio charge per text, previously uncapped. Over the daily cap the text is
         // skipped; the in-app row, email and push above/below still go out.
         if (!(await reserveSmsToday(userId))) {
@@ -225,6 +311,9 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           let smsSent=false,smsProviderId:string|undefined
           try { smsSent=params.onDeliveryReceipt?await sendSms(profile.phone,smsText.slice(0,320),id=>{smsProviderId=id}):await sendSms(profile.phone,smsText.slice(0,320)) } catch { /* Receipt records failure; other channels still run. */ }
           set('sms',{status:smsSent?'accepted':'failed',reason:smsSent?'provider_accepted':'provider_failed',attempts:1,...(smsProviderId?{providerId:smsProviderId}:{})})
+          // Texts had no delivery log, so the admin volume tracker could not count them. Record a
+          // `sent` row — inert to the relay, which only claims `pending` — and never fail the send on it.
+          if (smsSent) await recordSmsSent({ userId, leagueId: effectiveLeagueId, type, title, category })
           if (!smsSent) {
             console.error("[NotificationDispatcher] SMS send returned false", {
               userId,
@@ -235,62 +324,29 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         }
       } else set('sms',{status:'suppressed',reason:!catPrefs.sms?'channel_off':skipChannels?.sms?'caller_excluded':quiet.sms?'quiet_hours':'contact_or_consent_unavailable'})
 
-      /*
-       * Push goes through pushGate's rule, the same one every direct push sender uses, so a
-       * switch honoured here cannot be ignored elsewhere. Since 2026-09-14 push has its own
-       * per-category switch; a row without one follows in-app, as push always did.
-       */
-      const push = decidePush(profile.notificationPreferences as NotificationPreferences | null, {
-        category,
-        leagueId: effectiveLeagueId,
-        severity,
-        fallbackTimezone: profile.timezone,
-      })
-      if (push.allowed && !skipChannels?.push) {
-        const payload = {
-          title,
-          body: body ?? undefined,
-          href: actionHref,
-          // One tag per category unless the caller names one per event — see pushTagFor.
-          tag: pushTagFor(category, meta),
-          type,
-          // The service worker builds league-scoped action buttons from this; it was dropped here.
-          leagueId: effectiveLeagueId,
-          // A producer that has a picture (headshot, trade card) names it in meta.imageUrl.
-          imageUrl: typeof meta?.imageUrl === "string" ? meta.imageUrl : null,
-          // A producer with a face for it (a DM's sender) names it in meta.iconUrl.
-          iconUrl: typeof meta?.iconUrl === "string" ? meta.iconUrl : null,
-        }
-        const sending=params.onDeliveryReceipt?sendPushToUser(userId,payload,{strictSubscriptionRead:true}):sendPushToUser(userId,payload)
-        if (params.onDeliveryReceipt) {
-          try {
-            const results=await sending, accepted=results.filter(r=>r.ok).length
-            set('push',results.length===0?{status:'suppressed',reason:'no_subscriptions'}:{status:accepted===results.length?'accepted':accepted>0?'partial':'failed',reason:accepted>0?'provider_accepted':'provider_failed',endpoints:results.length,acceptedEndpoints:accepted})
-          } catch { set('push',{status:'failed',reason:'push_attempt_failed'}) }
-        } else {
-          /*
-           * 🛑 A PUSH THAT FAILED WITHOUT THROWING WAS INVISIBLE. `sendPushToUser` reports per-device
-           * results and only throws on a bug, so a missing VAPID or APNs key turned every push into a
-           * no-op with zero log lines. Say so when NOTHING got through — the error class only, never
-           * an endpoint URL (those are capability URLs).
-           */
-          sending
-            .then((results) => {
-              if (results.length === 0 || results.some((r) => r.ok)) return
-              const errors = [...new Set(results.map((r) => String(r.error ?? 'unknown').replace(/https?:\/\/\S+/g, '<url>').slice(0, 120)))]
-              console.warn("[NotificationDispatcher] push not delivered", { userId, type, endpoints: results.length, errors })
-            })
-            .catch((e) => console.error("[NotificationDispatcher] push error for user", userId, e))
-        }
-      } else set('push',{status:'suppressed',reason:skipChannels?.push?'caller_excluded':!push.allowed?push.reason:'channel_off'})
+      await pushDelivery
+
     } catch (e) {
       for (const channel of Object.keys(channels) as Array<keyof typeof channels>) if(channels[channel].status==='unknown') set(channel,{status:'unknown',reason:'dispatch_interrupted'})
       console.error("[NotificationDispatcher] dispatch error for user", userId, e)
     } finally {
+      if (transportFailed || channels.inApp.status === "failed" || Object.values(channels).some(c => c.reason === "dispatch_interrupted")) tally.failed++
+      else if (Object.values(channels).every(c => c.status === "suppressed")) tally.suppressed++
+      else tally.delivered++
+      if (dedupePrefix && typeof meta?.sport === 'string' && /^(game_|postseason_|breaking_news$)/.test(type)) {
+        try { await recordSportsDelivery({ eventKey: dedupePrefix, type, sport: meta.sport, detectedAt,
+          occurredAt: typeof meta.occurredAt === 'string' ? meta.occurredAt : undefined }, { userId, completedAt: new Date().toISOString(), channels }) }
+        catch { tally.failed++; console.error('[sports-alerts] receipt persistence failed', { eventKey: dedupePrefix }) }
+      }
       if(params.onDeliveryReceipt) {
         try { await params.onDeliveryReceipt({userId,completedAt:new Date().toISOString(),channels}) }
         catch { console.error('[NotificationDispatcher] receipt persistence failed', {userId,type}) }
       }
     }
   }
+  let next = 0
+  await Promise.all(Array.from({ length: Math.min(8, recipients.length) }, async () => {
+    while (next < recipients.length) await dispatchToUser(recipients[next++]!)
+  }))
+  return tally
 }
