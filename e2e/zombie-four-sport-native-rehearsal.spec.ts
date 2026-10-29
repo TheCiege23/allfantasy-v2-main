@@ -1,3 +1,4 @@
+import { startDraftSession } from '../lib/live-draft-engine/DraftSessionService'
 import { createZombieLeague } from '../lib/zombie/setupEngine'
 import { zombieRenewalDraftReadiness } from '../lib/zombie/zombieRenewalDraftReadiness'
 import assert from 'node:assert/strict'
@@ -642,9 +643,10 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
    const ready=await zombieRenewalDraftReadiness(prisma,next.leagueId,pool.seats,league.settings)
    assert.equal(ready.ready,open.length===0)
    if(open.length){
-    const start=await page.request.post('/api/leagues/'+next.leagueId+'/draft/controls',{data:{action:'start'},timeout:240000})
-    expect(start.status(),await start.text()).toBe(409)
-    expect((await start.json()).code).toBe('ZOMBIE_RENEWAL_SEATS_INCOMPLETE')
+    // Both manual controls and the scheduler use this core. No vendor pool build is needed
+    // to verify an expanded league cannot start with placeholder managers.
+    const start=await startDraftSession(next.leagueId)
+    expect(start).toMatchObject({ok:false,reason:'ZOMBIE_RENEWAL_SEATS_INCOMPLETE'})
    }
    const draft=await prisma.draftSession.findUniqueOrThrow({where:{id:next.draftId}})
    assert.equal(draft.status,'pre_draft');assert.equal(draft.teamCount,pool.seats);assert.equal(draft.startedAt,null)
