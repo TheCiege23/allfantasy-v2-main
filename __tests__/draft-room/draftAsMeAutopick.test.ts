@@ -77,3 +77,16 @@ describe('describeDraftStyle', () => {
     )
   })
 })
+
+describe('a team Chimmy runs on autopilot (phase 7, 2026-10-29)', () => {
+  it('drafts the way its owner did even when the league-wide switch is off and the plan check fails', async () => {
+    m.hasAccess.mockResolvedValue({ hasAccess: false })
+    m.league.mockResolvedValue({
+      userId: 'owner',
+      settings: { draft_as_me: false, af_managed_lineups: { r1: { since: '2026-10-01', byUserId: 'c', autopilot: { style: 'dynasty_owner', since: '2026-10-01', byUserId: 'c' } } } },
+    })
+    expect(await tryDraftAsMePick(args)).toMatchObject({ playerName: 'B' })
+    // Another team in the same league is not on autopilot: the switch stays off for it.
+    expect(await tryDraftAsMePick({ ...args, rosterId: 'r2' })).toBeNull()
+  })
+})
