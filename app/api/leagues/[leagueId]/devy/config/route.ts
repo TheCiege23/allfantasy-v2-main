@@ -9,7 +9,7 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isDevyLeague, getDevyConfig, upsertDevyConfig } from '@/lib/devy/DevyLeagueConfig'
-import { publishVariantConfigChange, readVariantConfigRules } from '@/lib/league-rules-explainer/variantConfigChange'
+import { mirrorRookieDraftToDynasty, publishVariantConfigChange, readVariantConfigRules } from '@/lib/league-rules-explainer/variantConfigChange'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,6 +120,8 @@ export async function PUT(
     ...(body.bestBallSuperflex != null && { bestBallSuperflex: Boolean(body.bestBallSuperflex) }),
   })
   if (!updated) return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+  // The rookie draft is built from the dynasty config: its rounds and type go there too.
+  await mirrorRookieDraftToDynasty(leagueId, body)
   await publishVariantConfigChange({ leagueId, actorUserId: userId, section: 'devy', before: rulesBefore })
   return NextResponse.json({ ok: true, config: updated })
 }
