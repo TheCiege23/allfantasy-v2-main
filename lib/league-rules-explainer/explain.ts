@@ -43,6 +43,9 @@ const FAAB_ON_CHOP = new Set(['keep', 'split'])
 const IMMUNITY = new Set(['off', 'top_scorer'])
 const TIEBREAKS = new Set(['bench_points', 'season_points', 'previous_period', 'draft_slot', 'commissioner', 'random'])
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
+const ROOKIE_ORDERS = new Set(['max_pf', 'reverse_standings', 'commissioner', 'weighted_lottery'])
+const DRAFT_TYPES = new Set(['linear', 'snake'])
+const TANKING_PENALTIES = new Set(['forfeit_pick', 'lottery_odds', 'faab'])
 const KEEPER_COSTS = new Set(['round_based', 'inflation', 'auction_value', 'free'])
 const PLATFORMS = new Set(['sleeper', 'espn', 'yahoo', 'mfl', 'fleaflicker', 'fantrax', 'cbs'])
 
@@ -55,7 +58,16 @@ export const HEADLINE_STATS: Record<string, readonly string[]> = {
   NFL: ['passing_td', 'interception', 'rushing_td', 'receptions', 'receiving_td'],
   NBA: ['points', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'three_pointers_made'],
   NHL: ['goal', 'assist', 'shot_on_goal', 'blocked_shot', 'power_play_point', 'save', 'goal_allowed', 'win', 'shutout'],
+  NCAAF: ['passing_td', 'interception', 'rushing_td', 'receptions', 'receiving_td'],
+  NCAAB: ['points', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'three_pointers_made'],
+  // MLB's `win` is a pitcher win and NHL's is a goalie win: they share a stat key but not a sentence,
+  // so MLB lists no `win` rather than calling it a goalie win.
+  MLB: ['home_run', 'rbi', 'run', 'stolen_base', 'strikeouts_pitched', 'save'],
+  SOCCER: ['goal', 'assist', 'clean_sheet', 'save', 'yellow_card', 'red_card'],
 }
+
+/** Sports scored like American football, where a catch can be worth points. */
+const RECEPTION_SPORTS = new Set(['NFL', 'NCAAF'])
 
 const BENCH_SLOTS = new Set(['BN', 'BENCH'])
 const RESERVE_SLOTS = new Set(['IR', 'IR_PLUS', 'IL', 'IL_PLUS', 'RESERVE'])
@@ -111,6 +123,8 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
         return text('v.noLimit')
       case 'taxiDeadlineWeek':
         return text('v.noDeadline')
+      case 'rookieDraftAutoStartDays':
+        return text('v.autoStart.off')
       default:
         return null
     }
@@ -215,9 +229,46 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       const items = overrideItems(value)
       return items ? (items.length ? text('v.list', { list: { list: items } }) : text('v.noSpecialWeeks')) : null
     }
+    case 'rookieDraftOrder':
+      return typeof value === 'string' && ROOKIE_ORDERS.has(value) ? text(`v.rookieOrder.${value}`) : null
+    case 'rookieDraftType':
+      return typeof value === 'string' && DRAFT_TYPES.has(value) ? text(`v.draftType.${value}`) : null
+    case 'rookieDraftRounds':
+      return isPosInt(value) ? plural('v.rounds', value) : null
+    case 'rookieDraftAutoStartDays':
+      return isPosInt(value) ? text('v.autoStart.days', { n: value }) : null
+    case 'tankingPenalty': {
+      if (!value || typeof value !== 'object') return null
+      if ((value as { enabled?: unknown }).enabled === false) return text('v.off')
+      const cost = tankingCost(value)
+      return cost ? text('v.tanking.on', { strike: (value as { atStrike: number }).atStrike, cost }) : null
+    }
     default:
       return null
   }
+}
+
+/** What a confirmed tanking strike costs, as a phrase ("its round 1 draft pick"), or null. */
+function tankingCost(value: unknown): RuleText | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const v = value as Record<string, unknown>
+  if (typeof v.penalty !== 'string' || !TANKING_PENALTIES.has(v.penalty) || !isPosInt(v.atStrike)) return null
+  if (v.penalty === 'forfeit_pick') return isPosInt(v.pickRound) ? text('tankingCost.forfeit_pick', { round: v.pickRound }) : null
+  if (v.penalty === 'lottery_odds') {
+    if (!isPosInt(v.lotteryOddsCutPct)) return null
+    return v.lotteryOddsCutPct >= 100 ? text('tankingCost.lottery_all') : text('tankingCost.lottery_odds', { pct: v.lotteryOddsCutPct })
+  }
+  return isPosInt(v.faabPercent) ? text('tankingCost.faab', { pct: v.faabPercent }) : null
+}
+
+/** The tanking line: off, a first-strike penalty, or warnings then the penalty. */
+function tankingLine(value: unknown): RuleText | null {
+  if (!value || typeof value !== 'object') return null
+  if ((value as { enabled?: unknown }).enabled === false) return text('dynasty.tanking.off')
+  const cost = tankingCost(value)
+  const strike = (value as { atStrike?: number }).atStrike
+  if (!cost || !isPosInt(strike)) return null
+  return strike <= 1 ? text('dynasty.tanking.onFirst', { cost }) : text('dynasty.tanking.on', { strike, cost })
 }
 
 function overrideItems(value: unknown): RuleText[] | null {
@@ -262,7 +313,7 @@ function scoringLines(s: RuleSnapshot): RuleLine[] {
     ? headline.filter((k) => isNum(values[k]) && values[k] !== 0).map((k) => text('scoring.statValue', { stat: text(`stat.${k}`), pts: values[k]! }))
     : []
   let ppr: RuleText | null = null
-  if (s.sport === 'NFL') {
+  if (RECEPTION_SPORTS.has(s.sport)) {
     const rec = values && isNum(values.receptions) ? values.receptions : s.scoringPreset === 'ppr' ? 1 : s.scoringPreset === 'half_ppr' ? 0.5 : s.scoringPreset === 'standard' ? 0 : null
     if (rec === 1) ppr = text('scoring.ppr.full')
     else if (rec === 0.5) ppr = text('scoring.ppr.half')
@@ -386,6 +437,15 @@ function dynastyLines(s: RuleSnapshot): RuleLine[] {
       'dynasty-taxi-stealing',
       slots && steal ? (steal.claims > 0 ? plural('dynasty.taxiStealing', steal.claims, { hours: steal.hours }) : text('dynasty.taxiStealingUnlimited', { hours: steal.hours })) : null,
     ),
+    line('dynasty-rookie-order', s.rookieDraftOrder && ROOKIE_ORDERS.has(s.rookieDraftOrder) ? text(`dynasty.order.${s.rookieDraftOrder}`) : null),
+    line(
+      'dynasty-rookie-rounds',
+      isPosInt(s.rookieDraftRounds)
+        ? plural(`dynasty.rounds.${s.rookieDraftType && DRAFT_TYPES.has(s.rookieDraftType) ? s.rookieDraftType : 'generic'}`, s.rookieDraftRounds)
+        : null,
+    ),
+    line('dynasty-rookie-start', isPosInt(s.rookieDraftAutoStartDays) ? text('dynasty.autoStart', { n: s.rookieDraftAutoStartDays }) : null),
+    line('dynasty-tanking', tankingLine(s.tankingPenalty)),
   ])
 }
 
@@ -535,6 +595,12 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
     case 'taxiStealing':
       if (isTaxiSteal(after)) return after.claims > 0 ? plural('dynasty.taxiStealing', after.claims, { hours: after.hours }) : text('dynasty.taxiStealingUnlimited', { hours: after.hours })
       return after === null ? text('change.taxiStealing.off') : null
+    case 'rookieDraftOrder':
+      return typeof after === 'string' && ROOKIE_ORDERS.has(after) ? text(`dynasty.order.${after}`) : null
+    case 'rookieDraftAutoStartDays':
+      return isPosInt(after) ? text('dynasty.autoStart', { n: after }) : after == null ? text('change.autoStart.off') : null
+    case 'tankingPenalty':
+      return tankingLine(after)
     default:
       return null
   }

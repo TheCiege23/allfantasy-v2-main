@@ -57,6 +57,11 @@ export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'taxiDeadlineWeek',
   'taxiMaxYears',
   'taxiStealing',
+  'rookieDraftOrder',
+  'rookieDraftRounds',
+  'rookieDraftType',
+  'rookieDraftAutoStartDays',
+  'tankingPenalty',
 ]
 
 const CHANGEABLE = new Set<string>(CHANGEABLE_RULE_KEYS)

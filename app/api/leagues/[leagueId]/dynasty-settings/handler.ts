@@ -32,7 +32,15 @@ import {
   isDynastyFootballSport,
 } from '@/lib/dynasty-core/constants'
 import { TAXI_ELIGIBILITY_YEARS_OPTIONS, TAXI_LOCK_BEHAVIOR_OPTIONS } from '@/lib/taxi/constants'
-import { ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY, normalizeAutoStartDays, normalizeCustomOpenDate } from '@/lib/dynasty-core/rookieDraftCalendar'
+import {
+  ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY,
+  normalizeAutoStartDays,
+  normalizeCustomOpenDate,
+  readRookieDraftCalendarSettings,
+} from '@/lib/dynasty-core/rookieDraftCalendar'
+import { dynastyRulesFromConfig } from '@/lib/league-rules-explainer/snapshot'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 import { getDynastySportPresets } from '@/lib/dynasty-core/DynastySportPresets'
 import { applyDynastySportPresetToLeague, isLeagueBeforeDraft } from '@/lib/dynasty-core/applyDynastySportPreset'
 import {
@@ -279,6 +287,18 @@ export async function PUT(
   }
 
   const config = await upsertDynastyConfig(leagueId, dynastyPayload)
+
+  // The league home's "What changed" card (lib/league-rules-explainer): the dynasty rules members read.
+  const settingsAfter = { ...((league.settings as Record<string, unknown>) ?? {}), ...settingsPatch }
+  await publishRuleChangesEvent({
+    leagueId,
+    actorUserId: userId,
+    section: 'dynasty',
+    changes: diffRuleSnapshots(
+      { ...dynastyRulesFromConfig(priorDynasty), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(league.settings).autoStartDays },
+      { ...dynastyRulesFromConfig(config), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(settingsAfter).autoStartDays },
+    ),
+  })
 
   return NextResponse.json({ ok: true, config })
 }

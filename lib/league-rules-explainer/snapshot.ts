@@ -37,7 +37,9 @@ import { readTaxiStealingRule } from '@/lib/taxi/taxiStealing'
 import { readTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
 import { supportsDailyLineups } from '@/lib/redraft/lineupModeSwitch'
 import { readPlayoffFormat } from '@/lib/core-app/outlookFormat'
-import { RULES_EXPLAINER_SPORTS, type RuleSnapshot, type RulesConcept, type RulesFormat } from './types'
+import { readTankingPenaltyPolicy } from '@/lib/integrity/tankingPenalties'
+import { readRookieDraftCalendarSettings } from '@/lib/dynasty-core/rookieDraftCalendar'
+import { RULES_EXPLAINER_SPORTS, type RuleSnapshot, type RulesConcept, type RulesFormat, type TankingPenaltyRule } from './types'
 
 /** The `League` columns a snapshot reads. A full Prisma `League` row satisfies it. */
 export type RulesLeagueRow = {
@@ -243,6 +245,9 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
     const steal = readTaxiStealingRule(row.settings)
     snapshot.taxiStealing = steal.enabled ? { hours: steal.protectHours, claims: steal.claimsPerSeason } : null
     snapshot.taxiMaxYears = readTaxiMaxYears(row.settings)
+    // The rookie-draft order, rounds and type live on DynastyLeagueConfig (read path, ./load.ts).
+    snapshot.rookieDraftAutoStartDays = readRookieDraftCalendarSettings(row.settings).autoStartDays
+    snapshot.tankingPenalty = tankingPenaltyRule(row.settings)
   }
 
   if (format === 'guillotine') {
@@ -356,5 +361,32 @@ export function guillotineRulesSnapshot(rules: GuillotineRulesLike, startWeek?: 
     dangerMarginPoints: nonNegNumber(rules.dangerMarginPoints),
     releaseTiming: rules.rosterReleaseTiming ?? null,
     faabOnChop: rules.faabOnChop ?? null,
+  }
+}
+
+/** A dynasty league's tanking penalty, as the rule members read. */
+export function tankingPenaltyRule(settings: unknown): TankingPenaltyRule {
+  const p = readTankingPenaltyPolicy(settings)
+  return {
+    enabled: p.enabled,
+    penalty: p.penalty,
+    atStrike: p.pickAtStrike,
+    pickRound: p.pickRound,
+    lotteryOddsCutPct: p.lotteryOddsCutPct,
+    faabPercent: p.faabPercent,
+  }
+}
+
+/**
+ * A dynasty league's rookie-draft rules from its DynastyLeagueConfig row. No row reads the same
+ * defaults the dynasty settings page shows. Shared by the popup and the dynasty settings save.
+ */
+export function dynastyRulesFromConfig(
+  c: { rookiePickOrderMethod?: string | null; rookieDraftRounds?: number | null; rookieDraftType?: string | null } | null,
+): Pick<RuleSnapshot, 'rookieDraftOrder' | 'rookieDraftRounds' | 'rookieDraftType'> {
+  return {
+    rookieDraftOrder: c?.rookiePickOrderMethod ?? 'max_pf',
+    rookieDraftRounds: c?.rookieDraftRounds ?? 4,
+    rookieDraftType: c?.rookieDraftType ?? 'linear',
   }
 }
