@@ -18,6 +18,45 @@ import { runPollLoop, createCadenceGate, LIVE_POLL_INTERVAL_MS, PBP_POLL_INTERVA
 import { refreshPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { refreshLiveSleeperPoints, LIVE_POINTS_INTERVAL_MS } from '@/lib/live/liveSleeperPointsSync'
 import { runGrokTdClipPilot } from '@/lib/live/grokTdClipPilot'
+import { resolveDailyLiveSports, runDailySportLiveTick } from '@/lib/live/dailySportLiveTick'
+import { createRunBudget } from '@/lib/cron/runBudget'
+
+/**
+ * How often, inside one invocation's 10-second loop, the daily-sport tick is even ASKED. The real
+ * cadence (default 3 min) is persisted per sport in the DB; this only stops the loop re-reading
+ * that state six times a minute.
+ */
+const DAILY_LIVE_CHECK_MS = 60_000
+
+/**
+ * ⚠ ONE PASS MAY HOLD THE LOOP FOR AT MOST THIS LONG. `tickOnce` is sequential and the worker is
+ * one JavaScript thread, so a daily-sport pass rescoring many leagues would otherwise delay the
+ * next NFL tick on a Sunday with MLB on. Seasons not reached are reconciled by the 5-minute
+ * `/api/redraft/score-sync` anyway; this only bounds how much of the live loop they may take.
+ */
+const DAILY_LIVE_PASS_BUDGET_MS = 30_000
+
+/**
+ * The league-points pass may run for its own 30s budget plus the slate digest and outlook re-runs
+ * that ride it. It only starts when at least this much of the invocation's poll budget is left.
+ */
+const POINTS_PASS_RESERVE_MS = 35_000
+
+/** Telemetry shape for the daily-sport tick: statuses and counts only, never provider text beyond a scrubbed error. */
+function summariseDailyLive(daily: Awaited<ReturnType<typeof runDailySportLiveTick>> | null) {
+  if (!daily) return null
+  return {
+    sports: Object.fromEntries(
+      Object.entries(daily.sports).map(([sport, o]) => [
+        sport,
+        { status: o?.status, dates: o?.dates, linesWritten: o?.linesWritten ?? 0, credential: o?.credential ?? null, error: o?.error ?? null },
+      ]),
+    ),
+    seasonsRescored: daily.seasonsRescored,
+    matchupsRecalculated: daily.matchupsRecalculated,
+    rescoreErrors: daily.rescoreErrors,
+  }
+}
 
 /**
  * Opt-in Rolling Insights live provider, PRESEASON ONLY.
@@ -114,6 +153,27 @@ export async function GET(request: NextRequest) {
     let pbp: Awaited<ReturnType<typeof refreshPlayByPlayFeed>> | null = null
     let points: Awaited<ReturnType<typeof refreshLiveSleeperPoints>> | null = null
     let clipPilot: Awaited<ReturnType<typeof runGrokTdClipPilot>> | null = null
+    let daily: Awaited<ReturnType<typeof runDailySportLiveTick>> | null = null
+    /*
+     * NBA / NHL / MLB in-game scoring (Phase 3.3d) — OFF unless DAILY_SPORT_LIVE_SCORING is set.
+     * Folded into this route rather than a new cron slot (cron-budget-check caps the list at 60),
+     * and bounded by THIS invocation's poll budget so it can never push the tick past its 2-minute
+     * interval. With the flag unset it issues no query at all.
+     */
+    const dailySports = resolveDailyLiveSports()
+    const dailyBudget = createRunBudget(POLL_BUDGET_MS)
+    /*
+     * ⚠ THE POLL BUDGET COUNTS FROM THE START OF THE INVOCATION, NOT FROM THE START OF THE LOOP.
+     * The first tick runs before `runPollLoop` and is the heaviest one: every cadence gate is open,
+     * so it carries the league-points pass (up to ~30s plus digests and outlooks) and the daily-sport
+     * pass (up to 30s) as well as NFL scoring. When the loop then took its full 105s on top, a
+     * game-night invocation ran 112-185s against a 120s interval and the dispatcher's 150s timeout
+     * (measured 2026-10-23, NBA and TNF live): every start after an overrun was skipped, which is
+     * a minute or more with no live updates. The loop gets what is left, and a heavy pass only
+     * starts when its own budget still fits.
+     */
+    const invocationStartedAt = Date.now()
+    const remainingMs = () => POLL_BUDGET_MS - (Date.now() - invocationStartedAt)
 
     const report = await withSyncJobRun(
       {
@@ -166,16 +226,28 @@ export async function GET(request: NextRequest) {
           console.error('[live-score-tick] clip pilot failed:', err instanceof Error ? err.message : err)
           return null
         })
+        const dailyDue = createCadenceGate(DAILY_LIVE_CHECK_MS)
         const tickOnce = async () => {
           const scored = await runLiveScoringForActiveSeasons(prisma, provider ? { provider } : {})
           if (pbpDue()) pbp = await refreshPlayByPlayFeed().catch(() => pbp)
-          if (pointsDue()) points = await refreshLiveSleeperPoints().catch(() => points)
+          if (remainingMs() >= POINTS_PASS_RESERVE_MS && pointsDue()) points = await refreshLiveSleeperPoints().catch(() => points)
+          // ⚠ LIKE PLAYS, THE DAILY SPORTS MUST NEVER TAKE DOWN NFL SCORING.
+          if (dailySports.length > 0 && !dailyBudget.exhausted() && remainingMs() >= DAILY_LIVE_PASS_BUDGET_MS && dailyDue()) {
+            const pass = createRunBudget(DAILY_LIVE_PASS_BUDGET_MS)
+            daily = await runDailySportLiveTick({
+              sports: dailySports,
+              shouldStop: () => dailyBudget.exhausted() || pass.exhausted(),
+            }).catch((err) => {
+              console.error('[live-score-tick] daily-sport tick failed:', err instanceof Error ? err.name : 'error')
+              return daily
+            })
+          }
           return scored
         }
         let last = await tickOnce()
         loop = await runPollLoop(async () => {
           last = await tickOnce()
-        })
+        }, { budgetMs: Math.max(0, remainingMs()) })
         clipPilot = await clipPilotRun
         return last
       },
@@ -205,6 +277,8 @@ export async function GET(request: NextRequest) {
           pollIntervalMs: LIVE_POLL_INTERVAL_MS,
           pbpIntervalMs: PBP_POLL_INTERVAL_MS,
           pollBudgetMs: POLL_BUDGET_MS,
+          /* Wall time of the whole invocation, first tick included; the loop's own elapsed is pollElapsedMs. */
+          invocationElapsedMs: Date.now() - invocationStartedAt,
           /* `pbpSkipped: 'no-token'` is a configuration problem; 'no-live-games'
              is a Tuesday. Distinguishing them in telemetry is the difference
              between an alert and a shrug. */
@@ -228,6 +302,10 @@ export async function GET(request: NextRequest) {
           clipPilotSearched: clipPilot?.searched ?? 0,
           clipPilotFound: clipPilot?.found ?? 0,
           clipPilotErrors: clipPilot?.errors ?? 0,
+          /* NBA/NHL/MLB in-game scoring. `dailyLiveEnabled: []` means the flag
+             is off; per-sport status tells a quiet night ('no-live-games') from a stuck feed. */
+          dailyLiveEnabled: dailySports,
+          dailyLive: summariseDailyLive(daily),
         },
       }),
     )

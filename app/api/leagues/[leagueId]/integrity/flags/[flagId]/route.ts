@@ -36,6 +36,8 @@ export async function PATCH(
   const status = body.status === "dismissed" || body.status === "escalated" ? body.status : null
   if (!status) return NextResponse.json({ error: "status must be dismissed or escalated" }, { status: 400 })
 
+  const before = await prisma.integrityFlag.findFirst({ where: { id: flagId, leagueId }, select: { status: true, flagType: true } })
+
   const row = await prisma.integrityFlag.updateMany({
     where: { id: flagId, leagueId },
     data: {
@@ -51,6 +53,18 @@ export async function PATCH(
     return NextResponse.json({ error: "Flag not found" }, { status: 404 })
   }
 
+  // Anti-tanking penalties: CONFIRMING a tanking flag is a strike — a warning, then at the league's
+  // threshold a lost draft pick (lib/integrity/tankingPenaltyService.ts). Only on the change to
+  // escalated, so re-saving an escalated flag never takes a second pick.
+  let penalties: unknown = undefined
+  if (status === "escalated" && before?.flagType === "tanking" && before.status !== "escalated") {
+    const { onTankingFlagConfirmed } = await import("@/lib/integrity/tankingPenaltyService")
+    penalties = await onTankingFlagConfirmed(flagId, userId).catch((err) => {
+      console.error("[integrity/flags] tanking penalty failed", err)
+      return { error: "The flag was confirmed, but the penalty could not be applied. Try again from the league log." }
+    })
+  }
+
   const updated = await prisma.integrityFlag.findFirst({ where: { id: flagId, leagueId } })
-  return NextResponse.json({ flag: updated })
+  return NextResponse.json({ flag: updated, ...(penalties !== undefined ? { penalties } : {}) })
 }

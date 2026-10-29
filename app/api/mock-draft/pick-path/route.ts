@@ -5,25 +5,14 @@ import { prisma } from '@/lib/prisma'
 import { getLiveADP, type ADPEntry } from '@/lib/adp-data'
 import { applyRealtimeAdpAdjustments } from '@/lib/mock-draft/adp-realtime-adjuster'
 import { buildManagerDNAFromLeague, type ManagerDNA } from '@/lib/mock-draft/manager-dna'
+import { resolveLeagueMockTeamCount, MAX_LEAGUE_MOCK_TEAMS, mockRoundOrder, mockTeamPickOveralls, type MockDraftOrder } from '@/lib/mock-draft/mockTeamCount'
+import { resolveLeagueMockDraftOrder } from '@/lib/mock-draft/leagueMockDraftOrder'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-function snakeOrder(teamCount: number, round: number): number[] {
-  const arr = Array.from({ length: teamCount }, (_, i) => i)
-  return round % 2 === 1 ? arr : arr.reverse()
-}
 
-function getUserPickOveralls(teamCount: number, userIdx: number, rounds: number): number[] {
-  const picks: number[] = []
-  for (let r = 1; r <= rounds; r++) {
-    const order = snakeOrder(teamCount, r)
-    const slot = order.indexOf(userIdx)
-    if (slot >= 0) picks.push((r - 1) * teamCount + slot + 1)
-  }
-  return picks
-}
 
 const POSITION_TARGETS: Record<string, number> = { QB: 2, RB: 5, WR: 5, TE: 2 }
 
@@ -80,6 +69,7 @@ function runScenarioSims(
   managerProfiles: Array<{ manager: string; tendency: Record<string, number>; rosterCounts: Record<string, number>; panicScore?: number; reachFrequency?: number }>,
   teamCount: number,
   rounds: number,
+  draftOrder: MockDraftOrder,
   userPickOveralls: Set<number>,
   simulations: number,
   scenarioMod?: {
@@ -106,7 +96,7 @@ function runScenarioSims(
 
     let overall = 1
     for (let round = 1; round <= rounds; round++) {
-      const order = snakeOrder(teamCount, round)
+      const order = mockRoundOrder(teamCount, round, draftOrder)
       for (let pick = 1; pick <= teamCount; pick++) {
         const managerIdx = order[pick - 1]
         const profile = counts[managerIdx]
@@ -211,9 +201,9 @@ export async function POST(req: NextRequest) {
         teams: {
           include: { performances: { orderBy: { week: 'desc' }, take: 12 } },
           orderBy: { currentRank: 'asc' },
-          take: 20,
+          take: MAX_LEAGUE_MOCK_TEAMS,
         },
-        rosters: { select: { platformUserId: true, playerData: true }, take: 20 },
+        rosters: { select: { platformUserId: true, playerData: true }, take: MAX_LEAGUE_MOCK_TEAMS },
       },
     })
 
@@ -223,7 +213,10 @@ export async function POST(req: NextRequest) {
     const adjusted = await applyRealtimeAdpAdjustments(adp, { isDynasty: league.isDynasty })
     const pool = adjusted.entries.filter(p => ['QB', 'RB', 'WR', 'TE'].includes(p.position)).slice(0, 180)
 
-    const teamCount = Math.max(league.leagueSize || 0, league.teams.length || 0, 12)
+    // The league's real size: a 4- or 20-team league is not a 12-team draft.
+    const teamCount = resolveLeagueMockTeamCount(league.leagueSize, league.teams.length)
+    // The league's own pick order: linear, snake, or snake with third-round reversal.
+    const draftOrder = await resolveLeagueMockDraftOrder(league.id)
 
     const dnaCards: ManagerDNA[] = league.teams.length
       ? buildManagerDNAFromLeague(
@@ -272,20 +265,20 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    const userPickOveralls = getUserPickOveralls(teamCount, userIdx, rounds)
+    const userPickOveralls = mockTeamPickOveralls(teamCount, userIdx, rounds, draftOrder)
     const userPickSet = new Set(userPickOveralls)
 
     const playerToRemove = targetPlayer || pool[0]?.name || ''
 
     const [baselineOutcomes, playerGoneOutcomes, rbRunOutcomes, qbRunOutcomes] = await Promise.all([
-      Promise.resolve(runScenarioSims(pool, managerProfiles, teamCount, rounds, userPickSet, simulations)),
-      Promise.resolve(runScenarioSims(pool, managerProfiles, teamCount, rounds, userPickSet, simulations, {
+      Promise.resolve(runScenarioSims(pool, managerProfiles, teamCount, rounds, draftOrder, userPickSet, simulations)),
+      Promise.resolve(runScenarioSims(pool, managerProfiles, teamCount, rounds, draftOrder, userPickSet, simulations, {
         removePlayer: playerToRemove,
       })),
-      Promise.resolve(runScenarioSims(pool, managerProfiles, teamCount, rounds, userPickSet, simulations, {
+      Promise.resolve(runScenarioSims(pool, managerProfiles, teamCount, rounds, draftOrder, userPickSet, simulations, {
         rbRunBefore: userPickOveralls[0],
       })),
-      Promise.resolve(runScenarioSims(pool, managerProfiles, teamCount, rounds, userPickSet, simulations, {
+      Promise.resolve(runScenarioSims(pool, managerProfiles, teamCount, rounds, draftOrder, userPickSet, simulations, {
         qbRunBefore: userPickOveralls[0],
       })),
     ])
@@ -318,7 +311,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       simulations,
       rounds,
-      league: { id: league.id, name: league.name, size: teamCount },
+      league: { id: league.id, name: league.name, size: teamCount, draftType: draftOrder.draftType, thirdRoundReversal: draftOrder.thirdRoundReversal },
       userManager: teamNames[userIdx],
       userDraftSlot: userIdx + 1,
       targetPlayer: playerToRemove,

@@ -67,21 +67,26 @@ describe('revote eligibility', () => {
 // ── DB-backed tally with mocks ───────────────────────────────────────────────
 const { prisma, loadCouncilContext } = vi.hoisted(() => ({
   prisma: {
+    $transaction: vi.fn(), $queryRaw: vi.fn(),
     survivorVote: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn() },
+    survivorWeeklyScore: { findMany: vi.fn(async () => []) },
     survivorTribalCouncil: { update: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn() },
-    survivorAuditEntry: { create: vi.fn() },
+    survivorAuditEntry: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     survivorGameState: { findUnique: vi.fn(), updateMany: vi.fn() },
+    $transaction: vi.fn(), $queryRaw: vi.fn(),
   },
   loadCouncilContext: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma }))
+vi.mock('@/lib/survivor/survivorHostIndependence', () => ({ hasIndependentSurvivorHost: vi.fn(async () => true) }))
 vi.mock('@/lib/survivor/survivorCouncilService', async (orig) => {
   const actual = await (orig as () => Promise<Record<string, unknown>>)()
   return { ...actual, loadCouncilContext }
 })
 
 import { tallyCouncil } from '@/lib/survivor/survivorVoteTallyService'
+import { hasIndependentSurvivorHost } from '@/lib/survivor/survivorHostIndependence'
 import { submitVote } from '@/lib/survivor/survivorVoteService'
 
 type IdolPlay = {
@@ -98,7 +103,7 @@ type IdolPlay = {
   playedAt: string
 }
 
-function makeCtx(opts: { status?: string; idolsPlayed?: IdolPlay[]; lateVotesAllowed?: boolean; selfVotesAllowed?: boolean; voteChangePolicy?: 'first_valid_locks' | 'allow_until_close' } = {}) {
+function makeCtx(opts: { status?: string; idolsPlayed?: IdolPlay[]; lateVotesAllowed?: boolean; selfVotesAllowed?: boolean; voteChangePolicy?: 'first_valid_locks' | 'allow_until_close'; tieRule?: string; nonVoterAutoCast?: boolean } = {}) {
   const scopePlayers = [
     { userId: 'a', rosterId: 'ra', displayName: 'A' },
     { userId: 'b', rosterId: 'rb', displayName: 'B' },
@@ -147,6 +152,8 @@ function makeCtx(opts: { status?: string; idolsPlayed?: IdolPlay[]; lateVotesAll
       lateVotesAllowed: opts.lateVotesAllowed ?? false,
       selfVotesAllowed: opts.selfVotesAllowed ?? false,
       voteChangePolicy: opts.voteChangePolicy ?? 'first_valid_locks',
+      tieRule: opts.tieRule ?? 'revote_then_rocks',
+      nonVoterAutoCast: opts.nonVoterAutoCast ?? true,
     },
     scopePlayers,
     eligibility,
@@ -160,6 +167,7 @@ describe('tallyCouncil', () => {
     vi.clearAllMocks()
     prisma.survivorTribalCouncil.update.mockResolvedValue({})
     prisma.survivorAuditEntry.create.mockResolvedValue({})
+    prisma.survivorAuditEntry.findMany.mockResolvedValue([])
   })
 
   it('counts valid ballots and names the eliminated player', async () => {
@@ -195,6 +203,49 @@ describe('tallyCouncil', () => {
     expect(res.tally.countsByTargetUserId.d).toBeUndefined()
     expect(res.tally.eliminatedUserId).toBe('a')
     expect(res.tally.revealSequence.filter((s) => s.status === 'blocked_by_idol')).toHaveLength(2)
+  })
+
+  it('a successful Shot in the Dark blocks votes only against its owner', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx())
+    prisma.survivorAuditEntry.findMany.mockResolvedValue([{ actorUserId: 'd', data: { draw: 1, success: true } }])
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'ra', targetRosterId: 'rd', targetUserId: 'd', targetName: 'D', doesNotCount: false, isLateVote: false },
+      { id: 'v2', voterRosterId: 'rb', targetRosterId: 'rc', targetUserId: 'c', targetName: 'C', doesNotCount: false, isLateVote: false },
+    ])
+    const result = await tallyCouncil('league-1', 'council-1')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.tally.countsByTargetUserId).toEqual({ c: 1 })
+    expect(result.tally.revealSequence[0].status).toBe('blocked_by_shot')
+    expect(result.tally.eliminatedUserId).toBe('c')
+  })
+
+  it('a failed draw leaves the owner vulnerable and forfeits any extra ballot', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx({ idolsPlayed: [{ idolId: 'i2', powerType: 'extra_vote', playerUserId: 'a', playerRosterId: 'ra', extraTargetUserId: 'd', extraTargetRosterId: 'rd', playedAt: 'x' }] }))
+    prisma.survivorAuditEntry.findMany.mockResolvedValue([{ actorUserId: 'a', data: { draw: 4, success: false } }])
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'rb', targetRosterId: 'ra', targetUserId: 'a', targetName: 'A', doesNotCount: false, isLateVote: false },
+    ])
+    const result = await tallyCouncil('league-1', 'council-1')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.tally.countsByTargetUserId).toEqual({ a: 1 })
+    expect(result.tally.revealSequence).toHaveLength(1)
+  })
+
+  it('does not count a stale ballot recorded for a manager who used a draw', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx())
+    prisma.survivorAuditEntry.findMany.mockResolvedValue([{ actorUserId: 'a', data: { draw: 6, success: false } }])
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'ra', targetRosterId: 'rd', targetUserId: 'd', targetName: 'D', doesNotCount: false, isLateVote: false },
+      { id: 'v2', voterRosterId: 'rb', targetRosterId: 'rc', targetUserId: 'c', targetName: 'C', doesNotCount: false, isLateVote: false },
+    ])
+    const result = await tallyCouncil('league-1', 'council-1')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.tally.countsByTargetUserId).toEqual({ c: 1 })
+    expect(result.tally.revealSequence[0].status).toBe('forfeited_by_shot')
+    expect(result.tally.doesNotCountVoteIds).toContain('v1')
   })
 
   it('Extra Vote adds an additional ballot at tally', async () => {
@@ -273,6 +324,126 @@ describe('tallyCouncil', () => {
     expect(res.status).toBe('tie_pending')
   })
 
+  function revoteStillTied(tieRule = 'revote_then_season_points') {
+    const ctx = makeCtx({ tieRule })
+    // A real revote restricts voters to the non-tied managers and targets to the tied.
+    loadCouncilContext.mockResolvedValue({ ...ctx, council: { ...ctx.council, phase: 'revote', tiePlayerIds: ['c', 'd'] }, eligibility: restrictCouncilToRevote(ctx.eligibility, ['c', 'd']) })
+    ;(prisma as unknown as Record<string, { findMany: ReturnType<typeof vi.fn> }>).survivorWeeklyScore = {
+      findMany: vi.fn(async () => [{ userId: 'c', finalScore: 120.5 }, { userId: 'd', finalScore: 120.5 }]),
+    }
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'ra', targetRosterId: 'rc', targetUserId: 'c', targetName: 'C', doesNotCount: false, isLateVote: false },
+      { id: 'v2', voterRosterId: 'rb', targetRosterId: 'rd', targetUserId: 'd', targetName: 'D', doesNotCount: false, isLateVote: false },
+    ])
+  }
+
+  it('a revote tie on equal season points waits for a commissioner who does not play', async () => {
+    revoteStillTied()
+    vi.mocked(hasIndependentSurvivorHost).mockResolvedValue(true)
+    const res = await tallyCouncil('league-1', 'council-1')
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.tally.isTie).toBe(true)
+    expect(res.tally.tiePhase).toBe('commissioner_tiebreak_required')
+    expect(res.tally.eliminatedUserId).toBeNull()
+  })
+
+  it('the same tie goes to the stones when the commissioner plays, so the week never stalls', async () => {
+    revoteStillTied()
+    vi.mocked(hasIndependentSurvivorHost).mockResolvedValue(false)
+    const res = await tallyCouncil('league-1', 'council-1')
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.tally.isTie).toBe(false)
+    expect(res.tally.tiePhase).toBe('stones_decided')
+    expect(['c', 'd']).toContain(res.tally.eliminatedUserId)
+    expect(res.tally.eliminatedUserId && res.tally.eliminatedRosterId).toBeTruthy()
+    // Reproducible: the same council draws the same stone.
+    const again = await tallyCouncil('league-1', 'council-1')
+    expect(again.ok && again.tally.eliminatedUserId).toBe(res.tally.eliminatedUserId)
+  })
+
+  it('owner\'s default: a revote that stays tied goes to rocks — a seeded draw among the tied — not to season points', async () => {
+    revoteStillTied('revote_then_rocks')
+    const res = await tallyCouncil('league-1', 'council-1')
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.tally.isTie).toBe(false)
+    expect(res.tally.tiePhase).toBe('rocks_decided')
+    expect(['c', 'd']).toContain(res.tally.eliminatedUserId)
+    expect(prisma.survivorTribalCouncil.update.mock.calls.at(-1)[0].data.tieBreakSeasonPoints).toMatchObject({ rule: 'revote_then_rocks', round: 'revote', rocks: { candidates: ['c', 'd'] } })
+    expect(vi.mocked(hasIndependentSurvivorHost)).not.toHaveBeenCalled()
+    const again = await tallyCouncil('league-1', 'council-1')
+    expect(again.ok && again.tally.eliminatedUserId).toBe(res.tally.eliminatedUserId)
+  })
+
+  it('"rocks immediately": a first-round tie draws rocks at once, with no revote', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx({ tieRule: 'rocks_immediately', nonVoterAutoCast: false }))
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'ra', targetRosterId: 'rd', targetUserId: 'd', targetName: 'D', doesNotCount: false, isLateVote: false },
+      { id: 'v2', voterRosterId: 'rb', targetRosterId: 'rc', targetUserId: 'c', targetName: 'C', doesNotCount: false, isLateVote: false },
+    ])
+    const res = await tallyCouncil('league-1', 'council-1')
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.tally.tiePhase).toBe('rocks_decided')
+    expect(res.status).toBe('closed')
+    expect(['c', 'd']).toContain(res.tally.eliminatedUserId)
+  })
+
+  it('a missing ballot is auto-cast for the lowest-scoring manager the voter could have targeted, and recorded', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx())
+    // a and b vote; c and d do not. This week c scored 80 and d 95, b 120, a 110.
+    prisma.survivorWeeklyScore.findMany.mockResolvedValue([
+      { userId: 'a', finalScore: 110, isFinalized: true }, { userId: 'b', finalScore: 120, isFinalized: true },
+      { userId: 'c', finalScore: 80, isFinalized: true }, { userId: 'd', finalScore: 95, isFinalized: true },
+    ])
+    prisma.survivorVote.upsert.mockImplementation(async (args: { create: { voterRosterId: string } }) => ({ id: `auto-${args.create.voterRosterId}` }))
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'ra', targetRosterId: 'rd', targetUserId: 'd', targetName: 'D', doesNotCount: false, isLateVote: false },
+      { id: 'v2', voterRosterId: 'rb', targetRosterId: 'rd', targetUserId: 'd', targetName: 'D', doesNotCount: false, isLateVote: false },
+    ])
+    const res = await tallyCouncil('league-1', 'council-1')
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    // c cannot vote for themself, so c's ballot goes to d (95, the lowest left); d's ballot goes to c (80).
+    const casts = prisma.survivorVote.upsert.mock.calls.map((call: [{ create: { voterUserId: string; targetUserId: string } }]) => call[0].create)
+    expect(casts.map(c => [c.voterUserId, c.targetUserId])).toEqual([['c', 'd'], ['d', 'c']])
+    expect(res.tally.countsByTargetUserId).toEqual({ d: 3, c: 1 })
+    expect(res.tally.eliminatedUserId).toBe('d')
+    expect(res.tally.totalBallots).toBe(4)
+    const audits = prisma.survivorAuditEntry.create.mock.calls.map((call: [{ data: { action: string } }]) => call[0].data.action)
+    expect(audits.filter(a => a === 'non_voter_auto_cast')).toHaveLength(2)
+    expect(audits.at(-1)).toBe('votes_tallied')
+  })
+
+  it('auto-cast skips a manager who used Shot in the Dark, and does nothing when switched off or without scores', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx())
+    prisma.survivorAuditEntry.findMany.mockResolvedValue([{ actorUserId: 'c', data: { draw: 3, success: false } }])
+    prisma.survivorWeeklyScore.findMany.mockResolvedValue([{ userId: 'a', finalScore: 10, isFinalized: true }, { userId: 'b', finalScore: 20, isFinalized: true }, { userId: 'c', finalScore: 5, isFinalized: true }])
+    prisma.survivorVote.upsert.mockResolvedValue({ id: 'auto' })
+    prisma.survivorVote.findMany.mockResolvedValue([
+      { id: 'v1', voterRosterId: 'ra', targetRosterId: 'rb', targetUserId: 'b', targetName: 'B', doesNotCount: false, isLateVote: false },
+      { id: 'v2', voterRosterId: 'rb', targetRosterId: 'ra', targetUserId: 'a', targetName: 'A', doesNotCount: false, isLateVote: false },
+    ])
+    await tallyCouncil('league-1', 'council-1')
+    // Only d is auto-cast (c forfeited by the shot); d's lowest-scoring target is c.
+    expect(prisma.survivorVote.upsert).toHaveBeenCalledTimes(1)
+    expect(prisma.survivorVote.upsert.mock.calls[0][0].create).toMatchObject({ voterUserId: 'd', targetUserId: 'c' })
+
+    vi.clearAllMocks()
+    prisma.survivorTribalCouncil.update.mockResolvedValue({})
+    prisma.survivorAuditEntry.findMany.mockResolvedValue([])
+    loadCouncilContext.mockResolvedValue(makeCtx({ nonVoterAutoCast: false }))
+    await tallyCouncil('league-1', 'council-1')
+    expect(prisma.survivorVote.upsert).not.toHaveBeenCalled()
+
+    loadCouncilContext.mockResolvedValue(makeCtx())
+    prisma.survivorWeeklyScore.findMany.mockResolvedValue([])
+    await tallyCouncil('league-1', 'council-1')
+    expect(prisma.survivorVote.upsert).not.toHaveBeenCalled()
+  })
+
   it('refuses to tally while the window is open', async () => {
     loadCouncilContext.mockResolvedValue(makeCtx({ status: 'voting_open' }))
     const res = await tallyCouncil('league-1', 'council-1')
@@ -285,8 +456,25 @@ describe('tallyCouncil', () => {
 describe('submitVote', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prisma.$transaction.mockImplementation(async fn => fn(prisma))
+    prisma.survivorGameState.findUnique.mockResolvedValue({ pausedSnapshot: null })
     prisma.survivorAuditEntry.create.mockResolvedValue({})
+    prisma.survivorAuditEntry.findUnique.mockResolvedValue(null)
     prisma.survivorVote.upsert.mockResolvedValue({})
+    prisma.$transaction.mockImplementation((work: (db: typeof prisma) => Promise<unknown>) => work(prisma))
+  })
+
+  it('cannot submit while the league is paused', async () => {
+    prisma.survivorGameState.findUnique.mockResolvedValue({ pausedSnapshot: { needsTribalLock: true } })
+    expect(await submitVote('league-1', 'a', 'c')).toMatchObject({ ok: false, code: 'league_paused' })
+    expect(prisma.survivorVote.upsert).not.toHaveBeenCalled()
+    expect(prisma.$queryRaw.mock.calls[0][1]).toBe('survivor-setup:league-1')
+  })
+
+  it.each(['closed', 'tie_pending'])('cannot submit after the window becomes %s', async status => {
+    loadCouncilContext.mockResolvedValue(makeCtx({ status }))
+    expect(await submitVote('league-1', 'a', 'c')).toMatchObject({ ok: false, code: 'window_closed' })
+    expect(prisma.survivorVote.upsert).not.toHaveBeenCalled()
   })
 
   it('blocks a self-vote when self-votes are disallowed', async () => {
@@ -325,5 +513,21 @@ describe('submitVote', () => {
     expect(res.locked).toBe(true)
     expect(res.targetUserId).toBe('c')
     expect(prisma.survivorVote.upsert).toHaveBeenCalledOnce()
+  })
+
+  it('rejects a vote after the manager used Shot in the Dark', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx({ status: 'voting_open' }))
+    prisma.survivorAuditEntry.findUnique.mockResolvedValue({ relatedEntityId: 'council-1' })
+    const result = await submitVote('league-1', 'a', 'c')
+    expect(result).toEqual(expect.objectContaining({ ok: false, code: 'shot_forfeited_vote' }))
+    expect(prisma.survivorVote.upsert).not.toHaveBeenCalled()
+  })
+
+  it('allows voting at a later council after using the one-time draw earlier', async () => {
+    loadCouncilContext.mockResolvedValue(makeCtx({ status: 'voting_open' }))
+    prisma.survivorAuditEntry.findUnique.mockResolvedValue({ relatedEntityId: 'older-council' })
+    prisma.survivorVote.findUnique.mockResolvedValue(null)
+    const result = await submitVote('league-1', 'a', 'b')
+    expect(result.ok).toBe(true)
   })
 })

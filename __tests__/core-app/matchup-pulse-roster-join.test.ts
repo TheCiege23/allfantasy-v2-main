@@ -252,7 +252,7 @@ describe('getMatchupPulse — elimination formats', () => {
     db.rosters[1] = { leagueId: 'L1', platformUserId: 'them-sleeper', playerData: { starters: ['c', 'd'] } }
   }
 
-  it('🛑 a guillotine league is counted as elimination, never ranked', async () => {
+  it('🛑 a Guilly league is counted as elimination, never ranked', async () => {
     pairedOpponent()
     db.claimed = [{ externalId: '1', platformUserId: 'me-sleeper', league: { ...LEAGUE, leagueType: 'guillotine' } }]
     const pulse = await getMatchupPulse(USER, NOW)

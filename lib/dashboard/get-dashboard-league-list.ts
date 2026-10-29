@@ -8,6 +8,7 @@ import { isRealLeague, EXCLUDED_VARIANTS } from '@/lib/leagues/leagueListFilter'
 import { resolveLeagueListSeasonYear } from '@/lib/leagues/resolveLeagueListSeasonYear'
 import type { ActivityLeagueEntry } from '@/lib/activity/types'
 import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
+import { isTournamentCoCommissioner, TOURNAMENT_CO_COMMISSIONERS_KEY } from '@/lib/league/tournamentCoCommissioners'
 
 const VARIANT_NOT_IN = Array.from(EXCLUDED_VARIANTS)
 
@@ -86,6 +87,9 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
                 { rosters: { some: { platformUserId: userId } } },
+                // A co-commissioner granted by the tournament that created the league runs it without a
+                // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
+                { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
               ],
             },
             { OR: [{ leagueVariant: null }, { leagueVariant: { notIn: VARIANT_NOT_IN } }] },
@@ -193,10 +197,13 @@ export function resolveViewerLeagueCommissioner(params: {
   leagueIsCommissionerFlag: boolean
   membershipRole?: string | null
   team?: { isCommissioner?: boolean | null; isCoCommissioner?: boolean | null } | null
+  /** `League.settings`, read for the tournament co-commissioner list. */
+  settings?: unknown
 }): boolean {
   const p = String(params.platform || '').toLowerCase()
   const isRowOwner = params.leagueRowOwnerId === params.viewerUserId
   if (params.team?.isCommissioner || params.team?.isCoCommissioner) return true
+  if (isTournamentCoCommissioner(params.settings, params.viewerUserId)) return true
   if (params.membershipRole === 'COMMISSIONER') return true
   if (
     isRowOwner &&
@@ -452,6 +459,7 @@ export async function getDashboardLeagueListForUser(
   userId: string,
   opts?: {
     collapseSeries?: boolean
+    requireCoreLeagues?: boolean
     /**
      * `'full'` (the default) returns every roster of every league with its `playerData`; `'count'`
      * returns roster ids only — enough for the team-count fallback below, and the shape stays an
@@ -516,6 +524,9 @@ export async function getDashboardLeagueListForUser(
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
                 { rosters: { some: { platformUserId: userId } } },
+                // A co-commissioner granted by the tournament that created the league runs it without a
+                // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
+                { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
               ],
             },
             {
@@ -569,6 +580,7 @@ export async function getDashboardLeagueListForUser(
           lifecycleState: true,
           tradeDeadlineWeek: true,
           playoffStartWeek: true,
+          playoffLowerBracket: true,
           leagueSettings: {
             select: { draftDateUtc: true },
           },
@@ -595,6 +607,8 @@ export async function getDashboardLeagueListForUser(
       })
       .catch((err: unknown) => {
         console.error('[League List] generic leagues query failed', err)
+        // Core uses this list as its membership gate. A failed read is not an empty list.
+        if (opts?.requireCoreLeagues) throw err
         return []
       }),
     (prisma as any).sleeperLeague
@@ -734,6 +748,7 @@ export async function getDashboardLeagueListForUser(
       leagueIsCommissionerFlag: Boolean(lgCore.isCommissioner),
       membershipRole,
       team: myTeam ?? null,
+      settings: lgCore.settings,
     })
     const userRole = computeUserRole(lgCore.platform, isCommissioner)
 
@@ -759,6 +774,7 @@ export async function getDashboardLeagueListForUser(
       lifecycleState: lgCore.lifecycleState ?? null,
       tradeDeadlineWeek: lgCore.tradeDeadlineWeek ?? null,
       playoffStartWeek: lgCore.playoffStartWeek ?? null,
+      playoffLowerBracket: lgCore.playoffLowerBracket ?? null,
       draftDate: viewerLeagueSettings?.draftDateUtc ? viewerLeagueSettings.draftDateUtc.toISOString() : null,
     }
   })

@@ -130,7 +130,7 @@ describe('🛑 the editors read Spanish in Spanish', () => {
     const r = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
     await r.findByText('Vista previa del orden del draft de novatos 2027')
     const text = r.container.textContent ?? ''
-    for (const s of ['Horario, reloj de selección, rondas y orden del draft.', 'Según tu zona horaria local', 'Elige una fecha', 'Elige una hora',
+    for (const s of ['Horario, reloj de selección, rondas y orden del draft.', 'La fecha y la hora están en la zona horaria de la liga', 'Elige una fecha', 'Elige una hora',
       'Serpiente', 'Lineal', 'Subasta', '90 segundos', '8 horas', '15 rondas', 'Draft en vivo', 'Solo para drafts lentos',
       'Llenar con CI', 'Vacío', 'Calculado automáticamente para la temporada 2027', 'Modo de orden del draft', 'Sin playoffs', 'Equipos de playoffs', 'Campeón', 'Subcampeón']) {
       expect(text, s).toContain(s)

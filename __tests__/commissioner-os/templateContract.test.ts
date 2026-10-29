@@ -115,7 +115,7 @@ describe('both fixtures validate', () => {
   })
 })
 
-describe('Survivor All-Stars Guillotine exposes BOTH survivor and guillotine capabilities', () => {
+describe('Survivor All-Stars Guilly exposes BOTH survivor and guillotine capabilities', () => {
   const t = SURVIVOR_ALL_STARS_GUILLOTINE_V1
 
   it('is guillotine', () => {

@@ -27,7 +27,8 @@ import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidati
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { pickAgreedAge, type AgeRow } from '@/lib/player-age'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
-import { ageTrajectory, dynastyValue } from './dynastyPlayerValue'
+import { dynastyValue } from './dynastyPlayerValue'
+import { deriveCatalogStarterRequirements } from './dynastySportCatalog'
 import { loadDynastyPickCapital, type DynastyPickCapital } from './dynastyPickCapital'
 import {
   fetchDynastyFreeAgentPool,
@@ -186,6 +187,14 @@ export async function buildDynastyWarRoomContext(
     if (superflexCount > 0) {
       roster.requiredByPosition.QB = (roster.requiredByPosition.QB ?? 0) + superflexCount
     }
+    /*
+     * 🛑 THE RB/WR/TE SPLIT ABOVE IS NFL'S. It used to run for every sport, so an NBA roster's two
+     * UTIL slots became RB/WR/TE "needs" that flowed into trade targets and waiver adds. For
+     * NBA/MLB/NHL the demand is rebuilt from the sport's own slot catalog (UTIL → the positions UTIL
+     * accepts). NFL — and any sport without a catalog — keeps the result above unchanged.
+     */
+    const catalogRequired = deriveCatalogStarterRequirements(sport, tmpl.template.slots)
+    if (catalogRequired) roster.requiredByPosition = catalogRequired
     if (taxiFromTemplate > 0) roster.taxiSlots = taxiFromTemplate
   } catch {
     rosterRulesState = 'missing'
@@ -328,7 +337,7 @@ export async function buildDynastyWarRoomContext(
       weekProjection: null,
       hasNoValueSignal: adp == null,
     }
-    const { value, source } = dynastyValue(base)
+    const { value, source } = dynastyValue(base, sport)
     base.dynastyValue = source === 'none' ? null : value
     return base
   }
@@ -430,7 +439,7 @@ export async function buildDynastyWarRoomContext(
       slotType: 'free_agent',
       isStarterSlot: false,
       age,
-      dynastyValue: dynastyValue({ adp: fa.adp } as DynastyPlayerFact).value,
+      dynastyValue: dynastyValue({ adp: fa.adp } as DynastyPlayerFact, sport).value,
       adp: fa.adp,
       injuryStatus: injuryNews.injuryByName.get(injuryNameKey(fa.playerName))?.status ?? null,
       weekProjection: null,

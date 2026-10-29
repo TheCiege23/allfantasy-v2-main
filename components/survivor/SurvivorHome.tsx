@@ -11,6 +11,7 @@ import { SurvivorTribalCouncilView } from './SurvivorTribalCouncilView'
 import { SurvivorIdolsView } from './SurvivorIdolsView'
 import { SurvivorExileView } from './SurvivorExileView'
 import { SurvivorMergeJuryView } from './SurvivorMergeJuryView'
+import { SurvivorShareCardsButton } from './share/SurvivorShareCards'
 import { SurvivorAIPanel } from './SurvivorAIPanel'
 import { SurvivorFirstEntryModal } from './SurvivorFirstEntryModal'
 import {
@@ -148,6 +149,8 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
         week={summary?.currentWeek}
         phase={tribesFormed ? (summary?.merged ? 'Merged island' : 'Tribe season') : 'Before the draft'}
         visualThemeId={summary?.config?.visualThemeId}
+        voteDeadlineAt={summary?.council && !summary.council.closedAt && !summary.council.isRevealed ? summary.council.voteDeadlineAt : null}
+        revealStartsAt={summary?.council?.isRevealed ? summary.council.revealStartsAt ?? null : null}
         headline={nextAction.headline}
         description={nextAction.description}
         primaryAction={nextAction.primaryAction}
@@ -224,6 +227,7 @@ export function SurvivorHome({ leagueId }: SurvivorHomeProps) {
         >
           <Zap className="h-4 w-4" /> Waivers
         </Link>
+        <SurvivorShareCardsButton leagueId={leagueId} />
       </div>
 
       {/* View switcher (mobile dropdown, desktop tabs) */}

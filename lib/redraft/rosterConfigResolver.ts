@@ -14,6 +14,7 @@
  */
 import { getRedraftSportConfig } from '@/lib/redraft/sportConfig'
 import { normalizeToken } from '@/lib/redraft/lineupValidation'
+import { isDailyRedraftSport } from '@/lib/sportConfig/dailySportRedraftRoster'
 
 export type ResolvedRosterConfig = {
   /** Normalized starter slot token → capacity (QB, RB, WR, TE, FLX, SF, DEF, K, IDP_*). */
@@ -28,15 +29,31 @@ export type ResolvedRosterConfig = {
 }
 
 const BENCH_TOKENS = new Set(['BENCH', 'BN'])
-const IR_TOKENS = new Set(['IR', 'RESERVE'])
-const TAXI_TOKENS = new Set(['TAXI', 'DEVY'])
+// MLB and NBA templates name their injured list `IL` (MLB adds `IL_PLUS` and the minor-league `NA`);
+// without them here those slots were counted as starter capacity (lib/mlb-roster/MlbRosterTemplates.ts).
+const IR_TOKENS = new Set(['IR', 'RESERVE', 'IL', 'IL_PLUS', 'NA'])
+const TAXI_TOKENS = new Set(['TAXI', 'DEVY', 'PROSPECT', 'RIGHTS', 'MINORS'])
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
+function numericSlotMap(candidate: unknown): Record<string, number> | null {
+  if (!isRecord(candidate)) return null
+  const map: Record<string, number> = {}
+  let found = false
+  for (const [k, v] of Object.entries(candidate)) {
+    const n = Number(v)
+    if (Number.isFinite(n)) {
+      map[k] = n
+      found = true
+    }
+  }
+  return found ? map : null
+}
+
 /** Extract a raw `{ slot: count }` map from the canonical/legacy settings shapes. */
-function extractRawSlotMap(leagueSettings: unknown): Record<string, number> | null {
+function extractRawSlotMap(sport: string, leagueSettings: unknown): Record<string, number> | null {
   const s = isRecord(leagueSettings) ? leagueSettings : {}
 
   // Canonical: settings.roster.config.sections[].slots (merge all sections).
@@ -58,6 +75,20 @@ function extractRawSlotMap(leagueSettings: unknown): Record<string, number> | nu
       }
     }
     if (found) return merged
+  }
+
+  /*
+   * NBA / NHL / MLB: the roster engine's `<sport>_roster_config.slots` — what the post-create
+   * bootstrap installs and the commissioner roster editor saves, and what the lineup screen
+   * (`RosterTemplateService.getRosterTemplate`) reads FIRST. Without this, a league whose settings
+   * carried no `roster.config.sections` was validated against `starter_slots` or the static defaults
+   * while the lineup screen showed this layout. Football keeps its existing order.
+   */
+  if (isDailyRedraftSport(sport)) {
+    const sportConfigKey = `${String(sport).trim().toLowerCase()}_roster_config`
+    const custom = isRecord(s[sportConfigKey]) ? (s[sportConfigKey] as Record<string, unknown>) : null
+    const slots = numericSlotMap(custom?.slots)
+    if (slots) return slots
   }
 
   // Legacy fallbacks.
@@ -93,8 +124,25 @@ function defaultsFor(sport: string): ResolvedRosterConfig {
   return { starterCapacities, benchSlots, irSlots, taxiSlots, maxRosterSize: starters + benchSlots + irSlots + taxiSlots, source: 'defaults' }
 }
 
+/**
+ * A roster slot whose capacity `maxRosterSize - irSlots - taxiSlots` leaves out — IR / IL / reserve
+ * and taxi / devy / minors — read with the same tokens that sized those slots, so a player sitting in
+ * one is not counted against the active limit those slots were subtracted from.
+ */
+export function isReserveRosterSlot(slotType: string | null | undefined): boolean {
+  if (!slotType) return false
+  const token = normalizeToken(slotType)
+  return IR_TOKENS.has(token) || TAXI_TOKENS.has(token)
+}
+
+/** The injured-list half of {@link isReserveRosterSlot}: IR / IL / reserve, never taxi or devy. */
+export function isInjuredReserveRosterSlot(slotType: string | null | undefined): boolean {
+  if (!slotType) return false
+  return IR_TOKENS.has(normalizeToken(slotType))
+}
+
 export function resolveRedraftRosterConfig(sport: string, leagueSettings: unknown): ResolvedRosterConfig {
-  const raw = extractRawSlotMap(leagueSettings)
+  const raw = extractRawSlotMap(sport, leagueSettings)
   if (!raw) return defaultsFor(sport)
 
   const starterCapacities = new Map<string, number>()

@@ -1,6 +1,7 @@
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import { normalizePositionForStarterEligibility } from '@/lib/roster/LineupTemplateValidation'
+import { placeStartersBySlotIndex } from '@/lib/league/lineupSlotPositions'
 
 export type RosterLineupLists = {
   starters: string[]
@@ -14,7 +15,7 @@ function idsFromSection(rows: Array<Record<string, unknown>>): string[] {
   return rows.map((r) => String(r.id ?? '')).filter(Boolean)
 }
 
-/** Build ordered starter IDs aligned to expanded slots (pad with empty string for empty slot). */
+/** Build ordered starter IDs aligned to expanded slots (empty string for an empty slot). */
 export function buildLineupListsFromPlayerData(
   playerData: unknown,
   starterSlotCount: number,
@@ -68,6 +69,11 @@ export function buildLineupListsFromPlayerData(
       bench = ids.slice(cap)
     }
   }
+
+  // Saved slot positions (lib/league/lineupSlotPositions.ts) put each starter back in the slot he
+  // was saved in, holes included. Without them (older saves), the compacted list is padded as before.
+  const placed = placeStartersBySlotIndex(sections.starters, starterSlotCount)
+  if (placed) starters = placed
 
   while (starters.length < starterSlotCount) starters.push('')
   if (starters.length > starterSlotCount) starters = starters.slice(0, starterSlotCount)

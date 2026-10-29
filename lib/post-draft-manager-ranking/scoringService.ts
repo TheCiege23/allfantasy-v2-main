@@ -102,14 +102,18 @@ function normalizePositionForSport(sport: SupportedSport, rawPosition: string): 
 
 /**
  * Score each pick: valueScore = adp - actual_pick.
- * When ADP is missing, use actual_pick as neutral (valueScore = 0).
+ * ADP is the market ADP recorded when the pick was made (`adpAtPick`) when present —
+ * what the manager actually faced — else today's AI ADP for the format. When neither
+ * matches, actual_pick is used as neutral (valueScore = 0).
  */
 function scorePicks(
   picks: DraftPickSnapshot[],
   adpMap: Map<string, number>
 ): PickScoreEntry[] {
   return picks.map((p) => {
-    const adp = getAdpForPick(adpMap, p.playerName, p.position, p.team ?? null, p.overall)
+    const current = getAdpForPick(adpMap, p.playerName, p.position, p.team ?? null, Number.NaN)
+    const adpSource = p.adpAtPick != null ? 'at_pick' : Number.isNaN(current) ? 'none' : 'current'
+    const adp = p.adpAtPick ?? (Number.isNaN(current) ? p.overall : current)
     const valueScore = adp - p.overall
     return {
       id: p.id,
@@ -123,6 +127,7 @@ function scorePicks(
       team: p.team ?? null,
       byeWeek: p.byeWeek ?? null,
       adp,
+      adpSource,
       valueScore,
     }
   })

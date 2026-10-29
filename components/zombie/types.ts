@@ -1,9 +1,10 @@
 /**
  * Frontend types for Zombie league (PROMPT 354).
  */
-import type { ZombieBoardEntry } from '@/lib/zombie/zombieHomeSummary'
+import type { ZombieBoardEntry, ZombieTurnMoment } from '@/lib/zombie/zombieHomeSummary'
+import type { ZombieMatchupView } from '@/lib/zombie/zombieMatchupBoard'
 
-export type { ZombieBoardEntry }
+export type { ZombieBoardEntry, ZombieTurnMoment, ZombieMatchupView }
 
 export type ZombieView =
   | 'home'
@@ -43,6 +44,8 @@ export interface ZombieSummary {
     status: string | null
     backgroundTheme: string
     teamCount: number
+    /** Null when the league is not part of a universe. */
+    universeId?: string | null
   }
   /** Already redacted: a hidden Whisperer is a Survivor here, as everywhere else in this payload. */
   myStatus?: string | null
@@ -60,6 +63,16 @@ export interface ZombieSummary {
   } | null
   /** Outbreak Points: `week` is null until that week is settled. */
   myWinnings?: { week: number | null; total: number } | null
+  /** My matchup as the Bashing card draws it. */
+  myMatchupView?: ZombieMatchupView | null
+  /** The latest week whose resolution completed; null before the first. */
+  lastResolvedWeek?: number | null
+  /** The status change the ZombieTurn overlay announces once. */
+  turnMoment?: ZombieTurnMoment | null
+  /** Roster ids of the teams the viewer turned. */
+  myInfections?: string[]
+  /** False in a secret-Whisperer league. */
+  whispererPublic?: boolean
   /** The engine's own numbers for this sport — never sample values. */
   rules?: {
     bashingMargin: number

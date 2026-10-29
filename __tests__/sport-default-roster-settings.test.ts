@@ -38,7 +38,7 @@ describe('Default Roster Settings by Sport', () => {
       }
 
       if (sport === 'MLB') {
-        for (const slot of ['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'OF', 'DH', 'UTIL']) {
+        for (const slot of ['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'CI', 'MI', 'OF', 'UTIL']) {
           expect(slotNames.includes(slot)).toBe(true)
         }
       }
@@ -50,9 +50,11 @@ describe('Default Roster Settings by Sport', () => {
       }
 
       if (sport === 'NCAAF') {
-        for (const slot of ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST']) {
+        for (const slot of ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K']) {
           expect(slotNames.includes(slot)).toBe(true)
         }
+        // No college team defense exists to draft — see redraftTeamDefenseEnabled.
+        expect(slotNames.includes('DST')).toBe(false)
       }
 
       if (sport === 'NCAAB') {
@@ -108,7 +110,8 @@ describe('Default Roster Settings by Sport', () => {
     expect(ncaabFallback.includes('PG')).toBe(false)
 
     const ncaafPositions = getPositionsForSport('NCAAF')
-    expect(ncaafPositions).toEqual(expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'K', 'DST']))
+    expect(ncaafPositions).toEqual(expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'K']))
+    expect(ncaafPositions).not.toContain('DST')
 
     const nflDynastyIdpPositions = getRegistryPositionsForSport('NFL', 'DYNASTY_IDP')
     expect(nflDynastyIdpPositions).toEqual(expect.arrayContaining(['DE', 'DT', 'LB', 'CB', 'S']))

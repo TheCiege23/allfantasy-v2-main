@@ -6,12 +6,14 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { prepareSurvivorDraftParticipants } from './survivorDraftParticipants'
+import { readLockedTribePlanMapping } from './survivorTribePlan'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
 import { assignSurvivorTribes, getTribeAssignmentStatus } from './survivorTribeProvisioning'
 import { provisionSurvivorChats } from './survivorTribeChatProvisioning'
-import { seedSurvivorIdols, getIdolSeedStatus } from './survivorIdolProvisioning'
+import { seedSurvivorIdols, getIdolSeedStatus, loadSurvivorWaiverIdolPool } from './survivorIdolProvisioning'
+import type { PoolIdolCandidate } from './survivorIdolPoolPlacement'
 import { postSurvivorIntroAnnouncement } from './survivorAnnouncementService'
 import type { TribeAssignmentMode } from './survivorTribeAssignmentEngine'
 
@@ -66,10 +68,13 @@ function setupStatus(complete: boolean, detail: string, blockers: string[] = [])
 }
 
 /** Atomic, serialized initialization for automatic completion and manual repair. */
-export function initializeSurvivorPhase2(
+export async function initializeSurvivorPhase2(
   leagueId: string,
   opts: SurvivorPhase2InitOptions = {},
 ): Promise<SurvivorPhase2InitResult> {
+  // The waiver-wire idols need the undrafted pool, a build that outlasts the setup transaction:
+  // read it before the transaction opens (see survivorIdolProvisioning).
+  const waiverPool = await loadSurvivorWaiverIdolPool(leagueId).catch(() => undefined)
   return withSurvivorSetupTransaction(leagueId, async (db) => {
     let sessionId = opts.completedDraftSessionId
     if (!sessionId) {
@@ -100,7 +105,7 @@ export function initializeSurvivorPhase2(
       if (preparation.alreadyStarted) return setupStatus(true, 'Survivor has already progressed; existing gameplay was preserved.')
       draftOrder ??= preparation.draftOrder
     }
-    const result = await initializeSurvivorPhase2Locked(leagueId, { ...opts, draftOrder }, db)
+    const result = await initializeSurvivorPhase2Locked(leagueId, { ...opts, draftOrder }, db, waiverPool)
     if (sessionId) {
       const detail = result.complete ? [] : [result.steps.tribes.detail, ...result.blockers]
       await recordDraftSetupStatus(db, leagueId, sessionId, result.complete, detail, opts.actorUserId)
@@ -129,6 +134,7 @@ async function initializeSurvivorPhase2Locked(
   leagueId: string,
   opts: SurvivorPhase2InitOptions,
   db: Prisma.TransactionClient,
+  waiverPool?: PoolIdolCandidate[],
 ): Promise<SurvivorPhase2InitResult> {
   const blockers: string[] = []
   const league = await db.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
@@ -136,8 +142,9 @@ async function initializeSurvivorPhase2Locked(
     league?.settings && typeof league.settings === 'object' ? (league.settings as Record<string, unknown>) : {},
   )
 
-  // 1. Tribes.
-  const tribesOutcome = await assignSurvivorTribes(leagueId, {
+  // 1. Tribes. A tribe plan the commissioner locked before the draft (handoff §5.4,
+  // survivorTribePlanServer.ts) wins over the league's default mode unless the caller overrides.
+  const baseTribeOpts = {
     mode: opts.mode ?? settings.tribeAssignmentMode,
     tribeCount: opts.tribeCount ?? settings.tribeCount,
     seed: opts.seed ?? null,
@@ -147,7 +154,14 @@ async function initializeSurvivorPhase2Locked(
     allowReassign: opts.allowReassign ?? false,
     actorUserId: opts.actorUserId,
     db,
-  })
+  }
+  const lockedPlan = opts.mode || opts.manualMapping ? null : readLockedTribePlanMapping(league?.settings)
+  let tribesOutcome = await assignSurvivorTribes(
+    leagueId,
+    lockedPlan ? { ...baseTribeOpts, mode: 'commissioner_manual', manualMapping: lockedPlan } : baseTribeOpts,
+  )
+  // The locked plan no longer fits the cast (a seat changed hands after the lock): use the default.
+  if (!tribesOutcome.ok && lockedPlan) tribesOutcome = await assignSurvivorTribes(leagueId, baseTribeOpts)
 
   if (!tribesOutcome.ok) {
     blockers.push(`tribe_assignment:${tribesOutcome.code}`)
@@ -175,6 +189,7 @@ async function initializeSurvivorPhase2Locked(
     actorUserId: opts.actorUserId,
     allowReseed: opts.allowReassign ?? false,
     db,
+    waiverPool,
   }) : { ok: true as const, seeded: false, alreadySeeded: false, voteShieldCount: 0 }
   if (!idolsOutcome.ok) throw new Error(`Survivor idol setup failed: ${idolsOutcome.error}`)
 

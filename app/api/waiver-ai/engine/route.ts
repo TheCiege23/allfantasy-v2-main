@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { z } from 'zod'
@@ -155,7 +156,7 @@ const RequestSchema = z.object({
 
 export const dynamic = 'force-dynamic'
 
-export const POST = withApiUsage({
+const paidToolPost = withApiUsage({
   endpoint: '/api/waiver-ai/engine',
   tool: 'WaiverAiEngine',
 })(async (request: NextRequest, _ctx?: unknown) => {
@@ -194,7 +195,7 @@ export const POST = withApiUsage({
       }
     }
 
-    const gate = await requireFeatureEntitlement({
+    const gate = input.includeAIExplanation ? await requireFeatureEntitlement({
       userId,
       userEmail: session?.user?.email,
       featureId: 'ai_waivers',
@@ -209,11 +210,12 @@ export const POST = withApiUsage({
         sport: input.sport ?? null,
         includeAIExplanation: Boolean(input.includeAIExplanation),
       },
-    })
+    }) : { ok: true as const, tokenSpend: null, tokenPreview: null }
     if (!gate.ok) return gate.response
     if (gate.tokenSpend) tokenFallbackLedgerId = gate.tokenSpend.id
 
     const analysis = await runWaiverAIService(input)
+    if (analysis.explanation.source !== 'ai') paidToolNotDelivered()
 
     // Decision OS Slice 2 â€” waiver shadow/live runner. Evaluation only; never executes a claim.
     // Stage 0 (SHADOW only): scope-filtered, logs parity, result discarded.
@@ -330,3 +332,5 @@ export const POST = withApiUsage({
     return NextResponse.json({ error: 'Waiver AI failed' }, { status: 500 })
   }
 })
+
+export const POST = withPaidToolBilling(paidToolPost)

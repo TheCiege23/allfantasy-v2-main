@@ -78,6 +78,12 @@ describe('Survivor blind-mode bypass prevention', () => {
     const access = buildSurvivorAccessContextFromSnapshot({ leagueId: 'l', userId: 'u', role: 'member', roster: { id: 'r' } })
     expect(canSeeSurvivorChannel(access, { channelType: 'tribe', tribeId: null })).toBe(false)
   })
+  it('never exposes an archived huddle even when the tribe id matches', () => {
+    const access = buildSurvivorAccessContextFromSnapshot({ leagueId: 'l', userId: 'u', role: 'member',
+      player: { userId: 'u', playerState: 'active', tribeId: 'tribe-a', canAccessTribeChat: true }, roster: { id: 'r' } })
+    expect(canSeeSurvivorChannel(access, { channelType: 'tribe', tribeId: 'tribe-a', isArchived: true })).toBe(false)
+    expect(canSeeSurvivorChannel(access, { channelType: 'tribe', tribeId: 'tribe-a', isArchived: false })).toBe(true)
+  })
 })
 
 it('honors hideIdolsFromCommissioner for a non-playing host while preserving council control', () => {

@@ -299,3 +299,63 @@ export async function findAfProjectionsByName(args: {
 
   return { rows: deduped, season }
 }
+
+/** A player's season-baseline AF projection, for surfaces that hold Rolling Insights ids. */
+export interface AfBaselineProjection {
+  /** PER GAME (DraftKings-style scoring for MLB/NHL — see `categoryScoring.ts`), never a season total. */
+  afProjection: number
+  season: number
+  computedAt: Date
+}
+
+/**
+ * Batch: Rolling Insights player id → that player's newest season-baseline (`week: null`) projection,
+ * at or before `season`.
+ *
+ * `AFProjectionSnapshot.playerId` is a `PlayerIdentityMap.id`, so the join goes through
+ * `PlayerIdentityMap.rollingInsightsId`. An RI id claimed by more than one identity is dropped —
+ * picking one would hand a player a stranger's projection.
+ */
+export async function loadAfBaselineProjectionsByRollingInsightsIds(args: {
+  sport: string
+  rollingInsightsIds: string[]
+  /** Upper bound on the season read; omit for the newest available. */
+  season?: number | null
+}): Promise<Map<string, AfBaselineProjection>> {
+  const sport = args.sport.trim().toUpperCase()
+  const out = new Map<string, AfBaselineProjection>()
+  const riIds = [...new Set(args.rollingInsightsIds.map((id) => String(id ?? '').trim()).filter(Boolean))]
+  if (!sport || riIds.length === 0) return out
+
+  const identities = await prisma.playerIdentityMap.findMany({
+    where: { sport, rollingInsightsId: { in: riIds } },
+    select: { id: true, rollingInsightsId: true },
+  })
+  const identityByRi = new Map<string, string | null>()
+  for (const identity of identities) {
+    const ri = String(identity.rollingInsightsId ?? '').trim()
+    if (!ri) continue
+    identityByRi.set(ri, identityByRi.has(ri) ? null : identity.id)
+  }
+  const riByIdentity = new Map<string, string>()
+  for (const [ri, identityId] of identityByRi) if (identityId) riByIdentity.set(identityId, ri)
+  if (riByIdentity.size === 0) return out
+
+  const rows = await prisma.aFProjectionSnapshot.findMany({
+    where: {
+      sport,
+      week: null,
+      playerId: { in: [...riByIdentity.keys()] },
+      ...(args.season != null ? { season: { lte: args.season } } : {}),
+    },
+    orderBy: [{ season: 'desc' }, { computedAt: 'desc' }],
+    select: { playerId: true, afProjection: true, season: true, computedAt: true },
+  })
+  for (const row of rows) {
+    const ri = riByIdentity.get(row.playerId)
+    if (!ri || out.has(ri)) continue
+    if (!Number.isFinite(row.afProjection) || row.afProjection <= 0) continue
+    out.set(ri, { afProjection: row.afProjection, season: row.season, computedAt: row.computedAt })
+  }
+  return out
+}

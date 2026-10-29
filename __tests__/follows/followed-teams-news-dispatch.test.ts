@@ -46,7 +46,7 @@ const ROW = {
   sport: 'NFL',
   playerName: 'Jordan Love',
   team: 'Packers',
-  headline: 'Love (knee) limited at practice',
+  headline: 'Love (knee) ruled out for Sunday',
   body: null,
   impact: 'medium',
 }
@@ -55,7 +55,7 @@ beforeEach(() => {
   for (const f of Object.values(h)) f.mockReset()
   h.newsFind.mockResolvedValue([ROW])
   h.newsUpdate.mockResolvedValue({ count: 1 })
-  h.dispatch.mockResolvedValue(undefined)
+  h.dispatch.mockResolvedValue({ requested: 1, delivered: 1, suppressed: 0, failed: 0 })
   h.classify.mockReturnValue('injury')
   h.rosterFind.mockResolvedValue([])
   h.playerFollowers.mockResolvedValue([])
@@ -80,7 +80,7 @@ describe('team followers', () => {
       category: 'followed_teams',
       leagueId: null,
       severity: 'high',
-      dedupePrefix: 'player-news:news-1',
+      dedupePrefix: expect.stringMatching(/^team-injury-news:/),
       meta: expect.objectContaining({ followedTeam: 'GB' }),
     })
     expect(out).toMatchObject({ notified: 1, teamFollowerRecipients: 1, noRoster: 0 })

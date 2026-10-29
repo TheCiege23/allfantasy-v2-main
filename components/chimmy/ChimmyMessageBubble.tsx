@@ -1,6 +1,8 @@
 'use client'
 
 import React from 'react'
+import { ChimmyAnalysisPreview } from './ChimmyAnalysisPreview'
+import { readDeepAnalysisPreview } from '@/lib/chimmy/deepAnalysisPreview'
 import { Volume2, Square, Loader2, ThumbsUp, ThumbsDown } from 'lucide-react'
 import type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types'
 import { SuggestedActionRenderer } from '@/lib/chimmy-chat/SuggestedActionRenderer'
@@ -16,6 +18,8 @@ import ChimmyTrustPanel from './ChimmyTrustPanel'
 export type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types'
 
 export interface ChimmyMessageBubbleProps {
+  onAnalysisUnlock?: () => void
+  analysisBusy?: boolean
   messageId?: string
   role: 'user' | 'assistant'
   content: string
@@ -69,6 +73,8 @@ function renderContentWithLinks(text: string) {
 
 export default function ChimmyMessageBubble({
   messageId,
+  onAnalysisUnlock,
+  analysisBusy,
   role,
   content,
   imageUrl,
@@ -116,6 +122,11 @@ export default function ChimmyMessageBubble({
       limit: 5,
     })
   }, [meta?.answerContract?.followUps, meta?.orchestration?.followUps, followUpChips])
+
+  const analysisPreview = !isUser ? readDeepAnalysisPreview(meta?.analysisPreview) : null
+  if (analysisPreview) return <div className="max-w-full sm:max-w-[80%]">
+    <ChimmyAnalysisPreview preview={analysisPreview} onUnlock={onAnalysisUnlock} busy={analysisBusy} />
+  </div>
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>

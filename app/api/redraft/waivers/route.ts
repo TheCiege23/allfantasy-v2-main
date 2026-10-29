@@ -3,6 +3,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import {
+  isRedraftLeagueMovesLocked,
+  REDRAFT_MOVES_LOCKED_CODE,
+  REDRAFT_MOVES_LOCKED_STATUS,
+  REDRAFT_ROSTER_MOVES_LOCKED_MESSAGE,
+} from '@/lib/redraft/tradeMoveLock'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 
@@ -80,6 +86,16 @@ export async function POST(req: NextRequest) {
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
   if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  // The commissioner's move lock, which the waiver screen's claim path (assertWaiverClaimEligibility) and the
+  // NFL runtime already refuse under. This route has no UI caller; without it a claim was queued anyway.
+  // Cancelling a pending claim (DELETE) moves nothing and stays open.
+  if (await isRedraftLeagueMovesLocked(leagueId)) {
+    return NextResponse.json(
+      { error: REDRAFT_ROSTER_MOVES_LOCKED_MESSAGE, code: REDRAFT_MOVES_LOCKED_CODE },
+      { status: REDRAFT_MOVES_LOCKED_STATUS },
+    )
+  }
 
   const bidAmount = body.bidAmount == null ? null : Number(body.bidAmount)
   if (bidAmount != null && (!Number.isFinite(bidAmount) || bidAmount < 0)) {

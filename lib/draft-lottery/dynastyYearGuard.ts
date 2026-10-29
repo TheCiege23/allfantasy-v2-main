@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 
 export type DynastyLotteryEligibility = {
   eligible: boolean
@@ -31,9 +32,12 @@ export async function checkDynastyLotteryEligibility(leagueId: string): Promise<
     select: {
       isDynasty: true,
       leagueVariant: true,
+      sport: true,
       season: true,
       createdAt: true,
       settings: true,
+      // The league's FIRST season — see `foundingSeason` below.
+      redraftSeasons: { select: { season: true }, orderBy: { season: 'asc' }, take: 1 },
       _count: {
         select: {
           redraftDrafts: { where: { status: 'completed' } },
@@ -65,14 +69,26 @@ export async function checkDynastyLotteryEligibility(leagueId: string): Promise<
   const startupSeason =
     typeof settings.startup_season === 'number' ? settings.startup_season : undefined
   const completedDrafts = league._count.redraftDrafts
-  const createdYear = new Date(league.createdAt).getFullYear()
+  /*
+   * 🛑 THE FOUNDING SEASON, NOT THE YEAR THE ROW WAS CREATED. This compared against
+   * `createdAt.getFullYear()`, but a league is stamped with the season it will PLAY
+   * (`resolveLeagueCreationSeason`): an MLB league created in November 2026 is season 2027, so in
+   * its startup year `2027 <= 2026` was false and the weighted lottery was allowed in a startup
+   * league. The mirror case: an NBA league created in February 2027 joins the in-progress season
+   * 2026, so the createdAt year (2027) would stretch its "startup" into year 2 and refuse the lottery
+   * there. The league's earliest RedraftSeason IS its first season, however it was stamped; without
+   * one, re-derive what creation stamps from `createdAt`.
+   */
+  const foundingSeason =
+    league.redraftSeasons?.[0]?.season ??
+    resolveLeagueCreationSeason(String(league.sport ?? ''), new Date(league.createdAt))
 
   let isStartupLeague = false
   if (startupSeason != null && currentSeason != null && currentSeason === startupSeason) {
     isStartupLeague = true
   } else if (completedDrafts === 0 && currentSeason != null) {
     if (startupSeason == null) {
-      isStartupLeague = currentSeason <= createdYear
+      isStartupLeague = currentSeason <= foundingSeason
     } else {
       isStartupLeague = currentSeason <= startupSeason
     }

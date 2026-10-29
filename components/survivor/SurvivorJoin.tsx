@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { tribeCrestAlt } from '@/lib/survivor/survivorTribeIdentity'
 
 export type SurvivorJoinPreview = {
   castSize: number
@@ -9,7 +10,7 @@ export type SurvivorJoinPreview = {
   season: number | string | null
   draftAt: string | null
   tribeCount: number
-  tribes: Array<{ name: string; logoUrl: string | null; managerCount: number }>
+  tribes: Array<{ name: string; logoUrl: string | null; mascot?: string | null; managerCount: number }>
   idolCount: number
   mergeWeek: number
   exileEnabled: boolean
@@ -94,7 +95,7 @@ export function SurvivorJoin(props: Props) {
       <div className="mt-8 grid gap-4 lg:grid-cols-3">
         <section className="rounded-xl border border-white/10 bg-[#10121b] p-5"><h2 className="text-sm font-bold uppercase tracking-widest text-slate-300">League settings</h2><dl className="mt-4">{settings.map(([label, value]) => <div key={label} className="flex justify-between gap-4 border-t border-white/10 py-2 text-sm"><dt className="text-slate-400">{label}</dt><dd className="text-right font-semibold">{value}</dd></div>)}</dl></section>
         <section className="rounded-xl border border-white/10 bg-[#10121b] p-5"><h2 className="text-sm font-bold uppercase tracking-widest text-slate-300">Who&apos;s on the island</h2><p className="mt-4 text-3xl font-bold tabular-nums">{filled} / {survivor.castSize}</p><p className="mt-2 text-sm text-slate-400">{survivor.castSize - filled} spots remain. Manager names appear in the league after you join.</p></section>
-        <section className="rounded-xl border border-white/10 bg-[#10121b] p-5"><h2 className="text-sm font-bold uppercase tracking-widest text-slate-300">The tribes</h2><div className="mt-4 grid grid-cols-2 gap-2">{survivor.tribes.map(tribe => <div key={tribe.name} className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-center">{tribe.logoUrl ? <img src={tribe.logoUrl} alt="" className="mx-auto h-12 w-12 object-contain" /> : null}<p className="mt-1 font-semibold">{tribe.name}</p><p className="text-xs text-slate-400">{tribe.managerCount} spots</p></div>)}</div><p className="mt-3 text-xs text-slate-400">Tribes are assigned at random when the league fills. Your tribe remains hidden until then.</p><p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-100">{survivor.idolCount} idols will be hidden on drafted players. Nobody knows where, including a commissioner who plays.</p></section>
+        <section className="rounded-xl border border-white/10 bg-[#10121b] p-5"><h2 className="text-sm font-bold uppercase tracking-widest text-slate-300">The tribes</h2><div className="mt-4 grid grid-cols-2 gap-2">{survivor.tribes.map(tribe => <div key={tribe.name} className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-center">{tribe.logoUrl ? <img src={tribe.logoUrl} alt={tribe.mascot ? tribeCrestAlt(tribe.name, tribe.mascot) : ''} className="mx-auto h-[72px] w-[60px] object-contain" /> : null}<p className="mt-1 font-semibold">{tribe.name}</p><p className="text-xs text-slate-400">{tribe.managerCount} spots</p></div>)}</div><p className="mt-3 text-xs text-slate-400">Tribes are assigned at random when the league fills. Your tribe remains hidden until then.</p><p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-100">{survivor.idolCount} idols will be hidden on drafted players. Nobody knows where, including a commissioner who plays.</p></section>
       </div>
     </div>
   </main>

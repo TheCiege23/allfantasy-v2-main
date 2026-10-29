@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Palmtree, Coins, AlertTriangle, ArrowRight } from 'lucide-react'
 import type { SurvivorSummary } from './types'
 import { EXILE_ISLAND_RULES, SURVIVOR_TOKEN_POOL_BLURB } from '@/lib/survivor/survivorIslandContent'
+import { ExileBossBoard } from './late/ExileBossBoard'
 
 export interface SurvivorExileViewProps {
   leagueId: string
@@ -22,6 +23,8 @@ export function SurvivorExileView({ leagueId, summary }: SurvivorExileViewProps)
 
   return (
     <div className="space-y-6">
+      {/* Exile board vs the boss. Hidden (403) for anyone who is not on Exile or a non-playing commissioner. */}
+      <ExileBossBoard leagueId={leagueId} />
       {seasonCalendar && (
         <section className="rounded-2xl border border-cyan-500/20 bg-cyan-950/15 p-4 sm:p-6">
           <p className="text-sm text-cyan-100/90">

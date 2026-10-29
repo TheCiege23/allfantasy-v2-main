@@ -35,12 +35,17 @@ type Effective = {
   taxiScoringOn?: boolean
   taxiDeadlineWeek?: number | null
   taxiPromotionDeadlineWeek?: number | null
+  rookieDraftAutoOpen?: boolean
+  rookieDraftAutoOpenSource?: 'commissioner' | 'plan_default' | 'plan_default_predates' | 'free_default'
+  rookieDraftCustomOpenDate?: string | null
+  rookieDraftAutoStartDays?: 3 | 7 | 14 | null
+  rookieDraftWindowLabel?: string | null
 }
 
 type Presets = {
   roster: { id: string; label: string; formatType: string }[]
   scoring: { id: string; label: string; formatType: string; summary: string }[]
-  playoff: { playoffTeamCount: number; label: string; firstRoundByes: number; playoffStartWeek: number }[]
+  playoff: { playoffTeamCount: number; label: string; firstRoundByes: number; playoffStartWeek: number | null }[]
 }
 
 type DynastySettingsResponse = {
@@ -263,7 +268,7 @@ export default function DynastySettingsPanel({
               <> · {effective.rosterSummary.map((s) => `${s.slotName} ${s.count}`).join(', ')}</>
             )}
           </p>
-          {presets?.roster?.length && isCommissioner && (
+          {presets && presets.roster.length > 0 && isCommissioner && (
             <select
               className="mt-2 rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
               value={effective.rosterFormatType}
@@ -286,7 +291,7 @@ export default function DynastySettingsPanel({
           <p className="mt-1 text-xs text-white/65">
             {effective.scoringPresetName} ({effective.scoringFormatType})
           </p>
-          {presets?.scoring?.length && isCommissioner && (
+          {presets && presets.scoring.length > 0 && isCommissioner && (
             <select
               className="mt-2 rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
               value={effective.scoringFormatType}
@@ -309,7 +314,7 @@ export default function DynastySettingsPanel({
           <p className="mt-1 text-xs text-white/65">
             {effective.playoffTeamCount} teams · Start week from structure · Regular season {effective.regularSeasonWeeks} weeks
           </p>
-          {presets?.playoff?.length && isCommissioner && (
+          {presets && presets.playoff.length > 0 && isCommissioner && (
             <select
               className="mt-2 rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
               value={effective.playoffTeamCount}
@@ -552,6 +557,75 @@ export default function DynastySettingsPanel({
         </div>
       )}
 
+      {/* Rookie draft calendar: auto-open on the sport's window (lib/dynasty-core/rookieDraftCalendar.ts) */}
+      {effective && (
+        <div>
+          <h4 className="text-xs font-medium text-white/80">Rookie draft calendar</h4>
+          <p className="mt-1 text-xs text-white/65">
+            {effective.rookieDraftWindowLabel
+              ? <>Default window: <span className="text-white/90">{effective.rookieDraftWindowLabel}</span>, after the real draft. </>
+              : null}
+            {effective.rookieDraftAutoOpen
+              ? effective.rookieDraftCustomOpenDate
+                ? `Opens automatically on ${effective.rookieDraftCustomOpenDate}.`
+                : 'Opens automatically when the window opens.'
+              : effective.rookieDraftAutoOpenSource === 'plan_default_predates'
+                ? 'Auto-open is off for this offseason, which started before AF Commissioner opened rookie drafts automatically. Turn it on below.'
+                : 'Created by the commissioner (auto-open is off).'}
+            {effective.rookieDraftAutoOpenSource === 'plan_default' && ' Included with AF Commissioner.'}
+            {' '}
+            {effective.rookieDraftAutoOpen && effective.rookieDraftAutoStartDays
+              ? `It then starts by itself ${effective.rookieDraftAutoStartDays} days later, at 8 pm Eastern, and members are told the time when it opens.`
+              : 'An opened draft waits in pre-draft until the commissioner starts it.'}
+          </p>
+          {isCommissioner && (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-1 text-xs text-white/80">
+                <input
+                  type="checkbox"
+                  checked={typeof patch.rookieDraftAutoOpen === 'boolean' ? patch.rookieDraftAutoOpen : Boolean(effective.rookieDraftAutoOpen)}
+                  onChange={(e) => setPatch((p) => ({ ...p, rookieDraftAutoOpen: e.target.checked }))}
+                />
+                Open the rookie draft automatically
+              </label>
+              <label className="flex items-center gap-1 text-xs text-white/80">
+                Custom open date
+                <input
+                  type="date"
+                  className="rounded border border-white/20 bg-black/40 px-2 py-0.5 text-xs text-white"
+                  value={
+                    typeof patch.rookieDraftCustomOpenDate === 'string'
+                      ? patch.rookieDraftCustomOpenDate
+                      : patch.rookieDraftCustomOpenDate === null
+                        ? ''
+                        : effective.rookieDraftCustomOpenDate ?? ''
+                  }
+                  onChange={(e) => setPatch((p) => ({ ...p, rookieDraftCustomOpenDate: e.target.value || null }))}
+                />
+              </label>
+              <label className="flex items-center gap-1 text-xs text-white/80">
+                Then start it
+                <select
+                  data-testid="rookie-draft-auto-start-days"
+                  className="rounded border border-white/20 bg-black/40 px-2 py-0.5 text-xs text-white"
+                  value={String(
+                    patch.rookieDraftAutoStartDays !== undefined ? patch.rookieDraftAutoStartDays ?? '' : effective.rookieDraftAutoStartDays ?? '',
+                  )}
+                  onChange={(e) =>
+                    setPatch((p) => ({ ...p, rookieDraftAutoStartDays: e.target.value ? (Number(e.target.value) as 3 | 7 | 14) : null }))
+                  }
+                >
+                  <option value="">when I press Start</option>
+                  <option value="3">by itself 3 days after it opens</option>
+                  <option value="7">by itself 7 days after it opens</option>
+                  <option value="14">by itself 14 days after it opens</option>
+                </select>
+              </label>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Taxi squad (PROMPT 3/5) */}
       {effective && (effective.taxiSlots != null || effective.taxiEligibilityYears != null) && (
         <div>
@@ -563,30 +637,11 @@ export default function DynastySettingsPanel({
             {effective.taxiScoringOn && ' · Scoring on taxi'}
             {(effective.taxiDeadlineWeek ?? effective.taxiPromotionDeadlineWeek) != null && ` · Deadlines: ${effective.taxiDeadlineWeek ?? '—'}/${effective.taxiPromotionDeadlineWeek ?? '—'}`}
           </p>
-          {isCommissioner && constants?.taxiEligibilityYearsOptions && constants?.taxiLockBehaviorOptions && (
-            <div className="mt-2 flex flex-wrap gap-2 items-center">
-              <label className="text-xs text-white/80">
-                Slots: <input type="number" min={0} max={20} className="w-12 rounded border border-white/20 bg-black/40 px-1 py-0.5 text-white" value={effective.taxiSlots ?? 4} onChange={(e) => setPatch((p) => ({ ...p, taxiSlots: Number(e.target.value) || 0 }))} />
-              </label>
-              <select className="rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white" value={effective.taxiEligibilityYears ?? 1} onChange={(e) => setPatch((p) => ({ ...p, taxiEligibilityYears: Number(e.target.value) }))}>
-                {constants.taxiEligibilityYearsOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              <select className="rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white" value={effective.taxiLockBehavior ?? 'once_promoted_no_return'} onChange={(e) => setPatch((p) => ({ ...p, taxiLockBehavior: e.target.value }))}>
-                {constants.taxiLockBehaviorOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              <label className="flex items-center gap-1 text-xs text-white/80">
-                <input type="checkbox" checked={effective.taxiInSeasonMoves ?? true} onChange={(e) => setPatch((p) => ({ ...p, taxiInSeasonMoves: e.target.checked }))} />
-                In-season moves
-              </label>
-              <label className="flex items-center gap-1 text-xs text-white/80">
-                <input type="checkbox" checked={effective.taxiPostseasonMoves ?? false} onChange={(e) => setPatch((p) => ({ ...p, taxiPostseasonMoves: e.target.checked }))} />
-                Postseason moves
-              </label>
-              <label className="flex items-center gap-1 text-xs text-white/80">
-                <input type="checkbox" checked={effective.taxiScoringOn ?? false} onChange={(e) => setPatch((p) => ({ ...p, taxiScoringOn: e.target.checked }))} />
-                Scoring on taxi
-              </label>
-            </div>
+          {/* Taxi editing is consolidated in Commissioner settings → Roster → Taxi squad. */}
+          {isCommissioner && (
+            <p className="mt-2 text-xs text-white/50" data-testid="dynasty-taxi-moved-note">
+              Edit taxi squad settings in Commissioner settings → Roster → Taxi squad.
+            </p>
           )}
         </div>
       )}

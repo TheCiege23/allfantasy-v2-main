@@ -40,29 +40,38 @@ vi.mock('@/lib/prisma', () => ({
         },
       ]),
     },
-    sportsInjury: {
-      findMany: vi.fn(async () => [
-        {
-          id: 'inj-1',
-          playerName: 'Travis Kelce',
-          team: 'KC',
-          position: 'TE',
-          status: 'Questionable',
-          description: 'Knee injury',
-          updatedAt: new Date(),
-        },
-        {
-          id: 'inj-2',
-          playerName: 'Mahomes',
-          team: 'KC',
-          position: 'QB',
-          status: 'Out',
-          description: 'Surgery recovery',
-          updatedAt: new Date(),
-        },
-      ]),
-    },
   },
+}))
+
+// 60029d4a6 (Slice 18) moved the route off prisma.sportsInjury onto the canonical injury read
+// port; the suite kept mocking the old delegate, so the route read nothing from it.
+const listInjuryFactsMock = vi.hoisted(() =>
+  vi.fn(async (_args: { sport: string; statuses?: string[]; maxAgeHours?: number; limit?: number }) => ({
+    facts: [
+      {
+        id: 'inj-1',
+        playerName: 'Travis Kelce',
+        team: 'KC',
+        position: 'TE',
+        status: 'Questionable',
+        description: 'Knee injury',
+      },
+      {
+        id: 'inj-2',
+        playerName: 'Mahomes',
+        team: 'KC',
+        position: 'QB',
+        status: 'Out',
+        description: 'Surgery recovery',
+      },
+    ],
+    newestFetchedAt: new Date(),
+    feedStale: false,
+  })),
+)
+
+vi.mock('@/lib/injuries/injuryReadPort', () => ({
+  listInjuryFacts: listInjuryFactsMock,
 }))
 
 vi.mock('@/lib/ai/openai-route-client', () => ({
@@ -228,6 +237,9 @@ describe('community-insights API', () => {
       expect(injury.status).toBeDefined()
       expect(['Out', 'Doubtful', 'Questionable', 'IR']).toContain(injury.status)
       expect(injury.description).toBeDefined()
+      expect(listInjuryFactsMock).toHaveBeenCalledWith(
+        expect.objectContaining({ sport: 'NFL', statuses: ['Out', 'Doubtful', 'Questionable', 'IR'] }),
+      )
     })
 
     it('includes data freshness metrics', async () => {

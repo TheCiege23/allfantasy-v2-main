@@ -419,7 +419,7 @@ export async function getLeagueStandings(
   }
 
   const teamCount = new Set(leagueTeams.map((t) => t.externalId)).size || seasonWeeks[0].rows
-  const rules = readStandingsRules(league.settings, teamCount, league.platform)
+  const rules = readStandingsRules(league.settings, teamCount, league.platform, `${league.id}:${season}`, league.playoffTeams)
   /*
    * Playoff weeks are not standings. If the league's regular season would exclude every scored week, the
    * setting is wrong for this data and is ignored rather than emptying the board.

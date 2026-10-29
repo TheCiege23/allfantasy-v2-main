@@ -4,7 +4,6 @@ import React from 'react'
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  Shield,
   Skull,
   MessageSquare,
   Settings,
@@ -14,8 +13,8 @@ import {
 import { GuillotineChopAnimation } from './GuillotineChopAnimation'
 import { GuillotineAIPanel } from './GuillotineAIPanel'
 import { shareCardImage } from '@/components/decide/shareCard'
-
-const GUILLOTINE_IMAGE = '/guillotine/Guillotine.png'
+import { GuillotineSpecialtyHome } from './GuillotineSpecialtyHome'
+import type { GuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 
 function leagueQueryPath(leagueId: string, params: Record<string, string>) {
   const q = new URLSearchParams(params)
@@ -39,6 +38,10 @@ type Summary = {
   /** Your escapes from chops that happened, newest first (shareable moments, 2026-09-14). */
   myEscapes?: { weekOrPeriod: number; myPoints: number; chopLine: number; margin: number; choppedCount: number }[]
   assets: { leagueImage: string; introVideo: string }
+  /** The viewer's roster, so the chop line can say "you". */
+  myRosterId?: string | null
+  /** Specialty-home extras (counts, chopped chips, next chop time, last chop). Null when unavailable. */
+  home?: GuillotineHomeExtras | null
   config?: {
     eliminationStartWeek: number
     eliminationEndWeek: number | null
@@ -82,7 +85,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
       const data = await res.json()
       setSummary(data)
     } catch {
-      setError('Failed to load guillotine summary')
+      setError('Failed to load Guilly summary')
       setSummary(null)
     } finally {
       setLoading(false)
@@ -93,16 +96,12 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
     load()
   }, [load])
 
-  const chopZone = summary?.dangerTiers?.filter((d) => d.tier === 'chop_zone') ?? []
-  const dangerTier = summary?.dangerTiers?.filter((d) => d.tier === 'danger') ?? []
-  const safeTier = summary?.dangerTiers?.filter((d) => d.tier === 'safe') ?? []
-  const bubbleTeams = [...chopZone, ...dangerTier].slice(0, 4)
   const myEscape = summary?.myEscapes?.[0] ?? null
 
   if (loading && !summary) {
     return (
       <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] p-8">
-        <p className="text-sm text-white/60">Loading Guillotine League…</p>
+        <p className="text-sm text-white/60">Loading Guilly League…</p>
       </div>
     )
   }
@@ -130,21 +129,10 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         onComplete={() => setReplayChop({ play: false })}
       />
 
-      {/* Branding header */}
-      <header className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-        <img
-          src={GUILLOTINE_IMAGE}
-          alt="Guillotine League"
-          className="h-16 w-16 rounded-xl object-cover sm:h-20 sm:w-20"
-        />
-        <div>
-          <h1 className="text-xl font-bold text-white sm:text-2xl">Guillotine League</h1>
-          {leagueName ? (
-            <p className="text-sm font-medium text-white/80">{leagueName}</p>
-          ) : null}
-          <p className="text-sm text-white/60">Survival standings · Chop Zone · Danger tier</p>
-        </div>
-      </header>
+      {/* Specialty-league home: hero, chop line, rail, phone home, and the chop moment (2026-10-18). */}
+      {summary ? (
+        <GuillotineSpecialtyHome leagueId={leagueId} sport={sport} leagueName={leagueName} summary={summary} />
+      ) : null}
 
       {/* Quick links: Chat, Settings, AI, Waivers */}
       <div className="flex flex-wrap gap-2">
@@ -220,96 +208,6 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
           </button>
         </section>
       ) : null}
-
-      {/* Survival Board */}
-      <section
-        id="guillotine-board"
-        className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6"
-      >
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-          <Shield className="h-5 w-5 text-cyan-400" />
-          Survival Board
-        </h2>
-        <p className="mb-3 text-xs text-white/50">Week {summary?.weekOrPeriod ?? week ?? '—'} · Lowest projected = Chop Zone</p>
-        <button
-          type="button"
-          onClick={() => load()}
-          className="mb-3 text-xs text-cyan-400 hover:underline"
-        >
-          Refresh live scores
-        </button>
-        <div className="space-y-3">
-          {chopZone.length > 0 && (
-            <div className="rounded-xl border border-rose-500/40 bg-rose-950/30 p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-rose-300">Chop Zone</p>
-              <ul className="space-y-1">
-                {chopZone.map((c) => (
-                  <li key={c.rosterId} className="text-sm font-medium text-white/90">
-                    {c.displayName ?? c.rosterId} · {c.pointsFromChopZone.toFixed(1)} pts from safety
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {dangerTier.length > 0 && (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-amber-300">On The Bubble (Bottom 4)</p>
-              <ul className="space-y-1">
-                {bubbleTeams
-                  .filter((d) => d.tier !== 'chop_zone')
-                  .map((d) => (
-                  <li key={d.rosterId} className="text-sm text-white/80">
-                    {d.displayName ?? d.rosterId} · +{d.pointsFromChopZone.toFixed(1)} pts
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {(chopZone.length > 0 || dangerTier.length > 0) && safeTier.length > 0 && (
-            <div
-              className="relative flex items-center justify-center py-2"
-              aria-hidden
-              data-testid="guillotine-bubble-separator"
-            >
-              <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[#1E6CFF] to-transparent" />
-              <div className="relative z-10 flex h-9 w-9 items-center justify-center rounded-full border border-[#1E6CFF]/60 bg-[#040915] shadow-[0_0_12px_rgba(30,108,255,0.45)]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/af-crest.svg"
-                  alt=""
-                  className="h-6 w-6 object-contain"
-                />
-              </div>
-            </div>
-          )}
-          {safeTier.length > 0 && (
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-emerald-300">Safe</p>
-              <ul className="space-y-1">
-                {safeTier.slice(0, 8).map((s) => (
-                  <li key={s.rosterId} className="text-sm text-white/70">
-                    {s.displayName ?? s.rosterId}
-                  </li>
-                ))}
-                {safeTier.length > 8 && (
-                  <li className="text-xs text-white/50">+{safeTier.length - 8} more</li>
-                )}
-              </ul>
-            </div>
-          )}
-        </div>
-        <div className="mt-4">
-          <p className="text-xs text-white/50">Survival standings (by season points)</p>
-          <ol className="mt-2 space-y-1">
-            {(summary?.survivalStandings ?? []).slice(0, 12).map((s) => (
-              <li key={s.rosterId} className="flex items-center justify-between text-sm">
-                <span className="text-white/80">#{s.rank} {s.displayName ?? s.rosterId}</span>
-                <span className="tabular-nums text-white/60">{s.seasonPointsCumul.toFixed(1)} pts</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
 
       {/* Chopped History */}
       <section id="guillotine-history" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">

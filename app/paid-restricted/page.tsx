@@ -19,7 +19,7 @@ export default async function PaidRestrictedPage(
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const subs = await liveSubscriptions()
   const cancelPanel =
-    subs.hasStripe || subs.hasApple ? <CancelSubscriptionPanel hasStripe={subs.hasStripe} hasApple={subs.hasApple} /> : null
+    subs.hasStripe || subs.hasApple || subs.hasGooglePlay ? <CancelSubscriptionPanel hasStripe={subs.hasStripe} hasApple={subs.hasApple} hasGooglePlay={subs.hasGooglePlay} /> : null
 
   /*
    * The card lock (lib/subscription/paidStateRefusal): this ACCOUNT, not this

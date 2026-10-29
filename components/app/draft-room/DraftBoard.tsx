@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { SurvivorTribeBadge, SurvivorTribeMark } from '@/components/league/survivor/SurvivorTribeBadge'
 import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Gavel } from 'lucide-react'
 import { DraftBoardCell, type DraftBoardCellPick, type PickHighlightTone } from './DraftBoardCell'
 import type { DraftPickSnapshot, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
@@ -12,6 +13,7 @@ import { getRoundNavigationState } from '@/lib/draft-room/DraftBoardRenderer'
 import { getManagerColorBySlot, withAlpha } from '@/lib/draft-room'
 import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import { mergePoolPlayerIntoBoardPickDisplay } from '@/lib/player-data/adapters/draftRoomDisplayFields'
+import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
 
 export type DraftBoardProps = {
   picks: DraftPickSnapshot[]
@@ -54,6 +56,13 @@ export type DraftBoardProps = {
   onCommissionerEditPick?: (overall: number) => void
   /** Live draft pool rows by player id — enriches tiles only; does not change stored picks */
   poolPlayerById?: Record<string, DraftRoomDisplayPlayerLike>
+  /** overall → (overall − market ADP), only for picks worth a steal/reach badge. See lib/draft-room/draftPulse. */
+  adpDeltaByOverall?: Record<number, number>
+  /**
+   * Team avatars / orphan / bot-personality for the sticky column header. Snake and linear
+   * boards have no separate team strip, so the header is where this lives.
+   */
+  teamMetaByRoster?: Record<string, DraftTeamStripTeamMeta> | null
 }
 
 type SequentialBoardEntry = {
@@ -68,6 +77,7 @@ type AuctionBoardColumn = {
   displayName: string
   tintHex: string
   picks: DraftBoardCellPick[]
+  tribe: SlotOrderEntry['tribe']
 }
 
 function isSnakeRoundReversed(round: number, draftType: 'snake' | 'linear' | 'auction', thirdRoundReversal: boolean): boolean {
@@ -155,6 +165,8 @@ function DraftBoardInner({
   onCommissionerEditPick,
   presentationVariant = 'default',
   poolPlayerById,
+  adpDeltaByOverall,
+  teamMetaByRoster = null,
 }: DraftBoardProps) {
   const rs = presentationVariant === 'redraft_snake'
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
@@ -301,6 +313,7 @@ function DraftBoardInner({
         isPromotedFromDevy: isPromotedFromDevy || undefined,
         source: source || undefined,
         ownerRosterId,
+        adpDelta: existing?.playerName ? adpDeltaByOverall?.[overall] ?? null : null,
       }
       const pid = existing?.playerId ? String(existing.playerId).trim() : ''
       const poolEntry = pid && poolPlayerById ? poolPlayerById[pid] : undefined
@@ -331,6 +344,7 @@ function DraftBoardInner({
     c2cCollegeRounds,
     sport,
     poolPlayerById,
+    adpDeltaByOverall,
   ])
 
   const auctionColumns = useMemo(() => {
@@ -358,6 +372,7 @@ function DraftBoardInner({
           displayName: entry.displayName,
           tintHex,
           picks: ownedPicks,
+          tribe: entry.tribe ?? null,
         }
       })
   }, [draftType, picks, slotOrder, sport, poolPlayerById])
@@ -577,6 +592,7 @@ function DraftBoardInner({
                     />
                   </div>
                   <p className="mt-1 truncate text-sm font-semibold text-white">{column.displayName}</p>
+                  {column.tribe ? <SurvivorTribeBadge tribe={column.tribe} className="mt-1 max-w-full" /> : null}
                 </div>
 
                 <div className="space-y-1.5 p-1.5">
@@ -647,7 +663,7 @@ function DraftBoardInner({
                   ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
                   : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
               }`}
-              style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(88px, 1fr))` }}
+              style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(104px, 1fr))` }}
               data-testid="draft-board-team-header"
             >
               <div
@@ -657,33 +673,65 @@ function DraftBoardInner({
               >
                 Rd
               </div>
-              {orderedSlots.map((entry) => (
+              {orderedSlots.map((entry) => {
+                const meta = teamMetaByRoster?.[entry.rosterId] ?? null
+                const isUser = Boolean(currentUserRosterId) && entry.rosterId === currentUserRosterId
+                const headerName = meta?.teamName?.trim() || entry.displayName
+                return (
                 <div
                   key={entry.rosterId}
-                  className={`group relative flex h-10 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 transition duration-150 ${
+                  data-testid={`draft-board-team-header-slot-${entry.slot}`}
+                  title={[headerName, entry.tribe ? `${entry.tribe.name} tribe` : null, meta?.aiArchetypeLabel ?? null].filter(Boolean).join(' · ')}
+                  className={`group relative flex h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 transition duration-150 ${
                     currentOwnerSlot === entry.slot ? 'text-cyan-100' : 'text-white/85'
-                  }`}
+                  } ${isUser ? 'bg-cyan-400/[0.08]' : ''}`}
                 >
                   <span
-                    className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold uppercase tracking-[0.03em] shadow-sm ${
+                    className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-bold uppercase tracking-[0.03em] shadow-sm ${
                       currentOwnerSlot === entry.slot
                         ? 'border-cyan-300/75 bg-cyan-500/20 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.40)]'
-                        : 'border-white/15 bg-white/[0.05] text-white/85'
+                        : isUser
+                          ? 'border-cyan-400/60 bg-cyan-500/10 text-cyan-50'
+                          : 'border-white/15 bg-white/[0.05] text-white/85'
                     }`}
                   >
-                    {managerInitials(entry.displayName)}
+                    {meta?.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={meta.avatarUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+                        }}
+                      />
+                    ) : (
+                      managerInitials(headerName)
+                    )}
+                    {meta?.isOrphan ? (
+                      <span
+                        className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-[#0b1428] bg-amber-400"
+                        title="Orphan roster"
+                        data-testid={`draft-board-team-header-orphan-${entry.slot}`}
+                      />
+                    ) : null}
+                    {entry.tribe ? (
+                      <SurvivorTribeMark tribe={entry.tribe} className="absolute -bottom-0.5 -right-0.5" />
+                    ) : null}
                   </span>
                   <span
-                    className="w-full truncate text-center text-[11px] font-medium leading-none text-white/72"
-                    title={entry.displayName}
+                    className={`w-full truncate text-center text-[11px] leading-none ${
+                      isUser ? 'font-bold text-cyan-200' : 'font-medium text-white/72'
+                    }`}
                   >
-                    {entry.displayName}
+                    {headerName}
                   </span>
                   {currentOwnerSlot === entry.slot ? (
                     <span className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-cyan-300/60 shadow-[0_0_6px_rgba(34,211,238,0.6)]" aria-hidden />
                   ) : null}
                 </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="space-y-[3px] pt-0.5">
@@ -691,14 +739,14 @@ function DraftBoardInner({
                 <section key={round} data-testid={`draft-board-round-${round}`}>
                     <div
                       className="grid gap-[3px]"
-                      style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(88px, 1fr))` }}
+                      style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(104px, 1fr))` }}
                     >
                     {(() => {
                       const reversed = isSnakeRoundReversed(round, draftType, thirdRoundReversal)
                       const isSnake = draftType === 'snake'
                       return (
                         <div
-                          className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-xl border text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:min-h-[46px] ${
+                          className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-xl border text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:min-h-[60px] ${
                             round === 1
                               ? 'border-amber-300/35 bg-gradient-to-br from-amber-500/18 via-[#1d2236] to-[#0a1228] text-amber-100/95'
                               : 'border-white/[0.1] bg-gradient-to-br from-[#0d1629] to-[#0a1228] text-white/75'
@@ -729,7 +777,7 @@ function DraftBoardInner({
                         return (
                           <div
                             key={`${round}-${slotEntry.slot}-missing`}
-                            className="min-h-[44px] rounded-xl border border-dashed border-red-400/30 bg-red-500/8 sm:min-h-[46px]"
+                            className="min-h-[56px] rounded-xl border border-dashed border-red-400/30 bg-red-500/8 sm:min-h-[60px]"
                             title="Missing cell data for this slot"
                           />
                         )

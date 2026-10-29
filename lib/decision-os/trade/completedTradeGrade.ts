@@ -6,6 +6,7 @@ import type { TradeGradeView } from './tradeGrade'
 import type { GradeInputs } from './tradeGradeInputs'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { giveawayReason } from '@/lib/trade-intel/tradeGiveaway'
+import { createTtlMemo } from '@/lib/ttl-memo'
 import { emptySideIndex, isPirateSteal, pirateStealReason, PIRATE_STEAL_KIND } from '@/lib/trade-intel/pirateSteal'
 import {
   frozenOriginalFor,
@@ -58,15 +59,25 @@ import type { TradeValueSource } from './valueSource'
 /*
  * One grader per league, briefly memoised: a history page asks for a grade per trade, and the chart
  * behind every one of them is the same. Five minutes is well inside the chart's own freshness.
+ *
+ * ⚠ BOUNDED. Each grader holds its league's whole trade chart, FantasyCalc board included (~1 MB+).
+ * This was a plain Map whose TTL was only checked on read, so every league ever graded stayed in
+ * memory for the life of the process — on the cron worker, `trade-grade-notify` touches every league
+ * every 5 minutes. Expired entries are now swept on write and the count is capped. Enabled in tests
+ * too, so callers see exactly the memoisation they always did.
  */
 const GRADER_TTL_MS = 5 * 60 * 1000
-const graders = new Map<string, { at: number; grader: Promise<LeagueTradeGrader | null> }>()
+const graders = createTtlMemo<Promise<LeagueTradeGrader | null>>({
+  ttlMs: GRADER_TTL_MS,
+  maxEntries: 200,
+  enabled: () => true,
+})
 
 export function completedTradeGraderFor(leagueId: string): Promise<LeagueTradeGrader | null> {
   const hit = graders.get(leagueId)
-  if (hit && Date.now() - hit.at < GRADER_TTL_MS) return hit.grader
+  if (hit) return hit
   const grader = createLeagueTradeGrader({ leagueId }).catch(() => null)
-  graders.set(leagueId, { at: Date.now(), grader })
+  graders.set(leagueId, grader)
   return grader
 }
 

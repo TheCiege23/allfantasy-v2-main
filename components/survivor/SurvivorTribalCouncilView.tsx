@@ -1,10 +1,12 @@
 'use client'
 
+import { useCallback, useEffect, useState } from 'react'
 import { Clock, ScrollText, Shield, Skull, Vote } from 'lucide-react'
-import type { SurvivorSummary } from './types'
+import type { SurvivorSummary, SurvivorSummaryCouncil } from './types'
 import { SurvivorCommandHelp } from './SurvivorCommandHelp'
-import { SurvivorScrollReveal } from './SurvivorScrollReveal'
-import { SurvivorShareCard } from './SurvivorShareCard'
+import { SurvivorVoteRevealScrolls } from '@/components/league/survivor/SurvivorVoteRevealScrolls'
+import { SurvivorAvatar } from './weekly/SurvivorAvatar'
+import { SurvivorShareCardsButton } from './share/SurvivorShareCards'
 
 export interface SurvivorTribalCouncilViewProps {
   leagueId: string
@@ -15,11 +17,61 @@ export interface SurvivorTribalCouncilViewProps {
 /**
  * Elimination Council View: countdown, voting instructions, @Chimmy usage examples, immunity markers, scroll reveal history, vote result recap.
  */
-export function SurvivorTribalCouncilView({ summary, names }: SurvivorTribalCouncilViewProps) {
-  const { council, votedOutHistory, currentWeek } = summary
+type ShotStatus = { available: boolean; used: boolean; success: boolean | null; councilId: string | null; odds?: number }
+
+export function SurvivorTribalCouncilView({ leagueId, summary, names }: SurvivorTribalCouncilViewProps) {
+  const { votedOutHistory, currentWeek } = summary
+  // The read is released step by step by the server; the scroll asks for the next steps here
+  // without reloading the whole home (which would unmount the scroll mid-read).
+  const [liveCouncil, setLiveCouncil] = useState<SurvivorSummaryCouncil | null>(null)
+  const council = liveCouncil && liveCouncil.id === summary.council?.id ? liveCouncil : summary.council
+  const refreshCouncil = useCallback(() => {
+    void fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/summary`, { cache: 'no-store' })
+      .then(async response => response.ok ? (await response.json() as SurvivorSummary).council : null)
+      .then(next => { if (next) setLiveCouncil(next) })
+      .catch(() => {})
+  }, [leagueId])
+  const [shot, setShot] = useState<ShotStatus | null>(null)
+  const [shotPending, setShotPending] = useState(false)
+  const [shotConfirm, setShotConfirm] = useState(false)
+  const [shotError, setShotError] = useState<string | null>(null)
+  const [outCardOpen, setOutCardOpen] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+    void fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/vote`, { cache: 'no-store' })
+      .then(async response => response.ok ? response.json() as Promise<ShotStatus> : null)
+      .then(value => { if (mounted) setShot(value) })
+      .catch(() => { if (mounted) setShot(null) })
+    return () => { mounted = false }
+  }, [leagueId, council?.id])
+
+  async function playShot() {
+    if (!shot?.available || shotPending) return
+    setShotPending(true)
+    setShotError(null)
+    try {
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/vote`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'shot_in_the_dark' }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.ok) {
+        setShotError(result.error ?? 'The draw could not be played.')
+      } else {
+        setShot(current => ({ available: false, used: true, success: result.success === true, councilId: result.councilId, odds: current?.odds }))
+        setShotConfirm(false)
+      }
+    } catch {
+      setShotError('Network error. Check your draw status before trying again.')
+    } finally {
+      setShotPending(false)
+    }
+  }
   const deadline = council?.voteDeadlineAt ? new Date(council.voteDeadlineAt) : null
   const isClosed = !!council?.closedAt
   const eliminated = council?.eliminatedRosterId
+  const isMyTorch = !!eliminated && summary.myRosterId === eliminated
 
   return (
     <div className="space-y-6">
@@ -34,13 +86,14 @@ export function SurvivorTribalCouncilView({ summary, names }: SurvivorTribalCoun
           <p className="text-sm text-white/50">No council scheduled for this week.</p>
         ) : (
           <div className="space-y-3">
+            {council.weekLabel && <p className="text-xs font-semibold uppercase tracking-wide text-amber-300" data-testid="survivor-council-week-label">{council.weekLabel}</p>}
             <p className="text-sm text-white/70">
               Phase: <span className="font-medium text-amber-300">{council.phase}</span>
               {council.attendingTribeId && ' · One tribe attending'}
             </p>
             {isClosed ? (
               <p className="rounded-lg border border-rose-500/30 bg-rose-950/20 px-3 py-2 text-sm text-rose-200">
-                {council.isRevealed ? (eliminated ? `Torch Ceremony complete. Eliminated: ${names[eliminated] ?? eliminated}` : 'Torch Ceremony complete.') : 'Voting has closed. Chimmy will reveal the result at the Torch Ceremony.'}
+                {council.isRevealed ? council.revealComplete === false ? 'The votes are being read.' : (eliminated ? `Torch Ceremony complete. Eliminated: ${names[eliminated] ?? eliminated}` : 'Torch Ceremony complete.') : 'Voting has closed. Chimmy will reveal the result at the Torch Ceremony.'}
               </p>
             ) : deadline ? (
               <p className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-200">
@@ -58,40 +111,96 @@ export function SurvivorTribalCouncilView({ summary, names }: SurvivorTribalCoun
           Voting instructions
         </h2>
         <p className="mb-4 text-sm text-white/70">
-          Cast your vote in league or tribe chat using the official command. Only one vote per roster. Self-vote may be disallowed by league settings.
+          Write your vote on the ballot and drop it in the urn, or send the official command to @Chimmy. Both are the same private ballot. Only one vote per roster, and immune managers can&apos;t receive votes.
         </p>
+        {council && !isClosed && (
+          <a href={`/survivor/${encodeURIComponent(leagueId)}/tribal`} className="mb-4 inline-flex min-h-[46px] items-center justify-center rounded-lg bg-gradient-to-b from-[#e7c46a] to-[#d4a94a] px-5 text-sm font-semibold text-[#1d1406]" data-testid="survivor-open-ballot">
+            Cast your vote
+          </a>
+        )}
         <SurvivorCommandHelp compact />
       </section>
 
-      {/* Vote scroll (sequence from server when council closes / votes tallied) */}
-      {council?.isRevealed &&
-        Array.isArray(council.revealSequence) &&
-        (council.revealSequence as unknown[]).length > 0 && (
+      <section className="rounded-2xl border border-amber-500/25 bg-amber-950/10 p-4 sm:p-6">
+        <h2 className="mb-2 text-lg font-semibold text-amber-100">Shot in the Dark</h2>
+        <p className="text-sm text-white/70">You may use this once per league during your original council vote window. You give up your vote for a 1-in-{shot?.odds ?? 6} chance of immunity. Your result stays private until the Torch Ceremony.</p>
+        {shot?.used ? (
+          <p role="status" className="mt-3 text-sm text-amber-100">Your draw: {shot.success ? 'Safe — immune at that council' : 'Not Safe'}. Your vote was forfeited.</p>
+        ) : shot?.available ? (
+          shotConfirm ? <div className="mt-3 space-y-3 rounded-lg border border-amber-400/30 bg-black/20 p-3">
+            <p className="text-sm text-amber-100">Confirm: this permanently uses your one draw and forfeits your vote at this council, even if the draw fails.</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={playShot} disabled={shotPending}
+                className="rounded-lg border border-amber-400/50 bg-amber-500/20 px-4 py-2 text-sm font-semibold text-amber-100 disabled:opacity-50">
+                {shotPending ? 'Drawing…' : 'Confirm draw'}
+              </button>
+              <button type="button" onClick={() => setShotConfirm(false)} disabled={shotPending}
+                className="rounded-lg border border-white/20 px-4 py-2 text-sm text-white/80 disabled:opacity-50">Cancel</button>
+            </div>
+          </div> : <button type="button" onClick={() => setShotConfirm(true)}
+            className="mt-3 rounded-lg border border-amber-400/50 bg-amber-500/20 px-4 py-2 text-sm font-semibold text-amber-100">
+            Use Shot in the Dark
+          </button>
+        ) : (
+          <p className="mt-3 text-sm text-white/50">The draw is unavailable now. Cast your private vote with @Chimmy when voting opens.</p>
+        )}
+        {shotError && <p role="alert" className="mt-2 text-sm text-rose-200">{shotError}</p>}
+      </section>
+
+      {/* Vote scroll: only the steps the server has released so far. */}
+      {council?.isRevealed && (
           <section className="rounded-2xl border border-amber-500/20 bg-[#0a1228]/80 p-4 sm:p-6">
             <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-amber-100">
               <ScrollText className="h-5 w-5 text-amber-400" />
-              Torch Ceremony · vote scroll
+              Tribal Council · the votes
             </h2>
-            <p className="mb-4 text-sm text-white/55">
-              Votes are read in scroll order — same sequence the host uses when the council closes.
-            </p>
-            <SurvivorScrollReveal
-              councilWeek={council.week}
-              revealSequence={council.revealSequence}
-              autoPlayMs={1400}
+            <SurvivorVoteRevealScrolls
+              key={council.id}
+              scrolls={council.revealSequence ?? []}
+              totalSteps={council.revealTotalSteps ?? council.revealSequence?.length ?? 0}
+              eliminatedName={council.eliminatedName ?? null}
+              isTie={council.isTie === true}
+              tiePhase={null}
+              revealMode={council.revealMode ?? 'one_at_a_time'}
+              nextStepAt={council.revealNextStepAt ?? null}
+              onRequestMore={refreshCouncil}
+              exileEnabled={summary.config.exileReturnEnabled}
+              week={council.week}
+              tribeName={summary.tribes.find(t => t.id === council.attendingTribeId)?.name ?? null}
             />
           </section>
         )}
 
-      {council?.isRevealed && eliminated && <SurvivorShareCard moment="voted_out" sport={summary.seasonCalendar?.sport ?? 'NFL'} leagueName={summary.config.seasonThemeLabel ?? 'Survivor League'} week={council.week} headline={`${names[eliminated] ?? 'A manager'} has left the island`} caption="The Torch Ceremony result is final." />}
+      {/* The "out" card is opt-in and offered only to the eliminated manager — never to anyone else —
+          and only once the read has finished (the server creates the moment at the same point). */}
+      {council?.isRevealed && council.revealComplete !== false && eliminated && isMyTorch && (outCardOpen
+        ? <SurvivorShareCardsButton leagueId={leagueId} type="out" week={council.week} label="Share your exit" autoOpen />
+        : <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/20 bg-[#080b11] p-4 text-white">
+            <p className="text-sm text-white/70">Want to share your exit? Only you can see this.</p>
+            <button type="button" onClick={() => setOutCardOpen(true)} className="min-h-[44px] rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-200">Make a share card</button>
+          </section>)}
 
-      {/* Immunity markers (placeholder – backend can expose who has immunity) */}
+      {/* Weekly necklace: top score in each tribe headed to Tribal Council */}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
         <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-white">
-          <Shield className="h-5 w-5 text-emerald-400" />
+          <Shield className="h-5 w-5 text-amber-300" />
           Immunity
         </h2>
-        <p className="text-sm text-white/50">Individual immunity (from challenges) and tribe immunity are shown on the Tribe Board when active.</p>
+        {summary.immunity?.length ? (
+          <ul className="space-y-2">
+            {summary.immunity.map(row => {
+              const name = names[row.rosterId] ?? row.displayName ?? 'A manager'
+              return <li key={`${row.week}-${row.tribeId}`} className="flex items-center gap-3 rounded-lg border border-amber-300/25 bg-amber-400/[0.07] px-3 py-2 text-sm" data-immune="true">
+                <SurvivorAvatar name={name} size={32} status="immune" gapColor="#10131c" />
+                <span className="min-w-0 flex-1 truncate font-semibold text-white">{name}</span>
+                <img src="/survivor/weekly/immunity-necklace-icon.svg" alt="Immune" className="h-5 w-5" />
+                <span className="font-mono tabular-nums text-white/80">{row.score.toFixed(1)}</span>
+              </li>
+            })}
+          </ul>
+        ) : (
+          <p className="text-sm text-white/50">The top score in each tribe going to Tribal Council wins immunity once the week&apos;s scores are final. It is worn until the next lineup lock.</p>
+        )}
       </section>
 
       {/* Voted-out history (scroll reveal) */}

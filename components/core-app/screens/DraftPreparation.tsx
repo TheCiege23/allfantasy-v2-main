@@ -8,8 +8,11 @@ import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient";
 import type { DraftPreparationData } from "@/lib/core-app/draftPreparation";
 import "@/components/core-app/af-draft-preparation.css";
 import { DraftReferences } from './DraftReferences';
+import { draftRoomHref } from "@/lib/league-chat/draftChatLink";
 
 const spanish: Record<string, string> = {
+  "Every available player is listed in the draft room.": "Todos los jugadores disponibles están en la sala del draft.",
+  "See the player pool": "Ver los jugadores disponibles",
   "Draft preparation": "Preparación del draft",
   "Draft-time ADP": "ADP al inicio del draft",
   "Observed ADP rankings": "Clasificación por ADP observado",
@@ -82,9 +85,12 @@ function numeric(v: number | null) {
 export function DraftPreparation({
   data,
   leagueId,
+  draftComplete = false,
 }: {
   data: DraftPreparationData;
   leagueId: string;
+  /** A finished draft has no pool left to send anyone to. */
+  draftComplete?: boolean;
 }) {
   const language = useOptionalLanguage().language,
     es = language === "es",
@@ -343,6 +349,17 @@ export function DraftPreparation({
           role={data.state === "error" ? "alert" : undefined}
         >
           {reason}
+        </p>
+      )}
+      {!data.players.length && data.sessionId && !draftComplete && (
+        /* An empty benchmark is not an empty player pool. Without this line a manager read
+           "No compatible observed ADP snapshot" as "players are not loading" (NBA, 2026-10-26).
+           Plain anchor: the room is a full navigation through the /draft resolver. */
+        <p className="af-prep-pool-link">
+          {t("Every available player is listed in the draft room.")}{" "}
+          <a href={draftRoomHref(leagueId)} data-testid="draft-prep-room-link">
+            {t("See the player pool")} →
+          </a>
         </p>
       )}
       {!data.observedAt && (

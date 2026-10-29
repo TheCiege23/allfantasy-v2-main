@@ -1,7 +1,8 @@
 /**
  * Build dispersal draft asset pool from orphaned/dissolved `Roster` rows.
  *
- * Players live in `Roster.playerData` (JSON array or `{ players: [] }` shape).
+ * Players live in `Roster.playerData` (JSON array or `{ players: [] }` shape) — except in a league
+ * AllFantasy runs, whose pool comes from its own tables (./nativeDispersal.ts).
  * Future/traded draft picks may appear under `draftPicks` | `futurePicks` on the same JSON object
  * when synced — otherwise the pool has no pick rows until import shapes are standardized.
  *
@@ -13,6 +14,7 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 
 import type { DispersalAsset } from './types'
+import { buildNativeAssetPool, isNativeDispersalLeague } from './nativeDispersal'
 
 function newPoolId(): string {
   return randomUUID()
@@ -161,6 +163,20 @@ export async function buildAssetPoolFromRosters(
   let draftPickCount = 0
   let faabCount = 0
   let totalFaab = 0
+
+  // A league AllFantasy runs keeps its rosters, picks and FAAB elsewhere (./nativeDispersal.ts).
+  if (await isNativeDispersalLeague(prisma, leagueId)) {
+    const native = await buildNativeAssetPool(prisma, leagueId, sourceRosterIds)
+    const count = (t: DispersalAsset['assetType']) => native.filter((a) => a.assetType === t).length
+    return {
+      assets: native,
+      totalCount: native.length,
+      playerCount: count('player'),
+      draftPickCount: count('draft_pick'),
+      faabCount: count('faab'),
+      totalFaab: native.reduce((sum, a) => sum + (a.faabAmount ?? 0), 0),
+    }
+  }
 
   const rosters = await prisma.roster.findMany({
     where: { leagueId, id: { in: sourceRosterIds } },

@@ -1,0 +1,78 @@
+/* Guilly (NBA guillotine). Layered on components/league/specialty with child selectors. */
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.bebas { font-family: 'Bebas Neue', sans-serif; letter-spacing: .04em; }
+.top { display: flex; align-items: center; gap: 14px; margin: 0 0 18px; }
+.top h1 { margin: 0; font-size: clamp(24px, 4vw, 34px); }
+.top p { margin: 2px 0 0; color: #9aa3b8; font-size: 14px; }
+.top img { width: 56px; height: auto; margin-left: auto; }
+
+.opt { display: grid; grid-template-columns: 40px 1fr auto; gap: 14px; align-items: center; padding: 14px 0; border-top: 1px solid rgba(255,255,255,.07); }
+.opt:first-child { border-top: 0; }
+.opt > img { width: 36px; height: 36px; }
+.opt h3 { margin: 0; font-size: 16px; }
+.opt p { margin: 2px 0 0; font-size: 13px; color: #9aa3b8; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 12px; border: 1px solid rgba(255,255,255,.1); background: #0c0f18; }
+.seg > button { min-height: 44px; min-width: 52px; padding: 0 12px; border-radius: 9px; border: 0; background: transparent; color: #c3c8d6; font-weight: 700; cursor: pointer; }
+.seg > button[aria-pressed='true'] { color: #f2c94c; box-shadow: inset 0 -2px 0 #e0402e; background: #161a28; }
+.seg > button:disabled { cursor: not-allowed; opacity: .45; }
+.soon { display: block; font-size: 11px; color: #f2c94c; font-weight: 600; }
+.nameInput { width: 100%; min-height: 44px; border-radius: 10px; border: 1px solid rgba(255,255,255,.14); background: #0c0f18; color: #fff; padding: 0 12px; font-size: 16px; }
+
+.wordmark { display: block; width: 100%; max-width: 320px; margin: 0 auto 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 12px; }
+.chips > span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.12); font-size: 13px; font-weight: 700; }
+.chips > span img { width: 18px; height: 18px; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 14px; margin: 10px 0; }
+.kv > dt { color: #9aa3b8; }
+.kv > dd { margin: 0; font-family: 'JetBrains Mono', monospace; text-align: right; }
+.warn { display: inline-block; font-size: 12px; color: #f2c94c; border: 1px dashed rgba(242,201,76,.6); border-radius: 8px; padding: 4px 8px; }
+.create { width: 100%; min-height: 48px; border-radius: 12px; border: 0; background: #ff3b2f; color: #fff; font-weight: 800; font-size: 16px; cursor: pointer; margin-top: 14px; }
+.create:disabled { opacity: .5; cursor: not-allowed; }
+.errs { margin: 10px 0 0; padding-left: 18px; color: #ff9a8a; font-size: 13px; }
+
+/* Blade line */
+.bl { list-style: none; padding: 0; margin: 0; }
+.bl > li { display: grid; grid-template-columns: 30px 36px 1fr auto auto; align-items: center; gap: 10px; padding: 8px 10px; margin-top: 6px; border-radius: 12px; border: 1px solid rgba(255,255,255,.06); min-height: 52px; }
+.bl > li.you { border-color: rgba(242,201,76,.6); background: rgba(242,201,76,.06); }
+.bl > li.zone { background: rgba(224,64,46,.08); border-color: rgba(224,64,46,.35); }
+.bl > li img { width: 34px; height: 34px; }
+.bl > li .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.bl > li .nm small { display: block; font-weight: 400; color: #9aa3b8; font-size: 12px; }
+.line { position: relative; border-top: 2px dashed #ff3b2f; margin: 16px 0 10px; }
+.line > span { position: absolute; left: 50%; top: -12px; transform: translateX(-50%); background: #ff3b2f; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .12em; padding: 3px 10px; border-radius: 6px; white-space: nowrap; }
+
+.neck { display: flex; gap: 14px; align-items: center; }
+.neck img { width: 64px; height: 64px; }
+.neck strong { display: block; font-family: 'Bebas Neue', sans-serif; font-size: 44px; line-height: 1; }
+.meter { position: relative; height: 12px; border-radius: 999px; background: linear-gradient(90deg, #e0402e, #f2c94c 55%, #3aa86a); margin: 14px 0 6px; }
+.meter > i { position: absolute; top: -4px; width: 6px; height: 20px; border-radius: 3px; background: #fff; transform: translateX(-50%); }
+.meterLbl { display: flex; justify-content: space-between; font-size: 11px; color: #9aa3b8; letter-spacing: .1em; }
+
+.grave { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.stone { position: relative; text-align: center; }
+.stone img { width: 100%; max-width: 140px; height: auto; display: block; margin: 0 auto; }
+.stone span { position: absolute; left: 18%; right: 18%; top: 48%; font-size: 12px; font-weight: 800; color: #2a2a2a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stone small { display: block; font-size: 12px; color: #9aa3b8; margin-top: 4px; }
+
+.chop { position: relative; overflow: hidden; text-align: center; }
+.chop img.scene { width: min(360px, 80%); height: auto; }
+.chop img.head { width: min(520px, 95%); height: auto; display: block; margin: 0 auto; animation: gyRoll .8s ease-out both; }
+.shake { animation: gyShake .5s ease-in-out 1; }
+@keyframes gyBlade { 0% { transform: translateY(-120%); } 70% { transform: translateY(6%); } 100% { transform: none; } }
+@keyframes gyRoll { 0% { transform: translate(-40px, -30px) rotate(-90deg); opacity: 0; } 40% { opacity: 1; } 100% { transform: none; opacity: 1; } }
+@keyframes gyShake { 0%,100% { transform: translate(0,0); } 20% { transform: translate(-6px,3px); } 40% { transform: translate(5px,-3px); } 60% { transform: translate(-4px,2px); } 80% { transform: translate(3px,-1px); } }
+.blade { animation: gyBlade .7s cubic-bezier(.2,.8,.3,1) both; }
+
+.channels { width: 100%; border-collapse: collapse; font-size: 12px; }
+.channels th, .channels td { padding: 6px 4px; border-top: 1px solid rgba(255,255,255,.06); text-align: center; }
+.channels th:first-child, .channels td:first-child { text-align: left; }
+
+@media (max-width: 640px) {
+  .opt { grid-template-columns: 32px 1fr; }
+  .opt > .seg { grid-column: 1 / -1; }
+  .bl > li { grid-template-columns: 24px 30px 1fr auto; }
+  .bl > li > .st { grid-column: 3 / -1; justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chop img.head, .shake, .blade { animation: none !important; }
+}

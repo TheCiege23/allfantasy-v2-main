@@ -117,7 +117,7 @@ describe('Slice 4 — interaction integrity contracts', () => {
   const pageClientSrc = read('components/app/draft-room/DraftRoomPageClient.tsx')
 
   it('9. queue action stays available after filtering (not gated by canDraft)', () => {
-    expect(playerPanelSrc).toContain('data-testid={`draft-queue-add-${virtualRow.index}`}')
+    expect(playerPanelSrc).toContain('data-testid={`draft-queue-add-${index}`}')
     expect(playerPanelSrc).toContain('onClick={() => onAddToQueue(p)}')
     expect(playerPanelSrc).toContain('secondaryAction={')
   })

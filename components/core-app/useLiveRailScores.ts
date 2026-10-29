@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { CORE_IDLE_REFRESH_MS } from '@/lib/core-app/coreRefreshPolicy'
 import type { RailLeague, RailMatchupSummary } from './AfCoreShell'
 
-type LiveScore = RailMatchupSummary & { season: number; week: number; updatedAt: string; fieldStanding?: RailMatchupSummary['standing'] }
+/** One league's row from `/api/core/rail-scores`. */
+export type LiveRailScore = RailMatchupSummary & { season: number; week: number; updatedAt: string; fieldStanding?: RailMatchupSummary['standing'] }
 
 /**
  * 🛑 NOT LESS THAN THIS, WHATEVER A CALLER PASSES. A missing argument arrives as `undefined`,
@@ -33,10 +34,22 @@ const MIN_RAIL_REFRESH_MS = 10_000
  * four times quieter when it does not. The caller owns the decision, so there is one authority
  * for "is anything live" rather than a second copy here.
  */
-export function useLiveRailScores(leagues: RailLeague[], enabled: boolean, refreshMs: number) {
-  const [scores, setScores] = useState<Record<string, LiveScore>>({})
+export function useLiveRailScores(
+  leagues: RailLeague[],
+  enabled: boolean,
+  refreshMs: number,
+  /**
+   * Native leagues whose server snapshot carries a native row (`RailMatchupSummary.native`) — a
+   * guillotine line or a native head-to-head. The route answers them from the database, not a provider.
+   */
+  nativeIds: readonly string[] = [],
+) {
+  const [scores, setScores] = useState<Record<string, LiveRailScore>>({})
   const [delayed, setDelayed] = useState<string[]>([])
-  const idsKey = JSON.stringify(leagues.filter(league => league.platform.toLowerCase() === 'sleeper' && !league.syncPaused).map(league => league.id))
+  const idsKey = JSON.stringify([...new Set([
+    ...leagues.filter(league => league.platform.toLowerCase() === 'sleeper' && !league.syncPaused).map(league => league.id),
+    ...nativeIds.filter(id => leagues.some(league => league.id === id && !league.syncPaused)),
+  ])])
   useEffect(() => {
     if (!enabled) return
     const ids: string[] = JSON.parse(idsKey)
@@ -52,7 +65,7 @@ export function useLiveRailScores(leagues: RailLeague[], enabled: boolean, refre
             const query = new URLSearchParams(batch.map(id => ['league', id]))
             const response = await fetch(`/api/core/rail-scores?${query}`, { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(40_000)]) })
             if (!response.ok) throw new Error('Refresh unavailable')
-            const data = await response.json() as { updates: Record<string, LiveScore>; unavailable: string[] }
+            const data = await response.json() as { updates: Record<string, LiveRailScore>; unavailable: string[] }
             if (controller.signal.aborted) return
             setScores(previous => ({ ...previous, ...data.updates }))
             setDelayed(previous => [...previous.filter(id => !batch.includes(id)), ...data.unavailable])

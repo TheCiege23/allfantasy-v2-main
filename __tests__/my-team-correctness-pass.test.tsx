@@ -14,13 +14,13 @@ import { isGuillotineLeague, isTeamEliminated } from '@/lib/core-app/teamElimina
 
 describe('one elimination rule for both My Team views', () => {
   const guillotineByVariant = { guillotineMode: false, leagueVariant: 'guillotine' }
-  it('reads a guillotine league from either flag', () => {
+  it('reads a Guilly league from either flag', () => {
     expect(isGuillotineLeague({ guillotineMode: true })).toBe(true)
     expect(isGuillotineLeague(guillotineByVariant)).toBe(true)
     expect(isGuillotineLeague({ leagueVariant: 'SURVIVOR_GUILLOTINE' })).toBe(true)
     expect(isGuillotineLeague({ guillotineMode: false, leagueVariant: 'dynasty' })).toBe(false)
   })
-  it('an emptied roster is a chop in a guillotine league marked only by leagueVariant', () => {
+  it('an emptied roster is a chop in a Guilly league marked only by leagueVariant', () => {
     // The board used to read only guillotineMode, so this team stayed on it as "needs a lineup".
     expect(isTeamEliminated({ playerData: { players: [] }, league: guillotineByVariant, eliminationRecorded: false })).toBe(true)
   })

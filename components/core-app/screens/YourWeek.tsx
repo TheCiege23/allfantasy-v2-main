@@ -319,7 +319,7 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
               {copy('No opponent — lowest score is out')} <TopicTip topic="eliminationCut" />
             </h2>
             <p className="af-wk-sectionnote">
-              {copy('Guillotine and survivor leagues eliminate the week’s lowest score instead of pairing teams off, so these show your points clear of the cut line rather than a win probability. The field is the rosters that have scored this week.')}
+              {copy('Guilly and survivor leagues eliminate the week’s lowest score instead of pairing teams off, so these show your points clear of the cut line rather than a win probability. The field is the rosters that have scored this week.')}
             </p>
           </div>
           <div className="af-wk-leans">

@@ -122,6 +122,7 @@ export function buildRedraftWarRoomPrompt(inputs: RedraftWarRoomPromptInputs): s
     lines.push('')
     lines.push(`=== UPCOMING MATCHUP (W${m.week}, ${m.status}) ===`)
     lines.push(`opponentRosterId=${m.opponentRosterId ?? 'n/a'} homeProj=${m.homeProjected ?? 'n/a'} awayProj=${m.awayProjected ?? 'n/a'}`)
+    if (m.extraMatchup) lines.push(m.extraMatchup)
   }
 
   if (inputs.needs) {

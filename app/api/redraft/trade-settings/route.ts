@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isTournamentCoCommissioner } from '@/lib/league/tournamentCoCommissioners'
 import { assertLeagueMember } from '@/lib/league/league-access'
 
 export const dynamic = 'force-dynamic'
@@ -31,6 +32,7 @@ export async function GET(req: NextRequest) {
         tradeDeadlineWeek: true,
         draftPickTrading: true,
         userId: true,
+        settings: true,
         teams: { where: { claimedByUserId: userId }, select: { isCommissioner: true, isCoCommissioner: true } },
       },
     }),
@@ -47,7 +49,9 @@ export async function GET(req: NextRequest) {
   for (const r of rosters) faabByRosterId[r.id] = r.faabBalance ?? 0
 
   const isCommissioner =
-    league?.userId === userId || (league?.teams ?? []).some((t) => t.isCommissioner || t.isCoCommissioner)
+    league?.userId === userId ||
+    (league?.teams ?? []).some((t) => t.isCommissioner || t.isCoCommissioner) ||
+    isTournamentCoCommissioner(league?.settings, userId)
 
   return NextResponse.json({
     settings: {

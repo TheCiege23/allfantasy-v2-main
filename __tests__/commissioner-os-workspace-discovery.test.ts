@@ -17,6 +17,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   activityGroupBy: vi.fn(),
   runGroupBy: vi.fn(),
+  seasonFindMany: vi.fn(),
+  draftFindMany: vi.fn(),
   isLiveReady: vi.fn(),
   runAutomationJob: vi.fn(),
 }))
@@ -25,6 +27,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     decisionOsImportedActivity: { groupBy: mocks.activityGroupBy },
     automationRun: { groupBy: mocks.runGroupBy },
+    redraftSeason: { findMany: mocks.seasonFindMany },
+    draftSession: { findMany: mocks.draftFindMany },
   },
 }))
 
@@ -42,6 +46,9 @@ const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86_400_000)
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.runGroupBy.mockResolvedValue([])
+  mocks.seasonFindMany.mockResolvedValue([])
+  mocks.draftFindMany.mockResolvedValue([])
+  mocks.activityGroupBy.mockResolvedValue([])
   mocks.isLiveReady.mockResolvedValue(true)
   mocks.runAutomationJob.mockResolvedValue({ status: 'completed', jobId: 'j', runId: 'r' })
 })
@@ -149,6 +156,141 @@ describe('discoverWorkspaceRefreshLeagues', () => {
   })
 })
 
+describe('discoverWorkspaceRefreshLeagues — native leagues', () => {
+  /*
+   * 🛑 Imported activity is written only by the provider emitters, so a native AllFantasy league
+   * never has a row in `decision_os_imported_activity`. Before the native path, a native league in
+   * season — a native NBA guillotine league, say — was never in this job's universe at all.
+   */
+  it('🛑 discovers an in-season native league that has no imported activity', async () => {
+    mocks.seasonFindMany.mockResolvedValue([{ leagueId: 'native-nba-guillotine' }])
+
+    const due = await discoverWorkspaceRefreshLeagues({ limit: 10, now: NOW })
+
+    expect(due).toHaveLength(1)
+    expect(due[0]).toMatchObject({ leagueId: 'native-nba-guillotine', native: true, lastActivityAt: null })
+    expect(due[0].idempotencyKey).toBeTruthy()
+  })
+
+  it('discovers a native league that is mid-draft and has no running season yet', async () => {
+    mocks.draftFindMany.mockResolvedValue([{ leagueId: 'native-drafting' }])
+
+    const due = await discoverWorkspaceRefreshLeagues({ limit: 10, now: NOW })
+
+    expect(due.map((d) => d.leagueId)).toEqual(['native-drafting'])
+  })
+
+  it('scopes the native queries to native platforms, scoring seasons and LIVE drafts only', async () => {
+    await discoverWorkspaceRefreshLeagues({ limit: 10, now: NOW })
+
+    const seasonWhere = JSON.stringify(mocks.seasonFindMany.mock.calls[0][0].where)
+    // Native platforms only — the shadow half of engineSeasonScope stays off.
+    expect(seasonWhere).toContain('"allfantasy"')
+    expect(seasonWhere).not.toContain('"sleeper"')
+    // Regular season AND playoffs, both status spellings; finished and unstarted seasons excluded.
+    for (const status of ['active', 'in_season', 'playoffs']) expect(seasonWhere).toContain(`"${status}"`)
+    expect(seasonWhere).not.toContain('"complete"')
+    expect(seasonWhere).not.toContain('"setup"')
+
+    const draftWhere = mocks.draftFindMany.mock.calls[0][0].where
+    expect(draftWhere.status.in).toEqual(['in_progress', 'paused'])
+    // `pre_draft` is the column default — an abandoned league sits in it forever.
+    expect(draftWhere.status.in).not.toContain('pre_draft')
+    expect(draftWhere.league.platform.in).toContain('allfantasy')
+    expect(draftWhere.league.platform.in).not.toContain('sleeper')
+  })
+
+  it('passes a single-league filter through to the native queries too', async () => {
+    await discoverWorkspaceRefreshLeagues({ limit: 10, now: NOW, leagueId: 'lg-x' })
+
+    expect(JSON.stringify(mocks.seasonFindMany.mock.calls[0][0].where)).toContain('"leagueId":"lg-x"')
+    expect(mocks.draftFindMany.mock.calls[0][0].where.leagueId).toBe('lg-x')
+    expect(mocks.activityGroupBy.mock.calls[0][0].where.afLeagueId).toBe('lg-x')
+  })
+
+  it('de-duplicates a league found by both paths, keeping its imported staleness', async () => {
+    mocks.activityGroupBy.mockResolvedValue([{ afLeagueId: 'both', _max: { occurredAt: daysAgo(5) } }])
+    mocks.seasonFindMany.mockResolvedValue([{ leagueId: 'both' }, { leagueId: 'native-only' }])
+    // A league can also have a live draft row alongside its season; it is still one league.
+    mocks.draftFindMany.mockResolvedValue([{ leagueId: 'native-only' }, { leagueId: 'both' }])
+
+    const due = await discoverWorkspaceRefreshLeagues({ limit: 10, now: NOW })
+
+    expect(due.map((d) => d.leagueId)).toEqual(['both', 'native-only'])
+    expect(due[0]).toMatchObject({ native: true, lastActivityAt: daysAgo(5) })
+    expect(due[1]).toMatchObject({ native: true, lastActivityAt: null })
+    expect(new Set(due.map((d) => d.idempotencyKey)).size).toBe(2)
+  })
+
+  it('rotates native leagues by last scan exactly like imported ones', async () => {
+    mocks.activityGroupBy.mockResolvedValue([{ afLeagueId: 'imported', _max: { occurredAt: daysAgo(90) } }])
+    mocks.seasonFindMany.mockResolvedValue([{ leagueId: 'native' }])
+    mocks.runGroupBy.mockResolvedValue([
+      { leagueId: 'imported', _max: { startedAt: daysAgo(0) } },
+      { leagueId: 'native', _max: { startedAt: daysAgo(3) } },
+    ])
+
+    const due = await discoverWorkspaceRefreshLeagues({ limit: 1, now: NOW })
+
+    // The imported league has the stalest data but was scanned today; the native one is overdue.
+    expect(due.map((d) => d.leagueId)).toEqual(['native'])
+  })
+
+  it('among equally-overdue leagues, imported staleness leads and native-only follows', async () => {
+    mocks.activityGroupBy.mockResolvedValue([{ afLeagueId: 'zzz-imported', _max: { occurredAt: daysAgo(2) } }])
+    mocks.seasonFindMany.mockResolvedValue([{ leagueId: 'aaa-native' }])
+
+    const due = await discoverWorkspaceRefreshLeagues({ limit: 2, now: NOW })
+
+    expect(due.map((d) => d.leagueId)).toEqual(['zzz-imported', 'aaa-native'])
+  })
+
+  it('keeps the limit as a cap over the UNION, not per path', async () => {
+    mocks.activityGroupBy.mockResolvedValue([
+      { afLeagueId: 'imp-1', _max: { occurredAt: daysAgo(1) } },
+      { afLeagueId: 'imp-2', _max: { occurredAt: daysAgo(2) } },
+    ])
+    mocks.seasonFindMany.mockResolvedValue([{ leagueId: 'nat-1' }, { leagueId: 'nat-2' }])
+
+    const due = await discoverWorkspaceRefreshLeagues({ limit: 3, now: NOW })
+
+    expect(due.map((d) => d.leagueId)).toEqual(['imp-2', 'imp-1', 'nat-1'])
+  })
+
+  it('⚠ orders deterministically on ties, whatever order the database returned', async () => {
+    const ids = ['nat-c', 'nat-a', 'nat-b']
+    mocks.seasonFindMany.mockResolvedValue(ids.map((leagueId) => ({ leagueId })))
+    const first = await discoverWorkspaceRefreshLeagues({ limit: 10, now: NOW })
+
+    mocks.seasonFindMany.mockResolvedValue([...ids].reverse().map((leagueId) => ({ leagueId })))
+    const second = await discoverWorkspaceRefreshLeagues({ limit: 10, now: NOW })
+
+    expect(first.map((d) => d.leagueId)).toEqual(['nat-a', 'nat-b', 'nat-c'])
+    expect(second.map((d) => d.leagueId)).toEqual(first.map((d) => d.leagueId))
+  })
+
+  it('every native league eventually reaches the front under a limit smaller than the set', async () => {
+    const leagues = Array.from({ length: 9 }, (_, i) => `nat-${i}`)
+    mocks.seasonFindMany.mockResolvedValue(leagues.map((leagueId) => ({ leagueId })))
+    mocks.activityGroupBy.mockResolvedValue([{ afLeagueId: 'imported', _max: { occurredAt: daysAgo(80) } }])
+    const scanned = new Map<string, Date>()
+    const seen = new Set<string>()
+
+    for (let day = 0; day < 5; day += 1) {
+      const at = new Date(NOW.getTime() + day * 86_400_000)
+      mocks.runGroupBy.mockResolvedValue(
+        [...scanned.entries()].map(([leagueId, startedAt]) => ({ leagueId, _max: { startedAt } })),
+      )
+      for (const row of await discoverWorkspaceRefreshLeagues({ limit: 2, now: at })) {
+        seen.add(row.leagueId)
+        scanned.set(row.leagueId, at)
+      }
+    }
+
+    expect([...seen].sort()).toEqual([...leagues, 'imported'].sort())
+  })
+})
+
 describe('refreshWorkspaceTasksBatch — the readiness gate', () => {
   it('🛑 WRITES NOTHING, AND DISCOVERS NOTHING, WHILE THE MODULE IS NOT LIVE-READY', async () => {
     /*
@@ -164,6 +306,8 @@ describe('refreshWorkspaceTasksBatch — the readiness gate', () => {
     expect(result.enabled).toBe(false)
     expect(result.discovered).toBe(0)
     expect(mocks.activityGroupBy).not.toHaveBeenCalled()
+    expect(mocks.seasonFindMany).not.toHaveBeenCalled()
+    expect(mocks.draftFindMany).not.toHaveBeenCalled()
     expect(mocks.runAutomationJob).not.toHaveBeenCalled()
   })
 

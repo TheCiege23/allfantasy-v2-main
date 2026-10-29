@@ -8,6 +8,8 @@ import { DeadlineReminderCard } from '@/app/survivor/components/chimmy/DeadlineR
 import { ExileTokenSummaryCard } from '@/app/survivor/components/chimmy/ExileTokenSummaryCard'
 import { JuryVotingCard } from '@/app/survivor/components/chimmy/JuryVotingCard'
 import { ChallengePickCard } from '@/app/survivor/components/chimmy/ChallengePickCard'
+import { AskChimmyCard } from '@/app/survivor/components/chimmy/AskChimmyCard'
+import { ConfessionalCard } from '@/app/survivor/components/ConfessionalCard'
 
 export default function SurvivorChimmyPage() {
   const params = useParams()
@@ -82,6 +84,10 @@ export default function SurvivorChimmyPage() {
         ) : null}
 
         <DeadlineReminderCard label="Vote deadline approaching" href={`/survivor/${leagueId}/tribal`} />
+
+        {leagueId ? <AskChimmyCard leagueId={leagueId} /> : null}
+
+        {leagueId && ctx.season?.userState ? <ConfessionalCard leagueId={leagueId} /> : null}
 
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-[12px] text-amber-100">
           Forbidden hidden information stays redacted for players and playing commissioners.

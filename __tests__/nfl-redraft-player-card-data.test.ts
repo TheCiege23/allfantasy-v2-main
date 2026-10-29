@@ -235,13 +235,16 @@ describe('DraftPlayerCard — NFL projection splits + kicker splits', () => {
 describe('DraftPlayerCard — Commit N rookie chip preserved', () => {
   const src = read('components/app/draft-room/DraftPlayerCard.tsx')
 
-  it('rookie chip gates on Boolean(isRookie)', () => {
-    expect(src).toMatch(/const showRookieBadge = Boolean\(isRookie\)/)
+  // Phase 3.2: the chip is the shared Rookie/Prospect badge, still fed from isRookie. Its behaviour
+  // (Rookie vs Prospect, every sport) is asserted by rendering in
+  // __tests__/draft-room/redraft-rookie-prospect-labels.test.tsx.
+  it('rookie chip is fed from isRookie through the shared label resolver', () => {
+    expect(src).toMatch(/const labelInput = \{ isRookie, isDevy, graduatedToNFL, poolType \}/)
   })
 
   it('rookie chip is rendered in BOTH the card and row variants', () => {
-    // Two ternaries, one per variant — same gate (showRookieBadge).
-    expect(src.match(/\{showRookieBadge \?/g) ?? []).toHaveLength(2)
+    // One badge per variant — same input (labelInput).
+    expect(src.match(/<DraftPlayerLabelBadge player=\{labelInput\}/g) ?? []).toHaveLength(2)
   })
 })
 
@@ -252,8 +255,8 @@ describe('Pool resolver dedupe + isRookie derivation (Commits N/O still pinned)'
     expect(src).toMatch(/dedupedEnrichedList = dedupeEnrichedRawRows\(/)
   })
 
-  it('runs through normalizePlayerList to canonicalise the served entries', () => {
-    expect(src).toMatch(/normalizePlayerList\(dedupedEnrichedList, sport\)/)
+  it('cooperatively normalizes the served entries', () => {
+    expect(src).toMatch(/cooperativeMap\(dedupedEnrichedList,[\s\S]*?normalizePlayer\(row, sport\)/)
   })
 
   it('marks non-graduated devy as rookie regardless of yearsExp', () => {

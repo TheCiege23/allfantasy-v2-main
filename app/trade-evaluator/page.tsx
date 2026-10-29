@@ -1,5 +1,7 @@
 "use client"
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
@@ -942,11 +944,10 @@ function TradeHubInner() {
     ]
 
     try {
-      const response = await fetch("/api/trade-evaluator", {
+      const response = await paidToolFetchWithConfirm("/api/trade-evaluator", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          trade_id: `trade_${Date.now()}`,
           confirmTokenSpend: true,
           ...(linkedLeagueId ? { leagueId: linkedLeagueId } : {}),
           sender: {

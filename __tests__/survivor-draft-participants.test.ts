@@ -90,6 +90,14 @@ describe('Survivor drafted cast reconciliation', () => {
     expect(await prepare()).toMatchObject({ ok: false, code: 'legacy_inventory_requires_review' })
     expect(db.survivorPlayer.upsert).not.toHaveBeenCalled()
   })
+  it('idols hidden in the draft pool are not an older inventory: setup goes ahead', async () => {
+    // Pool idols carry the pool placeholder roster; only rows outside it are an older inventory.
+    db.survivorIdol.count.mockImplementation(async (args: { where: { rosterId?: { not?: string } } }) =>
+      (args.where.rosterId?.not === '__survivor_pool__' ? 0 : 7))
+    db.survivorAuditEntry.findFirst.mockResolvedValue(null)
+    expect(await prepare()).toMatchObject({ ok: true, alreadyStarted: false })
+    expect(db.survivorPlayer.upsert).toHaveBeenCalledTimes(16)
+  })
   it('does not remove departed real players or unused placeholders that already hold idols', async () => {
     db.survivorPlayer.findMany.mockResolvedValue([{ userId: 'open-slot-league-2', playerState: 'active', tribeId: null, idolIds: ['idol'] }])
     expect(await prepare()).toMatchObject({ ok: false, code: 'existing_cast_requires_review' })

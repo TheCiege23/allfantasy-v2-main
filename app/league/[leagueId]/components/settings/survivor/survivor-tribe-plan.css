@@ -1,0 +1,43 @@
+/* Survivor tribe plan (TribeSetup.png). /core tokens with neutral fallbacks for non-.af-core hosts;
+ * the only colour from data is each tribe's identity colour, passed in as --tribe. No hex here. */
+.stp { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; padding: 18px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; background: var(--surface, transparent); color: var(--text, inherit); }
+.stp-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.stp-head h3 { margin: 0; font-size: 16px; font-weight: 700; }
+.stp-pill { padding: 4px 10px; border: 1px solid color-mix(in srgb, var(--p-gold-fg, currentColor) 45%, transparent); border-radius: 6px; color: var(--p-gold-fg, inherit); font-size: 12px; }
+.stp-label { margin: 0 0 8px; padding: 0; color: var(--faint, inherit); font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); letter-spacing: .12em; text-transform: uppercase; }
+.stp-controls { display: flex; flex-wrap: wrap; gap: 20px; }
+.stp-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line2, rgba(255,255,255,.12)); border-radius: 8px; background: var(--surface2, transparent); }
+.stp-seg button { min-height: 44px; padding: 0 14px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text2, inherit); font-weight: 600; cursor: pointer; }
+.stp-seg button[aria-checked='true'] { background: var(--raised, var(--chip, transparent)); border-color: var(--line2, transparent); color: var(--text, inherit); }
+.stp-seg button:disabled { opacity: .45; cursor: not-allowed; }
+.stp-toggles { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; border: 0; }
+.stp-toggles label { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 14px; }
+.stp-toggles input { width: 18px; height: 18px; accent-color: var(--accent, auto); }
+.stp-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.stp-btn { min-height: 44px; padding: 0 16px; border: 1px solid var(--line2, rgba(255,255,255,.12)); border-radius: 6px; background: transparent; color: var(--text, inherit); font-weight: 600; cursor: pointer; }
+.stp-btn:disabled { opacity: .45; cursor: not-allowed; }
+.stp-primary { background: var(--accent, transparent); border-color: var(--accent, transparent); color: var(--accent-ink, inherit); }
+.stp :is(button, select, input):focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; }
+.stp-summary { margin: 0; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--good, currentColor) 40%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--good, transparent) 8%, transparent); font-size: 14px; }
+.stp-summary[data-state='warn'] { border-color: color-mix(in srgb, var(--warn, currentColor) 45%, transparent); background: color-mix(in srgb, var(--warn, transparent) 8%, transparent); }
+.stp-help, .stp-note { margin: 0; color: var(--text2, inherit); font-size: 13px; }
+.stp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.stp-tribe { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid color-mix(in srgb, var(--tribe, var(--line2, currentColor)) 55%, transparent); border-radius: 10px; background: var(--surface2, transparent); }
+.stp-tribe header { display: flex; align-items: center; gap: 10px; }
+.stp-swatch { width: 14px; height: 14px; flex: none; border-radius: 4px; background: var(--tribe, var(--line2)); }
+.stp-tribe h4 { flex: 1; min-width: 0; margin: 0; font-size: 15px; font-weight: 700; }
+.stp-count { color: var(--faint, inherit); font: 12px var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.stp-count[data-off='true'] { color: var(--warn, inherit); }
+.stp-tribe ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.stp-tribe li { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 6px 4px 8px; border: 1px solid var(--line, transparent); border-radius: 8px; }
+.stp-avatar { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 999px; background: var(--chip, transparent); color: var(--text2, inherit); font-size: 11px; font-weight: 700; }
+.stp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 14px; }
+.stp-af { color: var(--faint, inherit); font: 11px var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.stp-move select { min-height: 36px; max-width: 110px; padding: 0 6px; border: 1px solid var(--line2, rgba(255,255,255,.12)); border-radius: 6px; background: var(--surface, transparent); color: var(--text, inherit); font-size: 12px; color-scheme: dark; }
+.stp-empty { color: var(--faint, inherit); font-size: 13px; }
+.stp-tribe footer { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; }
+.stp-tribe footer .stp-label { margin: 0; }
+.stp-avg { font: 12px var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.stp-bar { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--chip, rgba(255,255,255,.06)); overflow: hidden; }
+.stp-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--tribe, var(--accent)); transition: width .3s ease; }
+@media (prefers-reduced-motion: reduce) { .stp-bar > span { transition: none; } }

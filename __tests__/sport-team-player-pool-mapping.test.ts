@@ -431,6 +431,28 @@ describe('Sport teams, logos, and player pool mapping', () => {
     expect(soccerUrl).toContain('/soccer/500/mia.png')
   })
 
+  it('NBA logo URLs resolve NBA-standard and ESPN abbreviations to the same ESPN path', async () => {
+    const { getPrimaryLogoUrlForTeam, logoUrlForAbbrev } = await import('@/lib/sport-teams/SportTeamMetadataRegistry')
+    const pairs: Array<[string, string, string]> = [
+      ['GSW', 'GS', 'gs'],
+      ['NYK', 'NY', 'ny'],
+      ['NOP', 'NO', 'no'],
+      ['SAS', 'SA', 'sa'],
+      ['UTA', 'UTAH', 'utah'],
+      ['PHO', 'PHX', 'phx'],
+      ['BRK', 'BKN', 'bkn'],
+      ['WAS', 'WSH', 'wsh'],
+    ]
+    for (const [nbaStd, espn, key] of pairs) {
+      const expected = `https://a.espncdn.com/i/teamlogos/nba/500/${key}.png`
+      expect(getPrimaryLogoUrlForTeam('NBA', nbaStd)).toBe(expected)
+      expect(getPrimaryLogoUrlForTeam('NBA', espn)).toBe(expected)
+      expect(logoUrlForAbbrev('NBA', nbaStd.toLowerCase())).toBe(expected)
+    }
+    // Aliases are NBA-only: NFL's NO stays the Saints.
+    expect(getPrimaryLogoUrlForTeam('NFL', 'NO')).toContain('/nfl/500/no.png')
+  })
+
   it('getTeamIdByAbbreviationMap has correct size for NBA, MLB, NHL', async () => {
     const { getTeamIdByAbbreviationMap } = await import('@/lib/sport-teams/SportTeamMetadataRegistry')
     expect(getTeamIdByAbbreviationMap('NBA').size).toBe(30)

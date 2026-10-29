@@ -11,6 +11,8 @@ import { SurvivorStatusBadge } from '@/app/survivor/components/SurvivorStatusBad
 import type { SurvivorSeasonPlayer } from '@/lib/survivor/survivorUiTypes'
 import { getSurvivorThemeById } from '@/lib/survivor/survivorVisuals'
 import { SurvivorIslandHero } from '@/components/survivor/SurvivorIslandHero'
+import { SurvivorStatusCard } from '@/app/survivor/components/SurvivorStatusCard'
+import { buildSurvivorStatusCard } from '@/lib/survivor/survivorStatusCard'
 
 function formatDurationMs(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return 'Soon'
@@ -107,6 +109,8 @@ export default function SurvivorIslandHomePage() {
     }
   }, [council?.status, ch?.description, ch?.instructions, ch?.status, challengeEnd, now, phase, voteEnd])
 
+  const statusCard = buildSurvivorStatusCard({ season: ctx.season, canVote: ctx.canVote, canSubmitChallenge: ctx.canSubmitChallenge, base, now })
+
   const primaryAction = phase === 'pre_draft' || phase === 'drafting'
     ? { href: `/league/${leagueId}/draft`, label: 'Open draft board' }
     : council?.status === 'voting_open'
@@ -148,6 +152,7 @@ export default function SurvivorIslandHomePage() {
         week={ctx.currentWeek}
         phase={phase}
         visualThemeId={ctx.season?.visualThemeId}
+        voteDeadlineAt={council && !council.isRevealed ? council.voteDeadlineAt ?? council.votingDeadline ?? null : null}
         headline={heroTitle}
         description={heroSubtext}
         primaryAction={primaryAction}
@@ -158,6 +163,7 @@ export default function SurvivorIslandHomePage() {
         <span>{us?.displayName ?? 'Your island'}{us?.hasImmunityThisWeek ? ' · Immune this week' : ''}{ctx.hasActiveIdol ? ' · Private advantage held' : ''}</span>
         {ctx.isCommissioner ? <Link href={`${base}/commissioner`} className="ml-auto font-semibold text-amber-200 hover:underline">Commissioner hub</Link> : null}
       </div>
+      {statusCard && phase !== 'pre_draft' && phase !== 'drafting' ? <SurvivorStatusCard card={statusCard} /> : null}
 
       {/* Tribes or individual */}
       {!postMerge ? (

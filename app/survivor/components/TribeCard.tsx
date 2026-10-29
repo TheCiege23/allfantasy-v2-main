@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import type { SurvivorSeasonTribe } from '@/lib/survivor/survivorUiTypes'
 import { extractLeadingTribeIcon, stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
+import { tribeCrestAlt } from '@/lib/survivor/survivorTribeIdentity'
 
 export function TribeCard({
   tribe,
@@ -33,7 +34,7 @@ export function TribeCard({
           className={`flex shrink-0 items-center justify-center rounded-lg text-sm font-bold text-black/80 ${tribe.logoUrl ? 'h-16 w-16' : 'h-8 w-8'}`}
           style={{ backgroundColor: tribe.logoUrl ? 'transparent' : accent }}
         >
-          {tribe.logoUrl ? <img src={tribe.logoUrl} alt="" width={56} height={56} className="h-14 w-14 max-w-none object-contain" /> : tribeIcon ?? tribeName.slice(0, 1)}
+          {tribe.logoUrl ? <img src={tribe.logoUrl} alt={tribe.mascot ? tribeCrestAlt(tribeName || 'Tribe', tribe.mascot) : ''} width={56} height={56} className="h-14 w-14 max-w-none object-contain" /> : tribeIcon ?? tribeName.slice(0, 1)}
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[13px] font-bold uppercase tracking-wider text-[var(--survivor-text-bright)]">

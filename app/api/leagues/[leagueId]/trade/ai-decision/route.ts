@@ -20,6 +20,7 @@ import { appendDraftPickTrades } from '@/lib/live-draft-engine/DraftPickTradeSer
 import { computeUpcomingOwnedPicks } from '@/lib/live-draft-engine/draftPickTradeInventory'
 import { isDraftPickTradingAllowedForLeague } from '@/lib/tournament-mode/safety'
 import { prisma } from '@/lib/prisma'
+import { tradeDeadlineRefusal } from '@/lib/trade-deadline/tradeDeadlineWindow'
 
 export const dynamic = 'force-dynamic'
 
@@ -130,6 +131,8 @@ export async function POST(
 
     let createdProposalId: string | null = null
     if (createProposal) {
+      const deadlineRefusal = await tradeDeadlineRefusal(leagueId, {}, { picksOnly: true })
+      if (deadlineRefusal) return NextResponse.json({ error: deadlineRefusal, code: 'TRADE_DEADLINE_PASSED' }, { status: 409 })
       const created = await (prisma as any).draftPickTradeProposal.create({
         data: {
           sessionId: draftSession.id,
@@ -249,6 +252,9 @@ export async function POST(
   let applied = false
 
   if (applyDecision && proposalId && proposalStatus === 'pending') {
+    // An AI manager accepting for an orphan roster is still an acceptance, and the deadline binds it.
+    const deadlineRefusal = result.decision === 'accept' ? await tradeDeadlineRefusal(leagueId, {}, { picksOnly: true }) : null
+    if (deadlineRefusal) return NextResponse.json({ error: deadlineRefusal, code: 'TRADE_DEADLINE_PASSED' }, { status: 409 })
     if (result.decision === 'accept') {
       const slotOrder = ((draftSession as any).slotOrder ?? []) as Array<{ slot: number; rosterId: string; displayName: string }>
       const giveEntry = slotOrder.find((entry) => entry.slot === giveSlot)

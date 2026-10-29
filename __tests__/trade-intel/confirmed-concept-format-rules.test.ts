@@ -91,7 +91,7 @@ describe('a league with no confirmation reads exactly as before', () => {
     expect(readFormatRules(league).concept).toBe(concept)
   })
 
-  it('a plain guillotine league never carries the survivor-guillotine marker', () => {
+  it('a plain Guilly league never carries the survivor-guillotine marker', () => {
     expect(readFormatRules({ leagueType: 'guillotine', settings: {} }).variant).toBeNull()
     expect(readFormatRules({ leagueType: 'guillotine', settings: confirmed('guillotine') }).variant).toBeNull()
   })

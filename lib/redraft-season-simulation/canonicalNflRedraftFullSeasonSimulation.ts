@@ -128,7 +128,11 @@ export type G43FullSeasonSimulationResult = {
   }
   playoffs: {
     generated: boolean
-    seeds: Array<{ seed: number; rosterId: string }>
+    seeds: Array<{ seed: number; rosterId: string; qualifiedBy: string }>
+    /** Championship rounds played. */
+    rounds: number
+    /** Some round after the first was re-paired best-vs-worst (`reseed`). */
+    reseeded: boolean
     championRosterId: string
     runnerUpRosterId: string | null
     finalStandings: Array<{ finish: number; rosterId: string; champion: boolean }>
@@ -338,6 +342,8 @@ function buildRules(): CanonicalLeagueRules {
       byeRules: 'top_seed_byes',
       reseedBehavior: 'none',
       standingsTiebreakers: ['win_pct', 'wins', 'points_for', 'points_against'],
+      byePlan: null,
+      customTiebreakers: null,
     },
     schedule: {
       unit: 'week',
@@ -650,6 +656,28 @@ function scoreActiveRound(state: NflRedraftPlayoffRuntimeState, baseScore: numbe
   }
 }
 
+/** Scores the lower bracket's active round, which `scoreActiveRound` leaves to the title bracket. */
+function scoreActiveLowerRound(state: NflRedraftPlayoffRuntimeState, baseScore: number): NflRedraftPlayoffRuntimeState {
+  return {
+    ...state,
+    bracket: {
+      ...state.bracket,
+      consolationRounds: state.bracket.consolationRounds.map((round) =>
+        round.status === 'active'
+          ? {
+              ...round,
+              matchups: round.matchups.map((matchup, index) =>
+                matchup.bye || !matchup.homeRosterId || !matchup.awayRosterId
+                  ? matchup
+                  : { ...matchup, homeScore: baseScore + index, awayScore: baseScore - 4 - index, status: 'final' },
+              ),
+            }
+          : round,
+      ),
+    },
+  }
+}
+
 function simulationEvent(type: string, payload: Record<string, unknown> = {}): CanonicalLeagueRuntimeEvent {
   return toCanonicalLeagueRuntimeEvent({
     leagueId,
@@ -711,7 +739,18 @@ function duplicatePlayerIds(teams: SimTeam[]): string[] {
   return [...dupes]
 }
 
-export function runNflRedraftFullSeasonSimulation(): G43FullSeasonSimulationResult {
+/**
+ * Variations on the one season. The default run is the original G43 proof (two-team final). The
+ * divisions run widens the field to every team, turns on the commissioner's division rule
+ * (lib/league/divisions/leagueDivisions.ts) and NFL-style reseeding, and plays every round out.
+ */
+export type G43SimulationOptions = {
+  playoffTeams?: number
+  divisionPlayoffRule?: 'top_seeds' | 'guaranteed' | 'none'
+  reseed?: boolean
+}
+
+export function runNflRedraftFullSeasonSimulation(options: G43SimulationOptions = {}): G43FullSeasonSimulationResult {
   const rules = buildRules()
   const events: CanonicalLeagueRuntimeEvent[] = [
     simulationEvent('league.created'),
@@ -1011,26 +1050,56 @@ export function runNflRedraftFullSeasonSimulation(): G43FullSeasonSimulationResu
       divisionTies: standing.divisionTies,
     }
   })
+  const playoffRules = {
+    ...rules,
+    playoffs: {
+      ...rules.playoffs,
+      teamCount: options.playoffTeams ?? rules.playoffs.teamCount,
+      reseedBehavior: options.reseed ? 'reseed_after_round' : rules.playoffs.reseedBehavior,
+      ...(options.divisionPlayoffRule ? { divisionPlayoffRule: options.divisionPlayoffRule } : {}),
+    },
+  }
   const playoffState = buildNflRedraftPlayoffRuntimeState({
     leagueId,
     seasonId,
     season: 2026,
     week: 4,
-    rules,
+    rules: playoffRules,
     teams: playoffTeams,
     now: simulationNow,
   })
   const bracket = generateNflRedraftPlayoffBracket({ state: playoffState, actorUserId: commissionerUserId, lockBracket: true })
   events.push(...bracket.events)
   let activePlayoffs: NflRedraftPlayoffRuntimeState = { ...playoffState, bracket: bracket.bracket }
-  const advanced = advanceNflRedraftPlayoffRound({
+  let advanced = advanceNflRedraftPlayoffRound({
     state: scoreActiveRound(activePlayoffs, 135),
     actorUserId: commissionerUserId,
   })
   if (!advanced.ok) throw new Error(`G43 playoff advancement failed: ${advanced.code}`)
   events.push(...advanced.events)
   activePlayoffs = advanced.state
-  const finalized = finalizeNflRedraftPlayoffChampion({ state: activePlayoffs, actorUserId: commissionerUserId })
+  // A wider field plays its earlier rounds out before the final.
+  for (let guard = 0; advanced.ok && advanced.status !== 'championship_ready' && guard < 5; guard += 1) {
+    advanced = advanceNflRedraftPlayoffRound({
+      state: scoreActiveRound(activePlayoffs, 135 + (guard + 1) * 5),
+      actorUserId: commissionerUserId,
+    })
+    if (!advanced.ok) throw new Error(`G43 playoff advancement failed: ${advanced.code}`)
+    events.push(...advanced.events)
+    activePlayoffs = advanced.state
+  }
+  let finalized = finalizeNflRedraftPlayoffChampion({ state: activePlayoffs, actorUserId: commissionerUserId })
+  // The season closes only once the lower bracket is decided too: play its remaining rounds out.
+  for (let guard = 0; !finalized.ok && finalized.code === 'LOWER_BRACKET_INCOMPLETE' && guard < 5; guard += 1) {
+    const lower = advanceNflRedraftPlayoffRound({
+      state: scoreActiveLowerRound(activePlayoffs, 110),
+      actorUserId: commissionerUserId,
+    })
+    if (!lower.ok) throw new Error(`G43 lower-bracket advancement failed: ${lower.code}`)
+    events.push(...lower.events)
+    activePlayoffs = lower.state
+    finalized = finalizeNflRedraftPlayoffChampion({ state: activePlayoffs, actorUserId: commissionerUserId })
+  }
   if (!finalized.ok) throw new Error(`G43 playoff finalize failed: ${finalized.code}`)
   events.push(...finalized.events)
 
@@ -1055,7 +1124,16 @@ export function runNflRedraftFullSeasonSimulation(): G43FullSeasonSimulationResu
       return Boolean(scored && scored.homeScore === scored.home.starterTotal && (!scored.away || scored.awayScore === scored.away.starterTotal))
     }),
   )
-  const topSeeds = recalculatedSchedule.standings.slice(0, rules.playoffs.teamCount ?? 2).map((row) => row.rosterId)
+  const seedCount = playoffRules.playoffs.teamCount ?? 2
+  // With division winners on top, each division's leader comes first (best leader #1), then the rest.
+  const leaders = Array.from(new Set(recalculatedSchedule.standings.map((row) => row.divisionId)))
+    .map((divisionId) => recalculatedSchedule.standings.find((row) => row.divisionId === divisionId)!.rosterId)
+  const standingsOrder = recalculatedSchedule.standings.map((row) => row.rosterId)
+  const topSeeds = (
+    options.divisionPlayoffRule === 'top_seeds'
+      ? [...standingsOrder.filter((id) => leaders.includes(id)), ...standingsOrder.filter((id) => !leaders.includes(id))]
+      : standingsOrder
+  ).slice(0, seedCount)
   const playoffSeedRosters = playoffState.seeds.map((seed) => seed.rosterId)
 
   return {
@@ -1091,7 +1169,9 @@ export function runNflRedraftFullSeasonSimulation(): G43FullSeasonSimulationResu
     },
     playoffs: {
       generated: bracket.bracket.generated,
-      seeds: playoffState.seeds.map((seed) => ({ seed: seed.seed, rosterId: seed.rosterId })),
+      seeds: playoffState.seeds.map((seed) => ({ seed: seed.seed, rosterId: seed.rosterId, qualifiedBy: seed.qualifiedBy })),
+      rounds: activePlayoffs.bracket.rounds.length,
+      reseeded: activePlayoffs.bracket.rounds.some((round) => round.matchups.some((matchup) => matchup.metadata.reseeded === true)),
       championRosterId: finalized.championRosterId,
       runnerUpRosterId: finalized.runnerUpRosterId,
       finalStandings: finalized.finalStandings.map((row) => ({
@@ -1117,7 +1197,7 @@ export function runNflRedraftFullSeasonSimulation(): G43FullSeasonSimulationResu
       waiverUpdatedRosters: teams.some((team) => team.rosterId === 'bravo' && flatPlayers(team).some((player) => player.playerId === 'waiver-rb')),
       tradeUpdatedRosters: teams.some((team) => team.rosterId === 'alpha' && flatPlayers(team).some((player) => player.playerId === 'bravo-bench-wr')),
       playoffSeedsDerivedFromStandings: topSeeds.join('|') === playoffSeedRosters.join('|'),
-      bracketAdvanced: advanced.status === 'championship_ready',
+      bracketAdvanced: advanced.ok && advanced.status === 'championship_ready',
       championCrowned: Boolean(finalized.championRosterId),
       finalHistoryRecorded: finalHistory.finalStandingsRecorded,
       notificationsCreated: plans.length > 0 && plans.every((plan) => plan.notifications.length === baseTeamMeta.length),

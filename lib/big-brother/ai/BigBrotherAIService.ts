@@ -52,7 +52,8 @@ export async function generateBigBrotherAI(
     temperature: 0.6,
   })
 
-  const narrative = completion.choices[0]?.message?.content?.trim() ?? 'No narrative generated.'
+  const narrative = completion.choices[0]?.message?.content?.trim()
+  if (!narrative) throw new Error('No narrative generated')
   return {
     narrative,
     model: completion.model ?? undefined,

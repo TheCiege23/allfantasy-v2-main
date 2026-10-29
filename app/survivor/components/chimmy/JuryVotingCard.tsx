@@ -23,7 +23,7 @@ export function JuryVotingCard({
   return (
     <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.08] p-4">
       <p className="text-[11px] font-bold uppercase tracking-wider text-amber-200">⚖️ Jury vote</p>
-      <p className="mt-1 text-[13px] text-white/80">Cast your vote for Sole Survivor.</p>
+      <p className="mt-1 text-[13px] text-white/80">Cast your vote for the season winner.</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {finalists.map((f) => (
           <button

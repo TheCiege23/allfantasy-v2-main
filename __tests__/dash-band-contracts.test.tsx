@@ -28,7 +28,7 @@ const NOW = new Date('2026-08-24T20:00:00Z')
 function draft(over: Partial<DraftHqAllRow> = {}): DraftHqAllRow {
   return {
     leagueId: 'l1',
-    leagueName: 'Guillotine League 26',
+    leagueName: 'Guilly League 26',
     platform: 'sleeper',
     imageUrl: null,
     phase: 'live',

@@ -26,7 +26,7 @@ export async function getChimmyRequestResponse(userId: string, requestId: string
   if (!validChimmyRequestId(requestId)) return NextResponse.json({ error: 'Invalid request ID' }, { status: 400 })
   try {
     const receipt = await readRequestReceipt(userId, requestId)
-    return receipt ? await receiptResponse(receipt) : NextResponse.json({ error: 'Request unavailable' }, { status: 404 })
+    return receipt && !receipt.fingerprint.startsWith('paid-tool-v1:') ? await receiptResponse(receipt) : NextResponse.json({ error: 'Request unavailable' }, { status: 404 })
   } catch { return unavailable() }
 }
 

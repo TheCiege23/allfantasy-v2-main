@@ -36,6 +36,8 @@ import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/lea
 import { rosterIdsMatch } from './rosterIdMatch'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
+import { rosterPlayerIds } from './myRoster'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -150,6 +152,7 @@ export type LeagueHomeData = {
     variant: string | null
     name: string
     platform: string
+    canRemoveImported?: boolean
     format: string | null
     sport: string
     season: number | null
@@ -180,6 +183,9 @@ export type LeagueHomeData = {
    */
   stage: string | null
   preSeason: boolean
+  /** Provider teams remain visible before standings have any scored games. */
+  teamDirectory: Array<{ id: string; name: string; ownerName: string; isYou: boolean }>
+  rosteredPlayerCount: number
   /**
    * The week the scoreboard is showing, and the weeks it could show.
    *
@@ -637,15 +643,15 @@ export async function getLeagueHomeData(
   const [rosterRows, waiverSettings] = await Promise.all([
     prisma.roster.findMany({
         where: { leagueId },
-        select: { platformUserId: true, faabRemaining: true },
+        select: { platformUserId: true, faabRemaining: true, playerData: true },
       })
-      .catch((): Array<{ platformUserId: string; faabRemaining: number | null }> => []),
+      .catch((): Array<{ platformUserId: string; faabRemaining: number | null; playerData: unknown }> => []),
     prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverType: true } })
       .catch(() => null),
   ])
   const faabEnabled = waiverSettings?.waiverType?.toLowerCase() === 'faab'
 
-  const rosterCountForDraft = rosterRows.length
+  const rosteredPlayerCount = rosterRows.reduce((total, row) => total + rosterPlayerIds(row.playerData).length, 0)
   const faabBy = new Map(rosterRows.map((r) => [r.platformUserId, r.faabRemaining]))
 
   /*
@@ -721,7 +727,7 @@ export async function getLeagueHomeData(
    * are the evidence. Without this, a league with full rosters on screen was
    * told "no draft has been set up".
    */
-  const draftedAlready = rosterCountForDraft > 0
+  const draftedAlready = rosteredPlayerCount > 0
 
 
   // A league whose teams all sit at 0-0 has been imported but never had results
@@ -954,6 +960,13 @@ export async function getLeagueHomeData(
   return {
     stage,
     preSeason,
+    teamDirectory: teams.map((team) => ({
+      id: team.id,
+      name: team.teamName,
+      ownerName: team.ownerName,
+      isYou: team.id === yours?.id,
+    })),
+    rosteredPlayerCount,
     pairing,
     calendar: leagueCalendar(league.settings),
     league: {
@@ -961,6 +974,7 @@ export async function getLeagueHomeData(
       variant: league.leagueVariant,
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
+      canRemoveImported: league.userId === userId,
       format: league.leagueType ?? null,
       sport: String(league.sport ?? 'NFL'),
       season: league.season ?? null,
@@ -1041,7 +1055,8 @@ export async function getLeagueHomeData(
       ? {
           available: true,
           data: {
-            href: `/core/draft-hq?league=${league.id}`,
+            // A live draft goes straight to the room; Draft HQ is the planning screen.
+            href: draftRow.phase === 'live' ? draftRoomHref(league.id) : `/core/draft-hq?league=${league.id}`,
             linkLabel:
               draftRow.phase === 'done'
                 ? 'Open the draft board'
