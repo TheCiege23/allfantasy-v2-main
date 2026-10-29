@@ -23,6 +23,7 @@ import {
   type SimTeam,
 } from './outlookSim'
 import { readPlayoffFormat, type FormatSource } from './outlookFormat'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { liveWeeks, withLiveScores } from './outlookLiveShare'
 import { lineupShareKey, loadLineupBoards, type LineupShareTarget } from './outlookLiveWeekLoader'
 import {
@@ -510,7 +511,7 @@ export type OutlookInputs = {
 export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], identityLeagues: LeagueInput[] = leagues): Promise<OutlookInputs | null> {
   const [history, sports] = await Promise.all([
     readWeeklyHistory(userId, leagues, identityLeagues),
-    prisma.league.findMany({ where: { id: { in: leagues.map(l => l.id) } }, select: { id: true, sport: true, season: true, settings: true, status: true, leagueType: true } }),
+    prisma.league.findMany({ where: { id: { in: leagues.map(l => l.id) } }, select: { id: true, sport: true, season: true, settings: true, status: true, leagueType: true, platform: true, playoffTeams: true } }),
   ])
   if (!history) return null
   const rows = history.rows
@@ -583,7 +584,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
     const inputSettings = league.settings && typeof league.settings === 'object' ? league.settings : {}
     const storedSettings = storedLeague?.settings && typeof storedLeague.settings === 'object' ? storedLeague.settings : {}
     const effectiveLeague = { ...league, settings: { ...inputSettings, ...storedSettings } }
-    const format = readPlayoffFormat(effectiveLeague.settings, byRoster.size)
+    const format = readPlayoffFormat(effectiveLeague.settings, byRoster.size, storedLeague && isNativePlatform(storedLeague.platform) ? storedLeague.playoffTeams : null)
     if (nativeRule?.season === season && nativeRule.playoffStartWeek > 1) format.regularSeasonEndWeek = nativeRule.playoffStartWeek - 1
     const endWeek = format.regularSeasonEndWeek
     const regular = (week: number) => endWeek == null || week <= endWeek

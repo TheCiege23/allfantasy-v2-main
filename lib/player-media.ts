@@ -1,4 +1,5 @@
 import { toImageUrl } from '@/lib/media/imageUrl'
+import { boundMap } from '@/lib/ttl-memo'
 import { buildHeadshotUrl, getTeamLogoUrl } from './player-media-urls'
 import { authoritativeRowsBySleeperId, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 
@@ -35,6 +36,9 @@ interface CacheEntry<T> {
 const PLAYER_CACHE = new Map<string, CacheEntry<ResolvedPlayerMedia>>()
 const TEAM_CACHE = new Map<string, CacheEntry<PlayerMedia>>()
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000
+const PLAYER_CACHE_MAX_ENTRIES = 20_000
+const TEAM_CACHE_MAX_ENTRIES = 2_000
+const isExpiredEntry = (e: CacheEntry<unknown>) => e.expiresAt <= Date.now()
 
 function cacheKey(playerId: string, sport: string): string {
   return `${sport}:${playerId}`
@@ -107,6 +111,7 @@ export function attachTeamMedia(teamAbbr: string | null, sport: string = 'nfl'):
     teamLogoUrl: getTeamLogoUrl(teamAbbr, sport),
   }
 
+  boundMap(TEAM_CACHE, isExpiredEntry, TEAM_CACHE_MAX_ENTRIES)
   TEAM_CACHE.set(ck, { data: media, expiresAt: Date.now() + CACHE_TTL_MS })
   return media
 }
@@ -216,6 +221,7 @@ export async function attachPlayerMedia(player: {
     source,
   }
 
+  boundMap(PLAYER_CACHE, isExpiredEntry, PLAYER_CACHE_MAX_ENTRIES)
   PLAYER_CACHE.set(ck, { data: result, expiresAt: Date.now() + CACHE_TTL_MS })
   return result
 }
@@ -342,6 +348,7 @@ export async function attachPlayerMediaBatch(
       source,
     }
 
+    boundMap(PLAYER_CACHE, isExpiredEntry, PLAYER_CACHE_MAX_ENTRIES)
     PLAYER_CACHE.set(cacheKey(p.playerId, p.sport), { data: result, expiresAt: Date.now() + CACHE_TTL_MS })
     results.set(p.playerId, result)
   }

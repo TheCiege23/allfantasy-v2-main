@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import { getNativeLeagueMock } from '@/lib/mock-draft/native-league'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
@@ -270,6 +271,11 @@ export async function GET(req: NextRequest) {
 
   if (!leagueId && !platformLeagueId) {
     return NextResponse.json({ error: 'leagueId or platformLeagueId is required' }, { status: 400 })
+  }
+
+  if (leagueId) {
+    const native = await getNativeLeagueMock(leagueId, userId)
+    if (native) return NextResponse.json(native.body, { status: native.status })
   }
 
   const [league, sleeperLeague] = await Promise.all([

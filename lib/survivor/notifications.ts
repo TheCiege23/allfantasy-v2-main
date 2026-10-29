@@ -137,5 +137,5 @@ export const SURVIVOR_NOTIFICATION_COPY = {
   token_earned: '🪙 Token earned on Exile Island.',
   token_wiped: '🪙 Token reset — the Boss won this week.',
   jury_voting_open: '⚖️ Jury voting is open.',
-  winner_revealed: '🏆 The Sole Survivor has been revealed.',
+  winner_revealed: 'The jury has spoken: the season champion has been revealed.',
 } as const

@@ -404,7 +404,7 @@ export function DraftTab({
 
   const openSettingsDraft = useCallback(() => {
     if (onOpenLeagueSettings) onOpenLeagueSettings('draft')
-    else router.push(`/league/${league.id}?view=settings`)
+    else router.push(`/league/${league.id}?view=settings&settingsPanel=draft`)
   }, [onOpenLeagueSettings, router, league.id])
 
   const canEnterDraftRoom = (preDraft || liveDraft || draftCompleted) && Boolean(league.id)

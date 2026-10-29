@@ -1,0 +1,62 @@
+/* Salary cap specialty layer. Child selectors only (handoff README gotcha). */
+.capHead { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.capBar { display: flex; height: 34px; border-radius: 8px; overflow: hidden; background: #151926; border: 1px solid rgba(255, 255, 255, .06); }
+.capBar>span { display: block; height: 100%; }
+.segActive { background: #3aa86a; }
+.segDead { background: #f0643c; }
+.segRoll { background: repeating-linear-gradient(135deg, #d9b45a 0 6px, #8a6d2c 6px 12px); }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: #a3a9c2; }
+.legend>span { display: inline-flex; align-items: center; gap: 7px; }
+.legend>span>i { width: 11px; height: 11px; border-radius: 3px; display: block; }
+
+.years { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 14px; }
+.year { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.col { position: relative; width: 100%; height: 200px; border-radius: 10px; background: #10131c; border: 1px solid rgba(255, 255, 255, .06); overflow: hidden; }
+.col>.fill { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, #3aa86a, #1d5c3a); transition: height .6s ease-out; }
+.col>.fillOver { background: linear-gradient(180deg, #f0643c, #7a2a18); }
+.col>.capLine { position: absolute; left: 0; right: 0; border-top: 2px dashed #f2c94c; }
+.year>b { font: 700 15px 'JetBrains Mono', monospace; color: #e8eaf2; }
+.year>span { font: 500 12px 'JetBrains Mono', monospace; color: #7d84a3; }
+
+.tblWrap { overflow-x: auto; margin: 0 -4px; }
+.tbl { width: 100%; border-collapse: collapse; min-width: 520px; }
+.tbl th { font: 600 11px 'Archivo', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #7d84a3; text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.tbl td { padding: 10px; border-bottom: 1px solid rgba(255, 255, 255, .05); font-size: 13px; color: #c9cee0; vertical-align: middle; }
+.tbl td>strong { color: #e8eaf2; font-size: 14px; }
+.tbl .n { font-family: 'JetBrains Mono', monospace; text-align: right; }
+.pos { display: inline-grid; place-items: center; min-width: 36px; height: 24px; padding: 0 6px; border-radius: 99px; background: #151926; font: 700 11px 'Archivo', sans-serif; color: #a3a9c2; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Bid check (signature moment) */
+.bid { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.bidSide { flex: 0 1 340px; min-width: 0; }
+.bidMain { flex: 1 1 520px; min-width: 0; }
+.stepper { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.stepper>output { font: 700 54px/1 'JetBrains Mono', monospace; color: var(--acc2); min-width: 4.5ch; text-align: center; font-variant-numeric: tabular-nums; }
+.stepper>output.over { color: #ff8a6b; }
+.stepBtn { min-width: 64px; }
+.yearsSeg { display: flex; flex-wrap: wrap; gap: 8px; }
+.yearBtn[aria-pressed='true'] { border-color: var(--acc); color: var(--acc2); background: color-mix(in srgb, var(--acc) 14%, #151926); }
+.preview { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.preview>li { display: grid; grid-template-columns: 56px minmax(0, 1fr) 110px; align-items: center; gap: 14px; }
+.preview>li>b { font: 700 15px 'JetBrains Mono', monospace; color: #e8eaf2; }
+.preview>li>span { font: 600 13px 'JetBrains Mono', monospace; text-align: right; color: #7fe0a6; }
+.preview>li>span.over { color: #ff8a6b; }
+.pbar { position: relative; height: 22px; border-radius: 99px; background: #151926; overflow: hidden; display: flex; }
+.pbar>i { display: block; height: 100%; transition: width .45s ease-out; }
+.pCommitted { background: #23784b; }
+.pBid { background: #9be3b8; }
+.pBidOver { background: #ff8a6b; }
+.verdict { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; border-radius: 12px; background: #10131c; border: 1px solid rgba(255, 255, 255, .07); }
+.verdict>p { flex: 1 1 240px; margin: 0; color: #9be3b8; font-size: 14px; }
+.verdictOver { border-color: rgba(255, 138, 107, .55); }
+.verdictOver>p { color: #ff8a6b; }
+
+@media (prefers-reduced-motion: reduce) {
+  .col>.fill, .pbar>i { transition: none; }
+}
+@container (max-width: 640px) {
+  .stepper>output { font-size: 40px; }
+  .preview>li { grid-template-columns: 48px minmax(0, 1fr) 84px; gap: 10px; }
+  .col { height: 140px; }
+}

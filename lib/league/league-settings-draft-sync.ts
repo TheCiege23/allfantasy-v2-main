@@ -105,7 +105,7 @@ export function draftOrderSlotsToSlotOrder(
 }
 
 /** Draft statuses in which the draft has not started — the only ones a settings save may rewrite. */
-const NOT_STARTED_DRAFT_STATUSES = new Set(['pre_draft', 'configuring', 'configured'])
+export const NOT_STARTED_DRAFT_STATUSES: ReadonlySet<string> = new Set(['pre_draft', 'configuring', 'configured'])
 
 /** LeagueSettings keys this sync carries onto the draft session. */
 export const DRAFT_SESSION_SYNC_KEYS = [

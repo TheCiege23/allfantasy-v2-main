@@ -130,6 +130,8 @@ describe('autopick reads the warm pool snapshot instead of rebuilding the pool e
     expect(r).toMatchObject({ ok: true, pick: { playerName: 'Top Center' } })
     expect(hm.getResolvedDraftPoolForLeague).not.toHaveBeenCalled()
     expect(hm.ensureDraftPoolReady).not.toHaveBeenCalled()
+    // A pick never waits on a rebuild just because the snapshot passed its TTL mid-draft.
+    expect(hm.getWarmDraftPoolSnapshotFast).toHaveBeenCalledWith('L1', { allowStale: true })
   })
 
   it('a cold pool is built ONCE through the cache, then read from it', async () => {

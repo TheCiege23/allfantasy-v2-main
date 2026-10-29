@@ -1,4 +1,6 @@
 "use client"
+
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -78,8 +80,8 @@ import {
   sanitizeWorldCupChatMessage,
   type WorldCupChatColor,
   type WorldCupChatFont,
-  type WorldCupChatRichTextSegment,
 } from "@/lib/world-cup/worldCupChatRichText"
+import { WorldCupChatRichTextSegments } from "./chat/WorldCupChatRichText"
 import {
   EMOJI_CATEGORIES,
   EMOJI_BY_CATEGORY,
@@ -5620,7 +5622,7 @@ function WorldCupCommunityFoundationPanel({
     setIsChatLoading(true)
     setChatError(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/brackets/world-cup/${challengeId}/chat`, {
         cache: "no-store",
       })
       const data = await res.json().catch(() => ({}))
@@ -5731,7 +5733,7 @@ function WorldCupCommunityFoundationPanel({
     setIsDmStarting(true)
     setDmError(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/brackets/world-cup/${challengeId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -5809,10 +5811,10 @@ function WorldCupCommunityFoundationPanel({
     setChatError(null)
     setChatAiGate(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/brackets/world-cup/${challengeId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body, gif: selectedGif ?? undefined, image: selectedImage ?? undefined }),
+        body: JSON.stringify({ body, confirmedTokenSpend: false, gif: selectedGif ?? undefined, image: selectedImage ?? undefined }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -5946,7 +5948,7 @@ function WorldCupCommunityFoundationPanel({
     setIsPollCreating(true)
     setPollError(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/brackets/world-cup/${challengeId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "create_poll", question, options }),
@@ -5972,7 +5974,7 @@ function WorldCupCommunityFoundationPanel({
     setPollVotingMessageId(messageId)
     setChatError(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/brackets/world-cup/${challengeId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "poll_vote", messageId, optionId }),
@@ -6741,54 +6743,6 @@ function ComposerFormatButton({
       {label}
     </button>
   )
-}
-
-function getWorldCupRichTextClassName(segment: WorldCupChatRichTextSegment) {
-  const colorClass: Record<WorldCupChatColor, string> = {
-    default: "",
-    "af-blue": "text-white/85",
-    red: "text-white/85",
-    amber: "text-white/75",
-    green: "text-white/85",
-    purple: "text-purple-200",
-  }
-  const fontClass: Record<WorldCupChatFont, string> = {
-    default: "",
-    clean: "font-sans tracking-normal",
-    sport: "font-black uppercase tracking-wide",
-    mono: "font-mono",
-  }
-
-  return [
-    segment.marks.bold ? "font-black" : "",
-    segment.marks.italic ? "italic" : "",
-    segment.marks.underline ? "underline underline-offset-2" : "",
-    segment.marks.strike ? "line-through" : "",
-    colorClass[segment.marks.color ?? "default"],
-    fontClass[segment.marks.font ?? "default"],
-  ].filter(Boolean).join(" ")
-}
-
-function WorldCupChatRichTextSegments({
-  segments,
-  className,
-}: {
-  segments: WorldCupChatRichTextSegment[]
-  className?: string
-}) {
-  return (
-    <p className={className} dir="auto">
-      {segments.map((segment, index) => (
-        <span key={`${segment.text}-${index}`} className={getWorldCupRichTextClassName(segment)}>
-          {segment.text}
-        </span>
-      ))}
-    </p>
-  )
-}
-
-function WorldCupChatRichTextRenderer({ text, className }: { text: string; className?: string }) {
-  return <WorldCupChatRichTextSegments segments={parseWorldCupChatRichText(text)} className={className} />
 }
 
 function WorldCupGifPreview({

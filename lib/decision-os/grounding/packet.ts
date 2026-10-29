@@ -143,6 +143,8 @@ export interface ContextFacts {
   importedHistory: GroundedSlice<unknown>
   replayInsights: GroundedSlice<unknown>
   devy: GroundedSlice<unknown>
+  /** The commissioner tools as this viewer may see them (LeagueOfficeContextProvider). Prose. */
+  leagueOffice: GroundedSlice<unknown>
 }
 
 /**
@@ -302,6 +304,13 @@ const NOT_REQUESTED: GroundingGap = {
   remedy: 'Ask about it and it will be gathered.',
 }
 
+/** A league using none of the commissioner tools — not a gap, so it is filed the silent way. */
+const NO_LEAGUE_OFFICE: GroundingGap = {
+  reason: 'not_requested',
+  detail: 'This league uses none of the commissioner tools (weekly prizes, trade review, stat corrections, inactive manager mode).',
+  remedy: 'Nothing to do; the commissioner turns them on in league settings.',
+}
+
 /**
  * 🛑 EMPTINESS IS ABSENCE, NOT A FACT (5.2).
  *
@@ -356,6 +365,7 @@ type EngineProviderName =
   | 'importedHistory'
   | 'replayInsights'
   | 'devy'
+  | 'leagueOffice'
 
 /**
  * The ONE place a packet slice key and its engine provider name differ, so `meta.sources[].ms` can
@@ -1083,6 +1093,7 @@ export async function buildDecisionOsGroundingPacket(
       importedHistory: absent(contextKill),
       replayInsights: absent(contextKill),
       devy: absent(contextKill),
+      leagueOffice: absent(contextKill),
     }
   } else if (args.userId && leagueId) {
     /*
@@ -1153,6 +1164,16 @@ export async function buildDecisionOsGroundingPacket(
         importedHistory: grade('importedHistory', bundle.importedHistory, 'managerBehaviour'),
         replayInsights: grade('replayInsights', bundle.replayInsights, 'managerBehaviour'),
         devy: grade('devy', bundle.devy, 'globalPlayerValue'),
+        /*
+         * The commissioner tools exist only in leagues AllFantasy runs, so an EMPTY office is the
+         * normal state of most leagues, not a gap: it is filed as not-requested, which renders no
+         * "missing" line. A provider that FAILED still grades as a real gap. `leagueRules` because
+         * these are AllFantasy's own rows (prizes, reviews, the log) — no import can make them stale.
+         */
+        leagueOffice:
+          bundle.leagueOffice == null && servedBy.get('leagueOffice')?.error == null
+            ? (sliceMs.set('leagueOffice', servedBy.get('leagueOffice')?.durationMs ?? null), absent(NO_LEAGUE_OFFICE))
+            : grade('leagueOffice', bundle.leagueOffice?.summary ?? null, 'leagueRules'),
       }
 
       contextLookups = {
@@ -1189,6 +1210,7 @@ export async function buildDecisionOsGroundingPacket(
         importedHistory: absent(engineDown),
         replayInsights: absent(engineDown),
         devy: absent(engineDown),
+        leagueOffice: absent(engineDown),
       }
     }
   }

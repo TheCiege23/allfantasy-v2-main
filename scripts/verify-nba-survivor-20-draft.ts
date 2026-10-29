@@ -1,4 +1,4 @@
-/** Opt-in 20-seat native NBA Survivor draft proof. Writes only to an allowlisted test DB. */
+/** Opt-in native NBA Survivor draft proof for a 20-seat (default) or 16-seat cast (`--cast=16`). Writes only to an allowlisted test DB. */
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
@@ -14,8 +14,13 @@ import { loadNbaSurvivorRosterEligibility } from '../lib/draft-room/nbaSurvivorR
 import { canonicalName } from '../lib/draft-room/player-canonical-identity'
 import { configureEventInfrastructure, InMemoryOutboxStore } from '../lib/events'
 
-const marker = `nba20-${randomUUID().slice(0, 8)}`
-const userIds = Array.from({ length: 20 }, (_, i) => `${marker}-u${i + 1}`)
+const castArg = process.argv.find(arg => arg.startsWith('--cast='))
+const cast = castArg ? Number(castArg.slice('--cast='.length)) : 20
+assert.ok(cast === 16 || cast === 20, '--cast must be 16 or 20')
+const rounds = 12
+const totalPicks = cast * rounds
+const marker = `nba${cast}-${randomUUID().slice(0, 8)}`
+const userIds = Array.from({ length: cast }, (_, i) => `${marker}-u${i + 1}`)
 const positions = ['PG', 'SG', 'SF', 'PF', 'C', 'PG', 'SG', 'SF', 'PF', 'C', 'SG', 'SF']
 let leagueId: string | null = null
 
@@ -31,7 +36,7 @@ async function main() {
   })) })
   try {
     const body = {
-      concept: 'survivor', sport: 'NBA', teamCount: 20, draftType: 'snake',
+      concept: 'survivor', sport: 'NBA', teamCount: cast, draftType: 'snake',
       scoringPreset: 'nba_points', leagueName: `${marker} Survivor draft`, timezone: 'America/New_York',
       conceptSetup: { commissionerParticipationMode: 'participating_player', survivorTribeCount: 4 },
     }
@@ -40,9 +45,9 @@ async function main() {
     const engine = runPresetEngine({ ...validated.data, commissionerId: userIds[0] })
     leagueId = (await prisma.$transaction(tx => createCanonicalLeagueInTransaction(tx, userIds[0], validated.data, engine), { timeout: 120_000 })).leagueId
     const rosters = await prisma.roster.findMany({ where: { leagueId }, orderBy: { id: 'asc' } })
-    assert.equal(rosters.length, 20)
+    assert.equal(rosters.length, cast)
     rosters.sort((a, b) => Number(b.platformUserId === userIds[0]) - Number(a.platformUserId === userIds[0]))
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < cast; i++) {
       await prisma.roster.update({ where: { id: rosters[i].id }, data: { platformUserId: userIds[i] } })
       await prisma.leagueTeam.updateMany({ where: { leagueId, externalId: rosters[i].id }, data: {
         platformUserId: userIds[i], claimedByUserId: userIds[i], isOrphan: false,
@@ -50,7 +55,7 @@ async function main() {
       } })
     }
     const draft = await prisma.draftSession.findFirstOrThrow({ where: { leagueId } })
-    assert.equal(draft.rounds, 12)
+    assert.equal(draft.rounds, rounds)
     const slotOrder = rosters.map((r, i) => ({ slot: i + 1, rosterId: r.id, displayName: `Test Team ${i + 1}` }))
     const tradedPicks = [
       { round: 2, originalRosterId: rosters[0].id, previousOwnerName: 'Test Team 1', newRosterId: rosters[1].id, newOwnerName: 'Test Team 2' },
@@ -59,7 +64,7 @@ async function main() {
     await prisma.draftSession.update({ where: { id: draft.id }, data: { slotOrder, tradedPicks, timerSeconds: 90 } })
     await prisma.leagueSettings.update({ where: { leagueId }, data: { draftOrderLocked: true } })
 
-    const eligibility = await loadNbaSurvivorRosterEligibility(240)
+    const eligibility = await loadNbaSurvivorRosterEligibility(totalPicks)
     assert.ok(eligibility.ready, eligibility.reason ?? 'Current NBA roster unavailable')
     const allPlayers = await prisma.sportsPlayer.findMany({ where: {
       sport: 'NBA', source: 'thesportsdb', status: 'Active',
@@ -74,7 +79,8 @@ async function main() {
       seen.add(name)
       buckets.set(row.position!, [...(buckets.get(row.position!) ?? []), row])
     }
-    for (const [position, required] of [['PG', 40], ['SG', 60], ['SF', 60], ['PF', 40], ['C', 40]] as const) {
+    for (const position of ['PG', 'SG', 'SF', 'PF', 'C']) {
+      const required = positions.filter(p => p === position).length * cast
       assert.ok((buckets.get(position)?.length ?? 0) >= required, `Insufficient verified ${position} players`)
     }
     assert.deepEqual(await startDraftSession(leagueId), { ok: true })
@@ -118,10 +124,10 @@ async function main() {
     console.log('PASS paused commissioner correction and persisted audit')
 
     const nextByPosition = new Map<string, number>([['PG', 2], ['SG', 0], ['SF', 0], ['PF', 0], ['C', 0]])
-    for (let overall = 2; overall <= 240; overall++) {
+    for (let overall = 2; overall <= totalPicks; overall++) {
       const snapshot = await buildSessionSnapshot(leagueId)
       assert.equal(snapshot?.currentPick?.overall, overall)
-      const round = Math.ceil(overall / 20)
+      const round = Math.ceil(overall / cast)
       const position = positions[round - 1]
       const index = nextByPosition.get(position) ?? 0
       const player = buckets.get(position)![index]
@@ -136,37 +142,38 @@ async function main() {
         source: 'user', expectedOverall: overall,
       })
       assert.ok(result.success, `Pick ${overall}: ${result.code ?? result.error}`)
-      if (overall % 20 === 0) console.log(`PASS round ${round} of 12`)
+      if (overall % cast === 0) console.log(`PASS round ${round} of ${rounds}`)
     }
     session = await prisma.draftSession.findUniqueOrThrow({ where: { id: draft.id } })
     assert.equal(session.status, 'completed')
-    assert.equal(await prisma.draftPick.count({ where: { sessionId: draft.id } }), 240)
+    assert.equal(await prisma.draftPick.count({ where: { sessionId: draft.id } }), totalPicks)
     const pick = await prisma.draftPick.findFirstOrThrow({ where: { sessionId: draft.id, round: 2, slot: 1 } })
     assert.equal(pick.rosterId, rosters[1].id)
     assert.ok(pick.tradedPickMeta, 'Traded-pick metadata must be saved on the pick')
     const season = await prisma.redraftSeason.findFirstOrThrow({ where: { leagueId } })
     const seasonRosters = await prisma.redraftRoster.findMany({ where: { seasonId: season.id } })
-    assert.equal(seasonRosters.length, 20)
-    assert.equal(await prisma.redraftRosterPlayer.count({ where: { rosterId: { in: seasonRosters.map(r => r.id) }, droppedAt: null } }), 240)
-    const cast = await prisma.survivorPlayer.findMany({ where: { leagueId } })
-    assert.equal(cast.length, 20)
+    assert.equal(seasonRosters.length, cast)
+    assert.equal(await prisma.redraftRosterPlayer.count({ where: { rosterId: { in: seasonRosters.map(r => r.id) }, droppedAt: null } }), totalPicks)
+    const castPlayers = await prisma.survivorPlayer.findMany({ where: { leagueId } })
+    assert.equal(castPlayers.length, cast)
     assert.equal(await prisma.survivorTribe.count({ where: { leagueId } }), 4)
     const idols = await prisma.survivorIdol.findMany({ where: { leagueId } })
-    assert.equal(idols.length, 7)
+    const expectedIdols = Math.ceil(cast / 3)
+    assert.equal(idols.length, expectedIdols)
     assert.ok(idols.every(idol => idol.isSecret && !idol.isPubliclyKnown && idol.playerId && idol.currentOwnerUserId))
     const notices = await prisma.leagueChatMessage.findMany({ where: { leagueId, messageSubtype: 'chimmy_private' } })
-    assert.equal(notices.filter(n => (n.metadata as Record<string, unknown> | null)?.survivorIdolReveal === true).length, 7)
+    assert.equal(notices.filter(n => (n.metadata as Record<string, unknown> | null)?.survivorIdolReveal === true).length, expectedIdols)
     assert.ok(notices.every(n => n.isPrivate && n.visibleToUserId))
     let chatCount = 0
     for (let attempt = 0; attempt < 20; attempt++) {
       chatCount = await prisma.leagueChatMessage.count({ where: { leagueId, source: 'draft', type: 'draft_pick' } })
-      if (chatCount === 240) break
+      if (chatCount === totalPicks) break
       await new Promise(resolve => setTimeout(resolve, 500))
     }
-    assert.equal(chatCount, 240, 'Every pick must appear in draft chat')
+    assert.equal(chatCount, totalPicks, 'Every pick must appear in draft chat')
     const tradedChat = await prisma.leagueChatMessage.findFirst({ where: { leagueId, source: 'draft', type: 'draft_pick', metadata: { path: ['overall'], equals: pick.overall } } })
     assert.ok(tradedChat?.message.includes('Test Team 2'), 'Traded pick must name its current owner in chat')
-    console.log('PASS 240 picks and draft-chat cards, traded history, 20 season rosters, four tribes and seven private idol notices')
+    console.log(`PASS ${totalPicks} picks and draft-chat cards, traded history, ${cast} season rosters, four tribes and ${expectedIdols} private idol notices`)
   } finally {
     // The branch expires automatically. Only rows created by this run are removed.
     if (leagueId) {

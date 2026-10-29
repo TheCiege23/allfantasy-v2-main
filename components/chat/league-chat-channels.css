@@ -1,0 +1,43 @@
+/* League chat channel strip (native league handoff §6, 2026-10-18). /core tokens first; the older
+ * panel tokens are the fallback when the panel renders outside an .af-core scope. No hex here. */
+.lcc-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line, var(--border));
+  scrollbar-width: none;
+}
+.lcc-strip::-webkit-scrollbar { display: none; }
+.lcc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line2, var(--border));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text2, var(--muted));
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.lcc-chip > span { color: var(--faint, var(--muted2)); }
+.lcc-chip:hover { background: var(--chip, transparent); }
+.lcc-chip[aria-pressed='true'] {
+  border-color: var(--accent-line, var(--accent-cyan-strong));
+  background: var(--accent-soft, transparent);
+  color: var(--accent, var(--accent-cyan-strong));
+}
+.lcc-chip[aria-pressed='true'] > span { color: inherit; }
+/* Chimmy is the gold channel — the handoff's "gold" maps to /core's --p-gold-fg. */
+.lcc-chimmy,
+.lcc-chimmy > span { color: var(--p-gold-fg, var(--accent-amber-strong)); }
+.lcc-chimmy { border-color: color-mix(in srgb, var(--p-gold-fg, var(--accent-amber-strong)) 40%, transparent); }
+.lcc-chimmy[aria-pressed='true'] {
+  border-color: var(--p-gold-fg, var(--accent-amber-strong));
+  background: color-mix(in srgb, var(--p-gold-fg, var(--accent-amber-strong)) 12%, transparent);
+  color: var(--p-gold-fg, var(--accent-amber-strong));
+}

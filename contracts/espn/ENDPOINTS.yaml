@@ -1,7 +1,7 @@
 --- # ============================================================================
 # ESPN site API — Contract
-# NORMATIVE for the two endpoint x sport combinations below, each backed by a
-# committed fixture captured 2026-10-01 through scripts/probe.sh. Nothing else
+# NORMATIVE for the endpoint x sport combinations below, each backed by a
+# committed fixture captured through scripts/probe.sh (2026-10-01; NFL summary 2026-10-25). Nothing else
 # ESPN serves is described here yet; the many existing ESPN call sites
 # (injuries, standings, scores, news — see README "Existing call sites") predate
 # this contract and are NOT covered by it.
@@ -43,6 +43,9 @@ support_matrix:
     sport_path: basketball/mens-college-basketball
     teams: { status: probed, fixture: fixtures/teams.NCAAB.json }
     roster: { status: probed, fixtures: [fixtures/roster.NCAAB.team150.json, fixtures/roster.NCAAB.team2057.json, fixtures/roster.NCAAB.team2441.json] }
+  NFL:
+    sport_path: football/nfl
+    summary: { status: probed, fixture: fixtures/summary.NFL.event401873011.json, captured: 2026-10-25 }
   # Every other sport: not in this contract. Adding one = probe + fixture + this
   # matrix, in one commit.
 
@@ -106,6 +109,32 @@ endpoints:
       athletes[].injuries: { type: array }
       athletes[].teams: { type: array, note: "$ref links into sports.core.api.espn.pvt — internal host, not fetchable" }
       other_keys: [uid, guid, alternateIds, displayName, shortName, displayWeight, displayHeight, links, birthCountry, slug, flag]
+
+  summary:
+    method: GET
+    path: /{sport_path}/summary
+    query_params:
+      event: { required: true, note: "ESPN event id (our live-score gameId)" }
+    parser: lib/live/espnGameSummary.ts trimEspnGameSummary
+    measured_2026_10_25:
+      event: "401873011 — PIT 16 at NO 10, final, kickoff 2026-10-25T13:30Z"
+      http_status: 200
+      full_body_bytes: 965640   # committed UNTRIMMED: the alert tests need every play
+      drives_previous: 13
+      plays_total: 168
+      scoringPlays: 6
+      box_score_athletes: 65
+    envelope: >
+      { boxscore, gameInfo, drives: { previous: [ { id, team, plays: [...] } ], current? },
+        leaders, broadcasts, pickcenter, againstTheSpread, odds, winprobability,
+        header: { competitions: [ { status, competitors: [ { homeAway, team, score } ] } ] },
+        scoringPlays, standings, injuries, news, article, videos, meta, ... }
+    fields:
+      drives.previous[].plays[].type.text: { type: string, values_seen: ["Field Goal Good", "Sack", "Penalty", "Pass Reception", "Rush"] }
+      drives.previous[].plays[].scoringPlay: { type: boolean }
+      drives.previous[].plays[].text: { type: string, note: "🛑 a play wiped out by a penalty keeps its ORIGINAL text — 'field goal is GOOD, NULLIFIED by Penalty … - No Play' — under type 'Penalty' with scoringPlay false. Match NULLIFIED / No Play before reading the text as a score." }
+      drives.previous[].plays[].homeScore / awayScore: { type: integer, note: "the score AFTER the play" }
+      scoringPlays[].id: { type: string, note: "equals the play id inside drives — the six alerts and the six scoringPlays line up 1:1" }
 
 # ============================================================================
 headshot_cdn:

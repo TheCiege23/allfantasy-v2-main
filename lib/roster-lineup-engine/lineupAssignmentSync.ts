@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
+import { starterSlotIndexOf } from '@/lib/league/lineupSlotPositions'
 
 type Db = Parameters<Parameters<typeof prisma.$transaction>[0]>[0] | typeof prisma
 
@@ -27,22 +28,32 @@ export async function syncAfRosterLineupAssignments(
     playerId: string
   }> = []
 
+  /*
+   * A starter's `slotIndex` is his lineup SLOT (lib/league/lineupSlotPositions.ts) when every starter
+   * carries a distinct one, so an empty slot is recorded as a gap. Otherwise — and for every other
+   * section — it is the order within the section, as before. No reader scores from this column:
+   * scoring reads `section` (lib/redraft/weekLineupSlots.ts).
+   */
+  const starterSlots = sections.starters.map((r) => starterSlotIndexOf(r))
+  const usePositions =
+    starterSlots.length > 0 && starterSlots.every((s) => s != null) && new Set(starterSlots).size === starterSlots.length
   const keys: RosterSectionKey[] = ['starters', 'bench', 'ir', 'taxi', 'devy']
   for (const section of keys) {
     let i = 0
-    for (const row of sections[section]) {
+    sections[section].forEach((row, k) => {
       const id = String((row as Record<string, unknown>).id ?? '').trim()
-      if (!id) continue
+      if (!id) return
+      const order = i++
       rows.push({
         leagueId: input.leagueId,
         rosterId: input.rosterId,
         season: input.season,
         week: input.week,
         section,
-        slotIndex: i++,
+        slotIndex: section === 'starters' && usePositions ? (starterSlots[k] as number) : order,
         playerId: id,
       })
-    }
+    })
   }
 
   await db.afRosterLineupAssignment.deleteMany({

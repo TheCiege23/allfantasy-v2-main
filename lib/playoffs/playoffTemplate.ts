@@ -19,6 +19,8 @@ const MLB_ROUND_ORDER: PlayoffRoundKey[] = [
   "world_series",
 ]
 
+const CUP_ROUND_ORDER: PlayoffRoundKey[] = ["cup_quarterfinals", "cup_semifinals", "cup_championship"]
+
 const CFP_ROUND_ORDER: PlayoffRoundKey[] = [
   "cfp_first_round",
   "cfp_quarterfinals",
@@ -31,6 +33,7 @@ const ROUND_ORDER_BY_SPORT: Record<PlayoffSport, PlayoffRoundKey[]> = {
   nhl: CONFERENCE_ROUND_ORDER,
   mlb: MLB_ROUND_ORDER,
   ncaaf: CFP_ROUND_ORDER,
+  nba_cup: CUP_ROUND_ORDER,
 }
 
 const NBA_TEAMS = {
@@ -69,6 +72,7 @@ const TEST_MODE_TEAMS: Record<PlayoffSport, Record<string, readonly string[]>> =
   nhl: NHL_TEAMS,
   mlb: MLB_TEAMS,
   ncaaf: CFP_TEAMS,
+  nba_cup: { east: NBA_TEAMS.east.slice(0, 4), west: NBA_TEAMS.west.slice(0, 4) },
 }
 
 /**
@@ -361,11 +365,50 @@ function buildCfpTemplate(isTestMode: boolean): PlayoffTemplateSeries[] {
   return [...firstRound, ...quarterfinals, ...semifinals, championship]
 }
 
+function buildNbaCupTemplate(isTestMode: boolean): PlayoffTemplateSeries[] {
+  const seed = (side: "east" | "west", n: number) => resolveSeedName("nba_cup", side, n, isTestMode)
+  const quarterfinals = ([
+    { seriesNumber: 1, conference: "east", homeSeed: 1, awaySeed: 4, nextSeriesNumber: 5, nextSeriesSlot: "home" },
+    { seriesNumber: 2, conference: "east", homeSeed: 2, awaySeed: 3, nextSeriesNumber: 5, nextSeriesSlot: "away" },
+    { seriesNumber: 3, conference: "west", homeSeed: 1, awaySeed: 4, nextSeriesNumber: 6, nextSeriesSlot: "home" },
+    { seriesNumber: 4, conference: "west", homeSeed: 2, awaySeed: 3, nextSeriesNumber: 6, nextSeriesSlot: "away" },
+  ] as const).map((spec) => createSeries({
+    round: "cup_quarterfinals", roundIndex: 1, seriesNumber: spec.seriesNumber,
+    conference: spec.conference, homeSeed: spec.homeSeed, awaySeed: spec.awaySeed,
+    homeTeamName: seed(spec.conference, spec.homeSeed),
+    awayTeamName: seed(spec.conference, spec.awaySeed),
+    winnerTeamName: null, bestOf: 1, status: "scheduled", startsAt: null,
+    nextSeriesNumber: spec.nextSeriesNumber, nextSeriesSlot: spec.nextSeriesSlot,
+    sourceSeriesHome: null, sourceSeriesAway: null,
+  }))
+  const semifinals = ([
+    { seriesNumber: 5, conference: "east", home: 1, away: 2, nextSeriesSlot: "home" },
+    { seriesNumber: 6, conference: "west", home: 3, away: 4, nextSeriesSlot: "away" },
+  ] as const).map((spec) => createSeries({
+    round: "cup_semifinals", roundIndex: 2, seriesNumber: spec.seriesNumber,
+    conference: spec.conference, homeSeed: 0, awaySeed: 0,
+    homeTeamName: `Winner S${spec.home}`, awayTeamName: `Winner S${spec.away}`,
+    winnerTeamName: null, bestOf: 1, status: "scheduled", startsAt: null,
+    nextSeriesNumber: 7, nextSeriesSlot: spec.nextSeriesSlot,
+    sourceSeriesHome: spec.home, sourceSeriesAway: spec.away,
+  }))
+  const final = createSeries({
+    round: "cup_championship", roundIndex: 3, seriesNumber: 7,
+    conference: "finals", homeSeed: 0, awaySeed: 0,
+    homeTeamName: "East Champion", awayTeamName: "West Champion",
+    winnerTeamName: null, bestOf: 1, status: "scheduled", startsAt: null,
+    nextSeriesNumber: null, nextSeriesSlot: null,
+    sourceSeriesHome: 5, sourceSeriesAway: 6,
+  })
+  return [...quarterfinals, ...semifinals, final]
+}
+
 export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffTemplateSeries[] {
   const isTestMode = Boolean(input.isTestMode)
 
   if (input.sport === "mlb") return buildMlbTemplate(isTestMode)
   if (input.sport === "ncaaf") return buildCfpTemplate(isTestMode)
+  if (input.sport === "nba_cup") return buildNbaCupTemplate(isTestMode)
 
   return [
     createSeries({

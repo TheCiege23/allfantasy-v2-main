@@ -142,7 +142,11 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     }))
   }, [importSourceLeagueId, importTemplate])
 
-  const completionIssues = useMemo(() => analyzeCreateLeagueCompletion(state), [state])
+  const importedTeamCount = importSourceLeagueId && importTemplate ? importTemplate.teamCount : null
+  const completionIssues = useMemo(
+    () => analyzeCreateLeagueCompletion(state, { importedTeamCount }),
+    [state, importedTeamCount],
+  )
 
   const finishImportedLeague = useCallback(async (leagueId: string, href: string) => {
     setRetryingFinalization(true)

@@ -8,6 +8,7 @@ import { parseSurvivorCommand, looksLikeOfficialCommand } from './SurvivorComman
 import { applyIdolPower, getActiveIdolsForRoster } from './SurvivorIdolRegistry'
 import { resolveSurvivorCurrentWeek } from './SurvivorTimelineResolver'
 import { submitPrivateVoteCommand } from './survivorPrivateVoteCommand'
+import { playShotInTheDark } from './survivorShotInTheDark'
 import { submitChallengeAnswer, getCurrentOpenChallengesForWeek, getChallengeById } from './SurvivorChallengeEngine'
 import { getFinaleState, submitJuryVote } from './SurvivorFinaleEngine'
 import { getTribeForRoster } from './SurvivorTribeService'
@@ -415,6 +416,15 @@ export async function processSurvivorOfficialCommand(
       intent: parsed.intent,
       message: `Final jury vote recorded for ${rosterContext.rosterDisplayNames[targetRosterId] ?? targetRosterId}.${crownedMessage}`,
     }
+  }
+
+  if (parsed.intent === 'shot_in_the_dark') {
+    if (source !== 'private_chimmy') {
+      return { handled: true, ok: false, status: 422, error: 'Shot in the Dark is secret. Open your Survivor @Chimmy room and send @Chimmy shot in the dark.' }
+    }
+    const result = await playShotInTheDark(leagueId, userId)
+    if (!result.ok) return { handled: true, ok: false, status: result.status, error: result.error }
+    return { handled: true, ok: true, status: 200, intent: parsed.intent, message: result.message }
   }
 
   if (parsed.intent === 'vote' && source !== 'private_chimmy') {

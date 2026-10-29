@@ -26,11 +26,13 @@ import { notifyOrphanAiManagerAssigned } from '@/lib/draft-notifications'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
-import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
+import { markDraftRoundsManual } from '@/lib/draft/syncDraftRoundsToRoster'
 import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
 import { classifySeconds } from '@/lib/draft/timer-presets'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
+import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,12 +56,9 @@ function parseSlotOrder(value: unknown): SlotOrderEntry[] {
   })
 }
 
-/** AF Commissioner entitlement — the same check `/api/league/settings` reports as `hasAfCommissionerSub`. */
-async function hasAfCommissionerSub(userId: string): Promise<boolean> {
-  const r = await new EntitlementResolver()
-    .resolveForUser(userId, 'commissioner_ai_tools')
-    .catch(() => ({ hasAccess: false }))
-  return Boolean(r.hasAccess)
+/** AF Commissioner plan — the one shared check (lib/entitlements/afCommissionerPlan.ts). */
+function hasAfCommissionerSub(userId: string): Promise<boolean> {
+  return hasAfCommissionerPlan({ id: userId })
 }
 
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -122,7 +121,10 @@ export async function GET(
       isCommissioner(leagueId, userId),
       prisma.league.findUnique({
         where: { id: leagueId },
-        select: { sport: true, leagueVariant: true },
+        select: {
+          sport: true, leagueVariant: true, timezone: true,
+          leagueType: true, isDynasty: true, platform: true, survivorMode: true, guillotineMode: true,
+        },
       }),
       (async () => {
         const { isIdpLeague, getRosterDefaultsForIdpLeague, getIdpLeagueConfig } = await import('@/lib/idp')
@@ -160,6 +162,24 @@ export async function GET(
 
     let orphanStatus: { orphanRosterIds: string[]; recentActions: Array<{ action: string; createdAt: string; reason: string | null }> } | null = null
     let commissionerAiDraft: ReturnType<typeof buildApiResponse> | null = null
+    /*
+     * Which teams Chimmy manages, for every member's room — not only the commissioner's. Each open
+     * room asks for a Chimmy-managed team's pick when it comes on the clock
+     * (`/draft/chimmy-manager-pick`), so it needs to know which teams those are. Roster ids only:
+     * the styles and trade rules stay commissioner-only, below.
+     */
+    const chimmyManagedRosterIds = await prisma.draftSession
+      .findFirst({
+        where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        select: { commissionerAiManagers: true },
+      })
+      .then((row) =>
+        parseCommissionerAiManagers(row?.commissionerAiManagers)
+          .assignments.filter((a) => a.active)
+          .map((a) => a.rosterId),
+      )
+      .catch(() => [] as string[])
     if (commissioner) {
       const [orphanRosterIds, recentLogs, dsAi] = await Promise.all([
         getOrphanRosterIdsForLeague(leagueId),
@@ -195,6 +215,7 @@ export async function GET(
       sessionVariant: variant.sessionVariant ?? null,
       sessionPreDraft: variant.sessionPreDraft ?? false,
       orphanStatus,
+      chimmyManagedRosterIds,
       orphanAiProviderAvailable: providerStatus.anyAi,
       orphanDrafterEffectiveMode:
         variant.draftUISettings.orphanDrafterMode === 'ai' && !providerStatus.anyAi
@@ -218,7 +239,18 @@ export async function GET(
       teams,
       draftStatus: draftSessionStatus?.status ?? 'pre_draft',
       draftDate: lsRow?.draftDateUtc?.toISOString() ?? null,
+      // The draft date/time inputs are wall-clock in THIS zone, not the viewer's browser zone.
+      timezone: league?.timezone || 'America/New_York',
       autostartEnabled: lsRow?.autostart ?? false,
+      // What `startsAtScheduledTimeRegardlessOfAutostart` needs: the panel hides the Autostart toggle
+      // for leagues whose scheduled draft starts at its time whatever the toggle says.
+      scheduledStartLeague: league
+        ? {
+            sport: league.sport, leagueType: league.leagueType, isDynasty: league.isDynasty,
+            platform: league.platform, survivorMode: league.survivorMode,
+            guillotineMode: league.guillotineMode, leagueVariant: league.leagueVariant,
+          }
+        : null,
       slowDraftPauseEnabled: lsRow?.slowDraftPause ?? (variant.draftUISettings.timerMode === 'overnight_pause'),
       slowDraftPauseFrom: lsRow?.slowPauseFrom ?? variant.draftUISettings.slowDraftPauseWindow?.start ?? null,
       slowDraftPauseTo: lsRow?.slowPauseUntil ?? variant.draftUISettings.slowDraftPauseWindow?.end ?? null,
@@ -271,6 +303,7 @@ export async function PATCH(
   const currentVariant = async () => (currentVariantCache ??= await getDraftVariantSettings(leagueId))
 
   const configPatch: Record<string, unknown> = {}
+  let roundsManual: boolean | null = null
   if (typeof body.draft_type === 'string' && body.draft_type.trim().length > 0) {
     const normalizedDraftType = body.draft_type.trim().toLowerCase()
     if (isDraftTypeAllowedOnSettingsTab(leagueForFormat?.leagueType ?? null, normalizedDraftType)) {
@@ -281,13 +314,14 @@ export async function PATCH(
     let rounds = Math.round(body.rounds)
     // Rounds = draftable roster spots (IR excluded; taxi/devy counted for dynasty/devy/C2C/salary
     // cap). Only an AF Commissioner may override it; anyone else gets the computed count.
-    if (!(await viewerHasSub())) {
-      const computed = await getComputedDraftRounds(leagueId).catch(() => null)
-      if (computed) rounds = computed.rounds
-    }
+    const computed = await getComputedDraftRounds(leagueId).catch(() => null)
+    if (!(await viewerHasSub()) && computed) rounds = computed.rounds
     const roundsError = await validateDraftRoundsFitRoster(leagueId, rounds)
     if (roundsError) return NextResponse.json({ error: roundsError }, { status: 400 })
     configPatch.rounds = rounds
+    // Remember whether this is a deliberate override, so a later ROSTER change knows whether to
+    // carry the draft along with it (lib/draft/syncDraftRoundsToRoster.ts).
+    roundsManual = computed ? rounds !== computed.rounds : null
   }
   if (body.timer_seconds === null) configPatch.timer_seconds = null
   else if (body.timer_seconds !== undefined) {
@@ -589,6 +623,12 @@ export async function PATCH(
           console.warn('[draft/settings PATCH] league-settings sync', e),
         )
       }
+      // A tournament conference league's new draft time goes back onto the tournament's record for it.
+      if (body.draftDate !== undefined) {
+        await copyLeagueDraftTimeToTournament(leagueId, lsRow.draftDateUtc ?? null, userId).catch((e) =>
+          console.warn('[draft/settings PATCH] tournament draft time copy-back', e instanceof Error ? e.message : 'unknown error'),
+        )
+      }
     }
 
     const updated = await updateDraftVariantSettings(leagueId, {
@@ -597,6 +637,12 @@ export async function PATCH(
       ...(hasSessionVariant ? { sessionVariant: sessionVariantPatch as any } : {}),
       ...(hasSessionFlags ? { sessionFlags: sessionFlagsPatch as any } : {}),
     })
+    // After the settings write above, which rewrites League.settings wholesale.
+    if (roundsManual !== null) {
+      await markDraftRoundsManual(leagueId, roundsManual).catch((e) =>
+        console.warn('[draft/settings PATCH] rounds override flag', e instanceof Error ? e.message : 'unknown error'),
+      )
+    }
     if (orphanManagerSettingTouched) {
       const orphanModeChanged = current.draftUISettings.orphanDrafterMode !== updated.draftUISettings.orphanDrafterMode
       const orphanEnabledChanged =

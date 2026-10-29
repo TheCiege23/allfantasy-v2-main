@@ -198,3 +198,84 @@ describe('scoping', () => {
     expect(mockDraftFactFindMany.mock.calls[0]?.[0]?.where).not.toHaveProperty('season')
   })
 })
+
+describe('non-Sleeper imports resolve through their own id column', () => {
+  /** Identity rows answer by whichever provider column the query asks about. */
+  function identityByColumn(rows: Array<Record<string, string>>) {
+    mockIdentityFindMany.mockImplementation(async (args: any) => {
+      const where = args?.where ?? {}
+      const column = Object.keys(where).find((k) => k !== 'sport')!
+      const ids: string[] = where[column]?.in ?? []
+      return rows.filter((r) => ids.includes(r[column]) && (!where.sport || r.sport === where.sport))
+    })
+  }
+
+  it('resolves an ESPN league by espnId, scoped to the sport', async () => {
+    mockLeagueFindMany.mockResolvedValue([{ ...LEAGUE, platform: 'espn' }])
+    mockDraftFactFindMany.mockResolvedValue(fourTeamDraft())
+    identityByColumn(
+      Array.from({ length: 8 }, (_, i) => ({
+        espnId: `sleeper-${i + 1}`,
+        sport: 'NFL',
+        canonicalName: `Espn Player ${i + 1}`,
+        position: 'WR',
+      })),
+    )
+    const { picks, skippedUnresolvedPlayer } = await collectDraftFactSamples({ sport: 'NFL' })
+    expect(picks).toHaveLength(8)
+    expect(skippedUnresolvedPlayer).toBe(0)
+    expect(picks[0]!.playerName).toBe('Espn Player 1')
+    const where = mockIdentityFindMany.mock.calls[0]![0].where
+    expect(where.espnId).toBeDefined()
+    expect(where.sport).toBe('NFL')
+  })
+
+  it('never looks a Yahoo id up as a Sleeper id, and reports the drop under yahoo', async () => {
+    mockLeagueFindMany.mockResolvedValue([{ ...LEAGUE, platform: 'yahoo' }])
+    mockDraftFactFindMany.mockResolvedValue(fourTeamDraft())
+    identityByColumn(identityRows(8).map((r) => ({ ...r, sport: 'NFL' })))
+    const res = await collectDraftFactSamples({ sport: 'NFL' })
+    expect(res.picks).toHaveLength(0)
+    expect(res.skippedUnresolvedByPlatform).toEqual({ yahoo: 8 })
+    expect(mockIdentityFindMany).not.toHaveBeenCalled()
+  })
+
+  it('drops an id held by two identity rows instead of picking one', async () => {
+    mockLeagueFindMany.mockResolvedValue([{ ...LEAGUE, platform: 'mfl' }])
+    mockDraftFactFindMany.mockResolvedValue(fourTeamDraft())
+    const rows = Array.from({ length: 8 }, (_, i) => ({
+      mflId: `sleeper-${i + 1}`,
+      sport: 'NFL',
+      canonicalName: `Mfl Player ${i + 1}`,
+      position: 'RB',
+    }))
+    rows.push({ mflId: 'sleeper-1', sport: 'NFL', canonicalName: 'Someone Else', position: 'QB' })
+    identityByColumn(rows)
+    const res = await collectDraftFactSamples({ sport: 'NFL' })
+    expect(res.picks.map((p) => p.playerName)).not.toContain('Mfl Player 1')
+    expect(res.picks.map((p) => p.playerName)).not.toContain('Someone Else')
+    expect(res.skippedUnresolvedByPlatform).toEqual({ mfl: 1 })
+  })
+
+  it('keeps a Sleeper id and an ESPN id with the same digits apart', async () => {
+    mockLeagueFindMany.mockResolvedValue([
+      { ...LEAGUE, id: 'lgS', platform: 'sleeper' },
+      { ...LEAGUE, id: 'lgE', platform: 'espn' },
+    ])
+    mockDraftFactFindMany.mockResolvedValue([...fourTeamDraft('lgS'), ...fourTeamDraft('lgE')])
+    identityByColumn([
+      ...identityRows(8).map((r) => ({ ...r, sport: 'NFL' })),
+      ...Array.from({ length: 8 }, (_, i) => ({
+        espnId: `sleeper-${i + 1}`,
+        sport: 'NFL',
+        canonicalName: `Espn Player ${i + 1}`,
+        position: 'TE',
+      })),
+    ])
+    const { picks } = await collectDraftFactSamples({ sport: 'NFL' })
+    const names = new Set(picks.map((p) => p.playerName))
+    expect(names.has('Player 1')).toBe(true)
+    expect(names.has('Espn Player 1')).toBe(true)
+    expect(picks).toHaveLength(16)
+  })
+})

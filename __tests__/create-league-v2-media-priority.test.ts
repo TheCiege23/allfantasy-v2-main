@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveCreateLeagueHeroMedia } from '@/lib/create-league-v2/media-priority'
 import { LEAGUE_TYPE_MEDIA, SPORT_MEDIA } from '@/lib/create-league-v2/theme'
 import {
@@ -157,18 +157,18 @@ describe('Survivor NBA creation pilot and underlying sport catalog', () => {
     expect(isSportAllowedForType('SOCCER', 'survivor')).toBe(false)
   })
 
-  it('hides new NFL Survivor creation while preserving its existing draft and cast rules', () => {
-    expect(isSportAllowedForType('NFL', 'survivor')).toBe(false)
+  it('offers new NFL Survivor creation alongside NBA, with its draft and cast rules', () => {
+    expect(isSportAllowedForType('NFL', 'survivor')).toBe(true)
     expect(isSportAllowedForType('NBA', 'survivor')).toBe(true)
     const opts = getDraftTypeOptions('survivor', 'NFL').map((o) => o.id)
     expect(opts).toContain('snake')
     // 29566580a (feat(survivor): add phase 1 foundation) deliberately widened the cast from
     // [16, 20, 24] to a contiguous 16-20 and did not update this assertion, leaving the file
     // red on main. The catalog is the authoritative side.
-    // 2026-10-12: new leagues are offered 16 or 20 (four tribes of four or five), a subset of the
-    // 16-20 the engine accepts, so every offered size still survives the server clamp below.
+    // 2026-10-20: new leagues are offered 12–24 in the eight sizes that split into 2, 3 or 4
+    // equal tribes; every offered size still survives the server clamp below.
     const survivorTeams = LEAGUE_CREATE_OPTIONS_CATALOG_V1.teamCountOptionsByConceptSport.survivor?.NFL
-    expect(survivorTeams).toEqual([16, 20])
+    expect(survivorTeams).toEqual([12, 15, 16, 18, 20, 21, 22, 24])
     for (const size of survivorTeams ?? []) expect(SURVIVOR_CAST_SIZE_OPTIONS).toContain(size)
   })
 
@@ -176,11 +176,21 @@ describe('Survivor NBA creation pilot and underlying sport catalog', () => {
     // getTeamCountOptions reads the catalog when it has loaded and a hardcoded list otherwise.
     // Those two disagreed, so Survivor offered different sizes depending on whether
     // /api/leagues/create-options had resolved.
-    const fromCatalog = getTeamCountOptions('NFL', 'survivor')
-    setClientLeagueCreateOptionsCatalog(null)
-    const fromFallback = getTeamCountOptions('NFL', 'survivor')
-    expect(fromFallback).toEqual(fromCatalog)
-    expect(fromFallback).toEqual([...SURVIVOR_CREATE_CAST_SIZES])
+    // Preseason, so every size still fits the NFL schedule (later in the season both paths drop
+    // the sizes that no longer fit, identically).
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-01T12:00:00Z') })
+    try {
+      const fromCatalog = getTeamCountOptions('NFL', 'survivor')
+      setClientLeagueCreateOptionsCatalog(null)
+      const fromFallback = getTeamCountOptions('NFL', 'survivor')
+      expect(fromFallback).toEqual(fromCatalog)
+      expect(fromFallback).toEqual([...SURVIVOR_CREATE_CAST_SIZES])
+      vi.setSystemTime(new Date('2026-10-22T12:00:00Z'))
+      const lateFallback = getTeamCountOptions('NFL', 'survivor')
+      setClientLeagueCreateOptionsCatalog(LEAGUE_CREATE_OPTIONS_CATALOG_V1)
+      expect(getTeamCountOptions('NFL', 'survivor')).toEqual(lateFallback)
+      expect(lateFallback).not.toContain(24)
+    } finally { vi.useRealTimers() }
   })
 
   it('every offered cast size survives the server clamp unchanged, on BOTH resolution paths', () => {
@@ -204,9 +214,10 @@ describe('Survivor NBA creation pilot and underlying sport catalog', () => {
       }
     }
 
-    // Control: the clamp is doing something, so the loops above are not vacuous.
-    expect(clampSurvivorCastSize(24)).toBe(20)
-    expect(clampSurvivorCastSize(30)).toBe(20)
+    // Control: the clamp is doing something, so the loops above are not vacuous. 24 is a real
+    // cast now, so the out-of-range probes sit beyond both ends of the list.
+    expect(clampSurvivorCastSize(10)).toBe(12)
+    expect(clampSurvivorCastSize(30)).toBe(24)
   })
 
   it('every offered Survivor cast size can pick a tribe count', () => {

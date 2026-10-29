@@ -28,6 +28,12 @@ const checkDailyCapMock = vi.fn()
 const incrementDailyCapMock = vi.fn()
 const tryDeterministicAnswerMock = vi.fn()
 const cookiesMock = vi.fn()
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/chimmy/planAllowance')>(),
+  // These fixtures exercise the paid-token path after the two daily answers are used.
+  readChimmyAnswerAllowance: async () => ({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+    used: 2, remaining: 0, resetsAt: '2026-10-26T00:00:00.000Z' }),
+}))
 
 vi.mock('server-only', () => ({}))
 
@@ -111,7 +117,7 @@ function setupHappyPath() {
   requireFeatureEntitlementMock.mockResolvedValue({
     ok: true,
     decision: { entitlement: { plans: [] } },
-    tokenSpend: null,
+    tokenSpend: { id: 'language-ledger', balanceAfter: 10 },
     response: null,
   })
   checkDailyCapMock.mockResolvedValue({ allowed: true })
@@ -338,9 +344,9 @@ describe('POST /api/chimmy — provider fallback and safety invariants', () => {
     expect(body.response).not.toContain('deepseek')
   })
 
-  it('daily cap still enforced regardless of language', async () => {
+  it('abuse rate limits still apply regardless of language', async () => {
     cookiesMock.mockReturnValue(makeCookieStore('es'))
-    checkDailyCapMock.mockResolvedValue({ allowed: false, message: 'Daily cap reached' })
+    runAiProtectionMock.mockResolvedValue(new Response(JSON.stringify({ error: 'Too many requests' }), { status: 429 }))
 
     const { POST } = await import('@/app/api/chimmy/route')
     const req = buildJsonRequest({ message: 'What should I do?' })

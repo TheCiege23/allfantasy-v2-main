@@ -67,9 +67,9 @@ export default async function GeoBlockedPage(
           </div>
         ) : null}
 
-        {subs.hasStripe || subs.hasApple ? (
+        {subs.hasStripe || subs.hasApple || subs.hasGooglePlay ? (
           <div className="text-left">
-            <CancelSubscriptionPanel hasStripe={subs.hasStripe} hasApple={subs.hasApple} />
+            <CancelSubscriptionPanel hasStripe={subs.hasStripe} hasApple={subs.hasApple} hasGooglePlay={subs.hasGooglePlay} />
           </div>
         ) : null}
 

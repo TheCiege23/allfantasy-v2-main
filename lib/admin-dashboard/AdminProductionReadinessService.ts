@@ -202,6 +202,14 @@ const ENV_REQUIREMENTS: EnvRequirement[] = [
     allOf: ["CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"],
     note: "Used by rich media upload flows where enabled.",
   },
+  {
+    id: "google-play-reports",
+    category: "Platform",
+    label: "Google Play install reports",
+    severity: "optional",
+    allOf: ["GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "GOOGLE_PLAY_REPORTS_BUCKET"],
+    note: "Shows Google Play download counts on the admin dashboard. The service account needs Play Console access to bulk reports.",
+  },
 ]
 
 function present(name: string): boolean {
@@ -296,6 +304,16 @@ async function getTrafficLocations(): Promise<TrafficLocationRow[]> {
     return []
   }
 }
+
+/**
+ * Rows for crons that are scheduled only while their event runs. When the schedule declares
+ * NONE of their paths the job has been retired, not lost, and the row is omitted rather than
+ * reported "missing" — ApiHealthService turns "missing" into a CRITICAL. The World Cup sync was
+ * retired from cron-schedule.json after the 2026 final (4491fe57a reused its slot); keeping the
+ * row produced exactly the permanent false critical the matcher comment above warns about. A
+ * PARTIAL declaration still reports, so a half-restored schedule is never hidden.
+ */
+const SEASONAL_CRON_ROWS = new Set(["world-cup-official"])
 
 export async function getAdminProductionReadiness(): Promise<AdminProductionReadiness> {
   const crons = readVercelCrons()
@@ -435,7 +453,7 @@ export async function getAdminProductionReadiness(): Promise<AdminProductionRead
         crons,
         note: "Required for draft, start/sit, waiver, trade value, and player identity accuracy.",
       }),
-    ],
+    ].filter((row) => !(SEASONAL_CRON_ROWS.has(row.id) && row.configuredPaths.length === 0)),
     trafficLocations,
     trafficNotes: [
       "AnalyticsEvent currently stores path/referrer/session/user-agent and optional userId/meta.",

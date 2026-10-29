@@ -127,7 +127,7 @@ describe('slateDigestCopy', () => {
     expect(c.body).toBe('A League: won 100.0–90.0. B League: lost 90.0–100.0.')
   })
 
-  it('a guillotine league only appears when you are projected last', () => {
+  it('a Guilly league only appears when you are projected last', () => {
     const c = slateDigestCopy([{ kind: 'cut', leagueId: 'g', leagueName: 'Chopping Block', projectedFinish: 71.25 }], AFTERNOON, 6)!
     expect(c.title).toBe('After Sunday afternoon: projected last in Chopping Block')
     expect(c.body).toBe('Chopping Block: projected last (71.3 pts) — on the chopping block.')

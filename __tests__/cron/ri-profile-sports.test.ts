@@ -37,6 +37,24 @@ describe('selectRiProfileSports', () => {
     expect([...leads].sort()).toEqual(['MLB', 'NBA', 'NCAAB', 'NFL', 'NHL', 'SOCCER'])
   })
 
+  it('sports the last six-sport fire deferred lead, in rotation order, ahead of the rest', () => {
+    const now = at('2026-10-17T09:10:00Z')
+    const plain = selectRiProfileSports({ allSports: ALL, now })
+    const out = selectRiProfileSports({ allSports: ALL, now, deferredLastRun: ['nfl', 'SOCCER'] })
+    const tail = plain.filter((s) => s === 'SOCCER' || s === 'NFL')
+    expect(out.slice(0, 2)).toEqual(tail)
+    expect(out.slice(2)).toEqual(plain.filter((s) => !tail.includes(s)))
+  })
+
+  it('a deferral list never changes the NCAAF half or an explicit sport, and ignores unknown names', () => {
+    expect(selectRiProfileSports({ allSports: ALL, now: at('2026-10-17T03:10:00Z'), deferredLastRun: ['NFL'] })).toEqual(['NCAAF'])
+    expect(selectRiProfileSports({ allSports: ALL, explicitSport: 'MLB', deferredLastRun: ['NFL'] })).toEqual(['MLB'])
+    const now = at('2026-10-17T09:10:00Z')
+    expect(selectRiProfileSports({ allSports: ALL, now, deferredLastRun: ['CURLING', 'NCAAF'] })).toEqual(
+      selectRiProfileSports({ allSports: ALL, now }),
+    )
+  })
+
   it('an explicit ?sport= always wins, at any hour', () => {
     expect(selectRiProfileSports({ allSports: ALL, explicitSport: 'soccer', now: at('2026-09-27T03:10:00Z') })).toEqual(['SOCCER'])
     expect(selectRiProfileSports({ allSports: ALL, explicitSport: 'NCAAF', now: at('2026-09-27T09:10:00Z') })).toEqual(['NCAAF'])

@@ -14,7 +14,19 @@ export async function openJuryPhase(leagueId: string): Promise<void> {
   await postHostMessage(leagueId, 'jury_instruction', {}, 'jury_chat').catch(() => {})
 }
 
+/**
+ * survivor-core §5 "Jury vote is open": once per finale, to jurors only, on the first transition into
+ * questions/voting. Lazy import so this engine does not load the dispatcher at import time.
+ */
+async function notifyJuryVoteOpenOnce(leagueId: string, previousStatus: string | null | undefined): Promise<void> {
+  if (previousStatus === 'questions_open' || previousStatus === 'voting_open' || previousStatus === 'complete') return
+  await import('./notificationEngine')
+    .then(({ enqueueSurvivorCoreNotification }) => enqueueSurvivorCoreNotification(leagueId, { kind: 'jury_vote_open' }, { role: 'jury' }))
+    .catch(() => {})
+}
+
 export async function openFinale(leagueId: string, finalistUserIds: string[]): Promise<void> {
+  const previous = await prisma.jurySession.findUnique({ where: { leagueId }, select: { status: true } }).catch(() => null)
   await prisma.league.update({
     where: { id: leagueId },
     data: { survivorPhase: 'finale' },
@@ -28,55 +40,31 @@ export async function openFinale(leagueId: string, finalistUserIds: string[]): P
     where: { leagueId, userId: { in: finalistUserIds } },
     data: { isFinalist: true, canAccessFinaleChat: true },
   })
+  await notifyJuryVoteOpenOnce(leagueId, previous?.status)
+}
+
+/**
+ * Open jury voting with no commissioner click. Idempotent: an open or finished session is left
+ * alone, and a finale that opened without a session row gets one.
+ */
+export async function ensureJuryVotingOpen(leagueId: string, deadline: Date): Promise<void> {
+  const previous = await prisma.jurySession.findUnique({ where: { leagueId }, select: { status: true, votingDeadline: true } }).catch(() => null)
+  if (previous?.status === 'complete') return
+  if (previous?.status === 'voting_open' && previous.votingDeadline) return
+  await prisma.jurySession.upsert({
+    where: { leagueId },
+    create: { leagueId, status: 'voting_open', votingDeadline: deadline },
+    update: { status: 'voting_open', votingDeadline: deadline },
+  })
+  await notifyJuryVoteOpenOnce(leagueId, previous?.status)
 }
 
 export async function openJuryVoting(leagueId: string, deadline: Date): Promise<void> {
+  const previous = await prisma.jurySession.findUnique({ where: { leagueId }, select: { status: true } }).catch(() => null)
   await prisma.jurySession.update({
     where: { leagueId },
     data: { status: 'voting_open', votingDeadline: deadline },
   })
+  await notifyJuryVoteOpenOnce(leagueId, previous?.status)
 }
 
-export async function tallyJuryVotes(leagueId: string): Promise<string> {
-  const session = await prisma.jurySession.findUnique({
-    where: { leagueId },
-    include: { votes: true },
-  })
-  if (!session) throw new Error('No jury session')
-  const counts: Record<string, number> = {}
-  for (const v of session.votes) {
-    counts[v.finalistUserId] = (counts[v.finalistUserId] ?? 0) + 1
-  }
-  let winner = ''
-  let best = -1
-  for (const [uid, c] of Object.entries(counts)) {
-    if (c > best) {
-      best = c
-      winner = uid
-    }
-  }
-  await prisma.jurySession.update({
-    where: { leagueId },
-    data: {
-      winnerId: winner,
-      winnerName: winner ? `User ${winner.slice(0, 8)}` : null,
-      status: 'winner_revealed',
-      revealedAt: new Date(),
-    },
-  })
-  return winner
-}
-
-export async function revealWinner(leagueId: string): Promise<void> {
-  const session = await prisma.jurySession.findUnique({ where: { leagueId } })
-  if (!session?.winnerId) return
-  await prisma.league.update({
-    where: { id: leagueId },
-    data: { survivorPhase: 'complete' },
-  })
-  await prisma.survivorPlayer.updateMany({
-    where: { leagueId, userId: session.winnerId },
-    data: { playerState: 'survivor_winner' },
-  })
-  await postHostMessage(leagueId, 'winner_reveal', { winnerId: session.winnerId }, 'finale_chat').catch(() => {})
-}

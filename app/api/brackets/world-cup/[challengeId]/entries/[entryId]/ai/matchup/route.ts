@@ -1,3 +1,4 @@
+import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { userHasBracketBrainAi } from "@/lib/bracket-brain/bracketBrainAccess"
@@ -26,7 +27,7 @@ const bodySchema = z.object({
   confirmTokenSpend: z.boolean().optional().default(false),
 })
 
-export async function POST(
+async function paidToolPost(
   req: NextRequest,
   props: { params: Promise<{ challengeId: string; entryId: string }> }
 ) {
@@ -44,6 +45,50 @@ export async function POST(
   }
 
   const { matchId, strategy, intent } = body
+
+  const challenge = await (prisma as any).worldCupBracketChallenge.findUnique({
+    where: { id: challengeId },
+    select: {
+      id: true,
+      ownerUserId: true,
+      visibility: true,
+      participants: {
+        where: { userId: userResult.user.id },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  })
+
+  if (!challenge) {
+    return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
+  }
+
+  const isOwner = challenge.ownerUserId === userResult.user.id
+  const isParticipant = challenge.participants.length > 0
+  const isPublic = challenge.visibility === "public"
+  if (!isOwner && !isParticipant && !isPublic) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
+  const entry = await (prisma as any).worldCupBracketEntry.findFirst({
+    where: { id: entryId, challengeId, userId: userResult.user.id },
+    include: {
+      picks: {
+        where: {
+          selectedTeamName: { not: "" },
+          OR: [{ selectedTeamId: { not: null } }, { selectedSlotKey: { not: null } }],
+        },
+        include: { match: true },
+        orderBy: { createdAt: "asc" },
+      },
+      challenge: { include: { matches: true } },
+    },
+  })
+  if (!entry) {
+    return NextResponse.json({ error: "Entry not found" }, { status: 404 })
+  }
+
 
   const hasBracketBrainAi = await userHasBracketBrainAi(
     userResult.user.id,
@@ -102,48 +147,6 @@ export async function POST(
   // If panel cap exceeded, use deterministic path (bracketBrainAiEntitled: false).
   const useGenerative = aiEligible && !capExceededForExplicit
 
-  const challenge = await (prisma as any).worldCupBracketChallenge.findUnique({
-    where: { id: challengeId },
-    select: {
-      id: true,
-      ownerUserId: true,
-      visibility: true,
-      participants: {
-        where: { userId: userResult.user.id },
-        select: { id: true },
-        take: 1,
-      },
-    },
-  })
-
-  if (!challenge) {
-    return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
-  }
-
-  const isOwner = challenge.ownerUserId === userResult.user.id
-  const isParticipant = challenge.participants.length > 0
-  const isPublic = challenge.visibility === "public"
-  if (!isOwner && !isParticipant && !isPublic) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
-
-  const entry = await (prisma as any).worldCupBracketEntry.findFirst({
-    where: { id: entryId, challengeId, userId: userResult.user.id },
-    include: {
-      picks: {
-        where: {
-          selectedTeamName: { not: "" },
-          OR: [{ selectedTeamId: { not: null } }, { selectedSlotKey: { not: null } }],
-        },
-        include: { match: true },
-        orderBy: { createdAt: "asc" },
-      },
-      challenge: { include: { matches: true } },
-    },
-  })
-  if (!entry) {
-    return NextResponse.json({ error: "Entry not found" }, { status: 404 })
-  }
 
   const challengeMatches = Array.isArray((entry as any)?.challenge?.matches)
     ? ((entry as any).challenge.matches as unknown[])
@@ -248,3 +251,5 @@ export async function POST(
     tokenSpend,
   })
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

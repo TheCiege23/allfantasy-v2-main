@@ -16,8 +16,14 @@
  * matched identity, so they line up with the draft pool and with roster eligibility. Fantrax's
  * position is used only to split two identities that share a name.
  *
- * ⚠ NAME IS THE ONLY KEY. The payload is `{ pos, name: "Last, First", id, ADP }` — no team. A name
- * that matches no identity, or several we cannot split, is skipped and counted rather than guessed.
+ * ⚠ NAME IS THE FALLBACK KEY. The payload is `{ pos, name: "Last, First", id, ADP }` — no team. The
+ * Fantrax `id` is tried first against `PlayerIdentityMap.fantraxId` (written weekly for MLB, NBA and NHL
+ * by `ingestProFantraxIdentities`); a name that matches no identity, or several we cannot split, is
+ * skipped and counted rather than guessed.
+ *
+ * MLB and NHL use the same endpoint and matcher (`loadFantraxAdp`). ⚠ Only `getAdp?sport=NBA` has a
+ * verified response; MLB/NHL are assumed to share its shape — contracts/fantrax/GAPS.md F-11. The parser
+ * in `getFantraxAdp` drops rows it cannot read, so a different shape costs rows, never wrong ADP.
  */
 import 'server-only'
 import { prisma } from '@/lib/prisma'
@@ -49,6 +55,16 @@ export type NbaIdentityRow = {
   canonicalName: string
   position: string | null
   currentTeam: string | null
+  /** Fantrax's own player id, when the identity ingest has linked one. */
+  fantraxId?: string | null
+}
+
+/** Sports whose market ADP comes from Fantrax `getAdp`. */
+export const FANTRAX_ADP_SPORTS = ['NBA', 'MLB', 'NHL'] as const
+export type FantraxAdpSport = (typeof FANTRAX_ADP_SPORTS)[number]
+
+export function isFantraxAdpSport(sport: string): sport is FantraxAdpSport {
+  return (FANTRAX_ADP_SPORTS as readonly string[]).includes(sport)
 }
 
 export type NbaAdpMatch = {
@@ -71,9 +87,23 @@ export type NbaAdpMatchResult = {
   duplicates: number
 }
 
-const nbaPosition = (raw: string | null | undefined) => normalizePositionForSport('NBA', raw)
-
 export function matchFantraxNbaAdp(entries: FantraxAdpEntry[], identities: NbaIdentityRow[]): NbaAdpMatchResult {
+  return matchFantraxAdp('NBA', entries, identities)
+}
+
+export function matchFantraxAdp(
+  sport: FantraxAdpSport,
+  entries: FantraxAdpEntry[],
+  identities: NbaIdentityRow[],
+): NbaAdpMatchResult {
+  const nbaPosition = (raw: string | null | undefined) => normalizePositionForSport(sport, raw)
+  const byFantraxId = new Map<string, NbaIdentityRow | null>()
+  for (const identity of identities) {
+    const fid = String(identity.fantraxId ?? '').trim()
+    if (!fid) continue
+    // Two identities claiming one Fantrax id are a broken link, not a match: refuse the id path.
+    byFantraxId.set(fid, byFantraxId.has(fid) ? null : identity)
+  }
   const byName = new Map<string, NbaIdentityRow[]>()
   for (const identity of identities) {
     const key = nbaAdpNameKey(identity.canonicalName)
@@ -91,8 +121,10 @@ export function matchFantraxNbaAdp(entries: FantraxAdpEntry[], identities: NbaId
     if (!Number.isFinite(entry.adp) || entry.adp <= 0) continue
     const display = fantraxDisplayName(entry.name)
     const candidates = byName.get(nbaAdpNameKey(display)) ?? []
-    let identity: NbaIdentityRow | null = null
-    if (candidates.length === 1) {
+    let identity: NbaIdentityRow | null = byFantraxId.get(String(entry.fantraxId ?? '').trim()) ?? null
+    if (identity) {
+      // matched on Fantrax's own id
+    } else if (candidates.length === 1) {
       identity = candidates[0]
     } else if (candidates.length > 1) {
       const fantraxPos = nbaPosition(entry.position)
@@ -113,7 +145,11 @@ export function matchFantraxNbaAdp(entries: FantraxAdpEntry[], identities: NbaId
       identityId: identity.id,
       playerName: identity.canonicalName,
       position: nbaPosition(identity.position) ?? nbaPosition(entry.position) ?? 'UTIL',
-      team: normalizeTeamAbbrev(identity.currentTeam) ?? identity.currentTeam ?? 'FA',
+      // `normalizeTeamAbbrev` maps NFL spellings; MLB/NHL keep the identity's own code.
+      team:
+        (sport === 'NBA' ? normalizeTeamAbbrev(identity.currentTeam) : identity.currentTeam?.trim().toUpperCase() || null) ??
+        identity.currentTeam ??
+        'FA',
       adp: entry.adp,
     })
   }
@@ -126,11 +162,16 @@ export type FantraxNbaAdpLoad =
 
 /** Fetch Fantrax NBA ADP and match it to our NBA identities. Ingestion only. */
 export async function loadFantraxNbaAdp(): Promise<FantraxNbaAdpLoad> {
-  const res = await getFantraxAdp('NBA')
+  return loadFantraxAdp('NBA')
+}
+
+/** Fetch Fantrax ADP for one sport and match it to that sport's identities. Ingestion only. */
+export async function loadFantraxAdp(sport: FantraxAdpSport): Promise<FantraxNbaAdpLoad> {
+  const res = await getFantraxAdp(sport)
   if (!res.ok) return { ok: false, reason: res.failure.message }
   const identities = await prisma.playerIdentityMap.findMany({
-    where: { sport: 'NBA' },
-    select: { id: true, canonicalName: true, position: true, currentTeam: true },
+    where: { sport },
+    select: { id: true, canonicalName: true, position: true, currentTeam: true, fantraxId: true },
   })
-  return { ok: true, priced: res.data.length, result: matchFantraxNbaAdp(res.data, identities) }
+  return { ok: true, priced: res.data.length, result: matchFantraxAdp(sport, res.data, identities) }
 }

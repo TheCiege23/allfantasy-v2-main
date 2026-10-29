@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { getStealThreePreview } from '@/lib/survivor/survivorStealThree'
 import { idolDefinition, type IdolPlayPreview } from '@/lib/survivor/survivorIdolCatalog'
+import { BUNDLED_SURVIVOR_IDOL_TYPES, survivorIdolTag } from '@/lib/survivor/survivorIdolTypes'
+import { survivorIdolPlayEngine } from '@/lib/survivor/survivorIdolEngines'
+import { survivorIdolGlowStyle } from './SurvivorIdolCard'
 import './survivorIdolPlay.css'
 
 type PreviewResult = Awaited<ReturnType<typeof getStealThreePreview>>
@@ -68,10 +71,10 @@ function SurvivorRosterIdolPlay({ leagueId, idolId, powerType, onFinished }: { l
   const outgoing = preview?.myBench.filter(player => dropIds.includes(player.id)) ?? []
   const ready = preview && !preview.lockWarnings.length && (step === 1 ? preview.powerType === 'island_raid' || Boolean(team) : step === 2 ? incoming.length === 3 && incoming.every(player => !player.disabled) : step === 3 ? dropIds.length === preview.requiredDrops : true)
 
-  return <section className="survivor-idol-play" aria-label={`Play ${title}`} aria-busy={busy}>
+  return <section className="survivor-idol-play" aria-label={`Play ${title}`} aria-busy={busy} style={survivorIdolGlowStyle('#e5484d')}>
     <header><img src="/survivor/idols/steal-three-icon.svg" alt="" width={36} height={36} /><div><h3>{title}</h3><p>Your idols - only you can see this page{preview ? ` - week ${preview.week}` : ''}</p></div></header>
     <div className="idol-layout">
-      <aside className="idol-card"><img src="/survivor/idols/steal-three.svg" alt="" /><h3>{title}</h3><p>{powerType === 'island_raid' ? 'Take 3 players across opposing teams.' : "Take any 3 players from one team's roster and add them to yours."}</p><dl><dt>When</dt><dd>Before the playoffs</dd><dt>Cannot take</dt><dd>Players whose game has started, or players on IR</dd><dt>Make room</dt><dd>Drop bench players to waivers</dd><dt>Who sees it</dt><dd>The whole league, as soon as it is played</dd></dl></aside>
+      <aside className="idol-card"><img src="/survivor/idols/steal-three.svg" alt="" /><h3>{title}</h3><span className="svi-tag">Roster · ●●●</span><p>{powerType === 'island_raid' ? 'Take 3 players across opposing teams.' : "Take any 3 players from one team's roster and add them to yours."}</p><dl><dt>When</dt><dd>Before the playoffs</dd><dt>Cannot take</dt><dd>Players whose game has started, or players on IR</dd><dt>Make room</dt><dd>Drop bench players to waivers</dd><dt>Who sees it</dt><dd>The whole league, as soon as it is played</dd></dl></aside>
       <div className="idol-flow">
         <ol className="idol-steps" aria-label="Raid progress">{STEPS.map((label, index) => <li key={label} aria-current={!played && step === index + 1 ? 'step' : undefined}><span>{index + 1}</span>{label}{(played || step > index + 1) && <span className="sr-only"> completed</span>}</li>)}</ol>
         {error && <p role="alert" className="idol-warning">{error}</p>}
@@ -99,7 +102,7 @@ function SurvivorRosterIdolPlay({ leagueId, idolId, powerType, onFinished }: { l
 type IdolPlayProps = { leagueId: string; idolId: string; powerType: string; onFinished: () => void }
 
 export function SurvivorIdolPlay(props: IdolPlayProps) {
-  return ['triple_steal', 'island_raid'].includes(props.powerType)
+  return survivorIdolPlayEngine(props.powerType)?.flow === 'roster'
     ? <SurvivorRosterIdolPlay {...props} /> : <SurvivorCouncilIdolPlay {...props} />
 }
 
@@ -136,12 +139,13 @@ function SurvivorCouncilIdolPlay({ leagueId, idolId, powerType, onFinished }: Id
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'The idol could not be played.') }
     finally { setBusy(false); submitting.current = false }
   }
-  return <section className="survivor-idol-play survivor-catalog-play" aria-label={`Play ${definition.name}`} aria-busy={busy}>
+  const catalogType = BUNDLED_SURVIVOR_IDOL_TYPES.find(type => type.id === definition.id && type.name === definition.name)
+  return <section className="survivor-idol-play survivor-catalog-play" aria-label={`Play ${definition.name}`} aria-busy={busy} style={survivorIdolGlowStyle(definition.glow)}>
     <header><div><h3>Play an idol</h3><p>Your idols - only you can see this page</p></div></header>
     <div className="idol-layout">
-      <aside className="idol-card" style={{ borderColor: definition.glow }}>
+      <aside className="idol-card">
         {definition.id && <img src={`/survivor/idols/${definition.id}.svg`} alt="" />}
-        <h3 style={{ color: definition.glow }}>{definition.name}</h3><p>{definition.power}</p>
+        <h3>{definition.name}</h3>{catalogType && <span className="svi-tag" data-always={catalogType.alwaysIn || undefined}>{survivorIdolTag(catalogType)}</span>}<p>{definition.power}</p>
         <dl><dt>When</dt><dd>{definition.when}</dd><dt>Target</dt><dd>{definition.target}</dd><dt>Who sees it</dt><dd>Nobody until the scroll is read</dd></dl>
       </aside>
       <div className="idol-flow">

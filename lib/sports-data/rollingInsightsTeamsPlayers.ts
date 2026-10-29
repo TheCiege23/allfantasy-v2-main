@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
 import { remainingFor } from '@/lib/cron/runBudget'
@@ -307,6 +308,9 @@ export async function syncRollingInsightsPlayersToDb(opts: {
     if (notModified) result.notModified = true
     if (error) result.errors.push(`player-info ${label}: ${error}`)
 
+    // Keyed on externalId so a vendor duplicate keeps the LAST row, as the per-row upsert did, and
+    // so one INSERT ... ON CONFLICT never names the same key twice (Postgres rejects that).
+    const pending = new Map<string, RiPlayerRow>()
     for (const raw of rows) {
       const p = asRecord(raw)
       if (!p) continue
@@ -323,7 +327,8 @@ export async function syncRollingInsightsPlayersToDb(opts: {
       const imageUrl = toImageUrl(p.img ?? p.image ?? p.headshot ?? p.photo)
       if (imageUrl) result.withImage += 1
 
-      const data = {
+      const data: RiPlayerRow = {
+        externalId,
         name,
         position: str(p.position ?? p.pos),
         team: str(p.team_name ?? teamObj?.team ?? teamObj?.name) ?? (teamObj ? null : str(p.team)),
@@ -338,29 +343,114 @@ export async function syncRollingInsightsPlayersToDb(opts: {
         height: str(p.height),
         weight: str(p.weight),
         college: str(p.college ?? p.school),
-        ...(imageUrl ? { imageUrl } : {}),
+        imageUrl: imageUrl ?? null,
         // The vendor does not use these keys — it puts the date in `age`, so salvage it from there.
         dob: str(p.dob ?? p.birth_date ?? p.date_of_birth) ?? birthDateFromVendorValue(p.age),
         status: str(p.status),
-        fetchedAt: now,
-        expiresAt,
       }
+      pending.set(externalId, data)
+    }
 
+    const values = [...pending.values()]
+    for (let i = 0; i < values.length; i += PLAYER_WRITE_BATCH) {
+      /*
+       * The fetch was always bounded by `deadlineAt`; the WRITE was not, and it is the bigger half.
+       * NCAAF is ~69,600 players: one awaited upsert each ran this pass 12-20 minutes on production
+       * (sync_job_runs 2026-10-11..17, median 722s, 9 of 10 runs over 5 minutes), far past the
+       * edge's 5-minute cut and the route's own 240s budget. A batch is the unit the deadline can
+       * now stop between; rows past it are counted as deferred for the next fire, not dropped.
+       */
+      if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt) {
+        const left = values.length - i
+        result.deferredLeagues.push(`${label} (${left} players unwritten)`)
+        break
+      }
+      const chunk = values.slice(i, i + PLAYER_WRITE_BATCH)
       try {
-        await prisma.sportsPlayer.upsert({
-          where: { sport_externalId_source: { sport, externalId, source: SOURCE } },
-          update: data,
-          create: { sport, externalId, source: SOURCE, ...data },
-        })
-        result.written += 1
-        result.byLeague[label]!.written += 1
+        await upsertRiPlayerBatch({ sport, rows: chunk, now, expiresAt })
+        result.written += chunk.length
+        result.byLeague[label]!.written += chunk.length
       } catch (e) {
         if (result.errors.length < 10) {
-          result.errors.push(`upsert player ${externalId}: ${e instanceof Error ? e.message : String(e)}`)
+          result.errors.push(
+            `upsert players ${label} batch ${i / PLAYER_WRITE_BATCH}: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
+          )
         }
       }
     }
   }
 
   return result
+}
+
+/** One provider row as written to `SportsPlayer` (sport, source and timestamps are per call). */
+export interface RiPlayerRow {
+  externalId: string
+  name: string
+  position: string | null
+  team: string | null
+  teamId: string | null
+  number: number | null
+  age: number | null
+  height: string | null
+  weight: string | null
+  college: string | null
+  /** NULL means "the feed sent none" — the stored image is KEPT, exactly as the old update omitted it. */
+  imageUrl: string | null
+  dob: string | null
+  status: string | null
+}
+
+const PLAYER_WRITE_BATCH = 500
+
+/**
+ * `INSERT ... ON CONFLICT` for up to PLAYER_WRITE_BATCH players — the same row the per-row Prisma
+ * upsert wrote, one statement instead of 500 round trips.
+ *
+ *   - `id` has no DB default (Prisma generates it), hence `gen_random_uuid()`.
+ *   - `createdAt`, `sleeperId` and `yearsExp` are never touched on conflict; the old update did not
+ *     name them either.
+ *   - `imageUrl` is `COALESCE(new, stored)`: the old update only included it when the feed sent one.
+ *   - Timestamps are WITHOUT time zone and stored as UTC, so they bind as ISO strings cast to
+ *     `timestamp` rather than as Dates the session zone could shift.
+ */
+async function upsertRiPlayerBatch(args: {
+  sport: string
+  rows: RiPlayerRow[]
+  now: Date
+  expiresAt: Date
+}): Promise<void> {
+  if (args.rows.length === 0) return
+  const nowUtc = args.now.toISOString()
+  const expiresUtc = args.expiresAt.toISOString()
+  await prisma.$executeRaw`
+    INSERT INTO "SportsPlayer"
+      ("id", "sport", "externalId", "source", "name", "position", "team", "teamId", "number", "age",
+       "height", "weight", "college", "imageUrl", "dob", "status", "fetchedAt", "expiresAt",
+       "createdAt", "updatedAt")
+    VALUES ${Prisma.join(
+      args.rows.map(
+        (r) => Prisma.sql`(gen_random_uuid()::text, ${args.sport}, ${r.externalId}, ${SOURCE}, ${r.name},
+          ${r.position}::text, ${r.team}::text, ${r.teamId}::text, ${r.number}::integer, ${r.age}::integer,
+          ${r.height}::text, ${r.weight}::text, ${r.college}::text, ${r.imageUrl}::text, ${r.dob}::text,
+          ${r.status}::text, ${nowUtc}::timestamp, ${expiresUtc}::timestamp, ${nowUtc}::timestamp,
+          ${nowUtc}::timestamp)`,
+      ),
+    )}
+    ON CONFLICT ("sport", "externalId", "source") DO UPDATE SET
+      "name" = EXCLUDED."name",
+      "position" = EXCLUDED."position",
+      "team" = EXCLUDED."team",
+      "teamId" = EXCLUDED."teamId",
+      "number" = EXCLUDED."number",
+      "age" = EXCLUDED."age",
+      "height" = EXCLUDED."height",
+      "weight" = EXCLUDED."weight",
+      "college" = EXCLUDED."college",
+      "imageUrl" = COALESCE(EXCLUDED."imageUrl", "SportsPlayer"."imageUrl"),
+      "dob" = EXCLUDED."dob",
+      "status" = EXCLUDED."status",
+      "fetchedAt" = EXCLUDED."fetchedAt",
+      "expiresAt" = EXCLUDED."expiresAt",
+      "updatedAt" = EXCLUDED."updatedAt"`
 }

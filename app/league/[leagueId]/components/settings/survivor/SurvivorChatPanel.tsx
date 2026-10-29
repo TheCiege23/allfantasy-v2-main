@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { SettingsSection, SettingsRow } from '../../../tabs/settings/components'
 import type { SurvivorSettingsPanelProps } from './types'
+import { SurvivorShareCardsSetting } from './SurvivorShareCardsSetting'
 
 export function SurvivorChatPanel({ leagueId, canEdit }: SurvivorSettingsPanelProps) {
   const d = !canEdit
@@ -84,7 +85,9 @@ export function SurvivorChatPanel({ leagueId, canEdit }: SurvivorSettingsPanelPr
         {faqMessage && <p className="text-xs text-[#ffb8d1]/90">{faqMessage}</p>}
       </SettingsSection>
 
-      <p className="text-xs text-white/50">Island, tribe, Exile and jury channel access follows each manager’s current game state. Custom chat-permission overrides are not available in the NBA pilot.</p>
+      <SurvivorShareCardsSetting leagueId={leagueId} canEdit={canEdit} />
+
+      <p className="text-xs text-white/50">Island, tribe, Exile and jury channel access follows each manager’s current game state. Custom chat-permission overrides are not available yet.</p>
     </div>
   )
 }

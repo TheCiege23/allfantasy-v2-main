@@ -10,6 +10,12 @@ import { invalidateLeagueDraftCaches } from "@/lib/league/invalidateLeagueDraftC
 import { getPlatformEvents, EVENT } from "@/lib/events"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import type { LeagueSport } from "@prisma/client"
+import {
+  normalizeTradeReviewChoice,
+  publishTradeReviewChange,
+  withTradeReviewMode,
+  writeLeagueWithTradeReview,
+} from "@/lib/league-trade-engine/leagueTradeReviewSetting"
 
 const ALLOWED_TOP_LEVEL = [
   "name",
@@ -71,7 +77,8 @@ export async function getLeagueConfiguration(leagueId: string): Promise<LeagueCo
 
 export async function updateLeagueSettings(
   leagueId: string,
-  patch: LeagueSettingsPatch
+  patch: LeagueSettingsPatch,
+  actorUserId?: string,
 ): Promise<LeagueConfigurationView | null> {
   const updates: Record<string, unknown> = {}
   for (const key of ALLOWED_TOP_LEVEL) {
@@ -83,13 +90,18 @@ export async function updateLeagueSettings(
     const v = patch[key as keyof LeagueSettingsPatch]
     if (v !== undefined) settingsUpdates[key] = v
   }
+  // Trade review is written to every store a trade runtime reads (lib/league-trade-engine/leagueTradeReviewSetting.ts).
+  const tradeReview = normalizeTradeReviewChoice(patch.tradeReviewType)
+  let settingsBefore: Record<string, unknown> = {}
   if (Object.keys(settingsUpdates).length > 0) {
     const league = await prisma.league.findUnique({
       where: { id: leagueId },
       select: { settings: true },
     })
     const current = (league?.settings as Record<string, unknown>) || {}
-    updates.settings = { ...current, ...settingsUpdates }
+    settingsBefore = current
+    const merged = { ...current, ...settingsUpdates }
+    updates.settings = tradeReview ? withTradeReviewMode(merged, tradeReview) : merged
   }
   if (Object.keys(updates).length === 0) return getLeagueConfiguration(leagueId)
 
@@ -103,10 +115,10 @@ export async function updateLeagueSettings(
     settingsUpdates.rosterPositions !== undefined ||
     settingsUpdates.benchSize !== undefined
 
-  await prisma.league.update({
-    where: { id: leagueId },
-    data: updates,
-  })
+  await writeLeagueWithTradeReview(leagueId, updates, tradeReview)
+  if (tradeReview) {
+    await publishTradeReviewChange({ leagueId, actorUserId, settingsBefore, settingsAfter: updates.settings as Record<string, unknown> })
+  }
   if (rosterOrTemplateTouched) {
     invalidateLeagueDraftCaches(leagueId)
   }

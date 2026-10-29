@@ -16,6 +16,8 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
+const settingsProfile = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/user-settings', () => ({ getSettingsProfile: settingsProfile }))
 const outboxFindMany = vi.fn()
 const outboxUpdateMany = vi.fn()
 const outboxUpdate = vi.fn()
@@ -101,11 +103,27 @@ beforeEach(() => {
 })
 
 describe('notification outbox relay', () => {
+  it('retries a partial device failure instead of losing the failed phone', async () => {
+    stageRows([row({ channel: 'push' })])
+    sendPushToUser.mockResolvedValue([{ ok: true }, { ok: false, error: '503' }])
+    const result = await relayNotificationOutbox()
+    expect(result.retried).toBe(1)
+    expect(writeback().status).toBe('pending')
+  })
+
+  it('expires a live alert after an outage instead of replaying it late', async () => {
+    stageRows([row({ channel: 'push', metadata: { expiresAt: new Date(Date.now() - 1000).toISOString() } })])
+    const result = await relayNotificationOutbox()
+    expect(sendPushToUser).not.toHaveBeenCalled()
+    expect(result.skipped).toBe(1)
+    expect(writeback().lastError).toContain('expired')
+  })
+
   it('claims pending rows conditionally so two concurrent runs cannot double-send', async () => {
     stageRows([row()])
     await relayNotificationOutbox()
 
-    const claim = outboxUpdateMany.mock.calls[0]![0] as {
+    const claim = outboxUpdateMany.mock.calls.find(call => call[0].where.status === 'pending')![0] as {
       where: Record<string, unknown>
       data: Record<string, unknown>
     }
@@ -252,4 +270,36 @@ describe('notification outbox relay', () => {
       expect((call[0] as { data: { status: string } }).data.status).toBe('sent')
     }
   })
+})
+
+it.each(['email', 'push'])('suppresses a queued %s during quiet hours without morning replay', async channel => {
+ vi.useFakeTimers()
+ try {
+  vi.setSystemTime(new Date('2026-10-20T08:00:00Z'))
+  settingsProfile.mockResolvedValue({ email: 'manager@example.com', timezone: 'America/New_York', notificationPreferences: { globalEnabled: true, quietHours: { enabled: true, startHour: 22, endHour: 7, allowCritical: false }, categories: { injury_alerts: { enabled: true, inApp: true, email: true, push: true, sms: false } } } })
+  stageRows([row({ channel, metadata: { notificationCategory: 'injury_alerts', severity: 'high' } })])
+  const result = await relayNotificationOutbox()
+  expect(result.skipped).toBe(1)
+  expect(result.retried).toBe(0)
+  expect(sendNotificationEmail).not.toHaveBeenCalled()
+  expect(sendPushToUser).not.toHaveBeenCalled()
+  expect(writeback().lastError).toContain('quiet hours')
+ } finally { vi.useRealTimers() }
+})
+
+describe('stale game retry suppression', () => {
+  it.each(['email', 'push'])('drops legacy %s rows without expiry metadata', async channel => {
+    stageRows([row({ channel, eventType: 'game_final', createdAt: new Date(Date.now() - 86400_000) })])
+    await relayNotificationOutbox()
+    expect(sendNotificationEmail).not.toHaveBeenCalled()
+    expect(sendPushToUser).not.toHaveBeenCalled()
+    expect(outboxUpdate.mock.calls.some(call => call[0].data.lastError === 'notification expired before delivery')).toBe(true)
+  })
+})
+
+it('preserves fresh game email retries', async () => {
+  stageRows([row({channel:'email',eventType:'game_period_end',createdAt:new Date()})])
+  await relayNotificationOutbox()
+  expect(sendNotificationEmail).toHaveBeenCalled()
+  expect(writeback().status).toBe('sent')
 })

@@ -28,6 +28,8 @@ type Props = {
   onCancel: (claimId: string) => void
   /** Step 3C: move a claim up/down in the processing order (swaps priority with its neighbor). */
   onReorder?: (claimId: string, direction: "up" | "down") => void
+  /** "Processes after …" for a claim on a player still on waivers after a drop; null otherwise. */
+  processesAfterLabel?: (c: PendingClaimRow) => string | null
 }
 
 /**
@@ -42,6 +44,7 @@ export default function PendingClaimsList({
   onSave,
   onCancel,
   onReorder,
+  processesAfterLabel,
 }: Props) {
   return (
     <div className="rounded-xl border border-white/10 bg-black/20 p-4" data-testid="pending-claims-list">
@@ -69,6 +72,14 @@ export default function PendingClaimsList({
                   </span>
                   {c.dropPlayerId && <span className="text-xs text-white/60">Drop {c.dropPlayerId}</span>}
                 </div>
+                {(() => {
+                  const label = processesAfterLabel?.(c)
+                  return label ? (
+                    <span className="text-[11px] text-amber-200" data-testid={`waiver-claim-hold-${c.id}`}>
+                      {label}
+                    </span>
+                  ) : null
+                })()}
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-1.5">
                     <span className="text-white/50">Drop</span>

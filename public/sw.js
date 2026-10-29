@@ -183,6 +183,9 @@ self.addEventListener('push', (event) => {
     payload = { title: APP_NAME, body: event.data.text() };
   }
 
+  // Delivery can lag provider acceptance. Never display an expired game update.
+  if (payload.expiresAt && Date.parse(payload.expiresAt) <= Date.now()) return;
+
   const options = {
     body: payload.body || 'You have a new update.',
     icon: payload.icon || '/af-crest-transparent.png',

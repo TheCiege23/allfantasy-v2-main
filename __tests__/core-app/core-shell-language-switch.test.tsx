@@ -58,7 +58,7 @@ describe('shell copy helpers', () => {
     expect(ageText('3y ago', 'es')).toBe('hace 3 años')
     expect(ageText('just now', 'es')).toBe('justo ahora')
     expect(platformsPhraseText('Sleeper, ESPN, Fantrax, MFL or Fleaflicker', 'es')).toBe('Sleeper, ESPN, Fantrax, MFL o Fleaflicker')
-    expect(leagueConceptText('Guillotine', 'es')).toBe('Guillotina')
+    expect(leagueConceptText('Guilly', 'es')).toBe('Guilly')
     expect(leagueConceptText('Dynasty', 'es')).toBe('Dynasty') // a format name kept as is
   })
 
@@ -153,14 +153,18 @@ describe('the shell follows en → es → en', () => {
       />
     )
     const { rerender } = render(view())
+    fireEvent.click(screen.getByText('League details'))
     expect(text()).toContain('SLEEPER import · what’s on file')
-    expect(text()).toContain('Synced 4m ago')
+    expect(text()).toContain('Connected')
+    expect(text()).not.toContain('4m ago')
     expect(text()).toContain('League type')
 
     h.language = 'es'
     rerender(view())
     expect(text()).toContain('Importación de SLEEPER · qué hay registrado')
-    expect(text()).toContain('Sincronizado hace 4 min')
+    expect(text()).toContain('Conectado')
+    expect(text()).toContain('Detalles de la liga')
+    expect(text()).not.toContain('hace 4 min')
     expect(text()).toContain('Chimmy · Enfrentamiento')
     expect(text()).toContain('Tipo de liga')
     expect(text()).toContain('Análisis de la liga')
@@ -169,7 +173,8 @@ describe('the shell follows en → es → en', () => {
 
     h.language = 'en'
     rerender(view())
-    expect(text()).toContain('Synced 4m ago')
+    expect(text()).toContain('Connected')
+    expect(text()).not.toContain('4m ago')
   })
 
   it('SourceActionLink: visible label and tooltip, and the read-only note', () => {

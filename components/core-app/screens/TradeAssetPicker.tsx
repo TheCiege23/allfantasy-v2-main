@@ -2,7 +2,7 @@
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PickCoverage, RosterPick, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
+import type { PickCoverage, RosterPick, RosterPlayer, TradePickPolicy } from '@/components/core-app/screens/useLeagueRosters'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { readPickPreviewValue, type TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview'
 import { teamLogoUrl as knownTeamLogoUrl } from '@/lib/core-app/teamLogo'
@@ -284,6 +284,11 @@ export function TradeAssetPicker(props: {
    */
   pickCoverage?: PickCoverage
   /**
+   * Which picks the league may trade. In a redraft league (`redraft_current_draft`) only this
+   * season's draft trades: the hand-entry year is pinned to that season and the reason is shown.
+   */
+  pickPolicy?: TradePickPolicy | null
+  /**
    * League size, used only to price a hand-typed pick.
    *
    * ⚠ ABSENT IS FINE: `pickValueByOverall` falls back to its reference league size, so a
@@ -322,7 +327,10 @@ export function TradeAssetPicker(props: {
   const [rows, setRows] = useState<SearchRow[]>([])
   const [searching, setSearching] = useState(false)
 
-  const [pickYear, setPickYear] = useState(new Date().getFullYear() + 1)
+  const currentDraftOnly = props.pickPolicy?.futurePicksAllowed === false
+  const pinnedPickYear = currentDraftOnly ? props.pickPolicy?.season ?? new Date().getFullYear() : null
+  const [pickYear, setPickYear] = useState(pinnedPickYear ?? new Date().getFullYear() + 1)
+  const effectivePickYear = pinnedPickYear ?? pickYear
   const [pickRound, setPickRound] = useState(1)
   const [faab, setFaab] = useState(10)
 
@@ -637,6 +645,10 @@ export function TradeAssetPicker(props: {
                 )
               })}
             </>
+          ) : props.rosterKnown && currentDraftOnly && props.pickPolicy?.draftClosedReason ? (
+            <p className="af-tc-row-sub">{copy(props.pickPolicy.draftClosedReason)}</p>
+          ) : props.rosterKnown && currentDraftOnly ? (
+            <p className="af-tc-row-sub">{copy('This team holds no unmade picks in this season’s draft.')}</p>
           ) : props.rosterKnown ? (
             <p className="af-tc-row-sub">
               {copy(props.pickCoverage === 'complete'
@@ -650,15 +662,24 @@ export function TradeAssetPicker(props: {
             <p className="af-tc-row-sub">{copy(" Only picks that have changed hands are listed: we could not tell how many rounds this league's rookie draft has, so a team's own picks are not shown. ")}</p>
           ) : null}
 
+          {/*
+            A redraft league trades this season's draft only. Future picks are not listed above, and the
+            hand-entry year is pinned, with the reason said rather than a year silently refused on send.
+          */}
+          {currentDraftOnly && props.pickPolicy?.futurePicksReason ? (
+            <p className="af-tc-row-sub" data-testid="trade-picker-future-picks-reason">{copy(props.pickPolicy.futurePicksReason)}</p>
+          ) : null}
           <span className="af-label">{copy("Add a pick by hand")}</span>
           <label className="af-tc-field">
             <span className="af-label">{copy("Year")}</span>
             <input
               className="af-tc-input"
               type="number"
-              value={pickYear}
-              min={new Date().getFullYear()}
-              max={new Date().getFullYear() + 5}
+              value={effectivePickYear}
+              min={pinnedPickYear ?? new Date().getFullYear()}
+              max={pinnedPickYear ?? new Date().getFullYear() + 5}
+              disabled={pinnedPickYear != null}
+              title={pinnedPickYear != null ? props.pickPolicy?.futurePicksReason ?? undefined : undefined}
               onChange={(e) => setPickYear(Number(e.target.value))}
             />
           </label>
@@ -679,9 +700,9 @@ export function TradeAssetPicker(props: {
             onClick={() =>
               props.onPick({
                 kind: 'pick',
-                year: pickYear,
+                year: effectivePickYear,
                 round: pickRound,
-                label: `${pickYear} round ${pickRound}`,
+                label: `${effectivePickYear} round ${pickRound}`,
                 /*
                  * 🛑 THIS WAS null AND THE REASONING FOR IT WAS WRONG. The old comment said a
                  * hand-typed pick "has no round we can trust" — but the round comes from a
@@ -694,7 +715,7 @@ export function TradeAssetPicker(props: {
                  * says so and is unchanged.
                  */
                 value: props.leagueId ? readPickPreviewValue({
-                  leagueId: props.leagueId, book: props.pickPreviewBook, year: pickYear, round: pickRound,
+                  leagueId: props.leagueId, book: props.pickPreviewBook, year: effectivePickYear, round: pickRound,
                 }) : pickValueByOverall({
                   round: pickRound,
                   teams: props.teamCount ?? null,

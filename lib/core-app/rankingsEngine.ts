@@ -164,7 +164,7 @@ export const TYPE_LABEL: Record<LeagueTypeFilter, string> = {
   keeper: 'Keeper',
   dynasty: 'Dynasty',
   bestball: 'Best ball',
-  guillotine: 'Guillotine',
+  guillotine: 'Guilly',
 }
 
 export const FORMAT_LABEL: Record<FormatFilter, string> = {

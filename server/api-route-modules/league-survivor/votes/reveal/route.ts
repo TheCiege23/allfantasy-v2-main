@@ -1,12 +1,13 @@
 /**
  * POST /api/leagues/[leagueId]/survivor/votes/reveal
- * Commissioner-only: reveal locked votes and resolve elimination.
+ * Commissioner: publish the Torch Ceremony for the tallied council. Delegates to the canonical
+ * reveal, which posts the ceremony and sets the reveal flag in one transaction.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueCommissioner } from '@/lib/league/league-access'
-import { tallyVotes, getSeasonPointsFromRosterPerformance } from '@/lib/survivor/SurvivorVoteEngine'
+import { publishCouncilVerdictIfComplete, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { prisma } from '@/lib/prisma'
 
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
@@ -28,19 +29,14 @@ export async function POST(
   if (!gate.ok) return NextResponse.json({ error: 'Commissioner only' }, { status: gate.status ?? 403 })
 
   const council = await prisma.survivorTribalCouncil.findFirst({
-    where: { leagueId, status: 'votes_locked' },
+    where: { leagueId, isRevealed: false, status: { in: ['closed', 'tie_pending', 'voting_closed'] } },
     orderBy: { createdAt: 'desc' },
   })
-  if (!council) return NextResponse.json({ error: 'No locked council found' }, { status: 404 })
+  if (!council) return NextResponse.json({ error: 'No tallied council is waiting to be revealed' }, { status: 404 })
 
-  try {
-    const tally = await tallyVotes(council.id, {
-      getSeasonPointsForRoster: (lid, rid, week) =>
-        getSeasonPointsFromRosterPerformance(lid, rid, week),
-    })
-    return NextResponse.json({ ok: true, councilId: council.id, tally })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
-  }
+  const result = await revealCouncil(leagueId, council.id, userId)
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+  // The outcome is not echoed here: it is published only when the last ballot has been read.
+  await publishCouncilVerdictIfComplete(leagueId, council.id)
+  return NextResponse.json({ ok: true, councilId: council.id })
 }

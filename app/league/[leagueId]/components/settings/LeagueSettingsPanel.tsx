@@ -7,6 +7,13 @@ import { PremiumGate } from '@/components/subscription/PremiumGate'
 import { SubscriptionGateBadge } from '@/components/subscription/SubscriptionGateBadge'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useSubscriptionGateOptional } from '@/hooks/useSubscriptionGate'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { KEEPER_MAX_TEAMS, ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
+import {
+  EXTRA_MATCHUP_SETTINGS_KEY,
+  readExtraMatchupSettings,
+  type ExtraMatchupSettings,
+} from '@/lib/redraft/oddTeamExtraMatchupRules'
 import {
   SettingsPanelHeading,
   SettingsSectionLabel,
@@ -15,6 +22,20 @@ import {
   SettingsRadioGroup,
   controlClass,
 } from './settings-ui'
+
+/** `League.keeperRoundPenalty`: rounds EARLIER than last season; 0 = same round, negative = later. */
+const KEEPER_ROUND_SHIFTS = [5, 4, 3, 2, 1, 0, -1, -2, -3]
+
+function roundShiftLabel(n: number): string {
+  if (n === 0) return 'Same round as last season'
+  const rounds = Math.abs(n) === 1 ? '1 round' : `${Math.abs(n)} rounds`
+  return n > 0 ? `${rounds} up (earlier)` : `${rounds} down (later)`
+}
+
+function roundOrNull(value: unknown): number | null {
+  const n = Number(value)
+  return value != null && value !== '' && Number.isInteger(n) && n >= 1 ? n : null
+}
 
 export function LeagueSettingsPanel({
   leagueId,
@@ -34,6 +55,7 @@ export function LeagueSettingsPanel({
   save: (partial: Record<string, unknown>) => Promise<void>
   debouncedSave: (partial: Record<string, unknown>) => void
 }) {
+  const { t } = useOptionalLanguage()
   const [name, setName] = useState(initialData.name ?? '')
   const [season, setSeason] = useState(initialData.season ?? new Date().getFullYear())
   const [language, setLanguage] = useState(initialData.language ?? 'en')
@@ -45,6 +67,7 @@ export function LeagueSettingsPanel({
   )
   const [timezone, setTimezone] = useState(initialData.timezone ?? 'America/New_York')
   const [medianGame, setMedianGame] = useState(Boolean(initialData.medianGame))
+  const [medianInPlayoffs, setMedianInPlayoffs] = useState(initialData.medianGameInPlayoffs === true)
   const [leagueType, setLeagueType] = useState((initialData.leagueType ?? 'redraft') as string)
   const [leagueSize, setLeagueSize] = useState(initialData.leagueSize ?? 12)
   const [allowPreDraft, setAllowPreDraft] = useState(Boolean(initialData.allowPreDraftMoves))
@@ -65,6 +88,9 @@ export function LeagueSettingsPanel({
   const [keeperWaiverAllowed, setKeeperWaiverAllowed] = useState(initialData.keeperWaiverAllowed ?? true)
   const [keeperMinRoundsHeld, setKeeperMinRoundsHeld] = useState(initialData.keeperMinRoundsHeld ?? 0)
   const [keeperDeadlineLocal, setKeeperDeadlineLocal] = useState('')
+  const [keeperConflictRule, setKeeperConflictRule] = useState(initialData.keeperConflictRule ?? 'player_chooses')
+  const [keeperWaiverRound, setKeeperWaiverRound] = useState<number | null>(roundOrNull(settingsSnapshot.keeper_waiver_cost_round))
+  const [keeperMinCostRound, setKeeperMinCostRound] = useState<number | null>(roundOrNull(settingsSnapshot.keeper_min_cost_round))
 
   useEffect(() => {
     setName(initialData.name ?? '')
@@ -76,6 +102,7 @@ export function LeagueSettingsPanel({
     )
     setTimezone(initialData.timezone ?? 'America/New_York')
     setMedianGame(Boolean(initialData.medianGame))
+    setMedianInPlayoffs(initialData.medianGameInPlayoffs === true)
     setLeagueType(initialData.leagueType ?? 'redraft')
     setLeagueSize(initialData.leagueSize ?? 12)
     setAllowPreDraft(Boolean(initialData.allowPreDraftMoves))
@@ -93,6 +120,9 @@ export function LeagueSettingsPanel({
     setKeeperMaxYears(initialData.keeperMaxYears ?? 3)
     setKeeperWaiverAllowed(initialData.keeperWaiverAllowed ?? true)
     setKeeperMinRoundsHeld(initialData.keeperMinRoundsHeld ?? 0)
+    setKeeperConflictRule(initialData.keeperConflictRule ?? 'player_chooses')
+    setKeeperWaiverRound(roundOrNull(settingsSnapshot.keeper_waiver_cost_round))
+    setKeeperMinCostRound(roundOrNull(settingsSnapshot.keeper_min_cost_round))
     if (initialData.keeperSelectionDeadline) {
       const d = new Date(initialData.keeperSelectionDeadline)
       setKeeperDeadlineLocal(d.toISOString().slice(0, 16))
@@ -238,6 +268,7 @@ export function LeagueSettingsPanel({
       <div>
         <SettingsSectionLabel>Number of teams</SettingsSectionLabel>
         <select
+          data-testid="settings-league-size"
           className={controlClass}
           disabled={disabled}
           value={leagueSize}
@@ -247,12 +278,26 @@ export function LeagueSettingsPanel({
             debouncedSave({ leagueSize: n })
           }}
         >
-          {Array.from({ length: 15 }, (_, i) => i + 4).map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
+          {/* Keeper runs to 20 teams (lib/league/oddTeamLeagues.ts); every other format keeps 4–18 here. */}
+          {Array.from({ length: (leagueType === 'keeper' ? Math.max(KEEPER_MAX_TEAMS, leagueSize) : Math.max(18, leagueSize)) - 3 }, (_, i) => i + 4).map((n) => {
+            // An odd keeper size is an AF Commissioner option; the settings PATCH refuses it without the plan.
+            const locked = !hasCommissionerAccess && n !== leagueSize && oddTeamCountNeedsAfCommissioner(leagueType, n)
+            return (
+              <option key={n} value={n} disabled={locked}>
+                {n}{locked ? ' · AF Commissioner' : ''}
+              </option>
+            )
+          })}
         </select>
+        {!hasCommissionerAccess && leagueType === 'keeper' ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="settings-odd-keeper-size-locked">
+            <SettingsHelper>Odd team counts for a keeper league are part of AF Commissioner.</SettingsHelper>
+            <SubscriptionGateBadge
+              featureId="commissioner_ai_tools"
+              onClick={() => subscriptionGate?.gate('commissioner_ai_tools')}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-2">
@@ -266,6 +311,27 @@ export function LeagueSettingsPanel({
             void save({ medianGame: v })
           }}
         />
+        {medianGame ? (
+          <SettingsToggleRow
+            label="League median in playoffs"
+            description="Off: playoff weeks are win-or-go-home only. On: median results still count in playoff weeks, in season records only — the bracket is decided by playoff scores alone."
+            checked={medianInPlayoffs}
+            disabled={disabled}
+            onChange={(v) => {
+              setMedianInPlayoffs(v)
+              void save({ medianGameInPlayoffs: v })
+            }}
+          />
+        ) : null}
+        {isOddTeamCount(leagueSize) && ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(leagueType) ? (
+          <ExtraMatchupSettingsBlock
+            initial={readExtraMatchupSettings(settingsSnapshot)}
+            disabled={disabled}
+            hasAccess={hasCommissionerAccess}
+            onUpgrade={() => subscriptionGate?.gate('commissioner_ai_tools')}
+            save={(value) => void save({ settingsMerge: { [EXTRA_MATCHUP_SETTINGS_KEY]: value } })}
+          />
+        ) : null}
         <SettingsToggleRow
           label="Allow moves pre-draft"
           checked={allowPreDraft}
@@ -285,7 +351,8 @@ export function LeagueSettingsPanel({
           }}
         />
         <SettingsToggleRow
-          label="Lock all free agent and waiver moves"
+          label={t('leagueSettings.lockAllRosterMoves')}
+          description={t('leagueSettings.lockAllRosterMovesHint')}
           checked={lockMoves}
           disabled={disabled}
           dimmed={false}
@@ -416,8 +483,9 @@ export function LeagueSettingsPanel({
 
           {(keeperCostSystem === 'round_based' || keeperCostSystem === 'inflation') && (
             <div>
-              <label className="mb-1 block text-[11px] text-white/45">Round penalty (rounds earlier)</label>
+              <label className="mb-1 block text-[11px] text-white/45" htmlFor="kp-penalty">Keeper cost vs. last season</label>
               <select
+                id="kp-penalty"
                 className="rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
                 disabled={disabled}
                 value={keeperRoundPenalty}
@@ -427,12 +495,15 @@ export function LeagueSettingsPanel({
                   debouncedSave({ keeperRoundPenalty: n })
                 }}
               >
-                {[1, 2, 3, 4, 5].map((n) => (
+                {KEEPER_ROUND_SHIFTS.map((n) => (
                   <option key={n} value={n}>
-                    {n}
+                    {roundShiftLabel(n)}
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-[11px] text-white/40">
+                Up = an earlier, pricier round (drafted R5 → R4). Down = a later, cheaper round (R5 → R6).
+              </p>
             </div>
           )}
 
@@ -512,6 +583,84 @@ export function LeagueSettingsPanel({
             Allow waiver pickups as keepers
           </label>
 
+          {keeperWaiverAllowed && keeperCostSystem !== 'free' && keeperCostSystem !== 'auction_value' && (
+            <div>
+              <label className="mb-1 block text-[11px] text-white/45" htmlFor="kp-waiver-round">Waiver pickups cost</label>
+              <select
+                id="kp-waiver-round"
+                className="rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
+                disabled={disabled}
+                value={keeperWaiverRound ?? ''}
+                onChange={(e) => {
+                  const n = e.target.value === '' ? null : Number(e.target.value)
+                  setKeeperWaiverRound(n)
+                  debouncedSave({ settingsMerge: { keeper_waiver_cost_round: n } })
+                }}
+              >
+                <option value="">The last round</option>
+                {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    Round {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {keeperCostSystem !== 'free' && keeperCostSystem !== 'auction_value' && (
+            <>
+              <div>
+                <label className="mb-1 block text-[11px] text-white/45" htmlFor="kp-floor">Earliest round a keeper can cost</label>
+                <select
+                  id="kp-floor"
+                  className="rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
+                  disabled={disabled}
+                  value={keeperMinCostRound ?? ''}
+                  onChange={(e) => {
+                    const n = e.target.value === '' ? null : Number(e.target.value)
+                    setKeeperMinCostRound(n)
+                    debouncedSave({ settingsMerge: { keeper_min_cost_round: n } })
+                  }}
+                >
+                  <option value="">No limit</option>
+                  {Array.from({ length: 9 }, (_, i) => i + 2).map((n) => (
+                    <option key={n} value={n}>
+                      Round {n}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-white/40">Round 2 means first-round players can&apos;t be kept.</p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] text-white/45" htmlFor="kp-same-round">Two keepers that cost the same round</label>
+                <select
+                  id="kp-same-round"
+                  className="w-full max-w-md rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
+                  disabled={disabled}
+                  value={keeperConflictRule}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setKeeperConflictRule(v)
+                    void save({ keeperConflictRule: v })
+                  }}
+                >
+                  <option value="player_chooses">Not allowed: the manager picks one</option>
+                  <option value="reject_both">Not allowed: neither is kept</option>
+                  <option value="lose_round_before" disabled={!hasAfCommissionerSub && keeperConflictRule !== 'lose_round_before'}>
+                    Lose that round plus the round before{hasAfCommissionerSub ? '' : ' · AF Commissioner'}
+                  </option>
+                  <option value="lose_round_after" disabled={!hasAfCommissionerSub && keeperConflictRule !== 'lose_round_after'}>
+                    Lose that round plus the round after{hasAfCommissionerSub ? '' : ' · AF Commissioner'}
+                  </option>
+                </select>
+                <p className="mt-1 text-[11px] text-white/40">
+                  A pick a team traded away is handled the same way: the keeper moves to the next pick the team still owns.
+                </p>
+              </div>
+            </>
+          )}
+
           <div>
             <label className="mb-1 block text-[11px] text-white/45">Keeper selection deadline (local)</label>
             <input
@@ -570,6 +719,76 @@ export function LeagueSettingsPanel({
             </PremiumGate>
           ) : null}
         </div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * The extra matchup an odd-team league can play instead of the weekly bye (AF Commissioner). Without
+ * the plan the controls are shown locked with the upgrade badge — except "off", which is always
+ * allowed so a league whose plan lapsed can still turn it off. The server enforces the same.
+ */
+function ExtraMatchupSettingsBlock({
+  initial,
+  disabled,
+  hasAccess,
+  onUpgrade,
+  save,
+}: {
+  initial: ExtraMatchupSettings
+  disabled: boolean
+  hasAccess: boolean
+  onUpgrade: () => void
+  save: (value: ExtraMatchupSettings) => void
+}) {
+  const [value, setValue] = useState(initial)
+  useEffect(() => setValue(initial), [initial.enabled, initial.opponent, initial.scoring])
+  const locked = !hasAccess
+  const apply = (next: ExtraMatchupSettings) => {
+    setValue(next)
+    save(next)
+  }
+  return (
+    <div className="space-y-3 rounded-xl border border-white/[0.08] bg-black/15 p-4" data-testid="settings-extra-matchup">
+      <SettingsToggleRow
+        label="Extra matchup instead of a bye"
+        description="Each week the team the schedule leaves without an opponent plays an extra game. Regular season only; league median still applies to everyone."
+        checked={value.enabled}
+        disabled={disabled || (locked && !value.enabled)}
+        onChange={(enabled) => apply({ ...value, enabled })}
+      />
+      {locked ? (
+        <div className="flex flex-wrap items-center gap-2" data-testid="settings-extra-matchup-locked">
+          <SettingsHelper>The extra matchup is part of AF Commissioner.</SettingsHelper>
+          <SubscriptionGateBadge featureId="commissioner_ai_tools" onClick={onUpgrade} />
+        </div>
+      ) : null}
+      {value.enabled ? (
+        <>
+          <SettingsSectionLabel>Extra matchup opponent</SettingsSectionLabel>
+          <SettingsRadioGroup
+            name="Extra matchup opponent"
+            value={value.opponent}
+            disabled={disabled || locked}
+            onChange={(opponent) => apply({ ...value, opponent })}
+            options={[
+              { id: 'top_scorer', title: "Last week's top scorer", description: 'Week 1: the highest projected team, or a seeded draw.' },
+              { id: 'median', title: "Last week's median team", description: 'The middle scorer; ties go by the standings.' },
+            ]}
+          />
+          <SettingsSectionLabel>The extra game counts for</SettingsSectionLabel>
+          <SettingsRadioGroup
+            name="Extra matchup scoring"
+            value={value.scoring}
+            disabled={disabled || locked}
+            onChange={(scoring) => apply({ ...value, scoring })}
+            options={[
+              { id: 'leftover_only', title: 'The leftover team only', description: "The chosen team's own game is its result that week." },
+              { id: 'both', title: 'Both teams', description: 'The chosen team can go 2-0, 1-1 or 0-2. Standings rank by win %.' },
+            ]}
+          />
+        </>
       ) : null}
     </div>
   )

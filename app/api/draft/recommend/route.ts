@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 /**
  * POST /api/draft/recommend — deterministic draft recommendation.
  * Uses only provided pool and draft state; no invented players. For live and mock draft.
@@ -20,7 +21,7 @@ import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(req: NextRequest) {
+async function paidToolPost(req: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as {
     user?: { id?: string; email?: string | null }
   } | null
@@ -133,6 +134,7 @@ export async function POST(req: NextRequest) {
 
     const aiUsed = Boolean(result.aiExplanationUsed)
     const fallbackToDeterministic = includeAIExplanation && !aiUsed
+    if (fallbackToDeterministic) paidToolNotDelivered()
 
     // Slice 10 — Draft OS shadow: the FIRST production caller of
     // lib/shared-services/draft (previously test-only scaffolding). Gated by
@@ -229,3 +231,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to generate draft recommendation' }, { status: 500 })
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

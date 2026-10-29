@@ -45,7 +45,7 @@ describe('Awards route contracts', () => {
 
   it('forwards list filters and validates award type', async () => {
     listAwardsMock.mockResolvedValue([])
-    const { GET } = await import('@/app/api/leagues/[leagueId]/awards/route')
+    const { GET } = await import('@/app/api/leagues/[leagueId]/awards/handler')
     const req = new Request(
       'http://localhost/api/leagues/lg-1/awards?season=2025&awardType=gm_of_the_year&limit=25'
     )

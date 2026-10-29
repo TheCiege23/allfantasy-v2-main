@@ -1,7 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { appendSurvivorAudit } from './SurvivorAuditLog'
-import { syncTribeChatMembersAfterShuffle } from './SurvivorChatMembershipService'
 import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { getMinigameDef } from './SurvivorMiniGameRegistry'
 import { resolveSurvivorCurrentWeek } from './SurvivorTimelineResolver'
@@ -107,13 +106,19 @@ function normalizeChallengeRewards(
     week: number
     challengeType: string
     configJson: Prisma.JsonValue | null
+    /** The row's own reward columns (challengeEngine writes these, not configJson). */
+    rewardType?: string | null
+    rewardAmount?: number | null
   },
   resultJson: Record<string, unknown>
 ): SurvivorResolvedRewardInput[] {
   const config = asJsonObject(challenge.configJson)
   const definition = getMinigameDef(challenge.challengeType as SurvivorChallengeType)
+  const rowRewardType = typeof challenge.rewardType === 'string' && challenge.rewardType.trim() ? challenge.rewardType.trim() : null
+  const rowAmount = typeof challenge.rewardAmount === 'number' && Number.isFinite(challenge.rewardAmount) ? challenge.rewardAmount : null
   const fallbackRewardType =
     readString(config, 'rewardType') ??
+    rowRewardType ??
     (definition?.rewardTypes.length === 1 ? definition.rewardTypes[0] : definition?.rewardTypes[0] ?? null)
 
   const winnerRosterId = typeof resultJson.winnerRosterId === 'string' ? resultJson.winnerRosterId.trim() : ''
@@ -126,7 +131,7 @@ function normalizeChallengeRewards(
         rewardType: fallbackRewardType,
         rosterId: winnerRosterId || null,
         tribeId: winnerTribeId || null,
-        amount: readNumber(config, 'rewardAmount') ?? readNumber(config, 'scoreBoost') ?? null,
+        amount: readNumber(config, 'rewardAmount') ?? readNumber(config, 'scoreBoost') ?? rowAmount,
         powerType: readString(config, 'powerType'),
       },
     ]
@@ -139,7 +144,7 @@ function normalizeChallengeRewards(
           rewardType: reward.trim(),
           rosterId: winnerRosterId || null,
           tribeId: winnerTribeId || null,
-          amount: readNumber(config, 'rewardAmount') ?? readNumber(config, 'scoreBoost') ?? null,
+          amount: readNumber(config, 'rewardAmount') ?? readNumber(config, 'scoreBoost') ?? rowAmount,
           powerType: readString(config, 'powerType'),
         }
       }
@@ -158,7 +163,7 @@ function normalizeChallengeRewards(
           readNumber(rewardJson, 'scoreBoost') ??
           readNumber(config, 'rewardAmount') ??
           readNumber(config, 'scoreBoost') ??
-          null,
+          rowAmount,
         powerType: readString(rewardJson, 'powerType') ?? readString(config, 'powerType'),
       }
     })
@@ -169,6 +174,60 @@ async function resolveRewardRosterTargets(reward: SurvivorResolvedRewardInput): 
   if (reward.rosterId) return [reward.rosterId]
   if (reward.tribeId) return getTribeMemberRosterIds(reward.tribeId)
   return []
+}
+
+type FaabCredit = { credited: boolean; detail: Record<string, unknown> }
+
+/**
+ * A FAAB reward is real budget. Waiver claims spend `RedraftRoster.faabBalance`
+ * (lib/redraft/waiverEngine.ts), reached from the Survivor roster through `Roster.redraftRosterId`;
+ * `Roster.faabRemaining` is the older mirror some readers still show, so both move together when
+ * both exist. A reward id that is already a RedraftRoster id is credited directly. When there is
+ * nothing to credit (no roster, no amount, no balance) the reward is recorded, never invented.
+ */
+async function creditChallengeFaab(leagueId: string, rosterId: string, amount: number | null): Promise<FaabCredit> {
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) return { credited: false, detail: { faabReason: 'no_amount' } }
+  const detail: Record<string, unknown> = {}
+  let credited = false
+  const creditRedraft = async (redraftRosterId: string) => {
+    const redraft = await prisma.redraftRoster.findFirst({ where: { id: redraftRosterId, leagueId }, select: { id: true, faabBalance: true } })
+    if (!redraft || typeof redraft.faabBalance !== 'number' || !Number.isFinite(redraft.faabBalance)) return
+    const next = redraft.faabBalance + amount
+    await prisma.redraftRoster.update({ where: { id: redraft.id }, data: { faabBalance: next } })
+    detail.redraftRosterId = redraft.id
+    detail.faabBalanceBefore = redraft.faabBalance
+    detail.faabBalanceAfter = next
+    credited = true
+  }
+  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, redraftRosterId: true, faabRemaining: true } })
+  if (roster) {
+    if (roster.redraftRosterId) await creditRedraft(roster.redraftRosterId)
+    if (typeof roster.faabRemaining === 'number' && Number.isFinite(roster.faabRemaining)) {
+      const next = roster.faabRemaining + Math.round(amount)
+      await prisma.roster.update({ where: { id: roster.id }, data: { faabRemaining: next } })
+      detail.faabRemainingBefore = roster.faabRemaining
+      detail.faabRemainingAfter = next
+      credited = true
+    }
+  } else {
+    await creditRedraft(rosterId)
+    if (!credited) detail.faabReason = 'roster_not_found'
+  }
+  if (!credited && !detail.faabReason) detail.faabReason = 'no_budget_to_credit'
+  return { credited, detail }
+}
+
+/**
+ * Individual immunity won in a challenge: the flag the canonical council reads
+ * (survivorCouncilService.loadScopePlayers) to keep the manager off that week's ballot. Cleared
+ * at the week flip with every other non-necklace source.
+ */
+async function grantChallengeImmunity(leagueId: string, rosterId: string): Promise<boolean> {
+  const result = await prisma.survivorPlayer.updateMany({
+    where: { leagueId, redraftRosterId: rosterId, playerState: 'active' },
+    data: { hasImmunityThisWeek: true, immunitySource: 'challenge_win' },
+  })
+  return result.count > 0
 }
 
 export async function applyChallengeRewards(
@@ -183,6 +242,8 @@ export async function applyChallengeRewards(
       week: true,
       challengeType: true,
       configJson: true,
+      rewardType: true,
+      rewardAmount: true,
     },
   })
   if (!challenge) return []
@@ -285,6 +346,15 @@ export async function applyChallengeRewards(
 
     for (const rosterId of rosterTargets) {
       const amount = reward.rewardType === 'score_boost' ? reward.amount ?? 10 : reward.amount ?? null
+      let appliedMode: 'full' | 'record_only' = 'full'
+      let detail: Record<string, unknown> = {}
+      if (reward.rewardType === 'faab') {
+        const credit = await creditChallengeFaab(challenge.leagueId, rosterId, amount)
+        appliedMode = credit.credited ? 'full' : 'record_only'
+        detail = credit.detail
+      } else if (reward.rewardType === 'immunity' || reward.rewardType === 'voting_safety') {
+        appliedMode = (await grantChallengeImmunity(challenge.leagueId, rosterId)) ? 'full' : 'record_only'
+      }
       await appendEffectAudit(challenge.leagueId, 'challenge_reward_awarded', {
         challengeId: challenge.id,
         week: challenge.week,
@@ -292,7 +362,8 @@ export async function applyChallengeRewards(
         rosterId,
         tribeId: reward.tribeId ?? null,
         amount,
-        appliedMode: reward.rewardType === 'faab' ? 'record_only' : 'full',
+        appliedMode,
+        ...detail,
       })
       applied.push({
         rewardType: reward.rewardType,
@@ -300,7 +371,7 @@ export async function applyChallengeRewards(
         rosterId,
         tribeId: reward.tribeId ?? null,
         amount,
-        appliedMode: reward.rewardType === 'faab' ? 'record_only' : 'full',
+        appliedMode,
       })
     }
   }
@@ -652,10 +723,6 @@ export async function executeQueuedShuffleForCouncil(
   const shuffleResult = await runShuffle(leagueId)
   if (!shuffleResult.ok) {
     return { ok: false, shuffled: false, error: shuffleResult.error ?? 'Unable to run tribe shuffle' }
-  }
-  const syncResult = await syncTribeChatMembersAfterShuffle(leagueId)
-  if (!syncResult.ok) {
-    return { ok: false, shuffled: true, error: syncResult.error ?? 'Unable to sync tribe chat memberships after shuffle' }
   }
   return { ok: true, shuffled: true }
 }

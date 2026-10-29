@@ -9,7 +9,7 @@ import { useState } from "react"
  * Two steps (button, then confirm) because cancelling is immediate; see
  * app/api/account/cancel-subscription for the terms and why it has no geo check.
  */
-export function CancelSubscriptionPanel({ hasStripe, hasApple }: { hasStripe: boolean; hasApple: boolean }) {
+export function CancelSubscriptionPanel({ hasStripe, hasApple, hasGooglePlay = false }: { hasStripe: boolean; hasApple: boolean; hasGooglePlay?: boolean }) {
   const [step, setStep] = useState<"idle" | "confirm" | "busy" | "done" | "error">("idle")
   const [error, setError] = useState<string | null>(null)
   const [appleStillActive, setAppleStillActive] = useState(false)
@@ -99,6 +99,7 @@ export function CancelSubscriptionPanel({ hasStripe, hasApple }: { hasStripe: bo
         </>
       ) : null}
 
+      {hasGooglePlay && <a href="https://play.google.com/store/account/subscriptions?package=ai.allfantasy.app" className="block underline">Manage Google Play subscription</a>}
       {hasApple || appleStillActive ? (
         <p className="mt-3 text-amber-50/80" data-testid="paid-restricted-cancel-apple">
           Subscribed in the iPhone app? Apple doesn&apos;t let us cancel that for you — open iPhone Settings → your

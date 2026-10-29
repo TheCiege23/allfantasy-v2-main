@@ -100,8 +100,8 @@ export type SlotCategory = 'starter' | 'bench' | 'ir' | 'taxi' | 'devy'
 export function slotCategory(slotType: string | null | undefined): SlotCategory {
   const s = String(slotType ?? '').trim().toLowerCase()
   if (s === 'bench' || s === 'bn') return 'bench'
-  if (s === 'ir' || s === 'reserve') return 'ir'
-  if (s === 'taxi') return 'taxi'
+  if (s === 'ir' || s === 'reserve' || s === 'il' || s === 'il_plus' || s === 'na') return 'ir'
+  if (s === 'taxi' || s === 'prospect' || s === 'rights' || s === 'minors') return 'taxi'
   if (s === 'devy') return 'devy'
   return 'starter'
 }

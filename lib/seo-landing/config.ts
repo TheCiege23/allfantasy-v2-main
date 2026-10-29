@@ -24,7 +24,7 @@ export type ToolSlug =
   | 'career-share'
   | 'season-strategy'
   | 'ai-draft-assistant'
-  | 'matchup-simulator'
+  | 'simulation-lab'
   | 'bracket-challenge'
   | 'power-rankings'
   | 'legacy-dynasty'
@@ -50,7 +50,7 @@ export const TOOL_SLUGS: ToolSlug[] = [
   'career-share',
   'season-strategy',
   'ai-draft-assistant',
-  'matchup-simulator',
+  'simulation-lab',
   'bracket-challenge',
   'power-rankings',
   'legacy-dynasty',
@@ -291,7 +291,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'Lineup optimization suggestions',
       'League-context aware advice',
     ],
-    relatedToolSlugs: ['trade-analyzer', 'mock-draft-simulator', 'ai-draft-assistant', 'matchup-simulator'],
+    relatedToolSlugs: ['trade-analyzer', 'mock-draft-simulator', 'ai-draft-assistant', 'simulation-lab'],
     keywords: ['waiver wire advisor', 'fantasy waiver', 'pickup recommendations', 'lineup help'],
   },
   'manager-compare': {
@@ -333,7 +333,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'Spot buy-low, sell-high, injury, and hype signals with confidence and recency',
       'Send the names you find directly into the Trade Analyzer workspace',
     ],
-    relatedToolSlugs: ['trade-analyzer', 'waiver-wire-advisor', 'ai-draft-assistant', 'matchup-simulator'],
+    relatedToolSlugs: ['trade-analyzer', 'waiver-wire-advisor', 'ai-draft-assistant', 'simulation-lab'],
     keywords: ['social pulse', 'fantasy sentiment', 'player sentiment', 'grok live search', 'x search fantasy'],
     faqs: [
       { q: 'What sports does Social Pulse support today?', a: 'NFL and NBA live sentiment research today, using X and web search inside AllFantasy.' },
@@ -406,23 +406,27 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     relatedToolSlugs: ['mock-draft-simulator', 'trade-analyzer', 'waiver-wire-advisor', 'legacy-dynasty'],
     keywords: ['AI draft assistant', 'fantasy draft help', 'draft assistant', 'Chimmy AI'],
   },
-  'matchup-simulator': {
-    slug: 'matchup-simulator',
-    title: 'Matchup Simulator – Fantasy Projections & Scenarios | AllFantasy',
+  // Renamed from 'matchup-simulator' 2026-10-20 (owner decision). /tools/matchup-simulator is a 308
+  // to /tools/simulation-lab (app/tools/matchup-simulator/page.tsx). Analytics report the new path.
+  'simulation-lab': {
+    slug: 'simulation-lab',
+    title: 'Simulation Lab – Season, Playoff & Dynasty Simulations | AllFantasy',
     description:
-      'AllFantasy matchup simulator: run season and playoff scenarios, project head-to-head outcomes, and explore dynasty simulations.',
-    headline: 'Matchup Simulator',
+      'AllFantasy Simulation Lab: run season and playoff scenarios, project head-to-head outcomes, and explore dynasty simulations.',
+    headline: 'Simulation Lab',
     benefitSummary:
       'Simulate seasons, playoffs, and matchups. Use data-driven scenarios for redraft and dynasty.',
-    // /matchup-simulator is a 308 to /core/matchup since 2026-09-29 — link the destination.
-    openToolHref: '/core/matchup',
+    // Owner decision 2026-10-20: this card (season, playoff and dynasty simulations) opens the
+    // Simulation Lab. It pointed at /core/matchup from 2026-09-29 (5acd6ddad), when the old
+    // /matchup-simulator page became a 308 there and the lab's API routes were missing.
+    openToolHref: '/app/simulation-lab',
     examples: [
       'Season and playoff simulations',
       'Head-to-head and scoring projections',
       'Dynasty scenario modeling',
     ],
     relatedToolSlugs: ['power-rankings', 'waiver-wire-advisor', 'trade-analyzer', 'legacy-dynasty'],
-    keywords: ['matchup simulator', 'fantasy simulation', 'projection tool', 'playoff simulator'],
+    keywords: ['simulation lab', 'matchup simulator', 'fantasy simulation', 'projection tool', 'playoff simulator', 'dynasty simulator'],
   },
   'bracket-challenge': {
     slug: 'bracket-challenge',
@@ -455,7 +459,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'Sport-specific and multi-sport support',
       'Track rankings over time',
     ],
-    relatedToolSlugs: ['matchup-simulator', 'trade-analyzer', 'waiver-wire-advisor', 'bracket-challenge'],
+    relatedToolSlugs: ['simulation-lab', 'trade-analyzer', 'waiver-wire-advisor', 'bracket-challenge'],
     keywords: ['power rankings', 'fantasy rankings', 'league rankings', 'fantasy power rankings'],
   },
   'legacy-dynasty': {
