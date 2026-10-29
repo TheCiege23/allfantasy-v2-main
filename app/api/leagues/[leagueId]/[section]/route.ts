@@ -50,6 +50,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'dynasty-war-room': () => import('../dynasty-war-room/handler'),
   'eliminated-lineups': () => import('../eliminated-lineups/handler'),
   'fill-empty-slots': () => import('../fill-empty-slots/handler'),
+  'fill-empty-starters': () => import('../fill-empty-starters/handler'),
   'forecast-summary': () => import('../forecast-summary/handler'),
   'graph-insight': () => import('../graph-insight/handler'),
   'guillotine-war-room': () => import('../guillotine-war-room/handler'),

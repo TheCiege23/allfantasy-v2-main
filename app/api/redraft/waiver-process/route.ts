@@ -216,6 +216,30 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Fill an empty starting spot before lock (lib/lineup-automation/fillEmptyStartersService): on by
+   * default in every weekly-lineup league played on AllFantasy, unless the commissioner switched it off.
+   * Fills only empty spots from the bench and tells the commissioner about a spot nobody can play.
+   * Guarded and on its own job identity, like the sweeps around it.
+   */
+  let fillEmptyStarters: unknown = null
+  try {
+    const { runFillEmptyStarters } = await import('@/lib/lineup-automation/fillEmptyStartersService')
+    fillEmptyStarters = await withSyncJobRun(
+      { jobName: 'cron-fill-empty-starters', trigger: 'cron' },
+      () => runFillEmptyStarters(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.filled,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, flagged: r.flagged, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] fill empty starters failed', e)
+    fillEmptyStarters = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Chimmy autopilot (AF Commissioner): teams on autopilot claim a free agent for a starting slot
    * nobody healthy on the roster can fill. Before the waiver window below, so a claim made now can be
    * processed in the same run. Guarded and on its own job identity, like the sweeps above.
@@ -379,5 +403,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autoBenchByes, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autoBenchByes, fillEmptyStarters, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }
