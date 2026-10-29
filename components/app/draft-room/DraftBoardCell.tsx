@@ -10,6 +10,7 @@ import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { buildDraftPlayerDisplayModel } from '@/lib/draft-sports-models/build-display-model'
 import { normalizePlayer } from '@/lib/players/normalizePlayer'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
+import { positionTintHex } from '@/lib/draft-room/positionTint'
 
 export type DraftBoardCellPick = {
   overall: number
@@ -55,6 +56,7 @@ function TinyHeadshot({
   position,
   teamLogoUrl,
   teamAbbr,
+  size = 26,
 }: {
   name: string | null
   src: string | null
@@ -64,6 +66,7 @@ function TinyHeadshot({
    * separate `TinyTeamLogo` badge so the layout doesn't change for normal players. */
   teamLogoUrl?: string | null
   teamAbbr?: string | null
+  size?: number
 }) {
   /** E.1: delegate to the shared PlayerAvatar so the URL classifier (which rejects data URIs and
    * team logos) is applied uniformly. The board cell stays at 22px and skips the team-logo badge
@@ -75,7 +78,7 @@ function TinyHeadshot({
       teamLogoUrl={teamLogoUrl}
       teamAbbr={teamAbbr}
       position={position}
-      size={26}
+      size={size}
       testIdBase="draft-board-cell-headshot"
     />
   )
@@ -244,8 +247,18 @@ function DraftBoardCellInner({
   const managerTint =
     !tint && pick.managerTintColor
       ? {
-          borderColor: withAlpha(pick.managerTintColor, 0.40),
-          backgroundColor: withAlpha(pick.managerTintColor, 0.11),
+          borderColor: withAlpha(pick.managerTintColor, 0.5),
+          backgroundColor: withAlpha(pick.managerTintColor, 0.15),
+        }
+      : undefined
+  // A filled tile takes its position's color, so the board reads at a glance ("three WRs in a
+  // row"). Trade tint still wins when the commissioner turned trade coloring on.
+  const positionHex = !isEmpty ? positionTintHex(pick.position) : null
+  const positionTint =
+    !tint && positionHex
+      ? {
+          borderColor: withAlpha(positionHex, 0.6),
+          backgroundImage: `linear-gradient(160deg, ${withAlpha(positionHex, 0.34)}, ${withAlpha(positionHex, 0.08)} 55%, rgba(10,16,30,0.92))`,
         }
       : undefined
 
@@ -261,7 +274,7 @@ function DraftBoardCellInner({
 
   return (
     <div
-      className={`group relative flex h-[56px] min-h-[56px] flex-col overflow-hidden rounded-[6px] border px-1.5 pb-1 pt-0.5 text-[11px] backdrop-blur-sm transition-[border-color,box-shadow,transform,background-color] duration-200 ${hoverLift} hover:border-cyan-300/45 hover:shadow-lg sm:h-[60px] sm:min-h-[60px] sm:px-1.5 sm:pb-1 sm:pt-1 ${
+      className={`group relative flex aspect-square w-full flex-col overflow-hidden rounded-[8px] border px-1.5 pb-1.5 pt-1 text-[11px] backdrop-blur-sm transition-[border-color,box-shadow,transform,background-color] duration-200 ${hoverLift} hover:border-cyan-300/45 hover:shadow-lg ${
         onTradeFromCell ? 'pr-7 sm:pr-8' : ''
       } ${
         isCurrentPick ? 'draft-live-current-pick' : isRecentPick ? 'draft-live-recent-pick' : ''
@@ -279,7 +292,7 @@ function DraftBoardCellInner({
                 'border-dashed border-white/[0.10] bg-[rgba(7,11,22,0.64)]'
               : `border-white/[0.10] bg-gradient-to-br from-[#1c2741] via-[#141e31] to-[#0f1928] ${rs ? 'shadow-[0_8px_22px_rgba(2,8,24,0.40)]' : 'shadow-[0_10px_24px_rgba(2,8,24,0.42)]'} ${highlightClass(pickHighlight)}`
       }`}
-      style={tint ?? managerTint}
+      style={tint ?? positionTint ?? managerTint}
       data-overall={pick.overall}
       data-round={pick.round}
       data-slot={pick.slot}
@@ -350,9 +363,11 @@ function DraftBoardCellInner({
           characters wide; moving them up gives the name the full width beside the headshot. */}
       <div className="flex items-center justify-between gap-1">
         <div className="flex min-w-0 items-center gap-0.5 overflow-hidden">
-          <span className="shrink-0 tabular-nums text-[11px] font-semibold text-white/60" aria-hidden>
-            {compactLabel}
-          </span>
+          {isEmpty ? null : (
+            <span className="shrink-0 tabular-nums text-[11px] font-semibold text-white/60" aria-hidden>
+              {compactLabel}
+            </span>
+          )}
           {pick.isKeeper ? <StatusBadge label="K" className="bg-emerald-500/25 text-emerald-200" /> : null}
           {pick.isDevyPick ? <StatusBadge label="D" className="bg-violet-500/25 text-violet-200" /> : null}
           {pick.isCollegePick ? <StatusBadge label="C" className="bg-violet-500/25 text-violet-200" /> : null}
@@ -399,33 +414,42 @@ function DraftBoardCellInner({
       </div>
 
       {isEmpty ? (
-        <div className="mt-auto flex min-h-0 flex-1 items-end justify-between gap-1">
-          <div className="flex min-w-0 items-center gap-0.5 text-white/45">
-            {emptyCellDirection === 'reverse' ? (
-              <ArrowLeft className="h-2.5 w-2.5 shrink-0" aria-hidden />
-            ) : (
-              <ArrowRight className="h-2.5 w-2.5 shrink-0" aria-hidden />
-            )}
-            <span className="truncate text-[11px] font-normal" title={ownerLabel ?? 'Awaiting pick'}>
-              {ownerLabel ?? 'Awaiting pick'}
+        <>
+          {/* The square's middle holds the pick number large, so an empty board still reads as a
+              grid of slots rather than a wall of dashed outlines. */}
+          <div className="flex min-h-0 flex-1 items-center justify-center" aria-hidden>
+            <span className="tabular-nums text-[18px] font-black tracking-tight text-white/20 sm:text-[22px]">
+              {compactLabel}
             </span>
-            {isCollegeRound ? (
-              <StatusBadge label="College" className="shrink-0 bg-violet-500/25 text-violet-200" />
-            ) : isDevyRound ? (
-              <StatusBadge label="Devy" className="shrink-0 bg-violet-500/25 text-violet-200" />
+          </div>
+          <div className="flex min-w-0 items-center justify-between gap-1">
+            <div className="flex min-w-0 items-center gap-0.5 text-white/55">
+              {emptyCellDirection === 'reverse' ? (
+                <ArrowLeft className="h-2.5 w-2.5 shrink-0" aria-hidden />
+              ) : (
+                <ArrowRight className="h-2.5 w-2.5 shrink-0" aria-hidden />
+              )}
+              <span className="truncate text-[11px] font-medium" title={ownerLabel ?? 'Awaiting pick'}>
+                {ownerLabel ?? 'Awaiting pick'}
+              </span>
+              {isCollegeRound ? (
+                <StatusBadge label="College" className="shrink-0 bg-violet-500/25 text-violet-200" />
+              ) : isDevyRound ? (
+                <StatusBadge label="Devy" className="shrink-0 bg-violet-500/25 text-violet-200" />
+              ) : null}
+            </div>
+            {pick.tradedPickMeta?.previousOwnerName ? (
+              <span
+                className="max-w-[56px] shrink-0 truncate text-[11px] text-white/30"
+                title={`Originally ${pick.tradedPickMeta.previousOwnerName}`}
+              >
+                from {pick.tradedPickMeta.previousOwnerName}
+              </span>
             ) : null}
           </div>
-          {pick.tradedPickMeta?.previousOwnerName ? (
-            <span
-              className="max-w-[56px] shrink-0 truncate text-[11px] text-white/30"
-              title={`Originally ${pick.tradedPickMeta.previousOwnerName}`}
-            >
-              from {pick.tradedPickMeta.previousOwnerName}
-            </span>
-          ) : null}
-        </div>
+        </>
       ) : (
-        <div className="mt-auto flex min-h-0 min-w-0 items-center gap-1.5 overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden text-center">
           <div className="relative shrink-0">
             <TinyHeadshot
               name={pick.playerName}
@@ -433,23 +457,24 @@ function DraftBoardCellInner({
               position={pick.position}
               teamLogoUrl={teamLogoSrc}
               teamAbbr={pick.team}
+              size={40}
             />
             {/* F.1 — DEF picks already use the team logo as the primary avatar
                 (see PlayerAvatar's DEF branch). Skip the duplicate corner overlay. */}
             {isDefRowForAvatar(pick.position) ? null : (
-              <div className="absolute -bottom-0.5 -right-0.5 rounded border border-white/12 bg-[#232c40] p-px">
+              <div className="absolute -bottom-0.5 -right-1 rounded border border-white/12 bg-[#232c40] p-px">
                 <TinyTeamLogo team={pick.team} src={teamLogoSrc} />
               </div>
             )}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="w-full min-w-0">
             <span
-              className="block truncate text-[12px] font-semibold leading-[15px] tracking-tight text-white"
+              className="line-clamp-2 break-words text-[12px] font-bold leading-[14px] tracking-tight text-white"
               title={pick.playerName ?? undefined}
             >
               {pick.playerName}
             </span>
-            <p className="flex min-w-0 items-center gap-1 text-[11px] leading-[14px] text-white/65">
+            <p className="flex min-w-0 items-center justify-center gap-1 text-[11px] leading-[14px] text-white/70">
               <span className="truncate">
                 {(pick.team ?? '—').toString()}
                 {pick.byeWeek != null && pick.byeWeek > 0 ? ` · Bye ${pick.byeWeek}` : ''}

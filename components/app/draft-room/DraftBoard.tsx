@@ -15,6 +15,13 @@ import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draf
 import { mergePoolPlayerIntoBoardPickDisplay } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
 
+/**
+ * One board column. Capped so tiles stay square: a `1fr` column stretched an 8-team board's
+ * tiles to ~190px wide against a 60px height. 96–124px keeps a 12-team board on a laptop screen
+ * and scrolls sideways past that instead of squashing the tiles.
+ */
+const BOARD_COLUMN = 'minmax(96px, 124px)'
+
 export type DraftBoardProps = {
   picks: DraftPickSnapshot[]
   slotOrder: SlotOrderEntry[]
@@ -656,14 +663,14 @@ function DraftBoardInner({
         </div>
       ) : (
         <div className="snap-x snap-mandatory overflow-x-auto overscroll-x-contain overflow-y-visible px-2 py-2 pb-3 [-webkit-overflow-scrolling:touch]">
-          <div className="min-w-max" data-testid="draft-board-grid">
+          <div className="mx-auto w-max min-w-max" data-testid="draft-board-grid">
             <div
               className={`sticky top-0 z-10 grid gap-0 border-b pb-0.5 backdrop-blur-md sm:gap-0.5 ${
                 rs
                   ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
                   : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
               }`}
-              style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(104px, 1fr))` }}
+              style={{ gridTemplateColumns: `40px repeat(${teamCount}, ${BOARD_COLUMN})` }}
               data-testid="draft-board-team-header"
             >
               <div
@@ -739,14 +746,14 @@ function DraftBoardInner({
                 <section key={round} data-testid={`draft-board-round-${round}`}>
                     <div
                       className="grid gap-[3px]"
-                      style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(104px, 1fr))` }}
+                      style={{ gridTemplateColumns: `40px repeat(${teamCount}, ${BOARD_COLUMN})` }}
                     >
                     {(() => {
                       const reversed = isSnakeRoundReversed(round, draftType, thirdRoundReversal)
                       const isSnake = draftType === 'snake'
                       return (
                         <div
-                          className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-xl border text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:min-h-[60px] ${
+                          className={`flex h-full flex-col items-center justify-center gap-0.5 rounded-xl border text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${
                             round === 1
                               ? 'border-amber-300/35 bg-gradient-to-br from-amber-500/18 via-[#1d2236] to-[#0a1228] text-amber-100/95'
                               : 'border-white/[0.1] bg-gradient-to-br from-[#0d1629] to-[#0a1228] text-white/75'
