@@ -47,3 +47,12 @@ it('does not draft a second unscorable SportsDB identity in daily sports', () =>
   const result = reconcileCurrentProRows('NBA', [ri, tsdb], [ri, tsdb], true, now)
   expect(result).toHaveLength(1); expect(result[0]?.source).toBe('rolling_insights')
 })
+
+it('retains rostered inactive, practice squad and team-defense Sleeper rows', () => {
+  for (const status of ['Inactive', 'Practice Squad', null]) {
+    const current = row({ source: 'sleeper', status })
+    expect(reconcileCurrentProRows('NFL', [current], [current], true, now)).toHaveLength(1)
+  }
+  const freeAgent = row({ source: 'sleeper', status: 'Inactive', team: null })
+  expect(reconcileCurrentProRows('NFL', [freeAgent], [freeAgent], true, now)).toHaveLength(0)
+})

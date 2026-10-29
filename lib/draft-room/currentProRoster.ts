@@ -14,6 +14,9 @@ function fresh(row: CurrentProRow, now: number) {
 function live(row: CurrentProRow, now: number) {
   if (!fresh(row, now) || !team(row.team) || ['FA', 'FREEAGENT', 'NONE'].includes(team(row.team).toUpperCase())) return false
   if (row.source === 'rolling_insights') return ['ACT', 'QUES'].includes(status(row))
+  // Sleeper's team is authoritative. Inactive can describe a rostered injured player.
+  // Null teams were rejected above; never restore a free agent's previous club.
+  if (row.source === 'sleeper') return !['RETIRED', 'FREE AGENT', 'FREEAGENT', 'COACHING'].includes(status(row))
   return ['ACTIVE', 'INJURED RESERVE', 'INJUREDRESERVE', 'INJURED', 'OUT', 'QUESTIONABLE', 'IR', 'IL', 'DTD'].includes(status(row))
 }
 /** A conflicting birthday never authorizes a photo or position change. Same names alone are insufficient. */
