@@ -77,6 +77,7 @@ import { TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED } from '@/lib/tournament-mod
 import { getFeederLeagueCountForPool } from '@/lib/tournament-mode/tournament-sport-cutoffs'
 import type { WizardFormatOptions } from '@/lib/league-creation-wizard/wizard-format-options'
 import { LeagueFormatOptionsPanel } from './LeagueFormatOptionsPanel'
+import { DEFAULT_SELF_RUNNING_PRESET, offersSelfRunningPreset } from '@/lib/league-creation-wizard/selfRunningPreset'
 
 /** Lazy-loaded step panels to shrink initial bundle and improve mobile TTI. */
 const ScoringPresetSelector = dynamic(
@@ -1058,6 +1059,16 @@ export function LeagueCreationWizard({
           leagueType: state.leagueType,
           draftType: state.draftType,
         })
+        // Dynasty: apply the commissioner's "How much should AllFantasy run?" choice through the same
+        // presets the Commissioner Hub uses. Best-effort: the league exists either way, and every
+        // switch can be set later on the hub.
+        if (offersSelfRunningPreset(state.leagueType)) {
+          await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/automation-preset`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ preset: state.automationSettings.selfRunningPreset ?? DEFAULT_SELF_RUNNING_PRESET }),
+          }).catch(() => null)
+        }
         onSuccess?.(leagueId)
         router.push(
           buildPostCreateLeagueHomeHref({
