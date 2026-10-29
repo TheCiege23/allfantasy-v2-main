@@ -8,7 +8,7 @@ const until = Date.parse(env.PIRATE_REHEARSAL_UNTIL || '')
 if (env.RAILWAY_PROJECT_ID !== '80e84d3b-778a-4fe6-be53-6c16068e8aa2' ||
     env.RAILWAY_ENVIRONMENT_ID !== '686eb5e0-af93-4370-806a-af544049ea93' ||
     !Number.isFinite(until) || until > Date.parse('2026-11-07T12:00:00Z') || !env.CRON_SECRET ||
-    !['capture', 'data', 'score'].includes(env.PIRATE_REHEARSAL_TASK || '')) {
+    !['capture', 'data', 'score', 'daily-capture', 'daily-data'].includes(env.PIRATE_REHEARSAL_TASK || '')) {
   throw new Error('Isolated staging rehearsal configuration required')
 }
 if (Date.now() >= until) {
@@ -19,10 +19,12 @@ if (Date.now() >= until) {
     try {
       const response = await fetch(`${base}${path}`, { redirect: 'error',
         headers: { authorization: `Bearer ${env.CRON_SECRET}` }, signal: AbortSignal.timeout(timeoutMs) })
-      const body = await response.json() as { ok?: boolean; lineupCoverageCertified?: boolean; captured?: number; scoresUpserted?: number; finalized?: number; synced?: number; claimsCreated?: number }
+      const body = await response.json() as { ok?: boolean; pilot?: string; lineupCoverageCertified?: boolean; captured?: number; scoresUpserted?: number; finalized?: number; synced?: number; claimsCreated?: number }
       const isInjury = path.startsWith('/api/cron/import-injuries?')
+      const isDaily = path.includes('&pilot=daily')
       const result = { task: path.split('?')[0], sport: new URL(`${base}${path}`).searchParams.get('sport'),
-        ok: response.ok && body.ok === true && (!isInjury || body.lineupCoverageCertified === true), httpStatus: response.status,
+        mode: new URL(`${base}${path}`).searchParams.get('task'), pilot: body.pilot,
+        ok: response.ok && body.ok === true && (!isInjury || body.lineupCoverageCertified === true) && (!isDaily || body.pilot === 'daily'), httpStatus: response.status,
         lineupCoverageCertified: body.lineupCoverageCertified,
         captured: body.captured, scoresUpserted: body.scoresUpserted, finalized: body.finalized, synced: body.synced, claimsCreated: body.claimsCreated }
       console.log(JSON.stringify(result))
@@ -33,7 +35,12 @@ if (Date.now() >= until) {
     }
   }
   const results: boolean[] = []
-  results.push(await call(`/api/cron/pirate-rehearsal?task=${env.PIRATE_REHEARSAL_TASK === 'score' ? 'score' : 'capture'}`, env.PIRATE_REHEARSAL_TASK === 'score' ? 270000 : 60000))
+  const daily = env.PIRATE_REHEARSAL_TASK?.startsWith('daily-') === true
+  results.push(await call(`/api/cron/pirate-rehearsal?task=${env.PIRATE_REHEARSAL_TASK === 'score' ? 'score' : 'capture'}${daily ? '&pilot=daily' : ''}`, env.PIRATE_REHEARSAL_TASK === 'score' ? 270000 : 60000))
+  if (env.PIRATE_REHEARSAL_TASK === 'daily-data' && results[0]) {
+    results.push(await call('/api/cron/pirate-rehearsal?task=data&pilot=daily', 270000))
+    if (results.at(-1)) results.push(await call('/api/cron/pirate-rehearsal?task=score&pilot=daily', 270000))
+  }
   // The gate above must succeed before spending provider allowance. Feed latency
   // cannot hold up the independent five-minute capture worker.
   if (env.PIRATE_REHEARSAL_TASK === 'data' && results[0]) {

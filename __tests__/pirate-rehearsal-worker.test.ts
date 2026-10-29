@@ -8,7 +8,7 @@ const source = ts.transpileModule(readFileSync('scripts/railway-pirate-rehearsal
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 const env = { RAILWAY_PROJECT_ID: '80e84d3b-778a-4fe6-be53-6c16068e8aa2', RAILWAY_ENVIRONMENT_ID: '686eb5e0-af93-4370-806a-af544049ea93',
   CRON_SECRET: 'test-token', PIRATE_REHEARSAL_TASK: 'capture', PIRATE_REHEARSAL_UNTIL: '2026-11-07T12:00:00Z' }
-async function worker(overrides = {}, bodyFor: (url: string) => unknown = () => ({ ok: true, lineupCoverageCertified: true })) {
+async function worker(overrides = {}, bodyFor: (url: string) => unknown = () => ({ ok: true, pilot: 'daily', lineupCoverageCertified: true })) {
   const request = vi.fn(async (url: string) => ({ ok: true, status: 200, json: async () => bodyFor(url) }))
   const output = vi.fn()
   const run = new AsyncFunction('globalThis', 'fetch', 'console', source)({ Bun: { env: { ...env, ...overrides } } }, request, { log: output })
@@ -29,6 +29,29 @@ describe('Railway rehearsal worker', () => {
     const result = await worker(); await result.run
     expect(result.request).toHaveBeenCalledTimes(1)
     expect(result.request.mock.calls[0][0]).toContain('?task=capture')
+  })
+  it('captures a separately pinned daily pilot without touching the NFL scoring task', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-29'))
+    const result = await worker({ PIRATE_REHEARSAL_TASK: 'daily-capture' }); await result.run
+    expect(result.request.mock.calls.map(([url]) => url)).toEqual([
+      'https://pirate-web-staging.up.railway.app/api/cron/pirate-rehearsal?task=capture&pilot=daily',
+    ])
+  })
+  it('refreshes daily data before fixture scoring and refuses to score after an ingestion failure', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-29'))
+    const good = await worker({ PIRATE_REHEARSAL_TASK: 'daily-data' }); await good.run
+    expect(good.request.mock.calls.map(([url]) => url.split('?')[1])).toEqual([
+      'task=capture&pilot=daily', 'task=data&pilot=daily', 'task=score&pilot=daily',
+    ])
+    const bad = await worker({ PIRATE_REHEARSAL_TASK: 'daily-data' }, url => ({ ok: !url.includes('task=data'), pilot:'daily' }))
+    await expect(bad.run).rejects.toThrow('tasks failed')
+    expect(bad.request).toHaveBeenCalledTimes(2)
+  })
+  it('refuses an older web runtime that ignores the daily pilot selector', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-29'))
+    const result = await worker({PIRATE_REHEARSAL_TASK:'daily-data'},()=>({ok:true}))
+    await expect(result.run).rejects.toThrow('tasks failed')
+    expect(result.request).toHaveBeenCalledTimes(1)
   })
   it('does not spend provider allowance after a failed scope gate', async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-29'))

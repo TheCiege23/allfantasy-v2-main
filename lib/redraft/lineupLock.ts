@@ -170,13 +170,15 @@ export function normalizeLockTeam(sport: string, team: string | null | undefined
   if (String(sport).toUpperCase() === 'NFL') return normalizeNflTeam(team)
   // Full names from two feeds (Rolling Insights rosters, TheSportsDB games): drop accents and
   // punctuation so "Montréal Canadiens" / "St. Louis Blues" match "Montreal Canadiens" / "St Louis Blues".
-  return String(team ?? '')
+  const name = String(team ?? '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .replace(/[^A-Za-z0-9 ]+/g, ' ')
     .trim()
     .replace(/\s+/g, ' ')
     .toUpperCase()
+  // ESPN's full display name differs from RI's player/schedule identity.
+  return String(sport).toUpperCase() === 'NBA' && name === 'LA CLIPPERS' ? 'LOS ANGELES CLIPPERS' : name
 }
 
 export type WeekKickoffs = {

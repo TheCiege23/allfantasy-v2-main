@@ -3,10 +3,13 @@ import { NextRequest } from 'next/server'
 import { pirateRehearsalEnabled, PIRATE_STAGING_PROJECT, PIRATE_STAGING_ENVIRONMENT, isPirateRehearsalLeague } from '@/lib/pirate/stagingRehearsalScope'
 
 const m = vi.hoisted(() => ({ auth: vi.fn(), league: vi.fn(), season: vi.fn(), users: vi.fn(), capture: vi.fn(),
-  sync: vi.fn(), recalc: vi.fn(), standings: vi.fn(), finalize: vi.fn(), sealed: vi.fn(), seed: vi.fn(), maintain: vi.fn(), scheduleMeta: vi.fn(), schedule: vi.fn() }))
+  sync: vi.fn(), recalc: vi.fn(), standings: vi.fn(), finalize: vi.fn(), sealed: vi.fn(), seed: vi.fn(), maintain: vi.fn(), scheduleMeta: vi.fn(), schedule: vi.fn(), dataRun: vi.fn(), slate: vi.fn(), logs: vi.fn(), reference: vi.fn() }))
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: m.auth }))
-vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: m.league }, redraftSeason: { findFirst: m.season }, appUser: { findMany: m.users }, sportsDataCache: { findUnique: m.scheduleMeta } } }))
+vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: m.league }, redraftSeason: { findFirst: m.season }, appUser: { findMany: m.users }, sportsDataCache: { findUnique: m.scheduleMeta }, syncJobRun: { findFirst: m.dataRun } } }))
 vi.mock('@/lib/sports-data/riSeasonSchedule', () => ({ syncRiSeasonSchedule: m.schedule }))
+vi.mock('@/lib/sports-live-scores-service', () => ({ getLiveScoresForSport: m.slate }))
+vi.mock('@/lib/sports-data/rollingInsightsGameLogs', () => ({ ingestRollingInsightsGameLogs: m.logs }))
+vi.mock('@/lib/sports-data/riScheduleCache', async original => ({...await original<typeof import('@/lib/sports-data/riScheduleCache')>(),readRiScheduleWindow:m.reference}))
 vi.mock('@/lib/pirate/lineupEvidence', () => ({ capturePirateLineupEvidence: m.capture }))
 vi.mock('@/lib/pirate/service', () => ({ seedPirateClaims: m.seed, maintainPirateClaims: m.maintain }))
 vi.mock('@/lib/redraft/playerWeeklyScoreService', () => ({ syncPlayerWeeklyScoresForRedraftSeason: m.sync }))
@@ -59,6 +62,57 @@ describe('bounded isolated rehearsal', () => {
     expect((await GET(req())).status).toBe(200)
     expect(m.capture).toHaveBeenCalledWith({ leagueId: 'fixture', seasonId: 'season', season: 2026, week: 8 })
     expect(m.sync).not.toHaveBeenCalled(); expect(m.seed).not.toHaveBeenCalled()
+  })
+  it('keeps the daily pilot disabled without a separately pinned league', async () => {
+    expect((await GET(req('capture&pilot=daily'))).status).toBe(404)
+    expect(m.league).not.toHaveBeenCalled()
+  })
+  it('requires a daily-tagged league, an NBA daily season, and synthetic owners', async () => {
+    vi.stubEnv('PIRATE_DAILY_REHEARSAL_LEAGUE_ID', 'daily-fixture')
+    const daily = { ...league, id: 'daily-fixture', tenantId: 'pirate-capture-live-daily-qa', settings: {
+      pirate_live_rehearsal: true, pirate_daily_rehearsal: true,
+      sportConfig: { lineupLockType: 'daily', dailyLineupsEnabled: true },
+    } }
+    m.league.mockResolvedValue(daily)
+    expect((await GET(req('capture&pilot=daily'))).status).toBe(409) // NFL season cannot be repointed.
+    m.season.mockResolvedValue({ id: 'daily-season', sport: 'NBA', season: 2026, currentWeek: 2, rosters: [{ ownerId: 'bot' }] })
+    expect((await GET(req('capture&pilot=daily'))).status).toBe(200)
+    expect(m.capture).toHaveBeenLastCalledWith({ leagueId: 'daily-fixture', seasonId: 'daily-season', season: 2026, week: 2 })
+    m.capture.mockClear()
+    expect((await GET(req('score&pilot=daily'))).status).toBe(409)
+    m.dataRun.mockResolvedValue({status:'success',completedAt:new Date()})
+    expect((await GET(req('score&pilot=daily'))).status).toBe(200)
+    expect(m.maintain).toHaveBeenLastCalledWith({leagueId:'daily-fixture',limit:8})
+    m.capture.mockClear()
+    m.users.mockResolvedValueOnce([{ id: 'bot', email: 'human@example.com' }])
+    expect((await GET(req('score&pilot=daily'))).status).toBe(409)
+    m.league.mockResolvedValueOnce({ ...daily, tenantId: league.tenantId })
+    expect((await GET(req('capture&pilot=daily'))).status).toBe(409)
+    m.league.mockResolvedValueOnce({ ...daily, settings: { ...daily.settings, sportConfig: { lineupLockType: 'daily' } } })
+    expect((await GET(req('capture&pilot=daily'))).status).toBe(409)
+    expect(m.capture).not.toHaveBeenCalled()
+  })
+  it('does not accept arbitrary pilot selectors or let the daily pilot run schedule sweeps', async () => {
+    expect((await GET(req('capture&pilot=user-league'))).status).toBe(400)
+    expect((await GET(req('schedules&pilot=daily'))).status).toBe(400)
+    expect(m.league).not.toHaveBeenCalled()
+  })
+  it('certifies the full daily calendar and only asks for game logs once that date has started', async () => {
+    vi.setSystemTime(new Date('2026-10-29T12:00:00Z'))
+    vi.stubEnv('PIRATE_DAILY_REHEARSAL_LEAGUE_ID','daily-fixture')
+    m.league.mockResolvedValue({...league,id:'daily-fixture',tenantId:'pirate-capture-live-daily-qa',settings:{pirate_live_rehearsal:true,pirate_daily_rehearsal:true,
+      sportConfig:{lineupLockType:'daily',dailyLineupsEnabled:true}}})
+    m.season.mockResolvedValue({id:'daily-season',sport:'NBA',season:2026,currentWeek:2,rosters:[{ownerId:'bot'}]})
+    const game={homeTeamFull:'Atlanta Hawks',awayTeamFull:'Cleveland Cavaliers',startTime:'2026-10-29T00:00:00Z'}
+    const tomorrow={...game,startTime:'2026-10-30T00:00:00Z'}
+    m.slate.mockResolvedValue({refreshed:true,source:'espn_live',scores:[game,tomorrow]})
+    m.reference.mockResolvedValue([game,tomorrow].map(g=>({homeTeam:g.homeTeamFull,awayTeam:g.awayTeamFull,startTime:g.startTime,seasonType:'regular'})))
+    m.logs.mockResolvedValue({errors:[],unsupported:false,notModifiedDates:[],datesFetched:1,written:12,unresolved:0})
+    expect((await GET(req('data&pilot=daily'))).status).toBe(200)
+    expect(m.slate.mock.calls[0][0].espnDates).toHaveLength(7)
+    expect(m.logs).toHaveBeenCalledWith({sport:'NBA',dates:['2026-10-28']})
+    m.logs.mockResolvedValueOnce({errors:[],unsupported:false,notModifiedDates:['2026-10-28'],datesFetched:0,written:0,unresolved:0})
+    expect((await GET(req('data&pilot=daily'))).status).toBe(500)
   })
   it('retains fresh daily-sport schedules without spending provider calls', async () => {
     m.scheduleMeta.mockResolvedValue({ data: { syncedAt: new Date().toISOString() } })

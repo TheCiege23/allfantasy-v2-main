@@ -24,3 +24,11 @@ export function isPirateRehearsalLeague(league: {
     league.platform === 'manual' && league.leagueType === 'pirate' && league.leagueVariant === 'pirate' &&
     settings?.pirate_live_rehearsal === true
 }
+
+/** A separately pinned daily pilot; requests cannot supply arbitrary league IDs. */
+export function isPirateDailyRehearsalLeague(league: Parameters<typeof isPirateRehearsalLeague>[0], leagueId: string): boolean {
+  const settings = league.settings as Record<string, unknown> | null
+  const sportConfig = settings?.sportConfig as Record<string, unknown> | null
+  return isPirateRehearsalLeague(league, leagueId) && league.tenantId.startsWith('pirate-capture-live-daily-') &&
+    settings?.pirate_daily_rehearsal === true && sportConfig?.lineupLockType === 'daily' && sportConfig.dailyLineupsEnabled === true
+}
