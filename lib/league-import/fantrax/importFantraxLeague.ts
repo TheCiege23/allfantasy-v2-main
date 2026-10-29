@@ -120,11 +120,19 @@ export async function importFantraxLeague(args: {
   ownershipVerified?: boolean
   /** Refresh an owned snapshot in place, retaining its downstream league identity. */
   refreshSnapshotId?: string
+  /**
+   * Fantrax's own id for the caller's team, when the caller knows it. Preferred over
+   * `teamName` — see the team lookup below for why a name is not an identity.
+   */
+  teamId?: string | null
 }): Promise<FantraxImportOutcome> {
   const refreshTarget = args.refreshSnapshotId
     ? await prisma.fantraxLeague.findUnique({
         where: { id: args.refreshSnapshotId },
-        select: { id: true, appUserId: true, sourceLeagueId: true, season: true, sport: true, roster: true },
+        select: {
+          id: true, appUserId: true, sourceLeagueId: true, season: true, sport: true, roster: true,
+          userTeam: true, standings: true,
+        },
       })
     : null
   if (args.refreshSnapshotId && (
@@ -258,9 +266,21 @@ export async function importFantraxLeague(args: {
     }
   }
 
-  const mine = resolved.find(
-    (r) => r.teamName.toLowerCase() === args.teamName.trim().toLowerCase(),
-  )
+  /*
+   * ⚠ BY FANTRAX TEAM ID FIRST, NAME ONLY AS THE FALLBACK. A refresh is handed the
+   * snapshot's stored `userTeam` — the name the team had at the LAST import. Matching on
+   * that alone meant a manager who renamed their team on Fantrax could never be refreshed
+   * again ("no team named …"), and worse, if another manager had since taken the old
+   * name, the refresh silently attributed THAT team's roster to the importer. The stored
+   * standings carry each team's durable `fantraxTeamId` (written by `summarise` below),
+   * which survives a rename. CSV-era snapshots carry no id, and only they fall back.
+   */
+  const wantedTeamId =
+    String(args.teamId ?? '').trim() ||
+    storedTeamIdFor(refreshTarget?.standings, refreshTarget?.userTeam ?? args.teamName)
+  const mine =
+    (wantedTeamId ? resolved.find((r) => r.teamId === wantedTeamId) : undefined) ??
+    resolved.find((r) => r.teamName.toLowerCase() === args.teamName.trim().toLowerCase())
   if (!mine) {
     return {
       ok: false,
@@ -436,11 +456,16 @@ export async function importFantraxLeague(args: {
  * fixing.
  */
 function summarise(resolved: ResolvedRoster[], standings: FantraxStandingRow[] | null) {
+  /* By team id first: both endpoints key teams on Fantrax's own id, and a display name
+     is the one field a manager can change. The name is the fallback for a row with no id. */
+  const byId = new Map(
+    (standings ?? []).filter((row) => row.teamId).map((row) => [row.teamId, row]),
+  )
   const byName = new Map(
     (standings ?? []).map((row) => [row.teamName.trim().toLowerCase(), row]),
   )
   return resolved.map((r) => {
-    const row = byName.get(r.teamName.trim().toLowerCase()) ?? null
+    const row = (r.teamId ? byId.get(r.teamId) : undefined) ?? byName.get(r.teamName.trim().toLowerCase()) ?? null
     return {
       team: r.teamName,
       rosterCount: r.total,
@@ -544,6 +569,23 @@ export async function attachToFranchise(args: {
   }
 
   return { ok: true, linkId: link.id }
+}
+
+/**
+ * The Fantrax team id a stored snapshot recorded for `teamName`, from its standings
+ * column (`summarise` writes `{ team, fantraxTeamId }` per team). Empty when the
+ * snapshot predates ids or never named that team.
+ */
+function storedTeamIdFor(standings: unknown, teamName: string | null | undefined): string {
+  const wanted = String(teamName ?? '').trim().toLowerCase()
+  if (!wanted || !Array.isArray(standings)) return ''
+  for (const row of standings) {
+    const r = recordOf(row)
+    if (String(r.team ?? '').trim().toLowerCase() !== wanted) continue
+    const id = r.fantraxTeamId
+    return typeof id === 'string' ? id.trim() : ''
+  }
+  return ''
 }
 
 function recordOf(value: unknown): Record<string, unknown> {

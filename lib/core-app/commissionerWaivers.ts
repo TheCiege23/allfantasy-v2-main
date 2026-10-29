@@ -4,6 +4,7 @@ import { ourIdOrSleeperIdWhere, playerRowKeys } from '@/lib/player-identity/exte
 import { computeNextWaiverRunAtUtc } from '@/lib/waiver-wire/next-waiver-run'
 import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from '@/lib/waiver-wire/waiver-outcome-labels'
 import { pickLanguage } from './commissioner/pickLanguage'
+import { importedWaiverSettings } from './waiverRowMeta'
 
 /**
  * Waiver Oversight — the section added to the Commissioner Hub in the 2026-09-13
@@ -187,7 +188,7 @@ export async function getCommissionerWaiverOversight(input: {
   const now = input.now ?? new Date()
   const platform = String(input.platform ?? '').toLowerCase()
 
-  const [settings, lastRun, pendingCount] = await Promise.all([
+  const [storedSettings, lastRun, pendingCount] = await Promise.all([
     prisma.leagueWaiverSettings.findUnique({
       where: { leagueId },
       select: {
@@ -222,6 +223,9 @@ export async function getCommissionerWaiverOversight(input: {
     }),
     prisma.waiverClaim.count({ where: { leagueId, status: 'pending' } }),
   ])
+
+  /* A Fantrax row is AllFantasy's bootstrap defaults, never the league's rules (waiverRowMeta.ts). */
+  const settings = importedWaiverSettings(storedSettings, platform)
 
   if (!settings && !lastRun && pendingCount === 0) {
     const imported = platform && platform !== 'manual' && platform !== 'allfantasy'

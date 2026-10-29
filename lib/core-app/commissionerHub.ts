@@ -17,6 +17,7 @@ import type { CoreIssue } from './outstandingIssues'
 import type { CoreDepthAccess } from './coreDepthAccess'
 import { isScored } from './currentWeek'
 import { platformLabel, verifiedHandoff } from './platformLinks'
+import { importedWaiverSettings } from './waiverRowMeta'
 import { followsRenewalAutomatically } from '@/lib/league-import/sleeper/followRenewedLeagues'
 import { leagueWeekFromSettings, playoffStartWeek, regularSeasonWeeks, tradeDeadlineWeek } from './seasonTimeline'
 import {
@@ -575,7 +576,7 @@ export async function getCommissionerHub(input: {
    */
   const [
     teams,
-    waiverSettings,
+    storedWaiverSettings,
     rosters,
     waivers,
     healthSnapshots,
@@ -685,6 +686,8 @@ export async function getCommissionerHub(input: {
     })).catch(() => null),
     loadCommissionerHistory(leagueId, native, { platform, sport }, language).catch((): CommissionerHistory => ({ tradeAvailable: false, draftAvailable: false, trades: [], drafts: [], tradeNote: es ? 'No se pudo leer el historial de intercambios.' : 'Trade history could not be read.', draftNote: es ? 'No se pudo leer el historial de drafts.' : 'Draft history could not be read.' })),
   ])
+  /* A Fantrax row is AllFantasy's bootstrap defaults, never the league's rules (waiverRowMeta.ts). */
+  const waiverSettings = importedWaiverSettings(storedWaiverSettings, platform)
 
   const profile = resolveCommissionerLeagueProfile({
     league,

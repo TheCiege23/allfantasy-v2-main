@@ -18,6 +18,7 @@ import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbre
 import { startingSlotTemplate } from './rosterSlots'
 import { identityGapNote } from './identityGap'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
+import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { verifiedHandoff, type PlatformLink } from './platformLinks'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isBestBallSettings } from './lineupMode'
@@ -437,6 +438,8 @@ async function buildMatchupData(
 
   const platform = String(league.platform ?? 'manual').toLowerCase()
   const sport = league.sport ?? null
+  /* Fantrax's real league id, for the "Open in Fantrax" link — `platformLeagueId` is our own snapshot uuid there. */
+  const linkLeagueId = linkableSourceLeagueId(league, await fantraxSourceLeagueIds([league]))
 
   const base = {
     league: {
@@ -447,7 +450,7 @@ async function buildMatchupData(
       logoUrl: asImageUrl(league.logoUrl, platform) ?? asImageUrl(league.avatarUrl, platform),
       sourceLink: resolveSourceLink({
         platform: league.platform,
-        sourceLeagueId: league.platformLeagueId,
+        sourceLeagueId: linkLeagueId,
         leagueName: leagueDisplayName(league.name),
         season: league.season,
         action: 'matchup',
