@@ -10,6 +10,7 @@ import { setAppIntlLanguage } from "@/lib/i18n/appLocale";
 import {
   DEFAULT_THEME,
   THEME_STORAGE_KEY,
+  THEME_SYSTEM_RESOLVED_COOKIE_KEY,
   normalizeStoredTheme,
   resolveEffectiveDataMode,
 } from "@/lib/theme";
@@ -27,6 +28,12 @@ export function applyThemeToDocument(
   if (root) {
     root.setAttribute("data-mode", resolved);
     root.style.colorScheme = resolved === "light" ? "light" : "dark";
+  }
+  // Remember what System resolved to so the server paints it on the next load.
+  if (normalizeStoredTheme(value) === "system" && resolved !== "legacy") {
+    try {
+      document.cookie = `${THEME_SYSTEM_RESOLVED_COOKIE_KEY}=${resolved}; path=/; max-age=31536000; samesite=lax`;
+    } catch {}
   }
   return resolved;
 }

@@ -5,6 +5,7 @@ import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
+import { CoreLanguageChip } from '@/components/core-app/CoreLanguageChip'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
@@ -922,7 +923,15 @@ function navSections(props: AfCoreShellProps): NavSection[] {
  * `home` is included even when a league is selected: on a phone the league
  * switcher is off-screen, so the way back to the league list has to be here.
  */
-const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'trades', 'week', 'live']
+const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'matchup', 'trades', 'live']
+
+/**
+ * Stand-ins, in order, for bar slots whose item is hidden. Matchup (and Your week)
+ * only exist once the selected league has a scored week (`ifScored`), and Trades
+ * only where the platform publishes trades, so without these the bar shrank to
+ * four. Player Finder is unconditional, so the bar stays at five in every state.
+ */
+const MOBILE_BAR_FALLBACK_KEYS: CoreNavKey[] = ['week', 'players']
 
 /** The league-first Play sheet: starting or joining something, as opposed to a league you are in. */
 const LEAGUE_FIRST_PLAY_LINKS: ReadonlyArray<{ href: string; label: string; glyph: string }> = [
@@ -1191,8 +1200,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const sections = useMemo(() => navSections(props), [props])
   const mobileItems = useMemo(() => {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
-    return MOBILE_BAR_KEYS.flatMap((k) => {
+    const fallbacks = MOBILE_BAR_FALLBACK_KEYS.flatMap((k) => {
       const item = byKey.get(k)
+      return item ? [item] : []
+    })
+    return MOBILE_BAR_KEYS.flatMap((k) => {
+      const item = byKey.get(k) ?? fallbacks.shift()
       return item ? [item] : []
     })
   }, [props])
@@ -2198,6 +2211,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
             {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
             <ModeToggle className="af-mode-chip" />
+            {/* Language beside it, so switching never means leaving /core for /settings. */}
+            <CoreLanguageChip className="af-mode-chip" />
 
             {/*
               The COMPACT form, and only where the visible panel is not already
