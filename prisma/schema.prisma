@@ -16033,6 +16033,8 @@ model GuillotineElimination {
   eliminatedAt         DateTime         @default(now())
   season               GuillotineSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
 
+  /// One elimination per team per week: a re-run of a week cannot record it twice (lib/guillotine/guillotineChopAudit.ts).
+  @@unique([seasonId, scoringPeriod, eliminatedRosterId])
   @@index([seasonId, scoringPeriod])
   @@index([leagueId])
   @@map("guillotine_eliminations")
