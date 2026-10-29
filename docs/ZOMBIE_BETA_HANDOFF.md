@@ -35,3 +35,13 @@ https://api.fantasynerds.com/getting-started/pricing
 No subscription was purchased and no new endpoint was called. Before connecting: obtain licensed access or a current licensed export; confirm season, observation window/sample count, scoring and QB context, then capture the contract fixture and map canonical player IDs. Public documentation alone does not prove current in-season freshness. The existing /admin/adp-import workflow remains available for an eligible export.
 
 Outstanding provider exceptions: 222 missing portrait URLs at the prior audit; NBA Jaden Akins lacks a verified fantasy-specific profile; undocumented NHL season goalie wins/shutouts remain omitted. Do not guess faces, positions or numeric statistics.
+
+## October 29 renewal verification
+
+Runtime source 75f3dfb adds the universe renewal preview and atomic next-season creation. The normal league-renew dialog directs Zombie leagues to their specialized controls.
+
+An isolated Windows checkout and a fresh PostgreSQL 18 database bound to 127.0.0.1:55438 verified all four sports with two levels and 16 registered fixture managers per universe. Direct service checks covered real canonical league creation, next-season placements, empty unstarted drafts, old-roster/prize preservation, destination FAAB rollover, concurrent retries, a forced database failure on the final destination, and old/new season statistics/digest isolation. These are controlled fixtures, not a live-manager beta or signed-in device acceptance.
+
+The focused local suite passed 53 tests in seven files. Windows cold imports required a 180-second CLI startup allowance; the committed CI timeout and assertions were unchanged. The current hosted merge-candidate checks and staging build remain separate evidence.
+
+The owner chose to obtain additional NFL ADP provider access later. Do not purchase or activate a new subscription automatically.

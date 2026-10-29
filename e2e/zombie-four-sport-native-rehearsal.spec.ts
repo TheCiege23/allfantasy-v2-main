@@ -356,9 +356,10 @@ test('four-sport universe allocations use finished native standings and record o
       expect(await prisma.league.count({where:{userId:userIds[0]}})).toBe(countBefore)
       // A database failure on the final destination must roll back earlier newly-created leagues, seats and drafts.
       const trigger='zombie_renewal_'+randomUUID().replace(/-/g,'')
+      const lastDestination=preview.pools[preview.pools.length-1]
       try {
         await prisma.$executeRawUnsafe('CREATE FUNCTION '+trigger+'() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION \'fixture renewal failure\'; END $$')
-        await prisma.$executeRawUnsafe('CREATE TRIGGER '+trigger+' BEFORE INSERT ON zombie_leagues FOR EACH ROW WHEN (NEW."universeId" = \''+u.id+'\' AND NEW.season = 2027 AND NEW."levelId" = \''+levels[2].id+'\') EXECUTE FUNCTION '+trigger+'()')
+        await prisma.$executeRawUnsafe('CREATE TRIGGER '+trigger+' BEFORE INSERT ON zombie_leagues FOR EACH ROW WHEN (NEW."universeId" = \''+u.id+'\' AND NEW.season = 2027 AND NEW."levelId" = \''+lastDestination.levelId+'\') EXECUTE FUNCTION '+trigger+'()')
         await expect(renewZombieUniverse(u.id,2026,userIds[0],preview.previewHash)).rejects.toThrow('fixture renewal failure')
         expect(await prisma.league.count({where:{userId:userIds[0]}})).toBe(countBefore)
         expect(await prisma.zombieLeague.count({where:{universeId:u.id,season:2027}})).toBe(0)
