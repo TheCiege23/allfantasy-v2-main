@@ -18,6 +18,7 @@ import { compareMemoryWallEntries, resolveMemoryWallStatus } from '@/lib/big-bro
 import { resolveHaveNotRosterIdsForCycle } from '@/lib/big-brother/BigBrotherChatChannels'
 import { getVetoChallengeThemeHints } from '@/lib/big-brother/sport-adapter'
 import { prisma } from '@/lib/prisma'
+import { buildBigBrotherHomeExtras } from '@/lib/league-specialty/bigBrotherHome'
 
 export const dynamic = 'force-dynamic'
 
@@ -185,6 +186,10 @@ export async function GET(
 
   const sportCalendar = await getBigBrotherSportCalendarContext(config.sport)
 
+  // Specialty-home extras (phase step, next decision, last eviction's public result, feed).
+  // Presentation only, never a voter id; a failed read never fails the summary.
+  const home = await buildBigBrotherHomeExtras({ leagueId, configId: config.configId, config, current }).catch(() => null)
+
   const allRosters = await prisma.roster.findMany({
     where: { leagueId },
     select: { id: true, platformUserId: true },
@@ -257,5 +262,6 @@ export async function GET(
     isCommissioner: league?.userId === userId,
     haveNotRosterIds,
     vetoChallenge,
+    home,
   })
 }

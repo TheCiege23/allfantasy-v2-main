@@ -59,6 +59,24 @@
  * for it. It does nothing — not one read — unless the service carries CHOP_RELEASE_ALERTS_ENABLED=1.
  * It reports under `chopRelease` and records `cron-chimmy-chop-release` only on a run that found a chop.
  *
+ * AND SCHEDULED LEAGUE ANNOUNCEMENTS (2026-10-19, lib/commissioner/scheduledAnnouncementService.ts): a
+ * commissioner's announcement written now and posted at the time they chose. It goes FIRST — it is a
+ * handful of reads and is the one job here a person is watching the clock for — and so lands within one
+ * sweep (15 minutes) of its time. No flag: a commissioner pressed Schedule, and "schedule" that never
+ * posts is "save and forget". It reports under `scheduledAnnouncements` and records
+ * `cron-scheduled-announcements` only on a run that posted or failed something.
+ * AND THE STORYLINE STUDIO AUTO-POST (2026-10-26, lib/storyline-studio/storylineService.ts): the week's
+ * top storyline hook (and, if asked, its prediction poll) posted to an AllFantasy league's chat at the
+ * weekday and hour its commissioner chose. No flag, like scheduled announcements — a commissioner
+ * switched it on (OFF by default) — but `STORYLINE_AUTOPOST=off` stops it without a deploy. Once per
+ * league per fantasy week by the chat row's id; the poster's AF Commissioner plan is re-checked at send
+ * time. It reports under `storylineAutoPost` and records `cron-storyline-autopost` only on a run that
+ * posted or failed something.
+ * AND THE DEADLINE AUTOPILOT, SHIPPED OFF (lib/deadline-autopilot/autopilotService.ts): the 72 h / 24 h /
+ * 1 h reminders a commissioner switched on, sent to the managers who still have to act. Every sweep, so
+ * the 1 h reminder lands 60 to 55 minutes out. Off unless `DEADLINE_AUTOPILOT_ENABLED=1`. It reports
+ * under `deadlineAutopilot` and records `cron-deadline-autopilot` only on a run that sent something.
+ *
  * Query params:
  *   dryRun=1     evaluate and report without sending (both jobs)
  *   limit=N      cap users processed this run (default 200)
@@ -76,6 +94,9 @@
  *                           only; the daily claim still holds)
  *   sportWaiverCheck=off    skip the other-sport waiver check this run
  *   chopRelease=off     skip the chop-release alert this run (it is also off unless the flag is set)
+ *   scheduledAnnouncements=off  skip posting scheduled league announcements this run
+ *   deadlineAutopilot=off  skip the deadline autopilot this run (it is also off unless the flag is set)
+ *   storylineAutoPost=off  skip the Storyline Studio auto-post this run
  *
  * FAILS LOUDLY on a systemic error (no push configured, sweep threw). It does NOT fail when
  * zero alerts are found — on a Tuesday in the off-season that is the correct outcome, and a
@@ -83,6 +104,7 @@
  */
 
 import type { NextRequest } from 'next/server'
+import { readPlayerNewsLevelFor, claimPlayerNewsEmailToday } from "@/lib/notifications/playerNewsGate"
 import { NextResponse } from 'next/server'
 
 import { requireCronAuth } from '@/app/api/cron/_auth'
@@ -105,6 +127,9 @@ import { runWaiverCheck, type WaiverCheckRun } from '@/lib/chimmy-alerts/runWaiv
 import { runSportWaiverCheck, type SportWaiverCheckRun } from '@/lib/chimmy-alerts/runSportWaiverCheck'
 import type { ChopReleaseRun } from '@/lib/chimmy-alerts/runChopReleaseCheck'
 import { chopReleaseEnabled } from '@/lib/chimmy-alerts/chopRelease'
+import type { ScheduledAnnouncementRun } from '@/lib/commissioner/scheduledAnnouncementService'
+import type { AutopilotRun } from '@/lib/deadline-autopilot/autopilotService'
+import type { AutoPostRun } from '@/lib/storyline-studio/storylineService'
 import { runFollowFreeAgentCheck, type FollowFreeAgentRun } from '@/lib/follows/followFreeAgentCheck'
 import { followFreeAgentDeps } from '@/lib/follows/followFreeAgentDeps'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
@@ -145,6 +170,13 @@ const FOLLOW_FREE_AGENT_JOB = 'cron-follow-free-agent'
 const WAIVER_CHECK_JOB = 'cron-chimmy-waiver-check'
 const SPORT_WAIVER_CHECK_JOB = 'cron-chimmy-sport-waiver-check'
 const CHOP_RELEASE_JOB = 'cron-chimmy-chop-release'
+const SCHEDULED_ANNOUNCEMENTS_JOB = 'cron-scheduled-announcements'
+/** Posting is a few reads per league; this only stops a pathological backlog from eating the sweep. */
+const SCHEDULED_ANNOUNCEMENTS_BUDGET_MS = 60_000
+const DEADLINE_AUTOPILOT_JOB = 'cron-deadline-autopilot'
+const STORYLINE_AUTOPOST_JOB = 'cron-storyline-autopost'
+/** A handful of reads per due league; this only stops a backlog from eating the sweep. */
+const STORYLINE_AUTOPOST_BUDGET_MS = 60_000
 
 /**
  * A weekly check's share of a run. The injured-starter sweep goes first and is the reason this
@@ -169,6 +201,9 @@ type FollowFreeAgentReport = FollowFreeAgentRun | PhaseRefusal
 type WaiverCheckReport = WaiverCheckRun | PhaseRefusal
 type SportWaiverCheckReport = SportWaiverCheckRun | PhaseRefusal
 type ChopReleaseReport = ChopReleaseRun | PhaseRefusal
+type ScheduledAnnouncementsReport = ScheduledAnnouncementRun | PhaseRefusal
+type DeadlineAutopilotReport = AutopilotRun | PhaseRefusal
+type StorylineAutoPostReport = AutoPostRun | PhaseRefusal
 
 type PhaseArgs = {
   mode: string
@@ -346,6 +381,105 @@ async function chopReleasePhase(args: PhaseArgs): Promise<ChopReleaseReport> {
   )
 }
 
+/** Scheduled league announcements whose time has come. The heartbeat is written only when one moved. */
+async function scheduledAnnouncementsPhase(args: PhaseArgs): Promise<ScheduledAnnouncementsReport> {
+  if (args.mode === 'off' || args.mode === '0') return { ran: false, reason: 'disabled' }
+  const started = Date.now()
+  try {
+    const { runScheduledAnnouncements } = await import('@/lib/commissioner/scheduledAnnouncementService')
+    const r = await runScheduledAnnouncements({ dryRun: args.dryRun, budgetMs: SCHEDULED_ANNOUNCEMENTS_BUDGET_MS })
+    const moved = r.sent + r.failed + r.refused + r.staleFailed
+    if (!args.dryRun && (moved > 0 || r.errors.length > 0)) {
+      await recordSyncJobRun(
+        { jobName: SCHEDULED_ANNOUNCEMENTS_JOB, sport: null, trigger: 'cron' },
+        {
+          rowsRead: r.leagues,
+          rowsWritten: r.sent,
+          rowsSkipped: r.refused,
+          errors: r.errors.map((e) => `${e.leagueId}: ${e.error}`),
+          status: r.errors.length > 0 || r.failed > 0 || r.staleFailed > 0 ? 'partial' : 'success',
+          metadata: { failed: r.failed, staleFailed: r.staleFailed, budgetStopped: r.budgetStopped },
+        },
+        Date.now() - started,
+      )
+    }
+    return r
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
+    console.error('[cron/alert-sweep] scheduled announcements failed:', message)
+    return { ran: false, reason: 'error', error: message }
+  }
+}
+
+/** The Storyline Studio auto-post. The heartbeat is written only when something posted or failed. */
+async function storylineAutoPostPhase(args: PhaseArgs): Promise<StorylineAutoPostReport> {
+  if (args.mode === 'off' || args.mode === '0') return { ran: false, reason: 'disabled' }
+  if (String(process.env.STORYLINE_AUTOPOST ?? '').trim().toLowerCase() === 'off') return { ran: false, reason: 'disabled' }
+  const started = Date.now()
+  try {
+    const { runStorylineAutoPost } = await import('@/lib/storyline-studio/storylineService')
+    const r = await runStorylineAutoPost({
+      dryRun: args.dryRun,
+      budgetMs: Math.max(0, Math.min(STORYLINE_AUTOPOST_BUDGET_MS, SWEEP_CEILING_MS - (Date.now() - args.sweepStartedAt))),
+    })
+    if (!args.dryRun && (r.posted > 0 || r.errors.length > 0)) {
+      await recordSyncJobRun(
+        { jobName: STORYLINE_AUTOPOST_JOB, sport: null, trigger: 'cron' },
+        {
+          rowsRead: r.leagues,
+          rowsWritten: r.posted,
+          rowsSkipped: r.notDue + r.notEntitled + r.refused + r.nothingToSay + r.alreadyPosted,
+          errors: r.errors.map((e) => `${e.leagueId}: ${e.error}`),
+          status: r.errors.length > 0 ? 'partial' : 'success',
+          metadata: { notEntitled: r.notEntitled, refused: r.refused, nothingToSay: r.nothingToSay, budgetStopped: r.budgetStopped },
+        },
+        Date.now() - started,
+      )
+    }
+    return r
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
+    console.error('[cron/alert-sweep] storyline auto-post failed:', message)
+    return { ran: false, reason: 'error', error: message }
+  }
+}
+
+/**
+ * 🛑 THE FLAG IS READ HERE, BEFORE THE SERVICE IS LOADED. Off, the sweep never touches a league.
+ * The heartbeat is recorded only when reminders went out — an idle run every five minutes is noise.
+ */
+async function deadlineAutopilotPhase(args: PhaseArgs): Promise<DeadlineAutopilotReport> {
+  if (process.env.DEADLINE_AUTOPILOT_ENABLED !== '1') return { ran: false, reason: 'disabled' }
+  if (args.mode === 'off' || args.mode === '0') return { ran: false, reason: 'disabled' }
+  const started = Date.now()
+  try {
+    const { runDeadlineAutopilot } = await import('@/lib/deadline-autopilot/autopilotService')
+    const r = await runDeadlineAutopilot({
+      dryRun: args.dryRun,
+      budgetMs: Math.max(0, Math.min(WEEKLY_CHECK_BUDGET_MS, SWEEP_CEILING_MS - (Date.now() - args.sweepStartedAt))),
+    })
+    if (!args.dryRun && (r.reminders > 0 || r.errors.length > 0)) {
+      await recordSyncJobRun(
+        { jobName: DEADLINE_AUTOPILOT_JOB, sport: null, trigger: 'cron' },
+        {
+          rowsRead: r.leagues,
+          rowsWritten: r.reminders,
+          rowsSkipped: r.notEntitled,
+          errors: r.errors.map((e) => `${e.leagueId}: ${e.error}`),
+          status: r.errors.length > 0 ? 'partial' : 'success',
+          metadata: { recipients: r.recipients, budgetStopped: r.budgetStopped },
+        },
+        Date.now() - started,
+      )
+    }
+    return r
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
+    console.error('[cron/alert-sweep] deadline autopilot failed:', message)
+    return { ran: false, reason: 'error', error: message }
+  }
+}
+
 /**
  * Game-window Sleeper status fold.
  *
@@ -510,6 +644,26 @@ async function handle(req: NextRequest) {
     apnsConfig() !== null
 
   const runSweep = async () => {
+    // Scheduled announcements first: cheap, and the one job a person is waiting on (see the header).
+    const scheduledAnnouncements = singleUser
+      ? ({ ran: false, reason: 'disabled' } as const)
+      : await scheduledAnnouncementsPhase({
+          mode: (url.searchParams.get('scheduledAnnouncements') ?? '').trim().toLowerCase(),
+          dryRun,
+          singleUser,
+          sweepStartedAt: startedAt,
+        })
+
+    // The Storyline Studio auto-post, right after: also a commissioner's chosen time.
+    const storylineAutoPost = singleUser
+      ? ({ ran: false, reason: 'disabled' } as const)
+      : await storylineAutoPostPhase({
+          mode: (url.searchParams.get('storylineAutoPost') ?? '').trim().toLowerCase(),
+          dryRun,
+          singleUser,
+          sweepStartedAt: startedAt,
+        })
+
     // Game-window fold FIRST, so this very sweep evaluates against the fresh
     // statuses. Error-swallowed and time-boxed: Sleeper being slow or down must
     // never stop the sweep itself (the race leaves a late fold to finish in the
@@ -621,6 +775,12 @@ async function handle(req: NextRequest) {
         }
 
         if (dryRun) {
+          results.push(result)
+          continue
+        }
+
+        // Settings › Notifications › Player news "Off" silences these too (playerNewsLevel.ts).
+        if ((await readPlayerNewsLevelFor(sub.userId)) === 'off') {
           results.push(result)
           continue
         }
@@ -772,7 +932,9 @@ async function handle(req: NextRequest) {
         for (let i = 0; i < unsent.length; i++) {
           const u = unsent[i]!
           const top = u.group[0]!
-          const withEmail = i === 0 && injuryEmail != null
+          // At most ONE of these designed emails per person per Eastern day (owner's call, 2026-10-22):
+          // later sweeps that day push and write the bell; the daily roster digest carries the rest.
+          const withEmail = i === 0 && injuryEmail != null && (await claimPlayerNewsEmailToday(sub.userId, now))
           const texts = textBody != null && i === textNow[0]
           const covered = textNow.includes(i)
           await dispatchNotification({
@@ -894,6 +1056,14 @@ async function handle(req: NextRequest) {
       singleUser,
       sweepStartedAt: startedAt,
     })
+    const deadlineAutopilot = singleUser
+      ? ({ ran: false, reason: 'disabled' } as const)
+      : await deadlineAutopilotPhase({
+          mode: (url.searchParams.get('deadlineAutopilot') ?? '').trim().toLowerCase(),
+          dryRun,
+          singleUser,
+          sweepStartedAt: startedAt,
+        })
     const followFreeAgent = await followFreeAgentPhase({
       mode: (url.searchParams.get('followFree') ?? '').trim().toLowerCase(),
       dryRun,
@@ -932,6 +1102,12 @@ async function handle(req: NextRequest) {
       sportWaiverCheck,
       /** The guillotine chop-release alert — `{ ran: false, reason: 'disabled' }` until the flag is set. */
       chopRelease,
+      /** Scheduled league announcements posted this run — mostly `{ leagues: 0, sent: 0 }`. */
+      scheduledAnnouncements,
+      /** The deadline autopilot — `{ ran: false, reason: 'disabled' }` until the flag is set. */
+      deadlineAutopilot,
+      /** Storyline Studio auto-posts — mostly `{ leagues: 0, posted: 0 }`. */
+      storylineAutoPost,
       /** Followed players newly free in one of your leagues — `seeded` counts follows seen for the first time. */
       followFreeAgent,
       durationMs: Date.now() - startedAt,

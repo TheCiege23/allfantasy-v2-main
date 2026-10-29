@@ -43,6 +43,8 @@ import { importPlayerGameLogs } from "@/lib/sports-reporting/PlayerGameLogImport
 import { RI_LIVE_GAME_LOG_SPORTS } from "@/lib/sports-reporting/riLiveGameLogAdapter"
 import { currentScheduleSeason, syncRiSeasonSchedule } from "@/lib/sports-data/riSeasonSchedule"
 import { scoreProjectionAccuracyForCompletedWeeks } from "@/lib/projections/projectionAccuracy"
+import { isDailyFormSport } from "@/lib/projections/dailySportForm"
+import { writeDailySportFormCache } from "@/lib/projections/dailySportFormStore"
 import {
   SleeperWeeklyStatsFetcher,
   acquireRunLock,
@@ -217,6 +219,22 @@ async function handle(req: NextRequest) {
           }
         } catch (err) {
           ;(perSport[s] as Record<string, unknown>).cache = { error: String(err).slice(0, 200) }
+        }
+      }
+
+      /*
+       * THIRD WRITE: the AF projection / position-rank lines the waiver and lineup screens read
+       * (lib/projections/dailySportFormStore.ts), rebuilt from the rows the sweep above just
+       * refreshed. Here rather than in a new cron for the same reason as the cache above — the
+       * schedule is capped — and because a derived table refreshed by the run that writes its
+       * input cannot fall a day behind it. A budget-skipped sport keeps yesterday's lines.
+       */
+      if (!budget.exhausted() && isDailyFormSport(s)) {
+        try {
+          const form = await writeDailySportFormCache(prisma, s)
+          perSport[s] = { ...((perSport[s] as Record<string, unknown>) ?? {}), form }
+        } catch (err) {
+          perSport[s] = { ...((perSport[s] as Record<string, unknown>) ?? {}), form: { error: String(err).slice(0, 200) } }
         }
       }
     }

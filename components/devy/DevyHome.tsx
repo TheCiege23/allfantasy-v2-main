@@ -11,6 +11,10 @@ import { DevyPromotionPanel } from './DevyPromotionPanel'
 import { DevyCommissionerTools } from './DevyCommissionerTools'
 import { DevyDraftCenter } from './DevyDraftCenter'
 import { DevyLeagueHomeCards } from './DevyLeagueHomeCards'
+import { SpecialtyShell } from '@/components/league/specialty/SpecialtyShell'
+import { DevySpecialtyHome, type DevyHomeBlock } from '@/components/league/specialty/devy/DevySpecialtyHome'
+import { DevyPromotionMoment } from '@/components/league/specialty/devy/DevyPromotionMoment'
+import type { DevyStashItem } from '@/lib/devy/devyHomeView'
 
 interface DevySummary {
   leagueId: string
@@ -31,6 +35,10 @@ interface DevySummary {
   draftPhaseInfo: { phase: string; status: string; description: string } | null
   sessionId: string | null
   promotionEligibleCount?: number
+  /** Specialty home blocks (absent on older responses). */
+  league?: DevyHomeBlock['league']
+  my?: DevyHomeBlock['my']
+  feed?: DevyHomeBlock['feed']
 }
 
 interface DevyHomeProps {
@@ -43,6 +51,8 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
   const [summary, setSummary] = useState<DevySummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [promoting, setPromoting] = useState<DevyStashItem | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -67,7 +77,7 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
     }
     fetchSummary()
     return () => { active = false }
-  }, [leagueId])
+  }, [leagueId, reloadKey])
 
   if (loading) {
     return (
@@ -88,38 +98,40 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
   const { config, draftPhase, draftPhaseInfo, sport } = summary
   const adapterLabel = summary.sportAdapterId === 'nfl_devy' ? 'NCAA Football' : summary.sportAdapterId === 'nba_devy' ? 'NCAA Basketball' : 'Devy'
 
+  const home: DevyHomeBlock = { league: summary.league ?? null, my: summary.my ?? null, feed: summary.feed ?? [] }
+  const devySlots = { used: home.my?.stash.length ?? 0, total: config.devySlotCount }
+  const proRoster = { used: home.my?.proRosterCount ?? 0, total: home.league?.rosterSize ?? null }
+
+  if (promoting) {
+    return (
+      <SpecialtyShell format="devy" testId="devy-specialty">
+        <DevyPromotionMoment
+          leagueId={leagueId}
+          item={promoting}
+          devySlots={devySlots}
+          proRoster={proRoster}
+          onBack={() => setPromoting(null)}
+          onPromoted={() => setReloadKey((k) => k + 1)}
+        />
+      </SpecialtyShell>
+    )
+  }
+
   return (
+    <SpecialtyShell format="devy" testId="devy-specialty">
     <div className="space-y-4">
-      <div className="rounded-xl border border-white/10 bg-white/5 p-4 sm:p-6">
-        <h2 className="text-lg font-semibold text-white">Devy Dynasty</h2>
-        <p className="mt-1 text-sm text-white/70">
-          {sport} league with {adapterLabel} devy pool. Dynasty only; startup vet, rookie, and devy drafts.
-        </p>
-        <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-          <div className="rounded-lg bg-white/5 p-2">
-            <span className="text-white/50">Devy slots</span>
-            <p className="font-medium text-white">{config.devySlotCount}</p>
-          </div>
-          <div className="rounded-lg bg-white/5 p-2">
-            <span className="text-white/50">Taxi</span>
-            <p className="font-medium text-white">{config.taxiSize}</p>
-          </div>
-          <div className="rounded-lg bg-white/5 p-2">
-            <span className="text-white/50">Rookie rounds</span>
-            <p className="font-medium text-white">{config.rookieDraftRounds}</p>
-          </div>
-          <div className="rounded-lg bg-white/5 p-2">
-            <span className="text-white/50">Devy rounds</span>
-            <p className="font-medium text-white">{config.devyDraftRounds}</p>
-          </div>
-        </div>
-        {config.bestBallEnabled && (
-          <p className="mt-2 text-xs text-emerald-400">Best ball enabled</p>
-        )}
-        <p className="mt-2 text-xs text-white/50">
-          Best Ball auto-optimizes your highest scoring legal lineup each scoring period. Devy college players do not score until they become active pro assets.
-        </p>
-      </div>
+      <DevySpecialtyHome
+        leagueId={leagueId}
+        sport={sport}
+        config={config}
+        home={home}
+        onOpenPromotion={setPromoting}
+        draftHref={`/league/${leagueId}?tab=Draft`}
+      />
+      <p className="text-xs text-white/50">
+        {adapterLabel} devy pool · {config.devyDraftRounds} devy rounds · {config.rookieDraftRounds} rookie rounds
+        {config.bestBallEnabled ? ' · Best ball on: your highest-scoring legal lineup counts each week.' : ''}
+      </p>
 
       {draftPhaseInfo && (
         <div className="rounded-xl border border-white/10 bg-white/5 p-4">
@@ -164,5 +176,6 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
         League settings
       </Link>
     </div>
+    </SpecialtyShell>
   )
 }

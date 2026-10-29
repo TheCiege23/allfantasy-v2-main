@@ -1,3 +1,4 @@
+import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -8,7 +9,7 @@ import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(
+async function paidToolPost(
   req: Request,
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
@@ -101,3 +102,5 @@ export async function POST(
     return NextResponse.json({ error: 'AI Commissioner run failed' }, { status: 500 })
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

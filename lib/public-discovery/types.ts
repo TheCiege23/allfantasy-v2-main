@@ -3,6 +3,8 @@
  * Safe public data only; supports NFL, NHL, NBA, MLB, NCAAB, NCAAF, SOCCER.
  */
 
+import type { PublicReputation } from "@/lib/commish-reputation/reputation"
+
 export type DiscoverySource = "fantasy" | "bracket" | "creator"
 
 export type DiscoverySort = "ranking_match" | "popularity" | "newest" | "filling_fast"
@@ -59,6 +61,8 @@ export interface DiscoveryCard {
   draftDate: string | null
   /** Commissioner display name (same as ownerName). */
   commissionerName: string | null
+  /** Commish reputation, only when the commissioner made it public for this league (lib/commish-reputation). */
+  commissionerReputation?: PublicReputation | null
   /** AI-enabled features for display (e.g. ["ADP", "Trade"]). */
   aiFeatures: string[]
   /** Creator leagues only: FANTASY | BRACKET. */

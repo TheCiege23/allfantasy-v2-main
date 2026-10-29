@@ -64,6 +64,7 @@ import { applicableTemplates } from '@/lib/commissioner-os/profile/templateOffer
 import { loadCommissionerHistory, type CommissionerHistory } from './commissioner/history'
 import { messagesFor } from '@/lib/i18n/messages'
 import { commissionerHubMessages } from './messages/commissionerHub'
+import { pickTradeDeadlineFor } from '@/lib/trade-deadline/pickTradeDeadline'
 
 /**
  * Commissioner Hub — 38a screen 9.
@@ -863,6 +864,10 @@ export async function getCommissionerHub(input: {
       : null,
     tradeDeadlineWeek: noTradeDeadline ? null : tradeDeadline,
     noTradeDeadline,
+    pickTradeDeadline: (() => {
+      const rule = pickTradeDeadlineFor(league)
+      return rule.mode === 'same' ? null : rule
+    })(),
     playoffStartWeek: playoffStart,
     currentWeek,
     weekStarts,

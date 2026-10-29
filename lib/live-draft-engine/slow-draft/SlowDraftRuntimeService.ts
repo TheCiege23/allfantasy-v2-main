@@ -1,6 +1,7 @@
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
 import { prisma } from '@/lib/prisma'
+import { instantAutopickReason, shouldPickNow } from '@/lib/live-draft-engine/instantAutopick'
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
 import { getDraftUISettingsForLeague, isSoftTimerEnabled } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { submitBestAvailableAutopickForExpiredTimer } from '@/lib/live-draft-engine/autopickBestAvailableSubmit'
@@ -303,12 +304,18 @@ export async function runSlowDraftAutomationTick(
 
     // Slice 3 — Soft timer ON suppresses the slow-draft tick autopick gate. Same canonical helper as
     // processExpiredDraftPickForLeague. Pause/skip/notification side-effects below remain untouched.
+    // An autopilot team, or a manager on "Auto-pick me", picks as soon as it is on the clock
+    // (./instantAutopick.ts). Asked only when the clock has not already run out.
+    const instant =
+      onClockRosterId && timer.status !== 'expired' && timer.status !== 'paused'
+        ? await instantAutopickReason({ leagueId, draftSessionId: session.id, rosterId: onClockRosterId, leagueSettings }).catch(() => null)
+        : null
     if (
       uiSettings.autoPickEnabled &&
       // The session's per-draft switch, honoured here as the cron path honours it.
       (session as { cpuAutoPick?: boolean }).cpuAutoPick !== false &&
       !isSoftTimerEnabled(uiSettings) &&
-      timer.status === 'expired' &&
+      shouldPickNow(timer.status, instant) &&
       onClockRosterId
     ) {
       const queuePick = await tryQueueAutoPick(leagueId, onClockRosterId)
@@ -353,7 +360,8 @@ export async function runSlowDraftAutomationTick(
         // stale-overall guard fires deterministically when another
         // writer lands a pick first.
         const expectedOverall = session.picks.length + 1
-        if (autoPickBehavior === 'skip') {
+        // A team that asked for a pick is never skipped (./instantAutopick.ts).
+        if (autoPickBehavior === 'skip' && !instant) {
           const skip = await submitPick({
             leagueId,
             playerName: '(Skipped)',
@@ -421,7 +429,10 @@ export async function runSlowDraftAutomationTick(
       }
     }
 
+    // A team picked for at once (./instantAutopick.ts) is no longer on the clock: no time warnings for it.
+    const pickedThisTick = actions.some((x) => x.type === 'auto_pick' || x.type === 'auto_skip')
     if (
+      !pickedThisTick &&
       timer.status === 'running' &&
       timer.remainingSeconds != null &&
       timer.remainingSeconds > 0 &&
@@ -450,6 +461,7 @@ export async function runSlowDraftAutomationTick(
 
     const isSlowDraft = (session.timerSeconds ?? 0) >= 3600 || uiSettings.timerMode === 'overnight_pause'
     if (
+      !pickedThisTick &&
       isSlowDraft &&
       timer.status === 'running' &&
       timer.remainingSeconds != null &&

@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { loadNativeSeasonHistory } from '@/lib/redraft/offseason/nativeSeasonHistory'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,6 +33,14 @@ export async function GET(
     const seasonParam = url.searchParams.get('season')
     const season = seasonParam ? Number.parseInt(seasonParam, 10) : null
 
+    const access = await resolveLeagueAccess(id, userId)
+    if (!access?.isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const league = await prisma.league.findUnique({ where: { id }, select: { platform: true } })
+    if (league && isNativePlatform(league.platform)) {
+      const years = await prisma.leagueSeason.findMany({ where: { leagueId: id, ...(season ? { season } : {}) }, select: { season: true }, orderBy: { season: 'desc' } })
+      const seasons = await Promise.all(years.map(async ({ season: year }) => ({ year, picks: (await loadNativeSeasonHistory(id, year))?.draft ?? [] })))
+      return NextResponse.json({ seasons })
+    }
     const where: { leagueId: string; season?: number } = { leagueId: id }
     if (season && Number.isFinite(season)) where.season = season
 

@@ -47,8 +47,22 @@ export interface BlendWeights {
   api: number
   app: number
   ai: number
+  /**
+   * Completed drafts from leagues users IMPORTED from other platforms (`DraftFact`). This is the
+   * "real leagues elsewhere" signal — distinct from `app` (drafts run in AllFantasy) and from `api`
+   * (what platforms publish). Its sample is a count of drafts, so it is shrunk like `app` and `ai`.
+   */
+  imported: number
   custom: number
 }
+
+/**
+ * Default share for `imported` when a caller's saved weights predate it. Leagues stored
+ * `{ api, app, ai }`; a missing key here would otherwise default to 0 and silently keep imported
+ * drafts out of every existing league's number. Same order of magnitude as `app`: both are
+ * observed human drafts, and shrinkage already discounts whichever is thinner.
+ */
+export const DEFAULT_IMPORTED_WEIGHT = 30
 
 export interface BlendSource {
   adp: number
@@ -60,6 +74,7 @@ export interface BlendInput {
   api?: BlendSource | null
   app?: BlendSource | null
   ai?: BlendSource | null
+  imported?: BlendSource | null
   custom?: (BlendSource & { locked?: boolean }) | null
 }
 
@@ -96,22 +111,38 @@ export function normalizeBlendWeights(weights?: Partial<BlendWeights>): BlendWei
     api: Number(weights?.api ?? 40),
     app: Number(weights?.app ?? 35),
     ai: Number(weights?.ai ?? 25),
+    imported: Number(weights?.imported ?? NaN),
     custom: Number(weights?.custom ?? 0),
   }
   for (const k of Object.keys(base) as (keyof BlendWeights)[]) {
+    if (k === 'imported' && weights?.imported == null) continue
     if (!Number.isFinite(base[k]) || base[k] < 0) base[k] = 0
   }
-  const total = base.api + base.app + base.ai + base.custom
-  if (total <= 0) return { api: 0.4, app: 0.35, ai: 0.25, custom: 0 }
+  /*
+   * ⚠ A MISSING `imported` IS SCALED TO THE WEIGHTS THE CALLER DID GIVE, NOT A FIXED 30. Saved
+   * weights come as percentages (40/35/25) AND as fractions (0.4/0.35/0.25); a flat 30 beside
+   * fractions would hand imported drafts ~97% of the blend. 30 is a share of the default 100, so
+   * it is applied as that same share of whatever scale the caller used — and a caller who zeroed
+   * every source still gets zero here and falls through to the defaults below.
+   */
+  if (!Number.isFinite(base.imported)) {
+    base.imported = ((base.api + base.app + base.ai) * DEFAULT_IMPORTED_WEIGHT) / 100
+  }
+  const total = base.api + base.app + base.ai + base.imported + base.custom
+  if (total <= 0) {
+    const d = 40 + 35 + 25 + DEFAULT_IMPORTED_WEIGHT
+    return { api: 40 / d, app: 35 / d, ai: 25 / d, imported: DEFAULT_IMPORTED_WEIGHT / d, custom: 0 }
+  }
   return {
     api: base.api / total,
     app: base.app / total,
     ai: base.ai / total,
+    imported: base.imported / total,
     custom: base.custom / total,
   }
 }
 
-const EMPTY_CONTRIBUTIONS: BlendWeights = { api: 0, app: 0, ai: 0, custom: 0 }
+const EMPTY_CONTRIBUTIONS: BlendWeights = { api: 0, app: 0, ai: 0, imported: 0, custom: 0 }
 
 /**
  * Blend one player's ADP across the four sources.
@@ -120,7 +151,7 @@ const EMPTY_CONTRIBUTIONS: BlendWeights = { api: 0, app: 0, ai: 0, custom: 0 }
  * market or corpus evidence overrides an explicit instruction.
  */
 export function blendOne(input: BlendInput, weights: BlendWeights): BlendResult | null {
-  const { api, app, ai, custom } = input
+  const { api, app, ai, imported, custom } = input
 
   if (custom?.locked && Number.isFinite(custom.adp)) {
     return {
@@ -132,7 +163,7 @@ export function blendOne(input: BlendInput, weights: BlendWeights): BlendResult 
   }
 
   /*
-   * `app` and `ai` are discounted by how much of our own evidence stands behind them.
+   * `app`, `ai` and `imported` are discounted by how many drafts stand behind them.
    * `api` and `custom` are not — see the header for why provider count is a different scale.
    */
   const raw: Array<[keyof BlendWeights, number, number]> = [
@@ -143,6 +174,11 @@ export function blendOne(input: BlendInput, weights: BlendWeights): BlendResult 
       app && Number.isFinite(app.adp) ? app.adp : NaN,
     ],
     ['ai', weights.ai * sampleConfidence(ai?.sampleSize), ai && Number.isFinite(ai.adp) ? ai.adp : NaN],
+    [
+      'imported',
+      weights.imported * sampleConfidence(imported?.sampleSize),
+      imported && Number.isFinite(imported.adp) ? imported.adp : NaN,
+    ],
     ['custom', weights.custom, custom && Number.isFinite(custom.adp) ? custom.adp : NaN],
   ]
 
@@ -156,7 +192,7 @@ export function blendOne(input: BlendInput, weights: BlendWeights): BlendResult 
      * rather than inventing one, and report zero contribution so a caller can see it was a
      * fallback rather than a blend.
      */
-    const fallback = [api, app, ai, custom].find((s) => s && Number.isFinite(s.adp))
+    const fallback = [api, app, ai, imported, custom].find((s) => s && Number.isFinite(s.adp))
     if (!fallback) return null
     return {
       adp: round2(fallback.adp),

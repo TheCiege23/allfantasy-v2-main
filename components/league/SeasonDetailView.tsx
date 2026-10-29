@@ -76,6 +76,7 @@ type PlayoffParticipant = {
 }
 
 type StandingRow = {
+  rank?: number
   managerName?: string
   rosterId?: number | string
   wins?: number
@@ -241,7 +242,7 @@ export function SeasonDetailView({ leagueId, season }: SeasonDetailViewProps) {
   if (!data) return null
 
   const standings = Array.isArray(data.standings) ? data.standings : []
-  const sorted = [...standings].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0))
+  const sorted = [...standings].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || (b.wins ?? 0) - (a.wins ?? 0))
 
   return (
     <div className="mt-3 space-y-2">

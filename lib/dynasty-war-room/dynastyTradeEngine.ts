@@ -54,10 +54,10 @@ export interface DynastyTradeFinderResult {
 }
 
 /** Age-adjusted value: nudge value by trajectory so youth is worth a premium in dynasty. */
-function ageAdjustedValue(p: DynastyPlayerFact): number | null {
+function ageAdjustedValue(p: DynastyPlayerFact, sport: string): number | null {
   const v = dynastyValue(p)
   if (v.source === 'none') return null
-  const traj: AgeTrajectory = ageTrajectory(p.position, p.age)
+  const traj: AgeTrajectory = ageTrajectory(p.position, p.age, sport)
   const mult =
     traj === 'ascending' ? 1.15 : traj === 'prime' ? 1.0 : traj === 'aging' ? 0.85 : traj === 'cliff' ? 0.65 : 1.0
   return Math.round(v.value * mult * 100) / 100
@@ -130,8 +130,8 @@ export function dynastyTradeFacts(
   for (const pk of incomingPicks) pickImpact.push(`Acquiring ${pickLabel(pk)} pick.`)
   for (const pk of outgoingPicks) pickImpact.push(`Sending ${pickLabel(pk)} pick.`)
 
-  const outValues = [...outgoing.map(ageAdjustedValue), ...outPickValues]
-  const inValues = [...incoming.map(ageAdjustedValue), ...inPickValues]
+  const outValues = [...outgoing.map((p) => ageAdjustedValue(p, context.sport)), ...outPickValues]
+  const inValues = [...incoming.map((p) => ageAdjustedValue(p, context.sport)), ...inPickValues]
   const haveAllValues = [...outValues, ...inValues].every((v) => v != null)
   const haveAnyValue = [...outValues, ...inValues].some((v) => v != null)
 
@@ -146,12 +146,12 @@ export function dynastyTradeFacts(
 
   // Age impact narrative.
   for (const p of incoming) {
-    const t = ageTrajectory(p.position, p.age)
+    const t = ageTrajectory(p.position, p.age, context.sport)
     if (t === 'ascending') ageImpact.push(`Acquiring ${p.playerName} adds an ascending ${p.position}${p.age != null ? ` (age ${p.age})` : ''}.`)
     if (t === 'cliff') riskFlags.push(`Incoming ${p.playerName} is past its dynasty prime${p.age != null ? ` (age ${p.age})` : ''}.`)
   }
   for (const p of outgoing) {
-    const t = ageTrajectory(p.position, p.age)
+    const t = ageTrajectory(p.position, p.age, context.sport)
     if (t === 'ascending') riskFlags.push(`Trading away ascending ${p.playerName} surrenders long-term upside.`)
   }
 
@@ -175,8 +175,8 @@ export function dynastyTradeFacts(
   const direction = evaluateDynastyTeamDirection(context, input.rosterId)
   let directionImpact: string | null = null
   if (direction.window !== 'unknown') {
-    const incomingYoung = incoming.filter((p) => ['ascending', 'prime'].includes(ageTrajectory(p.position, p.age))).length
-    const outgoingYoung = outgoing.filter((p) => ['ascending', 'prime'].includes(ageTrajectory(p.position, p.age))).length
+    const incomingYoung = incoming.filter((p) => ['ascending', 'prime'].includes(ageTrajectory(p.position, p.age, context.sport))).length
+    const outgoingYoung = outgoing.filter((p) => ['ascending', 'prime'].includes(ageTrajectory(p.position, p.age, context.sport))).length
     if (direction.window === 'contend') {
       directionImpact = incomingYoung < outgoingYoung
         ? 'Aligns with a contending window only if incoming players start now — youth was dealt away.'

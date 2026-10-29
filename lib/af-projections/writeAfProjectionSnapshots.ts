@@ -14,6 +14,7 @@
  */
 
 import { createInjuryRowMatcher } from '@/lib/injuries/matchInjuryRows'
+import { selectCurrentDepthRows } from '@/lib/depthChartRows'
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
@@ -323,6 +324,9 @@ export async function writeAfProjectionSnapshotsForSeason(
     ? await loadSoccerSeasonLines(sourceSeason)
     : await prisma.fantasyStatLine.findMany({
         where: { sport, season: String(sourceSeason), source: SEASON_LINE_SOURCE_FILTER },
+        // Only `playerId` and `stats` are read (see SeasonLine). Selecting them keeps the
+        // per-preset points JSON and the rest of each row out of memory for a whole season.
+        select: { playerId: true, stats: true },
       })
 
   /*
@@ -346,6 +350,7 @@ export async function writeAfProjectionSnapshotsForSeason(
       ? await loadSoccerSeasonLines(priorSeason as number)
       : await prisma.fantasyStatLine.findMany({
           where: { sport, season: String(priorSeason), source: SEASON_LINE_SOURCE_FILTER },
+          select: { playerId: true, stats: true },
         })
   const priorByPlayer = new Map(priorLines.map((l) => [l.playerId, l]))
   const plan: Array<{ line: (typeof statLines)[number]; season: number }> = []
@@ -390,13 +395,18 @@ export async function writeAfProjectionSnapshotsForSeason(
     const rawBySleeper = new Map<string, WeeklyRawStats[]>()
     for (const g of seasonGames) {
       const obs = toWeeklyObservation(g.weekOrRound, g.normalizedStatMap)
-      if (obs) obsBySleeper.set(g.playerId, [...(obsBySleeper.get(g.playerId) ?? []), obs])
+      // Appended in place: copying the array per row was quadratic in a player's game count.
+      if (obs) {
+        const list = obsBySleeper.get(g.playerId)
+        if (list) list.push(obs)
+        else obsBySleeper.set(g.playerId, [obs])
+      }
       const statMap = g.normalizedStatMap as Record<string, unknown> | null
       if (statMap && typeof statMap === 'object') {
-        rawBySleeper.set(g.playerId, [
-          ...(rawBySleeper.get(g.playerId) ?? []),
-          { week: g.weekOrRound, statMap },
-        ])
+        const entry = { week: g.weekOrRound, statMap }
+        const list = rawBySleeper.get(g.playerId)
+        if (list) list.push(entry)
+        else rawBySleeper.set(g.playerId, [entry])
       }
     }
     obsBySeason.set(season, obsBySleeper)
@@ -406,7 +416,11 @@ export async function writeAfProjectionSnapshotsForSeason(
   // --- depth-chart role, indexed by player name --------------------------------------
   // Depth charts are RI-keyed and carry names, not canonical ids; name is the only bridge
   // available here. A miss costs confidence, never correctness.
-  const depthRows = await prisma.depthChart.findMany({ where: { sport } })
+  // selectCurrentDepthRows: one row per team/position, the freshest. MLB/NBA/NHL carry a
+  // second, months-old writer's rows beside the weekly REST ones, and with no order the first
+  // name seen could come from either. Plain-string entries (that old writer's shape) are still
+  // skipped below, as before.
+  const depthRows = selectCurrentDepthRows(await prisma.depthChart.findMany({ where: { sport } }))
   const slotByName = new Map<string, string>()
   for (const row of depthRows) {
     const players = Array.isArray(row.players) ? row.players : []

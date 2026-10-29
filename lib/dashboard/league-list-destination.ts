@@ -1,3 +1,4 @@
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import type { UserLeague } from '@/app/dashboard/types'
 
 /**
@@ -6,6 +7,7 @@ import type { UserLeague } from '@/app/dashboard/types'
  */
 export type LeagueListNavInput = {
   id: string
+  platform?: string | null
   settings?: Record<string, unknown> | null
   navigationLeagueId?: string | null
   unifiedLeagueId?: string | null
@@ -46,7 +48,7 @@ function pickCanonicalLeagueListId(row: LeagueListNavInput): string {
 
 /**
  * Single source of truth for “open this league row” from dashboard list payloads:
- * tournament hubs → `/tournament/[id]`; everything else → `/league/[canonicalId]`.
+ * tournament hubs → `/tournament/[id]`; AF-native → `/league/[canonicalId]`; imports → `/core?league=...`.
  * Works for AllFantasy-created leagues, imports (Sleeper/Yahoo/etc.), and tournament shells.
  */
 export function resolveLeagueHomeHrefFromListRow(row: LeagueListNavInput): string {
@@ -74,7 +76,7 @@ export function resolveLeagueHomeHrefFromListRow(row: LeagueListNavInput): strin
   }
 
   const leagueId = pickCanonicalLeagueListId(row) || row.id
-  return `/league/${leagueId}`
+  return leagueEntryHref({ id: leagueId, platform: row.platform })
 }
 
 /**

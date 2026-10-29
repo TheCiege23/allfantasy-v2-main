@@ -7,6 +7,7 @@ import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { PlayerAvatar } from './PlayerAvatar'
 import type { DraftAiOverlaySignal } from './PlayerPanel'
+import { formatSurvival, survivalProbability, survivalTone } from '@/lib/draft-room/draftPulse'
 
 type QueueSortMode = 'queue' | 'name' | 'adp' | 'rank'
 
@@ -50,6 +51,8 @@ export type QueuePanelProps = {
   /** Shared visibility toggle for AI overlays across pool/queue/helper/topbar. */
   showAiOverlays?: boolean
   presentationVariant?: 'default' | 'redraft_snake'
+  /** Viewer's next pick — each row gets an estimated "left @" chance from market ADP. */
+  leftAtPick?: { overall: number; label: string } | null
 }
 
 export function QueuePanel({
@@ -75,6 +78,7 @@ export function QueuePanel({
   aiOverlaySignals,
   showAiOverlays = true,
   presentationVariant = 'default',
+  leftAtPick = null,
 }: QueuePanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -551,6 +555,28 @@ export function QueuePanel({
                       {adpText ? (
                         <span className="rounded border border-cyan-300/35 bg-cyan-500/12 px-1.5 py-[1px] text-cyan-100">ADP {adpText}</span>
                       ) : null}
+                      {leftAtPick && survivalProbability(meta.adp, leftAtPick.overall) != null
+                        ? (() => {
+                            const odds = survivalProbability(meta.adp, leftAtPick.overall) as number
+                            const tone = survivalTone(odds)
+                            return (
+                              <span
+                                data-testid="queue-left-at"
+                                data-tone={tone}
+                                title={`About ${formatSurvival(odds)} chance ${entry.playerName} is still available at your next pick, from market ADP`}
+                                className={`rounded border px-1.5 py-[1px] ${
+                                  tone === 'likely'
+                                    ? 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
+                                    : tone === 'coin_flip'
+                                      ? 'border-amber-300/35 bg-amber-500/12 text-amber-100'
+                                      : 'border-rose-300/35 bg-rose-500/12 text-rose-100'
+                                }`}
+                              >
+                                {formatSurvival(odds)} left @ {leftAtPick.label}
+                              </span>
+                            )
+                          })()
+                        : null}
                       {aiAdpText ? (
                         <span className="rounded border border-violet-300/30 bg-violet-500/10 px-1.5 py-[1px] text-violet-100">AI ADP {aiAdpText}</span>
                       ) : null}

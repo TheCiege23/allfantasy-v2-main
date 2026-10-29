@@ -73,7 +73,7 @@ beforeEach(() => {
 describe('getChatBadge', () => {
   it('adds league chat since you last read it and Chimmy’s weekly checks to your DMs', async () => {
     const b = await getChatBadge('u1', NOW)
-    expect(b).toEqual({ total: 2 + 2 + 1, mentions: 1 + 1, dm: 2, league: 2, chimmy: 1 })
+    expect(b).toEqual({ total: 2 + 2 + 1, mentions: 1 + 1, dm: 2, league: 2, chimmy: 1, byLeague: { L1: 1, L2: 1 } })
   })
 
   it('league chat: never your own, never draft-only rows, never someone else’s private row, and a bounded window', async () => {
@@ -95,7 +95,7 @@ describe('getChatBadge', () => {
     expect((await getChatBadge(null, NOW)).total).toBe(0)
     h.teams = [] // no leagues → league part is simply zero
     h.owned = []
-    expect(await getChatBadge('u1', NOW)).toEqual({ total: 3, mentions: 1, dm: 2, league: 0, chimmy: 1 })
+    expect(await getChatBadge('u1', NOW)).toEqual({ total: 3, mentions: 1, dm: 2, league: 0, chimmy: 1, byLeague: {} })
   })
 })
 

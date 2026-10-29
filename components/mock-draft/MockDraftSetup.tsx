@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Play, Loader2 } from 'lucide-react'
 import type { MockDraftConfig, MockDraftSport, MockLeagueType, MockDraftType, MockScoringFormat, MockPoolType } from '@/lib/mock-draft/types'
 import { DEFAULT_MOCK_CONFIG } from '@/lib/mock-draft/types'
+import { getMockDraftTeamCountOptions, normalizeMockDraftTeamCount } from '@/lib/mock-draft/mockTeamCount'
 
 const SPORTS: { value: MockDraftSport; label: string }[] = [
   { value: 'NFL', label: 'NFL' },
@@ -77,7 +78,11 @@ export function MockDraftSetup({
   const [sport, setSport] = useState<MockDraftSport>(initialConfig?.sport ?? DEFAULT_MOCK_CONFIG.sport)
   const [leagueType, setLeagueType] = useState<MockLeagueType>(initialConfig?.leagueType ?? DEFAULT_MOCK_CONFIG.leagueType)
   const [draftType, setDraftType] = useState<MockDraftType>(initialConfig?.draftType ?? DEFAULT_MOCK_CONFIG.draftType)
-  const [numTeams, setNumTeams] = useState(initialConfig?.numTeams ?? DEFAULT_MOCK_CONFIG.numTeams)
+  const [requestedNumTeams, setNumTeams] = useState(initialConfig?.numTeams ?? DEFAULT_MOCK_CONFIG.numTeams)
+  // Every size a league of this sport and type accepts; a choice the new sport/type does not offer
+  // moves to the nearest one it does (lib/mock-draft/mockTeamCount.ts).
+  const teamCountOptions = useMemo(() => getMockDraftTeamCountOptions(sport, leagueType), [sport, leagueType])
+  const numTeams = normalizeMockDraftTeamCount(requestedNumTeams, sport, leagueType)
   const [scoringFormat, setScoringFormat] = useState<MockScoringFormat>(initialConfig?.scoringFormat ?? DEFAULT_MOCK_CONFIG.scoringFormat)
   const [timerSeconds, setTimerSeconds] = useState(initialConfig?.timerSeconds ?? DEFAULT_MOCK_CONFIG.timerSeconds)
   const [aiEnabled, setAiEnabled] = useState(initialConfig?.aiEnabled ?? DEFAULT_MOCK_CONFIG.aiEnabled)
@@ -209,11 +214,11 @@ export function MockDraftSetup({
         <div className="space-y-2">
           <Label className="text-white/80">Teams</Label>
           <Select value={String(numTeams)} onValueChange={(v) => setNumTeams(Number(v))}>
-            <SelectTrigger className="border-white/15 bg-black/40 text-white">
+            <SelectTrigger className="border-white/15 bg-black/40 text-white" data-testid="mock-draft-setup-teams-select">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {[8, 10, 12, 14, 16].map((n) => (
+              {teamCountOptions.map((n) => (
                 <SelectItem key={n} value={String(n)}>{n}</SelectItem>
               ))}
             </SelectContent>

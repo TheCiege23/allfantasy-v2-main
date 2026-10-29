@@ -76,4 +76,9 @@ export type DispersalDraftState = {
   completedAt: string | null
   pickTimeSeconds: number
   autoPickOnTimeout: boolean
+  /**
+   * When the current pick's clock runs out (`pickDeadlineFor`), the same instant for every viewer and for
+   * the server's sweep. Null when no clock runs: not in progress, or no pick timer.
+   */
+  pickDeadlineAt: string | null
 }

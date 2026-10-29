@@ -28,9 +28,16 @@ import {
   knownDailySportSeasons,
   resolveDailySportWeekWindow,
 } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
 import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
+import {
+  DAILY_NO_ROW_VERDICT_SPORTS,
+  DAILY_ZERO_VERDICTS,
+  loadDailyWindowParticipation,
+  type DailyNoRowVerdict,
+} from '@/lib/redraft/dailySportParticipation'
 import { loadNcaafWeekParticipation, NCAAF_ZERO_VERDICTS, type NcaafNoRowVerdict } from '@/lib/redraft/ncaafWeekParticipation'
 import { ncaafReserveAvailability, type NcaafReserveAvailability } from '@/lib/player-identity/verifiedNcaafReserves'
 import { aggregateNcaafWeek, isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
@@ -39,6 +46,16 @@ import { teamDefenseSleeperId } from '@/lib/core-app/teamDefenseCrosswalk'
 import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
+import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { addDatedGameRow, buildPlayerDailyStatLines, type DatedGameRows } from '@/lib/redraft/playerDailyStatLines'
+import { gamesCountActive } from '@/lib/redraft/gamesCount'
+import {
+  gamesCountDb,
+  gamesCountTablesExist,
+  warnGamesCountStorageMissing,
+  writePlayerWeekGameScores,
+} from '@/lib/redraft/gamesCountStore'
+import { readRiScheduleWindow } from '@/lib/sports-data/riScheduleCache'
 
 export type WeeklyScoreSyncSummary = {
   leagueId: string
@@ -52,6 +69,8 @@ export type WeeklyScoreSyncSummary = {
   preseasonRowsSkipped?: number
   /** Daily sports: roster ids translated to game-log (PlayerIdentityMap) ids — see rosterGameLogIdBridge.ts. */
   gameLogIdsBridged?: number
+  /** Of those, `tsdb_…` roster ids matched by name to one identity. */
+  gameLogIdsBridgedByName?: number
   /** NFL, foreign platform: roster ids translated to a Sleeper id through the crosswalk before any read or write. */
   foreignIdsTranslated?: number
   /** NFL, foreign platform: roster ids with no one-to-one Sleeper id — skipped, never read or written under. */
@@ -64,9 +83,17 @@ export type WeeklyScoreSyncSummary = {
    * they recorded nothing (see ncaafWeekParticipation.ts) — and why the rest with no row stayed missing.
    */
   ncaafZeroScored?: Array<{ playerId: string; reason: 'bye' | 'no_stat' }>
+  /** NBA / NHL / MLB: players with no row written as a real 0, and why (dailySportParticipation.ts). */
+  dailyZeroScored?: Array<{ playerId: string; reason: 'inactive' | 'no_stat' }>
+  /** NBA / NHL / MLB: players with no row left missing, by verdict. */
+  dailyMissingByReason?: Partial<Record<DailyNoRowVerdict, number>>
   ncaafMissingByReason?: Partial<Record<'pending' | 'not_ingested' | 'unmatched' | 'no_team' | NcaafReserveAvailability, number>>
   ncaafSeasonAvailability?: Array<{ playerId: string; status: NcaafReserveAvailability; reason: string; evidenceUrl: string }>
   scoresUpserted: number
+  /** Daily-lineup leagues only: per-day rows written to `player_daily_scores` (see lib/redraft/dailyLineups.ts). */
+  dailyScoresUpserted?: number
+  /** Games-count leagues only: `player_week_game_scores` rows written (lib/redraft/gamesCount.ts). */
+  weekGameScoresUpserted?: number
   missingCachePlayerIds: string[]
   missingWeekPlayerIds: string[]
   missingStatPlayerIds: string[]
@@ -233,8 +260,18 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   // has released the team for the following week.
   const survivorLeague = await prisma.league.findUnique({
     where: { id: season.leagueId },
-    select: { platform: true, survivorMode: true },
+    select: { platform: true, survivorMode: true, settings: true },
   })
+  // A daily-lineup league is scored per day, so its sync also keeps each player's per-day stats.
+  const dailyLineupScoring = isDailySport && isDailyLineupScoringEnabled(survivorLeague?.settings ?? null, sport)
+  // A league that counts only some games (best-N / lock-in, lib/redraft/gamesCount.ts) is scored per
+  // GAME, so its sync also keeps each player's per-game stats. Off for every other league.
+  let gamesCountScoring = isDailySport && gamesCountActive(survivorLeague?.settings ?? null, sport)
+  // Fail safe: without its tables the league is synced (and scored) as every game, never P2021.
+  if (gamesCountScoring && !(await gamesCountTablesExist(prisma))) {
+    warnGamesCountStorageMissing('stat sync', season.leagueId)
+    gamesCountScoring = false
+  }
   const exileEntries = survivorLeague?.survivorMode && isNativePlatform(survivorLeague.platform)
     ? await prisma.exileWeeklyEntry.findMany({
         where: { leagueId: season.leagueId, week },
@@ -364,6 +401,16 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
    * rather than invented ones.
    */
   const dailyRowsByPlayer = new Map<string, unknown[]>()
+  /** Daily-lineup leagues only: the same rows, keyed by their Eastern game day. */
+  const datedRowsByPlayer = new Map<string, DatedGameRows>()
+  /** Games-count leagues only: the same rows, keyed by the provider game id (one real game). */
+  const gameRowsByPlayer = new Map<string, Map<string, { day: Date; rows: unknown[] }>>()
+  /** Schedule start instants by game id, read once and only for a games-count league. */
+  let scheduleStartByGame: Map<string, string | null> | null = null
+  let dailyWindow: { start: Date; end: Date } | null = null
+  /** NBA / NHL / MLB: why a player with no row this week has none (see dailySportParticipation.ts). */
+  let dailyVerdictFor: ((identityId: string | null | undefined) => DailyNoRowVerdict) | null = null
+  const identityIdByRosterId = new Map<string, string>()
   if (isDailySport) {
     /**
      * 🛑 SELECTED BY DATE WINDOW, NOT BY `weekOrRound` — AND AN EARLIER VERSION
@@ -386,6 +433,8 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     // and those games are ingested like any other.
     // Without an explicit anchor, the shared resolver — which is where a gameweek sport (soccer)
     // differs from seven-day arithmetic. The finalizer reads the same function.
+    // A season past the curated table (dynasty year 2+) is primed from the labelled schedule first.
+    if (!params.seasonStartUtc) await ensureDailySportSeasonStart(sport, seasonYear, { db: prisma as never })
     const window = params.seasonStartUtc
       ? weekWindowFromSeasonStart(params.seasonStartUtc, week)
       : resolveDailySportWeekWindow(sport, seasonYear, week)
@@ -396,7 +445,8 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       const known = knownDailySportSeasons(sport)
       summary.warnings.push(
         `${sport} is a daily sport: a week is a date range, and scoring one needs the regular-season ` +
-          `start date. None was supplied and none is recorded for season ${seasonYear}` +
+          `start date. None was supplied, none is recorded and none could be derived from the stored ` +
+          `schedule for season ${seasonYear}` +
           `${known.length ? ` (recorded: ${known.join(', ')})` : ''}. ` +
           'Add it to `lib/season-week/dailySportSeasonStarts.ts`. No scores were written.',
       )
@@ -409,8 +459,20 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
      * Rolling Insights id; player_game_stats is keyed on PlayerIdentityMap.id. Queried directly,
      * every NHL/NCAAB starter found ZERO rows (measured 2026-09-24) — see rosterGameLogIdBridge.ts.
      */
-    const bridge = await bridgeRosterIdsToGameLogIds(prisma, candidateSportKeys(sport), playerIds)
+    // A `tsdb_…` id (an older draft pool) is bridged by its roster row's name — see the bridge.
+    const namesById = new Map(
+      ordinaryRosterPlayers.map((p: { playerId: string; playerName?: string | null }) => [p.playerId, p.playerName ?? null]),
+    )
+    const bridge = await bridgeRosterIdsToGameLogIds(prisma, candidateSportKeys(sport), playerIds, namesById)
     summary.gameLogIdsBridged = bridge.bridged
+    if (bridge.bridgedByName) summary.gameLogIdsBridgedByName = bridge.bridgedByName
+    if (bridge.nameRefused.length) {
+      summary.warnings.push(
+        `${bridge.nameRefused.length} TheSportsDB roster id(s) name a player this league already rosters under another id, ` +
+          `or more than one ${sport} player; they were NOT matched to game logs rather than score one man for two teams: ` +
+          `${bridge.nameRefused.slice(0, 5).join(', ')}.`,
+      )
+    }
     if (bridge.ambiguous.length) {
       summary.warnings.push(
         `${bridge.ambiguous.length} roster id(s) are both a Rolling Insights id and another player's Sleeper id in ${sport}; ` +
@@ -423,7 +485,14 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         sportType: { in: candidateSportKeys(sport) },
         gameDate: { gte: window.start, lt: window.end },
       },
-      select: { playerId: true, normalizedStatMap: true, sportType: true, season: true, gameDate: true },
+      select: {
+        playerId: true,
+        normalizedStatMap: true,
+        sportType: true,
+        season: true,
+        gameDate: true,
+        ...(gamesCountScoring ? { gameId: true, providerGameId: true } : {}),
+      },
     })
     for (const row of gameRows) {
       // A preseason game inside the window is not a fantasy game. `/live` returns them beside the
@@ -445,8 +514,45 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       const rows = dailyRowsByPlayer.get(rosterId) ?? []
       rows.push(row.normalizedStatMap)
       dailyRowsByPlayer.set(rosterId, rows)
+      if (dailyLineupScoring && row.gameDate) {
+        const byDay: DatedGameRows = datedRowsByPlayer.get(rosterId) ?? new Map()
+        addDatedGameRow(byDay, row.gameDate, row.normalizedStatMap)
+        datedRowsByPlayer.set(rosterId, byDay)
+      }
+      if (gamesCountScoring && row.gameDate) {
+        // An MLB two-way player's batting and pitching lines are two rows (`<game>:batting`,
+        // `<game>:pitching`) of ONE game; the provider game id groups them back together.
+        const r = row as { gameId?: string | null; providerGameId?: string | null }
+        const gameKey = r.providerGameId || String(r.gameId ?? '').split(':')[0]
+        if (gameKey) {
+          const byGame = gameRowsByPlayer.get(rosterId) ?? new Map<string, { day: Date; rows: unknown[] }>()
+          const entry = byGame.get(gameKey) ?? { day: row.gameDate, rows: [] }
+          entry.rows.push(row.normalizedStatMap)
+          byGame.set(gameKey, entry)
+          gameRowsByPlayer.set(rosterId, byGame)
+        }
+      }
     }
+    dailyWindow = window
     summary.cacheRowsRead = gameRows.length
+
+    // A player with no row is judged once, here, for the zero-or-missing decision in the loop below.
+    const noRow = playerIds.filter((id) => !dailyRowsByPlayer.has(id))
+    if (noRow.length > 0 && DAILY_NO_ROW_VERDICT_SPORTS.includes(sport)) {
+      // Roster id -> its identity: the bridged id where there is one, else the roster id itself.
+      for (const gameLogId of bridge.gameLogIds) {
+        const rosterId = bridge.rosterIdFor(gameLogId)
+        if (rosterId && (gameLogId !== rosterId || !identityIdByRosterId.has(rosterId))) identityIdByRosterId.set(rosterId, gameLogId)
+      }
+      dailyVerdictFor = await loadDailyWindowParticipation(prisma as never, {
+        sport,
+        sportKeys: candidateSportKeys(sport),
+        season: seasonYear,
+        week,
+        window,
+        identityIds: [...new Set(noRow.map((id) => identityIdByRosterId.get(id) ?? id))],
+      })
+    }
   }
 
   /**
@@ -754,6 +860,27 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     if (isDailySport) {
       const dailyRows = dailyRowsByPlayer.get(playerId) ?? []
       if (dailyRows.length === 0) {
+        /*
+         * No row is not "no data" when there is EVIDENCE he did not play: an inactive identity, or his
+         * team's games all final with their rows ingested. That is a real 0, written like NCAAF's, so
+         * the scorer and the finalizer's coverage both count him. Without evidence he stays missing.
+         * No daily row is written: a day with no row already scores 0 in a daily-lineup league.
+         */
+        const verdict = dailyVerdictFor ? dailyVerdictFor(identityIdByRosterId.get(playerId) ?? playerId) : null
+        if (verdict && DAILY_ZERO_VERDICTS.has(verdict)) {
+          await prisma.playerWeeklyScore.upsert({
+            where: { playerId_week_season_sport: { playerId, week, season: seasonYear, sport: playerSport } },
+            update: { stats: {}, fantasyPts: 0, isFinalized: false },
+            create: { playerId, week, season: seasonYear, sport: playerSport, stats: {}, fantasyPts: 0, isFinalized: false },
+          })
+          summary.scoresUpserted += 1
+          ;(summary.dailyZeroScored ??= []).push({ playerId, reason: verdict as 'inactive' | 'no_stat' })
+          continue
+        }
+        if (verdict) {
+          const byReason = (summary.dailyMissingByReason ??= {})
+          byReason[verdict] = (byReason[verdict] ?? 0) + 1
+        }
         summary.missingCachePlayerIds.push(playerId)
         continue
       }
@@ -794,6 +921,36 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         },
       })
       summary.scoresUpserted += 1
+      if (dailyLineupScoring && dailyWindow && normalizer) {
+        summary.dailyScoresUpserted =
+          (summary.dailyScoresUpserted ?? 0) +
+          (await writePlayerDailyScores({
+            playerId,
+            sport: playerSport,
+            season: seasonYear,
+            week,
+            window: dailyWindow,
+            byDay: datedRowsByPlayer.get(playerId) ?? new Map(),
+            normalizer,
+          }))
+      }
+      if (gamesCountScoring && dailyWindow && normalizer) {
+        if (!scheduleStartByGame) {
+          const schedule = await readRiScheduleWindow(prisma as never, { sport, season: seasonYear, window: dailyWindow })
+          scheduleStartByGame = new Map((schedule ?? []).map((g) => [g.gameId, g.startTime]))
+        }
+        const games: Array<{ gameId: string; gameDay: Date; startTime: Date | null; stats: Record<string, number> }> = []
+        for (const [gameId, { day, rows }] of gameRowsByPlayer.get(playerId) ?? new Map()) {
+          const aggregate = aggregateWeeklyStats(rows, normalizer)
+          if (aggregate.gamesCounted === 0 || !Object.keys(aggregate.stats).length) continue
+          const start = scheduleStartByGame.get(gameId)
+          const startTime = start ? new Date(start) : null
+          games.push({ gameId, gameDay: day, startTime: startTime && !Number.isNaN(startTime.getTime()) ? startTime : null, stats: aggregate.stats })
+        }
+        summary.weekGameScoresUpserted =
+          (summary.weekGameScoresUpserted ?? 0) +
+          (await writePlayerWeekGameScores(gamesCountDb(prisma), { playerId, sport: playerSport, season: seasonYear, week, games }))
+      }
       continue
     }
 
@@ -870,4 +1027,53 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
 
   await recordScoreSyncAudit(summary, params.actorId ?? 'system')
   return summary
+}
+
+/**
+ * Daily-lineup leagues: one `player_daily_scores` row per day the player played this week, summed by
+ * the same normalizer as the weekly roll-up. Days with no game have no row and score 0. Rows for days
+ * that no longer have a game (a stat correction, a game re-dated) are removed, so a stale day cannot
+ * keep scoring. See lib/redraft/dailyLineups.ts.
+ */
+async function writePlayerDailyScores(args: {
+  playerId: string
+  sport: string
+  season: number
+  week: number
+  window: { start: Date; end: Date }
+  byDay: DatedGameRows
+  normalizer: NonNullable<ReturnType<typeof getDailySportNormalizer>>
+}): Promise<number> {
+  const keep: Date[] = []
+  let written = 0
+  // The per-day lines come from the shared builder the admin re-ingest preview also uses.
+  for (const { day, stats, gamesPlayed } of buildPlayerDailyStatLines(args.byDay, args.normalizer)) {
+    keep.push(day)
+    await prisma.playerDailyScore.upsert({
+      where: {
+        playerId_sport_season_scoringDay: { playerId: args.playerId, sport: args.sport, season: args.season, scoringDay: day },
+      },
+      update: { week: args.week, stats, gamesPlayed, isFinalized: false },
+      create: {
+        playerId: args.playerId,
+        sport: args.sport,
+        season: args.season,
+        week: args.week,
+        scoringDay: day,
+        stats,
+        gamesPlayed,
+        isFinalized: false,
+      },
+    })
+    written += 1
+  }
+  await prisma.playerDailyScore.deleteMany({
+    where: {
+      playerId: args.playerId,
+      sport: args.sport,
+      season: args.season,
+      scoringDay: { gte: args.window.start, lt: args.window.end, notIn: keep },
+    },
+  })
+  return written
 }

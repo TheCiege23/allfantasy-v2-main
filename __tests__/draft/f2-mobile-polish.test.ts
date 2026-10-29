@@ -55,7 +55,8 @@ describe('F.2 — DraftRoomShell mobile structure', () => {
   it('mobile content div has min-w-0 + a stable testid + active-tab data attr', () => {
     expect(src).toMatch(/data-testid="draft-mobile-content"/)
     expect(src).toMatch(/data-active-tab=\{mobileTab\}/)
-    expect(src).toMatch(/min-h-\[220px\] min-w-0 p-2\.5/)
+    // Inside the tray the content area is sized by the tray's snap height and scrolls itself.
+    expect(src).toMatch(/h-full min-h-0 min-w-0 overflow-y-auto overscroll-contain/)
   })
 
   it('Board tab wraps its content in an overflow-x-auto scroll container', () => {
@@ -79,11 +80,27 @@ describe('F.2 — DraftRoomShell mobile structure', () => {
     expect(src).toMatch(/rosterPanel && mobileTab === 'roster' && rosterPanel/)
   })
 
-  it('mobile sticky bar is always enabled and includes a clock chip', () => {
+  /*
+   * The clock must stay visible on every mobile tab. It used to be a second, non-ticking
+   * "Clock" chip in this sticky bar; it now comes from the header's live timer, which
+   * sits outside the mobile scroll root and so never scrolls away. Guard both halves.
+   */
+  it('mobile sticky bar is always enabled; the live clock stays visible on phones via the header', () => {
     expect(pageSrc).toMatch(/const showMobileStickyBar = true/)
     expect(pageSrc).toMatch(/showMobileStickyBar \? \(/)
-    expect(pageSrc).toMatch(/>Clock<|Clock<\/span>/)
     expect(pageSrc).toMatch(/data-testid="draft-mobile-current-pick"/)
+
+    const shellSrc = read('components/app/draft-room/DraftRoomShell.tsx')
+    const topBarAt = shellSrc.indexOf('{topBar}')
+    const scrollRootAt = shellSrc.indexOf('data-testid="draft-mobile-scroll-root"')
+    expect(topBarAt).toBeGreaterThan(-1)
+    expect(scrollRootAt).toBeGreaterThan(topBarAt)
+
+    const topBarSrc = read('components/app/draft-room/DraftTopBar.tsx')
+    const centerSlot = topBarSrc.match(/className="([^"]*)"\s*data-testid="draft-topbar-center-slot"/)
+    expect(centerSlot).not.toBeNull()
+    expect(centerSlot![1].split(/\s+/)).not.toContain('hidden')
+    expect(topBarSrc).toMatch(/\{centerCta\}/)
   })
 })
 
@@ -133,10 +150,13 @@ describe('F.2 — DraftRightDockTabs is desktop-only on the mobile shell', () =>
     // Find the mobile layout block and assert it doesn't include the right
     // dock tabs (which are a desktop-only construct).
     const mobileMatch = shellSrc.match(
-      /data-testid="draft-mobile-layout"[\s\S]*?data-testid="draft-mobile-content"[\s\S]*?<\/nav>/,
+      // The tray mechanics moved to DraftMobileTray; the mobile block still spans layout → tray.
+      /data-testid="draft-mobile-layout"[\s\S]*?<\/DraftMobileTray>/,
     )
     expect(mobileMatch).not.toBeNull()
     const mobileBlock = mobileMatch![0]
+    expect(mobileBlock).toMatch(/data-testid="draft-mobile-content"/)
+    expect(mobileBlock).toMatch(/<\/nav>/)
     expect(mobileBlock).not.toMatch(/DraftRightDockTabs/)
   })
 })
@@ -145,14 +165,14 @@ describe('F.2 — WarRoomPopup mobile bottom sheet', () => {
   const src = read('components/app/draft-room/WarRoomPopup.tsx')
 
   it('renders a fixed full-width bottom sheet at mobile widths (< sm)', () => {
-    // Mobile (default): fixed inset-x-0 bottom-0, 80vh tall.
-    expect(src).toMatch(/fixed inset-x-0 bottom-0 z-\[55\][\s\S]{0,200}h-\[80vh\]/)
+    // Mobile (default): fixed inset-x-0 bottom-0, 80dvh tall.
+    expect(src).toMatch(/fixed inset-x-0 bottom-0 z-\[55\][\s\S]{0,200}h-\[80dvh\]/)
   })
 
   it('docks to the bottom-right corner at ≥ sm (tablet + desktop)', () => {
     expect(src).toMatch(/sm:bottom-20 sm:right-4 sm:left-auto/)
     expect(src).toMatch(/sm:inset-x-auto/)
-    expect(src).toMatch(/sm:h-\[min\(560px,80vh\)\]/)
+    expect(src).toMatch(/sm:h-\[min\(560px,80dvh\)\]/)
     expect(src).toMatch(/sm:w-\[min\(380px,calc\(100vw-2rem\)\)\]/)
     expect(src).toMatch(/sm:rounded-xl sm:border/)
   })

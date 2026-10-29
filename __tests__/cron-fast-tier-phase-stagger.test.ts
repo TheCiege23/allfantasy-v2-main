@@ -439,12 +439,11 @@ describe('the real cron schedule, after this fix', () => {
     }
   })
 
-  it('keeps the four remaining 30-minute incident jobs spread and the trade watcher on fifteen minutes', () => {
+  it('keeps the three remaining 30-minute incident jobs spread and the trade watcher on five minutes', () => {
     const { fast } = classifyCrons(readVercelCrons())
     const named = [
       '/api/cron/fantasy-os-exec-sync',
       '/api/cron/domain-os-refresh',
-      '/api/cron/import-injuries',
       '/api/cron/draft-pool-prewarm',
     ]
     const present = named.filter((p) => fast.some((c: { path: string }) => c.path === p))
@@ -461,7 +460,7 @@ describe('the real cron schedule, after this fix', () => {
       }))
     assignPhases(jobs)
     const phases = jobs.map((j: { phaseMs: number }) => j.phaseMs)
-    expect(new Set(phases).size).toBe(4)
+    expect(new Set(phases).size).toBe(3)
 
     // Every 5 minutes since the 5-minute offer sweep (2026-09-25); its full-feed rotation still runs
     // every 15, gated inside the route by `claimRotationTick` rather than by this schedule.
@@ -479,7 +478,6 @@ describe('the real cron schedule, after this fix', () => {
     const named = [
       '/api/cron/fantasy-os-exec-sync',
       '/api/cron/domain-os-refresh',
-      '/api/cron/import-injuries',
       '/api/cron/draft-pool-prewarm',
     ]
     const jobs = fast
@@ -518,7 +516,7 @@ describe('the real cron schedule, after this fix', () => {
     avoidCrossGroupCollision(jobs)
 
     const thirtyMinPhases = jobs.filter((j) => j.intervalMs === 1_800_000).map((j) => j.phaseMs)
-    expect(thirtyMinPhases.length, 'the four remaining */30 jobs must still be on the fast tier').toBe(4)
+    expect(thirtyMinPhases.length, 'the three remaining */30 jobs must still be on the fast tier').toBe(3)
 
     const decisionOs = jobs.find((j) => j.path === '/api/cron/decision-os-intelligence-maintenance')
     expect(decisionOs, 'the incident job must still be on the fast tier').toBeTruthy()

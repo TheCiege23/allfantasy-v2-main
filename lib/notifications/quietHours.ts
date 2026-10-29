@@ -84,16 +84,8 @@ export function isWithinQuietHours(
 }
 
 /**
- * Which channels quiet hours actually suppress.
- *
- * 🛑 IT SUPPRESSES THE ONES THAT BUZZ A PHONE, AND NOTHING ELSE. Push and SMS wake
- * someone up; that is the entire point of the setting. The in-app row is a LOG and must
- * still be written, or the user wakes to no record that anything happened and the
- * notifications screen lies about their night. Email sits in an inbox and does not
- * interrupt, so it goes too.
- *
- * ⚠ Suppressing the in-app row would also break the unread badge, which counts stored
- * rows — quiet hours would silently delete history rather than defer a buzz.
+ * External delivery channels share this decision. Email can also buzz a phone.
+ * Keep in-app history; suppress external delivery without morning replay bursts.
  */
 export function quietHoursSuppression(
   quiet: QuietHoursPreference | null | undefined,

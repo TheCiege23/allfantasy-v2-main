@@ -3,9 +3,12 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { createCouncil, closeCouncil } from './SurvivorTribalCouncilService'
+import { createCouncil } from './SurvivorTribalCouncilService'
+import { closeVoteWindow } from './survivorCouncilService'
+import { revealCouncil, tallyCouncil } from './survivorVoteTallyService'
+import { resolveAutonomousCouncil } from './survivorAutonomousCouncil'
+import { finishCouncilReadIfComplete } from './survivorCouncilReadFinish'
 import {
-  getSeasonPointsFromRosterPerformance,
   submitVote as submitVoteCore,
   tallyVotes,
 } from './SurvivorVoteEngine'
@@ -141,31 +144,52 @@ export async function submitVote(
   return { id: saved.id }
 }
 
-export async function lockVoting(councilId: string): Promise<void> {
+export type LockVotingOutcome =
+  | { ok: true; readOpened: boolean; complete: boolean }
+  | { ok: false; code: string; error: string }
+
+/**
+ * Close voting and open the public read the canonical way: close the window (late-vote policy), tally
+ * into a server-ordered reveal sequence, publish the read (revealStartsAt), then finish it — verdict in
+ * league chat and the elimination — only once the last ballot has been released. Before that nothing
+ * names the voted-out manager; the automation tick or reveal_next finishes the read later.
+ */
+export async function lockVoting(councilId: string): Promise<LockVotingOutcome> {
   const council = await prisma.survivorTribalCouncil.findUnique({ where: { id: councilId } })
   if (!council) throw new Error('Council not found')
+  const { leagueId } = council
 
-  const votes = await prisma.survivorVote.findMany({ where: { councilId } })
-  const lateVotes = votes.filter((v) => v.isLateVote).length
+  if (!council.isRevealed) {
+    const votes = await prisma.survivorVote.findMany({ where: { councilId } })
+    const lateVotes = votes.filter((v) => v.isLateVote).length
+    await logSurvivorAuditEntry({
+      leagueId,
+      week: council.week,
+      category: 'vote',
+      action: 'VOTE_LOCKED',
+      relatedEntityId: councilId,
+      relatedEntityType: 'council',
+      data: { councilId, totalVotes: votes.length, lateVotes },
+      isVisibleToPublic: false,
+    })
+    await processIdolPlays(councilId)
 
-  await prisma.survivorTribalCouncil.update({
-    where: { id: councilId },
-    data: { status: 'voting_closed' },
-  })
+    const closed = await closeVoteWindow(leagueId, councilId)
+    if (!closed.ok) return { ok: false, code: closed.code, error: closed.error }
+    const latest = await prisma.survivorTribalCouncil.findUnique({ where: { id: councilId }, select: { revealSequence: true, eliminatedUserId: true } })
+    if (!latest?.eliminatedUserId && (!Array.isArray(latest?.revealSequence) || latest.revealSequence.length === 0)) {
+      const tallied = await tallyCouncil(leagueId, councilId)
+      if (!tallied.ok) return { ok: false, code: tallied.code, error: tallied.error }
+    }
+    await resolveAutonomousCouncil(leagueId, councilId)
+    const revealed = await revealCouncil(leagueId, councilId)
+    // Closed and tallied but still sealed (e.g. league chat missing): a host publishes it later.
+    if (!revealed.ok) return { ok: false, code: revealed.code, error: revealed.error }
+  }
 
-  await logSurvivorAuditEntry({
-    leagueId: council.leagueId,
-    week: council.week,
-    category: 'vote',
-    action: 'VOTE_LOCKED',
-    relatedEntityId: councilId,
-    relatedEntityType: 'council',
-    data: { councilId, totalVotes: votes.length, lateVotes },
-    isVisibleToPublic: false,
-  })
-
-  await processIdolPlays(councilId)
-  await closeCouncil(councilId, { getSeasonPointsForRoster: getSeasonPointsFromRosterPerformance })
+  const finished = await finishCouncilReadIfComplete(leagueId, councilId)
+  if (!finished.ok) return { ok: false, code: finished.code, error: finished.error }
+  return { ok: true, readOpened: true, complete: finished.complete }
 }
 
 export async function processIdolPlays(councilId: string): Promise<void> {
@@ -205,7 +229,7 @@ export async function handleTie(_councilId: string, _tiedUserIds: string[]): Pro
 }
 
 export async function eliminatePlayer(_councilId: string, _userId: string): Promise<void> {
-  // Delegates to SurvivorTribalCouncilService closeCouncil + roster elimination pipeline.
+  // Elimination runs through finishCouncilReadIfComplete once the council read is complete.
 }
 
 /**

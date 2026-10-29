@@ -1,11 +1,13 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
+import { LeagueMark } from '@/components/core-app/LeagueMark'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import LeagueClipSpotlight from '@/components/core-app/highlights/LeagueClipSpotlight'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -233,9 +235,7 @@ function platformClass(platform: string | null | undefined): string {
  * CDN 404s for some Sleeper avatar ids.
  */
 function Mark({ src, alt, letter }: { src: string | null | undefined; alt: string; letter: string }) {
-  const [failed, setFailed] = useState(false)
-  if (!src || failed) return <>{letter}</>
-  return <img src={src} alt={alt} className="af3a-mark-img" onError={() => setFailed(true)} loading="lazy" />
+  return <LeagueMark src={src} letter={letter} className="af3a-mark-img" />
 }
 
 type PlayerHit = {
@@ -495,7 +495,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
             className={`af3a-tile ${platformClass(l.platform)}`}
             title={l.name ?? 'League'}
           >
-            <Mark src={l.imageUrl} alt={l.name ?? 'League'} letter={platformTile(l.platform)} />
+            <Mark src={l.imageUrl} alt={l.name ?? 'League'} letter={(Array.from(l.name?.trim() || '')[0] ?? platformTile(l.platform)).toUpperCase()} />
           </Link>
         ))}
         {railOverflow > 0 ? (
@@ -603,7 +603,10 @@ export function Dashboard3A(props: Dashboard3AProps) {
         */}
         <GeoRestrictionNotice />
 
-        <div className="af3a-body">
+        <div className="af3a-home-leagues">{slots.leagues}</div>
+
+        {/* No side cards (all switched off in Settings → Home page): the main column takes the width. */}
+        <div className="af3a-body" data-no-side={sideOrder.length === 0 ? '' : undefined}>
           <div className="af3a-col-main">
             {/*
               Your week (the weekly routine), outstanding issues and this week's matchups — in the
@@ -622,6 +625,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
           </div>
         </div>
 
+        <details className="af3a-insights"><summary>{es ? 'Análisis de tus ligas y temporada' : 'Portfolio & season insights'} <span>{es ? 'Exposición, resultados y herramientas' : 'Exposure, results and tools'}</span></summary>
         {slots.portfolioChart}
 
         {/* ── Bottom three-up ────────────────────────────────────────────── */}
@@ -632,8 +636,6 @@ export function Dashboard3A(props: Dashboard3AProps) {
               <Fragment key={key}>{slots[key]}</Fragment>
             ))}
           </div>
-
-          {slots.leagues}
 
           <section className="af3a-card">
             <header className="af3a-cardhead">
@@ -653,6 +655,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
             </div>
           </section>
         </div>
+        </details>
       </div>
     </div>
   )
@@ -814,9 +817,11 @@ export function Dash3AMatchups({
           platform: r.platform,
           you: r.pointsFor,
           them: r.pointsAgainst,
-          note: es
+          note: (es
             ? `Semana ${r.week} · ${MATCH_RESULT_ES[result]}`
-            : `Week ${r.week} · ${MATCH_RESULT_EN[result]}`,
+            : `Week ${r.week} · ${MATCH_RESULT_EN[result]}`) +
+            // An odd-team league's extra game, in place of the bye (lib/core-app/weekAll.ts).
+            (r.extraMatchupLabel ? ` · ${r.extraMatchupLabel}` : ''),
           completed: r.completed === true,
           period: `${r.season} · ${es ? 'Semana' : 'Week'} ${r.week}`,
         }
@@ -1254,7 +1259,7 @@ export function Dash3ALeagues({
       ? `${shownLeagues.length} ${es ? 'de' : 'of'} ${leagueTotal}`
       : `${leagueTotal} ${es ? 'en total' : 'total'}`
   return (
-          <section className="af3a-card">
+          <section className="af3a-card af3a-leagues-card">
             <header className="af3a-cardhead">
               <span className="af3a-label">{es ? 'MIS LIGAS' : 'MY LEAGUES'}</span>
               <span className="af3a-note af3a-push">{leagueTotalLabel}</span>
@@ -1272,25 +1277,27 @@ export function Dash3ALeagues({
                     key={l.id}
                     className="af3a-league"
                     /* Straight to /core — /dashboard only redirects here, a round trip per tap. */
-                    href={`/core?league=${encodeURIComponent(l.id)}`}
+                    href={leagueEntryHref(l)}
                   >
                     <span className={`af3a-tile ${platformClass(l.platform)}`}>
-                      <Mark src={l.imageUrl} alt={l.name ?? (es ? 'Liga' : 'League')} letter={platformTile(l.platform)} />
+                      <Mark src={l.imageUrl} alt={l.name ?? (es ? 'Liga' : 'League')} letter={Array.from(l.name?.trim() || "L")[0]} />
                     </span>
                     <span className="af3a-league-body">
                       <b>
                         {l.name ?? (es ? 'Liga sin nombre' : 'Untitled league')}
                         {l.isCommissioner ? <CommissionerBadge /> : null}
                       </b>
-                      <em>{l.formatLabel ? formatLabelText(l.formatLabel, language) : es ? 'Liga importada' : 'Imported league'}</em>
+                      <em>{[l.platform === 'manual' ? 'AllFantasy' : l.platform, l.sport, l.formatLabel ? formatLabelText(l.formatLabel, language) : null].filter(Boolean).join(' · ')}</em>
+                      {l.score ? <span className="af3a-league-score"><strong>{l.score.you.toFixed(1)}</strong><span>–</span><strong>{l.score.opponent.toFixed(1)}</strong><small>vs {l.score.opponentName}</small></span> : null}
                     </span>
+                    <span className="af3a-league-arrow" aria-hidden>›</span>
                   </Link>
                 ))}
               </div>
             )}
             <LeagueClipSpotlight leagueIds={shownLeagues.map(l => l.id)} />
             {leagueTotal > shownLeagues.length ? (
-              <Link className="af3a-cardlink" href="/core/portfolio">
+              <Link className="af3a-cardlink" href="/leagues">
                 {es ? <>Ver las {leagueTotal} &rarr;</> : <>Show all {leagueTotal} &rarr;</>}
               </Link>
             ) : null}

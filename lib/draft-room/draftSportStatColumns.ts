@@ -351,14 +351,20 @@ const NBA_LIKE: DraftStatColumnDef[] = [
   col('nba_proj', 'Proj', 'number', 'offense', ['projectedPoints', 'fantasy_points', 'season_projection']),
 ]
 
+/*
+ * MLB / NHL Proj/G is the AF projection PER GAME (`AFProjectionSnapshot.afProjection`, DraftKings-style
+ * scoring). No season total exists for these sports — `rosProjection` is on an NFL week horizon — so
+ * the column says per game rather than borrowing the NFL `projectedPoints` key.
+ */
 const MLB_HITTER: DraftStatColumnDef[] = [
   col('hr', 'HR', 'number', 'hitter', ['homeRuns', 'hr']),
   col('rbi', 'RBI', 'number', 'hitter', ['rbi', 'runsBattedIn']),
   col('r', 'R', 'number', 'hitter', ['runs', 'r']),
   col('sb', 'SB', 'number', 'hitter', ['stolenBases', 'sb']),
-  col('avg', 'AVG', 'number', 'hitter', ['battingAverage', 'avg', 'ba']),
+  // Not 'avg': the stat bag puts fantasy points per game there, which is not a batting average.
+  col('avg', 'AVG', 'number', 'hitter', ['battingAverage', 'ba']),
   col('obp', 'OBP', 'number', 'hitter', ['onBasePercentage', 'obp']),
-  col('hit_proj', 'Proj', 'number', 'hitter', ['projectedPoints', 'fantasy_points']),
+  col('hit_proj', 'Proj/G', 'number', 'hitter', ['projectedPointsPerGame']),
 ]
 
 const MLB_PITCHER: DraftStatColumnDef[] = [
@@ -367,7 +373,7 @@ const MLB_PITCHER: DraftStatColumnDef[] = [
   col('sv', 'SV', 'number', 'pitcher', ['saves', 'sv']),
   col('era', 'ERA', 'number', 'pitcher', ['era', 'earned_run_average']),
   col('whip', 'WHIP', 'number', 'pitcher', ['whip']),
-  col('p_proj', 'Proj', 'number', 'pitcher', ['projectedPoints', 'fantasy_points']),
+  col('p_proj', 'Proj/G', 'number', 'pitcher', ['projectedPointsPerGame']),
 ]
 
 const NHL_SKATER: DraftStatColumnDef[] = [
@@ -375,7 +381,7 @@ const NHL_SKATER: DraftStatColumnDef[] = [
   col('a', 'A', 'number', 'skater', ['assists', 'a']),
   col('sog', 'SOG', 'number', 'skater', ['shots', 'shots_on_goal', 'sog']),
   col('blk_nhl', 'BLK', 'number', 'skater', ['blocks', 'blocked_shots']),
-  col('nhl_sk_proj', 'Proj', 'number', 'skater', ['projectedPoints', 'fantasy_points']),
+  col('nhl_sk_proj', 'Proj/G', 'number', 'skater', ['projectedPointsPerGame']),
 ]
 
 const NHL_GOALIE: DraftStatColumnDef[] = [
@@ -384,7 +390,7 @@ const NHL_GOALIE: DraftStatColumnDef[] = [
   col('sho', 'SO', 'number', 'goalie', ['shutouts', 'shutout']),
   col('gaa', 'GAA', 'number', 'goalie', ['goalsAgainstAverage', 'gaa']),
   col('svp', 'SV%', 'percent', 'goalie', ['savePercentage', 'sv_pct']),
-  col('nhl_g_proj', 'Proj', 'number', 'goalie', ['projectedPoints', 'fantasy_points']),
+  col('nhl_g_proj', 'Proj/G', 'number', 'goalie', ['projectedPointsPerGame']),
 ]
 
 /** Rolling Insights-style keys on `display.stats` after ingestion. */

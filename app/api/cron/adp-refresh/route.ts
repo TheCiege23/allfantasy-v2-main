@@ -72,11 +72,19 @@ async function recordAdpHeartbeat(
       rowsSkipped: Math.max(0, result.providerRowsRead - result.providerRowsWritten),
       errors: [
         ...(result.providerRowsRead > 0 ? [] : ["ADP import read 0 provider rows"]),
-        // A failed NBA feed must be visible here: the rest of the run still writes NFL rows, so the
-        // row counts alone would read healthy while NBA boards quietly went back to name order.
-        ...(result.fantraxNba && !result.fantraxNba.ok ? [`Fantrax NBA ADP: ${result.fantraxNba.reason}`] : []),
+        // A failed Fantrax feed must be visible here: the rest of the run still writes NFL rows, so the
+        // row counts alone would read healthy while those boards quietly went back to name order.
+        // Same for MLB and NHL, which read the same Fantrax board.
+        ...Object.entries(result.fantraxBySport ?? {}).flatMap(([sport, stats]) =>
+          stats.ok ? [] : [`Fantrax ${sport} ADP: ${stats.reason}`],
+        ),
       ],
-      metadata: { week: result.week, season: result.season, fantraxNba: result.fantraxNba },
+      metadata: {
+        week: result.week,
+        season: result.season,
+        fantraxNba: result.fantraxNba,
+        fantraxBySport: result.fantraxBySport,
+      },
     },
     durationMs,
   )

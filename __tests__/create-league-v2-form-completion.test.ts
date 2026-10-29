@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { analyzeCreateLeagueCompletion, getConceptDefaultNotes, isFormComplete } from '@/lib/create-league-v2/form-completion'
 import { DEFAULT_V2_STATE, getDefaultDynastySetup } from '@/lib/create-league-v2/state'
 import {
@@ -74,7 +74,7 @@ describe('form-completion', () => {
     expect(analyzeCreateLeagueCompletion(s).some((i) => i.code === 'tournament_pool_mismatch')).toBe(true)
   })
 
-  it('Guillotine defaults: team count option list non-empty', () => {
+  it('Guilly defaults: team count option list non-empty', () => {
     const opts = getTeamCountOptions('NFL', 'guillotine', null)
     expect(opts.length).toBeGreaterThan(0)
     expect(getDefaultTeamCount('NFL', 'guillotine', null)).toBeGreaterThanOrEqual(4)
@@ -134,11 +134,14 @@ describe('payload normalization unchanged after form layer', () => {
    * and 24 was ACCEPTED there, only for the server to clamp it to 20 on save.
    */
   it('Survivor: every offered cast size passes the live gate on BOTH catalog paths', () => {
-    for (const withCatalog of [true, false]) {
+    // Preseason: late in the NFL season the largest casts stop fitting and are not offered.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-01T12:00:00Z') })
+    try { for (const withCatalog of [true, false]) {
       setClientLeagueCreateOptionsCatalog(withCatalog ? LEAGUE_CREATE_OPTIONS_CATALOG_V1 : null)
       const label = withCatalog ? 'catalog loaded' : 'pre-fetch fallback'
 
-      // New leagues are offered 16 or 20 (2026-10-12); 17-19 stay valid for existing leagues only.
+      // New leagues are offered 12–24 in the eight sizes that split into equal tribes (2026-10-20);
+      // 17 and 19 stay valid for existing leagues only.
       for (const teamCount of SURVIVOR_CREATE_CAST_SIZES) {
         const issues = analyzeCreateLeagueCompletion({
           ...baseValidRedraft(),
@@ -151,20 +154,59 @@ describe('payload normalization unchanged after form layer', () => {
           `${label}: ${teamCount} teams`,
         ).not.toContain('team_count_invalid')
       }
-    }
+    } } finally { vi.useRealTimers() }
     setClientLeagueCreateOptionsCatalog(null)
   })
 
+  describe('Survivor: the wizard refuses a cast the remaining season cannot eliminate', () => {
+    afterEach(() => vi.useRealTimers())
+    const nbaSurvivor = (teamCount: number, draftDate: string) => ({
+      ...baseValidRedraft(),
+      leagueType: 'survivor' as const,
+      sport: 'NBA' as const,
+      scoringPresetId: 'nba_points',
+      teamCount,
+      survivorTribeCount: 4,
+      draftDate,
+      timezone: 'America/New_York',
+    })
+    const codes = (state: ReturnType<typeof nbaSurvivor>) => analyzeCreateLeagueCompletion(state).map((i) => i.code)
+
+    it('24 managers fit from an opening-week or November draft (some weeks vote twice), but not from a March one', () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-18T12:00:00Z') })
+      expect(codes(nbaSurvivor(24, '2026-10-19'))).not.toContain('survivor_season_too_short')
+      // November leaves fewer periods than votes; two back-to-back councils in some weeks cover it.
+      expect(codes(nbaSurvivor(24, '2026-11-15'))).not.toContain('survivor_season_too_short')
+      expect(codes(nbaSurvivor(24, '2026-12-10'))).not.toContain('survivor_season_too_short')
+      // A March draft is still refused. (The wizard plans with Exile's default week-10 return, which a
+      // March start has already passed, so that is the message the commissioner sees first.)
+      expect(codes(nbaSurvivor(24, '2027-03-01'))).toContain('survivor_season_too_short')
+    })
+
+    it('does not run for sports without a verified full-season calendar, or when the draft is scheduled later', () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-18T12:00:00Z') })
+      expect(codes({ ...nbaSurvivor(24, '2026-11-15'), sport: 'MLB' as const })).not.toContain('survivor_season_too_short')
+      expect(codes({ ...nbaSurvivor(24, '2026-11-15'), draftScheduleLater: true })).not.toContain('survivor_season_too_short')
+    })
+
+    it('NFL has a verified calendar now: a mid-November 24-player cast is refused, a 12-player one fits', () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-18T12:00:00Z') })
+      const nfl = (teamCount: number) => ({ ...nbaSurvivor(teamCount, '2026-11-15'), sport: 'NFL' as const, scoringPresetId: 'fb_half_ppr' })
+      expect(codes(nfl(24))).toContain('survivor_season_too_short')
+      expect(codes(nfl(12))).not.toContain('survivor_season_too_short')
+    })
+  })
+
   it('Survivor: a size the server would clamp is still rejected by the gate', () => {
-    // Control — the gate is doing something, so the loop above is not vacuous. 24 sits outside
-    // SURVIVOR_CAST_SIZE_OPTIONS, so it must not pass on either path.
+    // Control — the gate is doing something, so the loop above is not vacuous. 14 sits outside
+    // SURVIVOR_CAST_SIZE_OPTIONS (it has no equal 2/3/4 split), so it must not pass on either path.
     for (const withCatalog of [true, false]) {
       setClientLeagueCreateOptionsCatalog(withCatalog ? LEAGUE_CREATE_OPTIONS_CATALOG_V1 : null)
       const issues = analyzeCreateLeagueCompletion({
         ...baseValidRedraft(),
         leagueType: 'survivor' as const,
         sport: 'NFL' as const,
-        teamCount: 24,
+        teamCount: 14,
       })
       expect(issues.map((i) => i.code)).toContain('team_count_invalid')
     }

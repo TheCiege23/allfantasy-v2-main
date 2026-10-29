@@ -24,6 +24,13 @@ import { rotateForFairness } from '@/lib/cron/runBudget'
  * at 04:30 must still be the NCAAF half, and a delayed 09:10 fire is still after 09:00.
  *
  * An explicit `?sport=` (an operator re-running one sport) always wins.
+ *
+ * 🛑 AND THE SIX NO LONGER FIT ONE BUDGET, SO ROTATION ALONE STARVES THE TAIL AGAIN. Measured
+ * 2026-10-17 from `sync_job_runs`: 8 of the 9 six-sport fires since 10-10 were `partial`, deferring
+ * one to three sports each. Rotation moves the list ONE place a day, so when two sports fall off the
+ * end, the second-to-last becomes the last the next day and is deferred again — SOCCER on 10-16 AND
+ * 10-17, NBA and NHL on 10-14 AND 10-15. `deferredLastRun` puts whatever the previous six-sport fire
+ * deferred at the FRONT, so no sport is deferred twice in a row while the front of a run fits.
  */
 export const RI_PROFILES_SPLIT_SPORT = 'NCAAF'
 /** Fires starting before this UTC hour are the NCAAF half. Must sit between the two schedule hours. */
@@ -34,6 +41,8 @@ export function selectRiProfileSports<S extends string>(input: {
   explicitSport?: string | null
   now?: Date
   rotationPeriodMs?: number
+  /** Sports the previous six-sport fire deferred for budget; they lead this fire. */
+  deferredLastRun?: readonly string[] | null
 }): S[] {
   const { allSports } = input
   const explicit = input.explicitSport?.trim().toUpperCase()
@@ -44,9 +53,17 @@ export function selectRiProfileSports<S extends string>(input: {
   if (!split) return rotateForFairness(allSports, input.rotationPeriodMs, () => now.getTime())
 
   if (now.getUTCHours() < RI_PROFILES_SPLIT_BEFORE_UTC_HOUR) return [split]
-  return rotateForFairness(
+  const rotated = rotateForFairness(
     allSports.filter((s) => s !== split),
     input.rotationPeriodMs ?? 24 * 60 * 60 * 1000,
     () => now.getTime(),
   )
+  return deferredFirst(rotated, input.deferredLastRun)
+}
+
+/** Stable: deferred sports first, each group keeping the rotation's order. Unknown names are ignored. */
+export function deferredFirst<S extends string>(ordered: readonly S[], deferred?: readonly string[] | null): S[] {
+  const wanted = new Set((deferred ?? []).map((s) => String(s).trim().toUpperCase()))
+  if (wanted.size === 0) return [...ordered]
+  return [...ordered.filter((s) => wanted.has(s)), ...ordered.filter((s) => !wanted.has(s))]
 }

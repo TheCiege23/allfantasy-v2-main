@@ -1,6 +1,7 @@
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ingestBatch, type NotificationEvent } from '@/lib/notification-engine'
+import { filterByLiveAlertLevel } from '@/lib/notifications/liveAlertLevelFilter'
 import type { LiveEvent } from '@/lib/live/eventDetector'
 import { headlineFor, PLAY_FEED_SPORT } from '@/lib/live/playFeedPresentation'
 import { headshotUrl } from '@/lib/media-url'
@@ -19,7 +20,7 @@ import { leagueIdentityColumns, type LeagueIdentityColumn } from '@/lib/player-i
  *
  * User decision, 2026-09-13: every score and every play of 20+ yards, to the
  * managers STARTING the player (a benched player's touchdown scores nothing for
- * you), by push + the in-app bell — never email or SMS.
+ * you), by push + the in-app bell — email when enabled, and never SMS.
  *
  * ⚠ NEVER ALERT ON A NEGATIVE DELTA. A cumulative stat going DOWN is a stat
  * correction, not a play — the vendor reprocesses for ~12h after a game and
@@ -65,6 +66,7 @@ export type NotifyResult = {
   eventsConsidered: number
   eventsAlertable: number
   notificationsSent: number
+  failed?: boolean
   skipped: 'no-events' | 'no-rosters' | null
 }
 
@@ -564,15 +566,12 @@ function notificationFor(
     userIds,
     severity: severityFor(event),
     source: 'live-plays',
-    actionHref: '/core/live?sport=NFL',
+    actionHref: `/core/live?sport=${encodeURIComponent('NFL')}`,
     actionLabel: 'Live scores',
-    /*
-     * ⚠ NEVER EMAIL A BIG PLAY. The category default is in-app + email, and
-     * an email per play on a Sunday is an inbox flood that burns the sending
-     * domain. In-app + push (matchup_results is a push category) is the
-     * whole interrupt.
-     */
-    skipChannels: { email: true, sms: true },
+    // Push and the bell only. Owner's call 2026-10-22: a play-by-play email is stale by the time it is
+    // read, and one per touchdown / 19-yard play per starter was the bulk of the email complaints.
+    // Texts are league operations only.
+    skipChannels: { sms: true, email: true },
     meta: {
       gameId: event.gameId,
       playerId: event.playerId,
@@ -596,11 +595,12 @@ function notificationFor(
        */
       idempotencyKey: event.idempotencyKey,
       /*
-       * One device notification per play. The dispatcher's default tag is one
-       * per category, so a second touchdown would silently replace the first on
-       * the phone before anyone read it.
+       * One device notification per GAME (owner's call, 2026-10-22): a new play from the same game
+       * replaces the last one on the lock screen instead of stacking a dozen. It still buzzes —
+       * push-service `shouldRenotify` re-alerts on a replaced live-play tag — and every play stays
+       * in the bell. The engine's own dedupe is keyed on `idempotencyKey`, not on this tag.
        */
-      pushTag: `live-play:${event.idempotencyKey}:${side}`,
+      pushTag: `live-play:${event.gameId}`,
       // The player this side of the play is about — the scorer, or the passer on the passer's side.
       ...(imageUrl ? { imageUrl } : {}),
     },
@@ -689,8 +689,18 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
     }
   }
 
+  // The person's live alert level ("Close games only" and "Off" silence starter plays). Fails open.
+  const allowed = new Set(await filterByLiveAlertLevel([...new Set(batch.flatMap((n) => n.userIds ?? []))], 'starter_play', () => true))
+  const permitted = batch.map((n) => ({ ...n, userIds: (n.userIds ?? []).filter((u) => allowed.has(u)) })).filter((n) => n.userIds.length > 0)
+  if (permitted.length === 0) {
+    return { eventsConsidered: events.length, eventsAlertable: alertable.length, notificationsSent: 0, skipped: null }
+  }
+
   try {
-    await ingestBatch(batch)
+    const results = await ingestBatch(permitted)
+    if (results?.some((result) => !result.dispatched && result.reason === 'dispatch_error')) {
+      throw new Error('Live play dispatch failed')
+    }
   } catch {
     // A failed send must not take down the tick that produced the score.
     return {
@@ -698,13 +708,14 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
       eventsAlertable: alertable.length,
       notificationsSent: 0,
       skipped: null,
+      failed: true,
     }
   }
 
   return {
     eventsConsidered: events.length,
     eventsAlertable: alertable.length,
-    notificationsSent: batch.length,
+    notificationsSent: permitted.length,
     skipped: null,
   }
 }

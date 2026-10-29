@@ -15,6 +15,7 @@ import {
   loadNativeFuturePicks,
   nativePickHorizonStart,
   parseInventoryPickId,
+  resolveNativePickYears,
   resolveRookieDraftRounds,
   transferNativeFuturePick,
 } from '@/lib/league-trade-engine/nativeFuturePicks'
@@ -44,6 +45,7 @@ function fakeDb(opts: {
   newest?: { season: number; status: string } | null
   openDraft?: boolean
   rows?: Row[]
+  futurePicksYearsOut?: number | null
 } = {}) {
   const rows: Row[] = opts.rows ?? []
   const rosters = ['R-a', 'R-b', 'R-c'].map((id) => ({ id, leagueId: 'L1', playerData: { players: [] }, faabRemaining: 100 }))
@@ -69,7 +71,12 @@ function fakeDb(opts: {
       findFirst: vi.fn(async () => (opts.newest === undefined ? { season: 2026, status: 'complete' } : opts.newest)),
     },
     draftSession: { findFirst: vi.fn(async () => (opts.openDraft ? { id: 'open' } : null)) },
-    dynastyLeagueConfig: { findUnique: vi.fn(async () => ({ rookieDraftRounds: 2 })) },
+    dynastyLeagueConfig: {
+      findUnique: vi.fn(async () => ({
+        rookieDraftRounds: 2,
+        ...(opts.futurePicksYearsOut !== undefined ? { futurePicksYearsOut: opts.futurePicksYearsOut } : {}),
+      })),
+    },
     futureDraftPick: {
       findMany: vi.fn(async ({ where }: { where: { leagueId: string; status?: string; pickSeason?: number | { in: number[] } } }) =>
         rows.filter((r) => r.leagueId === where.leagueId && (!where.status || r.status === where.status) && inSeason(where, r)),
@@ -83,9 +90,14 @@ function fakeDb(opts: {
         else rows.push({ id: `row-${rows.length + 1}`, ...create })
         return {}
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: { id: { in: string[] } }; data: Partial<Row> }) => {
-        for (const r of rows) if (where.id.in.includes(r.id)) Object.assign(r, data)
-        return { count: where.id.in.length }
+      updateMany: vi.fn(async ({ where, data }: { where: { id?: { in: string[] }; leagueId?: string; pickSeason?: number; status?: string; usedInDraftSessionId?: null }; data: Partial<Row> }) => {
+        const hit = rows.filter((r) =>
+          where.id
+            ? where.id.in.includes(r.id)
+            : r.leagueId === where.leagueId && r.pickSeason === where.pickSeason && r.status === where.status && (where.usedInDraftSessionId !== null || !r.usedInDraftSessionId),
+        )
+        for (const r of hit) Object.assign(r, data)
+        return { count: hit.length }
       }),
     },
   }
@@ -199,6 +211,23 @@ describe('settling a trade', () => {
     ])
   })
 
+  it('records the terms the offer gave the pick, in the same transaction', async () => {
+    const { db } = fakeDb()
+    const executeRaw = vi.fn(async () => 1)
+    const terms = { kind: 'protected', top: 3, ifProtected: 'stays' }
+    await applyTradeAssetsInTransaction(Object.assign(db, { $executeRaw: executeRaw }) as never, {
+      leagueId: 'L1',
+      proposerRosterId: 'R-a',
+      receiverRosterId: 'R-b',
+      assets: [{ itemType: 'rookie_pick', itemReference: 'fdp:2027:1:R-a', fromRosterId: 'R-a', toRosterId: 'R-b', metadata: { pickTerms: terms } }],
+      tradeId: 'trade-1',
+    })
+    expect(executeRaw).toHaveBeenCalledTimes(1)
+    const values = (executeRaw.mock.calls[0] as unknown[]).slice(1)
+    expect(values).toContain('fdp:2027:1:R-a')
+    expect(JSON.parse(values.find((v) => typeof v === 'string' && v.startsWith('{')) as string)).toMatchObject({ terms, tradeId: 'trade-1', result: null })
+  })
+
   it('refuses a pick the sender no longer holds', async () => {
     const { db } = fakeDb({
       rows: [
@@ -259,5 +288,81 @@ describe('the draft that uses it', () => {
     const traded = await consumeNativeFuturePicksForDraft(db as never, { leagueId: 'L1', season: 2027, draftSessionId: 'd', rounds: 2, slotOrder })
     expect(traded).toEqual([])
     expect(rows.every((r) => r.status === 'used')).toBe(true)
+  })
+})
+
+/*
+ * 🛑 THE HORIZON WAS A FLAT THREE SEASONS whatever the commissioner set in `futurePicksYearsOut`.
+ */
+describe('the tradeable horizon follows the league setting', () => {
+  it('clamps to 1..5 and defaults to 3', () => {
+    expect(resolveNativePickYears(undefined)).toBe(3)
+    expect(resolveNativePickYears(null)).toBe(3)
+    expect(resolveNativePickYears(Number.NaN)).toBe(3)
+    expect(resolveNativePickYears(0)).toBe(1)
+    expect(resolveNativePickYears(-2)).toBe(1)
+    expect(resolveNativePickYears(2)).toBe(2)
+    expect(resolveNativePickYears(4.7)).toBe(4)
+    expect(resolveNativePickYears(5)).toBe(5)
+    expect(resolveNativePickYears(40)).toBe(5)
+  })
+
+  it.each([
+    [1, [2027]],
+    [5, [2027, 2028, 2029, 2030, 2031]],
+    [null, [2027, 2028, 2029]],
+  ])('futurePicksYearsOut %s lists seasons %j', async (years, seasons) => {
+    const { db } = fakeDb({ futurePicksYearsOut: years })
+    const inv = await loadNativeFuturePicks('L1', db as never)
+    expect(inv?.seasons).toEqual(seasons)
+    // Three teams x two rounds per listed season.
+    expect(inv?.picks).toHaveLength(3 * 2 * seasons.length)
+  })
+
+  it('a pick past a shortened horizon is no longer offered, and is not deleted', async () => {
+    const stored: Row = {
+      id: 'row-1', leagueId: 'L1', pickSeason: 2029, round: 1, originalRosterId: 'R-a',
+      currentOwnerId: 'R-b', status: 'active', traded: true, sourceTradeId: 't1',
+    }
+    const { db, rows } = fakeDb({ futurePicksYearsOut: 2, rows: [stored] })
+    const inv = await loadNativeFuturePicks('L1', db as never)
+    expect(inv?.ownerByPickId.has('fdp:2029:1:R-a')).toBe(false)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.status).toBe('active')
+  })
+})
+
+describe('a pick forfeited as a penalty (lib/integrity/tankingPenaltyService.ts)', () => {
+  const forfeitedRow: Row = { id: 'row-f', leagueId: 'L1', pickSeason: 2027, round: 1, originalRosterId: 'R-a', currentOwnerId: 'R-a', status: 'forfeited', traded: false, sourceTradeId: null }
+
+  it('is gone from the inventory — not "back with its original team"', async () => {
+    const { db } = fakeDb({ rows: [forfeitedRow] })
+    const inv = await loadNativeFuturePicks('L1', db as never)
+    expect(inv!.ownerByPickId.has('fdp:2027:1:R-a')).toBe(false)
+    expect(inv!.ownerByPickId.get('fdp:2027:2:R-a')).toBe('R-a')
+    expect(inv!.ownerByPickId.get('fdp:2027:1:R-b')).toBe('R-b')
+  })
+
+  it('cannot be traded', async () => {
+    const { db } = fakeDb({ rows: [forfeitedRow] })
+    await expect(
+      transferNativeFuturePick(db as never, { leagueId: 'L1', ref: 'fdp:2027:1:R-a', fromRosterId: 'R-a', toRosterId: 'R-b' }),
+    ).rejects.toThrow('no longer tradeable')
+  })
+})
+
+describe('a forfeited pick at draft time', () => {
+  it('is tagged with the new draft so the draft skips it, and never becomes a traded pick', async () => {
+    const { db, rows } = fakeDb({
+      rows: [
+        { id: 'row-f', leagueId: 'L1', pickSeason: 2027, round: 1, originalRosterId: 'R-a', currentOwnerId: 'R-a', status: 'forfeited', traded: false, sourceTradeId: null },
+        { id: 'row-x', leagueId: 'L1', pickSeason: 2028, round: 1, originalRosterId: 'R-b', currentOwnerId: 'R-b', status: 'forfeited', traded: false, sourceTradeId: null },
+      ],
+    })
+    const traded = await consumeNativeFuturePicksForDraft(db as never, { leagueId: 'L1', season: 2027, draftSessionId: 'ds-2027', rounds: 2, slotOrder })
+    expect(traded).toEqual([])
+    expect(rows.find((r) => r.id === 'row-f')).toMatchObject({ status: 'forfeited', usedInDraftSessionId: 'ds-2027' })
+    // Another season's forfeit is left for that season's draft.
+    expect(rows.find((r) => r.id === 'row-x')!.usedInDraftSessionId).toBeUndefined()
   })
 })

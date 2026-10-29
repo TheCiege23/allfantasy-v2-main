@@ -3150,3 +3150,50 @@
 .af-live-final-card {
   padding: 0 8px 8px;
 }
+
+
+/* Scoreboard: scores first, team identity second, details below. */
+.af-core .af-live { gap: 16px; }
+.af-core .af-live-head { gap: 5px; max-width: 76ch; }
+.af-core .af-live-title { font-size: clamp(25px, 3vw, 34px); letter-spacing: -.04em; }
+.af-core .af-live-eyebrow { display: none; }
+.af-core .af-live-bar { border-radius: 16px; background: var(--surface); }
+.af-core .af-live-bar-name { display: none; }
+.af-core .af-live-bar-top { gap: 10px; padding: 12px; }
+.af-core .af-live-game { border-radius: 18px; padding: 18px; gap: 16px; box-shadow: 0 3px 14px #0000000a; }
+.af-core .af-live-game[data-live='true'] { border-color: var(--accent-line); box-shadow: inset 0 3px 0 var(--accent); }
+.af-core .af-live-team-score { font: 800 clamp(28px, 3vw, 38px)/1.1 system-ui, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+.af-core .af-live-team-crest, .af-core .af-live-team-mark { width: 44px; height: 44px; background: transparent; border-radius: 12px; }
+.af-core .af-live-team-name { font-size: 15px; }
+.af-core .af-live-tag, .af-core .af-live-clock { font: 650 12px/1.3 system-ui, sans-serif; letter-spacing: 0; border-radius: 7px; }
+@media (max-width: 720px) {
+  .af-core .af-live-game { padding: 14px; border-radius: 15px; }
+  .af-core .af-live-teams { gap: 8px; }
+  .af-core .af-live-side-team, .af-core .af-live-side-team[data-align='end'] { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 8px; text-align: left; }
+  .af-core .af-live-team-score { grid-column: 1 / -1; font-size: 34px; }
+  .af-core .af-live-team-crest, .af-core .af-live-team-mark { width: 36px; height: 36px; }
+  .af-core .af-live-team-name { white-space: normal; font-size: 13px; line-height: 1.3; }
+  .af-core .af-live-search { flex: 1 1 100%; order: 2; }
+  .af-core .af-live-search input { font-size: 16px; min-width: 0; }
+  .af-core .af-live-lede { font-size: 13px; line-height: 1.5; }
+  .af-core .af-live-sports { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+}
+
+
+/* Keep empty roster guidance below the games on phones. */
+@media (max-width: 1080px) {
+  .af-core .af-live-impact[data-placement='inline'] { padding: 14px 16px; }
+  .af-core .af-live-impact[data-placement='inline'][data-roster='false'] { display: none; }
+  .af-core .af-live-side .af-live-impact[data-placement='side'][data-roster='false'] { display: flex; }
+}
+
+@media (max-width: 720px) {
+  .af-core .af-live-bar-top { display: grid; grid-template-columns: minmax(0, 1fr) 48px; gap: 8px; }
+  .af-core .af-live-scope { grid-column: 1; grid-row: 1; width: fit-content; max-width: 100%; }
+  .af-core .af-live-refresh { grid-column: 2; grid-row: 1; }
+  .af-core .af-live-search { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+  .af-core .af-live-freshness { grid-column: 1; grid-row: 3; margin: 0; justify-self: start; max-width: 100%; white-space: normal; }
+  .af-core .af-live-lowdata-toggle { grid-column: 1 / -1; grid-row: 3; justify-self: end; }
+  .af-core .af-live-freshness[data-state='delayed'], .af-core .af-live-freshness[data-state='reconnecting'] { max-width: calc(100% - 12px); }
+  .af-core .af-live-sports { padding: 8px 12px; }
+}

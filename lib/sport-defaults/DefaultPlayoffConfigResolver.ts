@@ -3,6 +3,7 @@
  * Used by league creation initialization, standings, seeding and bracket rendering.
  */
 import type { SportType, DefaultPlayoffConfig } from './types'
+import { playoffStartWeekFor } from '@/lib/sportConfig/dailySportSeasonShape'
 
 type PlayoffVariantMap = Partial<Record<SportType, Record<string, Partial<DefaultPlayoffConfig>>>>
 
@@ -16,7 +17,7 @@ const BASE_CONFIGS: Record<SportType, DefaultPlayoffConfig> = {
     consolation_plays_for: 'pick',
     playoff_start_week: 15,
     seeding_rules: 'standard_standings',
-    tiebreaker_rules: ['points_for', 'head_to_head', 'points_against', 'division_record'],
+    tiebreaker_rules: ['win_pct', 'points_for', 'head_to_head', 'points_against', 'division_record'],
     bye_rules: 'top_two_seeds_bye',
     matchup_length: 1,
     total_rounds: 3,
@@ -33,9 +34,9 @@ const BASE_CONFIGS: Record<SportType, DefaultPlayoffConfig> = {
     first_round_byes: 2,
     bracket_type: 'single_elimination',
     consolation_plays_for: 'pick',
-    playoff_start_week: 22,
+    playoff_start_week: playoffStartWeekFor('NBA'),
     seeding_rules: 'standard_standings',
-    tiebreaker_rules: ['points_for', 'head_to_head', 'points_against'],
+    tiebreaker_rules: ['win_pct', 'points_for', 'head_to_head', 'points_against'],
     bye_rules: 'top_two_seeds_bye',
     matchup_length: 1,
     total_rounds: 3,
@@ -52,14 +53,15 @@ const BASE_CONFIGS: Record<SportType, DefaultPlayoffConfig> = {
     first_round_byes: 2,
     bracket_type: 'single_elimination',
     consolation_plays_for: 'none',
-    playoff_start_week: 23,
+    playoff_start_week: playoffStartWeekFor('MLB'),
     seeding_rules: 'standard_standings',
-    tiebreaker_rules: ['points_for', 'head_to_head', 'points_against'],
+    tiebreaker_rules: ['win_pct', 'points_for', 'head_to_head', 'points_against'],
     bye_rules: 'top_two_seeds_bye',
     matchup_length: 1,
     total_rounds: 3,
     consolation_bracket_enabled: false,
-    third_place_game_enabled: false,
+    // On for every sport's new leagues: the semifinal losers play for third in the final's weeks.
+    third_place_game_enabled: true,
     toilet_bowl_enabled: false,
     championship_length: 2,
     reseed_behavior: 'fixed_bracket',
@@ -71,9 +73,9 @@ const BASE_CONFIGS: Record<SportType, DefaultPlayoffConfig> = {
     first_round_byes: 2,
     bracket_type: 'single_elimination',
     consolation_plays_for: 'pick',
-    playoff_start_week: 22,
+    playoff_start_week: playoffStartWeekFor('NHL'),
     seeding_rules: 'standard_standings',
-    tiebreaker_rules: ['points_for', 'head_to_head', 'points_against'],
+    tiebreaker_rules: ['win_pct', 'points_for', 'head_to_head', 'points_against'],
     bye_rules: 'top_two_seeds_bye',
     matchup_length: 1,
     total_rounds: 3,
@@ -168,11 +170,11 @@ const VARIANT_OVERRIDES: PlayoffVariantMap = {
       reseed_behavior: 'reseed_after_round',
     },
     IDP: {
-      tiebreaker_rules: ['points_for', 'head_to_head', 'points_against', 'division_record'],
+      tiebreaker_rules: ['win_pct', 'points_for', 'head_to_head', 'points_against', 'division_record'],
       reseed_behavior: 'fixed_bracket',
     },
     DYNASTY_IDP: {
-      tiebreaker_rules: ['points_for', 'head_to_head', 'points_against', 'division_record'],
+      tiebreaker_rules: ['win_pct', 'points_for', 'head_to_head', 'points_against', 'division_record'],
       reseed_behavior: 'fixed_bracket',
     },
     DEVY_DYNASTY: {

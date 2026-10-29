@@ -9,6 +9,7 @@ import type { NflRedraftPlayerDisplayMetadata } from '@/lib/player-data/nflRedra
 import type { NflRedraftPlayerIntelligence } from '@/lib/player-data/nflRedraftPlayerIntelligence'
 import type { NflRedraftGameContext } from '@/lib/player-data/nflRedraftGameContext'
 import type { NflRedraftLiveScoringContext } from '@/lib/player-data/nflRedraftLiveScoringContext'
+import { resolveDraftRoomPlayerLabel } from '@/lib/draft-room/draftRoomPlayerLabel'
 
 export type DraftRoomDisplayPlayerLike = {
   name?: string | null
@@ -24,6 +25,10 @@ export type DraftRoomDisplayPlayerLike = {
   id?: string | null
   yearsExp?: number | null
   isRookie?: boolean
+  /** College/devy rows: labelled Prospect (see lib/draft-room/draftRoomPlayerLabel). */
+  isDevy?: boolean
+  graduatedToNFL?: boolean
+  poolType?: string | null
   adp?: number | null
   aiAdp?: number | null
   injuryStatus?: string | null
@@ -118,6 +123,8 @@ export function getDraftRoomDisplayLiveScoringContext(
 /** Short label for chips — not a clinical diagnosis */
 export function getDraftRoomDisplayExperienceBadge(player: DraftRoomDisplayPlayerLike | null | undefined): string | null {
   if (!player) return null
+  // Same resolver as the card's badge, so the board, the queue and the list never disagree.
+  if (resolveDraftRoomPlayerLabel(player) === 'prospect') return 'Prospect'
   const ye = player.yearsExp
   if (typeof ye === 'number' && Number.isFinite(ye)) {
     if (ye === 0) return 'Rookie'

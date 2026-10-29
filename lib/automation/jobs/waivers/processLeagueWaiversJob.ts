@@ -27,8 +27,13 @@ import { enqueueLeagueChatNotification } from "@/lib/automation/notifications"
 import { publishRealtimeEvent } from "@/lib/automation/realtime"
 import type { AutomationResult } from "@/lib/automation/types"
 import { prisma } from "@/lib/prisma"
-import { processWaiverClaimsForLeague } from "@/lib/waiver-wire/process-engine"
+import { processWaiverClaimsForLeague, type WaiverRunSkipReason } from "@/lib/waiver-wire/process-engine"
 import type { ProcessedClaimResult } from "@/lib/waiver-wire/types"
+
+const WAIVER_SKIP_MESSAGES: Record<WaiverRunSkipReason, string> = {
+  league_moves_locked:
+    "League skipped: the commissioner has locked all roster moves. Pending claims stay pending until the lock is lifted.",
+}
 
 function mapRunType(trigger: ProcessLeagueWaiversInput["trigger"]): string {
   if (trigger === "manual" || trigger === "admin") return "manual"
@@ -152,11 +157,48 @@ async function executeLockedWaiverProcess(input: {
       }
     }
 
+    const skip: { reason: WaiverRunSkipReason | null } = { reason: null }
     const rawResults = await processWaiverClaimsForLeague(leagueId, {
       runType: mapRunType(trigger),
       processedByUserId: actorUserId ?? null,
       idempotencyKey,
+      onSkip: (reason) => {
+        skip.reason = reason
+      },
     })
+
+    /*
+     * 🛑 SKIPPED, NOT COMPLETED. The idempotency key is the league plus the UTC day of `nextRunAt`, and a
+     * run the engine skipped does not move `nextRunAt` — so a COMPLETED job here would spend that key for
+     * good and the claims would never settle after the commissioner lifts the lock. A skipped job re-runs
+     * on the next fire. No "Waivers processed" chat post either: nothing was.
+     */
+    const skippedReason = skip.reason
+    if (skippedReason) {
+      const message = WAIVER_SKIP_MESSAGES[skippedReason]
+      const summary = {
+        ...summarizeWaiverProcessingResults([], { extraMetadata: { trigger, skippedReason } }),
+        message,
+      }
+      await publishRealtimeEvent({
+        leagueId,
+        eventType: "waivers.processing.completed",
+        payload: { processedCount: 0, awarded: 0, failed: 0, skippedReason },
+      })
+      await writeAutomationAuditLog({
+        leagueId,
+        action: "waivers.skipped",
+        entityType: "league",
+        entityId: leagueId,
+        jobId: input.jobId,
+        message,
+        metadata: { trigger, skippedReason },
+      })
+      return {
+        result: { status: "skipped", message, metadata: { summary } },
+        rawResults: [],
+      }
+    }
 
     const summary = summarizeWaiverProcessingResults(rawResults, {
       extraMetadata: { trigger },

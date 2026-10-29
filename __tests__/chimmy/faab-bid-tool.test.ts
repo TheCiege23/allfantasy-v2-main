@@ -66,7 +66,7 @@ beforeEach(() => {
 })
 
 describe('get_faab_bid_plan', () => {
-  it('in a guillotine league, splits the remaining budget across the real upgrades only', async () => {
+  it('in a Guilly league, splits the remaining budget across the real upgrades only', async () => {
     const text = await buildFaabBidContext('L1', 'me')
     expect(text).toContain('The user has $400 FAAB left of a $1000 season budget.')
     expect(text).toContain('- Free TE (TE): bid up to $323')

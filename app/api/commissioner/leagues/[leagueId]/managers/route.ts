@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole } from '@/lib/league/permissions'
+import { tournamentCoCommissionerIds } from '@/lib/league/tournamentCoCommissioners'
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { trackDiscoveryOrphanAdoption } from '@/lib/discovery-analytics/server'
 import { assignLeagueSeat, releaseLeagueSeat } from '@/lib/league/leagueSeats'
@@ -24,7 +25,8 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const [teams, rosters] = await Promise.all([
+  const [leagueRow, teamRows, rosters] = await Promise.all([
+    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
     prisma.leagueTeam.findMany({
       where: { leagueId },
       select: {
@@ -38,6 +40,7 @@ export async function GET(
         isOrphan: true,
         role: true,
         platformUserId: true,
+        claimedByUserId: true,
       },
     }),
     prisma.roster.findMany({
@@ -45,8 +48,18 @@ export async function GET(
       select: { id: true, platformUserId: true },
     }),
   ])
+  // Co-commissioners the tournament that created this league granted (no team needed). A team's own
+  // flag only covers people holding a seat, so the list would otherwise show them as plain managers.
+  const tournamentCoIds = new Set(tournamentCoCommissionerIds(leagueRow?.settings))
+  const teams = teamRows.map(({ claimedByUserId, ...t }) => ({
+    ...t,
+    isCoCommissioner: t.isCoCommissioner || (!t.isCommissioner && Boolean(claimedByUserId) && tournamentCoIds.has(claimedByUserId as string)),
+  }))
   const candidateUserIds = Array.from(
-    new Set(rosters.map((r) => r.platformUserId).filter((id): id is string => Boolean(id))),
+    new Set([
+      ...rosters.map((r) => r.platformUserId).filter((id): id is string => Boolean(id)),
+      ...tournamentCoIds,
+    ]),
   )
   const appUsers = candidateUserIds.length
     ? await prisma.appUser.findMany({
@@ -66,9 +79,19 @@ export async function GET(
       displayName: team?.ownerName ?? appUser?.displayName ?? team?.teamName ?? r.platformUserId,
       leagueTeamId: team?.id ?? null,
       isCommissioner: team?.isCommissioner ?? false,
-      isCoCommissioner: team?.isCoCommissioner ?? false,
+      isCoCommissioner: Boolean(team?.isCoCommissioner) || (!team?.isCommissioner && Boolean(r.platformUserId) && tournamentCoIds.has(r.platformUserId as string)),
       isOrphanTeam: team?.isOrphan ?? false,
       teamRole: team?.role ?? 'member',
+    }
+  })
+  // Every tournament co-commissioner, seat or not, so a screen can list the people who run the league.
+  const tournamentCoCommissioners = [...tournamentCoIds].map((id) => {
+    const u = appUserById.get(id)
+    return {
+      userId: id,
+      username: u?.username ?? null,
+      displayName: u?.displayName ?? u?.username ?? null,
+      hasTeam: rosters.some((r) => r.platformUserId === id),
     }
   })
 
@@ -76,6 +99,7 @@ export async function GET(
     teams,
     rosters: rosters.map((r) => ({ id: r.id, platformUserId: r.platformUserId })),
     managers,
+    tournamentCoCommissioners,
   })
 }
 

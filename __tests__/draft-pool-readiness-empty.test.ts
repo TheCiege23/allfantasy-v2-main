@@ -28,7 +28,11 @@ vi.mock('@/lib/draft-room/getResolvedDraftPoolForLeague', () => ({
 vi.mock('@/lib/db-first-mode', () => ({ dbFirstMode: { draftPoolCacheTtlSeconds: 3600 } }))
 vi.mock('@/lib/api-performance', () => ({ getApiCached: h.memory }))
 
-import { ensureDraftPoolReady, getDraftPoolReadiness } from '@/lib/draft-room/ensureDraftPoolReady'
+import {
+  ensureDraftPoolReady,
+  getDraftPoolReadiness,
+  inFlightDraftPoolBuildCount,
+} from '@/lib/draft-room/ensureDraftPoolReady'
 
 describe('cold draft pool readiness', () => {
   beforeEach(() => {
@@ -64,5 +68,59 @@ describe('cold draft pool readiness', () => {
     expect(h.upsert).toHaveBeenCalledOnce()
     expect(h.upsert.mock.calls[0]![0].create.cacheKey.length).toBeLessThanOrEqual(191)
     expect((await getDraftPoolReadiness('league-1')).ready).toBe(true)
+  })
+})
+
+/*
+ * 🛑 ONE COLD BUILD PER LEAGUE PER PROCESS. The cron, the draft-room open and autopick all call
+ * ensureDraftPoolReady, and its only guard was a DB read that sees nothing until a build FINISHES.
+ * A build overrunning the cron's 120s `withTimeout` (which races, it does not cancel) stayed alive
+ * while the next caller started another — production logged builds at 522s, and
+ * cron-draft-pool-prewarm ran past 5 minutes 46 times in a week.
+ */
+describe('concurrent callers share one cold build', () => {
+  beforeEach(() => {
+    h.row = null
+    h.resolve.mockReset()
+    h.upsert.mockReset()
+    h.memory.mockReturnValue(null)
+  })
+
+  it('three overlapping callers for one league run ONE build and all get its result', async () => {
+    let release!: (v: unknown) => void
+    h.resolve.mockImplementation(() => new Promise((r) => { release = r }))
+    h.upsert.mockResolvedValue({})
+
+    const calls = [ensureDraftPoolReady('league-9'), ensureDraftPoolReady('league-9'), ensureDraftPoolReady('league-9')]
+    await vi.waitFor(() => expect(h.resolve).toHaveBeenCalled())
+    expect(inFlightDraftPoolBuildCount()).toBe(1)
+    release({ sport: 'NFL', poolType: 'pro', count: 1, entries: [{ playerId: 'p1', name: 'P' }] })
+
+    const results = await Promise.all(calls)
+    expect(h.resolve).toHaveBeenCalledTimes(1)
+    expect(h.upsert).toHaveBeenCalledTimes(1)
+    expect(results).toEqual(Array(3).fill({ ok: true, source: 'rebuilt' }))
+    expect(inFlightDraftPoolBuildCount()).toBe(0)
+  })
+
+  it('different leagues do not share, and a finished build does not stick', async () => {
+    h.resolve.mockResolvedValue({ sport: 'NFL', poolType: 'pro', count: 1, entries: [{ playerId: 'p1', name: 'P' }] })
+    h.upsert.mockResolvedValue({})
+    await Promise.all([ensureDraftPoolReady('league-a'), ensureDraftPoolReady('league-b')])
+    expect(h.resolve).toHaveBeenCalledTimes(2)
+    // Sequential, after the first settled: a fresh call runs again rather than replaying a result.
+    h.row = null
+    await ensureDraftPoolReady('league-a')
+    expect(h.resolve).toHaveBeenCalledTimes(3)
+  })
+
+  it('a build that throws clears its slot, so the next caller can retry', async () => {
+    h.resolve.mockRejectedValueOnce(new Error('provider 500'))
+    const first = await ensureDraftPoolReady('league-x')
+    expect(first.ok).toBe(false)
+    expect(inFlightDraftPoolBuildCount()).toBe(0)
+    h.resolve.mockResolvedValue({ sport: 'NFL', poolType: 'pro', count: 1, entries: [{ playerId: 'p1', name: 'P' }] })
+    h.upsert.mockResolvedValue({})
+    expect(await ensureDraftPoolReady('league-x')).toEqual({ ok: true, source: 'rebuilt' })
   })
 })
