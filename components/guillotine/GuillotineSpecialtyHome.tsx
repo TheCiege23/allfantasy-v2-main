@@ -47,6 +47,8 @@ export interface GuillotineSpecialtySummary {
   myEscapes?: { weekOrPeriod: number; margin: number }[]
   home?: GuillotineHomeExtras | null
   config?: { tiebreakerOrder: string[]; teamsPerChop: number; dangerMarginPoints: number | null } | null
+  /** Set when the chop line is this week's live one, by the chop's own rules (lib/guillotine/chopWatch.ts). */
+  chopWatch?: { live: true; week: number; chopCount: number; chopLine: number | null } | null
 }
 
 const asset = (f: string) => specialtyAsset('guillotine', f)
@@ -215,7 +217,7 @@ export function GuillotineSpecialtyHome({
                         </span>
                         <span className={gl.tagCell}>
                           <SpecialtyTag tone={TONE[r.tier]} style={{ width: '100%' }}>
-                            {tierLabel(r.tier)}
+                            {r.immune ? 'Immune' : tierLabel(r.tier)}
                           </SpecialtyTag>
                         </span>
                       </div>
@@ -223,6 +225,12 @@ export function GuillotineSpecialtyHome({
                   ))}
                 </ol>
               )}
+              {summary.chopWatch?.live && line.rows.length > 0 ? (
+                <p className={sp.empty} data-testid="guillotine-chop-watch-note">
+                  Live: this week&rsquo;s scores so far, run through your league&rsquo;s chop rules. Updates every few minutes.
+                  {summary.chopWatch.chopCount > 1 ? ` ${summary.chopWatch.chopCount} teams are chopped this week.` : ''}
+                </p>
+              ) : null}
               {home && home.chopped.length > 0 ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 6 }}>
                   <span className={sp.lbl} style={{ marginRight: 6 }}>Chopped</span>

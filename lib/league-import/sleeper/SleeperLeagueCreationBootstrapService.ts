@@ -312,7 +312,10 @@ export async function bootstrapLeagueFromNormalizedImport(
     // C3: canonical `lineup_sections` consumed by `getNormalizedLineupSections`
     // (Chimmy's RosterContextProvider + autocoach/war-rooms/decision-os/
     // commissioner-hub). Without it, imported rosters read as empty starters/bench.
-    const lineupStarters = r.starter_ids ?? []
+    // `starter_ids` keeps Sleeper's `"0"` empty-slot markers (positional; stored as `starters`
+    // below). A section lists PLAYERS, and a string id carries no slot index, so the markers stay
+    // out of it — exactly what this section held before the mapper kept them.
+    const lineupStarters = (r.starter_ids ?? []).filter((id) => id && id !== '0')
     const lineupIr = r.reserve_ids ?? []
     const lineupTaxi = r.taxi_ids ?? []
     const lineupClaimedIds = new Set<string>([

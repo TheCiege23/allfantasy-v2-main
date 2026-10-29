@@ -23,6 +23,7 @@ import {
   type SimTeam,
 } from './outlookSim'
 import { readPlayoffFormat, type FormatSource } from './outlookFormat'
+import { leagueHasMedianGame, medianGameRecords } from './medianGame'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { liveWeeks, withLiveScores } from './outlookLiveShare'
 import { lineupShareKey, loadLineupBoards, type LineupShareTarget } from './outlookLiveWeekLoader'
@@ -421,7 +422,7 @@ function describeWhatDecidesIt(
       const safe = m.winsForSafe != null
       if (need <= 0) return `You already have ${m.currentWins} wins, which gets you in ${safe ? 'nine times in ten' : 'more often than not'}.`
       return (
-        `Get to ${target} wins — ${need} of your last ${weeksRemaining} — and you are in ${safe ? 'nine times in ten' : 'more often than not'}.` +
+        `Get to ${target} wins — ${need} of your last ${Math.max(weeksRemaining, m.maxWins - m.currentWins)} — and you are in ${safe ? 'nine times in ten' : 'more often than not'}.` +
         (you.playoffPct < 40 ? ' You will likely need help too.' : '')
       )
     }
@@ -589,14 +590,31 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
     const endWeek = format.regularSeasonEndWeek
     const regular = (week: number) => endWeek == null || week <= endWeek
 
+    const playedRow = (x: OutlookMatchupRow) => final(x) && regular(x.week) && (x.scored === true || x.pointsFor > 0 || x.pointsAgainst > 0)
+
+    /*
+     * 🛑 SLEEPER'S MEDIAN GAME (`league_average_match`) IS A SECOND GAME EVERY WEEK, AND IT IS IN THE
+     * PLATFORM'S RECORD. Without it a median league's record here was half the platform's, and the
+     * simulation played half the games left. The setting where the league states it; otherwise the
+     * platform's own records (two games a week) — see `medianGame.ts`.
+     */
+    const weeksDone = new Set(seasonRows.filter(playedRow).map((r) => r.week)).size
+    const reportedGames = history.reportedGames?.get(pid)
+    const medianGame = leagueHasMedianGame(
+      effectiveLeague.settings,
+      reportedGames != null ? { maxGames: reportedGames, weeksDone } : null,
+    )
+    const medianRecords = medianGame ? medianGameRecords(seasonRows.filter(playedRow)) : null
+
     const simTeams: SimTeam[] = []
     for (const [rosterId, list] of byRoster) {
-      const played = list.filter((x) => final(x) && regular(x.week) && (x.scored === true || x.pointsFor > 0 || x.pointsAgainst > 0))
+      const played = list.filter(playedRow)
+      const med = medianRecords?.get(rosterId) ?? { wins: 0, losses: 0, ties: 0 }
       simTeams.push({
         rosterId,
-        wins: played.filter((x) => x.win === 1).length,
-        losses: played.filter((x) => x.pointsFor < x.pointsAgainst).length,
-        ties: played.filter((x) => x.pointsFor === x.pointsAgainst).length,
+        wins: played.filter((x) => x.win === 1).length + med.wins,
+        losses: played.filter((x) => x.pointsFor < x.pointsAgainst).length + med.losses,
+        ties: played.filter((x) => x.pointsFor === x.pointsAgainst).length + med.ties,
         pointsFor: played.reduce((a, x) => a + x.pointsFor, 0),
         profile: fitProfile(scores.get(rosterId) ?? []),
       })
@@ -686,12 +704,14 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
 
     prepared.push({
       period: history.periodsByLeague.get(pid)?.week,
-      statusCanBeCertified: Boolean(completeQualificationSchedule) && canCertifyWeeklyPlayoffStatus(effectiveLeague.settings, format.playoffTeamsSource),
+      // A median league is never certified — `canCertifyWeeklyPlayoffStatus` already refuses a stated
+      // one, and an inferred one is the same league.
+      statusCanBeCertified: Boolean(completeQualificationSchedule) && !medianGame && canCertifyWeeklyPlayoffStatus(effectiveLeague.settings, format.playoffTeamsSource),
       league: effectiveLeague,
       pid,
       leagueName,
       season,
-      sim: { teams: simTeams, remaining, playoffTeams: format.playoffTeams, byeTeams: format.byeTeams },
+      sim: { teams: simTeams, remaining, playoffTeams: format.playoffTeams, byeTeams: format.byeTeams, ...(medianGame ? { medianGame: true } : {}) },
       seed: seedFromString(pid),
       played,
       weeks,

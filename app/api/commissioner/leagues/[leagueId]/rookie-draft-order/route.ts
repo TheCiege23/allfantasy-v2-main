@@ -27,6 +27,7 @@ import {
   type RookieDraftOrderMode,
 } from '@/lib/league/rookieDraftOrder'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
+import { publishRookieDraftOrderChange } from '@/lib/league-rules-explainer/rookieOrderChange'
 import { isLeagueEntitledToLiveRookieOrder } from '@/lib/rookie-order/liveRookieOrderService'
 
 export const dynamic = 'force-dynamic'
@@ -135,6 +136,9 @@ export async function PUT(
   if (changes.length > 0) {
     await notifyCommissionerChange(leagueId, session.user.id, 'Rookie Draft Settings', changes).catch(() => {})
   }
+
+  // The popup's rookie order follows this setting; members get a "What changed" card when it moves.
+  await publishRookieDraftOrderChange({ leagueId: leagueId, actorUserId: session.user.id, settingsBefore: league.settings })
 
   return NextResponse.json({ ok: true, mode, enabled })
 }

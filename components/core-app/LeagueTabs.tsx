@@ -7,6 +7,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { LeagueTabsPrewarm } from '@/components/core-app/LeagueTabsPrewarm'
 import { LeagueTabsScroller } from '@/components/core-app/LeagueTabsScroller'
+import { navLabel } from '@/lib/core-app/navLabels'
 import '@/components/core-app/af-league-tabs.css'
 
 /**
@@ -56,11 +57,11 @@ export type LeagueTabsProps = {
 
 /** The compact strip's five, in order, with their short labels. `''` is the league home. */
 const COMPACT_PRIMARY: Array<{ key: string; label: string; labelEs: string }> = [
-  { key: '', label: 'Overview', labelEs: 'Resumen' },
-  { key: 'my-team', label: 'My Team', labelEs: 'Equipo' },
-  { key: 'matchup', label: 'Matchup', labelEs: 'Partido' },
-  { key: 'players', label: 'Players', labelEs: 'Jugad.' },
-  { key: 'moves', label: 'Moves', labelEs: 'Movimientos' },
+  { key: '', label: navLabel('overview'), labelEs: 'Resumen' },
+  { key: 'my-team', label: navLabel('my-team'), labelEs: 'Equipo' },
+  { key: 'matchup', label: navLabel('matchup'), labelEs: 'Partido' },
+  { key: 'players', label: navLabel('players', 'short'), labelEs: 'Jugad.' },
+  { key: 'moves', label: navLabel('moves'), labelEs: 'Movimientos' },
 ]
 
 type TabRequirement = 'scores' | 'trades' | 'draft'
@@ -70,20 +71,20 @@ const TABS: Array<{
   label: string
   requires?: TabRequirement
 }> = [
-  { key: '', label: 'Overview' },
-  { key: 'moves', label: 'Moves' },
-  { key: 'schedule', label: 'Schedule' },
-  { key: 'my-team', label: 'My team' },
-  { key: 'matchup', label: 'Matchup', requires: 'scores' },
-  { key: 'trades', label: 'Trades', requires: 'trades' },
-  { key: 'waivers', label: 'Waivers' },
-  { key: 'players', label: 'Players' },
-  { key: 'war-room', label: 'War Room' },
-  { key: 'draft-hq', label: 'Draft HQ', requires: 'draft' },
-  { key: 'week', label: 'Your week', requires: 'scores' },
-  { key: 'live', label: 'Live' },
-  { key: 'standings', label: 'Standings', requires: 'scores' },
-  { key: 'season-outlook', label: 'Outlook', requires: 'scores' },
+  { key: '', label: navLabel('overview') },
+  { key: 'moves', label: navLabel('moves') },
+  { key: 'schedule', label: navLabel('schedule') },
+  { key: 'my-team', label: navLabel('my-team') },
+  { key: 'matchup', label: navLabel('matchup'), requires: 'scores' },
+  { key: 'trades', label: navLabel('trades'), requires: 'trades' },
+  { key: 'waivers', label: navLabel('waivers') },
+  { key: 'players', label: navLabel('players', 'short') },
+  { key: 'war-room', label: navLabel('war-room') },
+  { key: 'draft-hq', label: navLabel('draft-hq'), requires: 'draft' },
+  { key: 'week', label: navLabel('week'), requires: 'scores' },
+  { key: 'live', label: navLabel('live', 'short') },
+  { key: 'standings', label: navLabel('standings'), requires: 'scores' },
+  { key: 'season-outlook', label: navLabel('season-outlook', 'short'), requires: 'scores' },
 ]
 
 export function LeagueTabs({
@@ -174,7 +175,7 @@ export function LeagueTabs({
         return (
           <div className="af-lt-compact" data-compact={compact}>
             <LeagueTabsScroller className="af-lt-compact-row" activeKey={activeKey}>{primary.map((t) => tab(t.key, language === 'es' ? t.labelEs : t.label))}</LeagueTabsScroller>
-            {tab('live', language === 'es' ? 'En vivo' : 'Live')}
+            {tab('live', copy(navLabel('live', 'short')))}
             {commissionerHref && <Link className="af-lt-tab" href={commissionerHref}>{language === 'es' ? 'Comisionado' : 'Commissioner'}</Link>}
             {rest.length ? (
               <details className="af-lt-more" ref={moreRef}>

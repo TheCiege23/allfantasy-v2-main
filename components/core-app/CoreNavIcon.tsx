@@ -37,8 +37,10 @@ import type { CoreNavKey } from '@/components/core-app/AfCoreShell'
  * hardcoded fill would leave the active row's icon sitting in the old colour —
  * the one thing on the row that did not respond to being selected.
  *
- * The `glyph` field is untouched: the tab bar and the ≤1080px nav strip still
- * render it, and this is additive rather than a migration.
+ * ⚠ IT IS NOW THE ONLY ICON SYSTEM ON THE SHELL'S NAV SURFACES. The tab bar and the ≤1080px nav
+ * strip used to render `glyph`, so one destination wore a drawn icon in the More sheet and a
+ * unicode mark (rendered differently by every font) on the bar beside it. All three read this
+ * now. `NavItem.glyph` survives only for the league-first Play sheet's non-destination links.
  */
 
 /** Shared geometry, so nineteen icons cannot drift into nineteen weights. */
@@ -57,7 +59,13 @@ const STROKE = {
  * The fallback below is a real mark rather than a blank, so a missing entry
  * degrades to "a destination" instead of to a hole in the column.
  */
-const PATHS: Partial<Record<CoreNavKey, ReactNode>> = {
+/**
+ * Bar controls that are not nav destinations: the league-first bar's Chimmy, Play and Me, and the
+ * More button. They used unicode marks (✦ ⊕ ◉ ⋯) beside drawn destination icons on the same bar.
+ */
+export type ShellIconKey = 'chimmy' | 'play' | 'me' | 'more'
+
+const PATHS: Partial<Record<CoreNavKey | ShellIconKey, ReactNode>> = {
   /* House. */
   home: (
     <>
@@ -249,6 +257,30 @@ const PATHS: Partial<Record<CoreNavKey, ReactNode>> = {
       <path d="M9.2 12.2l2 2 3.6-3.9" />
     </>
   ),
+  /* Four-point spark — the assistant. */
+  chimmy: <path d="M12 3.5c.7 4.2 2.3 5.8 6.5 6.5-4.2.7-5.8 2.3-6.5 6.5-.7-4.2-2.3-5.8-6.5-6.5 4.2-.7 5.8-2.3 6.5-6.5Z" />,
+  /* Plus in a circle — start or join something. */
+  play: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8.5v7M8.5 12h7" />
+    </>
+  ),
+  /* Head and shoulders — you. */
+  me: (
+    <>
+      <circle cx="12" cy="8.5" r="3.5" />
+      <path d="M5 19.5c1.2-3.4 3.8-5 7-5s5.8 1.6 7 5" />
+    </>
+  ),
+  /* Three dots — everything else. */
+  more: (
+    <>
+      <circle cx="6" cy="12" r="1.2" />
+      <circle cx="12" cy="12" r="1.2" />
+      <circle cx="18" cy="12" r="1.2" />
+    </>
+  ),
   /* Hexagon with a key hole — the admin door. */
   admin: (
     <>
@@ -271,7 +303,7 @@ const FALLBACK = (
  * ⚠ `aria-hidden`, ALWAYS. Every caller renders this beside the destination's
  * own text label, so an accessible name here is the label read twice.
  */
-export function CoreNavIcon({ navKey, size = 18 }: { navKey: CoreNavKey; size?: number }) {
+export function CoreNavIcon({ navKey, size = 18 }: { navKey: CoreNavKey | ShellIconKey; size?: number }) {
   return (
     <svg
       width={size}

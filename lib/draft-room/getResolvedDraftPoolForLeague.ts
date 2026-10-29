@@ -201,7 +201,7 @@ export type GetResolvedDraftPoolResult = {
   provenNonRookies?: ProvenNonRookie[]
 }
 
-type SportPoolRow = {
+export type SportPoolRow = {
   full_name: string
   position: string
   team_abbreviation: string | null
@@ -622,7 +622,25 @@ function enrichRawRowFromDbPool(existing: DraftPoolRawRow, p: SportPoolRow, idFo
   }
 }
 
-function mergeDbPoolIntoRawList(
+function rawRowName(r: DraftPoolRawRow): string {
+  return r.name ?? r.playerName ?? r.full_name ?? ''
+}
+
+/**
+ * Folds DB pool rows into `rawList`: a row that matches an existing entry enriches it, anything
+ * else is appended (up to `mergeCap`).
+ *
+ * ⚠ INDEXED BY CANONICAL NAME, NOT SCANNED. This used `rawList.findIndex` per pool row and
+ * re-ran `canonicalName` (NFKD + five regexes) on every comparison: O(pool × list) with no
+ * yield, ~2,400 × ~2,400 for an NHL pool, and it ran in two concurrent builds on a new league's
+ * first open (reported as 30s+ to load, 2026-10-28). A match requires equal canonical names
+ * (`normalizeDraftPoolNameForDedupe` and `normalizeLooseName` are both `canonicalName`), so only
+ * same-name rows can match. Candidates are checked in insertion order, which returns the same
+ * row `findIndex` did. Position and team are still read from the row at match time because
+ * `enrichRawRowFromDbPool` can fill in a row's team mid-loop.
+ */
+/** Exported for the equivalence test only. */
+export function mergeDbPoolIntoRawList(
   rawList: DraftPoolRawRow[],
   poolRows: SportPoolRow[],
   mergeCap: number,
@@ -630,30 +648,35 @@ function mergeDbPoolIntoRawList(
   seenNames: Set<string>,
   idFor: PoolRowIdFor = externalSourceIdAsIs,
 ): void {
+  const byName = new Map<string, number[]>()
+  const indexRow = (idx: number) => {
+    const key = normalizeDraftPoolNameForDedupe(rawRowName(rawList[idx]!))
+    const bucket = byName.get(key)
+    if (bucket) bucket.push(idx)
+    else byName.set(key, [idx])
+  }
+  for (let i = 0; i < rawList.length; i += 1) indexRow(i)
+
   for (const p of poolRows) {
     const norm = normalizeDraftPoolNameForDedupe(p.full_name ?? '')
-    const looseNorm = normalizeLooseName(p.full_name ?? '')
     const poolPos = normalizeKeyPart(p.position ?? '')
     const poolTeam = normalizeKeyPart(p.team_abbreviation ?? '')
     if (!norm) continue
 
-    const existingIdx = rawList.findIndex(
-      (r) => {
-        const rowName = r.name ?? r.playerName ?? r.full_name ?? ''
-        const rowNorm = normalizeDraftPoolNameForDedupe(rowName)
-        const rowLoose = normalizeLooseName(rowName)
-        const rowPos = normalizeKeyPart(r.position ?? r.pos ?? '')
-        const rowTeam = normalizeKeyPart(r.team ?? r.teamAbbr ?? '')
-
-        const posMatch = !poolPos || !rowPos || poolPos === rowPos
-        const teamMatch = !poolTeam || !rowTeam || poolTeam === rowTeam
-        if (!posMatch || !teamMatch) return false
-
-        return rowNorm === norm || (looseNorm && rowLoose === looseNorm)
-      },
-    )
+    let existingIdx = -1
+    for (const idx of byName.get(norm) ?? []) {
+      const r = rawList[idx]!
+      const rowPos = normalizeKeyPart(r.position ?? r.pos ?? '')
+      const rowTeam = normalizeKeyPart(r.team ?? r.teamAbbr ?? '')
+      const posMatch = !poolPos || !rowPos || poolPos === rowPos
+      const teamMatch = !poolTeam || !rowTeam || poolTeam === rowTeam
+      if (posMatch && teamMatch) {
+        existingIdx = idx
+        break
+      }
+    }
     if (existingIdx >= 0) {
-      enrichRawRowFromDbPool(rawList[existingIdx], p, idFor)
+      enrichRawRowFromDbPool(rawList[existingIdx]!, p, idFor)
       seenNames.add(norm)
       continue
     }
@@ -675,6 +698,7 @@ function mergeDbPoolIntoRawList(
       age: p.age ?? null,
       ...(useMixedPoolTypeMarkers ? { poolType: 'pro' as const } : {}),
     })
+    indexRow(rawList.length - 1)
   }
 }
 
