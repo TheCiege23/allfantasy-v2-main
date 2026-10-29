@@ -286,6 +286,7 @@ import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { leagueDataFreshness } from '@/lib/core-app/cardFreshness'
 import { CARD_USE_COOKIE, orderHomeCards, parseCardUsage, timeSensitiveCards } from '@/lib/core-app/homeCardOrder'
 import { resolveHiddenHomeSections, type HomeSectionId } from '@/lib/core-app/homeSections'
+import { shellLineupHandoff } from '@/lib/core-app/shellLineupHandoff'
 
 export const dynamic = 'force-dynamic'
 
@@ -1313,6 +1314,12 @@ export default async function AfCorePage({
   const selectedLeagueRecord = await selectedLeagueRead
   const selectedLeaguePlatform = selectedLeagueRecord?.platform ?? selectedLeagueRow?.platform ?? null
 
+  // The Updates menu's "Fix lineup in <platform> ↗" for an imported league (lib/core-app/shellLineupHandoff.ts).
+  const lineupHandoff =
+    selectedLeagueRecord && isImportedPlatform(selectedLeagueRecord.platform?.trim())
+      ? await shellLineupHandoff(userId, selectedLeagueRecord).catch(() => null)
+      : null
+
   const shellProfile = {
     name: shellUser?.displayName?.trim() || shellUser?.username?.trim() || null,
     imageUrl: resolveDashboardAvatarUrl(shellUser?.avatarUrl) ?? null,
@@ -1647,6 +1654,7 @@ export default async function AfCorePage({
       syncEligibleCount={syncEligibleCount}
       leagueHasScoredWeek={leagueHasScoredWeek}
       selectedLeagueId={selectedLeagueId}
+      lineupHandoff={lineupHandoff}
       scope={shellScope}
       hasIdpDefense={hasIdpDefense}
       devySlotCount={devySlotCount}

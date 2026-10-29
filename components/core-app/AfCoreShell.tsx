@@ -42,6 +42,7 @@ import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topS
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
 import { withoutHidden } from '@/lib/core-app/leaguePreferences'
+import type { PlatformLink } from '@/lib/core-app/platformLinks'
 import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
 import { RAIL_WARM_DWELL_MS, railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
 import { speculationGate } from '@/components/core-app/speculationGate'
@@ -284,6 +285,12 @@ type NavSection = { id: string; heading: string | null; items: NavItem[] }
 
 export type AfCoreShellProps = {
   nativeLeague?: boolean
+  /**
+   * Where the open imported league's lineup is changed (lib/core-app/shellLineupHandoff.ts): the
+   * platform's verified lineup screen, else its league page, else null. The Updates menu turns its
+   * "make lineup changes on your league's platform" line into this button when present.
+   */
+  lineupHandoff?: Pick<PlatformLink, 'href' | 'screen' | 'platformLabel'> | null
   active: CoreNavKey
   /**
    * League-first phone shell (lib/core-app/leagueFirst.ts): the bottom bar becomes
@@ -2206,7 +2213,41 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 <strong>{language === 'es' ? 'Actualizaciones de liga' : 'League updates'}</strong>
                 <p>{syncChipText(syncAge.label, language)}</p>
                 <SyncNowButton eligibleCount={syncEligibleCount} />
-                <p>{props.nativeLeague ? (language === 'es' ? 'Los cambios se guardan en AllFantasy.' : 'Changes save to AllFantasy.') : (language === 'es' ? 'Cambia la alineación en la plataforma de tu liga.' : 'Make lineup changes on your league’s platform.')}</p>
+                {/*
+                  ⚠ A BUTTON, NOT JUST A SENTENCE, WHEN WE KNOW WHERE. This said "make lineup changes
+                  on your league's platform" and stopped. `lineupHandoff` is the verified lineup screen
+                  (or, labelled, the league page) for the open league; with no league open, or none
+                  we can build, the sentence stays — never a homepage under a "lineup" label.
+                */}
+                {props.nativeLeague ? (
+                  <p>{language === 'es' ? 'Los cambios se guardan en AllFantasy.' : 'Changes save to AllFantasy.'}</p>
+                ) : props.lineupHandoff ? (
+                  <>
+                    <p>
+                      {language === 'es'
+                        ? `AllFantasy solo lee esta liga: los cambios se hacen en ${props.lineupHandoff.platformLabel}.`
+                        : `AllFantasy only reads this league — changes are made in ${props.lineupHandoff.platformLabel}.`}
+                    </p>
+                    <a
+                      className="af-btn af-data-menu-handoff"
+                      href={props.lineupHandoff.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="updates-lineup-handoff"
+                    >
+                      {props.lineupHandoff.screen === 'Lineup'
+                        ? language === 'es'
+                          ? `Arreglar la alineación en ${props.lineupHandoff.platformLabel}`
+                          : `Fix lineup in ${props.lineupHandoff.platformLabel}`
+                        : language === 'es'
+                          ? `Abrir la liga en ${props.lineupHandoff.platformLabel}`
+                          : `Open league in ${props.lineupHandoff.platformLabel}`}{' '}
+                      <span aria-hidden>↗</span>
+                    </a>
+                  </>
+                ) : (
+                  <p>{language === 'es' ? 'Cambia la alineación en la plataforma de tu liga.' : 'Make lineup changes on your league’s platform.'}</p>
+                )}
               </div>
             </details>
 

@@ -3834,6 +3834,8 @@ html[data-mode='light'] .af-core {
 .af-core .af-data-menu > summary::-webkit-details-marker { display: none; }
 .af-core .af-data-menu-panel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 45; width: min(280px, calc(100vw - 28px)); padding: 16px; border: 1px solid var(--line2); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .af-core .af-data-menu-panel p { font-size: 13px; line-height: 1.5; color: var(--muted); margin: 8px 0; }
+/* The Updates menu's "Fix lineup in <platform>" handoff: full width, a 44px tap target. */
+.af-core .af-data-menu-handoff { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 44px; margin-top: 4px; text-decoration: none; }
 .af-core .af-cardfresh-details { margin: 8px 0 0; color: var(--warn); font-size: 12px; }
 .af-core .af-cardfresh-details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
 .af-core.af-shell[data-rail-open='true'] .af-rail-scroll { gap: 8px; padding: 8px; }

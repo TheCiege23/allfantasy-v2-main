@@ -179,6 +179,37 @@ describe('the /core rail', () => {
   })
 })
 
+describe('the Updates menu — lineup handoff', () => {
+  const rail = LIST.map((l) => ({ ...l, platform: 'sleeper', mark: 'S' }))
+  const shell = (props: Record<string, unknown> = {}) => (
+    <AfCoreShell active="home" leagues={rail as never} syncAge={{ label: 'just now', stale: false }} syncEligibleCount={0} {...props}>
+      <div>screen</div>
+    </AfCoreShell>
+  )
+
+  it('is a button to the platform lineup screen when one is known', () => {
+    render(shell({ lineupHandoff: { href: 'https://sleeper.com/leagues/1/team', screen: 'Lineup', platformLabel: 'Sleeper' } }))
+    const btn = screen.getByTestId('updates-lineup-handoff')
+    expect(btn.tagName).toBe('A')
+    expect(btn.getAttribute('href')).toBe('https://sleeper.com/leagues/1/team')
+    // External: new tab, and no opener handed to the provider's page.
+    expect(btn.getAttribute('target')).toBe('_blank')
+    expect(btn.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(btn.textContent).toMatch(/Fix lineup in Sleeper/)
+  })
+
+  it('says "Open league" when only the league page is known (an unverified lineup format)', () => {
+    render(shell({ lineupHandoff: { href: 'https://www.fantrax.com/fantasy/league/v2kzedypmm8jp61b/home', screen: 'League', platformLabel: 'Fantrax' } }))
+    expect(screen.getByTestId('updates-lineup-handoff').textContent).toMatch(/Open league in Fantrax/)
+  })
+
+  it('CONTROL: no handoff keeps the sentence and draws no button', () => {
+    const { container } = render(shell())
+    expect(screen.queryByTestId('updates-lineup-handoff')).toBeNull()
+    expect(container.textContent).toMatch(/Make lineup changes on your league/)
+  })
+})
+
 describe('Settings › Your leagues', () => {
   let posts: Array<{ field: string; leagueIds: string[] }>
   beforeEach(() => {
