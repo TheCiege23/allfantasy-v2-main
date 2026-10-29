@@ -31,11 +31,20 @@
  * the young pool only holds players good enough to have a projection — which flatters a pick. Every
  * choice is a named constant below so it can be tuned in one place.
  *
- * Refusals, never guesses: a player with no age on file, a pick for a draft already held, a pick
- * deeper than the young pool, and FAAB all withhold the grade with the reason.
+ * Refusals, never guesses: a pick for a draft already held, a pick when there is no young pool at all,
+ * and FAAB withhold the grade with the reason.
+ *
+ * ── Tuned 2026-10-29 (phase 7) — two refusals that hid most grades now price, and say how ─────────
+ * • A player with no age on file is valued as if he were at the END of his position's peak
+ *   (`MISSING_AGE_ASSUMPTION`): his later seasons fall off as a veteran's would. That never overpays an
+ *   unknown, which matters more here than underpaying one — the collusion checks read this grade.
+ * • A pick deeper than the young pool is worth the weakest young player in it, cut by
+ *   DEEP_PICK_ROUND_SHARE for each round past the pool's end. A late pick is a long shot, not nothing.
+ * The grade's basis names every player and pick priced this way.
  */
 
 import { ageMultiplierAtAge } from '@/lib/dynasty-engine/AgingCurveService'
+import { getPeakAgeRange } from '@/lib/dynasty-engine/SportDynastyResolver'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { gradeTrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
 import {
@@ -71,6 +80,14 @@ export const FULL_SEASON_GAMES: Record<DynastyGradedSport, number> = { NBA: 82, 
 export const YOUNG_POOL_MAX_AGE: Record<DynastyGradedSport, number> = { NBA: 22, NHL: 22, MLB: 24 }
 /** Seasons a new draftee usually waits before he scores: junior hockey, the minor leagues. */
 export const PROSPECT_WAIT_SEASONS: Record<DynastyGradedSport, number> = { NBA: 0, NHL: 2, MLB: 2 }
+
+/** A pick this many rounds past the end of the young pool is worth this share, per round, of its last player. */
+export const DEEP_PICK_ROUND_SHARE = 0.5
+
+/** The age a player with none on file is valued at: the last year of his position's peak. */
+export function missingAgeAssumption(sport: DynastyGradedSport, position: string): number {
+  return getPeakAgeRange(sport, position).peakEnd
+}
 
 /** What the loader adds to a dynasty league's context. */
 export type SportDynastyContext = {
@@ -141,7 +158,7 @@ export function pickDynastyValue(args: {
   pool: readonly number[]
   teams: number
   nextDraftYear: number
-}): { ok: true; value: number } | { ok: false; reason: string } {
+}): { ok: true; value: number; deep?: boolean } | { ok: false; reason: string } {
   const { pick, sport } = args
   const label = pickLabel(pick)
   if (!Number.isFinite(pick.year) || !Number.isFinite(pick.round) || pick.round < 1) {
@@ -152,15 +169,16 @@ export function pickDynastyValue(args: {
   }
   const teams = Math.max(1, Math.round(args.teams))
   const spot = (Math.round(pick.round) - 1) * teams + pickSlotInRound(pick.tier, teams)
-  const base = args.pool[spot]
-  if (base == null) {
-    return {
-      ok: false,
-      reason: `${label} is deeper than the ${args.pool.length} young ${sport} players with a projection to price it against, so this deal is not graded.`,
-    }
+  const last = args.pool[args.pool.length - 1]
+  if (last == null) {
+    return { ok: false, reason: `No young ${sport} player has a projection to price ${label} against, so this deal is not graded.` }
   }
+  // Past the pool's end: the weakest young player, cut for each round deeper (round up, so the first
+  // spot past the end already counts as one round deeper).
+  const deep = spot >= args.pool.length
+  const base = deep ? last * DEEP_PICK_ROUND_SHARE ** Math.ceil((spot - (args.pool.length - 1)) / teams) : args.pool[spot]!
   const wait = pick.year - args.nextDraftYear + PROSPECT_WAIT_SEASONS[sport]
-  return { ok: true, value: base * FUTURE_DISCOUNT ** wait }
+  return { ok: true, value: base * FUTURE_DISCOUNT ** wait, ...(deep ? { deep: true } : {}) }
 }
 
 export function sportDynastyBasis(ctx: SportPointsContext & { sport: DynastyGradedSport }): string {
@@ -192,6 +210,8 @@ export function gradeSportDynastyDeal(args: {
   const basis = sportDynastyBasis(ctx)
   const index = indexBoard(ctx.board)
   let pool: number[] | null = null
+  const assumedAge: string[] = []
+  const deepPicks: string[] = []
 
   const priceSide = (assets: readonly TradeAssetInput[]): { priced: Priced[] } | { withheld: string } => {
     const priced: Priced[] = []
@@ -201,6 +221,7 @@ export function gradeSportDynastyDeal(args: {
         pool ??= youngPlayerPool(ctx, dynasty)
         const p = pickDynastyValue({ sport: ctx.sport, pick: asset, pool, teams: ctx.teams, nextDraftYear: dynasty.nextDraftYear })
         if (!p.ok) return { withheld: p.reason }
+        if (p.deep) deepPicks.push(pickLabel(asset))
         priced.push({ name: pickLabel(asset), value: p.value, kind: 'pick' })
         continue
       }
@@ -217,9 +238,10 @@ export function gradeSportDynastyDeal(args: {
       if (!replacement) {
         return { withheld: `No free agent at ${pos || `${player.name}’s position`} has a projection to measure ${player.name} against, so there is no replacement level. This deal is not graded.` }
       }
-      const age = dynasty.ages.get(player.id)
+      let age = dynasty.ages.get(player.id)
       if (age == null) {
-        return { withheld: `${player.name} has no age on file, so his seasons after this one cannot be valued. This deal is not graded.` }
+        age = missingAgeAssumption(ctx.sport, player.position)
+        assumedAge.push(player.name)
       }
       priced.push({
         name: player.name,
@@ -244,6 +266,11 @@ export function gradeSportDynastyDeal(args: {
       basis,
     }
   }
+  const notes = [
+    assumedAge.length ? `${assumedAge.join(', ')} ${assumedAge.length === 1 ? 'has' : 'have'} no age on file, so ${assumedAge.length === 1 ? 'his later seasons are' : 'their later seasons are'} valued as a player at the end of his peak.` : '',
+    deepPicks.length ? `${deepPicks.join(', ')} ${deepPicks.length === 1 ? 'is' : 'are'} deeper than the young players with a projection, so ${deepPicks.length === 1 ? 'it is' : 'they are'} priced as a long shot: the weakest of them, cut to ${Math.round(DEEP_PICK_ROUND_SHARE * 100)}% for each round deeper.` : '',
+  ].filter(Boolean)
+  const dealBasis = notes.length ? `${basis} ${notes.join(' ')}` : basis
   const source = `${ctx.sport.toLowerCase()}-${ctx.valueKind === 'categories' ? 'category' : 'points'}-dynasty`
   const line = (side: 'give' | 'get') => (p: Priced): TradeGradeLine => ({
     side,
@@ -263,7 +290,7 @@ export function gradeSportDynastyDeal(args: {
     unpriced: 0,
     giveCount: args.give.length,
     getCount: args.get.length,
-    basis,
+    basis: dealBasis,
     scoringApplied: ctx.scoringBasis === 'league',
     needApplied: false,
     needGap: null,
