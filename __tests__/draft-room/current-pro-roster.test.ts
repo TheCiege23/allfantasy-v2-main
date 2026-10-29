@@ -56,3 +56,13 @@ it('retains rostered inactive, practice squad and team-defense Sleeper rows', ()
   const freeAgent = row({ source: 'sleeper', status: 'Inactive', team: null })
   expect(reconcileCurrentProRows('NFL', [freeAgent], [freeAgent], true, now)).toHaveLength(0)
 })
+
+it('uses a verified old photo without accepting a stale free-agent flag as current roster authority', () => {
+  const ri = row({ dob: '1990-01-01', status: 'ACT' })
+  const oldPhoto = row({ source: 'thesportsdb', status: 'Free Agent', dob: '1990-01-01', team: 'Old Team', imageUrl: 'https://r2.thesportsdb.com/images/media/player/cutout/own.png' })
+  const result = reconcileCurrentProRows('NBA', [ri], [ri, oldPhoto], true, now)
+  expect(result).toHaveLength(1); expect(result[0]?.imageUrl).toBe(oldPhoto.imageUrl)
+  expect(result[0]?.team).toBe('Current Team')
+  const retired = row({ dob: '1990-01-01', status: 'INACT' })
+  expect(reconcileCurrentProRows('NBA', [retired], [retired, oldPhoto], true, now)).toHaveLength(0)
+})

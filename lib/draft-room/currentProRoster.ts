@@ -33,7 +33,7 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
   if (!['NFL', 'NBA', 'NHL', 'MLB'].includes(sport)) return [...rows]
   const byName = new Map<string, T[]>()
   for (const row of evidence) {
-    if (!['thesportsdb', 'sleeper'].includes(row.source) || !live(row, now)) continue
+    if (!['thesportsdb', 'sleeper'].includes(row.source) || !fresh(row, now)) continue
     const key = normalizeMatchName(row.name)
     const bucket = byName.get(key) ?? []
     bucket.push(row); byName.set(key, bucket)
@@ -46,7 +46,7 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
     if (currentOnly && hasSleeperRoster && (row.source !== 'sleeper' || !live(row, now))) continue
     const matches = (byName.get(normalizeMatchName(row.name)) ?? []).filter((other) => verifiedRosterMatch(row, other))
     const verified = matches.length === 1 ? matches[0] : undefined
-    if (currentOnly && !live(row, now) && !verified) continue
+    if (currentOnly && !live(row, now) && !(verified && live(verified, now))) continue
     if (sport === 'NFL' || row.source !== 'rolling_insights' || !verified) { out.push(row); continue }
     const position = providerPositionCode(verified.position, sport)
     // Generic Forward/Guard/Winger labels cannot establish a fantasy lineup slot.
@@ -54,7 +54,7 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
       NBA: ['PG', 'SG', 'SF', 'PF', 'C'], NHL: ['C', 'LW', 'RW', 'D', 'G'],
       MLB: ['P', 'SP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'TWP'],
     } as Record<string, string[]>)[sport]?.includes(position)
-    out.push({ ...row, position: specific ? position : row.position, imageUrl: row.imageUrl || verified.imageUrl || null })
+    out.push({ ...row, position: specific && live(verified, now) ? position : row.position, imageUrl: row.imageUrl || verified.imageUrl || null })
   }
   return out
 }

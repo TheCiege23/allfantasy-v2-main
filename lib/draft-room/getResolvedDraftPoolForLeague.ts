@@ -1152,7 +1152,8 @@ async function buildResolvedDraftPoolForLeague(
   if (isDevyDynasty && !isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_vet'
   if (isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_merged'
   const mergeCollegePool = (devyEnabled || c2cEnabled) && (sport === 'NFL' || sport === 'NBA')
-  const verifyCurrentNbaRoster = shouldVerifyCurrentNbaRoster({
+  // Ordinary pro redraft uses the current roster reconciliation below. Survivor keeps its cast guard.
+  const verifyCurrentNbaRoster = String(league?.leagueVariant ?? '').toLowerCase() === 'survivor' && shouldVerifyCurrentNbaRoster({
     sport, variant: league?.leagueVariant,
     isDynasty: Boolean(league?.isDynasty) || String(effectiveLeagueTemplate.formatType).toUpperCase().includes('DYNASTY'),
     isDevy: isDevyDynasty, isC2C, mergeCollegePool,
