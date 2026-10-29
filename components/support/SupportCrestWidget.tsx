@@ -235,7 +235,7 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 sm:text-[14px]"
+                    className="min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 sm:[@media(pointer:fine)]:text-[14px]"
                   />
                 </div>
 
@@ -254,7 +254,7 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="Tell us what happened, or what you love."
-                    className="w-full resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 sm:text-[14px]"
+                    className="w-full resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 sm:[@media(pointer:fine)]:text-[14px]"
                   />
                 </div>
 

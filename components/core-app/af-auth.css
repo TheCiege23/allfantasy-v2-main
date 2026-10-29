@@ -495,7 +495,8 @@
  * been measuring the route's loading shell instead of this form. See
  * e2e/mobile/routeReady.ts, and login-field-probe.spec.ts for the controls.
  */
-@media (max-width: 720px) {
+/* Tablets also use the touch form, in portrait, landscape and split view. */
+@media (max-width: 720px), (pointer: coarse) {
   .af-au-field input {
     font-size: 16px;
   }
