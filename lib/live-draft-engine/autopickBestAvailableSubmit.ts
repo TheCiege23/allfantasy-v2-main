@@ -408,6 +408,7 @@ export async function resolveBestAvailableAutopickCandidate(
       ownPositions: draftSession.picks.filter((pick) => pick.rosterId === rid).map((pick) => pick.position),
       eligible: draftEligiblePositions,
       aiAdpByKey,
+      sport,
     }).catch(() => null)
     if (mine) {
       return { playerName: mine.playerName, position: mine.position, team: mine.team, playerId: mine.playerId, byeWeek: mine.byeWeek, reason: mine.reason, strategy: 'draft-as-me' }
