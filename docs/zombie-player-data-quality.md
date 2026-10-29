@@ -24,3 +24,5 @@ No production database changes or league-state transitions are part of this pass
 NBA season minutes and NHL season time on ice use the measured seconds contract from lib/chimmy/tools/dailySportStats.ts; the direct RI draft reader converts them to minutes before generic rate extraction. MLB two-way primary positions remain TWP.
 
 A secondary position may replace a primary position only when the verified athlete is also assigned to the same current club. Photos may still match across a transfer using the athlete identity; an older club or role is not copied into the current roster.
+
+Explicit current-club Starting Pitcher and Relief Pitcher labels map to SP/RP for draft eligibility. Generic P stays generic when the feed supplies no role; no starting/relief assignment is inferred from absence of statistics.

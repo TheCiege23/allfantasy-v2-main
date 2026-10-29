@@ -48,7 +48,10 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
     const verified = matches.length === 1 ? matches[0] : undefined
     if (currentOnly && !live(row, now) && !(verified && live(verified, now))) continue
     if (sport === 'NFL' || row.source !== 'rolling_insights' || !verified) { out.push(row); continue }
-    const position = providerPositionCode(verified.position, sport)
+    const explicitMlbRole = sport === 'MLB'
+      ? ({ 'STARTING PITCHER': 'SP', 'RELIEF PITCHER': 'RP' } as Record<string, string>)[String(verified.position ?? '').trim().toUpperCase()]
+      : undefined
+    const position = explicitMlbRole ?? providerPositionCode(verified.position, sport)
     // Generic Forward/Guard/Winger labels cannot establish a fantasy lineup slot.
     const specific = position && ({
       NBA: ['PG', 'SG', 'SF', 'PF', 'C'], NHL: ['C', 'LW', 'RW', 'D', 'G'],

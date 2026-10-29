@@ -80,3 +80,10 @@ it('does not overwrite a current role with a secondary provider role from the pr
   expect(result.position).toBe('PG'); expect(result.team).toBe('Current Team')
   expect(result.imageUrl).toBe(oldClub.imageUrl)
 })
+
+it.each([['Starting Pitcher', 'SP'], ['Relief Pitcher', 'RP']])('preserves an explicit current MLB %s role', (sourceRole, role) => {
+  const ri = row({ position: 'P', dob: '1990-01-01' })
+  const secondary = row({ source: 'thesportsdb', status: 'Active', position: sourceRole, dob: '1990-01-01' })
+  const result = reconcileCurrentProRows('MLB', [ri], [ri, secondary], true, now)[0]!
+  expect(result.position).toBe(role); expect(result.id).toBe('ri:1')
+})
