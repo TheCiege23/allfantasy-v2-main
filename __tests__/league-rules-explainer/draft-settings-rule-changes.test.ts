@@ -172,11 +172,11 @@ describe('loadDraftRules reads the store the draft runs on', () => {
     expect(r).toMatchObject({ draftType: 'auction', draftAuctionBudget: 250, draftAuctionMinBid: 1, draftPickSeconds: 35 })
   })
 
-  it('the order: a weighted lottery wins, then the saved order method', async () => {
+  it('the order: draft_order_mode weighted_lottery runs no lottery in a redraft league, so the saved order method stands', async () => {
     const { loadDraftRules } = await import('@/lib/league-rules-explainer/loadDraftRules')
     m.state.db.ls = { ...m.state.db.ls!, draftOrderMethod: 'worst_to_first' }
     expect((await loadDraftRules('L')).draftOrderMethod).toBe('standings')
     m.state.db.league = { ...m.state.db.league, settings: { draft_order_mode: 'weighted_lottery' } }
-    expect((await loadDraftRules('L')).draftOrderMethod).toBe('weighted_lottery')
+    expect((await loadDraftRules('L')).draftOrderMethod).toBe('standings')
   })
 })
