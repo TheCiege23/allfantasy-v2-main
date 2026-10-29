@@ -3632,6 +3632,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         }).catch(() => null)
       : null
 
+  // A native commissioner starts with the league's actual settings editors.
+  // The existing activity workspace remains reachable from that page.
+  if (commissionerHub?.allowed && commissionerHub.league.native && sp.workspace !== 'activity') {
+    redirect(`/league/${encodeURIComponent(commissionerHub.league.id)}?view=commissioner`)
+  }
+
   /*
    * This week's lineups, projected — AF beside API — as a section on the one-league hub. Display
    * only, and only once the hub's own gate has admitted the viewer (`commissionerHub` is null

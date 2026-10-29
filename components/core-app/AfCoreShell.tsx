@@ -2199,11 +2199,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             It LINKS to /core/notifications rather than asking for permission itself; there
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
+          <CoreWelcomeTour leagueCount={leagues.length} />
           {active === 'home' ? <GameDayAlertsBanner /> : null}
           {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
           {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
           {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
-          <CoreWelcomeTour leagueCount={leagues.length} />
           {/*
             The VISIBLE button, on the /core home screen: a real action row
             above the dashboard rather than a chip in the chrome. This is the

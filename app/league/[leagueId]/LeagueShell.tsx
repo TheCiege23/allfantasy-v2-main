@@ -1771,7 +1771,7 @@ export function LeagueShell({
               platform={league.platform}
             />
 
-            {nativeWorkspace && activeTab === 'settings' ? (
+            {nativeWorkspace && (activeTab === 'settings' || activeTab === 'commissioner') ? (
               <LeagueSettingsHomeContainer
                 key={`settings-home-${settingsHomeRequest.nonce}`}
                 initialSubPage={settingsHomeRequest.subPage}

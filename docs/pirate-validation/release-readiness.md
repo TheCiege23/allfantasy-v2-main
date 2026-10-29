@@ -1,5 +1,12 @@
 # Pirate League release readiness — 2026-10-27
 
+## Current acceptance update — 2026-10-29
+
+- Daily lineup, reserve/taxi and combined-acquisition evidence is implemented and deployed in the isolated staging app as commit `6034aa398ce5d0d76cf61e8d91a00a51d8d4de12`. The later NBA daily pilot commit `570a36c37cabc744cefc1ed24d06d19f91c3dae8` became healthy at 12:12 UTC; its live smoke check passed at 12:13 UTC against the separate staging database, with 40 exact-date daily rows and eight synthetic owners across both pilots. Capture endpoints reject unauthenticated requests and identify the daily/NFL pilot explicitly. No actual lock evidence, completed weekly result, or real 24-hour transfer is claimed before the games occur.
+- All 17 GitHub Actions jobs for `570a36c` passed. The ongoing NFL fixture is preserved; the daily capture worker has succeeded against the new runtime. Verify the next scheduled daily data/score heartbeat separately.
+- The owner physically verified Android test push delivery and found commissioner navigation and welcome-guide defects. Those UX fixes and the remaining physical-device save/reload acceptance are recorded in `commissioner-ux-acceptance.md`. Android push is passed; full Android UX acceptance remains open.
+- Later implementation evidence is in `daily-reserve-acquisition-rollout.md` and `daily-live-operations.md`; older sections below record the state when their individual checks were run. Production has not been deployed.
+
 ## Unattended rehearsal setup — 2026-10-28
 
 - A dedicated tenant and NFL week 8 league were prepared with four synthetic managers and eight current provider-verified players. Real game times, injuries and scores are never manufactured. The manifest is `live-matchup-staging.json`; live scoring-period acceptance remains pending actual games and finalization.

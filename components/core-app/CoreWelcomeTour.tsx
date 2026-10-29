@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSignInPushVisible } from '@/lib/push-notifications/signInPushVisibility'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import '@/components/core-app/core-welcome-tour.css'
 
@@ -20,6 +21,17 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
   const spanish = language === 'es'
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(0)
+  const pushVisible = useSignInPushVisible()
+  const guide = useRef<HTMLElement | null>(null)
+  const deferred = useRef(false)
+  useEffect(() => {
+    if (pushVisible) { deferred.current = true; return }
+    if (open && deferred.current) {
+      guide.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+      guide.current?.focus({ preventScroll: true })
+      deferred.current = false
+    }
+  }, [open, pushVisible])
 
   useEffect(() => {
     try {
@@ -83,7 +95,7 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
     },
   ]
 
-  if (!open) return null
+  if (!open || pushVisible) return null
   const current = steps[step]
 
   function finish() {
@@ -92,7 +104,7 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
   }
 
   return (
-    <aside className="af-welcome" role="dialog" aria-modal="false" aria-labelledby="af-welcome-title">
+    <aside ref={guide} tabIndex={-1} className="af-welcome" role="dialog" aria-modal="false" aria-labelledby="af-welcome-title">
       <div className="af-welcome-progress" aria-label={spanish ? `Paso ${step + 1} de ${steps.length}` : `Step ${step + 1} of ${steps.length}`}>
         {steps.map((_, index) => <i key={index} data-active={index <= step} />)}
       </div>
@@ -101,6 +113,7 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
       <h2 id="af-welcome-title">{current.title}</h2>
       <p>{current.body}</p>
       <div className="af-welcome-actions">
+        <button type="button" onClick={finish}>{spanish ? 'Cerrar guía' : 'Close guide'}</button>
         {current.action ? <Link href={current.action.href} onClick={finish}>{current.action.label}</Link> : null}
         {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)}>{spanish ? 'Atrás' : 'Back'}</button> : null}
         {step < steps.length - 1 ? (
