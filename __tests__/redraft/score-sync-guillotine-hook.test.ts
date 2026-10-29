@@ -48,7 +48,7 @@ vi.mock('@/lib/redraft/playerWeeklyScoreService', () => ({
 vi.mock('@/lib/redraft/scoringEngine', () => ({ recalculateMatchupsForSeasonWeek: vi.fn(async () => ({ updated: 0 })) }))
 vi.mock('@/lib/redraft/standingsEngine', () => ({ updateStandings: m.standings }))
 vi.mock('@/lib/season-week', () => ({
-  resolveSeasonWeekForRedraftSeason: vi.fn(async () => ({ ok: true, phase: 'regular', fantasyWeek: 4 })),
+  resolveSeasonWeekForRedraftSeason: vi.fn(async () => ({ ok: true, phase: 'regular', fantasyWeek: 4, sportWeekComplete: true })),
 }))
 vi.mock('@/lib/redraft/weekFinalizer', () => ({
   finalizeCompletedWeeksForSeason: vi.fn(async () => ({ results: [], finalized: 0, refusals: {} })),
@@ -82,9 +82,10 @@ describe('score-sync — native guillotine', () => {
     const body = (await res.json()) as { result: { redraft: Record<string, unknown> }; summary: { status: string } }
 
     expect(m.guillotine.mock.calls.map((c) => c[0])).toEqual([
-      { seasonId: 's-broken', currentFantasyWeek: 4 },
-      { seasonId: 's-guillotine', currentFantasyWeek: 4 },
-      { seasonId: 's-plain', currentFantasyWeek: 4 },
+      // The week's games being final is what lets a season's last week be chopped.
+      { seasonId: 's-broken', currentFantasyWeek: 4, currentWeekComplete: true },
+      { seasonId: 's-guillotine', currentFantasyWeek: 4, currentWeekComplete: true },
+      { seasonId: 's-plain', currentFantasyWeek: 4, currentWeekComplete: true },
     ])
     expect(body.result.redraft).toMatchObject({
       guillotineChops: 1,

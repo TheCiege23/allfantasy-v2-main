@@ -411,7 +411,7 @@ async function runRedraftReconciliation() {
     }
     try {
       const guillotine = await runNativeGuillotineWeek(
-        { seasonId: season.id, currentFantasyWeek: resolved.fantasyWeek },
+        { seasonId: season.id, currentFantasyWeek: resolved.fantasyWeek, currentWeekComplete: resolved.sportWeekComplete },
         {
           syncWeekStats: async ({ seasonId, week }) => {
             await syncPlayerWeeklyScoresForRedraftSeason({ seasonId, week, actorId: 'system:score-sync-backfill' })
