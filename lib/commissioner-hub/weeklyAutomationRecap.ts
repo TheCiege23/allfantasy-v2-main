@@ -79,7 +79,7 @@ export function recapLines(c: RecapCounts, lang: RecapLanguage = 'en'): string[]
         [c.managedLineupsSet, `puso ${plural(c.managedLineupsSet, 'alineación', 'alineaciones')} de equipos que maneja`],
         [c.eliminatedLineupsFilled, `completó alineaciones de equipos eliminados ${plural(c.eliminatedLineupsFilled, 'vez', 'veces')}`],
         [c.irMoves, `sacó de IR a ${plural(c.irMoves, 'jugador sano', 'jugadores sanos')}`],
-        [c.autopilotClaims, `hizo ${plural(c.autopilotClaims, 'reclamo de waivers', 'reclamos de waivers')} para equipos con piloto automático de Chimmy`],
+        [c.autopilotClaims, `hizo ${plural(c.autopilotClaims, 'reclamo', 'reclamos')} para equipos con piloto automático de Chimmy`],
         [c.autoPicks, `hizo ${plural(c.autoPicks, 'selección', 'selecciones')} del draft por mánagers ausentes`],
         [c.tankingWarnings, `envió ${plural(c.tankingWarnings, 'aviso de tanking', 'avisos de tanking')}`],
         [c.tankingPenalties, `aplicó ${plural(c.tankingPenalties, 'sanción por tanking', 'sanciones por tanking')} que elegiste`],

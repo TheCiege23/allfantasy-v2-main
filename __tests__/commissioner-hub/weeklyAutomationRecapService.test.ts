@@ -51,7 +51,7 @@ describe('runWeeklyAutomationRecaps', () => {
     await runWeeklyAutomationRecaps({ now: MONDAY })
     expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({
       title: 'Lo que hizo AllFantasy esta semana · Dyn',
-      body: 'Esta semana AllFantasy llenó 2 puestos titulares vacíos; y hizo 1 reclamo de waivers para equipos con piloto automático de Chimmy. Cada acción está en el registro de la liga.',
+      body: 'Esta semana AllFantasy llenó 2 puestos titulares vacíos; y hizo 1 reclamo para equipos con piloto automático de Chimmy. Cada acción está en el registro de la liga.',
       actionLabel: 'Abrir registro de la liga',
     }))
   })
