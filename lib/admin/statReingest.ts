@@ -254,6 +254,8 @@ type SeasonRow = {
   season: number
   sport: string | null
   status: string | null
+  /** The season's live week. Standings are rebuilt through it, never through the rescored week. */
+  currentWeek?: number | null
   league: {
     platform: string | null
     sport: string | null
@@ -540,6 +542,9 @@ export type StatReingestResult = {
     wrote: boolean
     writeRefusal: WriteRefusal | null
     applied: AppliedWeek[]
+    /** The week standings were rebuilt through after a write (the season's live week), else null. */
+    standingsThroughWeek: number | null
+    standingsError: string | null
   }
 }
 
@@ -569,6 +574,7 @@ export async function runStatReingest(
         season: true,
         sport: true,
         status: true,
+        currentWeek: true,
         league: { select: { platform: true, sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true } },
       },
     })) as SeasonRow | null
@@ -629,6 +635,8 @@ export async function runStatReingest(
   else if (anyUnsupported && req.confirm !== 'allow-flips') writeRefusal = 'preview_unsupported_requires_allow_flips'
 
   const applied: AppliedWeek[] = []
+  let standingsThroughWeek: number | null = null
+  let standingsError: string | null = null
   if (!writeRefusal) {
     const syncWeek = deps.syncWeek ?? syncPlayerWeeklyScoresForRedraftSeason
     const recalcWeek = deps.recalcWeek ?? recalculateMatchupsForSeasonWeek
@@ -655,7 +663,6 @@ export async function runStatReingest(
           )
           entry.reSeal = { finalized: sealed.finalized, alreadyFinal: sealed.alreadyFinal, refusal: sealed.refusal }
         }
-        await standings(season.id, week)
       } catch (e) {
         entry.error = (e instanceof Error ? e.message : String(e)).slice(0, 300)
       }
@@ -672,6 +679,15 @@ export async function runStatReingest(
       }
       applied.push(entry)
     }
+    // 🛑 `updateStandings(seasonId, week)` counts only matchups with week <= `week`. Passing the
+    // RESCORED week (as this did until 2026-10-29) rebuilt a 4-week record from weeks 1-2 alone.
+    // Rebuild once, through the season's live week (incomplete matchups are skipped there).
+    standingsThroughWeek = Math.max(Number(season.currentWeek ?? 0) || 0, ...req.weeks)
+    try {
+      await standings(season.id, standingsThroughWeek)
+    } catch (e) {
+      standingsError = (e instanceof Error ? e.message : String(e)).slice(0, 300)
+    }
     await db.leagueAuditLog
       .create({
         data: {
@@ -680,7 +696,7 @@ export async function runStatReingest(
           actionType: 'admin_stat_reingest_rescore',
           entityType: 'redraft_week',
           entityId: `${season.id}:${req.weeks.join(',')}`,
-          afterState: JSON.parse(JSON.stringify({ applied })) as Prisma.InputJsonValue,
+          afterState: JSON.parse(JSON.stringify({ applied, standingsThroughWeek, standingsError })) as Prisma.InputJsonValue,
           metadata: { actorId, sport: req.sport, from: req.from, to: req.to, confirm: String(req.confirm) },
         },
       })
@@ -689,7 +705,7 @@ export async function runStatReingest(
 
   return {
     ...base,
-    ok: applied.every((a) => !a.error),
+    ok: applied.every((a) => !a.error) && !standingsError,
     rescore: {
       leagueId: season.leagueId,
       seasonId: season.id,
@@ -699,6 +715,8 @@ export async function runStatReingest(
       wrote: !writeRefusal,
       writeRefusal,
       applied,
+      standingsThroughWeek,
+      standingsError,
     },
   }
 }
