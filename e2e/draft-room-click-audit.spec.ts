@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { openCommissionerControls } from './helpers/commissioner-controls'
+import { answerCspReportsInBrowser } from './helpers/csp-report-sink'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -32,6 +33,9 @@ test.beforeEach(async ({ page, context }) => {
       await route.abort('blockedbyclient').catch(() => null)
     })
   }
+
+  // The CSP reports were what starved the dev server, not the tests: see the helper.
+  await answerCspReportsInBrowser(context)
 
   await page.addInitScript(() => {
     try {
@@ -1582,21 +1586,15 @@ test.describe('@draft-room click audit', () => {
       await page.getByTestId('draft-trade-review-tp-1').click()
       await page.getByTestId('draft-trade-accept-tp-1').click()
     }
+    /*
+     * Close with the panel's own button, once. The loop this replaces also pressed Escape (the panel
+     * has no Escape handler) and then clicked draft-open-trades-button, which only ever OPENS it — so
+     * when the Close click landed but had not re-rendered within 250ms, the next pass reopened the
+     * panel and the assertion below failed with the overlay visible.
+     */
     const tradeOverlay = page.getByTestId('draft-trade-panel-overlay')
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (!(await tradeOverlay.isVisible().catch(() => false))) break
-      await page.keyboard.press('Escape').catch(() => null)
-      if (await tradeOverlay.isVisible().catch(() => false)) {
-        await tradeOverlay
-          .getByRole('button', { name: 'Close' })
-          .first()
-          .click({ force: true, noWaitAfter: true, timeout: 2_000 })
-          .catch(() => null)
-      }
-      if (await tradeOverlay.isVisible().catch(() => false)) {
-        await page.getByTestId('draft-open-trades-button').first().click({ force: true, noWaitAfter: true, timeout: 2_000 }).catch(() => null)
-      }
-      await page.waitForTimeout(250)
+    if (await tradeOverlay.isVisible().catch(() => false)) {
+      await tradeOverlay.getByRole('button', { name: 'Close draft trades' }).click()
     }
     await expect(tradeOverlay).not.toBeVisible({ timeout: 10_000 })
 
