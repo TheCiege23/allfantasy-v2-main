@@ -1,3 +1,5 @@
+import { createZombieLeague } from '../lib/zombie/setupEngine'
+import { zombieRenewalDraftReadiness } from '../lib/zombie/zombieRenewalDraftReadiness'
 import assert from 'node:assert/strict'
 /** Four-sport native Zombie rehearsal on the disposable CI database. Synthetic scores exercise settlement, not provider calibration. */
 import { randomUUID } from 'node:crypto'
@@ -499,7 +501,6 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
  if(process.env.UPSTASH_REDIS_REST_URL||process.env.UPSTASH_REDIS_REST_TOKEN)throw new Error('SHARED_REDIS_MUST_BE_DISABLED')
  const {runPresetEngine}=await import('../lib/league-creation/preset-engine/runPresetEngine')
  const {createCanonicalLeagueInTransaction}=await import('../lib/league-creation/canonical/createCanonicalLeagueInTransaction')
- const {createZombieLeague}=await import('../lib/zombie/setupEngine')
  const marker='manual-renewal-ci-'+randomUUID().slice(0,8)
  const password=randomUUID(),passwordHash=await bcrypt.hash(password,6)
  const users=Array.from({length:17},(_,i)=>marker+'-'+i)
@@ -535,7 +536,6 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
   const before=await prisma.roster.findMany({where:{leagueId:{in:originals}},orderBy:{id:'asc'}})
 
   const {getZombieUniverseRenewalEditor,previewReviewedZombieUniverseRenewal,saveZombieUniverseRenewalDraft}=await import('../lib/zombie/renewZombieUniverse')
-  const {zombieRenewalDraftReadiness}=await import('../lib/zombie/zombieRenewalDraftReadiness')
   await prisma.zombieUniverse.update({where:{id:u.id},data:{promotionMode:'manual'}})
   await assert.rejects(getZombieUniverseRenewalEditor(u.id,2026,users[1]),/RENEWAL_OWNER_REQUIRED/)
   await assert.rejects(previewZombieUniverseRenewal(u.id,2026,users[0]),/RENEWAL_MANUAL_REVIEW_REQUIRED/)
