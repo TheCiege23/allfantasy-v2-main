@@ -45,6 +45,12 @@ const TIEBREAKS = new Set(['bench_points', 'season_points', 'previous_period', '
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
 const ROOKIE_ORDERS = new Set(['max_pf', 'reverse_standings', 'commissioner', 'weighted_lottery'])
 const DRAFT_TYPES = new Set(['linear', 'snake'])
+/** The main draft (./loadDraftRules.ts). */
+const MAIN_DRAFT_TYPES = new Set(['snake', 'linear', 'auction'])
+const MAIN_DRAFT_ORDERS = new Set(['weighted_lottery', 'random', 'manual', 'standings', 'reverse_standings'])
+const DRAFT_TIMEOUTS = new Set(['autopick', 'skip', 'wait'])
+const ORPHAN_DRAFTERS = new Set(['ai', 'cpu'])
+const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 const TANKING_PENALTIES = new Set(['forfeit_pick', 'lottery_odds', 'faab'])
 const KEEPER_COSTS = new Set(['round_based', 'inflation', 'auction_value', 'free'])
 const PLATFORMS = new Set(['sleeper', 'espn', 'yahoo', 'mfl', 'fleaflicker', 'fantrax', 'cbs'])
@@ -104,6 +110,18 @@ function splitSlots(slots: Record<string, number> | null | undefined): SlotSplit
 const week = (n: number): RuleText => text('v.week', { n })
 const money = (n: number): RuleText => text('v.money', { n })
 
+/** 90 -> "90 seconds", 120 -> "2 minutes", 28800 -> "8 hours", 86400 -> "1 day". */
+function duration(sec: number): RuleText {
+  if (sec % 86400 === 0) return plural('v.days', sec / 86400)
+  if (sec % 3600 === 0) return plural('v.hours', sec / 3600)
+  if (sec % 60 === 0) return plural('v.minutes', sec / 60)
+  return plural('v.seconds', sec)
+}
+
+type OvernightPause = { from: string; to: string; picksAllowed: boolean }
+const isOvernightPause = (v: unknown): v is OvernightPause =>
+  !!v && typeof v === 'object' && CLOCK_TIME.test(String((v as OvernightPause).from)) && CLOCK_TIME.test(String((v as OvernightPause).to))
+
 function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot, 'sport'>): RuleText | null {
   if (value === null || value === undefined) {
     switch (key) {
@@ -125,6 +143,13 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
         return text('v.noDeadline')
       case 'rookieDraftAutoStartDays':
         return text('v.autoStart.off')
+      case 'draftPickSeconds':
+        return text('v.noClock')
+      case 'draftOvernightPause':
+      case 'draftOrphanPicks':
+        return text('v.off')
+      case 'draftStartAt':
+        return text('v.notScheduled')
       default:
         return null
     }
@@ -237,6 +262,27 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       return isPosInt(value) ? plural('v.rounds', value) : null
     case 'rookieDraftAutoStartDays':
       return isPosInt(value) ? text('v.autoStart.days', { n: value }) : null
+    case 'draftType':
+      return typeof value === 'string' && MAIN_DRAFT_TYPES.has(value) ? text(`v.draftType.${value}`) : null
+    case 'draftRounds':
+      return isPosInt(value) ? plural('v.rounds', value) : null
+    case 'draftPickSeconds':
+      return isPosInt(value) ? duration(value) : null
+    case 'draftOvernightPause':
+      return isOvernightPause(value) ? text('v.timeRange', { from: value.from, to: value.to }) : null
+    case 'draftOnTimeout':
+      return typeof value === 'string' && DRAFT_TIMEOUTS.has(value) ? text(`v.onTimeout.${value}`) : null
+    case 'draftOrderMethod':
+      return typeof value === 'string' && MAIN_DRAFT_ORDERS.has(value) ? text(`v.draftOrder.${value}`) : null
+    case 'draftThirdRoundReversal':
+    case 'draftAutostart':
+      return typeof value === 'boolean' ? text(value ? 'v.on' : 'v.off') : null
+    case 'draftAuctionBudget':
+      return isPosInt(value) ? money(value) : null
+    case 'draftStartAt':
+      return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? text('v.date', { date: { date: value } }) : null
+    case 'draftOrphanPicks':
+      return typeof value === 'string' && ORPHAN_DRAFTERS.has(value) ? text(`v.orphan.${value}`) : null
     case 'tankingPenalty': {
       if (!value || typeof value !== 'object') return null
       if ((value as { enabled?: unknown }).enabled === false) return text('v.off')
@@ -449,6 +495,45 @@ function dynastyLines(s: RuleSnapshot): RuleLine[] {
   ])
 }
 
+/**
+ * The main draft. Once it is complete the section stays, titled and opened as complete: its settings
+ * no longer change anything this season, so nothing here reads as a rule still to come (no schedule
+ * line), and a save after that publishes no change (./loadDraftRules.ts `draftRuleChanges`).
+ */
+function draftLines(s: RuleSnapshot): RuleLine[] {
+  const type = s.draftType && MAIN_DRAFT_TYPES.has(s.draftType) ? s.draftType : null
+  const status = s.draftStatus ?? null
+  const seconds = isPosInt(s.draftPickSeconds) ? s.draftPickSeconds : null
+  const pause = seconds && isOvernightPause(s.draftOvernightPause) ? s.draftOvernightPause : null
+  const timeout = s.draftOnTimeout && DRAFT_TIMEOUTS.has(s.draftOnTimeout) ? s.draftOnTimeout : null
+  const order = s.draftOrderMethod && MAIN_DRAFT_ORDERS.has(s.draftOrderMethod) ? s.draftOrderMethod : null
+  const orphan = s.draftOrphanPicks && ORPHAN_DRAFTERS.has(s.draftOrphanPicks) ? s.draftOrphanPicks : null
+  const startAt = typeof s.draftStartAt === 'string' && !Number.isNaN(Date.parse(s.draftStartAt)) ? s.draftStartAt : null
+  return compact([
+    line('draft-status', status === 'completed' ? text('draft.completed') : status === 'in_progress' ? text('draft.inProgress') : null),
+    line('draft-type', type && isPosInt(s.draftRounds) ? plural(`draft.type.${type}`, s.draftRounds) : null),
+    line('draft-3rr', type === 'snake' && s.draftThirdRoundReversal === true ? text('draft.thirdRoundReversal') : null),
+    line(
+      'draft-auction',
+      type === 'auction' && isPosInt(s.draftAuctionBudget) && isPosInt(s.draftAuctionMinBid)
+        ? text('draft.auctionBudget', { budget: s.draftAuctionBudget, min: s.draftAuctionMinBid })
+        : null,
+    ),
+    line(
+      'draft-clock',
+      type && seconds ? text(type === 'auction' ? 'draft.bidClock' : 'draft.pickClock', { time: duration(seconds) }) : type && type !== 'auction' ? text('draft.noClock') : null,
+    ),
+    line('draft-overnight', pause ? text(pause.picksAllowed ? 'draft.overnightPicks' : 'draft.overnight', { from: pause.from, to: pause.to }) : null),
+    line('draft-timeout', type && seconds && timeout ? text(`draft.timeout.${timeout}`) : null),
+    line('draft-order', type && order ? text(`draft.order.${order}`) : null),
+    line(
+      'draft-start',
+      type && status === 'scheduled' ? (startAt ? text(s.draftAutostart === true ? 'draft.start.auto' : 'draft.start.manual', { date: { date: startAt } }) : text('draft.start.none')) : null,
+    ),
+    line('draft-orphan', type && orphan ? text(`draft.orphan.${orphan}`) : null),
+  ])
+}
+
 /** Pick rules, in the trades section of a keeper or dynasty league. */
 function pickLines(s: RuleSnapshot): RuleLine[] {
   if (s.format !== 'keeper' && s.format !== 'dynasty') return []
@@ -502,6 +587,7 @@ export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): R
     { id: 'scoring', title: text('section.scoring'), lines: scoringLines(s) },
     { id: 'roster', title: text('section.roster'), lines: rosterLines(s) },
     { id: 'lineups', title: text('section.lineups'), lines: lineups },
+    ...(!imported ? [{ id: 'draft' as const, title: text(s.draftStatus === 'completed' ? 'section.draftComplete' : 'section.draft'), lines: draftLines(s) }] : []),
     ...(format === 'keeper' && !imported ? [{ id: 'keeper' as const, title: text('section.keeper'), lines: keeperLines(s) }] : []),
     ...(format === 'dynasty' && !imported ? [{ id: 'dynasty' as const, title: text('section.dynasty'), lines: dynastyLines(s) }] : []),
     ...(seasonal && (!imported || isPosInt(s.playoffTeams)) ? [{ id: 'playoffs' as const, title: text('section.playoffs'), lines: playoffLines(s) }] : []),
@@ -601,6 +687,22 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       return isPosInt(after) ? text('dynasty.autoStart', { n: after }) : after == null ? text('change.autoStart.off') : null
     case 'tankingPenalty':
       return tankingLine(after)
+    case 'draftType':
+      return typeof after === 'string' && MAIN_DRAFT_TYPES.has(after) ? text(`change.draftType.${after}`) : null
+    case 'draftRounds':
+      if (d != null && d > 0) return plural('change.draftRounds.more', d)
+      if (d != null && d < 0) return plural('change.draftRounds.fewer', -d)
+      return null
+    case 'draftOnTimeout':
+      return typeof after === 'string' && DRAFT_TIMEOUTS.has(after) ? text(`draft.timeout.${after}`) : null
+    case 'draftOrderMethod':
+      return typeof after === 'string' && MAIN_DRAFT_ORDERS.has(after) ? text(`draft.order.${after}`) : null
+    case 'draftThirdRoundReversal':
+      return after === true ? text('draft.thirdRoundReversal') : after === false ? text('change.thirdRoundReversal.off') : null
+    case 'draftAutostart':
+      return after === true ? text('change.autostart.on') : after === false ? text('change.autostart.off') : null
+    case 'draftOrphanPicks':
+      return typeof after === 'string' && ORPHAN_DRAFTERS.has(after) ? text(`draft.orphan.${after}`) : after == null ? text('change.orphan.off') : null
     default:
       return null
   }

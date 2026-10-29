@@ -133,7 +133,42 @@ export type RuleSnapshot = {
   rookieDraftAutoStartDays?: number | null
   /** Dynasty: what a confirmed tanking strike costs (lib/integrity/tankingPenalties.ts). */
   tankingPenalty?: TankingPenaltyRule | null
+  /*
+   * The league's main draft (startup / redraft / keeper / specialty), read by ./loadDraftRules.ts from
+   * the draft session the room runs, else what that session will be created from. Absent for an
+   * imported league and while the current draft is a dynasty rookie draft (the Dynasty section
+   * explains that one).
+   */
+  /** Not a rule: where the draft is. `completed` keeps the section, labelled as done. */
+  draftStatus?: DraftStatus | null
+  /** `snake` | `linear` | `auction`. */
+  draftType?: string | null
+  /** Rounds (an auction: roster spots each team fills). */
+  draftRounds?: number | null
+  /** Seconds per pick (an auction: per bid); null = no clock. */
+  draftPickSeconds?: number | null
+  /** The overnight clock pause, league time; null = none. */
+  draftOvernightPause?: DraftOvernightPause | null
+  /** What happens when a manager's clock runs out (snake / linear with a clock). */
+  draftOnTimeout?: string | null
+  /** How the order is set: weighted_lottery, random, manual, standings, reverse_standings. */
+  draftOrderMethod?: string | null
+  /** Snake only. */
+  draftThirdRoundReversal?: boolean | null
+  /** Auction only. */
+  draftAuctionBudget?: number | null
+  /** Auction only, and not a setting: the auction engine's minimum bid. Never a change. */
+  draftAuctionMinBid?: number | null
+  /** ISO time the draft is scheduled for; null = not scheduled. */
+  draftStartAt?: string | null
+  /** Whether the draft starts by itself at its time. */
+  draftAutostart?: boolean | null
+  /** Who drafts for a team without a manager: `ai` (Chimmy), `cpu`; null = nobody (off). */
+  draftOrphanPicks?: string | null
 }
+
+export type DraftStatus = 'scheduled' | 'in_progress' | 'completed'
+export type DraftOvernightPause = { from: string; to: string; picksAllowed: boolean }
 
 /** A dynasty league's tanking penalty as a rule, non-secret. */
 export type TankingPenaltyRule = {
@@ -146,7 +181,7 @@ export type TankingPenaltyRule = {
 }
 
 /** Every snapshot key that can appear in a change. */
-export type RuleKey = Exclude<keyof RuleSnapshot, 'sport' | 'format' | 'concept' | 'importedFrom'>
+export type RuleKey = Exclude<keyof RuleSnapshot, 'sport' | 'format' | 'concept' | 'importedFrom' | 'draftStatus' | 'draftAuctionMinBid'>
 
 /**
  * A value inside a line: plain text / number, a nested translated phrase, a date (formatted in the
@@ -163,7 +198,7 @@ export type RuleText = { k: string; vars?: Record<string, RuleVar> }
 
 export type RuleLine = { id: string; text: RuleText }
 
-export type RuleSectionId = 'overview' | 'scoring' | 'roster' | 'lineups' | 'playoffs' | 'trades' | 'waivers' | 'guillotine' | 'keeper' | 'dynasty'
+export type RuleSectionId = 'overview' | 'scoring' | 'roster' | 'lineups' | 'playoffs' | 'trades' | 'waivers' | 'guillotine' | 'keeper' | 'dynasty' | 'draft'
 
 export type RuleSection = { id: RuleSectionId; title: RuleText; lines: RuleLine[] }
 

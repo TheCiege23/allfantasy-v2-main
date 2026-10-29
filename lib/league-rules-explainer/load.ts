@@ -8,6 +8,7 @@ import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { HEADLINE_STATS } from './explain'
 import { dynastyRulesFromConfig, normalizeRosterSlots, ruleSnapshotFromLeague, taxiRulesFromEffective, type RulesLeagueRow } from './snapshot'
 import { parseSettingsChangeEvents } from './view'
+import { loadDraftRulesSafe } from './loadDraftRules'
 import type { RuleSnapshot, SettingsChangeEvent } from './types'
 
 /**
@@ -19,7 +20,7 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
   const snapshot = ruleSnapshotFromLeague(row)
   const sport = snapshot.sport
 
-  const [slots, scoring, guillotine, taxi, rookieDraft] = await Promise.all([
+  const [slots, scoring, guillotine, taxi, rookieDraft, draft] = await Promise.all([
     (async () => {
       const registry = getRosterEngineRegistry()
       if (!registry.isSupported(sport as never)) return null
@@ -36,8 +37,11 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
           .then(dynastyRulesFromConfig)
           .catch(() => null)
       : Promise.resolve(null),
+    // The main draft: its session and settings stores (./loadDraftRules.ts). An import drafts on its platform.
+    snapshot.importedFrom ? Promise.resolve(null) : loadDraftRulesSafe(leagueId),
   ])
   if (rookieDraft) Object.assign(snapshot, rookieDraft)
+  if (draft) Object.assign(snapshot, draft)
 
   if (taxi) Object.assign(snapshot, taxiRulesFromEffective(taxi))
 
