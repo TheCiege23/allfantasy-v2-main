@@ -72,6 +72,7 @@ async function recordAdpHeartbeat(
       rowsSkipped: Math.max(0, result.providerRowsRead - result.providerRowsWritten),
       errors: [
         ...(result.providerRowsRead > 0 ? [] : ["ADP import read 0 provider rows"]),
+        ...Object.entries(result.ffcByFormat ?? {}).flatMap(([format, sample]) => sample.fresh ? [] : ['FFC ' + format + ' draft sample is stale or undated']),
         // A failed Fantrax feed must be visible here: the rest of the run still writes NFL rows, so the
         // row counts alone would read healthy while those boards quietly went back to name order.
         // Same for MLB and NHL, which read the same Fantrax board.
@@ -314,6 +315,7 @@ async function handle(req: NextRequest) {
       week: result.week,
       providerRowsRead: result.providerRowsRead,
       providerRowsReadBySport: result.providerRowsReadBySport,
+      ffcByFormat: result.ffcByFormat,
       providerRowsWritten: result.providerRowsWritten,
       consensusRowsAttempted: result.consensusRowsAttempted,
       consensusRowsWritten: result.consensusRowsWritten,

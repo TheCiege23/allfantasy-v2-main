@@ -1,4 +1,7 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { getUniverseStandings } from './ZombieUniverseStandingsService'
+import { planUniverseMovement } from './universeMovementPlan'
 
 /**
  * Aggregate stats across all leagues in a universe after weekly resolutions.
@@ -170,49 +173,57 @@ export async function buildUniverseWeeklyDigest(universeId: string, week: number
   return digest
 }
 
-export async function executePromotionRelegation(universeId: string, season: number): Promise<void> {
-  const u = await prisma.zombieUniverse.findUnique({ where: { id: universeId } })
-  if (!u) throw new Error('Universe not found')
-
-  const stats = await prisma.zombieUniverseStat.findMany({
-    where: { universeId, season },
-    orderBy: [{ currentSeasonWinPct: 'desc' }, { currentSeasonPPW: 'desc' }],
-  })
-
-  const promoteN = u.promotionCount ?? 2
-  const relegateN = u.relegationCount ?? 2
-
-  const top = stats.slice(0, promoteN)
-  const bottom = stats.slice(-relegateN)
-
-  if (u.promotionMode === 'auto') {
-    for (const s of top) {
-      await prisma.zombieMovementRecord.create({
-        data: {
-          universeId,
-          userId: s.userId,
-          displayName: s.displayName,
-          season,
-          fromTierLabel: s.tierLabel ?? 'unknown',
-          toTierLabel: 'promoted',
-          movementType: 'promoted',
-          reason: 'record_performance',
-        },
-      })
+/** Record approved next-level allocations. This does not renew drafts or move current-season seats. */
+export async function executePromotionRelegation(universeId: string, season: number, actorUserId: string) {
+  if (!Number.isInteger(season) || season < 2000 || season > 2200) throw new Error('MOVEMENT_SEASON_INVALID')
+  const record = () => prisma.$transaction(async tx => {
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM zombie_universes WHERE id = ${universeId} FOR UPDATE`)
+    const u = await tx.zombieUniverse.findUnique({ where: { id: universeId }, include: { levels: true, leagues: true } })
+    if (!u) throw new Error('MOVEMENT_UNIVERSE_NOT_FOUND')
+    if ((u.commissionedByUserId ?? u.createdByUserId) !== actorUserId) throw new Error('MOVEMENT_OWNER_REQUIRED')
+    const prior = await tx.zombieAuditLog.findFirst({
+      where: { universeId, eventType: 'UNIVERSE_MOVEMENT_RECORDED', metadata: { path: ['season'], equals: season } },
+    })
+    if (prior) return { recorded: 0, alreadyRecorded: true, scope: 'movement_record_only' as const }
+    if (u.promotionMode !== 'auto') throw new Error('MOVEMENT_MANUAL_REVIEW_REQUIRED')
+    if (!u.leagues.length || u.leagues.some(l => l.season !== season || l.status !== 'complete')) throw new Error('MOVEMENT_SEASONS_INCOMPLETE')
+    const native = await tx.redraftSeason.findMany({ where: { leagueId: { in: u.leagues.map(l => l.leagueId) }, season } })
+    if (native.length !== u.leagues.length || native.some(s => s.status !== 'complete')) throw new Error('MOVEMENT_SEASONS_INCOMPLETE')
+    const unsettled = await tx.zombieWeeklyResolution.count({
+      where: { zombieLeagueId: { in: u.leagues.map(l => l.id) },
+        OR: [{ status: { not: 'complete' } }, { requiresStatCorrection: true }] },
+    })
+    if (unsettled) throw new Error('MOVEMENT_RECONCILIATION_REQUIRED')
+    if (await tx.zombieMovementRecord.count({ where: { universeId, season } })) throw new Error('MOVEMENT_LEGACY_REVIEW_REQUIRED')
+    const standings = await getUniverseStandings(universeId, season, tx)
+    const owners = await tx.roster.findMany({ where: { leagueId: { in: u.leagues.map(l => l.leagueId) } }, select: { id: true, platformUserId: true } })
+    const ownerByRoster = new Map(owners.map(r => [r.id, r.platformUserId]))
+    const used = new Set<string>()
+    for (const row of standings) {
+      const owner = ownerByRoster.get(row.rosterId)
+      if (!owner || used.has(owner)) throw new Error('MOVEMENT_MEMBERSHIP_AMBIGUOUS')
+      used.add(owner)
+      if (row.wins + row.losses + row.ties === 0) throw new Error('MOVEMENT_STANDINGS_INCOMPLETE')
     }
-    for (const s of bottom) {
-      await prisma.zombieMovementRecord.create({
-        data: {
-          universeId,
-          userId: s.userId,
-          displayName: s.displayName,
-          season,
-          fromTierLabel: s.tierLabel ?? 'unknown',
-          toTierLabel: 'relegated',
-          movementType: 'relegated',
-          reason: 'record_performance',
-        },
-      })
+    if (standings.length !== owners.length) throw new Error('MOVEMENT_STANDINGS_INCOMPLETE')
+    const plan = planUniverseMovement(standings, u.levels, u).filter(row => row.reason !== 'watch')
+    for (const row of plan) await tx.zombieMovementRecord.create({ data: {
+      universeId, season, userId: ownerByRoster.get(row.rosterId)!,
+      displayName: ownerByRoster.get(row.rosterId)!,
+      fromTierLabel: row.fromTierLabel, toTierLabel: row.toTierLabel,
+      movementType: row.reason === 'promotion' ? 'promoted' : 'relegated',
+      reason: 'record_performance', finalRecord: row.wins + '-' + row.losses + '-' + row.ties,
+      finalPPW: row.pointsPerWeek, finalTierRank: row.finalTierRank, approvedBy: actorUserId,
+    } })
+    await tx.zombieAuditLog.create({ data: {
+      universeId, leagueId: u.leagues[0].leagueId, eventType: 'UNIVERSE_MOVEMENT_RECORDED',
+      metadata: { version: 1, season, recorded: plan.length, actorUserId, scope: 'movement_record_only' },
+    } })
+    return { recorded: plan.length, alreadyRecorded: false, scope: 'movement_record_only' as const }
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000 })
+  for (let attempt = 0; ; attempt++) {
+    try { return await record() } catch (error) {
+      if (attempt >= 2 || !(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2034') throw error
     }
   }
 }

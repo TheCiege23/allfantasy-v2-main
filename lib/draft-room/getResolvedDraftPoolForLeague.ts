@@ -1,3 +1,4 @@
+import { ffcObservationIsFresh } from '@/lib/adp/ffcObservation'
 import { buildObservedAdpIdentityIndex, observedAdpCanonicalId, observedAdpForPlayer } from './observedAdpIdentity'
 import { nflDraftSeasonLine } from './nflDraftSeasonLine'
 import { observedAdpSeason } from './observedAdpSeason'
@@ -469,6 +470,24 @@ async function loadLatestAveragedAdpRowsForScorings(
     ? [...ADP_IMPORT_SOURCES_EXCLUDED, 'fantrax', 'sleeper', 'espn', 'mfl', 'nffc']
     : ADP_IMPORT_SOURCES_EXCLUDED
   const observedSince = season != null ? new Date(Date.now() - 7 * 86400000) : null
+  // FFC can re-serve the same September draft sample in October. Inspect its stored
+  // observation date, not adp_data's former ingestion timestamp. No provider I/O here.
+  let ffcScope: { OR: Array<{ source: { not: string } } | { source: string; scoring: { in: string[] } }> } | undefined
+  if (sport === 'NFL' && season != null) {
+    const formats = format === 'dynasty'
+      ? [['dynasty', 'standard']]
+      : [['standard', 'standard'], ['ppr', 'ppr'], ['half-ppr', 'halfPPR'], ['2qb', '2qb']]
+    const keys = formats.map(([name]) => 'ffc-adp-' + name + '-12-' + marketSeason)
+    const caches = await prisma.sportsDataCache.findMany({
+      where: { cacheKey: { in: keys } }, select: { cacheKey: true, data: true },
+    }).catch(() => [])
+    const fresh = formats.filter(([name]) => {
+      const cached = caches.find(c => c.cacheKey === 'ffc-adp-' + name + '-12-' + marketSeason)
+      const data = cached?.data as { meta?: unknown } | null
+      return ffcObservationIsFresh(data?.meta)
+    }).map(([, scoring]) => scoring)
+    ffcScope = { OR: [{ source: { not: 'ffc' } }, { source: 'ffc', scoring: { in: fresh } }] }
+  }
   const findLatest = () =>
     prisma.adpDataRecord.findFirst({
       where: {
@@ -478,6 +497,7 @@ async function loadLatestAveragedAdpRowsForScorings(
         ...(observedSince ? { createdAt: { gte: observedSince } } : {}),
         scoring,
         source: { notIn: sourceExclusions },
+        ...(ffcScope ? { AND: [ffcScope] } : {}),
       },
       orderBy: [{ season: 'desc' }, { week: 'desc' }, { createdAt: 'desc' }],
       select: { season: true, week: true },
@@ -511,6 +531,7 @@ async function loadLatestAveragedAdpRowsForScorings(
       week: latest.week,
       ...(observedSince ? { createdAt: { gte: observedSince } } : {}),
       source: { notIn: sourceExclusions },
+        ...(ffcScope ? { AND: [ffcScope] } : {}),
     },
     select: {
       playerId: true,

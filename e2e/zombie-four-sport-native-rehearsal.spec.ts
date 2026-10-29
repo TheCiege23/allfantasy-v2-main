@@ -6,6 +6,9 @@ import { prisma } from '../lib/prisma'
 import { configureEventInfrastructure, InMemoryOutboxStore } from '../lib/events'
 import { syncCompletedDraftToRedraftSeason } from '../lib/redraft/finalizeDraftToRedraftSeason'
 import { ensureZombieSeasonActivated } from '../lib/zombie/activateNativeZombieLeague'
+import { getUniverseStandings } from '../lib/zombie/ZombieUniverseStandingsService'
+import { refreshMovementProjections } from '../lib/zombie/ZombieUniverseProjectionService'
+import { executePromotionRelegation } from '../lib/zombie/universeStatEngine'
 import { runWeeklyResolution } from '../lib/zombie/weeklyResolutionEngine'
 
 const SPORTS = [
@@ -40,7 +43,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
     await prisma.appUser.createMany({ data: userIds.map((id, i) => ({
       id, username: id, email: `${id}@example.invalid`,
       displayName: `Zombie Manager ${i + 1}`, emailVerified: new Date(),
-      passwordHash: i === 0 ? passwordHash : null,
+      passwordHash,
     })) })
     await signIn(page, `${userIds[0]}@example.invalid`, password, userIds[0])
 
@@ -97,6 +100,18 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
         })
         await prisma.roster.update({ where: { id: rosters[i].id }, data: { platformUserId: userIds[i] } })
       }
+
+      const memberContext = await page.context().browser()!.newContext()
+      const memberPage = await memberContext.newPage()
+      try {
+        await signIn(memberPage, userIds[1] + '@example.invalid', password, userIds[1])
+        const denied = await memberPage.request.patch('/api/zombie/settings', { data: { leagueId, serumReviveCount: 5 } })
+        expect(denied.status()).toBe(403)
+        const payoutDenied = await memberPage.request.put('/api/zombie/weekly-payout', { data: {
+          leagueId, week: 1, winnerRosterId: 'not-a-roster', amountCents: 999, providerName: 'Other', status: 'recorded',
+        } })
+        expect(payoutDenied.status()).toBe(403)
+      } finally { await memberContext.close() }
 
       const draft = await prisma.draftSession.findFirstOrThrow({ where: { leagueId } })
       await prisma.draftPick.deleteMany({ where: { sessionId: draft.id } })
@@ -185,7 +200,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       expect(replay.resolution?.id).toBe(settled.resolution?.id)
       expect(await prisma.leagueChatMessage.count({ where: { zombieWeeklyAnnouncementId: announcement.id } })).toBe(1)
 
-      if (sport === 'NFL') {
+      { // External-prize correction protection applies independently to every sport.
         await prisma.zombieLeague.update({ where: { id: active.id }, data: { isPaid: true } })
         const paid = await page.request.put('/api/zombie/weekly-payout', { data: {
           leagueId, week, winnerRosterId: rosterIdByUser.get(whisperer.userId)!,
@@ -220,6 +235,113 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
     await prisma.analyticsEvent.deleteMany({ where: { userId: { in: userIds } } })
     for (const leagueId of leagueIds) await prisma.automationLock.deleteMany({ where: { lockKey: `draft:${leagueId}:pick` } })
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } })
+    await prisma.appUser.deleteMany({ where: { id: { in: userIds } } })
+    await prisma.$disconnect()
+  }
+})
+
+
+test('four-sport universe allocations use finished native standings and record once @zombie-rehearsal', async ({ page }) => {
+  test.setTimeout(1_800_000)
+  const host = new URL(process.env.DATABASE_URL ?? '').hostname
+  if (!['127.0.0.1', 'localhost'].includes(host)) throw new Error('LOCAL_DISPOSABLE_DATABASE_REQUIRED')
+  if (process.env.UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_TOKEN) throw new Error('SHARED_REDIS_MUST_BE_DISABLED')
+  const marker = 'zombie-universe-' + randomUUID().slice(0, 8)
+  const userIds = Array.from({ length: 25 }, (_, i) => marker + '-u' + i)
+  const leagues: string[] = [], universes: string[] = []
+  const password = randomUUID(), hash = await bcrypt.hash(password, 6)
+  try {
+    await prisma.appUser.createMany({ data: userIds.map(id => ({
+      id, username: id, email: id + '@example.invalid', emailVerified: new Date(), passwordHash: hash,
+    })) })
+    await signIn(page, userIds[0] + '@example.invalid', password, userIds[0])
+    for (const { sport, preset } of SPORTS) {
+      const u = await prisma.zombieUniverse.create({ data: {
+        name: marker + ' ' + sport, sport, commissionedByUserId: userIds[0], createdByUserId: userIds[0],
+        promotionCount: 2, relegationCount: 2,
+      } })
+      universes.push(u.id)
+      const levels = []
+      for (const [i, name] of ['Gamma', 'Beta', 'Alpha'].entries()) levels.push(await prisma.zombieUniverseLevel.create({
+        data: { universeId: u.id, name, tierLabel: name, rankOrder: i + 1 },
+      }))
+      for (const [levelIndex, level] of levels.entries()) {
+        const created = await page.request.post('/api/leagues', { data: {
+          concept: 'zombie', sport, teamCount: 8, draftType: 'snake', scoringPreset: preset,
+          leagueName: marker + ' ' + sport + ' ' + level.name, timezone: 'America/New_York', conceptSetup: {},
+        }, timeout: 240000 })
+        expect(created.ok(), await created.text()).toBeTruthy()
+        const leagueId = String((await created.json()).league.id)
+        leagues.push(leagueId)
+        const z = await prisma.zombieLeague.update({ where: { leagueId }, data: {
+          universeId: u.id, levelId: level.id, season: 2026, status: 'complete', totalWeeks: 1, currentWeek: 1,
+        } })
+        // Controlled completed-season fixture: this test checks allocation and access, not live provider scoring.
+        const season = await prisma.redraftSeason.create({ data: {
+          leagueId, sport, season: 2026, status: 'complete', totalWeeks: 1, currentWeek: 1, playoffStartWeek: 2,
+        } })
+        const rosters = await prisma.roster.findMany({ where: { leagueId }, orderBy: { id: 'asc' } })
+        expect(rosters).toHaveLength(8)
+        for (let i = 0; i < rosters.length; i++) {
+          const owner = userIds[1 + levelIndex * 8 + i]
+          await prisma.roster.update({ where: { id: rosters[i].id }, data: { platformUserId: owner } })
+          await prisma.zombieLeagueTeam.upsert({
+            where: { leagueId_rosterId: { leagueId, rosterId: rosters[i].id } },
+            create: { leagueId, rosterId: rosters[i].id, zombieLeagueId: z.id, displayName: owner },
+            update: {},
+          })
+          await prisma.redraftRoster.create({ data: {
+            leagueId, seasonId: season.id, ownerId: owner, ownerName: owner,
+            wins: 8-i, losses: i, pointsFor: 800-i*40,
+          } })
+        }
+        await prisma.zombieWeeklyResolution.create({ data: {
+          zombieLeagueId: z.id, week: 1, status: 'complete', resolvedAt: new Date(), matchupResults: [], newZombies: [],
+        } })
+      }
+      const rows = await getUniverseStandings(u.id, 2026)
+      expect(rows).toHaveLength(24)
+      expect(rows.filter(r => r.wins === 8)).toHaveLength(3)
+      expect(await getUniverseStandings(u.id, 2025)).toEqual([])
+      await refreshMovementProjections(u.id, 2026)
+      const projections = await prisma.zombieMovementProjection.findMany({ where: { universeId: u.id, season: 2026 } })
+      expect(projections).toHaveLength(24)
+      expect(projections.filter(r => r.reason !== 'watch')).toHaveLength(8)
+      const z = await prisma.zombieLeague.findFirstOrThrow({ where: { universeId: u.id } })
+      await prisma.zombieLeague.update({ where: { id: z.id }, data: { status: 'active' } })
+      await expect(executePromotionRelegation(u.id, 2026, userIds[0])).rejects.toThrow('MOVEMENT_SEASONS_INCOMPLETE')
+      expect(await prisma.zombieMovementRecord.count({ where: { universeId: u.id } })).toBe(0)
+      await prisma.zombieLeague.update({ where: { id: z.id }, data: { status: 'complete' } })
+      await prisma.zombieWeeklyResolution.update({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week: 1 } }, data: { requiresStatCorrection: true } })
+      await expect(executePromotionRelegation(u.id, 2026, userIds[0])).rejects.toThrow('MOVEMENT_RECONCILIATION_REQUIRED')
+      await prisma.zombieWeeklyResolution.update({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week: 1 } }, data: { requiresStatCorrection: false } })
+      await expect(executePromotionRelegation(u.id, 2026, userIds[1])).rejects.toThrow('MOVEMENT_OWNER_REQUIRED')
+      const before = await prisma.roster.findMany({ where: { leagueId: { in: rows.map(r => r.leagueId) } }, orderBy: { id: 'asc' }, select: { id: true, leagueId: true, platformUserId: true, playerData: true } })
+      const attempts = await Promise.all([executePromotionRelegation(u.id, 2026, userIds[0]), executePromotionRelegation(u.id, 2026, userIds[0])])
+      expect(attempts.filter(r => !r.alreadyRecorded)).toHaveLength(1)
+      expect(attempts.filter(r => r.alreadyRecorded)).toHaveLength(1)
+      const records = await prisma.zombieMovementRecord.findMany({ where: { universeId: u.id, season: 2026 } })
+      expect(records).toHaveLength(8)
+      expect(new Set(records.map(r => r.userId)).size).toBe(8)
+      expect(records.every(r => ['Gamma', 'Beta', 'Alpha'].includes(r.toTierLabel))).toBe(true)
+      expect(records.every(r => r.approvedBy === userIds[0])).toBe(true)
+      expect(await prisma.roster.findMany({ where: { leagueId: { in: rows.map(r => r.leagueId) } }, orderBy: { id: 'asc' }, select: { id: true, leagueId: true, platformUserId: true, playerData: true } })).toEqual(before)
+      const memberContext = await page.context().browser()!.newContext()
+      try {
+        const member = await memberContext.newPage()
+        await signIn(member, userIds[1] + '@example.invalid', password, userIds[1])
+        expect((await member.request.post('/api/zombie/universe-stats', { data: { universeId: u.id, action: 'execute_movement', season: 2026 } })).status()).toBe(403)
+        expect((await member.request.get('/api/zombie/universe-stats?universeId=' + u.id)).status()).toBe(403)
+        const visible = await member.request.get('/api/zombie-universe/' + u.id + '/standings?season=2026')
+        expect(visible.ok(), await visible.text()).toBeTruthy()
+      } finally { await memberContext.close() }
+      console.log(sport + ': 3 levels, configured counts, native standings, incomplete/correction gates, concurrent retry and member access passed; allocation records only')
+    }
+  } finally {
+    await prisma.zombieMovementProjection.deleteMany({ where: { universeId: { in: universes } } })
+    await prisma.league.deleteMany({ where: { id: { in: leagues } } })
+    await prisma.zombieUniverse.deleteMany({ where: { id: { in: universes } } })
+    await prisma.analyticsEvent.deleteMany({ where: { userId: { in: userIds } } })
     await prisma.appUser.deleteMany({ where: { id: { in: userIds } } })
     await prisma.$disconnect()
   }
