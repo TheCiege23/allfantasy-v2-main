@@ -60,11 +60,12 @@ function isEmptySlot(value: unknown): boolean {
 /**
  * How many of a lineup's starting slots are empty.
  *
- * 🛑 A STORED LINEUP DOES NOT CONTAIN THE `"0"` MARKER. Every importer drops it before storing
- * (`SleeperRosterMapper` `starter_ids`), so on production an empty slot shows up only as a starters
- * list shorter than the league requires. Measured 2026-09-17: 0 of 4,027 stored rosters hold a
- * `"0"`; 241 in-season Sleeper rosters are short. Counting markers alone reported "Every lineup is
- * full" for all of them, and the lineup-reminder recipe could never fire.
+ * 🛑 A STORED LINEUP MAY NOT CONTAIN THE `"0"` MARKER. Every importer dropped it before storing
+ * (`SleeperRosterMapper` `starter_ids` keeps it since 2026-10-29; rows imported earlier do not), so on
+ * production an empty slot can show up only as a starters list shorter than the league requires.
+ * Measured 2026-09-17: 0 of 4,027 stored rosters hold a `"0"`; 241 in-season Sleeper rosters are
+ * short. Counting markers alone reported "Every lineup is full" for all of them, and the
+ * lineup-reminder recipe could never fire.
  *
  * So, when the league's required starter count is known, empty = required − filled. When it is
  * not (0), only explicit markers count, which is all that can honestly be said.

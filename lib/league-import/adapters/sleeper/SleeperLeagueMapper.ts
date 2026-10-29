@@ -72,7 +72,10 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
     const ppr = league.scoring_settings?.rec ?? 0
     const superflex = rosterPositions.filter((p: string) => p === 'SUPER_FLEX').length > 0
     const tep = league.scoring_settings?.bonus_rec_te ?? 0
-    const scoring = [ppr > 0 && 'PPR', superflex && 'Superflex', tep > 0 && 'TEP'].filter(Boolean).join(' ') || 'Standard'
+    // ⚠ THE LABEL FOLLOWS THE RATE. `ppr > 0 && 'PPR'` stored a 0.5-a-catch league as "PPR", and the
+    // free-text readers of `League.scoring` (e.g. Chimmy's waiver board) then priced it at a full point.
+    const pprLabel = ppr === 1 ? 'PPR' : ppr === 0.5 ? 'Half PPR' : ppr > 0 ? `${ppr} PPR` : null
+    const scoring = [pprLabel, superflex && 'Superflex', tep > 0 && 'TEP'].filter(Boolean).join(' ') || 'Standard'
 
     // Tier 0 — every field below was audit-verified as previously dropped by this
     // mapper. Each now flows through the normalizer + persistence via the type
