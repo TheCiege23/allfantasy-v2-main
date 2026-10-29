@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import { useEffect, useRef, useState } from 'react'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
 import { Award, Axe, BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight } from 'lucide-react'
@@ -157,7 +158,8 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
         <div className="nl-nav-league"><span className="nl-initial">{initials(league.name)}</span><div><strong>{league.name}</strong><span className="nl-eyebrow">{phase}</span></div></div>
         {groups.map(group => navGroup(group.title, group.items))}
         {recordGroup}
-        <Link className="nl-back" href={leagueDashboardHref(league.id)}><BarChart3 size={16} aria-hidden /> League Dashboard</Link>
+        {!native && <Link className="nl-back" href={leagueDashboardHref(league.id)}><BarChart3 size={16} aria-hidden /> League Dashboard</Link>}
+        <CustomizeLeagueLink returnTo={`/league/${encodeURIComponent(league.id)}`} className="nl-back" />
         <Link className="nl-back" href="/settings"><Settings size={16} aria-hidden /> Your settings</Link>
       </aside>
       <header className="nl-mobile-top"><button type="button" onClick={() => setMenuOpen(value => !value)} aria-expanded={menuOpen} aria-label={menuOpen ? 'Close league navigation' : 'Open league navigation'}>{menuOpen ? <X aria-hidden /> : <Menu aria-hidden />}</button><div className="nl-mobile-pill">{prevLeague ? <Link className="nl-mobile-step" href={leagueSectionHref(prevLeague, activeTab)} aria-label={`Previous league: ${prevLeague.name}`}><ChevronLeft size={18} aria-hidden /></Link> : null}<button type="button" className="nl-mobile-league" onClick={openSwitcher} aria-label={`${league.name}, switch league`} data-ring={currentView.status.tone ?? undefined}><span className="nl-mobile-crest" data-ring={currentView.status.tone ?? undefined}><LeagueMark src={currentView.imageUrl ?? league.logoUrl} letter={initials(league.name)} className="nl-heading-image" /></span><span className="nl-mobile-name">{league.name}</span><span className="nl-rail-tag nl-mobile-tag" data-platform={currentView.platform}>{currentView.platformLabel}</span><ChevronDown size={16} aria-hidden /></button>{nextLeague ? <Link className="nl-mobile-step" href={leagueSectionHref(nextLeague, activeTab)} aria-label={`Next league: ${nextLeague.name}`}><ChevronRight size={18} aria-hidden /></Link> : null}</div></header>

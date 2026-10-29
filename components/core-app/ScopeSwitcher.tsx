@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { coreLeagueHref } from '@/lib/core-app/leagueNavigation'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import { usePathname, useRouter } from 'next/navigation'
@@ -178,7 +180,12 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
   const filterHref = (value: string | null) =>
     value == null ? `/core?view=all&${HOME_SCOPE_PARAM}=all` : `/core?view=all&${HOME_SCOPE_PARAM}=${encodeURIComponent(value)}`
 
-  const leagueHref = (id: string) => coreLeagueHref(pathname, id, leagueScreen)
+  const leagueHref = (id: string) => {
+    const league = leagues.find(row => row.id === id)
+    return league && isNativePlatform(league.platform)
+      ? leagueEntryHref(league)
+      : coreLeagueHref(pathname, id, leagueScreen)
+  }
 
   const navigate = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return

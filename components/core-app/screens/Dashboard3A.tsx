@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useRouter } from 'next/navigation'
@@ -1276,7 +1277,7 @@ export function Dash3ALeagues({
                     key={l.id}
                     className="af3a-league"
                     /* Straight to /core — /dashboard only redirects here, a round trip per tap. */
-                    href={`/core?league=${encodeURIComponent(l.id)}`}
+                    href={leagueEntryHref(l)}
                   >
                     <span className={`af3a-tile ${platformClass(l.platform)}`}>
                       <Mark src={l.imageUrl} alt={l.name ?? (es ? 'Liga' : 'League')} letter={Array.from(l.name?.trim() || "L")[0]} />
