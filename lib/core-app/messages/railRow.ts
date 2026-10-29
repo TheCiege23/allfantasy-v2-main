@@ -1,0 +1,122 @@
+import { defineMessages } from '@/lib/i18n/messages'
+
+/**
+ * One league row in the league rail (components/core-app/RailRowBody.tsx). Every string is the one the
+ * row printed before the move, byte for byte, in both languages — this is a relocation, not a rewrite.
+ */
+
+/** 1st, 2nd, 3rd, 4th … and 11th/12th/13th, which are the ones a naive rule gets wrong. */
+function ordinal(n: number): string {
+  const teens = n % 100
+  if (teens >= 11 && teens <= 13) return `${n}th`
+  const unit = n % 10
+  if (unit === 1) return `${n}st`
+  if (unit === 2) return `${n}nd`
+  if (unit === 3) return `${n}rd`
+  return `${n}th`
+}
+
+export const railRowMessages = defineMessages({
+  en: {
+    /* RailSide — the projection tooltip. `genericPpr` is "afProjected == null". */
+    sideTitle: (provider: string, pricedFrom: number, starterCount: number, genericPpr: boolean, afEngineFrom: number): string =>
+      `Weekly baseline projection — ${provider} (SLPR): ${provider}’s projection from ${pricedFrom} of ${starterCount} starters${
+        genericPpr
+          ? ', generic PPR because this league’s scoring could not be re-scored'
+          : ', re-scored with this league’s settings'
+      } · AF: AllFantasy engine from ${afEngineFrom} of ${starterCount} starters · live score is shown separately`,
+    /* RailStanding */
+    noHeadToHead: 'no head-to-head — rank not yet measurable',
+    tiedPrefix: 'T-',
+    rank: (n: number): string => ordinal(n),
+    of: ' of ',
+    tiedLowest: 'tied lowest',
+    onTheBlock: 'on the block',
+    bottomOfLeague: 'bottom of the league',
+    overTheCut: (margin: string) => `+${margin} over the cut`,
+    overLast: (margin: string) => `+${margin} over last`,
+    cutPosition: 'cut position',
+    placesClear: (n: number): string => `${n} ${n === 1 ? 'place' : 'places'} clear`,
+    onPoints: 'on points',
+    onProjection: 'on projection',
+    /* RailGuillotine */
+    ofAlive: (n: number) => ` of ${n} alive`,
+    choppedWeek: (week: number) => `Chopped wk ${week}`,
+    chopped: 'Chopped',
+    eliminated: 'eliminated',
+    draft: 'Draft',
+    seasonNotStarted: 'Season not started',
+    firstChopWeekLower: (week: number) => `first chop wk ${week}`,
+    aliveCount: (n: number) => `${n} alive`,
+    firstChopWeek: (week: number) => `First chop wk ${week}`,
+    noChopsYet: 'no chops yet',
+    noScoresYet: 'no scores yet',
+    inChopZone: 'in the chop zone',
+    toSafety: (margin: string) => `${margin} to safety`,
+    tiedAtLine: 'tied at the line',
+    aboveChop: (margin: string) => `+${margin} above chop`,
+    alive: 'alive',
+    /* RailRowBody */
+    week: 'Week',
+    syncPaused: 'Sync paused',
+    updatesDelayed: 'Updates delayed',
+    lastResult: 'Last result',
+    colLast: 'LAST',
+    colScore: 'SCORE',
+    providerProjection: (provider: string) => `${provider} projection`,
+    afEngineProjection: 'AllFantasy engine projection',
+    yourTeam: 'Your team',
+    opponentNotNamed: 'opponent not named',
+    espnUnavailable: 'Matchup unavailable from ESPN',
+    matchupNotAvailable: 'Matchup not available yet',
+  },
+  es: {
+    sideTitle: (provider, pricedFrom, starterCount, genericPpr, afEngineFrom) =>
+      `Proyección base semanal — ${provider} (SLPR): proyección de ${provider} con ${pricedFrom} de ${starterCount} titulares${
+        genericPpr
+          ? ', PPR genérico porque no se pudo recalcular con la puntuación de esta liga'
+          : ', recalculada con la configuración de esta liga'
+      } · AF: motor de AllFantasy con ${afEngineFrom} de ${starterCount} titulares · el marcador en vivo se muestra aparte`,
+    noHeadToHead: 'sin enfrentamiento directo: posición aún no medible',
+    tiedPrefix: 'E-',
+    rank: (n) => `#${n}`,
+    of: ' de ',
+    tiedLowest: 'empatado en el último lugar',
+    onTheBlock: 'en la línea de corte',
+    bottomOfLeague: 'último de la liga',
+    overTheCut: (margin) => `+${margin} sobre el corte`,
+    overLast: (margin) => `+${margin} sobre el último`,
+    cutPosition: 'posición de corte',
+    placesClear: (n) => `${n} ${n === 1 ? 'puesto' : 'puestos'} de margen`,
+    onPoints: 'por puntos',
+    onProjection: 'por proyección',
+    ofAlive: (n) => ` de ${n} vivos`,
+    choppedWeek: (week) => `Eliminado sem ${week}`,
+    chopped: 'Eliminado',
+    eliminated: 'fuera de la liga',
+    draft: 'Draft',
+    seasonNotStarted: 'Temporada sin empezar',
+    firstChopWeekLower: (week) => `primer corte sem ${week}`,
+    aliveCount: (n) => `${n} vivos`,
+    firstChopWeek: (week) => `Primer corte sem ${week}`,
+    noChopsYet: 'sin cortes aún',
+    noScoresYet: 'sin puntos todavía',
+    inChopZone: 'en zona de corte',
+    toSafety: (margin) => `${margin} para salvarse`,
+    tiedAtLine: 'empatado en la línea',
+    aboveChop: (margin) => `+${margin} sobre el corte`,
+    alive: 'vivo',
+    week: 'Semana',
+    syncPaused: 'Sincronización en pausa',
+    updatesDelayed: 'Actualizaciones retrasadas',
+    lastResult: 'Último resultado',
+    colLast: 'ÚLT',
+    colScore: 'PTS',
+    providerProjection: (provider) => `Proyección de ${provider}`,
+    afEngineProjection: 'Proyección del motor de AllFantasy',
+    yourTeam: 'Tu equipo',
+    opponentNotNamed: 'rival sin nombre',
+    espnUnavailable: 'ESPN no devolvió un calendario de enfrentamientos para esta liga',
+    matchupNotAvailable: 'sin enfrentamiento directo registrado esta semana',
+  },
+})

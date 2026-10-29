@@ -16,6 +16,8 @@ import { platformLabel, verifiedHandoff } from '@/lib/core-app/platformLinks'
 import { WaiverCompetitiveEdge, type WaiverEdgeState } from '@/components/core-app/screens/WaiverCompetitiveEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { waiversMessages } from '@/lib/core-app/messages/waivers'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import type { HelpTopicId } from '@/lib/core-app/helpTopics'
 
@@ -92,7 +94,7 @@ function Tile({
 
 export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(waiversMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   /** A league AllFantasy runs takes its claims (and its free-agent board) here; any other is only read. */
   const claimsHere = data.league.platform !== 'manual' && platformLabel(data.league.platform) === 'AllFantasy'
@@ -129,7 +131,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
           <span className="af-label">
             {copy('Next waiver run')} <TopicTip topic="waiverRun" />
           </span>{' '}
-          <WaiverRunClock schedule={schedule} yourTime={es ? ' (tu hora)' : ' your time'} />
+          <WaiverRunClock schedule={schedule} yourTime={m.yourTime} />
         </p>
       ) : null}
       <div className="af-wv-layout">
@@ -150,7 +152,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                   value: `$${b.faabRemaining}`,
                   sub:
                     b.rankByBudget != null
-                      ? es ? `${b.rankByBudget} de ${b.rostersWithBudget} por presupuesto restante` : `${b.rankByBudget} of ${b.rostersWithBudget} by budget left`
+                      ? m.budgetRank(b.rankByBudget, b.rostersWithBudget)
                       : undefined,
                 }
               }}
@@ -162,7 +164,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
               state={data.waiverPriority}
               render={(d: never) => {
                 const w = d as unknown as { priority: number; leagueRosters: number }
-                return { value: `#${w.priority}`, sub: es ? `de ${w.leagueRosters} equipos` : `of ${w.leagueRosters} rosters` }
+                return { value: `#${w.priority}`, sub: m.ofRosters(w.leagueRosters) }
               }}
             />
 
@@ -173,7 +175,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 const r = d as unknown as { playersHeld: number; starters: number; bench: number; reserve: number }
                 return {
                   value: String(r.playersHeld),
-                  sub: es ? `${r.starters} titulares · ${r.bench} suplentes${r.reserve > 0 ? ` · ${r.reserve} IR/taxi` : ''}` : `${r.starters} starting · ${r.bench} bench${r.reserve > 0 ? ` · ${r.reserve} IR/taxi` : ''}`,
+                  sub: m.rosterLoad(r.starters, r.bench, r.reserve),
                 }
               }}
             />
@@ -301,7 +303,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             */}
             {providerClaim ? (
               <a className="af-btn af-wv-browse" href={providerClaim.href} target="_blank" rel="noopener noreferrer">
-                {es ? `Reclamar en ${providerClaim.platformLabel}` : `Claim on ${providerClaim.platformLabel}`} ↗
+                {m.claimOn(providerClaim.platformLabel)} ↗
               </a>
             ) : null}
 
@@ -312,7 +314,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
               ? copy('Claims are made on your platform. AllFantasy only reads your league.')
               : claimsHere
                 ? copy('Claims for this league are made here, on AllFantasy.')
-                : es ? `Los reclamos se hacen en ${platformLabel(data.league.platform)}. AllFantasy solo lee tu liga.` : `Claims are made on ${platformLabel(data.league.platform)}. AllFantasy only reads your league.`}
+                : m.claimsMadeOn(platformLabel(data.league.platform))}
           </p>
         </div>
 
@@ -374,20 +376,18 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                     */}
                     {data.processTime.data.observedRuns != null ? (
                       <span className="af-wv-rule-observed">
-                        {es
-                          ? `según las últimas ${data.processTime.data.observedRuns} ejecuciones de esta liga`
-                          : `seen over this league's last ${data.processTime.data.observedRuns} runs`}
+                        {m.observedRuns(data.processTime.data.observedRuns)}
                       </span>
                     ) : data.processTime.data.fromSleeperSetting ? (
                       <span className="af-wv-rule-observed">
-                        {es ? 'según la configuración de Sleeper de esta liga' : "from this league's Sleeper settings"}
+                        {m.fromSleeperSettings}
                       </span>
                     ) : null}
                     {/* The same instant in the reader's own timezone, which IS knowable — see WaiverRunClock. */}
                     <span className="af-wv-rule-local">
                       <WaiverRunClock
                         schedule={data.processTime.data.schedule}
-                        yourTime={es ? ' (tu hora)' : ' your time'}
+                        yourTime={m.yourTime}
                         localOnly
                       />
                     </span>
@@ -422,8 +422,8 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
           <div className="af-wv-context">
             <span className="af-label">{copy('Priced for this league')}</span>
             <p className="af-wv-context-body">
-              {es ? 'Las ofertas y recomendaciones se calculan para ' : 'Bids and targets are priced against '}<strong>{data.league.name}</strong>
-              {data.league.format ? ` — ${data.league.format}` : ''}. {es ? 'Un mismo jugador puede valer distinto en otra liga.' : 'The same player is worth a different amount in a different league.'}
+              {m.pricedAgainst}<strong>{data.league.name}</strong>
+              {data.league.format ? ` — ${data.league.format}` : ''}. {m.differentLeague}
             </p>
           </div>
 

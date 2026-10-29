@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { MessageSquare } from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { messagesFor } from '@/lib/i18n/messages'
+import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import dynamic from 'next/dynamic'
 import type { CommsLeague, CommsTab } from './CommsDrawer'
@@ -98,6 +100,7 @@ export function CommsDock({
   mentions = 0,
 }: CommsDockProps) {
   const { language } = useOptionalLanguage()
+  const m = messagesFor(coreWidgetsMessages, language)
   const { data: session } = useSession()
   /*
    * 🛑 THE DRAWER IS KEYED ON WHO IS SIGNED IN, AND next-auth BRIEFLY SAYS "NOBODY". Its client
@@ -230,14 +233,12 @@ export function CommsDock({
             if (launcher.consumeDragClick()) return
             setOpen(true)
           }}
-          title={language === 'es' ? 'Abrir chat · arrastra para mover' : 'Open chat · drag to move'}
+          title={m.commsDockTitle}
           aria-label={
             badge.mentions > 0
-              ? language === 'es'
-                ? `Abrir chat (${badge.mentions} menciones, ${badge.unread} sin leer)`
-                : `Open communications (${badge.mentions} mention${badge.mentions === 1 ? '' : 's'}, ${badge.unread} unread)`
+              ? m.commsDockMentions(badge.mentions, badge.unread)
               : badge.unread > 0
-                ? language === 'es' ? `Abrir chat (${badge.unread} sin leer)` : `Open communications (${badge.unread} unread)`
+                ? m.commsDockUnread(badge.unread)
                 : coreUiCopy('Open communications', language)
           }
         >

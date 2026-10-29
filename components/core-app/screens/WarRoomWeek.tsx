@@ -7,7 +7,8 @@ import type { RailMatchup } from '@/lib/core-app/railMatchups'
 import { lineupProjectionFor, type WeekLineups } from '@/lib/core-app/weekLineups'
 import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
 import { TopicTip } from '@/components/core-app/TopicTip'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { warRoomWeekMessages } from '@/lib/core-app/messages/warRoomWeek'
 
 /**
  * "This week across your leagues" — the War Room's glance at every matchup, on the cross-league view.
@@ -62,35 +63,31 @@ const pts = (n: number) => n.toFixed(1)
  * cannot be read, so the strip stayed English in Spanish mode (2026-10-03 audit). Its imports are all
  * client-safe — `WeekLineupLine`, which it already rendered, is a client component itself.
  */
-function useEs(): boolean {
-  return useOptionalLanguage().language === 'es'
+function useCopy() {
+  return useMessages(warRoomWeekMessages)
 }
 
 function Status({ m, margin }: { m: RailMatchup; margin: number | null }) {
-  const es = useEs()
+  const t = useCopy()
   if (m.unpaired) {
     // Chopped: say so — "No head-to-head this week" read as a quiet week in a league you are out of.
-    if (m.eliminated) return <span className="af-wrw-status">{es ? 'Te eliminaron' : 'You were chopped'}</span>
+    if (m.eliminated) return <span className="af-wrw-status">{t.chopped}</span>
     const s = m.standing
-    if (!s) return <span className="af-wrw-status">{es ? 'Sin enfrentamiento directo esta semana' : 'No head-to-head this week'}</span>
+    if (!s) return <span className="af-wrw-status">{t.noHeadToHead}</span>
     return (
       <span className="af-wrw-status af-num" data-tone={s.elimination && s.overCut == null ? 'bad' : undefined}>
-        {s.elimination ? (es ? 'Semana de eliminación · ' : 'Elimination week · ') : ''}#{s.rank} {es ? 'de' : 'of'} {s.outOf}
+        {s.elimination ? t.eliminationWeek : ''}#{s.rank} {t.of} {s.outOf}
         {s.elimination
           ? s.overCut == null
-            ? es
-              ? ' · en el corte'
-              : ' · at the cut'
-            : es
-              ? ` · ${pts(s.overCut)} por encima del corte`
-              : ` · ${pts(s.overCut)} over the cut`
+            ? t.atTheCut
+            : t.overTheCut(pts(s.overCut))
           : ''}
-        {s.basis === 'projected' ? (es ? ' (proyectado)' : ' (projected)') : ''}
+        {s.basis === 'projected' ? t.projected : ''}
       </span>
     )
   }
   if (!m.scored) {
-    return <span className="af-wrw-status">{es ? 'Sin empezar' : 'Not started'}</span>
+    return <span className="af-wrw-status">{t.notStarted}</span>
   }
   const tone = margin == null || Math.abs(margin) < 0.05 ? undefined : margin > 0 ? 'good' : 'bad'
   return (
@@ -99,17 +96,11 @@ function Status({ m, margin }: { m: RailMatchup; margin: number | null }) {
         {pts(m.yourScore)}–{pts(m.opponentScore)}
       </span>{' '}
       {margin == null || Math.abs(margin) < 0.05
-        ? es
-          ? 'empatados'
-          : 'level'
+        ? t.level
         : margin > 0
-          ? es
-            ? `ganando por ${pts(margin)}`
-            : `ahead by ${pts(margin)}`
-          : es
-            ? `perdiendo por ${pts(-margin)}`
-            : `behind by ${pts(-margin)}`}
-      {m.source === 'history_fallback' ? (es ? ' · última importación' : ' · last import') : ''}
+          ? t.aheadBy(pts(margin))
+          : t.behindBy(pts(-margin))}
+      {m.source === 'history_fallback' ? t.lastImport : ''}
     </span>
   )
 }
@@ -124,7 +115,7 @@ export function WarRoomWeek({
   /** The all-leagues matchup board; a row links to it with `?league=`. */
   boardHref: string
 }) {
-  const es = useEs()
+  const t = useCopy()
   if (!lineups) return null
   const rows: Row[] = leagues
     .flatMap((league) => {
@@ -163,14 +154,14 @@ export function WarRoomWeek({
         */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
           <h2 className="af-label" id="af-wrw-h">
-            {es ? `Semana ${week} en tus ligas` : `Week ${week} across your leagues`}
+            {t.heading(week)}
           </h2>
           <TopicTip topic="warRoomWeekMargins" />
         </div>
         <span className="af-wrw-note af-num">
-          {rows.length} {es ? (rows.length === 1 ? 'enfrentamiento' : 'enfrentamientos') : rows.length === 1 ? 'matchup' : 'matchups'}
-          {ahead + behind > 0 ? (es ? ` · ganando en ${ahead}, perdiendo en ${behind}` : ` · ahead in ${ahead}, behind in ${behind}`) : ''}
-          {otherWeek > 0 ? (es ? ` · ${otherWeek} en otra semana` : ` · ${otherWeek} on another week`) : ''}
+          {rows.length} {t.matchups(rows.length)}
+          {ahead + behind > 0 ? t.aheadBehind(ahead, behind) : ''}
+          {otherWeek > 0 ? t.onAnotherWeek(otherWeek) : ''}
           {showsCut ? (
             <>
               {' '}
@@ -185,12 +176,12 @@ export function WarRoomWeek({
             <Link className="af-wrw-row" href={`${boardHref}?league=${encodeURIComponent(league.id)}`}>
               <span className="af-wrw-league">
                 {league.name}
-                {m.week !== week ? <span className="af-wrw-weektag af-num"> · {es ? 'semana' : 'week'} {m.week}</span> : null}
+                {m.week !== week ? <span className="af-wrw-weektag af-num"> · {t.week} {m.week}</span> : null}
               </span>
               <span className="af-wrw-vs">
                 {m.unpaired
-                  ? (m.yourTeam ?? (es ? 'Tu equipo' : 'Your team'))
-                  : `${m.yourTeam ?? (es ? 'Tú' : 'You')} vs ${m.opponentTeam ?? (es ? 'un equipo sin nombre' : 'an unnamed team')}`}
+                  ? (m.yourTeam ?? t.yourTeam)
+                  : `${m.yourTeam ?? t.you} vs ${m.opponentTeam ?? t.unnamedTeam}`}
               </span>
               <Status m={m} margin={margin} />
               <WeekLineupLine lineups={lineups} leagueId={league.id} season={m.season} week={m.week} />
@@ -199,7 +190,7 @@ export function WarRoomWeek({
         ))}
       </ul>
       <Link className="af-wrw-board" href={boardHref}>
-        {es ? 'Todos los enfrentamientos, por probabilidad de ganar' : 'Every matchup, ranked by win probability'} &rarr;
+        {t.boardLink} &rarr;
       </Link>
     </section>
   )

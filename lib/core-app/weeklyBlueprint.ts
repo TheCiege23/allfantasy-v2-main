@@ -7,6 +7,8 @@ import type { WeekLineups } from './weekLineups'
 import { formatPct1 } from './weeklyPercent'
 import type { WeeklyCalendar } from './weeklyCalendar'
 import { isAtRisk,isRuledOut } from './injuryStatus'
+import { messagesFor } from '@/lib/i18n/messages'
+import { weeklyBlueprintTextMessages } from './messages/weeklyBlueprintText'
 
 export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review' | 'deadline'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context' | 'weekly-calendar'; season?: number | null; period?: number | null; sport?: string; unavailable?: boolean; deadlineKind?: 'lineup' | 'waivers' | 'trade'; playoffScenarios?: {ifWin:number;ifLose:number}; evidence?: { empty: number; out: number; bye: number | null; questionable: number; players?: string[] } }
 export type WeeklyBlueprint = {
@@ -126,39 +128,41 @@ export function buildWeeklyBlueprint(input: {
       : featured?.opponent.name ? { matchup: { opponent: featured.opponent.name, period: featured.week, leagueName: featured.leagueName, leagueId: featured.leagueId, season: featured.season, ...(featured.live ? { status: featured.live.final ? 'final' as const : 'live' as const } : {}) } } : {}),
     ...(outlook && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 ? { playoff: { probability, leagueName: outlook.leagueName, leagueId: outlook.leagueId, season: outlook.season, period: outlook.period } } : {}) }
 }
+const copy = (es: boolean) => messagesFor(weeklyBlueprintTextMessages, es ? 'es' : 'en')
 export function weeklyActionText(action: WeeklyAction, es = false): string {
-  if(action.kind==='deadline')return es ? ({lineup:'Revisa el cierre de alineación',waivers:'Prepara tus reclamos antes del plazo',trade:'Revisa la fecha límite de intercambios'})[action.deadlineKind ?? 'lineup'] : ({lineup:'Review the confirmed lineup deadline',waivers:'Prepare claims before waiver processing',trade:'Review the confirmed trade deadline'})[action.deadlineKind ?? 'lineup']
-  if (es) return ({ lineup: `Revisa ${action.count} problema${action.count === 1 ? '' : 's'} en tu alineación`, monitor: `Vigila ${action.count} titular${action.count === 1 ? '' : 'es'} con dudas`, sync: 'Actualiza los datos de tu equipo', playoff: `Explora los escenarios del período ${action.count}`, review: 'Revisa tu equipo y sus reglas' })[action.kind]
-  return ({ lineup: `Review ${action.count} lineup issue${action.count === 1 ? '' : 's'}`, monitor: `Monitor ${action.count} questionable starter${action.count === 1 ? '' : 's'}`, sync: 'Refresh your team data', playoff: `Explore period ${action.count} playoff scenarios`, review: 'Review your team and its rules' })[action.kind]
+  const c = copy(es)
+  if(action.kind==='deadline')return ({lineup:c.deadlineLineup,waivers:c.deadlineWaivers,trade:c.deadlineTrade})[action.deadlineKind ?? 'lineup']
+  return ({ lineup: c.actionLineup(action.count), monitor: c.actionMonitor(action.count), sync: c.actionSync, playoff: c.actionPlayoff(action.count), review: c.actionReview })[action.kind]
 }
 export function weeklyActionReason(action: WeeklyAction, es = false): string {
-  if(action.unavailable)return es ? 'No hay una alineación verificable para esta liga. Revisa la cobertura de la importación antes de decidir; no se ha comprobado que los titulares estén disponibles.' : 'A verifiable lineup is unavailable for this league. Review import coverage before deciding; starter availability has not been checked.'
-  if(action.kind==='lineup' && action.sport && !['NFL','NCAAF'].includes(action.sport)) return es ? 'Los huecos y las ausencias pueden afectar tu resultado; compara opciones elegibles según el formato.' : 'Empty slots and unavailable starters can affect your result; compare eligible options under your scoring format.'
-  if(action.kind==='deadline')return es ? 'Hay una fecha confirmada guardada para esta liga. Comprueba las reglas y completa tu decisión antes del plazo.' : 'A confirmed date is stored for this league. Check the rules and complete your decision before the deadline.'
-  return es ? ({lineup:'Los huecos, las ausencias o los descansos pueden costarte puntos. Revisa las opciones elegibles.',monitor:'Una designación de duda puede cambiar. Comprueba las noticias antes de decidir.',sync:'Los datos están incompletos o no coinciden con el período. Actualízalos antes de elegir jugadores.',playoff:'Compara los escenarios de victoria y derrota y revisa las reglas del modelo.',review:'Revisa los titulares y las reglas de esta liga para preparar tu próxima decisión.'})[action.kind]
-    : ({lineup:'Empty slots, absences or byes can cost points. Review eligible options.',monitor:'A questionable designation can change. Check the latest status before deciding.',sync:'Team data is incomplete or differs from the matchup period. Refresh it before choosing players.',playoff:'Compare the win and loss scenarios and review the model’s rules.',review:'Review this league’s starters and rules to prepare your next decision.'})[action.kind]
+  const c = copy(es)
+  if(action.unavailable)return c.reasonUnavailable
+  if(action.kind==='lineup' && action.sport && !['NFL','NCAAF'].includes(action.sport)) return c.reasonLineupOtherSport
+  if(action.kind==='deadline')return c.reasonDeadline
+  return ({lineup:c.reasonLineup,monitor:c.reasonMonitor,sync:c.reasonSync,playoff:c.reasonPlayoff,review:c.reasonReview})[action.kind]
 }
 /** An unsent, scoped question; no lineup changes or claims are executed. */
 export function weeklyActionPrompt(action: WeeklyAction, es = false): string {
-  const period = action.period ? `${es ? 'Período' : 'Period'} ${action.period}${action.season ? ` · ${action.season}` : ''}. ` : ''
-  const timing = action.gameAt ? `${action.kind === 'deadline' ? es ? 'Plazo confirmado' : 'Confirmed deadline' : es ? 'Próximo partido registrado' : 'Next stored game time'}: ${action.gameAt}. ` : ''
-  return `${action.leagueName}. ${period}${weeklyActionText(action,es)}. ${weeklyActionReason(action,es)} ${timing}${es ? 'Ayúdame a comparar mis opciones. Verifica los datos, las reglas y el plazo oficial de esta liga; no inventes jugadores, horarios ni movimientos.' : 'Help me compare my options. Verify this league’s data, rules and official deadline; do not invent players, timing or transactions.'}`
+  const c = copy(es)
+  const period = action.period ? `${c.period} ${action.period}${action.season ? ` · ${action.season}` : ''}. ` : ''
+  const timing = action.gameAt ? `${action.kind === 'deadline' ? c.confirmedDeadline : c.nextGameTime}: ${action.gameAt}. ` : ''
+  return `${action.leagueName}. ${period}${weeklyActionText(action,es)}. ${weeklyActionReason(action,es)} ${timing}${c.promptAsk}`
 }
 export function weeklyBrief(data: WeeklyBlueprint, es = false): string {
-  const scope = data.teamName ?? (es ? `${data.leagueCount} liga${data.leagueCount === 1 ? '' : 's'}` : `${data.leagueCount} league${data.leagueCount === 1 ? '' : 's'}`)
+  const c = copy(es)
+  const scope = data.teamName ?? c.briefScopeLeagues(data.leagueCount)
   const sports = data.sports.length ? ` (${data.sports.join(', ')})` : ''
   const next = data.actions[0]
   // The brief is Chimmy's prefill: an unlabelled period read as the next game while it was being played (HailShiva, 2026-10-06).
   const m = data.matchup, final = m?.status === 'final'
-  const state = !m?.status ? '' : es ? (final ? ' (finalizado)' : ' (en juego)') : (final ? ' (final)' : ' (in progress)')
-  const matchup = m ? es ? `Período ${m.period}${state}: ${final ? 'jugó contra' : 'frente a'} ${m.opponent} en ${m.leagueName}. ` : `Period ${m.period}${state}: ${final ? 'played' : 'facing'} ${m.opponent} in ${m.leagueName}. ` : ''
+  const state = !m?.status ? '' : final ? c.stateFinal : c.stateLive
+  const matchup = m ? c.briefMatchup(m.period, state, final, m.opponent, m.leagueName) : ''
   // A run is replaced only when a week turns final, so odds beside a live period still score that game as unplayed.
   // HailShiva 2026-10-06: the card's 51.9% predated the week-4 win; Chimmy's re-run after it said 65.12%.
   const pending = !!data.playoff && m?.status === 'live' && data.playoff.period === m.period
-  const basis = !pending ? '' : es ? ` (simulada antes del resultado del período ${m!.period}; aún no cuenta ese partido)` : ` (simulated before period ${m!.period}'s result; that game is not counted yet)`
-  const playoff = data.playoff ? es ? `Probabilidad estimada de playoffs en ${data.playoff.leagueName}: ${formatPct1(data.playoff.probability)}%${basis}. ` : `Estimated playoff probability in ${data.playoff.leagueName}: ${formatPct1(data.playoff.probability)}%${basis}. ` : ''
-  return es ? `Tu plan para ${scope}${sports}. ${matchup}${playoff}${next ? `Primero: ${weeklyActionText(next, true)} en ${next.leagueName}. ` : ''}Chimmy puede ayudarte a evaluar tus opciones con el contexto de tus ligas.`
-    : `Your plan for ${scope}${sports}. ${matchup}${playoff}${next ? `First: ${weeklyActionText(next)} in ${next.leagueName}. ` : ''}Chimmy can help you weigh your options with your league context.`
+  const basis = !pending ? '' : c.briefBasis(m!.period)
+  const playoff = data.playoff ? c.briefPlayoff(data.playoff.leagueName, formatPct1(data.playoff.probability), basis) : ''
+  return c.brief(scope, sports, matchup, playoff, next ? c.briefFirst(weeklyActionText(next, es), next.leagueName) : '')
 }
 /** Unitless closeness; raw scoring scales never order a multi-sport portfolio. */
 export function matchupCloseness(m: { live?: { margin: number; you: number; them: number } | null; projection?: { winProbability: number } | null }): number {
