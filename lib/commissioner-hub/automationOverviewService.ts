@@ -14,27 +14,38 @@ import { buildAutomationOverview, type AutomationRow } from './automationOvervie
 
 export type AutomationOverviewView = { supported: true; rows: AutomationRow[]; commissionerPlan: boolean } | { supported: false }
 
-export async function readAutomationOverview(leagueId: string, userId: string): Promise<{ ok: true; view: AutomationOverviewView } | { ok: false; status: 403 | 404 }> {
-  const role = await getLeagueRole(leagueId, userId)
-  if (role !== 'commissioner' && role !== 'co_commissioner') return { ok: false, status: 403 }
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true, settings: true, leagueType: true, isDynasty: true } })
-  if (!league) return { ok: false, status: 404 }
-  // The automations act on leagues AllFantasy runs; an imported league's are its host's.
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: true, view: { supported: false } }
+/** Everything the overview and the presets read about one league's automations. Native leagues only. */
+export async function readAutomationFacts(leagueId: string) {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true, settings: true, leagueType: true, isDynasty: true, season: true } })
+  if (!league) return null
+  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { league, native: false as const }
   const [commissionerPlan, integrity] = await Promise.all([
     ownerHasAfCommissionerPlan(league.userId),
     prisma.leagueIntegritySettings.findUnique({ where: { leagueId }, select: { tankingMonitorEnabled: true } }).catch(() => null),
   ])
-  const rows = buildAutomationOverview({
-    leagueId,
-    settings: league.settings,
-    dynasty: isDynastyFamilyLeague(league),
-    commissionerPlan,
-    rookieDraftAutoOpen: resolveRookieDraftAutoOpen({ settings: league.settings, commissionerPlan, offseasonStartedAt: new Date() }).autoOpen,
-    liveRookieOrderOn: readLiveRookieOrderSettings(league.settings).enabled,
-    tankingMonitorOn: Boolean(integrity?.tankingMonitorEnabled),
-    tankingPenaltiesOn: readTankingPenaltyPolicy(league.settings).enabled,
-    holdFlaggedTradesMode: readHoldFlaggedTradesMode(league.settings),
-  })
-  return { ok: true, view: { supported: true, rows, commissionerPlan } }
+  return {
+    league,
+    native: true as const,
+    facts: {
+      leagueId,
+      settings: league.settings,
+      dynasty: isDynastyFamilyLeague(league),
+      commissionerPlan,
+      rookieDraftAutoOpen: resolveRookieDraftAutoOpen({ settings: league.settings, commissionerPlan, offseasonStartedAt: new Date() }).autoOpen,
+      liveRookieOrderOn: readLiveRookieOrderSettings(league.settings).enabled,
+      tankingMonitorOn: Boolean(integrity?.tankingMonitorEnabled),
+      tankingPenaltiesOn: readTankingPenaltyPolicy(league.settings).enabled,
+      holdFlaggedTradesMode: readHoldFlaggedTradesMode(league.settings),
+    },
+  }
+}
+
+export async function readAutomationOverview(leagueId: string, userId: string): Promise<{ ok: true; view: AutomationOverviewView } | { ok: false; status: 403 | 404 }> {
+  const role = await getLeagueRole(leagueId, userId)
+  if (role !== 'commissioner' && role !== 'co_commissioner') return { ok: false, status: 403 }
+  const read = await readAutomationFacts(leagueId)
+  if (!read) return { ok: false, status: 404 }
+  // The automations act on leagues AllFantasy runs; an imported league's are its host's.
+  if (!read.native) return { ok: true, view: { supported: false } }
+  return { ok: true, view: { supported: true, rows: buildAutomationOverview(read.facts), commissionerPlan: read.facts.commissionerPlan } }
 }

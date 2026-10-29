@@ -5,6 +5,7 @@ vi.mock('server-only', () => ({}))
 const m = vi.hoisted(() => ({
   notify: vi.fn(async () => ({})),
   sent: null as null | { id: string },
+  lang: 'en' as string | null,
   prisma: {
     automationAuditLog: {
       findMany: vi.fn(async () => [{ leagueId: 'L' }]),
@@ -17,6 +18,7 @@ const m = vi.hoisted(() => ({
     draftPick: { findMany: vi.fn(async () => []), count: vi.fn(async () => 0) },
     league: { findUnique: vi.fn(async () => ({ userId: 'commish', name: 'Dyn', platform: 'allfantasy' })) },
     platformNotification: { findUnique: vi.fn(async () => m.sent) },
+    userProfile: { findUnique: vi.fn(async () => ({ preferredLanguage: m.lang })) },
   },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
@@ -29,6 +31,7 @@ const MONDAY = new Date('2026-11-02T15:00:00Z')
 beforeEach(() => {
   vi.clearAllMocks()
   m.sent = null
+  m.lang = 'en'
 })
 
 describe('runWeeklyAutomationRecaps', () => {
@@ -40,6 +43,16 @@ describe('runWeeklyAutomationRecaps', () => {
       type: 'weekly_automation_recap',
       dedupePrefix: 'automation-recap:L:2026-10-26',
       body: 'This week AllFantasy filled 2 empty starting spots; and made 1 waiver claim for teams on Chimmy autopilot. Every action is in the league log.',
+    }))
+  })
+
+  it('in Spanish for a commissioner who reads Spanish', async () => {
+    m.lang = 'es-MX'
+    await runWeeklyAutomationRecaps({ now: MONDAY })
+    expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Lo que hizo AllFantasy esta semana · Dyn',
+      body: 'Esta semana AllFantasy llenó 2 puestos titulares vacíos; y hizo 1 reclamo para equipos con piloto automático de Chimmy. Cada acción está en el registro de la liga.',
+      actionLabel: 'Abrir registro de la liga',
     }))
   })
 
