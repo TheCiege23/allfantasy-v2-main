@@ -51,3 +51,18 @@ export async function setLeagueRulesSeen(userId: string, leagueId: string, value
       "updatedAt" = NOW()
   `
 }
+
+/**
+ * Many members' entries for one league in one read, for Commish OS. A member with no profile row or
+ * no entry is absent from the map — "nothing seen", exactly as `getLeagueRulesSeen` reads it.
+ */
+export async function getLeagueRulesSeenForUsers(userIds: readonly string[], leagueId: string): Promise<Map<string, LeagueRulesSeen>> {
+  const out = new Map<string, LeagueRulesSeen>()
+  if (!userIds.length) return out
+  const rows = await prisma.$queryRaw<Array<{ userId: string; seen: unknown }>>`
+    SELECT "userId", core_preferences->${LEAGUE_RULES_SEEN_KEY}::text->(${leagueId}::text) AS seen
+    FROM user_profiles WHERE "userId" = ANY(${[...userIds]}::text[])
+  `
+  for (const row of rows) if (row.seen != null) out.set(row.userId, readLeagueRulesSeen(row.seen))
+  return out
+}
