@@ -25,9 +25,9 @@ async function run() {
   const week = games[0].week
   const firstLock = games[0].startTime
   assert(firstLock.getTime() - Date.now() > 15 * 60000, 'Must prepare before the evidence window')
-  const response = await fetch('https://api.sleeper.app/v1/players/nfl', { signal: AbortSignal.timeout(30000) })
-  assert(response.ok, 'Current player identity response required')
-  const payload = await response.json() as Record<string, { player_id: string; full_name: string; position: string; team: string | null; status?: string }>
+  const { getAllPlayers } = await import('../lib/sleeper-client')
+  const payload = await getAllPlayers()
+  assert(Object.keys(payload).length > 0, 'Canonical player ingestion client must return identities')
   const names = ['Jordan Love', 'Bryce Young', 'Josh Allen', 'Lamar Jackson', 'Joe Burrow', 'Bo Nix', 'Justin Herbert', 'Jalen Hurts']
   const players = names.map(name => {
     const matches = Object.values(payload).filter(p => p.full_name === name && p.position === 'QB' && p.team)
