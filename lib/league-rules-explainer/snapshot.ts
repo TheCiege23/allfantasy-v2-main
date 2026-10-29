@@ -28,6 +28,7 @@ import { isWaiverProcessingMode, readDailyWaiverScheduleFromSettings, WAIVER_DAY
 import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
 import { readAdvanced, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { readFaabOnChop } from '@/lib/guillotine/faabOnChop'
+import { isBlindAuctionLeague } from '@/lib/guillotine/blindWaiverCutoff'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
@@ -255,6 +256,8 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
   if (format === 'guillotine') {
     snapshot.endgame = resolveGuillotineEndgame({ settings: row.settings, guillotineEndgame: row.guillotineEndgame ?? null }).format
     snapshot.faabOnChop = readFaabOnChop(row.settings)
+    // The waiver rule the claims hold enforces (lib/guillotine/blindWaiverCutoff.ts); the sport decides it.
+    snapshot.blindAuction = isBlindAuctionLeague({ sport: row.sport ?? null, guillotineMode: true, leagueVariant: 'guillotine' })
     Object.assign(snapshot, guillotineAdvancedSnapshot(readAdvanced(row.settings)))
   } else if (format === 'redraft' || format === 'keeper' || format === 'dynasty') {
     snapshot.medianGame = row.medianGame === true
