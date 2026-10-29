@@ -1,3 +1,4 @@
+import { canDisplayAiAdp } from '@/lib/draft-room/adpPresentation'
 import { describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ stats: vi.fn(), identities: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { playerSeasonStats: { findMany: mocks.stats }, playerIdentityMap: { findMany: mocks.identities } } }))
@@ -59,4 +60,11 @@ it('keeps the selected NFL box with its played season when the new season has ze
     poolKey: 'brown|wr', nk: canonicalName('A.J. Brown'), pk: 'wr', sleeperCandidate: '5859', existingRiId: null,
   }] })
   expect(result.seasonByPoolKey.get('brown|wr')).toMatchObject({ season: '2025', gamesPlayed: 10, stats: row.stats })
+})
+
+it('shows market ADP when the optional AF board has no usable observations', () => {
+  expect(canDisplayAiAdp(true, true, [{ aiAdp: 1 }])).toBe(false)
+  expect(canDisplayAiAdp(true, false, [{ aiAdp: null }, { aiAdp: 0 }, { aiAdp: Infinity }])).toBe(false)
+  expect(canDisplayAiAdp(true, false, [{ aiAdp: 12 }])).toBe(true)
+  expect(canDisplayAiAdp(false, false, [{ aiAdp: 12 }])).toBe(false)
 })

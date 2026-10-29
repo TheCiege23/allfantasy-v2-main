@@ -1,5 +1,7 @@
 'use client'
 
+import { canDisplayAiAdp } from '@/lib/draft-room/adpPresentation'
+
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { ProgressiveDraftPlayerList } from './ProgressiveDraftPlayerList'
 import { Search, User, Plus, GitCompare, LayoutGrid, Rows3, X } from 'lucide-react'
@@ -406,6 +408,7 @@ function PlayerPanelInner({
   poolError = false,
   rookieFilterState,
 }: PlayerPanelProps) {
+  const effectiveUseAiAdp = canDisplayAiAdp(useAiAdp, aiAdpUnavailable, players)
   const rs = presentationVariant === 'redraft_snake'
   const draftedIdsForRows = draftedPlayerIds?.size ? draftedPlayerIds : undefined
   const { t } = useLanguage()
@@ -430,6 +433,10 @@ function PlayerPanelInner({
   const [sortBy, setSortBy] = useState<SortKey>('adp')
   /** D.3 — sort direction. Toolbar buttons + table headers both flip this when re-clicked. */
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  useEffect(() => {
+    setSortBy(previous => effectiveUseAiAdp ? 'aiAdp' : previous === 'aiAdp' ? 'adp' : previous)
+    setSortDirection('asc')
+  }, [effectiveUseAiAdp])
   const [showRosterView, setShowRosterView] = useState(false)
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerEntry | null>(null)
   const [pendingNomination, setPendingNomination] = useState<PlayerEntry | null>(null)
@@ -1030,8 +1037,8 @@ function PlayerPanelInner({
               are the canonical sort UI. The "Use AI ADP" toggle, AI-ADP warnings,
               and the "My roster / Pool" view-toggle remain in this row because they
               don't belong on the table header. */}
-          {useAiAdp && (
-            <span className="rounded border border-cyan-300/25 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] text-cyan-100" title="Player order uses AI ADP">
+          {effectiveUseAiAdp && (
+            <span className="rounded border border-cyan-300/25 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] text-cyan-100" title="AllFantasy ADP enabled">
               AI ADP
             </span>
           )}
@@ -1200,7 +1207,7 @@ function PlayerPanelInner({
             position: selectedPlayer.position ?? null,
             team: selectedPlayer.team ?? null,
             byeWeek: selectedPlayer.byeWeek ?? null,
-            adp: useAiAdp ? (selectedPlayer.aiAdp ?? null) : (selectedPlayer.adp ?? null),
+            adp: effectiveUseAiAdp ? (selectedPlayer.aiAdp ?? null) : (selectedPlayer.adp ?? null),
             headshotUrl:
               getDraftRoomDisplayHeadshot(selectedPlayer) ??
               selectedNormalized?.imageUrl ??
@@ -1247,7 +1254,7 @@ function PlayerPanelInner({
             rs && getAssistantRoomContext ? getAssistantRoomContext(selectedPlayer) : null
           }
           presentationVariant={rs ? 'redraft_snake' : 'default'}
-          adpDisplayLabel={useAiAdp ? 'AI ADP' : 'ADP'}
+          adpDisplayLabel={effectiveUseAiAdp ? 'AI ADP' : 'ADP'}
           draftUnavailableReason={
             selectedPlayer && isPlayerDraftedEntry(selectedPlayer, draftedNames, draftedIdsForRows)
               ? 'already_drafted'
@@ -1431,7 +1438,7 @@ function PlayerPanelInner({
                   isPlayerQueued={isPlayerQueued}
                   canDraft={canDraft}
                   canNominate={canNominate}
-                  useAiAdp={useAiAdp}
+                  useAiAdp={effectiveUseAiAdp}
                   draftSport={sport}
                   onDraftRequest={onMakePick}
                   onAddToQueue={onAddToQueue}
@@ -1457,7 +1464,7 @@ function PlayerPanelInner({
                   }
                   canDraft={canDraft}
                   canNominate={canNominate}
-                  useAiAdp={useAiAdp}
+                  useAiAdp={effectiveUseAiAdp}
                   draftSport={sport}
                   statColumnOptions={sleeperStatOpts}
                   onDraftRequest={onMakePick}
