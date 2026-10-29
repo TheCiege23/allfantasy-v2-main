@@ -11,6 +11,7 @@ import { NextRequest } from 'next/server'
 const mockGameFindFirst = vi.hoisted(() => vi.fn())
 const mockRi = vi.hoisted(() => vi.fn())
 const mockEspn = vi.hoisted(() => vi.fn())
+const mockNotify = vi.hoisted(() => vi.fn().mockResolvedValue({ delivered: 0, errors: 0 }))
 const heartbeats = vi.hoisted(() => [] as Array<{ jobName: string; outcome: unknown }>)
 
 vi.mock('@/lib/prisma', () => ({ prisma: { sportsGame: { findFirst: mockGameFindFirst } } }))
@@ -18,6 +19,7 @@ vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
 vi.mock('@/lib/injuries/rollingInsightsInjuries', () => ({ syncRollingInsightsInjuriesToDb: mockRi }))
 vi.mock('@/lib/injuries/espnInjuries', () => ({ espnHasInjuryFeed: () => true, syncEspnInjuriesToDb: mockEspn }))
 vi.mock('@/lib/api-sports', () => ({ getApiSportsKey: () => null, syncAPISportsInjuriesToDb: vi.fn() }))
+vi.mock('@/lib/engagement-alerts/injuryAlerts', () => ({ notifySyncedInjuries: mockNotify }))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
   withSyncJobRun: async (ctx: { jobName: string }, fn: () => Promise<unknown>, extract?: (r: unknown) => unknown) => {
     const r = await fn()
@@ -64,6 +66,17 @@ describe('inNflInjuryGameWindow', () => {
 })
 
 describe('import-injuries ?gameWindow=1', () => {
+  it('allows an authenticated data-only import without delivering manager messages', async () => {
+    const response = await GET(req('?sport=NFL&notifications=0'))
+    expect(response.status).toBe(200)
+    expect(mockEspn).toHaveBeenCalled()
+    expect(mockNotify).not.toHaveBeenCalled()
+  })
+
+  it('preserves normal notification delivery when data-only mode is absent', async () => {
+    expect((await GET(req('?sport=NFL'))).status).toBe(200)
+    expect(mockNotify).toHaveBeenCalledWith('NFL')
+  })
   it.each([0, 1])('records complete v2 coverage with unknown designations only when no reports were skipped (skipped: %s)', async skipped => {
     mockRi.mockResolvedValue({ fetched: 10, written: 10, unparseableStatus: 2, legacyExpired: 0, unsupported: false, notModified: false, errors: [] })
     mockEspn.mockResolvedValue({ sport: 'NFL', fetched: 300, written: 300 - skipped, skippedNoPlayer: skipped, errors: [] })

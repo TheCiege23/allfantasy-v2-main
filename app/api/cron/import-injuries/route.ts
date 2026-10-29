@@ -329,7 +329,8 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
         espn.skippedNoPlayer === 0,
     })
 
-    const notifications = !failed && !noCoverage
+    // Authenticated data-only rehearsals must not dispatch manager messages.
+    const notifications = !failed && !noCoverage && url.searchParams.get('notifications') !== '0'
       ? await notifySyncedInjuries(sport).catch(e => {
           console.error('[cron/import-injuries] notification delivery failed', sport, e)
           return { delivered: 0, errors: 1 }
@@ -344,6 +345,7 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
         season: season ?? "current",
         source: providerLabel,
         providerCoverage: noCoverage ? "none" : "partial_or_full",
+        lineupCoverageCertified: !failed && !noCoverage && !providerErrored && !result.notModified && espn.skippedNoPlayer === 0,
         /** Every configured provider answered 200 with zero rows and no error — an out-of-season
          *  feed, not an outage. Surfaced so it is legible rather than an unexplained green. */
         providerReturnedEmpty: cleanEmpty || undefined,

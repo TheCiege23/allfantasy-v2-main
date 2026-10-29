@@ -1,5 +1,12 @@
 # Pirate League release readiness — 2026-10-27
 
+## Unattended rehearsal setup — 2026-10-28
+
+- A dedicated tenant and NFL week 8 league were prepared with four synthetic managers and eight current provider-verified players. Real game times, injuries and scores are never manufactured. The manifest is `live-matchup-staging.json`; live scoring-period acceptance remains pending actual games and finalization.
+- Separate Railway capture, data and score workers are configured for bounded isolated staging operation through November 7. Capture cadence is independent of provider latency. The fixture-scoped endpoint requires staging project, environment, database, configured league, tenant tag and synthetic owners; production defaults remain disabled.
+- Authenticated ingestion can omit manager delivery with `notifications=0`. The worker requires complete injury coverage even on HTTP 200, checks each sport, refreshes daily-sport schedules when twelve hours old, and uses canonical NFL weekly scoring and finalization with result notifications suppressed. Sealed weeks remain closed. See `live-rehearsal-operations.md` for schedule, expiry, inspection and cleanup.
+- All 57 focused tests passed: route/worker isolation and expiry, per-sport coverage failures, fresh schedule request avoidance, sealed result preservation, quiet/default injury delivery, tenant creation ratchet and scoreboard regressions. New sources passed ESLint. The scoped TypeScript run had no changed-source diagnostics; 41 baseline diagnostics elsewhere remain.
+
 ## Single-drop proof and live-data preparation — 2026-10-28
 
 - A single immediate acquisition may now include one specified unlocked bench drop. The exact transaction must pass canonical eligibility, undroppable and weekly drop limits; the dropped player is removed before full-lineup matching. Separate transaction plans are never combined. The Deck names the option and states that evidence collection makes no roster move.

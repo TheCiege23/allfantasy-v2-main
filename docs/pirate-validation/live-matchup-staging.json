@@ -1,0 +1,58 @@
+{
+  "preparedAt": "2026-10-29T00:20:05.148Z",
+  "leagueId": "d31e0b0b-903a-412b-b0ac-2a110f1ae44e",
+  "seasonId": "cmvssqzjx0002foxj5i482825",
+  "tenantId": "pirate-capture-live-37648072",
+  "week": 8,
+  "firstGameAt": "2026-10-30T00:15:00.000Z",
+  "lastGameAt": "2026-11-03T01:15:00.000Z",
+  "realPlayers": [
+    {
+      "id": "6804",
+      "name": "Jordan Love",
+      "team": "GB"
+    },
+    {
+      "id": "9228",
+      "name": "Bryce Young",
+      "team": "CAR"
+    },
+    {
+      "id": "4984",
+      "name": "Josh Allen",
+      "team": "BUF"
+    },
+    {
+      "id": "4881",
+      "name": "Lamar Jackson",
+      "team": "BAL"
+    },
+    {
+      "id": "6770",
+      "name": "Joe Burrow",
+      "team": "CIN"
+    },
+    {
+      "id": "11563",
+      "name": "Bo Nix",
+      "team": "DEN"
+    },
+    {
+      "id": "6797",
+      "name": "Justin Herbert",
+      "team": "LAC"
+    },
+    {
+      "id": "6904",
+      "name": "Jalen Hurts",
+      "team": "PHI"
+    }
+  ],
+  "managers": "Four uncontactable QA accounts, no human participants",
+  "cases": [
+    "Legal lineups control matchup",
+    "Empty QB slot with two bench QBs; penalty depends on captured real availability and a final loss"
+  ],
+  "status": "prepared; real scoring period has not completed",
+  "expiresAt": "2026-11-07T12:00:00Z"
+}
