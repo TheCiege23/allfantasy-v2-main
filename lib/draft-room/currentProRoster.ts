@@ -54,7 +54,7 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
       NBA: ['PG', 'SG', 'SF', 'PF', 'C'], NHL: ['C', 'LW', 'RW', 'D', 'G'],
       MLB: ['P', 'SP', 'RP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'TWP'],
     } as Record<string, string[]>)[sport]?.includes(position)
-    out.push({ ...row, position: row.position === 'TWP' ? row.position : specific && live(verified, now) ? position : row.position, imageUrl: row.imageUrl || verified.imageUrl || null })
+    out.push({ ...row, position: row.position === 'TWP' ? row.position : specific && live(verified, now) && team(row.team) === team(verified.team) ? position : row.position, imageUrl: row.imageUrl || verified.imageUrl || null })
   }
   return out
 }

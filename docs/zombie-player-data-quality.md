@@ -22,3 +22,5 @@ Run identity, season-selection, stat-unit tests, type checking and the existing 
 No production database changes or league-state transitions are part of this pass.
 
 NBA season minutes and NHL season time on ice use the measured seconds contract from lib/chimmy/tools/dailySportStats.ts; the direct RI draft reader converts them to minutes before generic rate extraction. MLB two-way primary positions remain TWP.
+
+A secondary position may replace a primary position only when the verified athlete is also assigned to the same current club. Photos may still match across a transfer using the athlete identity; an older club or role is not copied into the current roster.

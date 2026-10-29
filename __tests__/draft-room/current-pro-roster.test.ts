@@ -72,3 +72,11 @@ it('preserves the two-way MLB role when a secondary roster lists only pitcher', 
   const secondary = row({ source: 'thesportsdb', status: 'Active', position: 'P', dob: '1990-01-01' })
   expect(reconcileCurrentProRows('MLB', [ri], [ri, secondary], true, now)[0]?.position).toBe('TWP')
 })
+
+it('does not overwrite a current role with a secondary provider role from the previous club', () => {
+  const ri = row({ position: 'PG', dob: '1990-01-01' })
+  const oldClub = row({ source: 'thesportsdb', status: 'Active', position: 'SG', team: 'Previous Club', dob: '1990-01-01', imageUrl: 'https://r2.thesportsdb.com/images/media/player/cutout/own.png' })
+  const result = reconcileCurrentProRows('NBA', [ri], [ri, oldClub], true, now)[0]!
+  expect(result.position).toBe('PG'); expect(result.team).toBe('Current Team')
+  expect(result.imageUrl).toBe(oldClub.imageUrl)
+})
