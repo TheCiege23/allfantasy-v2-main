@@ -35,6 +35,8 @@ import {
   type TimelineEntry,
 } from './timeline'
 import type { SectionState } from '@/lib/core-app/leagueHome'
+import { messagesFor } from '@/lib/i18n/messages'
+import { commissionerBuildersMessages } from '../messages/commissionerBuilders'
 
 /**
  * Imported activity for this league, in either id space.
@@ -112,7 +114,7 @@ export async function loadActivityCharts(
   } catch {
     return {
       available: false,
-      reason: language === 'es' ? 'No se pudo leer la actividad de la liga en este momento.' : 'League activity couldn’t be read just now.',
+      reason: messagesFor(commissionerBuildersMessages, language).reportsActivityUnread,
     }
   }
 }

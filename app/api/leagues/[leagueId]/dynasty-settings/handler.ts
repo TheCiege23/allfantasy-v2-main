@@ -38,7 +38,7 @@ import {
   normalizeCustomOpenDate,
   readRookieDraftCalendarSettings,
 } from '@/lib/dynasty-core/rookieDraftCalendar'
-import { dynastyRulesFromConfig, taxiRulesFromEffective } from '@/lib/league-rules-explainer/snapshot'
+import { effectiveDynastyRules, taxiRulesFromEffective } from '@/lib/league-rules-explainer/snapshot'
 import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
@@ -308,8 +308,8 @@ export async function PUT(
     actorUserId: userId,
     section: 'dynasty',
     changes: diffRuleSnapshots(
-      { ...dynastyRulesFromConfig(priorDynasty), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(league.settings).autoStartDays, ...taxiChange[0] },
-      { ...dynastyRulesFromConfig(config), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(settingsAfter).autoStartDays, ...taxiChange[1] },
+      { ...effectiveDynastyRules(priorDynasty, league.settings), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(league.settings).autoStartDays, ...taxiChange[0] },
+      { ...effectiveDynastyRules(config, settingsAfter), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(settingsAfter).autoStartDays, ...taxiChange[1] },
     ),
   })
 

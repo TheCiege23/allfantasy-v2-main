@@ -2,7 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, useTransition } from 'react'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { pullToRefreshMessages } from '@/lib/core-app/messages/pullToRefresh'
 import { startClientSync } from '@/lib/core-app/clientSyncJob'
 import { pullAxis, pullDistance, pullIsReady, pullStartBlocked, type PullTargetNode } from '@/lib/core-app/pullToRefresh'
 import './af-pull-refresh.css'
@@ -60,8 +61,7 @@ export function PullToRefresh({ syncStale = false }: { syncStale?: boolean }) {
   routerRef.current = router
   const staleRef = useRef(syncStale)
   staleRef.current = syncStale
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(pullToRefreshMessages)
   const [pending, startTransition] = useTransition()
   const [phase, setPhase] = useState<Phase>('idle')
   const [distance, setDistance] = useState(0)
@@ -172,12 +172,12 @@ export function PullToRefresh({ syncStale = false }: { syncStale?: boolean }) {
   const ready = pullIsReady(distance)
   const label =
     phase === 'refreshing'
-      ? es ? 'Actualizando…' : 'Refreshing…'
+      ? m.refreshing
       : phase === 'done'
-        ? es ? 'Al día' : 'Up to date'
+        ? m.upToDate
         : ready
-          ? es ? 'Suelta para actualizar' : 'Release to refresh'
-          : es ? 'Desliza para actualizar' : 'Pull to refresh'
+          ? m.releaseToRefresh
+          : m.pullToRefresh
 
   return (
     <div
