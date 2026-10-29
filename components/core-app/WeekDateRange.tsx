@@ -3,10 +3,13 @@
 import { useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { localWeekRange } from '@/lib/core-app/localWeekRange'
+import { messagesFor } from '@/lib/i18n/messages'
+import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
 
 /** Resolve after hydration so the server timezone cannot set the viewer's calendar. */
 export function WeekDateRange() {
   const { language } = useOptionalLanguage()
+  const m = messagesFor(coreWidgetsMessages, language)
   const [range, setRange] = useState<{ label: string; timezone: string } | null>(null)
   useEffect(() => {
     const update = () => {
@@ -18,5 +21,5 @@ export function WeekDateRange() {
     const interval = window.setInterval(update, 60_000)
     return () => window.clearInterval(interval)
   }, [language])
-  return <span title={range?.timezone}>{range?.label ?? (language === 'es' ? 'Esta semana' : 'This week')}</span>
+  return <span title={range?.timezone}>{range?.label ?? m.weekRangeFallback}</span>
 }

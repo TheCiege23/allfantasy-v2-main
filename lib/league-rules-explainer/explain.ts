@@ -488,6 +488,7 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
     line('guillotine-stat-correction', isNum(s.statCorrectionHours) && s.statCorrectionHours > 0 ? plural('guillotine.statCorrection', s.statCorrectionHours) : null),
     line('guillotine-danger', isNum(s.dangerMarginPoints) && s.dangerMarginPoints > 0 ? plural('guillotine.danger', s.dangerMarginPoints) : null),
     line('guillotine-faab', s.faabOnChop && FAAB_ON_CHOP.has(s.faabOnChop) ? text(`guillotine.faab.${s.faabOnChop}`) : null),
+    line('guillotine-blind-auction', s.blindAuction === true ? text('guillotine.blindAuction') : null),
   ])
 }
 

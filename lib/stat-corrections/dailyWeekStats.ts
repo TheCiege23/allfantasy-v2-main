@@ -1,5 +1,5 @@
 /**
- * A daily sport's (NBA) week of stats, re-read from `player_game_stats` for the stat-correction check.
+ * A daily sport's (NBA, MLB, NHL) week of stats, re-read from `player_game_stats` for the stat-correction check.
  *
  * DB-first on purpose: the scheduled game-stats import (`/api/cron/import-player-game-stats?multiSport=1`)
  * re-sweeps the last few days on every run, so a correction to a recent game lands in that table. The
@@ -10,6 +10,9 @@
  * branch): the season's week window, the roster-id → game-log-id bridge, the preseason filter and the
  * sport's weekly aggregation. So the fresh numbers are summed exactly as the stored ones were; a second
  * summing rule would report differences that are only the two rules disagreeing.
+ *
+ * Daily-lineup leagues are compared day by day (`loadDailyDayStats`), because each day is scored on
+ * that day's starters only.
  *
  * Read-only: nothing here writes a score. (`ensureDailySportSeasonStart` may prime an in-process anchor
  * from the stored schedule; it writes no row.)
@@ -109,6 +112,26 @@ export const loadDailyWeekDayStats: DailyWeekDayStatsFetcher = async ({ sport, s
     const lines = buildPlayerDailyStatLines(byDay, normalizer)
     if (lines.length === 0) continue
     out.set(playerId, new Map(lines.map((l) => [dayKey(l.day), { stats: l.stats, isFinalized: false }])))
+  }
+  return out
+}
+
+/** Daily-lineup leagues, for the stat-correction check: each player's stats per Eastern game day — `dayKey` → that day's line. */
+export type DailyDayStatsFetcher = (args: {
+  sport: string
+  season: number
+  week: number
+  players: Array<{ playerId: string; playerName: string | null }>
+}) => Promise<Map<string, Map<string, Record<string, number>>>>
+
+/**
+ * The same per-day lines as `loadDailyWeekDayStats`, without the finalized flag the check does not
+ * read. Built ON it, so the check and the re-ingest preview cannot group or sum a day differently.
+ */
+export const loadDailyDayStats: DailyDayStatsFetcher = async (args) => {
+  const out = new Map<string, Map<string, Record<string, number>>>()
+  for (const [playerId, days] of await loadDailyWeekDayStats(args)) {
+    out.set(playerId, new Map([...days].map(([key, line]) => [key, line.stats])))
   }
   return out
 }

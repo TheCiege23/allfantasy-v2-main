@@ -56,22 +56,20 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
 
   return (
     <section
-      aria-label={es ? 'Ayuda con esta liga importada' : 'Imported league help'}
+      aria-label={es ? 'Liga importada' : 'Imported league'}
       className="shrink-0 border-b border-white/10 bg-[#0b1328] px-4 py-3"
       data-testid="imported-league-quick-actions"
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {/*
+          ⚠ NOT FRAMED AS HELP. This strip used to open with "Need help with this imported league?",
+          which made its remove button read as a support action — a user who wanted these leagues gone
+          hid them instead (2026-10-29). It states what the league is, and Remove comes first.
+        */}
         <p className="text-xs leading-5 text-white/70">
-          {es ? '¿Necesitas ayuda con esta liga importada?' : 'Need help with this imported league?'}
+          {es ? `Liga importada de ${platform}` : `Imported from ${platform}`}
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new Event(supportEvent))}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
-          >
-            {es ? 'Contactar a soporte' : 'Contact support'}
-          </button>
           {canRemove ? (
             <button
               type="button"
@@ -79,9 +77,16 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
               className="inline-flex min-h-11 items-center justify-center rounded-xl border border-rose-400/40 bg-rose-400/10 px-4 text-sm font-semibold text-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
               data-testid="delete-imported-league-open"
             >
-              {es ? 'Eliminar esta liga importada' : 'Delete this imported league'}
+              {es ? 'Quitar de mis ligas' : 'Remove from my leagues'}
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event(supportEvent))}
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+          >
+            {es ? 'Contactar a soporte' : 'Contact support'}
+          </button>
         </div>
       </div>
       {error ? <p role="alert" className="mx-auto mt-2 max-w-5xl text-sm text-rose-200">{error}</p> : null}

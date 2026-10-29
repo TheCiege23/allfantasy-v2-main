@@ -134,6 +134,7 @@ export const leagueRulesCopyEn: Record<string, string> = {
   'leagueRules.guillotine.release.immediate': 'A chopped team’s players become free agents as soon as the chop is final.',
   'leagueRules.guillotine.faab.keep': 'A chopped team’s unspent FAAB leaves with it; survivors keep the budgets they have.',
   'leagueRules.guillotine.faab.split': 'A chopped team’s unspent FAAB is shared evenly by every team still alive.',
+  'leagueRules.guillotine.blindAuction': 'Waiver claims are blind: in the hours before each waiver run, bids are hidden and held, then settled together, highest bid first. A chopped team’s players go to the highest bidder, not the fastest.',
 
   'leagueRules.tiebreak.bench_points': 'fewer bench points is chopped',
   'leagueRules.tiebreak.season_points': 'fewer season points is chopped',
@@ -663,6 +664,7 @@ export const leagueRulesCopyEs: Record<string, string> = {
   'leagueRules.guillotine.release.immediate': 'Los jugadores de un equipo eliminado quedan como agentes libres en cuanto la eliminación es definitiva.',
   'leagueRules.guillotine.faab.keep': 'El FAAB sin gastar de un equipo eliminado se pierde con él; los supervivientes conservan sus presupuestos.',
   'leagueRules.guillotine.faab.split': 'El FAAB sin gastar de un equipo eliminado se reparte a partes iguales entre los equipos que siguen vivos.',
+  'leagueRules.guillotine.blindAuction': 'Los reclamos son a ciegas: en las horas antes de cada procesamiento de reclamos, las pujas quedan ocultas y retenidas, y luego se resuelven juntas, de la puja más alta a la más baja. Los jugadores de un equipo eliminado van al que más puja, no al más rápido.',
 
   'leagueRules.tiebreak.bench_points': 'se elimina al que tenga menos puntos en el banquillo',
   'leagueRules.tiebreak.season_points': 'se elimina al que tenga menos puntos en la temporada',
