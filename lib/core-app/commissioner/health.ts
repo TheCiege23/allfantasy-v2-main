@@ -22,6 +22,8 @@
 
 import { isPollClosed, type ViewerPoll } from '@/lib/chat-core/messagePolls'
 import { unnamedTeamLabel } from './activity'
+import { commissionerToolsMessages } from '@/lib/core-app/messages/commissionerTools'
+import { messagesFor } from '@/lib/i18n/messages'
 
 export type HealthFlagKey = 'abandoned' | 'lineups' | 'schedule' | 'dues' | 'votes'
 
@@ -75,17 +77,14 @@ export function emptyStarterSlots(starters: unknown[], requiredStarters: number)
   return Math.max(0, requiredStarters - (starters.length - markers))
 }
 
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`
-}
-
 /**
  * Spanish when the reader asked for it (2026-10-05). Every flag is a sentence composed from league
  * data — counts, name lists, "and 3 more" — so it is written in the reader's language HERE rather
  * than translated by pattern at render, where it would come out half Spanish. The default is
- * English, so every other caller of these builders reads exactly what it always did.
+ * English, so every other caller of these builders reads exactly what it always did. The sentences
+ * live in the catalog (lib/core-app/messages/commissionerTools.ts), one block per language.
  */
-const isEs = (language: string | undefined) => language === 'es'
+const copy = (language: string | undefined) => messagesFor(commissionerToolsMessages, language)
 
 /**
  * A name list for a sentence. Repeated placeholders are COUNTED, not repeated: "No owner: Unnamed
@@ -95,21 +94,21 @@ const isEs = (language: string | undefined) => language === 'es'
  */
 function namesPreview(names: string[], max = 4, language?: string): string {
   if (names.length === 0) return ''
-  const es = isEs(language)
+  const m = copy(language)
   const blank = unnamedTeamLabel(language)
   const blanks = names.filter((n) => n === blank).length
   const items: Array<{ text: string; teams: number }> =
     blanks > 1
       ? [
           ...names.filter((n) => n !== blank).map((text) => ({ text, teams: 1 })),
-          { text: es ? `${blanks} equipos sin nombre` : `${blanks} unnamed teams`, teams: blanks },
+          { text: m.healthUnnamedTeams(blanks), teams: blanks },
         ]
       : names.map((text) => ({ text, teams: 1 }))
   const shownItems = items.slice(0, max)
   const shown = shownItems.map((i) => i.text).join(', ')
   if (items.length <= max) return shown
   const rest = names.length - shownItems.reduce((n, i) => n + i.teams, 0)
-  return es ? `${shown} y ${rest} más` : `${shown} and ${rest} more`
+  return m.healthAndMore(shown, rest)
 }
 
 // ── Abandoned teams ─────────────────────────────────────────────────────────
@@ -139,8 +138,8 @@ export type AbandonedInput = {
 }
 
 export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
-  const es = isEs(input.language)
-  const label = es ? 'Equipos abandonados' : 'Abandoned teams'
+  const m = copy(input.language)
+  const label = m.healthAbandonedLabel
   if (input.stale) {
     return { key: 'abandoned', label, measured: false, reason: input.stale.reason, action: input.stale.action }
   }
@@ -150,10 +149,7 @@ export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
       label,
       measured: false,
       reason:
-        input.activityReason ??
-        (es
-          ? 'No se pudo leer la actividad de los mánagers en este momento, así que ningún equipo puede considerarse abandonado ni activo.'
-          : 'Manager activity could not be read just now, so no team can be called abandoned or active.'),
+        input.activityReason ?? m.healthActivityUnreadable,
       action: input.action,
     }
   }
@@ -162,7 +158,7 @@ export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
       key: 'abandoned',
       label,
       measured: false,
-      reason: es ? 'Aún no se ha importado ningún equipo en esta liga.' : 'No teams have been imported for this league yet.',
+      reason: m.healthNoTeamsInLeague,
       action: null,
     }
   }
@@ -189,10 +185,8 @@ export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
       measured: true,
       severity: 'warn',
       count,
-      headline: es ? 'Ningún mánager ha hecho un movimiento en 14 días' : 'No manager has made a move in 14 days',
-      detail: es
-        ? `Ninguno de los ${managers.length} mánagers ha hecho un intercambio, un reclamo ni un cambio de plantilla en dos semanas. Es la liga la que está tranquila, no un equipo abandonado.`
-        : `None of the ${managers.length} managers has made a trade, waiver claim or roster move in two weeks. That is the league being quiet, not one team being abandoned.`,
+      headline: m.healthNoMovesHeadline,
+      detail: m.healthLeagueQuietDetail(managers.length),
       names: [],
       action: null,
     }
@@ -200,20 +194,10 @@ export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
 
   const headline =
     count === 0
-      ? es
-        ? 'Todos los equipos tienen dueño y un movimiento reciente'
-        : 'Every team has an owner and a recent move'
+      ? m.healthAllOwnedActiveHeadline
       : [
-          unowned.length > 0
-            ? es
-              ? plural(unowned.length, 'equipo sin dueño', 'equipos sin dueño')
-              : `${plural(unowned.length, 'team')} with no owner`
-            : null,
-          quiet.length > 0
-            ? es
-              ? plural(quiet.length, 'mánager sin movimientos en 14 días', 'mánagers sin movimientos en 14 días')
-              : `${plural(quiet.length, 'manager')} with no moves in 14 days`
-            : null,
+          unowned.length > 0 ? m.healthUnownedHeadline(unowned.length) : null,
+          quiet.length > 0 ? m.healthQuietHeadline(quiet.length) : null,
         ]
           .filter(Boolean)
           .join(' · ')
@@ -221,23 +205,11 @@ export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
   const detail =
     count === 0
       ? managers.length > 0
-        ? es
-          ? 'Todos los equipos tienen dueño, y todos los mánagers han hecho un movimiento en los últimos 14 días.'
-          : 'Every team has an owner, and every manager has made a move in the last 14 days.'
-        : es
-          ? 'Todos los equipos tienen dueño.'
-          : 'Every team has an owner.'
+        ? m.healthAllOwnedActiveDetail
+        : m.healthAllOwnedDetail
       : [
-          unowned.length > 0
-            ? es
-              ? `Sin dueño: ${namesPreview(unowned, 4, 'es')}.`
-              : `No owner: ${namesPreview(unowned)}.`
-            : null,
-          quiet.length > 0
-            ? es
-              ? `Sin intercambios, reclamos ni cambios de plantilla en 14 días: ${namesPreview(quiet, 4, 'es')}. Estar tranquilo no es lo mismo que haberse ido: habla con ellos antes de reemplazar a nadie.`
-              : `No trade, waiver claim or roster move in 14 days: ${namesPreview(quiet)}. Quiet isn’t the same as gone — check in before replacing anyone.`
-            : null,
+          unowned.length > 0 ? m.healthUnownedDetail(namesPreview(unowned, 4, input.language)) : null,
+          quiet.length > 0 ? m.healthQuietDetail(namesPreview(quiet, 4, input.language)) : null,
         ]
           .filter(Boolean)
           .join(' ')
@@ -286,17 +258,15 @@ export type LineupsInput = {
 const LINEUP_UNKNOWABLE = new Set(['mfl', 'fantrax'])
 
 export function missingLineupsFlag(input: LineupsInput): HealthFlag {
-  const es = isEs(input.language)
-  const label = es ? 'Alineaciones incompletas' : 'Missing lineups'
+  const m = copy(input.language)
+  const label = m.healthLineupsLabel
   const platform = input.platform.trim().toLowerCase()
   if (LINEUP_UNKNOWABLE.has(platform)) {
     return {
       key: 'lineups',
       label,
       measured: false,
-      reason: es
-        ? `Las importaciones de ${platform === 'mfl' ? 'MFL' : 'Fantrax'} no indican si una alineación en blanco está vacía o simplemente no se reportó, así que aquí no se revisan las alineaciones.`
-        : `${platform === 'mfl' ? 'MFL' : 'Fantrax'} imports don't say whether a blank lineup is empty or just not reported, so lineups aren't checked here.`,
+      reason: m.healthLineupsUnknowable(platform === 'mfl' ? 'MFL' : 'Fantrax'),
       action: input.action,
     }
   }
@@ -308,7 +278,7 @@ export function missingLineupsFlag(input: LineupsInput): HealthFlag {
       key: 'lineups',
       label,
       measured: false,
-      reason: es ? 'Las alineaciones solo se revisan mientras se juega la temporada.' : 'Lineups are only checked while the season is being played.',
+      reason: m.healthLineupsOffSeason,
       action: null,
     }
   }
@@ -321,9 +291,7 @@ export function missingLineupsFlag(input: LineupsInput): HealthFlag {
       key: 'lineups',
       label,
       measured: false,
-      reason: es
-        ? 'Ninguna plantilla de esta liga tiene todavía una alineación titular legible.'
-        : 'No roster in this league has a readable starting lineup yet.',
+      reason: m.healthLineupsNoneReadable,
       action: input.action,
     }
   }
@@ -337,9 +305,7 @@ export function missingLineupsFlag(input: LineupsInput): HealthFlag {
   const suffix =
     unread === 0
       ? ''
-      : es
-        ? ` ${plural(unread, 'plantilla', 'plantillas')} no se ${unread === 1 ? 'pudo' : 'pudieron'} leer y no ${unread === 1 ? 'cuenta' : 'cuentan'}.`
-        : ` ${plural(unread, 'roster')} could not be read and ${unread === 1 ? 'is' : 'are'} not counted.`
+      : m.healthLineupsUnread(unread)
 
   return {
     key: 'lineups',
@@ -349,24 +315,16 @@ export function missingLineupsFlag(input: LineupsInput): HealthFlag {
     count: holes.length,
     headline:
       holes.length === 0
-        ? es
-          ? 'Todas las alineaciones están completas'
-          : 'Every lineup is full'
-        : es
-          ? `${plural(holes.length, 'equipo', 'equipos')} con un hueco en la alineación titular`
-          : `${plural(holes.length, 'team')} starting with an empty slot`,
+        ? m.healthLineupsFullHeadline
+        : m.healthLineupsHolesHeadline(holes.length),
     detail:
       (holes.length === 0
-        ? es
-          ? readable.length === 1
-            ? 'La única alineación legible tiene todos los puestos titulares cubiertos.'
-            : `Las ${readable.length} alineaciones legibles tienen todos los puestos titulares cubiertos.`
-          : `All ${readable.length} readable lineups have every starting slot filled.`
+        ? m.healthLineupsFullDetail(readable.length)
         : holes
             .slice(0, 4)
-            .map((h) => (es ? `${h.name} (${plural(h.empty, 'hueco vacío', 'huecos vacíos')})` : `${h.name} (${plural(h.empty, 'empty slot')})`))
+            .map((h) => m.healthLineupsHole(h.name, h.empty))
             .join(', ') +
-          (holes.length > 4 ? (es ? ` y ${holes.length - 4} más.` : ` and ${holes.length - 4} more.`) : '.')) + suffix,
+          (holes.length > 4 ? m.healthLineupsMore(holes.length - 4) : '.')) + suffix,
     names: holes.map((h) => h.name),
     action: holes.length > 0 ? input.action : null,
   }
@@ -389,16 +347,14 @@ export type ScheduleInput = {
 }
 
 export function unequalSchedulesFlag(input: ScheduleInput): HealthFlag {
-  const es = isEs(input.language)
-  const label = es ? 'Calendarios desiguales' : 'Unequal schedules'
+  const m = copy(input.language)
+  const label = m.healthScheduleLabel
   if (input.eliminationFormat) {
     return {
       key: 'schedule',
       label,
       measured: false,
-      reason: es
-        ? 'Es un formato de eliminación, en el que los equipos eliminados dejan de jugar: que no todos tengan los mismos partidos es la regla funcionando.'
-        : 'This is an elimination format, where eliminated teams stop playing — unequal game counts are the rules working.',
+      reason: m.healthScheduleElimination,
       action: null,
     }
   }
@@ -407,7 +363,7 @@ export function unequalSchedulesFlag(input: ScheduleInput): HealthFlag {
       key: 'schedule',
       label,
       measured: false,
-      reason: es ? 'Aún no se ha importado ninguna semana jugada de esta temporada.' : 'No played weeks have been imported for this season yet.',
+      reason: m.healthScheduleNoWeeks,
       action: null,
     }
   }
@@ -424,7 +380,7 @@ export function unequalSchedulesFlag(input: ScheduleInput): HealthFlag {
 
   const counts = [...games.entries()].map(([rosterId, weeks]) => ({ rosterId, n: weeks.size }))
   if (counts.length === 0) {
-    return { key: 'schedule', label, measured: false, reason: es ? 'No hay equipos que comparar.' : 'No teams to compare.', action: null }
+    return { key: 'schedule', label, measured: false, reason: m.healthScheduleNoTeams, action: null }
   }
   const most = Math.max(...counts.map((c) => c.n))
   const behind = counts
@@ -440,28 +396,12 @@ export function unequalSchedulesFlag(input: ScheduleInput): HealthFlag {
     count: behind.length,
     headline:
       behind.length === 0
-        ? es
-          ? `Todos han jugado ${plural(most, 'partido', 'partidos')}`
-          : `Everyone has played ${plural(most, 'game')}`
-        : es
-          ? `${plural(behind.length, 'equipo', 'equipos')} con partidos de menos`
-          : `${plural(behind.length, 'team')} behind on games`,
+        ? m.healthScheduleEvenHeadline(most)
+        : m.healthScheduleBehindHeadline(behind.length),
     detail:
       behind.length === 0
-        ? es
-          ? through === 1
-            ? 'Todos los equipos tienen un enfrentamiento en la semana 1.'
-            : `Todos los equipos tienen un enfrentamiento en cada una de las semanas 1–${through}.`
-          : `Every team has a matchup in each of weeks 1–${through}.`
-        : es
-          ? `La mayoría de los equipos tiene ${plural(most, 'partido', 'partidos')} hasta la semana ${through}; ${behind
-              .slice(0, 4)
-              .map((b) => `${b.name} tiene ${b.n}`)
-              .join(', ')}${behind.length > 4 ? ` y ${behind.length - 4} más` : ''}.`
-          : `Most teams have ${plural(most, 'game')} through week ${through}; ${behind
-              .slice(0, 4)
-              .map((b) => `${b.name} has ${b.n}`)
-              .join(', ')}${behind.length > 4 ? ` and ${behind.length - 4} more` : ''}.`,
+        ? m.healthScheduleEvenDetail(through)
+        : m.healthScheduleBehindDetail(most, through, behind),
     names: behind.map((b) => b.name),
     action: behind.length > 0 ? input.action : null,
   }
@@ -516,27 +456,25 @@ export type DuesInput = {
 }
 
 export function unpaidDuesFlag(input: DuesInput): HealthFlag {
-  const es = isEs(input.language)
-  const label = es ? 'Cuotas sin pagar' : 'Unpaid dues'
+  const m = copy(input.language)
+  const label = m.healthDuesLabel
   const t = input.tracker
   if (!t || !t.enabled) {
     return {
       key: 'dues',
       label,
       measured: false,
-      reason: es
-        ? 'Las cuotas de esta liga no se registran en AllFantasy, así que nadie puede considerarse al día ni pendiente.'
-        : 'Dues aren’t tracked in AllFantasy for this league, so nobody can be called paid or unpaid.',
-      action: input.action ? { ...input.action, label: es ? 'Configurar el control de cuotas' : 'Set up dues tracking' } : null,
+      reason: m.healthDuesUntracked,
+      action: input.action ? { ...input.action, label: m.healthDuesSetUp } : null,
     }
   }
   if (input.teams.length === 0) {
-    return { key: 'dues', label, measured: false, reason: es ? 'Aún no se ha importado ningún equipo.' : 'No teams have been imported yet.', action: null }
+    return { key: 'dues', label, measured: false, reason: m.healthDuesNoTeams, action: null }
   }
 
   const paid = new Set(t.entries.filter((e) => e.paid).map((e) => e.teamId))
   const unpaid = input.teams.filter((team) => !paid.has(team.id)).map((team) => team.name)
-  const amount = t.amount != null ? `${es ? ' de' : ' of'} ${formatMoney(t.amount, t.currency)}` : ''
+  const amount = t.amount != null ? m.healthDuesAmount(formatMoney(t.amount, t.currency)) : ''
 
   return {
     key: 'dues',
@@ -546,22 +484,12 @@ export function unpaidDuesFlag(input: DuesInput): HealthFlag {
     count: unpaid.length,
     headline:
       unpaid.length === 0
-        ? es
-          ? 'Todos han pagado'
-          : 'Everyone has paid'
-        : es
-          ? `${plural(unpaid.length, 'equipo', 'equipos')} ${unpaid.length === 1 ? 'debe' : 'deben'} la cuota${amount}`
-          : `${plural(unpaid.length, 'team')} still owe${unpaid.length === 1 ? 's' : ''} dues${amount}`,
+        ? m.healthDuesPaidHeadline
+        : m.healthDuesOweHeadline(unpaid.length, amount),
     detail:
       unpaid.length === 0
-        ? es
-          ? input.teams.length === 1
-            ? 'El único equipo figura como pagado en el control de cuotas.'
-            : `Los ${input.teams.length} equipos figuran como pagados en el control de cuotas.`
-          : `All ${input.teams.length} teams are marked paid in the dues tracker.`
-        : es
-          ? `${namesPreview(unpaid, 4, 'es')}. Se marca a mano en el control de cuotas: AllFantasy no ve el pago en sí.`
-          : `${namesPreview(unpaid)}. Marked by hand in the dues tracker — AllFantasy does not see the payment itself.`,
+        ? m.healthDuesPaidDetail(input.teams.length)
+        : m.healthDuesUnpaidDetail(namesPreview(unpaid, 4, input.language)),
     names: unpaid,
     action: unpaid.length > 0 ? input.action : null,
   }
@@ -601,14 +529,14 @@ export function openPolls(polls: LeaguePoll[], now: Date): LeaguePoll[] {
 }
 
 export function unresolvedVotesFlag(input: VotesInput): HealthFlag {
-  const es = isEs(input.language)
-  const label = es ? 'Votaciones abiertas' : 'Unresolved votes'
+  const m = copy(input.language)
+  const label = m.healthVotesLabel
   if (input.polls == null) {
     return {
       key: 'votes',
       label,
       measured: false,
-      reason: es ? 'No se pudieron leer las encuestas del chat de la liga en este momento.' : 'League chat polls could not be read just now.',
+      reason: m.healthVotesUnreadable,
       action: input.action,
     }
   }
@@ -633,29 +561,15 @@ export function unresolvedVotesFlag(input: VotesInput): HealthFlag {
     count: open.length,
     headline:
       open.length === 0
-        ? es
-          ? 'No hay votaciones abiertas'
-          : 'No open votes'
-        : es
-          ? plural(open.length, 'votación de la liga sigue abierta', 'votaciones de la liga siguen abiertas')
-          : `${plural(open.length, 'league vote')} still open`,
+        ? m.healthVotesNoneHeadline
+        : m.healthVotesOpenHeadline(open.length),
     detail:
       open.length === 0
-        ? es
-          ? 'Todas las encuestas del chat de la liga se han cerrado. Las votaciones hechas en la propia plataforma no se importan.'
-          : 'Every league-chat poll has closed. Votes held on the platform itself are not imported.'
+        ? m.healthVotesNoneDetail
         : open
             .slice(0, 3)
-            .map((p) =>
-              p.closesAt
-                ? es
-                  ? `“${p.question}” cierra el ${new Date(p.closesAt).toLocaleDateString('es', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })}`
-                  : `“${p.question}” closes ${new Date(p.closesAt).toUTCString().slice(0, 16)}`
-                : es
-                  ? `“${p.question}” no tiene fecha límite`
-                  : `“${p.question}” has no deadline`,
-            )
-            .join('; ') + (open.length > 3 ? (es ? `; y ${open.length - 3} más.` : `; and ${open.length - 3} more.`) : '.'),
+            .map((p) => (p.closesAt ? m.healthVoteCloses(p.question, p.closesAt) : m.healthVoteNoDeadline(p.question)))
+            .join('; ') + (open.length > 3 ? m.healthVotesMore(open.length - 3) : '.'),
     names: open.map((p) => p.question),
     action: open.length > 0 ? input.action : null,
   }

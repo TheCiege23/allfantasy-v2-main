@@ -7,6 +7,8 @@ import { useClientSyncAccount } from '@/components/providers/ClientSyncAccountPr
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { syncMessageText } from '@/lib/core-app/syncMessageText'
 import { ageText } from '@/lib/core-app/shellCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { syncNowButtonMessages } from '@/lib/core-app/messages/syncNowButton'
 
 /**
  * "Sync now" — the shell's one write-shaped control, and it is not a write.
@@ -87,18 +89,18 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey, syncAg
 
   /* In the reader's language — the chip is in the top bar of every /core screen (2026-10-03). */
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(syncNowButtonMessages)
   const label =
     phase === 'busy'
-      ? es ? 'Sincronizando…' : 'Syncing…'
+      ? m.syncing
       : onlyKey
-        ? es ? 'Sincronizar esta liga' : 'Sync this league'
-        : es ? 'Sincronizar' : 'Sync now'
+        ? m.syncThisLeague
+        : m.syncNow
   const hint = nothingToSync
-    ? es ? 'Importa una liga primero: aún no hay nada que sincronizar' : 'Import a league first — there is nothing to sync yet'
+    ? m.hintNothingToSync
     : onlyKey
-      ? es ? 'Actualiza plantillas, marcadores y actividad de esta liga' : 'Refresh rosters, scores and activity for this league'
-      : es ? 'Trae la actividad nueva de tus ligas conectadas' : 'Pick up new activity in your connected leagues'
+      ? m.hintThisLeague
+      : m.hintAll
 
   const button = (
     <button
@@ -126,7 +128,7 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey, syncAg
       {phase === 'busy'
         ? message
           ? syncMessageText(message, language)
-          : es ? 'Releyendo tus ligas…' : 'Re-reading your leagues…'
+          : m.rereading
         : syncMessageText(message, language)}
     </span>
   )
@@ -151,24 +153,24 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey, syncAg
   const ageLine = !syncAge
     ? null
     : never
-      ? es ? 'Aún no se ha sincronizado' : 'Not synced yet'
-      : es ? `Actualizado ${ageText(syncAge.label, 'es')}` : `Updated ${syncAge.label}`
+      ? m.notSyncedYet
+      : m.updated(ageText(syncAge.label, language))
   const showStatus = phase === 'busy' || Boolean(message)
   const titleCount = totalLeagues != null && totalLeagues > 0 ? totalLeagues : eligibleCount
   return (
     <section
       className="af-syncnow-panel"
-      aria-label={es ? 'Sincroniza tus ligas' : 'Sync your leagues'}
+      aria-label={m.panelLabel}
       data-stale={syncAge?.stale && !nothingToSync ? 'true' : undefined}
     >
       <span className="af-syncnow-panel-dot" aria-hidden />
       <div className="af-syncnow-panel-text">
         <span className="af-syncnow-panel-title">
           {nothingToSync && !totalLeagues
-            ? es ? 'Aún no hay ligas' : 'No leagues yet'
-            : es
-              ? titleCount == null ? 'Tus ligas' : `Tus ${titleCount} liga${titleCount === 1 ? '' : 's'}`
-              : titleCount == null ? 'Your leagues' : `Your ${titleCount} league${titleCount === 1 ? '' : 's'}`}
+            ? m.noLeaguesYet
+            : titleCount == null
+              ? m.yourLeagues
+              : m.yourCount(titleCount)}
         </span>
         {nothingToSync ? (
           /*
@@ -182,18 +184,11 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey, syncAg
                * that are paused. Not "import a league": they have leagues. Neutral, because which of
                * the two it is is not known here.
                */
-              es ? (
-                'Nada que sincronizar por ahora.'
-              ) : (
-                'Nothing to sync right now.'
-              )
-            ) : es ? (
-              <>
-                <a href="/import">Importa una liga</a> para empezar.
-              </>
+              m.nothingRightNow
             ) : (
               <>
-                <a href="/import">Import a league</a> to get started.
+                <a href="/import">{m.importALeague}</a>
+                {m.toGetStarted}
               </>
             )}
           </span>

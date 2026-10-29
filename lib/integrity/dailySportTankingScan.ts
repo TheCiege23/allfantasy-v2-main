@@ -9,11 +9,14 @@
  *   - the day's slot: `dailySlotFor` (daily lineups), else the week's saved lineup (`loadWeekLineups`);
  *     a player neither names has no known slot and is skipped;
  *   - who was on the team: `daysOnRoster` over the rows still rostered or dropped during the week;
- *   - who played: `buildWeekKickoffMap(...).byTeamDay`, the daily lock's own schedule read.
+ *   - which teams played: `buildWeekKickoffMap(...).byTeamDay`, the daily lock's own schedule read;
+ *   - which bench players played: their `player_daily_scores` line for the day (`loadPlayerDailyStats`,
+ *     the daily scorer's own read). The sync writes a line only for a day the player had a game, so a
+ *     bench player listed Out, or one who never got in, has none and is no alternative.
  */
 import type { PrismaClient } from '@prisma/client'
 import { DAILY_LINEUP_LOCK_SPORTS, buildWeekKickoffMap, lockTeamLookupKeys } from '@/lib/redraft/lineupLock'
-import { dailySlotFor, dayKey, daysInWindow, daysOnRoster, droppedInWindow, isDailyLineupScoringEnabled, loadDailyLineups } from '@/lib/redraft/dailyLineups'
+import { dailySlotFor, dayKey, daysInWindow, daysOnRoster, droppedInWindow, isDailyLineupScoringEnabled, loadDailyLineups, loadPlayerDailyStats, type PlayerDailyStats } from '@/lib/redraft/dailyLineups'
 import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
@@ -40,11 +43,25 @@ export async function loadDailySportIdleStarts(
   const [rows, weekLineups, dailyLineups] = await Promise.all([
     db.redraftRosterPlayer.findMany({
       where: { rosterId: { in: [...args.redraftRosterIds] }, ...droppedInWindow(window) },
-      select: { rosterId: true, playerId: true, slotType: true, position: true, team: true, addedAt: true, droppedAt: true },
+      select: { rosterId: true, playerId: true, sport: true, slotType: true, position: true, team: true, addedAt: true, droppedAt: true },
     }),
     loadWeekLineups(db, { redraftRosterIds: args.redraftRosterIds, season: args.season, week: args.week }),
     mode === 'daily' ? loadDailyLineups(db, { redraftRosterIds: args.redraftRosterIds, window }) : Promise.resolve(null),
   ])
+
+  // Per sport, as the daily scorer reads it. Weekly lineups need no bench alternative, so none is read.
+  const dailyStats = new Map<string, PlayerDailyStats>()
+  if (mode === 'daily') {
+    for (const playerSport of new Set(rows.map((r) => r.sport))) {
+      const playerIds = [...new Set(rows.filter((r) => r.sport === playerSport).map((r) => r.playerId))]
+      dailyStats.set(playerSport, await loadPlayerDailyStats(db, { playerIds, sport: playerSport, season: args.season, window }))
+    }
+  }
+  const sportOf = new Map(rows.map((r) => [r.playerId, r.sport]))
+  const played = (playerId: string, day: string): boolean | null => {
+    const stats = dailyStats.get(sportOf.get(playerId) ?? '')
+    return stats ? stats.get(playerId)?.has(day) === true : null
+  }
 
   const teamPlays = (team: string | null, day: string | null): boolean | null => {
     for (const key of lockTeamLookupKeys(sport, team)) {
@@ -74,7 +91,7 @@ export async function loadDailySportIdleStarts(
           },
         }
       })
-    const idle = findIdleStarts({ mode, days: dayKeys, players, teamPlays, isStarterSlot: isNflRedraftScoringStarterSlot, slotAccepts })
+    const idle = findIdleStarts({ mode, days: dayKeys, players, teamPlays, played, isStarterSlot: isNflRedraftScoringStarterSlot, slotAccepts })
     if (idle.length) byRoster.set(rosterId, idle)
   }
   return { mode, byRoster }

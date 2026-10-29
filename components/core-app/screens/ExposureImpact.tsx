@@ -5,6 +5,9 @@ import MiniPlayerImg from '@/components/MiniPlayerImg'
 import type { ExposureRow } from '@/lib/core-app/dash3aPanels'
 import type { ImpactSlot, LeagueImpactRow, PlayerLeagueImpact } from '@/lib/core-app/playerLeagueImpact'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { messagesFor } from '@/lib/i18n/messages'
+import { exposureImpactMessages } from '@/lib/core-app/messages/exposureImpact'
 import { impactReasonText, impactSlotText, placeholderNameText } from '@/lib/core-app/dashboard3aCopy'
 
 /**
@@ -36,24 +39,24 @@ const pct = (p: number) => `${Math.round(p * 100)}%`
  * (PortfolioBoard calls it that way).
  */
 export function impactText(row: LeagueImpactRow, language = 'en'): { text: string; title?: string; drop?: number } {
-  const es = language === 'es'
+  const m = messagesFor(exposureImpactMessages, language)
   const i = row.impact
   if (i.kind === 'priced') {
     const drop = Math.round((i.now - i.without) * 100)
     return { text: `${pct(i.now)} → ${pct(i.without)}${drop > 0 ? ` (−${drop})` : ''}`, drop }
   }
   if (i.kind === 'not_starting') {
-    return { text: es ? 'no está en la alineación de esta semana: no influye' : 'not in this week’s lineup — no effect' }
+    return { text: m.notInLineup }
   }
   return {
-    text: es ? 'no se puede calcular este enfrentamiento' : 'can’t price this matchup',
+    text: m.cantPrice,
     title: impactReasonText(i.reason, language),
   }
 }
 
 export function ExposureRowItem({ row }: { row: ExposureRow }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(exposureImpactMessages)
   const name = placeholderNameText(row.name, language)
   const [open, setOpen] = useState(false)
   const [load, setLoad] = useState<Load>({ state: 'idle' })
@@ -95,7 +98,7 @@ export function ExposureRowItem({ row }: { row: ExposureRow }) {
           />
         </span>
         <span className="af3a-exp-count af3a-mono">
-          {row.count} {es ? 'de' : 'of'} {row.of}
+          {row.count} {m.of} {row.of}
         </span>
         {canExpand ? (
           <button
@@ -105,34 +108,28 @@ export function ExposureRowItem({ row }: { row: ExposureRow }) {
             aria-controls={panelId}
             onClick={toggle}
           >
-            {es ? (open ? 'Ocultar' : 'Si no juega') : open ? 'Hide' : 'If he sits'}
+            {open ? m.hide : m.ifHeSits}
           </button>
         ) : null}
       </div>
 
       {open ? (
         <div id={panelId} className="af3a-exp-impact" aria-live="polite">
-          {load.state === 'loading' || load.state === 'idle' ? <p className="af3a-impact-note">{es ? 'Calculando tus enfrentamientos…' : 'Pricing your matchups…'}</p> : null}
+          {load.state === 'loading' || load.state === 'idle' ? <p className="af3a-impact-note">{m.pricing}</p> : null}
           {load.state === 'error' ? (
             <p className="af3a-impact-note">
-              {es
-                ? 'No pudimos cargar sus ligas ahora. Inténtalo de nuevo en un momento.'
-                : 'Couldn’t load his leagues right now. Try again in a moment.'}
+              {m.loadError}
             </p>
           ) : null}
           {load.state === 'ready' ? (
             load.data.rows.length === 0 ? (
               <p className="af3a-impact-note">
-                {es
-                  ? 'Ninguna de las plantillas que pudimos leer lo tiene esta semana.'
-                  : 'None of your rosters we could read hold him this week.'}
+                {m.noneHold}
               </p>
             ) : (
               <>
                 <p className="af3a-impact-note">
-                  {es
-                    ? 'Tu probabilidad de ganar esta semana: ahora → si no suma ni un punto más.'
-                    : 'Your win chance this week — now → if he scores 0 from here.'}
+                  {m.winChanceNote}
                 </p>
                 <ul className="af3a-impact-list">
                   {load.data.rows.map((r) => {
@@ -153,18 +150,7 @@ export function ExposureRowItem({ row }: { row: ExposureRow }) {
                     )
                   })}
                 </ul>
-                {load.data.notPriced > 0 && es ? (
-                  <p className="af3a-impact-note">
-                    {load.data.notPriced === 1
-                      ? '1 liga más sin calcular aquí: ábrela en la pantalla de Enfrentamiento.'
-                      : `${load.data.notPriced} ligas más sin calcular aquí: ábrelas en la pantalla de Enfrentamiento.`}
-                  </p>
-                ) : load.data.notPriced > 0 ? (
-                  <p className="af3a-impact-note">
-                    {load.data.notPriced} more league{load.data.notPriced === 1 ? '' : 's'} not priced here — open the
-                    Matchup screen for those.
-                  </p>
-                ) : null}
+                {load.data.notPriced > 0 ? <p className="af3a-impact-note">{m.notPriced(load.data.notPriced)}</p> : null}
               </>
             )
           ) : null}

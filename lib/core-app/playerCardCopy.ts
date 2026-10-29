@@ -479,7 +479,7 @@ export type WaiverEdgeCopy = {
 }
 
 /**
- * Spanish only — WaiverCompetitiveEdge keeps its English JSX as it was. "Ventaja competitiva" in the
+ * Spanish only — the English lives in lib/core-app/messages/waiverEdge.ts, whose `es` block reads these. "Ventaja competitiva" in the
  * heading, as Draft HQ's (`coreUiCopy('Competitive Edge · how the others draft')`); the lock keeps the
  * product name, as coreDepthLockCopy says. Claims are "reclamos" and bids "ofertas", the Waivers
  * screens' words (coreUiCopy, help-topics/waivers.ts).

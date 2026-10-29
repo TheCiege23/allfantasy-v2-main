@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { commissionerScreensMessages } from '@/lib/core-app/messages/commissionerScreens'
 import { RECAP_TEXT_MAX, type RecapDraft, type RecapReviewSettings } from '@/lib/recap-review/recapReview'
 
 /**
@@ -11,17 +12,17 @@ import { RECAP_TEXT_MAX, type RecapDraft, type RecapReviewSettings } from '@/lib
 
 type View = { review: RecapReviewSettings; chimmySpeaksUp: boolean; draft: RecapDraft | null }
 
-const ERRORS: Record<string, [string, string]> = {
-  chimmy_quiet: ['Chimmy is switched off for this league, so the recap cannot post. Turn Chimmy back on under Automations.', 'Chimmy está apagado en esta liga, así que el resumen no puede publicarse. Vuelve a activarlo en Automatizaciones.'],
-  already_posted: ['This week’s recap is already in league chat.', 'El resumen de esta semana ya está en el chat de la liga.'],
-  not_pending: ['This recap was already posted or discarded.', 'Este resumen ya se publicó o se descartó.'],
-  text_required: ['The recap cannot be empty. Discard it instead.', 'El resumen no puede quedar vacío. Descártalo.'],
+type M = typeof commissionerScreensMessages.en
+
+const ERRORS: Record<string, (m: M) => string> = {
+  chimmy_quiet: (m) => m.recapErrChimmyQuiet,
+  already_posted: (m) => m.recapErrAlreadyPosted,
+  not_pending: (m) => m.recapErrNotPending,
+  text_required: (m) => m.recapErrTextRequired,
 }
 
 export function WeeklyRecapReview({ leagueId }: { leagueId: string }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
-  const t = (en: string, spanish: string) => (es ? spanish : en)
+  const m = useMessages(commissionerScreensMessages)
   const endpoint = `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/weekly-recap`
 
   const [view, setView] = useState<View | null>(null)
@@ -54,7 +55,7 @@ export function WeeklyRecapReview({ leagueId }: { leagueId: string }) {
       const body = (await res.json().catch(() => null)) as { error?: string } | null
       if (!res.ok) {
         const known = body?.error ? ERRORS[body.error] : undefined
-        setMessage(known ? t(known[0], known[1]) : body?.error ?? `HTTP ${res.status}`)
+        setMessage(known ? known(m) : body?.error ?? `HTTP ${res.status}`)
         return
       }
       setMessage(done)
@@ -64,7 +65,7 @@ export function WeeklyRecapReview({ leagueId }: { leagueId: string }) {
     }
   }
 
-  if (!view) return <p className="af-ch-muted">{message ?? t('Loading…', 'Cargando…')}</p>
+  if (!view) return <p className="af-ch-muted">{message ?? m.commonLoading}</p>
   const { review, draft } = view
   const at = draft ? { season: draft.season, week: draft.week } : null
 
@@ -73,12 +74,9 @@ export function WeeklyRecapReview({ leagueId }: { leagueId: string }) {
       <ul className="af-ch-recipe-list">
         <li data-on={review.mode === 'review'}>
           <div className="af-ch-recipe-body">
-            <p className="af-ch-recipe-label">{t('Review the weekly recap before it posts', 'Revisar el resumen semanal antes de publicarlo')}</p>
+            <p className="af-ch-recipe-label">{m.recapTitle}</p>
             <p className="af-ch-recipe-desc">
-              {t(
-                'Tuesday’s recap waits here instead of posting. Fix a name, add a line about the week, then post it to league chat as Chimmy.',
-                'El resumen del martes espera aquí en lugar de publicarse. Corrige un nombre, agrega una línea sobre la semana y publícalo en el chat como Chimmy.',
-              )}
+              {m.recapDesc}
             </p>
             {review.mode === 'review' && (
               <label className="af-ch-recipe-meta" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -86,9 +84,9 @@ export function WeeklyRecapReview({ leagueId }: { leagueId: string }) {
                   type="checkbox"
                   checked={review.autoPostIfUntouched}
                   disabled={busy}
-                  onChange={(e) => call('PUT', { mode: 'review', autoPostIfUntouched: e.target.checked }, t('Saved.', 'Guardado.'))}
+                  onChange={(e) => call('PUT', { mode: 'review', autoPostIfUntouched: e.target.checked }, m.recapSaved)}
                 />
-                {t('If I don’t get to it, post it Wednesday morning as written', 'Si no llego, publicarlo el miércoles por la mañana tal cual')}
+                {m.recapAutoPost}
               </label>
             )}
           </div>
@@ -98,9 +96,9 @@ export function WeeklyRecapReview({ leagueId }: { leagueId: string }) {
               role="switch"
               checked={review.mode === 'review'}
               disabled={busy}
-              aria-label={t('Review the weekly recap before it posts', 'Revisar el resumen semanal antes de publicarlo')}
+              aria-label={m.recapTitle}
               onChange={(e) =>
-                call('PUT', { mode: e.target.checked ? 'review' : 'auto', autoPostIfUntouched: review.autoPostIfUntouched }, e.target.checked ? t('Recaps will wait for you.', 'Los resúmenes te esperarán.') : t('Recaps post automatically again.', 'Los resúmenes vuelven a publicarse solos.'))
+                call('PUT', { mode: e.target.checked ? 'review' : 'auto', autoPostIfUntouched: review.autoPostIfUntouched }, e.target.checked ? m.recapWillWait : m.recapAutoAgain)
               }
             />
             <span aria-hidden className="af-ch-switch-track">
@@ -111,12 +109,12 @@ export function WeeklyRecapReview({ leagueId }: { leagueId: string }) {
       </ul>
 
       {!view.chimmySpeaksUp && (
-        <p className="af-ch-recipes-banner">{t('Chimmy is switched off for this league, so no recap is written or posted.', 'Chimmy está apagado en esta liga, así que no se escribe ni publica ningún resumen.')}</p>
+        <p className="af-ch-recipes-banner">{m.recapChimmyOff}</p>
       )}
 
       {draft && at ? (
         <div style={{ marginTop: 12 }}>
-          <p className="af-ch-recipe-label">{t(`Week ${draft.week} recap — waiting for you`, `Resumen de la semana ${draft.week}: te espera`)}</p>
+          <p className="af-ch-recipe-label">{m.recapWaiting(draft.week)}</p>
           <textarea
             className="w-full rounded-lg bg-black/30 p-2 text-sm"
             style={{ marginTop: 8, minHeight: 220, fontFamily: 'inherit' }}
@@ -126,22 +124,22 @@ export function WeeklyRecapReview({ leagueId }: { leagueId: string }) {
             onChange={(e) => setText(e.target.value)}
           />
           <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="af-btn" disabled={busy || !text.trim()} onClick={() => call('POST', { action: 'post', ...at, text }, t('Posted to league chat.', 'Publicado en el chat de la liga.'))}>
-              {t('Post to league chat', 'Publicar en el chat')}
+            <button type="button" className="af-btn" disabled={busy || !text.trim()} onClick={() => call('POST', { action: 'post', ...at, text }, m.recapPosted)}>
+              {m.recapPost}
             </button>
-            <button type="button" className="af-btn" disabled={busy || !text.trim()} onClick={() => call('POST', { action: 'save', ...at, text }, t('Edit saved. It will not post until you post it.', 'Cambios guardados. No se publicará hasta que lo publiques.'))}>
-              {t('Save edit', 'Guardar cambios')}
+            <button type="button" className="af-btn" disabled={busy || !text.trim()} onClick={() => call('POST', { action: 'save', ...at, text }, m.recapEditSaved)}>
+              {m.recapSaveEdit}
             </button>
             <button type="button" className="af-btn" disabled={busy} onClick={() => setText(draft.generatedText)}>
-              {t('Reset to original', 'Volver al original')}
+              {m.recapReset}
             </button>
-            <button type="button" className="af-btn" disabled={busy} onClick={() => call('POST', { action: 'discard', ...at }, t('Discarded. Nothing posts this week.', 'Descartado. Esta semana no se publica nada.'))}>
-              {t('Skip this week', 'Saltar esta semana')}
+            <button type="button" className="af-btn" disabled={busy} onClick={() => call('POST', { action: 'discard', ...at }, m.recapDiscarded)}>
+              {m.recapSkip}
             </button>
           </div>
         </div>
       ) : review.mode === 'review' ? (
-        <p className="af-ch-recipe-desc" style={{ marginTop: 8 }}>{t('No recap waiting. The next one arrives Tuesday afternoon.', 'No hay resumen pendiente. El próximo llega el martes por la tarde.')}</p>
+        <p className="af-ch-recipe-desc" style={{ marginTop: 8 }}>{m.recapNoneWaiting}</p>
       ) : null}
 
       {message && <p role="status" className="af-ch-recipe-error">{message}</p>}

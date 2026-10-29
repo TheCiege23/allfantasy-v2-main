@@ -109,6 +109,8 @@ export type RuleSnapshot = {
   dangerMarginPoints?: number | null
   releaseTiming?: string | null
   faabOnChop?: string | null
+  /** Guilly: claims are held before each waiver run and settled as one blind FAAB auction (fixed by sport). */
+  blindAuction?: boolean | null
   /** Keeper leagues: `League.keeperCount`, `keeperCostSystem`, `keeperMaxYears`. */
   keeperCount?: number | null
   keeperCost?: string | null

@@ -186,6 +186,19 @@ describe('the Draft section says how the order is really seated', () => {
     expect(m.eligibility).not.toHaveBeenCalled()
   })
 
+  it('(a) draft_order_mode randomize with no saved method: nothing shuffles — the commissioner’s order', async () => {
+    m.state.league = baseLeague({ settings: { draft_order_mode: 'randomize' } })
+    const r = await loadDraftRules('L')
+    expect(r.draftOrderMethod).toBe('manual')
+    expect(draftOrderLine(r, 'en')).toBe('The commissioner sets the draft order, by hand or with a random draw.')
+  })
+
+  it('(a) pressing Randomize records draftOrderMethod randomized, and that one reads as a random draw', async () => {
+    m.state.league = baseLeague({ settings: { draft_order_mode: 'randomize' } })
+    m.state.ls = { draftOrderMethod: 'randomized' }
+    expect((await loadDraftRules('L')).draftOrderMethod).toBe('random')
+  })
+
   it('(a) and the saved order method still wins over the mode, as before', async () => {
     m.state.league = baseLeague({})
     m.state.ls = { draftOrderMethod: 'randomized' }
@@ -238,6 +251,10 @@ describe('the "What changed" card for a draft_order_mode change', () => {
 
   it('🛑 redraft manual → weighted_lottery: nothing the engine seats moves, so no false "→ weighted lottery" line', async () => {
     expect(await change({ settings: { draft_order_mode: 'manual' } }, { settings: { draft_order_mode: 'weighted_lottery' } })).toEqual([])
+  })
+
+  it('🛑 redraft manual → randomize: nothing is shuffled, so no false "→ Random draw" line', async () => {
+    expect(await change({ settings: { draft_order_mode: 'manual' } }, { settings: { draft_order_mode: 'randomize' } })).toEqual([])
   })
 
   it('dynasty: switching the rookie order onto the lottery is what moves the Draft section, and its line is true', async () => {
