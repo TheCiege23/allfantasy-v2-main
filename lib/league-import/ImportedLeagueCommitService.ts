@@ -313,7 +313,8 @@ function resolveImportedLeagueVariant(normalized: NormalizedImportResult): strin
   ).toUpperCase()
   const rosterPositions = Array.isArray(leagueData.roster_positions)
     ? (leagueData.roster_positions as unknown[])
-        .map((p) => String(p).toUpperCase())
+        /* ESPN and Fantrax store `SLOT:COUNT` pairs; `DL:2` is a DL slot. */
+        .map((p) => String(p).toUpperCase().replace(/:\d+$/, ''))
     : []
   const hasIdpSignal =
     scoringFormat.includes('IDP') ||

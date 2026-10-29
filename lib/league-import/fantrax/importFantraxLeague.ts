@@ -206,8 +206,15 @@ export async function importFantraxLeague(args: {
    * map names more players IS the sport. Hardcoding CFB made every NFL Fantrax
    * league look empty, which is why the tile could only ever claim college.
    */
+  /*
+   * ⚠ `isDevy` IS FALSE FOR EVERY SPORT, COLLEGE INCLUDED. It was `true` for the CFB map, which filed
+   * every college-football league — a plain college redraft league too — as devy (devy scoring label,
+   * `isDynasty`, the devy count in chat context). A college player pool says what SPORT a league is,
+   * not that it is devy, and `getLeagueInfo` carries no devy/dynasty flag (contracts/fantrax/GAPS.md
+   * F-06). The CSV upload's explicit checkbox remains the only way a Fantrax league becomes devy.
+   */
   const candidates = [
-    cfb.ok ? { sport: 'cfb' as const, isDevy: true, resolved: resolveRosters(rosters.data, refreshTarget?.sport === 'cfb' ? preserveSnapshotNames(cfb.data, refreshTarget.roster) : cfb.data) } : null,
+    cfb.ok ? { sport: 'cfb' as const, isDevy: false, resolved: resolveRosters(rosters.data, refreshTarget?.sport === 'cfb' ? preserveSnapshotNames(cfb.data, refreshTarget.roster) : cfb.data) } : null,
     nfl.ok ? { sport: 'nfl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nfl.data) } : null,
     mlb.ok ? { sport: 'mlb' as const, isDevy: false, resolved: resolveRosters(rosters.data, mlb.data) } : null,
     nba.ok ? { sport: 'nba' as const, isDevy: false, resolved: resolveRosters(rosters.data, nba.data) } : null,
