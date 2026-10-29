@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { formatRecord, type BoardTeam, type StandingsBoard } from '@/lib/core-app/standingsModel'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { standingsChartsMessages } from '@/lib/core-app/messages/standingsScreen'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
@@ -36,6 +38,7 @@ function niceBounds(values: number[]): [number, number] {
 
 function PointsScatter({ teams }: { teams: BoardTeam[] }) {
   const language = useOptionalLanguage().language
+  const m = useMessages(standingsChartsMessages)
   const copy = (value: string) => coreUiCopy(value, language)
   const [hover, setHover] = useState<string | null>(null)
   const rows = teams.filter((t) => t.pointsAgainst != null && t.weeksPlayed > 0)
@@ -59,9 +62,7 @@ function PointsScatter({ teams }: { teams: BoardTeam[] }) {
         <svg
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={language === 'es'
-            ? `Puntos a favor y en contra de ${rows.length} equipos. ${rows.map((t) => `${t.name}: ${pts(t.pointsFor)} a favor, ${pts(t.pointsAgainst!)} en contra`).join('; ')}.`
-            : `Points for against points against for ${rows.length} teams. ${rows.map((t) => `${t.name}: ${pts(t.pointsFor)} for, ${pts(t.pointsAgainst!)} against`).join('; ')}.`}
+          aria-label={m.scatterAria(rows.length, rows.map((t) => m.pointAria(t.name, pts(t.pointsFor), pts(t.pointsAgainst!))).join('; '))}
         >
           <line className="af-stb-grid" x1={PAD.l} x2={W - PAD.r} y1={H - PAD.b} y2={H - PAD.b} />
           <line className="af-stb-grid" x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={H - PAD.b} />
@@ -99,9 +100,7 @@ function PointsScatter({ teams }: { teams: BoardTeam[] }) {
               data-you={t.isYou ? 'true' : undefined}
               data-hover={t.rosterId === hover ? 'true' : undefined}
               tabIndex={0}
-              aria-label={language === 'es'
-                ? `${t.name}: ${pts(t.pointsFor)} a favor, ${pts(t.pointsAgainst!)} en contra`
-                : `${t.name}: ${pts(t.pointsFor)} for, ${pts(t.pointsAgainst!)} against`}
+              aria-label={m.pointAria(t.name, pts(t.pointsFor), pts(t.pointsAgainst!))}
               onPointerEnter={() => setHover(t.rosterId)}
               onPointerLeave={() => setHover(null)}
               onFocus={() => setHover(t.rosterId)}
@@ -150,6 +149,7 @@ function PointsScatter({ teams }: { teams: BoardTeam[] }) {
 
 function WinsVsExpected({ teams }: { teams: BoardTeam[] }) {
   const language = useOptionalLanguage().language
+  const m = useMessages(standingsChartsMessages)
   const copy = (value: string) => coreUiCopy(value, language)
   const rows = teams
     .filter((t) => t.weeksPlayed > 0)
@@ -179,9 +179,7 @@ function WinsVsExpected({ teams }: { teams: BoardTeam[] }) {
           aria-label={rows
             .map(
               ({ t, actual }) =>
-                language === 'es'
-                  ? `${t.name}: ${actual} victorias, ${t.expectedWins.toFixed(1)} esperadas, contra todos ${formatRecord(t.allPlay)}`
-                  : `${t.name}: ${actual} wins, ${t.expectedWins.toFixed(1)} expected, all-play ${formatRecord(t.allPlay)}`,
+                m.winsAria(t.name, actual, t.expectedWins.toFixed(1), formatRecord(t.allPlay)),
             )
             .join('; ')}
         >
@@ -199,9 +197,7 @@ function WinsVsExpected({ teams }: { teams: BoardTeam[] }) {
             const e = sx(t.expectedWins)
             return (
               <g key={t.rosterId} className="af-stb-dumbbell" data-you={t.isYou ? 'true' : undefined}>
-                <title>{language === 'es'
-                  ? `${t.name}: ${actual} victorias frente a ${t.expectedWins.toFixed(2)} esperadas (contra todos ${formatRecord(t.allPlay)})`
-                  : `${t.name}: ${actual} wins vs ${t.expectedWins.toFixed(2)} expected (all-play ${formatRecord(t.allPlay)})`}</title>
+                <title>{m.winsTitle(t.name, actual, t.expectedWins.toFixed(2), formatRecord(t.allPlay))}</title>
                 <text className="af-stb-rowlabel" x={LABEL - 10} y={cy + 4} textAnchor="end">
                   {t.name.length > 20 ? `${t.name.slice(0, 19)}…` : t.name}
                 </text>

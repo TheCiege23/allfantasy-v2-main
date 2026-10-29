@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { automationOverviewMessages } from '@/lib/core-app/messages/automationOverview'
 import type { AutomationOverviewView } from '@/lib/commissioner-hub/automationOverviewService'
 import type { AutomationGroup, AutomationRow } from '@/lib/commissioner-hub/automationOverview'
 
@@ -11,10 +13,10 @@ import type { AutomationGroup, AutomationRow } from '@/lib/commissioner-hub/auto
  * automation in the league, whether it is on, and a link to its switch. Read-only; each switch stays
  * on its own card or settings page.
  */
-const GROUPS: Array<[AutomationGroup, string, string]> = [
-  ['lineups', 'Lineups', 'Alineaciones'],
-  ['drafts', 'Drafts', 'Drafts'],
-  ['fairness', 'Fairness', 'Juego limpio'],
+const GROUPS: Array<[AutomationGroup, 'groupLineups' | 'groupDrafts' | 'groupFairness']> = [
+  ['lineups', 'groupLineups'],
+  ['drafts', 'groupDrafts'],
+  ['fairness', 'groupFairness'],
 ]
 
 const LABELS_ES: Record<string, string> = {
@@ -34,7 +36,7 @@ const LABELS_ES: Record<string, string> = {
 export function AutomationOverview({ leagueId }: { leagueId: string }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
-  const t = (en: string, esText: string) => (es ? esText : en)
+  const m = useMessages(automationOverviewMessages)
   const [view, setView] = useState<AutomationOverviewView | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -53,33 +55,30 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
   const rows = view?.supported ? view.rows : []
   const on = rows.filter((r) => r.state === 'on').length
   const stateText = (r: AutomationRow) =>
-    r.state === 'on' ? t('On', 'Activo') : r.state === 'needs_plan' ? t('AF Commissioner', 'AF Commissioner') : t('Off', 'Apagado')
+    r.state === 'on' ? m.stateOn : r.state === 'needs_plan' ? m.stateNeedsPlan : m.stateOff
 
   return (
     <section id="ch-automation-overview" className="af-tw af-tw-panel" data-testid="automation-overview">
-      <h2>{t('What runs itself', 'Lo que funciona solo')}</h2>
+      <h2>{m.title}</h2>
       {view === null ? (
-        <p role="status">{t('Loading…', 'Cargando…')}</p>
+        <p role="status">{m.loading}</p>
       ) : (
         <>
           <p>
-            {t(
-              `${on} of ${rows.length} automations are on. Each switch is on its own card or settings page; follow the link to change it.`,
-              `${on} de ${rows.length} automatizaciones están activas. Cada interruptor está en su propia tarjeta o página de ajustes; sigue el enlace para cambiarlo.`,
-            )}
+            {m.summary(on, rows.length)}
           </p>
-          {GROUPS.map(([group, en, esText]) => {
+          {GROUPS.map(([group, heading]) => {
             const inGroup = rows.filter((r) => r.group === group)
             if (inGroup.length === 0) return null
             return (
               <div key={group}>
-                <h3>{t(en, esText)}</h3>
+                <h3>{m[heading]}</h3>
                 <ul>
                   {inGroup.map((r) => (
                     <li key={r.key} data-testid={`automation-${r.key}`} data-state={r.state}>
                       <strong>{es ? LABELS_ES[r.key] ?? r.label : r.label}</strong> · {stateText(r)}
                       {r.detail && !es ? ` · ${r.detail}` : ''}{' '}
-                      {r.href.startsWith('#') ? <a href={r.href}>{t('Change', 'Cambiar')}</a> : <Link href={r.href}>{t('Change', 'Cambiar')}</Link>}
+                      {r.href.startsWith('#') ? <a href={r.href}>{m.change}</a> : <Link href={r.href}>{m.change}</Link>}
                     </li>
                   ))}
                 </ul>
