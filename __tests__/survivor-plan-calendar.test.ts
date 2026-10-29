@@ -47,7 +47,8 @@ describe('NFL plan calendar', () => {
       expect(planWeekWindow(sport, 2026, 5)).toEqual(resolveDailySportWeekWindow(sport, 2026, 5))
     }
     expect(isSurvivorPlanSport('NFL')).toBe(true)
-    expect(isSurvivorPlanSport('MLB')).toBe(false)
+    expect(isSurvivorPlanSport('MLB')).toBe(true)
+    expect(isSurvivorPlanSport('NCAAF')).toBe(false)
   })
 })
 
@@ -83,5 +84,29 @@ describe('Exile return week default', () => {
   it('still refuses a return week the commissioner chose that has already passed', () => {
     expect(() => buildSurvivorFullSeasonPlan({ sport: 'NFL', season: 2026, castSize: 12, now: new Date('2026-11-15T12:00:00Z'), exileEnabled: true, exileReturnWeek: 10 }))
       .toThrow('Exile return week must follow the opening week')
+  })
+})
+
+describe('MLB planned season', () => {
+  it('uses the daily-sport calendar from Opening Night to the published last day', () => {
+    const instant = new Date('2027-05-01T12:00:00Z')
+    expect(planWeekForInstant('MLB', 2027, instant)).toBe(dailySportWeekForInstant('MLB', 2027, instant))
+    expect(planWeekWindow('MLB', 2027, 5)).toEqual(resolveDailySportWeekWindow('MLB', 2027, 5))
+    expect(planSeasonOpener('MLB', 2027)).toBe('2027-03-24T00:00:00.000Z')
+    expect(planRegularSeasonLastDay('MLB', 2027)).toBe('2027-09-26')
+    expect(planRegularSeasonLastDay('MLB', 2028)).toBeNull()
+  })
+
+  it('a 20-manager MLB cast drafted before Opening Night fits the 2027 season', () => {
+    const plan = buildSurvivorFullSeasonPlan({ sport: 'MLB', season: 2027, castSize: 20, now: new Date('2027-03-10T12:00:00Z'), exileEnabled: true })
+    expect(plan.sport).toBe('MLB')
+    expect(plan.startWeek).toBe(1)
+    expect(plan.eliminationWeeks.length).toBeGreaterThan(0)
+    expect(plan.endWeek).toBe(planWeekForInstant('MLB', 2027, new Date('2027-09-26T16:00:00Z')))
+    expect(readSurvivorFullSeasonPlan({ survivor_full_season_plan: plan })).toEqual(plan)
+  })
+
+  it('an unverified MLB season is refused rather than guessed', () => {
+    expect(() => buildSurvivorFullSeasonPlan({ sport: 'MLB', season: 2028, castSize: 20, now: new Date('2028-03-01T12:00:00Z') })).toThrow('has not been verified')
   })
 })

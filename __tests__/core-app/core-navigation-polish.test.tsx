@@ -28,6 +28,12 @@ describe('league navigation regressions', () => {
     expect(push).toHaveBeenCalledExactlyOnceWith('/core/my-team?league=two')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
+  it('opens a native league directly from Viewing', () => {
+    render(<ScopeSwitcher leagues={[{ id: 'af-two', name: 'AF League', sport: 'NFL', platform: 'manual' }]} scopeValue={null} label="All leagues" selectedLeagueId={null} favoriteIds={[]} leagueScreen={false} />)
+    fireEvent.click(screen.getByRole('button', { name: /Viewing/ }))
+    fireEvent.click(screen.getByRole('link', { name: /AF League/ }))
+    expect(push).toHaveBeenCalledExactlyOnceWith('/league/af-two')
+  })
   it('makes All leagues explicitly bypass the remembered league landing', () => {
     render(<ScopeSwitcher leagues={[]} scopeValue={null} label="All leagues" selectedLeagueId={null} favoriteIds={[]} leagueScreen={false} />)
     fireEvent.click(screen.getByRole('button', { name: /Viewing/ }))

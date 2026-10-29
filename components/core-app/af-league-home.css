@@ -1570,3 +1570,6 @@
 .af-lh-team-directory li { display: flex; flex-direction: column; gap: 2px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
 .af-lh-team-directory li strong { overflow-wrap: anywhere; font-size: 13px; }
 .af-lh-team-directory li span, .af-lh-team-directory li small { color: var(--text2); font-size: 12px; }
+
+.af-lh-side:empty { display: none; }
+.af-lh-grid:has(> .af-lh-side:empty) { grid-template-columns: minmax(0, 1fr); }

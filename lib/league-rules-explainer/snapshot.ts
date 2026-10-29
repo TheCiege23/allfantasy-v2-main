@@ -12,9 +12,13 @@
  *   trade deadline time  readDeadlineAt (`settings.trade_deadline_at`)
  *   daily claim days     readDailyWaiverScheduleFromSettings
  *   guillotine endgame   resolveGuillotineEndgame; chop schedule readAdvanced; FAAB rule readFaabOnChop
+ *   dynasty family       isDynastyFamilyLeague; pick trading isDraftPickTradingAllowed; pick deadline
+ *                        readPickTradeDeadline; pick terms readPickTermsEnabled; taxi stealing
+ *                        readTaxiStealingRule; taxi seasons readTaxiMaxYears
+ *   imported playoffs    readPlayoffFormat (the import-aware reader the standings board uses)
  */
 
-import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
+import { readChosenPlayoffStartWeek, resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
@@ -24,8 +28,20 @@ import { isWaiverProcessingMode, readDailyWaiverScheduleFromSettings, WAIVER_DAY
 import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
 import { readAdvanced, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { readFaabOnChop } from '@/lib/guillotine/faabOnChop'
+import { isBlindAuctionLeague } from '@/lib/guillotine/blindWaiverCutoff'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
-import { RULES_EXPLAINER_SPORTS, type RuleSnapshot, type RulesFormat } from './types'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
+import { readPickTradeDeadline } from '@/lib/trade-deadline/pickTradeDeadline'
+import { readPickTermsEnabled } from '@/lib/league-trade-engine/pickTerms'
+import { readTaxiStealingRule } from '@/lib/taxi/taxiStealing'
+import { readTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
+import { supportsDailyLineups } from '@/lib/redraft/lineupModeSwitch'
+import { readPlayoffFormat } from '@/lib/core-app/outlookFormat'
+import { readTankingPenaltyPolicy } from '@/lib/integrity/tankingPenalties'
+import { readRookieDraftCalendarSettings } from '@/lib/dynasty-core/rookieDraftCalendar'
+import type { WeightedLotteryConfig } from '@/lib/draft-lottery/types'
+import { RULES_EXPLAINER_SPORTS, type RookieDraftLotteryRule, type RuleSnapshot, type RulesConcept, type RulesFormat, type TankingPenaltyRule } from './types'
 
 /** The `League` columns a snapshot reads. A full Prisma `League` row satisfies it. */
 export type RulesLeagueRow = {
@@ -50,29 +66,36 @@ export type RulesLeagueRow = {
   waiverBudget?: number | null
   waiverMinBid?: number | null
   waiverHours?: number | null
+  keeperCount?: number | null
+  keeperCostSystem?: string | null
+  keeperMaxYears?: number | null
+  draftPickTrading?: boolean | null
   settings?: unknown
 }
 
-/** Variants that are their own format — out of scope even when `leagueType` reads redraft. */
-const SPECIALTY_VARIANTS = new Set([
-  'survivor',
-  'survivor_guillotine',
-  'big_brother',
-  'zombie',
-  'best_ball',
-  'bestball',
-  'idp',
-  'dynasty_idp',
-  'devy_dynasty',
-  'merged_devy_c2c',
-  'salary_cap',
-  'contract_dynasty',
-  'keeper',
-  'dynasty',
-  'devy',
-  'c2c',
-  'tournament',
-])
+/**
+ * Formats that are their own game, explained by concept only (`specialty`). The variant or the league
+ * type names them; either is enough.
+ */
+const SPECIALTY_CONCEPTS: Record<string, RulesConcept> = {
+  survivor: 'survivor',
+  survivor_guillotine: 'survivor_guillotine',
+  big_brother: 'big_brother',
+  zombie: 'zombie',
+  tournament: 'tournament',
+  salary_cap: 'salary_cap',
+  contract_dynasty: 'salary_cap',
+  king_of_the_hill: 'king_of_the_hill',
+  koth: 'king_of_the_hill',
+  pirate: 'pirate_vampire',
+  vampire: 'pirate_vampire',
+  pirate_vampire: 'pirate_vampire',
+  royal: 'royal',
+}
+const BEST_BALL_VARIANTS = new Set(['best_ball', 'bestball'])
+const DEVY_VARIANTS = new Set(['devy_dynasty', 'devy'])
+const C2C_VARIANTS = new Set(['merged_devy_c2c', 'c2c'])
+const DYNASTY_VARIANTS = new Set(['dynasty', 'dynasty_idp', ...DEVY_VARIANTS, ...C2C_VARIANTS])
 
 function record(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
@@ -92,22 +115,57 @@ export function rulesSportOf(sport: unknown): string {
   return String(sport ?? '').trim().toUpperCase()
 }
 
-/** Redraft, guillotine, or null when the league is outside this feature's scope. */
-export function resolveRulesFormat(row: RulesLeagueRow): RulesFormat | null {
-  const variant = String(row.leagueVariant ?? '').trim().toLowerCase()
-  const type = String(row.leagueType ?? '').trim().toLowerCase()
-  if (variant === 'survivor_guillotine' || row.survivorMode) return null
-  if (row.guillotineMode === true || type === 'guillotine' || variant === 'guillotine') return 'guillotine'
-  if (SPECIALTY_VARIANTS.has(variant)) return null
-  if (row.isDynasty || row.bestBallMode) return null
-  return type === 'redraft' ? 'redraft' : null
+function lower(v: unknown): string {
+  return String(v ?? '').trim().toLowerCase()
 }
 
-/** In scope: an AllFantasy-hosted NFL / NBA / NHL redraft or guillotine league. */
+/** The specialty concept the variant or type names, if any. */
+function specialtyConcept(row: RulesLeagueRow): RulesConcept | null {
+  if (row.survivorMode) return lower(row.leagueVariant) === 'survivor_guillotine' ? 'survivor_guillotine' : 'survivor'
+  return SPECIALTY_CONCEPTS[lower(row.leagueVariant)] ?? SPECIALTY_CONCEPTS[lower(row.leagueType)] ?? null
+}
+
+/**
+ * The format the popup explains, or null when it cannot tell. Most specific first: a specialty game
+ * (Survivor Guillotine is Survivor, not a guillotine league), then guillotine, best ball, the dynasty
+ * family, keeper, redraft. IDP is a scoring modifier, not a format, so an `idp` variant on a redraft
+ * league is redraft.
+ */
+export function resolveRulesFormat(row: RulesLeagueRow): RulesFormat | null {
+  const variant = lower(row.leagueVariant)
+  const type = lower(row.leagueType)
+  if (specialtyConcept(row)) return 'specialty'
+  if (row.guillotineMode === true || type === 'guillotine' || variant === 'guillotine') return 'guillotine'
+  if (row.bestBallMode === true || BEST_BALL_VARIANTS.has(variant) || type === 'best_ball' || type === 'bestball') return 'best_ball'
+  if (isDynastyFamilyLeague(row) || DYNASTY_VARIANTS.has(variant)) return 'dynasty'
+  if (type === 'keeper' || variant === 'keeper') return 'keeper'
+  return type === 'redraft' || variant === 'redraft' || variant === 'idp' ? 'redraft' : null
+}
+
+/** The concept the overview names beyond the format: Devy / C2C within dynasty, or the specialty game. */
+export function resolveRulesConcept(row: RulesLeagueRow): RulesConcept | null {
+  const special = specialtyConcept(row)
+  if (special) return special
+  const variant = lower(row.leagueVariant)
+  const type = lower(row.leagueType)
+  if (C2C_VARIANTS.has(variant) || type === 'c2c') return 'c2c'
+  if (DEVY_VARIANTS.has(variant) || type === 'devy') return 'devy'
+  return null
+}
+
+/** In scope: an AllFantasy-hosted league in a sport we host, whose format the popup can name. */
 export function isRulesExplainerLeague(row: RulesLeagueRow): boolean {
   if (!isNativePlatform(row.platform ?? null)) return false
   if (!(RULES_EXPLAINER_SPORTS as readonly string[]).includes(rulesSportOf(row.sport))) return false
   return resolveRulesFormat(row) !== null
+}
+
+/**
+ * An imported league gets the popup too, built only from what an import carries. Its rules change on
+ * its platform, so it never has a "What changed" card.
+ */
+export function isImportedRulesLeague(row: RulesLeagueRow): boolean {
+  return !isNativePlatform(row.platform ?? null) && (RULES_EXPLAINER_SPORTS as readonly string[]).includes(rulesSportOf(row.sport))
 }
 
 function normalizedWaiverType(raw: unknown): string | null {
@@ -119,7 +177,31 @@ function normalizedWaiverType(raw: unknown): string | null {
   return null
 }
 
-function tradeReviewMode(settings: Record<string, unknown>): string | null {
+/**
+ * The waiver rules the claims ENGINE runs (`getEffectiveLeagueWaiverSettings`: the `LeagueWaiverSettings`
+ * row, or the sport's defaults). The popup used to read `League.waiverType` / `waiverBudget`, which the
+ * commissioner's Waivers panel never writes — it saves the row directly — so a switch to FAAB or a new
+ * budget there left the popup describing the old rules. A field the engine leaves unset is left out,
+ * so the League column stands.
+ */
+export function waiverRulesFromEffective(e: {
+  normalizedWaiverType?: string | null
+  waiverType?: string | null
+  faabBudget?: number | null
+  faabMinBid?: number | null
+}): Pick<RuleSnapshot, 'waiverType' | 'waiverBudget' | 'waiverMinBid'> {
+  const out: Pick<RuleSnapshot, 'waiverType' | 'waiverBudget' | 'waiverMinBid'> = {
+    waiverType: normalizedWaiverType(e.normalizedWaiverType ?? e.waiverType),
+  }
+  const budget = nonNegNumber(e.faabBudget)
+  if (budget != null) out.waiverBudget = budget
+  const minBid = nonNegNumber(e.faabMinBid)
+  if (minBid != null) out.waiverMinBid = minBid
+  return out
+}
+
+/** The trade review the popup shows. Exported for saves that write it outside the settings patch. */
+export function tradeReviewMode(settings: Record<string, unknown>): string | null {
   const json = record(settings.settingsJson)
   const raw = String(settings.trade_review_mode ?? settings.tradeReviewMode ?? json.tradeReviewMode ?? '').trim().toLowerCase()
   return ['commissioner', 'league_vote', 'instant', 'none'].includes(raw) ? raw : null
@@ -170,14 +252,37 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
     waiverHours: nonNegNumber(row.waiverHours),
     waiverDays: schedule?.enabled ? WAIVER_DAY_KEYS.filter((d) => isWaiverProcessingMode(schedule.days[d])) : null,
     waiverProcessHour: schedule?.enabled ? schedule.processHour : null,
-    lineupMode: sport === 'NBA' || sport === 'NHL' ? readLineupMode(row.settings, sport) : null,
+    lineupMode: supportsDailyLineups(sport) ? readLineupMode(row.settings, sport) : null,
+    concept: resolveRulesConcept(row),
+  }
+
+  if (format === 'keeper') {
+    snapshot.keeperCount = nonNegNumber(row.keeperCount)
+    snapshot.keeperCost = typeof row.keeperCostSystem === 'string' && row.keeperCostSystem.trim() ? row.keeperCostSystem.trim().toLowerCase() : null
+    snapshot.keeperMaxYears = posInt(row.keeperMaxYears)
+  }
+  if (format === 'keeper' || format === 'dynasty') {
+    snapshot.pickTrading = isDraftPickTradingAllowed(row)
+  }
+  if (format === 'dynasty') {
+    const pick = readPickTradeDeadline(row.settings)
+    snapshot.pickTradeDeadline = pick.mode === 'week' ? pick.week : pick.mode
+    snapshot.pickTerms = readPickTermsEnabled(row.settings)
+    const steal = readTaxiStealingRule(row.settings)
+    snapshot.taxiStealing = steal.enabled ? { hours: steal.protectHours, claims: steal.claimsPerSeason } : null
+    snapshot.taxiMaxYears = readTaxiMaxYears(row.settings)
+    // The rookie-draft order, rounds and type live on DynastyLeagueConfig (read path, ./load.ts).
+    snapshot.rookieDraftAutoStartDays = readRookieDraftCalendarSettings(row.settings).autoStartDays
+    snapshot.tankingPenalty = tankingPenaltyRule(row.settings)
   }
 
   if (format === 'guillotine') {
     snapshot.endgame = resolveGuillotineEndgame({ settings: row.settings, guillotineEndgame: row.guillotineEndgame ?? null }).format
     snapshot.faabOnChop = readFaabOnChop(row.settings)
+    // The waiver rule the claims hold enforces (lib/guillotine/blindWaiverCutoff.ts); the sport decides it.
+    snapshot.blindAuction = isBlindAuctionLeague({ sport: row.sport ?? null, guillotineMode: true, leagueVariant: 'guillotine' })
     Object.assign(snapshot, guillotineAdvancedSnapshot(readAdvanced(row.settings)))
-  } else {
+  } else if (format === 'redraft' || format === 'keeper' || format === 'dynasty') {
     snapshot.medianGame = row.medianGame === true
     snapshot.playoffTeams = playoffTeams
     snapshot.playoffStartWeek = playoffTeams
@@ -190,6 +295,53 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
     snapshot.thirdPlaceGame = playoffTeams ? readThirdPlaceGameEnabled(row.settings, sport, row.leagueVariant) : null
   }
   return snapshot
+}
+
+/** Sleeper-shaped settings nest the provider's league under a key; read through it as the rules card does. */
+function providerBundle(settings: unknown): Record<string, unknown> {
+  const s = record(settings)
+  const nested = record(s.sleeper ?? s.sleeperLeague ?? s.league)
+  return Object.keys(nested).length ? { ...s, ...nested } : s
+}
+
+/**
+ * An imported league's rules, from what its import carries and nothing else.
+ *
+ * ⚠ ITS `League` COLUMNS ARE SCHEMA DEFAULTS, NOT RULES. An import never writes `waiverBudget`,
+ * `tradeReviewHours` or `playoffTeams`, so reading them would state a $100 budget or a 48-hour review
+ * the platform does not run. Only the format, the scoring preset, the roster positions and the playoff
+ * field (read by `readPlayoffFormat`, the import-aware reader the standings board uses) are taken.
+ */
+export function importedRuleSnapshot(row: RulesLeagueRow): RuleSnapshot {
+  const sport = rulesSportOf(row.sport)
+  const teamCount = posInt(row.leagueSize)
+  const bundle = providerBundle(row.settings)
+  const positions = Array.isArray(bundle.roster_positions) ? bundle.roster_positions : []
+  const slots: Record<string, number> = {}
+  for (const p of positions) {
+    const key = String(p ?? '').trim().toUpperCase()
+    if (key) slots[key] = (slots[key] ?? 0) + 1
+  }
+  const playoff = teamCount ? readPlayoffFormat(bundle, Math.max(2, teamCount)) : null
+  const playoffTeams = playoff && playoff.playoffTeamsSource === 'league' ? playoff.playoffTeams : null
+  return {
+    sport,
+    format: resolveRulesFormat(row),
+    concept: resolveRulesConcept(row),
+    importedFrom: lower(row.platform) || null,
+    teamCount,
+    scoringPreset: typeof row.scoring === 'string' && row.scoring.trim() ? row.scoring.trim().toLowerCase() : null,
+    rosterSlots: normalizeRosterSlots(slots),
+    playoffTeams,
+    // The week after the regular season, as readPlayoffFormat reads it (Sleeper's `playoff_week_start`,
+    // ESPN's `regular_season_length`); the native JSON copies otherwise.
+    playoffStartWeek: playoffTeams
+      ? playoff!.regularSeasonEndWeek != null
+        ? playoff!.regularSeasonEndWeek + 1
+        : readChosenPlayoffStartWeek({ settings: bundle })
+      : null,
+    playoffByes: playoffTeams && playoff!.byeSource === 'league' ? playoff!.byeTeams : null,
+  }
 }
 
 /** Roster slot counts with empty slots dropped, so `{ BN: 0 }` and `{}` are the same roster. */
@@ -237,5 +389,202 @@ export function guillotineRulesSnapshot(rules: GuillotineRulesLike, startWeek?: 
     dangerMarginPoints: nonNegNumber(rules.dangerMarginPoints),
     releaseTiming: rules.rosterReleaseTiming ?? null,
     faabOnChop: rules.faabOnChop ?? null,
+  }
+}
+
+/** A dynasty league's tanking penalty, as the rule members read. */
+export function tankingPenaltyRule(settings: unknown): TankingPenaltyRule {
+  const p = readTankingPenaltyPolicy(settings)
+  return {
+    enabled: p.enabled,
+    penalty: p.penalty,
+    atStrike: p.pickAtStrike,
+    pickRound: p.pickRound,
+    lotteryOddsCutPct: p.lotteryOddsCutPct,
+    faabPercent: p.faabPercent,
+  }
+}
+
+/**
+ * The rookie draft order the draft ENGINE seats from, which is not always the dynasty config's method.
+ * The engine (`lib/live-draft-engine/DraftSessionService.ts`) applies, highest first: the weighted
+ * lottery (`rookiePickOrderMethod: 'weighted_lottery'`); the live rookie order
+ * (`settings.rookie_draft_order.live`, AF Commissioner); the automatic order the commissioner switched
+ * on (`settings.rookie_draft_order {enabled, mode}`). The popup used to print the dynasty config's
+ * method whatever the engine did, so it could say "reverse max PF" over a draft seated worst record
+ * first. Only when none of those is on does the config's own method stand.
+ */
+export function effectiveRookieDraftOrder(configMethod: string | null | undefined, leagueSettings: unknown): string | null {
+  if (configMethod === 'weighted_lottery') return configMethod
+  const rookie = record(record(leagueSettings).rookie_draft_order)
+  if (record(rookie.live).enabled === true) return 'live'
+  if (rookie.enabled === true) return rookie.mode === 'reverse_max_pf' ? 'auto_reverse_max_pf' : 'auto_worst_to_first'
+  return configMethod ?? null
+}
+
+/**
+ * A dynasty league's rookie-draft rules from its DynastyLeagueConfig row. No row reads the same
+ * defaults the dynasty settings page shows. Shared by the popup and the dynasty settings save.
+ */
+export function dynastyRulesFromConfig(
+  c: { rookiePickOrderMethod?: string | null; rookieDraftRounds?: number | null; rookieDraftType?: string | null } | null,
+): Pick<RuleSnapshot, 'rookieDraftOrder' | 'rookieDraftRounds' | 'rookieDraftType'> {
+  return {
+    rookieDraftOrder: c?.rookiePickOrderMethod ?? 'max_pf',
+    rookieDraftRounds: c?.rookieDraftRounds ?? 4,
+    rookieDraftType: c?.rookieDraftType ?? 'linear',
+  }
+}
+
+/** `dynastyRulesFromConfig` with the rookie order the draft engine seats from (`effectiveRookieDraftOrder`). */
+export function effectiveDynastyRules(
+  c: Parameters<typeof dynastyRulesFromConfig>[0],
+  leagueSettings: unknown,
+): ReturnType<typeof dynastyRulesFromConfig> {
+  const rules = dynastyRulesFromConfig(c)
+  return { ...rules, rookieDraftOrder: effectiveRookieDraftOrder(rules.rookieDraftOrder, leagueSettings) }
+}
+
+// Maps, not object literals: a stored `constructor` must not read as a known value.
+const LOTTERY_ODDS = new Map<string, RookieDraftLotteryRule['odds']>([
+  ['inverse_standings', 'record'],
+  ['inverse_points_for', 'points_for'],
+  ['inverse_max_pf', 'max_pf'],
+  ['custom_weights', 'equal'], // computeWeight gives every team weight 1
+])
+const LOTTERY_POOLS = new Map<string, RookieDraftLotteryRule['pool']>([
+  ['non_playoff', 'non_playoff'],
+  ['bottom_n', 'worst'],
+  ['all_teams', 'worst'],
+  ['custom', 'worst'], // selectEligibleTeams reads `custom` as `all_teams`
+])
+const LOTTERY_REST = new Map<string, RookieDraftLotteryRule['rest']>([
+  ['reverse_standings', 'reverse_standings'],
+  ['reverse_max_pf', 'reverse_max_pf'],
+  ['manual', 'reverse_standings'], // buildFullSlotOrder has no commissioner order to read
+])
+const LOTTERY_TIEBREAKS = new Map<string, NonNullable<RookieDraftLotteryRule['tiebreak']>>([
+  ['lower_points_for', 'points_for'],
+  ['lower_max_pf', 'max_pf'],
+  ['seeded_random', 'random'],
+])
+
+/**
+ * The rookie lottery as a rule, from the parsed `draft_lottery_config` (readDraftOrderModeAndLotteryConfig)
+ * and the rookie order. Null unless the rookie draft is ordered by the lottery
+ * (`ensureRookieDraftLottery` runs it only then), or when any part of the config has no reading in
+ * the engine — a rule the popup cannot state exactly is not stated at all.
+ *
+ * Each field is mapped to what the draw DOES (see RookieDraftLotteryRule), so a save that changes a
+ * stored value without changing the draw — `custom` → `all_teams`, `manual` → `reverse_standings`,
+ * `bottomN` (which the engine never reads) — publishes no change. `allowCommissionerOverride` is not
+ * described: no engine path reads it. `tiebreakMode` is, now that a tie has one meaning everywhere the
+ * engine reads it (`applyTiebreak`); a value it does not know is sorted as `lower_points_for`, so it
+ * reads as that here.
+ */
+export function rookieDraftLotteryRule(
+  rookieOrder: string | null | undefined,
+  c: Pick<WeightedLotteryConfig, 'lotteryTeamCount' | 'lotteryPickCount' | 'eligibilityMode' | 'weightingMode' | 'fallbackOrder' | 'tiebreakMode'> | null | undefined,
+): RookieDraftLotteryRule | null {
+  if (rookieOrder !== 'weighted_lottery' || !c) return null
+  const teams = posInt(c.lotteryTeamCount)
+  const picks = posInt(c.lotteryPickCount)
+  const pool = LOTTERY_POOLS.get(String(c.eligibilityMode))
+  const odds = LOTTERY_ODDS.get(String(c.weightingMode))
+  const rest = LOTTERY_REST.get(String(c.fallbackOrder))
+  if (!teams || !picks || !pool || !odds || !rest) return null
+  const tiebreak = LOTTERY_TIEBREAKS.get(String(c.tiebreakMode)) ?? 'points_for'
+  return { teams, picks: Math.min(picks, teams), pool, odds, rest, tiebreak }
+}
+
+/**
+ * A dynasty league's taxi squad from getEffectiveTaxiSettings (lib/taxi/TaxiSettingsService), which
+ * applies the Devy / C2C slot override. Shared by the popup and the dynasty settings save, so a save
+ * that does not move the effective squad publishes no change.
+ */
+export function taxiRulesFromEffective(
+  t: { taxiSlotCount: number; taxiEligibilityYears: number; taxiDeadlineWeek: number | null },
+): Pick<RuleSnapshot, 'taxiSlots' | 'taxiEligibilityYears' | 'taxiDeadlineWeek'> {
+  return { taxiSlots: t.taxiSlotCount, taxiEligibilityYears: t.taxiEligibilityYears, taxiDeadlineWeek: t.taxiDeadlineWeek }
+}
+
+/**
+ * The main draft's rules, already read from their stores by ./loadDraftRules.ts. Pure: this decides
+ * what each value MEANS (a setting that changes nothing is not stated), the loader decides where it
+ * lives.
+ */
+export type DraftRuleInputs = {
+  /** `DraftSession.draftModeLabel` of the current draft; `rookie` = a dynasty rookie draft. */
+  sessionLabel: string | null
+  /** `DraftSession.status`; null before a session exists. */
+  sessionStatus: string | null
+  /** Engine type: snake, linear or auction. */
+  draftType: string | null
+  rounds: number | null
+  /** Seconds per pick (an auction: per bid), as the room runs it; null = no clock. */
+  pickSeconds: number | null
+  thirdRoundReversal: boolean | null
+  /** `draftUISettings.timerMode`: per_pick, soft_pause, overnight_pause, none. */
+  timerMode: string | null
+  pauseWindow: { start?: unknown; end?: unknown } | null
+  picksDuringPause: boolean
+  /** `draftUISettings.autoPickEnabled` — gates every expired-clock pick. */
+  autoPickEnabled: boolean
+  /** The session's (else LeagueSettings') CPU autopick for an absent manager. */
+  cpuAutoPick: boolean
+  /** `config.autopick_behavior`: `skip` skips a pick with nothing usable in the queue. */
+  autopickBehavior: string | null
+  /** Resolved order method: weighted_lottery, random, manual, standings, reverse_standings. */
+  orderMethod: string | null
+  /** The auction engine's budget and minimum bid (getAuctionConfigFromSession). */
+  auction: { budget: number; minBid: number } | null
+  startAt: string | null
+  /** `LeagueSettings.autostart`, or a league whose scheduled draft starts at its time regardless. */
+  autostart: boolean
+  orphanEnabled: boolean
+  orphanMode: string | null
+}
+
+const MAIN_DRAFT_TYPES = new Set(['snake', 'linear', 'auction'])
+const MAIN_DRAFT_ORDERS = new Set(['weighted_lottery', 'random', 'manual', 'standings', 'reverse_standings'])
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+
+function draftStatusOf(status: string | null): RuleSnapshot['draftStatus'] {
+  if (status === 'completed') return 'completed'
+  if (status === 'in_progress' || status === 'paused') return 'in_progress'
+  return 'scheduled'
+}
+
+export function draftRulesFromInputs(i: DraftRuleInputs): Partial<RuleSnapshot> {
+  // A dynasty rookie draft is the Dynasty section's (rookieDraft* keys), never this one.
+  if (lower(i.sessionLabel) === 'rookie') return {}
+  const type = MAIN_DRAFT_TYPES.has(lower(i.draftType)) ? lower(i.draftType) : null
+  const seconds = i.timerMode === 'none' ? null : posInt(i.pickSeconds)
+  const from = typeof i.pauseWindow?.start === 'string' ? i.pauseWindow.start : ''
+  const to = typeof i.pauseWindow?.end === 'string' ? i.pauseWindow.end : ''
+  let onTimeout: string | null = null
+  if ((type === 'snake' || type === 'linear') && seconds) {
+    // processExpiredDraftPicks: no pick when auto-pick is off, the clock is soft, or the session's
+    // CPU autopick is off; `skip` skips a pick whose queue has nothing usable; else queue → best.
+    if (!i.autoPickEnabled || i.timerMode === 'soft_pause' || !i.cpuAutoPick) onTimeout = 'wait'
+    else onTimeout = lower(i.autopickBehavior) === 'skip' ? 'skip' : 'autopick'
+  }
+  const startAt = typeof i.startAt === 'string' && Number.isFinite(Date.parse(i.startAt)) ? i.startAt : null
+  return {
+    draftStatus: draftStatusOf(i.sessionStatus),
+    draftType: type,
+    draftRounds: posInt(i.rounds),
+    draftPickSeconds: seconds,
+    draftOvernightPause:
+      seconds && i.timerMode === 'overnight_pause' && HHMM.test(from) && HHMM.test(to) ? { from, to, picksAllowed: i.picksDuringPause === true } : null,
+    draftOnTimeout: onTimeout,
+    // An auction has no pick order: the nomination order is not what this setting decides.
+    draftOrderMethod: type !== 'auction' && MAIN_DRAFT_ORDERS.has(lower(i.orderMethod)) ? lower(i.orderMethod) : null,
+    draftThirdRoundReversal: type === 'snake' ? i.thirdRoundReversal === true : null,
+    draftAuctionBudget: type === 'auction' ? posInt(i.auction?.budget) : null,
+    draftAuctionMinBid: type === 'auction' ? posInt(i.auction?.minBid) : null,
+    draftStartAt: startAt,
+    draftAutostart: startAt ? i.autostart === true : null,
+    draftOrphanPicks: i.orphanEnabled ? (i.orphanMode === 'ai' ? 'ai' : 'cpu') : null,
   }
 }

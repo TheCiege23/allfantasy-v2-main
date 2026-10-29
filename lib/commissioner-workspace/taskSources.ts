@@ -330,6 +330,8 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
     const { readPickTermsTasks } = await import('@/lib/league-trade-engine/pickTermsService')
     // Open taxi steal claims (lib/taxi/taxiStealing.ts).
     const { readTaxiStealTasks } = await import('@/lib/taxi/taxiStealingService')
+    // Managers who have not seen the newest rule change (lib/league-rules-explainer/awareness.ts).
+    const { readUnseenRuleChangeTasks } = await import('@/lib/league-rules-explainer/awarenessService')
     return [
       ...(orphans ? [orphans] : []),
       ...await readOperationalTasks(leagueId, now),
@@ -340,6 +342,7 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
       ...await readOrphanAuctionTasks(leagueId, now),
       ...await readPickTermsTasks(leagueId),
       ...await readTaxiStealTasks(leagueId, now),
+      ...await readUnseenRuleChangeTasks(leagueId, now),
     ]
   }
 

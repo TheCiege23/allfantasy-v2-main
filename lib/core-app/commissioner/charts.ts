@@ -21,10 +21,12 @@
  * Client-safe: no Prisma.
  *
  * Every chart takes the reader's language (default English) and writes its title, subtitle,
- * takeaway and bar labels in it — see `pickLanguage`. Team and manager names are data and stay.
+ * takeaway and bar labels in it — the sentences live in `messages/commissionerBuilders.ts`. Team and
+ * manager names are data and stay.
  */
 
-import { pickLanguage } from './pickLanguage'
+import { messagesFor } from '@/lib/i18n/messages'
+import { commissionerBuildersMessages } from '../messages/commissionerBuilders'
 
 export type ChartBar = {
   label: string
@@ -102,7 +104,7 @@ export function weeklyBuckets(rows: ActivityRow[], now: Date, weeks: number): Ar
 const ACTIVITY_WEEKS = 8
 
 export function activityChart(rows: ActivityRow[], now: Date, language = 'en'): HubChart {
-  const L = pickLanguage(language)
+  const m = messagesFor(commissionerBuildersMessages, language)
   const buckets = weeklyBuckets(rows, now, ACTIVITY_WEEKS)
   const total = buckets.reduce((n, b) => n + b.rows.length, 0)
   const last = buckets[buckets.length - 1].rows.length
@@ -110,11 +112,8 @@ export function activityChart(rows: ActivityRow[], now: Date, language = 'en'): 
   const avg = prior.length ? prior.reduce((n, b) => n + b.rows.length, 0) / prior.length : 0
   return {
     key: 'activity',
-    title: L('League activity', 'Actividad de la liga'),
-    subtitle: L(
-      `Trades, waiver claims and roster moves per week · last ${ACTIVITY_WEEKS} weeks`,
-      `Intercambios, reclamos y cambios de plantilla por semana · últimas ${ACTIVITY_WEEKS} semanas`,
-    ),
+    title: m.chartActivityTitle,
+    subtitle: m.chartActivitySubtitle(ACTIVITY_WEEKS),
     bars: buckets.map((b, i) => ({
       label: shortDate(b.start, language),
       value: b.rows.length,
@@ -123,23 +122,20 @@ export function activityChart(rows: ActivityRow[], now: Date, language = 'en'): 
     })),
     takeaway:
       total === 0
-        ? L('No moves imported in the last eight weeks.', 'No se importó ningún movimiento en las últimas ocho semanas.')
-        : L(
-            `${last} ${last === 1 ? 'move' : 'moves'} this week, against ${avg.toFixed(1)} a week before that.`,
-            `${last} ${last === 1 ? 'movimiento' : 'movimientos'} esta semana, frente a ${avg.toFixed(1)} por semana antes.`,
-          ),
+        ? m.chartActivityNone
+        : m.chartActivityTakeaway(last, avg),
   }
 }
 
 export function tradesChart(rows: ActivityRow[], now: Date, language = 'en'): HubChart {
-  const L = pickLanguage(language)
+  const m = messagesFor(commissionerBuildersMessages, language)
   const trades = rows.filter((r) => r.activityType === 'trade')
   const buckets = weeklyBuckets(trades, now, ACTIVITY_WEEKS)
   const total = buckets.reduce((n, b) => n + b.rows.length, 0)
   return {
     key: 'trades',
-    title: L('Trades', 'Intercambios'),
-    subtitle: L(`Completed trades per week · last ${ACTIVITY_WEEKS} weeks`, `Intercambios cerrados por semana · últimas ${ACTIVITY_WEEKS} semanas`),
+    title: m.chartTradesTitle,
+    subtitle: m.chartTradesSubtitle(ACTIVITY_WEEKS),
     bars: buckets.map((b) => ({
       label: shortDate(b.start, language),
       value: b.rows.length,
@@ -148,8 +144,8 @@ export function tradesChart(rows: ActivityRow[], now: Date, language = 'en'): Hu
     })),
     takeaway:
       total === 0
-        ? L('No trades in eight weeks.', 'Ningún intercambio en ocho semanas.')
-        : L(`${total} ${total === 1 ? 'trade' : 'trades'} in eight weeks.`, `${total} ${total === 1 ? 'intercambio' : 'intercambios'} en ocho semanas.`),
+        ? m.chartTradesNone
+        : m.chartTradesTakeaway(total),
   }
 }
 
@@ -163,7 +159,7 @@ export type ManagerRef = { key: string; name: string }
  * by a manager who has since left is real activity, just not attributable.
  */
 export function waiverParticipationChart(rows: ActivityRow[], managers: ManagerRef[], language = 'en'): HubChart {
-  const L = pickLanguage(language)
+  const m = messagesFor(commissionerBuildersMessages, language)
   const byKey = new Map(managers.map((m) => [m.key, m.name]))
   const counts = new Map<string, number>()
   let claims = 0
@@ -184,16 +180,13 @@ export function waiverParticipationChart(rows: ActivityRow[], managers: ManagerR
   const participating = bars.filter((b) => b.value > 0).length
   return {
     key: 'waivers',
-    title: L('Waiver participation', 'Participación en agentes libres'),
-    subtitle: L('Waiver claims by manager · this season', 'Reclamos por mánager · esta temporada'),
+    title: m.chartWaiversTitle,
+    subtitle: m.chartWaiversSubtitle,
     bars,
     takeaway:
       managers.length === 0
         ? null
-        : L(
-            `${participating} of ${managers.length} managers have made a claim${claims > 0 ? ` · ${claims} claims in all` : ''}.`,
-            `${participating} de ${managers.length} mánagers han hecho un reclamo${claims > 0 ? ` · ${claims} reclamos en total` : ''}.`,
-          ),
+        : m.chartWaiversTakeaway(participating, managers.length, claims),
   }
 }
 
@@ -216,7 +209,7 @@ export type BalanceTeam = { name: string; wins: number; losses: number; ties: nu
  * calibration behind it.
  */
 export function balanceChart(teams: BalanceTeam[], language = 'en'): HubChart | null {
-  const L = pickLanguage(language)
+  const m = messagesFor(commissionerBuildersMessages, language)
   const played = teams.filter((t) => t.wins + t.losses + t.ties > 0 || t.pointsFor > 0)
   if (played.length < 2) return null
   const sorted = [...played].sort((a, b) => b.pointsFor - a.pointsFor)
@@ -226,8 +219,8 @@ export function balanceChart(teams: BalanceTeam[], language = 'en'): HubChart | 
   const games = Math.max(...played.map((t) => t.wins + t.losses + t.ties))
   return {
     key: 'balance',
-    title: L('Competitive balance', 'Equilibrio competitivo'),
-    subtitle: L('Points for by team, with record', 'Puntos a favor por equipo, con su récord'),
+    title: m.chartBalanceTitle,
+    subtitle: m.chartBalanceSubtitle,
     bars: sorted.map((t, i) => ({
       label: t.name,
       value: Math.round(t.pointsFor),
@@ -237,10 +230,7 @@ export function balanceChart(teams: BalanceTeam[], language = 'en'): HubChart | 
     takeaway:
       games === 0
         ? null
-        : L(
-            `${Math.round(top - bottom).toLocaleString('en-US')} points separate the top and bottom scorers; win totals vary by ±${winsSd.toFixed(1)} over ${games} ${games === 1 ? 'game' : 'games'}.`,
-            `${Math.round(top - bottom).toLocaleString('en-US')} puntos separan al que más anota del que menos; las victorias varían ±${winsSd.toFixed(1)} en ${games} ${games === 1 ? 'partido' : 'partidos'}.`,
-          ),
+        : m.chartBalanceTakeaway(top - bottom, winsSd, games),
   }
 }
 
@@ -256,7 +246,7 @@ export function scoringChart(
   progress?: { currentWeek: number | null; complete: boolean },
   language = 'en',
 ): HubChart | null {
-  const L = pickLanguage(language)
+  const m = messagesFor(commissionerBuildersMessages, language)
   const certified = progress?.complete === true || progress?.currentWeek != null
   const byWeek = new Map<number, number[]>()
   for (const r of rows) {
@@ -272,22 +262,19 @@ export function scoringChart(
     const pts = byWeek.get(w) as number[]
     const avg = pts.reduce((a, b) => a + b, 0) / pts.length
     return {
-      label: L(`Wk ${w}`, `Sem ${w}`),
+      label: m.chartScoringWeekLabel(w),
       value: Math.round(avg * 10) / 10,
-      display: L(`${avg.toFixed(1)} avg · ${Math.max(...pts).toFixed(1)} high`, `${avg.toFixed(1)} media · ${Math.max(...pts).toFixed(1)} máx.`),
+      display: m.chartScoringBarDisplay(avg, Math.max(...pts)),
       tone: 'accent',
     }
   })
   const latest = byWeek.get(weeks[weeks.length - 1]) as number[]
   return {
     key: 'scoring',
-    title: L('Scoring', 'Puntuación'),
-    subtitle: certified ? L('Average team score per completed week', 'Puntuación media por equipo en cada semana completada') : L('Recorded weekly scores · may include a week in progress', 'Puntuaciones semanales registradas · puede incluir una semana en curso'),
+    title: m.chartScoringTitle,
+    subtitle: certified ? m.chartScoringSubtitleCertified : m.chartScoringSubtitleRecorded,
     bars,
-    takeaway: L(
-      `Week ${weeks[weeks.length - 1]}: high ${Math.max(...latest).toFixed(1)}, low ${Math.min(...latest).toFixed(1)}.`,
-      `Semana ${weeks[weeks.length - 1]}: máximo ${Math.max(...latest).toFixed(1)}, mínimo ${Math.min(...latest).toFixed(1)}.`,
-    ),
+    takeaway: m.chartScoringTakeaway(weeks[weeks.length - 1], Math.max(...latest), Math.min(...latest)),
   }
 }
 
@@ -295,7 +282,7 @@ export function engagementChart(
   managers: Array<{ status: 'active' | 'at_risk' | 'inactive' | 'unknown' }>,
   language = 'en',
 ): HubChart | null {
-  const L = pickLanguage(language)
+  const m = messagesFor(commissionerBuildersMessages, language)
   if (managers.length === 0) return null
   const count = (s: string) => managers.filter((m) => m.status === s).length
   const active = count('active')
@@ -303,16 +290,16 @@ export function engagementChart(
   const inactive = count('inactive')
   const unknown = count('unknown')
   const bars: ChartBar[] = [
-    { label: L('Active', 'Activos'), value: active, display: String(active), tone: 'good' },
-    { label: L('Slowing down', 'Bajando el ritmo'), value: atRisk, display: String(atRisk), tone: 'warn' },
-    { label: L('Inactive', 'Inactivos'), value: inactive, display: String(inactive), tone: 'bad' },
+    { label: m.chartEngagementActive, value: active, display: String(active), tone: 'good' },
+    { label: m.chartEngagementSlowing, value: atRisk, display: String(atRisk), tone: 'warn' },
+    { label: m.chartEngagementInactive, value: inactive, display: String(inactive), tone: 'bad' },
   ]
-  if (unknown > 0) bars.push({ label: L('Can’t tell', 'No se sabe'), value: unknown, display: String(unknown), tone: 'muted' })
+  if (unknown > 0) bars.push({ label: m.chartEngagementUnknown, value: unknown, display: String(unknown), tone: 'muted' })
   return {
     key: 'engagement',
-    title: L('Manager engagement', 'Participación de los mánagers'),
-    subtitle: L('Active vs. inactive managers · 14-day window', 'Mánagers activos e inactivos · últimos 14 días'),
+    title: m.chartEngagementTitle,
+    subtitle: m.chartEngagementSubtitle,
     bars,
-    takeaway: L(`${active} of ${managers.length} managers are active.`, `${active} de ${managers.length} mánagers están activos.`),
+    takeaway: m.chartEngagementTakeaway(active, managers.length),
   }
 }

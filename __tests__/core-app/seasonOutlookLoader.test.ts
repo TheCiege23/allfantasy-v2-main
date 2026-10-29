@@ -292,6 +292,32 @@ describe('getSeasonOutlook', () => {
     expect(out.leagues[0]?.weeksRemaining).toBe(0)
   })
 
+  /*
+   * Sleeper median leagues (`league_average_match = 1`) play the week's median as a second game. In
+   * this seed roster 5 is 2-0-1 head to head and finishes 4th, 4th and level-4th of eight: two median
+   * wins and a median tie. The platform's record is 4-0-2; the outlook must say the same.
+   */
+  it('counts the median game in the current record when the league states it', async () => {
+    const median = { ...LEAGUE, settings: { ...LEAGUE.settings, league_average_match: 1 } }
+    const out = await getSeasonOutlook('me', [median])
+    expect(out.leagues[0].you).toMatchObject({ wins: 4, losses: 0, ties: 2 })
+    // Three weeks left, each two games.
+    expect(out.leagues[0].milestones?.totalGames).toBe(12)
+  })
+
+  it('infers the median game from platform records that played two games a week', async () => {
+    for (const t of h.teams) Object.assign(t, { wins: 3, losses: 2, ties: 1 })
+    const you = (await getSeasonOutlook('me', [LEAGUE])).leagues[0].you!
+    expect(you).toMatchObject({ wins: 4, losses: 0, ties: 2 })
+  })
+
+  it('leaves a league without the median game at its head-to-head record', async () => {
+    for (const t of h.teams) Object.assign(t, { wins: 2, losses: 0, ties: 1 })
+    const out = await getSeasonOutlook('me', [LEAGUE])
+    expect(out.leagues[0].you).toMatchObject({ wins: 2, losses: 0, ties: 1 })
+    expect(out.leagues[0].milestones?.totalGames).toBe(6)
+  })
+
   it('withholds a league with too few modelled teams, and says why', async () => {
     h.matchups = h.matchups.filter((r) => (r.week as number) > 3)
     const out = await getSeasonOutlook('me', [LEAGUE])

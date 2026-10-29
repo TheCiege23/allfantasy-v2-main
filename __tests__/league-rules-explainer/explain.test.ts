@@ -1,7 +1,8 @@
 /**
  * The league rules explainer (lib/league-rules-explainer): hand-written, deterministic lines for
- * NFL / NBA / NHL redraft and guillotine leagues, in English and Spanish, built with the app's own
- * translations. Unknown keys and values are omitted — never shown raw.
+ * redraft and guillotine leagues, in English and Spanish, built with the app's own translations.
+ * Unknown keys and values are omitted — never shown raw. The other formats, sports and imported
+ * leagues are in ./all-formats.test.ts.
  */
 import { describe, expect, it } from 'vitest'
 import { translations } from '@/lib/i18n/translations'
@@ -124,16 +125,21 @@ function withGuillotineConfig(row: RulesLeagueRow): RuleSnapshot {
 }
 
 describe('scope', () => {
-  it('covers native NFL / NBA / NHL redraft and guillotine leagues only', () => {
+  // Widened 2026-10-28 (owner): every hosted sport and every format; imported leagues are served
+  // separately (isImportedRulesLeague) and covered in ./all-formats.test.ts.
+  it('covers every native league in a hosted sport whose format it can name', () => {
     expect(isRulesExplainerLeague(NFL_REDRAFT)).toBe(true)
     expect(isRulesExplainerLeague(NBA_REDRAFT)).toBe(true)
     expect(isRulesExplainerLeague(guillotineRow('NHL'))).toBe(true)
-    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, sport: 'MLB' })).toBe(false)
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, sport: 'MLB' })).toBe(true)
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueType: 'dynasty' })).toBe(true)
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueVariant: 'survivor' })).toBe(true)
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, bestBallMode: true })).toBe(true)
     expect(isRulesExplainerLeague({ ...NFL_REDRAFT, platform: 'sleeper' })).toBe(false)
-    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueType: 'dynasty' })).toBe(false)
-    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueVariant: 'survivor' })).toBe(false)
-    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, bestBallMode: true })).toBe(false)
-    expect(resolveRulesFormat({ leagueType: 'redraft', leagueVariant: 'survivor_guillotine', guillotineMode: true })).toBeNull()
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, sport: 'CRICKET' })).toBe(false)
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueType: 'mystery' })).toBe(false)
+    // Survivor Guillotine is Survivor's game, not a guillotine league.
+    expect(resolveRulesFormat({ leagueType: 'redraft', leagueVariant: 'survivor_guillotine', guillotineMode: true })).toBe('specialty')
   })
 })
 
@@ -229,6 +235,38 @@ describe('full rules — NHL categories redraft', () => {
     expectClean(es)
     expect(es).toContain('Cuentan 4 categorías: G, A, SOG, SV%.')
     expect(es).toContain('Los reclamos siguen la clasificación inversa: reclama primero el equipo más bajo de la clasificación.')
+  })
+})
+
+/*
+ * The blind FAAB auction (2026-10-29): in these sports a Guilly league holds claims before each waiver
+ * run and settles them together, highest bid first (lib/guillotine/blindWaiverCutoff.ts). It is the
+ * waiver rule a manager most needs to know on chop day, and the explainer never said it.
+ */
+describe('the blind FAAB auction', () => {
+  const BLIND = 'Waiver claims are blind: in the hours before each waiver run, bids are hidden and held, then settled together, highest bid first. A chopped team’s players go to the highest bidder, not the fastest.'
+  it.each(['NFL', 'NBA', 'MLB', 'NHL'])('a %s Guilly league explains it, in English and Spanish', (sport) => {
+    const snapshot = withGuillotineConfig(guillotineRow(sport))
+    expect(snapshot.blindAuction).toBe(true)
+    const sections = explainLeagueRules(snapshot)
+    expect(render(sections, 'en')).toContain(BLIND)
+    const es = render(sections, 'es')
+    expectClean(es)
+    expect(es.join(' ')).toContain('Los reclamos son a ciegas')
+    expect(es.join(' ')).not.toMatch(/waiver/i)
+  })
+
+  it('a Guilly league in a sport without it, and a redraft league, say nothing about it', () => {
+    const college = withGuillotineConfig(guillotineRow('NCAAF'))
+    expect(college.blindAuction).toBe(false)
+    expect(render(explainLeagueRules(college), 'en')).not.toContain(BLIND)
+    const redraft = ruleSnapshotFromLeague({ ...guillotineRow('NFL'), leagueType: 'redraft', leagueVariant: 'redraft', guillotineMode: false })
+    expect(redraft.blindAuction).toBeUndefined()
+    expect(render(explainLeagueRules(redraft), 'en')).not.toContain(BLIND)
+  })
+
+  it('is not a rule a commissioner change can name: the sport decides it', () => {
+    expect(CHANGEABLE_RULE_KEYS).not.toContain('blindAuction' as never)
   })
 })
 

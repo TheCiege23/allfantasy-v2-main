@@ -544,7 +544,8 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
           }),
         })
         const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
-        if (!res.ok) throw new Error(data.error || 'Failed to apply unified action')
+        // A refused action comes back as { ok: false, message } (e.g. the league locked that area).
+        if (!res.ok) throw new Error(data.error || data.message || 'Failed to apply unified action')
         toast.success(data.message || 'Commissioner action applied')
         await refreshAll()
       } catch (e: any) {

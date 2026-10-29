@@ -1,9 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { leagueWorkspaceHref } from '@/lib/league/league-workspace-navigation'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { useMemo, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { groupLeagueHubs } from '@/lib/core-app/leagueHubGroups'
 import { leagueSportCounts, leagueSportKey, leagueSportLabel } from '@/lib/core-app/leagueSports'
@@ -563,13 +566,12 @@ function LeagueCard({
   tier: MyLeaguesTier
   view: ViewMode
 }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(coreWidgetsMessages)
   const chips = league.chips ?? []
   const tone = league.priority === 'urgent' ? 'bad' : league.reason ? 'warn' : null
   const dashboardLabel = league.actionLabel && league.actionLabel !== 'Open league'
     ? league.actionLabel
-    : es ? 'Panel de la liga' : 'League dashboard'
+    : m.myLeaguesDashboard
 
   return (
     <article className="af-ml-card" data-tier={tier} data-tone={tone ?? undefined} data-view={view}>
@@ -623,12 +625,9 @@ function LeagueCard({
       ) : null}
 
       <div className="af-ml-card-actions">
-        <Link href={league.hub?.href ?? league.href} className="af-ml-open">
-          {league.hub ? (es ? 'Abrir centro compartido →' : 'Open shared hub →') : dashboardLabel}
+        <Link href={league.hub?.href ?? (isNativePlatform(league.platform) ? leagueEntryHref(league) : league.href)} className="af-ml-open">
+          {league.hub ? m.myLeaguesOpenHub : isNativePlatform(league.platform) ? m.myLeaguesOpenLeague : dashboardLabel}
         </Link>
-        {!league.hub ? (
-          <Link href={leagueWorkspaceHref(league.id)} className="af-ml-open af-ml-open--workspace">{es ? 'Abrir liga ↗' : 'Open League ↗'}</Link>
-        ) : null}
       </div>
     </article>
   )

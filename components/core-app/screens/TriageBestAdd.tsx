@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { coreTriageMessages } from '@/lib/core-app/messages/coreTriage'
+import { messagesFor } from '@/lib/i18n/messages'
 
 /**
  * "Add Puka Nacua (WR, +6.1 pts) in Guillotine League 26" — the triage card's free-agent button, upgraded
@@ -43,13 +45,14 @@ export function bestAddFrom(board: Board | null | undefined): BestAdd | null {
 
 /** The button's words: the add itself, nobody worth adding, or the plain search it started as. */
 export function bestAddCtaText(add: BestAdd | null, leagueName: string, es: boolean): string {
-  if (!add) return es ? `Buscar agentes libres en ${leagueName}` : `Find free agents in ${leagueName}`
+  const m = messagesFor(coreTriageMessages, es ? 'es' : 'en')
+  if (!add) return m.bestAddSearch(leagueName)
   if (add.kind === 'none') {
-    return es ? `Ningún agente libre mejora tu alineación en ${leagueName}` : `No free agent beats your lineup in ${leagueName}`
+    return m.bestAddNone(leagueName)
   }
   const pts = `+${add.gain.toFixed(1)} pts`
   const detail = add.position ? `${add.position}, ${pts}` : pts
-  return es ? `Añadir a ${add.name} (${detail}) en ${leagueName}` : `Add ${add.name} (${detail}) in ${leagueName}`
+  return m.bestAddAdd(add.name, detail, leagueName)
 }
 
 /** The Waivers deep link: that league, the player highlighted, priced with the injured starter at zero. */

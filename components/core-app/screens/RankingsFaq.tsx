@@ -25,6 +25,7 @@ import {
   WIN_RATE_PRIOR_GAMES,
 } from '@/lib/core-app/rankingsEngine'
 import '@/components/core-app/af-rankings-screen.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * How ranking works — handoff 14b.
@@ -194,7 +195,7 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
                     margin: '6px 0 5px',
                   }}
                 >
-                  {t.minXp.toLocaleString()}
+                  {t.minXp.toLocaleString(getAppIntlLocale())}
                 </span>
                 <span style={{ fontFamily: 'inherit', fontWeight: 400, fontSize: 11 }}>
                   {TIER_FLAVOUR[t.group]}
@@ -208,7 +209,7 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
             {you
               ? `You're at level ${you.level} of ${you.totalLevels} — ${you.levelName}.` +
                 (you.xpToNext != null && you.nextLevelName
-                  ? ` ${you.nextLevelName} needs ${(you.xp + you.xpToNext).toLocaleString()} XP, so ${you.xpToNext.toLocaleString()} to go: titles move it fastest, seasons alone would take years.`
+                  ? ` ${you.nextLevelName} needs ${(you.xp + you.xpToNext).toLocaleString(getAppIntlLocale())} XP, so ${you.xpToNext.toLocaleString(getAppIntlLocale())} to go: titles move it fastest, seasons alone would take years.`
                   : ' There is no rung above this one.')
               : data.signedIn
                 ? 'Your career has not been ranked yet, so there is no position to mark here. The thresholds above are the same for everyone.'
@@ -323,7 +324,7 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
             {data.ladder.reduce((n, t) => n + (t.lastLevel - t.firstLevel + 1), 0)} levels grouped
             into {data.ladder.length} tiers: {data.ladder.map((t) => t.tier).join(', ')}. Level{' '}
             {data.ladder[data.ladder.length - 1].firstLevel} starts at{' '}
-            {data.ladder[data.ladder.length - 1].minXp.toLocaleString()} XP. Thresholds are fixed —
+            {data.ladder[data.ladder.length - 1].minXp.toLocaleString(getAppIntlLocale())} XP. Thresholds are fixed —
             you&apos;re never ranked against other people for your level.
           </p>
         </section>

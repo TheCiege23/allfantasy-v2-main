@@ -5,6 +5,8 @@ import type { RecentTradeGradeParts } from './recentTrades'
 import type { Next24OddsParts } from './todayStrip'
 import { coreUiCopy } from './coreUiCopy'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { messagesFor } from '@/lib/i18n/messages'
+import { homeBandsMessages } from './messages/homeBands'
 
 /**
  * The /core home's bands in Spanish (2026-10-04): the words the LOADERS write — dash34's first-kickoff
@@ -74,15 +76,14 @@ export function firstLockText(lock: FirstLock): FirstLockText | null {
  * server keeps `Date.now()`, so both sides of hydration agree on it.
  */
 export function coarseCountdownText(mins: number, language: string): string {
-  const es = language === 'es'
-  if (mins <= 0) return es ? 'en curso' : 'underway'
-  if (mins < 60) return es ? `en ${mins} min` : `in ${mins}m`
+  const m = messagesFor(homeBandsMessages, language)
+  if (mins <= 0) return m.underway
+  if (mins < 60) return m.inMinutes(mins)
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return es ? `en ${hours} h` : `in ${hours}h`
+  if (hours < 24) return m.inHours(hours)
   const days = Math.floor(hours / 24)
   const rem = hours - days * 24
-  if (es) return rem > 0 ? `en ${days} d ${rem} h` : `en ${days} d`
-  return rem > 0 ? `in ${days}d ${rem}h` : `in ${days}d`
+  return rem > 0 ? m.inDaysHours(days, rem) : m.inDays(days)
 }
 
 /* ── dash34: Chimmy's brief ──────────────────────────────────────────────────────────────────── */

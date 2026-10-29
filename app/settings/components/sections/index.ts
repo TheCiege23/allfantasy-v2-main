@@ -11,3 +11,5 @@ export { LegalSettingsSection } from "./LegalSettingsSection"
 export { AccountSettingsSection } from "./AccountSettingsSection"
 export { BillingSettingsSection } from "./BillingSettingsSection"
 export type { SettingsProfile, SettingsOnSave } from "./settings-types"
+
+export { LeagueSectionsSettingsSection } from "./LeagueSectionsSettingsSection"

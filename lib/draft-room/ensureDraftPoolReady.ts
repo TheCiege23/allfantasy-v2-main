@@ -433,6 +433,33 @@ export function ensureDraftPoolReady(leagueId: string): Promise<EnsureDraftPoolR
   return build
 }
 
+/**
+ * Waits for a pool build this process is already running for `leagueId`, if any, so a caller
+ * that is about to build the same pool can read the row that build writes instead.
+ *
+ * ⚠ The draft-room page fires `triggerDraftPoolPrewarmBackground` and the room's first
+ * `GET /draft/pool` arrives a moment later. The GET had its own in-flight map, so a brand-new
+ * league ran two full builds of the same pool at once on one thread (part of the 30s+ first load
+ * reported 2026-10-28). Capped at `maxWaitMs` so a stuck build cannot hang the request; on timeout
+ * or failure the caller simply falls through to building it itself, as before.
+ */
+export async function waitForInFlightDraftPoolBuild(leagueId: string, maxWaitMs = 60_000): Promise<boolean> {
+  const build = inFlightPoolBuilds.get(leagueId)
+  if (!build) return false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      build.catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, maxWaitMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+  return true
+}
+
 /** Test seam: how many league builds this process is running right now. */
 export function inFlightDraftPoolBuildCount(): number {
   return inFlightPoolBuilds.size

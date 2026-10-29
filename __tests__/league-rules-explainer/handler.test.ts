@@ -76,11 +76,31 @@ describe('GET', () => {
     expect(m.prisma.league.findUnique).not.toHaveBeenCalled()
   })
 
-  it('reports out-of-scope leagues as unsupported (MLB, imported, dynasty)', async () => {
-    for (const league of [{ ...NFL, sport: 'MLB' }, { ...NFL, platform: 'sleeper' }, { ...NFL, leagueType: 'dynasty' }]) {
+  it('reports a league it cannot explain as unsupported (an unhosted sport, an unknown format)', async () => {
+    for (const league of [{ ...NFL, sport: 'CRICKET' }, { ...NFL, leagueType: 'mystery' }, { ...NFL, platform: 'sleeper', sport: 'CRICKET' }]) {
       m.league = league
       expect(await (await GET(req(), ctx)).json()).toEqual({ supported: false })
     }
+  })
+
+  it('serves an imported league from what its import carries, never its schema-default columns, with no change cards', async () => {
+    m.league = { ...NFL, platform: 'sleeper', settings: { roster_positions: ['QB', 'RB', 'RB', 'WR', 'BN'], playoff_teams: 4 } }
+    m.events = [{ id: 'e9', createdAt: '2026-10-02T00:00:00.000Z', actorUserId: 'commish', changes: [{ key: 'tradeDeadlineWeek', before: 12, after: 13 }] }]
+    const body = await (await GET(req(), ctx)).json()
+    expect(body.supported).toBe(true)
+    expect(body.sections.map((s: { id: string }) => s.id)).toEqual(['overview', 'scoring', 'roster', 'playoffs'])
+    expect(body.pendingChanges).toEqual([])
+    expect(body.history).toEqual([])
+    const { loadRuleSnapshot, loadSettingsChangeEvents } = await import('@/lib/league-rules-explainer/load')
+    expect(loadRuleSnapshot).not.toHaveBeenCalled()
+    expect(loadSettingsChangeEvents).not.toHaveBeenCalled()
+  })
+
+  it('a native dynasty league gets its dynasty rules', async () => {
+    m.league = { ...NFL, leagueType: 'dynasty', draftPickTrading: true, settings: { pick_trade_deadline: { mode: 'open' } } }
+    const body = await (await GET(req(), ctx)).json()
+    expect(body.format).toBe('dynasty')
+    expect(body.sections.map((s: { id: string }) => s.id)).toEqual(['overview', 'scoring', 'dynasty', 'playoffs', 'trades', 'waivers'])
   })
 
   it('a member who has not seen the rules gets the popup', async () => {

@@ -8,6 +8,7 @@
 
 import type {
   ChangeGroup,
+  RookieDraftLotteryRule,
   ChangeLine,
   RuleChange,
   RuleKey,
@@ -43,13 +44,37 @@ const FAAB_ON_CHOP = new Set(['keep', 'split'])
 const IMMUNITY = new Set(['off', 'top_scorer'])
 const TIEBREAKS = new Set(['bench_points', 'season_points', 'previous_period', 'draft_slot', 'commissioner', 'random'])
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
+const ROOKIE_ORDERS = new Set(['max_pf', 'reverse_standings', 'commissioner', 'weighted_lottery', 'live', 'auto_worst_to_first', 'auto_reverse_max_pf'])
+const DRAFT_TYPES = new Set(['linear', 'snake'])
+/** The main draft (./loadDraftRules.ts). */
+const MAIN_DRAFT_TYPES = new Set(['snake', 'linear', 'auction'])
+const MAIN_DRAFT_ORDERS = new Set(['weighted_lottery', 'random', 'manual', 'standings', 'reverse_standings'])
+const DRAFT_TIMEOUTS = new Set(['autopick', 'skip', 'wait'])
+const ORPHAN_DRAFTERS = new Set(['ai', 'cpu'])
+const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
+const TANKING_PENALTIES = new Set(['forfeit_pick', 'lottery_odds', 'faab'])
+const KEEPER_COSTS = new Set(['round_based', 'inflation', 'auction_value', 'free'])
+const PLATFORMS = new Set(['sleeper', 'espn', 'yahoo', 'mfl', 'fleaflicker', 'fantrax', 'cbs'])
+
+type TaxiSteal = { hours: number; claims: number }
+const isTaxiSteal = (v: unknown): v is TaxiSteal =>
+  !!v && typeof v === 'object' && isPosInt((v as TaxiSteal).hours) && isNum((v as TaxiSteal).claims) && Number.isInteger((v as TaxiSteal).claims) && (v as TaxiSteal).claims >= 0
 
 /** The stats worth a line per sport, in reading order. Keys are the scoring engine's stat keys. */
 export const HEADLINE_STATS: Record<string, readonly string[]> = {
   NFL: ['passing_td', 'interception', 'rushing_td', 'receptions', 'receiving_td'],
   NBA: ['points', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'three_pointers_made'],
   NHL: ['goal', 'assist', 'shot_on_goal', 'blocked_shot', 'power_play_point', 'save', 'goal_allowed', 'win', 'shutout'],
+  NCAAF: ['passing_td', 'interception', 'rushing_td', 'receptions', 'receiving_td'],
+  NCAAB: ['points', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'three_pointers_made'],
+  // MLB's `win` is a pitcher win and NHL's is a goalie win: they share a stat key but not a sentence,
+  // so MLB lists no `win` rather than calling it a goalie win.
+  MLB: ['home_run', 'rbi', 'run', 'stolen_base', 'strikeouts_pitched', 'save'],
+  SOCCER: ['goal', 'assist', 'clean_sheet', 'save', 'yellow_card', 'red_card'],
 }
+
+/** Sports scored like American football, where a catch can be worth points. */
+const RECEPTION_SPORTS = new Set(['NFL', 'NCAAF'])
 
 const BENCH_SLOTS = new Set(['BN', 'BENCH'])
 const RESERVE_SLOTS = new Set(['IR', 'IR_PLUS', 'IL', 'IL_PLUS', 'RESERVE'])
@@ -86,6 +111,18 @@ function splitSlots(slots: Record<string, number> | null | undefined): SlotSplit
 const week = (n: number): RuleText => text('v.week', { n })
 const money = (n: number): RuleText => text('v.money', { n })
 
+/** 90 -> "90 seconds", 120 -> "2 minutes", 28800 -> "8 hours", 86400 -> "1 day". */
+function duration(sec: number): RuleText {
+  if (sec % 86400 === 0) return plural('v.days', sec / 86400)
+  if (sec % 3600 === 0) return plural('v.hours', sec / 3600)
+  if (sec % 60 === 0) return plural('v.minutes', sec / 60)
+  return plural('v.seconds', sec)
+}
+
+type OvernightPause = { from: string; to: string; picksAllowed: boolean }
+const isOvernightPause = (v: unknown): v is OvernightPause =>
+  !!v && typeof v === 'object' && CLOCK_TIME.test(String((v as OvernightPause).from)) && CLOCK_TIME.test(String((v as OvernightPause).to))
+
 function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot, 'sport'>): RuleText | null {
   if (value === null || value === undefined) {
     switch (key) {
@@ -99,6 +136,21 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       case 'chopSteps':
       case 'chopOverrides':
         return text('v.noSpecialWeeks')
+      case 'taxiStealing':
+        return text('v.off')
+      case 'taxiMaxYears':
+        return text('v.noLimit')
+      case 'taxiDeadlineWeek':
+        return text('v.noDeadline')
+      case 'rookieDraftAutoStartDays':
+        return text('v.autoStart.off')
+      case 'draftPickSeconds':
+        return text('v.noClock')
+      case 'draftOvernightPause':
+      case 'draftOrphanPicks':
+        return text('v.off')
+      case 'draftStartAt':
+        return text('v.notScheduled')
       default:
         return null
     }
@@ -131,7 +183,25 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       return isNum(value) && Number.isInteger(value) && value >= 0 && value <= 23 ? text('v.hourOfDay', { h: value }) : null
     case 'medianGame':
     case 'thirdPlaceGame':
+    case 'pickTrading':
+    case 'pickTerms':
       return typeof value === 'boolean' ? text(value ? 'v.on' : 'v.off') : null
+    case 'keeperCount':
+      return isNum(value) && Number.isInteger(value) && value >= 0 ? plural('v.players', value) : null
+    case 'keeperMaxYears':
+    case 'taxiMaxYears':
+    case 'taxiEligibilityYears':
+      return isPosInt(value) ? plural('v.seasons', value) : null
+    case 'taxiSlots':
+      return isNum(value) && Number.isInteger(value) && value >= 0 ? text('v.count', { n: value }) : null
+    case 'taxiDeadlineWeek':
+      return isPosInt(value) ? week(value) : null
+    case 'keeperCost':
+      return typeof value === 'string' && KEEPER_COSTS.has(value) ? text(`keeperCost.${value}`) : null
+    case 'pickTradeDeadline':
+      return value === 'same' || value === 'open' ? text(`pickDeadline.${value}`) : isPosInt(value) ? text('pickDeadline.week', { week: value }) : null
+    case 'taxiStealing':
+      return isTaxiSteal(value) ? plural('v.protectHours', value.hours) : null
     case 'tradeDeadlineAt':
       return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? text('v.date', { date: { date: value } }) : null
     case 'waiverType':
@@ -185,9 +255,96 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       const items = overrideItems(value)
       return items ? (items.length ? text('v.list', { list: { list: items } }) : text('v.noSpecialWeeks')) : null
     }
+    case 'rookieDraftOrder':
+      return typeof value === 'string' && ROOKIE_ORDERS.has(value) ? text(`v.rookieOrder.${value}`) : null
+    case 'rookieDraftType':
+      return typeof value === 'string' && DRAFT_TYPES.has(value) ? text(`v.draftType.${value}`) : null
+    case 'rookieDraftRounds':
+      return isPosInt(value) ? plural('v.rounds', value) : null
+    case 'rookieDraftAutoStartDays':
+      return isPosInt(value) ? text('v.autoStart.days', { n: value }) : null
+    case 'draftType':
+      return typeof value === 'string' && MAIN_DRAFT_TYPES.has(value) ? text(`v.draftType.${value}`) : null
+    case 'draftRounds':
+      return isPosInt(value) ? plural('v.rounds', value) : null
+    case 'draftPickSeconds':
+      return isPosInt(value) ? duration(value) : null
+    case 'draftOvernightPause':
+      return isOvernightPause(value) ? text('v.timeRange', { from: value.from, to: value.to }) : null
+    case 'draftOnTimeout':
+      return typeof value === 'string' && DRAFT_TIMEOUTS.has(value) ? text(`v.onTimeout.${value}`) : null
+    case 'draftOrderMethod':
+      return typeof value === 'string' && MAIN_DRAFT_ORDERS.has(value) ? text(`v.draftOrder.${value}`) : null
+    case 'draftThirdRoundReversal':
+    case 'draftAutostart':
+      return typeof value === 'boolean' ? text(value ? 'v.on' : 'v.off') : null
+    case 'draftAuctionBudget':
+      return isPosInt(value) ? money(value) : null
+    case 'draftStartAt':
+      return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? text('v.date', { date: { date: value } }) : null
+    case 'draftOrphanPicks':
+      return typeof value === 'string' && ORPHAN_DRAFTERS.has(value) ? text(`v.orphan.${value}`) : null
+    case 'rookieDraftLottery': {
+      const l = lotteryOf(value)
+      if (!l) return null
+      const parts = { pool: lotteryPool('v.lottery.pool', l), picks: lotteryPicks(l), odds: text(`v.lottery.odds.${l.odds}`), rest: text(`v.lottery.rest.${l.rest}`) }
+      // A value stored before the tiebreak was described has none, and reads as it did.
+      return l.tiebreak ? text('v.lottery.withTiebreak', { ...parts, tiebreak: text(`v.lottery.tiebreak.${l.tiebreak}`) }) : text('v.lottery', parts)
+    }
+    case 'tankingPenalty': {
+      if (!value || typeof value !== 'object') return null
+      if ((value as { enabled?: unknown }).enabled === false) return text('v.off')
+      const cost = tankingCost(value)
+      return cost ? text('v.tanking.on', { strike: (value as { atStrike: number }).atStrike, cost }) : null
+    }
     default:
       return null
   }
+}
+
+const LOTTERY_POOLS = new Set(['non_playoff', 'worst'])
+const LOTTERY_ODDS = new Set(['record', 'points_for', 'max_pf', 'equal'])
+const LOTTERY_REST = new Set(['reverse_standings', 'reverse_max_pf'])
+const LOTTERY_TIEBREAKS = new Set(['points_for', 'max_pf', 'random'])
+
+/** A stored rookie-lottery value this module has sentences for, or null (an unknown part drops it whole). */
+function lotteryOf(value: unknown): RookieDraftLotteryRule | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const v = value as Record<string, unknown>
+  if (!isPosInt(v.teams) || !isPosInt(v.picks) || v.picks > v.teams) return null
+  if (typeof v.pool !== 'string' || !LOTTERY_POOLS.has(v.pool)) return null
+  if (typeof v.odds !== 'string' || !LOTTERY_ODDS.has(v.odds)) return null
+  if (typeof v.rest !== 'string' || !LOTTERY_REST.has(v.rest)) return null
+  if (v.tiebreak !== undefined && (typeof v.tiebreak !== 'string' || !LOTTERY_TIEBREAKS.has(v.tiebreak))) return null
+  return value as RookieDraftLotteryRule
+}
+
+const lotteryPicks = (l: RookieDraftLotteryRule): RuleText => plural('lottery.picks', l.picks)
+const lotteryPool = (k: string, l: RookieDraftLotteryRule): RuleText => plural(`${k}.${l.pool}`, l.teams)
+/** "The 6 worst teams that missed the playoffs draw for the first 6 picks." */
+const lotteryDraw = (l: RookieDraftLotteryRule): RuleText => plural(`dynasty.lottery.draw.${l.pool}`, l.teams, { picks: lotteryPicks(l) })
+
+/** What a confirmed tanking strike costs, as a phrase ("its round 1 draft pick"), or null. */
+function tankingCost(value: unknown): RuleText | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const v = value as Record<string, unknown>
+  if (typeof v.penalty !== 'string' || !TANKING_PENALTIES.has(v.penalty) || !isPosInt(v.atStrike)) return null
+  if (v.penalty === 'forfeit_pick') return isPosInt(v.pickRound) ? text('tankingCost.forfeit_pick', { round: v.pickRound }) : null
+  if (v.penalty === 'lottery_odds') {
+    if (!isPosInt(v.lotteryOddsCutPct)) return null
+    return v.lotteryOddsCutPct >= 100 ? text('tankingCost.lottery_all') : text('tankingCost.lottery_odds', { pct: v.lotteryOddsCutPct })
+  }
+  return isPosInt(v.faabPercent) ? text('tankingCost.faab', { pct: v.faabPercent }) : null
+}
+
+/** The tanking line: off, a first-strike penalty, or warnings then the penalty. */
+function tankingLine(value: unknown): RuleText | null {
+  if (!value || typeof value !== 'object') return null
+  if ((value as { enabled?: unknown }).enabled === false) return text('dynasty.tanking.off')
+  const cost = tankingCost(value)
+  const strike = (value as { atStrike?: number }).atStrike
+  if (!cost || !isPosInt(strike)) return null
+  return strike <= 1 ? text('dynasty.tanking.onFirst', { cost }) : text('dynasty.tanking.on', { strike, cost })
 }
 
 function overrideItems(value: unknown): RuleText[] | null {
@@ -232,7 +389,7 @@ function scoringLines(s: RuleSnapshot): RuleLine[] {
     ? headline.filter((k) => isNum(values[k]) && values[k] !== 0).map((k) => text('scoring.statValue', { stat: text(`stat.${k}`), pts: values[k]! }))
     : []
   let ppr: RuleText | null = null
-  if (s.sport === 'NFL') {
+  if (RECEPTION_SPORTS.has(s.sport)) {
     const rec = values && isNum(values.receptions) ? values.receptions : s.scoringPreset === 'ppr' ? 1 : s.scoringPreset === 'half_ppr' ? 0.5 : s.scoringPreset === 'standard' ? 0 : null
     if (rec === 1) ppr = text('scoring.ppr.full')
     else if (rec === 0.5) ppr = text('scoring.ppr.half')
@@ -331,31 +488,154 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
     line('guillotine-stat-correction', isNum(s.statCorrectionHours) && s.statCorrectionHours > 0 ? plural('guillotine.statCorrection', s.statCorrectionHours) : null),
     line('guillotine-danger', isNum(s.dangerMarginPoints) && s.dangerMarginPoints > 0 ? plural('guillotine.danger', s.dangerMarginPoints) : null),
     line('guillotine-faab', s.faabOnChop && FAAB_ON_CHOP.has(s.faabOnChop) ? text(`guillotine.faab.${s.faabOnChop}`) : null),
+    line('guillotine-blind-auction', s.blindAuction === true ? text('guillotine.blindAuction') : null),
   ])
 }
 
-/** The full rules popup: one section per area, empty sections dropped. */
+function keeperLines(s: RuleSnapshot): RuleLine[] {
+  const cost = s.keeperCost && KEEPER_COSTS.has(s.keeperCost) ? s.keeperCost : null
+  return compact([
+    line('keeper-count', isNum(s.keeperCount) && Number.isInteger(s.keeperCount) && s.keeperCount > 0 ? plural('keeper.count', s.keeperCount) : null),
+    line('keeper-cost', cost ? text(`keeper.cost.${cost}`) : null),
+    line('keeper-years', isPosInt(s.keeperMaxYears) ? plural('keeper.maxYears', s.keeperMaxYears) : null),
+  ])
+}
+
+function dynastyLines(s: RuleSnapshot): RuleLine[] {
+  const slots = isNum(s.taxiSlots) && Number.isInteger(s.taxiSlots) ? s.taxiSlots : null
+  const steal = isTaxiSteal(s.taxiStealing) ? s.taxiStealing : null
+  return compact([
+    line('dynasty-carryover', text('dynasty.carryover')),
+    line('dynasty-taxi', slots == null ? null : slots > 0 ? plural('dynasty.taxi', slots) : text('dynasty.noTaxi')),
+    line('dynasty-taxi-eligible', slots && isPosInt(s.taxiEligibilityYears) ? plural('dynasty.taxiEligible', s.taxiEligibilityYears) : null),
+    line('dynasty-taxi-years', slots && isPosInt(s.taxiMaxYears) ? plural('dynasty.taxiMaxYears', s.taxiMaxYears) : null),
+    line('dynasty-taxi-deadline', slots && isPosInt(s.taxiDeadlineWeek) ? text('dynasty.taxiDeadline', { week: s.taxiDeadlineWeek }) : null),
+    line(
+      'dynasty-taxi-stealing',
+      slots && steal ? (steal.claims > 0 ? plural('dynasty.taxiStealing', steal.claims, { hours: steal.hours }) : text('dynasty.taxiStealingUnlimited', { hours: steal.hours })) : null,
+    ),
+    line('dynasty-rookie-order', s.rookieDraftOrder && ROOKIE_ORDERS.has(s.rookieDraftOrder) ? text(`dynasty.order.${s.rookieDraftOrder}`) : null),
+    // The lottery's own settings, only while it is what orders the rookie draft.
+    ...lotteryLines(s.rookieDraftOrder === 'weighted_lottery' ? lotteryOf(s.rookieDraftLottery) : null),
+    line(
+      'dynasty-rookie-rounds',
+      isPosInt(s.rookieDraftRounds)
+        ? plural(`dynasty.rounds.${s.rookieDraftType && DRAFT_TYPES.has(s.rookieDraftType) ? s.rookieDraftType : 'generic'}`, s.rookieDraftRounds)
+        : null,
+    ),
+    line('dynasty-rookie-start', isPosInt(s.rookieDraftAutoStartDays) ? text('dynasty.autoStart', { n: s.rookieDraftAutoStartDays }) : null),
+    line('dynasty-tanking', tankingLine(s.tankingPenalty)),
+  ])
+}
+
+function lotteryLines(l: RookieDraftLotteryRule | null): Array<RuleLine | null> {
+  if (!l) return []
+  return [
+    line('dynasty-lottery-draw', lotteryDraw(l)),
+    line('dynasty-lottery-odds', text(`dynasty.lottery.odds.${l.odds}`)),
+    line('dynasty-lottery-rest', text(`dynasty.lottery.rest.${l.rest}`)),
+    line('dynasty-lottery-tiebreak', l.tiebreak ? text(`dynasty.lottery.tiebreak.${l.tiebreak}`) : null),
+  ]
+}
+
+/**
+ * The main draft. Once it is complete the section stays, titled and opened as complete: its settings
+ * no longer change anything this season, so nothing here reads as a rule still to come (no schedule
+ * line), and a save after that publishes no change (./loadDraftRules.ts `draftRuleChanges`).
+ */
+function draftLines(s: RuleSnapshot): RuleLine[] {
+  const type = s.draftType && MAIN_DRAFT_TYPES.has(s.draftType) ? s.draftType : null
+  const status = s.draftStatus ?? null
+  const seconds = isPosInt(s.draftPickSeconds) ? s.draftPickSeconds : null
+  const pause = seconds && isOvernightPause(s.draftOvernightPause) ? s.draftOvernightPause : null
+  const timeout = s.draftOnTimeout && DRAFT_TIMEOUTS.has(s.draftOnTimeout) ? s.draftOnTimeout : null
+  const order = s.draftOrderMethod && MAIN_DRAFT_ORDERS.has(s.draftOrderMethod) ? s.draftOrderMethod : null
+  const orphan = s.draftOrphanPicks && ORPHAN_DRAFTERS.has(s.draftOrphanPicks) ? s.draftOrphanPicks : null
+  const startAt = typeof s.draftStartAt === 'string' && !Number.isNaN(Date.parse(s.draftStartAt)) ? s.draftStartAt : null
+  return compact([
+    line('draft-status', status === 'completed' ? text('draft.completed') : status === 'in_progress' ? text('draft.inProgress') : null),
+    line('draft-type', type && isPosInt(s.draftRounds) ? plural(`draft.type.${type}`, s.draftRounds) : null),
+    line('draft-3rr', type === 'snake' && s.draftThirdRoundReversal === true ? text('draft.thirdRoundReversal') : null),
+    line(
+      'draft-auction',
+      type === 'auction' && isPosInt(s.draftAuctionBudget) && isPosInt(s.draftAuctionMinBid)
+        ? text('draft.auctionBudget', { budget: s.draftAuctionBudget, min: s.draftAuctionMinBid })
+        : null,
+    ),
+    line(
+      'draft-clock',
+      type && seconds ? text(type === 'auction' ? 'draft.bidClock' : 'draft.pickClock', { time: duration(seconds) }) : type && type !== 'auction' ? text('draft.noClock') : null,
+    ),
+    line('draft-overnight', pause ? text(pause.picksAllowed ? 'draft.overnightPicks' : 'draft.overnight', { from: pause.from, to: pause.to }) : null),
+    line('draft-timeout', type && seconds && timeout ? text(`draft.timeout.${timeout}`) : null),
+    line('draft-order', type && order ? text(`draft.order.${order}`) : null),
+    line(
+      'draft-start',
+      type && status === 'scheduled' ? (startAt ? text(s.draftAutostart === true ? 'draft.start.auto' : 'draft.start.manual', { date: { date: startAt } }) : text('draft.start.none')) : null,
+    ),
+    line('draft-orphan', type && orphan ? text(`draft.orphan.${orphan}`) : null),
+  ])
+}
+
+/** Pick rules, in the trades section of a keeper or dynasty league. */
+function pickLines(s: RuleSnapshot): RuleLine[] {
+  if (s.format !== 'keeper' && s.format !== 'dynasty') return []
+  if (s.pickTrading !== true) return compact([line('trades-picks', s.pickTrading === false ? text('trades.picks.off') : null)])
+  const pd = s.pickTradeDeadline
+  return compact([
+    line('trades-picks', text('trades.picks.on')),
+    line('trades-pick-deadline', pd === 'open' ? text('trades.pickDeadline.open') : isPosInt(pd) ? text('trades.pickDeadline.week', { week: pd }) : null),
+    line('trades-pick-terms', s.pickTerms === true ? text('trades.pickTerms') : null),
+  ])
+}
+
+function overviewFormat(s: RuleSnapshot): RuleText | null {
+  // A named concept (Devy, C2C, Survivor…) says more than its format; the format sentence otherwise.
+  if (s.concept) return text(`overview.concept.${s.concept}`)
+  return s.format ? text(`overview.format.${s.format}`) : null
+}
+
+function overviewImported(s: RuleSnapshot): RuleText | null {
+  if (!s.importedFrom) return null
+  return PLATFORMS.has(s.importedFrom) ? text('overview.imported', { platform: text(`platform.${s.importedFrom}`) }) : text('overview.importedGeneric')
+}
+
+/**
+ * The full rules popup: one section per area, empty sections dropped.
+ *
+ * ⚠ WHAT A FORMAT HAS DECIDES WHAT IS SAID. A specialty game (Survivor, Big Brother…) plays its own
+ * trades, waivers and finale, so it gets the basics, scoring and roster only; best ball sets no
+ * lineups; an imported league states only what its import carries. Saying "no trade deadline" for a
+ * league whose deadline simply is not read here would be a rule nobody set.
+ */
 export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): RuleSection[] {
   const format = s.format
+  const imported = Boolean(s.importedFrom)
+  const seasonal = format === 'redraft' || format === 'keeper' || format === 'dynasty'
   const overview = compact([
-    line('overview-commissioner', ctx.isCommissioner ? text('overview.commissionerPreview') : null),
+    line('overview-commissioner', ctx.isCommissioner && !imported ? text('overview.commissionerPreview') : null),
+    line('overview-imported', overviewImported(s)),
     line('overview-teams', isPosInt(s.teamCount) ? plural('overview.teams', s.teamCount) : null),
-    line('overview-format', format ? text(`overview.format.${format}`) : null),
-    line('overview-median', format === 'redraft' && s.medianGame === true ? text('overview.median') : null),
+    line('overview-format', overviewFormat(s)),
+    line('overview-median', seasonal && s.medianGame === true ? text('overview.median') : null),
   ])
   const lineups =
-    (s.sport === 'NBA' || s.sport === 'NHL') && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
+    !imported && format !== 'best_ball' && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
       ? [{ id: 'lineups-mode', text: text(`lineups.${s.lineupMode}`) }]
       : []
+  const ownRules = !imported && format !== 'specialty' && format !== 'best_ball'
   const sections: RuleSection[] = [
     { id: 'overview', title: text('section.overview'), lines: overview },
-    ...(format === 'guillotine' ? [{ id: 'guillotine' as const, title: text('section.guillotine'), lines: guillotineLines(s) }] : []),
+    ...(format === 'guillotine' && !imported ? [{ id: 'guillotine' as const, title: text('section.guillotine'), lines: guillotineLines(s) }] : []),
     { id: 'scoring', title: text('section.scoring'), lines: scoringLines(s) },
     { id: 'roster', title: text('section.roster'), lines: rosterLines(s) },
     { id: 'lineups', title: text('section.lineups'), lines: lineups },
-    ...(format === 'redraft' ? [{ id: 'playoffs' as const, title: text('section.playoffs'), lines: playoffLines(s) }] : []),
-    { id: 'trades', title: text('section.trades'), lines: tradeLines(s) },
-    { id: 'waivers', title: text('section.waivers'), lines: waiverLines(s, format) },
+    ...(!imported ? [{ id: 'draft' as const, title: text(s.draftStatus === 'completed' ? 'section.draftComplete' : 'section.draft'), lines: draftLines(s) }] : []),
+    ...(format === 'keeper' && !imported ? [{ id: 'keeper' as const, title: text('section.keeper'), lines: keeperLines(s) }] : []),
+    ...(format === 'dynasty' && !imported ? [{ id: 'dynasty' as const, title: text('section.dynasty'), lines: dynastyLines(s) }] : []),
+    ...(seasonal && (!imported || isPosInt(s.playoffTeams)) ? [{ id: 'playoffs' as const, title: text('section.playoffs'), lines: playoffLines(s) }] : []),
+    ...(ownRules ? [{ id: 'trades' as const, title: text('section.trades'), lines: [...tradeLines(s), ...pickLines(s)] }] : []),
+    ...(ownRules ? [{ id: 'waivers' as const, title: text('section.waivers'), lines: waiverLines(s, format) }] : []),
   ]
   return sections.filter((section) => section.lines.length > 0)
 }
@@ -425,6 +705,60 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       return typeof after === 'string' && TRADE_REVIEWS.has(after) ? text(`trades.review.${after}`) : null
     case 'thirdPlaceGame':
       return after === true ? text('playoffs.thirdPlace') : null
+    case 'keeperCount':
+      if (d != null && d > 0) return plural('change.keeperCount.more', d)
+      if (d != null && d < 0) return plural('change.keeperCount.fewer', -d)
+      return null
+    case 'keeperCost':
+      return typeof after === 'string' && KEEPER_COSTS.has(after) ? text(`keeper.cost.${after}`) : null
+    case 'pickTrading':
+      return typeof after === 'boolean' ? text(after ? 'trades.picks.on' : 'trades.picks.off') : null
+    case 'pickTerms':
+      return typeof after === 'boolean' ? text(after ? 'trades.pickTerms' : 'change.pickTerms.off') : null
+    case 'pickTradeDeadline':
+      return after === 'open' ? text('trades.pickDeadline.open') : after === 'same' ? text('change.pickDeadline.same') : isPosInt(after) ? text('trades.pickDeadline.week', { week: after }) : null
+    case 'taxiSlots':
+      if (d != null && d > 0) return plural('change.taxiSlots.more', d)
+      if (d != null && d < 0) return plural('change.taxiSlots.fewer', -d)
+      return null
+    case 'taxiStealing':
+      if (isTaxiSteal(after)) return after.claims > 0 ? plural('dynasty.taxiStealing', after.claims, { hours: after.hours }) : text('dynasty.taxiStealingUnlimited', { hours: after.hours })
+      return after === null ? text('change.taxiStealing.off') : null
+    case 'rookieDraftOrder':
+      return typeof after === 'string' && ROOKIE_ORDERS.has(after) ? text(`dynasty.order.${after}`) : null
+    case 'rookieDraftAutoStartDays':
+      return isPosInt(after) ? text('dynasty.autoStart', { n: after }) : after == null ? text('change.autoStart.off') : null
+    case 'rookieDraftLottery': {
+      // The one part that moved, as its popup sentence; several at once read best from the values.
+      const b = lotteryOf(before)
+      const a = lotteryOf(after)
+      if (!b || !a) return null
+      const drawMoved = b.teams !== a.teams || b.picks !== a.picks || b.pool !== a.pool
+      const tiebreakMoved = b.tiebreak !== a.tiebreak
+      const moved = [drawMoved, b.odds !== a.odds, b.rest !== a.rest, tiebreakMoved].filter(Boolean).length
+      if (moved !== 1) return null
+      if (drawMoved) return lotteryDraw(a)
+      if (tiebreakMoved) return a.tiebreak ? text(`dynasty.lottery.tiebreak.${a.tiebreak}`) : null
+      return b.odds !== a.odds ? text(`dynasty.lottery.odds.${a.odds}`) : text(`dynasty.lottery.rest.${a.rest}`)
+    }
+    case 'tankingPenalty':
+      return tankingLine(after)
+    case 'draftType':
+      return typeof after === 'string' && MAIN_DRAFT_TYPES.has(after) ? text(`change.draftType.${after}`) : null
+    case 'draftRounds':
+      if (d != null && d > 0) return plural('change.draftRounds.more', d)
+      if (d != null && d < 0) return plural('change.draftRounds.fewer', -d)
+      return null
+    case 'draftOnTimeout':
+      return typeof after === 'string' && DRAFT_TIMEOUTS.has(after) ? text(`draft.timeout.${after}`) : null
+    case 'draftOrderMethod':
+      return typeof after === 'string' && MAIN_DRAFT_ORDERS.has(after) ? text(`draft.order.${after}`) : null
+    case 'draftThirdRoundReversal':
+      return after === true ? text('draft.thirdRoundReversal') : after === false ? text('change.thirdRoundReversal.off') : null
+    case 'draftAutostart':
+      return after === true ? text('change.autostart.on') : after === false ? text('change.autostart.off') : null
+    case 'draftOrphanPicks':
+      return typeof after === 'string' && ORPHAN_DRAFTERS.has(after) ? text(`draft.orphan.${after}`) : after == null ? text('change.orphan.off') : null
     default:
       return null
   }
@@ -440,6 +774,9 @@ export function explainRuleChange(change: RuleChange, snapshot: Pick<RuleSnapsho
   const before = describeValue(key, change.before ?? null, snapshot)
   const after = describeValue(key, change.after ?? null, snapshot)
   if (!before || !after) return null
+  // A change that reads the same on both sides tells members nothing — e.g. roster slots that differ
+  // only in a taxi / devy stash, which the roster sentence leaves to its own line.
+  if (sameRuleValue(before, after)) return null
   return { key, label: text(`label.${key}`), before, after, consequence: consequenceFor(key, change.before ?? null, change.after ?? null) }
 }
 

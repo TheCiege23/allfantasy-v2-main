@@ -5,12 +5,13 @@ import { prisma } from '@/lib/prisma'
 /**
  * The writer for `provider_trade_offers` — provider-side trades that have not settled.
  *
- * ── 🛑 THE MIGRATION IS PARKED. NOTHING CALLS THIS YET, AND THAT IS DELIBERATE ─────────────────
+ * ── WIRED: THE MIGRATION LANDED AND THE SLEEPER SWEEPS CALL THIS ──────────────────────────────
  *
- * `prisma/migrations-pending/20260916030000_provider_trade_offers/` has not been applied. A
- * reader or a scheduled caller wired ahead of the apply does not no-op — a generated client that
- * knows about a table production lacks raises P2021 — so this module exists, is tested, and is
- * called by nobody until the migration lands. Wiring it is a separate, deliberate act.
+ * The table arrives with `prisma/migrations/20260916030000_provider_trade_offers/` (it was parked in
+ * `migrations-pending/` when this module was written, which is why the module once had no caller).
+ * Callers today: `lib/provider-trades/syncProviderTradeOffers.ts` (the per-league ledger sync, and
+ * `recordSweptTradesOnLedger` from the trade sweep in lib/trade-intel/tradeNotifyService.ts). Only
+ * Sleeper writes rows; the collusion scan reads them (lib/integrity/scanImportedTrades.ts).
  *
  * ── WHY THIS IS NOT A ROW IN `dw_transaction_facts` ───────────────────────────────────────────
  *

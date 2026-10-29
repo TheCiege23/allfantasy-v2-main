@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import { BookOpen, X } from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { renderChangeLine, renderRuleText } from '@/lib/league-rules-explainer/render'
@@ -35,10 +36,20 @@ function formatChangeDate(iso: string, lang: string): string {
 
 /**
  * League home only: the "League rules" button, the first-time rules popup, and the "What changed"
- * card. Rendered by NativeLeagueHome — never the draft room or a live game screen, which is the
- * owner's rule ("never interrupt"): the popup can only open while the league home is on screen.
+ * card. Rendered by NativeLeagueHome, and by an imported league's League tab (`variant="classic"`, its
+ * own styling) — never the draft room or a live game screen, which is the owner's rule ("never
+ * interrupt"): the popup can only open while the league home is on screen.
  */
-export function LeagueRulesHomeHost({ leagueId, blocked = false }: { leagueId: string; blocked?: boolean }) {
+export function LeagueRulesHomeHost({
+  leagueId,
+  blocked = false,
+  variant = 'native',
+}: {
+  leagueId: string
+  blocked?: boolean
+  /** `classic`: the imported-league shell, which has no `nl-*` styles. */
+  variant?: 'native' | 'classic'
+}) {
   // The app's i18n (`t` from LanguageProviderClient); English outside a provider.
   const { t, language } = useOptionalLanguage()
   const lang = language === 'es' ? 'es' : 'en'
@@ -160,7 +171,16 @@ export function LeagueRulesHomeHost({ leagueId, blocked = false }: { leagueId: s
       ) : null}
 
       <div className="flex justify-end">
-        <button type="button" className="nl-button" onClick={() => setOpen(true)} data-testid="league-rules-open">
+        <button
+          type="button"
+          className={
+            variant === 'classic'
+              ? 'inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-white/[0.04] px-3 py-2 text-[13px] font-semibold text-white/80 hover:bg-white/[0.08]'
+              : 'nl-button'
+          }
+          onClick={() => setOpen(true)}
+          data-testid="league-rules-open"
+        >
           <BookOpen size={15} aria-hidden /> {t('leagueRules.ui.open')}
         </button>
       </div>
@@ -218,7 +238,16 @@ export function LeagueRulesHomeHost({ leagueId, blocked = false }: { leagueId: s
                     )}
                   </section>
                 </div>
-                <div className="border-t border-white/[0.07] px-5 py-3">
+                <div className="space-y-2 border-t border-white/[0.07] px-5 py-3">
+                  {/* The chat route types the question in, scoped to this league, and never sends it by itself. */}
+                  <Link
+                    href={`/chimmy/chat?prompt=${encodeURIComponent(t('leagueRules.ui.chimmyPrompt'))}&leagueId=${encodeURIComponent(leagueId)}`}
+                    onClick={close}
+                    className="block w-full rounded-xl border border-white/15 px-4 py-2.5 text-center text-[14px] font-semibold text-white/85"
+                    data-testid="league-rules-ask-chimmy"
+                  >
+                    {t('leagueRules.ui.askChimmy')}
+                  </Link>
                   <button
                     type="button"
                     onClick={close}

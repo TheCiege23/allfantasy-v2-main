@@ -14,6 +14,7 @@ import type { SectionState } from '@/lib/core-app/leagueHome'
 import type { ScoutData, ScoutedManager, ScoutStanding } from '@/lib/core-app/scout'
 import type { Record3, Zone } from '@/lib/core-app/standingsModel'
 import type { RailStanding } from '@/lib/core-app/railMatchups'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Scout — the first room of the War Room.
@@ -130,7 +131,7 @@ function EdgeLine({ m }: { m: ScoutEdgeManager }) {
     )
   }
   if (m.faabRemaining != null) {
-    const left = Math.round(m.faabRemaining).toLocaleString('en-US')
+    const left = Math.round(m.faabRemaining).toLocaleString(getAppIntlLocale())
     parts.push(es ? `le quedan $${left} de FAAB` : `$${left} FAAB left`)
   }
   if (parts.length === 0) return null
@@ -219,7 +220,7 @@ function recordText(r: Record3): string {
 
 /** Points with one decimal, pinned to en-US so the server and any client agree on the separator. */
 function points(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  return n.toLocaleString(getAppIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
 /*

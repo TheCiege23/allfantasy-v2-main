@@ -22,6 +22,8 @@ import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import { ownerHasAfCommissionerPlan } from '@/lib/stat-corrections/applyStatCorrections'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 import { hasUsedTaxiSeasons, loadTaxiSeasonsUsed, readTaxiMaxYears, storedTaxiMaxYears, TAXI_MAX_YEARS_CHOICES, TAXI_MAX_YEARS_KEY } from './taxiMaxYears'
 import {
   diffTaxiSquad,
@@ -289,7 +291,20 @@ export async function saveTaxiRules(
   if (body.lockBehavior !== undefined) payload.taxiLockBehavior = String(body.lockBehavior)
   if (typeof body.inSeasonMoves === 'boolean') payload.taxiInSeasonMoves = body.inSeasonMoves
   if (typeof body.postseasonMoves === 'boolean') payload.taxiPostseasonMoves = body.postseasonMoves
-  if (Object.keys(payload).length) await upsertDynastyConfig(leagueId, payload)
+  if (Object.keys(payload).length) {
+    // The taxi deadline lives in the dynasty config, outside the settings patch, so its "What changed"
+    // card is published here (lib/league-rules-explainer/publishRuleChanges.ts), from the same reader
+    // the rules popup uses. Best-effort: it never fails the save.
+    const before = payload.taxiDeadlineWeek !== undefined ? await getEffectiveTaxiSettings(leagueId).catch(() => null) : null
+    await upsertDynastyConfig(leagueId, payload)
+    if (before) {
+      const after = await getEffectiveTaxiSettings(leagueId).catch(() => null)
+      if (after) {
+        const changes = diffRuleSnapshots({ taxiDeadlineWeek: before.taxiDeadlineWeek }, { taxiDeadlineWeek: after.taxiDeadlineWeek })
+        await publishRuleChangesEvent({ leagueId, actorUserId: userId, section: 'taxi', changes })
+      }
+    }
+  }
 
   const merge: Record<string, unknown> = {}
   if (typeof body.enforced === 'boolean' && body.enforced !== readTaxiRulesEnforced(league.settings)) merge[TAXI_RULES_ENFORCED_KEY] = body.enforced

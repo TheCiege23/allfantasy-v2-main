@@ -5,6 +5,8 @@ import '@/components/core-app/af-week-lineup.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
+import { messagesFor } from '@/lib/i18n/messages'
+import { corePartsMessages } from '@/lib/core-app/messages/coreParts'
 
 /**
  * One line of this week's LINEUP projections under a Your Week matchup: "Lineup proj · AF
@@ -32,12 +34,7 @@ export function WeekLineupLine({
   return (
     <span
       className="af-wk-lineup af-num"
-      title={language === 'es'
-        ? `Proyecciones de las alineaciones de esta semana: suman a los jugadores titulares con la puntuación de esta liga. AF es la proyección de AllFantasy; ${PROJECTION_PROVIDER_LABEL} es la de ${PROJECTION_PROVIDER_LABEL}. Es una medida distinta de la probabilidad de ganar mostrada arriba.${v.partial ? ' Faltan proyecciones de algunos titulares, así que el total es parcial.' : ''}`
-        : 'This week’s lineup projections: each side’s players summed over the lineup as set, under this league’s scoring. ' +
-          `AF is AllFantasy’s own projection engine; ${PROJECTION_PROVIDER_LABEL} is ${PROJECTION_PROVIDER_LABEL}’s own projection. ` +
-          'Not the same measure as the team-average projection and win probability above.' +
-          (v.partial ? ' Some starters have no projection, so a total is partial.' : '')}
+      title={messagesFor(corePartsMessages, language).lineupProjectionTitle(PROJECTION_PROVIDER_LABEL, v.partial)}
     >
       <span className="af-wk-lineup-k">{copy('Lineup proj')}</span>
       {v.af ? (

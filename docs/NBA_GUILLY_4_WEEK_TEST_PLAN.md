@@ -110,9 +110,10 @@ repo; that is enough to find the right logs and code.
 
 ### Known limits (not bugs)
 
-- Stat corrections in NBA **head-to-head** leagues are reviewed and applied the same way
-  as NFL ones. NBA leagues with daily lineups are not re-checked yet; NBA Guilly is covered
-  by the pre-chop refresh above.
+- Stat corrections in NBA, MLB and NHL **head-to-head** leagues are reviewed and applied
+  the same way as NFL ones, with weekly or daily lineups (a daily league is checked only on
+  the days each player started). Leagues with games limits are not re-checked; NBA Guilly
+  is covered by the pre-chop refresh above.
 - Imported leagues: completed trades in leagues imported from **Sleeper** get the
   collusion check (within about 15 minutes of the trade going through on Sleeper), and a
   flagged trade alerts the commissioner. "Hold flagged trades" is not available there,

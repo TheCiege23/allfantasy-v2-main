@@ -38,8 +38,24 @@ export function isAutopilotStyle(v: unknown): v is AutopilotStyle {
  */
 export type ChimmyAutopilot = { style: AutopilotStyle; since: string; byUserId: string }
 
-export type ManagedLineup = { since: string; byUserId: string; autopilot?: ChimmyAutopilot }
+/**
+ * `ownerUserId` is who owned the team when the commissioner switched it on (phase 9, 2026-10-29). The
+ * mode is for THAT owner's absence: once the team has a new owner — claimed, adopted, won at auction,
+ * reassigned — it no longer applies (`managedForOwner`), and the hourly run ends it. Entries written
+ * before this field existed carry none; the hourly run stamps the current owner onto them.
+ */
+export type ManagedLineup = { since: string; byUserId: string; ownerUserId?: string | null; autopilot?: ChimmyAutopilot }
 export type ManagedLineups = Record<string, ManagedLineup>
+
+/**
+ * Whether a managed entry still applies to the team's current owner: `current` when it was switched on
+ * for this owner, `new_owner` when the team has changed hands since, `unstamped` for an entry written
+ * before owners were recorded (treated as current until the hourly run stamps it).
+ */
+export function managedForOwner(entry: ManagedLineup, currentOwnerId: string | null | undefined): 'current' | 'new_owner' | 'unstamped' {
+  if (entry.ownerUserId === undefined) return 'unstamped'
+  return (entry.ownerUserId ?? null) === (currentOwnerId ?? null) ? 'current' : 'new_owner'
+}
 
 /** Above this share of the open player pool without a projection, the lineup is left alone. */
 export const MAX_MISSING_PROJECTION_SHARE = 0.25
@@ -52,6 +68,7 @@ export function readManagedLineups(settings: unknown): ManagedLineups {
     const o = v && typeof v === 'object' ? (v as Record<string, unknown>) : null
     if (!o || typeof o.since !== 'string' || typeof o.byUserId !== 'string') continue
     const entry: ManagedLineup = { since: o.since, byUserId: o.byUserId }
+    if (typeof o.ownerUserId === 'string' || o.ownerUserId === null) entry.ownerUserId = o.ownerUserId as string | null
     const ap = o.autopilot && typeof o.autopilot === 'object' ? (o.autopilot as Record<string, unknown>) : null
     if (ap && typeof ap.since === 'string' && typeof ap.byUserId === 'string') {
       entry.autopilot = { style: isAutopilotStyle(ap.style) ? ap.style : DEFAULT_AUTOPILOT_STYLE, since: ap.since, byUserId: ap.byUserId }

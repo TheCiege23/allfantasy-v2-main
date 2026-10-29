@@ -25,6 +25,7 @@ import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine
 import { describeSchedule } from '@/lib/guillotine/chopSchedule'
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
+import { loadChopWatch } from '@/lib/guillotine/chopWatchLoad'
 import { guillotineAdvancedSnapshot, guillotineRulesSnapshot } from '@/lib/league-rules-explainer/snapshot'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
@@ -90,7 +91,7 @@ export async function GET(
     ? Math.max(1, parseInt(weekParam, 10)) || 1
     : await resolveGuillotineCurrentWeek(leagueId, config)
 
-  const [summary, myEscapes, myRosterId, home, advanced] = await Promise.all([
+  const [summary, myEscapes, myRosterId, home, advanced, watch] = await Promise.all([
     buildWeeklySummary({ leagueId, weekOrPeriod, includeDanger: true }),
     // Your escapes from chops that happened — shareable moments (2026-09-14). Never fails the summary.
     getGuillotineEscapesForUser(leagueId, userId).catch(() => []),
@@ -103,6 +104,9 @@ export async function GET(
           .catch(() => null)
       : Promise.resolve(null),
     readGuillotineAdvanced(leagueId).catch(() => null),
+    // Chop Watch (lib/guillotine/chopWatch.ts): this week's chop line, live, by the chop's own rules.
+    // The current week only — a past week's line is the one its chop already settled.
+    weekParam ? Promise.resolve(null) : loadChopWatch(leagueId, weekOrPeriod),
   ])
   // For the commissioner only: may they change the AF Commissioner guillotine rules? The SAME check
   // the chop-rules and league-rules saves enforce, so no page shows an editor the save will refuse.
@@ -114,9 +118,11 @@ export async function GET(
 
   return NextResponse.json({
     ...summary,
+    ...(watch ? { dangerTiers: watch.dangerTiers } : {}),
+    chopWatch: watch ? { live: true, week: watch.week, chopCount: watch.chopCount, chopLine: watch.chopLine } : null,
     myEscapes,
     myRosterId,
-    home,
+    home: home && watch ? { ...home, scores: watch.scores } : home,
     config: config
       ? {
           eliminationStartWeek: config.eliminationStartWeek,

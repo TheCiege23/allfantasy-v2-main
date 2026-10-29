@@ -1,4 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
+import { answerCspReportsInBrowser } from './helpers/csp-report-sink'
+
+// See the helper: dev-mode CSP reports otherwise saturate the shared `next dev`.
+test.beforeEach(async ({ context }) => {
+  await answerCspReportsInBrowser(context)
+})
 
 test.describe('@mock-draft-room mobile production mock room', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true })

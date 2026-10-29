@@ -5,7 +5,9 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { WAIVER_EDGE_ES, waiverFactText } from '@/lib/core-app/playerCardCopy'
+import { waiverFactText } from '@/lib/core-app/playerCardCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { waiverEdgeMessages } from '@/lib/core-app/messages/waiverEdge'
 import type { WaiverEdge } from '@/lib/competitive-edge/waiverEdge'
 import { getIntlLocale } from '@/lib/i18n/constants'
 
@@ -44,14 +46,14 @@ export function WaiverCompetitiveEdge({
   edge: WaiverEdgeState | null | undefined
 }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(waiverEdgeMessages)
   if (access && !access.unlocked) {
     return <CoreDepthLock access={access} what={lockSubjectText('Competitive Edge', language)} lang={language} />
   }
   if (!edge) return null
 
-  const aria = es ? WAIVER_EDGE_ES.aria : 'Competitive Edge · waivers'
-  const heading = es ? WAIVER_EDGE_ES.heading : <>Competitive Edge · other managers&apos; waiver activity</>
+  const aria = m.aria
+  const heading = m.heading
 
   if (!edge.available) {
     return (
@@ -63,7 +65,7 @@ export function WaiverCompetitiveEdge({
   }
 
   const { leagueFacts, rivals, coverage } = edge.data
-  const asOf = asOfLabel(coverage.asOf, es ? getIntlLocale('es') : 'en-US')
+  const asOf = asOfLabel(coverage.asOf, language === 'es' ? getIntlLocale('es') : 'en-US')
 
   return (
     <section className="af-card af-wv-section" data-testid="waiver-competitive-edge" aria-label={aria}>
@@ -94,16 +96,7 @@ export function WaiverCompetitiveEdge({
       </ul>
 
       <p className="af-wv-edge-note" data-testid="waiver-competitive-edge-basis">
-        {es ? (
-          WAIVER_EDGE_ES.basis(coverage.season, asOf, coverage.stale)
-        ) : (
-          <>
-            Counted from winning waiver claims in this league&apos;s Sleeper history for the {coverage.season} season
-            {asOf ? `, as of ${asOf} ET` : ''}
-            {coverage.stale ? ' — may be out of date' : ''}. Sleeper doesn&apos;t publish losing bids, so these are wins only.
-            It shows what they did, not what they&apos;ll bid.
-          </>
-        )}
+        {m.basis(coverage.season, asOf, coverage.stale)}
       </p>
     </section>
   )

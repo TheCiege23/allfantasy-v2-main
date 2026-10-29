@@ -44,6 +44,8 @@ import { readPlayoffFormat } from './outlookFormat'
 import { standardByes } from './outlookSim'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { coinFlipDraw, readTiebreakerOrder, TIEBREAKER_LABELS, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
+import { standingsModelMessages } from '@/lib/core-app/messages/standingsModel'
+import { messagesFor } from '@/lib/i18n/messages'
 
 // ── Inputs ─────────────────────────────────────────────────────────────────
 
@@ -706,25 +708,21 @@ export function explainOrder(upper: OrderRow, lower: OrderRow, ctx: ExplainCtx):
  * so the Spanish screen copy says the same thing in Spanish.
  */
 export function leagueTiebreakReason(upper: OrderRow, lower: OrderRow, ctx: OrderCtx, language: 'en' | 'es'): string {
-  const es = language === 'es'
+  const m = messagesFor(standingsModelMessages, language)
   for (const tb of ctx.tiebreakers) {
     if (compareOnKey(upper, lower, tb, ctx) === 0) continue
     const label = TIEBREAKER_LABELS[tb][language].toLowerCase()
     const detail =
       tb === 'points_for'
-        ? ` (${fmtPts(upper.pointsFor)} ${es ? 'frente a' : 'to'} ${fmtPts(lower.pointsFor)})`
+        ? ` (${fmtPts(upper.pointsFor)} ${m.tiebreakTo} ${fmtPts(lower.pointsFor)})`
         : tb === 'points_against'
-          ? ` (${fmtPts(upper.pointsAgainst ?? 0)} ${es ? 'frente a' : 'to'} ${fmtPts(lower.pointsAgainst ?? 0)})`
+          ? ` (${fmtPts(upper.pointsAgainst ?? 0)} ${m.tiebreakTo} ${fmtPts(lower.pointsAgainst ?? 0)})`
           : tb === 'head_to_head'
             ? ` (${formatRecord(ctx.h2h[upper.rosterId]![lower.rosterId]!)})`
             : ''
-    return es
-      ? `${upper.name} va delante por ${label}${detail}, según el orden de desempates del comisionado.`
-      : `${upper.name} is ahead on ${label}${detail}, the commissioner's tiebreaker order.`
+    return m.tiebreakAhead(upper.name, label, detail)
   }
-  return es
-    ? 'empatados en todos los desempates del comisionado; el orden entre ellos no está decidido.'
-    : "level on every one of the commissioner's tiebreakers; the order between them is not settled."
+  return m.tiebreakLevel
 }
 
 function normalCdf(z: number): number {

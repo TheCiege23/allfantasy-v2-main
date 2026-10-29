@@ -4,6 +4,8 @@ import { COMMS_OPEN_EVENT, type CommsOpenDetail } from '@/components/core-app/co
 import { chimmyAsk, type LeagueCall } from '@/lib/core-app/leagueCall'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { leagueCallsMessages } from '@/lib/core-app/messages/leagueCalls'
 
 /**
  * "Your call, league by league" — one computed start/sit call per league you have him in
@@ -25,7 +27,7 @@ function askChimmy(detail: CommsOpenDetail) {
 
 export function LeagueCalls({ calls, playerName }: { calls: LeagueCall[]; playerName: string }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(leagueCallsMessages)
   if (calls.length === 0) return null
   // What needs you first: sit/start before hold, locked last.
   // A questionable hold (tone warn) still needs a plan, so it sits above a settled one.
@@ -34,7 +36,7 @@ export function LeagueCalls({ calls, playerName }: { calls: LeagueCall[]; player
   return (
     <section className="af-card af-pf-calls" aria-labelledby="af-pf-calls-h">
       <h3 className="af-label" id="af-pf-calls-h">
-        {es ? 'Tu decisión, liga por liga' : 'Your call, league by league'}
+        {m.title}
       </h3>
       <ul className="af-pf-calls-list">
         {sorted.map((c) => {
@@ -59,7 +61,7 @@ export function LeagueCalls({ calls, playerName }: { calls: LeagueCall[]; player
                     href={c.fix.href}
                     {...(c.fix.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                   >
-                    {es ? `Corregir la alineación en ${c.fix.platformLabel}` : `Fix lineup in ${c.fix.platformLabel}`}
+                    {m.fixLineupIn(c.fix.platformLabel)}
                   </a>
                 ) : null}
                 <button
@@ -67,24 +69,14 @@ export function LeagueCalls({ calls, playerName }: { calls: LeagueCall[]; player
                   className="af-pf-call-ask"
                   onClick={() => askChimmy({ tab: 'chimmy', prefill: chimmyAsk(c, playerName, language), leagueId: c.leagueId })}
                 >
-                  {es ? 'Preguntar a Chimmy' : 'Ask Chimmy'}
+                  {m.askChimmy}
                 </button>
               </div>
             </li>
           )
         })}
       </ul>
-      {es ? (
-        <p className="af-pf-calls-foot">
-          Cada decisión compara las proyecciones con la puntuación de esa liga, su designación de lesión y los horarios de la semana; nada
-          más. Haz el cambio donde vive la liga: «Corregir la alineación» en la decisión, o «Abrir la alineación» en la tabla de arriba.
-        </p>
-      ) : (
-        <p className="af-pf-calls-foot">
-          Each call compares projections under that league&apos;s own scoring, his injury designation and the week&apos;s kickoffs — nothing
-          else. Make the change where the league lives — &ldquo;Fix lineup&rdquo; on the call, or the table&apos;s &ldquo;Open lineup&rdquo; above.
-        </p>
-      )}
+      <p className="af-pf-calls-foot">{m.foot}</p>
     </section>
   )
 }

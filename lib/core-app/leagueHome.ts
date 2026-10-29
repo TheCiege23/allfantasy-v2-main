@@ -152,6 +152,7 @@ export type LeagueHomeData = {
     variant: string | null
     name: string
     platform: string
+    canRemoveImported?: boolean
     format: string | null
     sport: string
     season: number | null
@@ -973,6 +974,7 @@ export async function getLeagueHomeData(
       variant: league.leagueVariant,
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
+      canRemoveImported: league.userId === userId,
       format: league.leagueType ?? null,
       sport: String(league.sport ?? 'NFL'),
       season: league.season ?? null,

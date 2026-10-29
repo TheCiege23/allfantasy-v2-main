@@ -7,6 +7,8 @@ import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { dashTradeBandMessages } from '@/lib/core-app/messages/dashTradeBand'
 import { ageText } from '@/lib/core-app/shellCopy'
 import { gradeReasonText, tradeStatusText } from '@/lib/core-app/homeBandsCopy'
 
@@ -71,19 +73,19 @@ export type TradeBandQuiet = {
   ago: string | null
 }
 
-function verdictText(v: NonNullable<TradeBandCard['verdict']>, es: boolean): string {
-  if (v.kind === 'even') return es ? 'Un intercambio equilibrado sobre el papel' : 'An even deal on paper'
+type BandMessages = typeof dashTradeBandMessages.en
+
+function verdictText(v: NonNullable<TradeBandCard['verdict']>, m: BandMessages): string {
+  if (v.kind === 'even') return m.verdictEven
   /* No name resolved: say the shape of the verdict, never a placeholder. */
-  if (v.kind === 'unnamed') return es ? 'Un lado sale ganando' : 'One side comes out ahead'
-  if (es) return `${v.strongly ? 'Favorece claramente a' : 'Favorece ligeramente a'} ${v.who}`
-  return `${v.strongly ? 'Clearly favours' : 'Slightly favours'} ${v.who}`
+  if (v.kind === 'unnamed') return m.verdictUnnamed
+  return m.favours(v.strongly, v.who)
 }
 
-function basisText(basis: Side['gradeBasis'], es: boolean): string {
-  if (basis === 'League') return es ? 'Calificación de liga' : 'League grade'
-  if (basis == null) return es ? 'Calificación contextual no disponible' : 'Contextual grade withheld'
-  if (!es) return basis
-  return basis === 'Market' ? 'Mercado' : 'Real'
+function basisText(basis: Side['gradeBasis'], m: BandMessages): string {
+  if (basis === 'League') return m.basisLeague
+  if (basis == null) return m.basisWithheld
+  return m.basisOther(basis)
 }
 
 /** A letter's tone: A/B read good, C neutral, D/F bad. */
@@ -126,8 +128,9 @@ export function DashTradeBandView({
   quiet?: TradeBandQuiet | null
 }) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(dashTradeBandMessages)
   const es = language === 'es'
-  const title = es ? 'Intercambios' : 'Trades'
+  const title = m.title
 
   return (
     <section className="af-core af-trade" aria-label={title}>
@@ -135,26 +138,20 @@ export function DashTradeBandView({
         <span className="af-trade-kicker">{title}</span>
         <TopicTip topic="completedTradeGrade" />
         <span className="af-trade-count af-num">
-          {trades.length > 0
-            ? es
-              ? `${trades.length} en las últimas 24 h`
-              : `${trades.length} in the last 24h`
-            : es
-              ? 'últimas 24 h'
-              : 'last 24h'}
+          {trades.length > 0 ? m.countLast24h(trades.length) : m.last24h}
         </span>
       </div>
 
       {trades.length === 0 && quiet ? (
         <Link className="af-trade-quiet" href={quiet.href}>
           <span className="af-trade-quiet-text">
-            {es ? 'Sin intercambios en las últimas 24 horas.' : 'No trades in the last 24 hours.'}
+            {m.noTrades24h}
             <span className="af-trade-quiet-sub">
-              {es ? `El último fue en ${quiet.leagueName}` : `Last one was in ${quiet.leagueName}`}
+              {m.lastOneIn(quiet.leagueName)}
               {quiet.ago ? ` · ${ageText(quiet.ago, language)}` : ''}
             </span>
           </span>
-          <span className="af-trade-quiet-cta">{es ? 'Ver intercambios' : 'See trades'} →</span>
+          <span className="af-trade-quiet-cta">{m.seeTrades} →</span>
         </Link>
       ) : null}
 
@@ -205,14 +202,14 @@ export function DashTradeBandView({
                         <span
                           className="af-trade-grade"
                           data-tone={gradeTone(s.grade)}
-                          title={basisText(s.gradeBasis, es)}
-                          aria-label={`${es ? 'Calificación' : 'Grade'} ${s.grade ?? '—'}`}
+                          title={basisText(s.gradeBasis, m)}
+                          aria-label={`${m.grade} ${s.grade ?? '—'}`}
                         >
                           {s.grade ?? '—'}
                         </span>
                       </div>
                       <span className="af-trade-got">
-                        {t.status === 'processed' ? (es ? 'Recibió' : 'Received') : es ? 'Recibe' : 'Gets'}
+                        {t.status === 'processed' ? m.received : m.gets}
                       </span>
                       <ul className="af-trade-assets">
                         {s.received.map((a, i) => (
@@ -246,13 +243,13 @@ export function DashTradeBandView({
                         ))}
                         {s.receivedCount > visibleAssets ? (
                           <li className="af-trade-more">
-                            {es ? `+${s.receivedCount - visibleAssets} más` : `+${s.receivedCount - visibleAssets} more`}
+                            {m.more(s.receivedCount - visibleAssets)}
                           </li>
                         ) : null}
                         {s.receivedCount === 0 ? (
                           /* Never an empty column with an arrow pointing into it — the Trades board's
                              wording says what it is: a FAAB-only side, or one the import did not capture. */
-                          <li className="af-trade-more">{es ? 'Solo FAAB, o no se capturó' : 'FAAB only, or not captured'}</li>
+                          <li className="af-trade-more">{m.faabOnly}</li>
                         ) : null}
                       </ul>
                     </div>
@@ -263,19 +260,19 @@ export function DashTradeBandView({
                   <p className="af-trade-verdict">
                     {/* The engine says "favors A"; the manager's own name is the only version anyone can act on. */}
                     <span className="af-trade-verdict-word" data-fair={t.verdict.kind === 'even' ? 'true' : 'false'}>
-                      {verdictText(t.verdict, es)}
+                      {verdictText(t.verdict, m)}
                     </span>
                     <span className="af-trade-conf af-num">
                       {' '}
-                      · {es ? 'con los valores de esta liga' : 'on this league’s values'} {gradeMoment(t.moment, language)}
-                      {t.confidence > 0 ? (es ? ` · ${t.confidence}% de confianza` : ` · ${t.confidence}% confidence`) : ''}
+                      · {m.onLeagueValues} {gradeMoment(t.moment, language)}
+                      {t.confidence > 0 ? m.confidence(t.confidence) : ''}
                     </span>
                   </p>
                 ) : null}
 
                 {why.unlocked ? (
                   reasons.length > 0 ? (
-                    <ul className="af-trade-why" aria-label={es ? 'Por qué estas calificaciones' : 'Why these grades'}>
+                    <ul className="af-trade-why" aria-label={m.whyGrades}>
                       {reasons.map((r) => (
                         <li key={r.key}>
                           <strong>{r.name}:</strong> {r.text}
@@ -286,12 +283,12 @@ export function DashTradeBandView({
                 ) : (
                   <Link className="af-trade-why-lock" href={why.upgradePath}>
                     <span aria-hidden>🔒</span>
-                    {es ? `Por qué estas calificaciones · ${why.planName}` : `Why these grades · ${why.planName}`}
+                    {m.whyLocked(why.planName)}
                   </Link>
                 )}
 
                 <Link className="af-trade-open" href={t.href}>
-                  {es ? `Todos los intercambios de ${t.leagueName}` : `All ${t.leagueName} trades`} →
+                  {m.allTrades(t.leagueName)} →
                 </Link>
               </article>
             )

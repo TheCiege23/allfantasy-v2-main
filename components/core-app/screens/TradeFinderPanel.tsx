@@ -5,6 +5,7 @@ import { TopicTip } from '@/components/core-app/TopicTip'
 
 import { useCallback, useState } from 'react'
 import { readableApiError } from '@/lib/http/readableApiError'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Decision OS · Trade Finder, on the Trade Center.
@@ -48,7 +49,7 @@ type FinderResponse = {
 }
 
 function money(v: number | null): string {
-  return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString() : '—'
+  return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString(getAppIntlLocale()) : '—'
 }
 
 export function TradeFinderPanel(props: { leagueId: string | null }) {
