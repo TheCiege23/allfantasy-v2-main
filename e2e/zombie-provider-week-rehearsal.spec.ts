@@ -95,7 +95,7 @@ test('recorded provider weeks score and settle NFL NBA NHL MLB @zombie-rehearsal
           where: { leagueId, OR: [{ externalId: rosters[i].id }, { platformUserId: rosters[i].platformUserId }] },
           data: { platformUserId: userIds[i], claimedByUserId: userIds[i], isOrphan: false },
         })
-        await prisma.roster.update({ where: { id: rosters[i].id },
+        rosters[i] = await prisma.roster.update({ where: { id: rosters[i].id },
           data: { platformUserId: userIds[i], redraftRosterId: sr.id } })
         const p = players[i]
         await prisma.redraftRosterPlayer.create({ data: {
@@ -223,6 +223,13 @@ test('recorded provider weeks score and settle NFL NBA NHL MLB @zombie-rehearsal
       console.log(sport + ' recorded-provider replay: ' + sync.cacheRowsRead + ' game rows, 8 scores, 4 final matchups, infection, winnings and one report')
     }
   } finally {
+    // Weekly score rows are shared by player/sport/year, so remove only this replay's
+    // recorded-player scores on the guarded disposable DB, including on failed attempts.
+    await prisma.playerWeeklyScore.deleteMany({ where: {
+      season: 2026, week: 1, OR: ['NFL', 'NBA', 'NHL', 'MLB'].map(sport => ({
+        sport, playerId: { in: recorded.players.filter(p => p.sport === sport).map(p => p.draft_id) },
+      })),
+    } })
     await prisma.analyticsEvent.deleteMany({ where: { userId: { in: userIds } } })
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } })
     await prisma.appUser.deleteMany({ where: { id: { in: userIds } } })
