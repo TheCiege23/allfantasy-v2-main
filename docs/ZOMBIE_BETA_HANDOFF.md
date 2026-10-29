@@ -96,3 +96,14 @@ Use only the separate QA rooms for start/pick/pause checks. Keep the original fo
 3. Resume current NFL ADP integration when the owner obtains licensed access; continue verified portrait/profile/stat exceptions without fabricating data.
 
 Renewal UX reference reviewed: [Sleeper commissioner controls](https://support.sleeper.com/en/articles/3971182-what-can-a-commissioner-do). The new Zombie flow uses an explicit preview and a separate next-season league to preserve the completed season.
+
+
+## Reviewed next-season universe capacity and placement
+
+Commissioner Universe controls and the universe page now offer **Edit placements and capacity** after every source league finishes its season, draft and weekly settlements. The owner can add/remove next-season destination leagues, select an existing level and prior-league rule template, choose 8/10/12/14/16 seats, and assign every returning manager exactly once. No manager can be silently discarded. Level league limits and 24 destinations are enforced. Added seats remain open; drafts for expanded leagues require distinct registered managers in every seat before manual or scheduled starts.
+
+A reason of 10-1,000 characters is required. Preview is read-only. Saving a review draft appends an owner audit record and creates no leagues; restore it after reopening. Every edit invalidates the approval and requires another preview. Creation binds the complete proposal, rules, membership, results and recorded movement to the preview hash. If recorded movement differs, explicit replacement consent is required; its full original allocation is retained with the actor, reason and new allocation in the audit trail. Completed leagues, rosters, resources and prizes remain archived. New destination rules, FAAB policies and draft settings come from the selected source template. This workflow changes next-season capacity, not current-season membership.
+
+No schema migration, provider requests, external messages, money transfers or production changes are involved. Additional current NFL ADP access remains deferred by the owner. Physical iPhone acceptance and a real-manager scoring window remain open beta requirements. Engineering completion remains an estimate of about 96%; this is not a production release or live beta acceptance.
+
+Implementation references: Sleeper [league resizing](https://support.sleeper.com/en/articles/4000484-how-to-decrease-league-size) and [nonplaying commissioners](https://support.sleeper.com/en/articles/3231520-can-i-commish-a-league-without-owning-a-team). AllFantasy explicitly reviews every returning manager before changing the next-season field and preserves the completed season.

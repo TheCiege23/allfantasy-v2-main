@@ -7,12 +7,14 @@ import type { ValidatedCreateLeagueBody } from '@/lib/league-creation/canonical/
 import { getUniverseStandings } from './ZombieUniverseStandingsService'
 import { detachedPolicy, nextZombieSettings } from './renewalSettings'
 import { planUniverseRenewal, renewalFingerprint } from './universeRenewalPlan'
+import { parseUniverseRenewalProposal, planReviewedUniverseRenewal, type ReviewedRenewalPool, type UniverseRenewalProposal } from './reviewedUniverseRenewal'
 
 const EVENT = 'UNIVERSE_SEASON_RENEWED'
 type Tx = Prisma.TransactionClient
 export type ZombieRenewalResult = {
   version: number; universeId: string | null; season: number; nextSeason: number; previewHash: string;
-  leagues: Array<{ previousLeagueId: string; leagueId: string; draftId: string }>;
+  leagues: Array<{ previousLeagueId: string; leagueId: string; draftId: string; poolId?: string; name?: string }>;
+  proposalHash?: string | null;
   placements: Array<{ userId: string; previousRosterId: string; leagueId: string; slot: number; movement: string }>;
   alreadyRenewed: boolean
 }
@@ -56,15 +58,16 @@ async function renewalPolicies(tx: Tx, sources: Source[], season: number, drafts
     paid: z.paidConfig, free: z.freeRewardConfig, extended: z.league.redraftExtendedSettings,
   })))
 }
-function withFaab(assignments: ReturnType<typeof planUniverseRenewal>['assignments'], sources: Source[]) {
+function withFaab(assignments: ReturnType<typeof planUniverseRenewal>['assignments'], sources: Source[], pools?: ReviewedRenewalPool[]) {
   return assignments.map(m => {
-    const destination = sources.find(z=>z.leagueId===m.destinationLeagueId)!.league
+    const templateId=pools?.find(p=>p.leagueId===m.destinationLeagueId)?.templateLeagueId??m.destinationLeagueId
+    const destination = sources.find(z=>z.leagueId===templateId)!.league
     const previous = sources.flatMap(z=>z.league.rosters).find(r=>r.id===m.rosterId)!
     const faabRule = effectiveFaabRolloverRule(storedFaabRolloverRule(destination.waiverSettings?.waiverEngineConfig),'redraft')
     return { ...m, faabRule, nextFaab: faabBalanceAfterRollover(faabRule,destination.waiverSettings?.faabBudget ?? destination.waiverBudget ?? 0,previous.faabRemaining) }
   })
 }
-async function loadPlan(tx: Tx, universeId: string, season: number, actor: string, standalone = false) {
+async function loadPlan(tx: Tx, universeId: string, season: number, actor: string, standalone = false, options: {proposal?:UniverseRenewalProposal;editorOnly?:boolean} = {}) {
   if (standalone) return loadStandalonePlan(tx, universeId, season, actor)
   if (!Number.isInteger(season) || season < 2000 || season >= 2200) fail('RENEWAL_SEASON_INVALID')
   const universe = await tx.zombieUniverse.findUnique({ where: { id: universeId }, include: { levels: true } })
@@ -74,7 +77,6 @@ async function loadPlan(tx: Tx, universeId: string, season: number, actor: strin
     universeId, eventType: EVENT, metadata: { path: ['season'], equals: season },
   } })
   if (prior) return { prior: prior.metadata, universe, sources: [], plan: null }
-  if (universe.promotionMode !== 'auto') fail('RENEWAL_MANUAL_REVIEW_REQUIRED')
   if (await tx.zombieLeague.count({ where: { universeId, season: { gt: season } } })) fail('RENEWAL_NEWER_SEASON_EXISTS')
   const sources = await readSources(tx, { universeId, season })
   if (!sources.length || sources.length > 24) fail('RENEWAL_LEAGUE_COUNT_INVALID')
@@ -113,36 +115,52 @@ async function loadPlan(tx: Tx, universeId: string, season: number, actor: strin
     return { ...row, userId: user.id, displayName: user.displayName || user.username || 'Manager',
       teamName: team?.teamName || user.displayName || user.username || 'Team', avatarUrl: team?.avatarUrl ?? user.avatarUrl }
   })
-  let placement
-  try { placement = planUniverseRenewal(managers, universe.levels, universe, sources.map(z => ({
-    leagueId: z.leagueId, levelId: z.levelId!, name: z.name || z.league.name || 'Zombie League', seats: z.teamCount, orderInLevel: z.orderInLevel,
-  })), universeId + ':' + (season+1)) } catch (error) { fail(error instanceof Error ? error.message : 'RENEWAL_CAPACITY_INVALID') }
+  const pools=sources.map(z=>({leagueId:z.leagueId,levelId:z.levelId!,name:z.name||z.league.name||'Zombie League',seats:z.teamCount,orderInLevel:z.orderInLevel}))
+  const recordedMovement=await tx.zombieMovementRecord.findMany({where:{universeId,season},orderBy:{id:'asc'}})
+  if(options.editorOnly) {
+    const saved=await tx.zombieAuditLog.findFirst({where:{universeId,eventType:'UNIVERSE_RENEWAL_DRAFT_SAVED',metadata:{path:['season'],equals:season}},orderBy:{createdAt:'desc'}})
+    let savedProposal:UniverseRenewalProposal|null=null
+    try { savedProposal=parseUniverseRenewalProposal((saved?.metadata as {proposal?:unknown}|null)?.proposal) } catch {}
+    return {universe,sources,drafts,policies:[],plan:null,prior:null,previewHash:undefined,editor:{
+      season,nextSeason:season+1,managers,pools,levels:universe.levels.map(l=>({id:l.id,name:l.name,rankOrder:l.rankOrder,maxLeagues:l.maxLeagues})),
+      savedProposal,recordedMovementCount:recordedMovement.length,
+    }}
+  }
+  if(!options.proposal && universe.promotionMode !== 'auto') fail('RENEWAL_MANUAL_REVIEW_REQUIRED')
+  let placement:ReturnType<typeof planUniverseRenewal>
+  try { placement = options.proposal
+    ? planReviewedUniverseRenewal(managers,universe.levels,universe,pools,options.proposal,universeId+':'+(season+1))
+    : planUniverseRenewal(managers,universe.levels,universe,pools,universeId+':'+(season+1))
+  } catch(error) { fail(error instanceof Error?error.message:'RENEWAL_CAPACITY_INVALID') }
   // The fingerprint covers copied rules as well as membership/results: an edited rule requires a fresh preview.
   const policies = await renewalPolicies(tx, sources, season, drafts)
-  const assignments = withFaab(placement!.assignments, sources)
-  const plan = { version: 1, universeId, season, nextSeason: season+1, ...placement!, assignments }
+  const assignments = withFaab(placement!.assignments, sources, placement.pools)
+  const plan = { version: 1, universeId, season, nextSeason: season+1, ...placement!, assignments,
+    openSeats:placement.pools.reduce((n,p)=>n+p.seats,0)-assignments.length,
+    ...(options.proposal?{proposal:options.proposal,recordedMovement}:{}),
+  }
   return { universe, sources, policies, drafts, plan, prior: null,
     previewHash: renewalFingerprint({ plan, policies }),
   }
 }
 
-async function previewRenewal(id: string, season: number, actor: string, standalone = false) {
+async function previewRenewal(id: string, season: number, actor: string, standalone = false, proposal?:UniverseRenewalProposal) {
   return prisma.$transaction(async tx => {
-    const loaded = await loadPlan(tx, id, season, actor, standalone)
+    const loaded = await loadPlan(tx, id, season, actor, standalone, {proposal})
     return loaded.prior ? { completed: true, result: loaded.prior } :
       { completed: false, ...loaded.plan, previewHash: loaded.previewHash }
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 60000 })
 }
 
-async function executeRenewal(id: string, season: number, actor: string, previewHash: string, standalone = false): Promise<ZombieRenewalResult> {
+async function executeRenewal(id: string, season: number, actor: string, previewHash: string, standalone = false, proposal?:UniverseRenewalProposal): Promise<ZombieRenewalResult> {
   const universeId = standalone ? null : id
   const run = () => prisma.$transaction(async tx => {
     if (standalone) await tx.$queryRaw(Prisma.sql`SELECT id FROM zombie_leagues WHERE "leagueId" = ${id} FOR UPDATE`)
     else await tx.$queryRaw(Prisma.sql`SELECT id FROM zombie_universes WHERE id = ${id} FOR UPDATE`)
-    const loaded = await loadPlan(tx, id, season, actor, standalone)
+    const loaded = await loadPlan(tx, id, season, actor, standalone, {proposal})
     if (loaded.prior) {
       const prior = loaded.prior as unknown as ZombieRenewalResult
-      if (prior.previewHash !== previewHash) fail('RENEWAL_PREVIEW_CHANGED')
+      if (prior.previewHash !== previewHash || (prior.proposalHash??null)!==(proposal?renewalFingerprint(proposal):null)) fail('RENEWAL_PREVIEW_CHANGED')
       if (!Array.isArray(prior.leagues) || !Array.isArray(prior.placements)) fail('RENEWAL_MOVEMENT_REVIEW_REQUIRED')
       return { ...prior, alreadyRenewed: true }
     }
@@ -152,39 +170,47 @@ async function executeRenewal(id: string, season: number, actor: string, preview
       const universeId = id
       const movement = plan!.movement.filter(m=>m.reason !== 'watch')
       const existingMovement = await tx.zombieMovementRecord.findMany({ where: { universeId, season } })
-      if (existingMovement.length) {
-        if (existingMovement.length !== movement.length || movement.some(m => !existingMovement.some(r =>
-          r.userId === plan!.assignments.find(a=>a.rosterId===m.rosterId)!.userId &&
-          r.fromTierLabel===m.fromTierLabel && r.toTierLabel===m.toTierLabel &&
-          r.movementType===(m.reason==='promotion'?'promoted':'relegated')))) fail('RENEWAL_MOVEMENT_REVIEW_REQUIRED')
-      } else for (const m of movement) {
+      const movementDiffers=existingMovement.length>0 && (existingMovement.length!==movement.length || movement.some(m=>!existingMovement.some(r=>
+        r.userId===plan!.assignments.find(a=>a.rosterId===m.rosterId)!.userId &&
+        r.fromTierLabel===m.fromTierLabel && r.toTierLabel===m.toTierLabel &&
+        r.movementType===(m.reason==='promotion'?'promoted':'relegated'))))
+      if(movementDiffers) {
+        if(!proposal?.replaceRecordedMovement) fail('RENEWAL_MOVEMENT_REVIEW_REQUIRED')
+        await tx.zombieAuditLog.create({data:{universeId,leagueId:sources[0].leagueId,eventType:'UNIVERSE_MOVEMENT_OVERRIDDEN',
+          metadata:JSON.parse(JSON.stringify({version:1,season,actorUserId:actor,reason:proposal.reason,before:existingMovement,after:movement})) as Prisma.InputJsonValue}})
+        await tx.zombieMovementRecord.deleteMany({where:{universeId,season}})
+      }
+      if (!existingMovement.length || movementDiffers) for (const m of movement) {
         const manager=plan!.assignments.find(a=>a.rosterId===m.rosterId)!
         await tx.zombieMovementRecord.create({ data: { universeId, season, userId: manager.userId, displayName: manager.displayName,
           fromTierLabel: m.fromTierLabel, toTierLabel: m.toTierLabel, movementType: m.reason==='promotion'?'promoted':'relegated',
-          reason: 'record_performance', finalRecord: m.wins+'-'+m.losses+'-'+m.ties, finalPPW: m.pointsPerWeek, finalTierRank: m.finalTierRank, approvedBy: actor } })
+          reason: proposal ? 'commissioner_manual_renewal' : 'record_performance', finalRecord: m.wins+'-'+m.losses+'-'+m.ties, finalPPW: m.pointsPerWeek, finalTierRank: m.finalTierRank, approvedBy: actor } })
       }
       if (!await tx.zombieAuditLog.findFirst({ where: { universeId, eventType: 'UNIVERSE_MOVEMENT_RECORDED', metadata: { path: ['season'], equals: season } } }))
         await tx.zombieAuditLog.create({ data: { universeId, leagueId: sources[0].leagueId, eventType: 'UNIVERSE_MOVEMENT_RECORDED',
           metadata: { version: 1, season, recorded: movement.length, actorUserId: actor, scope: 'season_renewal' } } })
     }
-    const created: Array<{ previousLeagueId: string; leagueId: string; draftId: string }> = []
-    for (const z of sources) {
+    const created: Array<{ previousLeagueId: string; poolId: string; leagueId: string; draftId: string; name:string }> = []
+    for (const pool of plan!.pools as ReviewedRenewalPool[]) {
+      const z=sources.find(source=>source.leagueId===(pool.templateLeagueId??pool.leagueId))!
+      const capacity=pool.seats
       const old = z.league, policy = policies!.find(p => p.leagueId === z.leagueId)!, draft = drafts!.find(d => d.leagueId === z.leagueId)!
-      const name = (old.name || z.name || 'Zombie League').replace(/ · \d{4}$/, '') + ' · ' + (season+1)
+      const name = (pool.name || old.name || z.name || 'Zombie League').replace(/ · \d{4}$/, '') + ' · ' + (season+1)
       const body: ValidatedCreateLeagueBody = {
-        concept: 'zombie', sport: old.sport, teamCount: z.teamCount, draftType: draft.draftType,
+        concept: 'zombie', sport: old.sport, teamCount: capacity, draftType: draft.draftType,
         scoringPreset: old.scoringPresetId || ({ NFL: 'fb_half_ppr', NBA: 'nba_points', NHL: 'nhl_points', MLB: 'mlb_points' } as Record<string,string>)[old.sport],
         leagueName: name.slice(0,100), timezone: old.timezone || 'America/New_York', language: old.language === 'es' ? 'es' : 'en', conceptSetup: {},
       }
-      const engine = runPresetEngine({ concept: 'zombie', sport: old.sport, teamCount: z.teamCount,
+      const engine = runPresetEngine({ concept: 'zombie', sport: old.sport, teamCount: capacity,
         draftType: draft.draftType, scoringPreset: body.scoringPreset, leagueName: body.leagueName, commissionerId: actor, conceptSetup: {} })
       const shell = await createCanonicalLeagueInTransaction(tx, actor, body, engine, undefined, { tenantId: old.tenantId, season: season+1 })
       const leagueId = shell.leagueId
       const fresh = await tx.league.findUniqueOrThrow({ where: { id: leagueId }, select: { settings: true } })
       const base = fresh.settings as Prisma.JsonObject
-      const settings = { ...base, ...policy.settings, default_team_count: z.teamCount,
+      const settings = { ...base, ...policy.settings, default_team_count: capacity,
+        zombie_renewal:{version:1,season:season+1,previousLeagueId:z.leagueId,requiresRegisteredSeats:plan!.assignments.filter(m=>m.destinationLeagueId===pool.leagueId).length<capacity},
         draftSettings: { draftType: draft.draftType, rounds: draft.rounds, timerSeconds: draft.timerSeconds, thirdRoundReversal: draft.thirdRoundReversal },
-        foundation_defaults: { ...(base.foundation_defaults as Prisma.JsonObject), ...(policy.settings.foundation_defaults as Prisma.JsonObject),
+        foundation_defaults: { ...(base.foundation_defaults as Prisma.JsonObject), ...(policy.settings.foundation_defaults as Prisma.JsonObject), managerCount:capacity,
           draft: { draftType: draft.draftType, rounds: draft.rounds, timerSeconds: draft.timerSeconds } },
         draft_rounds: draft.rounds, draft_type: draft.draftType, requested_draft_type: draft.draftType, draft_timer_seconds: draft.timerSeconds,
         third_round_reversal: draft.thirdRoundReversal, draft_third_round_reversal: draft.thirdRoundReversal,
@@ -209,17 +235,29 @@ async function executeRenewal(id: string, season: number, actor: string, preview
       if (old.redraftExtendedSettings) await tx.redraftLeagueExtendedSettings.update({ where: { leagueId }, data: {
         ...detachedPolicy(old.redraftExtendedSettings, ['settingsJson','isPublic']), isPublic: false,
       } })
-      const members = plan!.assignments.filter(m => m.destinationLeagueId === z.leagueId).sort((a,b) => a.slot-b.slot)
+      const members = plan!.assignments.filter(m => m.destinationLeagueId === pool.leagueId).sort((a,b) => a.slot-b.slot)
       const seats = await tx.leagueEntrySlot.findMany({ where: { leagueId }, orderBy: { slotNumber: 'asc' } })
-      if (seats.length !== members.length || seats.some(s => !s.rosterId)) fail('RENEWAL_CONFIGURATION_INCOMPLETE')
+      if (seats.length !== capacity || seats.some(s => !s.rosterId)) fail('RENEWAL_CONFIGURATION_INCOMPLETE')
       // Detach the creator before assigning seats, so moving the commissioner cannot hit the owner uniqueness constraint.
       for (const seat of seats) await tx.roster.update({ where: { id: seat.rosterId! }, data: { platformUserId: 'renewal-seat-' + seat.id } })
       const slotOrder = []
-      for (let i=0; i<members.length; i++) {
-        const m=members[i], rosterId=seats[i].rosterId!
+      for (let i=0; i<capacity; i++) {
+        const m=members.find(member=>member.slot===i+1), rosterId=seats[i].rosterId!
+        if(!m) {
+          const openName='Open Team '+(i+1),owner='open-slot-'+leagueId+'-'+(i+1)
+          await tx.roster.update({where:{id:rosterId},data:{platformUserId:owner,
+            playerData:{players:[],draftPicks:[],foundation:{slotNumber:i+1,openTeam:true,createdBy:'zombie_universe_renewal'}},
+            settings:{openSlot:true,commissioner:false},faabRemaining:old.waiverSettings?.faabBudget??old.waiverBudget??0}})
+          await tx.leagueTeam.update({where:{leagueId_externalId:{leagueId,externalId:rosterId}},data:{
+            platformUserId:owner,claimedByUserId:null,ownerName:openName,teamName:openName,avatarUrl:null,isOrphan:true,isCommissioner:false,
+            role:'member',lifecycleState:'CURRENT',managerKind:'VACANT'}})
+          await tx.leagueEntrySlot.update({where:{id:seats[i].id},data:{status:'OPEN'}})
+          slotOrder.push({slot:i+1,rosterId,displayName:openName,open:true})
+          continue
+        }
         await tx.roster.update({ where: { id: rosterId }, data: {
           platformUserId: m.userId, playerData: { players: [], draftPicks: [], foundation: { slotNumber: i+1, openTeam: false, createdBy: 'zombie_universe_renewal' } },
-          faabRemaining: m.nextFaab, waiverPriority: members.length-i,
+          faabRemaining: m.nextFaab, waiverPriority: capacity-i,
           settings: { openSlot: false, commissioner: m.userId === actor },
         } })
         await tx.leagueTeam.update({ where: { leagueId_externalId: { leagueId, externalId: rosterId } }, data: {
@@ -242,7 +280,7 @@ async function executeRenewal(id: string, season: number, actor: string, preview
       } })
       const nextDraft = await tx.draftSession.findFirstOrThrow({ where: { leagueId } })
       await tx.draftSession.update({ where: { id: nextDraft.id }, data: {
-        draftType: draft.draftType, rounds: draft.rounds, teamCount: members.length, slotOrder,
+        draftType: draft.draftType, rounds: draft.rounds, teamCount: capacity, slotOrder,
         timerSeconds: draft.timerSeconds, thirdRoundReversal: draft.thirdRoundReversal,
         auctionBudgetPerTeam: draft.auctionBudgetPerTeam, aiAutoPick: draft.aiAutoPick, cpuAutoPick: draft.cpuAutoPick,
         playerPool: draft.playerPool, alphabeticalSort: false, customRankingsEnabled: draft.customRankingsEnabled,
@@ -255,7 +293,7 @@ async function executeRenewal(id: string, season: number, actor: string, preview
       // No last-season role records, resources, payouts, balances, or paid-manager lists enter the new league.
       const nextZombie = await tx.zombieLeague.create({ data: {
         ...detachedPolicy(z, ['league','paidConfig','freeRewardConfig','rulesSnapshot','commissionerUiPrefs','season','leagueId','status','currentWeek','potTotal','draftScheduledAt','currentTeamCount','slug','name']),
-        leagueId, universeId, levelId: z.levelId, name: body.leagueName, season: season+1, status: 'setup',
+        leagueId, universeId, levelId: standalone?null:pool.levelId, teamCount:capacity, orderInLevel:pool.orderInLevel, name: body.leagueName, season: season+1, status: 'setup',
         currentWeek: 0, seasonStartWeek: 1, isSingleLeague: standalone, commissionerId: actor, currentTeamCount: members.length, potTotal: 0, draftScheduledAt: null, slug: '',
         ...(z.commissionerUiPrefs != null ? { commissionerUiPrefs: z.commissionerUiPrefs as Prisma.InputJsonValue } : {}),
       } as Prisma.ZombieLeagueUncheckedCreateInput })
@@ -270,12 +308,16 @@ async function executeRenewal(id: string, season: number, actor: string, preview
         ...detachedPolicy(z.freeRewardConfig, ['symbolicPotTotal','symbolicWeeklyPool']), zombieLeagueId: nextZombie.id, symbolicPotTotal: 0, symbolicWeeklyPool: 0,
       } as Prisma.ZombieFreeRewardConfigUncheckedCreateInput })
       await tx.findLeagueListing.updateMany({ where: { leagueId }, data: { isActive: false } })
-      created.push({ previousLeagueId: z.leagueId, leagueId, draftId: nextDraft.id })
+      created.push({ previousLeagueId: z.leagueId, poolId:pool.leagueId, leagueId, draftId: nextDraft.id, name:body.leagueName })
     }
-    const result = { version: 1, universeId, previousLeagueId: standalone ? id : null, season, nextSeason: season+1, previewHash, leagues: created,
+    const result = { version: 1, universeId, previousLeagueId: standalone ? id : null, season, nextSeason: season+1, previewHash, proposalHash:proposal?renewalFingerprint(proposal):null, leagues: created,
       placements: plan!.assignments.map(m=>({ userId: m.userId, previousRosterId: m.rosterId,
-        leagueId: created.find(c=>c.previousLeagueId===m.destinationLeagueId)!.leagueId, slot: m.slot, movement: m.movement })),
+        leagueId: created.find(c=>c.poolId===m.destinationLeagueId)!.leagueId, slot: m.slot, movement: m.movement })),
       alreadyRenewed: false }
+    if(proposal) await tx.zombieAuditLog.create({data:{universeId,leagueId:sources[0].leagueId,eventType:'UNIVERSE_RENEWAL_REVIEW_APPLIED',
+      metadata:{version:1,season,nextSeason:season+1,actorUserId:actor,reason:proposal.reason,proposal,
+        before:sources.map(z=>({leagueId:z.leagueId,levelId:z.levelId,seats:z.teamCount})),
+        after:plan!.pools,placements:result.placements} as unknown as Prisma.InputJsonValue}})
     await tx.zombieAuditLog.create({ data: { universeId, leagueId: sources[0].leagueId, eventType: standalone ? 'LEAGUE_SEASON_RENEWED' : EVENT,
       metadata: result as unknown as Prisma.InputJsonValue } })
     const announcementLeague = await tx.zombieLeague.findUniqueOrThrow({ where: { leagueId: created[0].leagueId } })
@@ -340,8 +382,35 @@ async function loadStandalonePlan(tx: Tx, leagueId: string, season: number, acto
 export function previewZombieUniverseRenewal(id: string, season: number, actor: string) {
   return previewRenewal(id,season,actor)
 }
-export function renewZombieUniverse(id: string, season: number, actor: string, hash: string) {
-  return executeRenewal(id,season,actor,hash)
+export function renewZombieUniverse(id: string, season: number, actor: string, hash: string, rawProposal?:unknown) {
+  const proposal=rawProposal===undefined?undefined:parseReviewedProposal(rawProposal)
+  return executeRenewal(id,season,actor,hash,false,proposal)
+}
+function parseReviewedProposal(raw:unknown) {
+  try { return parseUniverseRenewalProposal(raw) } catch { fail('RENEWAL_PROPOSAL_INVALID') }
+}
+export function previewReviewedZombieUniverseRenewal(id:string,season:number,actor:string,raw:unknown) {
+  return previewRenewal(id,season,actor,false,parseReviewedProposal(raw))
+}
+export function getZombieUniverseRenewalEditor(id:string,season:number,actor:string) {
+  return prisma.$transaction(async tx=>{
+    const loaded=await loadPlan(tx,id,season,actor,false,{editorOnly:true})
+    if(loaded.prior) return {completed:true,result:loaded.prior}
+    if(!('editor' in loaded)) fail('RENEWAL_CONFIGURATION_INCOMPLETE')
+    return {completed:false,...loaded.editor}
+  },{isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead,timeout:60000})
+}
+export function saveZombieUniverseRenewalDraft(id:string,season:number,actor:string,hash:string,raw:unknown) {
+  const proposal=parseReviewedProposal(raw)
+  return prisma.$transaction(async tx=>{
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM zombie_universes WHERE id = ${id} FOR UPDATE`)
+    const loaded=await loadPlan(tx,id,season,actor,false,{proposal})
+    if(loaded.prior) fail('RENEWAL_ALREADY_RENEWED')
+    if(loaded.previewHash!==hash) fail('RENEWAL_PREVIEW_CHANGED')
+    await tx.zombieAuditLog.create({data:{universeId:id,leagueId:loaded.sources[0].leagueId,eventType:'UNIVERSE_RENEWAL_DRAFT_SAVED',
+      metadata:{version:1,season,actorUserId:actor,previewHash:hash,proposal} as unknown as Prisma.InputJsonValue}})
+    return {saved:true}
+  },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,timeout:60000})
 }
 export function previewStandaloneZombieRenewal(id: string, season: number, actor: string) {
   return previewRenewal(id,season,actor,true)

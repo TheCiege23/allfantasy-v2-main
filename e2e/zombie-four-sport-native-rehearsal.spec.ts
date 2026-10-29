@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 /** Four-sport native Zombie rehearsal on the disposable CI database. Synthetic scores exercise settlement, not provider calibration. */
 import { randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
@@ -489,4 +490,167 @@ test('four-sport universe allocations use finished native standings and record o
     await prisma.appUser.deleteMany({ where: { id: { in: userIds } } })
     await prisma.$disconnect()
   }
+})
+
+test('four-sport reviewed capacity plans preserve archives and require renewed consent @zombie-rehearsal',async({page})=>{
+ test.setTimeout(1_800_000)
+ const target=new URL(process.env.DATABASE_URL||'http://invalid')
+ if(!['127.0.0.1','localhost'].includes(target.hostname))throw new Error('LOCAL_DISPOSABLE_DATABASE_REQUIRED')
+ if(process.env.UPSTASH_REDIS_REST_URL||process.env.UPSTASH_REDIS_REST_TOKEN)throw new Error('SHARED_REDIS_MUST_BE_DISABLED')
+ const {runPresetEngine}=await import('../lib/league-creation/preset-engine/runPresetEngine')
+ const {createCanonicalLeagueInTransaction}=await import('../lib/league-creation/canonical/createCanonicalLeagueInTransaction')
+ const {createZombieLeague}=await import('../lib/zombie/setupEngine')
+ const marker='manual-renewal-ci-'+randomUUID().slice(0,8)
+ const password=randomUUID(),passwordHash=await bcrypt.hash(password,6)
+ const users=Array.from({length:17},(_,i)=>marker+'-'+i)
+ await prisma.appUser.createMany({data:users.map(id=>({id,username:id,email:id+'@example.invalid',emailVerified:new Date(),passwordHash}))})
+ await signIn(page,users[0]+'@example.invalid',password,users[0])
+ try {
+ for(const [sport,preset] of [['NFL','fb_half_ppr'],['NBA','nba_points'],['NHL','nhl_points'],['MLB','mlb_points']] as const){
+  const u=await prisma.zombieUniverse.create({data:{name:marker+' '+sport,sport,commissionedByUserId:users[0],createdByUserId:users[0],promotionCount:2,relegationCount:2}})
+  const originals:string[]=[]
+  for(const [li,name] of ['Gamma','Alpha'].entries()){
+   const level=await prisma.zombieUniverseLevel.create({data:{universeId:u.id,name,tierLabel:name,rankOrder:li+1}})
+   const body={concept:'zombie',sport,teamCount:8,draftType:'snake',scoringPreset:preset,leagueName:marker+' '+sport+' '+name,timezone:'America/New_York',conceptSetup:{}}
+   const engine=runPresetEngine({...body,commissionerId:users[0]})
+   const made=await prisma.$transaction(tx=>createCanonicalLeagueInTransaction(tx,users[0],body,engine,undefined,{tenantId:'allfantasy',season:2026}),{timeout:120000})
+   const id=made.leagueId; originals.push(id)
+   const z=await createZombieLeague({leagueId:id,sport,teamCount:8,season:2026},u.id,level.id)
+   await prisma.zombieLeague.update({where:{id:z.id},data:{status:'complete',totalWeeks:1,currentWeek:1,seasonStartWeek:1,isPaid:true,potTotal:200}})
+   await prisma.zombiePaidConfig.create({data:{zombieLeagueId:z.id,buyInAmount:25,totalPot:200,totalCollected:200,paidUserIds:[users[1+li*8]],potIsLocked:true}})
+   await prisma.league.update({where:{id},data:{status:'complete'}})
+   await prisma.draftSession.updateMany({where:{leagueId:id},data:{status:'completed',completedAt:new Date()}})
+   await prisma.leagueWaiverSettings.update({where:{leagueId:id},data:{faabBudget:100,waiverEngineConfig:{faab_rollover_rule:li?'carry_over':'reset'}}})
+   const season=await prisma.redraftSeason.create({data:{leagueId:id,sport,season:2026,status:'complete',totalWeeks:1,currentWeek:1,playoffStartWeek:2}})
+   const roster=await prisma.roster.findMany({where:{leagueId:id},orderBy:{id:'asc'}})
+   for(let i=0;i<8;i++){
+    const owner=users[1+li*8+i]
+    await prisma.roster.update({where:{id:roster[i].id},data:{platformUserId:owner,faabRemaining:13+i}})
+    await prisma.zombieLeagueTeam.create({data:{leagueId:id,zombieLeagueId:z.id,rosterId:roster[i].id,displayName:owner}})
+    await prisma.redraftRoster.create({data:{leagueId:id,seasonId:season.id,ownerId:owner,ownerName:owner,wins:8-i,losses:i,pointsFor:800-i*40}})
+   }
+   await prisma.zombieWeeklyResolution.create({data:{zombieLeagueId:z.id,week:1,status:'complete',matchupResults:[],newZombies:[],resolvedAt:new Date()}})
+   await prisma.zombieWeeklyWinnings.create({data:{zombieLeagueId:z.id,leagueId:id,rosterId:roster[0].id,week:1,amount:25}})
+  }
+  const before=await prisma.roster.findMany({where:{leagueId:{in:originals}},orderBy:{id:'asc'}})
+
+  const {getZombieUniverseRenewalEditor,previewReviewedZombieUniverseRenewal,saveZombieUniverseRenewalDraft}=await import('../lib/zombie/renewZombieUniverse')
+  const {zombieRenewalDraftReadiness}=await import('../lib/zombie/zombieRenewalDraftReadiness')
+  await prisma.zombieUniverse.update({where:{id:u.id},data:{promotionMode:'manual'}})
+  await assert.rejects(getZombieUniverseRenewalEditor(u.id,2026,users[1]),/RENEWAL_OWNER_REQUIRED/)
+  await assert.rejects(previewZombieUniverseRenewal(u.id,2026,users[0]),/RENEWAL_MANUAL_REVIEW_REQUIRED/)
+  const editor=await getZombieUniverseRenewalEditor(u.id,2026,users[0])
+  assert.equal(editor.managers!.length,16)
+  const proposal={version:1,reason:'Reviewed next-season expansion and placements',replaceRecordedMovement:false,
+   pools:editor.pools!.map(p=>({key:p.leagueId,templateLeagueId:p.leagueId,levelId:p.levelId,name:p.name,seats:10})),
+   placements:editor.managers!.map(m=>({userId:m.userId,poolId:m.leagueId}))}
+  if(sport==='NFL'){proposal.pools=[{...proposal.pools[1],seats:16}];proposal.placements.forEach(m=>m.poolId=proposal.pools[0].key)}
+  if(sport==='MLB'){
+   proposal.pools.forEach(p=>p.seats=8)
+   proposal.pools.push({...proposal.pools[0],key:'expansion-third',name:'Expansion Gamma'})
+   proposal.placements.forEach((m,i)=>m.poolId=proposal.pools[i%3].key)
+  }
+  const oldMovement=await prisma.zombieMovementRecord.create({data:{universeId:u.id,season:2026,userId:users[1],displayName:'Fixture old allocation',
+   fromTierLabel:'Gamma',toTierLabel:'Alpha',movementType:'promoted',reason:'fixture_recorded',finalRecord:'8-0',finalPPW:100,finalTierRank:1,approvedBy:users[0]}})
+
+  const path='/api/zombie-universe/'+u.id+'/renew'
+  const editorResponse=await page.request.get(path+'?editor=1&season=2026')
+  expect(editorResponse.status()).toBe(200)
+  const apiPreview=await page.request.patch(path,{data:{season:2026,proposal}})
+  expect(apiPreview.status()).toBe(200)
+  const apiHash=(await apiPreview.json()).previewHash
+  expect((await page.request.put(path,{data:{season:2026,proposal,previewHash:apiHash}})).status()).toBe(200)
+  const memberContext=await page.context().browser()!.newContext()
+  try{
+   const member=await memberContext.newPage();await signIn(member,users[1]+'@example.invalid',password,users[1])
+   expect((await member.request.get(path+'?editor=1&season=2026')).status()).toBe(403)
+   expect((await member.request.patch(path,{data:{season:2026,proposal}})).status()).toBe(403)
+   expect((await member.request.put(path,{data:{season:2026,proposal,previewHash:apiHash}})).status()).toBe(403)
+   expect((await member.request.post(path,{data:{season:2026,proposal,previewHash:apiHash}})).status()).toBe(403)
+  }finally{await memberContext.close()}
+  if(sport==='NFL'){
+   await page.setViewportSize({width:390,height:844})
+   await page.goto('/zombie/universe/'+u.id)
+   await page.getByRole('button',{name:'Edit placements and capacity',exact:true}).click()
+   await expect(page.getByRole('button',{name:'Restore saved review draft'})).toBeVisible()
+   await page.getByRole('button',{name:'Restore saved review draft'}).click()
+   await page.getByRole('button',{name:'Preview this proposal',exact:true}).click()
+   await expect(page.getByRole('button',{name:'Create season 2027',exact:true})).toBeDisabled()
+   await page.getByRole('checkbox',{name:'I reviewed the placements and the fresh-season resets.'}).check()
+   await expect(page.getByRole('button',{name:'Create season 2027',exact:true})).toBeEnabled()
+   await page.getByLabel('Reason for these placements and capacity changes').fill('A changed proposal needs another preview')
+   await expect(page.getByRole('button',{name:'Create season 2027',exact:true})).toHaveCount(0)
+   await expect(page.getByRole('button',{name:'Save review draft',exact:true})).toBeDisabled()
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
+  }
+
+  let review=await previewReviewedZombieUniverseRenewal(u.id,2026,users[0],proposal)
+  await saveZombieUniverseRenewalDraft(u.id,2026,users[0],review.previewHash!,proposal)
+  assert.deepEqual((await getZombieUniverseRenewalEditor(u.id,2026,users[0])).savedProposal,proposal)
+  await assert.rejects(renewZombieUniverse(u.id,2026,users[0],review.previewHash!,proposal),/RENEWAL_MOVEMENT_REVIEW_REQUIRED/)
+  assert.equal(await prisma.zombieLeague.count({where:{universeId:u.id,season:2027}}),0)
+  proposal.replaceRecordedMovement=true
+  await assert.rejects(renewZombieUniverse(u.id,2026,users[0],review.previewHash!,proposal),/RENEWAL_PREVIEW_CHANGED/)
+  review=await previewReviewedZombieUniverseRenewal(u.id,2026,users[0],proposal)
+  const trigger='manual_rollback_'+randomUUID().replace(/-/g,'')
+  const priorCount=await prisma.league.count({where:{userId:users[0]}})
+  try{
+   await prisma.$executeRawUnsafe('CREATE FUNCTION '+trigger+'() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION '+String.fromCharCode(39)+'manual_rollback_fixture'+String.fromCharCode(39)+'; END $$')
+   await prisma.$executeRawUnsafe('CREATE TRIGGER '+trigger+' BEFORE INSERT ON zombie_leagues FOR EACH ROW WHEN (NEW."universeId"='+String.fromCharCode(39)+u.id+String.fromCharCode(39)+' AND NEW.season=2027) EXECUTE FUNCTION '+trigger+'()')
+   await assert.rejects(renewZombieUniverse(u.id,2026,users[0],review.previewHash!,proposal),/manual_rollback_fixture/)
+   assert.equal(await prisma.league.count({where:{userId:users[0]}}),priorCount)
+   assert(await prisma.zombieMovementRecord.findUnique({where:{id:oldMovement.id}}))
+   assert.equal(await prisma.zombieAuditLog.count({where:{universeId:u.id,eventType:'UNIVERSE_MOVEMENT_OVERRIDDEN'}}),0)
+  }finally{
+   await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS '+trigger+' ON zombie_leagues')
+   await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS '+trigger+'()')
+  }
+  const results=await Promise.all([renewZombieUniverse(u.id,2026,users[0],review.previewHash!,proposal),renewZombieUniverse(u.id,2026,users[0],review.previewHash!,proposal)])
+  assert.equal(results.filter(r=>!r.alreadyRenewed).length,1)
+  const result=results.find(r=>!r.alreadyRenewed)!
+  assert.equal(result.leagues.length,proposal.pools.length)
+  assert.equal(result.placements.length,16);assert.equal(new Set(result.placements.map(m=>m.userId)).size,16)
+  await assert.rejects(renewZombieUniverse(u.id,2026,users[0],review.previewHash!,{...proposal,reason:'Different unreviewed reason'}),/RENEWAL_PREVIEW_CHANGED/)
+  assert.deepEqual(await prisma.roster.findMany({where:{leagueId:{in:originals}},orderBy:{id:'asc'}}),before)
+  const override=await prisma.zombieAuditLog.findFirstOrThrow({where:{universeId:u.id,eventType:'UNIVERSE_MOVEMENT_OVERRIDDEN'}})
+  assert.equal((override.metadata as any).before[0].id,oldMovement.id)
+  assert.equal((override.metadata as any).reason,proposal.reason)
+  assert.equal(await prisma.zombieAuditLog.count({where:{universeId:u.id,eventType:'UNIVERSE_RENEWAL_REVIEW_APPLIED'}}),1)
+  let totalOpen=0
+  for(const next of result.leagues){
+   const pool=proposal.pools.find(p=>p.key===next.poolId)!
+   const expected=review.assignments!.filter(m=>m.destinationLeagueId===pool.key)
+   const roster=await prisma.roster.findMany({where:{leagueId:next.leagueId}})
+   assert.equal(roster.length,pool.seats)
+   for(const m of expected)assert.equal(roster.find(r=>r.platformUserId===m.userId)!.faabRemaining,m.nextFaab)
+   const open=roster.filter(r=>(r.settings as any).openSlot);totalOpen+=open.length
+   assert.equal(open.length,pool.seats-expected.length)
+   assert.equal(await prisma.leagueEntrySlot.count({where:{leagueId:next.leagueId,status:'OPEN'}}),open.length)
+   const league=await prisma.league.findUniqueOrThrow({where:{id:next.leagueId}})
+   const ready=await zombieRenewalDraftReadiness(prisma,next.leagueId,pool.seats,league.settings)
+   assert.equal(ready.ready,open.length===0)
+   if(open.length){
+    const start=await page.request.post('/api/leagues/'+next.leagueId+'/draft/controls',{data:{action:'start'},timeout:240000})
+    expect(start.status(),await start.text()).toBe(409)
+    expect((await start.json()).code).toBe('ZOMBIE_RENEWAL_SEATS_INCOMPLETE')
+   }
+   const draft=await prisma.draftSession.findUniqueOrThrow({where:{id:next.draftId}})
+   assert.equal(draft.status,'pre_draft');assert.equal(draft.teamCount,pool.seats);assert.equal(draft.startedAt,null)
+   const zombie=await prisma.zombieLeague.findUniqueOrThrow({where:{leagueId:next.leagueId}})
+   assert.equal(zombie.currentTeamCount,expected.length);assert.equal(zombie.teamCount,pool.seats)
+   assert.equal((await prisma.zombiePaidConfig.findUniqueOrThrow({where:{zombieLeagueId:zombie.id}})).totalCollected,0)
+  }
+  assert.equal(totalOpen,review.openSeats)
+  console.log(JSON.stringify({event:'manual_four_sport_renewal_pass',sport,leagues:result.leagues.length,managers:16,openSeats:totalOpen,rollback:true,idempotent:true,auditPreserved:true}))
+
+
+ }
+ }finally {
+ const owned=await prisma.league.findMany({where:{userId:users[0]},select:{id:true}})
+ await prisma.analyticsEvent.deleteMany({where:{userId:{in:users}}})
+ await prisma.league.deleteMany({where:{id:{in:owned.map(l=>l.id)}}})
+ await prisma.zombieUniverse.deleteMany({where:{createdByUserId:users[0]}})
+ await prisma.appUser.deleteMany({where:{id:{in:users}}})
+ await prisma.$disconnect()
+ }
 })
