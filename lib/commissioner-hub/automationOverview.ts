@@ -11,6 +11,7 @@ import { readEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLin
 import { readIrAutoMoveEnabled } from '@/lib/ir-activation/irAutoMove'
 import { readRookieDraftCalendarSettings } from '@/lib/dynasty-core/rookieDraftCalendar'
 import { readTaxiRulesEnforced } from '@/lib/taxi/taxiMoveRules'
+import { readAutoHandover } from '@/lib/inactive-manager/autoHandover'
 
 export type AutomationGroup = 'lineups' | 'drafts' | 'fairness'
 export type AutomationState = 'on' | 'off' | 'needs_plan'
@@ -74,6 +75,18 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       href: '#ch-inactive-managers',
       plan: 'free',
     },
+    (() => {
+      const rule = readAutoHandover(f.settings)
+      return {
+        key: 'auto_handover',
+        group: 'lineups' as const,
+        label: 'Hand over a team with no activity',
+        state: rule ? ('on' as const) : ('off' as const),
+        detail: rule ? `After ${rule.days} days, to ${rule.to === 'autopilot' && f.commissionerPlan ? 'Chimmy autopilot' : 'AllFantasy'}` : null,
+        href: '#ch-inactive-managers',
+        plan: 'free' as const,
+      }
+    })(),
     {
       key: 'eliminated_lineups',
       group: 'lineups',

@@ -25,6 +25,7 @@ describe('buildAutomationOverview', () => {
         eliminated_lineup_minimum: { enabled: true, standard: 'playable', autoFill: true },
         dynasty_rookie_draft_calendar: { autoStartDays: 7 },
         taxi_rules_enforced: true,
+        inactive_auto_handover: { days: 14, to: 'autopilot', since: '2026-10-01T00:00:00.000Z', byUserId: 'c' },
       },
     }))
     expect(row(rows, 'fill_empty_starters')).toMatchObject({ state: 'off', href: '#ch-fill-empty-starters' })
@@ -32,6 +33,7 @@ describe('buildAutomationOverview', () => {
     expect(row(rows, 'eliminated_lineups')).toMatchObject({ state: 'on', detail: 'Short spots filled from the bench' })
     expect(row(rows, 'rookie_draft_starts')).toMatchObject({ state: 'on', detail: '7 days after it opens', href: '/league/L1?view=settings' })
     expect(row(rows, 'taxi_rules')).toMatchObject({ state: 'on' })
+    expect(row(rows, 'auto_handover')).toMatchObject({ state: 'on', detail: 'After 14 days, to Chimmy autopilot', href: '#ch-inactive-managers' })
     expect(row(rows, 'tanking')).toMatchObject({ state: 'on', detail: 'Warning, then the penalty you chose', href: '/league/L1/commissioner/integrity' })
     expect(row(rows, 'hold_flagged_trades')).toMatchObject({ state: 'on', detail: 'Serious flags only' })
   })
@@ -41,6 +43,7 @@ describe('buildAutomationOverview', () => {
     expect(row(rows, 'fill_empty_starters').state).toBe('on')
     expect(row(rows, 'managed_teams').state).toBe('off')
     expect(row(rows, 'rookie_draft_starts').state).toBe('off')
+    expect(row(rows, 'auto_handover').state).toBe('off')
   })
 
   it('without AF Commissioner, the paid automations say so instead of claiming to run', () => {

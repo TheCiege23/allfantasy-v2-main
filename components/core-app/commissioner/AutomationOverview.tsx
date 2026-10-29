@@ -20,6 +20,7 @@ const GROUPS: Array<[AutomationGroup, string, string]> = [
 const LABELS_ES: Record<string, string> = {
   fill_empty_starters: 'Llenar puestos titulares vacíos antes del cierre',
   managed_teams: 'Equipos que maneja AllFantasy o Chimmy',
+  auto_handover: 'Pasar un equipo sin actividad',
   eliminated_lineups: 'Alineación mínima para equipos eliminados',
   ir_auto_move: 'Sacar de IR a los jugadores sanos',
   draft_as_me: 'Picks perdidos hechos como drafta el mánager',

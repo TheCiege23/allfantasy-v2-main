@@ -22,6 +22,7 @@ export type RecapCounts = {
   tankingWarnings: number
   tankingPenalties: number
   newOwnerHandovers: number
+  autoHandovers: number
 }
 
 export const EMPTY_RECAP: RecapCounts = {
@@ -35,6 +36,7 @@ export const EMPTY_RECAP: RecapCounts = {
   tankingWarnings: 0,
   tankingPenalties: 0,
   newOwnerHandovers: 0,
+  autoHandovers: 0,
 }
 
 /** Which recorded action counts toward which line. Automation-log `action` and league-audit `actionType`. */
@@ -51,6 +53,7 @@ export const RECAP_ACTIONS: Record<string, keyof RecapCounts> = {
   'integrity.tanking_lottery_odds_cut': 'tankingPenalties',
   'integrity.tanking_faab_taken': 'tankingPenalties',
   'inactive_manager_mode.ended_new_owner': 'newOwnerHandovers',
+  'inactive_manager_mode.auto_handover': 'autoHandovers',
 }
 
 export function countRecapActions(actions: ReadonlyArray<{ action: string; n: number }>, autoPicks: number): RecapCounts {
@@ -77,6 +80,7 @@ export function recapLines(c: RecapCounts): string[] {
     [c.tankingWarnings, `sent ${plural(c.tankingWarnings, 'tanking warning', 'tanking warnings')}`],
     [c.tankingPenalties, `applied ${plural(c.tankingPenalties, 'tanking penalty', 'tanking penalties')} you chose`],
     [c.newOwnerHandovers, `handed ${plural(c.newOwnerHandovers, 'team', 'teams')} back to a new owner`],
+    [c.autoHandovers, `took over ${plural(c.autoHandovers, 'team', 'teams')} with no activity, as you set up`],
   ]
   return lines.filter(([n]) => n > 0).sort((a, b) => b[0] - a[0]).map(([, text]) => text)
 }
