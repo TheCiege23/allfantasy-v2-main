@@ -1886,6 +1886,34 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             )
           }),
           ])}
+          {/*
+            ⚠ THE WAY BACK TO A HIDDEN LEAGUE. The header counts hidden leagues, but that count sits
+            inside the expand/collapse button and cannot be a link of its own. Without this row an
+            account that hid every league opened the tray to "2 leagues · 2 hidden" and nothing else —
+            no rows and no pointer to Settings, where unhiding lives. Reported by a user 2026-10-29.
+          */}
+          {hiddenRailCount > 0 ? (
+            <Link
+              href="/settings?tab=preferences&returnTo=%2Fcore#your-leagues"
+              className="af-rail-tile af-rail-add af-rail-hidden-link"
+              data-all-hidden={railLeagues.length === 0 ? 'true' : undefined}
+              data-testid="rail-hidden-leagues-link"
+              title={language === 'es' ? 'Mostrar u ocultar ligas en Ajustes' : 'Show or hide leagues in Settings'}
+            >
+              {/* The count, so the collapsed 42px rail still says how many are tucked away. */}
+              <span className="af-rail-foot-icon af-num" aria-hidden>
+                {hiddenRailCount}
+              </span>
+              <span className="af-rail-foot-copy">
+                <strong>
+                  {language === 'es'
+                    ? `Mostrar ${hiddenRailCount} ${hiddenRailCount === 1 ? 'liga oculta' : 'ligas ocultas'}`
+                    : `Show ${hiddenRailCount} hidden ${hiddenRailCount === 1 ? 'league' : 'leagues'}`}
+                </strong>
+                <small>{language === 'es' ? 'Gestionar en Ajustes' : 'Manage in Settings'}</small>
+              </span>
+            </Link>
+          ) : null}
         </div>
 
         {/*
