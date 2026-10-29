@@ -9,8 +9,8 @@ export function nextZombieSettings(raw: Prisma.JsonValue | null, season: number,
     'regular_season_length','season_labeling','snapshotVersion','scoring_preset_id','scoring_mode','scoring_format_type',
     'roster_format_type','roster_mode','category_preset_id','category_record_mode','playoff_team_count','playoff_structure','waiver_mode'])
   const out: Record<string, Prisma.JsonValue> = {}
-  for (const [k,v] of Object.entries(source)) if (exact.has(k) || /^(nfl|nba|nhl|mlb)_(roster|scoring)_config$/.test(k) ||
-    k.startsWith('fantasy_schedule_') || (k.startsWith('schedule_') && !/date|start|end|generated|current|season/i.test(k))) out[k]=v
+  for (const [k,v] of Object.entries(source)) if (v !== undefined && (exact.has(k) || /^(nfl|nba|nhl|mlb)_(roster|scoring)_config$/.test(k) ||
+    k.startsWith('fantasy_schedule_') || (k.startsWith('schedule_') && !/date|start|end|generated|current|season/i.test(k)))) out[k]=v
   // Foundation settings are rules; draft state/dates and creation-time ownership are rebuilt separately.
   if (source.foundation_defaults && typeof source.foundation_defaults === 'object' && !Array.isArray(source.foundation_defaults)) {
     const foundation = source.foundation_defaults

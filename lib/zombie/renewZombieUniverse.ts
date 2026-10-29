@@ -22,7 +22,7 @@ function fail(code: string): never { throw new ZombieRenewalError(code) }
 const LEAGUE_RULES = [
   'scoring','rosterSize','starters','scoringPresetId','presetKey','settingsSnapshotVersion','timezone','language',
   'waiverType','waiverBudget','waiverMinBid','waiverClearAfterGames','waiverHours','customDailyWaivers',
-  'waiverProcessTime','waiverSchedule','tradeReviewHours','draftPickTrading','playoffStartWeek','playoffTeams',
+  'waiverProcessTime','waiverSchedule','tradeReviewHours','tradeDeadlineWeek','draftPickTrading','playoffStartWeek','playoffTeams',
   'playoffWeeksPerRound','playoffSeedingRule','playoffLowerBracket','irSlots','irAllowCovid','irAllowOut',
   'irAllowSuspended','irAllowNA','irAllowDNR','irAllowDoubtful','medianGame','allowPreDraftMoves','preventBenchDrops',
   'taxiSlots','taxiAllowNonRookies','taxiYearsLimit','taxiDeadlineWeek','aiChimmyEnabled','aiWaiverSuggestions',
@@ -246,7 +246,7 @@ export async function renewZombieUniverse(universeId: string, season: number, ac
       } as Prisma.ZombieLeagueConfigUncheckedCreateInput })
       if (z.paidConfig) await tx.zombiePaidConfig.create({ data: {
         ...detachedPolicy(z.paidConfig, ['totalPot','weeklyPayoutPool','ultimateSurvivorPot','paidUserIds','totalCollected','totalPaidOut','potIsLocked']),
-        zombieLeagueId: nextZombie.id, paidUserIds: [], totalCollected: 0, totalPaidOut: 0, totalPot: 0, weeklyPayoutPool: 0, ultimateSurvivorPot: 0, potIsLocked: false,
+        zombieLeagueId: nextZombie.id, buyInAmount: z.paidConfig.buyInAmount, paidUserIds: [], totalCollected: 0, totalPaidOut: 0, totalPot: 0, weeklyPayoutPool: 0, ultimateSurvivorPot: 0, potIsLocked: false,
       } as Prisma.ZombiePaidConfigUncheckedCreateInput })
       if (z.freeRewardConfig) await tx.zombieFreeRewardConfig.create({ data: {
         ...detachedPolicy(z.freeRewardConfig, ['symbolicPotTotal','symbolicWeeklyPool']), zombieLeagueId: nextZombie.id, symbolicPotTotal: 0, symbolicWeeklyPool: 0,

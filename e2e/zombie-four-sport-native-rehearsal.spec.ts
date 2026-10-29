@@ -8,7 +8,7 @@ import { syncCompletedDraftToRedraftSeason } from '../lib/redraft/finalizeDraftT
 import { ensureZombieSeasonActivated } from '../lib/zombie/activateNativeZombieLeague'
 import { getUniverseStandings } from '../lib/zombie/ZombieUniverseStandingsService'
 import { refreshMovementProjections } from '../lib/zombie/ZombieUniverseProjectionService'
-import { executePromotionRelegation } from '../lib/zombie/universeStatEngine'
+import { executePromotionRelegation, syncUniverseStats, buildUniverseWeeklyDigest } from '../lib/zombie/universeStatEngine'
 import { previewZombieUniverseRenewal, renewZombieUniverse } from '../lib/zombie/renewZombieUniverse'
 import { runWeeklyResolution } from '../lib/zombie/weeklyResolutionEngine'
 
@@ -415,6 +415,13 @@ test('four-sport universe allocations use finished native standings and record o
       expect(hubData.counts.leagueCount).toBe(3)
       expect(hubData.universe.leagues.every((l:{season:number})=>l.season===2027)).toBe(true)
       expect(await getUniverseStandings(u.id,2026)).toHaveLength(24)
+      await syncUniverseStats(u.id,1,2026)
+      expect(await prisma.zombieUniverseStat.count({where:{universeId:u.id,season:2026}})).toBe(24)
+      expect((await prisma.zombieUniverseStat.findFirstOrThrow({where:{universeId:u.id,season:2026},orderBy:{currentSeasonPPW:'desc'}})).currentSeasonPPW).toBe(100)
+      await syncUniverseStats(u.id,0,2027)
+      expect(await prisma.zombieUniverseStat.count({where:{universeId:u.id,season:2027}})).toBe(0)
+      expect(await buildUniverseWeeklyDigest(u.id,1,2026)).toContain('📋 Leagues: 3')
+      expect(await buildUniverseWeeklyDigest(u.id,0,2027)).toContain('📋 Leagues: 3')
       const memberCtx=await page.context().browser()!.newContext()
       try {
         const member=await memberCtx.newPage()

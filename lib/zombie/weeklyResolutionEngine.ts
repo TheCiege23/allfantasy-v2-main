@@ -93,7 +93,7 @@ export async function runWeeklyResolution(
         previous: existing,
       }).catch(() => null)
       if (replayed) {
-        if (z.universeId) await syncUniverseStats(z.universeId, week).catch(() => null)
+        if (z.universeId) await syncUniverseStats(z.universeId, week, z.season).catch(() => null)
         return { resolution: replayed }
       }
     }
