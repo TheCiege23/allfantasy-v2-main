@@ -10,6 +10,7 @@ import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { emptyCollegeRoundsError, sanitizeRoundList } from '@/lib/draft-defaults/draftRoundList'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,9 +41,14 @@ export async function PATCH(
 
   const body = await req.json().catch(() => ({}))
   const enabled = Boolean(body.enabled)
-  const devyRounds = Array.isArray(body.devyRounds)
-    ? (body.devyRounds as number[]).filter((r) => typeof r === 'number' && r >= 1 && r <= (draft.rounds ?? 50))
-    : []
+  // Whole rounds 1..draft.rounds, each once, ascending — the same normaliser Settings › Draft uses
+  // (lib/draft-defaults/draftRoundList.ts). Kept, normalised, when off: the pick check ignores them.
+  const devyRounds = sanitizeRoundList(body.devyRounds, draft.rounds)
+  // On with no round would make every round pro-only (the pick check's Array.includes never
+  // matches), so it is refused rather than stored — Settings › Draft refuses it too.
+  if (enabled && devyRounds.length === 0) {
+    return NextResponse.json({ error: emptyCollegeRoundsError('devy', draft.rounds) }, { status: 400 })
+  }
 
   const devyConfig = { enabled, devyRounds }
 
