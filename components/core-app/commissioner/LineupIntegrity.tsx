@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { commissionerScreensMessages } from '@/lib/core-app/messages/commissionerScreens'
 import type { LineupIntegrityReport } from '@/lib/lineup-integrity/lineupIntegrityService'
 
 /**
@@ -11,20 +12,17 @@ import type { LineupIntegrityReport } from '@/lib/lineup-integrity/lineupIntegri
 
 type View = LineupIntegrityReport & { entitled: boolean }
 
-const UNSUPPORTED: Record<string, [string, string]> = {
-  unsupported_platform: [
-    'Available for leagues run on AllFantasy and for Sleeper leagues. This league’s platform does not give AllFantasy each week’s starting lineup.',
-    'Disponible para ligas de AllFantasy y de Sleeper. La plataforma de esta liga no le da a AllFantasy la alineación de cada semana.',
-  ],
-  not_nfl: ['Only NFL leagues have a weekly lineup lock to audit.', 'Solo las ligas de la NFL tienen un cierre semanal de alineación que auditar.'],
-  best_ball: ['Best ball leagues set lineups automatically, so there is nothing to audit.', 'Las ligas best ball fijan la alineación solas, así que no hay nada que auditar.'],
-  no_lineup_rules: ['This league’s starting slots could not be read, so empty slots cannot be counted.', 'No se pudieron leer los puestos titulares de esta liga, así que no se pueden contar los vacíos.'],
+type M = typeof commissionerScreensMessages.en
+
+const UNSUPPORTED: Record<string, (m: M) => string> = {
+  unsupported_platform: (m) => m.integrityUnsupportedPlatform,
+  not_nfl: (m) => m.integrityNotNfl,
+  best_ball: (m) => m.integrityBestBall,
+  no_lineup_rules: (m) => m.integrityNoLineupRules,
 }
 
 export function LineupIntegrity({ leagueId }: { leagueId: string }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
-  const t = (en: string, spanish: string) => (es ? spanish : en)
+  const m = useMessages(commissionerScreensMessages)
   const [view, setView] = useState<View | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,10 +43,10 @@ export function LineupIntegrity({ leagueId }: { leagueId: string }) {
   }, [leagueId])
 
   if (error) return <p className="af-ch-muted">{error}</p>
-  if (!view) return <p className="af-ch-muted">{t('Loading…', 'Cargando…')}</p>
+  if (!view) return <p className="af-ch-muted">{m.commonLoading}</p>
   if (!view.supported) {
     const copy = UNSUPPORTED[view.reason]
-    return <p className="af-ch-recipe-desc">{copy ? t(copy[0], copy[1]) : view.reason}</p>
+    return <p className="af-ch-recipe-desc">{copy ? copy(m) : view.reason}</p>
   }
 
   const flagged = view.findings.filter((f) => f.flagged)
@@ -57,14 +55,14 @@ export function LineupIntegrity({ leagueId }: { leagueId: string }) {
     <div className="af-ch-recipes" data-testid="lineup-integrity">
       <p className="af-ch-recipe-desc">
         {view.latestWeek == null
-          ? t('No finished week on file yet.', 'Todavía no hay ninguna semana terminada.')
+          ? m.integrityNoFinishedWeek
           : view.fullSeason
-            ? t(`Season ${view.season}, weeks ${view.weeks[0]}–${view.latestWeek}.`, `Temporada ${view.season}, semanas ${view.weeks[0]}–${view.latestWeek}.`)
-            : t(`Week ${view.latestWeek}, the latest finished week.`, `Semana ${view.latestWeek}, la última terminada.`)}
+            ? m.integritySeasonWeeks(view.season, view.weeks[0], view.latestWeek)
+            : m.integrityLatestWeek(view.latestWeek)}
       </p>
 
       {flagged.length === 0 && view.latestWeek != null && (
-        <p className="af-ch-recipe-desc">{t('Every audited lineup could score: no empty slots and no starters on bye.', 'Todas las alineaciones auditadas podían sumar: sin puestos vacíos ni titulares en semana libre.')}</p>
+        <p className="af-ch-recipe-desc">{m.integrityAllClear}</p>
       )}
       {flagged.length > 0 && (
         <ul className="af-ch-recipe-list">
@@ -77,7 +75,7 @@ export function LineupIntegrity({ leagueId }: { leagueId: string }) {
       )}
       {soft.length > 0 && (
         <>
-          <p className="af-ch-recipe-label" style={{ marginTop: 12 }}>{t('Leads to check', 'Pistas para revisar')}</p>
+          <p className="af-ch-recipe-label" style={{ marginTop: 12 }}>{m.integrityLeads}</p>
           <ul className="af-ch-recipe-list">
             {soft.map((f) => (
               <li key={`soft-${f.rosterId}-${f.week}`}>
@@ -92,10 +90,10 @@ export function LineupIntegrity({ leagueId }: { leagueId: string }) {
         <table className="w-full text-sm" style={{ marginTop: 12 }}>
           <thead>
             <tr className="text-left text-white/60">
-              <th>{t('Team', 'Equipo')}</th>
-              <th>{t('Weeks flagged', 'Semanas marcadas')}</th>
-              <th>{t('Empty slots', 'Puestos vacíos')}</th>
-              <th>{t('Bye starters', 'Titulares en semana libre')}</th>
+              <th>{m.integrityTeam}</th>
+              <th>{m.integrityWeeksFlagged}</th>
+              <th>{m.integrityEmptySlots}</th>
+              <th>{m.integrityByeStarters}</th>
             </tr>
           </thead>
           <tbody>
@@ -117,7 +115,7 @@ export function LineupIntegrity({ leagueId }: { leagueId: string }) {
 
       {!view.entitled && (
         <p className="af-ch-recipe-meta" style={{ marginTop: 8 }}>
-          {t('The full-season record, team by team, is part of the AF Commissioner plan.', 'El historial de toda la temporada, equipo por equipo, es parte del plan AF Commissioner.')}
+          {m.integrityUpsell}
         </p>
       )}
       <p className="af-ch-recipe-meta" style={{ marginTop: 8 }}>{view.basis}</p>

@@ -768,6 +768,13 @@ export async function getDashboardLeagueListForUser(
       hasUnifiedRecord: true,
       teamCount: teamCountForFilter,
       isCommissioner,
+      /*
+       * Whether this `League` row is the viewer's own copy — the only kind `DELETE /api/league/[id]`
+       * removes (it matches on `userId`). A league reached through a claimed team or a redraft
+       * membership belongs to whoever imported it; deleting it "succeeds" with zero rows removed.
+       * The owner id itself is stripped above and stays stripped; only this boolean leaves.
+       */
+      viewerOwnsRow: String(leagueRowOwnerId ?? '') === userId,
       userRole,
       isPaid,
       entryFee: entryFee ?? null,

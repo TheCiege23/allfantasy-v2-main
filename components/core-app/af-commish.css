@@ -1416,3 +1416,16 @@
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+
+/*
+ * Manager health: the manager column stays put while Lineups / Moves / Trades / Last action /
+ * Status scroll under it (640px floor, scrolls in its own box on a phone).
+ */
+.af-core .af-cm-table th:first-child,
+.af-core .af-cm-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: inset -1px 0 0 var(--line);
+}

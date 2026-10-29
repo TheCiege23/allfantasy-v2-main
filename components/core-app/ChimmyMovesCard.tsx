@@ -5,6 +5,8 @@ import Link from 'next/link'
 import type { ChimmyMove, ChimmyMoves } from '@/lib/core-app/chimmyMoves'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { chimmyMovesCardMessages } from '@/lib/core-app/messages/chimmyMovesCard'
 import { COMMS_OPEN_EVENT, type CommsOpenDetail } from './comms/commsEvents'
 
 function askChimmy(prefill: string, leagueId?: string) {
@@ -54,9 +56,10 @@ function moveTextEs(move: ChimmyMove, leagueName: string): MoveText | null {
 
 export function ChimmyMovesCard({ data, leagueName }: { data: ChimmyMoves; leagueName: string }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(chimmyMovesCardMessages)
+  /* Spanish rebuilds a move from its parts; every other language keeps the composer's English. */
   const textOf = (move: ChimmyMove): MoveText =>
-    (es ? moveTextEs(move, leagueName) : null) ?? {
+    (language === 'es' ? moveTextEs(move, leagueName) : null) ?? {
       title: move.title,
       detail: move.detail,
       actionLabel: move.actionLabel,
@@ -64,12 +67,12 @@ export function ChimmyMovesCard({ data, leagueName }: { data: ChimmyMoves; leagu
       about: move.title.replace(/^(Bench|Check) /, ''),
     }
   return (
-    <section className="af-frame af-cmv" aria-label={es ? 'Jugadas de Chimmy' : "Chimmy's moves"}>
+    <section className="af-frame af-cmv" aria-label={m.sectionLabel}>
       <header className="af-cmv-head">
         <span className="af-cmv-mark" aria-hidden>
           ✦
         </span>
-        <h2 className="af-cmv-title">{es ? 'Jugadas de Chimmy' : <>Chimmy&rsquo;s moves</>}</h2>
+        <h2 className="af-cmv-title">{m.title}</h2>
         {data.moves.length > 0 ? (
           <span className="af-cmv-count af-num">{data.moves.length}</span>
         ) : null}
@@ -92,7 +95,7 @@ export function ChimmyMovesCard({ data, leagueName }: { data: ChimmyMoves; leagu
                   <button
                     type="button"
                     className="af-cmv-ask"
-                    aria-label={es ? `Preguntar a Chimmy sobre ${t.about}` : `Ask Chimmy about ${t.about}`}
+                    aria-label={m.askAbout(t.about)}
                     onClick={() => askChimmy(t.ask, data.leagueId)}
                   >
                     ✦
@@ -109,22 +112,14 @@ export function ChimmyMovesCard({ data, leagueName }: { data: ChimmyMoves; leagu
             triage cannot join yet) silence is not health, so the copy says nothing about the lineup.
           */}
           <p className="af-cmv-detail">
-            {es
-              ? data.startersRead > 0
-                ? `No quedan titulares señalados por revisar antes del inicio en ${leagueName}. Revisa cada bloqueo y las novedades de lesiones en tu plataforma.`
-                : `Chimmy puede revisar tu alineación de ${leagueName}.`
-              : data.startersRead > 0
-                ? `No remaining flagged starters to review before kickoff in ${leagueName}. Check individual locks and injury updates on your platform.`
-                : `Chimmy can check your ${leagueName} lineup for you.`}
+            {data.startersRead > 0 ? m.allClear(leagueName) : m.canCheck(leagueName)}
           </p>
           <button
             type="button"
             className="af-btn af-cmv-do"
-            onClick={() =>
-              askChimmy(es ? `Revisa mi alineación de ${leagueName} para esta semana: a quién alinear y a quién sentar.` : data.checkAsk, data.leagueId)
-            }
+            onClick={() => askChimmy(m.checkAsk(leagueName, data.checkAsk), data.leagueId)}
           >
-            {es ? 'Revisar titulares' : 'Start/sit check'}
+            {m.startSitCheck}
           </button>
         </div>
       )}

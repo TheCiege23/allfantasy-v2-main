@@ -38,6 +38,8 @@ describe('buildChopPreview', () => {
     expect(p.rows.map((r) => [r.rosterId, r.status])).toEqual([['c', 'chopped'], ['b', 'danger'], ['a', 'safe'], ['d', 'safe']])
     expect(p.chopLine).toBe(90)
     expect(p.rows.find((r) => r.rosterId === 'b')!.margin).toBe(5)
+    // Season points ride along, for the live danger tiers (lib/guillotine/chopWatch.ts).
+    expect(p.rows.find((r) => r.rosterId === 'b')!.seasonPoints).toBe(95)
     expect(p.release).toEqual({ players: 9, when: 'At the next waiver run' })
     expect(p.announcement).toBe(chopAnnouncementText(3, ['C']))
   })

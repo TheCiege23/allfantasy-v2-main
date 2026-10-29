@@ -21,6 +21,7 @@ import { isRedraftWeekSealed } from '@/lib/redraft/weekSealed'
 import { checkStatCorrectionsForSeason } from '@/lib/stat-corrections/statCorrectionDetector'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
+import { sendChopZoneWarningsForSeason } from '@/lib/guillotine/chopAlerts'
 import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSeasonRunner'
@@ -411,7 +412,7 @@ async function runRedraftReconciliation() {
     }
     try {
       const guillotine = await runNativeGuillotineWeek(
-        { seasonId: season.id, currentFantasyWeek: resolved.fantasyWeek },
+        { seasonId: season.id, currentFantasyWeek: resolved.fantasyWeek, currentWeekComplete: resolved.sportWeekComplete },
         {
           syncWeekStats: async ({ seasonId, week }) => {
             await syncPlayerWeeklyScoresForRedraftSeason({ seasonId, week, actorId: 'system:score-sync-backfill' })
@@ -422,6 +423,19 @@ async function runRedraftReconciliation() {
         guillotineOutcomes[guillotine.outcome] = (guillotineOutcomes[guillotine.outcome] ?? 0) + 1
       }
       if (guillotine.outcome === 'chopped') guillotineChops += 1
+      /*
+       * The chop-zone warning (lib/guillotine/chopAlerts.ts): the week being played is the next one to
+       * chop, so about a day before its last game the teams at the bottom are told. Once a week, claimed
+       * inside; every other tick stops at one indexed read.
+       */
+      if (guillotine.outcome === 'waiting' && guillotine.reason === 'week_in_progress' && guillotine.week === resolved.fantasyWeek) {
+        try {
+          const warning = await sendChopZoneWarningsForSeason({ seasonId: season.id, week: guillotine.week })
+          if (warning.outcome === 'sent') guillotineOutcomes.chop_zone_warning = (guillotineOutcomes.chop_zone_warning ?? 0) + 1
+        } catch {
+          guillotineOutcomes.chop_zone_warning_failed = (guillotineOutcomes.chop_zone_warning_failed ?? 0) + 1
+        }
+      }
     } catch {
       guillotineFailed += 1
     }

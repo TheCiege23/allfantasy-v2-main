@@ -31,6 +31,7 @@ import {
 import '@/components/core-app/af-core-boards.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /** Universal weekly priorities, then unitless matchup closeness. No playoff-odds exclusion. */
 
@@ -531,7 +532,7 @@ export function WeekBoard({
           ? /* `basis` is whole sentences, so the sample is its own sentence too — splicing it in as
                a clause read "…completed weeks — Projected from … A heuristic, not a simulation., fitted
                on 40,396 roster-weeks." on production, 2026-09-28. */
-            `${copy(board.model.basis)} ${es ? 'Modelo ajustado con' : 'Fitted on'} ${board.model.sampleSize.toLocaleString()} ${es ? 'semanas de equipos.' : 'roster-weeks.'}`
+            `${copy(board.model.basis)} ${es ? 'Modelo ajustado con' : 'Fitted on'} ${board.model.sampleSize.toLocaleString(getAppIntlLocale())} ${es ? 'semanas de equipos.' : 'roster-weeks.'}`
           : copy(board.model.basis)}{' '}
         {/* Said once, here, because the rows no longer say "projected" once a week has points. */}
         {copy("Once a league's week has points on the board, its margin is the actual score, not a projection.")}{' '}

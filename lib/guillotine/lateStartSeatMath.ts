@@ -24,19 +24,29 @@ export type GuillotineChopWindow = {
   maxTeams: number
 }
 
+/**
+ * ⚠ A FINAL-STAGE ENDING NEEDS ROOM. "Final two/three/four" stops chopping at that many teams and
+ * then scores `finalPeriods` (3) more weeks, all inside the end week — so the chops must be done
+ * `finalPeriods` weeks earlier, and `finalists` teams are left rather than one. Counting only chop
+ * weeks sized such a league with three weeks too many teams, and its final ran out of season.
+ */
 export function guillotineChopWindow(input: {
   eliminationStartWeek: number
   eliminationEndWeek: number
   teamsPerChop: number
   draftWeek: number
+  /** The endgame (endgameRules.ts): teams left when chops stop, and the final weeks after. Default: last team standing. */
+  endgame?: { threshold: number; cumulativePeriods: number }
 }): GuillotineChopWindow {
   const start = Math.max(1, Math.floor(input.eliminationStartWeek || 1))
   const end = Math.floor(input.eliminationEndWeek)
   const perChop = Math.max(1, Math.floor(input.teamsPerChop || 1))
   const draftWeek = Math.max(0, Math.floor(input.draftWeek || 0))
+  const finalists = Math.max(1, Math.floor(input.endgame?.threshold ?? 1))
+  const finalPeriods = Math.max(0, Math.floor(input.endgame?.cumulativePeriods ?? 0))
   const firstChopWeek = Math.max(start, draftWeek + 1)
-  const chopWeeks = Math.max(0, end - firstChopWeek + 1)
-  return { draftWeek, firstChopWeek, chopWeeks, maxTeams: chopWeeks * perChop + 1 }
+  const chopWeeks = Math.max(0, end - finalPeriods - firstChopWeek + 1)
+  return { draftWeek, firstChopWeek, chopWeeks, maxTeams: chopWeeks * perChop + finalists }
 }
 
 export type GuillotineSeatDecision = {

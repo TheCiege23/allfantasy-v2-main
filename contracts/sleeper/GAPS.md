@@ -84,3 +84,12 @@ Two things the later writer must respect, read from code on `main`:
   writes `yearsExp` on the RI rows today, so there is nothing to disagree with — keep it that way,
   or copy Sleeper's value onto the linked RI row (`PlayerIdentityMap.rollingInsightsId` +
   `sleeperId`) rather than writing a second opinion.
+
+## League settings — median game (`/league/{id}` → `settings.league_average_match`) (recorded 2026-10-29, no probe)
+
+Stored from 2026-10-29 by `SleeperLeagueMapper` as `League.settings.league_average_match`, and read by
+`lib/core-app/medianGame.ts` (Season Outlook simulation and record, public standings).
+
+| ID | Gap | Status | Blocks | How the code copes today |
+|---|---|---|---|---|
+| `S-10` | **Is `settings.league_average_match` the median-game flag, with `1` = on and `0`/absent = off?** The name is taken from code already in the repo (`lib/core-app/weeklyCapabilities.ts`, `lib/trade-value/pickSlotProjection.ts`), not from a fixture. Also unknown: whether any value other than 0/1 occurs, and whether the median game is played in playoff weeks. | **UNVERIFIED — no fixture** | Trusting the stated flag over the records | The platform's own effect is MEASURED (standingsModel.ts header, 2026-09-17: 524 of 526 teams in 40 leagues match "head-to-head + a win for the top half of the week"). `leagueHasMedianGame` prefers the stated flag and otherwise reads the records — two games a week means median — so a wrong flag reading costs only leagues where the flag is present. Playoff weeks: the outlook and the public table count the median game only in weeks they already treat as regular season. **To resolve:** capture `/league/{id}` for one median league in a committed fixture, via a Sleeper `scripts/probe.sh` (none exists yet). |

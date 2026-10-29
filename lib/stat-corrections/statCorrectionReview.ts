@@ -26,6 +26,11 @@ export type StarterStatLine = {
   storedStats: Record<string, number> | null
   /** The same week pulled again now; null when the fresh pull had no line for him. */
   freshStats: Record<string, number> | null
+  /**
+   * Daily-lineup leagues: one entry per day he STARTED, each scored on its own line and summed, in
+   * place of the two week lines above. A day with no line on one side scored, or now scores, 0.
+   */
+  days?: ReadonlyArray<{ storedStats: Record<string, number> | null; freshStats: Record<string, number> | null }>
 }
 
 export type ReviewMatchup = {
@@ -80,12 +85,30 @@ export function reviewStatCorrections(args: {
   const changes: PlayerCorrection[] = []
   let unchecked = 0
   for (const s of args.starters) {
-    if (!s.storedStats || !s.freshStats) {
-      unchecked += 1
-      continue
+    let before: number
+    let after: number
+    if (s.days) {
+      const stored = s.days.some((d) => d.storedStats)
+      const fresh = s.days.some((d) => d.freshStats)
+      // No game on any day he started, on either side: nothing to compare and nothing changed.
+      if (!stored && !fresh) continue
+      // A whole side missing is a gap in a read, not every game of his week being struck off.
+      if (!stored || !fresh) {
+        unchecked += 1
+        continue
+      }
+      const sum = (pick: 'storedStats' | 'freshStats') =>
+        s.days!.reduce((total, d) => total + (d[pick] ? args.score(d[pick]!, s.position) : 0), 0)
+      before = round2(sum('storedStats'))
+      after = round2(sum('freshStats'))
+    } else {
+      if (!s.storedStats || !s.freshStats) {
+        unchecked += 1
+        continue
+      }
+      before = round2(args.score(s.storedStats, s.position))
+      after = round2(args.score(s.freshStats, s.position))
     }
-    const before = round2(args.score(s.storedStats, s.position))
-    const after = round2(args.score(s.freshStats, s.position))
     const delta = round2(after - before)
     if (Math.abs(delta) < STAT_CORRECTION_MIN_DELTA) continue
     changes.push({ rosterId: s.rosterId, playerId: s.playerId, playerName: s.playerName, position: s.position, before, after, delta })

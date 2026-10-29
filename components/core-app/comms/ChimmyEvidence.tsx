@@ -1,6 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * WHAT AN ANSWER WAS BUILT FROM, RENDERED WHERE THE ANSWER IS.
@@ -326,7 +327,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
 
           {syncedAt ? (
             <p className="af-cm-ev-signals">
-              Sports data synced {new Date(syncedAt).toLocaleString()}.
+              Sports data synced {new Date(syncedAt).toLocaleString(getAppIntlLocale())}.
             </p>
           ) : null}
 

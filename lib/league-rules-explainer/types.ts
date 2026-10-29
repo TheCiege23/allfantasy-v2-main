@@ -103,6 +103,8 @@ export type RuleSnapshot = {
   dangerMarginPoints?: number | null
   releaseTiming?: string | null
   faabOnChop?: string | null
+  /** Guilly: claims are held before each waiver run and settled as one blind FAAB auction (fixed by sport). */
+  blindAuction?: boolean | null
   /** Keeper leagues: `League.keeperCount`, `keeperCostSystem`, `keeperMaxYears`. */
   keeperCount?: number | null
   keeperCost?: string | null
@@ -180,6 +182,9 @@ export type DraftOvernightPause = { from: string; to: string; picksAllowed: bool
  * the config spells it: `bottom_n`, `all_teams` and `custom` eligibility all take the worst `teams` of
  * the whole league, `custom_weights` gives every team the same weight, and a `manual` fallback seats
  * the rest in reverse standings. `picks` is capped at `teams` — the draw cannot place more.
+ * `tiebreak` is which team of a tie in the standings is the worse finish (`applyTiebreak`): the one
+ * that scored fewer points, the lower max PF, or fewer points then a seeded draw. Optional only so a
+ * change stored before it existed still reads.
  */
 export type RookieDraftLotteryRule = {
   teams: number
@@ -188,6 +193,7 @@ export type RookieDraftLotteryRule = {
   pool: 'non_playoff' | 'worst'
   odds: 'record' | 'points_for' | 'max_pf' | 'equal'
   rest: 'reverse_standings' | 'reverse_max_pf'
+  tiebreak?: 'points_for' | 'max_pf' | 'random'
 }
 
 /** A dynasty league's tanking penalty as a rule, non-secret. */

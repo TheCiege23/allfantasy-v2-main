@@ -7,6 +7,7 @@ import type { CareerData } from '@/lib/core-app/career'
 import { chooseShareVideoFormat } from '@/lib/core-app/shareVideo'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-career-share.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * 26a — Career Share, the generator.
@@ -559,7 +560,7 @@ export function CareerShare({
               </div>
               <div>
                 <dt>XP</dt>
-                <dd className="af-num">{career.xp ? career.xp.total.toLocaleString() : '—'}</dd>
+                <dd className="af-num">{career.xp ? career.xp.total.toLocaleString(getAppIntlLocale()) : '—'}</dd>
               </div>
               <div>
                 <dt>Record</dt>

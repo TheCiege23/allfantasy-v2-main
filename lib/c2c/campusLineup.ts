@@ -143,3 +143,24 @@ export function validateCampusLineup(input: {
   }
   return []
 }
+
+export type CampusToggle = { playerId: string; onCampus: boolean; canStart: boolean }
+
+/**
+ * The panel's buttons: for each college player, whether he is on campus and whether he could be
+ * started now (a free seat he can fill, with everyone already on campus still seated).
+ */
+export function campusToggles(
+  seats: readonly string[],
+  starterIds: readonly string[],
+  players: ReadonlyArray<{ id: string; position: string | null | undefined }>,
+): CampusToggle[] {
+  const positionOf = new Map(players.map((p) => [p.id, p.position]))
+  const on = new Set(starterIds)
+  const current = starterIds.map((id) => positionOf.get(id))
+  return players.map((p) => ({
+    playerId: p.id,
+    onCampus: on.has(p.id),
+    canStart: on.has(p.id) || seatCampusPlayers(seats, [...current, p.position]),
+  }))
+}

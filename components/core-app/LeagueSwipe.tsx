@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { coreTriageMessages } from '@/lib/core-app/messages/coreTriage'
 import {
   classifySwipe,
   leagueSwipeHref,
@@ -59,8 +60,7 @@ export function LeagueSwipe({
 }) {
   const router = useRouter()
   const pathname = usePathname() ?? '/core'
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(coreTriageMessages)
   const nav = neighborLeagues(leagues, selectedLeagueId)
   const [peek, setPeek] = useState<{ dir: 'next' | 'prev'; progress: number } | null>(null)
   const navRef = useRef(nav)
@@ -147,7 +147,7 @@ export function LeagueSwipe({
 
   return (
     <>
-      <nav className="af-lswipe" aria-label={es ? 'Cambiar de liga' : 'Switch league'}>
+      <nav className="af-lswipe" aria-label={m.swipeAria}>
         {nav.prev ? (
           <Link className="af-lswipe-btn" href={leagueSwipeHref(pathname, nav.prev.id)} data-dir="prev">
             <span aria-hidden>‹</span>

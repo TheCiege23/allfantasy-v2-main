@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { PlayerCardIdentity } from '@/lib/core-app/playerCard'
 import type { PlayerHighlightsResult } from '@/lib/highlights/types'
 import HighlightVideos from './HighlightVideos'
+import { coreTriageMessages } from '@/lib/core-app/messages/coreTriage'
+import { messagesFor } from '@/lib/i18n/messages'
 
 export default function PlayerHighlights({ player }: { player: PlayerCardIdentity }) {
   if (player.sport.toUpperCase() !== 'NFL') return null
@@ -14,6 +16,7 @@ export default function PlayerHighlights({ player }: { player: PlayerCardIdentit
 
 function NflPlayerHighlights({ player }: { player: PlayerCardIdentity }) {
   const { language, copy } = useHighlightCopy()
+  const m = messagesFor(coreTriageMessages, language)
   const [result, setResult] = useState<PlayerHighlightsResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
@@ -46,9 +49,9 @@ function NflPlayerHighlights({ player }: { player: PlayerCardIdentity }) {
   }
 
   return (
-    <section className="af-pc-highlights" aria-label={language === 'es' ? `Videos de ${player.name}` : `${player.name} highlights`}>
+    <section className="af-pc-highlights" aria-label={m.highlightsAria(player.name)}>
       <div className="af-pc-label">{copy("HIGHLIGHTS · YouTube")}</div>
-      <p className="af-pc-faint">{language === 'es' ? `Publicaciones recientes del canal oficial de la NFL. Los resúmenes de equipo pueden no mostrar a ${player.name}.` : `Recent official NFL uploads. Team recaps may not feature ${player.name}.`}</p>
+      <p className="af-pc-faint">{m.highlightsNote(player.name)}</p>
       {!result || result.status === 'unavailable' ? (
         <button className="af-pc-highlights-load" type="button" onClick={load} disabled={loading}>
           {loading ? copy("Finding highlights…") : error || result ? copy("Try highlights again") : copy("Find highlights")}

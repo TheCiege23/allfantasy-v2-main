@@ -7,6 +7,7 @@ import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISetting
 import { computeEffectivePickTimerSeconds, sessionDraftTypeFromLeagueSettings } from '@/lib/live-draft-engine/DraftSessionService'
 import { getAuctionConfigFromSession } from '@/lib/live-draft-engine/auction/AuctionEngine'
 import { readDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
+import { checkDynastyLotteryEligibility, isDynastyLeagueRow } from '@/lib/draft-lottery/dynastyYearGuard'
 import { resolveRenewDraftOrderMode } from '@/lib/redraft/offseason/renewRedraftLeague'
 import { startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
@@ -38,6 +39,7 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
       select: {
         platform: true, sport: true, leagueType: true, isDynasty: true, survivorMode: true,
         guillotineMode: true, leagueVariant: true, settings: true,
+        dynastyConfig: { select: { rookiePickOrderMethod: true } },
       },
     }),
     prisma.draftSession.findFirst({
@@ -79,13 +81,17 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
       : computeEffectivePickTimerSeconds(ls, config, ui)
 
   const settings = league.settings
-  const lottery = readDraftOrderModeAndLotteryConfig(settings)
   const rawMode = String((settings as Record<string, unknown> | null)?.draft_order_mode ?? '').trim().toLowerCase()
   const orderMethod =
-    lottery.draftOrderMode === 'weighted_lottery'
+    (await lotterySeatsDraftOrder(leagueId, league))
       ? 'weighted_lottery'
       : resolveRenewDraftOrderMode(ls?.draftOrderMethod) ??
-        (rawMode === 'randomize' ? 'random' : rawMode === 'manual' ? 'manual' : null)
+        // 🛑 NO SEATING PATH READS `draft_order_mode`. `buildSlotOrderForLeague` seats the saved
+        // `LeagueSettings.draftOrderSlots`, else the seat order; a random order exists only once the
+        // commissioner presses Randomize, which shuffles, saves the slots and records
+        // `draftOrderMethod: 'randomized'` (read above). So `randomize` here — the storage default —
+        // and a `weighted_lottery` with no lottery behind it both seat what `manual` does.
+        (rawMode === 'randomize' || rawMode === 'manual' || rawMode === 'weighted_lottery' ? 'manual' : null)
 
   return draftRulesFromInputs({
     sessionLabel: session?.draftModeLabel ?? null,
@@ -108,6 +114,30 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
     orphanEnabled: ui.orphanTeamAiManagerEnabled === true,
     orphanMode: ui.orphanDrafterMode ?? null,
   })
+}
+
+/**
+ * Whether a weighted lottery draw is what seats this league's draft order.
+ *
+ * 🛑 `settings.draft_order_mode === 'weighted_lottery'` ALONE DOES NOT RUN A LOTTERY, AND THE POPUP
+ * USED TO SAY IT DID. Every engine path that seats a draw — `resolveWeightedLotterySlotOrderForLeague`
+ * (buildSlotOrderForLeague / the session repair) and `ensureRookieDraftLottery` (createNextLeagueDraft)
+ * — requires a dynasty league whose `DynastyLeagueConfig.rookiePickOrderMethod` is `weighted_lottery`,
+ * past its founding season (`checkDynastyLotteryEligibility`). Neither reads `draft_order_mode` at all.
+ *
+ * Anywhere else — a redraft league, a dynasty league whose rookie order is something else, a startup
+ * year — `buildSlotOrderForLeague` seats what it seats under any mode: the commissioner's saved order
+ * (`LeagueSettings.draftOrderSlots`, typed in or produced by "Randomize"), else the seat order. That is
+ * the `manual` sentence ("The commissioner sets the draft order, by hand or with a random draw."), or
+ * the saved order method's own when `LeagueSettings.draftOrderMethod` names one.
+ */
+async function lotterySeatsDraftOrder(
+  leagueId: string,
+  league: { isDynasty: boolean; leagueVariant: string | null; dynastyConfig?: { rookiePickOrderMethod: string | null } | null },
+): Promise<boolean> {
+  if (!isDynastyLeagueRow(league)) return false
+  if (league.dynastyConfig?.rookiePickOrderMethod !== 'weighted_lottery') return false
+  return (await checkDynastyLotteryEligibility(leagueId)).eligible
 }
 
 /** loadDraftRules, or null when it cannot be read — a save never fails over its change card. */

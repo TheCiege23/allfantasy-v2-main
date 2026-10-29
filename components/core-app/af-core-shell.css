@@ -241,8 +241,11 @@
 }
 
 .af-nav-glyph {
+  /* Holds a drawn CoreNavIcon (an inline SVG), not a unicode glyph. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 16px;
-  text-align: center;
   opacity: 0.85;
 }
 .af-nav-label {
@@ -1015,7 +1018,9 @@
     display: grid;
     grid-template-columns: repeat(6, 1fr);
     gap: 2px;
-    padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    /* Side insets too: in landscape on a notched phone the end tabs sat under the notch. */
+    padding: 6px calc(6px + env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px))
+      calc(6px + env(safe-area-inset-left, 0px));
     background: color-mix(in srgb, var(--surface2) 92%, transparent);
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
@@ -1051,6 +1056,7 @@
 
   .af-core .af-tabbar-glyph {
     position: relative;
+    display: inline-flex;
     font-size: 15px;
     line-height: 1;
   }
@@ -3436,6 +3442,7 @@ html[data-mode='light'] .af-core {
   }
   .af-core.af-shell:not([data-league-first='true']) .af-tabbar-glyph {
     position: relative;
+    display: inline-flex;
     font-size: 15px;
     line-height: 1;
   }
@@ -3668,6 +3675,85 @@ html[data-mode='light'] .af-core {
     width: 24px;
     height: 24px;
     border-radius: 8px;
+  }
+}
+
+/* ── Phone header: one row, search behind an icon (default mode) ─────────────
+ *
+ * ⚠ APPENDED AT END OF FILE ON PURPOSE — the one insertion point with no enclosing
+ * query (see the window-controls-overlay note above).
+ *
+ * Below 720px the default topbar wrapped to two rows because the search took a full-width
+ * row of its own, and with the league bars under it roughly a third of a phone was chrome
+ * before any content. League-first already folded search into an icon (`.af-lf-search-btn`);
+ * the default header now does the same, so it is one row until the manager asks to search.
+ * Desktop and tablet are untouched.
+ *
+ * `overscroll-behavior-y: contain` stops Android Chrome's own pull-to-refresh firing alongside
+ * PullToRefresh.tsx, whose listeners are passive and so cannot cancel the native gesture.
+ */
+@media (max-width: 720px) {
+  html:has(.af-core.af-shell) {
+    overscroll-behavior-y: contain;
+  }
+
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar .af-search-wrap {
+    display: none;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar[data-lf-search-open='true'] .af-search-wrap {
+    display: block;
+    flex-basis: 100%;
+    order: 10;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar-right {
+    flex: 1 1 0;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-lf-search-btn {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    order: 5;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--line2);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text2);
+    font: inherit;
+    font-size: 20px;
+    cursor: pointer;
+  }
+}
+
+/* ── Tap areas for small close / remove / search buttons ─────────────────────
+ * Same technique as `.af-help-dot` and `.af-mu-weeknav-btn`: the paint stays small, a
+ * transparent centred ::after makes the touch target 44px. Coarse pointers only.
+ */
+@media (pointer: coarse) {
+  .af-sp-close,
+  .af-olk-chip-x,
+  .af-cm-close,
+  .af-pf-search-btn {
+    position: relative;
+  }
+  .af-sp-close::after,
+  .af-olk-chip-x::after,
+  .af-cm-close::after,
+  .af-pf-search-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: 44px;
+    transform: translate(-50%, -50%);
+    background: transparent;
   }
 }
 
