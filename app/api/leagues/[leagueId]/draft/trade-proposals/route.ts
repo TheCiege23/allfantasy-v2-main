@@ -26,6 +26,7 @@ import {
   saveCommissionerAiManagers,
 } from '@/lib/commissioner-ai-draft-manager'
 import { sendPrivateTradeAIDM } from '@/lib/trade-ai-dm/TradeAIDMService'
+import { tradeDeadlineRefusal } from '@/lib/trade-deadline/tradeDeadlineWindow'
 
 export const dynamic = 'force-dynamic'
 
@@ -116,6 +117,14 @@ export async function POST(
   if (!uiSettings.pickTradeEnabled) {
     return NextResponse.json({ error: 'Draft pick trading is disabled in draft settings.' }, { status: 403 })
   }
+
+  /*
+   * The league's trade deadline binds the draft room too. A startup draft runs before the season, so
+   * it never trips this; a draft held mid-season (a supplemental or dispersal draft) would otherwise
+   * be a way to trade after trades closed. Same verdict as every other trade path.
+   */
+  const deadlineRefusal = await tradeDeadlineRefusal(leagueId, {}, { picksOnly: true })
+  if (deadlineRefusal) return NextResponse.json({ error: deadlineRefusal, code: 'TRADE_DEADLINE_PASSED' }, { status: 409 })
 
   const draftSession = await getDraftSessionByLeague(leagueId)
   if (!draftSession || draftSession.status !== 'in_progress') {

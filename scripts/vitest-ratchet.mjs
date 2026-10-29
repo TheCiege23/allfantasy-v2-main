@@ -12,7 +12,9 @@
  * file that was already failing does not.
  *
  *   - default (check):  fail if a file OUTSIDE the baseline failed. Never fail because a baseline
- *                       file is still failing, and never fail because one got fixed.
+ *                       file is still failing. DO fail when a baseline file now passes (since
+ *                       2026-10-19): the entry is stale and must be removed in the same change,
+ *                       or it silently excuses that file's next real regression.
  *   - --update:         rewrite the baseline from this run. Run against the FULL suite, not a
  *                       shard, or you will delete every other shard's entries.
  *   - --merge=a,b,c     combine shard result files into the baseline. This is how the baseline is
@@ -63,14 +65,27 @@ function readBaseline() {
 }
 
 function writeBaseline(files, note) {
+  // Carry each surviving entry's triage reason forward; a regenerated baseline must not erase
+  // why a file is allowed to fail. __tests__/vitest-ratchet-judge.test.ts requires one per entry.
+  let previous = {}
+  try {
+    previous = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) || {}
+  } catch {
+    previous = {}
+  }
+  const sorted = [...files].sort()
+  const reasons = {}
+  for (const f of sorted) reasons[f] = previous.reasons?.[f] || 'UNTRIAGED -- say why this file may fail'
   const payload = {
     // Deliberately no timestamp: a regenerated-but-identical baseline should produce an empty
     // diff, not churn. `ts-error-baseline.json` behaves the same way.
     note:
       note ||
+      previous.note ||
       'Test files already failing when the vitest ratchet was introduced. Shrink this list; never grow it.',
-    count: files.length,
-    failingFiles: [...files].sort(),
+    count: sorted.length,
+    failingFiles: sorted,
+    reasons,
   }
   writeFileSync(BASELINE_PATH, JSON.stringify(payload, null, 2) + '\n', 'utf8')
   return payload
@@ -239,10 +254,36 @@ function main() {
   // must not be mistaken for fixed — or for missing.
   const verdict = judge({ baseline, summary })
 
-  if (verdict.fixed.length) {
-    console.log(`\n[vitest-ratchet] ${verdict.fixed.length} baseline file(s) now PASS — tighten the ratchet by removing them:`)
-    for (const f of verdict.fixed) console.log(`  ✓ ${f}`)
+  // ⚠ JOB LOGS ARE OFTEN UNREADABLE TO WHOEVER INVESTIGATES (expired, truncated, or blocked by an
+  // egress proxy), but check-run ANNOTATIONS are served by the plain REST API. So on Actions every
+  // finding is also emitted as a workflow command, one per file, which makes "which file and why"
+  // answerable from `gh api .../check-runs/<id>/annotations` alone.
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const esc = (s) => String(s).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')
+    for (const f of verdict.fixed) {
+      console.log(`::error file=${f},title=vitest-ratchet stale baseline entry::${esc(`${f} now PASSES; remove it from scripts/vitest-failure-baseline.json`)}`)
+    }
+    for (const r of verdict.regressions) {
+      console.log(`::error file=${r.file},title=vitest-ratchet regression::${esc(`${r.file}: ${r.reasons.join(' | ')}`.slice(0, 900))}`)
+    }
+    for (const why of verdict.runErrors) {
+      console.log(`::error title=vitest-ratchet unattributed error::${esc(why.slice(0, 900))}`)
+    }
   }
+
+  if (verdict.fixed.length) {
+    // Deliberately NOT the "were passing and now FAIL" phrase below: pre-push-smoke blocks on that
+    // phrase, and a stale allowlist entry is CI's job to stop, not a reason to refuse a push.
+    console.error(
+      `\n[vitest-ratchet] ${verdict.fixed.length} baseline file(s) now PASS — remove them from ` +
+        `scripts/vitest-failure-baseline.json (failingFiles, reasons and count) in this change:`,
+    )
+    for (const f of verdict.fixed) console.error(`  ✓ ${f}`)
+    console.error('A passing file left in the baseline would silently excuse its next real regression.')
+  }
+
+  const failing = verdict.regressions.length > 0 || verdict.runErrors.length > 0
+  if (!failing && verdict.fixed.length) process.exit(1)
 
   if (!verdict.ok) {
     // ⚠ KEEP "were passing and now FAIL" IN THIS LINE. scripts/pre-push-smoke.mjs classifies this

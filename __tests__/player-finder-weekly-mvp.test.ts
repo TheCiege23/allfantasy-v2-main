@@ -57,21 +57,35 @@ describe('loadWeeklyMvp', () => {
     for (const f of Object.values(h)) f.mockReset()
     h.gameFind.mockResolvedValue({ week: 5, season: 2026 })
     h.teamFind.mockResolvedValue([
-      { leagueId: 'A', externalId: '3', league: { name: 'KBFL' } },
-      { leagueId: 'B', externalId: '7', league: { name: 'Home' } },
+      // Our League.id and Sleeper's league id deliberately differ: the scores table is keyed on Sleeper's.
+      { leagueId: 'A', externalId: '3', league: { name: 'KBFL', platformLeagueId: 'sl-A' } },
+      { leagueId: 'B', externalId: '7', league: { name: 'Home', platformLeagueId: 'sl-B' } },
     ])
     h.resolve.mockImplementation(async (ids: string[]) => new Map(ids.map((id) => [id, { sleeperId: id, name: `P${id}`, position: 'QB', team: 'BUF', imageUrl: null, ref: `NFL:${id}` }])))
   })
 
   it('🛑 last week is the one BEFORE the next scheduled game, and only YOUR roster’s starters count', async () => {
     h.scoreFind.mockResolvedValue([
-      { leagueId: 'A', playerId: 'mine', rosterId: 3, points: 30 },
-      { leagueId: 'A', playerId: 'theirs', rosterId: 4, points: 50 }, // another roster in your league
-      { leagueId: 'B', playerId: 'mine', rosterId: 7, points: 12 },
+      { leagueId: 'sl-A', playerId: 'mine', rosterId: 3, points: 30 },
+      { leagueId: 'sl-A', playerId: 'theirs', rosterId: 4, points: 50 }, // another roster in your league
+      { leagueId: 'sl-B', playerId: 'mine', rosterId: 7, points: 12 },
     ])
     const m = (await loadWeeklyMvp('u1', new Date('2026-10-09T15:00:00Z')))!
     expect(h.scoreFind.mock.calls[0]![0].where).toMatchObject({ seasonYear: 2026, week: 4, isStarter: true })
     expect(m).toMatchObject({ week: 4, points: 42, leaguesRead: 2, player: { name: 'Pmine' }, runnerUp: null })
+  })
+
+  it('🛑 reads scores by SLEEPER’s league id and hands back OUR league id', async () => {
+    h.scoreFind.mockResolvedValue([{ leagueId: 'sl-A', playerId: 'mine', rosterId: 3, points: 30 }])
+    const m = (await loadWeeklyMvp('u1', new Date('2026-10-09T15:00:00Z')))!
+    expect(h.scoreFind.mock.calls[0]![0].where.leagueId).toEqual({ in: ['sl-A', 'sl-B'] })
+    expect(m.leagues).toEqual([{ leagueId: 'A', leagueName: 'KBFL', points: 30 }])
+  })
+
+  it('skips a team whose league has no Sleeper id', async () => {
+    h.teamFind.mockResolvedValueOnce([{ leagueId: 'A', externalId: '3', league: { name: 'KBFL', platformLeagueId: null } }])
+    expect(await loadWeeklyMvp('u1', new Date('2026-10-09T15:00:00Z'))).toBeNull()
+    expect(h.scoreFind).not.toHaveBeenCalled()
   })
 
   it('null in the off-season, before week 1 has been played, or with no Sleeper team', async () => {

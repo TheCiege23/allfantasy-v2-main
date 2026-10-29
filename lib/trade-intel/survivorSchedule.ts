@@ -323,7 +323,7 @@ export const SCHEDULE_REGISTRY_IDS_FOR_TEST = Object.keys(SCHEDULE_BY_PLATFORM_L
 
 export const SURVIVOR_ALL_STARS_2026: SurvivorSchedule = {
   id: 'survivor_all_stars_2026',
-  label: 'Survivor All-Stars Guillotine (22 teams)',
+  label: 'Survivor All-Stars Guilly (22 teams)',
   aliveByWeek: {
     1: 22, 2: 21, 3: 20, 4: 19, 5: 18, 6: 17, 7: 16, 8: 15, 9: 14, 10: 13,
     11: 12, 12: 10, 13: 8,

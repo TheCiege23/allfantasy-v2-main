@@ -17,7 +17,7 @@ export const HUB_TABS_ES: Record<HubFormat, string> = {
   tournament: 'Torneo',
   survivor: 'Survivor',
   c2c: 'C2C',
-  guillotine: 'Guillotina',
+  guillotine: 'Guilly',
   efl: 'Dinastía EFL',
 }
 
@@ -90,15 +90,15 @@ export function themeCopyEs(platformsPhrase: string): Record<HubFormat, ThemeCop
       foot: `AllFantasy nunca escribe en ${platformsPhrase}: la sincronización solo lee.`,
     },
     guillotine: {
-      title: 'Centro de ligas Guillotina',
-      desc: 'La puntuación más baja de la semana no solo pierde: es ejecutada. Cada liga guillotina en la que juegas, y su corte semanal, desde un solo centro.',
+      title: 'Centro de ligas Guilly',
+      desc: 'La puntuación más baja de la semana no solo pierde: es ejecutada. Cada liga Guilly en la que juegas, y su corte semanal, desde un solo centro.',
       connect: '+ Conectar una liga',
       leaguesLabel: 'Ligas en el patíbulo',
       meterLabel: 'Equipos que quedan',
       tradesLabel: 'Intercambios en el patíbulo',
       mentionsLabel: 'Menciones en tus ligas',
       broadcastLabel: 'Anunciar el corte semanal',
-      emptyTitle: 'Todavía no estás en una liga guillotina',
+      emptyTitle: 'Todavía no estás en una liga Guilly',
       foot: 'Cada corte es definitivo y queda registrado, visible para todos los mánagers de la liga donde ocurrió.',
     },
     efl: {

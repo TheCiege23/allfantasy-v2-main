@@ -63,7 +63,7 @@ const BEST_BALL_SPORTS: LeagueSport[] = [...BEST_BALL_SUPPORTED_SPORTS]
 const DRAFT_TYPES_REDRAFT: DraftTypeId[] = ['snake', 'linear', 'auction', 'slow_draft', 'mock_draft']
 const DRAFT_TYPES_KEEPER: DraftTypeId[] = ['snake', 'linear', 'auction', 'slow_draft', 'mock_draft']
 const DRAFT_TYPES_STANDARD: DraftTypeId[] = ['snake', 'linear', 'auction']
-const DRAFT_TYPES_SURVIVOR: DraftTypeId[] = ['snake', 'auction']
+const DRAFT_TYPES_SURVIVOR: DraftTypeId[] = ['snake', 'linear', 'auction']
 const DRAFT_TYPES_BIG_BROTHER: DraftTypeId[] = ['snake', 'auction']
 
 /** Exported for format-engine — authoritative draft-type lists per league format concept. */

@@ -36,6 +36,14 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
     const history = FantraxHistoryMapper.map(raw)
     const playerMapCount = Object.keys(raw.playerMap ?? {}).length
     const rosterWithPlayersCount = rosters.filter((roster) => roster.player_ids.length > 0).length
+    const preDraftEmptyRosters = league.status === 'pre_draft' && rosterWithPlayersCount === 0
+    const publishedLineup = raw.settings?.raw?.rosterInfo
+    const hasPublishedLineup = Boolean(
+      publishedLineup && typeof publishedLineup === 'object' &&
+      Object.keys((publishedLineup as { positionConstraints?: Record<string, unknown> }).positionConstraints ?? {}).length > 0,
+    )
+    const mappedPositions = (league as Record<string, unknown>).roster_positions
+    const lineupNotMapped = hasPublishedLineup && (!Array.isArray(mappedPositions) || mappedPositions.length === 0)
 
     const viewerTeam = raw.teams.find((t) => t.managerId.startsWith('fantrax-user:'))
 
@@ -56,8 +64,11 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
       })),
       coverage: {
         leagueSettings: {
-          state: 'full',
+          state: lineupNotMapped ? 'partial' : 'full',
           count: 1,
+          note: lineupNotMapped
+            ? 'Fantrax published lineup positions, but this import could not map them to an exact AllFantasy lineup. Review roster settings before using lineup advice.'
+            : null,
         },
         currentRosters: {
           state:
@@ -68,8 +79,10 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
                 : 'partial',
           count: rosters.length,
           note:
-            rosters.length > 0 && rosterWithPlayersCount !== rosters.length
-              ? 'Fantrax roster exports include full player details only for teams included in uploaded CSV history.'
+            preDraftEmptyRosters
+              ? 'All teams were imported; their player rosters are empty because this league has not drafted.'
+              : rosters.length > 0 && rosterWithPlayersCount !== rosters.length
+              ? 'Some Fantrax team rosters have no player details in this import.'
               : null,
         },
         historicalRosterSnapshots: {

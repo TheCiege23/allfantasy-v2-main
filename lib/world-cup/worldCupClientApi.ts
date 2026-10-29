@@ -1,3 +1,4 @@
+import { paidToolFetch } from '@/lib/tokens/paidToolClient'
 /**
  * Client-side API helpers for World Cup bracket entries.
  * All functions are safe to call from React components ("use client").
@@ -180,7 +181,8 @@ export type WorldCupChallengeIntegrityReport = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
-  const res = await fetch(url, {
+  const transport = url.endsWith('/ai/matchup') ? paidToolFetch : fetch
+  const res = await transport(url, {
     ...init,
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
   })

@@ -1,5 +1,6 @@
 export { ProfileSettingsSection } from "./ProfileSettingsSection"
 export { PreferencesSettingsSection } from "./PreferencesSettingsSection"
+export { HomeSectionsSettingsSection } from "./HomeSectionsSettingsSection"
 export { SecuritySettingsSection } from "./SecuritySettingsSection"
 export { NotificationsSettingsSection } from "./NotificationsSettingsSection"
 export { ConnectedAccountsSettingsSection } from "./ConnectedAccountsSettingsSection"
@@ -10,3 +11,5 @@ export { LegalSettingsSection } from "./LegalSettingsSection"
 export { AccountSettingsSection } from "./AccountSettingsSection"
 export { BillingSettingsSection } from "./BillingSettingsSection"
 export type { SettingsProfile, SettingsOnSave } from "./settings-types"
+
+export { LeagueSectionsSettingsSection } from "./LeagueSectionsSettingsSection"

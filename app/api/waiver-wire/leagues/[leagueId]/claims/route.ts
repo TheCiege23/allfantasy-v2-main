@@ -16,6 +16,7 @@ import { assertRosterTransactionsAllowed } from '@/lib/roster-legality/rosterTra
 import { getLeagueRole } from "@/lib/league/permissions"
 import { resolveWriteAuthorityEnvelope } from "@/lib/league/write-authority-server"
 import { mergeCommissionerOverrides } from "@/lib/waiver-wire/commissioner-claim-override"
+import { LINEUP_WARNING_CODE, lineupWarningConfirmed, loadLineupFillWarning } from "@/lib/waiver-wire/lineup-fill-warning"
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedWaiverIntegrationService } from '@/lib/sports-evidence/waiverIntegration'
 import { extractPlayerRefs } from '@/lib/sports-evidence/lineupIntegration'
@@ -210,6 +211,16 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
       }
     }
 
+    // A claim whose drop would leave a starting slot unfillable is confirmed once by the manager
+    // (lib/waiver-wire/lineup-fill-warning.ts) — a warning, never a block.
+    const claimDropId = body.dropPlayerId ?? body.drop_player_id ?? null
+    if (claimDropId && !lineupWarningConfirmed(body)) {
+      const warning = await loadLineupFillWarning({ leagueId, rosterId: roster.id, addPlayerId: String(addPlayerId), dropPlayerId: String(claimDropId) })
+      if (warning) {
+        return NextResponse.json({ error: warning.message, code: LINEUP_WARNING_CODE, warning }, { status: 409 })
+      }
+    }
+
     const claim = await createClaim(leagueId, roster.id, {
       addPlayerId: String(addPlayerId),
       dropPlayerId: body.dropPlayerId ?? body.drop_player_id ?? null,
@@ -238,7 +249,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
 
     const eff = await getEffectiveLeagueWaiverSettings(leagueId)
     let fcfsProcessWarning: string | undefined
-    if (eff.normalizedWaiverType === "fcfs") {
+    // During the post-draft roster lock a claim QUEUES for the first waiver run; processing it
+    // immediately here would be a free-agent pickup through the back door.
+    const queuedForFirstWaiverRun = gate.postDraftLock?.locked === true
+    if (eff.normalizedWaiverType === "fcfs" && !queuedForFirstWaiverRun) {
       try {
         const { processWaiverClaimsForLeague } = await import("@/lib/waiver-wire/process-engine")
         await processWaiverClaimsForLeague(leagueId, {
@@ -257,7 +271,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
 
     return NextResponse.json({
       claim,
-      fcfsProcessedImmediately: eff.normalizedWaiverType === "fcfs" && !fcfsProcessWarning,
+      fcfsProcessedImmediately: eff.normalizedWaiverType === "fcfs" && !queuedForFirstWaiverRun && !fcfsProcessWarning,
+      ...(queuedForFirstWaiverRun ? { queuedForFirstWaiverRun: true } : {}),
       writeAuthority,
       ...(fcfsProcessWarning ? { fcfsProcessWarning } : {}),
       ...(sportsDataDecision ? { sportsDataDecision } : {}),

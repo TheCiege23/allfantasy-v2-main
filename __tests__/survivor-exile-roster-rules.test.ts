@@ -10,6 +10,13 @@ describe('Exile team rights', () => {
     expect(isExileAnchor('NBA', 'PG/SG')).toBe(true)
     expect(isExileAnchor('NBA', 'C')).toBe(false)
     expect(isExileAnchor('NHL', 'G')).toBe(true)
+    // MLB pitchers are stored as plain P; a feed that labels the role still anchors.
+    expect(isExileAnchor('MLB', 'P')).toBe(true)
+    expect(isExileAnchor('MLB', 'SP')).toBe(true)
+    expect(isExileAnchor('MLB', 'RP')).toBe(true)
+    expect(isExileAnchor('MLB', 'C')).toBe(false)
+    expect(isExileAnchor('MLB', 'SS')).toBe(false)
+    expect(() => addExilePlayer(emptyExileRoster(), { id: 'c', name: 'Catcher', position: 'C', team: 'NYY' }, 'MLB', {}, [])).toThrow('Pitcher first')
   })
   it('requires the anchor, awards only that player, then allows individual teammates', () => {
     expect(() => addExilePlayer(emptyExileRoster(), receiver, 'NFL', {}, [])).toThrow('Quarterback first')

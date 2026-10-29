@@ -23,7 +23,7 @@ export function SurvivorMergeJuryPanel({ leagueId }: SurvivorSettingsPanelProps)
   useEffect(() => { void load() }, [load])
 
   return <div className="space-y-5 px-6 py-6 text-[13px] text-white/85">
-    <p className="text-[11px] text-amber-200/80">Merge timing is configured in Survivor Setup. Finale format and jury Q&A timers are system-managed for this NBA pilot.</p>
+    <p className="text-[11px] text-amber-200/80">Merge timing is configured in Survivor Setup. Finale format and jury Q&A timers are managed automatically.</p>
     {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
     {!config && !error && <p role="status" className="text-sm text-white/50">Loading merge rules…</p>}
     {config && <SettingsSection id="sv-merge-current" title="Current merge and jury rules">

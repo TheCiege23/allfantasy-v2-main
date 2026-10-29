@@ -96,13 +96,13 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
 
   if (!result.ok) {
     const status =
-      result.reason === 'not-found'
+      result.reason === 'structure-locked' ? 409 : result.reason === 'not-found'
         ? 404
         : result.reason === 'invalid-type' || result.reason === 'invalid-base-format'
           ? 400
           : 500
     const message =
-      result.reason === 'invalid-type'
+      result.reason === 'structure-locked' ? 'League format cannot change after the draft has started or the season exists.' : result.reason === 'invalid-type'
         ? 'That is not a league format we recognise'
         : result.reason === 'invalid-base-format'
           ? 'A Pirate league needs to say whether rosters carry over: send baseFormat "dynasty" or "redraft"'

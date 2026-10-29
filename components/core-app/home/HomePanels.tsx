@@ -83,3 +83,28 @@ export function HomeReadFailure() {
     </div>
   )
 }
+
+/**
+ * The foot of the home: the way to switch sections off (Settings → Home page, 2026-10-24). When some
+ * are already off it says how many, so a missing card reads as the reader's own choice rather than
+ * as something broken — and the same link brings it back.
+ */
+export function HomeCustomizeLink({ hiddenCount }: { hiddenCount: number }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const text =
+    hiddenCount > 0
+      ? es
+        ? `${hiddenCount} ${hiddenCount === 1 ? 'sección oculta' : 'secciones ocultas'} · Elegir qué se muestra aquí →`
+        : `${hiddenCount} ${hiddenCount === 1 ? 'section' : 'sections'} hidden · Choose what shows here →`
+      : es
+        ? '¿Demasiado? Elige qué se muestra aquí →'
+        : 'Too much? Choose what shows here →'
+  return (
+    <p className="af-home-customize">
+      <a href="/settings?tab=home" data-testid="home-customize-link">
+        {text}
+      </a>
+    </p>
+  )
+}

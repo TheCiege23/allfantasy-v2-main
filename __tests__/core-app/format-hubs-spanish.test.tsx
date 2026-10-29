@@ -47,8 +47,8 @@ const data = (over: Partial<FormatHubData> = {}): FormatHubData => ({
 describe('FormatHub in Spanish', () => {
   it('renders the themed copy, switcher and card actions in Spanish', () => {
     render(<FormatHub data={data()} />)
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Centro de ligas Guillotina')
-    expect(screen.getByRole('link', { name: 'Guillotina' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Centro de ligas Guilly')
+    expect(screen.getByRole('link', { name: 'Guilly' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: 'Todas las ligas' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Comisionado' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Pendientes' })).toBeTruthy()
@@ -60,15 +60,15 @@ describe('FormatHub in Spanish', () => {
     render(<FormatHub data={data()} />)
     fireEvent.click(screen.getAllByRole('button', { name: '+ Conectar una liga' })[0])
     expect(screen.getByText('Trae una liga a este centro')).toBeTruthy()
-    expect(screen.getByText('Crear una liga Guillotina en AllFantasy')).toBeTruthy()
+    expect(screen.getByText('Crear una liga Guilly en AllFantasy')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Importar' }).getAttribute('href')).toBe('/import')
   })
 
   it('leaves English byte-for-byte as it was', () => {
     lang.language = 'en'
     render(<FormatHub data={data()} />)
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Guillotine League Hub')
-    expect(screen.getByRole('link', { name: 'Guillotine' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Guilly League Hub')
+    expect(screen.getByRole('link', { name: 'Guilly' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Commissioner' })).toBeTruthy()
   })
 

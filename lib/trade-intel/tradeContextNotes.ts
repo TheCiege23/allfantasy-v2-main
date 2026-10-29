@@ -651,7 +651,7 @@ async function zombieNotesFor(
 function survivorGuillotineTradeNote(): string | null {
   const trade = getConceptById('survivor_guillotine')?.actions.find((a) => a.id === 'trade')
   if (!trade || trade.legalInFormat) return null
-  return `Survivor Guillotine: trades are not allowed in this league. ${trade.note ?? ''}`.trim()
+  return `Survivor Guilly: trades are not allowed in this league. ${trade.note ?? ''}`.trim()
 }
 
 async function guillotineNotes(leagueId: string): Promise<string[]> {

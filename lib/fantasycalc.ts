@@ -1,5 +1,7 @@
 import { getConsensusADP as getMultiPlatformConsensus } from './multi-platform-adp'
 import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
+import { getDynastySportConfig } from '@/lib/dynasty-core/dynastySportConfig'
+import { rookieDraftCalendarYear } from '@/lib/dynasty-core/rookieDraftCalendar'
 
 export interface FantasyCalcPlayerIdentity {
   id: number;
@@ -263,7 +265,103 @@ export function getDetailedTier(value: number, rank: number, position: string): 
   return { tier: 4, label: 'Tier 4 - Depth/Lottery', description: 'Roster filler, low trade value' };
 }
 
-export function getPickValue(year: number, round: number, isDynasty: boolean, pickNumber?: number, numTeams?: number): number {
+/**
+ * Sports whose rookie-pick calendar and round count come from dynastySportConfig instead of the
+ * NFL defaults (May 1 rookie fever, 5-round curve). NCAAF's "rookie" draft is the January class of
+ * incoming recruits (4 rounds), NCAAB's a May draft (3 rounds), SOCCER's a July draft (4 rounds).
+ */
+const PICK_SPORTS_WITH_OWN_CALENDAR = new Set(['MLB', 'NBA', 'NHL', 'SOCCER', 'NCAAF', 'NCAAB'])
+
+type PickCalendar = {
+  /** 1-12: month the fantasy rookie draft happens; the pre-draft bump counts down to its 1st day. */
+  rookieDraftMonth: number
+  /** Calendar year of a `year` pick's draft — MLB's is held the winter before (`rookieDraftCalendar.ts`). */
+  draftYear: (year: number) => number
+  /** Value of a pick in `round` (1-based) before slot / time / fever adjustments. */
+  roundBase: (round: number) => number
+}
+
+/** Same table nflPickValue uses (rounds 1-5). */
+function nflRoundTable(isDynasty: boolean): Record<number, number> {
+  return isDynasty
+    ? { 1: 6000, 2: 3900, 3: 2400, 4: 1200, 5: 600 }
+    : { 1: 3000, 2: 1200, 3: 500, 4: 200, 5: 100 };
+}
+
+/**
+ * Stretch the 5-round NFL curve over the sport's own rookie-draft length, so the LAST round of a
+ * 4-round NBA/NHL rookie draft is priced like a last round (not like an NFL 4th), and rounds past
+ * the configured length keep decaying instead of sitting on a flat floor.
+ */
+function sportPickCalendar(sport: string, isDynasty: boolean): PickCalendar {
+  const cfg = getDynastySportConfig(sport);
+  const nfl = nflRoundTable(isDynasty);
+  const rounds = Math.max(2, cfg.rookieDraftRounds);
+  const lastValue = nfl[5];
+  const baseValues: Record<number, number> = {};
+  for (let r = 1; r <= rounds; r++) {
+    const idx = 1 + ((r - 1) / (rounds - 1)) * 4; // 1..5 on the NFL table
+    const lo = Math.floor(idx);
+    const hi = Math.min(5, lo + 1);
+    const frac = idx - lo;
+    baseValues[r] = Math.round(nfl[lo] + (nfl[hi] - nfl[lo]) * frac);
+  }
+  return {
+    rookieDraftMonth: cfg.offseason.rookieDraftMonth,
+    draftYear: (year) => rookieDraftCalendarYear(cfg.offseason, year),
+    roundBase: (round) =>
+      round <= rounds
+        ? baseValues[Math.max(1, round)]
+        : Math.max(isDynasty ? 100 : 25, Math.round(lastValue * Math.pow(0.6, round - rounds))),
+  };
+}
+
+/**
+ * @param sport optional. Omitted (or NFL) keeps the historical NFL pricing exactly. MLB / NBA / NHL /
+ * SOCCER / NCAAF / NCAAB use their own rookie-draft month and round count from dynastySportConfig.
+ */
+export function getPickValue(year: number, round: number, isDynasty: boolean, pickNumber?: number, numTeams?: number, sport?: string): number {
+  const sportKey = String(sport ?? '').toUpperCase();
+  if (sportKey && PICK_SPORTS_WITH_OWN_CALENDAR.has(sportKey)) {
+    return pickValueWithCalendar(year, round, pickNumber, numTeams, sportPickCalendar(sportKey, isDynasty));
+  }
+  return nflPickValue(year, round, isDynasty, pickNumber, numTeams);
+}
+
+function pickValueWithCalendar(year: number, round: number, pickNumber: number | undefined, numTeams: number | undefined, cal: PickCalendar): number {
+  const currentYear = new Date().getFullYear();
+  const yearsAway = year - currentYear;
+  const TIME_MULTIPLIER: Record<number, number> = { 0: 1.00, 1: 0.92, 2: 0.85, 3: 0.80 };
+  const TIME_FLOOR = 0.75;
+  const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+
+  let daysToDraft: number | null = null;
+  if (year >= currentYear && year <= currentYear + 3) {
+    const draftDate = new Date(cal.draftYear(year), cal.rookieDraftMonth - 1, 1);
+    const diffDays = Math.ceil((draftDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    daysToDraft = diffDays > 0 ? diffDays : null;
+  }
+  const feverMult = daysToDraft === null ? 1.0 : daysToDraft <= 30 ? 1.06 : daysToDraft <= 90 ? 1.03 : 1.0;
+
+  let base = cal.roundBase(round);
+  if (pickNumber && numTeams && numTeams > 1) {
+    const slotPosition = clamp((pickNumber - 1) / (numTeams - 1), 0, 1);
+    const prevRoundBase = round > 1 ? cal.roundBase(round - 1) : base * 1.6;
+    const nextRoundBase = cal.roundBase(round + 1);
+    if (slotPosition < 0.5) {
+      const blend = (0.5 - slotPosition) / 0.5;
+      base = base + blend * 0.30 * (prevRoundBase - base);
+    } else if (slotPosition > 0.5) {
+      const blend = (slotPosition - 0.5) / 0.5;
+      base = base - blend * 0.30 * (base - nextRoundBase);
+    }
+  }
+  const timeMult = clamp(TIME_MULTIPLIER[yearsAway] ?? TIME_FLOOR, TIME_FLOOR, 1.00);
+  return Math.round(base * timeMult * feverMult);
+}
+
+/** Historical NFL pricing — unchanged; pinned by __tests__/dynasty-multisport/nfl-unchanged.test.ts. */
+function nflPickValue(year: number, round: number, isDynasty: boolean, pickNumber?: number, numTeams?: number): number {
   const currentYear = new Date().getFullYear();
   const yearsAway = year - currentYear;
   

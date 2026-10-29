@@ -11,6 +11,7 @@
 
 import type { TokenSpendRuleCode } from '@/lib/tokens/constants'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
+import type { SurvivorAIType } from '@/lib/survivor/ai/SurvivorAIContext'
 
 export type SurvivorAiActionId =
   | 'vote_risk_quick'
@@ -83,3 +84,54 @@ const BY_ID = new Map<SurvivorAiActionId, SurvivorAiActionMeta>(
 export function getSurvivorAiAction(id: SurvivorAiActionId): SurvivorAiActionMeta | undefined {
   return BY_ID.get(id)
 }
+
+/**
+ * 🛑 WHAT IS ACTUALLY SOLD (2026-10-27). The rows above are the pricing catalogue; only these AI
+ * request types exist (`POST .../survivor/ai`), and each charges ONE rule. This map is the single
+ * source the route guard charges from and the command centre lists from, so the price list can
+ * never again offer an action nobody built (13 of the 22 rows above had no code behind them).
+ */
+export const SURVIVOR_AI_TYPE_RULE_CODE = {
+  host_challenge: 'survivor_ai_host_weekly_recap',
+  host_merge: 'survivor_ai_host_minigame_grade',
+  host_council: 'survivor_ai_host_vote_processing',
+  host_jury: 'survivor_ai_host_story_mode',
+  tribe_help: 'survivor_ai_vote_risk_quick',
+  tribal_help: 'survivor_ai_blindside_risk',
+  exile_help: 'survivor_ai_recap_short',
+  bestball_help: 'survivor_ai_challenge_strategy',
+  idol_timing_help: 'survivor_ai_idol_timing',
+  jury_help: 'survivor_ai_jury_management',
+  weekly_plan: 'survivor_ai_weekly_advice_pack',
+} as const satisfies Partial<Record<SurvivorAIType, TokenSpendRuleCode>>
+
+export type SurvivorPaidAiType = keyof typeof SURVIVOR_AI_TYPE_RULE_CODE
+
+/** What each paid request does, in the words a manager would use. */
+const SURVIVOR_PAID_AI_LABELS: Record<SurvivorPaidAiType, string> = {
+  tribe_help: 'Tribe strategy help',
+  tribal_help: 'Tribal Council strategy help',
+  exile_help: 'Exile Island help',
+  bestball_help: 'Best-ball lineup help',
+  idol_timing_help: 'Idol timing plan',
+  jury_help: 'Jury management advice',
+  weekly_plan: 'Weekly game plan',
+  host_challenge: 'Challenge announcement',
+  host_merge: 'Merge announcement',
+  host_council: 'Tribal Council narration',
+  host_jury: 'Jury and finale narration',
+}
+
+export type SurvivorSoldAiAction = { aiType: SurvivorPaidAiType; label: string; lane: 'player' | 'host'; tokenCost: number | null; ruleCode: TokenSpendRuleCode }
+
+/** The paid Survivor AI actions that exist, with the price their rule charges. */
+export const SURVIVOR_SOLD_AI_ACTIONS: readonly SurvivorSoldAiAction[] = (Object.keys(SURVIVOR_AI_TYPE_RULE_CODE) as SurvivorPaidAiType[]).map((aiType) => {
+  const ruleCode = SURVIVOR_AI_TYPE_RULE_CODE[aiType]
+  return {
+    aiType,
+    label: SURVIVOR_PAID_AI_LABELS[aiType],
+    lane: aiType.startsWith('host_') ? 'host' : 'player',
+    tokenCost: getTokenSpendRuleMatrixEntry(ruleCode)?.tokenCost ?? null,
+    ruleCode,
+  }
+})

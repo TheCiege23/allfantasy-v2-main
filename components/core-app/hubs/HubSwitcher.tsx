@@ -15,7 +15,7 @@ export const HUB_TABS: Record<HubFormat, string> = {
   tournament: 'Tournament',
   survivor: 'Survivor',
   c2c: 'C2C',
-  guillotine: 'Guillotine',
+  guillotine: 'Guilly',
   efl: 'EFL Dynasty',
 }
 

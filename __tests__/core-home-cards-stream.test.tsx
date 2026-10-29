@@ -61,7 +61,7 @@ const g = vi.hoisted(() => {
     scanned: [],
     incomplete: null,
   }
-  const account: { sleeperUserId: string | null; leagues: unknown[] | null } = { sleeperUserId: 's1', leagues: null }
+  const account: { sleeperUserId: string | null; leagues: unknown[] | null; preferences: Record<string, unknown> } = { sleeperUserId: 's1', leagues: null, preferences: {} }
   /** The league home read: null is "could not read it", an object is a league that loaded. */
   const leagueHome: { data: unknown } = { data: null }
   return { gates, calls, fns, gate, scan, account, leagueHome }
@@ -128,7 +128,7 @@ vi.mock('@/lib/ai-access/AIAccessResolver', () => ({ aiAccessResolver: { resolve
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     platformNotification: { count: vi.fn(async () => 0) },
-    appUser: { findUnique: vi.fn(async () => null) },
+    appUser: { findUnique: vi.fn(async () => ({ profile: { notificationPreferences: g.account.preferences } })) },
     league: { findUnique: vi.fn(async () => ({ settings: {}, platform: 'sleeper' })) },
   },
 }))
@@ -280,6 +280,8 @@ beforeEach(() => {
   g.scan.incomplete = null
   g.account.sleeperUserId = 's1'
   g.account.leagues = null
+  // Streaming tests exercise every card through the explicit "show everything" choice.
+  g.account.preferences = { homeLayoutHiddenSections: [] }
   summaries.on = false
   g.leagueHome.data = null
 })
@@ -290,6 +292,15 @@ afterEach(() => {
 })
 
 describe('/core home cards stream independently', () => {
+  it('renders the simpler default layout when no personal layout is saved', { timeout: 180_000 }, async () => {
+    g.account.preferences = {}
+    const { cards } = await homeCards()
+    expect([...cards.keys()]).toEqual([
+      'connect', 'streak', 'issues', 'triage', 'trade-band', 'user-os',
+      'chimmy', 'career', 'rivals', 'following', 'leagues', 'coverage',
+    ])
+  })
+
   it('returns the home while every read is pending — with the independent reads already started', { timeout: 180_000 }, async () => {
     const body = await homeBody()
     const outcome = await within(render(body).then(() => 'resolved'), 20_000)

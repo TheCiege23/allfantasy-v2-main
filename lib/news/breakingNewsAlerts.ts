@@ -5,11 +5,11 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { RunBudget } from '@/lib/cron/runBudget'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
-import { listUserIdsPlayingSport } from '@/lib/notifications/sportAudience'
+import { listSportsAlertAudience } from '@/lib/notifications/sportAudience'
 import { withinDailyCap } from '@/lib/follows/teamFollowAlerts'
 import { getTeamIndex, isTeamFollowSport, listFollowerIdsForTeam, listTeamsForSport } from '@/lib/follows/teamFollows'
 import { resolveTeam } from '@/lib/follows/teamResolver'
-import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
+import { SUPPORTED_SPORTS, LIVE_ONLY_SPORTS } from '@/lib/sport-scope'
 import {
   breakingAlertTitle,
   breakingStoryKey,
@@ -36,6 +36,8 @@ import {
  *     the teams named.
  *   - `notable` stories (an ordinary signing, a release): followers of the teams named only.
  * Both under the `breaking_news` category, capped at BREAKING_NEWS_PER_DAY per person.
+ * PUSH + BELL ONLY, never email or text (owner's call, 2026-10-25): after the player-news fix it was
+ * the biggest email type left — 176 emails to 43 people in two and a half days, up to 5 a day each.
  *
  * DB-FIRST: reads `sports_news` only. The cron that calls this refreshes ESPN news first.
  *
@@ -90,7 +92,7 @@ export async function findBreakingCandidates(now: Date = new Date()): Promise<Br
   const rows = (await prisma.sportsNews
     .findMany({
       where: {
-        sport: { in: [...SUPPORTED_SPORTS] },
+        sport: { in: [...SUPPORTED_SPORTS, ...LIVE_ONLY_SPORTS] },
         OR: [{ publishedAt: { gte: since } }, { publishedAt: null, fetchedAt: { gte: since } }],
       },
       orderBy: [{ publishedAt: 'desc' }],
@@ -171,7 +173,7 @@ export async function dispatchBreakingNewsAlerts(input: { now?: Date; budget?: R
       for (const id of (await listFollowerIdsForTeam(sport, team).catch(() => null)) ?? []) audience.add(id)
     }
     if (c.classification.tier === 'major') {
-      for (const id of await listUserIdsPlayingSport(sport)) audience.add(id)
+      for (const id of await listSportsAlertAudience(sport)) audience.add(id)
     }
     if (audience.size === 0) continue
 
@@ -186,7 +188,7 @@ export async function dispatchBreakingNewsAlerts(input: { now?: Date; budget?: R
 
     const title = breakingAlertTitle(sport, c.classification)
     const body = `${c.row.title} — via ${c.outlet.name}`
-    await dispatchNotification({
+    const dispatched = await dispatchNotification({
       userIds: allowed,
       category: 'breaking_news',
       type: 'breaking_news',
@@ -197,8 +199,12 @@ export async function dispatchBreakingNewsAlerts(input: { now?: Date; budget?: R
       leagueId: null,
       severity: c.classification.tier === 'major' ? 'high' : 'medium',
       dedupePrefix: c.storyKey,
+      skipChannels: { email: true, sms: true },
       meta: {
         sport,
+        eventKey: c.storyKey,
+        occurredAt: (c.row.publishedAt ?? c.row.fetchedAt).toISOString(),
+        detectedAt: now.toISOString(),
         kind: c.classification.kind,
         tier: c.classification.tier,
         confidence: c.classification.confidence,
@@ -207,7 +213,14 @@ export async function dispatchBreakingNewsAlerts(input: { now?: Date; budget?: R
         sourceUrl: c.row.sourceUrl,
         newsId: c.row.id,
       },
-    }).catch((err) => console.error('[breaking-news] dispatch failed:', err instanceof Error ? err.message : err))
+    }).catch(async (err) => {
+      await prisma.sportsDataCache.delete({ where: { cacheKey: c.storyKey } })
+      throw err
+    })
+    if (dispatched && dispatched.failed > 0) {
+      await prisma.sportsDataCache.delete({ where: { cacheKey: c.storyKey } })
+      throw new Error('Breaking news recipient dispatch incomplete; retry on next tick')
+    }
     out.sent++
     out.recipients += allowed.length
     out.stories.push({ sport, kind: c.classification.kind, tier: c.classification.tier, title: c.row.title, recipients: allowed.length })

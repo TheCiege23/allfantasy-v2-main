@@ -29,7 +29,8 @@ import { expect, test, type Page } from "@playwright/test"
 
 const ROOT = resolve(__dirname, "../..")
 const STYLESHEETS = ["components/core-app/af-core.css", "components/core-app/af-core-shell.css"]
-const SHELL_SOURCE = "components/core-app/AfCoreShell.tsx"
+// The tray lives in AfCoreShell; each row's body moved to RailRowBody (shared with the league page rail).
+const SHELL_SOURCES = ["components/core-app/AfCoreShell.tsx", "components/core-app/RailRowBody.tsx"]
 
 /*
  * Tailwind's preflight is compiled into the app's global CSS and is not readable as a plain file here.
@@ -55,9 +56,8 @@ function tile(i: number): string {
     <span class="af-rail-row">
       <span class="af-rail-row-headline">
         <span class="af-rail-row-name">NFL Dynasty 2026 League ${i + 1}</span>
-        <span class="af-rail-row-fresh">now</span>
       </span>
-      <span class="af-rail-score-status">W5 scores updated 8:03 PM</span>
+      <span class="af-rail-row-meta"><span>sleeper</span><span>Week 5</span></span>
       <span class="af-rail-row-line">
         <span class="af-rail-row-labels"><span></span><span>SCORE</span><span>SLPR</span><span>AF</span></span>
         ${side("allfantasyreview")}
@@ -150,13 +150,13 @@ function expectNoSidewaysPan(g: TrayGeometry, where: string): void {
 
 test.describe("@mobile league tray layout", () => {
   test("the markup under test still matches AfCoreShell", () => {
-    const source = readFileSync(resolve(ROOT, SHELL_SOURCE), "utf8")
+    const source = SHELL_SOURCES.map((f) => readFileSync(resolve(ROOT, f), "utf8")).join("\n")
     const used = new Set<string>()
     for (const m of trayMarkup(1, "image").matchAll(/class="([^"]+)"/g)) {
       for (const c of m[1].split(/\s+/)) used.add(c)
     }
     const missing = [...used].filter((c) => !source.includes(c))
-    expect(missing, `classes this spec renders that ${SHELL_SOURCE} no longer uses — update the markup`).toEqual([])
+    expect(missing, `classes this spec renders that ${SHELL_SOURCES.join(" + ")} no longer use — update the markup`).toEqual([])
   })
 
   for (const avatar of ["letter", "image"] as const) {

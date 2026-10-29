@@ -61,8 +61,10 @@ describe('NFL redraft core — settings modal cards', () => {
     // Non-commissioners must NEVER see the commissioner control center,
     // even if they navigate to the General tab. This gate is the single
     // source of truth for that visibility rule.
+    // Native leagues (onOpenSettingsHome set) never render it either: their settings live on the
+    // League Settings page, so the control center would be a second editor for every setting.
     expect(src).toMatch(
-      /isCommissioner\s*&&\s*mainTab\s*===\s*'general'\s*\?\s*\(\s*<CommissionerLeagueSettingsShell/,
+      /isCommissioner\s*&&\s*mainTab\s*===\s*'general'\s*&&\s*!onOpenSettingsHome\s*\?\s*\(\s*<CommissionerLeagueSettingsShell/,
     )
   })
 })

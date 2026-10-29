@@ -176,7 +176,7 @@ function guillotine(over: Partial<GuillotineSummaryLite> = {}): GuillotineSummar
   }
 }
 
-describe('Guillotine stakes', () => {
+describe('Guilly stakes', () => {
   it('nothing before there are danger tiers', () => {
     expect(guillotineStakes(guillotine({ dangerTiers: [] }))).toBeNull()
   })
@@ -241,7 +241,7 @@ describe('the card', () => {
     expect(screen.queryByTestId('league-stakes')).toBeNull()
     first.unmount()
 
-    const failing = vi.fn(async () => ({ ok: false, status: 404, json: async () => ({ error: 'Not a guillotine league' }) }) as Response)
+    const failing = vi.fn(async () => ({ ok: false, status: 404, json: async () => ({ error: 'Not a Guilly league' }) }) as Response)
     vi.stubGlobal('fetch', failing)
     render(<LeagueStakesCard leagueId="L1" format="guillotine" onSelectTab={vi.fn()} />)
     await waitFor(() => expect(failing).toHaveBeenCalled())

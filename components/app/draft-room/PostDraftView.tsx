@@ -28,6 +28,7 @@ import type {
   TeamResultEntry,
   ValueReachEntry,
 } from '@/lib/post-draft'
+import { DraftReportCardPanel } from './DraftReportCardPanel'
 
 export type PostDraftTab = 'summary' | 'teams' | 'roster' | 'replay' | 'recap' | 'share'
 
@@ -548,6 +549,7 @@ export function PostDraftView({
       <main className="flex-1 overflow-auto p-4 text-sm min-h-0">
         {tab === 'summary' && (
           <section className="space-y-4" data-testid="post-draft-summary-panel">
+            <DraftReportCardPanel leagueId={leagueId} rosterId={session.status === 'completed' ? currentUserRosterId : null} />
             <div className="rounded-xl border border-white/10 bg-white/5 p-4" data-testid="post-draft-summary-card-overview">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-2">Draft summary</h2>
               <p className="text-white/90">Total picks: <strong>{effectivePickCount}</strong> of {effectiveTotalPicks}</p>

@@ -27,8 +27,8 @@ export function scopeLabelText(label: string, language: string): string {
  * Canton, Survivor) stay; the rest follow `coreUiCopy`'s own choice ("Guillotine" → "Guillotina").
  */
 const LEAGUE_CONCEPT_ES: Record<string, string> = {
-  Guillotine: 'Guillotina',
-  'Survivor Guillotine': 'Guillotina Survivor',
+  Guilly: 'Guilly',
+  'Survivor Guilly': 'Guilly Survivor',
   Tournament: 'Torneo',
   Pirate: 'Pirata',
   'Salary Cap': 'Tope salarial',

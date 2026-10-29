@@ -111,8 +111,10 @@ describe('D.6.2 — top-middle RESUME DRAFT replaced with prominent clock', () =
     expect(src).toMatch(/>\s*Paused\s*<\/span>/)
   })
 
-  it('clock pill uses larger, prominent typography (text-base + min-h-[36px])', () => {
-    expect(src).toMatch(/min-h-\[36px\][\s\S]*?text-base font-extrabold/)
+  it('clock pill uses large, prominent typography (text-xl / sm:text-2xl + min-h-[36px])', () => {
+    // Anchored to the pill's own class string so a matching class elsewhere in the file
+    // cannot satisfy it. Raised from text-base when the on-the-clock chips moved beside it.
+    expect(src).toMatch(/min-h-\[36px\] items-center gap-2 rounded-full border px-3\.5 py-1\.5 text-xl font-extrabold tabular-nums sm:text-2xl/)
   })
 })
 

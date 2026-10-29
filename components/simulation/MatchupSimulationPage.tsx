@@ -1,5 +1,7 @@
 'use client'
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bot, Check, Loader2, Play, RefreshCw, Share2, Sparkles } from 'lucide-react'
 import { MatchupShareModal } from '@/components/matchup-sharing'
@@ -614,7 +616,7 @@ export function MatchupSimulationPage({
     setLastRequestedSignature(signature)
 
     try {
-      const response = await fetch('/api/simulation/matchup', {
+      const response = await paidToolFetchWithConfirm('/api/simulation/matchup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(simulationPayload),

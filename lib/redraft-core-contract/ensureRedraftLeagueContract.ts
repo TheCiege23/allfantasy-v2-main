@@ -5,11 +5,11 @@ import {
   buildRedraftSettingsSnapshot,
   getRedraftEngineDraftType,
   isFootballRedraftDefaultsSport,
-  isKnownLegacyRedraftStarterMap,
   normalizeRedraftDraftType,
   resolveRedraftScoringPreset,
 } from '@/lib/league-concepts/redraftDefaults'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { firstPositive, hasSavedRosterLayout, readSavedRosterLayout } from './savedRosterLayout'
 
 type JsonRecord = Record<string, unknown>
 
@@ -69,20 +69,62 @@ function jsonStable(value: unknown): string {
   return JSON.stringify(value)
 }
 
-function readStarterSlots(settings: JsonRecord): unknown {
-  if (isRecord(settings.starter_slots)) return settings.starter_slots
-  if (isRecord(settings.rosterTemplate) && isRecord(settings.rosterTemplate.starterSlots)) {
-    return settings.rosterTemplate.starterSlots
+/*
+ * 🛑 A LEAGUE THAT HAS SAVED ANY ROSTER LAYOUT KEEPS EXACTLY THAT LAYOUT (owner, 2026-10-20).
+ *
+ * This repair runs on every load of the draft page. It used to `deepMergeMissing` the full default
+ * snapshot into the saved settings, and that merge recurses into objects — so every default starter key
+ * a saved `starter_slots` map lacked was ADDED: a league saved with QB, RB, WR, WR, TE, DEF silently
+ * gained FLX and K, and a custom map spelled FLEX / DST gained a second flex (FLX) and a second defense
+ * (DEF). `starter_slot_order` is an array, so the merge left it alone and the two then disagreed. It
+ * also rewrote the known legacy map to the canonical one, which for NCAAF dropped a saved DEF.
+ *
+ * "Has a saved layout" is defined once, in ./savedRosterLayout, and shared with the read paths.
+ */
+
+/**
+ * Default-snapshot keys that describe the roster layout, or are sized from it. None of them may be
+ * merged into a league that has a saved layout: each would describe the DEFAULT roster beside the
+ * league's own (a 15-player `roster_size`, `lineupValidationRules.requiredPositions` naming FLX and K,
+ * a `rosterTemplate` / `rosterSettings` carrying the default starters, 15 draft rounds for a 12-player
+ * roster).
+ */
+const ROSTER_LAYOUT_KEYS = [
+  'starter_slots',
+  'starter_slot_order',
+  'roster_slot_order',
+  'compact_roster_slot_order',
+  'bench_slots',
+  'ir_slots',
+  'taxi_slots',
+  'roster_size',
+  'rosterSize',
+  'rosterTemplate',
+  'rosterSettings',
+  'lineupValidationRules',
+  'draft_rounds',
+  'rounds',
+] as const
+
+function withoutRosterLayout(defaults: JsonRecord): JsonRecord {
+  const out: JsonRecord = { ...defaults }
+  for (const key of ROSTER_LAYOUT_KEYS) delete out[key]
+  if (isRecord(out.draftSettings)) {
+    const { rounds: _rounds, fallbackRounds: _fallbackRounds, ...draftSettings } = out.draftSettings
+    out.draftSettings = draftSettings
   }
-  if (isRecord(settings.rosterSettings) && isRecord(settings.rosterSettings.starterSlots)) {
-    return settings.rosterSettings.starterSlots
-  }
-  return null
+  return out
 }
 
-function shouldRepairRosterDefaults(sport: 'NFL' | 'NCAAF', settings: JsonRecord): boolean {
-  const current = readStarterSlots(settings)
-  return !current || isKnownLegacyRedraftStarterMap(sport, current)
+/**
+ * Draft rounds for a league WITH a saved layout but no saved round count: its own starters + bench,
+ * the same rule the default contract uses (rounds = draftable roster). Null when that cannot be read,
+ * and the caller then keeps the previous behaviour (the default round count).
+ */
+function savedLayoutDraftRounds(sport: 'NFL' | 'NCAAF', settings: JsonRecord): number | null {
+  const layout = readSavedRosterLayout(sport, settings)
+  if (!layout || layout.starterOrder.length === 0 || layout.benchSlots == null) return null
+  return layout.starterOrder.length + layout.benchSlots
 }
 
 function scoringInput(settings: JsonRecord): string | null {
@@ -200,28 +242,22 @@ export function buildRedraftContractRepairPlan(input: {
     scoringPresetId: scoringInput(incoming),
     teamCount,
   }) ?? {}
-  let nextSettings = deepMergeMissing(defaults, incoming)
-
-  if (shouldRepairRosterDefaults(sport, incoming)) {
-    const rosterTemplate = defaults.rosterTemplate
-    nextSettings = {
-      ...nextSettings,
-      starter_slots: defaults.starter_slots,
-      starter_slot_order: defaults.starter_slot_order,
-      roster_slot_order: defaults.roster_slot_order,
-      compact_roster_slot_order: defaults.compact_roster_slot_order,
-      bench_slots: defaults.bench_slots,
-      ir_slots: defaults.ir_slots,
-      rosterTemplate,
-      rosterSettings: defaults.rosterSettings,
-      roster_size: defaults.roster_size,
-      rosterSize: defaults.rosterSize,
-    }
-  }
+  // A saved layout is never merged into (see hasSavedRosterLayout); a league with none gets the full
+  // default layout filled in, key by key, without overwriting anything it does have.
+  const savedLayout = hasSavedRosterLayout(sport, incoming)
+  let nextSettings = deepMergeMissing(savedLayout ? withoutRosterLayout(defaults) : defaults, incoming)
 
   nextSettings = normalizeScoringIfKnown(sport, nextSettings)
 
-  const rounds = numberOr(nextSettings.draft_rounds, numberOr(defaults.draft_rounds, 15))
+  const savedDraftSettings = isRecord(nextSettings.draftSettings) ? nextSettings.draftSettings : {}
+  const fallbackRounds = numberOr(
+    savedLayout ? savedLayoutDraftRounds(sport, incoming) : null,
+    numberOr(defaults.draft_rounds, 15),
+  )
+  const rounds = numberOr(
+    nextSettings.draft_rounds,
+    numberOr(nextSettings.rounds, numberOr(savedDraftSettings.rounds, fallbackRounds)),
+  )
   const timerSeconds = numberOr(nextSettings.draft_timer_seconds, 90)
   const engineDraftType = getRedraftEngineDraftType(draftType)
   const slotOrder = buildRedraftDraftSlotOrder({ teamCount, rosters: input.rosters, teams: input.teams })
@@ -309,7 +345,9 @@ export async function ensureRedraftLeagueContract(leagueId: string): Promise<{
         where: { id: leagueId },
         data: {
           settings: settings as Prisma.InputJsonValue,
-          rosterSize: league.rosterSize ?? numberOr(settings.rosterSize, numberOr(settings.roster_size, 0)),
+          // A league with a saved layout no longer gets the default `rosterSize` merged into settings, so
+          // leave the column alone rather than write 0 when neither it nor settings carry a size.
+          rosterSize: league.rosterSize ?? firstPositive(settings.rosterSize, settings.roster_size) ?? undefined,
           scoring: league.scoring ?? stringOr(settings.scoring_format, 'half_ppr'),
           scoringPresetId: league.scoringPresetId ?? stringOr(settings.scoring_preset_id, 'fb_half_ppr'),
           playoffTeams: league.playoffTeams ?? numberOr(playoffSettings.playoffTeams, 6),

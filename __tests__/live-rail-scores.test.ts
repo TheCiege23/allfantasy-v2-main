@@ -38,7 +38,7 @@ describe('live league rail', () => {
   it('does not fabricate a matchup for an unknown roster', () => {
     expect(summarizeLiveScores([row(1, 0)], '9')).toBeNull()
   })
-  it('retains the field race when a configured guillotine league has paired fixtures', () => {
+  it('retains the field race when a configured Guilly league has paired fixtures', () => {
     const result = summarizeLiveScores([row(1, 20, 1), row(2, 12, 1), row(3, 30, 2), row(4, 20, 2)], '1')
     expect(result?.standing).toBeNull()
     expect(result?.fieldStanding).toMatchObject({ rank: 2, placesAboveCut: 1, cutLine: 12, overCut: 8, tied: true })

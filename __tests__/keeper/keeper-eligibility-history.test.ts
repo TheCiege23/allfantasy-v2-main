@@ -86,8 +86,9 @@ describe('computeKeeperEligibility reads the league history', () => {
     expect(byId.get('p-early')).toMatchObject({ yearsKept: 0, projectedCostRound: 1, isEligible: true })
     // Kept once at round 4 → his cost starts from 4, not from his original draft round (9).
     expect(byId.get('p-kept')).toMatchObject({ yearsKept: 1, projectedCostRound: 3 })
-    // Never drafted → the draft's last round.
-    expect(byId.get('p-waiver')).toMatchObject({ yearsKept: 0, projectedCostRound: 14 })
+    // Never drafted → the league's waiver round, which defaults to the draft's last round. That
+    // round IS the cost: the one-round-up penalty applies to drafted players, not pickups (spec §1.2).
+    expect(byId.get('p-waiver')).toMatchObject({ yearsKept: 0, projectedCostRound: 15 })
     // Kept three times against a three-year limit.
     expect(byId.get('p-vet')).toMatchObject({ yearsKept: 3, isEligible: false, ineligibleReason: 'max_years_reached' })
     // Synthetic draft id, real roster id: matched by name and position.

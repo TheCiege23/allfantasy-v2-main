@@ -111,7 +111,7 @@ const MCLAURIN_OUT = "Commanders WR Terry McLaurin won't play London game becaus
 
 beforeEach(() => {
   h.dispatch.mockReset()
-  h.dispatch.mockResolvedValue(undefined)
+  h.dispatch.mockResolvedValue({ requested: 1, delivered: 1, suppressed: 0, failed: 0 })
   h.teamFollowers.mockReset()
   h.teamFollowers.mockImplementation(async (_s: string, abbr: string) => FANS[abbr] ?? [])
   h.cap.mockReset()
@@ -196,7 +196,10 @@ describe('a TEAM row goes to that team\'s followers', () => {
       story('Dallas Cowboys', 'DAL', 'Cowboys rule out top cornerback for Sunday'),
     ]
     await dispatchPendingPlayerNewsNotifications()
-    expect(toldUnder('followed_teams')).toEqual(['cowboys-fan', 'cowboys-fan'])
+    expect(toldUnder('followed_teams')).toEqual(['cowboys-fan'])
+    const summary=h.dispatch.mock.calls[0][0].body
+    expect(summary).toContain('Cowboys rule out starting left tackle')
+    expect(summary).toContain('Cowboys rule out top cornerback for Sunday')
   })
 })
 
@@ -244,7 +247,7 @@ describe("a player story goes to the followers of the team he is on NOW (his Sle
 
   it('Kaleb Johnson — registry PIT, Sleeper Green Bay Packers — goes to Packers fans, not Steelers fans', async () => {
     h.sleeper = [sleeperRow('12507', 'Kaleb Johnson', 'RB', 'Green Bay Packers')]
-    h.news = [story('Kaleb Johnson', 'PIT', 'Kaleb Johnson (ankle) limited at practice')]
+    h.news = [story('Kaleb Johnson', 'PIT', 'Kaleb Johnson (ankle) ruled out for Sunday')]
     await dispatchPendingPlayerNewsNotifications()
     expect(toldUnder('followed_teams')).toEqual(['packers-fan'])
     expect(calls()[0].meta.team).toBe('GB')
@@ -252,7 +255,7 @@ describe("a player story goes to the followers of the team he is on NOW (his Sle
 
   it('no readable Sleeper row keeps the registry team (what routed before)', async () => {
     h.sleeperThrows = true
-    h.news = [story('Kaleb Johnson', null, 'Kaleb Johnson (ankle) limited at practice')]
+    h.news = [story('Kaleb Johnson', null, 'Kaleb Johnson (ankle) ruled out for Sunday')]
     await dispatchPendingPlayerNewsNotifications()
     expect(toldUnder('followed_teams')).toEqual(['steelers-fan'])
   })

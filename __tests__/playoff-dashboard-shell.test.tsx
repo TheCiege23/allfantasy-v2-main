@@ -656,6 +656,28 @@ describe("PlayoffBracketShell dashboard", () => {
     )
 
     expect(screen.queryByRole("button", { name: "Create Another Bracket" })).not.toBeInTheDocument()
-    expect(screen.getByText("Entry limit reached. Bracket 6 is blocked.")).toBeInTheDocument()
+    expect(screen.getByText("This league allows up to 5 brackets per person.")).toBeInTheDocument()
+  })
+
+  it("disables a new CFP bracket when the free tournament allowance was used in another league", () => {
+    render(
+      <PlayoffBracketShell
+        initialView={buildView({
+          challenge: {
+            ...buildView().challenge,
+            sport: "ncaaf",
+            firstGameStartsAt: new Date(Date.now() + 3600000).toISOString(),
+          },
+          viewerTournamentBracketLimit: 1,
+          viewerTournamentBracketUsed: 1,
+          activeEntry: null,
+          entries: [],
+        })}
+      />
+    )
+
+    expect(screen.getByRole("button", { name: "Bracket limit reached" })).toBeDisabled()
+    expect(screen.getByText(/1 of 1 brackets used across this tournament/)).toBeInTheDocument()
+    expect(screen.getByText("Tournament bracket limit reached (1).")).toBeInTheDocument()
   })
 })

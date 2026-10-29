@@ -71,8 +71,10 @@ export async function awardIndividualImmunity(leagueId: string, week: number): P
 }
 
 export async function clearWeeklyImmunity(leagueId: string): Promise<void> {
+  // The weekly necklace (tribe_top_score) is worn until the next lineup lock, not the week flip;
+  // clearExpiredTribeImmunity takes it off.
   await prisma.survivorPlayer.updateMany({
-    where: { leagueId },
+    where: { leagueId, OR: [{ immunitySource: null }, { immunitySource: { not: 'tribe_top_score' } }] },
     data: { hasImmunityThisWeek: false, immunitySource: null },
   })
 }

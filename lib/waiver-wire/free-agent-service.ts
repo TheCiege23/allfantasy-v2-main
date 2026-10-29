@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assertWaiverClaimEligibility } from './transaction-eligibility'
 import { addPlayerToRosterData, removePlayerFromRosterData, getRosterPlayerIds } from './roster-utils'
+import { applyRedraftRosterMoves } from '@/lib/league-runtime/redraftRosterMoveSync'
 
 /**
  * Immediate free-agent add/drop (Step 3B).
@@ -34,6 +35,10 @@ export async function executeImmediateAddDrop(
   leagueId: string,
   rosterId: string,
   input: { addPlayerId: string; dropPlayerId?: string | null },
+  opts: {
+    /** The commissioner opened the offseason as first-come free agency (season-phase-policy.ts). */
+    offseasonFreeAgency?: boolean
+  } = {},
 ): Promise<ImmediateAddDropResult> {
   const addPlayerId = String(input.addPlayerId)
   const dropPlayerId = input.dropPlayerId ? String(input.dropPlayerId) : null
@@ -46,6 +51,7 @@ export async function executeImmediateAddDrop(
     dropPlayerId,
     faabBid: null,
     claimMetadata: { source: 'free_agent_immediate' },
+    ...(opts.offseasonFreeAgency ? { offseasonFreeAgency: true } : {}),
   })
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } })
@@ -66,6 +72,16 @@ export async function executeImmediateAddDrop(
     nextData = addPlayerToRosterData(nextData, addPlayerId)
 
     await tx.roster.update({ where: { id: rosterId }, data: { playerData: nextData as Prisma.InputJsonValue } })
+    // Native scoring reads `RedraftRosterPlayer`; see `redraftRosterMoveSync` for why this is needed.
+    await applyRedraftRosterMoves(tx, {
+      leagueId,
+      acquisitionType: 'free_agent',
+      moves: [
+        { playerId: addPlayerId, fromRosterId: null, toRosterId: rosterId },
+        ...(dropPlayerId ? [{ playerId: dropPlayerId, fromRosterId: rosterId, toRosterId: null }] : []),
+      ],
+      playerDataByRoster: new Map([[rosterId, nextData]]),
+    })
 
     const txnRow = await tx.waiverTransaction.create({
       data: {

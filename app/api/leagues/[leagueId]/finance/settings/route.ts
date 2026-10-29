@@ -19,7 +19,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
   const { leagueId } = await ctx.params
 
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'money')
   } catch (e) {
     if (e instanceof Response) {
       const body = await e.json().catch(() => ({}))

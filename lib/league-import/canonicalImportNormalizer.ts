@@ -23,8 +23,23 @@ import type {
 
 const NORMALIZATION_VERSION = '2'
 
+function importedReceptionPoints(normalized: NormalizedImportResult): number | null {
+  if (normalizeToSupportedSport(normalized.league.sport) !== 'NFL') return null
+  const reception = normalized.scoring?.rules.find((rule) => rule.stat_key === 'rec' && !rule.positions?.length)
+  return reception && Number.isFinite(reception.points_value) ? reception.points_value : null
+}
+
 function inferScoringPresetId(normalized: NormalizedImportResult): string {
+  const sport = normalizeToSupportedSport(normalized.league.sport)
   const fmt = String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '').toLowerCase()
+  // Non-football points leagues carry their own stat rules. A football PPR preset
+  // would label an NBA/NHL/MLB import with the wrong sport and mislead valuations.
+  const pointsPresetBySport: Partial<Record<LeagueSport, string>> = {
+    NBA: 'nba_points', NHL: 'nhl_points', MLB: 'mlb_points',
+    NCAAB: 'ncaab_points', SOCCER: 'soc_points',
+  }
+  const sportPointsPreset = pointsPresetBySport[sport as LeagueSport]
+  if (sportPointsPreset) return sportPointsPreset
   if (fmt.includes('idp')) return 'fb_idp'
   if (fmt.includes('te') && fmt.includes('prem')) return 'fb_te_premium'
   if (fmt.includes('super')) return 'fb_superflex'
@@ -40,6 +55,12 @@ function inferScoringPresetId(normalized: NormalizedImportResult): string {
   if (fmt.includes('half') || fmt.includes('0.5')) return 'fb_half_ppr'
   if (fmt.includes('std') || fmt.includes('non')) return 'fb_std'
   if (fmt.includes('ppr') || fmt.includes('reception')) return 'fb_ppr'
+  const receptionPoints = importedReceptionPoints(normalized)
+  if (receptionPoints != null) {
+    if (receptionPoints < 0.25) return 'fb_std'
+    if (receptionPoints < 0.75) return 'fb_half_ppr'
+    return 'fb_ppr'
+  }
   /*
    * 🛑 THE FALLBACK IS A GUESS, AND IT USED TO BE AN UNQUALIFIED ONE. Half-PPR is the
    * most common league shape, so it remains the least-wrong default — but the caller
@@ -56,7 +77,10 @@ function inferScoringPresetId(normalized: NormalizedImportResult): string {
  * become an unqualified exact valuation (audit IMP-03).
  */
 function scoringPresetWasInferred(normalized: NormalizedImportResult): boolean {
+  const sport = normalizeToSupportedSport(normalized.league.sport)
   const fmt = String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '').toLowerCase()
+  if (sport !== 'NFL' && sport !== 'NCAAF') return !fmt.includes('points')
+  if (importedReceptionPoints(normalized) != null) return false
   if (!fmt.trim()) return true
   return !(
     fmt.includes('idp') ||
@@ -98,7 +122,7 @@ function collectConceptSignals(normalized: NormalizedImportResult): string {
 }
 
 function heuristicConceptFromSignals(signals: string): string | null {
-  if (/\bguillotine\b/.test(signals)) return 'guillotine'
+  if (/\bguill(?:otine|y)\b/.test(signals)) return 'guillotine'
   if (/\bsurvivor\b/.test(signals)) return 'survivor'
   if (/\bzombie\b/.test(signals)) return 'zombie'
   if (/\btournament\b/.test(signals) || /\bbracket\b/.test(signals)) return 'tournament'
@@ -232,10 +256,11 @@ function inferDerivedFlags(
     : []
   const idpPositions = ['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'DB', 'IDP_FLEX', 'IDP']
   const hasIdpSlot = rosterPositions.some((p) => idpPositions.some((x) => p.includes(x)))
+  const hasIdpScoring = normalized.scoring?.rules.some((rule) => rule.stat_key.startsWith('idp_')) ?? false
   const signals = collectConceptSignals(normalized)
 
   return {
-    idp: scoringPresetId === 'fb_idp' || hasIdpSlot,
+    idp: scoringPresetId === 'fb_idp' || hasIdpSlot || hasIdpScoring,
     salaryCap: inferredConcept === 'salary_cap' || /\bsalary[\s_]*cap\b|salarycap/.test(signals),
     devy: inferredConcept === 'devy' || signals.includes('taxi_devy') || /\bdevy\b/.test(signals),
     c2c: inferredConcept === 'c2c' || /\bc2c\b|campus\s*2\s*canton/.test(signals),
@@ -593,7 +618,7 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
       code: 'scoring_preset_inferred',
       message: `Source reported scoring format "${
         normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '(none)'
-      }", which did not match a known preset — defaulted to half-PPR. Confirm in League Settings before trusting valuations.`,
+      }", which did not match a known preset — used ${scoringPresetId} as a fallback. Confirm in League Settings before trusting valuations.`,
       severity: 'warn',
       metadata: {
         rawFormat: String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? ''),

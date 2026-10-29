@@ -28,8 +28,13 @@ export function GlobalModeToggle() {
    *  This toggle sits at fixed bottom-4 right-4 z-40 — same coordinates, lower
    *  z-index — so the AF/light-dark button visually overlaps the War Room
    *  trigger and steals user clicks at narrow widths. The draft route has its
-   *  own theme controls in DraftTopBar; the global toggle is redundant here. */
-  if (pathname?.startsWith("/draft/") || pathname?.startsWith("/draft-room/")) return null
+   *  own theme controls in DraftTopBar; the global toggle is redundant here.
+   *  Include the canonical plural live route and mock room: their stacked mobile
+   *  navigation otherwise sits under this pill and taps can change the theme. */
+  if (
+    pathname.startsWith("/draft/") || pathname.startsWith("/draft-room/") ||
+    pathname.startsWith("/drafts/") || pathname === "/mock-draft" || pathname.startsWith("/mock-draft/")
+  ) return null
 
   /** /chimmy/chat is the chat drawer's Chimmy tab at full screen, and like the drawer it is always
    *  dark (af-comms.css scopes its own tokens), so a light/dark switch there changes nothing on

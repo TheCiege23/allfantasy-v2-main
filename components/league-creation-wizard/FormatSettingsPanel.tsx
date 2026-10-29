@@ -62,8 +62,11 @@ export function SurvivorSettingsPanel({ settings, onChange, sport }: SurvivorSet
       {settings.idolsEnabled && (
         <div className="w-32">
           <label className="mb-1 block text-xs text-white/50">Idol count</label>
-          <Input type="number" min={1} max={20} value={settings.idolCount}
-            onChange={(e) => onChange({ idolCount: Number(e.target.value) || 9 })} />
+          <select value={[6, 7, 8].includes(settings.idolCount) ? settings.idolCount : 7}
+            onChange={(e) => onChange({ idolCount: Number(e.target.value) })}
+            className="h-10 w-full rounded-md border border-white/15 bg-transparent px-2 text-sm text-white">
+            {[6, 7, 8].map(count => <option key={count} value={count}>{count}</option>)}
+          </select>
         </div>
       )}
     </div>
@@ -139,7 +142,7 @@ interface GuillotineSettingsPanelProps {
 
 const SPORT_INFO: Record<string, { weeks: number; chopDay: string; waiverDay: string }> = {
   NFL: { weeks: 18, chopDay: 'Tuesday', waiverDay: 'Wednesday' },
-  NBA: { weeks: 24, chopDay: 'Monday', waiverDay: 'Tuesday' },
+  NBA: { weeks: 24, chopDay: 'Tuesday night', waiverDay: 'Thursday' },
   MLB: { weeks: 26, chopDay: 'Monday', waiverDay: 'Tuesday' },
   NHL: { weeks: 24, chopDay: 'Monday', waiverDay: 'Tuesday' },
   NCAAF: { weeks: 14, chopDay: 'Sunday', waiverDay: 'Monday' },
@@ -152,7 +155,7 @@ export function GuillotineSettingsPanel({ settings, onChange, sport }: Guillotin
 
   return (
     <div className="space-y-5 rounded-2xl border border-red-500/20 bg-red-500/[0.03] p-5">
-      <div className="text-sm font-semibold text-white/90">Guillotine Settings</div>
+      <div className="text-sm font-semibold text-white/90">Guilly Settings</div>
 
       {/* Schedule info */}
       <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/50">

@@ -150,8 +150,8 @@ export interface GenerateScheduledReportsBatchResult {
 /**
  * The scheduled sweep.
  *
- * ⚠ IT REUSES THE WORKSPACE JOB'S DISCOVERY DELIBERATELY. "Leagues with imported activity, least
- * recently touched first" is the same population and the same fairness problem — and a second
+ * ⚠ IT REUSES THE WORKSPACE JOB'S DISCOVERY DELIBERATELY. "Leagues with imported activity, plus
+ * native leagues in season, least recently touched first" is the same population and the same fairness problem — and a second
  * discovery would be a second definition of "which leagues exist", free to drift from the first.
  * One definition, two consumers.
  */

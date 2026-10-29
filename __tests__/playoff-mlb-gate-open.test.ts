@@ -22,7 +22,7 @@ const read = (p: string) => readFileSync(resolve(root, p), "utf8")
 describe("MLB playoff pools — the gate is open, consistently", () => {
   it("the create API accepts mlb", () => {
     const src = read("app/api/brackets/playoffs/route.ts")
-    expect(src).toContain('sport: z.enum(["nba", "nhl", "mlb"])')
+    expect(src).toContain('sport: z.enum(["nba", "nhl", "mlb", "ncaaf", "nba_cup"])')
   })
 
   it("the sync service will sync mlb", async () => {
@@ -47,12 +47,12 @@ describe("MLB playoff pools — the gate is open, consistently", () => {
 
     const enumMatch = api.match(/sport: z\.enum\(\[([^\]]+)\]\)/)
     expect(enumMatch, "could not find the create API sport enum").toBeTruthy()
-    const apiSports = (enumMatch![1].match(/"([a-z]+)"/g) ?? []).map((s) => s.replace(/"/g, "").toUpperCase())
+    const apiSports = (enumMatch![1].match(/"([a-z_]+)"/g) ?? []).map((s) => s.replace(/"/g, "").toUpperCase())
     expect(apiSports.length).toBeGreaterThan(0)
 
     const pageMatch = page.match(/PLAYOFF_POOL_SPORTS = \[([^\]]+)\]/)
     expect(pageMatch, "could not find PLAYOFF_POOL_SPORTS in the create page").toBeTruthy()
-    const pageSports = (pageMatch![1].match(/"([A-Z]+)"/g) ?? []).map((s) => s.replace(/"/g, ""))
+    const pageSports = (pageMatch![1].match(/"([A-Z_]+)"/g) ?? []).map((s) => s.replace(/"/g, ""))
 
     expect([...pageSports].sort()).toEqual([...apiSports].sort())
   })
@@ -65,11 +65,11 @@ describe("MLB playoff pools — the gate is open, consistently", () => {
     const api = read("app/api/brackets/playoffs/route.ts")
     const hub = read("app/brackets/page.tsx")
 
-    const apiSports = (api.match(/sport: z\.enum\(\[([^\]]+)\]\)/)![1].match(/"([a-z]+)"/g) ?? [])
+    const apiSports = (api.match(/sport: z\.enum\(\[([^\]]+)\]\)/)![1].match(/"([a-z_]+)"/g) ?? [])
       .map((s) => s.replace(/"/g, "").toUpperCase())
 
     // Every playoffPoolHref(...) argument must be an accepted sport.
-    const hrefSports = [...hub.matchAll(/playoffPoolHref\("([A-Z]+)"\)/g)].map((m) => m[1])
+    const hrefSports = [...hub.matchAll(/playoffPoolHref\("([A-Z_]+)"\)/g)].map((m) => m[1])
     expect(hrefSports.length).toBeGreaterThan(0)
     for (const sport of hrefSports) {
       expect(apiSports, `hub offers ${sport}`).toContain(sport)

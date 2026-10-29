@@ -24,6 +24,8 @@ export interface PushPayload {
   tag?: string
   /** Notification type for analytics; `sw.js` also uses it to pick action buttons. */
   type?: string
+  /** Absolute deadline; receivers discard an expired game update. */
+  expiresAt?: string
   /** Lets `sw.js` build league-scoped action deep links (trade/draft/score). */
   leagueId?: string | null
   /**

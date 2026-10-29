@@ -488,7 +488,7 @@ function buildActions(
     },
     {
       key: lockAllMoves ? 'unlock_rosters' : 'lock_rosters',
-      label: lockAllMoves ? 'Unlock Rosters' : 'Lock Rosters',
+      label: lockAllMoves ? 'Unlock all roster moves' : 'Lock all roster moves',
       description: lockAllMoves
         ? 'Open commissioner settings to re-enable roster moves.'
         : 'Open commissioner settings to pause roster moves.',

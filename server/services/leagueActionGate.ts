@@ -9,6 +9,7 @@ import {
   type LifecycleGateError,
 } from '@/server/services/leagueLifecycleService'
 import { canViewLeague, isElevatedCommissioner } from '@/server/services/permissionService'
+import type { PostDraftRosterLockStatus, RosterMoveKind } from '@/lib/league/postDraftRosterLock'
 
 /** Actions that normal team managers may perform when lifecycle + roster ownership allow (routes still verify roster/trade specifics). */
 export const MEMBER_SCOPED_LIFECYCLE_ACTIONS: ReadonlySet<LeagueLifecycleAction> = new Set([
@@ -36,8 +37,12 @@ export async function assertLeagueActionGate(
     treatAsElevated?: boolean
     /** Forwarded to `assertLifecycleActionAllowed` (e.g. playoff scoring override). */
     lifecycle?: { commissionerOverride?: boolean }
+    /** The roster move, for the post-draft lock (see `assertLifecycleActionAllowed`). */
+    rosterMove?: RosterMoveKind
+    /** Forwarded to `assertLifecycleActionAllowed`: first-come adds in an offseason opened to free agency. */
+    offseasonFreeAgency?: boolean
   },
-): Promise<{ ok: true } | { ok: false; err: LeagueActionGateError }> {
+): Promise<{ ok: true; postDraftLock?: PostDraftRosterLockStatus } | { ok: false; err: LeagueActionGateError }> {
   if (!userId) {
     return { ok: false, err: { status: 401, error: 'Unauthorized', code: 'UNAUTHORIZED' } }
   }
@@ -60,5 +65,7 @@ export async function assertLeagueActionGate(
   return assertLifecycleActionAllowed(leagueId, action, userId, {
     isElevatedCommissioner: elevated || Boolean(opts?.treatAsElevated),
     commissionerOverride: opts?.lifecycle?.commissionerOverride,
+    ...(opts?.rosterMove ? { rosterMove: opts.rosterMove } : {}),
+    ...(opts?.offseasonFreeAgency ? { offseasonFreeAgency: true } : {}),
   })
 }

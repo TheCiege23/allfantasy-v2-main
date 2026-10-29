@@ -216,3 +216,46 @@ html[data-mode='light'] .af-league-admin.af-settings-dialog .af-ls-mode-tabs .af
 }
 .af-league-admin .af-ls-stepper button:disabled { opacity: .35; }
 .af-league-admin .af-ls-stepper output { min-width: 28px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text); font-size: 14px; }
+
+/* ─── One visual style across League Settings ──────────────────────────────────────
+   The older editors were drawn with fixed dark-navy Tailwind colours: cyan pills for the
+   main button, pastel emerald/red/amber text for saved/error/warning notes. On the light
+   theme those pastels sit on white at ~1.5:1, and on every theme the main button looked
+   different from the one on the next page. These map them onto AF Core's tokens so every
+   settings page shares one button, one selected state and one set of status colours, and
+   follows the viewer's theme.
+   Only a PLAIN utility is matched (start of the class list, or after a space) — never a
+   `hover:` / `focus:` variant, which would otherwise apply all the time. Solid warning and
+   destructive buttons (bg-amber-500, bg-red-600…) keep their colours: those carry meaning. */
+
+/* Main action: the accent button every League Settings page uses (.lsh-primary). Solid or
+   mostly-opaque cyan only; the /10–/25 tints are chips and selected states, below. */
+.af-league-admin button:is([class~='bg-cyan-500'], [class~='bg-cyan-600'], [class~='bg-cyan-600/60'], [class~='bg-cyan-600/80']):not([aria-pressed]):not([role='switch']) {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+  border-radius: 12px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.af-league-admin button:is([class~='bg-cyan-500'], [class~='bg-cyan-600'], [class~='bg-cyan-600/60'], [class~='bg-cyan-600/80']):not([aria-pressed]):not([role='switch']):enabled:hover { filter: brightness(1.08); }
+
+/* Selected / highlighted: accent tint and line, as the settings list's chips. */
+.af-league-admin :is([class^='bg-cyan-950'], [class*=' bg-cyan-950'], [class^='bg-cyan-500/1'], [class*=' bg-cyan-500/1'], [class^='bg-cyan-500/2'], [class*=' bg-cyan-500/2'], [class^='bg-cyan-400/1'], [class*=' bg-cyan-400/1'], [class^='bg-cyan-400/2'], [class*=' bg-cyan-400/2'], [class^='bg-cyan-600/2'], [class*=' bg-cyan-600/2']) { background-color: var(--accent-soft); }
+.af-league-admin :is([class^='border-cyan-'], [class*=' border-cyan-']) { border-color: var(--accent-line); }
+
+/* Status notes: saved / error / warning in the theme's own semantic colours. */
+.af-league-admin :is([class^='text-emerald-'], [class*=' text-emerald-'], [class^='text-green-'], [class*=' text-green-']) { color: var(--good); }
+.af-league-admin :is([class^='text-red-'], [class*=' text-red-'], [class^='text-rose-'], [class*=' text-rose-']) { color: var(--bad); }
+.af-league-admin :is([class^='text-amber-'], [class*=' text-amber-'], [class^='text-yellow-'], [class*=' text-yellow-']) { color: var(--warn); }
+.af-league-admin :is([class^='bg-emerald-950'], [class*=' bg-emerald-950'], [class^='bg-emerald-500/'], [class*=' bg-emerald-500/'], [class^='bg-green-500/'], [class*=' bg-green-500/']) { background-color: var(--good-soft); }
+.af-league-admin :is([class^='bg-red-950'], [class*=' bg-red-950'], [class^='bg-red-900/'], [class*=' bg-red-900/'], [class^='bg-red-500/'], [class*=' bg-red-500/'], [class^='bg-rose-950'], [class*=' bg-rose-950'], [class^='bg-rose-500/'], [class*=' bg-rose-500/']) { background-color: var(--bad-soft); }
+.af-league-admin :is([class^='bg-amber-950'], [class*=' bg-amber-950'], [class^='bg-amber-900/'], [class*=' bg-amber-900/'], [class^='bg-amber-500/'], [class*=' bg-amber-500/'], [class^='bg-yellow-500/'], [class*=' bg-yellow-500/']) { background-color: var(--warn-soft); }
+.af-league-admin :is([class^='border-emerald-'], [class*=' border-emerald-'], [class^='border-green-'], [class*=' border-green-']) { border-color: color-mix(in srgb, var(--good) 35%, transparent); }
+.af-league-admin :is([class^='border-red-'], [class*=' border-red-'], [class^='border-rose-'], [class*=' border-rose-']) { border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
+.af-league-admin :is([class^='border-amber-'], [class*=' border-amber-'], [class^='border-yellow-'], [class*=' border-yellow-']) { border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+
+/* Cards: one radius and line weight, as .lsh-field-card. */
+.af-league-admin :is([class^='bg-[#0d1526]'], [class*=' bg-[#0d1526]']) { background-color: var(--surface); }
+.af-league-admin :is([class^='bg-[#0a1228]'], [class*=' bg-[#0a1228]'], [class^='bg-[#0d1526]'], [class*=' bg-[#0d1526]']):is([class^='rounded-xl'], [class*=' rounded-xl'], [class^='rounded-2xl'], [class*=' rounded-2xl']) { border-radius: 14px; border-color: var(--line); }

@@ -240,10 +240,12 @@ const PLATFORM_LABEL: Record<string, string> = {
 /** How many queued players the screen lists; the count says how many more there are. */
 const QUEUE_SHOWN = 10
 
+/** What the engine does with each fallback (lib/draft-lottery/WeightedDraftLotteryEngine.ts `buildFullSlotOrder`). */
 const FALLBACK_ORDER_TEXT: Record<string, string> = {
   reverse_standings: 'reverse order of finish',
-  reverse_max_pf: 'reverse order of max points for',
-  manual: 'an order the commissioner sets',
+  reverse_max_pf: 'reverse order of max points for outside the playoffs, then the playoff teams in reverse order of finish',
+  // The engine has no commissioner order to read, so a `manual` fallback seats by finish.
+  manual: 'reverse order of finish',
 }
 
 /**

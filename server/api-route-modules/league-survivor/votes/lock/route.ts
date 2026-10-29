@@ -1,12 +1,14 @@
 /**
  * POST /api/leagues/[leagueId]/survivor/votes/lock
- * Commissioner-only: lock voting on the active tribal council.
+ * Commissioner: close the open council's vote window and tally it. Delegates to the canonical
+ * council services, so this legacy URL can never run a second vote engine on the same council.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueCommissioner } from '@/lib/league/league-access'
-import { lockVoting } from '@/lib/survivor/votingEngine'
+import { closeVoteWindow } from '@/lib/survivor/survivorCouncilService'
+import { tallyCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { prisma } from '@/lib/prisma'
 
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
@@ -28,16 +30,14 @@ export async function POST(
   if (!gate.ok) return NextResponse.json({ error: 'Commissioner only' }, { status: gate.status ?? 403 })
 
   const council = await prisma.survivorTribalCouncil.findFirst({
-    where: { leagueId, status: 'voting_open' },
+    where: { leagueId, status: 'voting_open', isRevealed: false },
     orderBy: { createdAt: 'desc' },
   })
   if (!council) return NextResponse.json({ error: 'No open council' }, { status: 404 })
 
-  try {
-    await lockVoting(council.id)
-    return NextResponse.json({ ok: true, councilId: council.id })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
-  }
+  const closed = await closeVoteWindow(leagueId, council.id, userId)
+  if (!closed.ok) return NextResponse.json({ error: closed.error }, { status: closed.status })
+  const tally = await tallyCouncil(leagueId, council.id)
+  if (!tally.ok) return NextResponse.json({ error: tally.error }, { status: tally.status })
+  return NextResponse.json({ ok: true, councilId: council.id, status: tally.status })
 }

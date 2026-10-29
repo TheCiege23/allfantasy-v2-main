@@ -638,7 +638,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           >
             {connection === 'live' ? <span className="af-live-pulse" aria-hidden /> : null}
             <span role="status">{lsc(connectionLabel(connection), language)}</span>
-            {ageSeconds != null ? <span>{updatedAgo(formatAge(ageSeconds), language)}</span> : null}
+            {ageSeconds != null && connection !== 'live' && connection !== 'idle' ? <span>{updatedAgo(formatAge(ageSeconds), language)}</span> : null}
             {refreshing ? <span className="af-live-refreshing" aria-hidden> ·</span> : null}
           </span>
           <button type="button" className="af-btn af-live-refresh" aria-label={lsc(refreshing ? 'Refreshing scores' : 'Refresh scores', language)} disabled={refreshing} onClick={() => void load(sport, scope)}><span className="af-live-refresh-icon" aria-hidden>↻</span><span className="af-live-refresh-label">{lsc(refreshing ? 'Refreshing…' : 'Refresh scores', language)}</span></button>
@@ -797,7 +797,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           )}
         </section>
 
-        <aside className="af-live-side" aria-label={lsc('Your live impact', language)}>
+        <aside className="af-live-side" data-roster={data.hasRosterData} aria-label={lsc('Your live impact', language)}>
 
           <ImpactSummary data={data} impact={impact} leagueScoped={leagueFilterId != null} placement="side" />
 
@@ -956,7 +956,7 @@ function ImpactSummary({
 }) {
   const { language } = useOptionalLanguage()
   return (
-    <div className="af-live-impact" data-placement={placement}>
+    <div className="af-live-impact" data-placement={placement} data-roster={data.hasRosterData || data.rosterFailed}>
       <h2 className="af-label">
         {lsc('Your live impact', language)} <TopicTip topic="liveImpactTotal" />
       </h2>

@@ -23,6 +23,8 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
   }
   const primary = [
     ...item('League home', 'home', 'native_home', 'home'),
+    // A guillotine league's defining screen (chop line, danger zone, history) sat under "More tools".
+    ...item('Guilly', 'guillotine', 'guillotine'),
     ...item('My team', 'team', 'roster', 'team', 'squad'),
     ...item('Matchup', 'matchup', 'matchups', 'matchup', 'fixtures'),
     ...item('Players & waivers', 'players', 'waivers', 'players'),
@@ -30,11 +32,12 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     ...item('Draft HQ', 'draft', 'draft'),
     ...item(isSurvivor ? 'Standings' : 'Standings & playoffs', 'standings', 'standings', 'table'),
     ...item('League chat', 'chat', 'league_chat'),
-    ...(commissioner ? item('Commissioner', 'settings', 'commissioner', 'league') : []),
+    // Commissioner lands on the League Settings page (?view=settings); the old commissioner tab stays under More tools.
+    ...(commissioner ? item('Commissioner', 'settings', 'settings', 'commissioner', 'league') : []),
   ]
   const survivor = tabs.filter(tab => tab.id.startsWith('survivor')).map(tab => {
     used.add(tab.id)
-    const labels: Record<string, string> = { survivor: 'Island', survivor_tribal: 'Elimination Council', survivor_challenges: 'Challenges', survivor_ai: 'Chimmy', survivor_exile: 'Exile', survivor_jury: 'Jury & finale', survivor_commissioner: 'Survivor command' }
+    const labels: Record<string, string> = { survivor: 'Island', survivor_tribal: 'Elimination Council', survivor_challenges: 'Challenges', survivor_ai: 'Chimmy', survivor_chimmy: 'Chimmy', survivor_exile: 'Exile', survivor_jury: 'Jury & finale', survivor_commissioner: 'Survivor command', survivor_command: 'Commissioner hub' }
     return { ...tab, label: labels[tab.id] ?? tab.label.replace(/^[^\p{L}\p{N}]+/u, ''), icon: 'survivor' }
   })
   const weekly = [
@@ -45,6 +48,21 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
   // Secondary tools remain reachable; role checks stay in the server and existing tab registry.
   const more = tabs.filter(tab => !used.has(tab.id) && tab.id !== 'settings' && !(tab.id === 'home' && used.has('native_home')) && (commissioner || tab.id !== 'commissioner')).map(tab => ({ ...tab, icon: 'more' }))
   return [{ title: 'This league', items: primary }, { title: 'Survivor', items: survivor }, { title: 'This week', items: weekly }, { title: 'More tools', items: more }].filter(group => group.items.length)
+}
+
+/**
+ * Handoff §2's third nav group, "Your record". These are /core screens, not league tabs, so they are
+ * links (the same hrefs /core's own rail builds: `/core/career?league=…`, `/core/rankings?league=…`).
+ *
+ * "This week" keeps Decision OS where the handoff drew "Season Outlook": Decision OS replaced the
+ * outlook screen on 2026-10 and is the live surface; this group is added beside it, not instead of it.
+ */
+export function nativeLeagueRecordLinks(leagueId: string): Array<{ id: string; label: string; href: string; icon: string }> {
+  const q = `?league=${encodeURIComponent(leagueId)}`
+  return [
+    { id: 'career', label: 'Your career', href: `/core/career${q}`, icon: 'career' },
+    { id: 'rankings', label: 'Rankings', href: `/core/rankings${q}`, icon: 'rankings' },
+  ]
 }
 
 export function leagueSectionHref(league: UserLeague, view: string) {

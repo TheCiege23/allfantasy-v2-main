@@ -17,6 +17,7 @@ import {
   YahooApiResponseError,
   YahooImportConnectionError,
   YahooImportLeagueNotFoundError,
+  YahooImportUnknownSportError,
 } from './yahoo/YahooLeagueFetchService'
 import { describeYahooRejection } from './yahoo/yahooRejection'
 import {
@@ -37,6 +38,7 @@ import {
   FleaflickerImportUnavailableError,
 } from './fleaflicker/FleaflickerLeagueFetchService'
 import { runImportNormalizationPipeline } from './ImportNormalizationPipeline'
+import { checkImportSportRunnable, checkImportSportSupported } from './provider-ui-config'
 import type { ImportProvider, NormalizedImportResult } from './types'
 
 export interface ImportedLeagueNormalizationInput {
@@ -103,6 +105,16 @@ export interface ImportedLeagueNormalizationInput {
    * stops at the current week.
    */
   maxMatchupWeeks?: number
+  /**
+   * True when this run REFRESHES a league that is already imported (scheduled activity
+   * ingest, manual re-sync), rather than importing a new one. Skips the sport gate.
+   *
+   * ⚠ THE SPORT GATE IS AN IMPORT RULE, NOT A SYNC RULE. It refuses a league whose sport the
+   * provider is not listed for in `provider-ui-config.ts`. Applied to a refresh it would strand
+   * a league imported before the gate existed: every sync failing, its data frozen, with no way
+   * for the user to fix it. New imports are refused; existing ones keep syncing.
+   */
+  refreshOfImportedLeague?: boolean
 }
 
 export interface ImportedLeagueNormalizationResult {
@@ -134,6 +146,12 @@ export interface ImportedLeagueNormalizationError {
      * map it to 503, not 404.
      */
     | 'PROVIDER_UNAVAILABLE'
+    /**
+     * The league's sport is not one this provider's import supports (`supportedSports` in
+     * provider-ui-config.ts), or the provider did not say which sport it is. Routes map it to
+     * 422: the request was understood, and retrying will not change the answer.
+     */
+    | 'UNSUPPORTED_SPORT'
 }
 
 /**
@@ -149,6 +167,7 @@ export async function runImportedLeagueNormalizationPipeline(
   /* Legacy string input is an import call site, so it keeps the full 1..18 transaction sweep too. */
   const transactionWeeks = typeof input === 'string' ? undefined : input.transactionWeeks
   const maxMatchupWeeks = typeof input === 'string' ? undefined : input.maxMatchupWeeks
+  const refreshOfImportedLeague = typeof input === 'string' ? false : input.refreshOfImportedLeague === true
 
   try {
     let payload: unknown
@@ -224,6 +243,24 @@ export async function runImportedLeagueNormalizationPipeline(
       provider,
       raw: payload,
     })
+    /*
+     * Yahoo is held to its listed sports. The live importers keep the sports they already accept and
+     * refuse only a sport AllFantasy does not run, or a league that does not say (owner, 2026-10-25).
+     * Sleeper's mapper fills a missing sport with NFL, so its RAW sport is what is checked for that.
+     * A refresh of an already-imported league is never gated: it must keep syncing.
+     */
+    if (!refreshOfImportedLeague) {
+      const sportCheck =
+        provider === 'yahoo'
+          ? checkImportSportSupported(provider, normalized.league?.sport)
+          : checkImportSportRunnable(
+              provider,
+              provider === 'sleeper' && !sleeperRawSport(payload) ? null : normalized.league?.sport,
+            )
+      if (!sportCheck.ok) {
+        return { success: false, error: sportCheck.message, code: 'UNSUPPORTED_SPORT' }
+      }
+    }
     return { success: true, normalized, rawPayload: payload }
   } catch (e) {
     /*
@@ -246,6 +283,9 @@ export async function runImportedLeagueNormalizationPipeline(
     }
     if (e instanceof YahooImportLeagueNotFoundError) {
       return { success: false, error: e.message, code: 'LEAGUE_NOT_FOUND' }
+    }
+    if (e instanceof YahooImportUnknownSportError) {
+      return { success: false, error: e.message, code: 'UNSUPPORTED_SPORT' }
     }
     /*
      * ⚠ WITHOUT THIS, YAHOO'S RAW JSON REACHED THE SCREEN. The message on a
@@ -303,4 +343,10 @@ export async function runImportedLeagueNormalizationPipeline(
     const message = e instanceof Error ? e.message : 'Import normalization failed'
     return { success: false, error: message, code: 'NORMALIZATION_FAILED' }
   }
+}
+
+/** The sport Sleeper itself sent (`nfl`, `nba`, `lol`…), before the mapper defaults a missing one. */
+function sleeperRawSport(payload: unknown): string | null {
+  const league = (payload as { league?: { sport?: unknown } } | null | undefined)?.league
+  return typeof league?.sport === 'string' && league.sport.trim() ? league.sport.trim() : null
 }

@@ -12,7 +12,7 @@ export default async function DashboardDispersalPage() {
     redirect(`/login?callbackUrl=${encodeURIComponent('/dashboard/dispersal')}`)
   }
   const userId = session.user.id
-  const dispersalDraftClient = (prisma as any).dispersalDraft
+  const dispersalDraftClient = prisma.dispersalDraft
 
   const drafts: Array<{
     id: string

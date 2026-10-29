@@ -62,11 +62,16 @@ export async function GET(req: Request) {
      * the Billing tab opens the native sheet instead and never reaches this route.)
      */
     const live = await prisma.userSubscription.findMany({
-      where: { userId: session.user.id, status: { notIn: ["canceled", "expired"] } },
+      where: { userId: session.user.id, OR: [
+        { status: { notIn: ["canceled", "expired"] } },
+        { source: "google_play", status: "canceled", currentPeriodEnd: { gt: new Date() } },
+      ] },
       select: { source: true, stripeCustomerId: true },
     })
     const liveApple = live.some((r) => r.source === "apple")
+    const livePlay = live.some(r => r.source === "google_play")
     const liveStripe = live.some((r) => r.source !== "apple" && Boolean(r.stripeCustomerId))
+    if (livePlay && !liveStripe && !liveApple) return NextResponse.redirect("https://play.google.com/store/account/subscriptions?package=ai.allfantasy.app")
     if (liveApple && !liveStripe) return NextResponse.redirect(APPLE_MANAGE_SUBSCRIPTIONS_URL)
 
     const row = await prisma.userSubscription.findFirst({

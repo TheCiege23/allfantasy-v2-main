@@ -18,9 +18,10 @@ type SavedPlan = SavedSeasonBlueprint
 const field = 'min-h-11 w-full rounded-xl border border-white/20 bg-slate-900 px-3 py-2 text-white'
 const panel = 'min-w-0 rounded-2xl border border-white/15 bg-slate-900/70 p-4 sm:p-6'
 
-export function SeasonTournamentPlanner({ saved }: { saved?: SavedPlan }) {
+/** `initial` carries the sport and field size chosen on the format picker (step 1). */
+export function SeasonTournamentPlanner({ saved, initial }: { saved?: SavedPlan; initial?: { sport: 'NFL' | 'NBA'; participants: number } }) {
   const router = useRouter()
-  const [config, setConfig] = useState<SeasonBlueprint>(saved?.config ?? defaultSeasonBlueprint())
+  const [config, setConfig] = useState<SeasonBlueprint>(saved?.config ?? (initial ? { ...defaultSeasonBlueprint(initial.sport), participants: initial.participants } : defaultSeasonBlueprint()))
   const [divisionText, setDivisionText] = useState(config.divisions.join('\n'))
   const [leagueText, setLeagueText] = useState(config.leagueNames.join('\n'))
   const [busy, setBusy] = useState(false)

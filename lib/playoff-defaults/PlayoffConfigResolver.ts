@@ -20,6 +20,8 @@ export interface PlayoffConfigForLeague {
   toilet_bowl_enabled: boolean
   championship_length: number
   consolation_plays_for: string
+  consolation_pick_goes_to: string
+  draft_order_carries_over: boolean
   seeding_rules: string
   tiebreaker_rules: string[]
   bye_rules: string | null
