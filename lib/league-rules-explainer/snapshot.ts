@@ -402,3 +402,84 @@ export function taxiRulesFromEffective(
 ): Pick<RuleSnapshot, 'taxiSlots' | 'taxiEligibilityYears' | 'taxiDeadlineWeek'> {
   return { taxiSlots: t.taxiSlotCount, taxiEligibilityYears: t.taxiEligibilityYears, taxiDeadlineWeek: t.taxiDeadlineWeek }
 }
+
+/**
+ * The main draft's rules, already read from their stores by ./loadDraftRules.ts. Pure: this decides
+ * what each value MEANS (a setting that changes nothing is not stated), the loader decides where it
+ * lives.
+ */
+export type DraftRuleInputs = {
+  /** `DraftSession.draftModeLabel` of the current draft; `rookie` = a dynasty rookie draft. */
+  sessionLabel: string | null
+  /** `DraftSession.status`; null before a session exists. */
+  sessionStatus: string | null
+  /** Engine type: snake, linear or auction. */
+  draftType: string | null
+  rounds: number | null
+  /** Seconds per pick (an auction: per bid), as the room runs it; null = no clock. */
+  pickSeconds: number | null
+  thirdRoundReversal: boolean | null
+  /** `draftUISettings.timerMode`: per_pick, soft_pause, overnight_pause, none. */
+  timerMode: string | null
+  pauseWindow: { start?: unknown; end?: unknown } | null
+  picksDuringPause: boolean
+  /** `draftUISettings.autoPickEnabled` — gates every expired-clock pick. */
+  autoPickEnabled: boolean
+  /** The session's (else LeagueSettings') CPU autopick for an absent manager. */
+  cpuAutoPick: boolean
+  /** `config.autopick_behavior`: `skip` skips a pick with nothing usable in the queue. */
+  autopickBehavior: string | null
+  /** Resolved order method: weighted_lottery, random, manual, standings, reverse_standings. */
+  orderMethod: string | null
+  /** The auction engine's budget and minimum bid (getAuctionConfigFromSession). */
+  auction: { budget: number; minBid: number } | null
+  startAt: string | null
+  /** `LeagueSettings.autostart`, or a league whose scheduled draft starts at its time regardless. */
+  autostart: boolean
+  orphanEnabled: boolean
+  orphanMode: string | null
+}
+
+const MAIN_DRAFT_TYPES = new Set(['snake', 'linear', 'auction'])
+const MAIN_DRAFT_ORDERS = new Set(['weighted_lottery', 'random', 'manual', 'standings', 'reverse_standings'])
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+
+function draftStatusOf(status: string | null): RuleSnapshot['draftStatus'] {
+  if (status === 'completed') return 'completed'
+  if (status === 'in_progress' || status === 'paused') return 'in_progress'
+  return 'scheduled'
+}
+
+export function draftRulesFromInputs(i: DraftRuleInputs): Partial<RuleSnapshot> {
+  // A dynasty rookie draft is the Dynasty section's (rookieDraft* keys), never this one.
+  if (lower(i.sessionLabel) === 'rookie') return {}
+  const type = MAIN_DRAFT_TYPES.has(lower(i.draftType)) ? lower(i.draftType) : null
+  const seconds = i.timerMode === 'none' ? null : posInt(i.pickSeconds)
+  const from = typeof i.pauseWindow?.start === 'string' ? i.pauseWindow.start : ''
+  const to = typeof i.pauseWindow?.end === 'string' ? i.pauseWindow.end : ''
+  let onTimeout: string | null = null
+  if ((type === 'snake' || type === 'linear') && seconds) {
+    // processExpiredDraftPicks: no pick when auto-pick is off, the clock is soft, or the session's
+    // CPU autopick is off; `skip` skips a pick whose queue has nothing usable; else queue → best.
+    if (!i.autoPickEnabled || i.timerMode === 'soft_pause' || !i.cpuAutoPick) onTimeout = 'wait'
+    else onTimeout = lower(i.autopickBehavior) === 'skip' ? 'skip' : 'autopick'
+  }
+  const startAt = typeof i.startAt === 'string' && Number.isFinite(Date.parse(i.startAt)) ? i.startAt : null
+  return {
+    draftStatus: draftStatusOf(i.sessionStatus),
+    draftType: type,
+    draftRounds: posInt(i.rounds),
+    draftPickSeconds: seconds,
+    draftOvernightPause:
+      seconds && i.timerMode === 'overnight_pause' && HHMM.test(from) && HHMM.test(to) ? { from, to, picksAllowed: i.picksDuringPause === true } : null,
+    draftOnTimeout: onTimeout,
+    // An auction has no pick order: the nomination order is not what this setting decides.
+    draftOrderMethod: type !== 'auction' && MAIN_DRAFT_ORDERS.has(lower(i.orderMethod)) ? lower(i.orderMethod) : null,
+    draftThirdRoundReversal: type === 'snake' ? i.thirdRoundReversal === true : null,
+    draftAuctionBudget: type === 'auction' ? posInt(i.auction?.budget) : null,
+    draftAuctionMinBid: type === 'auction' ? posInt(i.auction?.minBid) : null,
+    draftStartAt: startAt,
+    draftAutostart: startAt ? i.autostart === true : null,
+    draftOrphanPicks: i.orphanEnabled ? (i.orphanMode === 'ai' ? 'ai' : 'cpu') : null,
+  }
+}

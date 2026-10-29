@@ -1,0 +1,88 @@
+/**
+ * The Settings › Draft panel's save (PATCH /draft/settings, DraftSettingsCommissionerPanel) and the
+ * league settings patch's draft fields publish the main draft's before/after as ruleChanges. The
+ * reads themselves are covered against a stateful league in ./draft-settings-rule-changes.test.ts;
+ * here the loader is a sequence (before, after) so the wiring is what is under test.
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createMockNextRequest } from '../helpers/createMockNextRequest'
+
+const m = vi.hoisted(() => ({
+  reads: [] as Array<Record<string, unknown> | null>,
+  publish: vi.fn(async (_input: unknown) => undefined),
+  variant: { config: { timer_seconds: 90, rounds: 15, draft_type: 'snake' }, draftUISettings: { timerMode: 'per_pick', orphanDrafterMode: 'cpu', orphanTeamAiManagerEnabled: false }, leagueSize: 12, sessionVariant: null },
+}))
+
+vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'commish' } })) }))
+vi.mock('@/lib/auth', () => ({ authOptions: {} }))
+vi.mock('@/lib/live-draft-engine/auth', () => ({ canAccessLeagueDraft: vi.fn(async () => true) }))
+vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: vi.fn(async () => undefined), isCommissioner: vi.fn(async () => true) }))
+vi.mock('@/lib/tournament/seasonDraftMutationGate', () => ({ isSeasonTournamentDraft: vi.fn(async () => false), SEASON_DRAFT_MUTATION_BLOCKED: 'blocked' }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    league: { findUnique: vi.fn(async () => ({ leagueType: 'redraft', timezone: 'UTC', leagueSize: 12, settings: {} })) },
+    draftSession: { findFirst: vi.fn(async () => ({ id: 'S', status: 'pre_draft', teamCount: 12 })) },
+    leagueSettings: { upsert: vi.fn(async () => ({ draftDateUtc: null })) },
+    leagueTeam: { findMany: vi.fn(async () => []) },
+  },
+}))
+vi.mock('@/lib/live-draft-engine/RosterFitValidation', () => ({ validateDraftRoundsFitRoster: vi.fn(async () => null) }))
+vi.mock('@/lib/draft-defaults/DraftVariantSettingsHub', () => ({
+  getDraftVariantSettings: vi.fn(async () => m.variant),
+  updateDraftVariantSettings: vi.fn(async () => m.variant),
+}))
+vi.mock('@/lib/draft-lottery/lotteryConfigStorage', () => ({
+  getDraftOrderModeAndLotteryConfig: vi.fn(async () => ({ draftOrderMode: 'randomize', lotteryConfig: null, lotteryLastSeed: null, lotteryLastRunAt: null })),
+  setDraftOrderModeAndLotteryConfig: vi.fn(),
+}))
+vi.mock('@/lib/orphan-ai-manager/orphanRosterResolver', () => ({ getOrphanRosterIdsForLeague: vi.fn(async () => []) }))
+vi.mock('@/lib/commissioner-ai-draft-manager', () => ({ buildApiResponse: vi.fn(), parseCommissionerAiManagers: vi.fn(() => ({ assignments: [] })) }))
+vi.mock('@/lib/orphan-ai-manager/OrphanAIManagerService', () => ({ getRecentAuditEntries: vi.fn(async () => []) }))
+vi.mock('@/lib/provider-config', () => ({ getProviderStatus: vi.fn(() => ({ anyAi: true })) }))
+vi.mock('@/lib/draft-notifications', () => ({ notifyOrphanAiManagerAssigned: vi.fn(async () => undefined) }))
+vi.mock('@/lib/draft-room/ensureDraftPoolReady', () => ({ triggerDraftPoolPrewarmBackground: vi.fn() }))
+vi.mock('@/lib/entitlements/afCommissionerPlan', () => ({ hasAfCommissionerPlan: vi.fn(async () => true) }))
+vi.mock('@/lib/draft/computedDraftRounds', () => ({ getComputedDraftRounds: vi.fn(async () => null) }))
+vi.mock('@/lib/draft/syncDraftRoundsToRoster', () => ({ markDraftRoundsManual: vi.fn(async () => undefined) }))
+vi.mock('@/lib/league/league-settings-draft-sync', () => ({ syncDraftSessionFromLeagueSettings: vi.fn(async () => ({ synced: true })) }))
+vi.mock('@/lib/tournament/divisions/leagueDraftTimeToTournament', () => ({ copyLeagueDraftTimeToTournament: vi.fn(async () => undefined) }))
+vi.mock('@/lib/league-rules-explainer/publishRuleChanges', () => ({ publishRuleChangesEvent: m.publish }))
+vi.mock('@/lib/league-rules-explainer/loadDraftRules', async (importActual) => {
+  const actual = await importActual<typeof import('@/lib/league-rules-explainer/loadDraftRules')>()
+  return { ...actual, loadDraftRulesSafe: vi.fn(async () => m.reads.shift() ?? null) }
+})
+
+import { PATCH } from '@/app/api/leagues/[leagueId]/draft/settings/route'
+
+const patch = (body: unknown) =>
+  PATCH(createMockNextRequest('http://x/api/leagues/L/draft/settings', { method: 'PATCH', body }) as never, { params: Promise.resolve({ leagueId: 'L' }) })
+
+const draft = (over: Record<string, unknown> = {}) => ({ draftStatus: 'scheduled', draftType: 'snake', draftRounds: 15, draftPickSeconds: 90, draftOnTimeout: 'autopick', ...over })
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  m.reads = []
+})
+
+describe('PATCH /draft/settings (Settings › Draft)', () => {
+  it('publishes the draft rules it changed, from the reads before and after the writes', async () => {
+    m.reads = [draft(), draft({ draftPickSeconds: 28800 })]
+    expect((await patch({ timer_seconds: 28800 })).status).toBe(200)
+    expect(m.publish).toHaveBeenCalledWith({
+      leagueId: 'L',
+      actorUserId: 'commish',
+      section: 'draft',
+      changes: [{ key: 'draftPickSeconds', before: 90, after: 28800 }],
+    })
+  })
+
+  it('a completed draft, or a read that failed, publishes no change', async () => {
+    m.reads = [draft({ draftStatus: 'completed' }), draft({ draftStatus: 'completed', draftPickSeconds: 60 })]
+    await patch({ timer_seconds: 60 })
+    expect(m.publish).toHaveBeenCalledWith(expect.objectContaining({ changes: [] }))
+    vi.clearAllMocks()
+    m.reads = [null, draft({ draftPickSeconds: 60 })]
+    await patch({ timer_seconds: 60 })
+    expect(m.publish).toHaveBeenCalledWith(expect.objectContaining({ changes: [] }))
+  })
+})
