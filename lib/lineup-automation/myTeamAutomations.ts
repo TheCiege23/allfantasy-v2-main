@@ -35,7 +35,7 @@ export function myTeamAutomations(f: MyTeamFacts): { items: MyTeamAutomation[]; 
     )
   }
   if (f.weeklyLineups && fillEmptyStartersOn(f.settings)) {
-    items.push({ key: 'fill_empty_starters', en: 'If you leave a starting spot empty, AllFantasy puts your best bench player who can play there before lock. It never moves a player you started.', es: 'Si dejas un puesto titular vacío, AllFantasy pone antes del cierre al mejor suplente que pueda jugar ahí. Nunca mueve a un jugador que pusiste de titular.' })
+    items.push({ key: 'fill_empty_starters', en: 'If you leave a starting spot empty, AllFantasy tells you first, then about 3 hours later puts your best bench player who can play there (at once if games have already started). It never moves a player you started.', es: 'Si dejas un puesto titular vacío, AllFantasy te avisa primero y unas 3 horas después pone al mejor suplente que pueda jugar ahí (de inmediato si ya empezaron los partidos). Nunca mueve a un jugador que pusiste de titular.' })
   }
   const handover = readAutoHandover(f.settings)
   if (handover && !f.managed) {

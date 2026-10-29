@@ -61,7 +61,7 @@ describe('buildAutomationContextForChimmy', () => {
     const ctx = await buildAutomationContextForChimmy('L', 'u')
     expect(ctx).toContain('Every automation in the league')
     expect(ctx).toContain('- Anti-tanking monitor: needs AF Commissioner')
-    expect(ctx).toContain('- Fill empty starting spots before lock: on (Every hour, from the bench)')
+    expect(ctx).toContain('- Fill empty starting spots before lock: on (From the bench, after telling the owner first)')
   })
 
   it('nothing for an imported league', async () => {
