@@ -177,6 +177,29 @@ function normalizedWaiverType(raw: unknown): string | null {
   return null
 }
 
+/**
+ * The waiver rules the claims ENGINE runs (`getEffectiveLeagueWaiverSettings`: the `LeagueWaiverSettings`
+ * row, or the sport's defaults). The popup used to read `League.waiverType` / `waiverBudget`, which the
+ * commissioner's Waivers panel never writes — it saves the row directly — so a switch to FAAB or a new
+ * budget there left the popup describing the old rules. A field the engine leaves unset is left out,
+ * so the League column stands.
+ */
+export function waiverRulesFromEffective(e: {
+  normalizedWaiverType?: string | null
+  waiverType?: string | null
+  faabBudget?: number | null
+  faabMinBid?: number | null
+}): Pick<RuleSnapshot, 'waiverType' | 'waiverBudget' | 'waiverMinBid'> {
+  const out: Pick<RuleSnapshot, 'waiverType' | 'waiverBudget' | 'waiverMinBid'> = {
+    waiverType: normalizedWaiverType(e.normalizedWaiverType ?? e.waiverType),
+  }
+  const budget = nonNegNumber(e.faabBudget)
+  if (budget != null) out.waiverBudget = budget
+  const minBid = nonNegNumber(e.faabMinBid)
+  if (minBid != null) out.waiverMinBid = minBid
+  return out
+}
+
 /** The trade review the popup shows. Exported for saves that write it outside the settings patch. */
 export function tradeReviewMode(settings: Record<string, unknown>): string | null {
   const json = record(settings.settingsJson)

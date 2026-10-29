@@ -41,6 +41,7 @@ import { recordEngineTelemetrySample } from '@/lib/analytics/recordAnalyticsEven
 import { ENGINE } from '@/lib/analytics/eventNames'
 import { withPickLock } from '@/lib/draft/draftLock'
 import { resolveAdpAtPick } from '@/lib/draft-room/adpAtPick'
+import { resolveStoredPickHeadshot } from '@/lib/draft-room/storedPickHeadshot'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
@@ -362,6 +363,22 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
           position: input.position,
         })
       : null
+  // Auto / AI / expired-clock picks arrive without the card's photo; look up the stored one so the
+  // board shows a face instead of initials (non-NFL only - see storedPickHeadshot.ts).
+  const clientImageUrl = /^https?:\/\//i.test(String(input.playerImageUrl ?? '').trim())
+    ? String(input.playerImageUrl).trim()
+    : null
+  const playerImageUrl =
+    clientImageUrl ??
+    (assetType === 'player'
+      ? await resolveStoredPickHeadshot({
+          sport: (session as any).sportType ?? null,
+          leagueId: input.leagueId,
+          playerId: input.playerId ?? null,
+          playerName: input.playerName,
+          team: input.team ?? null,
+        })
+      : null)
 
   let pick: any
   try {
@@ -404,9 +421,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
           // The pool resolved this face for the card that was picked; the insert used to drop it,
           // so the board rebuilt one from the id — an NFL Sleeper URL for every sport. Only a real
           // URL is kept: the pool's "AF" placeholder is a data: URI, not a photo.
-          playerImageUrl: /^https?:\/\//i.test(String(input.playerImageUrl ?? '').trim())
-            ? String(input.playerImageUrl).trim()
-            : null,
+          playerImageUrl,
           tradedPickMeta: tradedPickMeta ? (tradedPickMeta as any) : undefined,
           source: input.source ?? 'user',
           assetType,
