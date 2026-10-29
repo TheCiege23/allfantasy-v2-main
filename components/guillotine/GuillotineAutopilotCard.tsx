@@ -17,8 +17,9 @@ import { GuillotineChopPreview } from './GuillotineChopPreview'
  * link into League Settings, with the AF Commissioner extras marked rather than hidden.
  */
 
-/** NFL and NBA hold guillotine waiver claims for a blind auction (lib/redraft/waiverEngine.ts). */
-const BLIND_WAIVER_SPORTS = new Set(['NFL', 'NBA'])
+/** Sports whose guillotine waiver claims are held for a blind auction — mirrors BLIND_WAIVER_GUILLOTINE_SPORTS
+ *  in lib/guillotine/blindWaiverCutoff.ts (a server module, so it is not imported here). */
+const BLIND_WAIVER_SPORTS = new Set(['NFL', 'NBA', 'MLB', 'NHL'])
 
 type SummaryConfig = {
   eliminationStartWeek?: number

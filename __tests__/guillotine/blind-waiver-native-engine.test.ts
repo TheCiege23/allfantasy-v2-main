@@ -41,6 +41,7 @@ vi.mock('@/lib/ai-learning-system/resolveLeagueSport', () => ({ resolveLeagueSpo
 import { processWaiverClaimsForLeague } from '@/lib/waiver-wire/process-engine'
 import { discoverDueWaiverLeagues } from '@/lib/automation/jobs/waivers/discoverDueWaiverLeagues'
 import { blindWaiverCutoff } from '@/lib/guillotine/blindWaiverCutoff'
+import { getWaiverBlindWindowStart } from '@/lib/guillotine/sportConfig'
 
 const INSIDE = new Date('2026-10-28T03:00:00Z') // window opened 2026-10-28T00:00Z
 const OUTSIDE = new Date('2026-10-27T15:00:00Z')
@@ -51,12 +52,16 @@ const claim = (id: string, createdAt: string, faabBid: number) => ({
 const settledIds = (results: Array<{ claimId: string }>) => results.map((r) => r.claimId).sort()
 
 describe('blindWaiverCutoff', () => {
-  it('holds only for an NBA/NFL Guilly league, from when the window opened', () => {
+  it('holds only for an NFL/NBA/MLB/NHL Guilly league, from when the window opened', () => {
     const guilly = { sport: 'NBA', guillotineMode: true, leagueVariant: null }
     expect(blindWaiverCutoff(guilly, null, INSIDE)?.toISOString()).toBe('2026-10-28T00:00:00.000Z')
     expect(blindWaiverCutoff(guilly, null, OUTSIDE)).toBeNull()
     expect(blindWaiverCutoff({ sport: 'NBA', guillotineMode: false, leagueVariant: 'redraft' }, null, INSIDE)).toBeNull()
-    expect(blindWaiverCutoff({ sport: 'MLB', guillotineMode: true, leagueVariant: 'guillotine' }, null, INSIDE)).toBeNull()
+    expect(blindWaiverCutoff({ sport: 'NHL', guillotineMode: true, leagueVariant: 'guillotine' }, null, INSIDE)?.toISOString()).toBe('2026-10-28T00:00:00.000Z')
+    // Sunday is inside NCAAF's own window (its run is Monday 12:00 UTC), so only the sport list can refuse it.
+    const ncaafInside = new Date('2026-11-01T15:00:00Z')
+    expect(getWaiverBlindWindowStart('NCAAF', ncaafInside)).not.toBeNull()
+    expect(blindWaiverCutoff({ sport: 'NCAAF', guillotineMode: true, leagueVariant: 'guillotine' }, null, ncaafInside)).toBeNull()
   })
 })
 
