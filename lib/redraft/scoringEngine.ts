@@ -798,6 +798,21 @@ export async function scoreRosterForWeek(args: {
   return scoreRosterStarters({ ...args, useDevyEngine, bestBall })
 }
 
+/**
+ * C2C (Campus to Canton): each team's campus starters score on top of its pro lineup — one total
+ * (lib/c2c/campusScoring.ts). Native football C2C leagues only; null when no one starts a college
+ * player, so a league without a campus lineup scores exactly as before. Imported lazily: the campus
+ * scorer uses this module's stat scorer.
+ */
+async function loadCampusPoints(
+  league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
+  args: { season: number; nflWeek: number; homeRosterId: string; awayRosterId: string },
+) {
+  if (!league || !isNativePlatform(league.platform)) return null
+  const { campusPointsForMatchup, isFootballC2CLeague } = await import('@/lib/c2c/campusScoring')
+  return isFootballC2CLeague(league) ? campusPointsForMatchup(prisma as never, args) : null
+}
+
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
   const m = await prisma.redraftMatchup.findFirst({
     where: { id: matchupId },
@@ -827,7 +842,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   if (!season) return null
   const seasonYear = season.season
 
-  const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true, platform: true } })
+  const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true, platform: true, sport: true, leagueVariant: true } })
   // The scoring type in force for THIS week: a mid-season switch never re-scores a week played before it.
   const scoringSettings = settingsForScoringWeek(scoringLeague?.settings as Record<string, any> | null, seasonYear, week)
   const scoringMode = scoringSettings?.scoring_mode ?? scoringSettings?.scoringSettings?.scoringMode ?? 'points'
@@ -874,6 +889,14 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     home.points = adjustedScore(home.points, adjustments, matchupId, homeRosterId)
     away.points = adjustedScore(away.points, adjustments, matchupId, awayRosterId)
   }
+  const campus =
+    scoringMode === 'points' && !bestBall && !useDevyEngine
+      ? await loadCampusPoints(scoringLeague, { season: seasonYear, nflWeek: week, homeRosterId, awayRosterId })
+      : null
+  if (campus) {
+    home.points = Math.round((home.points + campus.home.points) * 100) / 100
+    away.points = Math.round((away.points + campus.away.points) * 100) / 100
+  }
   const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds]
   const isComplete =
     missingPlayerIds.length === 0 &&
@@ -917,6 +940,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
           scoredAt: new Date().toISOString(),
           isComplete,
           ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
+          ...(campus ? { campus } : {}),
           home,
           away,
           missingPlayerIds,
@@ -1044,7 +1068,7 @@ async function updateByeRowScore(row: {
 }): Promise<void> {
   let m = row
   const [league, season] = await Promise.all([
-    prisma.league.findFirst({ where: { id: m.leagueId }, select: { settings: true, medianGame: true } }),
+    prisma.league.findFirst({ where: { id: m.leagueId }, select: { settings: true, medianGame: true, platform: true, sport: true, leagueVariant: true } }),
     prisma.redraftSeason.findFirst({ where: { id: m.seasonId }, select: { season: true, medianGame: true } }),
   ])
   if (!league || !season) return
@@ -1076,6 +1100,11 @@ async function updateByeRowScore(row: {
   })
   const adjustments = readScoreAdjustments(scoringSettings)
   if (adjustments.length) home.points = adjustedScore(home.points, adjustments, m.id, m.homeRosterId)
+  // A C2C bye team's campus starters count toward its median / extra-game score too.
+  const campus = !bestBall && !useDevyEngine
+    ? await loadCampusPoints(league, { season: season.season, nflWeek: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
+    : null
+  if (campus) home.points = Math.round((home.points + campus.home.points) * 100) / 100
   const isComplete =
     home.missingPlayerIds.length === 0 && home.starterCount > 0 && home.scoredStarterCount === home.starterCount
   await prisma.redraftMatchup.update({
@@ -1091,6 +1120,7 @@ async function updateByeRowScore(row: {
           bye: true,
           home,
           missingPlayerIds: home.missingPlayerIds,
+          ...(campus ? { campus: { cfbWeeks: campus.cfbWeeks, home: campus.home } } : {}),
         },
       },
     },

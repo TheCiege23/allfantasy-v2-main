@@ -1,5 +1,6 @@
 import type { RosterTemplateDto } from '@/lib/multi-sport/RosterTemplateService'
 import { withoutSlotIndex } from '@/lib/league/lineupSlotPositions'
+import { CAMPUS_SECTION, campusStartersAfterSave } from '@/lib/c2c/campusLineup'
 
 export type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 
@@ -111,6 +112,8 @@ export function buildPlayerDataFromSections(
     taxi: sections.taxi.map(withoutSlotIndex),
     devy: sections.devy.map(withoutSlotIndex),
   }
+  // A C2C team's campus starters (lib/c2c/campusLineup.ts) survive an AutoCoach or manual rebuild.
+  const campus = campusStartersAfterSave({ saved: base, devyIds: sections.devy.map((p) => String(p.id)) })
   return {
     ...base,
     players,
@@ -118,7 +121,7 @@ export function buildPlayerDataFromSections(
     reserve: sections.ir.map((p) => p.id),
     taxi: sections.taxi.map((p) => p.id),
     devy: sections.devy.map((p) => p.id),
-    lineup_sections: stored,
+    lineup_sections: campus.length ? { ...stored, [CAMPUS_SECTION]: campus } : stored,
     lineup_updated_at: new Date().toISOString(),
   }
 }
