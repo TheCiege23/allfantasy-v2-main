@@ -25,7 +25,7 @@ import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPla
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import { buildDisplayPlayerMap, type DisplayPlayerMap, type DisplayPlayerRecord } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 import { buildPlayerRow, buildSwapCandidates, initOrSyncLineupLists, type RosterLineupLists } from '@/app/league/[leagueId]/tabs/team-tab-roster-helpers'
-import { resolveLineupMove, seatStartersInSlots, startersOnBye, type LineupMoveContext, type LineupSpot } from '@/lib/league/native/lineupMoves'
+import { resolveLineupMove, resolveLineupTap, seatStartersInSlots, startersOnBye, type LineupMoveContext, type LineupSpot, type LineupTap } from '@/lib/league/native/lineupMoves'
 import { isIrEligibleStatus, type IrRules } from '@/lib/roster-lineup-engine/irEligibility'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { writeAuthorityCopy } from '@/lib/league/write-authority'
@@ -47,7 +47,8 @@ import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RA
  * server still validates every save. "Optimize lineup" proposes the exact optimum over the
  * players whose games have not started; it never moves a locked player.
  *
- * Moves work by CLICK ("Move") or DRAG (the grip handle, @dnd-kit). Both go through
+ * Moves work by TAP TO SWAP (tap a player or slot, then tap where he goes — Sleeper's model, the one
+ * that works on a phone), by the "Move" list, or by DRAG (the grip handle, @dnd-kit). All go through
  * `resolveLineupMove`, so slot eligibility (`playerEligibleForSlot`), lock and IR rules are decided
  * once, and both end in the same `save`. Dropping on an occupied slot swaps; dropping a starter on
  * the bench leaves his slot empty; IR takes only an IR-eligible designation under the league's flags.
@@ -110,6 +111,32 @@ function DragHandle({ id, name }: { id: string; name: string }) {
 }
 type Move = { kind: 'starter'; slotIndex: number } | { kind: 'bench'; playerId: string }
 
+const TAP_HELP = 'Tap a player, then tap where he goes or who he swaps with. You can also drag by the handle.'
+
+function sameTap(a: LineupTap, b: LineupTap): boolean {
+  if (a.kind === 'slot' && b.kind === 'slot') return a.slotIndex === b.slotIndex
+  if (a.kind === 'player' && b.kind === 'player') return a.playerId === b.playerId
+  return false
+}
+
+/** What a screen reader hears for the tap target on a row. */
+function tapLabel(o: { name?: string; empty: boolean; slot: string; picked: boolean; target?: 'ok' | 'no'; waiting: boolean }): string {
+  const who = o.empty ? `Empty ${o.slot} slot` : `${o.name ?? 'Player'}, ${o.slot}`
+  if (o.picked) return `${who}. Selected. Tap again to cancel.`
+  if (o.waiting) return o.target === 'ok' ? `${who}. Tap to move here.` : `${who}. Not a legal move.`
+  return `${who}. Tap to select.`
+}
+
+/** The player cell: a button while the lineup is editable, so a row is one tap target on a phone. */
+function PlayerCell({ tappable, picked, label, disabled, onTap, children }: { tappable: boolean; picked: boolean; label: string; disabled: boolean; onTap: () => void; children: ReactNode }) {
+  if (!tappable) return <div className="nls-player">{children}</div>
+  return (
+    <button type="button" className="nls-player nls-tap" aria-pressed={picked} aria-label={label} disabled={disabled} onClick={onTap} data-testid="lineup-tap">
+      {children}
+    </button>
+  )
+}
+
 function kickoff(p: DisplayPlayerRecord | undefined): Date | null {
   const iso = p?.kickoffTimeIso
   if (!iso) return null
@@ -171,6 +198,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [move, setMove] = useState<Move | null>(null)
+  /** Tap to swap: the first tap, waiting for the second. */
+  const [picked, setPicked] = useState<LineupTap | null>(null)
   const [tab, setTab] = useState<'lineup' | 'roster'>('lineup')
   const [pendingClaims, setPendingClaims] = useState<number | null>(null)
   const [nextRunAt, setNextRunAt] = useState<string | null>(null)
@@ -328,6 +357,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         toast.success(c.title ?? copy.title, { description: c.detail || undefined })
         setLists(next)
         setMove(null)
+        setPicked(null)
         invalidateIntelligence({ leagueId: league.id, reason: 'lineup_saved' })
         void load()
         return true
@@ -388,7 +418,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     (dropId: string) => {
       const t = spotFromDropId(dropId)
       if (!t) return 'nowhere'
-      return t.kind === 'starter' ? `the ${slots[t.slotIndex]?.label ?? ''} slot` : t.kind === 'ir' ? 'injured reserve' : 'the bench'
+      return t.kind === 'starter' ? `the ${slots[t.slotIndex]?.label ?? ''} slot` : t.kind === 'ir' ? 'injured reserve' : t.kind === 'taxi' ? 'the taxi squad' : 'the bench'
     },
     [slots],
   )
@@ -407,6 +437,48 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     if (!dragId) return undefined
     return tryMove(dragId, target)?.ok ? 'ok' : 'no'
   }
+
+  /** Tap to swap: what the second tap would do, for every row and section while a first tap waits. */
+  const tapMove = (second: LineupTap) => (picked && lists ? resolveLineupTap(lists, picked, second) : null)
+  const tapState = (second: LineupTap): 'ok' | 'no' | undefined => {
+    if (!picked || dragId || sameTap(picked, second)) return undefined
+    const m = tapMove(second)
+    return m && tryMove(m.playerId, m.target)?.ok ? 'ok' : 'no'
+  }
+  const onTap = (tap: LineupTap) => {
+    if (!editable || saving || !lists) return
+    if (picked && sameTap(picked, tap)) return setPicked(null)
+    const m = picked ? tapMove(tap) : null
+    if (m) {
+      setPicked(null)
+      doMove(m.playerId, m.target)
+      return
+    }
+    // A first tap, or a second tap that makes no move: it becomes the new first tap.
+    if (tap.kind === 'section') return setPicked(null)
+    const id = tap.kind === 'player' ? tap.playerId : lists.starters[tap.slotIndex] ?? ''
+    if (id && locked(id)) {
+      toast.error(lockReason(id) ?? 'This player is locked.')
+      return setPicked(null)
+    }
+    setMove(null)
+    setPicked(tap)
+  }
+  useEffect(() => {
+    if (!picked) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPicked(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [picked])
+  /** Section header button: "Move here" while a first tap could land in this section. */
+  const sectionTap = (section: 'bench' | 'ir' | 'taxi', label: string) =>
+    picked && tapState({ kind: 'section', section }) === 'ok' ? (
+      <button type="button" className="nls-btn" data-size="sm" disabled={saving} onClick={() => onTap({ kind: 'section', section })}>
+        Move to {label}
+      </button>
+    ) : null
 
   const optimal = useMemo(() => (lists && editable ? optimalLineupListsRespectingLocks(slots, lists, players, locked) : null), [lists, editable, slots, players, locked])
 
@@ -436,8 +508,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         : !editable
           ? weekLock?.reason ?? data.lineupLockHelp ?? 'Lineup changes are closed right now.'
           : daily
-            ? `Daily lineup: each player locks when his game starts today. Changes apply today${lastDay ? ` through ${dayLabel(lastDay)}` : ''}. Drag a player by the handle, or tap Move.`
-            : `${data.lineupLockHelp ?? 'Each game locks at kickoff.'} Drag a player by the handle, or tap Move.`
+            ? `Daily lineup: each player locks when his game starts today. Changes apply today${lastDay ? ` through ${dayLabel(lastDay)}` : ''}. ${TAP_HELP}`
+            : `${data.lineupLockHelp ?? 'Each game locks at kickoff.'} ${TAP_HELP}`
 
   const renderPastDay = (d: DailyLineupDay) => {
     const ids = Object.keys(d.slots)
@@ -479,20 +551,29 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
           (move.kind === 'bench' && kind === 'bench' && move.playerId === id)),
     )
     const pill = kind === 'starter' ? slot?.label ?? '—' : kind === 'ir' ? 'IR' : kind === 'taxi' ? 'TX' : 'BN'
+    const tap: LineupTap = kind === 'starter' ? { kind: 'slot', slotIndex: slotIndex ?? 0 } : { kind: 'player', playerId: id }
+    const isPicked = Boolean(picked && sameTap(picked, tap))
+    const tapTarget = tapState(tap)
     const reasonId = reason ? `nls-lock-${kind}-${slotIndex ?? id}` : undefined
     const cells = (
       <>
         {editable ? <span className="nls-drag-cell">{id && !isLocked ? <DragHandle id={id} name={p?.name ?? 'player'} /> : null}</span> : null}
         <PosPill label={pill} tone={kind === 'starter' ? slot?.label : pill} />
-        <div className="nls-player">
+        <PlayerCell
+          tappable={editable}
+          picked={isPicked}
+          label={tapLabel({ name: p?.name, empty: !id, slot: pill, picked: isPicked, target: tapTarget, waiting: Boolean(picked) })}
+          disabled={saving}
+          onTap={() => onTap(tap)}
+        >
           <strong>
             {p?.name ?? (id ? 'Unknown player' : 'Empty')}
             {kind !== 'starter' && p?.position ? <span className="nls-player-pos"> {p.position}</span> : null}
             <RankTag p={p} />
             <InjuryFlag status={p?.injuryStatus} />
           </strong>
-          <small>{gameLine(p) || (id ? '—' : 'Open slot')}</small>
-        </div>
+          <small>{isPicked ? 'Selected · tap where he goes' : gameLine(p) || (id ? '—' : 'Open slot')}</small>
+        </PlayerCell>
         <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
         <span className="nls-lrow-action">
           {editable ? (
@@ -524,11 +605,11 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     return (
       <li key={`${kind}-${slotIndex ?? id}`}>
         {kind === 'starter' && editable ? (
-          <DropZone id={`slot:${slotIndex}`} className="nls-lrow" row moving={moving} state={dropState({ kind: 'starter', slotIndex: slotIndex ?? 0 })}>
+          <DropZone id={`slot:${slotIndex}`} className="nls-lrow" row moving={moving || isPicked} state={dragId ? dropState({ kind: 'starter', slotIndex: slotIndex ?? 0 }) : tapTarget}>
             {cells}
           </DropZone>
         ) : (
-          <div className="nls-lrow" data-moving={moving || undefined} data-dnd={editable || undefined}>
+          <div className="nls-lrow" data-moving={moving || isPicked || undefined} data-dnd={editable || undefined} data-drop={tapTarget}>
             {cells}
           </div>
         )}
@@ -681,8 +762,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                     <ul className="nls-rows">{slots.map((s, i) => renderRow(lists.starters[i] ?? '', s, 'starter', i))}</ul>
                     {afFormProjected ? <p className="nls-muted" data-testid="lineup-af-projection-note">{AF_FORM_PROJECTION_EXPLAINER}{daily && viewDay ? ` Projections are for ${viewDay.status === 'today' ? 'today' : dayLabel(viewDay.day)}.` : ''}</p> : null}
                   </section>
-                  <DropZone as="section" id="bench" className="nls-card nls-card-flush nls-dropzone" label="Bench" state={dropState({ kind: 'bench' })}>
-                    <h3 className="nls-label nls-card-head"><span>Bench</span>{dragId ? <span>Drop to bench</span> : benchCapacity != null ? <span>{lists.bench.filter(Boolean).length} / {benchCapacity}</span> : null}</h3>
+                  <DropZone as="section" id="bench" className="nls-card nls-card-flush nls-dropzone" label="Bench" state={dragId ? dropState({ kind: 'bench' }) : tapState({ kind: 'section', section: 'bench' })}>
+                    <h3 className="nls-label nls-card-head"><span>Bench</span>{dragId ? <span>Drop to bench</span> : sectionTap('bench', 'bench') ?? (benchCapacity != null ? <span>{lists.bench.filter(Boolean).length} / {benchCapacity}</span> : null)}</h3>
                     <ul className="nls-rows">
                       {lists.bench.filter(Boolean).map((id) => renderRow(id, null, 'bench'))}
                       {benchCapacity != null
@@ -697,8 +778,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                     </ul>
                   </DropZone>
                   {hasIr ? (
-                    <DropZone as="section" id="ir" className="nls-card nls-card-flush nls-dropzone" label="Injured reserve" state={dropState({ kind: 'ir' })}>
-                      <h3 className="nls-label nls-card-head"><span>Injured reserve</span><span>{irCapacity != null ? `${lists.ir.filter(Boolean).length} / ${irCapacity}` : ''}</span></h3>
+                    <DropZone as="section" id="ir" className="nls-card nls-card-flush nls-dropzone" label="Injured reserve" state={dragId ? dropState({ kind: 'ir' }) : tapState({ kind: 'section', section: 'ir' })}>
+                      <h3 className="nls-label nls-card-head"><span>Injured reserve</span>{sectionTap('ir', 'IR') ?? <span>{irCapacity != null ? `${lists.ir.filter(Boolean).length} / ${irCapacity}` : ''}</span>}</h3>
                       <ul className="nls-rows">
                         {lists.ir.filter(Boolean).map((id) => renderRow(id, null, 'ir'))}
                         {!lists.ir.some(Boolean) ? (
@@ -708,8 +789,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                     </DropZone>
                   ) : null}
                   {hasTaxi ? (
-                    <DropZone as="section" id="taxi" className="nls-card nls-card-flush nls-dropzone" label="Taxi squad" state={dropState({ kind: 'taxi' })}>
-                      <h3 className="nls-label nls-card-head"><span>Taxi squad</span><span>{taxiCapacity != null && taxiCapacity > 0 ? `${lists.taxi.filter(Boolean).length} / ${taxiCapacity}` : ''}</span></h3>
+                    <DropZone as="section" id="taxi" className="nls-card nls-card-flush nls-dropzone" label="Taxi squad" state={dragId ? dropState({ kind: 'taxi' }) : tapState({ kind: 'section', section: 'taxi' })}>
+                      <h3 className="nls-label nls-card-head"><span>Taxi squad</span>{sectionTap('taxi', 'taxi') ?? <span>{taxiCapacity != null && taxiCapacity > 0 ? `${lists.taxi.filter(Boolean).length} / ${taxiCapacity}` : ''}</span>}</h3>
                       <ul className="nls-rows">
                         {lists.taxi.filter(Boolean).map((id) => renderRow(id, null, 'taxi'))}
                         {!lists.taxi.some(Boolean) ? (
