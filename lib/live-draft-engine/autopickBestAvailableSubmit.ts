@@ -27,6 +27,8 @@ import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
 import type { CurrentOnTheClock } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
+import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
+import { fitsOpenStarterSlot, mustFillStarter, openStarterSlots, starterSlotsFromTemplate } from '@/lib/live-draft-engine/autopickStarterNeeds'
 
 export type AutopickFallbackPoolEntry = {
   playerName: string
@@ -460,7 +462,19 @@ export async function resolveBestAvailableAutopickCandidate(
   }
 
   if (!selected) {
-    const sorted = [...fallbackPool].sort((a, b) => {
+    // Last chance to fill the starting lineup: when this team's remaining picks only just cover its
+    // open starting spots, take only players who can start in one of them.
+    let pool = fallbackPool
+    const template = (await getLeagueDraftTemplatePayload(leagueId).catch(() => null))?.template
+    if (template) {
+      const ownPositions = draftSession.picks.filter((pick) => pick.rosterId === rid).map((pick) => pick.position)
+      const open = openStarterSlots(starterSlotsFromTemplate(template.slots), ownPositions)
+      if (mustFillStarter(open, draftSession.rounds - ownPositions.length)) {
+        const starters = fallbackPool.filter((entry) => fitsOpenStarterSlot(entry.position, open))
+        if (starters.length > 0) pool = starters
+      }
+    }
+    const sorted = [...pool].sort((a, b) => {
       const keyA = `${normalizeName(a.playerName)}|${(a.position || '').toLowerCase()}|${(a.team || '').toLowerCase()}`
       const keyB = `${normalizeName(b.playerName)}|${(b.position || '').toLowerCase()}|${(b.team || '').toLowerCase()}`
       const adpA = aiAdpByKey?.[keyA] ?? a.adp ?? 999
