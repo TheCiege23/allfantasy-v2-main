@@ -679,6 +679,23 @@ export const CHIMMY_TOOL_SPECS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'propose_automation_change',
+      description:
+        "COMMISSIONERS ONLY. Prepares a change to the league's automations and shows a CONFIRM CARD — nothing is saved unless the commissioner taps Confirm. Use when a commissioner asks to turn on the recommended setup, let AllFantasy run the league, go hands-on, or hand quiet / inactive teams over after N days (or stop doing that). Pass EXACTLY ONE of: preset ('recommended' = the fair-play automations; 'run_it' = recommended plus handing quiet teams over after 14 days; 'hands_on' = nothing runs on its own), or handover_days (7, 14 or 21; 0 turns it off) with optional handover_to ('lineups' free, or 'autopilot' which needs AF Commissioner). For anyone who is not the commissioner it refuses and says so.",
+      parameters: {
+        type: 'object',
+        properties: {
+          preset: { type: 'string', enum: ['recommended', 'run_it', 'hands_on'], description: 'A whole setup to switch to.' },
+          handover_days: { type: 'number', enum: [0, 7, 14, 21], description: 'Hand a team over after this many days with no activity from its owner; 0 turns it off.' },
+          handover_to: { type: 'string', enum: ['lineups', 'autopilot'], description: 'What happens to a handed-over team. Omit to use the best the league has.' },
+        },
+        required: [],
+      },
+    },
+  },
 ] as const
 
 /*
@@ -1187,6 +1204,26 @@ export async function executeChimmyTool(
                 give: args.give,
                 get: args.get,
               })
+        if (outcome.ok) ctx.actionCards.push(outcome.card)
+        return outcome.text
+      }
+
+      // Same rule as the two above: a card, never a write. The commissioner check is inside.
+      case 'propose_automation_change': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        if (!ctx.actionCards) {
+          return "This chat surface cannot show a confirm card, so nothing was prepared. Tell the commissioner to change it in the Commissioner Hub's \"What runs itself\" card. Do not say it was done."
+        }
+        if (ctx.actionCards.length >= MAX_ACTION_CARDS_PER_ANSWER) {
+          return `There are already ${MAX_ACTION_CARDS_PER_ANSWER} confirm cards in this answer; no more were made. Ask the user to confirm or dismiss those first.`
+        }
+        const outcome = await (await import('@/lib/chimmy/actions/automationAction')).proposeAutomationChange({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          preset: args.preset,
+          handoverDays: args.handover_days,
+          handoverTo: args.handover_to,
+        })
         if (outcome.ok) ctx.actionCards.push(outcome.card)
         return outcome.text
       }
