@@ -175,7 +175,8 @@ function normalizedWaiverType(raw: unknown): string | null {
   return null
 }
 
-function tradeReviewMode(settings: Record<string, unknown>): string | null {
+/** The trade review the popup shows. Exported for saves that write it outside the settings patch. */
+export function tradeReviewMode(settings: Record<string, unknown>): string | null {
   const json = record(settings.settingsJson)
   const raw = String(settings.trade_review_mode ?? settings.tradeReviewMode ?? json.tradeReviewMode ?? '').trim().toLowerCase()
   return ['commissioner', 'league_vote', 'instant', 'none'].includes(raw) ? raw : null
