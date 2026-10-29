@@ -442,25 +442,53 @@ export async function endManagedForNewOwners(leagueId: string, commissionerId: s
 export async function endInactiveManagerModeOnOwnerSave(leagueId: string, rosterId: string, ownerUserId: string): Promise<boolean> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   if (!readManagedLineups(league?.settings)[rosterId]) return false
-  let ended = false
+  let ended: ManagedLineup | null = null
   await updateManaged(leagueId, (current) => {
     if (!current[rosterId]) return null
-    ended = true
+    ended = current[rosterId]!
     const next = { ...current }
     delete next[rosterId]
     return next
   })
   if (ended) {
+    const entry = ended as ManagedLineup
+    const endedAt = new Date()
     await logAction({
       leagueId,
       userId: ownerUserId,
       actionType: ENDED_ACTION,
       entityType: 'roster',
       entityId: rosterId,
-      metadata: { rosterId, reason: 'owner_saved_lineup' },
+      // `since` and `autopilot` let the welcome-back summary (./welcomeBack.ts) read what was done.
+      metadata: { rosterId, reason: 'owner_saved_lineup', since: entry.since, autopilot: Boolean(entry.autopilot) },
     })
+    await sendWelcomeBack(leagueId, rosterId, ownerUserId, entry, endedAt).catch((e) =>
+      console.warn('[inactive-manager] welcome-back notice skipped', { leagueId, rosterId, error: String(e) }),
+    )
   }
-  return ended
+  return Boolean(ended)
+}
+
+/** One notice with what was done while the owner was away; the lineup screen shows the full summary. */
+async function sendWelcomeBack(leagueId: string, rosterId: string, ownerUserId: string, entry: ManagedLineup, endedAt: Date): Promise<void> {
+  const since = new Date(entry.since)
+  if (Number.isNaN(since.getTime())) return
+  const { buildWelcomeBack } = await import('./welcomeBackService')
+  const summary = await buildWelcomeBack({ leagueId, rosterId, since, endedAt, autopilot: Boolean(entry.autopilot) })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true } })
+  await dispatchNotification({
+    userIds: [ownerUserId],
+    category: 'autocoach',
+    type: 'inactive_manager_welcome_back',
+    title: `Welcome back · ${league?.name ?? 'your league'}`,
+    body: summary.en.headline,
+    severity: 'low',
+    leagueId,
+    actionHref: `/league/${leagueId}?tab=team`,
+    actionLabel: 'See what changed',
+    dedupePrefix: `welcome-back:${leagueId}:${rosterId}:${entry.since}`,
+    meta: { leagueId, rosterId, lineupChanges: summary.lineupChanges, claims: summary.claims },
+  })
 }
 
 export type InactiveLineupRunResult = {

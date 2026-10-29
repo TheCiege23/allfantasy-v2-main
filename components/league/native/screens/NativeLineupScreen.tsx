@@ -38,6 +38,7 @@ import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreen
 import { AutoBenchByeToggle } from './AutoBenchByeToggle'
 import { MyTeamAutomations } from './MyTeamAutomations'
 import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
+import { WelcomeBackCard } from '@/components/league/WelcomeBackCard'
 import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE } from '@/lib/projections/dailySportFormLabels'
 
 /**
@@ -759,6 +760,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                     </p>
                   ) : null}
                   {data?.rosterId && !daily ? <AutoBenchByeToggle leagueId={league.id} /> : null}
+                  {data?.rosterId ? <WelcomeBackCard leagueId={league.id} /> : null}
                   {data?.rosterId ? <MyTeamAutomations leagueId={league.id} /> : null}
                   {data?.rosterId ? <AutomaticChangesLog leagueId={league.id} className="nls-card" onUndone={() => void load()} /> : null}
                   <section className="nls-card nls-card-flush" aria-label="Starters">

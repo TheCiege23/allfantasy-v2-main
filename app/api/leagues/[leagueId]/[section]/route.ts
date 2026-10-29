@@ -112,6 +112,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'taxi-steals': () => import('../taxi-steals/handler'),
   'tournament-context': () => import('../tournament-context/handler'),
   'trades': () => import('../trades/handler'),
+  'welcome-back': () => import('../welcome-back/handler'),
 }
 
 type Ctx = { params: Promise<{ leagueId: string; section: string }> | { leagueId: string; section: string } }
