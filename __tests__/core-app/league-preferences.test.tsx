@@ -139,7 +139,19 @@ describe('the /core rail', () => {
   it('drops hidden rows and says how many are hidden', () => {
     const { container } = render(shell({ hiddenLeagueIds: ['b', 'c'] }))
     expect(rowNames(container)).toEqual(['Alpha', 'Delta'])
-    expect(container.textContent).toMatch(/4 leagues · 2 hidden/)
+    expect(container.querySelector('.af-rail-toggle')?.textContent).toMatch(/4 leagues/)
+    expect(screen.getByTestId('rail-hidden-count-link').textContent).toBe('2 hidden · Show')
+  })
+
+  it('the header count is a link of its own, not text inside the collapse button', () => {
+    const { container } = render(shell({ hiddenLeagueIds: ['b', 'c'] }))
+    const count = screen.getByTestId('rail-hidden-count-link')
+    expect(count.tagName).toBe('A')
+    expect(count.getAttribute('href')).toBe('/settings?tab=preferences&returnTo=%2Fcore#your-leagues')
+    // Tapping it must not be a tap on the toggle — the bug was that it only closed the tray.
+    expect(count.closest('button')).toBeNull()
+    expect(container.querySelector('.af-rail-toggle')?.textContent).not.toMatch(/hidden/)
+    expect(container.querySelector('#af-rail')?.getAttribute('data-has-hidden')).toBe('true')
   })
 
   it('links the hidden count to Settings, where unhiding lives', () => {
@@ -162,6 +174,8 @@ describe('the /core rail', () => {
     const { container } = render(shell())
     expect(rowNames(container)).toEqual(['Alpha', 'Bravo', 'Charlie', 'Delta'])
     expect(screen.queryByTestId('rail-hidden-leagues-link')).toBeNull()
+    expect(screen.queryByTestId('rail-hidden-count-link')).toBeNull()
+    expect(container.querySelector('#af-rail')?.getAttribute('data-has-hidden')).toBeNull()
   })
 })
 
