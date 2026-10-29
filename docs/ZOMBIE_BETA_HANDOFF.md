@@ -2,7 +2,9 @@
 
 ## Evidence and acceptance
 
-- All ten workflows for commit 93e2a27b completed successfully. Mobile: eight targeted Chrome/WebKit draft checks passed; the broader 136 cases finished with 134 direct passes and two passes on retry.
+- Runtime source 75f3dfb is live on isolated Railway staging (deployment 35f9ebf7-06ea-48fc-aff9-4a4d9b202c2d). Its deployment marker matches; health returned 200 and signed-out renewal returned 401.
+- At eba4663, TypeScript gates and all six Playwright jobs passed: desktop draft regression, full four-sport Zombie rehearsal, mobile, retention, referral and onboarding. Mobile: eight targeted Chrome/WebKit draft checks plus 136 broader mobile cases all passed without retries.
+- The unit workflow found one missing C2C mock. The follow-up test-only correction passed all three original assertions locally; final-head hosted checks restart after publication. No application or failure-baseline change is included in that correction.
 - This is browser emulation, not a physical iPhone acceptance result.
 - The original four staging leagues remain setup/week zero/unstarted. Use separate QA rooms for start/pick/pause checks.
 - Historical provider replay and the controlled eight-manager rehearsal do not establish a live-calendar beta result.
@@ -42,6 +44,23 @@ Runtime source 75f3dfb adds the universe renewal preview and atomic next-season 
 
 An isolated Windows checkout and a fresh PostgreSQL 18 database bound to 127.0.0.1:55438 verified all four sports with two levels and 16 registered fixture managers per universe. Direct service checks covered real canonical league creation, next-season placements, empty unstarted drafts, old-roster/prize preservation, destination FAAB rollover, concurrent retries, a forced database failure on the final destination, and old/new season statistics/digest isolation. These are controlled fixtures, not a live-manager beta or signed-in device acceptance.
 
-The focused local suite passed 53 tests in seven files. Windows cold imports required a 180-second CLI startup allowance; the committed CI timeout and assertions were unchanged. The current hosted merge-candidate checks and staging build remain separate evidence.
+The focused local suites passed 56 tests in eight files, including the corrected C2C fixture. Windows cold imports required a 180-second CLI startup allowance; the committed CI timeout and assertions were unchanged. Hosted verification also passed the full four-sport three-level renewal rehearsal, including rollback, retries, preserved history and owner-only access. The isolated staging deployment is verified; final test-only-head checks remain separate evidence.
 
 The owner chose to obtain additional NFL ADP provider access later. Do not purchase or activate a new subscription automatically.
+
+## Read-only staging readiness snapshot
+
+The original four leagues still have unstarted drafts and are at setup/week zero:
+
+| Sport | Configured seats | Registered managers | Seats still to fill |
+| --- | ---: | ---: | ---: |
+| NFL | 8 | 1 | 7 |
+| NBA | 8 | 1 | 7 |
+| NHL | 12 | 1 | 11 |
+| MLB | 8 | 1 | 7 |
+
+Counts join roster ownership to actual AppUser records; placeholder team IDs do not qualify. No original league seats, settings, drafts or weeks were changed. All four current test leagues are standalone; the new linked-universe renewal does not yet provide their standalone renewal flow.
+
+Follow-up regression: the C2C renewal fixture was missing the new non-Zombie lookup. Adding a null-returning ZombieLeague mock preserves all three original assertions; all three passed locally. This changes no deployed application code or failure baseline.
+
+Recommended next coding: dedicated standalone Zombie renewal, then a commissioner readiness panel covering genuine managers, draft/lineup readiness and provider exceptions. Physical iPhone and live-calendar acceptance remain distinct owner/participant work.
