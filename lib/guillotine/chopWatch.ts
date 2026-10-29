@@ -15,6 +15,7 @@
  * Pure. The loader with its cache is ./chopWatchLoad.ts.
  */
 import type { ChopPreview } from './chopPreview'
+import type { GuillotineDangerRow } from './types'
 
 export type ChopWatchTier = { rosterId: string; displayName: string; tier: 'chop_zone' | 'danger' | 'safe'; pointsFromChopZone: number; immune?: true }
 
@@ -27,6 +28,8 @@ export type ChopWatch = {
   dangerTiers: ChopWatchTier[]
   /** rosterId -> this week's points so far. */
   scores: Record<string, number>
+  /** rosterId -> season points through this week, live. */
+  seasonPoints: Record<string, number>
 }
 
 /**
@@ -52,5 +55,23 @@ export function chopWatchFromPreview(preview: ChopPreview, week: number): ChopWa
     chopLine: preview.chopLine,
     dangerTiers,
     scores: Object.fromEntries(preview.rows.map((row) => [row.rosterId, row.points])),
+    seasonPoints: Object.fromEntries(preview.rows.map((row) => [row.rosterId, row.seasonPoints ?? 0])),
   }
+}
+
+/**
+ * The watch in the danger engine's own row shape (`getDangerTiers`), for the surfaces that read that:
+ * rank 1 is the lowest score (the preview's rows come lowest first), `projectedPoints` is this week's
+ * points so far, `seasonPointsCumul` the season through this week.
+ */
+export function chopWatchDangerRows(watch: ChopWatch): GuillotineDangerRow[] {
+  return watch.dangerTiers.map((t, i) => ({
+    rosterId: t.rosterId,
+    displayName: t.displayName,
+    projectedPoints: watch.scores[t.rosterId] ?? 0,
+    seasonPointsCumul: watch.seasonPoints[t.rosterId] ?? 0,
+    tier: t.tier,
+    rank: i + 1,
+    pointsFromChopZone: t.pointsFromChopZone,
+  }))
 }

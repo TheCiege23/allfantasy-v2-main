@@ -238,6 +238,38 @@ describe('full rules — NHL categories redraft', () => {
   })
 })
 
+/*
+ * The blind FAAB auction (2026-10-29): in these sports a Guilly league holds claims before each waiver
+ * run and settles them together, highest bid first (lib/guillotine/blindWaiverCutoff.ts). It is the
+ * waiver rule a manager most needs to know on chop day, and the explainer never said it.
+ */
+describe('the blind FAAB auction', () => {
+  const BLIND = 'Waiver claims are blind: in the hours before each waiver run, bids are hidden and held, then settled together, highest bid first. A chopped team’s players go to the highest bidder, not the fastest.'
+  it.each(['NFL', 'NBA', 'MLB', 'NHL'])('a %s Guilly league explains it, in English and Spanish', (sport) => {
+    const snapshot = withGuillotineConfig(guillotineRow(sport))
+    expect(snapshot.blindAuction).toBe(true)
+    const sections = explainLeagueRules(snapshot)
+    expect(render(sections, 'en')).toContain(BLIND)
+    const es = render(sections, 'es')
+    expectClean(es)
+    expect(es.join(' ')).toContain('Los reclamos son a ciegas')
+    expect(es.join(' ')).not.toMatch(/waiver/i)
+  })
+
+  it('a Guilly league in a sport without it, and a redraft league, say nothing about it', () => {
+    const college = withGuillotineConfig(guillotineRow('NCAAF'))
+    expect(college.blindAuction).toBe(false)
+    expect(render(explainLeagueRules(college), 'en')).not.toContain(BLIND)
+    const redraft = ruleSnapshotFromLeague({ ...guillotineRow('NFL'), leagueType: 'redraft', leagueVariant: 'redraft', guillotineMode: false })
+    expect(redraft.blindAuction).toBeUndefined()
+    expect(render(explainLeagueRules(redraft), 'en')).not.toContain(BLIND)
+  })
+
+  it('is not a rule a commissioner change can name: the sport decides it', () => {
+    expect(CHANGEABLE_RULE_KEYS).not.toContain('blindAuction' as never)
+  })
+})
+
 describe.each(['NFL', 'NBA', 'NHL'])('full rules — %s guillotine', (sport) => {
   const snapshot = withGuillotineConfig(guillotineRow(sport))
   const sections = explainLeagueRules(snapshot)

@@ -2,6 +2,8 @@
 
 import { AppLinkHint } from '@/components/core-app/player-finder/AppLinkHint'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { playerFinderMessages } from '@/lib/core-app/messages/playerFinder'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { formatDelta, type PlayerMove } from '@/lib/core-app/playerMoves'
 import { moveText } from '@/lib/core-app/playerMovesCopy'
@@ -27,15 +29,15 @@ export function RecommendedMoves({
   emptyReason: string | null
 }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const msg = useMessages(playerFinderMessages)
   return (
     <section className="af-pf-block af-pf-moves" aria-labelledby="af-pf-moves-h">
       <header className="af-pf-block-head">
         <h3 className="af-pf-h3" id="af-pf-moves-h">
-          {es ? 'Movimientos recomendados' : 'Recommended moves'}
+          {msg.movesTitle}
         </h3>
         <p className="af-pf-block-sub">
-          {es ? 'Los haces en la plataforma; nosotros te decimos exactamente dónde' : 'You make them on the platform — we tell you exactly where'}
+          {msg.movesSub}
         </p>
       </header>
 
@@ -43,9 +45,7 @@ export function RecommendedMoves({
         <p className="af-pf-unavailable">
           {emptyReason
             ? coreUiCopy(emptyReason, language)
-            : es
-              ? 'Nada que hacer: está donde debe estar en todas las ligas donde lo tienes.'
-              : 'Nothing to do — he is where he should be in every league you have him.'}
+            : msg.movesNothing}
         </p>
       ) : (
         <ul className="af-pf-move-list">
@@ -64,15 +64,7 @@ export function RecommendedMoves({
                   <span
                     className="af-pf-move-delta af-num"
                     data-tone={m.tone}
-                    title={
-                      m.scoring === 'league'
-                        ? es
-                          ? 'con la puntuación propia de esta liga'
-                          : 'under this league’s own scoring'
-                        : es
-                          ? 'puntuación estándar'
-                          : 'standard scoring'
-                    }
+                    title={m.scoring === 'league' ? msg.movesLeagueScoring : msg.movesStandardScoring}
                   >
                     {formatDelta(m.delta)}
                   </span>
@@ -82,7 +74,7 @@ export function RecommendedMoves({
                 {m.locked ? (
                   /* The platform would refuse it right now; the reason sits in the path line. */
                   <span className="af-chip af-num af-pf-move-locked" title={coreUiCopy(m.locked, language)}>
-                    {es ? 'bloqueado' : 'locked'}
+                    {msg.locked}
                   </span>
                 ) : m.link ? (
                   m.link.external ? (
@@ -92,12 +84,12 @@ export function RecommendedMoves({
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      {es ? `Abrir en ${m.link.platformLabel}` : m.link.label}
+                      {msg.openIn(m.link)}
                       <AppLinkHint platform={m.link.platformLabel} screen={m.link.screen} />
                     </a>
                   ) : (
                     <a className="af-btn af-pf-move-btn" href={m.link.href}>
-                      {es ? `Abrir en ${m.link.platformLabel}` : m.link.label}
+                      {msg.openIn(m.link)}
                     </a>
                   )
                 ) : null}
@@ -107,17 +99,7 @@ export function RecommendedMoves({
         </ul>
       )}
 
-      {es ? (
-        <p className="af-pf-readonly-note">
-          Los movimientos de alineación y de IR se calculan con la puntuación propia de cada liga; los reclamos, con la
-          puntuación estándar. AllFantasy solo lee tus ligas: el cambio se hace en la plataforma.
-        </p>
-      ) : (
-        <p className="af-pf-readonly-note">
-          Lineup and IR moves are priced under each league&apos;s own scoring; claims are standard
-          scoring. AllFantasy only reads your leagues — the change happens on the platform.
-        </p>
-      )}
+      <p className="af-pf-readonly-note">{msg.movesReadOnly}</p>
     </section>
   )
 }

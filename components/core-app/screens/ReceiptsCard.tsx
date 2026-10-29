@@ -13,6 +13,8 @@ import type {
 } from '@/lib/core-app/decisionReceipts'
 import { describeTrackRecord, readTrackRecordLine } from '@/lib/chimmy-outcomes/trackRecord'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { receiptsCardMessages } from '@/lib/core-app/messages/receiptsCard'
 import { trackRecordText } from '@/lib/core-app/dashboard3aCopy'
 import { AfSavedShare } from '@/components/core-app/screens/AfSavedShare'
 
@@ -33,80 +35,45 @@ import { AfSavedShare } from '@/components/core-app/screens/AfSavedShare'
  * agrees.
  */
 
-const OUTCOME_TEXT: Record<TradeReceipt['outcome'], string> = {
-  ahead: 'you’re ahead',
-  behind: 'you’re behind',
-  even: 'about even',
-}
-
-const OUTCOME_TEXT_ES: Record<TradeReceipt['outcome'], string> = {
-  ahead: 'vas ganando',
-  behind: 'vas perdiendo',
-  even: 'más o menos parejo',
-}
-
 /** 'AF' is the home triage card's rule-based "swap in X" tip — AllFantasy's, never Chimmy's. */
 type Adviser = 'AutoCoach' | 'Chimmy' | 'AF'
 
-function callText(who: Adviser, call: StartCallReceipt['call'], es: boolean): string {
-  if (es) return call === 'same' ? 'más o menos igual' : call === 'right' ? `${who} acertó` : `${who} falló`
-  return call === 'same' ? 'about the same' : `${who} was ${call}`
-}
+type ReceiptsMessages = typeof receiptsCardMessages.en
 
 function signed(n: number): string {
   const r = Math.round(n * 10) / 10
   return `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r).toFixed(1)}`
 }
 
-function list(names: string[], es: boolean): string {
-  if (names.length === 0) return es ? 'nada' : 'nothing'
-  return names.length <= 2 ? names.join(es ? ' y ' : ' & ') : `${names.slice(0, 2).join(', ')} +${names.length - 2}`
+function list(names: string[], m: ReceiptsMessages): string {
+  if (names.length === 0) return m.nothing
+  return names.length <= 2 ? names.join(m.and) : `${names.slice(0, 2).join(', ')} +${names.length - 2}`
 }
 
-/** "titularidad" — a week he was in your starting lineup. */
-function startsEs(n: number): string {
-  return `${n} ${n === 1 ? 'titularidad' : 'titularidades'}`
-}
-
-function WaiverRow({ w, es }: { w: WaiverReceipt; es: boolean }) {
-  if (es) {
-    return (
-      <li className="af3a-receipt" data-kind="waiver">
-        <Link className="af3a-receipt-title" href={w.href}>
-          Incorporaste a {w.playerName}
-          {w.position ? ` (${w.position})` : ''}
-        </Link>
-        <span className="af3a-receipt-where af3a-mono">
-          {w.leagueName} · {w.season} sem. {w.week}
-          {w.faab != null ? ` · $${w.faab} FAAB` : ''}
-        </span>
-        <span className="af3a-receipt-result">
-          <b className="af3a-mono">{w.points.toFixed(1)} pts</b> para ti · {startsEs(w.starts)}
-          {w.leftWeek != null ? ` · se fue en la sem. ${w.leftWeek}` : ' (sigue en tu equipo)'}
-        </span>
-      </li>
-    )
-  }
+function WaiverRow({ w }: { w: WaiverReceipt }) {
+  const m = useMessages(receiptsCardMessages)
   return (
     <li className="af3a-receipt" data-kind="waiver">
       <Link className="af3a-receipt-title" href={w.href}>
-        You added {w.playerName}
+        {m.youAdded(w.playerName)}
         {w.position ? ` (${w.position})` : ''}
       </Link>
       <span className="af3a-receipt-where af3a-mono">
-        {w.leagueName} · {w.season} wk {w.week}
+        {w.leagueName} · {w.season} {m.wk} {w.week}
         {w.faab != null ? ` · $${w.faab} FAAB` : ''}
       </span>
       <span className="af3a-receipt-result">
-        <b className="af3a-mono">{w.points.toFixed(1)} pts</b> for you ·{' '}
-        {w.starts} start{w.starts === 1 ? '' : 's'}
-        {w.leftWeek != null ? ` · gone wk ${w.leftWeek}` : ' (still yours)'}
+        <b className="af3a-mono">{w.points.toFixed(1)} pts</b>
+        {m.forYou}
+        {m.starts(w.starts)}
+        {w.leftWeek != null ? m.goneWeek(w.leftWeek) : m.stillYours}
       </span>
     </li>
   )
 }
 
-function LineupRow({ l, es }: { l: LineupReceipt; es: boolean }) {
+function LineupRow({ l }: { l: LineupReceipt }) {
+  const m = useMessages(receiptsCardMessages)
   const describe = (players: Array<{ name: string; points: number }>) => {
     return players.map((p) => `${p.name} (${p.points.toFixed(1)})`).join(', ')
   }
@@ -116,34 +83,21 @@ function LineupRow({ l, es }: { l: LineupReceipt; es: boolean }) {
   return (
     <li className="af3a-receipt" data-kind="lineup" data-outcome={l.perfect ? 'ahead' : undefined}>
       <Link className="af3a-receipt-title" href={l.href}>
-        {es
-          ? l.perfect
-            ? `Alineación perfecta en la semana ${l.week}`
-            : `Dejaste ${l.pointsLeft.toFixed(1)} pts en tu banca`
-          : l.perfect
-            ? `Perfect lineup in week ${l.week}`
-            : `You left ${l.pointsLeft.toFixed(1)} pts on your bench`}
+        {l.perfect ? m.perfectLineup(l.week) : m.leftOnBench(l.pointsLeft.toFixed(1))}
       </Link>
       <span className="af3a-receipt-where af3a-mono">
-        {l.leagueName} · {l.season} {es ? 'sem.' : 'wk'} {l.week}
+        {l.leagueName} · {l.season} {m.wk} {l.week}
       </span>
-      {changes && es ? (
+      {changes ? (
         <span className="af3a-receipt-swap">
-          Mejor alineación válida: {changes.in.length > 0 ? `alinea a ${describe(changes.in)}` : ''}
+          {m.bestLegalLineup}
+          {changes.in.length > 0 ? m.startsPlayers(describe(changes.in)) : ''}
           {changes.in.length > 0 && changes.out.length > 0 ? ' · ' : ''}
-          {changes.out.length > 0 ? `sienta a ${describe(changes.out)}` : ''}
-        </span>
-      ) : changes ? (
-        <span className="af3a-receipt-swap">
-          Best legal lineup: {changes.in.length > 0 ? `starts ${describe(changes.in)}` : ''}
-          {changes.in.length > 0 && changes.out.length > 0 ? ' · ' : ''}
-          {changes.out.length > 0 ? `benches ${describe(changes.out)}` : ''}
+          {changes.out.length > 0 ? m.benchesPlayers(describe(changes.out)) : ''}
         </span>
       ) : !l.perfect && l.benched ? (
         <span className="af3a-receipt-swap">
-          {es
-            ? `La mejor alineación válida incluye a ${l.benched.name} (${l.benched.points.toFixed(1)}).`
-            : `Best legal lineup includes ${l.benched.name} (${l.benched.points.toFixed(1)}).`}
+          {m.includesBenched(l.benched.name, l.benched.points.toFixed(1))}
         </span>
       ) : null}
     </li>
@@ -158,44 +112,35 @@ function StartCallRow({
   c,
   who,
   confidencePct,
-  es,
 }: {
   c: StartCallReceipt
   who: Adviser
   confidencePct?: number | null
-  es: boolean
 }) {
+  const m = useMessages(receiptsCardMessages)
   const outcome = c.call === 'right' ? 'ahead' : c.call === 'wrong' ? 'behind' : undefined
   return (
     <li className="af3a-receipt" data-kind={who === 'AutoCoach' ? 'autocoach' : who === 'AF' ? 'af-tip' : 'chimmy'} data-outcome={outcome}>
       <Link className="af3a-receipt-title" href={c.href}>
-        {es
-          ? `${who} dijo que alinearas a ${c.recommended.name} en lugar de ${c.instead.name}`
-          : `${who} said start ${c.recommended.name} over ${c.instead.name}`}
+        {m.saidStart(who, c.recommended.name, c.instead.name)}
       </Link>
       <span className="af3a-receipt-where af3a-mono">
-        {c.leagueName} · {c.season} {es ? 'sem.' : 'wk'} {c.week}
+        {c.leagueName} · {c.season} {m.wk} {c.week}
         {c.slot ? ` · ${c.slot}` : ''}
-        {confidencePct != null ? (es ? ` · ${confidencePct}% de confianza` : ` · ${confidencePct}% confident`) : ''}
+        {confidencePct != null ? m.confident(confidencePct) : ''}
       </span>
       <span className="af3a-receipt-result">
         <b className="af3a-mono">
           {c.recommended.name} {c.recommended.points.toFixed(1)}
         </b>{' '}
-        · {c.instead.name} {c.instead.points.toFixed(1)} — {callText(who, c.call, es)}
+        · {c.instead.name} {c.instead.points.toFixed(1)} — {m.callResult(who, c.call)}
       </span>
       <span className="af3a-receipt-note">
-        {es
-          ? c.followed === 'yes'
-            ? `Alineaste a ${c.recommended.name} en Sleeper.`
-            : c.followed === 'no'
-              ? `Mantuviste a ${c.instead.name} en Sleeper.`
-              : 'Tu alineación de Sleeper no coincidió con ninguna de las dos opciones.'
-          : c.followed === 'yes'
-            ? `You started ${c.recommended.name} on Sleeper.`
-            : c.followed === 'no'
-              ? `You kept ${c.instead.name} in on Sleeper.`
-              : 'Your Sleeper lineup didn’t match either way.'}
+        {c.followed === 'yes'
+          ? m.followedYes(c.recommended.name)
+          : c.followed === 'no'
+            ? m.followedNo(c.instead.name)
+            : m.followedUnclear}
       </span>
     </li>
   )
@@ -205,33 +150,27 @@ function StartCallRow({
  * "Chimmy said add X". Whether that was a good add is not judged here — the points he scored for
  * you are the receipt. A player you passed on gets no points: a free agent's are not on file.
  */
-function AddCallRow({ a, es }: { a: ChimmyAddReceipt; es: boolean }) {
+function AddCallRow({ a }: { a: ChimmyAddReceipt }) {
+  const m = useMessages(receiptsCardMessages)
   return (
     <li className="af3a-receipt" data-kind="chimmy-add">
       <Link className="af3a-receipt-title" href={a.href}>
-        {es ? `Chimmy dijo que incorporaras a ${a.playerName}` : `Chimmy said add ${a.playerName}`}
+        {m.saidAdd(a.playerName)}
       </Link>
       <span className="af3a-receipt-where af3a-mono">
-        {a.leagueName} · {a.season} {es ? 'sem.' : 'wk'} {a.week}
-        {a.confidencePct != null ? (es ? ` · ${a.confidencePct}% de confianza` : ` · ${a.confidencePct}% confident`) : ''}
+        {a.leagueName} · {a.season} {m.wk} {a.week}
+        {a.confidencePct != null ? m.confident(a.confidencePct) : ''}
       </span>
       <span className="af3a-receipt-result">
-        {a.added && es ? (
+        {a.added ? (
           <>
-            <b className="af3a-mono">{a.added.points.toFixed(1)} pts</b> para ti · lo incorporaste en la sem. {a.added.week} ·{' '}
-            {startsEs(a.added.starts)}
-            {a.added.leftWeek != null ? ` · se fue en la sem. ${a.added.leftWeek}` : ' (sigue en tu equipo)'}
+            <b className="af3a-mono">{a.added.points.toFixed(1)} pts</b>
+            {m.addedInWeek(a.added.week)}
+            {m.starts(a.added.starts)}
+            {a.added.leftWeek != null ? m.goneWeek(a.added.leftWeek) : m.stillYours}
           </>
-        ) : a.added ? (
-          <>
-            <b className="af3a-mono">{a.added.points.toFixed(1)} pts</b> for you · you added him wk {a.added.week} ·{' '}
-            {a.added.starts} start{a.added.starts === 1 ? '' : 's'}
-            {a.added.leftWeek != null ? ` · gone wk ${a.added.leftWeek}` : ' (still yours)'}
-          </>
-        ) : es ? (
-          'No lo incorporaste.'
         ) : (
-          'You didn’t add him.'
+          m.notAdded
         )}
       </span>
     </li>
@@ -244,55 +183,18 @@ function CallNotes({
   pending,
   unscored,
   unreadable,
-  es,
 }: {
   who: Adviser
   pending: number
   unscored: number
   unreadable: number
-  es: boolean
 }) {
-  if (es) {
-    return (
-      <>
-        {pending > 0 ? (
-          <p className="af3a-exp-note">
-            {pending === 1 ? `1 consejo de ${who} es` : `${pending} consejos de ${who} son`} de una semana que aún se
-            está jugando.
-          </p>
-        ) : null}
-        {unscored > 0 ? (
-          <p className="af3a-exp-note">
-            {unscored === 1 ? '1 consejo aún no tiene' : `${unscored} consejos aún no tienen`} puntuaciones semanales
-            registradas.
-          </p>
-        ) : null}
-        {unreadable > 0 ? (
-          <p className="af3a-exp-note">
-            {unreadable === 1 ? '1 consejo no se pudo emparejar' : `${unreadable} consejos no se pudieron emparejar`} con
-            una semana ni con tu plantilla de esa semana.
-          </p>
-        ) : null}
-      </>
-    )
-  }
+  const m = useMessages(receiptsCardMessages)
   return (
     <>
-      {pending > 0 ? (
-        <p className="af3a-exp-note">
-          {pending} {who} call{pending === 1 ? ' is' : 's are'} for a week still being played.
-        </p>
-      ) : null}
-      {unscored > 0 ? (
-        <p className="af3a-exp-note">
-          {unscored} call{unscored === 1 ? ' has' : 's have'} no weekly scores on file yet.
-        </p>
-      ) : null}
-      {unreadable > 0 ? (
-        <p className="af3a-exp-note">
-          {unreadable} call{unreadable === 1 ? '' : 's'} couldn’t be matched to a week or to your roster that week.
-        </p>
-      ) : null}
+      {pending > 0 ? <p className="af3a-exp-note">{m.callsPending(pending, who)}</p> : null}
+      {unscored > 0 ? <p className="af3a-exp-note">{m.callsUnscored(unscored)}</p> : null}
+      {unreadable > 0 ? <p className="af3a-exp-note">{m.callsUnreadable(unreadable)}</p> : null}
     </>
   )
 }
@@ -300,6 +202,7 @@ function CallNotes({
 export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null; help?: ReactNode }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
+  const m = useMessages(receiptsCardMessages)
   if (!data) return null
   const waivers = data.waivers ?? []
   const waiversTooEarly = data.waiversTooEarly ?? 0
@@ -337,43 +240,33 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
     <section className="af3a-card af3a-receipts">
       <header className="af3a-cardhead">
         {/* "Resultados de tus decisiones" — the title of this card's own "?" (help-topics/home.ts `homeReceipts`). */}
-        <span className="af3a-label">{es ? 'RESULTADOS DE TUS DECISIONES' : 'RECEIPTS'}</span>
+        <span className="af3a-label">{m.label}</span>
         {help}
       </header>
 
       {hasTrades ? (
         <>
-          {headed ? <h3 className="af3a-receipt-group">{es ? 'Intercambios' : 'Trades'}</h3> : null}
+          {headed ? <h3 className="af3a-receipt-group">{m.trades}</h3> : null}
           {data.trades.length > 0 ? (
             <ul className="af3a-receipt-list">
               {data.trades.map((t) => (
                 <li key={`${t.leagueId}:${t.id}`} className="af3a-receipt" data-outcome={t.outcome}>
                   <Link className="af3a-receipt-title" href={t.href}>
-                    {es
-                      ? `Tu intercambio${t.counterparty ? ` con ${t.counterparty}` : ''}`
-                      : `Your trade${t.counterparty ? ` with ${t.counterparty}` : ''}`}
+                    {m.yourTrade(t.counterparty)}
                   </Link>
                   <span className="af3a-receipt-where af3a-mono">
-                    {t.leagueName} · {t.season} {es ? 'sem.' : 'wk'} {t.week}
+                    {t.leagueName} · {t.season} {m.wk} {t.week}
                   </span>
                   <span className="af3a-receipt-swap">
-                    {es
-                      ? `Diste ${list(t.gave, true)} · recibiste ${list(t.got, true)}`
-                      : `Gave ${list(t.gave, false)} · got ${list(t.got, false)}`}
+                    {m.gaveGot(list(t.gave, m), list(t.got, m))}
                   </span>
                   <span className="af3a-receipt-result">
                     <b className="af3a-mono">{signed(t.netPoints)} pts</b>{' '}
-                    {es
-                      ? `desde entonces: ${OUTCOME_TEXT_ES[t.outcome]}${t.ongoing ? ' (sigue contando)' : ''}`
-                      : `since — ${OUTCOME_TEXT[t.outcome]}${t.ongoing ? ' (still counting)' : ''}`}
+                    {m.sinceOutcome(t.outcome, t.ongoing)}
                   </span>
                   {t.unsettledPicks > 0 ? (
                     <span className="af3a-receipt-note">
-                      {es
-                        ? t.unsettledPicks === 1
-                          ? '1 selección aún no se ha usado en un draft: no cuenta'
-                          : `${t.unsettledPicks} selecciones aún no se han usado en un draft: no cuentan`
-                        : `${t.unsettledPicks} pick${t.unsettledPicks === 1 ? '' : 's'} not drafted yet — not counted`}
+                      {m.unsettledPicks(t.unsettledPicks)}
                     </span>
                   ) : null}
                 </li>
@@ -382,9 +275,7 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
           ) : null}
           {data.tooEarly > 0 ? (
             <p className="af3a-exp-note">
-              {es
-                ? `Es pronto para evaluar ${data.tooEarly === 1 ? '1 intercambio más reciente' : `${data.tooEarly} intercambios más recientes`}.`
-                : `${data.tooEarly} newer trade${data.tooEarly === 1 ? ' is' : 's are'} too early to call.`}
+              {m.tradesTooEarly(data.tooEarly)}
             </p>
           ) : null}
         </>
@@ -392,26 +283,22 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
 
       {hasWaivers ? (
         <>
-          {headed ? <h3 className="af3a-receipt-group">{es ? 'Incorporaciones' : 'Waiver adds'}</h3> : null}
+          {headed ? <h3 className="af3a-receipt-group">{m.waiverAdds}</h3> : null}
           {waivers.length > 0 ? (
             <ul className="af3a-receipt-list">
               {waivers.map((w) => (
-                <WaiverRow key={w.id} w={w} es={es} />
+                <WaiverRow key={w.id} w={w} />
               ))}
             </ul>
           ) : null}
           {waiversTooEarly > 0 ? (
             <p className="af3a-exp-note">
-              {es
-                ? `Es pronto para evaluar ${waiversTooEarly === 1 ? '1 incorporación reciente' : `${waiversTooEarly} incorporaciones recientes`}.`
-                : `${waiversTooEarly} recent add${waiversTooEarly === 1 ? ' is' : 's are'} too early to call.`}
+              {m.waiversTooEarly(waiversTooEarly)}
             </p>
           ) : null}
           {waiversUnscored > 0 ? (
             <p className="af3a-exp-note">
-              {es
-                ? `${waiversUnscored === 1 ? '1 incorporación aún no tiene' : `${waiversUnscored} incorporaciones aún no tienen`} puntuaciones semanales registradas.`
-                : `${waiversUnscored} add${waiversUnscored === 1 ? ' has' : 's have'} no weekly scores on file yet.`}
+              {m.waiversUnscored(waiversUnscored)}
             </p>
           ) : null}
         </>
@@ -419,33 +306,21 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
 
       {hasLineups ? (
         <>
-          {headed ? <h3 className="af3a-receipt-group">{es ? 'Alineaciones' : 'Lineups'}</h3> : null}
+          {headed ? <h3 className="af3a-receipt-group">{m.lineups}</h3> : null}
           {lineups.length > 0 ? (
             <ul className="af3a-receipt-list">
               {lineups.map((l) => (
-                <LineupRow key={l.id} l={l} es={es} />
+                <LineupRow key={l.id} l={l} />
               ))}
             </ul>
           ) : null}
           {lineupsUnscored > 0 ? (
             <p className="af3a-exp-note">
-              {es
-                ? `${lineupsUnscored === 1 ? '1 semana reciente aún no tiene' : `${lineupsUnscored} semanas recientes aún no tienen`} puntuaciones semanales registradas.`
-                : `${lineupsUnscored} recent week${lineupsUnscored === 1 ? ' has' : 's have'} no weekly scores on file yet.`}
+              {m.lineupsUnscored(lineupsUnscored)}
             </p>
           ) : null}
           {lineupsUnreadable > 0 ? (
-            es ? (
-              <p className="af3a-exp-note">
-                {lineupsUnreadable === 1 ? '1 semana no se pudo revisar' : `${lineupsUnreadable} semanas no se pudieron revisar`}:
-                falta la posición de un titular o los puestos de alineación de la liga.
-              </p>
-            ) : (
-              <p className="af3a-exp-note">
-                {lineupsUnreadable} week{lineupsUnreadable === 1 ? '' : 's'} couldn’t be checked — a starter’s
-                position or the league’s lineup slots aren’t on file.
-              </p>
-            )
+            <p className="af3a-exp-note">{m.lineupsUnreadable(lineupsUnreadable)}</p>
           ) : null}
         </>
       ) : null}
@@ -456,11 +331,11 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
           {autocoach.length > 0 ? (
             <ul className="af3a-receipt-list">
               {autocoach.map((a) => (
-                <StartCallRow key={a.id} c={a} who="AutoCoach" es={es} />
+                <StartCallRow key={a.id} c={a} who="AutoCoach" />
               ))}
             </ul>
           ) : null}
-          <CallNotes who="AutoCoach" pending={autocoachPending} unscored={autocoachUnscored} unreadable={autocoachUnreadable} es={es} />
+          <CallNotes who="AutoCoach" pending={autocoachPending} unscored={autocoachUnscored} unreadable={autocoachUnreadable} />
         </>
       ) : null}
 
@@ -473,72 +348,46 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
              * been graded against the real scores. The percentage appears only once it means something.
              */
             <p className="af3a-receipt-record" data-kind="chimmy-record">
-              <b>{es ? 'Historial de Chimmy en tus decisiones de titular o banca:' : 'Chimmy’s record on your start/sit calls:'}</b>{' '}
+              <b>{m.chimmyRecord}</b>{' '}
               <span className="af3a-mono">{trackRecordText(chimmyRecord, describeTrackRecord(chimmyRecord), language)}</span>
             </p>
           ) : null}
           {chimmy.length > 0 ? (
             <ul className="af3a-receipt-list">
               {chimmy.map((c) => (
-                <StartCallRow key={c.id} c={c} who="Chimmy" confidencePct={c.confidencePct} es={es} />
+                <StartCallRow key={c.id} c={c} who="Chimmy" confidencePct={c.confidencePct} />
               ))}
             </ul>
           ) : null}
-          <CallNotes who="Chimmy" pending={chimmyPending} unscored={chimmyUnscored} unreadable={chimmyUnreadable} es={es} />
+          <CallNotes who="Chimmy" pending={chimmyPending} unscored={chimmyUnscored} unreadable={chimmyUnreadable} />
           {chimmyAdds.length > 0 ? (
             <ul className="af3a-receipt-list">
               {chimmyAdds.map((a) => (
-                <AddCallRow key={a.id} a={a} es={es} />
+                <AddCallRow key={a.id} a={a} />
               ))}
             </ul>
           ) : null}
           {chimmyAddsTooEarly > 0 ? (
             <p className="af3a-exp-note">
-              {es
-                ? `Es pronto para evaluar ${chimmyAddsTooEarly === 1 ? '1 consejo de incorporación' : `${chimmyAddsTooEarly} consejos de incorporación`}.`
-                : `${chimmyAddsTooEarly} add call${chimmyAddsTooEarly === 1 ? ' is' : 's are'} too early to call.`}
+              {m.addCallsTooEarly(chimmyAddsTooEarly)}
             </p>
           ) : null}
           {chimmyAddsUnscored > 0 ? (
-            es ? (
-              <p className="af3a-exp-note">
-                {chimmyAddsUnscored === 1
-                  ? '1 incorporación que hiciste por consejo de Chimmy aún no tiene'
-                  : `${chimmyAddsUnscored} incorporaciones que hiciste por consejo de Chimmy aún no tienen`}{' '}
-                puntuaciones semanales registradas.
-              </p>
-            ) : (
-              <p className="af3a-exp-note">
-                {chimmyAddsUnscored} add{chimmyAddsUnscored === 1 ? ' you made on Chimmy’s call has' : 's you made on Chimmy’s call have'} no
-                weekly scores on file yet.
-              </p>
-            )
+            <p className="af3a-exp-note">{m.addCallsUnscored(chimmyAddsUnscored)}</p>
           ) : null}
           {chimmyAddsUnknown > 0 ? (
-            es ? (
-              <p className="af3a-exp-note">
-                {chimmyAddsUnknown === 1
-                  ? '1 consejo de incorporación aún no se pudo revisar'
-                  : `${chimmyAddsUnknown} consejos de incorporación aún no se pudieron revisar`}
-                : las transacciones de tu liga no se han sincronizado más allá de esa semana.
-              </p>
-            ) : (
-              <p className="af3a-exp-note">
-                {chimmyAddsUnknown} add call{chimmyAddsUnknown === 1 ? '' : 's'} couldn’t be checked yet — your league’s
-                transactions haven’t synced past that week.
-              </p>
-            )
+            <p className="af3a-exp-note">{m.addCallsUnknown(chimmyAddsUnknown)}</p>
           ) : null}
         </>
       ) : null}
 
       {hasAfTips ? (
         <>
-          {headed ? <h3 className="af3a-receipt-group">{es ? 'Consejos de cambio de AF' : 'AF swap tips'}</h3> : null}
+          {headed ? <h3 className="af3a-receipt-group">{m.afSwapTips}</h3> : null}
           <ul className="af3a-receipt-list">
             {afTips.map((t) => (
               <Fragment key={t.id}>
-                <StartCallRow c={t} who="AF" es={es} />
+                <StartCallRow c={t} who="AF" />
                 {/* A brag only when it is one: you followed the tip and it outscored the alternative. */}
                 {t.call === 'right' && t.followed === 'yes' ? (
                   <li className="af3a-receipt-share-row">
@@ -556,7 +405,7 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
 
       {data.uncoveredLeagues > 0 ? (
         <p className="af3a-exp-note">
-          {es ? 'Por ahora, estos resultados cubren tus ligas de Sleeper.' : 'Receipts cover your Sleeper leagues for now.'}
+          {m.sleeperOnly}
         </p>
       ) : null}
     </section>

@@ -228,6 +228,85 @@ describe('Settings › Your leagues', () => {
   })
 })
 
+describe('Settings › Your leagues › Remove', () => {
+  let deletes: string[]
+  /** Alpha and Charlie are the viewer's own imports; Bravo and Delta reached them through a claimed team. */
+  const stub = (deleteResponse: (id: string) => Response) => {
+    deletes = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'DELETE') {
+          const id = decodeURIComponent(url.split('/').pop() ?? '')
+          deletes.push(id)
+          return deleteResponse(id)
+        }
+        if (init?.method === 'POST') return new Response(JSON.stringify({ ok: true }))
+        if (url.startsWith('/api/league/list'))
+          return new Response(
+            JSON.stringify({
+              leagues: LIST.map((l) => ({ ...l, platform: 'sleeper', hasUnifiedRecord: true, viewerOwnsRow: l.id === 'a' || l.id === 'c' })),
+            }),
+          )
+        return new Response(JSON.stringify({ favorites: null, hidden: ['a'], order: [] }))
+      }),
+    )
+  }
+  const removed = (n: number) => () =>
+    new Response(JSON.stringify({ ok: true, removed: { leagueRows: n, sleeperLeagueRows: 0, tournamentRows: 0 } }))
+
+  it('offers Remove only on leagues the viewer imported', async () => {
+    stub(removed(1))
+    render(<LeagueListPreferencesCard />)
+    await screen.findByTestId('league-list-row-a')
+    expect(screen.queryByTestId('league-remove-a')).not.toBeNull()
+    expect(screen.queryByTestId('league-remove-c')).not.toBeNull()
+    expect(screen.queryByTestId('league-remove-b')).toBeNull()
+    expect(screen.queryByTestId('league-remove-d')).toBeNull()
+  })
+
+  it('asks first, then deletes and drops the row — including a hidden one', async () => {
+    stub(removed(1))
+    render(<LeagueListPreferencesCard />)
+    fireEvent.click(await screen.findByTestId('league-remove-a'))
+    // Nothing is deleted until the confirm.
+    expect(deletes).toEqual([])
+    expect(screen.getByTestId('league-remove-confirm-a').textContent).toMatch(/other members' copies stay as they are/)
+    fireEvent.click(screen.getByTestId('league-remove-go-a'))
+    await waitFor(() => expect(screen.queryByTestId('league-list-row-a')).toBeNull())
+    expect(deletes).toEqual(['a'])
+    expect(screen.queryByTestId('league-list-row-c')).not.toBeNull()
+  })
+
+  it('Cancel deletes nothing', async () => {
+    stub(removed(1))
+    render(<LeagueListPreferencesCard />)
+    fireEvent.click(await screen.findByTestId('league-remove-c'))
+    fireEvent.click(screen.getByText('Cancel'))
+    expect(screen.queryByTestId('league-remove-confirm-c')).toBeNull()
+    expect(deletes).toEqual([])
+    expect(screen.queryByTestId('league-list-row-c')).not.toBeNull()
+  })
+
+  it('a 200 that removed nothing is a failure, not a silent success', async () => {
+    stub(removed(0))
+    render(<LeagueListPreferencesCard />)
+    fireEvent.click(await screen.findByTestId('league-remove-c'))
+    fireEvent.click(screen.getByTestId('league-remove-go-c'))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Another member imported this league/)
+    expect(screen.queryByTestId('league-list-row-c')).not.toBeNull()
+  })
+
+  it('a failed request keeps the row and says so', async () => {
+    stub(() => new Response('{}', { status: 500 }))
+    render(<LeagueListPreferencesCard />)
+    fireEvent.click(await screen.findByTestId('league-remove-c'))
+    fireEvent.click(screen.getByTestId('league-remove-go-c'))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Couldn't remove that league/)
+    expect(screen.queryByTestId('league-list-row-c')).not.toBeNull()
+  })
+})
+
 describe('Settings league save ordering', () => {
   it('blocks another edit while saving, then restores and allows retry after failure', async () => {
     let finish!: (value: Response) => void

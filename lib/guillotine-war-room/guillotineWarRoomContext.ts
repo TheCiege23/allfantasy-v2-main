@@ -23,7 +23,7 @@ import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidati
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { resolveGuillotineWeekState } from '@/lib/guillotine/guillotineCurrentWeek'
-import { getDangerTiers } from '@/lib/guillotine/GuillotineDangerEngine'
+import { getLiveDangerTiers } from '@/lib/guillotine/chopWatchLoad'
 import { claimedPlayerIds } from '@/lib/guillotine/choppedReleases'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
@@ -139,7 +139,8 @@ export async function buildGuillotineWarRoomContext(
     .catch(() => [])) as RosterStateRow[]
   const stateByRoster = new Map(rosterStates.map((s) => [s.rosterId, s]))
 
-  const dangerRows = await getDangerTiers({ leagueId, weekOrPeriod: currentWeek }).catch(() => [])
+  // Live while the week is played (lib/guillotine/chopWatch.ts): the engine's tiers ranked on last week's totals.
+  const { rows: dangerRows, live: dangerLive } = await getLiveDangerTiers({ leagueId, weekOrPeriod: currentWeek }).catch(() => ({ rows: [], live: false }))
   const dangerByRoster = new Map(dangerRows.map((d) => [d.rosterId, d]))
 
   type PeriodScoreRow = { rosterId: string; periodPoints: number; seasonPointsCumul: number }
@@ -237,7 +238,8 @@ export async function buildGuillotineWarRoomContext(
       choppedInPeriod: stateByRoster.get(t.rosterId)?.choppedInPeriod ?? null,
       rank: t.eliminated ? null : (danger?.rank ?? null),
       seasonPointsCumul: danger?.seasonPointsCumul ?? score?.seasonPointsCumul ?? 0,
-      periodPoints: score?.periodPoints ?? null,
+      // This week's score is not saved until the chop; a live row carries it.
+      periodPoints: score?.periodPoints ?? (dangerLive && danger ? danger.projectedPoints : null),
       tier,
       pointsFromChopZone: t.eliminated ? null : (danger?.pointsFromChopZone ?? null),
     }

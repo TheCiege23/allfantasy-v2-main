@@ -41,6 +41,9 @@ describe('chopWatchFromPreview', () => {
       ['a', 'chop_zone', -11.3, false],
     ])
     expect(watch.scores).toEqual({ top: 131.2, mid: 104, close: 76.9, b: 71.4, a: 60.1 })
+    // A row without season points (an older preview) reads as 0, never undefined.
+    expect(watch.seasonPoints).toEqual({ top: 0, mid: 0, close: 0, b: 0, a: 0 })
+    expect(chopWatchFromPreview(preview({ rows: [{ ...row('a', 60, 'chopped', 0), seasonPoints: 412.5 }, row('z', 90, 'safe', 30)] }), 6)!.seasonPoints).toEqual({ a: 412.5, z: 0 })
     expect(watch).toMatchObject({ week: 6, chopCount: 2, chopLine: 71.4 })
   })
 

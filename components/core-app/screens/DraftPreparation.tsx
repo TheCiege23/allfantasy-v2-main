@@ -4,78 +4,13 @@ import { saveDraftPlanningPreference } from "@/lib/core-app/draftPlanningActions
 import { draftPlanningPreference } from "@/lib/core-app/draftPlanningPreferenceModel";
 import Link from "next/link";
 import { InfoTip } from "../InfoTip";
-import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient";
+import { useMessages } from "@/components/i18n/useMessages";
+import { draftScreensMessages } from "@/lib/core-app/messages/draftScreens";
 import type { DraftPreparationData } from "@/lib/core-app/draftPreparation";
 import "@/components/core-app/af-draft-preparation.css";
 import { DraftReferences } from './DraftReferences';
 import { draftRoomHref } from "@/lib/league-chat/draftChatLink";
 
-const spanish: Record<string, string> = {
-  "Every available player is listed in the draft room.": "Todos los jugadores disponibles están en la sala del draft.",
-  "See the player pool": "Ver los jugadores disponibles",
-  "Draft preparation": "Preparación del draft",
-  "Draft-time ADP": "ADP al inicio del draft",
-  "Observed ADP rankings": "Clasificación por ADP observado",
-  "Pre-draft outlook": "Perspectiva previa al draft",
-  "Preparation checklist": "Lista de preparación",
-  "Search players": "Buscar jugadores",
-  "All positions": "Todas las posiciones",
-  Player: "Jugador",
-  Rank: "Puesto",
-  ADP: "ADP",
-  Sample: "Muestra",
-  Range: "Rango",
-  Tier: "Nivel",
-  "Roster fit": "Encaje en plantilla",
-  Position: "Posición",
-  "Next round": "Próxima ronda",
-  "Market spread": "Dispersión del mercado",
-  "ADP order": "Orden por ADP",
-  "Prefer tighter range": "Preferir menor dispersión",
-  "Prefer broader range": "Preferir mayor dispersión",
-  "Personal order": "Orden personal",
-  "Reset planning preferences": "Restablecer preferencias",
-  "Move up": "Subir",
-  "Move down": "Bajar",
-  Previous: "Anterior",
-  Next: "Siguiente",
-  Unavailable: "No disponible",
-  Team: "Equipo",
-  Score: "Puntuación",
-  "Roster / keepers": "Plantilla / conservados",
-  "Draft capital": "Capital del draft",
-  Flexibility: "Flexibilidad",
-  "Keeper costs": "Costes de conservados",
-  Round: "Ronda",
-  Pick: "Selección",
-  Difference: "Diferencia",
-  "Matching rules recorded": "Reglas compatibles registradas",
-  "Remaining queue targets": "Objetivos restantes en cola",
-  "Open a what-if mock": "Abrir simulación hipotética",
-  "Direct slot open": "Puesto directo vacante",
-  "Covered / flexible": "Cubierto / flexible",
-  "No players match these filters.":
-    "Ningún jugador coincide con estos filtros.",
-  "Platform ADP: unavailable": "ADP de plataforma: no disponible",
-  "Consensus ADP: unavailable": "ADP de consenso: no disponible",
-  "No grade is assigned when ADP is missing.":
-    "Sin ADP, no se asigna calificación.",
-  "Planning preferences sync privately to your account for this draft. They do not change your live queue or autopick.":
-    "Las preferencias se sincronizan de forma privada con tu cuenta para este draft. No cambian tu cola ni la selección automática.",
-  "Observed market order, not a projected-points ranking.":
-    "Orden del mercado observado; no es una clasificación de puntos proyectados.",
-  "Relative planning heuristic v1; not a win forecast. Equivalent fresh redraft teams tie.":
-    "Heurística relativa de planificación v1; no predice victorias. Los equipos equivalentes en redraft empatan.",
-  "Provider coverage must include matching season, rules, team count and player pool before comparison.":
-    "La cobertura debe incluir temporada, reglas, número de equipos y grupo de jugadores compatibles.",
-  "Market spread describes draft-position variability, not player performance risk.":
-    "La dispersión describe variación en la posición del draft, no el riesgo de rendimiento.",
-  "New snapshots build coverage going forward; earlier draft-day benchmarks cannot be reconstructed from current ADP.":
-    "Las nuevas instantáneas crean cobertura futura; el ADP actual no permite reconstruir referencias anteriores.",
-  "AllFantasy native observed drafts": "Drafts observados en AllFantasy",
-  Yes: "Sí",
-  No: "No",
-};
 function signed(v: number | null) {
   return v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(1);
 }
@@ -92,9 +27,8 @@ export function DraftPreparation({
   /** A finished draft has no pool left to send anyone to. */
   draftComplete?: boolean;
 }) {
-  const language = useOptionalLanguage().language,
-    es = language === "es",
-    t = (s: string) => (es ? (spanish[s] ?? s) : s);
+  const m = useMessages(draftScreensMessages),
+    t = m.prepLabel;
   const [search, setSearch] = useState(""),
     [position, setPosition] = useState(""),
     [spread, setSpread] = useState("adp"),
@@ -184,31 +118,12 @@ export function DraftPreparation({
     [keys[i], keys[j]] = [keys[j], keys[i]];
     save(keys, spread);
   };
-  const help = (title: string, en: string, sp: string) => (
-    <InfoTip label={`${es ? "Acerca de" : "About"} ${t(title)}`} title={t(title)}>
-      <span className="af-info-para">{es ? sp : en}</span>
+  const help = (title: string, text: string) => (
+    <InfoTip label={`${m.prepAbout} ${t(title)}`} title={t(title)}>
+      <span className="af-info-para">{text}</span>
     </InfoTip>
   );
-  const reasonTranslations: Record<string, string> = {
-    "No compatible observed ADP snapshot is available.":
-      "No hay una instantánea de ADP observado compatible.",
-    "Draft preparation could not be loaded. Retry this page.":
-      "No se pudo cargar la preparación. Vuelve a intentar.",
-    "Auction preparation needs observed bid prices and budgets. Pick-order ADP is not a price benchmark.":
-      "La preparación de subastas necesita precios y presupuestos observados. El ADP por selección no sirve como referencia de precio.",
-    "Scoring and roster slots must be recorded before this draft can use a matching ADP board.":
-      "Se deben registrar reglas y puestos antes de usar un ADP compatible.",
-    "This draft has no verified start time, so a draft-time ADP comparison cannot be made.":
-      "No hay hora de inicio verificada para comparar el ADP de este draft.",
-    "Historical imported ADP needs a preserved draft-time context. No upcoming draft is scheduled here.":
-      "El ADP histórico importado necesita contexto conservado. No hay un draft próximo programado aquí.",
-  };
-  const reason = data.reason
-    ? es
-      ? (reasonTranslations[data.reason] ??
-        "Esta función necesita datos compatibles adicionales.")
-      : data.reason
-    : null;
+  const reason = data.reason ? m.prepReason(data.reason) : null;
   return (
     <section
       className="af-frame af-dh-section af-prep"
@@ -219,11 +134,7 @@ export function DraftPreparation({
       <header className="af-dh-section-head">
         <h2 className="af-label">
           {t("Draft preparation")}{" "}
-          {help(
-            "Draft preparation",
-            "Preparation uses this native draft only. Imported historical sections below may describe another draft. Missing or incompatible benchmarks stay unavailable.",
-            "La preparación usa solo este draft nativo. Las secciones históricas importadas pueden corresponder a otro draft. Las referencias ausentes o incompatibles permanecen no disponibles.",
-          )}
+          {help("Draft preparation", m.prepHelpDraftPreparation)}
         </h2>
         <Link
           href={
@@ -242,7 +153,7 @@ export function DraftPreparation({
           {data.context.sport} · {data.context.season} ·{" "}
           {data.context.leagueType} · {data.context.purpose} ·{" "}
           {data.context.playerPool} · {data.context.scoring} ·{" "}
-          {data.context.teamCount} {es ? "equipos" : "teams"} ·{" "}
+          {data.context.teamCount} {m.prepTeams} ·{" "}
           {data.context.draftType}
         </p>
       )}
@@ -250,11 +161,7 @@ export function DraftPreparation({
         <details className="af-prep-rules">
           <summary>
             {t("Benchmark settings")}{" "}
-            {help(
-              "Benchmark settings",
-              "ADP is matched to these recorded scoring rules and roster slots. A benchmark for another context is never substituted.",
-              "El ADP coincide con estas reglas y puestos registrados. Nunca se sustituye con otra configuración.",
-            )}
+            {help("Benchmark settings", m.prepHelpBenchmarkSettings)}
           </summary>
           <p>
             {t("Roster slots")}:{" "}
@@ -278,11 +185,7 @@ export function DraftPreparation({
         <div>
           <h3>
             {t("Preparation checklist")}{" "}
-            {help(
-              "Preparation checklist",
-              "Checklist progress measures preparation activity, not roster strength. Queues are read without changing draft state.",
-              "La lista mide actividad de preparación, no fuerza de plantilla. Las colas se leen sin cambiar el estado del draft.",
-            )}
+            {help("Preparation checklist", m.prepHelpPreparationChecklist)}
           </h3>
           <p>
             {t("Matching rules recorded")}: {t(data.context ? "Yes" : "No")}
@@ -292,35 +195,13 @@ export function DraftPreparation({
             {data.queue.count ?? t("Unavailable")}
           </p>
           <p>
-            {es
-              ? ((
-                  {
-                    "The provider controls its own queue and autopick.":
-                      "El proveedor controla su propia cola y selección automática.",
-                    "Queue settings are unavailable.":
-                      "Las preferencias de cola no están disponibles.",
-                    "Queue or autopick settings could not be loaded. Retry this page.":
-                      "No se pudieron cargar la cola o las preferencias. Vuelve a intentar.",
-                    "Your personal autopick is disabled.":
-                      "Tu selección automática personal está desactivada.",
-                    "Chimmy queue autopick is enabled.":
-                      "La selección automática de la cola con Chimmy está activada.",
-                    "Standard autopick is enabled; it tries your live queue before fallback rules.":
-                      "La selección automática estándar está activada; usa tu cola antes de las reglas alternativas.",
-                  } as Record<string, string>
-                )[data.queue.autopick] ??
-                "Las preferencias de cola no están disponibles.")
-              : data.queue.autopick}
+            {m.prepAutopick(data.queue.autopick)}
           </p>
         </div>
         <div>
           <h3>
             {t(data.historical ? "Draft-time ADP" : "Observed ADP rankings")}{" "}
-            {help(
-              "ADP",
-              "Average draft position in matching observed drafts. Historical comparisons use the newest preserved snapshot at or before draft start. No current-ADP fallback.",
-              "Posición media en drafts observados compatibles. Las comparaciones históricas usan la última instantánea anterior al inicio. No se sustituye con ADP actual.",
-            )}
+            {help("ADP", m.prepHelpAdp)}
           </h3>
           <p>
             {t("AllFantasy native observed drafts")}
@@ -427,20 +308,14 @@ export function DraftPreparation({
             {t(
               "Market spread describes draft-position variability, not player performance risk.",
             )}{" "}
-            {help(
-              "Market spread",
-              "Standard deviation measures variation in observed pick position. Low samples (fewer than 10 observations) are labeled; one observation has no measured spread.",
-              "La desviación estándar mide variación en posición. Se indican muestras menores de 10; una observación no permite medir dispersión.",
-            )}
+            {help("Market spread", m.prepHelpMarketSpread)}
           </p>
           <p>
             {t(
               "Planning preferences sync privately to your account for this draft. They do not change your live queue or autopick.",
             )}
           </p>
-          <p role="status">{es
-            ? (({ local: "Copia local: cambia una preferencia para sincronizarla con tu cuenta.", saving: "Guardando…", saved: "Guardado en tu cuenta.", error: "No se pudo sincronizar. La copia local sigue disponible." } as Record<string, string>)[sync] ?? "")
-            : (({ local: "Local copy: change a preference to sync it to your account.", saving: "Saving…", saved: "Saved to your account.", error: "Account sync unavailable. Your local copy remains available." } as Record<string, string>)[sync] ?? "")}</p>
+          <p role="status">{m.prepSyncStatus(sync)}</p>
           <div
             className="af-prep-table"
             tabIndex={0}
@@ -457,27 +332,15 @@ export function DraftPreparation({
                   <th>{t("Range")}</th>
                   <th>
                     {t("Tier")}{" "}
-                    {help(
-                      "Tier",
-                      "Market bands group each team-count block of ADP. They are not projection tiers.",
-                      "Las bandas agrupan bloques de ADP según número de equipos. No son niveles de proyecciones.",
-                    )}
+                    {help("Tier", m.prepHelpTier)}
                   </th>
                   <th>
                     {t("Roster fit")}{" "}
-                    {help(
-                      "Roster fit",
-                      "An uncovered exact starting-position slot. Flexible eligibility and lineup optimization are not inferred.",
-                      "Puesto titular directo sin cubrir. No se infieren elegibilidad flexible ni optimización.",
-                    )}
+                    {help("Roster fit", m.prepHelpRosterFit)}
                   </th>
                   <th>
                     {t("Next round")}{" "}
-                    {help(
-                      "Next round",
-                      "Remaining same-position players within one team-count span after this player’s ADP. A market-density hint, not an availability probability.",
-                      "Jugadores restantes del mismo puesto dentro de un bloque de ADP. Indica densidad, no probabilidad de disponibilidad.",
-                    )}
+                    {help("Next round", m.prepHelpNextRound)}
                   </th>
                   {data.customRankingsEnabled && <th>{t("Personal order")}</th>}
                 </tr>
@@ -499,7 +362,7 @@ export function DraftPreparation({
                     <td>
                       {p.sampleSize}
                       {p.sampleSize < 10 && (
-                        <small>{es ? "Muestra pequeña" : "Low sample"}</small>
+                        <small>{m.prepLowSample}</small>
                       )}
                     </td>
                     <td>
@@ -558,11 +421,7 @@ export function DraftPreparation({
       )}
       <h3>
         {t("Pre-draft outlook")}{" "}
-        {help(
-          "Pre-draft outlook",
-          "Relative heuristic: keeper market strength 45%, unspent draft capital 35%, remaining-pick flexibility 20%. Components are min-max scaled 0–100 within this league; equal components are 50. Capital sums 1/sqrt(overall pick). No standings prediction. Dynasty needs existing-roster snapshots before ranking.",
-          "Heurística relativa: fuerza de conservados 45%, capital disponible 35%, flexibilidad 20%. Componentes escalados 0–100 en la liga; valores iguales son 50. Capital suma 1/raíz de selección. No predice resultados; dynasty necesita instantáneas de plantilla.",
-        )}
+        {help("Pre-draft outlook", m.prepHelpPreDraftOutlook)}
       </h3>
       <p>
         {t(
@@ -607,20 +466,14 @@ export function DraftPreparation({
         </div>
       ) : (
         <p>
-          {es
-            ? "Datos insuficientes para comparar equipos."
-            : (data.outlookReason ?? "Insufficient data to compare teams.")}
+          {m.prepOutlookReason(data.outlookReason)}
         </p>
       )}
       {!!data.keeperCosts.length && (
         <>
           <h3>
             {t("Keeper costs")}{" "}
-            {help(
-              "Keeper costs",
-              "Round costs consume picks. Positive cost-minus-ADP means a later pick is spent. This is a market comparison, not a keeper recommendation.",
-              "El coste por ronda consume selecciones. Diferencia positiva indica gasto de una selección posterior al ADP. No es recomendación de conservar.",
-            )}
+            {help("Keeper costs", m.prepHelpKeeperCosts)}
           </h3>
           <div
             className="af-prep-table"
@@ -658,11 +511,7 @@ export function DraftPreparation({
         <>
           <h3>
             {t("Draft-time ADP")}{" "}
-            {help(
-              "Difference",
-              "Overall pick minus draft-time ADP: positive = later, negative = earlier. Market discount does not prove pick quality. Missing ADP never receives a grade.",
-              "Selección global menos ADP al inicio: positivo = posterior, negativo = anterior. El descuento no demuestra calidad. Sin ADP no se asigna calificación.",
-            )}
+            {help("Difference", m.prepHelpDifference)}
           </h3>
           <p>{t("No grade is assigned when ADP is missing.")}</p>
           <div

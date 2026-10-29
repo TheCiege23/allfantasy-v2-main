@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react'
 import type { StandingsBoard } from '@/lib/core-app/standingsModel'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { messagesFor } from '@/lib/i18n/messages'
+import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 /**
@@ -35,6 +37,7 @@ export function StandingsHistoryChart({
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
+  const m = messagesFor(coreWidgetsMessages, language)
   const [hoverId, setHoverId] = useState<string | null>(null)
   const [hoverWeek, setHoverWeek] = useState<number | null>(null)
   const teams = board.teams
@@ -62,9 +65,7 @@ export function StandingsHistoryChart({
   if (weeks.length < 2) {
     return (
       <p className="af-stb-empty">
-        {language === 'es'
-          ? `El historial comienza cuando terminan dos semanas; hasta ahora ${weeks.length === 1 ? 'hay una' : 'no hay ninguna'}.`
-          : `The history starts once two weeks are final — there ${weeks.length === 1 ? 'is one' : 'are none'} so far.`}
+        {m.historyChartEmpty(weeks.length)}
       </p>
     )
   }
@@ -91,9 +92,7 @@ export function StandingsHistoryChart({
         <svg
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={language === 'es'
-            ? `${you ? `Tu ${label} por semana: ${(board.history[you.rosterId] ?? []).map((p) => `semana ${p.week} ${p[metric]}`).join(', ')}. ` : ''}La ${label} semanal de cada equipo aparece en la tabla debajo del gráfico.`
-            : `${you ? `Your ${label} by week: ${(board.history[you.rosterId] ?? []).map((p) => `week ${p.week} ${p[metric]}`).join(', ')}. ` : ''}Every team's weekly ${label} is in the table below the chart.`}
+          aria-label={m.historyChartAria(label, you ? (board.history[you.rosterId] ?? []).map((p) => ({ week: p.week, value: p[metric] })) : null)}
           onPointerMove={onMove}
           onPointerLeave={() => setHoverWeek(null)}
         >
@@ -108,7 +107,7 @@ export function StandingsHistoryChart({
           ))}
           {weeks.map((w, i) => (
             <text key={`x${w}`} className="af-stb-axis" x={x(i)} y={H - 8} textAnchor="middle">
-              {language === 'es' ? 'S' : 'W'}{w}
+              {m.historyChartWeekAbbr}{w}
             </text>
           ))}
           {hoverIdx >= 0 ? <line className="af-stb-cross" x1={x(hoverIdx)} x2={x(hoverIdx)} y1={PAD_T - 6} y2={H - PAD_B + 6} /> : null}
@@ -195,7 +194,7 @@ export function StandingsHistoryChart({
                 <th scope="col">{copy('Team')}</th>
                 {weeks.map((w) => (
                   <th key={w} scope="col" className="af-num">
-                    {language === 'es' ? 'S' : 'W'}{w}
+                    {m.historyChartWeekAbbr}{w}
                   </th>
                 ))}
               </tr>

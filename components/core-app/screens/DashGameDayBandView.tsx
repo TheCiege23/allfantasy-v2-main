@@ -5,6 +5,8 @@ import { Dash34Time, Dash34Countdown } from '@/components/core-app/screens/Dashb
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { dashGameDayBandMessages } from '@/lib/core-app/messages/dashGameDayBand'
 import { oddsText, playActionText } from '@/lib/core-app/homeBandsCopy'
 import type { PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import type { Next24Row } from '@/lib/core-app/todayStrip'
@@ -30,9 +32,6 @@ const TYPE_LABEL: Record<PlayFeedItem['type'], string> = {
   SPECIAL_TEAMS_SCORE: 'ST TD',
   TWO_POINT_CONVERSION: '2PT',
 }
-
-/** TD, FG and their DEF / ST forms are what a Spanish-language broadcast prints too; the two words are not. */
-const TYPE_LABEL_ES: Partial<Record<PlayFeedItem['type'], string>> = { BIG_PLAY: 'GRAN', TURNOVER: 'PÉRD' }
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -63,21 +62,21 @@ export function DashGameDayBandView({
 }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
-  const title = es ? 'Día de partido' : 'Game day'
+  const m = useMessages(dashGameDayBandMessages)
 
   return (
-    <section className="af-core af-gd" aria-label={title}>
+    <section className="af-core af-gd" aria-label={m.title}>
       <div className="af-gd-head">
-        <span className="af-label af-gd-kicker">{title}</span>
+        <span className="af-label af-gd-kicker">{m.title}</span>
         {record ? (
           <>
             <span className="af-gd-record af-num">
-              <b>{es ? `${record.wins} por delante` : `${record.wins} ahead`}</b>
+              <b>{m.ahead(record.wins)}</b>
               <span className="af-gd-sep">·</span>
-              <i>{es ? `${record.losses} por detrás` : `${record.losses} behind`}</i>
+              <i>{m.behind(record.losses)}</i>
               <span className="af-gd-recmeta">
                 {' '}
-                {es ? `ahora mismo · semana ${record.week}` : `right now · week ${record.week}`}
+                {m.rightNowWeek(record.week)}
               </span>
             </span>
             {/* A sibling of the record, not inside it: one "?" for the line, never per number. */}
@@ -90,14 +89,14 @@ export function DashGameDayBandView({
            * a 0–0, which reads as a day played and lost.
            */
           <span className="af-gd-recmeta">
-            {es ? 'ninguno de tus enfrentamientos ha sumado puntos todavía' : 'none of your matchups have scored yet'}
+            {m.noneScored}
           </span>
         )}
       </div>
 
       {plays.length > 0 ? (
         <p className="af-gd-scope">
-          {es ? 'Todas las jugadas de anotación de la NFL, no solo las de tus jugadores' : 'Every NFL scoring play — not only your players'}
+          {m.everyScoringPlay}
         </p>
       ) : null}
 
@@ -113,7 +112,7 @@ export function DashGameDayBandView({
                 )}
               </span>
               <span className="af-gd-type af-num" data-type={p.type}>
-                {(es ? TYPE_LABEL_ES[p.type] : null) ?? TYPE_LABEL[p.type] ?? (es ? 'JUGADA' : 'PLAY')}
+                {p.type === 'BIG_PLAY' ? m.typeBigPlay : p.type === 'TURNOVER' ? m.typeTurnover : (TYPE_LABEL[p.type] ?? m.play)}
               </span>
               <span className="af-gd-line">
                 {headlineText(p, es)}
@@ -130,7 +129,7 @@ export function DashGameDayBandView({
       */}
       {upcoming.some((row) => row.game) ? (
         <p className="af-gd-scope">
-          {es ? 'Próximas 24 horas · líneas de apuestas' : 'Next 24 hours · betting lines'} <TopicTip topic="bettingLine" />
+          {m.next24} <TopicTip topic="bettingLine" />
         </p>
       ) : null}
 
@@ -151,7 +150,7 @@ export function DashGameDayBandView({
                   {row.game ? (
                     <>
                       {/* ESPN Deportes' convention: the away side "en" the home side. */}
-                      <span>{es ? 'en' : 'at'}</span>
+                      <span>{m.at}</span>
                       {row.game.homeLogo ? <FallbackImg src={row.game.homeLogo} fallback={null} alt="" width={24} height={24} loading="lazy" /> : null}
                       <span>{row.game.home}</span>
                     </>
@@ -159,12 +158,12 @@ export function DashGameDayBandView({
                 </div>
                 {row.game ? <div className="af-gd-market">{es ? (oddsText(row.game.oddsParts) ?? row.game.odds) : row.game.odds}</div> : null}
                 <div className="af-gd-nextsub">
-                  {subText(row, es)} · {es ? 'Empieza en' : 'Starts in'} <Dash34Countdown to={row.time} initial="—" />
+                  {subText(row, es)} · {m.startsIn} <Dash34Countdown to={row.time} initial="—" />
                 </div>
               </div>
               {row.game ? (
                 <Link className="af-gd-scoring" href={row.game.href}>
-                  {es ? 'Puntuación en vivo →' : 'Live scoring →'}
+                  {m.liveScoring}
                 </Link>
               ) : null}
             </li>
