@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useHomePromptTurn } from '@/components/core-app/HomePromptSlot'
 import Link from 'next/link'
 
 /**
@@ -60,7 +61,9 @@ export function GameDayAlertsBanner() {
     setShow(true)
   }, [])
 
-  if (!show) return null
+  // One optional prompt at a time on the /core home (HomePromptSlot).
+  const turn = useHomePromptTurn('game-day-alerts', show)
+  if (!turn) return null
 
   const dismiss = () => {
     setShow(false)
