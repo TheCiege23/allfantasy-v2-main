@@ -168,6 +168,18 @@ test('recorded provider weeks score and settle NFL NBA NHL MLB @zombie-rehearsal
       const inventory = await handleZombieChimmyAction(leagueId, rosterFor(victim).platformUserId, '@chimmy inventory', 1)
       expect(inventory.ok).toBe(true)
       expect(inventory.privateMessage).toContain('Inventory')
+      const heldWeapon = await prisma.zombieTeamItem.create({ data: {
+        teamStatusId: teamFor(victim).id, zombieLeagueId: z.id, userId: rosterFor(victim).platformUserId,
+        itemType: 'weapon_knife', itemLabel: 'Knife', acquiredAtWeek: 1, acquiredReason: 'rehearsal_fixture',
+      } })
+      const blockedWeapon = await handleZombieChimmyAction(leagueId, rosterFor(victim).platformUserId, '@chimmy use knife', 1)
+      expect(blockedWeapon.ok).toBe(false)
+      expect((await prisma.zombieTeamItem.findUniqueOrThrow({ where: { id: heldWeapon.id } })).isUsed).toBe(false)
+      const whispererRecord = await prisma.whispererRecord.findUniqueOrThrow({ where: { zombieLeagueId: z.id } })
+      const blockedAmbush = await handleZombieChimmyAction(leagueId, whispererRecord.userId,
+        '@chimmy ambush swap ' + (teamFor(victim).fantasyTeamName || teamFor(victim).displayName), 1)
+      expect(blockedAmbush.ok).toBe(false)
+      expect((await prisma.whispererRecord.findUniqueOrThrow({ where: { id: whispererRecord.id } })).ambushesRemaining).toBe(whispererRecord.ambushesRemaining)
       const late = await handleZombieChimmyAction(leagueId, rosterFor(victim).platformUserId, '@chimmy use serum', 1)
       expect(late.ok).toBe(false)
       const settled = await runWeeklyResolution(z.id, 1)
@@ -192,6 +204,20 @@ test('recorded provider weeks score and settle NFL NBA NHL MLB @zombie-rehearsal
       expect(await prisma.zombieWeeklyWinnings.findMany({ where: { leagueId, week: 1 }, orderBy: { rosterId: 'asc' } })).toEqual(ledger)
       expect(await prisma.leagueChatMessage.count({ where: { zombieWeeklyAnnouncementId: announcement.id } })).toBe(1)
       expect((await prisma.zombieLeague.findUniqueOrThrow({ where: { id: z.id } })).currentWeek).toBe(2)
+      // Native inventory revival spends exactly the configured cost once, while held weapons stay with the team.
+      const config = await prisma.zombieLeagueConfig.findUniqueOrThrow({ where: { leagueId } })
+      await prisma.zombieTeamItem.createMany({ data: Array.from({ length: config.serumReviveCount }, () => ({
+        teamStatusId: teamFor(victim).id, zombieLeagueId: z.id, userId: rosterFor(victim).platformUserId,
+        itemType: 'serum_standard', itemLabel: 'Serum', acquiredAtWeek: 2, acquiredReason: 'rehearsal_fixture',
+      })) })
+      const revived = await handleZombieChimmyAction(leagueId, rosterFor(victim).platformUserId, '@chimmy revive', 2)
+      expect(revived.ok, JSON.stringify(revived)).toBe(true)
+      expect((await prisma.zombieLeagueTeam.findUniqueOrThrow({ where: { id: teamFor(victim).id } })).status).toBe('Survivor')
+      const consumed = await prisma.zombieTeamItem.count({ where: { teamStatusId: teamFor(victim).id, usedEffect: 'revive', isUsed: true } })
+      expect(consumed).toBe(config.serumReviveCount)
+      expect((await handleZombieChimmyAction(leagueId, rosterFor(victim).platformUserId, '@chimmy revive', 2)).ok).toBe(false)
+      expect(await prisma.zombieTeamItem.count({ where: { teamStatusId: teamFor(victim).id, usedEffect: 'revive', isUsed: true } })).toBe(consumed)
+      expect((await prisma.zombieTeamItem.findUniqueOrThrow({ where: { id: heldWeapon.id } })).teamStatusId).toBe(teamFor(victim).id)
       console.log(sport + ' recorded-provider replay: ' + sync.cacheRowsRead + ' game rows, 8 scores, 4 final matchups, infection, winnings and one report')
     }
   } finally {
