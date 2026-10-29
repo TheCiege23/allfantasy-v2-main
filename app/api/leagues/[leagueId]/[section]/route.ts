@@ -26,6 +26,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'ai-commissioner': () => import('../ai-commissioner/handler'),
   'ai-settings': () => import('../ai-settings/handler'),
   'audit-logs': () => import('../audit-logs/handler'),
+  'automatic-changes': () => import('../automatic-changes/handler'),
   'automation-overview': () => import('../automation-overview/handler'),
   'automation-preset': () => import('../automation-preset/handler'),
   'autocoach-settings': () => import('../autocoach-settings/handler'),

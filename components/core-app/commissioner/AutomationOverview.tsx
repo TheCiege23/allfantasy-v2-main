@@ -7,6 +7,7 @@ import type { AutomationOverviewView } from '@/lib/commissioner-hub/automationOv
 import type { AutomationGroup, AutomationRow } from '@/lib/commissioner-hub/automationOverview'
 import type { AutomationPreset, PresetPlan } from '@/lib/commissioner-hub/automationPreset'
 import { automationToggleRequest, isToggleableAutomation } from '@/lib/commissioner-hub/automationToggles'
+import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
 
 /**
  * "What runs itself" (lib/commissioner-hub/automationOverview.ts) on the Commissioner Hub: every
@@ -198,6 +199,7 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
           })}
         </>
       )}
+      <AutomaticChangesLog leagueId={leagueId} />
       <p role="status">{message}</p>
     </section>
   )
