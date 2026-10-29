@@ -556,6 +556,11 @@ export type DraftRuleInputs = {
   autostart: boolean
   orphanEnabled: boolean
   orphanMode: string | null
+  /**
+   * The current session's `devyConfig` / `c2cConfig`, raw, and whether the league is a devy or C2C
+   * (dynasty-family) league. Omitted, the college-round keys are not stated at all.
+   */
+  collegeRounds?: { applies: boolean; devy: unknown; c2c: unknown }
 }
 
 const MAIN_DRAFT_TYPES = new Set(['snake', 'linear', 'auction'])
@@ -599,5 +604,39 @@ export function draftRulesFromInputs(i: DraftRuleInputs): Partial<RuleSnapshot> 
     draftStartAt: startAt,
     draftAutostart: startAt ? i.autostart === true : null,
     draftOrphanPicks: i.orphanEnabled ? (i.orphanMode === 'ai' ? 'ai' : 'cpu') : null,
+    ...(i.collegeRounds ? collegeRoundRules(i.collegeRounds, type, posInt(i.rounds)) : {}),
   }
+}
+
+/**
+ * The rounds of the main draft set aside for college players, read the way the pick check reads them
+ * (PickSubmissionService → validateC2CEligibilityAsync / validateDevyEligibilityAsync):
+ *
+ *   - the rule is on only when the config's `enabled` is set; then a round in the list takes only a
+ *     college player (a devy-eligible player not yet pro), and every other round refuses one;
+ *   - the C2C config is checked INSTEAD of the devy config when both are on;
+ *   - a round matches by `Array.includes`, so only whole-number entries count, and a round past the
+ *     draft's last round never comes up — both are dropped here, so they never read as a rule;
+ *   - an auction never runs this check (the auction engine does not call it), so it has no such rule.
+ *
+ * `[]` is real: the rule is on with no listed round, so the check refuses every college player.
+ */
+function collegeRoundRules(
+  c: { applies: boolean; devy: unknown; c2c: unknown },
+  type: string | null,
+  maxRounds: number | null,
+): Pick<RuleSnapshot, 'draftDevyRounds' | 'draftCollegeRounds'> {
+  const off = { draftDevyRounds: null, draftCollegeRounds: null }
+  if (!c.applies || (type !== 'snake' && type !== 'linear')) return off
+  const c2c = record(c.c2c)
+  if (c2c.enabled) return { draftDevyRounds: null, draftCollegeRounds: listedRounds(c2c.collegeRounds, maxRounds) }
+  const devy = record(c.devy)
+  if (devy.enabled) return { draftDevyRounds: listedRounds(devy.devyRounds, maxRounds), draftCollegeRounds: null }
+  return off
+}
+
+function listedRounds(raw: unknown, maxRounds: number | null): number[] {
+  if (!Array.isArray(raw)) return []
+  const rounds = raw.filter((r): r is number => typeof r === 'number' && Number.isInteger(r) && r >= 1 && (maxRounds == null || r <= maxRounds))
+  return [...new Set(rounds)].sort((a, b) => a - b)
 }
