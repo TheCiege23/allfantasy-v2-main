@@ -910,11 +910,22 @@ export async function getAdminProviderHealthRows(): Promise<AdminProviderHealthR
       rates,
       sync,
     }),
+    /*
+     * ⚠ SCAFFOLD ONLY MATTERS WHEN IT IS THE SELECTED PROVIDER. This row used to pass
+     * `scaffold: true` unconditionally, so it raised a permanent Command Center warning that no
+     * configuration could clear — while production runs WORLD_CUP_DATA_PROVIDER=mock/apifootball
+     * and never touches this class. Unselected, it is `disabled` (deliberate, never an issue).
+     * Selected, it still warns: getTeams/getFixtures throw, so World Cup sync would break.
+     */
     providerRow({
       id: "sportsdata_world_cup",
       name: "SportsData.io World Cup",
       category: "World Cup soccer",
-      status: statusFromConfig({ configured: sportsDataConfigured, scaffold: true }),
+      status: statusFromConfig({
+        configured: sportsDataConfigured,
+        scaffold: worldCupOps.name === "sportsdata",
+        disabled: worldCupOps.name !== "sportsdata",
+      }),
       configured: sportsDataConfigured,
       envVars: ["SPORTSDATA_API_KEY", "SPORTSDATA_WORLD_CUP_COMPETITION_ID"],
       dataCategories: ["teams", "fixtures", "live scores"],
