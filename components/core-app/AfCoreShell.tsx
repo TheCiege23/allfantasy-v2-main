@@ -929,10 +929,10 @@ const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'matchup', 'trades']
 /*
  * ⚠ "LEAGUES" IS A BAR SLOT, NOT A LINK, AND IT TOOK LIVE'S PLACE (2026-10-29). A user on Android
  * reported that getting into their leagues was "too complicated and not straightforward": the bar
- * had no Leagues entry, the floating pill (`.af-rail-handle`) read as an action button rather than
- * navigation, and the text route was the last group of More. The tab opens the SAME league tray
- * the pill does — not /leagues, whose ProductShell chrome swaps the whole header and bar and was
- * itself part of the confusion. Trades stays pinned (see mobile-trade-access.test.ts); Live moves
+ * had no Leagues entry, the floating pill (`.af-rail-handle`, since removed) read as an action
+ * button rather than navigation, and the text route was the last group of More. The tab opens the
+ * league tray in place — not /leagues, whose ProductShell chrome swaps the whole header and bar and
+ * was itself part of the confusion. Trades stays pinned (see mobile-trade-access.test.ts); Live moves
  * to More → This week, one tap further.
  */
 const MOBILE_BAR_LEAGUES_AFTER_INDEX = 0
@@ -1490,13 +1490,14 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const liveWeek = Object.values(liveRail.scores).find((s) => !s.native)?.week
   const railWeekLabel = liveWeek ? `Week ${liveWeek}` : props.railWeekLabel
   const railRef = useRef<HTMLElement>(null)
-  const railHandleRef = useRef<HTMLButtonElement>(null)
   /*
-   * The DESKTOP control that replaces the phone handle above 720px, and so the
-   * only sane place for focus to land when the viewport widens with the tray
-   * open. The handle itself is `display: none` by then — still mounted, which is
-   * exactly why the overlay hook's old `isConnected` check waved it through and
-   * focus fell to <body>.
+   * The tray's own header row: its ✕ close control on a phone, and the DESKTOP
+   * collapse toggle above 720px. So it is where focus starts when the tray
+   * opens, and the only sane place for focus to land when the viewport widens
+   * with the tray open — the phone's opener (the bar's Leagues tab) is
+   * `display: none` by then, still mounted, which is exactly why the overlay
+   * hook's old `isConnected` check waved such an opener through and focus fell
+   * to <body>.
    */
   const railToggleRef = useRef<HTMLButtonElement>(null)
   const [phoneLayout, setPhoneLayout] = useState(false)
@@ -1507,8 +1508,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const railScrollRef = useRef<HTMLDivElement>(null)
   const railLayout: RailLayout | null = !layoutKnown ? null : phoneLayout ? 'tray' : railOpen ? 'open' : 'collapsed'
   useRailScrollMemory(railScrollRef, railLayout, props.selectedLeagueId ?? null)
-  /** The tray's close control lives outside the tray — see the hook call below. */
-  const railKeepRefs = useMemo(() => [railHandleRef], [])
 
   /*
    * The phone tray covers the screen, so it is modal: focus and scrolling stay
@@ -1526,17 +1525,15 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * walking that overlay's ancestor chain — so the tray still inerts the shell
    * when the tray is on top, and stops doing so the moment a card opens above it.
    *
-   * `keepInteractiveRefs` is what preserves this tray's one unusual property:
-   * its close control is the handle, which is rendered as a SIBLING of the tray
-   * rather than inside it. It stays out of the inert sweep and stays at the end
-   * of the Tab cycle, exactly as the hand-rolled version had it.
+   * The tray no longer needs `keepInteractiveRefs`: its close control used to
+   * be the floating handle, a SIBLING of the tray kept out of the inert sweep.
+   * The handle is gone, and the ✕ header row inside the tray is the way out.
    */
   useOverlayContainment({
     active: mobileRailOpen,
     containerRef: railRef,
     onClose: () => setRailChoice('closed'),
-    initialFocusRef: railHandleRef,
-    keepInteractiveRefs: railKeepRefs,
+    initialFocusRef: railToggleRef,
     restoreFallbackRef: railToggleRef,
   })
 
@@ -1681,28 +1678,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       </a>
 
       {/*
-        ⚠ THE MOBILE HANDLE IS OUTSIDE THE RAIL, NOT INSIDE IT. Below 720px the
-        rail becomes a full-screen tray; a handle rendered inside it would be
-        inside the thing it opens. Hidden above 720px, where the rail's own
-        header carries the toggle.
+        ⚠ THERE IS NO FLOATING "LEAGUES" PILL ANY MORE (2026-10-29). The phone opens the league tray
+        from the bar's Leagues tab (`af-tabbar-leagues`), or the league name in the league-first
+        top bar; the tray closes from its own ✕ header row (`.af-rail-toggle`). The pill was the
+        tray's only labelled entry for a long time, and users read it as an action button.
       */}
-      <button
-        type="button"
-        className="af-rail-handle"
-        ref={railHandleRef}
-        aria-label={railOpen ? (language === 'es' ? 'Cerrar ligas' : 'Close leagues') : (language === 'es' ? 'Abrir ligas' : 'Open leagues')}
-        aria-expanded={railOpen}
-        aria-controls="af-rail"
-        onClick={toggleRail}
-      >
-        <span className="af-rail-handle-mark">
-          <AfCrest size={20} tone="inherit" />
-        </span>
-        <span className="af-rail-handle-text">
-          {railOpen ? copy('Close') : selectedLeagueName ?? copy('Leagues')}
-        </span>
-      </button>
-
       {/* ── League rail ─────────────────────────────────────────────── */}
       <nav
         ref={railRef}
@@ -1741,7 +1721,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           /*
            * On a phone this row IS the tray's header and its way out, so it says "close" and draws a ✕
            * (moved to the right edge by af-core-shell.css) rather than the desktop's « collapse arrow.
-           * The floating handle still closes it too; this is the control a reader looks for at the top.
+           * It is the tray's only close control on a phone (with Escape and the scrim-free full-screen
+           * tray, there is nothing else to tap), so it is also where focus starts when the tray opens.
            */
           aria-label={mobileRailOpen ? (language === 'es' ? 'Cerrar ligas' : 'Close leagues') : undefined}
           title={
@@ -2101,7 +2082,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             Reported from a real phone as "the AF crest is not shown anywhere".
             It was drawn in exactly two places, and below 720px neither is on
             screen: `.af-rail-logo` lives inside the rail, which becomes a
-            full-screen tray you have to OPEN to see, and `.af-rail-handle`
+            full-screen tray you have to OPEN to see, and `.af-rail-handle` (since removed)
             carries a 20px mark that reads as part of a "LEAGUES" pill rather
             than as the product's mark. So a phone user never saw the brand on
             any screen without opening a tray first.
