@@ -51,6 +51,7 @@ type UniverseHubPayload = {
     levels?: LevelRow[]
     leagues: HubLeague[]
   }
+  seasons: number[]
   counts: { survivorCount: number; zombieCount: number; whispererCount: number; leagueCount: number }
   animations: Array<{
     id: string
@@ -74,15 +75,16 @@ type UniverseHubPayload = {
 export default function ZombieUniverseHubPage() {
   const { universeId } = useParams<{ universeId: string }>() ?? ({} as { universeId: string })
   const [data, setData] = useState<UniverseHubPayload | null>(null)
+  const [selectedSeason, setSelectedSeason] = useState<number | null>(null)
   const router = useRouter()
 
   useEffect(() => {
     if (!universeId) return
-    fetch(`/api/zombie/universe-hub?universeId=${encodeURIComponent(universeId)}`, { credentials: 'include' })
+    fetch(`/api/zombie/universe-hub?universeId=${encodeURIComponent(universeId)}${selectedSeason ? '&season='+selectedSeason : ''}`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
       .then(setData)
       .catch(() => setData(null))
-  }, [universeId])
+  }, [universeId, selectedSeason])
 
   // Solo zombie universes (single_gamma tier) skip the universe hub entirely —
   // there's nothing to commission across multiple leagues, so route the user
@@ -213,6 +215,12 @@ export default function ZombieUniverseHubPage() {
       </section>
 
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
+        {data.seasons?.length > 1 && <label className="flex items-center gap-3 text-sm text-white/80">
+          Season
+          <select aria-label="Universe season" className="min-h-[44px] rounded-lg border border-white/20 bg-slate-950 px-3 text-base" value={u.season} onChange={event=>setSelectedSeason(Number(event.target.value))}>
+            {data.seasons.map(year=><option key={year} value={year}>{year}</option>)}
+          </select>
+        </label>}
         <ZombieUniverseRenewalPanel key={u.id+':'+u.season} universeId={u.id} season={u.season} />
         <CommissionerFeederGrid
           leagues={feederCards}

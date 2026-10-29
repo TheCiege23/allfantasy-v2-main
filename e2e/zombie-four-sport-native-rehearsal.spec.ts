@@ -298,6 +298,11 @@ test('four-sport universe allocations use finished native standings and record o
             wins: 8-i, losses: i, pointsFor: 800-i*40,
           } })
         }
+        await prisma.zombieLeague.update({where:{id:z.id},data:{isPaid:true,potTotal:250}})
+        await prisma.zombiePaidConfig.create({data:{zombieLeagueId:z.id,buyInAmount:25,totalPot:250,totalCollected:250,totalPaidOut:25,paidUserIds:[userIds[1+levelIndex*8]],potIsLocked:true}})
+        await prisma.zombieResourceLedger.create({data:{leagueId,zombieLeagueId:z.id,rosterId:rosters[0].id,resourceType:'serum',balance:2,awardedInWeek:1}})
+        await prisma.zombieWeeklyWinnings.create({data:{leagueId,zombieLeagueId:z.id,rosterId:rosters[0].id,week:1,amount:25}})
+        await prisma.whispererRecord.create({data:{zombieLeagueId:z.id,userId:userIds[1+levelIndex*8],displayName:'Past Whisperer',selectionMode:'random',ambushesUsed:3,ambushesRemaining:0}})
         await prisma.zombieWeeklyResolution.create({ data: {
           zombieLeagueId: z.id, week: 1, status: 'complete', resolvedAt: new Date(), matchupResults: [], newZombies: [],
         } })
@@ -386,7 +391,14 @@ test('four-sport universe allocations use finished native standings and record o
         expect(await prisma.zombieLeague.findUniqueOrThrow({where:{leagueId:next.leagueId}})).toMatchObject({season:2027,status:'setup',currentWeek:0,potTotal:0})
         expect(await prisma.zombieLeagueTeam.count({where:{leagueId:next.leagueId}})).toBe(0)
         expect(await prisma.zombieResourceLedger.count({where:{leagueId:next.leagueId}})).toBe(0)
+        expect(await prisma.zombieResourceLedger.count({where:{leagueId:next.previousLeagueId,balance:2}})).toBe(1)
+        const newZombie=await prisma.zombieLeague.findUniqueOrThrow({where:{leagueId:next.leagueId}})
+        expect(await prisma.whispererRecord.count({where:{zombieLeagueId:newZombie.id}})).toBe(0)
+        expect(await prisma.zombiePaidConfig.findUniqueOrThrow({where:{zombieLeagueId:newZombie.id}})).toMatchObject({
+          buyInAmount:25,totalPot:0,totalCollected:0,totalPaidOut:0,paidUserIds:[],potIsLocked:false,
+        })
         expect(await prisma.zombieWeeklyWinnings.count({where:{leagueId:next.leagueId}})).toBe(0)
+        expect((await prisma.zombieWeeklyWinnings.findFirstOrThrow({where:{leagueId:next.previousLeagueId}})).amount).toBe(25)
         const oldConfig=await prisma.zombieLeagueConfig.findUniqueOrThrow({where:{leagueId:next.previousLeagueId}})
         expect(await prisma.zombieLeagueConfig.findUniqueOrThrow({where:{leagueId:next.leagueId}})).toMatchObject({serumReviveCount:oldConfig.serumReviveCount,autoSerumRevive:oldConfig.autoSerumRevive,zombieTradeBlocked:oldConfig.zombieTradeBlocked})
       }

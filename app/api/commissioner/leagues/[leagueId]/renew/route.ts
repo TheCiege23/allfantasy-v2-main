@@ -86,6 +86,7 @@ export async function GET(
     select: {
       userId: true, season: true, sport: true, isDynasty: true,
       leagueVariant: true, status: true, settings: true, scoring: true,
+      zombieLeague: { select: { universeId: true } },
       name: true, leagueSize: true,
       lifecycleState: true, lifecycleMetadata: true,
       teams: {
@@ -204,6 +205,9 @@ export async function GET(
     }),
     lifecycleState: league.lifecycleState,
     tournamentFeeder,
+    zombieRenewal: league.zombieLeague || league.leagueVariant === 'zombie' ? {
+      renewFromHubPath: league.zombieLeague?.universeId ? '/zombie/universe/' + league.zombieLeague.universeId : '/league/' + leagueId + '/zombie-commissioner',
+    } : null,
     draftTeams,
     draftOrderModes: RENEW_DRAFT_ORDER_MODES,
     defaultDraftOrder: resolveRenewDraftOrderMode(savedDraftOrderMethod) ?? 'standings',

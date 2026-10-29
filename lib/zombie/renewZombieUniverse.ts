@@ -149,7 +149,7 @@ export async function renewZombieUniverse(universeId: string, season: number, ac
       const body: ValidatedCreateLeagueBody = {
         concept: 'zombie', sport: old.sport, teamCount: z.teamCount, draftType: draft.draftType,
         scoringPreset: old.scoringPresetId || ({ NFL: 'fb_half_ppr', NBA: 'nba_points', NHL: 'nhl_points', MLB: 'mlb_points' } as Record<string,string>)[old.sport],
-        leagueName: name.slice(0,100), timezone: old.timezone || 'America/New_York', language: old.language || 'en', conceptSetup: {},
+        leagueName: name.slice(0,100), timezone: old.timezone || 'America/New_York', language: old.language === 'es' ? 'es' : 'en', conceptSetup: {},
       }
       const engine = runPresetEngine({ concept: 'zombie', sport: old.sport, teamCount: z.teamCount,
         draftType: draft.draftType, scoringPreset: body.scoringPreset, leagueName: body.leagueName, commissionerId: actor, conceptSetup: {} })
@@ -161,7 +161,8 @@ export async function renewZombieUniverse(universeId: string, season: number, ac
         draftSettings: { draftType: draft.draftType, rounds: draft.rounds, timerSeconds: draft.timerSeconds, thirdRoundReversal: draft.thirdRoundReversal },
         foundation_defaults: { ...(base.foundation_defaults as Prisma.JsonObject), ...(policy.settings.foundation_defaults as Prisma.JsonObject),
           draft: { draftType: draft.draftType, rounds: draft.rounds, timerSeconds: draft.timerSeconds } },
-        draft_rounds: draft.rounds, draft_type: draft.draftType, draft_timer_seconds: draft.timerSeconds,
+        draft_rounds: draft.rounds, draft_type: draft.draftType, requested_draft_type: draft.draftType, draft_timer_seconds: draft.timerSeconds,
+        third_round_reversal: draft.thirdRoundReversal, draft_third_round_reversal: draft.thirdRoundReversal,
       } as Prisma.InputJsonValue
       await tx.league.update({ where: { id: leagueId }, data: { ...policy.leagueRules, settings,
         starters: old.starters == null ? Prisma.DbNull : old.starters as Prisma.InputJsonValue,
@@ -212,7 +213,7 @@ export async function renewZombieUniverse(universeId: string, season: number, ac
       })
       await tx.leagueSettings.update({ where: { leagueId }, data: {
         ...detachedPolicy(old.leagueSettings!, ['draftDateUtc','autostart','draftOrderSlots','draftOrderLocked','draftOrderMethod','randomizeCount','randomizeHistory','resetHistory','updatedBy','keeperSlots']),
-        draftDateUtc: null, autostart: false, draftOrderSlots: slotOrder, draftOrderLocked: false, draftOrderMethod: 'manual',
+        draftDateUtc: null, autostart: false, alphabeticalSort: false, draftOrderSlots: slotOrder, draftOrderLocked: false, draftOrderMethod: 'manual',
       } })
       const nextDraft = await tx.draftSession.findFirstOrThrow({ where: { leagueId } })
       await tx.draftSession.update({ where: { id: nextDraft.id }, data: {

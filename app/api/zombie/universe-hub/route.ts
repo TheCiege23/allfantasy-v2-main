@@ -24,6 +24,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const seasonRows = await prisma.zombieLeague.groupBy({ by: ['season'], where: { universeId }, orderBy: { season: 'desc' } })
   const latest = await prisma.zombieLeague.aggregate({ where: { universeId }, _max: { season: true } })
   const rawSeason = searchParams.get('season')
   if (rawSeason != null && !/^\d{4}$/.test(rawSeason)) return NextResponse.json({ error: 'Invalid season' }, { status: 400 })
@@ -77,6 +78,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     universe: { ...u, season },
+    seasons: seasonRows.map(r => r.season),
     counts: { survivorCount, zombieCount, whispererCount, leagueCount: u.leagues.length },
     animations,
     announcements,
