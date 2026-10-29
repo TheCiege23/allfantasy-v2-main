@@ -125,4 +125,24 @@ describe('What changed', () => {
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
     expect(container.innerHTML).toBe('')
   })
+
+  it('hands off to Chimmy with the question typed in, scoped to the league, and closing counts as seen', async () => {
+    mockFetch(buildRulesExplainerView({ snapshot, events: [], seen: EMPTY_LEAGUE_RULES_SEEN, viewerUserId: 'm', isCommissioner: false, broadcastsEnabled: true }))
+    render(<LeagueRulesHomeHost leagueId="L1" />)
+    await screen.findByTestId('league-rules-modal')
+    const chimmy = screen.getByTestId('league-rules-ask-chimmy') as HTMLAnchorElement
+    const { translations } = await import('@/lib/i18n/translations')
+    expect(chimmy.getAttribute('href')).toBe(`/chimmy/chat?prompt=${encodeURIComponent(translations.en['leagueRules.ui.chimmyPrompt']!)}&leagueId=L1`)
+    fireEvent.click(chimmy)
+    await waitFor(() => expect(posts).toEqual([{ kind: 'rules' }]))
+  })
+
+  it('the imported-league shell gets its own button styling, not the native one', async () => {
+    mockFetch(buildRulesExplainerView({ snapshot: { ...snapshot, importedFrom: 'sleeper' }, events: [], seen: { ...EMPTY_LEAGUE_RULES_SEEN, rulesSeenAt: '2026-10-01T00:00:00.000Z' }, viewerUserId: 'm', isCommissioner: false, broadcastsEnabled: true }))
+    render(<LeagueRulesHomeHost leagueId="L1" variant="classic" />)
+    const button = await screen.findByTestId('league-rules-open')
+    expect(button.className).not.toContain('nl-button')
+    fireEvent.click(button)
+    expect((await screen.findByTestId('league-rules-modal')).textContent).toContain('This league runs on Sleeper.')
+  })
 })

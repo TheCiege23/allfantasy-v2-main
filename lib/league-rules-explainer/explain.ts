@@ -43,6 +43,12 @@ const FAAB_ON_CHOP = new Set(['keep', 'split'])
 const IMMUNITY = new Set(['off', 'top_scorer'])
 const TIEBREAKS = new Set(['bench_points', 'season_points', 'previous_period', 'draft_slot', 'commissioner', 'random'])
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
+const KEEPER_COSTS = new Set(['round_based', 'inflation', 'auction_value', 'free'])
+const PLATFORMS = new Set(['sleeper', 'espn', 'yahoo', 'mfl', 'fleaflicker', 'fantrax', 'cbs'])
+
+type TaxiSteal = { hours: number; claims: number }
+const isTaxiSteal = (v: unknown): v is TaxiSteal =>
+  !!v && typeof v === 'object' && isPosInt((v as TaxiSteal).hours) && isNum((v as TaxiSteal).claims) && Number.isInteger((v as TaxiSteal).claims) && (v as TaxiSteal).claims >= 0
 
 /** The stats worth a line per sport, in reading order. Keys are the scoring engine's stat keys. */
 export const HEADLINE_STATS: Record<string, readonly string[]> = {
@@ -99,6 +105,12 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       case 'chopSteps':
       case 'chopOverrides':
         return text('v.noSpecialWeeks')
+      case 'taxiStealing':
+        return text('v.off')
+      case 'taxiMaxYears':
+        return text('v.noLimit')
+      case 'taxiDeadlineWeek':
+        return text('v.noDeadline')
       default:
         return null
     }
@@ -131,7 +143,25 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       return isNum(value) && Number.isInteger(value) && value >= 0 && value <= 23 ? text('v.hourOfDay', { h: value }) : null
     case 'medianGame':
     case 'thirdPlaceGame':
+    case 'pickTrading':
+    case 'pickTerms':
       return typeof value === 'boolean' ? text(value ? 'v.on' : 'v.off') : null
+    case 'keeperCount':
+      return isNum(value) && Number.isInteger(value) && value >= 0 ? plural('v.players', value) : null
+    case 'keeperMaxYears':
+    case 'taxiMaxYears':
+    case 'taxiEligibilityYears':
+      return isPosInt(value) ? plural('v.seasons', value) : null
+    case 'taxiSlots':
+      return isNum(value) && Number.isInteger(value) && value >= 0 ? text('v.count', { n: value }) : null
+    case 'taxiDeadlineWeek':
+      return isPosInt(value) ? week(value) : null
+    case 'keeperCost':
+      return typeof value === 'string' && KEEPER_COSTS.has(value) ? text(`keeperCost.${value}`) : null
+    case 'pickTradeDeadline':
+      return value === 'same' || value === 'open' ? text(`pickDeadline.${value}`) : isPosInt(value) ? text('pickDeadline.week', { week: value }) : null
+    case 'taxiStealing':
+      return isTaxiSteal(value) ? plural('v.protectHours', value.hours) : null
     case 'tradeDeadlineAt':
       return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? text('v.date', { date: { date: value } }) : null
     case 'waiverType':
@@ -334,28 +364,89 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
   ])
 }
 
-/** The full rules popup: one section per area, empty sections dropped. */
+function keeperLines(s: RuleSnapshot): RuleLine[] {
+  const cost = s.keeperCost && KEEPER_COSTS.has(s.keeperCost) ? s.keeperCost : null
+  return compact([
+    line('keeper-count', isNum(s.keeperCount) && Number.isInteger(s.keeperCount) && s.keeperCount > 0 ? plural('keeper.count', s.keeperCount) : null),
+    line('keeper-cost', cost ? text(`keeper.cost.${cost}`) : null),
+    line('keeper-years', isPosInt(s.keeperMaxYears) ? plural('keeper.maxYears', s.keeperMaxYears) : null),
+  ])
+}
+
+function dynastyLines(s: RuleSnapshot): RuleLine[] {
+  const slots = isNum(s.taxiSlots) && Number.isInteger(s.taxiSlots) ? s.taxiSlots : null
+  const steal = isTaxiSteal(s.taxiStealing) ? s.taxiStealing : null
+  return compact([
+    line('dynasty-carryover', text('dynasty.carryover')),
+    line('dynasty-taxi', slots == null ? null : slots > 0 ? plural('dynasty.taxi', slots) : text('dynasty.noTaxi')),
+    line('dynasty-taxi-eligible', slots && isPosInt(s.taxiEligibilityYears) ? plural('dynasty.taxiEligible', s.taxiEligibilityYears) : null),
+    line('dynasty-taxi-years', slots && isPosInt(s.taxiMaxYears) ? plural('dynasty.taxiMaxYears', s.taxiMaxYears) : null),
+    line('dynasty-taxi-deadline', slots && isPosInt(s.taxiDeadlineWeek) ? text('dynasty.taxiDeadline', { week: s.taxiDeadlineWeek }) : null),
+    line(
+      'dynasty-taxi-stealing',
+      slots && steal ? (steal.claims > 0 ? plural('dynasty.taxiStealing', steal.claims, { hours: steal.hours }) : text('dynasty.taxiStealingUnlimited', { hours: steal.hours })) : null,
+    ),
+  ])
+}
+
+/** Pick rules, in the trades section of a keeper or dynasty league. */
+function pickLines(s: RuleSnapshot): RuleLine[] {
+  if (s.format !== 'keeper' && s.format !== 'dynasty') return []
+  if (s.pickTrading !== true) return compact([line('trades-picks', s.pickTrading === false ? text('trades.picks.off') : null)])
+  const pd = s.pickTradeDeadline
+  return compact([
+    line('trades-picks', text('trades.picks.on')),
+    line('trades-pick-deadline', pd === 'open' ? text('trades.pickDeadline.open') : isPosInt(pd) ? text('trades.pickDeadline.week', { week: pd }) : null),
+    line('trades-pick-terms', s.pickTerms === true ? text('trades.pickTerms') : null),
+  ])
+}
+
+function overviewFormat(s: RuleSnapshot): RuleText | null {
+  // A named concept (Devy, C2C, Survivor…) says more than its format; the format sentence otherwise.
+  if (s.concept) return text(`overview.concept.${s.concept}`)
+  return s.format ? text(`overview.format.${s.format}`) : null
+}
+
+function overviewImported(s: RuleSnapshot): RuleText | null {
+  if (!s.importedFrom) return null
+  return PLATFORMS.has(s.importedFrom) ? text('overview.imported', { platform: text(`platform.${s.importedFrom}`) }) : text('overview.importedGeneric')
+}
+
+/**
+ * The full rules popup: one section per area, empty sections dropped.
+ *
+ * ⚠ WHAT A FORMAT HAS DECIDES WHAT IS SAID. A specialty game (Survivor, Big Brother…) plays its own
+ * trades, waivers and finale, so it gets the basics, scoring and roster only; best ball sets no
+ * lineups; an imported league states only what its import carries. Saying "no trade deadline" for a
+ * league whose deadline simply is not read here would be a rule nobody set.
+ */
 export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): RuleSection[] {
   const format = s.format
+  const imported = Boolean(s.importedFrom)
+  const seasonal = format === 'redraft' || format === 'keeper' || format === 'dynasty'
   const overview = compact([
-    line('overview-commissioner', ctx.isCommissioner ? text('overview.commissionerPreview') : null),
+    line('overview-commissioner', ctx.isCommissioner && !imported ? text('overview.commissionerPreview') : null),
+    line('overview-imported', overviewImported(s)),
     line('overview-teams', isPosInt(s.teamCount) ? plural('overview.teams', s.teamCount) : null),
-    line('overview-format', format ? text(`overview.format.${format}`) : null),
-    line('overview-median', format === 'redraft' && s.medianGame === true ? text('overview.median') : null),
+    line('overview-format', overviewFormat(s)),
+    line('overview-median', seasonal && s.medianGame === true ? text('overview.median') : null),
   ])
   const lineups =
-    (s.sport === 'NBA' || s.sport === 'NHL') && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
+    !imported && format !== 'best_ball' && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
       ? [{ id: 'lineups-mode', text: text(`lineups.${s.lineupMode}`) }]
       : []
+  const ownRules = !imported && format !== 'specialty' && format !== 'best_ball'
   const sections: RuleSection[] = [
     { id: 'overview', title: text('section.overview'), lines: overview },
-    ...(format === 'guillotine' ? [{ id: 'guillotine' as const, title: text('section.guillotine'), lines: guillotineLines(s) }] : []),
+    ...(format === 'guillotine' && !imported ? [{ id: 'guillotine' as const, title: text('section.guillotine'), lines: guillotineLines(s) }] : []),
     { id: 'scoring', title: text('section.scoring'), lines: scoringLines(s) },
     { id: 'roster', title: text('section.roster'), lines: rosterLines(s) },
     { id: 'lineups', title: text('section.lineups'), lines: lineups },
-    ...(format === 'redraft' ? [{ id: 'playoffs' as const, title: text('section.playoffs'), lines: playoffLines(s) }] : []),
-    { id: 'trades', title: text('section.trades'), lines: tradeLines(s) },
-    { id: 'waivers', title: text('section.waivers'), lines: waiverLines(s, format) },
+    ...(format === 'keeper' && !imported ? [{ id: 'keeper' as const, title: text('section.keeper'), lines: keeperLines(s) }] : []),
+    ...(format === 'dynasty' && !imported ? [{ id: 'dynasty' as const, title: text('section.dynasty'), lines: dynastyLines(s) }] : []),
+    ...(seasonal && (!imported || isPosInt(s.playoffTeams)) ? [{ id: 'playoffs' as const, title: text('section.playoffs'), lines: playoffLines(s) }] : []),
+    ...(ownRules ? [{ id: 'trades' as const, title: text('section.trades'), lines: [...tradeLines(s), ...pickLines(s)] }] : []),
+    ...(ownRules ? [{ id: 'waivers' as const, title: text('section.waivers'), lines: waiverLines(s, format) }] : []),
   ]
   return sections.filter((section) => section.lines.length > 0)
 }
@@ -425,6 +516,25 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       return typeof after === 'string' && TRADE_REVIEWS.has(after) ? text(`trades.review.${after}`) : null
     case 'thirdPlaceGame':
       return after === true ? text('playoffs.thirdPlace') : null
+    case 'keeperCount':
+      if (d != null && d > 0) return plural('change.keeperCount.more', d)
+      if (d != null && d < 0) return plural('change.keeperCount.fewer', -d)
+      return null
+    case 'keeperCost':
+      return typeof after === 'string' && KEEPER_COSTS.has(after) ? text(`keeper.cost.${after}`) : null
+    case 'pickTrading':
+      return typeof after === 'boolean' ? text(after ? 'trades.picks.on' : 'trades.picks.off') : null
+    case 'pickTerms':
+      return typeof after === 'boolean' ? text(after ? 'trades.pickTerms' : 'change.pickTerms.off') : null
+    case 'pickTradeDeadline':
+      return after === 'open' ? text('trades.pickDeadline.open') : after === 'same' ? text('change.pickDeadline.same') : isPosInt(after) ? text('trades.pickDeadline.week', { week: after }) : null
+    case 'taxiSlots':
+      if (d != null && d > 0) return plural('change.taxiSlots.more', d)
+      if (d != null && d < 0) return plural('change.taxiSlots.fewer', -d)
+      return null
+    case 'taxiStealing':
+      if (isTaxiSteal(after)) return after.claims > 0 ? plural('dynasty.taxiStealing', after.claims, { hours: after.hours }) : text('dynasty.taxiStealingUnlimited', { hours: after.hours })
+      return after === null ? text('change.taxiStealing.off') : null
     default:
       return null
   }

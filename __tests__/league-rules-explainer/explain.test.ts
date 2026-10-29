@@ -1,7 +1,8 @@
 /**
  * The league rules explainer (lib/league-rules-explainer): hand-written, deterministic lines for
- * NFL / NBA / NHL redraft and guillotine leagues, in English and Spanish, built with the app's own
- * translations. Unknown keys and values are omitted — never shown raw.
+ * redraft and guillotine leagues, in English and Spanish, built with the app's own translations.
+ * Unknown keys and values are omitted — never shown raw. The other formats, sports and imported
+ * leagues are in ./all-formats.test.ts.
  */
 import { describe, expect, it } from 'vitest'
 import { translations } from '@/lib/i18n/translations'
@@ -124,16 +125,21 @@ function withGuillotineConfig(row: RulesLeagueRow): RuleSnapshot {
 }
 
 describe('scope', () => {
-  it('covers native NFL / NBA / NHL redraft and guillotine leagues only', () => {
+  // Widened 2026-10-28 (owner): every hosted sport and every format; imported leagues are served
+  // separately (isImportedRulesLeague) and covered in ./all-formats.test.ts.
+  it('covers every native league in a hosted sport whose format it can name', () => {
     expect(isRulesExplainerLeague(NFL_REDRAFT)).toBe(true)
     expect(isRulesExplainerLeague(NBA_REDRAFT)).toBe(true)
     expect(isRulesExplainerLeague(guillotineRow('NHL'))).toBe(true)
-    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, sport: 'MLB' })).toBe(false)
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, sport: 'MLB' })).toBe(true)
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueType: 'dynasty' })).toBe(true)
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueVariant: 'survivor' })).toBe(true)
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, bestBallMode: true })).toBe(true)
     expect(isRulesExplainerLeague({ ...NFL_REDRAFT, platform: 'sleeper' })).toBe(false)
-    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueType: 'dynasty' })).toBe(false)
-    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueVariant: 'survivor' })).toBe(false)
-    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, bestBallMode: true })).toBe(false)
-    expect(resolveRulesFormat({ leagueType: 'redraft', leagueVariant: 'survivor_guillotine', guillotineMode: true })).toBeNull()
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, sport: 'CRICKET' })).toBe(false)
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueType: 'mystery' })).toBe(false)
+    // Survivor Guillotine is Survivor's game, not a guillotine league.
+    expect(resolveRulesFormat({ leagueType: 'redraft', leagueVariant: 'survivor_guillotine', guillotineMode: true })).toBe('specialty')
   })
 })
 
