@@ -77,6 +77,8 @@ test('recorded provider weeks score and settle NFL NBA NHL MLB @zombie-rehearsal
       await prisma.league.update({ where: { id: leagueId }, data: { season: 2026 } })
       const rosters = await prisma.roster.findMany({ where: { leagueId }, orderBy: { id: 'asc' } })
       expect(rosters).toHaveLength(8)
+      // Keep the existing commissioner seat at index zero before assigning the other fixture managers.
+      rosters.sort((a, b) => Number(b.platformUserId === userIds[0]) - Number(a.platformUserId === userIds[0]))
       const season = await prisma.redraftSeason.create({ data: {
         leagueId, sport, season: 2026, status: 'active', currentWeek: 1, totalWeeks: 2, playoffStartWeek: 3,
       } })
