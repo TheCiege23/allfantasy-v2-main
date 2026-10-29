@@ -6,7 +6,7 @@ import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConf
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { HEADLINE_STATS } from './explain'
-import { dynastyRulesFromConfig, normalizeRosterSlots, ruleSnapshotFromLeague, type RulesLeagueRow } from './snapshot'
+import { dynastyRulesFromConfig, normalizeRosterSlots, ruleSnapshotFromLeague, taxiRulesFromEffective, type RulesLeagueRow } from './snapshot'
 import { parseSettingsChangeEvents } from './view'
 import type { RuleSnapshot, SettingsChangeEvent } from './types'
 
@@ -39,11 +39,7 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
   ])
   if (rookieDraft) Object.assign(snapshot, rookieDraft)
 
-  if (taxi) {
-    snapshot.taxiSlots = taxi.taxiSlotCount
-    snapshot.taxiEligibilityYears = taxi.taxiEligibilityYears
-    snapshot.taxiDeadlineWeek = taxi.taxiDeadlineWeek
-  }
+  if (taxi) Object.assign(snapshot, taxiRulesFromEffective(taxi))
 
   const rosterSlots = normalizeRosterSlots(slots)
   if (rosterSlots) snapshot.rosterSlots = rosterSlots
