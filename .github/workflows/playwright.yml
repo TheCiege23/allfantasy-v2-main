@@ -356,7 +356,45 @@ jobs:
         PLAYWRIGHT_SERVER_NODE_OPTIONS: --max-old-space-size=8192
         # Audited phone routes only: keep unrelated admin/core bundles out of this server.
         E2E_WARM_ROUTES: /,/login,/pricing,/e2e/draft-room,/dev/league-mobile-preview,/dev/tournament-invite-readiness,/zombie/e2e-zombie-phone-league,/zombie/e2e-zombie-phone-league/items
-      run: npm run test:e2e:mobile -- --reporter=line,html
+      # A long-lived dev server restarted under memory pressure on 2026-10-29.
+      # Give each route family a fresh server, as the draft regression lane does.
+      # Every mobile spec stays assigned once; both devices and @db exclusion stay intact.
+      run: |
+        mapfile -t all_specs < <(rg --files e2e/mobile | rg '\.spec\.ts$' | sort)
+        draft_specs=()
+        layout_specs=()
+        general_specs=()
+        for spec in "${all_specs[@]}"; do
+          case "$spec" in
+            e2e/mobile/draft-room-usability.spec.ts|e2e/mobile/league-draft-polish.spec.ts|e2e/mobile/league-layout-settings.spec.ts|e2e/mobile/zombie-commissioner-accessibility.spec.ts)
+              draft_specs+=("$spec") ;;
+            e2e/mobile/iphone-safe-area-layout.spec.ts|e2e/mobile/support-keyboard-layout.spec.ts|e2e/mobile/league-tray-layout.spec.ts|e2e/mobile/desktop-layout.spec.ts|e2e/mobile/tablet-layout.spec.ts)
+              layout_specs+=("$spec") ;;
+            *)
+              general_specs+=("$spec") ;;
+          esac
+        done
+        if (( ${#all_specs[@]} == 0 || ${#draft_specs[@]} + ${#layout_specs[@]} + ${#general_specs[@]} != ${#all_specs[@]} )); then
+          echo "::error::Mobile spec partition is empty or incomplete."
+          exit 1
+        fi
+        rc=0
+        if (( ${#draft_specs[@]} )); then
+          E2E_WARM_ROUTES=/,/e2e/draft-room,/dev/league-mobile-preview,/zombie/e2e-zombie-phone-league,/zombie/e2e-zombie-phone-league/items \
+          PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/mobile-draft \
+            npx playwright test "${draft_specs[@]}" --project="Mobile Chrome" --project="Mobile Safari" --grep-invert "@db" --reporter=line,html || rc=1
+        fi
+        if (( ${#layout_specs[@]} )); then
+          E2E_WARM_ROUTES=/,/login,/dev/league-mobile-preview \
+          PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/mobile-layout \
+            npx playwright test "${layout_specs[@]}" --project="Mobile Chrome" --project="Mobile Safari" --grep-invert "@db" --reporter=line,html || rc=1
+        fi
+        if (( ${#general_specs[@]} )); then
+          E2E_WARM_ROUTES=/,/login,/pricing,/dev/tournament-invite-readiness \
+          PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/mobile-general \
+            npx playwright test "${general_specs[@]}" --project="Mobile Chrome" --project="Mobile Safari" --grep-invert "@db" --reporter=line,html || rc=1
+        fi
+        exit $rc
     # ⚠ THE AUTHENTICATED PHONE LANE. Separate from mobile-smoke on purpose: it
     # seeds leagues and users and signs in, which is exactly what phone-smoke.spec.ts
     # refuses to do ("an authenticated phone journey ... belongs in its own lane").
