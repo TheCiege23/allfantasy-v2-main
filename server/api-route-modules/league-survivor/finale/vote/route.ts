@@ -100,7 +100,7 @@ export async function POST(
     const leagueName = league?.name?.trim() || 'Survivor League'
     const script = [
       `Survivor finale results for ${leagueName}.`,
-      `The jury vote is final. ${winnerLabel} has been crowned Sole Survivor.`,
+      `The jury vote is final. ${winnerLabel} is the last one standing.`,
       `Votes submitted: ${result.state.votesSubmitted ?? 0} of ${result.state.votesRequired ?? 0}.`,
     ].join(' ')
 

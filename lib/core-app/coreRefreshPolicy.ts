@@ -19,13 +19,15 @@ export function coreRefreshIntervalMs(gameDayActive: boolean, liveGameCount: num
  * ⚠ ADD A SCREEN HERE ONLY WITH THE SAME EVIDENCE. A screen that shows live points refreshed at
  * idle cadence would sit on stale scores through a whole slate, with nothing to say so.
  */
-const NO_LIVE_VALUE_SCREENS: ReadonlySet<string> = new Set(['my-team'])
+// LiveScores owns its 20-second data poll; the rail also polls independently.
+// A full server render at that same cadence adds work without fresher scores.
+const IDLE_SHELL_SCREENS: ReadonlySet<string> = new Set(['my-team', 'live'])
 
 /**
  * The cadence of the shell's FULL-ROUTE refresh for the screen on display. The rail's own score
  * poll (useLiveRailScores) keeps `coreRefreshIntervalMs` — it fetches live scores and wants 20s.
  */
 export function shellRouteRefreshMs(screen: string, gameDayActive: boolean, liveGameCount: number): number {
-  if (NO_LIVE_VALUE_SCREENS.has(screen)) return CORE_IDLE_REFRESH_MS
+  if (IDLE_SHELL_SCREENS.has(screen)) return CORE_IDLE_REFRESH_MS
   return coreRefreshIntervalMs(gameDayActive, liveGameCount)
 }

@@ -148,8 +148,9 @@ describe('the expanded rail, every row shape', () => {
 
   it('reads Spanish — standing, freshness, labels, the no-schedule line and the profile tile', () => {
     const t = shellText('es')
+    expect(t).not.toContain('antigüedad desconocida')
     for (const es of ['#10 de 15', '+3.2 sobre el corte', '2 puestos de margen', 'por proyección', 'PTS',
-      'ESPN no devolvió un calendario de enfrentamientos para esta liga', 'antigüedad desconocida',
+      'ESPN no devolvió un calendario de enfrentamientos para esta liga',
       'Proyección del motor de AllFantasy', 'Tu cuenta', 'Perfil y ajustes', 'Saltar al contenido', '3 ligas']) {
       expect(t, es).toContain(es)
     }
@@ -160,8 +161,9 @@ describe('the expanded rail, every row shape', () => {
 
   it('CONTROL — the same shell in English keeps every English word', () => {
     const t = shellText('en')
+    expect(t).not.toContain('sync age unknown')
     for (const en of ['10th', ' of 15', '+3.2 over the cut', '2 places clear', 'on projection', 'SCORE',
-      'ESPN did not return a matchup schedule for this league', 'Your account', 'Profile & settings', 'Skip to content', '3 leagues']) {
+      'Matchup unavailable from ESPN', 'Your account', 'Profile & settings', 'Skip to content', '3 leagues']) {
       expect(t, en).toContain(en)
     }
   })

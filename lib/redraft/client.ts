@@ -133,7 +133,10 @@ export type RedraftTradeProposal = {
   vetoMode: string
   vetoThreshold: number | null
   reason: string | null
+  /** Before acceptance: the offer's deadline. After it: the end of the review window. */
   expiresAt: string | null
+  /** Set when the receiver accepted; the trade is then in review (lib/redraft/tradeReviewWindow.ts). */
+  acceptedAt?: string | null
   createdAt: string
   assets: Array<{
     id: string
@@ -451,6 +454,36 @@ export async function runRedraftScheduleAction(payload: {
   // A refused transition is a 409 carrying a `code` the UI must show verbatim —
   // "all matchups must be finalized" is the answer, not a generic failure.
   return (await res.json()) as RedraftScheduleActionResult
+}
+
+/**
+ * Commissioner schedule regeneration. Rebuilds only the weeks that have not started; once a week
+ * has started the route answers 409 `mid_season_confirmation_required` until the call is re-sent
+ * with `confirmMidSeasonChange: true`. Refusals (live draft, archived league, nothing left to
+ * rebuild) come back as 409 with a `code` and the reason in `error`.
+ */
+export type RedraftScheduleRegenerateResult = {
+  ok?: boolean
+  seasonId?: string
+  created?: number
+  regenerated?: boolean
+  regeneratedFromWeek?: number
+  warnings?: string[]
+  code?: string
+  error?: string
+}
+
+export async function regenerateRedraftSchedule(payload: {
+  seasonId: string
+  confirmMidSeasonChange?: boolean
+}): Promise<RedraftScheduleRegenerateResult> {
+  const res = await fetch('/api/redraft/schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ ...payload, action: 'regenerate' }),
+  })
+  return (await res.json().catch(() => ({ error: 'Unexpected response' }))) as RedraftScheduleRegenerateResult
 }
 
 export async function fetchRedraftLiveScoring(params: {

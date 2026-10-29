@@ -4,15 +4,27 @@ import { useState, useEffect, useCallback } from 'react'
 import clsx from 'clsx'
 import Link from 'next/link'
 import type { ZombieBoardEntry, ZombieSummary } from './types'
-import { ZombieSceneBackground } from './ZombieSceneBackground'
+import { getZombieTheme, zombieThemeImageSrc } from '@/lib/zombie/zombieBackgroundThemes'
 import { ZombieStatusChip, zombieChipStatus, type ZombieChipStatus } from './ZombieStatusChip'
+import { ZombieBashingCard, type ZombieBashingRules } from './ZombieBashingCard'
+import { ZombieTurnOverlay } from './ZombieTurnOverlay'
+import { ZombieWhispererLair } from './ZombieWhispererLair'
+import { SpecialtyHero, SpecialtyShell, spStyles, specialtyAsset } from '@/components/league/specialty/SpecialtyShell'
+import { ZombieUniverseMap } from '@/components/league/specialty/zombie/ZombieUniverseMap'
+import { ZombieInfectionNight } from '@/components/league/specialty/zombie/ZombieInfectionNight'
+import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
+import { daysUntilResolution } from '@/lib/zombie/zombieHomeView'
 
 /*
  * The Zombie league's home (the Zombie tab on /league/[id]). Layout from the design handoff's
  * ZombieHome screen; every number on it comes from the summary route, which reads the engine's own rules
- * (`getZombieRulesForSport`) — never the handoff's sample values. Deliberately absent in v1: a countdown
- * (infections run once the week's matchups are final, not at a fixed time), a win-probability bar, and
- * any "Use" button for items whose effects the engine does not apply yet.
+ * (`getZombieRulesForSport`) — never the handoff's sample values. Deliberately absent: a ticking countdown
+ * (infections run once the week's matchups are final on the sport's resolution day, not at a fixed minute —
+ * the hero shows the day instead), a win-probability bar, and any "Use" button for items whose effects the
+ * engine does not apply yet.
+ *
+ * Wrapped in the shared specialty shell (specialty handoff zombie/): banner, emblem, Creepster title, the
+ * universe map, and Infection night as the signature moment.
  */
 
 export interface ZombieHomeProps {
@@ -66,6 +78,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
   const [error, setError] = useState<string | null>(null)
   /** Null until the first load: the server picks the league's current week. */
   const [week, setWeek] = useState<number | null>(null)
+  const [view, setView] = useState<'home' | 'infection'>('home')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -138,60 +151,94 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
 
   const m = summary.myMatchup
   const items = summary.myResources ?? { serums: 0, weapons: 0, ambush: 0 }
+  const bashRules: ZombieBashingRules | null = rules
+    ? { bashingThreshold: rules.bashingMargin, maulingThreshold: rules.maulingMargin, bashShare: rules.bashShare, maulShare: rules.maulShare }
+    : null
+  const board = summary.weeklyBoard ?? []
+  const turnedThisWeek = board.filter((e): e is Extract<ZombieBoardEntry, { kind: 'infection' }> => e.kind === 'infection')
+  const blowouts = board.filter((e) => e.kind !== 'infection')
+  const infectedPct = total ? Math.round((turned / total) * 100) : 0
+
+  const sportCfg = getZombieSportConfig(String(lg?.sport ?? 'nfl').toLowerCase())
+  const daysToRun = daysUntilResolution(sportCfg.resolutionDay)
+  const universeId = lg?.universeId ?? null
+  // The league's own scene (commissioner-chosen, one of the ten backgrounds) stays the hero art; the
+  // handoff banner is the fallback for a league with no known scene.
+  const scene = getZombieTheme(lg?.backgroundTheme)
+  const heroBanner = scene ? zombieThemeImageSrc(scene.id) : specialtyAsset('zombie', 'banner.svg')
+  const scrollToMatchup = () => document.getElementById('zombie-week-matchup')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+  if (view === 'infection') {
+    return (
+      <SpecialtyShell format="zombie" testId="zombie-specialty">
+        <ZombieInfectionNight summary={summary} onBack={() => setView('home')} />
+      </SpecialtyShell>
+    )
+  }
 
   return (
+    <SpecialtyShell format="zombie" testId="zombie-specialty">
     <div className="space-y-5 text-[var(--zombie-text-full)]">
-      {/* Hero */}
-      <header className="relative overflow-hidden rounded-3xl border border-white/10 shadow-[0_18px_60px_rgba(0,0,0,0.4)]">
-        <ZombieSceneBackground themeId={lg?.backgroundTheme} />
-        <div className="relative z-[1] flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-7">
-          {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
-          <img
-            src={`/zombie/art/char-${myChip ?? 'survivor'}.svg`}
-            alt=""
-            className="h-20 w-20 shrink-0 drop-shadow-[0_8px_24px_rgba(0,0,0,0.6)] sm:h-28 sm:w-28"
-          />
-          <div className="min-w-0 flex-1">
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {[lg?.sport, lg?.season ? String(lg.season) : null, 'Zombie', lg ? `${lg.teamCount} teams` : null]
-                .filter(Boolean)
-                .map((chip) => (
-                  <span key={chip} className="rounded-md border border-white/15 bg-black/40 px-2 py-0.5 text-[11px] font-semibold text-white/80">
-                    {chip}
-                  </span>
-                ))}
-              {myChip && <ZombieStatusChip status={myChip} />}
-            </div>
-            <h1 className="truncate text-2xl font-black tracking-tight text-[var(--zombie-toxic,#4ade80)] sm:text-4xl">
-              {lg?.name || 'Zombie League'}
-            </h1>
-            <p className="mt-1 text-sm font-semibold text-lime-100 sm:text-base">{statusLine(summary, myChip, turned, total)}</p>
-            <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-white/70">
-              One Whisperer hides among you. Lose to the Whisperer{lossToZombieInfects ? ' or a Zombie' : ''} and you turn.
-              Infections run after the week&apos;s last game.
-            </p>
-            <nav className="mt-4 flex flex-wrap gap-2" aria-label="Zombie league">
-              <Link href={`${hub}/matchups`} className="inline-flex min-h-[44px] items-center rounded-xl bg-lime-400 px-4 text-sm font-bold text-black hover:bg-lime-300">
-                Matchups
-              </Link>
-              {[
-                ['Items', `${hub}/items`],
-                ['Standings', `${hub}/standings`],
-                ['Rules', `${hub}/rules`],
-                ['Chat', `/league/${leagueId}?tab=Chat`],
-              ].map(([label, href]) => (
-                <Link
-                  key={label}
-                  href={href}
-                  className="inline-flex min-h-[44px] items-center rounded-xl border border-white/15 bg-black/45 px-4 text-sm font-semibold text-white/90 hover:bg-black/60"
-                >
-                  {label}
-                </Link>
-              ))}
-            </nav>
+      <ZombieTurnOverlay
+        leagueId={leagueId}
+        leagueName={lg?.name}
+        moment={summary.turnMoment}
+        ctx={{
+          reviveSerums,
+          serums: items.serums,
+          lossToZombieInfects,
+          zombieTradeBlocked: summary.config.zombieTradeBlocked,
+        }}
+      />
+      <SpecialtyHero
+        format="zombie"
+        bannerSrc={heroBanner}
+        emblemSrc={specialtyAsset('zombie', 'emblem.svg')}
+        emblemAlt="Zombie league crest"
+        chips={[
+          lg?.sport,
+          lg?.season ? String(lg.season) : null,
+          universeId ? 'Zombie universe' : 'Zombie',
+          lg ? `${lg.teamCount} teams` : null,
+          myChip ? `You: ${myChip === 'revived' ? 'Revived' : myChip[0].toUpperCase() + myChip.slice(1)}` : null,
+        ].filter((c): c is string => Boolean(c))}
+        title={lg?.name || 'The Outbreak'}
+        headline={statusLine(summary, myChip, turned, total)}
+        blurb={`Every league has one Whisperer. Lose to the Whisperer${lossToZombieInfects ? ' or a Zombie' : ''} and you turn. Serums cure, weapons are earned by big weeks, and the universe standings decide who moves up a level next season.`}
+        actions={[
+          { label: 'My matchup', onClick: scrollToMatchup, primary: true },
+          { label: 'Infection night', onClick: () => setView('infection'), testId: 'zombie-open-infection-night' },
+          universeId
+            ? { label: 'Universe board', href: `/app/zombie-universe/${encodeURIComponent(universeId)}/standings` }
+            : { label: 'Standings', href: `${hub}/standings` },
+        ]}
+        clock={
+          <div className={spStyles.clock} data-testid="zombie-infection-clock">
+            <span className={spStyles.lbl}>Infections run</span>
+            <span className={spStyles.clockValue}>
+              {daysToRun == null ? sportCfg.resolutionDay : daysToRun === 0 ? 'Today' : `${daysToRun}d`}
+            </span>
+            <span className={spStyles.clockCaption}>{sportCfg.resolutionDay}, after stat corrections</span>
           </div>
-        </div>
-      </header>
+        }
+      />
+      <nav className="flex flex-wrap gap-2" aria-label="Zombie league">
+        {[
+          ['Matchups', `${hub}/matchups`],
+          ['Items', `${hub}/items`],
+          ['Rules', `${hub}/rules`],
+          ['Chat', `/league/${leagueId}?tab=Chat`],
+        ].map(([label, href]) => (
+          <Link
+            key={label}
+            href={href}
+            className="inline-flex min-h-[44px] items-center rounded-xl border border-white/15 bg-black/45 px-4 text-sm font-semibold text-white/90 hover:bg-black/60"
+          >
+            {label}
+          </Link>
+        ))}
+      </nav>
+      {universeId ? <ZombieUniverseMap universeId={universeId} leagueId={leagueId} /> : null}
 
       {/* Week selector: the whole season, defaulting to the league's current week. */}
       <div className="flex items-center gap-2">
@@ -252,9 +299,19 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
           </section>
 
           {/* This week's matchup */}
-          <section className="rounded-2xl border border-lime-500/25 bg-[linear-gradient(180deg,rgba(20,30,10,0.35),rgba(7,8,13,0.9))] p-4 sm:p-5">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-lime-300">Week {summary.week} matchup</h2>
-            {m && myChip ? (
+          <section id="zombie-week-matchup" className="scroll-mt-4 rounded-2xl border border-lime-500/25 bg-[linear-gradient(180deg,rgba(20,30,10,0.35),rgba(7,8,13,0.9))] p-4 sm:p-5">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-lime-300">
+              Week {summary.week} matchup
+              {m && myChip && (myChip === 'survivor' || myChip === 'revived') && (() => {
+                const them = chipFor(m.opponentRosterId, m.opponentStatus)
+                return them === 'whisperer' || (them === 'zombie' && lossToZombieInfects)
+              })() ? ' · Danger' : ''}
+            </h2>
+            {summary.myMatchupView && bashRules ? (
+              <div className="mt-3">
+                <ZombieBashingCard m={summary.myMatchupView} rules={bashRules} revived={revived} />
+              </div>
+            ) : m && myChip ? (
               <>
                 <p className="mt-1 text-lg font-bold text-white">You vs {m.opponentName}</p>
                 <p className="mt-1 text-[13px] text-white/70">
@@ -280,28 +337,80 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
             )}
           </section>
 
-          {/* Weekly board */}
-          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Week {summary.week} board</h2>
-            {(summary.weeklyBoard ?? []).length === 0 ? (
-              <p className="mt-2 text-sm text-white/55">Nothing yet — the board fills once the week&apos;s matchups are final.</p>
+          {/* The Outbreak Report — the week's board */}
+          <section
+            className="rounded-2xl border border-lime-500/20 bg-[linear-gradient(180deg,rgba(20,30,10,0.3),rgba(7,8,13,0.85))] p-4 sm:p-5"
+            data-testid="zombie-outbreak-report"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black uppercase tracking-tight text-lime-300 sm:text-2xl">The Outbreak Report</h2>
+                <p className="text-[12px] text-white/55">
+                  Week {summary.week}
+                  {lg?.name ? ` · ${lg.name}` : ''}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="font-mono text-3xl font-black text-lime-300">{infectedPct}%</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">infected</p>
+              </div>
+            </div>
+            {board.length === 0 ? (
+              <p className="mt-4 text-sm text-white/55">Nothing yet — the report fills once the week&apos;s matchups are final.</p>
             ) : (
-              <ul className="mt-2 divide-y divide-white/[0.06]">
-                {(summary.weeklyBoard ?? []).map((e, i) => (
-                  <BoardRow key={i} entry={e} nameOf={nameOf} />
-                ))}
-              </ul>
+              <>
+                {turnedThisWeek.length ? (
+                  <>
+                    <h3 className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-lime-300">Turned this week</h3>
+                    <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {turnedThisWeek.map((e) => (
+                        <li key={e.victimRosterId} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/25 p-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
+                          <img src="/zombie/art/status-zombie.svg" alt="" className="h-9 w-9 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-white">{nameOf(e.victimRosterId)}</p>
+                            <p className="text-[12px] text-white/55">
+                              {e.infectorRosterId ? `by ${nameOf(e.infectorRosterId)}` : 'by the infection'}
+                              {e.winnerScore != null && e.loserScore != null ? ` · ${fmt(e.winnerScore)} to ${fmt(e.loserScore)}` : ''}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+                {blowouts.length ? (
+                  <>
+                    <h3 className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-lime-300">Bashings and maulings</h3>
+                    <ul className="mt-1 divide-y divide-white/[0.06]">
+                      {blowouts.map((e, i) => (
+                        <BoardRow key={i} entry={e} nameOf={nameOf} />
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+              </>
             )}
+            <p className="mt-4 text-[11px] text-white/45">
+              Infections run after the week&apos;s last game. A stat correction can replay a week.
+            </p>
           </section>
         </div>
 
         <aside className="space-y-5">
+          {myChip === 'whisperer' ? (
+            <ZombieWhispererLair
+              isPublic={summary.whispererPublic !== false}
+              horde={(summary.myInfections ?? []).map((id) => nameOf(id))}
+              ambushes={items.ambush}
+            />
+          ) : null}
           {/* Supplies — counts only in v1. */}
           <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
             <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Your supplies</h2>
             {summary.myRosterId ? (
               <ul className="mt-3 space-y-3">
-                <SupplyRow art="serum" label="Serums" count={items.serums} note={`${reviveSerums} bring a Zombie back as a Survivor.`} />
+                <SupplyRow art="serum" label="Serums" count={items.serums} note={`One registered before kickoff keeps you human for a week; ${reviveSerums} bring a Zombie back.`} />
                 <SupplyRow
                   art="weapon-knife"
                   label="Weapons"
@@ -336,7 +445,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
                 rules
                   ? `You bank your score every week as Outbreak Points. Get infected and that week goes to whoever turned you; lose by ${fmt(rules.maulingMargin)}+ and ${pct(rules.maulShare)} of it goes, by ${fmt(rules.bashingMargin)}+ and ${pct(rules.bashShare)}.`
                   : 'You bank your score every week as Outbreak Points.',
-                `${reviveSerums} serums bring a Zombie back as a Survivor.`,
+                `A serum registered before kickoff keeps you human for a week; ${reviveSerums} bring a Zombie back.`,
                 `Infections run after the week's last game.${summary.config.zombieTradeBlocked ? ' Zombies can\'t trade.' : ''}`,
               ].map((text, i) => (
                 <li key={i} className="flex gap-2.5">
@@ -352,6 +461,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
         </aside>
       </div>
     </div>
+    </SpecialtyShell>
   )
 }
 
@@ -381,7 +491,12 @@ function BoardRow({ entry, nameOf }: { entry: ZombieBoardEntry; nameOf: (id: str
     <li className="flex items-center gap-3 py-2.5">
       {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
       <img src={`/zombie/art/${art}.svg`} alt="" className="h-8 w-8 shrink-0" />
-      <p className="text-sm font-semibold text-white/90">{title}</p>
+      <p className="min-w-0 flex-1 text-sm font-semibold text-white/90">{title}</p>
+      {entry.amount != null ? (
+        <span className="shrink-0 font-mono text-sm text-amber-300" title="Outbreak Points moved">
+          +{fmt(entry.amount)}
+        </span>
+      ) : null}
     </li>
   )
 }

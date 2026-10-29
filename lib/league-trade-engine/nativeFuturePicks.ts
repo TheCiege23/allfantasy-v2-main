@@ -29,8 +29,26 @@ import { futurePickInventory, inventoryPickId, type InventoryPick } from './futu
 
 type Db = Prisma.TransactionClient
 
-/** Seasons ahead a native pick can be traded — the three-year horizon imported leagues use. */
+/** Seasons ahead a native pick can be traded when the league has not set one — the three-year horizon imported leagues use. */
 export const NATIVE_PICK_YEARS = 3
+/** Bounds on the commissioner's `futurePicksYearsOut`; past five years a pick has no market to speak of. */
+export const NATIVE_PICK_YEARS_MIN = 1
+export const NATIVE_PICK_YEARS_MAX = 5
+
+/**
+ * The league's tradeable-pick horizon in seasons: `DynastyLeagueConfig.futurePicksYearsOut`, clamped
+ * to [1, 5], or 3 when unset or not a number. It used to be a flat 3 whatever the commissioner chose.
+ *
+ * Shrinking it never loses a pick: a stored trade for a season now beyond the horizon stays in
+ * `future_draft_picks` and is still applied when that season's draft is created
+ * (`consumeNativeFuturePicksForDraft` reads by season, not by horizon); it is only not offered again
+ * until the season comes back inside the window.
+ */
+export function resolveNativePickYears(configured: number | null | undefined): number {
+  const n = Number(configured)
+  if (configured == null || !Number.isFinite(n)) return NATIVE_PICK_YEARS
+  return Math.min(Math.max(NATIVE_PICK_YEARS_MIN, Math.floor(n)), NATIVE_PICK_YEARS_MAX)
+}
 
 /** The league's rookie-draft round count, clamped exactly as `createNextLeagueDraft` clamps it. */
 export function resolveRookieDraftRounds(configured: number | null | undefined): number {
@@ -68,6 +86,30 @@ export function nativePickHorizonStart(args: {
   return args.leagueSeason != null ? args.leagueSeason + 1 : null
 }
 
+/**
+ * `nativePickHorizonStart` read from the league's own rows: its newest season and whether a draft is
+ * open. The one place that question is asked, so the inventory and an imported league's carryover
+ * agree on which seasons are still ahead.
+ */
+export async function loadNativePickHorizonStart(db: Db, leagueId: string, leagueSeason: number | null): Promise<number | null> {
+  const [newestSeason, openDraft] = await Promise.all([
+    db.redraftSeason.findFirst({
+      where: { leagueId },
+      orderBy: { createdAt: 'desc' },
+      select: { season: true, status: true },
+    }),
+    db.draftSession.findFirst({
+      where: { leagueId, status: { in: [...OPEN_DRAFT_SESSION_STATUSES] } },
+      select: { id: true },
+    }),
+  ])
+  return nativePickHorizonStart({
+    newestSeason: newestSeason ? { season: newestSeason.season, status: String(newestSeason.status) } : null,
+    hasOpenDraft: Boolean(openDraft),
+    leagueSeason,
+  })
+}
+
 /** `fdp:<season>:<round>:<originalRosterId>` → its parts, or null for any other reference. */
 export function parseInventoryPickId(ref: string): { season: number; round: number; originalRosterId: string } | null {
   const m = /^fdp:(\d{4}):(\d{1,2}):(.+)$/.exec(ref)
@@ -93,33 +135,29 @@ export async function loadNativeFuturePicks(leagueId: string, db: Db = prisma): 
   })
   if (!league || !isNativeFuturePickLeague(league)) return null
 
-  const [rosters, newestSeason, openDraft, dynasty] = await Promise.all([
+  const [rosters, start, dynasty] = await Promise.all([
     db.roster.findMany({ where: { leagueId }, select: { id: true } }),
-    db.redraftSeason.findFirst({
-      where: { leagueId },
-      orderBy: { createdAt: 'desc' },
-      select: { season: true, status: true },
-    }),
-    db.draftSession.findFirst({
-      where: { leagueId, status: { in: [...OPEN_DRAFT_SESSION_STATUSES] } },
-      select: { id: true },
-    }),
-    db.dynastyLeagueConfig.findUnique({ where: { leagueId }, select: { rookieDraftRounds: true } }),
+    loadNativePickHorizonStart(db, leagueId, league.season ?? null),
+    db.dynastyLeagueConfig.findUnique({ where: { leagueId }, select: { rookieDraftRounds: true, futurePicksYearsOut: true } }),
   ])
-  const start = nativePickHorizonStart({
-    newestSeason: newestSeason ? { season: newestSeason.season, status: String(newestSeason.status) } : null,
-    hasOpenDraft: Boolean(openDraft),
-    leagueSeason: league.season ?? null,
-  })
   if (start == null || rosters.length === 0) return null
 
-  const seasons = Array.from({ length: NATIVE_PICK_YEARS }, (_, i) => start + i)
+  const seasons = Array.from({ length: resolveNativePickYears(dynasty?.futurePicksYearsOut) }, (_, i) => start + i)
   const rounds = resolveRookieDraftRounds(dynasty?.rookieDraftRounds)
   const stored = await db.futureDraftPick.findMany({
     where: { leagueId, status: 'active', pickSeason: { in: seasons } },
     select: { pickSeason: true, round: true, originalRosterId: true, currentOwnerId: true },
   })
-  const picks = futurePickInventory({ teamIds: rosters.map((r) => r.id), seasons, rounds, stored })
+  // A pick forfeited as a penalty (lib/integrity/tankingPenaltyService.ts) is gone: not held, not
+  // tradeable. Without this, "no active row" would read as "still with its original team".
+  const forfeited = await db.futureDraftPick.findMany({
+    where: { leagueId, status: 'forfeited', pickSeason: { in: seasons } },
+    select: { pickSeason: true, round: true, originalRosterId: true },
+  })
+  const gone = new Set(forfeited.map((f) => `${f.pickSeason}:${f.round}:${f.originalRosterId}`))
+  const picks = futurePickInventory({ teamIds: rosters.map((r) => r.id), seasons, rounds, stored }).filter(
+    (p) => !gone.has(`${p.season}:${p.round}:${p.originalTeamId}`),
+  )
   const ownerByPickId = new Map(picks.map((p) => [inventoryPickId(p), p.ownerTeamId]))
   return { picks, seasons, rounds, ownerByPickId }
 }
@@ -178,19 +216,42 @@ export async function consumeNativeFuturePicksForDraft(
   tx: Db,
   args: { leagueId: string; season: number; draftSessionId: string; rounds: number; slotOrder: SlotOrderEntry[]; now?: Date },
 ): Promise<TradedPickRecord[]> {
+  // Picks forfeited as a penalty stay `forfeited`; tagging them with this draft is how the draft
+  // knows to skip them (lib/live-draft-engine/forfeitedPickSkips.ts).
+  await tx.futureDraftPick.updateMany({
+    where: { leagueId: args.leagueId, pickSeason: args.season, status: 'forfeited', usedInDraftSessionId: null },
+    data: { usedInDraftSessionId: args.draftSessionId },
+  })
   const rows = await tx.futureDraftPick.findMany({
     where: { leagueId: args.leagueId, pickSeason: args.season, status: 'active' },
     select: { id: true, round: true, originalRosterId: true, currentOwnerId: true },
   })
   if (rows.length === 0) return []
 
+  // Conditional and protected picks (./pickTerms.ts) settle here, on the order this draft seats:
+  // a protected pick stays, a conditional one may convey as another round. Imported lazily — the
+  // terms module reads this one.
+  const { settlePickTermsForDraft } = await import('./pickTermsService')
+  const overrides = await settlePickTermsForDraft(tx, {
+    leagueId: args.leagueId,
+    season: args.season,
+    rows,
+    slotOrder: args.slotOrder,
+    rounds: args.rounds,
+    draftSessionId: args.draftSessionId,
+    now: args.now ?? new Date(),
+  })
+
   const nameByRoster = new Map(args.slotOrder.map((e) => [e.rosterId, e.displayName]))
   const traded: TradedPickRecord[] = []
   for (const row of rows) {
-    if (row.currentOwnerId === row.originalRosterId || row.round > args.rounds) continue
+    const override = overrides.get(row.id)
+    if (override && 'skip' in override) continue
+    const round = override?.round ?? row.round
+    if (row.currentOwnerId === row.originalRosterId || round > args.rounds) continue
     if (!nameByRoster.has(row.originalRosterId) || !nameByRoster.has(row.currentOwnerId)) continue
     traded.push({
-      round: row.round,
+      round,
       originalRosterId: row.originalRosterId,
       previousOwnerName: nameByRoster.get(row.originalRosterId) ?? '',
       newRosterId: row.currentOwnerId,

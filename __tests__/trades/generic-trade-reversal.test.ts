@@ -17,7 +17,7 @@ const db = {
   afLeagueTrade: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), updateMany: vi.fn() },
   tradeExecutionSnapshot: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn() },
   tradeReversal: { findUnique: vi.fn(), create: vi.fn() },
-  roster: { findUnique: vi.fn(), update: vi.fn() },
+  roster: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
   $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(db)),
 }
 
@@ -331,6 +331,27 @@ describe('🛑 a trade that moved a native future pick', () => {
       tradeId: 't-1',
     })
     expect(db.roster.update).toHaveBeenCalledTimes(2)
+  })
+
+  it('takes back the pick terms this trade gave, and keeps another trade’s', async () => {
+    db.league.findUnique.mockResolvedValue({
+      sport: 'NFL',
+      leagueVariant: null,
+      settings: {
+        pick_terms: {
+          'fdp:2027:1:r1': { terms: { kind: 'protected', top: 3, ifProtected: 'stays' }, tradeId: 't-1', setAt: 'x' },
+          'fdp:2028:2:r3': { terms: { kind: 'protected', top: 2, ifProtected: 'stays' }, tradeId: 't-other', setAt: 'x' },
+        },
+      },
+    })
+    const executeRaw = vi.fn(async () => 1)
+    ;(db as Record<string, unknown>).$executeRaw = executeRaw
+    const { reverseGenericTrade } = await import('@/lib/league-trade-engine/tradeReversal')
+    expect((await reverseGenericTrade({ tradeId: 't-1', actorUserId: 'u-commish', actorRole: 'commissioner', reason: 'collusion' })).ok).toBe(true)
+    expect(executeRaw).toHaveBeenCalledTimes(1)
+    expect((executeRaw.mock.calls[0] as unknown[]).slice(1)).toContain('fdp:2027:1:r1')
+    delete (db as Record<string, unknown>).$executeRaw
+    db.league.findUnique.mockResolvedValue({ sport: 'NFL', leagueVariant: null })
   })
 
   it('a trade without native picks never reads the pick inventory', async () => {

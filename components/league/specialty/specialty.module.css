@@ -1,0 +1,160 @@
+/*
+ * Specialty-league shell — a scoped port of the handoff's shared/sp.css
+ * (design-refs/native-league-handoff/specialty-leagues/shared/sp.css).
+ *
+ * Differences from the mockup stylesheet, all deliberate:
+ *   - CSS-module scoped: every rule hangs off a local class, so nothing leaks into the league shell.
+ *   - Child selectors (`.x>span`) wherever the mockup styled a label next to a value (README gotcha).
+ *   - The 10.5px labels/tags are 11px: this app's type floor (__tests__/core-app/type-floor.test.ts).
+ *   - Phone widths: 16px side gutter, hero stacks, no horizontal scroll.
+ *   - prefers-reduced-motion shows every animation's end state.
+ *
+ * Theme: the root (.sp) reads --acc / --acc2 / --accInk / --disp, set inline by <SpecialtyShell>.
+ */
+.sp {
+  --acc: #d9b45a;
+  --acc2: #f1d58a;
+  --accInk: #1a1204;
+  --disp: 'Archivo';
+  background: #07080d;
+  color: #e8eaf2;
+  font: 13px/1.45 'Archivo', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  border-radius: 18px;
+  overflow: hidden;
+  container-type: inline-size;
+}
+.sp * { box-sizing: border-box; }
+
+.page { display: flex; flex-direction: column; gap: 20px; padding: 20px 24px 28px; }
+
+.card { background: #0b0d14; border: 1px solid rgba(255, 255, 255, .07); border-radius: 12px; }
+.card2 { background: #10131c; border: 1px solid rgba(255, 255, 255, .07); border-radius: 12px; }
+.pad { padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+.h1 { margin: 0; font-weight: 700; font-size: 26px; letter-spacing: -.02em; }
+.lbl { font: 600 11px 'Archivo', sans-serif; letter-spacing: .09em; text-transform: uppercase; color: #7d84a3; }
+.t2 { color: #a3a9c2; }
+.t3 { color: #7d84a3; }
+.num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+.accText { color: var(--acc2); }
+.disp { font-family: var(--disp), 'Archivo', sans-serif; letter-spacing: .02em; }
+
+.btn {
+  text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .12);
+  background: #151926; color: #e8eaf2; font: 600 13px 'Archivo', sans-serif; cursor: pointer;
+}
+.btn:hover { background: #1b2030; }
+.btn:focus-visible { outline: 2px solid var(--acc2); outline-offset: 2px; }
+.btnP { background: var(--acc); border-color: var(--acc); color: var(--accInk); }
+.btnP:hover { background: var(--acc); filter: brightness(1.08); }
+.btn:disabled { opacity: .45; cursor: default; filter: none; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, .12); color: #a3a9c2; font: 600 11px 'Archivo', sans-serif;
+  white-space: nowrap; background: rgba(7, 8, 13, .5);
+}
+.tag {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 22px; padding: 0 8px;
+  border-radius: 99px; font: 700 11px 'Archivo', sans-serif; letter-spacing: .04em; text-transform: uppercase;
+  white-space: nowrap;
+}
+/* Status-tag tones: colour is never the only signal — the tag always carries text. */
+.toneSafe { background: rgba(58, 190, 120, .14); color: #7fe0a6; }
+.toneDanger { background: rgba(255, 190, 90, .14); color: #ffc46b; }
+.toneZone { background: rgba(224, 64, 46, .2); color: #ff9a8a; }
+.toneAcc { background: color-mix(in srgb, var(--acc) 20%, transparent); color: var(--acc2); }
+.toneGold { background: rgba(242, 201, 76, .16); color: #f2c94c; }
+.tonePink { background: rgba(255, 79, 163, .16); color: #ff8fc8; }
+.toneMuted { background: rgba(255, 255, 255, .06); color: #8d93ad; }
+
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: #0b0d14; border: 1px solid rgba(255, 255, 255, .08); }
+.seg>button {
+  min-height: 44px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; color: #a3a9c2;
+  font: 600 12px 'Archivo', sans-serif; cursor: pointer;
+}
+.seg>button[aria-pressed='true'] { background: #151926; color: var(--acc2); box-shadow: inset 0 -2px 0 var(--acc); }
+.seg>button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------- hero ---------- */
+.hero { position: relative; overflow: hidden; border-radius: 16px; border: 1px solid rgba(255, 255, 255, .08); min-height: 250px; }
+.hero>.bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hero>.veil { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(7, 8, 13, .95) 0%, rgba(7, 8, 13, .82) 50%, rgba(7, 8, 13, .3) 100%); }
+.hero>.heroIn { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 26px; padding: 26px 30px; min-height: 250px; }
+.emblem { width: 150px; flex: none; filter: drop-shadow(0 14px 22px rgba(0, 0, 0, .6)); }
+.heroText { flex: 1 1 420px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.title { margin: 0; font: 800 38px/1.05 'Archivo', sans-serif; letter-spacing: -.03em; color: #fff; overflow-wrap: anywhere; }
+.titleDisp { font-family: var(--disp), 'Archivo', sans-serif; font-weight: 400; font-size: 54px; line-height: .95; letter-spacing: .02em; }
+.headline { margin: 0; font-size: 16px; font-weight: 600; color: var(--acc2); }
+.blurb { margin: 0; font-size: 14px; max-width: 620px; color: #a3a9c2; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.actions>.btn { min-height: 46px; padding: 0 20px; }
+
+.clock {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 22px; border-radius: 14px;
+  background: rgba(7, 8, 13, .66); border: 1px solid rgba(255, 255, 255, .12); text-align: center;
+}
+.clock>.lbl { color: var(--acc2); }
+.clockValue { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; font-size: 36px; font-weight: 700; color: #fff; line-height: 1.1; }
+.clockCaption { font-size: 12px; color: #7d84a3; }
+
+/* ---------- main + rail ---------- */
+.grid { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.main { flex: 1 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.rail { flex: 0 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+.row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; background: #10131c; border: 1px solid rgba(255, 255, 255, .05); min-width: 0; }
+.av {
+  position: relative; flex: none; width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center;
+  font: 700 11.5px 'Archivo', sans-serif; color: #fff; overflow: hidden;
+}
+.av>img { width: 100%; height: 100%; object-fit: cover; }
+.bar { height: 10px; border-radius: 99px; background: #151926; overflow: hidden; }
+.bar>span { display: block; height: 100%; border-radius: 99px; transition: width .5s ease-out; }
+
+.rules { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.rule { display: flex; gap: 10px; font-size: 13px; color: #a3a9c2; }
+.rule>b { color: var(--acc2); font-family: 'JetBrains Mono', monospace; flex: none; }
+
+.feed { margin: 0; padding: 0; list-style: none; }
+.feedItem { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255, 255, 255, .05); }
+.feedItem:last-child { border-bottom: 0; }
+.feedItem>img { width: 32px; height: 32px; flex: none; }
+.feedText { display: flex; flex-direction: column; min-width: 0; }
+.feedText>strong { font-size: 13.5px; color: #e8eaf2; }
+.feedText>span { font-size: 12px; color: #7d84a3; }
+
+.empty { margin: 0; font-size: 12.5px; color: #7d84a3; }
+.prop { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; border: 1px dashed rgba(255, 214, 107, .55); color: #ffd66b; font: 600 11px 'Archivo', sans-serif; }
+
+/* ---------- moment (signature screen) ---------- */
+.momentHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.moment { position: relative; overflow: hidden; }
+
+/* ---------- phone (narrow container) ---------- */
+@container (max-width: 640px) {
+  .page { padding: 16px; gap: 16px; }
+  .hero>.heroIn { padding: 20px 16px; gap: 16px; min-height: 0; }
+  .emblem { width: 72px; }
+  .heroText { flex-basis: 100%; }
+  .title { font-size: 28px; }
+  .titleDisp { font-size: 38px; }
+  .clock { width: 100%; }
+  .clockValue { font-size: 28px; }
+  .actions>.btn { flex: 1 1 140px; }
+  .rail { flex-basis: 100%; }
+}
+
+@keyframes spPop { 0% { transform: scale(.6); opacity: 0; } 60% { transform: scale(1.06); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes spUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes spShake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+.pop { animation: spPop .55s ease-out both; }
+.up { animation: spUp .45s ease-out both; }
+.shake { animation: spShake .4s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .pop, .up, .shake { animation: none; }
+  .bar>span { transition: none; }
+}

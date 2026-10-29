@@ -2,7 +2,9 @@
 
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
-import { getSurvivorThemeById, survivorSceneArtwork } from '@/lib/survivor/survivorVisuals'
+import { useEffect, useState } from 'react'
+import { resolveSurvivorMood, survivorBackgroundSrc } from '@/lib/survivor/survivorMood'
+import { SurvivorMoodScene } from './SurvivorMoodScene'
 
 type SurvivorIslandHeroProps = {
   leagueId: string
@@ -10,7 +12,12 @@ type SurvivorIslandHeroProps = {
   sport?: string | null
   week?: number | null
   phase: string
+  /** @deprecated The scene follows league state now; kept so callers need not change at once. */
   visualThemeId?: string | null
+  /** Open council deadline: dusk on deadline day. */
+  voteDeadlineAt?: string | null
+  /** Council read-out start: night while the votes are read. */
+  revealStartsAt?: string | null
   headline: string
   description: string
   primaryAction: { href: string; label: string }
@@ -19,23 +26,30 @@ type SurvivorIslandHeroProps = {
 
 /** The same island entry on the league dashboard and the full Survivor hub. */
 export function SurvivorIslandHero({
-  leagueId,
   leagueName,
   sport,
   week,
   phase,
-  visualThemeId,
+  voteDeadlineAt,
+  revealStartsAt,
   headline,
   description,
   primaryAction,
   secondaryAction,
 }: SurvivorIslandHeroProps) {
-  const theme = getSurvivorThemeById(visualThemeId, leagueId)
-  const scene = survivorSceneArtwork(sport, theme.id)
+  // Null until mounted so server and client render the same (day) scene; then the mood follows state.
+  const [now, setNow] = useState<number | null>(null)
+  useEffect(() => {
+    setNow(Date.now())
+    const id = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
+  const mood = now == null ? 'day' : resolveSurvivorMood({ now, voteDeadlineAt, revealStartsAt })
+  const scene = survivorBackgroundSrc(mood, sport)
 
   return (
-    <header className="relative isolate min-h-[330px] overflow-hidden rounded-[24px] border border-amber-300/25 bg-[#07110e] px-5 py-6 text-white shadow-[0_24px_70px_rgba(0,0,0,0.35)] sm:min-h-[390px] sm:px-8 sm:py-9" data-testid="survivor-island-hero">
-      <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${scene})` }} />
+    <header className="survivor-island-hero relative isolate min-h-[330px] overflow-hidden rounded-[24px] border border-amber-300/25 bg-[#07110e] px-5 py-6 text-white shadow-[0_24px_70px_rgba(0,0,0,0.35)] sm:min-h-[420px] sm:px-8 sm:py-9" data-testid="survivor-island-hero" data-mood={mood}>
+      <SurvivorMoodScene src={scene} />
       <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-[#05100e]/95 via-[#05100e]/80 to-[#05100e]/25" />
       <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-[#05100e]/90 via-transparent to-[#05100e]/35" />
       <div className="relative flex min-h-[278px] flex-col justify-between sm:min-h-[318px]">

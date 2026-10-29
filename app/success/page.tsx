@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -11,7 +12,7 @@ import { gtagEvent } from '@/lib/gtag'
 import { trackLandingSignupComplete } from '@/lib/landing-analytics'
 
 const SPORTS = ['NFL', 'NHL', 'NBA', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER']
-const LEAGUE_TYPES = ['Redraft', 'Dynasty', 'Keeper', 'Best Ball', 'Guillotine', 'Survivor', 'Tournament']
+const LEAGUE_TYPES = ['Redraft', 'Dynasty', 'Keeper', 'Best Ball', 'Guilly', 'Survivor', 'Tournament']
 const COMPETITIVENESS = ['Casual', 'Competitive', 'Degenerate 😈']
 const DRAFT_PREFS = ['Snake', 'Auction', 'Either']
 const PAIN_POINTS = ['Drafting', 'Waivers', 'Trades', 'Start/Sit', 'League Management']
@@ -19,7 +20,7 @@ const EXPERIMENTAL_FORMATS = [
   'Survivor (TV Show Style)',
   'Big Brother',
   'Zombie',
-  'Guillotine++',
+  'Guilly++',
   'Vampire / Pirate',
   'King of the Hill',
   'Draft Lottery Chaos',
@@ -258,6 +259,12 @@ function SuccessContent() {
                 </label>
               ))}
             </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Sneak peek:{' '}
+              <Link href="/formats/king-of-the-hill" className="inline-flex min-h-[44px] items-center text-neon-cyan underline">King of the Hill</Link>
+              {' · '}
+              <Link href="/formats/pirate" className="inline-flex min-h-[44px] items-center text-neon-cyan underline">Pirate</Link>
+            </p>
             {errors.experimentalInterest && <p className="text-xs text-red-400 mt-1">{errors.experimentalInterest.message}</p>}
           </div>
 

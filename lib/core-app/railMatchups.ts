@@ -11,6 +11,8 @@ import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules }
 import { eliminationFormat, resolveRailMatchupMode } from './railMatchupMode'
 import { loadUnavailableBySport } from './unavailableStarters'
 import { isForeignIdSpace } from './rosterIdSpace'
+import type { RailGuillotineLine } from './railGuillotineLine'
+import { getNativeRailMatchups } from './nativeRailMatchups'
 
 /**
  * This week's head-to-head for every league, for the expanded league rail.
@@ -219,6 +221,20 @@ export type RailMatchup = {
   source: 'live_cache' | 'history_fallback'
   season: number
   week: number
+  /**
+   * A NATIVE guillotine league's score line (`nativeRailMatchups.ts`): points, rank among the
+   * survivors, distance to the chop line, chopped / first-chop / draft states. Drawn instead of
+   * `standing` when present.
+   */
+  guillotine?: RailGuillotineLine | null
+  /** Built from the native tables, not `WeeklyMatchup`; `/api/core/rail-scores` refreshes it the same way. */
+  native?: boolean
+  /**
+   * An odd-team native league's extra matchup involving your team this week — the game the leftover
+   * team plays instead of a bye (lib/redraft/oddTeamExtraMatchupRules.ts). For the leftover team the
+   * row above IS that game; for the chosen team its own game stays the row and this is the second one.
+   */
+  extraMatchup?: { label: string; line: string; yourScore: number | null; theirScore: number | null } | null
 }
 
 export type RailMatchups = {
@@ -239,15 +255,33 @@ export type RailMatchups = {
 
 const EMPTY: RailMatchups = { byLeague: {}, season: null, week: null, projectionWeek: null }
 
-export async function getRailMatchups(
-  userId: string,
-  leagues: Array<{
-    id: string
-    platformLeagueId?: string | null
-    /** Explicitly resolved by the caller from league type, variant and settings. */
-    elimination?: boolean
-  }>,
-): Promise<RailMatchups> {
+type RailLeagueInput = {
+  id: string
+  platformLeagueId?: string | null
+  /** Explicitly resolved by the caller from league type, variant and settings. */
+  elimination?: boolean
+}
+
+/**
+ * Every league's rail row: the imported leagues from `WeeklyMatchup` (below), the native ones from
+ * the native tables (`nativeRailMatchups.ts`). The two reads run side by side; an imported row wins
+ * where both answer, so nothing an importer already drew changes.
+ *
+ * ⚠ NATIVE LEAGUES GOT NOTHING HERE BEFORE. `WeeklyMatchup` is written only by provider importers,
+ * so every AllFantasy-hosted league fell through to "no head-to-head on file this week" — including
+ * native guillotine leagues, which have no head-to-head by design (2026-10-18).
+ */
+export async function getRailMatchups(userId: string, leagues: RailLeagueInput[]): Promise<RailMatchups> {
+  const [imported, native] = await Promise.all([
+    getImportedRailMatchups(userId, leagues),
+    getNativeRailMatchups(userId, leagues.map((l) => l.id)).catch(() => ({ byLeague: {} as Record<string, RailMatchup> })),
+  ])
+  const nativeEntries = Object.entries(native.byLeague).filter(([id]) => !imported.byLeague[id])
+  if (nativeEntries.length === 0) return imported
+  return { ...imported, byLeague: { ...imported.byLeague, ...Object.fromEntries(nativeEntries) } }
+}
+
+async function getImportedRailMatchups(userId: string, leagues: RailLeagueInput[]): Promise<RailMatchups> {
   const platformIds = leagues
     .map((l) => l.platformLeagueId)
     .filter((v): v is string => typeof v === 'string' && v.length > 0)

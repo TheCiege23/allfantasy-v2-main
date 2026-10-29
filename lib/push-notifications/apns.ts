@@ -1,3 +1,5 @@
+import { pushRetentionSeconds } from "@/lib/notifications/gameAlertFreshness"
+import { createHash } from "node:crypto"
 /**
  * Apple Push Notification service (APNs) — native push to the iOS app.
  *
@@ -25,6 +27,10 @@ import "server-only"
 import crypto from "crypto"
 import http2 from "http2"
 
+export function apnsCollapseId(tag: string): string {
+  return Buffer.byteLength(tag, "utf8") <= 64 ? tag : createHash("sha256").update(tag).digest("hex")
+}
+
 export const IOS_ENDPOINT_PREFIX = "apns:"
 
 export type ApnsPayload = {
@@ -33,6 +39,7 @@ export type ApnsPayload = {
   href?: string
   tag?: string
   type?: string
+  expiresAt?: string
   leagueId?: string | null
   /** Absolute https picture; the app's notification service extension attaches it. */
   imageUrl?: string | null
@@ -105,10 +112,11 @@ export function apnsBody(payload: ApnsPayload): string {
        * the same key the web uses as its tag. `apns-collapse-id` (below) REPLACES; this only GROUPS,
        * so ten DMs from three people read as three stacks instead of ten loose rows.
        */
-      ...(payload.tag ? { "thread-id": payload.tag.slice(0, 64) } : {}),
+      ...(payload.tag ? { "thread-id": apnsCollapseId(payload.tag) } : {}),
     },
     href: payload.href ?? null,
     type: payload.type ?? "notification",
+    ...(payload.expiresAt ? { expiresAt: payload.expiresAt } : {}),
     leagueId: payload.leagueId ?? null,
     ...(imageUrl ? { imageUrl } : {}),
   })
@@ -146,10 +154,11 @@ export async function sendApns(deviceTokens: string[], payload: ApnsPayload): Pr
               "apns-topic": cfg.topic,
               "apns-push-type": "alert",
               "apns-priority": "10",
+                "apns-expiration": String(pushRetentionSeconds(payload.type) === 0 ? 0 : Math.floor(Date.now() / 1000) + pushRetentionSeconds(payload.type)),
               "content-type": "application/json",
             }
             // Same-tag notifications replace each other, as on the web. Apple caps the id at 64 bytes.
-            if (payload.tag) headers["apns-collapse-id"] = payload.tag.slice(0, 64)
+            if (payload.tag) headers["apns-collapse-id"] = apnsCollapseId(payload.tag)
             const req = session.request(headers)
             let status = 0
             let text = ""

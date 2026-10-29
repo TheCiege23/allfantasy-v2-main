@@ -142,7 +142,7 @@ describe('gradeGuillotineDeal', () => {
     replacementBySlot: new Map([['FLEX', { name: 'Free FLEX', perGame: 11.9 }], ['SUPER_FLEX', { name: 'Free SF', perGame: 13.3 }]]),
     teamsAlive: 14,
     startingTeams: 18,
-    nflWeeksLeft: 13,
+    weeksLeft: 13,
     survival: survivalCurve(14, 13),
     liveFaab: 1899,
     wireValue: 251.7,

@@ -13,6 +13,7 @@ import {
   resolveValidDraftTypeForSelection,
   resolveValidScoringPresetIdForSelection,
 } from './rules-engine'
+import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
 
 export type ImportedLeagueTemplateSource = {
   name: string | null
@@ -40,7 +41,13 @@ export function createStateFromImportedLeague(source: ImportedLeagueTemplateSour
       ? rawType as LeagueTypeId
       : 'redraft'
   const soccerPipeline = sport === 'SOCCER' ? 'euro' : null
-  const teamOptions = getTeamCountOptions(sport, leagueType, soccerPipeline)
+  // A carryover keeps every imported team, so the import's own size is offered for the
+  // import-flexible types even when the native list lacks it.
+  const teamOptions = teamCountOptionsWithImported(
+    getTeamCountOptions(sport, leagueType, soccerPipeline),
+    idpSelected ? 'idp' : leagueType,
+    source.leagueSize,
+  )
   const teamCount = source.leagueSize != null && teamOptions.includes(source.leagueSize)
     ? source.leagueSize
     : getDefaultTeamCount(sport, leagueType, soccerPipeline)

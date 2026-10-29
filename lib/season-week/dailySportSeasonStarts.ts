@@ -105,7 +105,9 @@ const DAY_MS = 86_400_000
 // NBA fantasy periods follow Eastern calendar days. A fixed seven-day UTC offset
 // moves the boundary by an hour when daylight saving time changes in November.
 function nbaEasternWeekDay(season: number, week: number): Date | null {
-  const opener = REGULAR_SEASON_START_UTC.NBA[season]
+  // Through the resolver, not the table: a schedule-derived opener (see below) must reach the NBA
+  // Eastern-day arithmetic too, or a year-2 dynasty season would resolve windows but not weeks.
+  const opener = resolveDailySportSeasonStart('NBA', season)
   if (!opener) return null
   const day = new Date(Date.parse(opener) + (week - 1) * 7 * DAY_MS)
   const noon = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 12))
@@ -189,30 +191,122 @@ export function dailySportWeekForInstant(
 }
 
 /**
+ * Openers DERIVED from the stored schedule, for seasons the curated table above does not list yet.
+ *
+ * 🛑 WHY THIS EXISTS: DYNASTY LEAGUES OUTLIVE THE TABLE. A dynasty league rolls into `season + 1`
+ * every year (`ensureNextRedraftSeasonShell.ts`, `carryDynastyRosters.ts`). With only NBA/NHL 2026
+ * and MLB 2026-27 recorded, a year-2 NBA/NHL dynasty league (the 2027-28 season) had no anchor: the
+ * week roller held at `NO_WEEK_SIGNAL`, the stat sync and the finalizer declined, and the league
+ * never activated or scored — every such league, every year, until someone added a line by hand.
+ * MLB hits the same wall at 2028.
+ *
+ * The curated table stays AUTHORITATIVE: a curated year never consults this cache, and a derived
+ * entry can never be recorded over one. A derived entry is only ever the earliest game that the
+ * stored schedule EXPLICITLY labels regular season (`deriveDailySportSeasonStart.ts`) — a fact
+ * read from Postgres, not a guess. The async deriver writes it here because most readers of this
+ * module are synchronous and one is client-reachable (the lineup lock), so this module cannot read
+ * the database itself. The async entry points that roll, score and lock weeks prime it first; a
+ * reader in a process that has not primed sees `null` exactly as before — it declines, it never
+ * guesses.
+ *
+ * An ESTIMATE (`estimateDailySportSeasonStart`) is deliberately NOT stored here and NOT returned by
+ * `resolveDailySportSeasonStart`; see its own comment.
+ */
+const DERIVED_REGULAR_SEASON_START_UTC = new Map<string, string>()
+
+const derivedKey = (sport: string, season: number) => `${sport}:${season}`
+
+/**
+ * Record (or, with `null`, forget) a schedule-derived opener. Refused for a curated season, for
+ * soccer (its weeks are a curated gameweek list, so an arithmetic anchor would be wrong), and for
+ * any sport with no curated opener at all (an NFL "opener" here would flip it onto the daily path).
+ */
+export function recordDerivedDailySportSeasonStart(
+  sport: string | null | undefined,
+  season: number,
+  opener: string | null,
+): void {
+  const key = String(sport ?? '').trim().toUpperCase()
+  if (!estimateDailySportSeasonStart(key, season)) return
+  if (opener && !Number.isNaN(Date.parse(opener))) DERIVED_REGULAR_SEASON_START_UTC.set(derivedKey(key, season), opener)
+  else DERIVED_REGULAR_SEASON_START_UTC.delete(derivedKey(key, season))
+}
+
+/** Test seam: forget every derived opener. */
+export function clearDerivedDailySportSeasonStarts(): void {
+  DERIVED_REGULAR_SEASON_START_UTC.clear()
+}
+
+/** Whether the hand-curated, two-source-checked table lists this season. */
+export function isCuratedDailySportSeason(
+  sport: string | null | undefined,
+  season: number | null | undefined,
+): boolean {
+  const key = String(sport ?? '').trim().toUpperCase()
+  const year = Number(season)
+  return Number.isFinite(year) && Boolean(REGULAR_SEASON_START_UTC[key]?.[year])
+}
+
+/**
+ * A rough opener for a season AFTER the latest curated one: the latest curated opener's month and
+ * day in the target year, moved to the nearest same weekday (NBA and NHL 2026 opened on a Tuesday,
+ * MLB 2027 on a Wednesday). E.g. NBA 2026-10-20 (Tue) → 2027-10-19 (Tue).
+ *
+ * ⚠ IT IS AN ESTIMATE AND IS NEVER AN ANCHOR. Openers move by a week or more year to year (NHL 2026
+ * opened 29 September, earlier than usual), and a week window anchored on a wrong day scores
+ * confidently wrong numbers — the failure the `null` contract below exists to prevent. It only
+ * centres the deriver's search window and tells a human roughly when the opener is expected while
+ * the schedule is unpublished; every caller that receives one is told `estimated: true`.
+ *
+ * `null` for soccer (curated gameweek list), for seasons at or before the latest curated one, and
+ * for sports with no curated opener.
+ */
+export function estimateDailySportSeasonStart(
+  sport: string | null | undefined,
+  season: number | null | undefined,
+): string | null {
+  const key = String(sport ?? '').trim().toUpperCase()
+  const year = Number(season)
+  if (key === 'SOCCER' || !Number.isInteger(year)) return null
+  const known = knownDailySportSeasons(key)
+  const latest = known[known.length - 1]
+  if (latest == null || year <= latest) return null
+  const base = new Date(REGULAR_SEASON_START_UTC[key]![latest]!)
+  const anniversary = new Date(Date.UTC(year, base.getUTCMonth(), base.getUTCDate()))
+  // Signed shift in [-3, +3] days that lands on the base opener's weekday.
+  const shift = ((base.getUTCDay() - anniversary.getUTCDay() + 10) % 7) - 3
+  return new Date(anniversary.getTime() + shift * DAY_MS).toISOString()
+}
+
+/**
  * The regular-season opener for a daily sport, or `null` when that season has
- * not been recorded here.
+ * not been recorded here — curated, or derived from the labelled schedule above.
  *
  * 🛑 RETURNING `null` IS THE POINT. The caller declines and says so rather than
  * inventing an anchor: a guessed start date does not fail loudly, it silently
  * assigns every game to the wrong week and scores confidently wrong numbers.
- * Adding next season means adding a line here, deliberately, with the same
- * two-source check described above.
+ * The curated table wins; a schedule-derived opener fills a later season only
+ * once the stored schedule labels that season's regular-season games. Adding a
+ * line to the table, with the two-source check described above, still overrides
+ * both — do that for any season whose opener is known.
  */
 export function resolveDailySportSeasonStart(
   sport: string | null | undefined,
   season: number | null | undefined,
 ): string | null {
   const key = String(sport ?? '').trim().toUpperCase()
-  const bySeason = REGULAR_SEASON_START_UTC[key]
-  if (!bySeason) return null
-
   const year = Number(season)
   if (!Number.isFinite(year)) return null
 
-  return bySeason[year] ?? null
+  const curated = REGULAR_SEASON_START_UTC[key]?.[year]
+  if (curated) return curated
+  return DERIVED_REGULAR_SEASON_START_UTC.get(derivedKey(key, year)) ?? null
 }
 
-/** Seasons recorded for a sport, for diagnostics that want to say what IS known. */
+/**
+ * CURATED seasons recorded for a sport, for diagnostics that want to say what IS known. Derived
+ * openers are not listed: they live per process and exist only once something has primed them.
+ */
 export function knownDailySportSeasons(sport: string | null | undefined): number[] {
   const key = String(sport ?? '').trim().toUpperCase()
   return Object.keys(REGULAR_SEASON_START_UTC[key] ?? {})

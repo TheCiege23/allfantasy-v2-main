@@ -3,6 +3,7 @@ import { setWhisperer } from '@/lib/zombie/ZombieOwnerStatusService'
 import { notifyCommissioner, notifyZombiePlayer } from '@/lib/zombie/commissionerNotificationService'
 import { logAuditEntry } from '@/lib/zombie/auditService'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
+import { loadZombieNames, resolveManagerName } from '@/lib/zombie/zombieTeamNames'
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
@@ -93,9 +94,12 @@ export async function selectWhisperer(
 
   await setWhisperer(leagueId, pickRosterId)
 
+  // The person's name, else their team's, else the role — never the user id this used to fall back to
+  // (`AppUser.displayName` is usually null, so the record carried a uuid shown as the Whisperer's name).
   const displayName =
-    (await prisma.appUser.findUnique({ where: { id: uid }, select: { displayName: true } }))?.displayName ??
-    uid
+    (await resolveManagerName(uid)) ??
+    (await loadZombieNames(leagueId).then((names) => names.get(pickRosterId!)?.teamName ?? null).catch(() => null)) ??
+    'The Whisperer'
 
   const amb = z.whispererAmbushCount ?? 3
   const rec = await prisma.whispererRecord.upsert({

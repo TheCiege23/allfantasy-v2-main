@@ -149,7 +149,10 @@ export const proactiveDeliveryDeps: ProactiveDeliveryDeps = {
       throw e
     }
   },
-  dispatch: dispatchNotification,
+  dispatch: async (params) => {
+    const result = await dispatchNotification(params)
+    if (result.failed > 0) throw new Error('Proactive notification dispatch incomplete')
+  },
   baseUrl: getBaseUrl,
 }
 

@@ -9,6 +9,7 @@ import {
   type BoardTeam,
   type StandingsBoard,
   type Zone,
+  leagueTiebreakReason,
 } from '@/lib/core-app/standingsModel'
 import {
   DEFAULT_STANDINGS_SORT,
@@ -1272,6 +1273,9 @@ function spanishOrderReason(upper: BoardTeam, lower: BoardTeam, board: Standings
       : `${platform} coloca a ${upper.name} delante pese a tener peor récord (${formatRecord(upper.record)} frente a ${formatRecord(lower.record)}).`
   }
   const level = `Empatados a ${formatRecord(upper.record)}`
+  if (board.rules.tiebreakerSource === 'league' && !board.platformOrder) {
+    return `${level}; ${leagueTiebreakReason(upper, lower, { h2h: board.h2h, hasHeadToHead: board.hasHeadToHead, tiebreakers: board.rules.tiebreakers, coinSeed: board.rules.coinSeed }, 'es')}`
+  }
   if (upper.pointsFor > lower.pointsFor) {
     return `${level}; ${upper.name} va delante por puntos a favor (${pts(upper.pointsFor)} frente a ${pts(lower.pointsFor)}), ${board.rules.tiebreakerSource === 'platform' ? `según el desempate de ${platform}` : 'según el desempate supuesto para esta plataforma'}.`
   }
@@ -1328,6 +1332,7 @@ function WhyAbove({ board, view }: { board: StandingsBoard; view: StandingsViewK
         h2h: board.h2h,
         hasHeadToHead: board.hasHeadToHead,
         tiebreakers: board.rules.tiebreakers,
+        coinSeed: board.rules.coinSeed,
         tiebreakerSource: board.rules.tiebreakerSource,
         platformLabel: board.rules.platformLabel,
         platformOrder: board.platformOrder,

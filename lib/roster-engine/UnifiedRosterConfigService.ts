@@ -8,6 +8,7 @@ import {
   detectReadOnlyRosterView,
 } from './RosterPermissionsService'
 import { mapImportedRosterToAF } from './RosterImportMapper'
+import { sportSupportsProspectStash, stripProspectStashSlots } from '@/lib/league-creation/prospectStashPolicy'
 import { validateRosterConfig } from './RosterValidationEngine'
 import type {
   RosterAuditEntry,
@@ -139,7 +140,13 @@ export async function updateLeagueRosterConfig(
   const template = service.resolveDefaultTemplate(leagueType)
   const compare = compareRosterToTemplate(latest.slots, template)
 
-  const currentSettings = (league.settings as Record<string, unknown>) ?? {}
+  /*
+   * Re-read AFTER saveConfig. `league.settings` was read before it, and saveConfig writes the
+   * sport's `<sport>_roster_config` into these same settings, so spreading the earlier copy below
+   * put the OLD slots back while LeagueRosterConfig kept the new ones.
+   */
+  const fresh = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const currentSettings = ((fresh?.settings ?? league.settings) as Record<string, unknown>) ?? {}
   const previousMeta = (currentSettings.roster as Record<string, unknown>) ?? {}
   const nextVersion = Number(previousMeta.version ?? 0) + 1
   const previousAudit = Array.isArray(previousMeta.auditLog) ? (previousMeta.auditLog as RosterAuditEntry[]) : []
@@ -192,6 +199,13 @@ export async function createDefaultLeagueRosterConfig(
   const settings = (league?.settings as Record<string, unknown>) ?? {}
   let config = await service.getConfig(leagueId)
   const setup = settings.conceptSetup as Record<string, unknown> | undefined
+  const withoutStash = stripProspectStashSlots(sport, config.slots)
+  if (Object.keys(withoutStash).length !== Object.keys(config.slots).length) {
+    // NHL / MLB: the sport templates still carry TAXI / PROSPECT / RIGHTS / MINORS for existing
+    // leagues, but a NEW league gets none of them (lib/league-creation/prospectStashPolicy.ts).
+    await service.saveConfig(leagueId, { templateKey: config.templateKey, slots: withoutStash, isCustom: config.isCustom })
+    config = await service.getConfig(leagueId)
+  }
   if (leagueType === 'dynasty' && setup) {
     const slots = { ...config.slots }
     let changed = false
@@ -199,6 +213,7 @@ export async function createDefaultLeagueRosterConfig(
     const irSlot = 'IL' in slots ? 'IL' : 'IR'
     for (const [choice, slot] of [['benchCount', benchSlot], ['irCount', irSlot], ['taxiSlots', 'TAXI']] as const) {
       const value = setup[choice]
+      if (slot === 'TAXI' && !sportSupportsProspectStash(sport)) continue
       if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && slots[slot] !== value) {
         slots[slot] = value
         changed = true

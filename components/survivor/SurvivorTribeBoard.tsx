@@ -4,6 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Users, Trophy } from 'lucide-react'
 import type { SurvivorSummary } from './types'
+import { SurvivorAvatar, SurvivorOutChip, SurvivorTorchIcon, survivorAvatarStatus } from './weekly/SurvivorAvatar'
+import { tribeCrestAlt } from '@/lib/survivor/survivorTribeIdentity'
 
 export interface SurvivorTribeBoardProps {
   leagueId: string
@@ -44,7 +46,8 @@ export function SurvivorTribeBoard({ leagueId, summary, names, onRefresh }: Surv
   const weekResults = challenges.filter((challenge) => challenge.week === currentWeek && challenge.resultJson)
 
   const tribeImmunity = new Set<string>()
-  const rosterImmunity = new Set<string>()
+  // The weekly necklace (top score in each tribe headed to Tribal Council) plus challenge immunity.
+  const rosterImmunity = new Set<string>(summary.immunityRosterIds ?? [])
   const tribeBonuses = new Map<string, string[]>()
 
   for (const challenge of weekResults) {
@@ -121,7 +124,7 @@ export function SurvivorTribeBoard({ leagueId, summary, names, onRefresh }: Surv
                 }`}
               >
                 <div className="mb-2 flex items-center justify-between">
-                  <h3 className="flex items-center gap-2 font-semibold text-white">{tribe.logoUrl && <img src={tribe.logoUrl} alt="" width={64} height={64} className="h-16 w-16 object-contain" />}{tribe.name}</h3>
+                  <h3 className="flex items-center gap-2 font-semibold text-white">{tribe.logoUrl && <img src={tribe.logoUrl} alt={tribe.mascot ? tribeCrestAlt(tribe.name, tribe.mascot) : ''} width={64} height={76} className="h-[76px] w-16 object-contain" />}{tribe.name}</h3>
                   {hasImmunity && (
                     <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs text-emerald-300">
                       <img src="/survivor/weekly/immunity-necklace-icon.svg" alt="" className="h-5 w-5 object-contain" /> Immunity
@@ -132,16 +135,34 @@ export function SurvivorTribeBoard({ leagueId, summary, names, onRefresh }: Surv
                   )}
                 </div>
                 <ul className="space-y-1">
-                  {tribe.members.map((member) => (
-                    <li
-                      key={member.rosterId}
-                      className="flex items-center gap-2 text-sm text-white/80"
-                    >
-                      {member.isLeader && <Trophy className="h-3.5 w-3.5 text-amber-400" />}
-                      {rosterImmunity.has(member.rosterId) && <img src="/survivor/weekly/immunity-necklace-icon.svg" alt="Immunity" className="h-5 w-5 object-contain" />}
-                      {names[member.rosterId] ?? member.rosterId}
-                    </li>
-                  ))}
+                  {tribe.members.map((member) => {
+                    const immune = rosterImmunity.has(member.rosterId)
+                    const name = names[member.rosterId] ?? member.rosterId
+                    return (
+                      <li
+                        key={member.rosterId}
+                        className={`flex min-h-[44px] items-center gap-3 rounded-lg px-2 text-sm text-white/80 ${immune ? 'bg-amber-400/[0.07] ring-1 ring-amber-300/25' : ''}`}
+                        data-immune={immune}
+                      >
+                        <SurvivorAvatar name={name} size={30} status={survivorAvatarStatus({ immune })} gapColor="#10131c" />
+                        <span className="min-w-0 flex-1 truncate">{name}</span>
+                        {member.isLeader && <Trophy className="h-3.5 w-3.5 text-amber-400" aria-label="Tribe leader" />}
+                        {immune && <img src="/survivor/weekly/immunity-necklace-icon.svg" alt="Immune" className="h-5 w-5 object-contain" />}
+                        <SurvivorTorchIcon out={false} size={20} />
+                      </li>
+                    )
+                  })}
+                  {(tribe.outMembers ?? []).map((member) => {
+                    const name = names[member.rosterId] ?? member.rosterId
+                    return (
+                      <li key={`out-${member.rosterId}`} className="flex min-h-[44px] items-center gap-3 px-2 text-sm text-white/45" data-out="true">
+                        <SurvivorAvatar name={name} size={30} status="out" gapColor="#10131c" />
+                        <span className="min-w-0 flex-1 truncate line-through">{name}</span>
+                        <SurvivorOutChip week={member.week} />
+                        <SurvivorTorchIcon out size={20} />
+                      </li>
+                    )
+                  })}
                 </ul>
                 {required > 0 && <p className="mt-2 text-xs text-cyan-200">Sit-outs: {accepted} of {required} confirmed. Chimmy selects the rest at first tipoff.</p>}
                 <p className="mt-2 text-xs text-white/50">

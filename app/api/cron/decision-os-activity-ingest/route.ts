@@ -477,6 +477,8 @@ async function ingestOnePlatformLeague(
       provider: "fleaflicker",
       sourceId,
       currentStateOnly: true,
+      /* An already-imported league: the import-time sport gate must not strand its sync. */
+      refreshOfImportedLeague: true,
     })
     if (!imported.success) throw new Error(`${imported.code}:${imported.error}`)
 
@@ -507,6 +509,8 @@ async function ingestOnePlatformLeague(
       sourceId: sourceLeagueId,
       userId: importingUserId,
       currentStateOnly: true,
+      /* An already-imported league: the import-time sport gate must not strand its sync. */
+      refreshOfImportedLeague: true,
     })
     if (!imported.success) throw new Error(`${imported.code}:${imported.error}`)
     const teamOwnerMap = new Map<string, string | null>(

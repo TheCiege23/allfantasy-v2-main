@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { FirstEntryIntroShell, useFirstEntryIntro } from '@/components/league/FirstEntryIntroShell'
 import { firstEntryIntroStorageKey } from '@/lib/league/post-create-welcome'
 
 const DEVY_INTRO_VIDEO = '/league-type-devy-intro.mp4'
@@ -57,7 +58,6 @@ export function DevyFirstEntryModal({
   mode = 'devy',
   forceReplay = false,
 }: DevyFirstEntryModalProps) {
-  const [visible, setVisible] = useState(false)
   const [videoKey, setVideoKey] = useState(0)
   const [videoFailed, setVideoFailed] = useState(false)
 
@@ -69,106 +69,90 @@ export function DevyFirstEntryModal({
   const title = mode === 'c2c' ? 'Campus to Canton (C2C)' : 'Devy Dynasty'
   const cta = mode === 'c2c' ? 'Enter your C2C league' : 'Build the pipeline'
 
-  const markSeen = useCallback(() => {
-    if (typeof window !== 'undefined' && leagueId && userId) {
-      try { window.localStorage.setItem(storageKey, '1') } catch { /* ignore */ }
-    }
-  }, [leagueId, userId, storageKey])
-
-  const handleDismiss = useCallback(() => {
-    markSeen()
-    setVisible(false)
-    onClose()
-  }, [markSeen, onClose])
+  const { visible, dismiss: handleDismiss } = useFirstEntryIntro({
+    storageKey,
+    enabled: enabled && Boolean(leagueId && userId),
+    forceReplay,
+    onClose,
+  })
 
   const handleReplay = useCallback(() => {
     setVideoFailed(false)
     setVideoKey((k) => k + 1)
   }, [])
 
-  useEffect(() => {
-    if (!enabled || !leagueId || !userId) { setVisible(false); return }
-    if (forceReplay) { setVisible(true); return }
-    try {
-      const seen = typeof window !== 'undefined' && window.localStorage.getItem(storageKey)
-      setVisible(!seen)
-    } catch { setVisible(true) }
-  }, [enabled, leagueId, userId, storageKey, forceReplay])
-
   if (!visible) return null
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/92 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={mode === 'c2c' ? 'Campus to Canton intro' : 'Devy Dynasty intro'}
+    <FirstEntryIntroShell
+      ariaLabel={mode === 'c2c' ? 'Campus to Canton intro' : 'Devy Dynasty intro'}
+      onDismiss={handleDismiss}
+      cardClassName="border border-violet-500/25 bg-[#050a14]"
+      closeTestId="devy-intro-close"
     >
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-violet-500/25 bg-[#050a14] shadow-2xl">
-        <div className="border-b border-violet-500/20 bg-gradient-to-r from-violet-950/40 via-indigo-950/20 to-transparent px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-500/30 bg-violet-950/40 text-lg">
-              <span role="img" aria-label="crystal ball">&#128302;</span>
-            </div>
-            <div>
-              <p className="text-[15px] font-bold text-violet-100">{title}</p>
-              <p className="text-[11px] text-white/50">{tagline}</p>
-            </div>
+      <div className="border-b border-violet-500/20 bg-gradient-to-r from-violet-950/40 via-indigo-950/20 to-transparent px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-500/30 bg-violet-950/40 text-lg">
+            <span role="img" aria-label="crystal ball">&#128302;</span>
           </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-white/50">{welcome}</p>
-        </div>
-
-        {!videoFailed ? (
-          <video
-            key={videoKey}
-            className="aspect-video w-full bg-black"
-            src={resolvedVideoSrc}
-            controls
-            autoPlay
-            muted
-            playsInline
-            onError={() => setVideoFailed(true)}
-            onEnded={handleDismiss}
-          />
-        ) : (
-          <div className="flex aspect-video flex-col items-center justify-center bg-gradient-to-b from-[#030816] to-[#0a0520] px-6 text-center">
-            <div className="mb-3 text-5xl">&#128302;</div>
-            <p className="text-sm font-semibold text-violet-200">{title}</p>
-            <p className="mt-1 text-xs text-white/50">
-              {mode === 'c2c' ? 'College + Pro unified pipeline' : 'Startup / Rookie / Devy Drafts'}
-            </p>
-            <p className="mt-3 text-[11px] text-white/40">
-              Intro video not found. Add it at{' '}
-              <span className="font-mono text-violet-300/70">
-                {mode === 'c2c' ? 'public/league-type-c2c-intro.mp4' : 'public/league-type-devy-intro.mp4'}
-              </span>
-            </p>
+          <div>
+            <p className="text-[15px] font-bold text-violet-100">{title}</p>
+            <p className="text-[11px] text-white/50">{tagline}</p>
           </div>
-        )}
-
-        <div className="max-h-[28vh] overflow-y-auto border-t border-white/[0.06] bg-[#040914] px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
-            {mode === 'c2c' ? 'How C2C works' : 'How devy works'}
-          </p>
-          <ul className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-white/55">
-            {tips.map((t) => (
-              <li key={t} className="flex gap-2">
-                <span className="text-violet-400/90" aria-hidden>&#8226;</span>
-                <span>{t}</span>
-              </li>
-            ))}
-          </ul>
         </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] bg-white/[0.04] p-4">
-          <button type="button" onClick={handleReplay} className="rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10">
-            Replay
-          </button>
-          <button type="button" onClick={handleDismiss} className="rounded-lg bg-violet-600/90 px-4 py-2 text-sm font-medium text-white hover:bg-violet-600" data-testid="devy-intro-continue">
-            {cta}
-          </button>
-        </div>
+        <p className="mt-2 text-[11px] leading-relaxed text-white/50">{welcome}</p>
       </div>
-    </div>
+
+      {!videoFailed ? (
+        <video
+          key={videoKey}
+          className="aspect-video w-full bg-black"
+          src={resolvedVideoSrc}
+          controls
+          autoPlay
+          muted
+          playsInline
+          onError={() => setVideoFailed(true)}
+          onEnded={handleDismiss}
+        />
+      ) : (
+        <div className="flex aspect-video flex-col items-center justify-center bg-gradient-to-b from-[#030816] to-[#0a0520] px-6 text-center">
+          <div className="mb-3 text-5xl">&#128302;</div>
+          <p className="text-sm font-semibold text-violet-200">{title}</p>
+          <p className="mt-1 text-xs text-white/50">
+            {mode === 'c2c' ? 'College + Pro unified pipeline' : 'Startup / Rookie / Devy Drafts'}
+          </p>
+          <p className="mt-3 text-[11px] text-white/40">
+            Intro video not found. Add it at{' '}
+            <span className="font-mono text-violet-300/70">
+              {mode === 'c2c' ? 'public/league-type-c2c-intro.mp4' : 'public/league-type-devy-intro.mp4'}
+            </span>
+          </p>
+        </div>
+      )}
+
+      <div className="max-h-[28vh] overflow-y-auto border-t border-white/[0.06] bg-[#040914] px-4 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+          {mode === 'c2c' ? 'How C2C works' : 'How devy works'}
+        </p>
+        <ul className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-white/55">
+          {tips.map((t) => (
+            <li key={t} className="flex gap-2">
+              <span className="text-violet-400/90" aria-hidden>&#8226;</span>
+              <span>{t}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] bg-white/[0.04] p-4">
+        <button type="button" onClick={handleReplay} className="rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10">
+          Replay
+        </button>
+        <button type="button" onClick={handleDismiss} className="rounded-lg bg-violet-600/90 px-4 py-2 text-sm font-medium text-white hover:bg-violet-600" data-testid="devy-intro-continue">
+          {cta}
+        </button>
+      </div>
+    </FirstEntryIntroShell>
   )
 }

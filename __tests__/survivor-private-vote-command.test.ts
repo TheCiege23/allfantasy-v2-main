@@ -36,7 +36,8 @@ describe('unrevealed council allowlist', () => {
   })
   it('exposes public results after reveal without exposing voter identities or the seed', () => {
     const result = survivorPublicCouncil({ ...secret, isRevealed: true }, false)
-    expect(result?.revealSequence).toEqual(secret.revealSequence)
+    // A legacy read (no revealStartsAt) is complete; steps are projected to the public ballot shape.
+    expect(result?.revealSequence).toEqual([{ order: 1, targetName: 'Secret', status: 'counts', isExtraVote: false }])
     expect(result?.votes).toEqual([])
     expect(result).not.toHaveProperty('auditLog')
   })

@@ -9,7 +9,7 @@ import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core
  * people in two requests. This store is shared.
  */
 import { clearTyping, markTyping, readTyping } from "@/lib/chat-core/durableTyping"
-import { canAccessLeagueDraft } from "@/lib/live-draft-engine/auth"
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { prisma } from "@/lib/prisma"
 
 async function canAccessThread(threadId: string, appUserId: string): Promise<boolean> {
@@ -23,7 +23,7 @@ async function canAccessThread(threadId: string, appUserId: string): Promise<boo
     })
     if (bracketMember) return true
 
-    return canAccessLeagueDraft(leagueId, appUserId)
+    return (await resolveLeagueAccess(leagueId, appUserId)) != null
   }
 
   const member = await (prisma as any).platformChatThreadMember.findFirst({

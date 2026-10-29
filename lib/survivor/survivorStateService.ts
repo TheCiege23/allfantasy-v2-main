@@ -7,6 +7,7 @@ import {
   type SurvivorAccessContext,
 } from './survivorAccessControl'
 import { buildTribalCouncilView, type TribalCouncilView } from './survivorTribalView'
+import { resolveTribeEmblem } from './survivorTribeIdentity'
 
 type VoteWindowStatus = 'not_started' | 'pending' | 'voting_open' | 'votes_locked' | 'revealed' | 'complete'
 
@@ -24,6 +25,9 @@ type StatePlayerRow = {
 type StateTribeRow = {
   logoUrl: string | null
   colorHex: string | null
+  catalogId: string | null
+  primaryColor: string | null
+  secondaryColor: string | null
   id: string
   name: string
   slotIndex: number
@@ -73,6 +77,8 @@ export interface SurvivorFoundationState {
   leagueId: string
   phase: string
   currentWeek: number
+  /** The league's sport, so settings screens can show sport-only rules (NBA weekly scoring). */
+  sport?: string
   settings: SurvivorAccessContext['settings']
   access: {
     role: SurvivorAccessContext['role']
@@ -98,7 +104,11 @@ export interface SurvivorFoundationState {
     mergeTriggered: boolean
   }
   tribes: Array<{
+    /** Full crest (composed with the tribe's current name and colours for catalogue tribes). */
     logoUrl: string | null
+    /** Round mark for small/decorative placements. */
+    markUrl: string | null
+    mascot: string | null
     colorHex: string | null
     id: string
     name: string
@@ -201,6 +211,7 @@ export async function buildSurvivorStateForUser(
         survivorPlayerCount: true,
         survivorMergeWeek: true,
         leagueVariant: true,
+        sport: true,
       },
     }),
     prisma.survivorGameState.findUnique({ where: { leagueId } }),
@@ -226,6 +237,9 @@ export async function buildSurvivorStateForUser(
         slotIndex: true,
         logoUrl: true,
         colorHex: true,
+        catalogId: true,
+        primaryColor: true,
+        secondaryColor: true,
         isActive: true,
         isMerged: true,
         members: { select: { rosterId: true } },
@@ -354,6 +368,7 @@ export async function buildSurvivorStateForUser(
     leagueId,
     phase: gameState?.phase ?? league.survivorPhase ?? 'setup',
     currentWeek: gameState?.currentWeek ?? 0,
+    sport: String(league.sport ?? 'NFL').toUpperCase(),
     settings: access.settings,
     access: {
       role: access.role,
@@ -380,10 +395,13 @@ export async function buildSurvivorStateForUser(
     },
     tribes: tribeRows.map((tribe) => {
       const canSeeMembers = access.decisions.canSeeHiddenIdolAssignments || tribe.id === access.tribeId
+      const emblem = resolveTribeEmblem(tribe, String(league.sport ?? 'NFL'))
       return {
         id: tribe.id,
         name: tribe.name,
-        logoUrl: tribe.logoUrl,
+        logoUrl: emblem.crestUrl,
+        markUrl: emblem.markUrl,
+        mascot: emblem.mascot,
         colorHex: tribe.colorHex,
         slotIndex: tribe.slotIndex,
         isActive: tribe.isActive,

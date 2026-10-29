@@ -1,3 +1,5 @@
+import { gameAlertDeadline } from "./gameAlertFreshness"
+import { emailWithheldByUnsubscribe } from "@/lib/email/emailSubscription"
 /**
  * NOTIFICATION OUTBOX RELAY — the delivery half of `notification_outbox`.
  *
@@ -37,6 +39,16 @@
  *   monitor exists to catch, and it had no probe.
  */
 import { prisma } from "@/lib/prisma"
+import { sendTemplatedEmail } from "@/lib/resend-client"
+import { getSettingsProfile } from "@/lib/user-settings"
+import { resolveNotificationPreferences } from "@/lib/notification-settings/NotificationPreferenceResolver"
+import { decidePush } from "./pushGate"
+import { quietHoursSuppression } from "./quietHours"
+import { isCategoryAllowedForLeague } from "./leagueOverrides"
+import { isCategoryHiddenByHomeSection } from '@/lib/core-app/homeSections'
+import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
+import { pushTagFor } from "./pushTag"
+import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
 import { sendNotificationEmail } from "@/lib/resend-client"
 import { sendPushToUser } from "@/lib/push-notifications/push-service"
 import { decideFatigue } from "./fatigueBudget"
@@ -73,6 +85,7 @@ type OutboxRow = {
   attemptCount: number
   maxAttempts: number
   metadata: unknown
+  createdAt: Date
 }
 
 function emptyChannelTally() {
@@ -118,6 +131,39 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
   const fatigue = await decideFatigue(row)
   if (fatigue.suppress) return { outcome: "skipped", error: fatigue.reason }
 
+  const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {}
+  const deadline = gameAlertDeadline(row.eventType, row.createdAt, metadata.expiresAt)
+  if (deadline !== undefined && deadline <= Date.now()) {
+    return { outcome: 'skipped', error: 'notification expired before delivery' }
+  }
+  const category = metadata.notificationCategory as NotificationCategoryId | undefined
+  // Durable dispatcher rows re-evaluate current preferences at retry time.
+  if (category && row.userId && (row.channel === 'push' || row.channel === 'email')) {
+    const profile = await getSettingsProfile(row.userId)
+    if (!profile) return { outcome: 'skipped', error: 'profile unavailable' }
+    const prefs = resolveNotificationPreferences(profile.notificationPreferences as NotificationPreferences | null)
+    const cat = prefs.categories?.[category]
+    if (!prefs.globalEnabled || !cat?.enabled || !isCategoryAllowedForLeague(prefs, category, row.leagueId)) {
+      return { outcome: 'skipped', error: 'notifications muted' }
+    }
+    // Hidden from the home in Settings → Home page after this row was queued (lib/core-app/homeSections.ts).
+    if (isCategoryHiddenByHomeSection(profile.notificationPreferences, category)) {
+      return { outcome: 'skipped', error: 'home section hidden' }
+    }
+    const quiet = quietHoursSuppression(prefs.quietHours, new Date(), metadata.severity === 'high' ? 'high' : 'medium', profile.timezone)
+    if (quiet.push) return { outcome: 'skipped', error: 'quiet hours; retained in app' }
+    if (row.channel === 'email' && (!cat.email || !profile.email || isUndeliverableEmailDomain(profile.email) || emailWithheldByUnsubscribe(profile.emailSubscription, category))) {
+      return { outcome: 'skipped', error: 'email unavailable or muted' }
+    }
+    if (row.channel === 'push') {
+      const decision = decidePush(profile.notificationPreferences as NotificationPreferences | null, {
+        category, leagueId: row.leagueId, severity: metadata.severity === 'high' ? 'high' : 'medium', fallbackTimezone: profile.timezone,
+      })
+      if (!decision.allowed) return decision.reason === 'quiet_hours'
+        ? { outcome: 'skipped', error: 'quiet hours; retained in app' } : { outcome: 'skipped', error: decision.reason }
+    }
+  }
+
   switch (row.channel) {
     case "email": {
       if (!row.userId) return { outcome: "skipped", error: "email row has no userId" }
@@ -127,7 +173,8 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
       })
       if (!user?.email) return { outcome: "skipped", error: `no email for user ${row.userId}` }
 
-      const res = await sendNotificationEmail({
+      const designed = metadata.emailOverride as { subject: string; html: string } | undefined
+      const res = designed ? await sendTemplatedEmail({ to: user.email, subject: designed.subject, html: designed.html }) : await sendNotificationEmail({
         to: user.email,
         subject: row.title,
         bodyHtml: row.body,
@@ -144,7 +191,11 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
         body: row.body,
         href: actionHrefFrom(row.metadata),
         type: row.eventType,
+        expiresAt: deadline === undefined ? undefined : new Date(deadline).toISOString(),
         leagueId: row.leagueId,
+        tag: pushTagFor(category ?? row.eventType, metadata),
+        imageUrl: typeof metadata.imageUrl === "string" ? metadata.imageUrl : null,
+        iconUrl: typeof metadata.iconUrl === "string" ? metadata.iconUrl : null,
       })
       /*
        * No subscriptions is a legitimate end state, not a failure: the user has simply never
@@ -152,7 +203,8 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
        * users who will never receive push at all.
        */
       if (results.length === 0) return { outcome: "skipped", error: "no push subscriptions" }
-      if (results.some((r) => r.ok)) return { outcome: "sent" }
+      if (results.every(r => !r.ok && r.error === 'Subscription expired')) return { outcome: 'skipped', error: 'all subscriptions expired' }
+      if (results.every((r) => r.ok || r.error === 'Subscription expired')) return { outcome: "sent" }
       return {
         outcome: "retry",
         error: results[0]?.error ?? "all push endpoints failed",
@@ -236,6 +288,10 @@ export async function relayNotificationOutbox(options: RelayOptions = {}): Promi
     errors: [],
   }
 
+  if (!options.dryRun) await prisma.notificationOutbox.updateMany({
+    where: { status: 'sending', updatedAt: { lt: new Date(now.getTime() - 10 * 60_000) } },
+    data: { status: 'pending', lastError: 'Recovered expired delivery lease' },
+  })
   const due = await prisma.notificationOutbox.findMany({
     where: {
       status: "pending",
@@ -256,14 +312,17 @@ export async function relayNotificationOutbox(options: RelayOptions = {}): Promi
 
   /* THE CLAIM. `status: "pending"` in the where clause is what makes this safe under concurrency —
    * a row already taken by another run no longer matches and is not re-sent. */
-  const claim = await prisma.notificationOutbox.updateMany({
-    where: { id: { in: ids }, status: "pending" },
-    data: { status: "sending", updatedAt: now },
-  })
-  if (claim.count === 0) return result
+  const claimedIds: string[] = []
+  for (const id of ids) {
+    const claim = await prisma.notificationOutbox.updateMany({
+      where: { id, status: "pending" }, data: { status: "sending", updatedAt: now },
+    })
+    if (claim.count) claimedIds.push(id)
+  }
+  if (!claimedIds.length) return result
 
   const rows = (await prisma.notificationOutbox.findMany({
-    where: { id: { in: ids }, status: "sending" },
+    where: { id: { in: claimedIds }, status: "sending" },
     select: {
       id: true,
       leagueId: true,
@@ -275,12 +334,13 @@ export async function relayNotificationOutbox(options: RelayOptions = {}): Promi
       attemptCount: true,
       maxAttempts: true,
       metadata: true,
+      createdAt: true,
     },
   })) as OutboxRow[]
 
   result.claimed = rows.length
 
-  for (const row of rows) {
+  const deliverRow = async (row: OutboxRow) => {
     const tally = (result.byChannel[row.channel] ??= emptyChannelTally())
     const attempt = row.attemptCount + 1
 
@@ -302,7 +362,7 @@ export async function relayNotificationOutbox(options: RelayOptions = {}): Promi
       })
       result.sent += 1
       tally.sent += 1
-      continue
+      return
     }
 
     if (outcome === "skipped") {
@@ -314,9 +374,16 @@ export async function relayNotificationOutbox(options: RelayOptions = {}): Promi
       result.skipped += 1
       tally.skipped += 1
       if (error) result.errors.push(`${row.channel}/${row.id}: ${error}`)
-      continue
+      return
     }
 
+    if (error === 'quiet hours') {
+      await prisma.notificationOutbox.update({ where: { id: row.id }, data: {
+        status: 'pending', sendAfter: new Date(now.getTime() + 15 * 60_000), lastError: error,
+      } })
+      result.retried++; tally.retried++
+      return
+    }
     // Transient. Back to pending until maxAttempts is spent, then terminal.
     const exhausted = attempt >= row.maxAttempts
     await prisma.notificationOutbox.update({
@@ -336,6 +403,11 @@ export async function relayNotificationOutbox(options: RelayOptions = {}): Promi
     }
     if (error) result.errors.push(`${row.channel}/${row.id}: ${error}`)
   }
+
+  let next = 0
+  await Promise.all(Array.from({ length: Math.min(8, rows.length) }, async () => {
+    while (next < rows.length) await deliverRow(rows[next++]!)
+  }))
 
   return result
 }

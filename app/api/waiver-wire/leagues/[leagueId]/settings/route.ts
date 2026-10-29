@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { getEffectiveLeagueWaiverSettings, upsertLeagueWaiverSettings } from "@/lib/waiver-wire"
 import { buildWriteAuthorityEnvelope } from "@/lib/league/write-authority"
 import { loadDailyTransactionPolicy } from "@/lib/waiver-wire/daily-schedule-gate"
+import { loadWaiverPhasePolicy } from "@/lib/waiver-wire/season-phase-gate"
+import { effectiveFaabRolloverRule, faabRolloverFamilyForLeague } from "@/lib/waiver-wire/faab-rollover"
 
 export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -14,15 +16,16 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
 
   const leagueId = params.leagueId
   const [league, rosterAsMember] = await Promise.all([
-    (prisma as any).league.findFirst({ where: { id: leagueId }, select: { id: true, sport: true, leagueVariant: true, userId: true, platform: true } }),
+    (prisma as any).league.findFirst({ where: { id: leagueId }, select: { id: true, sport: true, leagueType: true, leagueVariant: true, userId: true, platform: true, isDynasty: true, settings: true } }),
     (prisma as any).roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
   ])
   const hasAccess = league && (league.userId === userId || rosterAsMember)
   if (!hasAccess) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
-  const [settings, daily] = await Promise.all([
+  const [settings, daily, phasePolicy] = await Promise.all([
     getEffectiveLeagueWaiverSettings(leagueId),
     loadDailyTransactionPolicy(leagueId).catch(() => null),
+    loadWaiverPhasePolicy(leagueId, (rosterAsMember as { id?: string } | null)?.id ?? null).catch(() => null),
   ])
   const variant = (league as { leagueVariant?: string })?.leagueVariant ?? ""
   const formatType = (variant === "IDP" || variant === "DYNASTY_IDP" || variant === "idp") ? "IDP" : undefined
@@ -40,6 +43,13 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
           immediateRefusal: daily.policy.immediateRefusal,
         }
       : null,
+    // The season phase's rule for the viewer's team (lib/waiver-wire/season-phase-policy.ts), so the
+    // page can say why a move is blocked before the server refuses it.
+    phasePolicy,
+    // The FAAB rollover rule a renewal applies when the commissioner has chosen none — keeper and dynasty
+    // carry over, redraft resets (faabRolloverFamilyForLeague, lib/waiver-wire/faab-rollover.ts), the
+    // same family the renew route applies, so the screens show what will happen.
+    faabRolloverDefault: effectiveFaabRolloverRule(null, faabRolloverFamilyForLeague(league as { leagueType?: string | null; leagueVariant?: string | null; settings?: unknown; isDynasty?: boolean | null })),
     // Loaded with the rest of the waiver shell so the page can disclose SHADOW status before a
     // manager files a claim, not only in the toast afterwards.
     writeAuthority: buildWriteAuthorityEnvelope('waiver_claim', (league as { platform?: string })?.platform ?? null),

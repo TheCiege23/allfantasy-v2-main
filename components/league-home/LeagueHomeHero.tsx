@@ -30,7 +30,7 @@ function labelForLeagueType(leagueType: string | null | undefined, variant?: str
   if (v === 'idp' || v === 'dynasty_idp') return 'IDP'
   if (v === 'devy_dynasty') return 'Devy'
   if (v === 'merged_devy_c2c') return 'C2C'
-  if (v === 'guillotine') return 'Guillotine'
+  if (v === 'guillotine') return 'Guilly'
   if (v === 'zombie') return 'Zombie'
   if (v === 'salary_cap') return 'Salary Cap'
 
@@ -42,7 +42,7 @@ function labelForLeagueType(leagueType: string | null | undefined, variant?: str
     best_ball: 'Best Ball',
     salary_cap: 'Salary Cap',
     survivor: 'Survivor',
-    guillotine: 'Guillotine',
+    guillotine: 'Guilly',
     tournament: 'Tournament',
     devy: 'Devy',
     c2c: 'C2C',

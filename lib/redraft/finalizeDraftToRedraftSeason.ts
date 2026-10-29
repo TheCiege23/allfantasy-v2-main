@@ -1,9 +1,12 @@
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
+import { seedNullFaabBalances } from '@/lib/waiver-wire/settings-service'
 import { reconcileSurvivorDraftPlan } from '@/lib/survivor/reconcileSurvivorDraftPlan'
 import { withSurvivorSetupTransaction } from '@/lib/survivor/survivorSetupTransaction'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
-import { resolveCreatedSeasonWeeks } from './createdSeasonLength'
+import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
+import { resolveCreatedSeasonWeeks, resolveGuillotineSeasonWeeks } from './createdSeasonLength'
+import { maxPlayoffStartWeekFor } from './regularSeasonCap'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
@@ -13,9 +16,10 @@ import { tryGetSportConfig } from '@/lib/sportConfig'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
-import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
+import { getGuillotineConfig, isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { resolveSeasonStartWeek } from '@/lib/redraft/seasonStartWeek'
 import { STANDARD_WEEKLY_SEASON_FORMATS } from '@/lib/season-week/standardSeasonScope'
+import { afterDynastyNewSeasonActivated } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -153,7 +157,7 @@ function inferSlotTypeFromGenericRosterPlayerData(
   return 'bench'
 }
 
-async function ensureRedraftSeason(leagueId: string) {
+export async function ensureRedraftSeason(leagueId: string) {
   const existing = await prisma.redraftSeason.findFirst({
     where: { leagueId },
     orderBy: { createdAt: 'desc' },
@@ -170,6 +174,7 @@ async function ensureRedraftSeason(leagueId: string) {
       playoffStartWeek: true,
       playoffTeams: true,
       playoffWeeksPerRound: true,
+      leagueType: true,
       dynastyConfig: { select: { regularSeasonWeeks: true } },
       bbContestId: true,
       bestBallMode: true,
@@ -181,15 +186,26 @@ async function ensureRedraftSeason(leagueId: string) {
   const sportKey = leagueSportToConfigSport(String(league.sport ?? 'NFL'))
   const cfg = tryGetSportConfig(sportKey)
   const seasonYear = Number(league.season ?? currentSeasonYear()) || currentSeasonYear()
-  const totalWeeks = resolveCreatedSeasonWeeks(league, cfg?.defaultSeasonWeeks ?? 17)
+  // A guillotine league runs until its last chop and has no playoffs. The sport default (NBA 22)
+  // would end the season before a week-24 final chop and open playoffs mid-elimination.
+  const guillotine = (await isGuillotineLeague(leagueId).catch(() => false))
+    ? await getGuillotineConfig(leagueId).catch(() => null)
+    : null
+  const createdWeeks = resolveCreatedSeasonWeeks(league, cfg?.defaultSeasonWeeks ?? 17)
+  const totalWeeks = guillotine ? resolveGuillotineSeasonWeeks(guillotine.eliminationEndWeek, createdWeeks) : createdWeeks
   // The commissioner's playoff start week, when it fits the season; the sport default otherwise.
+  // A divisions-tournament conference league has no league playoffs: its bracket weeks are regular
+  // weeks the tournament scores (lib/tournament/divisions/conferenceSeasonPlan.ts).
   // It used to be the sport default always, while the bracket read the league setting — so the
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
-  const playoffStartWeek = readSurvivorFullSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
-    Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks
+  const playoffStartCap = maxPlayoffStartWeekFor(league)
+  const playoffStartWeek = guillotine || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
+    Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks &&
+    // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts).
+    (playoffStartCap == null || leaguePlayoffStart <= playoffStartCap)
       ? leaguePlayoffStart
-      : cfg?.defaultPlayoffStartWeek ?? 15
+      : Math.min(cfg?.defaultPlayoffStartWeek ?? 15, playoffStartCap ?? Infinity)
 
   const season = await prisma.redraftSeason.create({
     data: {
@@ -440,6 +456,10 @@ export async function syncCompletedDraftToRedraftSeason(
   if (!league) return { ...EMPTY_SUMMARY, reason: 'league_not_found' }
   if (seasonSetupBlocked(league.settings)) return { ...EMPTY_SUMMARY, reason: 'season_tournament_managed' }
 
+  // A FAAB league's teams carry its budget into the season. Without this, a roster that was never
+  // seeded entered the season with the hardcoded 100 below instead of the commissioner's budget.
+  await seedNullFaabBalances(leagueId).catch(() => undefined)
+
   /*
    * 🛑 THIS GATE READ `leagueType === 'redraft' || isDynasty === false`, WHICH IS NOT A
    * STATEMENT ABOUT REDRAFT — IT IS "EVERYTHING EXCEPT DYNASTY", AND DYNASTY WAS EXCLUDED BY
@@ -626,6 +646,20 @@ export async function syncCompletedDraftToRedraftSeason(
         currentWeek: Math.max(1, season.currentWeek ?? 1, scheduleStartWeek),
       },
     })
+    /*
+     * A dynasty league's rookie draft starting year two: re-check the carried taxi and IR players
+     * and flag any team the draft took over its roster size. A no-op for every other league and for
+     * a first season (see `afterDynastyNewSeasonActivated`), and it must not fail draft completion.
+     */
+    if (season.status === 'setup') {
+      await afterDynastyNewSeasonActivated(leagueId, season.id).catch((err) => {
+        console.warn('[syncCompletedDraftToRedraftSeason] dynasty rollover housekeeping skipped', {
+          leagueId,
+          seasonId: season.id,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+    }
   }
 
   await ensureScheduleForNewSeason({

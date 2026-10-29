@@ -28,6 +28,11 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/league/permissions', () => ({
   getLeagueRole: h.role,
   isCommissionerRole: (r: unknown) => r === 'commissioner' || r === 'co_commissioner',
+  // The redraft veto route's check (owner, team flags, tournament list), over the same league read.
+  hasLeagueCommissionerRights: async (_leagueId: string, userId: string) => {
+    const l = (await h.leagueFind()) as { userId?: string; teams?: { isCommissioner?: boolean; isCoCommissioner?: boolean }[] } | null
+    return Boolean(l && (l.userId === userId || (l.teams ?? []).some((t) => t.isCommissioner || t.isCoCommissioner)))
+  },
 }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimit: h.rate }))
 vi.mock('@/lib/decision-os/trade/tradeReviewContext', () => ({ reviewStoredTrade: h.review }))

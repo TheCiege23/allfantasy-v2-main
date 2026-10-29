@@ -604,7 +604,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           >
             {connection === 'live' ? <span className="af-live-pulse" aria-hidden /> : null}
             <span role="status">{connectionLabel(connection)}</span>
-            {ageSeconds != null ? <span> · updated {formatAge(ageSeconds)} ago</span> : null}
+            {ageSeconds != null && connection !== 'live' && connection !== 'idle' ? <span> · updated {formatAge(ageSeconds)} ago</span> : null}
             {refreshing ? <span className="af-live-refreshing" aria-hidden> ·</span> : null}
           </span>
           <button type="button" className="af-btn af-live-refresh" aria-label={refreshing ? 'Refreshing scores' : 'Refresh scores'} disabled={refreshing} onClick={() => void load(sport, scope)}><span className="af-live-refresh-icon" aria-hidden>↻</span><span className="af-live-refresh-label">{refreshing ? 'Refreshing…' : 'Refresh scores'}</span></button>
@@ -764,7 +764,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           )}
         </section>
 
-        <aside className="af-live-side" aria-label="Your live impact">
+        <aside className="af-live-side" data-roster={data.hasRosterData} aria-label="Your live impact">
 
           <ImpactSummary data={data} impact={impact} leagueScoped={leagueFilterId != null} placement="side" />
 
@@ -923,7 +923,7 @@ function ImpactSummary({
   placement: 'side' | 'inline'
 }) {
   return (
-    <div className="af-live-impact" data-placement={placement}>
+    <div className="af-live-impact" data-placement={placement} data-roster={data.hasRosterData || data.rosterFailed}>
       <h2 className="af-label">
         Your live impact <TopicTip topic="liveImpactTotal" />
       </h2>

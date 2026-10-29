@@ -46,8 +46,8 @@ export async function buildGuillotineContextForChimmy(
     const myDanger = ctx.dangerTiers.find((d) => d.rosterId === roster?.id)
 
     return [
-      `[GUILLOTINE MODE CONTEXT — explanation only; you never decide eliminations or chop outcomes.]`,
-      `League: Guillotine. Sport: ${league.sport}. Week: ${ctx.weekOrPeriod}.`,
+      `[GUILLY MODE CONTEXT — explanation only; you never decide eliminations or chop outcomes.]`,
+      `League: Guilly. Sport: ${league.sport}. Week: ${ctx.weekOrPeriod}.`,
       `Elimination starts week ${config.eliminationStartWeek}. Tiebreaker: ${config.tiebreakerOrder?.[0] ?? 'points_for'}.`,
       `Remaining teams: ${ctx.survivalStandings.length}. Chopped this week: ${ctx.choppedThisWeek.length}.`,
       myStanding ? `Your rank: #${myStanding.rank} (${myStanding.seasonPointsCumul.toFixed(1)} cumulative PF).` : '',

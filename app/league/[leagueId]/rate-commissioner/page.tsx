@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Star, Send, CheckCircle, Trophy, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
+import { CommishReputationPanel, type ReputationView } from '@/components/commish-reputation/CommishReputationPanel'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -107,6 +108,7 @@ export default function RateCommissionerPage() {
   const [userSubmitted, setUserSubmitted] = useState(false)
   const [totalResponses, setTotalResponses] = useState(0)
   const [averages, setAverages] = useState<Record<string, number> | null>(null)
+  const [reputation, setReputation] = useState<ReputationView | null>(null)
 
   const [ratings, setRatings] = useState<Record<string, number>>({})
   const [comment, setComment] = useState('')
@@ -127,6 +129,7 @@ export default function RateCommissionerPage() {
         setUserSubmitted(data.userSubmitted ?? false)
         setTotalResponses(data.totalResponses ?? 0)
         setAverages(data.averages ?? null)
+        setReputation(data.reputation ?? null)
         if (data.userSubmitted) setSubmitted(true)
       })
       .catch(() => { if (active) setError('Failed to load') })
@@ -270,6 +273,7 @@ export default function RateCommissionerPage() {
               </p>
             )}
           </div>
+          {reputation && <CommishReputationPanel leagueId={leagueId} initial={reputation} />}
         </div>
       </div>
     )

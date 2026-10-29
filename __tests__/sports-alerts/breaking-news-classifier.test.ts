@@ -155,3 +155,34 @@ describe('college stories under a pro sport', () => {
     expect(isCollegeStoryForProSport('NFL', 'https://www.espn.com/nfl/story/_/id/1/college-teammates-reunite-in-denver')).toBe(false)
   })
 })
+
+
+describe('championship matchup announcements', () => {
+  it.each([
+    'World Series is set: Dodgers vs. Yankees',
+    '2026 World Series schedule: Rays vs. Brewers dates and times',
+    'Super Bowl matchup officially set',
+    'NBA Finals matchup is set',
+    'WNBA Finals pairing confirmed',
+    'Stanley Cup Final matchup locked in',
+    'National championship matchup is set',
+    'College World Series field is set',
+    'MLS Cup matchup is set',
+    'Champions League final matchup is set',
+    'World Cup final matchup is set',
+  ])('recognizes a major milestone: %s', (title) => {
+    expect(classifyBreakingHeadline(title)).toMatchObject({ kind: 'championship_matchup', tier: 'major' })
+  })
+  it.each([
+    'World Series is set: predictions and odds',
+    'Could the World Series matchup be set tonight?',
+    'World Series schedule is set',
+    '2026 World Series schedule: TBD vs. Brewers dates and times',
+    '2026 World Series schedule: Rays vs. ALCS winner dates and times',
+    'World Series is set: what to know',
+    'World Series matchup expected to be confirmed',
+    'NBA Finals preview: matchup is set',
+  ])('does not turn previews or schedules into milestone alerts: %s', (title) => {
+    expect(classifyBreakingHeadline(title)).toBeNull()
+  })
+})

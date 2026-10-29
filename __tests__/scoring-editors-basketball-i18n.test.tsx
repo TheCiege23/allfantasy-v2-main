@@ -123,7 +123,7 @@ describe('🛑 the basketball editors read Spanish in Spanish', () => {
     await r.findByText('Puntuación de NBA')
     const text = r.container.textContent ?? ''
     for (const s of ['Define valores de puntuación personalizados para tu liga de NBA.', 'Preset de puntuación', 'Personalizado',
-      'Este preset se basa en el formato predeterminado de Sleeper. Las ligas especiales (Zombie, Survivor, Torneo, Guillotina, Big Brother)',
+      'Este preset se basa en el formato predeterminado de Sleeper. Las ligas especiales (Zombie, Survivor, Torneo, Guilly, Big Brother)',
       'Categorías de puntuación NBA compatibles con Sleeper', '0.5 pts por punto anotado (predeterminado de AF)', 'Guardar puntuación']) {
       expect(text, s).toContain(s)
     }

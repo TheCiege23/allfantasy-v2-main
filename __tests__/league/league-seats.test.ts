@@ -154,6 +154,13 @@ describe('assignLeagueSeat', () => {
     expect(await countSeatsHeldByPeople(db, 'L')).toBe(2)
   })
 
+  it('writes the manager avatar onto a native open team at claim', async () => {
+    const db = nativeLeague()
+    db.appUser.rows.find((u: Row) => u.id === 'amy').avatarUrl = 'https://cdn.allfantasy.ai/avatars/amy.png'
+    expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })).toMatchObject({ ok: true })
+    expect(db.leagueTeam.rows.find((t: Row) => t.id === 't3')).toMatchObject({ claimedByUserId: 'amy', avatarUrl: 'https://cdn.allfantasy.ai/avatars/amy.png' })
+  })
+
   it('is safe to run after a membership row already exists (no duplicate insert)', async () => {
     const db = nativeLeague()
     db.redraftLeagueMember.rows.push({ leagueId: 'L', userId: 'amy', role: 'MEMBER', teamNumber: null })

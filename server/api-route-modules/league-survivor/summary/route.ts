@@ -35,11 +35,31 @@ import { seasonWeekBoundsForSport } from '@/lib/survivor/survivorSeasonCalendar'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { getSurvivorSitOutStateForWeek, getSurvivorTribeBalanceState } from '@/lib/survivor/SurvivorSitOutEngine'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
+import { survivorIdolExpiryRule, survivorIdolExpiryText, survivorIdolPlayCutoffText } from '@/lib/survivor/survivorIdolExpiry'
+import { buildSurvivorWeekAdvice } from '@/lib/survivor/survivorWeekAdvice'
+import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
+import { loadCouncilWeekPosition } from '@/lib/survivor/survivorWeekCouncilProgress'
+import { councilWeekLabel } from '@/lib/survivor/survivorEliminationSchedule'
+import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
+import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
+import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
 
 export const dynamic = 'force-dynamic'
+
+/** Crest (current name + colours) and decorative mark for a summary tribe; the merged pseudo-tribe has neither. */
+/** When idols stop being playable: the league's expiry rule, plus the play cutoff if one is set. */
+function idolTimingText(settings: ReturnType<typeof normalizeSurvivorFoundationSettings>): string {
+  const cutoff = survivorIdolPlayCutoffText(settings.idolPlayCutoffHours)
+  return [survivorIdolExpiryText(survivorIdolExpiryRule(settings)), cutoff].filter(Boolean).join(' ')
+}
+
+function summaryTribeEmblem(t: { name: string; logoUrl?: string | null; catalogId?: string | null; primaryColor?: string | null; secondaryColor?: string | null }, sport: string | null | undefined) {
+  const emblem = resolveTribeEmblem({ name: t.name, logoUrl: t.logoUrl ?? null, catalogId: t.catalogId, primaryColor: t.primaryColor, secondaryColor: t.secondaryColor }, sport ?? 'NFL')
+  return { logoUrl: emblem.crestUrl, markUrl: emblem.markUrl, mascot: emblem.mascot }
+}
 
 export async function GET(
   req: NextRequest,
@@ -63,7 +83,7 @@ export async function GET(
   const currentWeek = await resolveSurvivorCurrentWeek(leagueId, requestedWeek)
   const weeklyScoreRows = currentWeek > 0 ? await prisma.survivorWeeklyScore.findMany({
     where: { leagueId, week: currentWeek, countedTowardTribeTotal: true },
-    select: { tribeId: true, finalScore: true, isFinalized: true },
+    select: { userId: true, tribeId: true, finalScore: true, isFinalized: true, wonIndividualImmunity: true },
   }) : []
   const tribeScores: Record<string, number> = {}
   for (const score of weeklyScoreRows) {
@@ -78,7 +98,7 @@ export async function GET(
     getJuryMembers(leagueId),
     getExileLeagueId(leagueId),
     getExileLeagueId(leagueId).then((id) => (id ? getAllTokenStates(id) : [])),
-    prisma.survivorTribalCouncil.findMany({ where: { leagueId, isRevealed: true, eliminatedRosterId: { not: null } }, select: { eliminatedRosterId: true, week: true }, orderBy: { week: 'asc' } }),
+    prisma.survivorTribalCouncil.findMany({ where: { leagueId, isRevealed: true, eliminatedRosterId: { not: null } }, select: { eliminatedRosterId: true, week: true, isRevealed: true, revealStartsAt: true, revealStep: true, revealSequence: true }, orderBy: { week: 'asc' } }),
     isMergeTriggered(leagueId, currentWeek),
     getCurrentUserRosterIdForLeague(leagueId, userId),
     getCurrentlyEliminatedRosterIds(leagueId),
@@ -96,11 +116,14 @@ export async function GET(
 
   const leagueMeta = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, name: true },
+    select: { sport: true, name: true, survivorRevealMode: true },
   })
   const seasonCalendar = seasonWeekBoundsForSport(leagueMeta?.sport, config.regularSeasonEndWeek ?? null)
 
-  const votedOutHistory = audit.map(row => ({ rosterId: row.eliminatedRosterId!, week: row.week }))
+  // Only councils whose read has finished name a voted-out manager (see survivorRevealGate).
+  const votedOutHistory = audit.filter(row => isCouncilReadComplete(row, leagueMeta?.survivorRevealMode)).map(row => ({ rosterId: row.eliminatedRosterId!, week: row.week }))
+  // Weekly necklaces still being worn (until the next lineup lock). Public by design.
+  const activeNecklaces = await getActiveTribeImmunity(leagueId)
 
   const tribes = merged
     ? [
@@ -118,13 +141,33 @@ export async function GET(
         members: tribe.members.filter((member) => !eliminatedRosterIds.has(member.rosterId)),
       }))
 
+  const outWeekByRoster = new Map(votedOutHistory.map(row => [row.rosterId, row.week]))
+  const outMembersByTribe = new Map<string, { rosterId: string; week: number | null }[]>()
+  if (merged) {
+    outMembersByTribe.set('merged', mainLeagueRosters.filter(roster => eliminatedRosterIds.has(roster.id)).map(roster => ({ rosterId: roster.id, week: outWeekByRoster.get(roster.id) ?? null })))
+  } else {
+    for (const tribe of tribesRaw) {
+      outMembersByTribe.set(tribe.id, tribe.members.filter(member => eliminatedRosterIds.has(member.rosterId)).map(member => ({ rosterId: member.rosterId, week: outWeekByRoster.get(member.rosterId) ?? null })))
+    }
+  }
+
   const myTribeId =
     !merged && myRosterId
       ? tribes.find((tribe) => tribe.members.some((member) => member.rosterId === myRosterId))?.id ?? null
       : null
+  // After the merge every active manager shares one huddle: the merged tribe's chat source.
+  const mergedTribe = merged
+    ? await prisma.survivorTribe.findFirst({ where: { leagueId, isMerged: true }, orderBy: { createdAt: 'desc' }, select: { id: true } })
+    : null
+  const myTribeSource = myTribeId
+    ? getTribeChatSource(myTribeId)
+    : merged && mergedTribe && myRosterId && !eliminatedRosterIds.has(myRosterId)
+      ? getTribeChatSource(mergedTribe.id)
+      : null
 
   const rosterIds = new Set<string>([
     ...tribes.flatMap((t) => t.members.map((m) => m.rosterId)),
+    ...[...outMembersByTribe.values()].flat().map((m) => m.rosterId),
     ...jury.map((j) => j.rosterId),
     ...votedOutHistory.map((v) => v.rosterId!).filter(Boolean),
     ...(myRosterId ? [myRosterId] : []),
@@ -258,7 +301,9 @@ export async function GET(
 
   const privacy = await resolveSurvivorAccessContext(leagueId, userId)
   if (!privacy?.isLeagueMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const publicCouncil = survivorPublicCouncil(council, privacy.decisions.canSeePrivateVotes)
+  const publicCouncil = survivorPublicCouncil(council, privacy.decisions.canSeePrivateVotes, { revealMode: leagueMeta?.survivorRevealMode })
+  // Double-elimination weeks run two councils back to back; say which one this is.
+  const councilWeekPosition = council ? await loadCouncilWeekPosition(leagueId, council, leagueSettingsRow?.settings) : null
 
   const body = {
     leagueName: leagueMeta?.name ?? 'Survivor League',
@@ -293,13 +338,37 @@ export async function GET(
     seasonCalendar,
     currentWeek,
     tribeScores,
+    // Weekly scores are public; keyed by main roster so the home can show each castaway's points.
+    memberScores: Object.fromEntries(weeklyScoreRows.flatMap(row => {
+      const rosterId = mainRosterByPlatformUserId.get(row.userId)
+      return rosterId ? [[rosterId, row.finalScore]] : []
+    })),
+    immunityRosterIds: [...new Set([
+      ...activeNecklaces.map(row => mainRosterByPlatformUserId.get(row.immunityWinnerUserId) ?? row.immunityWinnerRosterId),
+      ...weeklyScoreRows.flatMap(row => {
+        const rosterId = row.wonIndividualImmunity ? mainRosterByPlatformUserId.get(row.userId) : undefined
+        return rosterId ? [rosterId] : []
+      }),
+    ])],
+    immunity: activeNecklaces.map(row => ({
+      rosterId: mainRosterByPlatformUserId.get(row.immunityWinnerUserId) ?? row.immunityWinnerRosterId,
+      tribeId: row.tribeId,
+      week: row.week,
+      score: row.score,
+      displayName: row.winnerName,
+      expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+    })),
     scoresFinalized: weeklyScoreRows.length > 0 && weeklyScoreRows.every(row => row.isFinalized),
     tribes: tribes.map((t) => ({
       id: t.id,
       name: t.name,
       emoji: extractLeadingTribeIcon(t.name),
       slotIndex: t.slotIndex,
+      ...summaryTribeEmblem(t, leagueMeta?.sport),
+      colorHex: 'colorHex' in t ? t.colorHex ?? null : null,
       members: t.members.map((m) => ({ rosterId: m.rosterId, isLeader: m.isLeader })),
+      // Voted-out castaways stay listed (struck through, "Out · Wk N") with a snuffed torch.
+      outMembers: outMembersByTribe.get(t.id) ?? [],
     })),
     council: publicCouncil
       ? {
@@ -311,7 +380,16 @@ export async function GET(
           closedAt: publicCouncil.closedAt,
           eliminatedRosterId: publicCouncil?.eliminatedRosterId ?? null,
           revealSequence: publicCouncil?.revealSequence ?? null,
+          revealMode: publicCouncil?.revealMode ?? 'one_at_a_time',
+          revealTotalSteps: publicCouncil?.revealTotalSteps ?? null,
+          revealComplete: publicCouncil?.revealComplete ?? false,
+          revealNextStepAt: publicCouncil?.revealNextStepAt ?? null,
+          eliminatedName: publicCouncil?.eliminatedName ?? null,
+          isTie: publicCouncil?.isTie ?? false,
           isRevealed: publicCouncil.isRevealed,
+          revealStartsAt: (publicCouncil as { revealStartsAt?: Date | null }).revealStartsAt ?? null,
+          weekPosition: councilWeekPosition,
+          weekLabel: councilWeekLabel(councilWeekPosition),
         }
       : null,
     challenges: challenges.map((c) => ({
@@ -347,8 +425,9 @@ export async function GET(
     merged,
     myRosterId: myRosterId ?? undefined,
     myTribeId: myTribeId ?? undefined,
-    myTribeSource: myTribeId ? getTribeChatSource(myTribeId) : null,
+    myTribeSource,
     myIdols,
+    idolExpiryText: idolTimingText(normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>)),
     myActiveEffects,
     myExileStatus,
     nbaWeeklyScoringMode: normalizeSurvivorFoundationSettings(leagueSettingsRow?.settings as Record<string, unknown>).nbaWeeklyScoringMode,
@@ -405,12 +484,35 @@ export async function GET(
             tieBreakSeasonPoints: finaleState.closed ? finaleState.tieBreakSeasonPoints : null,
           }
         : null,
+    // survivor-core §7 "The league is paused" state. Only whether, never what was snapshotted.
+    paused: await Promise.resolve().then(() => prisma.survivorGameState.findUnique({ where: { leagueId }, select: { pausedSnapshot: true, lastError: true } }))
+      .then(game => Boolean(game?.pausedSnapshot) || Boolean(game?.lastError?.startsWith('PAUSED:')))
+      .catch(() => false),
     rosterDisplayNames,
   }
 
+  // This week's strategy for the viewer, from facts already in the payload (only their own idols).
+  const openCouncil = body.council && !body.council.closedAt && !body.council.isRevealed ? body.council : null
+  const weekAdvice = buildSurvivorWeekAdvice({
+    merged: Boolean(merged),
+    inGame: Boolean(myRosterId) && !eliminatedRosterIds.has(myRosterId!),
+    myRosterId: myRosterId ?? null,
+    myTribeId: myTribeId ?? null,
+    tribeScores,
+    tribeNames: Object.fromEntries(tribes.map(tribe => [tribe.id, tribe.name])),
+    memberScores: body.memberScores,
+    rosterNames: rosterDisplayNames,
+    immuneRosterIds: body.immunityRosterIds.filter((id): id is string => typeof id === 'string'),
+    scoresFinalized: body.scoresFinalized,
+    council: openCouncil ? { attendingTribeId: openCouncil.attendingTribeId ?? null } : null,
+    myIdols: myIdols.map(idol => ({ name: idolDefinition(idol.powerType).name, playableAtCouncil: Boolean(idolDefinition(idol.powerType).action) })),
+    idolExpiryText: body.idolExpiryText,
+  })
+  const payload = { ...body, weekAdvice }
+
   if (fairPlayRedact) {
-    return NextResponse.json(redactSurvivorSummaryPayloadForFairPlay(body))
+    return NextResponse.json(redactSurvivorSummaryPayloadForFairPlay(payload))
   }
 
-  return NextResponse.json(body)
+  return NextResponse.json(payload)
 }

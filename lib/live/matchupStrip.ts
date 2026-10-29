@@ -41,6 +41,8 @@ export function buildMatchupStrip(data: MatchupData | null, loadFailed = false):
   if (!data) return null
   const week = data.week.available ? data.week.data.week : null
   if (!data.sides.available) {
+    // An odd-team native league's extra game: say it, with both scores, rather than "no matchup".
+    if (data.extraMatchup) return { kind: 'unavailable', reason: data.extraMatchup.line }
     if (data.teams.available) {
       return { kind: 'scheduled', week, you: data.teams.data.you.teamName, opponent: data.teams.data.opponent.teamName }
     }

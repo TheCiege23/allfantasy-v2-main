@@ -18,12 +18,19 @@ type Row = {
   killedByUserId?: string | null
   serumsHeld?: number
   weaponsHeld?: number
+  /** Outbreak Points banked all season (the winnings ledger total). */
+  totalWinnings?: number
+  /** Null when the infector is someone this viewer may not know. */
+  killedByRosterId?: string | null
+  revivedAt?: string | null
 }
 
 type Filter = 'all' | 'survivors' | 'zombies' | 'whisperer'
 
-function getStatusKey(s: string): string {
+function getStatusKey(s: string, revivedAt?: string | null): string {
   const lower = s.toLowerCase()
+  // A revived team is stored as Survivor with revivedAt set.
+  if (revivedAt && lower.includes('survivor')) return 'revived'
   if (lower.includes('whisperer')) return 'whisperer'
   if (lower.includes('zombie')) return 'zombie'
   if (lower.includes('revived')) return 'revived'
@@ -47,6 +54,9 @@ export default function ZombieStandingsPage() {
       })
       .catch(() => setRows([]))
   }, [leagueId])
+
+  const nameOf = (t: Row | undefined) => t?.fantasyTeamName || t?.displayName || 'Unnamed team'
+  const byRoster = new Map(rows.map((r) => [r.rosterId, r]))
 
   const survivorCount = rows.filter((r) => {
     const k = getStatusKey(r.status)
@@ -133,12 +143,14 @@ export default function ZombieStandingsPage() {
               <th className="p-2.5 w-14 text-right">W-L</th>
               <th className="hidden p-2.5 text-right sm:table-cell">PF</th>
               <th className="hidden p-2.5 text-right sm:table-cell">PPW</th>
+              <th className="p-2.5 text-right" title="Outbreak Points banked this season">Points</th>
+              <th className="hidden p-2.5 md:table-cell">Turned</th>
               <th className="p-2.5 text-right w-16">Items</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((t, i) => {
-              const sk = getStatusKey(t.status)
+              const sk = getStatusKey(t.status, t.revivedAt)
               const played = t.wins + t.losses
               const ppw = played > 0 ? (t.pointsFor / played).toFixed(2) : '0.00'
               return (
@@ -156,7 +168,7 @@ export default function ZombieStandingsPage() {
                   <td className="p-2.5">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-[var(--zombie-text-full)]">
-                        {t.fantasyTeamName || t.displayName || t.rosterId}
+                        {nameOf(t)}
                       </span>
                       {sk === 'zombie' && t.weekBecameZombie && (
                         <span className="text-[11px] text-[var(--zombie-purple)]">
@@ -176,6 +188,14 @@ export default function ZombieStandingsPage() {
                   </td>
                   <td className="hidden p-2.5 text-right font-mono text-[var(--zombie-text-mid)] sm:table-cell">
                     {ppw}
+                  </td>
+                  <td className="p-2.5 text-right font-mono text-amber-200/90">
+                    {(t.totalWinnings ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </td>
+                  <td className="hidden p-2.5 text-[11px] text-[var(--zombie-text-mid)] md:table-cell">
+                    {sk === 'zombie' && t.weekBecameZombie
+                      ? `Wk ${t.weekBecameZombie}${t.killedByRosterId ? ` · ${nameOf(byRoster.get(t.killedByRosterId))}` : ''}`
+                      : '—'}
                   </td>
                   <td className="p-2.5 text-right">
                     <div className="flex items-center justify-end gap-1 text-[11px]">

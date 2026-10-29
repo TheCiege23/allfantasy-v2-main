@@ -6,7 +6,7 @@ import { recordProactiveOpen } from '@/lib/chimmy-alerts/recordProactiveOpen'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { toPlayedLeagues } from '@/lib/core-app/playedLeagues'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
-import { planAllowanceMeta, readChimmyPlanAllowance } from '@/lib/chimmy/planAllowance'
+import { planAllowanceMeta, readChimmyAnswerAllowance } from '@/lib/chimmy/planAllowance'
 import { readChatPageSport, toChatPageLeagues } from '@/lib/chimmy/chatPage'
 import { ChimmyChatPageClient } from './ChimmyChatPageClient'
 
@@ -86,7 +86,7 @@ export default async function ChimmyChatPage(
    */
   const [leaguePayload, planState] = await Promise.all([
     getDashboardLeagueListForUser(userId).catch(() => null),
-    readChimmyPlanAllowance({ userId, email: session?.user?.email ?? null }).catch(() => null),
+    readChimmyAnswerAllowance({ userId, email: session?.user?.email ?? null }).catch(() => null),
   ])
   const leagues = toChatPageLeagues(toPlayedLeagues(leaguePayload?.leagues ?? []))
   const tokenCost = getTokenSpendRuleMatrixEntry('ai_chimmy_chat_message')?.tokenCost ?? null

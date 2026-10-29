@@ -8,6 +8,10 @@ import {
   SettingsToggleRow,
   controlClass,
 } from './settings-ui'
+import {
+  startsAtScheduledTimeRegardlessOfAutostart,
+  type ScheduledStartLeague,
+} from '@/lib/draft/redraftScheduledStart'
 
 const DRAFT_TYPES: { value: string; label: string }[] = [
   { value: 'snake', label: 'Snake' },
@@ -59,13 +63,17 @@ export function DraftSettingsPanel({
   canEdit,
   save,
   debouncedSave,
+  league,
 }: {
   draftRow: Record<string, unknown> | null
+  /** From `/api/league/settings`'s `league`; hides the Autostart toggle where it does nothing. */
+  league?: ScheduledStartLeague | null
   canEdit: boolean
   save: (partial: Record<string, unknown>) => Promise<void>
   debouncedSave: (partial: Record<string, unknown>) => void
 }) {
   const disabled = !canEdit
+  const startsAtScheduledTime = startsAtScheduledTimeRegardlessOfAutostart(league)
   const r = draftRow ?? {}
 
   const [draftType, setDraftType] = useState(String(r.draftType ?? 'snake'))
@@ -291,15 +299,19 @@ export function DraftSettingsPanel({
 
       <div className="space-y-2">
         <SettingsSectionLabel>Draft room behavior</SettingsSectionLabel>
-        <SettingsToggleRow
-          label="Autostart draft at scheduled time"
-          checked={autostart}
-          disabled={disabled}
-          onChange={(v) => {
-            setAutostart(v)
-            void save({ autostart: v })
-          }}
-        />
+        {startsAtScheduledTime ? (
+          <SettingsHelper>Drafts start automatically at the scheduled time.</SettingsHelper>
+        ) : (
+          <SettingsToggleRow
+            label="Autostart draft at scheduled time"
+            checked={autostart}
+            disabled={disabled}
+            onChange={(v) => {
+              setAutostart(v)
+              void save({ autostart: v })
+            }}
+          />
+        )}
         <SettingsToggleRow
           label="Slow draft pause (scheduled quiet hours)"
           checked={slowDraftPause}

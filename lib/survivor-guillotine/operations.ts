@@ -607,7 +607,7 @@ export async function settleSGGauntletAuction(leagueId: string, now = new Date()
     await tx.survivorGuillotineAuctionBid.update({ where: { id: winner.id }, data: { status: 'won' } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   await createPlatformNotification({ userId: owner.claimedByUserId, leagueId, type: 'survivor_guillotine_reward',
-    title: 'Your sealed Gauntlet bid won', body: 'Your private idol is available in Survivor Guillotine powers.',
+    title: 'Your sealed Gauntlet bid won', body: 'Your private idol is available in Survivor Guilly powers.',
     sourceKey: `survivor-guillotine:${leagueId}:auction:${season.currentPeriod}:${winner.rosterId}` })
   return { settled: true, period: season.currentPeriod }
 }
@@ -743,12 +743,12 @@ export async function advanceSGHostedCeremony(leagueId: string, actorUserId: str
     const protectedTeamIds = Array.isArray(entry.protectedTeamIds) ? entry.protectedTeamIds as string[] : []
     const choppedTeamIds = Array.isArray(entry.choppedTeamIds) ? entry.choppedTeamIds as string[] : []
     const message = stage === 1 ? (immuneTribeId
-      ? `Survivor Guillotine period ${period}: ${immuneTribeId} won tribe immunity.`
-      : `Survivor Guillotine period ${period}: no tribe won immunity.`)
+      ? `Survivor Guilly period ${period}: ${immuneTribeId} won tribe immunity.`
+      : `Survivor Guilly period ${period}: no tribe won immunity.`)
       : stage === 2 ? (protectedTeamIds.length
-        ? `Survivor Guillotine period ${period}: immunity idols were played for ${protectedTeamIds.join(', ')}. ${savedTeamIds.length ? `Saved: ${savedTeamIds.join(', ')}.` : 'No idol changed the chop.'}`
-        : `Survivor Guillotine period ${period}: no immunity idol was played.`)
-        : `Survivor Guillotine period ${period} chop: ${choppedTeamIds.join(', ')} eliminated. Their players enter waivers.`
+        ? `Survivor Guilly period ${period}: immunity idols were played for ${protectedTeamIds.join(', ')}. ${savedTeamIds.length ? `Saved: ${savedTeamIds.join(', ')}.` : 'No idol changed the chop.'}`
+        : `Survivor Guilly period ${period}: no immunity idol was played.`)
+        : `Survivor Guilly period ${period} chop: ${choppedTeamIds.join(', ')} eliminated. Their players enter waivers.`
     await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
       message,
       metadata: { survivorGuillotine: true, event: 'hosted_ceremony_advanced', period, stage } } })
@@ -776,7 +776,7 @@ export async function restartSGHostedCeremony(leagueId: string, actorUserId: str
         periodState: { ...resetState, ceremonyStarted: false } as unknown as Prisma.InputJsonValue } })
     if (saved.count !== 1) throw new Error('Ceremony changed; reload and retry.')
     await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
-      message: `Survivor Guillotine period ${period} hosted ceremony was restarted. Earlier reveal stages are superseded; no roster was chopped.`,
+      message: `Survivor Guilly period ${period} hosted ceremony was restarted. Earlier reveal stages are superseded; no roster was chopped.`,
       metadata: { survivorGuillotine: true, event: 'hosted_ceremony_restarted', period } } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   return { period, restarted: true }

@@ -40,23 +40,45 @@ const CONFIDENCE_ES: Record<DecisionOsConfidenceLabel, string> = { High: 'alta',
 export const decisionOsCardClassName =
   'card-premium overflow-hidden p-0 transition duration-200 hover:border-brand-primary/25 hover:shadow-popover motion-reduce:transition-none'
 
-/** `language: 'es'` (2026-10-04, the /core home's User OS card) says it in Spanish; English is unchanged. */
+/*
+ * 🛑 THE ZONE IS PINNED, NOT THE READER'S. `UserOsCard` is a client component rendered on the /core
+ * home, so this string is printed once on the server (UTC) and again in the browser during
+ * hydration. Unpinned, a reader in Eastern time got "1:00 AM" from the server and "9:00 PM" from
+ * their browser: React #425, then #422 as the card's boundary fell back to a client render. Same
+ * rule as components/commissioner-os/primitives/pinnedTime.ts — US Eastern, with the zone named on
+ * a time so it is not read as the reader's own clock.
+ */
+const UPDATED_ZONE = 'America/New_York'
+const UPDATED_DATE = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: UPDATED_ZONE })
+const UPDATED_TIME = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZone: UPDATED_ZONE,
+  timeZoneName: 'short',
+})
+/** Spanish clock, same pin and zone name: "21:00 GMT-4". The day reuses UPDATED_DATE via kickoffText. */
+const UPDATED_TIME_ES = new Intl.DateTimeFormat('es', {
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZone: UPDATED_ZONE,
+  timeZoneName: 'short',
+})
+
+/** `language: 'es'` (2026-10-04, the /core home's User OS card) says it in Spanish; English is unchanged.
+ * Both languages use the Eastern-pinned formatters above. */
 export function formatDecisionOsUpdated(value: string, includeTime = false, language = 'en') {
   const date = new Date(value)
   if (language === 'es') {
     if (Number.isNaN(date.getTime())) return 'Actualizado justo ahora'
     // "Oct 4" → "4 oct" through /core's one date translator (Intl's own 'es' writes "sept").
-    const day = kickoffText(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), 'es')
+    const day = kickoffText(UPDATED_DATE.format(date), 'es')
     if (!includeTime) return `Actualizado ${day}`
-    return `Actualizado ${day} a las ${date.toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' })}`
+    return `Actualizado ${day} a las ${UPDATED_TIME_ES.format(date)}`
   }
   if (Number.isNaN(date.getTime())) return 'Updated just now'
-  const datePart = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const datePart = UPDATED_DATE.format(date)
   if (!includeTime) return `Updated ${datePart}`
-  return `Updated ${datePart} at ${date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  })}`
+  return `Updated ${datePart} at ${UPDATED_TIME.format(date)}`
 }
 
 export function DecisionOsBadge({

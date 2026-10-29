@@ -25,7 +25,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
-vi.mock('@/lib/notifications/sportAudience', () => ({ listUserIdsPlayingSport: h.players }))
+vi.mock('@/lib/notifications/sportAudience', () => ({ listUserIdsPlayingSport: h.players, listSportsAlertAudience: h.players }))
 vi.mock('@/lib/follows/teamFollowAlerts', () => ({ withinDailyCap: async (ids: string[]) => ids }))
 vi.mock('@/lib/follows/teamScoreAlerts', () => ({ TEAM_SCORE_ALERTS_PER_DAY: 20 }))
 vi.mock('@/lib/follows/teamFollows', () => ({
@@ -85,6 +85,12 @@ describe('breaking news', () => {
     expect(new Set(call.userIds)).toEqual(new Set(['u-fan', 'u-player-1', 'u-player-2']))
     expect(call.body).toContain('via ESPN')
     expect(call.title).toContain('(report)')
+  })
+
+  it('is push and bell only — never an email or a text', async () => {
+    h.newsFind.mockResolvedValue([news()])
+    await dispatchBreakingNewsAlerts({ now: NOW })
+    expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ email: true, sms: true })
   })
 
   it('does not resend a story another run already claimed', async () => {

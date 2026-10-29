@@ -19,6 +19,7 @@ import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalizat
 import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { mergeKnownYearsExp } from '@/lib/draft-room/nonNflRookieFields'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { rowsDescribeSamePlayer, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 
@@ -45,6 +46,8 @@ const POOL_PLAYER_SELECT = {
   age: true,
   imageUrl: true,
   source: true,
+  // `0` is a rookie, NULL is unknown — carried as `experience` for every sport (see nonNflRookieFields).
+  yearsExp: true,
 } as const
 
 const SPORT_STR: Record<LeagueSport, string> = {
@@ -559,8 +562,12 @@ async function buildPlayerPoolRecords(
   const isAuthoritative = (row: { source?: string | null }) => isNfl && row.source === 'sleeper'
   const bestByKey = new Map<string, (typeof rows)[number]>()
   const bestImageByKey = new Map<string, { url: string; quality: number }>()
+  // Experience is carried like the photo: the winning duplicate may be the one source that lacks it.
+  const yearsExpValuesByKey = new Map<string, unknown[]>()
   for (const row of poolRows) {
     const key = `${String(row.name ?? '').trim().toLowerCase()}|${String(row.position ?? '').trim().toUpperCase()}|${teamKeyOf(row.team)}`
+    const ye = (row as { yearsExp?: number | null }).yearsExp
+    if (ye != null) yearsExpValuesByKey.set(key, [...(yearsExpValuesByKey.get(key) ?? []), ye])
     const quality = sportsPlayerQuality(row)
     if (isHttpImage(row.imageUrl) && quality > (bestImageByKey.get(key)?.quality ?? -1)) {
       bestImageByKey.set(key, { url: String(row.imageUrl), quality })
@@ -582,7 +589,9 @@ async function buildPlayerPoolRecords(
   }
   for (const [key, row] of bestByKey) {
     const image = bestImageByKey.get(key)
-    if (image && !isHttpImage(row.imageUrl)) bestByKey.set(key, { ...row, imageUrl: image.url })
+    const withImage = image && !isHttpImage(row.imageUrl) ? { ...row, imageUrl: image.url } : row
+    const knownValues = yearsExpValuesByKey.get(key)
+    bestByKey.set(key, knownValues ? { ...withImage, yearsExp: mergeKnownYearsExp(knownValues) } : withImage)
   }
 
   // Phase 27 fix: alphabetical order alone is not a fantasy-relevance signal.
@@ -666,7 +675,7 @@ async function buildPlayerPoolRecords(
     // cannot tell a Sleeper id from a provider id that merely looks like one.
     sleeper_id: r.sleeperId ?? null,
     age: r.age ?? null,
-    experience: null,
+    experience: (r as { yearsExp?: number | null }).yearsExp ?? null,
     secondary_positions: [],
     metadata: { source: r.source },
     image_url: toImageUrl((r as { imageUrl?: string | null }).imageUrl),

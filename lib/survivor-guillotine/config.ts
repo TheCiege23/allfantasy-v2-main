@@ -2,7 +2,7 @@ import type { SGConfig, SGMode, SGPeriod, SGSport } from './types'
 
 export const SG_MODE_LABELS: Record<SGMode, string> = {
   match_play: 'Match Play', tribe_champion: 'Tribe Champion', gauntlet: 'Gauntlet',
-  merged: 'Individual Guillotine', final_three: 'Final Three', off: 'No elimination',
+  merged: 'Individual Guilly', final_three: 'Final Three', off: 'No elimination',
 }
 
 /** Reject unknown/malformed live inputs rather than storing unchecked client JSON as league rules. */

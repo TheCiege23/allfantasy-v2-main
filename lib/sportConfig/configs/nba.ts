@@ -1,4 +1,9 @@
 import type { SportConfigFull } from '../types'
+import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, regularSeasonWeeksFor } from '@/lib/sportConfig/dailySportSeasonShape'
+import { DAILY_REDRAFT_ROSTER_LAYOUTS, dailyRedraftReserveCount, dailyRedraftSlotCount } from '@/lib/sportConfig/dailySportRedraftRoster'
+
+/** Default counts are the one redraft layout (lib/sportConfig/dailySportRedraftRoster.ts). */
+const LAYOUT = DAILY_REDRAFT_ROSTER_LAYOUTS.NBA
 
 export const NBA_CONFIG: SportConfigFull = {
   sport: 'NBA',
@@ -30,18 +35,18 @@ export const NBA_CONFIG: SportConfigFull = {
   ],
 
   defaultRosterSlots: [
-    { key: 'PG', label: 'Point Guard', eligiblePositions: ['PG'], defaultCount: 1, minCount: 1, maxCount: 2, isOptional: false },
-    { key: 'SG', label: 'Shooting Guard', eligiblePositions: ['SG'], defaultCount: 1, minCount: 1, maxCount: 2, isOptional: false },
-    { key: 'SF', label: 'Small Forward', eligiblePositions: ['SF'], defaultCount: 1, minCount: 1, maxCount: 2, isOptional: false },
-    { key: 'PF', label: 'Power Forward', eligiblePositions: ['PF'], defaultCount: 1, minCount: 1, maxCount: 2, isOptional: false },
-    { key: 'C', label: 'Center', eligiblePositions: ['C'], defaultCount: 1, minCount: 1, maxCount: 2, isOptional: false },
-    { key: 'G', label: 'Guard', eligiblePositions: ['PG', 'SG'], defaultCount: 1, minCount: 0, maxCount: 2, isOptional: true },
-    { key: 'F', label: 'Forward', eligiblePositions: ['SF', 'PF'], defaultCount: 1, minCount: 0, maxCount: 2, isOptional: true },
-    { key: 'UTIL', label: 'Utility', eligiblePositions: ['PG', 'SG', 'SF', 'PF', 'C'], defaultCount: 1, minCount: 0, maxCount: 3, isOptional: true },
+    { key: 'PG', label: 'Point Guard', eligiblePositions: ['PG'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'PG'), minCount: 1, maxCount: 2, isOptional: false },
+    { key: 'SG', label: 'Shooting Guard', eligiblePositions: ['SG'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'SG'), minCount: 1, maxCount: 2, isOptional: false },
+    { key: 'SF', label: 'Small Forward', eligiblePositions: ['SF'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'SF'), minCount: 1, maxCount: 2, isOptional: false },
+    { key: 'PF', label: 'Power Forward', eligiblePositions: ['PF'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'PF'), minCount: 1, maxCount: 2, isOptional: false },
+    { key: 'C', label: 'Center', eligiblePositions: ['C'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'C'), minCount: 1, maxCount: 2, isOptional: false },
+    { key: 'G', label: 'Guard', eligiblePositions: ['PG', 'SG'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'G'), minCount: 0, maxCount: 2, isOptional: true },
+    { key: 'F', label: 'Forward', eligiblePositions: ['SF', 'PF'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'F'), minCount: 0, maxCount: 2, isOptional: true },
+    { key: 'UTIL', label: 'Utility', eligiblePositions: ['PG', 'SG', 'SF', 'PF', 'C'], defaultCount: dailyRedraftSlotCount(LAYOUT, 'UTIL'), minCount: 0, maxCount: 3, isOptional: true },
   ],
 
-  defaultBenchSlots: 4,
-  defaultIRSlots: 2,
+  defaultBenchSlots: LAYOUT.benchSlots,
+  defaultIRSlots: dailyRedraftReserveCount(LAYOUT),
   defaultTaxiSlots: 0,
   defaultDevySlots: 0,
 
@@ -53,9 +58,9 @@ export const NBA_CONFIG: SportConfigFull = {
     C: ['C', 'UTIL'],
   },
 
-  defaultSeasonWeeks: 22,
-  defaultPlayoffStartWeek: 20,
-  defaultPlayoffTeams: 4,
+  defaultSeasonWeeks: DAILY_SPORT_SEASON_SHAPE.NBA.totalWeeks,
+  defaultPlayoffStartWeek: playoffStartWeekFor('NBA'),
+  defaultPlayoffTeams: DAILY_SPORT_SEASON_SHAPE.NBA.playoffTeams,
   defaultMatchupPeriodDays: 7,
   lineupLockType: 'daily',
 
@@ -85,21 +90,21 @@ export const NBA_CONFIG: SportConfigFull = {
       locksAfterStart: true,
     },
     { key: 'enableDailyLineups', label: 'Daily Lineup Changes', type: 'toggle', defaultValue: true, section: 'roster' },
-    { key: 'pgCount', label: 'PG Slots', type: 'number', defaultValue: 1, min: 1, max: 2, section: 'roster' },
-    { key: 'sgCount', label: 'SG Slots', type: 'number', defaultValue: 1, min: 1, max: 2, section: 'roster' },
-    { key: 'sfCount', label: 'SF Slots', type: 'number', defaultValue: 1, min: 1, max: 2, section: 'roster' },
-    { key: 'pfCount', label: 'PF Slots', type: 'number', defaultValue: 1, min: 1, max: 2, section: 'roster' },
-    { key: 'cCount', label: 'C Slots', type: 'number', defaultValue: 1, min: 1, max: 2, section: 'roster' },
-    { key: 'utilCount', label: 'Utility Slots', type: 'number', defaultValue: 1, min: 0, max: 3, section: 'roster' },
-    { key: 'benchSlots', label: 'Bench Slots', type: 'number', defaultValue: 4, min: 2, max: 10, section: 'roster' },
-    { key: 'irSlots', label: 'IR Slots', type: 'number', defaultValue: 2, min: 0, max: 5, section: 'roster' },
+    { key: 'pgCount', label: 'PG Slots', type: 'number', defaultValue: dailyRedraftSlotCount(LAYOUT, 'PG'), min: 1, max: 2, section: 'roster' },
+    { key: 'sgCount', label: 'SG Slots', type: 'number', defaultValue: dailyRedraftSlotCount(LAYOUT, 'SG'), min: 1, max: 2, section: 'roster' },
+    { key: 'sfCount', label: 'SF Slots', type: 'number', defaultValue: dailyRedraftSlotCount(LAYOUT, 'SF'), min: 1, max: 2, section: 'roster' },
+    { key: 'pfCount', label: 'PF Slots', type: 'number', defaultValue: dailyRedraftSlotCount(LAYOUT, 'PF'), min: 1, max: 2, section: 'roster' },
+    { key: 'cCount', label: 'C Slots', type: 'number', defaultValue: dailyRedraftSlotCount(LAYOUT, 'C'), min: 1, max: 2, section: 'roster' },
+    { key: 'utilCount', label: 'Utility Slots', type: 'number', defaultValue: dailyRedraftSlotCount(LAYOUT, 'UTIL'), min: 0, max: 3, section: 'roster' },
+    { key: 'benchSlots', label: 'Bench Slots', type: 'number', defaultValue: LAYOUT.benchSlots, min: 2, max: 10, section: 'roster' },
+    { key: 'irSlots', label: 'IR Slots', type: 'number', defaultValue: dailyRedraftReserveCount(LAYOUT), min: 0, max: 5, section: 'roster' },
     {
       key: 'seasonWeeks',
       label: 'Regular Season Weeks',
       type: 'number',
-      defaultValue: 19,
+      defaultValue: regularSeasonWeeksFor('NBA'),
       min: 12,
-      max: 24,
+      max: DAILY_SPORT_SEASON_SHAPE.NBA.totalWeeks,
       section: 'schedule',
       locksAfterStart: true,
     },
@@ -107,7 +112,7 @@ export const NBA_CONFIG: SportConfigFull = {
       key: 'playoffTeams',
       label: 'Playoff Teams',
       type: 'select',
-      defaultValue: 4,
+      defaultValue: DAILY_SPORT_SEASON_SHAPE.NBA.playoffTeams,
       options: [
         { value: 4, label: '4 teams' },
         { value: 6, label: '6 teams' },

@@ -37,7 +37,7 @@ import type { AggregatablePick } from '@/lib/adp/computeAllFantasyAdp'
  * pick was made. Stamping it would date a 2019 draft to this morning.
  */
 
-/** Sleeper ids resolve to a name and position through the canonical identity map. */
+/** A pick's player id resolves to a name and position through the canonical identity map. */
 interface ResolvedPlayer {
   name: string
   position: string
@@ -55,8 +55,14 @@ export interface DraftFactSampleOptions {
 export interface DraftFactSampleResult {
   picks: AggregatablePick[]
   factsScanned: number
-  /** Sleeper ids with no canonical identity row. Reported, never silently dropped. */
+  /** Player ids with no canonical identity row. Reported, never silently dropped. */
   skippedUnresolvedPlayer: number
+  /**
+   * The same count split by the league's import platform, so "ESPN picks are not resolving" is
+   * visible rather than averaged into one number. A platform with no identity column (Yahoo today)
+   * shows up here in full.
+   */
+  skippedUnresolvedByPlatform: Record<string, number>
   /** Draft groups with no measurable round-1 team count. */
   skippedNoTeamCount: number
   /** Facts whose league row is missing (deleted league, orphaned facts). */
@@ -67,44 +73,112 @@ export interface DraftFactSampleResult {
 const DEFAULT_MAX_FACTS = 200_000
 
 /**
- * Resolve Sleeper player ids to name + position.
+ * The `PlayerIdentityMap` column holding each import platform's own player id.
  *
- * `PlayerIdentityMap` is canonical and its `sleeperId` is unique. `SportsPlayer` is the fallback,
- * because the identity sync can lag a freshly-added Sleeper id.
+ * 🛑 THIS USED TO RESOLVE SLEEPER IDS ONLY, AND EVERY OTHER PLATFORM'S DRAFTS WERE DISCARDED.
+ * ESPN, MFL, Fantrax and Yahoo historical backfills all write `DraftFact` — with THEIR OWN player
+ * id in `playerId` — and this module looked every one of them up in `sleeperId`. None matched, so
+ * each pick was counted as "unresolved" and an imported ESPN league with years of drafts added
+ * nothing to ADP. Same mapping `lib/league-import/playerIdResolver.ts` declares; that module
+ * resolves one id per query and has no production caller, so it is mirrored here rather than
+ * called in a loop over 200k facts.
+ *
+ * Yahoo has no column. Its picks stay unresolved — reported per platform, never name-guessed:
+ * `DraftFact` carries no name to match on, and a wrong match puts one player's draft slot on
+ * another's ADP.
+ */
+const PLATFORM_ID_COLUMN = {
+  sleeper: 'sleeperId',
+  espn: 'espnId',
+  mfl: 'mflId',
+  fantrax: 'fantraxId',
+  fleaflicker: 'fleaflickerId',
+} as const
+type IdColumn = (typeof PLATFORM_ID_COLUMN)[keyof typeof PLATFORM_ID_COLUMN]
+
+/**
+ * Platforms whose ids must NOT be looked up as Sleeper ids. Yahoo player ids are bare integers in
+ * the same range as Sleeper's, so a Sleeper lookup would not merely miss — it would match a
+ * DIFFERENT player and put his name on this pick.
+ */
+const NO_ID_COLUMN = new Set(['yahoo'])
+
+/**
+ * ⚠ ANY OTHER PLATFORM FALLS BACK TO `sleeperId`, WHICH IS WHAT EVERY LEAGUE GOT BEFORE. Leagues
+ * created from an import (`copyImportedHistory`) and older rows can carry a platform other than the
+ * source's while their facts hold Sleeper ids; resolving them by any other column would silently
+ * drop picks that count today.
+ */
+function idColumnFor(platform: string | null | undefined): IdColumn | null {
+  const key = String(platform ?? '').trim().toLowerCase()
+  if (NO_ID_COLUMN.has(key)) return null
+  return (PLATFORM_ID_COLUMN as Record<string, IdColumn>)[key] ?? 'sleeperId'
+}
+
+/** Key a resolution by platform AND id: an ESPN id and a Sleeper id may be the same digits. */
+function resolutionKey(column: IdColumn, playerId: string): string {
+  return `${column}:${playerId}`
+}
+
+/**
+ * Resolve each platform's player ids to name + position.
+ *
+ * `PlayerIdentityMap` is canonical. Only `sleeperId` is unique there, so the other columns are
+ * scoped to the sport — an ESPN athlete id is not guaranteed unique across sports — and an id held
+ * by more than one row is dropped rather than picked arbitrarily. `SportsPlayer` stays the Sleeper
+ * fallback, because the identity sync can lag a freshly-added Sleeper id.
  *
  * A player we cannot name is discarded entirely. `aggregateAdp` keys on `name|position`, so an
  * unnamed pick would collapse every unknown player into one shared key — a single fabricated
  * "player" whose ADP is the mean of everyone we failed to identify.
  */
-async function resolvePlayers(sleeperIds: string[]): Promise<Map<string, ResolvedPlayer>> {
+async function resolvePlayers(
+  idsByColumn: Map<IdColumn, Set<string>>,
+  sport: string,
+): Promise<Map<string, ResolvedPlayer>> {
   const out = new Map<string, ResolvedPlayer>()
-  if (sleeperIds.length === 0) return out
 
-  const identity = await prisma.playerIdentityMap.findMany({
-    where: { sleeperId: { in: sleeperIds } },
-    select: { sleeperId: true, canonicalName: true, position: true },
-  })
-  for (const row of identity) {
-    if (!row.sleeperId) continue
-    const name = (row.canonicalName ?? '').trim()
-    const position = (row.position ?? '').trim()
-    if (!name || !position) continue
-    out.set(row.sleeperId, { name, position })
-  }
+  for (const [column, idSet] of idsByColumn) {
+    const ids = Array.from(idSet)
+    if (ids.length === 0) continue
 
-  const missing = sleeperIds.filter((id) => !out.has(id))
-  if (missing.length === 0) return out
+    const rows = (await prisma.playerIdentityMap.findMany({
+      where: {
+        [column]: { in: ids },
+        ...(column === 'sleeperId' ? {} : { sport: sport.toUpperCase() }),
+      },
+      select: { [column]: true, canonicalName: true, position: true },
+    } as any)) as unknown as Array<Record<string, string | null>>
 
-  const players = await prisma.sportsPlayer.findMany({
-    where: { sleeperId: { in: missing } },
-    select: { sleeperId: true, name: true, position: true },
-  })
-  for (const row of players) {
-    if (!row.sleeperId || out.has(row.sleeperId)) continue
-    const name = (row.name ?? '').trim()
-    const position = (row.position ?? '').trim()
-    if (!name || !position) continue
-    out.set(row.sleeperId, { name, position })
+    const seen = new Map<string, number>()
+    for (const row of rows) {
+      const id = row[column]
+      if (id) seen.set(id, (seen.get(id) ?? 0) + 1)
+    }
+    for (const row of rows) {
+      const id = row[column]
+      if (!id || (seen.get(id) ?? 0) > 1) continue
+      const name = (row.canonicalName ?? '').trim()
+      const position = (row.position ?? '').trim()
+      if (!name || !position) continue
+      out.set(resolutionKey(column, id), { name, position })
+    }
+
+    if (column !== 'sleeperId') continue
+    const missing = ids.filter((id) => !out.has(resolutionKey(column, id)))
+    if (missing.length === 0) continue
+
+    const players = await prisma.sportsPlayer.findMany({
+      where: { sleeperId: { in: missing } },
+      select: { sleeperId: true, name: true, position: true },
+    })
+    for (const row of players) {
+      if (!row.sleeperId || out.has(resolutionKey(column, row.sleeperId))) continue
+      const name = (row.name ?? '').trim()
+      const position = (row.position ?? '').trim()
+      if (!name || !position) continue
+      out.set(resolutionKey(column, row.sleeperId), { name, position })
+    }
   }
 
   return out
@@ -123,6 +197,7 @@ export async function collectDraftFactSamples(
     picks: [],
     factsScanned: 0,
     skippedUnresolvedPlayer: 0,
+    skippedUnresolvedByPlatform: {},
     skippedNoTeamCount: 0,
     skippedNoLeague: 0,
     draftsCovered: 0,
@@ -148,11 +223,19 @@ export async function collectDraftFactSamples(
 
   const leagues = await prisma.league.findMany({
     where: { id: { in: Array.from(new Set(facts.map((f) => f.leagueId))) } },
-    select: { id: true, scoring: true, isDynasty: true, leagueVariant: true },
+    select: { id: true, scoring: true, isDynasty: true, leagueVariant: true, platform: true },
   })
   const leagueById = new Map(leagues.map((l) => [l.id, l]))
 
-  const resolved = await resolvePlayers(Array.from(new Set(facts.map((f) => f.playerId))))
+  const idsByColumn = new Map<IdColumn, Set<string>>()
+  for (const fact of facts) {
+    const column = idColumnFor(leagueById.get(fact.leagueId)?.platform)
+    if (!column) continue
+    const bucket = idsByColumn.get(column) ?? new Set<string>()
+    bucket.add(fact.playerId)
+    idsByColumn.set(column, bucket)
+  }
+  const resolved = await resolvePlayers(idsByColumn, options.sport)
 
   /* One group per (league, season) — that is one draft. */
   const groups = new Map<string, typeof facts>()
@@ -189,11 +272,14 @@ export async function collectDraftFactSamples(
       season,
     }
 
+    const platform = String(league.platform ?? 'unknown').toLowerCase()
+    const column = idColumnFor(league.platform)
     let contributed = false
     for (const fact of bucket) {
-      const player = resolved.get(fact.playerId)
+      const player = column ? resolved.get(resolutionKey(column, fact.playerId)) : undefined
       if (!player) {
         result.skippedUnresolvedPlayer++
+        result.skippedUnresolvedByPlatform[platform] = (result.skippedUnresolvedByPlatform[platform] ?? 0) + 1
         continue
       }
       if (!Number.isFinite(fact.pickNumber) || fact.pickNumber < 1) continue

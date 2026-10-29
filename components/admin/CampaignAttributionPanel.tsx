@@ -36,6 +36,12 @@ const STATUS_STYLES: Record<MetricStatus, { chip: string; label: string }> = {
   query_failed: { chip: "border-rose-300/30 bg-rose-300/10 text-rose-100", label: "query failed" },
 }
 
+const SHORT_METRIC_NOTES: Record<string, string> = {
+  landing_viewed: "Tagged landing pages viewed.",
+  signups_completed: "Accounts actually created.",
+  dashboard_activated: "People who reached a usable dashboard.",
+}
+
 const FRESHNESS_STYLES: Record<CampaignAttributionReport["freshness"], string> = {
   fresh: "border-emerald-300/30 bg-emerald-300/10 text-emerald-100",
   delayed: "border-amber-300/30 bg-amber-300/10 text-amber-100",
@@ -80,8 +86,7 @@ function MetricCard({ metric }: { metric: Metric }) {
       <div className={`mt-2 font-black ${showsNumber ? "text-2xl text-white sm:text-3xl" : "text-base text-white/40"}`}>
         {showsNumber ? metric.value!.toLocaleString() : "—"}
       </div>
-      <div className="mt-1 text-[11px] leading-4 text-white/45">{metric.note ?? metric.definition}</div>
-      <div className="mt-1 font-mono text-[11px] text-white/30">{metric.source}</div>
+      <div className="mt-1 text-xs leading-5 text-white/60">{metric.note ?? SHORT_METRIC_NOTES[metric.key] ?? metric.definition}</div>
     </div>
   )
 }
@@ -131,6 +136,8 @@ export function CampaignAttributionPanel() {
     () => report?.summary.filter((m) => m.status !== "not_implemented") ?? [],
     [report],
   )
+  const headline = measured.filter((m) => ["landing_viewed", "signups_completed", "dashboard_activated"].includes(m.key))
+  const supporting = measured.filter((m) => !headline.includes(m))
 
   return (
     <div className="space-y-4">
@@ -182,16 +189,8 @@ export function CampaignAttributionPanel() {
 
         {report && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-white/50">
-              env: {report.environment}
-            </span>
-            <span
-              className={`rounded-full border px-2 py-1 text-[11px] font-black uppercase ${FRESHNESS_STYLES[report.freshness]}`}
-            >
-              {report.freshness.replace("_", " ")}
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-white/50">
-              n={report.sampleSize.toLocaleString()}
+            <span className={`rounded-full border px-2 py-1 text-[11px] font-black uppercase ${FRESHNESS_STYLES[report.freshness]}`}>
+              {report.freshness === "no_data" ? "No activity" : `Data ${report.freshness}`}
             </span>
           </div>
         )}
@@ -213,32 +212,35 @@ export function CampaignAttributionPanel() {
             </div>
           )}
 
-          {unbuilt.length > 0 && (
-            <div className="rounded-2xl border border-amber-300/20 bg-amber-300/[0.07] p-4">
-              <div className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-100">
-                {unbuilt.length} funnel stages have no emitter yet
-              </div>
-              <p className="mt-1 text-[12px] leading-5 text-amber-100/70">
-                These are reported as unavailable, never as zero. Until each is wired, no campaign can be credited
-                for that stage.
-              </p>
-              <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
-                {unbuilt.map((m) => (
-                  <li key={m.key} className="text-[11px] leading-4 text-amber-100/60">
-                    <span className="font-mono text-amber-100/85">{m.key}</span> — {m.note}
-                  </li>
-                ))}
-              </ul>
+          <div className={`af-cc-focus af-cc-focus--${report.errors.length || report.freshness === "stale" ? "warn" : "neutral"}`}>
+            <div>
+              <p className="af-cc-focus-eyebrow">What this report can tell you</p>
+              <h3>{report.errors.length > 0 ? "Some attribution data could not be measured" : report.sampleSize === 0 ? "No attributed activity in this window" : "Landing, signup, and activation are measured"}</h3>
+              <p>{report.sampleSize === 0 ? "Try a longer window or check tagged links before judging campaign performance." : `${report.sampleSize.toLocaleString()} attributed events in this window.${unbuilt.length > 0 ? ` ${unbuilt.length} other funnel ${unbuilt.length === 1 ? "step has" : "steps have"} no emitter, so ${unbuilt.length === 1 ? "its result is" : "their results are"} unknown rather than zero.` : ""}`}</p>
             </div>
-          )}
-
-          {/* Mobile shows one column (lower density); desktop packs four. */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {measured.map((m) => (
-              <MetricCard key={m.key} metric={m} />
-            ))}
           </div>
-
+          <div className="grid gap-3 sm:grid-cols-3">
+            {headline.map((m) => <MetricCard key={m.key} metric={m} />)}
+          </div>
+          {unbuilt.length > 0 ? (
+            <details className="af-cc-drilldown">
+              <summary>View {unbuilt.length} unmeasured funnel steps</summary>
+              <p className="af-cc-empty-state">These steps have no tracking emitter. Campaign credit for them cannot be calculated yet.</p>
+              <ul className="af-cc-plain-list">
+                {unbuilt.map((m) => <li key={m.key}><strong>{m.label}</strong><span>{m.note}</span></li>)}
+              </ul>
+            </details>
+          ) : null}
+          {supporting.length > 0 ? (
+            <details className="af-cc-drilldown">
+              <summary>View supporting attribution metrics</summary>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {supporting.map((m) => <MetricCard key={m.key} metric={m} />)}
+              </div>
+            </details>
+          ) : null}
+          <details className="af-cc-drilldown">
+            <summary>View campaign-by-campaign results</summary>
           <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <div className="text-[11px] uppercase tracking-[0.14em] text-cyan-100/45">
@@ -310,10 +312,14 @@ export function CampaignAttributionPanel() {
             )}
           </div>
 
-          <div className="font-mono text-[11px] text-white/30">
-            Source: first-party AnalyticsEvent · calculated {formatEt(report.calculatedAtIso)} ET · last event{" "}
-            {formatEt(report.lastEventAtIso)} ET · GA4/Pixel estimates are not included
-          </div>
+          </details>
+          <details className="af-cc-drilldown">
+            <summary>How attribution is measured</summary>
+            <p className="af-cc-context-note">First-party events only, grouped by first touch. GA4 and Pixel estimates are separate. Calculated {formatEt(report.calculatedAtIso)} ET; last recorded event {formatEt(report.lastEventAtIso)} ET. Environment: {report.environment}.</p>
+            <ul className="af-cc-plain-list">
+              {measured.map((metric) => <li key={metric.key}><strong>{metric.label}</strong><span>{metric.definition} Source: {metric.source}</span></li>)}
+            </ul>
+          </details>
         </>
       )}
     </div>

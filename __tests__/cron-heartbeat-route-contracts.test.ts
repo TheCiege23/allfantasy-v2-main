@@ -147,7 +147,7 @@ describe('/api/cron/waivers heartbeat contract', () => {
     expect(res.status).toBe(200)
     expect(syncRuns).toHaveLength(1)
     expect(syncRuns[0].ctx).toMatchObject({ jobName: 'cron-waivers', trigger: 'cron' })
-    expect(body).toEqual({ ok: true, dryRun: false, discovered: 0, processed: 0, failed: 0, results: [] })
+    expect(body).toEqual({ ok: true, dryRun: false, discovered: 0, processed: 0, failed: 0, skippedLocked: 0, results: [] })
   })
 
   it('records NO heartbeat for a dry run', async () => {

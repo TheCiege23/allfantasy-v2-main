@@ -146,7 +146,7 @@ describe('floorOverCeilingNote: said when it matters, not every week', () => {
 describe('the guillotine notes are actually reachable', () => {
   const SRC = readFileSync(resolve(process.cwd(), 'lib/trade-intel/tradeContextNotes.ts'), 'utf8')
 
-  it('⚠ the trade console routes guillotine leagues to the guillotine model', () => {
+  it('⚠ the trade console routes Guilly leagues to the guillotine model', () => {
     /*
      * The failure this guards is the one this repo keeps hitting: a module built,
      * tested, merged, and never executed because nothing calls it.

@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { ABSENT_MANAGER_RULE_KEY, readAbsentManagerRule, type AbsentManagerRule } from '@/lib/draft-day/absentManager'
 
 export type TimerMode = 'per_pick' | 'soft_pause' | 'overnight_pause' | 'none'
 
@@ -62,6 +63,8 @@ export interface DraftUISettings {
   guillotineAutoHeyGenEnabled: boolean
   /** Auto-generate HeyGen winner reveal clip once survivor finale voting closes. */
   survivorFinaleAutoHeyGenEnabled: boolean
+  /** Draft-day kit: short clock for a team whose last picks were all auto-picked (lib/draft-day/absentManager.ts). Saved by the draft-day route. */
+  absentManagerRule?: AbsentManagerRule
 }
 
 const DRAFT_UI_DEFAULTS: DraftUISettings = {
@@ -119,6 +122,7 @@ const SETTINGS_KEYS: Record<keyof DraftUISettings, string> = {
   roundOneHeyGenHighlightEnabled: 'draft_round_one_heygen_highlight_enabled',
   guillotineAutoHeyGenEnabled: 'draft_guillotine_auto_heygen_enabled',
   survivorFinaleAutoHeyGenEnabled: 'draft_survivor_finale_auto_heygen_enabled',
+  absentManagerRule: ABSENT_MANAGER_RULE_KEY,
 }
 
 function fromStorage(settings: Record<string, unknown>): DraftUISettings {
@@ -156,6 +160,7 @@ function fromStorage(settings: Record<string, unknown>): DraftUISettings {
     survivorFinaleAutoHeyGenEnabled:
       settings[SETTINGS_KEYS.survivorFinaleAutoHeyGenEnabled] as boolean ??
       DRAFT_UI_DEFAULTS.survivorFinaleAutoHeyGenEnabled,
+    absentManagerRule: readAbsentManagerRule(settings),
   }
 }
 

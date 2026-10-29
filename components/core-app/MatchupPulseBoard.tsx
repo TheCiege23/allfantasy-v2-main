@@ -324,7 +324,7 @@ function gapNote(pulse: MatchupPulse, language: string): string | null {
   if (notStarted > 0) parts.push(`${notStarted} ${notStarted === 1 ? 'has' : 'have'} not started yet`)
   /* Not a gap at all — the format plays the whole field, so there is no one opponent to rank against. */
   if (elimination > 0) {
-    parts.push(`${elimination} ${elimination === 1 ? 'is a guillotine league' : 'are guillotine leagues'}, scored against the whole field`)
+    parts.push(`${elimination} ${elimination === 1 ? 'is a Guilly league' : 'are Guilly leagues'}, scored against the whole field`)
   }
   if (noSchedule > 0) parts.push(`${noSchedule} carry no schedule`)
   if (noOpponent > 0) parts.push(`${noOpponent} have no game this week`)
@@ -348,7 +348,7 @@ function gapNote(pulse: MatchupPulse, language: string): string | null {
   if (language === 'es') {
     const reasons: string[] = []
     if (notStarted > 0) reasons.push(`${notStarted} aún sin comenzar`)
-    if (elimination > 0) reasons.push(`${elimination} de eliminación (guillotina), contra toda la liga`)
+    if (elimination > 0) reasons.push(`${elimination} de eliminación (Guilly), contra toda la liga`)
     if (noSchedule > 0) reasons.push(`${noSchedule} sin calendario`)
     if (noOpponent > 0) reasons.push(`${noOpponent} sin partido esta semana`)
     if (unpriceable > 0) reasons.push(`${unpriceable} sin puntuación o proyección`)

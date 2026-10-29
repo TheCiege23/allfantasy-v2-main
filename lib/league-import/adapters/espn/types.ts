@@ -106,6 +106,11 @@ export interface EspnImportPayload {
   }>
   /** Logged-in user's team id when ESPN cookies identify the member in `raw` members/teams. */
   viewerTeamId?: string | null
+  /**
+   * True when this user has ESPN cookies saved. With `viewerTeamId` null, this means the saved
+   * ESPN account has no team in this league — not that ESPN is unconnected.
+   */
+  viewerEspnConnected?: boolean
   /** Team ids owned by members flagged as league manager/commissioner in ESPN member data. */
   commissionerTeamIds?: string[]
 }

@@ -1483,6 +1483,34 @@
   align-items: stretch;
 }
 
+/*
+ * Sport section heading in the league rail (AfCoreShell `railSections`). Drawn only when the
+ * account plays two or more sports. Centred over the 42px tiles when the rail is collapsed,
+ * left-aligned with the rows when it is open.
+ */
+.af-rail-sport {
+  flex: 0 0 auto;
+  width: 100%;
+  margin-top: 6px;
+  /* 11px is this repo's type floor (__tests__/core-app/type-floor.test.ts); "SOCCER" fits the 68px collapsed rail. */
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.af-rail-sport:first-child {
+  margin-top: 0;
+}
+
+.af-shell[data-rail-open='true'] .af-rail-sport {
+  padding: 0 8px;
+  text-align: left;
+}
+
 .af-shell[data-rail-open='true'] .af-rail-tile {
   display: flex;
   align-items: center;
@@ -3529,4 +3557,186 @@ html[data-mode='light'] .af-core {
     height: 24px;
     border-radius: 8px;
   }
+}
+
+/*
+ * ── Phone league tray: one header row and a close control at the top (2026-10-08) ──────────────────
+ *
+ * Measured on an iPhone screenshot the same day: the crest, the divider and the count row stacked
+ * three high, so the first league started ~150px down the tray, and the only way out was the floating
+ * "Close" pill at the bottom-left, over the list. Now the crest and the count share one row, the
+ * divider goes (it separated a column of crests on desktop and separates nothing here), and the
+ * count row's glyph becomes a ✕ on the right edge (AfCoreShell renders the glyph and its label).
+ *
+ * ⚠ A GRID, NOT A WRAPPER ELEMENT. The rail's five children are the same on every layout; placing them
+ * on phone-only grid areas changes nothing above 720px, where a wrapper would have needed its own
+ * `display: contents` story for desktop.
+ *
+ * ⚠ `minmax(0, max-content)` FOR THE LIST, NOT `1fr`. With `1fr` the list always fills, so three leagues
+ * sit at the top and the Create / Import / Profile foot is pinned at the bottom with a void between.
+ * `max-content` lets a short list end where its leagues end and the foot follow it, while the 0 minimum
+ * still caps a long list at the space left and makes it scroll inside the tray.
+ *
+ * Its own top-level @media, appended, per this file's convention.
+ */
+@media (max-width: 720px) {
+  .af-core.af-shell .af-rail {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, max-content) auto;
+    align-content: start;
+    column-gap: 8px;
+    row-gap: 12px;
+  }
+  .af-core.af-shell .af-rail-logo {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+  .af-core.af-shell .af-rail-divider {
+    display: none;
+  }
+  .af-core.af-shell .af-rail-toggle {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+  .af-core.af-shell .af-rail-scroll {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-height: 0;
+  }
+  .af-core.af-shell .af-rail-foot {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .af-core.af-shell[data-rail-open='true'] .af-rail-toggle-icon {
+    order: 2;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    margin-left: auto;
+    border-radius: 12px;
+    background: var(--chip);
+    color: var(--text);
+    font-size: 16px;
+  }
+}
+
+
+/* Mobile-first polish: quiet chrome, clear league cards, touch-sized navigation. */
+.af-core.af-shell { background-image: none; }
+.af-core .af-main { min-width: 0; }
+.af-core .af-content { padding: 22px clamp(14px, 2.4vw, 32px) 32px; }
+.af-core .af-topbar { gap: 12px; padding-block: 10px; background: var(--bg); }
+.af-core .af-topbar-right { gap: 10px; }
+.af-core .af-data-menu { position: relative; flex: none; font-size: 13px; }
+.af-core .af-data-menu > summary { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 44px; min-height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; color: var(--muted); list-style: none; }
+.af-core .af-data-menu > summary::-webkit-details-marker { display: none; }
+.af-core .af-data-menu-panel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 45; width: min(280px, calc(100vw - 28px)); padding: 16px; border: 1px solid var(--line2); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.af-core .af-data-menu-panel p { font-size: 13px; line-height: 1.5; color: var(--muted); margin: 8px 0; }
+.af-core .af-cardfresh-details { margin: 8px 0 0; color: var(--warn); font-size: 12px; }
+.af-core .af-cardfresh-details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.af-core.af-shell[data-rail-open='true'] .af-rail-scroll { gap: 8px; padding: 8px; }
+.af-core.af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile { width: 100%; gap: 10px; padding: 12px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.af-core.af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile:hover { border-color: var(--accent-line); background: var(--surface2); }
+.af-core.af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile[data-active='true'] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.af-core .af-rail-row-name { font-size: 13px; line-height: 1.35; font-weight: 750; letter-spacing: -.01em; }
+.af-core .af-rail-row-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; color: var(--muted); font: 500 11px/1.5 system-ui, sans-serif; }
+.af-core .af-rail-row-meta > span:first-child { text-transform: capitalize; }
+.af-core .af-rail-delayed { color: var(--warn); }
+.af-core .af-rail-row-team { font-size: 12px; }
+.af-core .af-rail-row-av { width: 20px; height: 20px; }
+.af-core .af-rail-row-line { margin-top: 6px; }
+.af-core .af-nav-item { min-height: 44px; border-radius: 10px; }
+.af-core :is(button, a, summary, input, select, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (min-width: 1081px) {
+  .af-core.af-shell[data-rail-open='true'] { grid-template-columns: 280px 188px minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .af-core.af-shell { width: 100%; max-width: 100%; overflow-x: clip; }
+  .af-core .af-content { padding: 14px 12px calc(92px + env(safe-area-inset-bottom, 0px)); }
+  .af-core .af-topbar { padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px; gap: 6px 10px; }
+  .af-core .af-topbar .af-topbar-right { overflow: visible; flex: 0 0 auto; margin-left: auto; }
+  .af-core .af-topbar .af-plan, .af-core .af-topbar .af-week, .af-core .af-admin-shortcut { display: none; }
+  .af-core .af-data-menu > summary span { display: none; }
+  .af-core .af-tabbar { display: flex; padding: 5px 4px calc(5px + env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--line2); }
+  .af-core .af-tabbar-item { flex: 1 1 0; min-width: 0; min-height: 52px; gap: 4px; border-radius: 12px; }
+  .af-core .af-tabbar-label { font: 600 11px/1.2 system-ui, sans-serif; letter-spacing: 0; }
+  .af-core .af-tabbar-item[aria-current='page'] { background: var(--accent-soft); color: var(--accent); }
+  .af-core.af-shell[data-rail-open='true'] .af-rail-row-name { font-size: 15px; }
+  .af-core.af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile { padding: 12px; }
+  .af-core input, .af-core textarea, .af-core select { font-size: 16px; }
+}
+
+/* A visible bracket entry on the Core home; the bracket hub owns sport availability. */
+.af-core .af-core-bracket-promo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+  margin: 0 0 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--accent-line, var(--line));
+  border-radius: 16px;
+  background: linear-gradient(115deg, var(--accent-soft, transparent), transparent 72%), var(--surface);
+  box-shadow: 0 8px 24px rgba(2, 8, 23, .06);
+}
+.af-core .af-core-bracket-promo-copy { flex: 1 1 330px; min-width: 0; }
+.af-core .af-core-bracket-promo-kicker {
+  margin: 0;
+  color: var(--accent);
+  font: 800 11px/1.2 'JetBrains Mono', monospace;
+  letter-spacing: .14em;
+}
+.af-core .af-core-bracket-promo h2 {
+  margin: 7px 0 5px;
+  color: var(--text);
+  font: 800 clamp(18px, 2vw, 24px)/1.2 'Archivo', system-ui, sans-serif;
+  letter-spacing: -.025em;
+}
+.af-core .af-core-bracket-promo-copy > p:not(.af-core-bracket-promo-kicker) {
+  margin: 0;
+  color: var(--muted);
+  font: 400 13px/1.5 'Archivo', system-ui, sans-serif;
+}
+.af-core .af-core-bracket-promo-actions {
+  display: flex;
+  flex: 0 1 290px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.af-core .af-core-bracket-promo-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink, #04121a);
+  font: 750 13px/1.2 'Archivo', system-ui, sans-serif;
+  text-align: center;
+  text-decoration: none;
+}
+.af-core .af-core-bracket-promo-button:hover { filter: brightness(1.08); }
+.af-core .af-core-bracket-promo-browse {
+  padding: 8px 2px;
+  color: var(--accent);
+  font: 700 13px/1.2 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+}
+.af-core .af-core-bracket-promo-browse:hover { text-decoration: underline; }
+.af-core .af-core-bracket-promo a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+@media (max-width: 720px) {
+  .af-core .af-core-bracket-promo { padding: 16px; }
+  .af-core .af-core-bracket-promo-actions { flex: 1 1 100%; justify-content: flex-start; }
+  .af-core .af-core-bracket-promo-button { flex: 1 1 145px; }
 }

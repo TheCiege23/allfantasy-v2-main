@@ -64,9 +64,9 @@ function SurvivorAppShellInner({
     ctx.leaguePhase === 'finale' ||
     ctx.playerState === 'jury' ||
     ctx.playerState === 'finalist'
-  const hasAfCommissionerSub = Boolean(
-    (ctx.season as { hasAfCommissionerSub?: unknown } | null)?.hasAfCommissionerSub,
-  )
+  // From /api/league/settings (the shared AF Commissioner check). This used to read a field the
+  // season payload never carries, so the paid commissioner tools stayed locked for every subscriber.
+  const hasAfCommissionerSub = ctx.hasAfCommissionerSub
 
   type NavItem = {
     href: string
@@ -104,6 +104,8 @@ function SurvivorAppShellInner({
     { href: `${base}/exile`, label: 'Exile', icon: '🏚', show: showExileTab, dot: exileHot, home: false },
     { href: `${base}/jury`, label: 'Jury', icon: '⚖️', show: showJuryTab, dot: false, home: false },
     { href: `${base}/episodes`, label: 'Episodes', icon: '📜', show: true, dot: false, home: false },
+    { href: `${base}/intel`, label: 'Intel', icon: '🔎', show: true, dot: false, home: false },
+    { href: `${base}/rules`, label: 'Rules', icon: '📖', show: true, dot: false, home: false },
     {
       href: '#settings',
       label: 'Settings',

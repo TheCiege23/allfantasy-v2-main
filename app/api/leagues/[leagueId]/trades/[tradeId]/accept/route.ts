@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { acceptAfLeagueTrade } from '@/lib/league-trade-engine/tradeService'
 import { evaluateTradeSettlementGuard } from '@/lib/sports-evidence/tradeSettlementGuard'
+import { postDraftLockErrorResponse } from '@/lib/league/postDraftRosterLock'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,8 @@ export async function POST(
     const out = await acceptAfLeagueTrade({ tradeId, leagueId, userId })
     return NextResponse.json({ ok: true, ...out, ...(sports.decision ? { sportsDataDecision: sports.decision } : {}) })
   } catch (e) {
+    const locked = postDraftLockErrorResponse(e)
+    if (locked) return NextResponse.json(locked.body, { status: locked.status })
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({ error: msg }, { status: 400 })
   }

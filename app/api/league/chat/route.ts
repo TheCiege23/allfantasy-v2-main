@@ -22,7 +22,7 @@ import { processDevyLeagueChatInput } from '@/lib/devy/devyChimmyLeagueChat'
 import { processC2cLeagueChatInput } from '@/lib/c2c/c2cChimmyLeagueChat'
 import { isChimmyPrivateMessage, parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
 import { markViewingChat, readChatPresence } from '@/lib/chat-core/chatPresence'
-import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
+import { redactPollForViewer } from '@/lib/chat-core/messagePolls'
 import { syncTradeCardsForLeague } from '@/lib/league-chat/tradeChatCards'
 import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
 import { activateSGLivePower } from '@/lib/survivor-guillotine/live'
@@ -39,6 +39,9 @@ import { filterMessagesByBlocked } from '@/lib/moderation/SafetyVisibilityResolv
 import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import { parseSurvivorCommand } from '@/lib/survivor/SurvivorCommandParser'
 import { processSurvivorOfficialCommand } from '@/lib/survivor/SurvivorOfficialCommandService'
+import { handleChimmyPrivateMessage } from '@/lib/survivor/chimmyHandler'
+import { isSurvivorChimmyAsk } from '@/lib/survivor/survivorRulesAnswers'
+import { messageInLeagueChannel, parseLeagueChatChannel, withLeagueChannel } from '@/lib/league-chat/leagueChatChannels'
 
 function toStringValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
@@ -201,9 +204,18 @@ export async function GET(req: NextRequest) {
    */
   const withoutPins = messages.filter((message) => (message.messageType ?? 'text') !== 'pin')
 
+  /*
+   * League channels (#general / #trash-talk / #trades / #waivers — lib/league-chat/leagueChatChannels.ts).
+   * Only when the reader names one, and never in a Big Brother league, whose rooms are its own. A
+   * request without `leagueChannel` gets the whole transcript, exactly as before, so the comms drawer
+   * and every older caller are unchanged.
+   */
+  const leagueChannel = bbAccess ? null : parseLeagueChatChannel(req.nextUrl.searchParams?.get('leagueChannel'))
   const inRoom = selectedBbChannel
     ? withoutPins.filter((message) => bbChannelOfMessage(message) === selectedBbChannel)
-    : withoutPins
+    : leagueChannel
+      ? withoutPins.filter((message) => messageInLeagueChannel(message, leagueChannel))
+      : withoutPins
   const filteredMessages = filterMessagesByBlocked(inRoom, blockSet)
 
   /*
@@ -261,11 +273,12 @@ export async function GET(req: NextRequest) {
         messageType: message.messageType ?? 'text',
         channelSource: message.channelSource ?? null,
         /*
-         * Anonymous polls are redacted HERE, on the way out. The ids stay in
-         * the database because refusing a second vote means knowing who has
-         * already voted; what changes is what other members can see.
+         * Anonymous polls, and open polls whose results show after close, are
+         * redacted HERE, on the way out. The ids stay in the database because
+         * refusing a second vote means knowing who has already voted; what
+         * changes is what other members can see.
          */
-        metadata: (redactAnonymousPollVotes(message.metadata ?? null, userId) ?? null) as
+        metadata: (redactPollForViewer(message.metadata ?? null, userId) ?? null) as
           | Record<string, unknown>
           | null,
       })
@@ -337,7 +350,11 @@ export async function POST(req: NextRequest) {
   const selectedBbChannel: BigBrotherChannelKey | null = bbWrite.channel
   const bigBrotherLeague = selectedBbChannel !== null
 
-  const finalMetadata = selectedBbChannel ? { ...(metadata ?? {}), bbChannel: selectedBbChannel } : metadata
+  /* The league channel is server-stamped from a validated body field; a Big Brother room wins. */
+  const leagueChannel = bigBrotherLeague ? null : parseLeagueChatChannel(body?.leagueChannel)
+  const finalMetadata = selectedBbChannel
+    ? { ...(metadata ?? {}), bbChannel: selectedBbChannel }
+    : withLeagueChannel(metadata as Record<string, unknown> | undefined, leagueChannel)
 
   let bbProcessed: Awaited<ReturnType<typeof processBigBrotherLeagueChatInput>> | null = null
   if (!hasRich && message.trim() && bigBrotherLeague) {
@@ -401,7 +418,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
     }
     let decision: ReturnType<typeof decisionAnswerMeta> | undefined
-    const survivorVote = (parseSurvivorCommand(message).intent === 'vote' || /^@chimmy\s+vote(?:\s|$)/i.test(message)) && await isSurvivorLeague(leagueId)
+    const survivorVote = (['vote', 'shot_in_the_dark'].includes(parseSurvivorCommand(message).intent) || /^@chimmy\s+vote(?:\s|$)/i.test(message)) && await isSurvivorLeague(leagueId)
     const voteResult = survivorVote
       ? await processSurvivorOfficialCommand({ leagueId, userId, command: message, source: 'private_chimmy' })
       : null
@@ -410,11 +427,16 @@ export async function POST(req: NextRequest) {
       try { sgReply = (await activateSGLivePower(leagueId, userId, message))?.reply ?? null }
       catch (error) { sgReply = error instanceof Error ? error.message : 'Power activation failed.' }
     }
+    // In a Survivor league, rules questions and questions about your own game go to the Survivor
+    // host, which answers from this league's settings; everything else stays with general Chimmy.
+    const survivorAsk = !sgReply && !voteResult?.handled && isSurvivorChimmyAsk(message) && await isSurvivorLeague(leagueId)
     const replyText = sgReply ?? (voteResult?.handled
       ? voteResult.ok
         ? voteResult.message ?? 'Your vote was recorded privately.'
         : `${voteResult.error ?? 'Vote was not recorded.'} To vote, send @Chimmy @manager or @Chimmy vote @manager.`
-      : await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } }))
+      : survivorAsk
+        ? await handleChimmyPrivateMessage(leagueId, userId, message)
+        : await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } }))
     const leagueRow = await prisma.league.findUnique({
       where: { id: leagueId },
       select: { userId: true },
@@ -514,6 +536,7 @@ export async function POST(req: NextRequest) {
             ...(devyProcessed?.outcome === 'post_user_and_chimmy' ? { devy: true } : {}),
             ...(idpProcessed?.outcome === 'post_user_and_chimmy' ? { idp: true } : {}),
             ...(bigBrotherLeague && selectedBbChannel ? { bbChannel: selectedBbChannel } : {}),
+            ...(leagueChannel && leagueChannel !== 'general' ? { leagueChannel } : {}),
             ...(chimmy.metadata ?? {}),
           },
         })
