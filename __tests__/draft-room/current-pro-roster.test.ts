@@ -66,3 +66,9 @@ it('uses a verified old photo without accepting a stale free-agent flag as curre
   const retired = row({ dob: '1990-01-01', status: 'INACT' })
   expect(reconcileCurrentProRows('NBA', [retired], [retired, oldPhoto], true, now)).toHaveLength(0)
 })
+
+it('preserves the two-way MLB role when a secondary roster lists only pitcher', () => {
+  const ri = row({ position: 'TWP', dob: '1990-01-01' })
+  const secondary = row({ source: 'thesportsdb', status: 'Active', position: 'P', dob: '1990-01-01' })
+  expect(reconcileCurrentProRows('MLB', [ri], [ri, secondary], true, now)[0]?.position).toBe('TWP')
+})

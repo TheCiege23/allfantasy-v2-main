@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { extractMlbDraftSeasonStats, extractNbaDraftSeasonRates, extractNhlDraftSeasonStats } from './sportsPlayerRecordDraftEnrichment'
-import { selectDraftSeasonRows } from './selectDraftSeasonRows'
+import { selectDraftSeasonRows, normalizeRiDraftSeasonUnits } from './selectDraftSeasonRows'
 
 /** Provider IDs, sport and season are joined directly; names never join statistics. */
 export async function loadStoredDraftSeasonStats(sport: string, ids: string[], season: number) {
@@ -11,11 +11,9 @@ export async function loadStoredDraftSeasonStats(sport: string, ids: string[], s
     select: { playerId: true, season: true, gamesPlayed: true, stats: true, position: true },
   })
   for (const [id, row] of selectDraftSeasonRows(rows, season)) {
-    // RI's season field named "minutes" has unverified units; never label it MPG.
-    const nbaBlob = row.stats && typeof row.stats === 'object' && !Array.isArray(row.stats) ? { ...row.stats } : {}
-    delete (nbaBlob as Record<string, unknown>).minutes
-    const nbaDraftStats = sport === 'NBA' ? extractNbaDraftSeasonRates(nbaBlob) : null
-    const seasonStatLine = sport === 'MLB' ? extractMlbDraftSeasonStats(row.stats) : sport === 'NHL' ? extractNhlDraftSeasonStats(row.stats) : null
+    const box = normalizeRiDraftSeasonUnits(sport, row.stats)
+    const nbaDraftStats = sport === 'NBA' ? extractNbaDraftSeasonRates(box) : null
+    const seasonStatLine = sport === 'MLB' ? extractMlbDraftSeasonStats(box) : sport === 'NHL' ? extractNhlDraftSeasonStats(box) : null
     // RI acknowledges incomplete NHL goalie decisions/shutouts. Omit those metrics until its backfill is verified.
     if (sport === 'NHL' && seasonStatLine && (row.position === 'G' || 'savePercentage' in seasonStatLine || 'goalsAgainstAverage' in seasonStatLine)) {
       delete seasonStatLine.wins

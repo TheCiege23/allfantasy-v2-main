@@ -9,3 +9,14 @@ export function selectDraftSeasonRows<T extends { playerId: string; season: stri
   }
   return out
 }
+
+/** RI season clocks are seconds, measured in lib/chimmy/tools/dailySportStats.ts (2026-09-24). Generic provider extractors consume minutes. */
+export function normalizeRiDraftSeasonUnits(sport: string, blob: unknown): Record<string, unknown> {
+  const out = blob && typeof blob === 'object' && !Array.isArray(blob) ? { ...blob } as Record<string, unknown> : {}
+  const field = sport === 'NBA' ? 'minutes' : sport === 'NHL' ? 'time_on_ice' : null
+  if (!field) return out
+  const raw = out[field]
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() && !raw.includes(':') ? Number(raw) : NaN
+  if (Number.isFinite(n) && n >= 0) out[field] = n / 60
+  return out
+}

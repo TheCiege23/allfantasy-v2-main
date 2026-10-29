@@ -20,3 +20,5 @@ Scope: NFL, NBA, NHL, MLB. Existing user leagues and drafts remain unstarted.
 Audit all four saved pools after roster, stat and image ingestion. Measure real photo URL coverage separately from successful image rendering.
 Run identity, season-selection, stat-unit tests, type checking and the existing desktop/mobile draft suites.
 No production database changes or league-state transitions are part of this pass.
+
+NBA season minutes and NHL season time on ice use the measured seconds contract from lib/chimmy/tools/dailySportStats.ts; the direct RI draft reader converts them to minutes before generic rate extraction. MLB two-way primary positions remain TWP.

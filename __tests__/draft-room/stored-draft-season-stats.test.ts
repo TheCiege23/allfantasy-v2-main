@@ -26,7 +26,12 @@ describe('draft reads stored RI season statistics', () => {
   })
 })
 
-it('does not mistake unverified RI season units for minutes per game', async () => {
+it('converts measured RI season seconds into minutes per game', async () => {
   findMany.mockResolvedValue([{ playerId: '1975', season: '2026', gamesPlayed: 2, position: 'SG', stats: { games_played: 2, points: 0, minutes: 115 } }])
-  expect((await loadStoredDraftSeasonStats('NBA', ['1975'], 2026)).get('1975')?.nbaDraftStats?.minutesPerGame).toBeNull()
+  expect((await loadStoredDraftSeasonStats('NBA', ['1975'], 2026)).get('1975')?.nbaDraftStats?.minutesPerGame).toBe(1)
+})
+
+it('uses the documented season clock units for goalie goals-against average', async () => {
+  findMany.mockResolvedValue([{ playerId: '2', season: '2026', gamesPlayed: 1, position: 'G', stats: { saves: 17, shots_against: 18, goals_allowed: 1, time_on_ice: 3600 } }])
+  expect((await loadStoredDraftSeasonStats('NHL', ['2'], 2026)).get('2')?.seasonStatLine?.goalsAgainstAverage).toBe(1)
 })
