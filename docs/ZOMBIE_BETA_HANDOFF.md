@@ -153,3 +153,7 @@ Verification on the polish candidate:
 - Phone and desktop screenshots were visually inspected. Full hosted unit/browser CI and staging deployment status must be recorded separately.
 
 Remaining acceptance: latest hosted CI, owner review of the polished staging screen, the remaining four-sport physical-device checks, and a real-manager live scoring window after recruitment. Current NFL ADP provider access remains deferred by the owner.
+
+Typecheck follow-up: the initial full-project check reported 139 errors against a 143-error baseline, with three new nullable `useSearchParams` reads in the inherited `app/dev/league-mobile-preview/Preview.tsx`. The renewal screens had no diagnostics. The three reads now use optional access so the existing default preview remains available when parameters are absent. The baseline is unchanged; the follow-up full-project verdict is tracked separately.
+
+The visual candidate `29c796f1f2f1c18e2887e7ecbeaee495eac6c386` is building in isolated Railway staging as deployment `e9024206-0266-4201-9622-aed8ee56bb08`. The reviewed environment patch changes only the pinned source SHA. No variables, schemas, schedules or production services were changed. This build does not include the subsequent preview-only null-guard cleanup; the Zombie renewal UI is identical between the two candidates.
