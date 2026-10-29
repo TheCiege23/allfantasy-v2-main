@@ -358,3 +358,6 @@
 }
 
 .nl-heading-image{display:block;width:100%;height:100%;border-radius:inherit;object-fit:cover}
+
+.nl-home-secondary:empty { display: none; }
+.nl-home:has(> .nl-home-secondary:empty) { grid-template-columns: minmax(0, 1fr); }

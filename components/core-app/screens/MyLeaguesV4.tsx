@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { leagueWorkspaceHref } from '@/lib/league/league-workspace-navigation'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { useMemo, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -623,12 +624,9 @@ function LeagueCard({
       ) : null}
 
       <div className="af-ml-card-actions">
-        <Link href={league.hub?.href ?? league.href} className="af-ml-open">
-          {league.hub ? (es ? 'Abrir centro compartido →' : 'Open shared hub →') : dashboardLabel}
+        <Link href={league.hub?.href ?? (isNativePlatform(league.platform) ? leagueEntryHref(league) : league.href)} className="af-ml-open">
+          {league.hub ? (es ? 'Abrir centro compartido →' : 'Open shared hub →') : isNativePlatform(league.platform) ? (es ? 'Abrir liga ↗' : 'Open League ↗') : dashboardLabel}
         </Link>
-        {!league.hub ? (
-          <Link href={leagueWorkspaceHref(league.id)} className="af-ml-open af-ml-open--workspace">{es ? 'Abrir liga ↗' : 'Open League ↗'}</Link>
-        ) : null}
       </div>
     </article>
   )

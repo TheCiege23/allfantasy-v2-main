@@ -121,6 +121,8 @@ import {
 } from '@/lib/redraft/lineupModeSwitch'
 import { gamesCountSportConfigError } from '@/lib/redraft/gamesCount'
 import { gamesCountChangeRefusal, gamesCountSettingOf, keepGamesCountFields } from '@/lib/redraft/gamesCountSwitch'
+import { ruleSnapshotFromLeague } from '@/lib/league-rules-explainer/snapshot'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -1503,6 +1505,19 @@ export async function executeLeagueSettingsPatch(
     })
   }
 
+  /*
+   * Before/after for the rules this save changed, for the league home's "What changed" card
+   * (lib/league-rules-explainer). Only the explainer's own snapshot keys — non-secret league rules a
+   * member can already read — never the request body. Computed from the row read BEFORE the writes
+   * and the row read after them, with the same readers the rules popup uses.
+   */
+  let ruleChanges: ReturnType<typeof diffRuleSnapshots> = []
+  try {
+    if (fresh) ruleChanges = diffRuleSnapshots(ruleSnapshotFromLeague(league), ruleSnapshotFromLeague(fresh))
+  } catch (e) {
+    console.warn('[executeLeagueSettingsPatch] rule change diff', e instanceof Error ? e.message : 'unknown error')
+  }
+
   void import('@/lib/league-events/publisher')
     .then(({ publishLeagueFanoutEvent }) =>
       publishLeagueFanoutEvent({
@@ -1518,6 +1533,8 @@ export async function executeLeagueSettingsPatch(
         meta: {
           section: patchOptions?.section ?? null,
           updatedFields: [...new Set(updatedFieldNames)].slice(0, 40),
+          actorUserId,
+          ...(ruleChanges.length ? { ruleChanges } : {}),
         },
       }),
     )

@@ -28,7 +28,7 @@ import { processExpiredDraftPicks } from '@/lib/live-draft-engine/expired-picks/
 import { mirrorActiveSleeperDrafts } from '@/lib/draft/mirrorActiveSleeperDrafts'
 import { startScheduledSurvivorDrafts } from '@/lib/survivor/startScheduledSurvivorDrafts'
 import { reportSurvivorAutomationError } from '@/lib/survivor/survivorAutomationReporting'
-import { startScheduledRedraftDrafts } from '@/lib/draft/startScheduledRedraftDrafts'
+import { startScheduledDynastyDrafts, startScheduledRedraftDrafts } from '@/lib/draft/startScheduledRedraftDrafts'
 import { fillAutoDraftBoards, type FillAutoDraftBoardsSummary } from '@/lib/live-draft-engine/autoDraftFill'
 import { processExpiredDispersalPicks, type ExpiredDispersalPicksSummary } from '@/lib/dispersal-draft/expiredDispersalPicks'
 
@@ -122,6 +122,12 @@ export async function GET(request: NextRequest) {
           scanned: 0, started: 0, skipped: 0, skips: [] as Array<{ leagueId: string; reason: string }>,
           errors: [{ leagueId: '', error: error instanceof Error ? error.message : String(error) }],
         }))
+        // And a dynasty league (startup or rookie draft) whose commissioner turned on Autostart Draft,
+        // including a rookie draft the calendar opened with "start it N days after it opens".
+        const dynastyStarts = await startScheduledDynastyDrafts().catch((error) => ({
+          scanned: 0, started: 0, skipped: 0, skips: [] as Array<{ leagueId: string; reason: string }>,
+          errors: [{ leagueId: '', error: error instanceof Error ? error.message : String(error) }],
+        }))
         // An auto draft is the commissioner's instruction that the computer drafts every seat, so
         // like a scheduled start it runs whether or not server-side autopick is enabled.
         const autoDrafts: FillAutoDraftBoardsSummary = await fillAutoDraftBoards({ maxLeagues: 10, budgetMs: 40_000 }).catch((error) => ({
@@ -133,12 +139,12 @@ export async function GET(request: NextRequest) {
         const dispersal: ExpiredDispersalPicksSummary = await processExpiredDispersalPicks({ maxDrafts: 25 }).catch((error) => ({
           scanned: 0, advanced: 0, errors: [{ draftId: '', error: error instanceof Error ? error.message : String(error) }],
         }))
-        const startErrors = survivorStarts.errors.length + redraftStarts.errors.length + autoDrafts.errors.length + dispersal.errors.length
+        const startErrors = survivorStarts.errors.length + redraftStarts.errors.length + dynastyStarts.errors.length + autoDrafts.errors.length + dispersal.errors.length
 
         // Autopick is inert until deliberately enabled — see SAFETY above.
-        if (!isEnabled()) return { disabled: true as const, mirror, survivorStarts, redraftStarts, autoDrafts, dispersal, startErrors, summary: null }
+        if (!isEnabled()) return { disabled: true as const, mirror, survivorStarts, redraftStarts, dynastyStarts, autoDrafts, dispersal, startErrors, summary: null }
 
-        return { disabled: false as const, mirror, survivorStarts, redraftStarts, autoDrafts, dispersal, startErrors, summary: await processExpiredDraftPicks({ maxLeagues }) }
+        return { disabled: false as const, mirror, survivorStarts, redraftStarts, dynastyStarts, autoDrafts, dispersal, startErrors, summary: await processExpiredDraftPicks({ maxLeagues }) }
       },
       (r) =>
         r.summary
@@ -157,6 +163,7 @@ export async function GET(request: NextRequest) {
                 errors: r.summary.errors.slice(0, 10),
                 survivorStarts: r.survivorStarts,
                 redraftStarts: { ...r.redraftStarts, skips: r.redraftStarts.skips.slice(0, 10) },
+                dynastyStarts: { ...r.dynastyStarts, skips: r.dynastyStarts.skips.slice(0, 10) },
                 autoDrafts: autoDraftsMeta(r.autoDrafts),
                 dispersal: dispersalMeta(r.dispersal),
               },
@@ -168,6 +175,7 @@ export async function GET(request: NextRequest) {
                 autopickDisabled: true,
                 survivorStarts: r.survivorStarts,
                 redraftStarts: { ...r.redraftStarts, skips: r.redraftStarts.skips.slice(0, 10) },
+                dynastyStarts: { ...r.dynastyStarts, skips: r.dynastyStarts.skips.slice(0, 10) },
                 autoDrafts: autoDraftsMeta(r.autoDrafts),
                 dispersal: dispersalMeta(r.dispersal),
               } },
@@ -181,13 +189,14 @@ export async function GET(request: NextRequest) {
         mirror: tick.mirror,
         survivorStarts: tick.survivorStarts,
         redraftStarts: tick.redraftStarts,
+        dynastyStarts: tick.dynastyStarts,
         autoDrafts: autoDraftsMeta(tick.autoDrafts),
         dispersal: dispersalMeta(tick.dispersal),
         ranAt: new Date().toISOString(),
       })
     }
 
-    return NextResponse.json({ ok: true, ...tick.summary, mirror: tick.mirror, survivorStarts: tick.survivorStarts, redraftStarts: tick.redraftStarts, autoDrafts: autoDraftsMeta(tick.autoDrafts), dispersal: dispersalMeta(tick.dispersal), ranAt: new Date().toISOString() })
+    return NextResponse.json({ ok: true, ...tick.summary, mirror: tick.mirror, survivorStarts: tick.survivorStarts, redraftStarts: tick.redraftStarts, dynastyStarts: tick.dynastyStarts, autoDrafts: autoDraftsMeta(tick.autoDrafts), dispersal: dispersalMeta(tick.dispersal), ranAt: new Date().toISOString() })
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'draft-tick failed' },

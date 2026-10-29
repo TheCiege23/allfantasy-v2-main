@@ -33,6 +33,8 @@ import { buildManagerDnaViewModel } from '@/lib/decision-os/manager-dna'
 import { buildDecisionRecommendationsViewModel } from '@/lib/decision-os/recommendations'
 import type { ManagerIntelligencePayload } from '@/lib/decision-os/dashboard-intelligence'
 import type { UserOsSnapshot } from '@/lib/decision-os/userOs'
+import { LeagueRulesHomeHost } from '@/components/league/native/LeagueRulesHomeHost'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 
 export type LeagueTabProps = {
   league: UserLeague
@@ -772,6 +774,8 @@ export function LeagueTab({
       <LeagueMembersPreview league={league} teams={teams} seasonSnapshot={seasonSnapshot ?? null} />
 
       {/* Sleeper-style rules snapshot - scoring, waivers, trade deadline, etc. */}
+      {/* An imported league's rules popup (lib/league-rules-explainer); native leagues have it on their home. */}
+      {isNativePlatform(league.platform) ? null : <LeagueRulesHomeHost leagueId={league.id} variant="classic" />}
       <LeagueRulesSummaryCard league={league} leagueId={league.id} />
 
       <DraftTab

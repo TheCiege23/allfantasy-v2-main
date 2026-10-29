@@ -25,8 +25,20 @@ import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine
 import { describeSchedule } from '@/lib/guillotine/chopSchedule'
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
+import { guillotineAdvancedSnapshot, guillotineRulesSnapshot } from '@/lib/league-rules-explainer/snapshot'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 
 export const dynamic = 'force-dynamic'
+
+/** A "before" read for the What-changed event: any failure means no event, never a failed save. */
+async function bestEffort<T>(read: () => Promise<T> | T): Promise<T | null> {
+  try {
+    return (await read()) ?? null
+  } catch {
+    return null
+  }
+}
 
 export async function GET(
   req: NextRequest,
@@ -145,9 +157,19 @@ export async function PATCH(
   const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown; advanced?: unknown; rules?: unknown } | null
   if (body && 'rules' in body) {
     try {
+      const before = await bestEffort(() => readGuillotineRules(leagueId, userId))
       const saved = await saveGuillotineRules(leagueId, userId, body.rules)
       if (!saved.ok) {
         return NextResponse.json({ error: saved.error, field: saved.field ?? null, fields: saved.fields ?? [] }, { status: saved.status })
+      }
+      // Before/after for the league home's "What changed" card (lib/league-rules-explainer).
+      if (before) {
+        await publishRuleChangesEvent({
+          leagueId,
+          actorUserId: userId,
+          section: 'guillotine-rules',
+          changes: diffRuleSnapshots(guillotineRulesSnapshot(before.rules), guillotineRulesSnapshot(saved.view.rules)),
+        })
       }
       return NextResponse.json({ ok: true, ...saved.view })
     } catch (e) {
@@ -156,11 +178,20 @@ export async function PATCH(
     }
   }
   if (body && 'advanced' in body) {
+    const before = await bestEffort(() => readGuillotineAdvanced(leagueId))
     const saved = await saveGuillotineAdvanced(leagueId, userId, body.advanced)
     if (!saved.ok) {
       const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : 400
       const message = saved.error === 'not_entitled' ? 'Chop schedules and immunity are part of AF Commissioner.' : saved.error
       return NextResponse.json({ error: message, code: saved.error }, { status })
+    }
+    if (before) {
+      await publishRuleChangesEvent({
+        leagueId,
+        actorUserId: userId,
+        section: 'guillotine-chop-rules',
+        changes: diffRuleSnapshots(guillotineAdvancedSnapshot(before), guillotineAdvancedSnapshot(saved.value)),
+      })
     }
     const config = await getGuillotineConfig(leagueId)
     return NextResponse.json({ ok: true, advanced: saved.value, scheduleLines: config ? describeSchedule(saved.value, config.teamsPerChop, config.eliminationStartWeek) : [] })
@@ -170,8 +201,20 @@ export async function PATCH(
   }
 
   try {
+    const beforeConfig = await bestEffort(() => getGuillotineConfig(leagueId))
     const result = await updateGuillotineFirstChopWeek(leagueId, body.eliminationStartWeek)
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    if (beforeConfig) {
+      await publishRuleChangesEvent({
+        leagueId,
+        actorUserId: userId,
+        section: 'guillotine-first-chop',
+        changes: diffRuleSnapshots(
+          { chopStartWeek: beforeConfig.eliminationStartWeek, chopEndWeek: beforeConfig.eliminationEndWeek ?? null },
+          { chopStartWeek: result.eliminationStartWeek, chopEndWeek: result.eliminationEndWeek ?? null },
+        ),
+      })
+    }
     return NextResponse.json({
       ok: true,
       config: {

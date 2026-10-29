@@ -29,6 +29,7 @@ export interface ImportPreviewLeague {
   teamCount: number
   playoffTeams: number | undefined
   avatar: string | null
+  seasonPhase?: 'pre_draft' | 'offseason' | null
   settings: {
     ppr?: boolean
     superflex?: boolean
@@ -313,6 +314,14 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
     teamCount: normalized.league.leagueSize,
     playoffTeams: normalized.league.playoff_team_count,
     avatar: normalized.league_branding?.avatar_url ?? null,
+    seasonPhase: normalized.source.source_provider === 'fantrax'
+      ? normalized.league.status === 'pre_draft'
+        ? 'pre_draft'
+        : normalized.league.status === 'off_season' ||
+            (normalized.league as { fantrax_settings?: { seasonState?: string } }).fantrax_settings?.seasonState === 'complete'
+          ? 'offseason'
+          : null
+      : null,
     settings: {
       ppr: ppr > 0,
       superflex,

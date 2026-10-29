@@ -1,3 +1,5 @@
+import { LeagueDisplayPreferences } from '@/components/league/LeagueDisplayPreferences'
+import { readHiddenLeagueSections } from '@/lib/league/leagueSections'
 import { getServerSession } from 'next-auth'
 import { touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
 import { redirect } from 'next/navigation'
@@ -323,7 +325,7 @@ export default async function LeaguePage(
                         prisma.userProfile
                           .findUnique({
                                         where: { userId },
-                                        select: { sleeperUserId: true, discordUserId: true },
+                                        select: { sleeperUserId: true, discordUserId: true, notificationPreferences: true },
                           })
                           .catch((err) => {
                                         console.error('[league page] userProfile query failed', { userId, err })
@@ -417,6 +419,7 @@ export default async function LeaguePage(
 
       return (
         <div className="flex min-h-0 flex-1 flex-col" data-league-id={leagueId}>
+          <LeagueDisplayPreferences hidden={readHiddenLeagueSections(userProfile?.notificationPreferences)}>
           <LeagueShellClient
             league={league}
             userTeam={userTeam}
@@ -444,6 +447,7 @@ export default async function LeaguePage(
             defaultOpenChat={defaultOpenChat}
             shouldPlayIntro={shouldPlayIntro}
           />
+          </LeagueDisplayPreferences>
         </div>
       )
   } catch (error) {

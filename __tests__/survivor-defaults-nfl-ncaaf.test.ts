@@ -10,6 +10,7 @@ import {
 import { resolveConceptPreset, mergeConceptPresetSettings } from '../lib/league-concepts/resolveConceptPreset'
 import { CONCEPT_PRESET_CATALOG } from '../lib/league-concepts/conceptPresetCatalog'
 import { resolveMlbRosterTemplate } from '../lib/mlb-roster/MlbRosterTemplates'
+import { resolveNhlRosterTemplate } from '../lib/nhl-roster/NhlRosterTemplates'
 
 // ── isSurvivorEligibleSport ───────────────────────────────────────────────────
 
@@ -230,6 +231,19 @@ describe('getSurvivorDefaultContract — MLB', () => {
     const { BN, ...starters } = resolveMlbRosterTemplate('survivor').slots
     expect(starters).toEqual(contract.rosterTemplate.starterSlots)
     expect(BN).toBe(contract.rosterTemplate.benchSlots)
+  })
+})
+
+describe('getSurvivorDefaultContract — NHL', () => {
+  const contract = getSurvivorDefaultContract({ sport: 'NHL' })!
+
+  // The roster engine saves its own survivor template over the creation roster. When they differed,
+  // the draft ran 16 rounds into 17 spots and every team carried an empty one.
+  it('is the roster the roster engine saves, and drafts one round per spot', () => {
+    const { BN, ...starters } = resolveNhlRosterTemplate('survivor').slots
+    expect(starters).toEqual(contract.rosterTemplate.starterSlots)
+    expect(BN).toBe(contract.rosterTemplate.benchSlots)
+    expect(contract.rosterTemplate.draftRounds).toBe(17)
   })
 })
 

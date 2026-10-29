@@ -211,6 +211,7 @@ const spanish: Record<string, string> = {
   off: 'de descanso',
   'Your league scores differently from the standard projection:': 'La puntuación de tu liga difiere de la proyección estándar:',
   'Your league uses standard PPR scoring, so both numbers should agree. Where they do not, it is because we could not score a player under your rules.': 'Tu liga usa puntuación PPR estándar; ambos números deberían coincidir. Si difieren, no pudimos valorar a un jugador con tus reglas.',
+  'This league’s scoring rules are saved. Projection totals appear when a compatible player stat feed is available.': 'Las reglas de puntuación de esta liga están guardadas. Los totales proyectados aparecerán cuando haya datos estadísticos compatibles de los jugadores.',
   'We do not hold this league’s scoring settings, so there is no league-specific projection to show — only the standard one.': 'No tenemos las reglas de puntuación de esta liga; solo podemos mostrar la proyección estándar.',
   'Ask Chimmy why they differ': 'Preguntar a Chimmy por la diferencia',
   Starters: 'Titulares',

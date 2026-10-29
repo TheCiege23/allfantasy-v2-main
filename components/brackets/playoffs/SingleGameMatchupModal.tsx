@@ -5,11 +5,13 @@ import type { BracketTeamProfile, PlayoffSeriesView } from "@/lib/playoffs/types
 import { roundLabel, seriesOdds } from "@/lib/playoffs/playoffBracketGraph"
 import { isOfficialTeamName } from "@/lib/playoffs/playoffBracketProjection"
 import { pointsForSeries } from "@/lib/playoffs/playoffScoring"
+import { TeamLogo } from "@/app/components/TeamLogo"
 
 type Props = {
   series: PlayoffSeriesView
   sport: string
   profiles: Record<string, BracketTeamProfile>
+  teamLogos: Record<string, string>
   picked: string | null
   locked: boolean
   saving: boolean
@@ -27,7 +29,7 @@ function chance(series: PlayoffSeriesView, home?: BracketTeamProfile, away?: Bra
   return null
 }
 
-export default function SingleGameMatchupModal({ series, sport, profiles, picked, locked, saving, onPick, onClose }: Props) {
+export default function SingleGameMatchupModal({ series, sport, profiles, teamLogos, picked, locked, saving, onPick, onClose }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     closeRef.current?.focus()
@@ -51,7 +53,12 @@ export default function SingleGameMatchupModal({ series, sport, profiles, picked
   const teamCard = (name: string, seed: number, profile: BracketTeamProfile | undefined, probability: number | null) => (
     <div className={`rounded-3xl border p-5 sm:p-7 ${picked === name ? "border-teal-300 bg-teal-400/10" : "border-white/15 bg-white/5"}`}>
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-300">{seed > 0 ? `Seed ${seed}` : "Tournament team"}</p>
-      <h2 className="mt-2 text-2xl font-black sm:text-4xl">{isOfficialTeamName(name) ? name : "Winner to be determined"}</h2>
+      <div className="mt-3 flex items-center gap-4">
+        {isOfficialTeamName(name) && !/^(?:CFP|EAST|WEST)\d+$/i.test(name) ? (
+          <TeamLogo teamAbbr={name} sport={sport === "ncaaf" ? "NCAAF" : "NBA_CUP"} logoUrl={teamLogos[name] ?? null} size={64} className="border-white/20 bg-white/10" />
+        ) : null}
+        <h2 className="text-2xl font-black sm:text-4xl">{isOfficialTeamName(name) ? name : "Winner to be determined"}</h2>
+      </div>
       <div className="mt-5 grid grid-cols-3 gap-2 text-center">
         <div className="rounded-xl bg-slate-900/80 p-3"><strong className="block text-xl">{profile?.won != null && profile.lost != null ? `${profile.won}-${profile.lost}` : "—"}</strong><span className="text-xs text-slate-400">Record</span></div>
         <div className="rounded-xl bg-slate-900/80 p-3"><strong className="block text-xl">{profile?.winPercentage != null ? `${profile.winPercentage}%` : "—"}</strong><span className="text-xs text-slate-400">Win rate</span></div>

@@ -3,6 +3,7 @@
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
 import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
+import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
@@ -1689,6 +1690,14 @@ export function LeagueShell({
               capSummary={capSummary}
               capRosterId={capRosterId}
             />}
+            {!embedMode && !nativeWorkspace && !isAfHostedPlatform(league.platform) ? (
+              <ImportedLeagueQuickActions
+                leagueId={league.id}
+                leagueName={selectedLeague.name ?? 'League'}
+                platform={league.platform}
+                canRemove={isOwner}
+              />
+            ) : null}
 
             {dispersalDraftInProgress ? (
               <div className="shrink-0 border-b border-[#ff3d81]/20 bg-[#081226] px-4 py-2.5">

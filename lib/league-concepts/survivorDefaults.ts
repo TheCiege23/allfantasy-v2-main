@@ -292,9 +292,15 @@ const SURVIVOR_DAILY_ROSTERS = {
       { slotName: 'UTIL', allowedPositions: ['PG', 'SG', 'SF', 'PF', 'C'] },
     ],
   },
+  /*
+   * The roster the NHL roster engine's survivor template (lib/nhl-roster/NhlRosterTemplates.ts) saves
+   * over this one after creation, so every live NHL Survivor league already plays it. This used to say
+   * D 2, G 1 and bench 6: the draft ran 16 rounds into the template's 17 spots and left one spot
+   * empty on every team (NHL rehearsal, 2026-10-28). Owner's call: keep the standard hockey lineup.
+   */
   NHL: {
-    starter_slots: { C: 2, LW: 2, RW: 2, D: 2, G: 1, UTIL: 1 } as Record<string, number>,
-    bench_slots: 6,
+    starter_slots: { C: 2, LW: 2, RW: 2, D: 4, G: 2, UTIL: 1 } as Record<string, number>,
+    bench_slots: 4,
     flex_definitions: [{ slotName: 'UTIL', allowedPositions: ['C', 'LW', 'RW', 'D'] }],
   },
   /*
