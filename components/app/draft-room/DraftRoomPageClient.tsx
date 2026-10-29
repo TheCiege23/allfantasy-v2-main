@@ -107,7 +107,6 @@ import { buildDraftRoomClientDiagnostics } from '@/lib/draft-room/player-pool-au
 import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
 import { detectSnakeBackToBackSoon, computeRedraftStarterHints } from '@/lib/draft-room/redraftPlanningHints'
 import { RedraftPlanningRibbon } from '@/components/app/draft-room/RedraftPlanningRibbon'
-import { DraftPulseStrip } from '@/components/app/draft-room/DraftPulseStrip'
 import { DraftIntelPanel } from '@/components/app/draft-room/DraftIntelPanel'
 import { buildDraftLookahead } from '@/lib/draft-room/draftIntelLookahead'
 import type { ManagerHistorySummary } from '@/lib/draft-room/managerDraftHistory'
@@ -5416,18 +5415,9 @@ export function DraftRoomPageClient({
               />
             </div>
           ) : null}
-          {session.draftType !== 'auction' ? (
-            <DraftPulseStrip
-              picks={session.picks ?? []}
-              pool={players}
-              available={pulseAvailablePlayers}
-              teamCount={safeBoardTeamCount}
-              currentOverall={currentPick?.overall ?? null}
-              viewerRosterId={currentUserRosterId ?? null}
-              sport={effectiveDraftSport}
-              formatPickLabel={(overall) => formatPickLabel(overall, safeBoardTeamCount)}
-            />
-          ) : null}
+          {/* The Recent picks / Position run / Your picks vs ADP strip (DraftPulseStrip) used to sit
+              here. Removed at the user's request (2026-10-29) to match Sleeper, which shows nothing
+              between the top bar and the board: it pushed the board down by ~110px. */}
           {draftUISettings?.executionMode === 'offline' ? (
             <div
               className="w-full shrink-0 rounded-lg border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"
