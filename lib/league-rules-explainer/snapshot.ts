@@ -390,3 +390,14 @@ export function dynastyRulesFromConfig(
     rookieDraftType: c?.rookieDraftType ?? 'linear',
   }
 }
+
+/**
+ * A dynasty league's taxi squad from getEffectiveTaxiSettings (lib/taxi/TaxiSettingsService), which
+ * applies the Devy / C2C slot override. Shared by the popup and the dynasty settings save, so a save
+ * that does not move the effective squad publishes no change.
+ */
+export function taxiRulesFromEffective(
+  t: { taxiSlotCount: number; taxiEligibilityYears: number; taxiDeadlineWeek: number | null },
+): Pick<RuleSnapshot, 'taxiSlots' | 'taxiEligibilityYears' | 'taxiDeadlineWeek'> {
+  return { taxiSlots: t.taxiSlotCount, taxiEligibilityYears: t.taxiEligibilityYears, taxiDeadlineWeek: t.taxiDeadlineWeek }
+}

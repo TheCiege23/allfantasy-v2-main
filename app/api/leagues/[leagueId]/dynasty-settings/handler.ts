@@ -38,7 +38,8 @@ import {
   normalizeCustomOpenDate,
   readRookieDraftCalendarSettings,
 } from '@/lib/dynasty-core/rookieDraftCalendar'
-import { dynastyRulesFromConfig } from '@/lib/league-rules-explainer/snapshot'
+import { dynastyRulesFromConfig, taxiRulesFromEffective } from '@/lib/league-rules-explainer/snapshot'
+import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 import { getDynastySportPresets } from '@/lib/dynasty-core/DynastySportPresets'
@@ -51,6 +52,9 @@ import {
 } from '@/lib/league-creation/prospectStashPolicy'
 
 export const dynamic = 'force-dynamic'
+
+/** The taxi fields the rules popup shows (lib/league-rules-explainer/load.ts). */
+const TAXI_CARD_FIELDS = ['taxiSlots', 'taxiEligibilityYears', 'taxiDeadlineWeek'] as const
 
 export async function GET(
   _req: NextRequest,
@@ -286,7 +290,16 @@ export async function PUT(
     }
   }
 
+  // The taxi squad members read comes from the effective settings (Devy / C2C override the slot
+  // count), so it is read before and after rather than diffed from the config row. Only when the save
+  // sends a taxi field the popup shows; a failed read drops those lines from the card, never the save.
+  const touchesTaxi = TAXI_CARD_FIELDS.some((k) => dynastyPayload[k] !== undefined)
+  const taxiBefore = touchesTaxi ? await getEffectiveTaxiSettings(leagueId).catch(() => null) : null
+
   const config = await upsertDynastyConfig(leagueId, dynastyPayload)
+
+  const taxiAfter = taxiBefore ? await getEffectiveTaxiSettings(leagueId).catch(() => null) : null
+  const taxiChange = taxiBefore && taxiAfter ? [taxiRulesFromEffective(taxiBefore), taxiRulesFromEffective(taxiAfter)] : [{}, {}]
 
   // The league home's "What changed" card (lib/league-rules-explainer): the dynasty rules members read.
   const settingsAfter = { ...((league.settings as Record<string, unknown>) ?? {}), ...settingsPatch }
@@ -295,8 +308,8 @@ export async function PUT(
     actorUserId: userId,
     section: 'dynasty',
     changes: diffRuleSnapshots(
-      { ...dynastyRulesFromConfig(priorDynasty), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(league.settings).autoStartDays },
-      { ...dynastyRulesFromConfig(config), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(settingsAfter).autoStartDays },
+      { ...dynastyRulesFromConfig(priorDynasty), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(league.settings).autoStartDays, ...taxiChange[0] },
+      { ...dynastyRulesFromConfig(config), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(settingsAfter).autoStartDays, ...taxiChange[1] },
     ),
   })
 
