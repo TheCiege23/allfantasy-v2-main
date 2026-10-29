@@ -19,6 +19,9 @@ import type { DraftPickSnapshot, DraftSessionSnapshot } from '@/lib/live-draft-e
 import { buildDeterministicPostDraftRecap } from '@/lib/post-draft'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
+import { getWarmDraftPoolSnapshotFast } from '@/lib/draft-room/ensureDraftPoolReady'
+import type { NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 
 import { draftIntelStateStore } from './DraftIntelStateStore'
@@ -152,6 +155,16 @@ async function buildAvailablePlayers(
   sport: LeagueSport,
   draftedNames: Set<string>
 ): Promise<RecommendationPlayer[]> {
+  if (sport === 'NBA') {
+    const warm = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
+    const entries = warm.warm && warm.payload.sport === 'NBA' && Array.isArray(warm.payload.entries)
+      ? warm.payload.entries as NormalizedDraftEntry[]
+      : (await getResolvedDraftPoolForLeague(leagueId, { limit: 500 })).entries
+    return entries.filter(row => !draftedNames.has(row.name)).slice(0, 250).map(row => ({
+      name: row.name, position: row.position, team: row.team, playerId: row.playerId ?? null,
+      adp: row.adp ?? null, byeWeek: row.byeWeek ?? null,
+    }))
+  }
   const pool = await getPlayerPoolForLeague(leagueId, sport, { limit: 500 }).catch(() => [])
   const rows = pool
     .filter((row) => !draftedNames.has(String(row.full_name || '')))
@@ -559,14 +572,16 @@ async function buildActiveState(params: {
     leagueName: params.ctx.leagueName,
     sport: params.ctx.sport,
     sessionId: params.snapshot.id,
-    status: picksUntilUser === 0 ? 'on_clock' : 'active',
+    status: params.snapshot.status === 'in_progress' && picksUntilUser === 0 ? 'on_clock' : 'active',
     trigger: params.trigger,
     currentOverall,
     userNextOverall,
     picksUntilUser,
     generatedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    headline: buildDefaultHeadline(picksUntilUser, params.ctx.leagueName),
+    headline: params.snapshot.status === 'pre_draft' ? 'Pre-draft planning is ready.'
+      : params.snapshot.status === 'paused' ? 'Draft paused. Review your next turn.'
+      : buildDefaultHeadline(picksUntilUser, params.ctx.leagueName),
     queue,
     predictions,
     messages: {

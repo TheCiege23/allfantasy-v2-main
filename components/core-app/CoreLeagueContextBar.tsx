@@ -19,7 +19,7 @@ import {
 } from '@/lib/league/leagueConceptOptions'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { ageText, leagueConceptText, SURFACE_LABEL_ES } from '@/lib/core-app/shellCopy'
+import { leagueConceptText, SURFACE_LABEL_ES } from '@/lib/core-app/shellCopy'
 import { leagueRecommendationText } from '@/lib/core-app/leagueRecommendationText'
 import { useMessages } from '@/components/i18n/useMessages'
 import { leagueContextBarMessages } from '@/lib/core-app/messages/leagueContextBar'
@@ -280,6 +280,7 @@ export default function CoreLeagueContextBar({
         </strong>
       </div>
 
+      <details className="af-lctx-details"><summary>{m.leagueDetails}</summary>
       <div className="af-lctx-statuses">
         {coverageHref && leagueWorkspaceMode(platform, language).authority !== 'NATIVE' ? (
           /*
@@ -305,8 +306,8 @@ export default function CoreLeagueContextBar({
         )}
         <span className="af-lctx-chip" data-tone={gameDayActive ? 'live' : syncStale ? 'warn' : 'fresh'}>
           {gameDayActive
-            ? m.gameDayRefresh
-            : m.synced(ageText(syncLabel, language))}
+            ? m.gameDay
+            : syncStale ? m.updatesDelayed : m.connected}
         </span>
         {decisionSlot !== undefined ? decisionSlot : <CoreLeagueDecisionChip available={Boolean(decisionAvailable)} />}
         <span className="af-lctx-chip" data-tone="chimmy">
@@ -389,7 +390,7 @@ export default function CoreLeagueContextBar({
                       : ''}
           </small>
         </div>
-      </div>
+      </div></details>
 
       {recommendationSlot !== undefined ? (
         recommendationSlot

@@ -8,23 +8,28 @@ import { prisma } from '@/lib/prisma'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { assertLeagueCommissioner, assertLeagueMember } from '@/lib/league/league-access'
 import { processReturnFromExile, scoreExileWeek } from '@/lib/survivor/exileEngine'
+import { runExileRosterRollover } from '@/lib/survivor/survivorExileRollover'
+import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
 import {
   submitExileTeamClaim,
   getExileTeamDraftStatus,
 } from '@/lib/survivor/exileTeamDraft'
 
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
+import { getExileBossBoard } from '@/lib/survivor/exileBossBoard'
+import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
   if (requireCronAuth(req)) {
+    const nativeRollover = await runExileRosterRollover()
     const islands = await prisma.exileIsland.findMany({ where: { isActive: true } })
     for (const is of islands) {
       await scoreExileWeek(is.leagueId, is.currentWeek).catch(() => {})
     }
-    return NextResponse.json({ ok: true, processed: islands.length })
+    return NextResponse.json({ ok: true, processed: islands.length, nativeRollover })
   }
 
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -36,12 +41,52 @@ export async function GET(req: NextRequest) {
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
+  if (req.nextUrl.searchParams?.get('view') === 'boss') {
+    const weekParam = Number.parseInt(req.nextUrl.searchParams.get('week') ?? '', 10)
+    const result = await getExileBossBoard(leagueId, userId, { week: Number.isFinite(weekParam) ? weekParam : null })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    return NextResponse.json({ board: result.board })
+  }
+
   const island = await prisma.exileIsland.findUnique({ where: { leagueId } })
   const me = await prisma.survivorPlayer.findFirst({ where: { leagueId, userId } })
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, sport: true, season: true, survivorTokenCap: true } })
   const settings = normalizeSurvivorFoundationSettings(league?.settings as Record<string, unknown> | null)
   const resolved = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, action: 'scheduled_exile_return_resolved' }, select: { id: true } })
-  return NextResponse.json({ island, user: me, returnRules: { enabled: settings.exileIslandEnabled, week: settings.exileReturnWeek, tokensRequired: settings.exileReturnTokens, resolved: Boolean(resolved), slots: 1 } })
+  let bossContest: { status: 'pending' | 'locked' | 'final'; week: number; team?: string; players?: { name: string; position: string; slot: string }[]; score?: number } | null = null
+  const bossMode = readSurvivorLateSeasonSettings(league?.settings).exileBossMode
+  if (island?.isActive && island.bossWinsEnabled && bossMode === 'chimmy_roster' && me?.playerState === 'exile') {
+    const week = league ? dailySportWeekForInstant(league.sport, league.season, new Date()) ?? island.currentWeek : island.currentWeek
+    const [locked, finalized] = await Promise.all([
+      prisma.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_boss_roster_locked' }, select: { data: true } }),
+      prisma.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'exile_boss_result_finalized' }, select: { data: true } }),
+    ])
+    const rosterData = locked?.data && typeof locked.data === 'object' && !Array.isArray(locked.data) ? locked.data as Record<string, unknown> : null
+    const scoreData = finalized?.data && typeof finalized.data === 'object' && !Array.isArray(finalized.data) ? finalized.data as Record<string, unknown> : null
+    const roster = rosterData?.roster && typeof rosterData.roster === 'object' && !Array.isArray(rosterData.roster) ? rosterData.roster as Record<string, unknown> : null
+    const players = Array.isArray(roster?.players) ? roster.players.flatMap((player: unknown) => {
+      if (!player || typeof player !== 'object' || Array.isArray(player)) return []
+      const row = player as Record<string, unknown>
+      return typeof row.name === 'string' && typeof row.position === 'string' && typeof row.slot === 'string'
+        ? [{ name: row.name, position: row.position, slot: row.slot }] : []
+    }) : []
+    const score = typeof scoreData?.score === 'number' && Number.isFinite(scoreData.score) ? scoreData.score : undefined
+    bossContest = { status: score != null ? 'final' : locked ? 'locked' : 'pending', week,
+      ...(locked && typeof rosterData?.team === 'string' ? { team: rosterData.team, players } : {}),
+      ...(score != null ? { score } : {}) }
+  }
+  // The caller's own entry for the most recent SCORED Exile week drives the token earned / wiped
+  // toast (scoreExileWeek writes an exile_week_scored marker per week; open weeks are not final).
+  // Owner-only: filtered to the session user, never another manager's entry.
+  const scored = island && me ? await prisma.survivorAuditEntry.findFirst({ where: { leagueId, action: 'exile_week_scored', week: { not: null } }, orderBy: { week: 'desc' }, select: { week: true } }) : null
+  const latestEntry = island && me && scored?.week != null ? await prisma.exileWeeklyEntry.findFirst({
+    where: { exileId: island.id, userId, week: scored.week },
+    orderBy: { week: 'desc' },
+    select: { id: true, week: true, weeklyScore: true, bossScore: true, tokenEarned: true, tokenWiped: true },
+  }) : null
+  const latest = latestEntry && (latestEntry.tokenEarned > 0 || latestEntry.tokenWiped) ? latestEntry : null
+  const latestResult = latest ? { id: latest.id, week: latest.week, weeklyScore: latest.weeklyScore, bossScore: latest.bossScore, tokenEarned: latest.tokenEarned, tokenWiped: latest.tokenWiped } : null
+  return NextResponse.json({ island, user: me, bossContest, bossMode, latestResult, tokenCap: league?.survivorTokenCap ?? null, returnRules: { enabled: settings.exileIslandEnabled, week: settings.exileReturnWeek, tokensRequired: settings.exileReturnTokens, resolved: Boolean(resolved), slots: 1 } })
 }
 
 export async function POST(req: NextRequest) {

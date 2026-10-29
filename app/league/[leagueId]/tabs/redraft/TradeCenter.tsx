@@ -21,6 +21,7 @@ import {
 } from '@/lib/redraft/client'
 import { ReverseTradeDialog } from '@/components/league-trade/ReverseTradeDialog'
 import { previewNativeTradeReversal, requestNativeTradeReversal } from '@/lib/trade-reversal/client'
+import { explainTradeReview } from '@/lib/redraft/tradeReviewWindow'
 
 function rosterName(row: RedraftRosterRow | undefined, fallbackId: string): string {
   return row?.teamName ?? row?.ownerName ?? fallbackId.slice(0, 6)
@@ -285,6 +286,11 @@ export function TradeCenter({
                   </div>
                 </div>
                 {p.reason ? <p className="mt-2 text-white/55">“{p.reason}”</p> : null}
+                {p.status === 'pending' ? (
+                  <p className="mt-2 rounded border border-cyan-300/20 bg-cyan-400/[0.06] px-2 py-1.5 text-cyan-50/85" data-testid="trade-review-explainer">
+                    {explainTradeReview({ ...p, acceptedAt: p.acceptedAt ?? null, votes: p.votes }, Date.now()).en}
+                  </p>
+                ) : null}
                 {p.status === 'pending' ? (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {(['accept', 'reject', 'cancel', 'vote_approve', 'vote_veto'] as const).map((action) => (

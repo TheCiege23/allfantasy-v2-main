@@ -1,0 +1,16 @@
+/* Dense board-cell actions keep their own layout; enlarging absolute controls there would overlap. */
+/* Keep these rules on the phone room; desktop tables retain their compact density. */
+@media(max-width:767px){
+  .draft-touch-room{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+  body:has(.draft-touch-room [data-testid=draft-mobile-quick-dock]) [data-testid=war-room-popup-trigger]{display:none}
+  .draft-touch-room :is(button,a[aria-label],summary):not([data-testid^="draft-board-cell-"]){min-height:44px;min-width:44px;touch-action:manipulation}
+  .draft-touch-room :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px;min-height:44px}
+  .draft-touch-room label:has(input[type=checkbox]),.draft-touch-room label:has(input[type=radio]){min-height:44px;display:inline-flex;align-items:center;gap:8px}
+  .draft-touch-room>header{padding:6px 10px;flex-shrink:0}
+  .draft-touch-room [data-testid=draft-mobile-content]{min-height:0}
+  .draft-touch-room [data-testid=draft-mobile-primary-nav]{padding-bottom:max(4px,env(safe-area-inset-bottom,0px));background:#070f21}
+  .draft-touch-room [data-testid=draft-mobile-primary-nav]>button{min-width:0;min-height:52px}
+  .draft-touch-room [data-testid=draft-mobile-players-sheet]{border-radius:14px;box-shadow:none}
+  .draft-touch-room :is(button,a,input,select,textarea,summary):focus-visible{outline:2px solid #67e8f9;outline-offset:2px}
+  [data-testid=draft-topbar-menu] :is(button,a){min-height:44px;touch-action:manipulation}
+}

@@ -253,6 +253,7 @@ export interface LiveScoreRow {
    * silently dropped from every provider series group, for every sport.
    */
   eventName?: string | null
+  playoffSeries?: { completed: boolean; winnerTeamId: string | null }
   odds: string | null
   overUnder: number | null
   week: number | null
@@ -442,6 +443,7 @@ interface ESPNLeaderCategory {
 }
 
 interface ESPNCompetition {
+  series?: { completed?: boolean; competitors?: Array<{ id: string; wins?: number }> }
   competitors: ESPNCompetitor[]
   status: {
     /** `state` is "pre", "in" or "post". */
@@ -604,6 +606,14 @@ export async function fetchEspnScoreboard(
          * that only fills one of them still says something.
          */
         eventName: comp.notes?.[0]?.headline ?? event.name ?? null,
+        ...(comp.series ? { playoffSeries: {
+          completed: comp.series.completed === true,
+          winnerTeamId: (() => {
+            const teams = comp.series!.competitors ?? []
+            if (!comp.series!.completed || teams.length !== 2 || teams.some(t => typeof t.wins !== 'number') || teams[0].wins === teams[1].wins) return null
+            return teams[0].wins! > teams[1].wins! ? teams[0].id : teams[1].id
+          })(),
+        } } : {}),
         odds: comp.odds?.[0]?.details ?? null,
         overUnder: comp.odds?.[0]?.overUnder ?? null,
         week: event.week?.number ?? null,

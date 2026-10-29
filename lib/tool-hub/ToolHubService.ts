@@ -95,9 +95,10 @@ export function getToolsForSport(sportSlug: SportSlug | null): ToolHubTool[] {
     '/trade-analyzer': '/trade-evaluator',
     '/waiver-wire': '/waiver-ai',
     '/social-pulse': '/social-pulse',
-    // The matchup tool opens /core/matchup (its openToolHref) since /matchup-simulator became a 308.
-    '/matchup-simulator': '/core/matchup',
-    '/app/simulation-lab': '/core/matchup',
+    // Both hrefs mean the simulation-lab card (slug `matchup-simulator` until 2026-10-20), which
+    // opens the lab (its openToolHref). From 2026-09-29 to 2026-10-20 they aliased to /core/matchup.
+    '/matchup-simulator': '/app/simulation-lab',
+    '/app/simulation-lab': '/app/simulation-lab',
     '/bracket': '/brackets',
     '/app/power-rankings': '/power-rankings',
   }

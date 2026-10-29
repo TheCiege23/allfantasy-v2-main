@@ -78,6 +78,11 @@ export type CalendarInput = {
   tradeDeadlineWeek: number | null
   /** The league has explicitly said trades never close (the `99` sentinel). */
   noTradeDeadline: boolean
+  /**
+   * A dynasty league's separate rule for trades made only of picks (lib/trade-deadline/pickTradeDeadline.ts).
+   * Null or absent: pick trades follow the trade deadline.
+   */
+  pickTradeDeadline?: { mode: 'open' } | { mode: 'week'; week: number } | null
   playoffStartWeek: number | null
   currentWeek: number | null
   /** First regular-season kickoff of each week — real fixtures, never guessed. */
@@ -243,6 +248,27 @@ export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
           : `La configuración de ${input.platformLabel} de esta liga no fija una fecha límite de intercambios.`,
       ),
     )
+  }
+
+  // ── Pick trade deadline (dynasty) ────────────────────────────────────
+  const pickRule = input.pickTradeDeadline
+  if (pickRule?.mode === 'open') {
+    gaps.push(L('Pick trades stay open all season; only player trades close at the deadline.', 'Los intercambios de selecciones siguen abiertos toda la temporada; solo los de jugadores cierran en la fecha límite.'))
+  } else if (pickRule?.mode === 'week') {
+    const week = pickRule.week
+    const start = input.weekStarts.get(week) ?? null
+    events.push({
+      id: 'pick-trade-deadline',
+      kind: 'trade_deadline',
+      title: L('Pick trade deadline', 'Fecha límite para intercambiar selecciones'),
+      at: start ? start.toISOString() : null,
+      allDay: true,
+      week,
+      whenLabel: start ? `${weekLabel(week)} · ${formatWhen(start, true, language)}` : weekLabel(week),
+      status: start ? statusFor(start, now) : weekStatus(week, input.currentWeek),
+      detail: L(`Trades made only of draft picks close after week ${week}.`, `Los intercambios solo de selecciones del draft cierran tras la semana ${week}.`),
+      source: 'allfantasy',
+    })
   }
 
   // ── Playoffs ─────────────────────────────────────────────────────────

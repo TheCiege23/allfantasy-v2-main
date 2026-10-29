@@ -95,6 +95,9 @@ function printPretty(args: Args, report: RecomputeAllFantasyAdpReport): void {
   console.log(` Imported drafts:     ${report.importedDraftsCovered} drafts, ${report.importedPicksKept} picks`)
   console.log(`   facts scanned:     ${report.importedFactsScanned}`)
   console.log(`   unresolved player: ${report.importedSkippedUnresolvedPlayer}`)
+  for (const [platform, n] of Object.entries(report.importedSkippedUnresolvedByPlatform)) {
+    console.log(`     ${platform}: ${n}`)
+  }
   console.log('')
   console.log(` Unique players:      ${report.uniquePlayers}`)
   console.log(` Unique contexts:     ${report.uniqueContexts}`)

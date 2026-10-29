@@ -90,7 +90,7 @@ function readState(
 
 export const guillotineModel: FormatValueModel = {
   formatId: 'guillotine',
-  label: 'Guillotine',
+  label: 'Guilly',
 
   adjust(input: FormatValueInput): FormatAdjustment | null {
     const state = readState(input.teamState, input.shape.teams)

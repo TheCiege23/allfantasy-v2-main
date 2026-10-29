@@ -1,10 +1,12 @@
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
+import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assignIdpCapSalaryForWaiverClaim } from '@/lib/idp/capEngine'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
+import { copyRedraftFaabToGeneric } from '@/lib/league/faabMirror'
 
 export type ProcessedClaim = { claimId: string; status: string; reason?: string }
 
@@ -158,15 +160,22 @@ export function compareClaimsWithCurrentRosterPriority(
   )
 }
 
+/**
+ * A guillotine league holds claims during the blind window before its sport's scheduled waiver run,
+ * so the FAAB bids on a chopped team's players compete together (lib/guillotine/blindWaiverCutoff.ts,
+ * shared with lib/waiver-wire/process-engine.ts).
+ */
 export async function processWaiverWindow(
   leagueId: string,
   seasonId: string,
+  now: Date = new Date(),
 ): Promise<ProcessedClaim[]> {
   const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId } })
   if (!season) return []
 
+  const claimsCutoff = await guillotineClaimsCutoff(leagueId, now)
   const claims = await prisma.redraftWaiverClaim.findMany({
-    where: { leagueId, seasonId, status: 'pending' },
+    where: { leagueId, seasonId, status: 'pending', ...(claimsCutoff ? { submittedAt: { lt: claimsCutoff } } : {}) },
     // Mirrors compareWaiverClaims: highest bid first (null bids last, treated as
     // 0), then lowest priority number, earliest submission, then stable id.
     orderBy: [
@@ -292,6 +301,7 @@ export async function processWaiverWindow(
             where: { id: claim.rosterId },
             data: { faabBalance: Math.max(0, roster.faabBalance - bid) },
           })
+          await copyRedraftFaabToGeneric(tx, [claim.rosterId])
         }
       })
     } catch (err) {

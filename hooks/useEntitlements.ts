@@ -58,9 +58,9 @@ function computeFlags(
   return {
     snapshot: snap,
     hasCommissioner:
-      isActive && (expanded.includes("commissioner") || expanded.includes("supreme")),
-    hasPro: isActive && (expanded.includes("pro") || expanded.includes("supreme")),
-    hasWarRoom: isActive && (expanded.includes("war_room") || expanded.includes("supreme")),
+      isActive && expanded.includes("commissioner"),
+    hasPro: isActive && expanded.includes("pro"),
+    hasWarRoom: isActive && expanded.includes("war_room"),
     hasSupreme: isActive && plans.includes("supreme"),
     hasAnyPaid: isActive && plans.length > 0,
     isAdminBypassAccount,

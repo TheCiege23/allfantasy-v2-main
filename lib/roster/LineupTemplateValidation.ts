@@ -1,4 +1,5 @@
 import type { RosterTemplateDto } from '@/lib/multi-sport/RosterTemplateService'
+import { withoutSlotIndex } from '@/lib/league/lineupSlotPositions'
 
 export type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 
@@ -12,7 +13,8 @@ function toPlayerId(raw: unknown): string | null {
   return null
 }
 
-function normalizeLineupSection(section: unknown): Array<Record<string, unknown>> {
+/** `keepSlotIndex`: only STARTER rows keep a lineup slot position (lib/league/lineupSlotPositions.ts). */
+function normalizeLineupSection(section: unknown, keepSlotIndex = false): Array<Record<string, unknown>> {
   if (!Array.isArray(section)) return []
   const out: Array<Record<string, unknown>> = []
   const seen = new Set<string>()
@@ -21,11 +23,12 @@ function normalizeLineupSection(section: unknown): Array<Record<string, unknown>
     if (!id || seen.has(id)) continue
     seen.add(id)
     const obj = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
-    out.push({
+    const row = {
       ...obj,
       id,
       position: String(obj.position ?? 'UTIL').toUpperCase(),
-    })
+    }
+    out.push(keepSlotIndex ? row : withoutSlotIndex(row))
   }
   return out
 }
@@ -54,7 +57,7 @@ export function getNormalizedLineupSections(
       : {}
 
   return {
-    starters: normalizeLineupSection(rawSections.starters),
+    starters: normalizeLineupSection(rawSections.starters, true),
     bench: normalizeLineupSection(rawSections.bench),
     ir: normalizeLineupSection(rawSections.ir),
     taxi: normalizeLineupSection(rawSections.taxi),
@@ -100,6 +103,14 @@ export function buildPlayerDataFromSections(
     ...sections.devy.map((p) => String(p.id)),
   ]
   const players = [...new Set(allIds)]
+  // A slot position belongs to a starter; a player moved off the lineup does not take one with him.
+  const stored: Record<RosterSectionKey, Array<Record<string, unknown>>> = {
+    starters: sections.starters,
+    bench: sections.bench.map(withoutSlotIndex),
+    ir: sections.ir.map(withoutSlotIndex),
+    taxi: sections.taxi.map(withoutSlotIndex),
+    devy: sections.devy.map(withoutSlotIndex),
+  }
   return {
     ...base,
     players,
@@ -107,7 +118,7 @@ export function buildPlayerDataFromSections(
     reserve: sections.ir.map((p) => p.id),
     taxi: sections.taxi.map((p) => p.id),
     devy: sections.devy.map((p) => p.id),
-    lineup_sections: sections,
+    lineup_sections: stored,
     lineup_updated_at: new Date().toISOString(),
   }
 }

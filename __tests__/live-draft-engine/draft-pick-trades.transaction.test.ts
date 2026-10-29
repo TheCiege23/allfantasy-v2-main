@@ -222,6 +222,46 @@ describe('DraftPickTradeService — mocked Prisma', () => {
     expect(r.success).toBe(false)
     expect(r.error).toMatch(/not found/i)
   })
+
+  it('writes conditionally on the version it read', async () => {
+    await appendDraftPickTrades('league-1', [])
+    expect(tradePrisma.draftSession.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'session-1', version: 3 } }),
+    )
+  })
+
+  it('refuses instead of clobbering when another write moved the session (P2025)', async () => {
+    tradePrisma.draftSession.update.mockRejectedValueOnce(Object.assign(new Error('not found'), { code: 'P2025' }))
+    const r = await appendDraftPickTrades('league-1', [
+      { round: 1, originalRosterId: 'roster-a', previousOwnerName: 'A', newRosterId: 'roster-b', newOwnerName: 'B' },
+    ])
+    expect(r.success).toBe(false)
+    expect(r.error).toMatch(/try again/i)
+    expect(tradeStore.tradedPicks).toHaveLength(0)
+  })
+
+  it('refuses an offer from an earlier draft session', async () => {
+    const r = await appendDraftPickTrades('league-1', [], { sessionId: 'older-session' })
+    expect(r.success).toBe(false)
+    expect(tradePrisma.draftSession.update).not.toHaveBeenCalled()
+  })
+
+  it('runs validate against the current session and refuses without writing when it objects', async () => {
+    tradePrisma.draftSession.findUnique.mockResolvedValueOnce({
+      ...tradeStore,
+      picks: [{ overall: 1 }],
+    })
+    const seen: Array<{ status: string; drafted: number[] }> = []
+    const r = await appendDraftPickTrades('league-1', [], {
+      validate: (s) => {
+        seen.push({ status: s.status, drafted: [...s.draftedOveralls] })
+        return s.draftedOveralls.has(1) ? 'One of these picks has already been made.' : null
+      },
+    })
+    expect(seen).toEqual([{ status: 'in_progress', drafted: [1] }])
+    expect(r).toEqual({ success: false, error: 'One of these picks has already been made.' })
+    expect(tradePrisma.draftSession.update).not.toHaveBeenCalled()
+  })
 })
 
 describe('Accept-path trade pair (mirrors proposal route semantics)', () => {

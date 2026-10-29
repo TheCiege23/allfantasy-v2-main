@@ -2,8 +2,9 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
+import { riFetch } from '@/lib/workers/providers/rollingInsightsRest'
 import { riSupports } from '@/lib/sports-data/rollingInsightsSupport'
+import { getRollingInsightsSportCode } from '@/lib/providers/rollingInsightsFieldMaps'
 
 /**
  * Depth charts for every sport Rolling Insights serves them for — MLB, NFL, NBA, NHL.
@@ -170,6 +171,84 @@ export function normalizeRiDepthCharts(rows: unknown[]): NormalizedDepthCharts {
   return { teams, unrecognisedKeys: [...unrecognised] }
 }
 
+/** True for a key that can only be a provider id, never a team name. */
+const isIdLike = (k: string) => /^\d+$/.test(k.trim())
+
+/**
+ * Pure: unwrap a `/depth-charts/{SPORT}` body into team blocks, KEEPING the team when it is a map key.
+ *
+ * 🛑 WHY THIS IS NOT `resolveRiEnvelope`. The field map documents depth charts as
+ * `<team>.<position_key>.<rank_key>` — the TEAM IS THE MAP KEY, not a field on the block. The
+ * generic envelope helper turns an object map into `Object.values(...)`, which throws the keys
+ * away, and `normalizeRiDepthCharts` then skips every block for having no team name. That is
+ * exactly what production reported for NBA, NHL and MLB on every weekly run since this path
+ * shipped: HTTP 200, `teams: 0`, no error, no `unrecognisedKeys` — and not one
+ * `rolling_insights_rest` row in `depth_charts`.
+ *
+ * Accepts, in order: `data.<CODE>` or bare `data` (or the root), each as an array of team blocks
+ * or as a map of team key -> block. A block that already names its team is left untouched; a
+ * numeric key is kept as `team_id`, since it cannot be a name. G-07 still holds: this widens what
+ * is ACCEPTED, it does not verify the shape — see `describeDepthChartPayload`.
+ */
+export function extractRiDepthChartTeamBlocks(payload: unknown, sport: string): unknown[] {
+  const root = asRecord(payload)
+  if (!root) return Array.isArray(payload) ? payload : []
+  const data = root.data ?? root
+  if (Array.isArray(data)) return data
+  const bag = asRecord(data)
+  if (!bag) return []
+
+  const code = getRollingInsightsSportCode(sport)
+  const inner = bag[code] ?? bag[sport.toUpperCase()] ?? bag
+  if (Array.isArray(inner)) return inner
+  const map = asRecord(inner)
+  if (!map) return []
+
+  const blocks: unknown[] = []
+  for (const [key, value] of Object.entries(map)) {
+    if (Array.isArray(value)) {
+      // A list under a key: either the team list itself, or one team's players. Only the first
+      // can be a block list, and only when its entries are objects carrying a team.
+      if (value.some((v) => asRecord(v) && (asRecord(v)!.team ?? asRecord(v)!.team_name))) blocks.push(...value)
+      continue
+    }
+    const block = asRecord(value)
+    if (!block) continue
+    const named = block.team ?? block.team_name ?? block.abbrv ?? block.abbreviation
+    if (named != null) blocks.push(block)
+    else if (isIdLike(key)) blocks.push({ team_id: key, ...block })
+    else blocks.push({ team: key, ...block })
+  }
+  return blocks
+}
+
+/**
+ * Pure: the payload's SHAPE — key names and value kinds, never a value. Attached to a run whose
+ * 200 parsed to zero teams, so the next weekly fire says what the vendor actually sent instead of
+ * another silent zero. Keys here are team and position names; no credential can reach them.
+ */
+export function describeDepthChartPayload(payload: unknown, sport: string): Record<string, unknown> {
+  const kind = (v: unknown) => (Array.isArray(v) ? `array(${v.length})` : v === null ? 'null' : typeof v)
+  const keysOf = (v: unknown) => (asRecord(v) ? Object.keys(asRecord(v)!).slice(0, 12) : [])
+  const root = asRecord(payload)
+  const data = root ? (root.data ?? root) : payload
+  const code = getRollingInsightsSportCode(sport)
+  const inner = asRecord(data)?.[code]
+  const level = inner ?? data
+  const firstKey = keysOf(level)[0]
+  const first = Array.isArray(level) ? level[0] : firstKey != null ? asRecord(level)![firstKey] : undefined
+  return {
+    root: kind(payload),
+    rootKeys: keysOf(payload),
+    data: kind(data),
+    dataKeys: keysOf(data),
+    sportKey: inner === undefined ? null : `${code}: ${kind(inner)}`,
+    firstEntryKey: firstKey ?? null,
+    firstEntry: kind(first),
+    firstEntryKeys: keysOf(first),
+  }
+}
+
 export interface DepthChartSyncResult {
   sport: string
   teams: number
@@ -179,6 +258,8 @@ export interface DepthChartSyncResult {
   unsupported: boolean
   notModified: boolean
   unrecognisedKeys: string[]
+  /** Present only when a 200 parsed to zero teams: the payload's key layout, no values. */
+  shapeHint?: Record<string, unknown>
   errors: string[]
 }
 
@@ -214,18 +295,23 @@ export async function syncRollingInsightsDepthChartsToDb(opts: {
     return result
   }
 
-  const { rows, notModified, unsupported, error } = await riFetchRows('depth_charts', {
-    sport,
-    fetchImpl: opts.fetchImpl,
-  })
-  result.notModified = notModified
-  result.unsupported = unsupported
-  if (error) result.errors.push(`depth-charts: ${error}`)
-  if (rows.length === 0) return result
+  const outcome = await riFetch('depth_charts', { sport, fetchImpl: opts.fetchImpl })
+  if (!outcome.ok) {
+    result.notModified = outcome.kind === 'not_modified'
+    result.unsupported = outcome.kind === 'unsupported'
+    // The transport already strips the token from every error it builds.
+    result.errors.push(`depth-charts: ${outcome.error}`)
+    return result
+  }
 
+  const rows = extractRiDepthChartTeamBlocks(outcome.payload, sport)
   const normalized = normalizeRiDepthCharts(rows)
   result.teams = normalized.teams.length
   result.unrecognisedKeys = normalized.unrecognisedKeys
+  if (normalized.teams.length === 0) {
+    result.shapeHint = describeDepthChartPayload(outcome.payload, sport)
+    return result
+  }
 
   const now = opts.now ?? new Date()
   const expiresAt = new Date(now.getTime() + TTL_MS)

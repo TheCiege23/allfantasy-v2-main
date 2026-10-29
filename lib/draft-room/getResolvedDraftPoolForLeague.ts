@@ -8,7 +8,9 @@ import { prisma } from '@/lib/prisma'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
-import { normalizePlayerList, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
+import { normalizePlayer, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
+import { cooperativeMap } from '@/lib/async-cooperative-map'
+import { entryRookieVerdict, hasRookieVerdicts, resolveRookieFilterState, type RookieFilterState } from '@/lib/draft-room/rookieFilterState'
 import { resolveDraftIdProvenance, type DraftIdProvenance } from './draftIdProvenance'
 import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
@@ -44,6 +46,7 @@ import {
   type NflRookieFetchSource,
   type NflRookieLookup,
 } from '@/lib/draft-room/nflRookieLookup'
+import { devyPoolSportForDraftSport, resolveNonNflRookieFields } from '@/lib/draft-room/nonNflRookieFields'
 import {
   canonicalName,
   canonicalPosition,
@@ -62,13 +65,27 @@ import { applyPositionAwareProjectionFallbacks, type ProjectionFallbackDiagnosti
 import {
   loadSportsPlayerRecordMapsForDraftPool,
   lookupSportsPlayerRecordAugmentDetailed,
+  type DraftSeasonStatLine,
 } from '@/lib/draft-room/sportsPlayerRecordDraftEnrichment'
+import {
+  loadAfBaselineProjectionsByRollingInsightsIds,
+  type AfBaselineProjection,
+} from '@/lib/af-projections/readAfProjections'
 import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import {
+  isSeasonStatsRookieSport,
+  loadSeasonStatsRookieVerdicts,
+  rollingInsightsIdOfPoolRow,
+  type RookieVerdict,
+} from '@/lib/draft-room/seasonStatsRookieStatus'
+import { rookieClassYear } from '@/lib/draft-room/rookieFilterPredicate'
 import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
-import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches, nbaSurvivorPlayerIsEligible, type NbaRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
+import { computeAfAdp } from '@/lib/adp/afAdp'
+import type { AdpCorpusSplit } from '@/lib/adp/loadAdpBoard'
+import { shouldVerifyCurrentNbaRoster, loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches, nbaSurvivorPlayerIsEligible, type NbaRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
 const DEFAULT_LIMIT = 300
 const DEVY_POOL_LIMIT = 200
@@ -116,6 +133,10 @@ export type DraftPoolRawRow = {
   age?: number | null
   fantasyPointsPerGame?: number | null
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
+  /** MLB / NHL season line (`extractMlbDraftSeasonStats` / `extractNhlDraftSeasonStats`). */
+  seasonStatLine?: DraftSeasonStatLine | null
+  /** MLB / NHL: AF projection, PER GAME (DraftKings-style), from `AFProjectionSnapshot`. */
+  afProjectionPerGame?: number | null
   lifetimeValue?: number | null
   nflDraftProjectionSplits?: NflDraftProjectionSplits
   /** D.7 â Sleeper years_exp; 0 = rookie. Only attached for NFL pools. */
@@ -167,6 +188,17 @@ export type GetResolvedDraftPoolResult = {
   devyConfig?: { enabled: boolean; devyRounds: number[] }
   c2cConfig?: { enabled: boolean; collegeRounds: number[] }
   isIdp?: boolean
+  /**
+   * Whether a "rookies only" session's filter actually narrowed the board. See
+   * `resolveRookieFilterState` — `fallback_no_rookie_data` means the full pool is being
+   * shown on a rookies-only board, and the draft room says so.
+   */
+  rookieFilterState?: RookieFilterState
+  /**
+   * Players a rookies-only verdict pool removed as proven non-rookies. Stored with the warm
+   * snapshot so the pick check can still refuse them (`serverRookieStatus.ts`).
+   */
+  provenNonRookies?: ProvenNonRookie[]
 }
 
 type SportPoolRow = {
@@ -389,9 +421,10 @@ export async function loadLatestAveragedAdpRowsFromDb(
   format: 'redraft' | 'dynasty',
   twoQuarterbacks = false,
   context?: { season: number; scoring: string | null },
+  options: { allowLiveImport?: boolean } = {},
 ): Promise<AveragedAdpRow[]> {
   if (twoQuarterbacks) {
-    const qbHeavy = await loadLatestAveragedAdpRowsForScorings(sport, format, { in: QB_HEAVY_ADP_SCORINGS }, context?.season)
+    const qbHeavy = await loadLatestAveragedAdpRowsForScorings(sport, format, { in: QB_HEAVY_ADP_SCORINGS }, context?.season, options.allowLiveImport !== false)
     // No 2QB board for this format is better answered by the 1QB board than by nothing.
     if (qbHeavy.length > 0) return qbHeavy
   }
@@ -400,7 +433,7 @@ export async function loadLatestAveragedAdpRowsFromDb(
     : ['halfppr', 'fbhalfppr', 'ncaafhalfppr'].includes(token ?? '') ? ['halfPPR', 'half-ppr', 'half_ppr', 'halfppr']
     : ['standard', 'nonppr', 'fbstandard', 'ncaafstandard'].includes(token ?? '') ? ['standard', 'non-ppr', 'nonppr']
     : context?.scoring ? [context.scoring] : null
-  const scoped = await loadLatestAveragedAdpRowsForScorings(sport, format, aliases ? { in: aliases } : { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
+  const scoped = await loadLatestAveragedAdpRowsForScorings(sport, format, aliases ? { in: aliases } : { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season, options.allowLiveImport !== false)
   /*
    * Outside football the board is one market, not one per scoring system: Fantrax publishes a single
    * NBA board (stored as `standard`), while a league's `scoring` is its own preset id. Requiring the
@@ -408,7 +441,7 @@ export async function loadLatestAveragedAdpRowsFromDb(
    * alphabetical order. Football keeps the strict match — its PPR and standard boards genuinely differ.
    */
   if (scoped.length === 0 && aliases && sport !== 'NFL' && sport !== 'NCAAF') {
-    return loadLatestAveragedAdpRowsForScorings(sport, format, { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
+    return loadLatestAveragedAdpRowsForScorings(sport, format, { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season, options.allowLiveImport !== false)
   }
   return scoped
 }
@@ -418,6 +451,7 @@ async function loadLatestAveragedAdpRowsForScorings(
   format: 'redraft' | 'dynasty',
   scoring: { in: string[] } | { notIn: string[] },
   season?: number,
+  allowLiveImport = true,
 ): Promise<AveragedAdpRow[]> {
   const sourceExclusions = sport === 'NFL' && season != null && !('in' in scoring && scoring.in.some(value => QB_HEAVY_ADP_SCORINGS.includes(value)))
     ? [...ADP_IMPORT_SOURCES_EXCLUDED, 'fantrax', 'sleeper', 'espn', 'mfl', 'nffc']
@@ -440,6 +474,7 @@ async function loadLatestAveragedAdpRowsForScorings(
   let latest = await findLatest()
   if (!latest) {
     if (
+      allowLiveImport &&
       !dbFirstMode.useDbCacheOnly &&
       !dbFirstMode.disableLiveApiOnPageLoad &&
       !dbFirstMode.disableAdpLiveMergeOnPageLoad
@@ -918,6 +953,30 @@ export function applyDraftModePoolFilters(
   session: { draftModeLabel?: string | null; playerPool?: string | null } | null | undefined,
   rostered: ReadonlyArray<{ playerId: string | null; playerName: string | null }>,
 ): NormalizedDraftEntry[] {
+  return applyDraftModePoolFiltersWithState(entries, session, rostered).entries
+}
+
+export { resolveRookieFilterState, type RookieFilterState }
+
+/** A player the rookies-only filter took off the board because stored stats prove he is no rookie. */
+export type ProvenNonRookie = { playerId: string | null; name: string }
+
+/**
+ * `applyDraftModePoolFilters`, also reporting whether a rookies-only filter could be applied
+ * (`fallback_no_rookie_data` = the full pool is kept; the draft room must say so, or veterans
+ * appear on a "rookies only" board unexplained).
+ *
+ * `provenNonRookies` lists the entries a verdict pool (MLB/NBA/NHL, `seasonStatsRookieStatus.ts`)
+ * removed as `not_rookie`. The board is the warm snapshot the pick check reads
+ * (`serverRookieStatus.ts`), and on a `partial_rookie_data` board a player's absence cannot mean
+ * "not a rookie" — unknowns stay on it — so without this list a removed veteran picked by a stale
+ * board or a direct API call would read as unknown and be accepted.
+ */
+export function applyDraftModePoolFiltersWithState(
+  entries: NormalizedDraftEntry[],
+  session: { draftModeLabel?: string | null; playerPool?: string | null } | null | undefined,
+  rostered: ReadonlyArray<{ playerId: string | null; playerName: string | null }>,
+): { entries: NormalizedDraftEntry[]; rookieFilterState: RookieFilterState; provenNonRookies: ProvenNonRookie[] } {
   let out = entries
   if (isFollowUpDraftMode(session?.draftModeLabel) && rostered.length > 0) {
     out = filterExcludedDraftEntries(
@@ -927,13 +986,30 @@ export function applyDraftModePoolFilters(
     )
   }
   // The board matches what pick validation (`validateSpecialtyDraftPools`) already enforces.
+  // ⚠ Not in the `fallback_no_rookie_data` case: validation refuses a rookies-only pick only when
+  // its metadata says `isRookie: false`, and the draft room sends `true` or nothing — so with no
+  // rookie data every pick is accepted. The banner copy says exactly that.
   const pool = String(session?.playerPool ?? '').toLowerCase()
-  if (pool === 'rookies_only' && out.some((e) => e.isRookie === true)) {
+  const rookieFilterState = resolveRookieFilterState(out, session)
+  const provenNonRookies: ProvenNonRookie[] = []
+  if (hasRookieVerdicts(out) && (rookieFilterState === 'applied' || rookieFilterState === 'partial_rookie_data')) {
+    // A verdict pool: `unknown` is not "veteran". Applied keeps proven rookies only (there are no
+    // unknowns); partial drops only the proven non-rookies and leaves everyone unknown unchecked.
+    const keep = rookieFilterState === 'applied' ? (e: NormalizedDraftEntry) => entryRookieVerdict(e) === 'rookie'
+      : (e: NormalizedDraftEntry) => entryRookieVerdict(e) !== 'not_rookie'
+    out = out.filter((e) => {
+      if (keep(e)) return true
+      if (entryRookieVerdict(e) === 'not_rookie') {
+        provenNonRookies.push({ playerId: String(e.playerId ?? '').trim() || null, name: String(e.name ?? '') })
+      }
+      return false
+    })
+  } else if (rookieFilterState === 'applied') {
     out = out.filter((e) => e.isRookie === true)
   } else if (pool === 'veterans_only') {
     out = out.filter((e) => e.isRookie !== true)
   }
-  return out
+  return { entries: out, rookieFilterState, provenNonRookies }
 }
 
 function filterExcludedDraftEntries(
@@ -1060,6 +1136,11 @@ export async function getResolvedDraftPoolForLeague(
   if (isDevyDynasty && !isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_vet'
   if (isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_merged'
   const mergeCollegePool = (devyEnabled || c2cEnabled) && (sport === 'NFL' || sport === 'NBA')
+  const verifyCurrentNbaRoster = shouldVerifyCurrentNbaRoster({
+    sport, variant: league?.leagueVariant,
+    isDynasty: Boolean(league?.isDynasty) || String(effectiveLeagueTemplate.formatType).toUpperCase().includes('DYNASTY'),
+    isDevy: isDevyDynasty, isC2C, mergeCollegePool,
+  })
   const strictPoolSeparation = (isDevyDynasty && poolType != null) || (isC2C && poolType != null)
   const useMixedPoolTypeMarkers = mergeCollegePool || c2cEnabled || devyEnabled
   const adpFormat: 'redraft' | 'dynasty' =
@@ -1298,9 +1379,12 @@ export async function getResolvedDraftPoolForLeague(
   }
 
   if (strictPoolSeparation && (poolType === 'devy' || poolType === 'college' || poolType === 'startup_college')) {
+    // Scoped to the league's college sport: unscoped, an NBA devy league drew NCAAF players and an
+    // NFL one drew NCAAB players. Sports with no college layer (null) keep the old unscoped read.
+    const devySport = devyPoolSportForDraftSport(sport)
     const devyPlayers = await (prisma as any).devyPlayer
       .findMany({
-        where: { devyEligible: true, graduatedToNFL: false },
+        where: { devyEligible: true, graduatedToNFL: false, ...(devySport ? { sport: devySport } : {}) },
         take: DEVY_POOL_LIMIT,
         orderBy: { devyAdp: 'asc' },
       })
@@ -1411,8 +1495,7 @@ export async function getResolvedDraftPoolForLeague(
     } else {
       // An NBA Survivor cast can make hundreds of picks. Without an ADP feed,
       // the display limit is too small to supply a complete verified draft.
-      const initialPoolRows = sport === 'NBA' && league?.leagueVariant === 'survivor'
-        ? poolRows : poolRows.slice(0, limit)
+      const initialPoolRows = verifyCurrentNbaRoster ? poolRows : poolRows.slice(0, limit)
       rawList = initialPoolRows.map<DraftPoolRawRow>((p) => ({
         name: p.full_name,
         position: p.position,
@@ -1453,9 +1536,11 @@ export async function getResolvedDraftPoolForLeague(
     mergeCollegePool && !(strictPoolSeparation && (poolType === 'startup_vet' || poolType === 'startup_pro'))
 
   if (includeCollegeInPool) {
+    // Same sport scoping as the strict path above. `mergeCollegePool` is NFL/NBA only.
+    const mergeDevySport = devyPoolSportForDraftSport(sport)
     const devyPlayers = await (prisma as any).devyPlayer
       .findMany({
-        where: { devyEligible: true, graduatedToNFL: false },
+        where: { devyEligible: true, graduatedToNFL: false, ...(mergeDevySport ? { sport: mergeDevySport } : {}) },
         take: DEVY_POOL_LIMIT,
         orderBy: { devyAdp: 'asc' },
       })
@@ -1514,7 +1599,7 @@ export async function getResolvedDraftPoolForLeague(
   }
 
   let nbaSurvivorRoster: NbaRosterEligibility | null = null
-  if (sport === 'NBA' && league?.leagueVariant === 'survivor') {
+  if (verifyCurrentNbaRoster) {
     const requiredPlayers = (draftSession?.teamCount ?? league?.leagueSize ?? 20) * (draftSession?.rounds ?? 12)
     nbaSurvivorRoster = await loadNbaSurvivorRosterEligibility(requiredPlayers)
     if (!nbaSurvivorRoster.ready) throw new Error(nbaSurvivorRoster.reason ?? 'Current NBA roster unavailable')
@@ -1628,6 +1713,32 @@ export async function getResolvedDraftPoolForLeague(
     perfFallback()
     fallbackSeasonByPoolKey = fallbackResult.seasonByPoolKey
     playerSeasonStatsDiagnostics = fallbackResult.diagnostics
+  }
+
+  /*
+   * MLB / NBA / NHL rookie verdicts from our own stored season stats (`seasonStatsRookieStatus.ts`,
+   * docs/DYNASTY_PROSPECT_DATA_PLAN.md §4.3), for the league's season. One read of
+   * `player_season_stats`; a failure leaves the pool without verdicts — the old behaviour, which
+   * the board reports as "no rookie data" — rather than failing the draft.
+   */
+  let seasonStatsRookieVerdicts: Map<string, RookieVerdict> | null = null
+  if (isSeasonStatsRookieSport(sport) && poolRows.length > 0) {
+    const perfRookieVerdicts = perfStart('9c. loadSeasonStatsRookieVerdicts')
+    seasonStatsRookieVerdicts = await loadSeasonStatsRookieVerdicts(prisma as never, {
+      sport,
+      // ⚠ The league's own season. A rookie draft held AFTER that season ends (league not yet rolled
+      // forward) may want season + 1, so the season just played counts; as written it does not,
+      // which errs lenient — fewer players proven non-rookies, none refused wrongly.
+      season: Number.isInteger(league?.season) ? Number(league?.season) : rookieClassYear(sport),
+      players: poolRows.flatMap((p) => {
+        const riId = rollingInsightsIdOfPoolRow(p)
+        return riId ? [{ riId, age: p.age ?? null }] : []
+      }),
+    }).catch((err) => {
+      console.warn('[draft-pool] season-stats rookie verdicts unavailable:', err instanceof Error ? err.message : String(err))
+      return null
+    })
+    perfRookieVerdicts()
   }
 
   const nflStatsSeason = sport === 'NFL' ? defaultNflPlayerStatsSeason() : ''
@@ -1775,6 +1886,8 @@ export async function getResolvedDraftPoolForLeague(
    * `aiAdpByPlayerKey.get('<lowercased name>|<lowercased position>')` returns
    *   { adp, sampleSize, lowSample, sevenDayTrend, thirtyDayTrend, standardDeviation }
    */
+  /** Own vs imported corpora per player key, for the three-factor AF ADP. See lib/adp/afAdp.ts. */
+  let afAdpCorpora: Map<string, AdpCorpusSplit> = new Map()
   const aiAdpByPlayerKey = new Map<
     string,
     {
@@ -1828,6 +1941,7 @@ export async function getResolvedDraftPoolForLeague(
       const board = await loadAdpBoard(ctx, { draftMode: 'real' })
       perfAiAdp()
       const LOW_SAMPLE_THRESHOLD = 10
+      afAdpCorpora = board.corpora
       for (const row of board.entries) {
         aiAdpByPlayerKey.set(row.playerKey, {
           adp: row.adp,
@@ -1896,7 +2010,30 @@ export async function getResolvedDraftPoolForLeague(
   )
   perfSprMaps()
 
-  const enrichedList = rawListFiltered.map((row) => {
+  /*
+   * MLB / NHL projections. `AFProjectionSnapshot` is written daily for both (compute-projections),
+   * but nothing in the pool read it, so their Proj column was always empty. Joined by Rolling
+   * Insights id only — a pool row without one gets no projection rather than a name guess. A
+   * failure leaves the column empty, never the draft broken.
+   */
+  let afProjectionsByRiId: Map<string, AfBaselineProjection> | null = null
+  if ((sport === 'MLB' || sport === 'NHL') && poolRows.length > 0) {
+    const perfAfProj = perfStart('11c. AF projections (MLB/NHL)')
+    afProjectionsByRiId = await loadAfBaselineProjectionsByRollingInsightsIds({
+      sport,
+      rollingInsightsIds: poolRows.flatMap((p) => {
+        const riId = rollingInsightsIdOfPoolRow(p)
+        return riId ? [riId] : []
+      }),
+      season: Number.isInteger(league?.season) ? Number(league?.season) : null,
+    }).catch((err) => {
+      console.warn('[draft-pool] AF projections unavailable:', err instanceof Error ? err.message : String(err))
+      return null
+    })
+    perfAfProj()
+  }
+
+  const enrichedList = await cooperativeMap(rawListFiltered, (row) => {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
     const position = row.position ?? row.pos ?? ''
     const team = row.team ?? row.teamAbbr ?? null
@@ -2350,6 +2487,8 @@ export async function getResolvedDraftPoolForLeague(
         (row as RawRow).fantasyPointsPerGame ??
         undefined,
       nbaDraftStats: sport === 'NBA' ? (sprAug?.nbaDraftStats ?? null) : null,
+      seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (sprAug?.seasonStatLine ?? null) : null,
+      afProjectionPerGame: afProjectionsByRiId?.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null,
       lifetimeValue:
         resolvedAnalytics?.lifetimeValue ??
         analytics?.lifetimeValue ??
@@ -2371,6 +2510,25 @@ export async function getResolvedDraftPoolForLeague(
             aiAdpTeamCounts: aiAdpHit.contributingTeamCounts,
           }
         : { aiAdp: null }),
+      /**
+       * AF ADP — market + imported real-league drafts + AllFantasy drafts, each AF-drafted input
+       * shrunk by its own sample size (lib/adp/afAdp.ts). Additive: `adp` (market) and `aiAdp`
+       * keep their meaning, so no existing column changes underneath a reader.
+       */
+      ...(() => {
+        const af = computeAfAdp({
+          marketAdp: resolvedAdp,
+          split: afAdpCorpora.get(buildPlayerKey(name ?? '', position ?? '')),
+        })
+        return af
+          ? {
+              afAdp: af.afAdp,
+              afAdpContributions: af.contributions,
+              afAdpImportedSampleSize: af.importedSampleSize,
+              afAdpOwnSampleSize: af.afSampleSize,
+            }
+          : { afAdp: null }
+      })(),
       /** D.7 â attach Sleeper years_exp for NFL rows. Devy rows that have not
        * been promoted to the NFL retain `isRookie=true` regardless of yearsExp
        * (their Sleeper match is typically absent). Promoted rows fall through
@@ -2422,12 +2580,27 @@ export async function getResolvedDraftPoolForLeague(
 
             return {}
           })()
-        : {}),
-      ...(row.isDevy && !row.graduatedToNFL
-        ? { isRookie: true }
-        : sport !== 'NFL' && sprAug?.rookieHint === true
-          ? { isRookie: true }
-          : {}),
+        : (() => {
+            // Phase 3.2 (main): a known `SportsPlayer.yearsExp` wins, as on the NFL path.
+            const fromExp = resolveNonNflRookieFields({
+              rowYearsExp: row.yearsExp,
+              poolExperience: (poolMatch as { experience?: number | null } | undefined)?.experience,
+              // With season-stats verdicts the zero-games hint is replaced by the verdict below.
+              rookieHint: seasonStatsRookieVerdicts ? false : sprAug?.rookieHint,
+            })
+            if (!seasonStatsRookieVerdicts) return fromExp
+            if (fromExp.yearsExp != null) {
+              // Every pro row of a verdict pool carries one, so the board can tell "unknown" from
+              // "veteran"; a known experience settles it.
+              const verdict: RookieVerdict = fromExp.yearsExp === 0 ? 'rookie' : 'not_rookie'
+              return { ...fromExp, rookieVerdict: verdict }
+            }
+            // Experience unknown: the verdict from our stored season stats replaces the
+            // `gamesPlayed === 0` hint for these sports.
+            const verdict = seasonStatsRookieVerdicts.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '') ?? 'unknown'
+            return verdict === 'rookie' ? { isRookie: true, rookieVerdict: verdict } : { rookieVerdict: verdict }
+          })()),
+      ...(row.isDevy && !row.graduatedToNFL ? { isRookie: true } : {}),
     } as unknown as RawRow
   })
 
@@ -2480,7 +2653,7 @@ export async function getResolvedDraftPoolForLeague(
   }
 
   const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[], sport)
-  let entries: NormalizedDraftEntry[] = normalizePlayerList(dedupedEnrichedList, sport).map((entry, index) => ({ ...entry, draftIdProvenance: dedupedEnrichedList[index]?.draftIdProvenance }))
+  let entries: NormalizedDraftEntry[] = await cooperativeMap(dedupedEnrichedList, (row) => ({ ...normalizePlayer(row, sport), draftIdProvenance: row.draftIdProvenance }))
   if (nbaSurvivorRoster) {
     const activeRoster = nbaSurvivorRoster
     entries = entries.filter((entry) =>
@@ -2499,6 +2672,8 @@ export async function getResolvedDraftPoolForLeague(
     options.excludeDraftedPlayerIds,
   )
 
+  let rookieFilterState: RookieFilterState = 'not_requested'
+  let provenNonRookies: ProvenNonRookie[] = []
   if (isFollowUpDraftMode(draftSession?.draftModeLabel)) {
     // The league's CURRENT rosters only: last season's rows are never marked dropped, so reading
     // every season would hide a player a team has since released.
@@ -2513,9 +2688,15 @@ export async function getResolvedDraftPoolForLeague(
           })
           .catch(() => [] as Array<{ playerId: string; playerName: string }>)
       : []
-    entries = applyDraftModePoolFilters(entries, draftSession, rostered)
+    const filtered = applyDraftModePoolFiltersWithState(entries, draftSession, rostered)
+    entries = filtered.entries
+    rookieFilterState = filtered.rookieFilterState
+    provenNonRookies = filtered.provenNonRookies
   } else {
-    entries = applyDraftModePoolFilters(entries, draftSession, [])
+    const filtered = applyDraftModePoolFiltersWithState(entries, draftSession, [])
+    entries = filtered.entries
+    rookieFilterState = filtered.rookieFilterState
+    provenNonRookies = filtered.provenNonRookies
   }
 
   // Phase 2: filter out teamless (free-agent/released) players from the live pool.
@@ -2589,5 +2770,7 @@ export async function getResolvedDraftPoolForLeague(
         ? { enabled: c2cEnabled, collegeRounds: rawC2cConfig?.collegeRounds ?? [] }
         : undefined,
     isIdp: effectiveLeagueTemplate.idpEnabled || undefined,
+    rookieFilterState,
+    ...(provenNonRookies.length > 0 ? { provenNonRookies } : {}),
   }
 }

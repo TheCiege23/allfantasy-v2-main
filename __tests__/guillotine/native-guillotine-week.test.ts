@@ -158,12 +158,44 @@ describe('runNativeGuillotineWeek', () => {
     expect(m.release).toHaveBeenCalled()
   })
 
+  it('hands the tiebreak bench points and last week\'s points, which the native path never filled', async () => {
+    arrange()
+    db.guillotinePeriodScore.findMany.mockResolvedValue([
+      { rosterId: 'R-a', periodPoints: 100, weekOrPeriod: 2 },
+      { rosterId: 'R-b', periodPoints: 90, weekOrPeriod: 2 },
+      { rosterId: 'R-b', periodPoints: 80, weekOrPeriod: 1 },
+    ])
+    m.scoreRosterForWeek.mockImplementation(async ({ rosterId }: { rosterId: string }) => ({
+      points: 90,
+      benchPoints: rosterId === 'rr-b' ? 4 : 20,
+    }))
+
+    await run()
+
+    expect(m.scoreRosterForWeek.mock.calls[0]![0]).toMatchObject({ includeBench: true })
+    const rows = m.runElimination.mock.calls[0]![0].periodScores as Array<Record<string, unknown>>
+    expect(rows.find((r) => r.rosterId === 'R-b')).toMatchObject({ benchPoints: 4, previousPeriodPoints: 90, seasonPointsCumul: 260 })
+    expect(rows.find((r) => r.rosterId === 'R-a')).toMatchObject({ benchPoints: 20, previousPeriodPoints: 100 })
+    // No week-2 row for R-c: no previous-period figure rather than a made-up 0.
+    expect(rows.find((r) => r.rosterId === 'R-c')).not.toHaveProperty('previousPeriodPoints')
+  })
+
   it('a league with no owner is chopped but not announced (a chat post needs a real author)', async () => {
     arrange()
     db.league.findUnique.mockResolvedValue({ userId: null })
     const r = await run()
     expect(r).toMatchObject({ outcome: 'chopped' })
     expect(m.runElimination.mock.calls[0]![0]).toMatchObject({ skipChat: true, systemUserId: undefined })
+  })
+
+  it('a scheduled no-chop week ends as no_chop, not refused, and drops nobody', async () => {
+    arrange()
+    m.runElimination.mockResolvedValue({ leagueId: 'L1', weekOrPeriod: 3, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'no chop scheduled' })
+
+    const r = await run()
+
+    expect(r).toMatchObject({ outcome: 'no_chop', week: 3 })
+    expect(db.redraftRosterPlayer.updateMany).not.toHaveBeenCalled()
   })
 
   it('does nothing for a league that is not guillotine', async () => {
@@ -197,6 +229,55 @@ describe('runNativeGuillotineWeek', () => {
     const syncWeekStats = vi.fn(async () => undefined)
     expect((await run(4, { syncWeekStats })).outcome).toBe('chopped')
     expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 's1', week: 3 })
+  })
+
+  describe('pre-chop stat refresh (a correction inside the window decides the chop)', () => {
+    it('re-pulls the week and re-seals it before any team is scored', async () => {
+      arrange()
+      const order: string[] = []
+      const syncWeekStats = vi.fn(async () => { order.push('sync') })
+      m.finalizeRedraftWeek.mockImplementation(async () => {
+        order.push('seal')
+        return { refusal: null, finalized: true, slate: { lastStartTime: LAST_KICKOFF } }
+      })
+      m.scoreRosterForWeek.mockImplementation(async ({ rosterId }: { rosterId: string }) => {
+        order.push('score')
+        return { points: POINTS[rosterId] }
+      })
+
+      expect((await run(4, { syncWeekStats })).outcome).toBe('chopped')
+      expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 's1', week: 3 })
+      expect(order.slice(0, 4)).toEqual(['seal', 'sync', 'seal', 'score'])
+    })
+
+    it('waits instead of chopping when the refreshed week will not re-seal', async () => {
+      arrange()
+      m.finalizeRedraftWeek
+        .mockResolvedValueOnce({ refusal: null, finalized: true, slate: { lastStartTime: LAST_KICKOFF } })
+        .mockResolvedValueOnce({ refusal: 'stat_coverage_below_floor', slate: null })
+      const r = await run(4, { syncWeekStats: vi.fn(async () => undefined) })
+      expect(r).toMatchObject({ outcome: 'waiting', week: 3, reason: 'pre_chop_refresh:stat_coverage_below_floor' })
+      expect(m.runElimination).not.toHaveBeenCalled()
+      expect(m.release).toHaveBeenCalled()
+    })
+
+    it('a refresh that throws chops on the sealed stats rather than stall the season', async () => {
+      arrange()
+      const r = await run(4, { syncWeekStats: vi.fn(async () => { throw new Error('provider down') }) })
+      expect(r.outcome).toBe('chopped')
+      expect(m.finalizeRedraftWeek).toHaveBeenCalledTimes(1)
+    })
+
+    it('an "immediate" league has no window, so nothing is re-pulled', async () => {
+      arrange()
+      m.getGuillotineConfig.mockResolvedValue({
+        eliminationStartWeek: 1, eliminationEndWeek: 17, teamsPerChop: 1, correctionWindow: 'immediate',
+        statCorrectionHours: null, customCutoffDayOfWeek: null, customCutoffTimeUtc: null,
+      })
+      const syncWeekStats = vi.fn(async () => undefined)
+      expect((await run(4, { syncWeekStats })).outcome).toBe('chopped')
+      expect(syncWeekStats).not.toHaveBeenCalled()
+    })
   })
 
   it('waits inside the stat-correction window', async () => {

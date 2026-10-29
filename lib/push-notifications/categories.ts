@@ -21,8 +21,11 @@ export const PUSH_NOTIFICATION_CATEGORIES = [
   "league_drama",
   "commissioner_alerts",
   "draft_intel_alerts",
+  "draft_alerts",
   "autocoach",
   "injury_alerts",
+  "lineup_alerts",
+  "performance_alerts",
   "trade_proposals",
   "trade_accept_reject",
   // A player you follow (2026-09-14): the whole point of following is being told.

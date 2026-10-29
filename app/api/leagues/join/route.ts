@@ -20,6 +20,8 @@ import { validateFantasyInviteCode } from '@/lib/league-invite'
 import { divisionGateRefusal, evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
 import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
+import { notifyCommissionerOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+import { resolveGuillotineSeatSummary } from '@/lib/guillotine/lateStartSeats'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
@@ -479,6 +481,13 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  if (!joinResult.alreadyMember) {
+    // After the commit, and never awaited by the response: the join stands whatever the alert does.
+    void notifyCommissionerOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
+      console.warn('[league-join] commissioner join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
+    })
+  }
+
   return NextResponse.json(
     divisionGate.outcome === 'allow_flagged' && !joinResult.alreadyMember
       ? { ...joinResult, divisionFlag: { reason: divisionGate.reason, userDivision: divisionGate.userDivision, leagueDivision: divisionGate.leagueDivision } }
@@ -537,9 +546,11 @@ export async function GET(req: NextRequest) {
 
   // Claim progress — how many of the league's teams have a real AF member
   // behind them. Powers the "N of M teams claimed" bar next to the invite link.
-  const [teamCount, claimedCount] = await Promise.all([
+  const [teamCount, claimedCount, guillotineSeats] = await Promise.all([
     prisma.leagueTeam.count({ where: { leagueId } }).catch(() => 0),
     prisma.leagueTeam.count({ where: { leagueId, claimedByUserId: { not: null } } }).catch(() => 0),
+    // Native guillotine only: seats left in the season, the draft time, and what happens if not full.
+    resolveGuillotineSeatSummary(leagueId).catch(() => null),
   ])
 
   return NextResponse.json({
@@ -548,5 +559,6 @@ export async function GET(req: NextRequest) {
     inviteLink: result.inviteLink,
     inviteExpiresAt: result.inviteExpiresAt,
     claim: { teamCount, claimedCount },
+    guillotineSeats,
   })
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { readTournamentCoCommissioners, SeatlessCoCommissioners, type TournamentCoCommissioner } from '@/components/league-settings/TournamentLeagueNotes'
 
 type Manager = {
   rosterId: string
@@ -13,6 +14,7 @@ type Manager = {
 
 export default function MemberSettingsPanel({ leagueId }: { leagueId?: string }) {
   const [managers, setManagers] = useState<Manager[]>([])
+  const [tournamentCos, setTournamentCos] = useState<TournamentCoCommissioner[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [removingRosterId, setRemovingRosterId] = useState<string | null>(null)
@@ -37,6 +39,7 @@ export default function MemberSettingsPanel({ leagueId }: { leagueId?: string })
       }
       const nextManagers = Array.isArray(json?.managers) ? (json.managers as Manager[]) : []
       setManagers(nextManagers)
+      setTournamentCos(readTournamentCoCommissioners(json))
     } catch {
       setError('Failed to load member settings')
       setManagers([])
@@ -168,6 +171,10 @@ export default function MemberSettingsPanel({ leagueId }: { leagueId?: string })
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4">
+        <SeatlessCoCommissioners people={tournamentCos} />
       </div>
 
       <div className="mt-4 space-y-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">

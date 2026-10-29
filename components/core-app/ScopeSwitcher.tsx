@@ -1,6 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { coreLeagueHref } from '@/lib/core-app/leagueNavigation'
+import { LeagueMark } from '@/components/core-app/LeagueMark'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
@@ -52,7 +56,7 @@ import '@/components/core-app/af-scope-switcher.css'
  */
 export function ScopeResetLink({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <Link href={`/core?${HOME_SCOPE_PARAM}=all`} className={className} onClick={() => writeCookie(SCOPE_COOKIE, null, null)}>
+    <Link href={`/core?view=all&${HOME_SCOPE_PARAM}=all`} className={className} onClick={() => writeCookie(SCOPE_COOKIE, null, null)}>
       {children}
     </Link>
   )
@@ -63,6 +67,7 @@ export type ScopeSwitcherLeague = {
   name: string
   platform: string
   sport: string
+  imageUrl?: string | null
   /** The viewer commissions it — draws the blue C (CommissionerBadge). */
   isCommissioner?: boolean
 }
@@ -175,11 +180,20 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
   }, [leagues, labels, favorites, q, hiddenKey, archivedKey, selectedLeagueId])
 
   const filterHref = (value: string | null) =>
-    value == null ? `/core?${HOME_SCOPE_PARAM}=all` : `/core?${HOME_SCOPE_PARAM}=${encodeURIComponent(value)}`
+    value == null ? `/core?view=all&${HOME_SCOPE_PARAM}=all` : `/core?view=all&${HOME_SCOPE_PARAM}=${encodeURIComponent(value)}`
 
   const leagueHref = (id: string) => {
-    const base = leagueScreen ? pathname : '/core'
-    return `${base}?league=${encodeURIComponent(id)}`
+    const league = leagues.find(row => row.id === id)
+    return league && isNativePlatform(league.platform)
+      ? leagueEntryHref(league)
+      : coreLeagueHref(pathname, id, leagueScreen)
+  }
+
+  const navigate = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    setOpen(false)
+    router.push(href)
   }
 
   const chooseFilter = (option: ScopeOption) => {
@@ -284,7 +298,8 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                             href={filterHref(option.value)}
                             className="af-scope-chip"
                             aria-current={isCurrent(option) ? 'true' : undefined}
-                            onClick={() => chooseFilter(option)}
+                            prefetch={false}
+                            onClick={(event) => { chooseFilter(option); navigate(event, filterHref(option.value)) }}
                           >
                             {option.group === 'favorites' ? '★ ' : ''}
                             {scopeLabelText(option.label, language)} <b>{option.count}</b>
@@ -332,8 +347,10 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                         href={leagueHref(league.id)}
                         className="af-scope-league"
                         aria-current={league.id === selectedLeagueId ? 'true' : undefined}
-                        onClick={() => setOpen(false)}
+                        prefetch={false}
+                        onClick={(event) => navigate(event, leagueHref(league.id))}
                       >
+                        <span className="af-scope-league-art"><LeagueMark src={league.imageUrl} letter={Array.from(league.name)[0] ?? "L"} /></span>
                         <span className="af-scope-league-name">
                           {labelOf(league)}
                           {league.isCommissioner ? <CommissionerBadge /> : null}

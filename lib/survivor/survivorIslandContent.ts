@@ -62,7 +62,7 @@ export const EXILE_ISLAND_RULES = {
   intro:
     'Voted out isn’t always the end. On Exile, you can fight to return while the main island keeps playing.',
   lineup:
-    'Each week starts with an empty Exile roster. Claim an NFL quarterback, NBA point guard, or NHL goalie to reserve that real-world team, then claim only that team’s players. All players return to waivers after the week.',
+    'Each week starts with an empty Exile roster. Claim an NFL quarterback, NBA point guard, NHL goalie, or MLB pitcher to reserve that real-world team, then claim only that team’s players. All players return to waivers after the week.',
   tokens:
     'Verified weekly Exile scoring awards tokens. At the configured deadline, the highest balance meeting the minimum takes the single return spot.',
   bossReset:

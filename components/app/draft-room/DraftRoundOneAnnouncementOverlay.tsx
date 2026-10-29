@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { roundOneHypeLine } from '@/lib/draft-room/roundOneHypeLine'
 
 export type RoundOneAnnouncementItem = RoundOneAnnouncementQueueItem
 
@@ -18,6 +19,8 @@ export type DraftRoundOneAnnouncementOverlayProps = {
   presentationVariant?: 'default' | 'redraft_snake'
   leagueName?: string
   sportLabel?: string
+  /** League format (e.g. 'survivor'): the island gets its own line under the pick. */
+  formatType?: string | null
   /** Queue: first item is visible */
   queue: RoundOneAnnouncementItem[]
   onDismissFront: () => void
@@ -27,6 +30,7 @@ export function DraftRoundOneAnnouncementOverlay({
   presentationVariant = 'default',
   leagueName,
   sportLabel,
+  formatType,
   queue,
   onDismissFront,
 }: DraftRoundOneAnnouncementOverlayProps) {
@@ -77,14 +81,7 @@ export function DraftRoundOneAnnouncementOverlay({
   const { pick, headshotUrl, teamLogoUrl } = current
   const mgr = pick.displayName ?? 'Draft board'
   const subtitle = `${sportLabel ? `${sportLabel} · ` : ''}Round 1 · Pick ${pick.slot} · #${pick.overall} overall`
-  const hypeLine = (() => {
-    const pos = String(pick.position ?? '').toUpperCase()
-    if (pos === 'QB') return 'Commanding the board early with a field general.'
-    if (pos === 'RB') return 'Ground game priority set for the draft room.'
-    if (pos === 'WR') return 'A high-upside target just came off the board.'
-    if (pos === 'TE') return 'Securing a mismatch creator in Round 1.'
-    return 'Opening statement pick locked in.'
-  })()
+  const hypeLine = roundOneHypeLine({ sport: sportLabel, position: pick.position, formatType })
   const chips = [
     `Pick ${pick.pickLabel}`,
     `Overall #${pick.overall}`,

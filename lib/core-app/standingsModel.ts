@@ -42,6 +42,8 @@
 
 import { readPlayoffFormat } from './outlookFormat'
 import { standardByes } from './outlookSim'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { coinFlipDraw, readTiebreakerOrder, TIEBREAKER_LABELS, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 
 // ── Inputs ─────────────────────────────────────────────────────────────────
 
@@ -75,7 +77,7 @@ export type TeamMeta = {
   reported: ReportedRecord | null
 }
 
-export type Tiebreaker = 'points_for' | 'head_to_head'
+export type Tiebreaker = TiebreakerKey
 
 export type StandingsRules = {
   playoffTeams: number
@@ -85,7 +87,10 @@ export type StandingsRules = {
   /** Last regular-season week, or null when the league does not say (then every scheduled week counts). */
   regularSeasonEnd: number | null
   tiebreakers: Tiebreaker[]
-  tiebreakerSource: 'platform' | 'assumed'
+  /** `league`: the commissioner's own order (AllFantasy-run leagues only, lib/standings/tiebreakerOrder.ts). */
+  tiebreakerSource: 'platform' | 'assumed' | 'league'
+  /** Seeds the coin-flip tiebreaker: league id + season, the same seed the playoff runtime uses. */
+  coinSeed?: string
   /** True only where the stored rank is the provider's own standings position. */
   rankIsOfficial: boolean
   /** "Sleeper", "ESPN" … — used in copy only. */
@@ -345,13 +350,19 @@ export function readStandingsRules(
   settings: unknown,
   teamCount: number,
   platform: string | null | undefined,
+  /** League id + season, for the coin-flip tiebreaker. */
+  coinSeed = '',
+  /** `League.playoffTeams` — read only when the league is native (readPlayoffFormat). */
+  playoffTeamsColumn?: number | null,
 ): StandingsRules {
   /*
    * Field size, byes (the bracket gap, lowered never raised by a stated `first_round_byes`) and the
    * last regular-season week all come from Season Outlook's reader — see `readPlayoffTeams` above.
    */
-  const format = readPlayoffFormat(settings, teamCount)
+  const format = readPlayoffFormat(settings, teamCount, isNativePlatform(platform) ? playoffTeamsColumn : null)
   const key = String(platform ?? '').toLowerCase()
+  // Only an AllFantasy-run league's commissioner sets the rule; an imported league follows its platform.
+  const custom = isNativePlatform(platform) ? readTiebreakerOrder(settings) : null
   return {
     playoffTeams: format.playoffTeams,
     playoffTeamsSource: format.playoffTeamsSource === 'league' ? 'league' : 'assumed',
@@ -361,8 +372,9 @@ export function readStandingsRules(
      * Only Sleeper's rule is known for certain: record, then total points for. Head-to-head follows as
      * our own last resort for two teams level on both. Everything else is labelled an assumption.
      */
-    tiebreakers: ['points_for', 'head_to_head'],
-    tiebreakerSource: key === 'sleeper' ? 'platform' : 'assumed',
+    tiebreakers: custom ?? ['points_for', 'head_to_head'],
+    tiebreakerSource: custom ? 'league' : key === 'sleeper' ? 'platform' : 'assumed',
+    coinSeed,
     rankIsOfficial: OFFICIAL_RANK_PLATFORMS.has(key),
     platformLabel: PLATFORM_LABEL[key] ?? 'the platform',
   }
@@ -432,6 +444,8 @@ export type BoardTeam = {
   pfRank: number
   pfMove: number | null
   allPlay: Record3
+  /** All-play win share, for the `all_play` tiebreaker. */
+  allPlayShare?: number | null
   /** Head-to-head wins, ties counted as half — the number `luck` is measured from. */
   headToHeadWins: number
   expectedWins: number
@@ -593,12 +607,41 @@ function h2hThrough(snapshots: WeekSnapshot[]): Record<string, Record<string, Re
   return out
 }
 
-type OrderRow = { rosterId: string; name: string; record: Record3; pointsFor: number; pointsAgainst: number | null }
+type OrderRow = {
+  rosterId: string
+  name: string
+  record: Record3
+  pointsFor: number
+  pointsAgainst: number | null
+  /** All-play win share, (wins + half ties) / games; null when unknown. */
+  allPlayShare?: number | null
+}
 
 type OrderCtx = {
   h2h: Record<string, Record<string, Record3>>
   hasHeadToHead: boolean
   tiebreakers: Tiebreaker[]
+  coinSeed?: string
+}
+
+/** Negative = `a` ranks higher on this one key; 0 = level on it (or it cannot be measured). */
+function compareOnKey(a: OrderRow, b: OrderRow, tb: Tiebreaker, ctx: OrderCtx): number {
+  switch (tb) {
+    case 'points_for':
+      return b.pointsFor - a.pointsFor
+    case 'head_to_head': {
+      const r = ctx.h2h[a.rosterId]?.[b.rosterId]
+      return r && r.wins !== r.losses ? r.losses - r.wins : 0
+    }
+    case 'points_against':
+      return a.pointsAgainst != null && b.pointsAgainst != null ? a.pointsAgainst - b.pointsAgainst : 0
+    case 'all_play':
+      return a.allPlayShare != null && b.allPlayShare != null ? b.allPlayShare - a.allPlayShare : 0
+    case 'coin_flip':
+      return coinFlipDraw(ctx.coinSeed ?? '', b.rosterId) - coinFlipDraw(ctx.coinSeed ?? '', a.rosterId)
+    default:
+      return 0
+  }
 }
 
 /** Negative = `a` ranks higher. Win percentage, then the tiebreaker chain, then name so the order is stable. */
@@ -608,17 +651,14 @@ function compareOfficial(a: OrderRow, b: OrderRow, ctx: OrderCtx): number {
     if (d !== 0) return d
   }
   for (const tb of ctx.tiebreakers) {
-    if (tb === 'points_for' && a.pointsFor !== b.pointsFor) return b.pointsFor - a.pointsFor
-    if (tb === 'head_to_head') {
-      const r = ctx.h2h[a.rosterId]?.[b.rosterId]
-      if (r && r.wins !== r.losses) return r.losses - r.wins
-    }
+    const d = compareOnKey(a, b, tb, ctx)
+    if (d !== 0) return d
   }
   return a.name.localeCompare(b.name)
 }
 
 export type ExplainCtx = OrderCtx & {
-  tiebreakerSource: 'platform' | 'assumed'
+  tiebreakerSource: 'platform' | 'assumed' | 'league'
   platformLabel: string
   /** True when the order is the platform's own rank rather than our rule. */
   platformOrder: boolean
@@ -643,6 +683,7 @@ export function explainOrder(upper: OrderRow, lower: OrderRow, ctx: ExplainCtx):
       : `${ctx.platformLabel} ranks ${upper.name} higher despite a worse record (${formatRecord(upper.record)} to ${formatRecord(lower.record)}).`
   }
   const level = `Level at ${formatRecord(upper.record)}`
+  if (ctx.tiebreakerSource === 'league' && !ctx.platformOrder) return `${level}; ${leagueTiebreakReason(upper, lower, ctx, 'en')}`
   const whose =
     ctx.tiebreakerSource === 'platform' ? `${ctx.platformLabel}'s tiebreaker` : 'the tiebreaker we assume for this platform'
   if (upper.pointsFor > lower.pointsFor) {
@@ -658,6 +699,32 @@ export function explainOrder(upper: OrderRow, lower: OrderRow, ctx: ExplainCtx):
     return `${level}. ${ctx.platformLabel} puts ${upper.name} first by a tiebreaker it does not report to us — ${lower.name} leads on points for.`
   }
   return `${level} and level on every tiebreaker we hold; the order between them is not settled.`
+}
+
+/**
+ * Under the commissioner's order: the first key that separates the two teams, in a sentence. Exported
+ * so the Spanish screen copy says the same thing in Spanish.
+ */
+export function leagueTiebreakReason(upper: OrderRow, lower: OrderRow, ctx: OrderCtx, language: 'en' | 'es'): string {
+  const es = language === 'es'
+  for (const tb of ctx.tiebreakers) {
+    if (compareOnKey(upper, lower, tb, ctx) === 0) continue
+    const label = TIEBREAKER_LABELS[tb][language].toLowerCase()
+    const detail =
+      tb === 'points_for'
+        ? ` (${fmtPts(upper.pointsFor)} ${es ? 'frente a' : 'to'} ${fmtPts(lower.pointsFor)})`
+        : tb === 'points_against'
+          ? ` (${fmtPts(upper.pointsAgainst ?? 0)} ${es ? 'frente a' : 'to'} ${fmtPts(lower.pointsAgainst ?? 0)})`
+          : tb === 'head_to_head'
+            ? ` (${formatRecord(ctx.h2h[upper.rosterId]![lower.rosterId]!)})`
+            : ''
+    return es
+      ? `${upper.name} va delante por ${label}${detail}, según el orden de desempates del comisionado.`
+      : `${upper.name} is ahead on ${label}${detail}, the commissioner's tiebreaker order.`
+  }
+  return es
+    ? 'empatados en todos los desempates del comisionado; el orden entre ellos no está decidido.'
+    : "level on every one of the commissioner's tiebreakers; the order between them is not settled."
 }
 
 function normalCdf(z: number): number {
@@ -700,6 +767,11 @@ function powerOrder(snapshots: WeekSnapshot[], ids: string[]): { rank: Map<strin
     (a, b) => (score.get(b) ?? 0) - (score.get(a) ?? 0) || snapTeam(latest, b).pf - snapTeam(latest, a).pf || a.localeCompare(b),
   )
   return { rank: new Map(ordered.map((id, i) => [id, i + 1])), score }
+}
+
+function allPlayShareOf(s: SnapshotTeam): number | null {
+  const games = s.apw + s.apl + s.apt
+  return games > 0 ? (s.apw + s.apt / 2) / games : null
 }
 
 /** Highest first; ties share the better rank. */
@@ -777,11 +849,12 @@ export function buildStandingsBoard(input: BoardInput): StandingsBoard {
           : recordAt(s, medianGames),
       pointsFor: usePlatform && rep ? rep.pointsFor : s.pf,
       pointsAgainst: !hasHeadToHead ? null : usePlatform ? rep?.pointsAgainst ?? null : s.pa,
+      allPlayShare: allPlayShareOf(s),
     }
   })
   const rowOf = new Map(orderRows.map((r) => [r.rosterId, r]))
 
-  const orderCtx: OrderCtx = { h2h, hasHeadToHead, tiebreakers: rules.tiebreakers }
+  const orderCtx: OrderCtx = { h2h, hasHeadToHead, tiebreakers: rules.tiebreakers, coinSeed: rules.coinSeed }
   const reportedRanks = ids.map((id) => meta.get(id)?.reported?.rank ?? null)
   const platformOrder =
     usePlatform &&
@@ -802,7 +875,7 @@ export function buildStandingsBoard(input: BoardInput): StandingsBoard {
     const ctx: OrderCtx = { ...orderCtx, h2h: h2hThrough(upTo) }
     const rows = ids.map((id) => {
       const s = snapTeam(snap, id)
-      return { rosterId: id, name: nameOf(id), record: recordAt(s, medianGames), pointsFor: s.pf, pointsAgainst: s.pa }
+      return { rosterId: id, name: nameOf(id), record: recordAt(s, medianGames), pointsFor: s.pf, pointsAgainst: s.pa, allPlayShare: allPlayShareOf(s) }
     })
     const seeds = new Map([...rows].sort((a, b) => compareOfficial(a, b, ctx)).map((r, k) => [r.rosterId, k + 1]))
     const powers = powerOrder(upTo, ids).rank
@@ -907,6 +980,7 @@ export function buildStandingsBoard(input: BoardInput): StandingsBoard {
       pfRank: pfRank.get(id)!,
       pfMove: move(pfByWeek, id),
       allPlay: { wins: s.apw, losses: s.apl, ties: s.apt },
+      allPlayShare: allPlayShareOf(s),
       headToHeadWins: s.w + s.t / 2,
       expectedWins: Math.round(s.xw * 100) / 100,
       luck: Math.round((s.w + s.t / 2 - s.xw) * 100) / 100,
@@ -941,7 +1015,9 @@ export function buildStandingsBoard(input: BoardInput): StandingsBoard {
 
   const orderBasis = platformOrder
     ? `Order is ${P}'s reported standings.`
-    : hasHeadToHead
+    : hasHeadToHead && rules.tiebreakerSource === 'league'
+      ? `Order is winning percentage, then the commissioner's tiebreakers: ${rules.tiebreakers.map((tb) => TIEBREAKER_LABELS[tb].en.toLowerCase()).join(', ')}.`
+      : hasHeadToHead
       ? `Order is winning percentage, then points for, then head-to-head${
           rules.tiebreakerSource === 'platform' ? ` — ${P}'s rule` : ` — assumed, because ${P} does not report its tiebreaker to us`
         }.`

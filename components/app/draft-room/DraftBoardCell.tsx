@@ -45,6 +45,8 @@ export type DraftBoardCellPick = {
   ownerRosterId?: string | null
   /** From live pool merge — Rookie / N YOE */
   experienceBadge?: string | null
+  /** overall − market ADP, rounded; set only when large enough to badge (+ steal, − reach). */
+  adpDelta?: number | null
 }
 
 function TinyHeadshot({
@@ -65,7 +67,7 @@ function TinyHeadshot({
 }) {
   /** E.1: delegate to the shared PlayerAvatar so the URL classifier (which rejects data URIs and
    * team logos) is applied uniformly. The board cell stays at 22px and skips the team-logo badge
-   * because TinyTeamLogo is rendered separately in this layout. */
+   * because TinyTeamLogo is rendered separately in this layout. 26px since the 56px tile redesign. */
   return (
     <PlayerAvatar
       headshotUrl={src}
@@ -73,7 +75,7 @@ function TinyHeadshot({
       teamLogoUrl={teamLogoUrl}
       teamAbbr={teamAbbr}
       position={position}
-      size={22}
+      size={26}
       testIdBase="draft-board-cell-headshot"
     />
   )
@@ -176,7 +178,7 @@ function PositionBadge({ pos }: { pos: string | null }) {
   const p = (pos ?? '—').trim().slice(0, 4).toUpperCase()
   return (
     <span
-      className="inline-flex min-w-[1.5rem] shrink-0 items-center justify-center rounded-md border border-cyan-300/45 bg-cyan-500/25 px-1 py-0.5 text-[11px] font-bold text-cyan-100/95 shadow-sm"
+      className="inline-flex min-w-[1.5rem] shrink-0 items-center justify-center rounded-md border border-cyan-300/45 bg-cyan-500/25 px-1 text-[11px] font-bold leading-4 text-cyan-100/95 shadow-sm"
       title={pos ?? undefined}
     >
       {p}
@@ -259,7 +261,7 @@ function DraftBoardCellInner({
 
   return (
     <div
-      className={`group relative flex h-[42px] min-h-[42px] flex-col overflow-hidden rounded-[6px] border px-1 pb-0.5 pt-0.5 text-[11px] backdrop-blur-sm transition-[border-color,box-shadow,transform,background-color] duration-200 ${hoverLift} hover:border-cyan-300/45 hover:shadow-lg sm:h-[44px] sm:min-h-[44px] sm:px-1 sm:pb-0.5 sm:pt-0.5 ${
+      className={`group relative flex h-[56px] min-h-[56px] flex-col overflow-hidden rounded-[6px] border px-1.5 pb-1 pt-0.5 text-[11px] backdrop-blur-sm transition-[border-color,box-shadow,transform,background-color] duration-200 ${hoverLift} hover:border-cyan-300/45 hover:shadow-lg sm:h-[60px] sm:min-h-[60px] sm:px-1.5 sm:pb-1 sm:pt-1 ${
         onTradeFromCell ? 'pr-7 sm:pr-8' : ''
       } ${
         isCurrentPick ? 'draft-live-current-pick' : isRecentPick ? 'draft-live-recent-pick' : ''
@@ -343,8 +345,14 @@ function DraftBoardCellInner({
         aria-hidden
       />
 
-      <div className="flex items-start justify-between gap-0.5">
-        <div className="flex min-w-0 flex-wrap items-center gap-0.5">
+      {/* Top row: pick number + status on the left, position / ADP / auction price on the right.
+          These used to share the name row, which in an 88px column left the name a few
+          characters wide; moving them up gives the name the full width beside the headshot. */}
+      <div className="flex items-center justify-between gap-1">
+        <div className="flex min-w-0 items-center gap-0.5 overflow-hidden">
+          <span className="shrink-0 tabular-nums text-[11px] font-semibold text-white/60" aria-hidden>
+            {compactLabel}
+          </span>
           {pick.isKeeper ? <StatusBadge label="K" className="bg-emerald-500/25 text-emerald-200" /> : null}
           {pick.isDevyPick ? <StatusBadge label="D" className="bg-violet-500/25 text-violet-200" /> : null}
           {pick.isCollegePick ? <StatusBadge label="C" className="bg-violet-500/25 text-violet-200" /> : null}
@@ -362,14 +370,37 @@ function DraftBoardCellInner({
           ) : null}
         </div>
 
-        <span className="-mt-px tabular-nums text-[11px] font-medium text-white/38" aria-hidden>
-          {compactLabel}
-        </span>
+        {isEmpty ? null : (
+          <div className="flex shrink-0 items-center gap-0.5">
+            {pick.amount != null && pick.amount > 0 ? (
+              <span className="inline-flex items-center gap-0.5 rounded bg-amber-500/16 px-1 text-[11px] font-semibold tabular-nums text-amber-100">
+                <Gavel className="h-2.5 w-2.5" aria-hidden />
+                ${pick.amount}
+              </span>
+            ) : null}
+            {pick.adpDelta != null && pick.adpDelta !== 0 ? (
+              <span
+                className={`rounded px-1 text-[11px] font-bold tabular-nums ${
+                  pick.adpDelta > 0 ? 'bg-emerald-500/18 text-emerald-200' : 'bg-rose-500/18 text-rose-200'
+                }`}
+                title={
+                  pick.adpDelta > 0
+                    ? `Taken ${pick.adpDelta} picks after ADP`
+                    : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
+                }
+                data-testid="draft-board-cell-adp-delta"
+              >
+                {pick.adpDelta > 0 ? `+${pick.adpDelta}` : `−${Math.abs(pick.adpDelta)}`}
+              </span>
+            ) : null}
+            <PositionBadge pos={pick.position} />
+          </div>
+        )}
       </div>
 
       {isEmpty ? (
         <div className="mt-auto flex min-h-0 flex-1 items-end justify-between gap-1">
-          <div className="flex min-w-0 items-center gap-0.5 text-white/30">
+          <div className="flex min-w-0 items-center gap-0.5 text-white/45">
             {emptyCellDirection === 'reverse' ? (
               <ArrowLeft className="h-2.5 w-2.5 shrink-0" aria-hidden />
             ) : (
@@ -394,55 +425,47 @@ function DraftBoardCellInner({
           ) : null}
         </div>
       ) : (
-        <div className="mt-0.5 flex min-h-0 flex-1 flex-col justify-between gap-0.5 overflow-hidden">
-          <div className="flex min-w-0 items-start gap-1">
-            <div className="relative shrink-0">
-              <TinyHeadshot
-                name={pick.playerName}
-                src={headshotSrc}
-                position={pick.position}
-                teamLogoUrl={teamLogoSrc}
-                teamAbbr={pick.team}
-              />
-              {/* F.1 — DEF picks already use the team logo as the primary avatar
-                  (see PlayerAvatar's DEF branch). Skip the duplicate corner overlay. */}
-              {isDefRowForAvatar(pick.position) ? null : (
-                <div className="absolute -bottom-0.5 -right-0.5 rounded border border-white/12 bg-[#232c40] p-px">
-                  <TinyTeamLogo team={pick.team} src={teamLogoSrc} />
-                </div>
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1">
-                <span className="truncate font-semibold leading-tight tracking-tight text-white text-[11px]" title={pick.playerName ?? undefined}>
-                  {pick.playerName}
-                </span>
-                <PositionBadge pos={pick.position} />
-                {pick.experienceBadge ? (
-                  <span className="shrink-0 rounded border border-cyan-400/30 bg-cyan-500/12 px-1 py-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-100/95">
-                    {pick.experienceBadge}
-                  </span>
-                ) : null}
+        <div className="mt-auto flex min-h-0 min-w-0 items-center gap-1.5 overflow-hidden">
+          <div className="relative shrink-0">
+            <TinyHeadshot
+              name={pick.playerName}
+              src={headshotSrc}
+              position={pick.position}
+              teamLogoUrl={teamLogoSrc}
+              teamAbbr={pick.team}
+            />
+            {/* F.1 — DEF picks already use the team logo as the primary avatar
+                (see PlayerAvatar's DEF branch). Skip the duplicate corner overlay. */}
+            {isDefRowForAvatar(pick.position) ? null : (
+              <div className="absolute -bottom-0.5 -right-0.5 rounded border border-white/12 bg-[#232c40] p-px">
+                <TinyTeamLogo team={pick.team} src={teamLogoSrc} />
               </div>
-              <p className="truncate text-[11px] text-white/44">
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <span
+              className="block truncate text-[12px] font-semibold leading-[15px] tracking-tight text-white"
+              title={pick.playerName ?? undefined}
+            >
+              {pick.playerName}
+            </span>
+            <p className="flex min-w-0 items-center gap-1 text-[11px] leading-[14px] text-white/65">
+              <span className="truncate">
                 {(pick.team ?? '—').toString()}
                 {pick.byeWeek != null && pick.byeWeek > 0 ? ` · Bye ${pick.byeWeek}` : ''}
-              </p>
-            </div>
+              </span>
+              {pick.injuryStatus ? (
+                <span className="shrink-0 font-semibold text-amber-300" title={pick.injuryStatus}>
+                  {pick.injuryStatus.slice(0, 3).toUpperCase()}
+                </span>
+              ) : null}
+              {pick.experienceBadge ? (
+                <span className="shrink-0 rounded border border-cyan-400/30 bg-cyan-500/12 px-1 text-[11px] font-bold uppercase tracking-wide text-cyan-100/95">
+                  {pick.experienceBadge}
+                </span>
+              ) : null}
+            </p>
           </div>
-
-          {pick.amount != null && pick.amount > 0 ? (
-            <span className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/16 px-1.5 py-0.5 text-[11px] font-semibold text-amber-100">
-              <Gavel className="h-2.5 w-2.5" aria-hidden />
-              ${pick.amount}
-            </span>
-          ) : null}
-
-          {pick.injuryStatus ? (
-            <span className="truncate text-[11px] text-amber-300/90" title={pick.injuryStatus}>
-              {pick.injuryStatus}
-            </span>
-          ) : null}
         </div>
       )}
     </div>

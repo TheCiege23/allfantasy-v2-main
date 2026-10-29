@@ -27,6 +27,12 @@ export type WaiverEngineConfigJson = {
   playoff_waiver_rules?: string
   undroppable_player_ids?: string[]
   allow_zero_faab_bid?: boolean
+  /** `standard` | `after_run` (Sleeper-style, lib/waiver-wire/after-run-free-agency.ts). */
+  free_agency_mode?: string
+  /** `reset` | `carry_over` at season rollover (lib/waiver-wire/faab-rollover.ts); unset = per-family default. */
+  faab_rollover_rule?: string
+  /** After-drop waiver period per position, `{ K: 0, DEF: 0 }` (lib/waiver-wire/hold-by-position.ts). */
+  dropped_player_hold_hours_by_position?: Record<string, number>
 }
 
 export function parseWaiverEngineConfig(raw: unknown): WaiverEngineConfigJson {

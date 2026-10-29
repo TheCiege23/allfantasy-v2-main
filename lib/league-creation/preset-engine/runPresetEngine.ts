@@ -15,6 +15,7 @@ import { normalizeToSupportedSport, supportsIdpLeagueSport } from '@/lib/sport-s
 import { normalizeConceptToFormat, type NormalizedConcept } from '@/lib/league-creation/canonical/normalizeConcept'
 import type { DerivedLeagueFlags, PresetEngineOutput } from '@/lib/league-creation/canonical/types'
 import { buildRedraftSettingsSnapshot } from '@/lib/league-concepts/redraftDefaults'
+import { buildDailyRedraftSettingsSnapshot } from '@/lib/league-concepts/dailySportRedraftDefaults'
 import { buildDynastySettingsSnapshot, isDynastyEligibleSport } from '@/lib/league-concepts/dynastyDefaults'
 import { buildBestBallSettingsSnapshot, isBestBallEligibleSport } from '@/lib/league-concepts/bestBallDefaults'
 import { buildKeeperSettingsSnapshot } from '@/lib/league-concepts/keeperDefaults'
@@ -136,9 +137,16 @@ export function runPresetEngine(input: RunPresetEngineInput): PresetEngineOutput
       scoring_preset_id: input.scoringPreset,
     },
   })
+  // Football redraft (NFL/NCAAF) or the daily-sport redraft preset (NBA/NHL/MLB); null for others.
   const redraftSnapshot =
     formatId === 'redraft'
       ? buildRedraftSettingsSnapshot({
+          sport,
+          draftType: input.draftType,
+          scoringPresetId: input.scoringPreset,
+          teamCount: input.teamCount,
+        }) ??
+        buildDailyRedraftSettingsSnapshot({
           sport,
           draftType: input.draftType,
           scoringPresetId: input.scoringPreset,

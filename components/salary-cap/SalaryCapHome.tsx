@@ -3,11 +3,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  Wallet,
-  FileText,
-  Users,
-  Gavel,
-  Sparkles,
   Settings,
   ChevronDown,
   MessageSquare,
@@ -20,7 +15,9 @@ import { TeamBuilderView } from './TeamBuilderView'
 import { StartupAuctionView } from './StartupAuctionView'
 import { SalaryCapAIPanel } from './SalaryCapAIPanel'
 import { SalaryCapRulesView } from './SalaryCapRulesView'
-import { useUserTimezone } from '@/hooks/useUserTimezone'
+import { SpecialtyShell } from '@/components/league/specialty/SpecialtyShell'
+import { SalaryCapSpecialtyHome } from '@/components/league/specialty/salary/SalaryCapSpecialtyHome'
+import { SalaryCapBidCheck } from '@/components/league/specialty/salary/SalaryCapBidCheck'
 
 export interface SalaryCapHomeProps {
   leagueId: string
@@ -37,11 +34,12 @@ const VIEW_LABELS: Record<SalaryCapView, string> = {
 }
 
 export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
-  const { formatDateInTimezone } = useUserTimezone()
   const [summary, setSummary] = useState<SalaryCapSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<SalaryCapView>('home')
+  /** The free-agent bid check (specialty handoff SalaryCapBid) — a full-screen view over the home. */
+  const [bidOpen, setBidOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -93,23 +91,25 @@ export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
     )
   }
 
-  const ledger = summary?.ledger ?? null
-  const config = summary?.config
+  if (bidOpen && summary) {
+    return (
+      <SpecialtyShell format="salary" testId="salary-specialty">
+        <SalaryCapBidCheck summary={summary} onBack={() => setBidOpen(false)} waiversHref={`/league/${leagueId}?tab=Waivers`} />
+      </SpecialtyShell>
+    )
+  }
 
   return (
+    <SpecialtyShell format="salary" testId="salary-specialty">
     <div className="space-y-6">
-      {/* Branding header */}
-      <header className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-950/30 sm:h-20 sm:w-20">
-          <Wallet className="h-8 w-8 text-emerald-400 sm:h-10 sm:w-10" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-white sm:text-2xl">Salary Cap League</h1>
-          <p className="text-sm text-white/60">
-            {config?.mode === 'bestball' ? 'Best Ball' : 'Dynasty'} · Cap & contracts
-          </p>
-        </div>
-      </header>
+      {view === 'home' && summary && (
+        <SalaryCapSpecialtyHome
+          summary={summary}
+          onOpenContracts={() => setView('contracts')}
+          onOpenBid={() => setBidOpen(true)}
+          tradesHref={`/league/${leagueId}?tab=Trades`}
+        />
+      )}
 
       {/* Quick links */}
       <div className="flex flex-wrap gap-2">
@@ -174,122 +174,6 @@ export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
         </div>
       </div>
 
-      {/* Home view: summary cards + links to panels */}
-      {view === 'home' && summary && (
-        <div className="space-y-6">
-          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-            <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-              <Wallet className="h-5 w-5 text-emerald-400" />
-              Cap at a glance
-            </h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <p className="text-xs text-white/50">Current cap space</p>
-                <p className="text-lg font-semibold text-emerald-300">
-                  {ledger ? `$${ledger.capSpace}` : '—'}
-                </p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <p className="text-xs text-white/50">Committed (this year)</p>
-                <p className="text-lg font-semibold text-white/80">
-                  {ledger ? `$${ledger.totalCapHit}` : '—'}
-                </p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <p className="text-xs text-white/50">Dead money</p>
-                <p className="text-lg font-semibold text-amber-300">
-                  {summary.deadMoneyTotal ? `$${summary.deadMoneyTotal}` : '$0'}
-                </p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <p className="text-xs text-white/50">Active contracts</p>
-                <p className="text-lg font-semibold text-white/80">{summary.contracts.length}</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setView('cap-dashboard')}
-              className="mt-3 text-sm text-cyan-400 hover:underline"
-            >
-              Open Cap Dashboard →
-            </button>
-          </section>
-
-          {summary.futureProjection.length > 0 && (
-            <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-              <h2 className="mb-3 text-lg font-semibold text-white">Future cap projection</h2>
-              <ul className="space-y-2">
-                {summary.futureProjection.map((y) => (
-                  <li
-                    key={y.capYear}
-                    className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-sm"
-                  >
-                    <span className="text-white/80">{y.capYear}</span>
-                    <span className="tabular-nums text-emerald-300">${y.projectedSpace} space</span>
-                    <span className="text-white/50">${y.totalCapHit} hit</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-            <h2 className="mb-3 text-lg font-semibold text-white">Summaries</h2>
-            <ul className="space-y-2 text-sm text-white/80">
-              <li>Expiring this year: {summary.expiringCount}</li>
-              {config?.extensionsEnabled && (
-                <li>Extension candidates: {summary.extensionCandidatesCount}</li>
-              )}
-              {config?.franchiseTagEnabled && (
-                <li>Franchise tag candidates: {summary.tagCandidatesCount}</li>
-              )}
-              <li>Rookie contracts: {summary.rookieContractCount}</li>
-            </ul>
-            <button
-              type="button"
-              onClick={() => setView('contracts')}
-              className="mt-3 text-sm text-cyan-400 hover:underline"
-            >
-              View all contracts →
-            </button>
-          </section>
-
-          {summary.events.length > 0 && (
-            <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-              <h2 className="mb-3 text-lg font-semibold text-white">Recent cap events</h2>
-              <ul className="max-h-48 space-y-1 overflow-y-auto">
-                {summary.events.slice(0, 15).map((e, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center justify-between rounded border border-white/5 px-2 py-1 text-xs text-white/70"
-                  >
-                    <span>{e.eventType.replace(/_/g, ' ')}</span>
-                    <span>{formatDateInTimezone(e.createdAt)}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-            <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
-              <Sparkles className="h-5 w-5 text-cyan-400" />
-              AI Salary Cap Tools
-            </h2>
-            <p className="mb-3 text-sm text-white/70">
-              Cap strategy, extension suggestions, title-window analysis, contend vs rebuild.
-            </p>
-            <button
-              type="button"
-              onClick={() => setView('ai')}
-              className="rounded-xl border border-cyan-500/30 bg-cyan-950/30 px-4 py-2 text-sm text-cyan-200 hover:bg-cyan-950/50"
-            >
-              Open AI Tools
-            </button>
-          </section>
-        </div>
-      )}
-
       {view === 'cap-dashboard' && summary && (
         <CapDashboard summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
       )}
@@ -309,5 +193,6 @@ export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
         <SalaryCapRulesView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
       )}
     </div>
+    </SpecialtyShell>
   )
 }

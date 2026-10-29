@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
 import { SURVIVOR_TRIBE_CATALOG, tribeCrestUrl } from '@/lib/survivor/survivorTribeIdentity'
 import { getZombieJoinPreview } from '@/lib/zombie/zombieJoinPreview'
+import { resolveGuillotineSeatSummary } from '@/lib/guillotine/lateStartSeats'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +40,8 @@ export async function GET(req: NextRequest) {
       tribeCount: settings.tribeCount,
       tribes: settings.survivorTribeSlots.map(slot => ({
         name: SURVIVOR_TRIBE_CATALOG.find(tribe => tribe.id === slot.catalogId)?.name ?? slot.catalogId,
-        logoUrl: tribeCrestUrl(slot.catalogId, String(league.sport)),
+        logoUrl: tribeCrestUrl(slot.catalogId, String(league.sport), { primaryColor: slot.primaryColor, secondaryColor: slot.secondaryColor }),
+        mascot: SURVIVOR_TRIBE_CATALOG.find(tribe => tribe.id === slot.catalogId)?.mascot ?? null,
         managerCount: slot.managerCount,
       })),
       idolCount: settings.idolCount,
@@ -61,6 +63,7 @@ export async function GET(req: NextRequest) {
       inviteCode: result.preview.inviteCode,
       survivor: await survivorPreview(result.preview.leagueId),
       zombie: await getZombieJoinPreview(result.preview.leagueId),
+      guillotineSeats: await resolveGuillotineSeatSummary(result.preview.leagueId).catch(() => null),
     })
   }
 
@@ -93,6 +96,7 @@ export async function GET(req: NextRequest) {
       inviteCode: result.preview.inviteCode,
       survivor: await survivorPreview(result.preview.leagueId),
       zombie: await getZombieJoinPreview(result.preview.leagueId),
+      guillotineSeats: await resolveGuillotineSeatSummary(result.preview.leagueId).catch(() => null),
     })
   }
 

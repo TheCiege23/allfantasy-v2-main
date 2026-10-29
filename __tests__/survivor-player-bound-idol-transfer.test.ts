@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
 
 function fixture() {
-  const idol = { id: 'idol-1', rosterId: 'draft-a', currentOwnerUserId: 'user-a' as string | null, status: 'hidden' }
+  const idol = { id: 'idol-1', rosterId: 'draft-a', currentOwnerUserId: 'user-a' as string | null, status: 'hidden', powerType: 'vote_shield' }
   const inventories: Record<string, string[]> = { 'user-a': ['idol-1'], 'user-b': [] }
   const ledger: Array<Record<string, unknown>> = []
+  const notices: Array<Record<string, unknown>> = []
   const db = {
     survivorIdol: {
       findMany: vi.fn(async () => [{ ...idol }]),
@@ -28,9 +29,12 @@ function fixture() {
         inventories[where.leagueId_userId.userId] = data.idolIds
       }),
     },
-    survivorIdolLedgerEntry: { create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { ledger.push(data) }) },
+    survivorIdolLedgerEntry: { create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { ledger.push(data); return { id: `ledger-${ledger.length}` } }) },
+    league: { findUnique: vi.fn(async () => ({ userId: 'commish' })) },
+    sportsPlayer: { findFirst: vi.fn(async () => ({ name: 'Jalen Brunson', imageUrl: 'https://img/brunson.png' })) },
+    leagueChatMessage: { create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { notices.push(data) }) },
   }
-  return { db, idol, inventories, ledger }
+  return { db, idol, inventories, ledger, notices }
 }
 
 describe('player-bound Survivor idol settlement', () => {
@@ -66,5 +70,20 @@ describe('player-bound Survivor idol settlement', () => {
       leagueId: 'league', playerId: 'player', fromRedraftRosterId: 'season-a', toRedraftRosterId: 'season-b', reason: 'trade',
     })).rejects.toThrow('no longer belongs to the source roster')
     expect(db.survivorIdol.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('tells only the new holder, privately, when an idol arrives with a player', async () => {
+    const { db, notices } = fixture()
+    await movePlayerBoundIdolsInTransaction(db as never, {
+      leagueId: 'league', playerId: 'player', fromRedraftRosterId: 'season-a', toRedraftRosterId: null, reason: 'waiver_drop',
+    })
+    expect(notices).toHaveLength(0)
+    await movePlayerBoundIdolsInTransaction(db as never, {
+      leagueId: 'league', playerId: 'player', fromRedraftRosterId: null, toRedraftRosterId: 'season-b', reason: 'waiver_claim',
+    })
+    expect(notices).toEqual([expect.objectContaining({
+      id: 'survivor-idol:ledger-2:arrival', isPrivate: true, visibleToUserId: 'user-b', messageSubtype: 'chimmy_private',
+      message: expect.stringContaining('Jalen Brunson arrived carrying a hidden Vote Shield Idol'),
+    })])
   })
 })

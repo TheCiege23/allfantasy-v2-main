@@ -1,0 +1,169 @@
+{
+  "provenance": {
+    "capturedAt": "2026-10-26T02:22:22Z",
+    "source": "https://www.fantrax.com/fxea/general/getPlayerIds?sport=NBA",
+    "note": "Slice of 20 of 1318 rows: exactly the players in nba-public-2026.json playerInfo."
+  },
+  "players": {
+    "06mkb": {
+      "rotowireId": 6261,
+      "sportRadarId": "3d186345-1517-446d-b4bf-8707fc77f093",
+      "name": "Walter, JaKobe",
+      "fantraxId": "06mkb",
+      "team": "TOR",
+      "position": "SG"
+    },
+    "0722e": {
+      "rotowireId": 6651,
+      "sportRadarId": "5ec8194c-a2fc-4982-8afb-c02948e8c6ef",
+      "name": "Cleveland, Matthew",
+      "fantraxId": "0722e",
+      "team": "(N/A)",
+      "position": "PG"
+    },
+    "06mkc": {
+      "rotowireId": 6277,
+      "sportRadarId": "90b52759-3f0e-4d93-b5ca-fcb53afce857",
+      "name": "Tyson, Jaylon",
+      "fantraxId": "06mkc",
+      "team": "CLE",
+      "position": "SG"
+    },
+    "07apr": {
+      "rotowireId": 6943,
+      "sportRadarId": "89d83ed5-2a3c-47fe-9adb-8b9f23266276",
+      "name": "McKneely, Isaac",
+      "fantraxId": "07apr",
+      "team": "(N/A)",
+      "position": "G"
+    },
+    "06mka": {
+      "rotowireId": 6267,
+      "sportRadarId": "98fa75e7-a46f-4483-a15b-053c5ca52604",
+      "name": "da Silva, Tristan",
+      "fantraxId": "06mka",
+      "team": "ORL",
+      "position": "SF"
+    },
+    "07aps": {
+      "rotowireId": 6590,
+      "sportRadarId": "631e000e-4fcb-420b-ac65-eacece1a166b",
+      "name": "Uzan, Milos",
+      "fantraxId": "07aps",
+      "team": "(N/A)",
+      "position": "G"
+    },
+    "05wah": {
+      "rotowireId": 5422,
+      "sportRadarId": "ee52d990-1de5-4693-8150-adac989fe5e6",
+      "name": "Garrett, Marcus",
+      "fantraxId": "05wah",
+      "team": "(N/A)",
+      "position": "SG"
+    },
+    "06mjy": {
+      "rotowireId": 6262,
+      "sportRadarId": "50e0c4e6-dfe4-42ca-bf18-aa2630be21c9",
+      "name": "Salaun, Tidjane",
+      "fantraxId": "06mjy",
+      "team": "CHA",
+      "position": "PF"
+    },
+    "07apl": {
+      "rotowireId": 6476,
+      "sportRadarId": "dbff3b16-ba55-48ac-aa16-ea775cc50ef3",
+      "name": "Ukomadu, John",
+      "fantraxId": "07apl",
+      "team": "(N/A)",
+      "position": "F"
+    },
+    "06mjz": {
+      "rotowireId": 6254,
+      "sportRadarId": "c76e8dae-58ad-4950-8929-5094036210c4",
+      "name": "Clingan, Donovan",
+      "fantraxId": "06mjz",
+      "team": "POR",
+      "position": "C"
+    },
+    "07apm": {
+      "rotowireId": 4897,
+      "sportRadarId": "d16edab9-6295-47d9-a9c3-4acb3c73eb7d",
+      "name": "Elmore, Jon",
+      "fantraxId": "07apm",
+      "team": "(N/A)",
+      "position": "PG"
+    },
+    "06mjw": {
+      "rotowireId": 6250,
+      "sportRadarId": "ddee4a31-2791-4339-bfc3-a058ce2d1397",
+      "name": "Castle, Stephon",
+      "fantraxId": "06mjw",
+      "team": "SA",
+      "position": "PG"
+    },
+    "07apj": {
+      "rotowireId": 7045,
+      "sportRadarId": "4a60bd48-2f1b-4702-b521-ee177596ae14",
+      "name": "Fricks, Wyatt",
+      "fantraxId": "07apj",
+      "team": "(N/A)",
+      "position": "F"
+    },
+    "06mjx": {
+      "rotowireId": 5939,
+      "sportRadarId": "a2b3bc56-566e-443d-affe-7837a59a1ed7",
+      "name": "Holland, Ron",
+      "fantraxId": "06mjx",
+      "team": "DET",
+      "position": "SF"
+    },
+    "07apk": {
+      "rotowireId": 7016,
+      "sportRadarId": "9659a929-cf2b-4c58-8ded-8233c40d09db",
+      "name": "Humrichous, Ben",
+      "fantraxId": "07apk",
+      "team": "(N/A)",
+      "position": "F"
+    },
+    "06mju": {
+      "rotowireId": 6240,
+      "sportRadarId": "fe4c4f99-5dfb-4e32-b69a-da8c5a779c27",
+      "name": "Sarr, Alex",
+      "fantraxId": "06mju",
+      "team": "WAS",
+      "position": "C"
+    },
+    "07aph": {
+      "rotowireId": 7031,
+      "sportRadarId": "324d4ae3-c03e-4f1c-abef-fd59c8be0918",
+      "name": "Mast, Rienk",
+      "fantraxId": "07aph",
+      "team": "(N/A)",
+      "position": "F"
+    },
+    "06mjv": {
+      "rotowireId": 6257,
+      "sportRadarId": "af1ba5e5-3f34-4ada-aa9f-f818baf7706f",
+      "name": "Sheppard, Reed",
+      "fantraxId": "06mjv",
+      "team": "HOU",
+      "position": "PG"
+    },
+    "07api": {
+      "rotowireId": 7020,
+      "sportRadarId": "1017f05c-8bb7-4217-ab60-e193cdb9bc58",
+      "name": "Keita, Keba",
+      "fantraxId": "07api",
+      "team": "(N/A)",
+      "position": "C"
+    },
+    "07apf": {
+      "rotowireId": 7049,
+      "sportRadarId": "90ea7d07-e309-47e1-8a44-745fcfa51045",
+      "name": "Tilly, Christoph",
+      "fantraxId": "07apf",
+      "team": "(N/A)",
+      "position": "C"
+    }
+  }
+}

@@ -5,6 +5,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { dashDraftsBandMessages } from '@/lib/core-app/messages/dashDraftsBand'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
 
 /**
  * The words of DashDraftsBand, in the reader's language (2026-10-04).
@@ -99,9 +100,11 @@ export function DashDraftsBandView({ liveCount, visible, overflow }: { liveCount
                 {clock ?? m.noTimer}
               </p>
 
-              <Link className="af-drafts-open" href={`/core/draft-hq?league=${encodeURIComponent(row.leagueId)}`}>
+              {/* Straight into the room: this band only shows live drafts, and Draft HQ is a planning
+                  screen — sending a phone user there on the clock was the 2026-10-26 report. */}
+              <a className="af-drafts-open" href={draftRoomHref(row.leagueId)}>
                 {m.openDraftRoom}
-              </Link>
+              </a>
             </article>
           )
         })}

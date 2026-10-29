@@ -24,7 +24,7 @@ export async function generateWeeklyGuillotineRecap(seasonId: string, scoringPer
 
   const choppedNames = eliminations.map((e) => e.eliminatedTeamName).filter(Boolean)
   const dangerRosterIds = dangerLogs.map((l) => l.rosterId)
-  const leagueName = season?.league?.name ?? 'Guillotine League'
+  const leagueName = season?.league?.name ?? 'Guilly League'
 
   return {
     headline: `The Blade Falls — Week ${scoringPeriod}`,
@@ -74,7 +74,7 @@ export async function generateEliminationPage(eliminationId: string): Promise<Dy
   }
 }
 
-export async function generateWaiverWarRecap(seasonId: string, scoringPeriod: number): Promise<DynastyStoryline> {
+export async function generateChopWeekWaiverRecap(seasonId: string, scoringPeriod: number): Promise<DynastyStoryline> {
   const releases = await prisma.guillotineWaiverRelease.findMany({
     where: { seasonId, scoringPeriod },
     orderBy: [{ winningBid: 'desc' }],

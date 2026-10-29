@@ -333,6 +333,28 @@ describe('Redraft trade proposals route contract', () => {
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
   })
 
+  it('🛑 a proposal refused by the league-wide move lock is a 409 MOVE_LOCKED, and nothing is created', async () => {
+    prismaMock.redraftSeason.findFirst.mockResolvedValueOnce({ id: 's-1', leagueId: 'l-1' })
+    prismaMock.redraftRoster.findFirst
+      .mockResolvedValueOnce({ id: 'r-1', ownerId: 'u-1' })
+      .mockResolvedValueOnce({ id: 'r-2', ownerId: 'u-2' })
+    validateProposalMock.mockResolvedValueOnce({
+      ok: false,
+      code: 'MOVE_LOCKED',
+      message: 'Roster moves are locked by league settings.',
+      source: 'league_runtime',
+    } as never)
+
+    const { POST } = await import('../app/api/redraft/trade-proposals/route')
+    const res = await POST(
+      createMockNextRequest('http://localhost/api/redraft/trade-proposals', { method: 'POST', body: governanceBody() }) as any,
+    )
+
+    expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({ code: 'MOVE_LOCKED' })
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
   it('validates the parsed assets for this league, season and pair of rosters', async () => {
     arrangeCreatableProposal()
     const { POST } = await import('../app/api/redraft/trade-proposals/route')

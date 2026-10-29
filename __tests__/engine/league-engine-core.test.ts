@@ -150,7 +150,35 @@ describe('orderClaimsForProcessing', () => {
       roster: { ...baseClaim.roster, id: 'r2', platformUserId: 'u2' },
     }
     const out = orderClaimsForProcessing([c1, c2] as any, 'reverse_standings', rank)
-    expect(out[0]?.roster.platformUserId).toBe('u2')
+    // currentRank 1 is first place, so the rank-2 team (the worse one) claims first.
+    expect(out[0]?.roster.platformUserId).toBe('u1')
+  })
+
+  it('reverse_standings puts an unranked team after every ranked one', () => {
+    const rank = new Map<string, number>([['u1', 1]])
+    const c1 = { ...baseClaim, id: 'x', roster: { ...baseClaim.roster, platformUserId: 'u1' } }
+    const c2 = {
+      ...baseClaim,
+      id: 'y',
+      rosterId: 'r2',
+      roster: { ...baseClaim.roster, id: 'r2', platformUserId: 'u-unranked' },
+    }
+    const out = orderClaimsForProcessing([c2, c1] as any, 'reverse_standings', rank)
+    expect(out.map((c: any) => c.id)).toEqual(['x', 'y'])
+  })
+
+  it('FAAB reverse-standings tiebreak gives an equal bid to the worse team', () => {
+    const rank = new Map<string, number>([['u1', 1], ['u2', 4]])
+    const c1 = { ...baseClaim, id: 'x', faabBid: 10, roster: { ...baseClaim.roster, platformUserId: 'u1' } }
+    const c2 = {
+      ...baseClaim,
+      id: 'y',
+      faabBid: 10,
+      rosterId: 'r2',
+      roster: { ...baseClaim.roster, id: 'r2', platformUserId: 'u2' },
+    }
+    const out = orderClaimsForProcessing([c1, c2] as any, 'faab', rank, 'reverse_standings')
+    expect(out[0]?.id).toBe('y')
   })
 
   it('orders rolling by waiverPriority', () => {

@@ -136,4 +136,39 @@ describe('the dispatcher end to end', () => {
     expect(out).toMatch(/timed out after \d+ms/)
     expect(out).not.toContain('timed out after 800ms (NOT')
   }, 30_000)
+
+  /*
+   * 🛑 THE CUT THAT ACTUALLY FIRES IN PRODUCTION IS NOT A TIMEOUT. Railway's edge closes a request
+   * after 5 minutes with no data, ~0.9s before undici's own headers timeout, and the client sees
+   * `TypeError: fetch failed` / `cause.code UND_ERR_SOCKET "other side closed"` (measured, Node 22.22
+   * and 24.11). 2026-10-16 03:10 `?riProfiles=1`: 499 at 300,008ms, retried at 03:15 while the first
+   * handler ran on to 03:33. `--retry-window-ms` shrinks the 30s window so this runs in seconds.
+   */
+  it('does not retry a connection the far side dropped after the handler had been running', async () => {
+    const { hits, code, out } = await dispatchAgainst((req) => {
+      setTimeout(() => req.socket.destroy(), 1_200)
+    }, ['--retry-window-ms', '500'])
+    expect(hits).toBe(1)
+    expect(code).toBe(1)
+    expect(out).toContain('UND_ERR_SOCKET')
+    expect(out).toContain('NOT retried')
+  }, 30_000)
+
+  it('control: the SAME dropped connection, failing fast, is still retried once', async () => {
+    const { hits } = await dispatchAgainst((req) => {
+      req.socket.destroy()
+    }, ['--retry-window-ms', '5000'])
+    expect(hits).toBe(2)
+  }, 30_000)
+
+  it('does not retry a 5xx that arrived after the handler had been running', async () => {
+    const { hits, out } = await dispatchAgainst((_req, res) => {
+      setTimeout(() => {
+        res.writeHead(502)
+        res.end('bad gateway')
+      }, 1_200)
+    }, ['--retry-window-ms', '500'])
+    expect(hits).toBe(1)
+    expect(out).toContain('HTTP 502 after')
+  }, 30_000)
 })

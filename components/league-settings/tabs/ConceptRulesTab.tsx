@@ -2,19 +2,34 @@
 
 import { useMemo } from 'react'
 import { DevyLeagueSettingsHub } from '@/components/devy/settings/DevyLeagueSettingsHub'
-import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { BestBallSettingsCommissionerPanel } from '@/components/league-settings/BestBallSettingsCommissionerPanel'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
-/** Specialty / concept-specific rules — merges JSON under `settings` via `settingsMerge`. */
+/** "big_brother" → "Big Brother": a format id is never shown to a commissioner as-is. */
+function formatName(variant: string | null): string {
+  if (!variant) return '—'
+  // Customer-facing name since the 2026-10-22 rename; the stored id stays 'guillotine'.
+  if (variant.toLowerCase() === 'guillotine') return 'Guilly'
+  return variant
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((w) => w[0]!.toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
+/**
+ * League format: what kind of league this is, and the format's own panels (Devy, Best Ball).
+ *
+ * This page used to end in a "Commissioner concept notes (JSON merge)" textarea that wrote raw
+ * JSON into `settings.concept_rules_overlay`. Nothing reads that key (it only round-trips into
+ * league templates), so it was a developer field shown to commissioners; it is gone. Any value
+ * already saved is left in place.
+ */
 export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
   const leagueId = ctx.league.id
-  const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'conceptRules', {
-    enabled: canEdit,
-  })
 
   const isDevy = useMemo(() => {
     const raw =
@@ -44,7 +59,7 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           <li>{t('lsHub.cr.guillotine').replace('{{state}}', flags.guillotine ? t('lsHub.on') : t('lsHub.off'))}</li>
           <li>{t('lsHub.cr.survivor').replace('{{state}}', flags.survivor ? t('lsHub.on') : t('lsHub.off'))}</li>
           <li>{t('lsHub.cr.bestBall').replace('{{state}}', flags.bestBall ? t('lsHub.on') : t('lsHub.off'))}</li>
-          <li>{t('lsHub.cr.variant').replace('{{variant}}', flags.variant ?? '—')}</li>
+          <li>{t('lsHub.cr.variant').replace('{{variant}}', formatName(flags.variant))}</li>
         </ul>
         <p className="mt-3 text-[11px] leading-relaxed text-white/45">
           {t('lsHub.cr.note')}
@@ -69,36 +84,6 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         </div>
       ) : null}
 
-      <div>
-        <label className="block">
-          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-            {t('lsHub.cr.notes')}
-          </span>
-          <textarea
-            defaultValue={JSON.stringify(
-              (ctx.league.settings as Record<string, unknown> | null)?.concept_rules_overlay ?? {},
-              null,
-              2,
-            )}
-            disabled={!canEdit}
-            rows={6}
-            onBlur={(e) => {
-              try {
-                const parsed = JSON.parse(e.target.value || '{}')
-                if (parsed && typeof parsed === 'object') {
-                  queuePatch({
-                    settingsMerge: { concept_rules_overlay: parsed },
-                  })
-                }
-              } catch {
-                /* invalid JSON — skip */
-              }
-            }}
-            className="w-full rounded-xl border border-white/[0.10] bg-black/30 px-3 py-2 font-mono text-[11px] text-white/90 outline-none focus:border-cyan-400/35 disabled:opacity-50"
-          />
-        </label>
-        {saving ? <p className="mt-1 text-[11px] text-cyan-300/80">{t('lsHub.saving')}</p> : null}
-      </div>
     </div>
   )
 }

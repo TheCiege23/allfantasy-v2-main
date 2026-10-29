@@ -111,16 +111,20 @@ export const CONTENDER_PLAYOFF_PCT = 50
 export type Known<T> = { ok: true; value: T } | { ok: false; reason: string }
 
 export type ReviewSideLineup = {
-  /** Projected starting points this week, before the trade. */
-  startingBefore: number
-  /** Change in projected starting points this week. */
-  startingDelta: number
+  /**
+   * Projected starting points this week, before the trade, and its change. Null where no weekly
+   * projection prices the lineup (every sport but NFL): who starts is still known, its points are not.
+   */
+  startingBefore: number | null
+  startingDelta: number | null
   /** League value of everything this side receives, and the part of it that would NOT start. */
   receivedValue: number | null
   receivedBenchValue: number | null
   /** Players this side SENDS that start for it today. */
   sentStarterNames: string[]
 }
+
+export type ReviewStanding = { eliminated: boolean; holdsPlayoffSpot: boolean }
 
 export type TradeReviewFacts = {
   /** Side A is the receipt's graded (`give`) side; B the other. */
@@ -138,6 +142,12 @@ export type TradeReviewFacts = {
   inactiveDays: Known<readonly [number | null, number | null]>
   /** Season forecast playoff odds per side, in percent. */
   playoffPct: Known<readonly [number, number]>
+  /**
+   * A league played on AllFantasy, from its own standings when no forecast exists: whether each side is
+   * mathematically out of the race (lib/eliminated-lineups/eliminatedLineups.ts) and whether it holds
+   * a playoff spot. Absent or not ok: the elimination check reads the forecast only.
+   */
+  standing?: Known<readonly [ReviewStanding, ReviewStanding]>
   /** The deadline instant (ISO), or null when the league has no trade deadline. */
   deadlineAt: Known<string | null>
   now: string
@@ -179,7 +189,7 @@ function tanking(f: TradeReviewFacts): ReviewCheck {
   const found: string[] = []
   let unknown = 0
   f.lineup.value.forEach((side, i) => {
-    if (!side || side.receivedValue == null || side.receivedBenchValue == null || side.startingBefore <= 0) {
+    if (!side || side.receivedValue == null || side.receivedBenchValue == null || side.startingBefore == null || side.startingDelta == null || side.startingBefore <= 0) {
       unknown++
       return
     }
@@ -237,7 +247,10 @@ function inactive(f: TradeReviewFacts): ReviewCheck {
 
 function eliminatedDumping(f: TradeReviewFacts): ReviewCheck {
   const base = { code: 'eliminated_team_dumping' as const, severity: 'medium' as const }
-  if (!f.playoffPct.ok) return { ...base, status: 'not_computed', explanation: f.playoffPct.reason }
+  if (!f.playoffPct.ok) {
+    if (f.standing?.ok) return eliminatedDumpingFromStandings(f, f.standing.value)
+    return { ...base, status: 'not_computed', explanation: f.playoffPct.reason }
+  }
   const [pa, pb] = f.playoffPct.value
   const pairs: Array<[number, number]> = [[0, 1], [1, 0]]
   for (const [e, c] of pairs) {
@@ -257,6 +270,30 @@ function eliminatedDumping(f: TradeReviewFacts): ReviewCheck {
     }
   }
   return { ...base, status: 'clear', explanation: 'No eliminated team sends starters to a contender.' }
+}
+
+/**
+ * The same check on the league's own standings (no forecast): a team that cannot reach a playoff spot
+ * even by winning every game left, sending starters to a team that holds one. Stricter than the
+ * forecast's 1%: only a mathematical elimination counts.
+ */
+function eliminatedDumpingFromStandings(f: TradeReviewFacts, standing: readonly [ReviewStanding, ReviewStanding]): ReviewCheck {
+  const base = { code: 'eliminated_team_dumping' as const, severity: 'medium' as const }
+  for (const [e, c] of [[0, 1], [1, 0]] as const) {
+    if (!standing[e].eliminated || !standing[c].holdsPlayoffSpot) continue
+    if (!f.lineup.ok || !f.lineup.value[e]) {
+      return { ...base, status: 'not_computed', explanation: `${f.sides[e]!.name} is out of the playoff race and ${f.sides[c]!.name} holds a playoff spot, but who starts for ${f.sides[e]!.name} could not be read.` }
+    }
+    const starters = f.lineup.value[e]!.sentStarterNames
+    if (starters.length) {
+      return {
+        ...base,
+        status: 'raised',
+        explanation: `${f.sides[e]!.name} can no longer reach the playoffs and sends starters (${starters.join(', ')}) to ${f.sides[c]!.name}, which holds a playoff spot.`,
+      }
+    }
+  }
+  return { ...base, status: 'clear', explanation: 'No team out of the playoff race sends starters to a team holding a playoff spot.' }
 }
 
 function deadlineRush(f: TradeReviewFacts): ReviewCheck {

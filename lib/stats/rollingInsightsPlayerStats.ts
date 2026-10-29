@@ -38,6 +38,7 @@ import 'server-only'
  * rate stops the rollout instead of silently thinning the data.
  */
 
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
@@ -55,6 +56,149 @@ const STAT_LINE_TTL_MS = 7 * 24 * 60 * 60 * 1000
  * NFL week is 0, so aggregates can never collide with a future weekly ingest.
  */
 export const SEASON_AGGREGATE_WEEK = 0
+
+/**
+ * Sports whose RI season rows are ALSO written to `player_season_stats`, keyed on RI's own player id —
+ * the shape `syncNflFoundationSeasonStats` already writes for NFL.
+ *
+ * 🛑 WHY. The redraft roster (`loadOwnRollingInsightsSeasonStats`), the player card and Player Finder
+ * all read `player_season_stats` WHERE source = 'rolling_insights' for whatever sport they are given,
+ * and reach it through `rollingInsightsCrosswalk` by RI id. Measured 2026-10-17: that table held RI rows
+ * for NFL only, so for these three sports every one of those reads found nothing while this module was
+ * writing the same feed, daily, into `fantasy_stat_lines` — which none of them read.
+ *
+ * NOT NFL: it has its own writer of this exact key, and two writers would race on one row.
+ * NOT NCAAB: GAPS.md N-14 — RI's NCAABB season totals stop ~mid-December and must never be presented as
+ * a season. Not NCAAF (CFBD) and not SOCCER (no feed).
+ */
+export const PLAYER_SEASON_STATS_MIRROR_SPORTS: readonly string[] = ['MLB', 'NBA', 'NHL']
+
+/**
+ * Pure: a stat map with only scalar values. A nested group (MLB's `batting` / `pitching`) is kept under
+ * qualified keys — `batting.hits` — never merged to a bare `hits`, which is the convention Player Finder
+ * already documents for grouped providers and the only version that cannot conflate two stats.
+ */
+export function flattenRiSeasonStats(stats: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(stats)) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      for (const [ik, iv] of Object.entries(v as Record<string, unknown>)) {
+        if (iv === null || typeof iv !== 'object') out[`${k}.${ik}`] = iv
+      }
+    } else if (!Array.isArray(v)) {
+      out[k] = v
+    }
+  }
+  return out
+}
+
+const finiteOrNull = (v: unknown): number | null => {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN
+  return Number.isFinite(n) ? n : null
+}
+
+/**
+ * Write one sport's RI season rows to `player_season_stats` under RI's id (the same key and column
+ * semantics as the NFL writer; `createdAt` is preserved on conflict). Independent of the identity
+ * map on purpose: these readers resolve RI ids themselves, and refusing here for want of an identity row
+ * would recreate the gap. Fantasy points stay NULL — RI sends none for these sports and inventing a
+ * scoring would fabricate numbers (the projection engine reads a null as "no RI FPPG", not zero).
+ */
+async function mirrorToPlayerSeasonStats(args: {
+  sport: string
+  season: number
+  rows: RiPlayerStatsRow[]
+  infoById: Map<string, RiPlayerInfo>
+  now: Date
+}): Promise<{ written: number; errors: string[] }> {
+  let written = 0
+  const errors: string[] = []
+  const expiresAt = new Date(args.now.getTime() + STAT_LINE_TTL_MS)
+  const values = buildPlayerSeasonStatsMirrorValues(args)
+  // The timestamp columns are WITHOUT time zone and Prisma stores UTC; a bound Date would be shifted by
+  // the session zone. An ISO string cast to `timestamp` keeps the UTC wall clock exactly.
+  const nowUtc = args.now.toISOString()
+  const expiresUtc = expiresAt.toISOString()
+
+  /*
+   * ⚠ BATCHED, BECAUSE THIS RIDES A ROUTE WITH NO SLACK. `import-stat-lines` ran 153-270s against
+   * a ~240s budget on 2026-10-16/17, and MLB alone is ~2,600 rows. One upsert per row would add
+   * thousands of round trips and push whole sports out of the run. One INSERT ... ON CONFLICT per
+   * 500 rows keeps the added cost to a handful of statements. `id` has no DB default (Prisma
+   * generates it client-side), hence `gen_random_uuid()`.
+   */
+  for (let i = 0; i < values.length; i += MIRROR_BATCH) {
+    const chunk = values.slice(i, i + MIRROR_BATCH)
+    try {
+      const n = await prisma.$executeRaw`
+        INSERT INTO "player_season_stats"
+          ("id", "sport", "playerId", "playerName", "season", "seasonType", "position", "team", "stats",
+           "gamesPlayed", "fantasyPoints", "fantasyPointsPerGame", "source", "fetchedAt", "expiresAt",
+           "createdAt", "updatedAt")
+        VALUES ${Prisma.join(
+          chunk.map(
+            (v) => Prisma.sql`(gen_random_uuid()::text, ${args.sport}, ${v.playerId}, ${v.playerName},
+              ${v.season}, 'regular', ${v.position}::text, ${v.team}::text, ${JSON.stringify(v.stats)}::jsonb,
+              ${v.gamesPlayed}::integer, NULL, NULL, ${RI_SOURCE}, ${nowUtc}::timestamp, ${expiresUtc}::timestamp,
+              ${nowUtc}::timestamp, ${nowUtc}::timestamp)`,
+          ),
+        )}
+        ON CONFLICT ("sport", "playerId", "season", "seasonType", "source") DO UPDATE SET
+          "playerName" = EXCLUDED."playerName",
+          "position" = EXCLUDED."position",
+          "team" = EXCLUDED."team",
+          "stats" = EXCLUDED."stats",
+          "gamesPlayed" = EXCLUDED."gamesPlayed",
+          "fetchedAt" = EXCLUDED."fetchedAt",
+          "expiresAt" = EXCLUDED."expiresAt",
+          "updatedAt" = EXCLUDED."updatedAt"`
+      written += n
+    } catch (e) {
+      if (errors.length < 5) {
+        errors.push(`season-stats batch ${i / MIRROR_BATCH}: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`)
+      }
+    }
+  }
+  return { written, errors }
+}
+
+const MIRROR_BATCH = 500
+
+export interface PlayerSeasonStatsMirrorValue {
+  playerId: string
+  playerName: string
+  season: string
+  position: string | null
+  team: string | null
+  stats: Record<string, unknown>
+  gamesPlayed: number | null
+}
+
+/** Pure: the rows `mirrorToPlayerSeasonStats` writes. Rows with no regular-season stats are skipped. */
+export function buildPlayerSeasonStatsMirrorValues(args: {
+  season: number
+  rows: RiPlayerStatsRow[]
+  infoById: Map<string, RiPlayerInfo>
+}): PlayerSeasonStatsMirrorValue[] {
+  const out: PlayerSeasonStatsMirrorValue[] = []
+  for (const row of args.rows) {
+    if (!row.regularSeason || Object.keys(row.regularSeason).length === 0) continue
+    const stats = flattenRiSeasonStats(row.regularSeason)
+    const gamesPlayed = finiteOrNull(stats.games_played)
+    const info = args.infoById.get(row.providerPlayerId)
+    out.push({
+      playerId: row.providerPlayerId,
+      playerName: row.playerName,
+      season: String(args.season),
+      position: info?.position ?? null,
+      // `normalizeTeamAbbrev` is NFL-only; other sports keep the provider's own team string.
+      team: row.teamName ?? info?.teamName ?? null,
+      stats,
+      gamesPlayed: gamesPlayed != null ? Math.round(gamesPlayed) : null,
+    })
+  }
+  return out
+}
 
 export interface RiPlayerStatsRow {
   providerPlayerId: string
@@ -155,6 +299,8 @@ export interface RiStatSyncResult {
    * intended response — not an empty result set to write.
    */
   notModified: boolean
+  /** Rows also written to `player_season_stats` (PLAYER_SEASON_STATS_MIRROR_SPORTS only). */
+  seasonStatsWritten: number
   sampleUnresolved: string[]
   errors: string[]
 }
@@ -205,6 +351,7 @@ export async function syncRollingInsightsPlayerStatsToDb(opts?: {
     unresolvedRate: 0,
     unsupported: false,
     notModified: false,
+    seasonStatsWritten: 0,
     sampleUnresolved: [],
     errors: [],
   }
@@ -253,6 +400,19 @@ export async function syncRollingInsightsPlayerStatsToDb(opts?: {
     } else {
       infoById = normalizeRiPlayerInfo(res.payload, sport)
     }
+  }
+
+  // --- player_season_stats, keyed on RI id (before identity resolution, which it does not need) ---
+  if (PLAYER_SEASON_STATS_MIRROR_SPORTS.includes(sport)) {
+    const mirrored = await mirrorToPlayerSeasonStats({
+      sport,
+      season: result.seasonUsed as number,
+      rows,
+      infoById,
+      now,
+    })
+    result.seasonStatsWritten = mirrored.written
+    result.errors.push(...mirrored.errors)
   }
 
   // --- identity candidates ---

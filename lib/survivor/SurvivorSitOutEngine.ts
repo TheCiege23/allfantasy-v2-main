@@ -1,7 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { enqueueNotification } from './notificationEngine'
-import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { getTribesWithMembers } from './SurvivorTribeService'
 import { logSurvivorAuditEntry } from './auditEntry'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
@@ -9,8 +8,17 @@ import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonS
 import { readWeekGames } from '@/lib/redraft/weekGames'
 import { randomInt } from 'node:crypto'
 import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
+import { createSurvivorChatMessage } from './survivorChatBridge'
+import {
+  SURVIVOR_HOST_USER_ID,
+  TRIBE_REDRAW_DECISIONS,
+  TRIBE_REDRAW_DEFAULT_DECISION,
+  TRIBE_REDRAW_RECOMMENDATION_ACTION,
+  TRIBE_REDRAW_RESPONSE_ACTIONS,
+  tribeBelowHalfOfLargest,
+} from './survivorTribeRedrawActions'
 
-const CHIMMY_HOST_USER_ID = 'survivor-ai-host'
+const CHIMMY_HOST_USER_ID = SURVIVOR_HOST_USER_ID
 const CHIMMY_HOST_NAME = '@Chimmy'
 
 export type SurvivorSitOutAction = {
@@ -130,7 +138,7 @@ export async function settleNbaTribeSitOutDeadline(leagueId: string, week: numbe
     await enqueueNotification(leagueId, 'tribe_shuffle_recommendation', {
       recipientRole: 'commissioner', title: 'Tribe balance needs a redraw',
       body: 'No eligible sit-out rotation can balance tribe totals this week. Review the tribe switch.',
-      deepLinkPath: `/league/${leagueId}/survivor/commissioner`, urgency: 'high', isSpoilerSafe: true,
+      deepLinkPath: `/survivor/${leagueId}/commissioner?tab=tribes`, urgency: 'high', isSpoilerSafe: true,
     })
   }
   return result.status
@@ -140,11 +148,15 @@ export async function settleNbaTribeSitOutDeadline(leagueId: string, week: numbe
 export async function runNbaTribeSitOutDeadlineBatch(now = new Date()) {
   const states = await prisma.survivorGameState.findMany({
     where: { weekScoringFinalAt: null, phase: { in: ['pre_merge', 'post_swap', 'tribe'] }, league: { survivorMode: true, sport: 'NBA' } },
-    select: { leagueId: true, currentWeek: true, league: { select: { settings: true } } }, orderBy: { updatedAt: 'asc' }, take: 20,
+    select: { leagueId: true, currentWeek: true, pausedSnapshot: true, league: { select: { settings: true } } }, orderBy: { updatedAt: 'asc' }, take: 20,
   })
   const outcomes: Record<string, number> = {}
   let failed = 0
   for (const state of states) {
+    if (state.pausedSnapshot != null) {
+      outcomes.paused = (outcomes.paused ?? 0) + 1
+      continue
+    }
     try {
       const week = state.currentWeek > 0 ? state.currentWeek : readSurvivorFullSeasonPlan(state.league.settings)?.startWeek
       if (!week) continue
@@ -208,12 +220,12 @@ function hasSameWeekPendingNomination(actions: SurvivorSitOutAction[], nominated
 
 async function postToTribeChat(leagueId: string, tribeId: string, content: string, cardData?: Record<string, unknown>): Promise<void> {
   const channel = await prisma.survivorChatChannel.findFirst({
-    where: { leagueId, channelType: 'tribe', tribeId },
+    where: { leagueId, channelType: 'tribe', tribeId, isArchived: false },
     select: { id: true },
   })
   if (!channel) return
 
-  await prisma.survivorChatMessage.create({
+  await createSurvivorChatMessage(prisma, {
     data: {
       leagueId,
       channelId: channel.id,
@@ -255,10 +267,9 @@ async function getNominatedAndAcceptedActions(leagueId: string, week: number): P
 }
 
 export async function getSurvivorTribeBalanceState(leagueId: string, week: number): Promise<SurvivorTribeBalanceState> {
-  const [league, tribes, config] = await Promise.all([
+  const [league, tribes] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { survivorPhase: true } }),
-    getTribesWithMembers(leagueId),
-    getSurvivorConfig(leagueId),
+    getTribesWithMembers(leagueId, { activeOnly: true }),
   ])
 
   const merged = ['merge', 'post_merge', 'jury', 'finale'].includes(league?.survivorPhase ?? '')
@@ -290,9 +301,8 @@ export async function getSurvivorTribeBalanceState(leagueId: string, week: numbe
   const activeSizes = tribeSizes.map(t => t.activeCount)
   const minTribeSize = activeSizes.length ? Math.min(...activeSizes) : 0
   const maxTribeSize = Math.max(...tribeSizes.map((t) => t.activeCount))
-  const originalTribeSize = config?.tribeSize ?? maxTribeSize
-  const shuffleThreshold = Math.floor(originalTribeSize * 0.4)
-  const shouldSuggestShuffle = originalTribeSize > 0 && minTribeSize <= shuffleThreshold
+  // The owner's rule: a tribe below half the size of the largest tribe. Exactly half is not below.
+  const shouldSuggestShuffle = tribeBelowHalfOfLargest(activeSizes)
 
   return {
     leagueId,
@@ -303,7 +313,7 @@ export async function getSurvivorTribeBalanceState(leagueId: string, week: numbe
     maxTribeSize,
     shouldSuggestShuffle,
     suggestionReason: shouldSuggestShuffle
-      ? `At least one tribe has dropped to 40% or less of its original ${originalTribeSize} members.`
+      ? `A tribe has dropped below half the size of the largest tribe (${minTribeSize} vs ${maxTribeSize} active managers).`
       : null,
     requiredSitOuts: requiredTribeSitOuts(Object.fromEntries(tribeSizes.map(tribe => [tribe.tribeId, tribe.activeCount]))),
   }
@@ -702,57 +712,48 @@ export async function maybeTriggerSurvivorTribeShuffleRecommendation(
   leagueId: string,
   week: number,
 ): Promise<{ triggered: boolean; reason: string }> {
-  const [balance, config, existingRecommendation] = await Promise.all([
-    getSurvivorTribeBalanceState(leagueId, week),
-    getSurvivorConfig(leagueId),
-    prisma.survivorCommissionerAction.findFirst({
-      where: {
-        leagueId,
-        actionType: 'sit_out_shuffle_recommendation',
-      },
-      select: { id: true },
-    }),
-  ])
+  const balance = await getSurvivorTribeBalanceState(leagueId, week)
 
   if (!balance.shouldSuggestShuffle) {
-    return { triggered: false, reason: 'No tribe has dropped to 40% or less of its original size.' }
+    return { triggered: false, reason: 'No tribe has dropped below half the size of the largest tribe.' }
   }
+  const existingRecommendation = await prisma.survivorCommissionerAction.findFirst({
+    where: { leagueId, actionType: TRIBE_REDRAW_RECOMMENDATION_ACTION }, orderBy: { executedAt: 'desc' }, select: { id: true, week: true },
+  })
   if (existingRecommendation) {
-    return { triggered: false, reason: 'Shuffle recommendation has already been used this season.' }
-  }
-
-  if (config?.tribeShuffleEnabled && config.tribeShuffleImbalanceThreshold != null) {
-    const spread = Math.max(0, balance.maxTribeSize - balance.minTribeSize)
-    if (spread <= config.tribeShuffleImbalanceThreshold) {
-      return {
-        triggered: false,
-        reason: 'Current tribe spread is within configured intentional reshuffle tolerance.',
-      }
-    }
+    if (existingRecommendation.week === week) return { triggered: false, reason: 'This week’s shuffle recommendation already exists.' }
+    const priorResponse = await prisma.survivorCommissionerAction.findFirst({
+      where: { leagueId, actionType: { in: TRIBE_REDRAW_RESPONSE_ACTIONS }, description: existingRecommendation.id },
+      select: { id: true },
+    })
+    if (!priorResponse) return { triggered: false, reason: 'An earlier shuffle recommendation is awaiting a commissioner decision.' }
   }
 
   const created = await prisma.survivorCommissionerAction.create({
     data: {
+      id: `survivor-redraw:${leagueId}:${week}`,
       leagueId,
       commissionerId: CHIMMY_HOST_USER_ID,
       week,
-      actionType: 'sit_out_shuffle_recommendation',
-      description: 'One-time recommendation: approve or postpone a random tribe redraw after a tribe reaches 40% of its original size.',
+      actionType: TRIBE_REDRAW_RECOMMENDATION_ACTION,
+      description: 'A tribe fell below half the size of the largest tribe. Choose a random redraw, reassign by hand, or merge now; the random redraw runs on its own before the next council.',
       newState: {
         minTribeSize: balance.minTribeSize,
         maxTribeSize: balance.maxTribeSize,
         tribeSizes: balance.tribeSizes,
+        defaultDecision: TRIBE_REDRAW_DEFAULT_DECISION,
+        options: [...TRIBE_REDRAW_DECISIONS],
       } as object,
-      wasConfirmed: true,
+      wasConfirmed: false,
     },
   })
 
   await Promise.all([
     enqueueNotification(leagueId, 'tribe_shuffle_recommendation', {
       recipientRole: 'commissioner',
-      title: '⚖️ Survivor shuffle recommended',
-      body: 'A tribe has reached 40% or less of its original size. Approve or postpone a random redraw.',
-      deepLinkPath: `/league/${leagueId}/survivor/commissioner`,
+      title: '⚖️ Tribe redraw recommended',
+      body: 'A tribe has fallen below half the size of the largest tribe. Choose a random redraw, reassign by hand, or merge now. The random redraw runs on its own before the next council.',
+      deepLinkPath: `/survivor/${leagueId}/commissioner?tab=tribes`,
       urgency: 'high',
       isSpoilerSafe: true,
     }),

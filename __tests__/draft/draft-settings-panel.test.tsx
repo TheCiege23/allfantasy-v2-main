@@ -174,4 +174,24 @@ describe('DraftSettingsCommissionerPanel', () => {
     await r.findByText('CI Team 3')
     expect(r.getByText('Middy draft')).toBeTruthy() // 10 min from the reload
   })
+
+  describe('Autostart toggle', () => {
+    const REDRAFT = { sport: 'NFL', leagueType: 'redraft', isDynasty: false, platform: 'allfantasy', survivorMode: false, guillotineMode: false, leagueVariant: null }
+
+    it('is hidden for a native redraft league, whose draft starts at its time anyway, with a note in its place', async () => {
+      stub({ ...BASE, autostartEnabled: false, scheduledStartLeague: REDRAFT })
+      const r = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
+      await r.findByText('14 rounds · from 14 roster spots')
+      expect(r.queryByRole('switch', { name: 'Autostart Draft' })).toBeNull()
+      expect(r.getByText('Drafts start automatically at the scheduled time.')).toBeTruthy()
+    })
+
+    it('is shown for a survivor league, which still honours it', async () => {
+      stub({ ...BASE, autostartEnabled: true, scheduledStartLeague: { ...REDRAFT, survivorMode: true } })
+      const r = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
+      await r.findByText('14 rounds · from 14 roster spots')
+      expect(r.getByRole('switch', { name: 'Autostart Draft' }).getAttribute('aria-checked')).toBe('true')
+      expect(r.queryByText('Drafts start automatically at the scheduled time.')).toBeNull()
+    })
+  })
 })

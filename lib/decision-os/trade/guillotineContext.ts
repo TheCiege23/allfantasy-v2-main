@@ -6,8 +6,15 @@ import { lineupSeatsFromSettings } from '@/lib/core-app/slotEligibility'
 import { isTeamEliminated } from '@/lib/core-app/teamElimination'
 import { rosteredIdsOf } from './ncaafRedraftContext'
 import { scoringRulesFrom } from './scoringContextFromWorld'
+import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
+import { BENCH_SLOTS, startingSlots } from '@/lib/core-app/slotEligibility'
+import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { dailySportWeekForInstant, resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
 import { indexBoard, sampleGamesFromReasons, type BoardPlayer } from './sportPointsValue'
+import { lineupSlotsFor, loadSportPointsBase, seasonLabelFor } from './sportPointsContext'
 import {
+  guillotineTradeSport,
+  minReplacementGamesFor,
   releaseValue,
   slotReplacement,
   survivalCurve,
@@ -15,10 +22,13 @@ import {
   type GuillotineContext,
   type GuillotineRoster,
   type GuillotineSeat,
+  type GuillotineTradeSport,
 } from './guillotineValue'
 
 /**
  * What a guillotine grade is priced from, read once per league. See `./guillotineValue.ts` for the rules.
+ * NBA leagues read the NBA points board and the NBA period calendar instead (`loadNbaGuillotineContext`);
+ * what follows describes the NFL read.
  *
  * DB-first: the league's settings (lineup, scoring), its rosters (who is alive, who is rostered, the FAAB
  * each live team holds), the NFL season projections (`AFProjectionSnapshot`, keyed on
@@ -79,13 +89,25 @@ function lineupLabel(seats: readonly GuillotineSeat[]): string {
 
 export type GuillotineContextResult = { ok: true; ctx: GuillotineContext } | { ok: false; reason: string }
 
-export async function loadGuillotineContext(league: {
+export type GuillotineLeague = {
   id: string
   settings: unknown
   leagueSize: number | null
-}): Promise<GuillotineContextResult> {
+  /** NFL when absent. */
+  sport?: string | null
+}
+
+/** NFL or NBA, by the league's sport; anything else is refused (the grader never asks for one). */
+export async function loadGuillotineContext(league: GuillotineLeague, now: Date = new Date()): Promise<GuillotineContextResult> {
+  const sport = league.sport == null ? 'NFL' : guillotineTradeSport(league.sport)
+  if (sport === 'NBA') return loadNbaGuillotineContext(league, now)
+  if (sport !== 'NFL') return { ok: false, reason: 'Guilly trade grades cover NFL and NBA leagues so far.' }
+  return loadNflGuillotineContext(league)
+}
+
+async function loadNflGuillotineContext(league: GuillotineLeague): Promise<GuillotineContextResult> {
   const seatsRaw = lineupSeatsFromSettings(league.settings)
-  if (!seatsRaw) return { ok: false, reason: 'This league’s starting lineup could not be read, so a guillotine grade cannot be priced.' }
+  if (!seatsRaw) return { ok: false, reason: 'This league’s starting lineup could not be read, so a Guilly grade cannot be priced.' }
   const seats: GuillotineSeat[] = seatsRaw.map((s) => ({ slot: s.slot, eligible: s.eligible }))
   const rules = scoringRulesFrom(league.settings)
   if (!rules || !hasScoringRules(rules)) return { ok: false, reason: NO_LEAGUE_SCORING_REASON }
@@ -94,7 +116,7 @@ export async function loadGuillotineContext(league: {
   const latest = await prisma.aFProjectionSnapshot
     .findFirst({ where: { sport: 'NFL', week: null }, orderBy: { computedAt: 'desc' }, select: { season: true } })
     .catch(() => null)
-  if (!latest) return { ok: false, reason: 'No NFL projections are on file, so this guillotine trade cannot be graded yet.' }
+  if (!latest) return { ok: false, reason: 'No NFL projections are on file, so this Guilly trade cannot be graded yet.' }
 
   const [rows, rosterRows] = await Promise.all([
     prisma.aFProjectionSnapshot
@@ -143,6 +165,117 @@ export async function loadGuillotineContext(league: {
   weeksLeft.sort((a, b) => a - b)
   const nflWeeksLeft = weeksLeft.length ? weeksLeft[Math.floor(weeksLeft.length / 2)]! : 0
 
+  return assembleGuillotineContext({ sport: 'NFL', board, seats, rosterRows, leagueSize: league.leagueSize, weeksLeft: nflWeeksLeft, gamesPerWeek: null })
+}
+
+/**
+ * The NBA regular-season weeks a guillotine league has left to chop, the week in progress included — on the
+ * period calendar the native chop runs on (`dailySportWeekForInstant`: seven Eastern days from the recorded
+ * opener) and the guillotine profile's 24 regular-season weeks. Null when that season's opener is not
+ * recorded: a guessed anchor would count the wrong weeks with confidence.
+ */
+export function nbaGuillotineWeeksLeft(season: number, now: Date): number | null {
+  const opener = resolveDailySportSeasonStart('NBA', season)
+  const total = getGuillotineSportConfig('NBA')?.regularSeasonWeeks
+  if (!opener || !total) return null
+  const week = dailySportWeekForInstant('NBA', season, now)
+  if (week != null) return Math.max(0, total - week + 1)
+  // Before the opener (its Eastern midnight falls a few hours after the UTC date it is stored under).
+  return now.getTime() < Date.parse(opener) + 86_400_000 ? total : null
+}
+
+/** The NBA positions a starting slot can take — every one a real NBA position, or null (an unknown slot). */
+function nbaSeats(settings: unknown): GuillotineSeat[] | null {
+  const NBA_POSITIONS = new Set(['PG', 'SG', 'SF', 'PF', 'C'])
+  const seat = (slot: string): GuillotineSeat | null => {
+    const eligible = allowedPositionsForSlot('NBA', slot).filter((p) => NBA_POSITIONS.has(p))
+    return eligible.length ? { slot: slot.toUpperCase(), eligible } : null
+  }
+  // A Sleeper import stores `roster_positions`; the redraft resolver reads the native slot map (or the defaults).
+  const imported = startingSlots(settings)
+  const tokens = imported
+    ? imported.filter((t) => !BENCH_SLOTS.has(t) && t !== 'IL' && t !== 'IR')
+    : lineupSlotsFor('NBA', settings).slots.flatMap((s) => Array.from({ length: s.count }, () => s.slot))
+  const seats: GuillotineSeat[] = []
+  for (const t of tokens) {
+    const s = seat(t)
+    if (!s) return null
+    seats.push(s)
+  }
+  return seats.length ? seats : null
+}
+
+/**
+ * An NBA guillotine league's context. The board is the NBA points board (`loadSportPointsBase`: the league's
+ * own scoring, `AFProjectionSnapshot` keyed on `PlayerIdentityMap.id`, its readiness and dynasty refusals),
+ * put on the WEEK — see `./guillotineValue.ts`. No provider call.
+ */
+async function loadNbaGuillotineContext(league: GuillotineLeague, now: Date): Promise<GuillotineContextResult> {
+  const seats = nbaSeats(league.settings)
+  if (!seats) return { ok: false, reason: 'This league’s starting lineup could not be read, so a Guilly grade cannot be priced.' }
+  const base = await loadSportPointsBase({
+    sport: 'NBA',
+    league: { id: league.id, settings: league.settings, leagueType: 'guillotine', leagueSize: league.leagueSize },
+    now,
+  })
+  if (!base.ok) return base
+  // A guillotine chops the lowest POINTS total; a category score answers a different question.
+  if (base.ctx.valueKind === 'categories') {
+    return { ok: false, reason: 'This Guilly league scores NBA by categories, and the chop is decided on points, so this deal is not graded.' }
+  }
+  const { season, gamesRemaining } = base.ctx.window
+  const weeksLeft = nbaGuillotineWeeksLeft(season, now)
+  if (weeksLeft == null) {
+    return { ok: false, reason: `The ${seasonLabelFor(season, 'NBA')} NBA season’s opening date is not on file, so the Guilly weeks left cannot be counted.` }
+  }
+  if (weeksLeft > 0 && !(gamesRemaining > 0)) {
+    return { ok: false, reason: `No ${seasonLabelFor(season, 'NBA')} NBA games are left on the schedule, so this Guilly trade cannot be graded.` }
+  }
+  const gamesPerWeek = weeksLeft > 0 ? gamesRemaining / weeksLeft : 0
+  const weekly = base.ctx.board.map((p) => ({ ...p, perGame: p.perGame * gamesPerWeek }))
+
+  const rosterRows = await prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true, faabRemaining: true } }).catch(() => null)
+  if (!rosterRows) return { ok: false, reason: 'This league’s rosters could not be read just now.' }
+
+  /*
+   * 🛑 ONE ID SPACE, NEVER BOTH. The points board answers to Rolling Insights AND Sleeper ids, and their bare
+   * numbers overlap: an id two players answer to is dropped from the index, so a rostered star would read as
+   * a free agent and raise his slot's replacement level for the whole league (the NFL's Bijan Robinson,
+   * 2026-10-11 — see the NFL loader). The rosters are in one space; the board is matched in whichever of the
+   * two maps more of them, and only that one.
+   */
+  const identities = await prisma.playerIdentityMap
+    .findMany({ where: { id: { in: weekly.map((p) => p.id) } }, select: { id: true, rollingInsightsId: true, sleeperId: true } })
+    .catch(() => [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null }>)
+  const byId = new Map(identities.map((i) => [i.id, i]))
+  const inSpace = (key: 'sleeperId' | 'rollingInsightsId') =>
+    weekly.map((p) => {
+      const alias = byId.get(p.id)?.[key]
+      return { ...p, aliases: alias ? [alias] : [] }
+    })
+  const rosteredIds = rosterRows.flatMap((r) => rosteredIdsOf(r.playerData))
+  const mappedIn = (b: readonly BoardPlayer[]) => {
+    const index = indexBoard(b)
+    return rosteredIds.filter((id) => index.has(id) || index.has(id.includes(':') ? id.slice(id.indexOf(':') + 1) : id)).length
+  }
+  const sleeper = inSpace('sleeperId')
+  const ri = inSpace('rollingInsightsId')
+  const board = mappedIn(ri) > mappedIn(sleeper) ? ri : sleeper
+  return assembleGuillotineContext({ sport: 'NBA', board, seats, rosterRows, leagueSize: league.leagueSize, weeksLeft, gamesPerWeek })
+}
+
+/** Who is alive and rostered, the wire, the survival curve and what FAAB buys — the same for every sport. */
+function assembleGuillotineContext(args: {
+  sport: GuillotineTradeSport
+  board: BoardPlayer[]
+  seats: GuillotineSeat[]
+  rosterRows: ReadonlyArray<{ playerData: unknown; faabRemaining: number | null }>
+  leagueSize: number | null
+  weeksLeft: number
+  gamesPerWeek: number | null
+}): GuillotineContextResult {
+  const { sport, board, seats, rosterRows, weeksLeft } = args
+  const minGames = minReplacementGamesFor(sport)
   const index = indexBoard(board)
   const live: GuillotineRoster[] = []
   const rostered = new Set<string>()
@@ -162,27 +295,30 @@ export async function loadGuillotineContext(league: {
     }
     live.push({ players, faab: typeof r.faabRemaining === 'number' ? r.faabRemaining : null })
   }
-  if (live.length < 2) return { ok: false, reason: 'Fewer than two teams are alive in this guillotine league, so there is nothing left to trade for.' }
+  if (live.length < 2) return { ok: false, reason: 'Fewer than two teams are alive in this Guilly league, so there is nothing left to trade for.' }
   if (ids === 0 || mapped / ids < MIN_ROSTER_MAPPING) {
     return { ok: false, reason: 'This league’s rosters could not be matched to projected players, so the waiver wire cannot be priced.' }
   }
 
-  const replacementBySlot = slotReplacement(board, rostered, seats, live.length)
-  const survival = survivalCurve(live.length, nflWeeksLeft)
+  const replacementBySlot = slotReplacement(board, rostered, seats, live.length, minGames)
+  const survival = survivalCurve(live.length, weeksLeft)
   const byId = new Map(board.map((p) => [p.id, p]))
   return {
     ok: true,
     ctx: {
+      sport,
       board,
       seats,
       replacementBySlot,
       teamsAlive: live.length,
-      startingTeams: Math.max(rosterRows.length, league.leagueSize ?? 0),
-      nflWeeksLeft,
+      startingTeams: Math.max(rosterRows.length, args.leagueSize ?? 0),
+      weeksLeft,
+      gamesPerWeek: args.gamesPerWeek,
+      minReplacementGames: minGames,
       survival,
       liveFaab: live.reduce((s, r) => s + Math.max(0, r.faab ?? 0), 0),
       releaseValue: releaseValue({ rosters: live, board: byId, seats, replacementBySlot, survival }),
-      wireValue: wireValue({ board, rostered, seats, replacementBySlot, survival }),
+      wireValue: wireValue({ board, rostered, seats, replacementBySlot, survival, minGames }),
       lineupLabel: lineupLabel(seats),
     },
   }

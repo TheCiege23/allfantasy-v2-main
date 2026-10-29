@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getLeagueChatReadMarks } from './leagueChatRead'
 import { getChatUnread } from './unreadCounts'
+import { tallyLeagueUnread } from './leagueUnreadTally'
 
 /**
  * THE CHAT BUBBLE'S NUMBER — everything waiting for you, not only DMs (owner's call 2026-09-25,
@@ -19,7 +20,15 @@ import { getChatUnread } from './unreadCounts'
  * Each part fails to zero on its own: a badge is decoration on a working page.
  */
 
-export type ChatBadge = { total: number; mentions: number; dm: number; league: number; chimmy: number }
+export type ChatBadge = {
+  total: number
+  mentions: number
+  dm: number
+  league: number
+  chimmy: number
+  /** `league` split per league id, for the league rail's unread badges. Zero-count leagues are absent. */
+  byLeague?: Record<string, number>
+}
 
 export const CHIMMY_PROACTIVE_TYPES = ['chimmy_lineup_check', 'chimmy_waiver_check'] as const
 const LEAGUE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
@@ -33,7 +42,7 @@ export async function getChatBadge(userId: string | null | undefined, now: Date 
   if (!userId) return ZERO
   const [dm, league, chimmy] = await Promise.all([
     getChatUnread(userId).catch(() => ({ total: 0, mentions: 0, mutedUnread: 0 })),
-    leagueUnread(userId, now).catch(() => ({ count: 0, mentions: 0 })),
+    leagueUnread(userId, now).catch(() => ({ count: 0, mentions: 0, byLeague: {} as Record<string, number> })),
     chimmyUnread(userId, now).catch(() => 0),
   ])
   return {
@@ -42,6 +51,7 @@ export async function getChatBadge(userId: string | null | undefined, now: Date 
     dm: dm.total,
     league: league.count,
     chimmy,
+    byLeague: league.byLeague,
   }
 }
 
@@ -59,9 +69,9 @@ async function myLeagueIds(userId: string): Promise<string[]> {
   return Array.from(new Set([...teams.map((t) => t.leagueId), ...owned.map((l) => l.id)])).slice(0, MAX_LEAGUES)
 }
 
-async function leagueUnread(userId: string, now: Date): Promise<{ count: number; mentions: number }> {
+async function leagueUnread(userId: string, now: Date): Promise<{ count: number; mentions: number; byLeague: Record<string, number> }> {
   const leagueIds = await myLeagueIds(userId)
-  if (leagueIds.length === 0) return { count: 0, mentions: 0 }
+  if (leagueIds.length === 0) return { count: 0, mentions: 0, byLeague: {} }
   const floor = new Date(now.getTime() - LEAGUE_WINDOW_MS)
   const [marks, rows] = await Promise.all([
     getLeagueChatReadMarks(userId, leagueIds),
@@ -80,15 +90,7 @@ async function leagueUnread(userId: string, now: Date): Promise<{ count: number;
       take: MAX_LEAGUE_ROWS,
     }),
   ])
-  let count = 0
-  let mentions = 0
-  for (const r of rows) {
-    const readAt = marks.get(r.leagueId)
-    if (readAt && r.createdAt.getTime() <= readAt.getTime()) continue
-    count += 1
-    if (r.mentionedUserIds.includes(userId)) mentions += 1
-  }
-  return { count, mentions }
+  return tallyLeagueUnread(rows, marks, userId)
 }
 
 async function chimmyUnread(userId: string, now: Date): Promise<number> {

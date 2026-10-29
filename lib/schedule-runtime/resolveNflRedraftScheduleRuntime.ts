@@ -1,8 +1,12 @@
+import { loadSeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
 import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
+import { applyWeeklyWaiverPriorityReset } from '@/lib/waiver-wire/weekly-priority-reset'
+import { assignExtraMatchupForWeek } from '@/lib/redraft/oddTeamExtraMatchup'
 import { prisma } from '@/lib/prisma'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime/resolveNflRedraftRosterRuntime'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { generateNflRedraftPlayoffRuntimeBracket } from '@/lib/playoff-runtime'
 import {
   buildCanonicalScheduleRuntimeState,
@@ -15,6 +19,14 @@ import {
   type ScheduleRuntimeTeamInput,
 } from './canonicalScheduleRuntime'
 import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
+import { lastWeekOfPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { logAction } from '@/server/services/auditService'
+import {
+  SCHEDULE_REGEN_CONFIRMATION_CODE,
+  SCHEDULE_REGEN_CONFIRMATION_MESSAGE,
+  firstRegenerableWeek,
+  scheduleRegenerationLifecycleRefusal,
+} from './scheduleRegeneration'
 
 type RedraftRosterRow = {
   id: string
@@ -62,15 +74,21 @@ export type PersistedScheduleGenerationResult =
       seasonId: string
       created: number
       regenerated: boolean
+      /** The first week written; every earlier week was kept as it was. */
+      regeneratedFromWeek: number
+      warnings: string[]
       state: CanonicalScheduleRuntimeState
       events: ReturnType<typeof buildScheduleGeneratedEvents>
     }
   | {
       ok: false
       code:
+        | 'DRAFT_IN_PROGRESS'
+        | 'LEAGUE_ARCHIVED'
         | 'LEAGUE_NOT_FOUND'
         | 'NOT_NFL_REDRAFT'
-        | 'PROTECTED_SCHEDULE'
+        | 'NO_REGENERABLE_WEEKS'
+        | typeof SCHEDULE_REGEN_CONFIRMATION_CODE
         | 'ROSTERS_UNAVAILABLE'
         | 'SCHEDULE_ALREADY_EXISTS'
         | 'SEASON_NOT_FOUND'
@@ -134,15 +152,22 @@ async function buildTeamsForRedraftRosters(leagueId: string, rosters: RedraftRos
       division: { select: { id: true, name: true, tierLevel: true } },
     },
   }) as LeagueTeamDivisionRow[]
+  // The commissioner's divisions (`settings.division_config`) win over the promotion tier column.
+  const commissionerDivisions = await loadSeasonRosterDivisions(leagueId, rosters)
 
   return rosters.map((roster) => {
     const team = findLeagueTeamForRoster(roster, leagueTeams)
+    const division = commissionerDivisions?.byRoster.get(roster.id)
     return {
       rosterId: roster.id,
       displayName: roster.teamName || roster.ownerName,
       ownerName: roster.ownerName,
-      divisionId: team?.divisionId ?? null,
-      divisionName: team?.division?.name ?? (team?.division ? `Division ${team.division.tierLevel}` : null),
+      divisionId: division ? division.key : commissionerDivisions ? null : team?.divisionId ?? null,
+      divisionName: division
+        ? division.name
+        : commissionerDivisions
+          ? null
+          : team?.division?.name ?? (team?.division ? `Division ${team.division.tierLevel}` : null),
     }
   })
 }
@@ -157,8 +182,10 @@ function toScheduleMatchupInput(row: {
   awayScore: number
   status: string
   isMedianMatchup: boolean
+  lineupSnapshots?: unknown
 }): ScheduleRuntimeMatchupInput {
   return {
+    lineupSnapshots: row.lineupSnapshots,
     id: row.id,
     week: row.week,
     type: row.type,
@@ -200,6 +227,7 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     include: {
       rosters: { orderBy: { id: 'asc' } },
       schedule: { orderBy: [{ week: 'asc' }, { id: 'asc' }] },
+      league: { select: { medianGame: true, settings: true } },
     },
   })
   if (!season) return { ok: false, reason: 'season_not_found' }
@@ -227,6 +255,9 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     playoffStartWeek: imported?.playoffStartWeek ?? season.playoffStartWeek,
     regularSeasonWeeks: imported?.regularSeasonWeeks,
     now: input.now,
+    // The same flags `updateStandings` reads: the league's current median setting over the season's copy.
+    medianGame: !imported && Boolean(season.league?.medianGame ?? season.medianGame),
+    medianInPlayoffs: readMedianGameInPlayoffs(season.league?.settings),
   })
 
   return {
@@ -238,16 +269,66 @@ export async function resolveNflRedraftScheduleRuntime(input: {
   }
 }
 
-function hasProtectedScheduleRow(row: { status: string; week: number }, currentWeek: number): boolean {
-  const status = normalize(row.status)
-  return row.week < currentWeek || status === 'completed' || status === 'final' || status === 'locked'
+async function hasLiveDraftSession(leagueId: string): Promise<boolean> {
+  const live = await prisma.draftSession.findFirst({
+    where: { leagueId, status: { in: ['in_progress', 'paused'] } },
+    select: { id: true },
+  })
+  return Boolean(live)
 }
 
+/**
+ * Would the final, as the league configures it (`championship_length`, weeks per round, playoff
+ * team count), end after the season's last week? Regeneration never moves playoff weeks — it writes
+ * regular-season weeks only, ending the week before `playoffStartWeek` — so this is reported as a
+ * warning, not a refusal: the commissioner's fix is the playoff settings, not the schedule.
+ */
+function championshipWindowWarning(input: {
+  rules: NonNullable<Awaited<ReturnType<typeof resolveCanonicalLeagueRules>>>
+  playoffStartWeek: number | null
+  totalWeeks: number
+}): string | null {
+  const teams = Number(input.rules.playoffs.teamCount ?? 0)
+  const rounds = teams >= 2 ? Math.ceil(Math.log2(teams)) : 0
+  if (rounds < 1 || !input.playoffStartWeek) return null
+  const lastWeek = lastWeekOfPlayoffRound({
+    playoffStartWeek: input.playoffStartWeek,
+    roundNumber: rounds,
+    weeksPerRound: input.rules.playoffs.weeksPerRound,
+    finalRoundNumber: rounds,
+    championshipLength: input.rules.playoffs.championshipLength,
+    seriesLengths: input.rules.playoffs.seriesLengths ?? null,
+  })
+  if (lastWeek <= input.totalWeeks) return null
+  return `The playoffs as configured end in week ${lastWeek}, past the season's last week (${input.totalWeeks}). Shorten the final or move the playoffs earlier.`
+}
+
+/**
+ * Generate the regular-season schedule, or regenerate the weeks that have not started.
+ *
+ * Covers every league that runs the standard weekly season (`runsStandardWeeklySeason`) — the same
+ * scope as the read path above. 🛑 IT WAS NFL-REDRAFT ONLY: a dynasty league (year 1 or a year-2+
+ * season opened by `startDynastyNewSeason`) and every NBA/NHL/MLB league were refused with
+ * `NOT_NFL_REDRAFT`, so their commissioners had no way to rebuild a schedule after a team was
+ * added, divisions changed or the playoff start moved.
+ *
+ * Regeneration rules (see `scheduleRegeneration.ts`):
+ *   - refused while a draft is live and on an archived league;
+ *   - weeks up to the last started week are kept exactly; only later weeks are rewritten, from the
+ *     same full-season rotation, so regenerating an unchanged league reproduces its schedule;
+ *   - only regular-season weeks are written (through `playoffStartWeek - 1`, capped by
+ *     `totalWeeks`); odd team counts get the deterministic bye, divisions are prioritised;
+ *   - once a week has started it needs `confirmMidSeasonChange` (the scoring/roster editors' flag);
+ *   - a regeneration writes a `schedule_regenerated` audit row and a league announcement.
+ */
 export async function generateNflRedraftScheduleForSeason(input: {
   seasonId: string
   regenerate?: boolean
+  /** Legacy name for the mid-season confirmation. It no longer unlocks started weeks. */
   commissionerOverride?: boolean
+  confirmMidSeasonChange?: boolean
   actorUserId?: string | null
+  now?: Date
 }): Promise<PersistedScheduleGenerationResult> {
   const season = await prisma.redraftSeason.findUnique({
     where: { id: input.seasonId },
@@ -260,25 +341,24 @@ export async function generateNflRedraftScheduleForSeason(input: {
 
   const rules = await resolveCanonicalLeagueRules(season.leagueId)
   if (!rules) return { ok: false, code: 'LEAGUE_NOT_FOUND', message: 'League rules could not be resolved.' }
-  if (String(rules.general.sport).toUpperCase() !== 'NFL' || normalize(rules.general.format) !== 'redraft') {
-    return { ok: false, code: 'NOT_NFL_REDRAFT', message: 'Schedule runtime is scoped to NFL redraft leagues.' }
+  if (!runsStandardWeeklySeason(rules.general.sport, rules.general.format)) {
+    return { ok: false, code: 'NOT_NFL_REDRAFT', message: "This league's format schedules its own weeks; a head-to-head schedule can't be generated for it." }
   }
   if (season.rosters.length < 2) {
     return { ok: false, code: 'ROSTERS_UNAVAILABLE', message: 'At least two redraft rosters are required.' }
   }
-  if (season.schedule.length > 0 && !input.regenerate) {
-    return { ok: false, code: 'SCHEDULE_ALREADY_EXISTS', message: 'Schedule already exists. Use regenerate before scoring begins.' }
+  const replacing = season.schedule.length > 0
+  if (replacing && !input.regenerate) {
+    return { ok: false, code: 'SCHEDULE_ALREADY_EXISTS', message: 'Schedule already exists. Use regenerate to rebuild the weeks that have not started.' }
   }
-  if (
-    season.schedule.length > 0 &&
-    season.schedule.some((row) => hasProtectedScheduleRow(row, season.currentWeek)) &&
-    !input.commissionerOverride
-  ) {
-    return {
-      ok: false,
-      code: 'PROTECTED_SCHEDULE',
-      message: 'Schedule has locked or scored weeks and cannot be regenerated without commissioner override.',
-    }
+
+  if (replacing) {
+    const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { lifecycleState: true } })
+    const refusal = scheduleRegenerationLifecycleRefusal({
+      lifecycleState: league?.lifecycleState ?? null,
+      liveDraft: await hasLiveDraftSession(season.leagueId),
+    })
+    if (refusal) return { ok: false, code: refusal.code, message: refusal.message }
   }
 
   const teams = await buildTeamsForRedraftRosters(season.leagueId, season.rosters as RedraftRosterRow[])
@@ -296,20 +376,46 @@ export async function generateNflRedraftScheduleForSeason(input: {
     }
   }
 
-  const regularMatchups = generated.matchups.map((matchup) => ({
-    seasonId: season.id,
-    leagueId: season.leagueId,
-    week: matchup.week,
-    type: 'regular',
-    homeRosterId: matchup.homeRosterId,
-    awayRosterId: matchup.awayRosterId,
-    isMedianMatchup: false,
-    status: 'scheduled',
-  }))
+  const fromWeek = replacing
+    ? firstRegenerableWeek({
+        currentWeek: season.currentWeek,
+        sport: season.sport,
+        seasonYear: season.season,
+        now: input.now ?? new Date(),
+        persisted: season.schedule,
+        regularSeasonWeeks: generated.regularSeasonWeeks,
+      })
+    : 1
+  if (fromWeek > generated.regularSeasonWeeks) {
+    return {
+      ok: false,
+      code: 'NO_REGENERABLE_WEEKS',
+      message: 'Every regular-season week has already started, so there is nothing left to regenerate.',
+    }
+  }
+  const midSeason = replacing && fromWeek > 1
+  if (midSeason && !(input.confirmMidSeasonChange || input.commissionerOverride)) {
+    return { ok: false, code: SCHEDULE_REGEN_CONFIRMATION_CODE, message: SCHEDULE_REGEN_CONFIRMATION_MESSAGE }
+  }
+
+  const regularMatchups = generated.matchups
+    .filter((matchup) => matchup.week >= fromWeek)
+    .map((matchup) => ({
+      seasonId: season.id,
+      leagueId: season.leagueId,
+      week: matchup.week,
+      type: 'regular',
+      homeRosterId: matchup.homeRosterId,
+      awayRosterId: matchup.awayRosterId,
+      isMedianMatchup: false,
+      status: 'scheduled',
+    }))
 
   await prisma.$transaction(async (tx) => {
-    if (season.schedule.length > 0 && input.regenerate) {
-      await tx.redraftMatchup.deleteMany({ where: { seasonId: season.id } })
+    if (replacing) {
+      // Every row at or after `fromWeek` belongs to a week that has not started (that is what
+      // `fromWeek` means), including stale rows past a playoff start that moved earlier.
+      await tx.redraftMatchup.deleteMany({ where: { seasonId: season.id, week: { gte: fromWeek } } })
     }
     if (regularMatchups.length > 0) {
       await tx.redraftMatchup.createMany({ data: regularMatchups })
@@ -321,18 +427,86 @@ export async function generateNflRedraftScheduleForSeason(input: {
     return { ok: false, code: 'VALIDATION_BLOCKED', message: `Generated schedule could not be resolved: ${resolved.reason}` }
   }
 
+  const warning = championshipWindowWarning({
+    rules,
+    playoffStartWeek: generated.playoffStartWeek,
+    totalWeeks: season.totalWeeks,
+  })
+
+  if (replacing) {
+    await recordScheduleRegeneration({
+      leagueId: season.leagueId,
+      seasonId: season.id,
+      actorUserId: input.actorUserId ?? null,
+      fromWeek,
+      throughWeek: generated.regularSeasonWeeks,
+      created: regularMatchups.length,
+      midSeason,
+    })
+  }
+
   return {
     ok: true,
     seasonId: season.id,
     created: regularMatchups.length,
-    regenerated: Boolean(input.regenerate && season.schedule.length > 0),
+    regenerated: replacing,
+    regeneratedFromWeek: fromWeek,
+    warnings: warning ? [warning] : [],
     state: resolved.state,
     events: buildScheduleGeneratedEvents({
       state: resolved.state,
-      regenerated: Boolean(input.regenerate && season.schedule.length > 0),
+      regenerated: replacing,
       actorUserId: input.actorUserId,
     }),
   }
+}
+
+/**
+ * The audit row and the league announcement for a regeneration — the pair the mid-season
+ * scoring/roster editors write. Never throws: the schedule is already saved.
+ */
+async function recordScheduleRegeneration(args: {
+  leagueId: string
+  seasonId: string
+  actorUserId: string | null
+  fromWeek: number
+  throughWeek: number
+  created: number
+  midSeason: boolean
+}): Promise<void> {
+  const metadata = {
+    seasonId: args.seasonId,
+    fromWeek: args.fromWeek,
+    throughWeek: args.throughWeek,
+    matchupsWritten: args.created,
+    midSeason: args.midSeason,
+    confirmed: args.midSeason,
+  }
+  await logAction({
+    leagueId: args.leagueId,
+    userId: args.actorUserId,
+    actionType: 'schedule_regenerated',
+    entityType: 'redraft_season',
+    entityId: args.seasonId,
+    metadata,
+  }).catch(() => {})
+
+  await import('@/lib/league-events/publisher')
+    .then(({ publishLeagueFanoutEvent }) =>
+      publishLeagueFanoutEvent({
+        leagueId: args.leagueId,
+        eventType: 'settings_changed',
+        title: 'Schedule regenerated',
+        message: args.midSeason
+          ? `The commissioner regenerated the schedule from week ${args.fromWeek}. Weeks that already started are unchanged.`
+          : 'The commissioner regenerated the league schedule. Check your upcoming matchups.',
+        category: 'league_announcements',
+        visibility: 'all_members',
+        actorUserId: args.actorUserId,
+        meta: metadata,
+      }),
+    )
+    .catch(() => {})
 }
 
 export async function advanceNflRedraftScheduleWeek(input: {
@@ -376,6 +550,24 @@ export async function advanceNflRedraftScheduleWeek(input: {
 
   if (input.action === 'complete_week' || input.action === 'advance_week') {
     await updateStandings(input.seasonId, input.week ?? resolved.state.currentWeek)
+  }
+
+  // A new scoring week opened: a league on the weekly priority reset goes back to reverse standings
+  // (lib/waiver-wire/weekly-priority-reset.ts — a no-op for rolling, and once per week). After the
+  // standings above, so the order reflects the week just finished. Best-effort: the advance stands.
+  if ((input.action === 'advance_week' || input.action === 'open_week') && transition.currentWeek > resolved.state.currentWeek) {
+    await applyWeeklyWaiverPriorityReset({
+      leagueId: resolved.state.leagueId,
+      seasonId: input.seasonId,
+      week: transition.currentWeek,
+    }).catch((error) => {
+      console.error('[schedule-runtime] weekly waiver priority reset failed', { seasonId: input.seasonId, error })
+    })
+    // An odd-team league on the extra matchup fixes this week's leftover-team opponent now, from the
+    // week just finished (lib/redraft/oddTeamExtraMatchup.ts — idempotent, a no-op when it is off).
+    await assignExtraMatchupForWeek({ seasonId: input.seasonId, week: transition.currentWeek }).catch((error) => {
+      console.error('[schedule-runtime] extra matchup assignment failed', { seasonId: input.seasonId, error })
+    })
   }
 
   // The commissioner already made the "regular season is over" call by

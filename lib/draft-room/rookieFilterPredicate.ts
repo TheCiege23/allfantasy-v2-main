@@ -3,12 +3,15 @@
  *
  * Rookie rules:
  * - Explicit `isRookie === true` always wins.
+ * - A stored-season-stats verdict of `not_rookie` (MLB/NBA/NHL, `seasonStatsRookieStatus.ts`) is
+ *   proof, and beats the age / draft-year inference below.
  * - `yearsExp === 0` means rookie when experience data is available.
  * - Devy/C2C rows remain rookie while not graduated.
  * - Non-football sports get conservative inference from available metadata.
  *
  * Vet rules:
  * - Explicit rookie marker beats vet classification.
+ * - A `not_rookie` verdict means veteran.
  * - `yearsExp >= 1` means veteran.
  * - Graduated devy rows count as vets only when not explicitly rookie.
  * - Unknown rows stay excluded from both filters.
@@ -27,6 +30,7 @@ export type DraftSportForRookieInference =
 export type RookieFilterCandidate = {
   sport?: DraftSportForRookieInference | null
   isRookie?: boolean
+  rookieVerdict?: 'rookie' | 'not_rookie' | 'unknown' | null
   yearsExp?: number | null
   isDevy?: boolean
   graduatedToNFL?: boolean
@@ -44,12 +48,33 @@ export type RookieFilterCandidate = {
 
 export type VetFilterCandidate = {
   isRookie?: boolean
+  rookieVerdict?: 'rookie' | 'not_rookie' | 'unknown' | null
   yearsExp?: number | null
   isDevy?: boolean
   graduatedToNFL?: boolean
 }
 
-const CURRENT_SEASON_YEAR = new Date().getFullYear()
+/*
+ * 🛑 AN NBA ROOKIE STOPPED BEING A ROOKIE ON JANUARY 1. This used `new Date().getFullYear()`, taken
+ * once when the module loaded: the calendar year, not the rookie class. A 2026 draftee (June 2026,
+ * rookie season 2026-27) failed `draftYear === year` from Jan 1 2027 — mid rookie season and
+ * before the next rookie draft — and a long-running server kept whatever year it booted in.
+ *
+ * The class year is now resolved per call: the caller's league season when it has one
+ * (`seasonYear`, keyed by the year the season begins), otherwise the most recent draft class for
+ * the sport. NBA and NHL draft in late June, so before July the latest class is last year's; NCAAB
+ * and SOCCER keep their existing label/age rules; MLB debut years are calendar seasons.
+ */
+const JUNE_DRAFT_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NHL'])
+
+export function rookieClassYear(sport: unknown, now: Date = new Date()): number {
+  const year = now.getUTCFullYear()
+  if (!JUNE_DRAFT_SPORTS.has(normalizedSport(sport))) return year
+  // Months are 0-based: 6 = July, the first month after the June draft.
+  return now.getUTCMonth() >= 6 ? year : year - 1
+}
+
+type RookieClassContext = { classYear: number }
 
 function finiteNumber(value: unknown): number | null {
   if (value == null || value === '') return null
@@ -86,35 +111,35 @@ function hasFreshmanClassLabel(player: RookieFilterCandidate): boolean {
   )
 }
 
-function hasCurrentDraftYear(player: RookieFilterCandidate): boolean {
+function hasCurrentDraftYear(player: RookieFilterCandidate, ctx: RookieClassContext): boolean {
   const year = finiteNumber(player.draftYear ?? player.rookieYear)
-  return year === CURRENT_SEASON_YEAR
+  return year === ctx.classYear
 }
 
-function hasCurrentDebutYear(player: RookieFilterCandidate): boolean {
+function hasCurrentDebutYear(player: RookieFilterCandidate, ctx: RookieClassContext): boolean {
   const year = finiteNumber(player.debutYear ?? player.firstSeasonYear)
-  return year === CURRENT_SEASON_YEAR
+  return year === ctx.classYear
 }
 
-function inferNonFootballRookie(player: RookieFilterCandidate): boolean {
+function inferNonFootballRookie(player: RookieFilterCandidate, ctx: RookieClassContext): boolean {
   const sport = normalizedSport(player.sport)
   const age = finiteNumber(player.age)
 
   switch (sport) {
     case 'NBA':
-      return hasCurrentDraftYear(player)
+      return hasCurrentDraftYear(player, ctx)
 
     case 'NCAAB':
       return hasFreshmanClassLabel(player)
 
     case 'MLB':
-      return hasCurrentDebutYear(player)
+      return hasCurrentDebutYear(player, ctx)
 
     case 'NHL':
-      return hasCurrentDraftYear(player) || (age != null && age <= 20)
+      return hasCurrentDraftYear(player, ctx) || (age != null && age <= 20)
 
     case 'SOCCER':
-      return hasCurrentDebutYear(player) || (age != null && age <= 19)
+      return hasCurrentDebutYear(player, ctx) || (age != null && age <= 19)
 
     default:
       return false
@@ -123,9 +148,16 @@ function inferNonFootballRookie(player: RookieFilterCandidate): boolean {
 
 export function isRookieEligibleForFilter(
   player: RookieFilterCandidate,
-  options?: { devyEnabled?: boolean; c2cEnabled?: boolean },
+  options?: {
+    devyEnabled?: boolean
+    c2cEnabled?: boolean
+    /** The league's season (the year it begins). Wins over the sport's latest draft class. */
+    seasonYear?: number | null
+    now?: Date
+  },
 ): boolean {
   if (player.isRookie === true) return true
+  if (player.rookieVerdict === 'not_rookie') return false
 
   if (player.yearsExp != null && Number.isFinite(Number(player.yearsExp))) {
     return Number(player.yearsExp) === 0
@@ -136,11 +168,14 @@ export function isRookieEligibleForFilter(
     if (hasFreshmanClassLabel(player)) return true
   }
 
-  return inferNonFootballRookie(player)
+  const seasonYear = finiteNumber(options?.seasonYear)
+  const classYear = seasonYear ?? rookieClassYear(player.sport, options?.now)
+  return inferNonFootballRookie(player, { classYear })
 }
 
 export function isVetEligibleForFilter(player: VetFilterCandidate): boolean {
   if (player.isRookie === true) return false
+  if (player.rookieVerdict === 'not_rookie') return true
 
   if (player.yearsExp != null && Number.isFinite(Number(player.yearsExp))) {
     return Number(player.yearsExp) >= 1

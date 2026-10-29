@@ -6,7 +6,7 @@ import { loadGuillotineContext, type GuillotineContextResult } from './guillotin
 import { gradeGuillotineDeal, isGuillotineTradeLeague } from './guillotineValue'
 
 /**
- * The guillotine half of the one grade (`createLeagueTradeGrader`): an NFL guillotine league is graded on
+ * The guillotine half of the one grade (`createLeagueTradeGrader`): an NFL or NBA guillotine league is graded on
  * points over the free agent for the same lineup slot and FAAB's purchasing power (`./guillotineValue.ts`),
  * never on the market chart. Null for every other league.
  *
@@ -36,8 +36,8 @@ export function createGuillotineGrader(
   let ctx: Promise<GuillotineContextResult> | null = null
   const ctxOnce = () =>
     (ctx ??= deps
-      .loadContext(args.league)
-      .catch((): GuillotineContextResult => ({ ok: false, reason: 'This guillotine league’s values could not be loaded just now.' })))
+      .loadContext({ ...args.league, sport: args.sport ?? null })
+      .catch((): GuillotineContextResult => ({ ok: false, reason: 'This Guilly league’s values could not be loaded just now.' })))
 
   return {
     async grade(give, get) {

@@ -154,7 +154,7 @@ describe('valueBookFor — confirmed concepts', () => {
     expect(valueBookFor({ roster_positions: RB }, 'pirate').format).toBe('DYNASTY')
   })
 
-  it('prices a confirmed Survivor Guillotine league on REDRAFT whatever its column says', () => {
+  it('prices a confirmed Survivor Guilly league on REDRAFT whatever its column says', () => {
     for (const column of ['guillotine', 'dynasty', 'keeper', null]) {
       expect(valueBookFor(confirmed('survivor_guillotine'), column).format).toBe('REDRAFT')
     }

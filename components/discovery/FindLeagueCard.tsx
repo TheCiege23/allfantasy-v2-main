@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { CommishReputationBadge } from "@/components/commish-reputation/CommishReputationBadge"
 import { Calendar, User, Sparkles, Zap } from "lucide-react"
 import { trackDiscoveryJoinClick } from "@/lib/discovery-analytics/client"
 import { getFanCredBoundaryDisclosureShort } from "@/lib/legal/FanCredBoundaryDisclosure"
@@ -217,6 +218,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           <span className="flex items-center gap-1">
             <User className="h-3.5 w-3.5 shrink-0" />
             {league.commissionerName || "Commissioner"}
+            <CommishReputationBadge reputation={league.commissionerReputation} className="ml-1" />
           </span>
         </div>
         {league.maxMembers > 0 && (
