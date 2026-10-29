@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { dailyStreakMessages } from '@/lib/core-app/messages/dailyStreak'
 import type { StreakSummary } from '@/lib/core-app/dailyStreak'
 
 /**
@@ -13,42 +14,35 @@ import type { StreakSummary } from '@/lib/core-app/dailyStreak'
  * separately so the strip never waits on the league reads). It celebrates once, on the visit that
  * extends the streak; every later load that day is quiet.
  */
-const WEEKDAY = {
-  en: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
-  es: ['D', 'L', 'M', 'X', 'J', 'V', 'S'],
+type StreakMessages = typeof dailyStreakMessages.en
+
+function headline(s: StreakSummary, m: StreakMessages): string {
+  if (s.current === 0) return m.startStreak
+  if (s.justExtended && s.current === 1) return m.dayOneStarted
+  if (s.justExtended) return m.dayN(s.current)
+  return m.streakOf(s.current)
 }
 
-function headline(s: StreakSummary, es: boolean): string {
-  if (s.current === 0) return es ? 'Empieza una racha' : 'Start a streak'
-  if (s.justExtended && s.current === 1) return es ? 'Día 1: racha iniciada' : 'Day 1 — streak started'
-  if (s.justExtended) return es ? `¡Día ${s.current}!` : `Day ${s.current}!`
-  return es ? `Racha de ${s.current} día${s.current === 1 ? '' : 's'}` : `${s.current}-day streak`
-}
-
-function subline(s: StreakSummary, es: boolean): string {
-  if (s.reached != null) return es ? `🏅 ¡Logro de ${s.reached} días!` : `🏅 ${s.reached}-day milestone!`
+function subline(s: StreakSummary, m: StreakMessages): string {
+  if (s.reached != null) return m.milestone(s.reached)
   if (s.current > 0 && !s.checkedInToday) {
-    return es ? 'Entra hoy para no perderla' : 'Check in today to keep it alive'
+    return m.checkInToday
   }
-  if (s.current === 0) return es ? 'Vuelve cada día para sumar días' : 'Open AllFantasy each day to build it'
+  if (s.current === 0) return m.comeBackDaily
   if (s.next) {
-    return es
-      ? `${s.next.left} día${s.next.left === 1 ? '' : 's'} para el logro de ${s.next.at}`
-      : `${s.next.left} day${s.next.left === 1 ? '' : 's'} to your ${s.next.at}-day badge`
+    return m.toNextBadge(s.next.left, s.next.at)
   }
-  return es ? 'Leyenda absoluta' : 'Legend status'
+  return m.legend
 }
 
 export function DailyStreakCardView({ streak, children }: { streak: StreakSummary; children?: ReactNode }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
-  const days = es ? WEEKDAY.es : WEEKDAY.en
+  const m = useMessages(dailyStreakMessages)
   const atRisk = streak.current > 0 && !streak.checkedInToday
 
   return (
     <section
       className="af-core af-streak"
-      aria-label={es ? 'Racha diaria' : 'Daily streak'}
+      aria-label={m.dailyStreak}
       data-celebrate={streak.justExtended ? 'true' : undefined}
       data-at-risk={atRisk ? 'true' : undefined}
     >
@@ -58,30 +52,30 @@ export function DailyStreakCardView({ streak, children }: { streak: StreakSummar
           <span className="af-streak-count af-num">{streak.current}</span>
         </span>
         <div className="af-streak-text">
-          <span className="af-streak-title">{headline(streak, es)}</span>
-          <span className="af-streak-sub">{subline(streak, es)}</span>
+          <span className="af-streak-title">{headline(streak, m)}</span>
+          <span className="af-streak-sub">{subline(streak, m)}</span>
         </div>
-        <ol className="af-streak-week" aria-label={es ? 'Últimos 7 días' : 'Last 7 days'}>
+        <ol className="af-streak-week" aria-label={m.last7Days}>
           {streak.week.map((d) => (
             <li
               key={d.day}
               className="af-streak-day"
               data-checked={d.checked ? 'true' : 'false'}
               data-today={d.isToday ? 'true' : undefined}
-              aria-label={`${d.day}${d.checked ? (es ? ', registrado' : ', checked in') : ''}`}
+              aria-label={`${d.day}${d.checked ? m.checkedIn : ''}`}
             >
               <span className="af-streak-dot" aria-hidden>
                 {d.checked ? '✓' : ''}
               </span>
               <span className="af-streak-wd" aria-hidden>
-                {days[d.weekday]}
+                {m.weekday(d.weekday)}
               </span>
             </li>
           ))}
         </ol>
         {streak.best > 1 ? (
           <span className="af-streak-best af-num">
-            {es ? 'Mejor' : 'Best'} {streak.best}
+            {m.best} {streak.best}
           </span>
         ) : null}
       </div>
@@ -98,32 +92,31 @@ export type StreakGlanceItem = {
   href: string
 }
 
-function glanceText(item: StreakGlanceItem, es: boolean): string {
+function glanceText(item: StreakGlanceItem, m: StreakMessages): string {
   const n = item.count
   if (item.key === 'lineups') {
-    if (n === 0) return es ? 'Alineaciones listas' : 'Lineups set'
-    return es ? `${n} alineación${n === 1 ? '' : 'es'} por revisar` : `${n} lineup${n === 1 ? '' : 's'} to fix`
+    if (n === 0) return m.lineupsSet
+    return m.lineupsToFix(n)
   }
   if (item.key === 'injuries') {
-    if (n === 0) return es ? 'Sin alertas de lesión' : 'No injury flags'
-    return es ? `${n} alerta${n === 1 ? '' : 's'} de lesión` : `${n} injury flag${n === 1 ? '' : 's'}`
+    if (n === 0) return m.noInjuries
+    return m.injuryFlags(n)
   }
-  if (n === 0) return es ? 'Sin intercambios hoy' : 'No new trades'
-  return es ? `${n} intercambio${n === 1 ? '' : 's'} nuevo${n === 1 ? '' : 's'}` : `${n} new trade${n === 1 ? '' : 's'}`
+  if (n === 0) return m.noTrades
+  return m.newTrades(n)
 }
 
 /** Today's glance — three facts the home already holds, each one tap from where it is handled. */
 export function StreakGlanceView({ items }: { items: StreakGlanceItem[] }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(dailyStreakMessages)
   if (items.length === 0) return null
   return (
-    <ul className="af-streak-glance" aria-label={es ? 'Hoy de un vistazo' : 'Today at a glance'}>
+    <ul className="af-streak-glance" aria-label={m.todayAtAGlance}>
       {items.map((item) => (
         <li key={item.key}>
           <Link className="af-streak-chip" href={item.href} data-tone={item.tone}>
             <span aria-hidden>{item.tone === 'ok' ? '✓' : '!'}</span>
-            {glanceText(item, es)}
+            {glanceText(item, m)}
           </Link>
         </li>
       ))}

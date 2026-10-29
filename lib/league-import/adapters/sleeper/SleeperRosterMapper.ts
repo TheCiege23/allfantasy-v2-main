@@ -3,6 +3,9 @@ import type { NormalizedRoster } from '../../types'
 import type { SleeperImportPayload } from './types'
 import { sleeperPointsAgainst } from './SleeperPointsAgainst'
 
+/** Sleeper's marker for a starting slot nobody filled. Kept in `starter_ids` so slots stay aligned. */
+export const EMPTY_STARTER_SLOT = '0'
+
 export const SleeperRosterMapper: IExternalRosterMapper<SleeperImportPayload> = {
   map(source) {
     const rosters = source.rosters ?? []
@@ -72,7 +75,10 @@ export const SleeperRosterMapper: IExternalRosterMapper<SleeperImportPayload> = 
         points_for: fpts,
         points_against: sleeperPointsAgainst(roster.settings),
         player_ids: roster.players ?? [],
-        starter_ids: roster.starters?.filter((s) => s && s !== '0') ?? [],
+        // ⚠ POSITIONAL: index i is `roster_positions[i]`, and Sleeper marks an unfilled slot `"0"`.
+        // Dropping the markers shifted every starter after a hole into the wrong slot, so they stay
+        // (a null/blank slot becomes the same marker). Readers treat `"0"` as empty, never a player.
+        starter_ids: roster.starters?.map((s) => s || EMPTY_STARTER_SLOT) ?? [],
         reserve_ids: roster.reserve,
         taxi_ids: roster.taxi,
         // Tier 0 (Finding #9) — `faab_remaining = league.settings.waiver_budget -
