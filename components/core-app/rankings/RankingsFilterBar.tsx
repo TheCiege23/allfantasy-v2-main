@@ -5,6 +5,7 @@ import {
   type FilterOptions,
   type RankingFilters,
 } from '@/lib/core-app/rankingsEngine'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The filter row — a GET form.
@@ -116,7 +117,7 @@ function Select({
         <option value="">All</option>
         {list.map((o) => (
           <option key={o.value} value={o.value}>
-            {o.label} ({o.count.toLocaleString()} {unit})
+            {o.label} ({o.count.toLocaleString(getAppIntlLocale())} {unit})
           </option>
         ))}
       </select>

@@ -5,6 +5,7 @@ import {
   resolveLanguage,
   type LanguageCode,
 } from "@/lib/i18n/constants";
+import { setAppIntlLanguage } from "@/lib/i18n/appLocale";
 import {
   DEFAULT_THEME,
   THEME_STORAGE_KEY,
@@ -38,6 +39,8 @@ export function applyLanguageToDocument(
     root.setAttribute("lang", resolved);
     root.setAttribute("data-lang", resolved);
   }
+  // Numbers and dates across /core read this (lib/i18n/appLocale.ts).
+  setAppIntlLanguage(resolved);
   return resolved;
 }
 

@@ -20,6 +20,7 @@ import {
 import { useLanguage } from "@/components/i18n/LanguageProviderClient";
 import { KickerValuationBand, type KickerValuationView } from "./KickerValuationBand";
 import { selectLatestSeasonLeagues } from "./latestSeasonLeagues";
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 type LeagueFormat = "redraft" | "dynasty" | "keeper";
 type RankingView = "power" | "dynasty" | "composite";
@@ -543,7 +544,7 @@ function mapTeamSummary(raw: RawTeam): TeamRanking {
     strength:
       positiveDriver != null
         ? humanizeKey(positiveDriver.id)
-        : `Starter value ${Math.round(raw.starterValue).toLocaleString()}`,
+        : `Starter value ${Math.round(raw.starterValue).toLocaleString(getAppIntlLocale())}`,
     risk:
       negativeDriver != null
         ? humanizeKey(negativeDriver.id)
@@ -1013,7 +1014,7 @@ function ExpandedTeamDetail({
             <CollapsibleCard
               title={t("powerRankingsPage.detail.forwardOdds")}
               badge={tInterpolate("powerRankingsPage.forwardOdds.sims", {
-                n: team.forwardOdds.simCount.toLocaleString(),
+                n: team.forwardOdds.simCount.toLocaleString(getAppIntlLocale()),
               })}
             >
               <div className="space-y-3">
@@ -1160,11 +1161,11 @@ function ExpandedTeamDetail({
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-white/8 bg-[#0c0c1e] p-3 text-sm text-white/65">
                   {t("powerRankingsPage.position.starterValue")}{" "}
-                  <span className="font-bold text-white">{team.positionValues.starterValue.toLocaleString()}</span>
+                  <span className="font-bold text-white">{team.positionValues.starterValue.toLocaleString(getAppIntlLocale())}</span>
                 </div>
                 <div className="rounded-xl border border-white/8 bg-[#0c0c1e] p-3 text-sm text-white/65">
                   {t("powerRankingsPage.position.benchDepth")}{" "}
-                  <span className="font-bold text-white">{team.positionValues.benchDepth.toLocaleString()}</span>
+                  <span className="font-bold text-white">{team.positionValues.benchDepth.toLocaleString(getAppIntlLocale())}</span>
                 </div>
               </div>
             </CollapsibleCard>
@@ -2004,7 +2005,7 @@ export default function PowerRankingsPanel({
                 detail={tInterpolate("powerRankingsPage.hero.strongestDetail", {
                   value: Math.round(
                     heroData.strongest.raw.starterValue + heroData.strongest.raw.benchValue
-                  ).toLocaleString(),
+                  ).toLocaleString(getAppIntlLocale()),
                 })}
                 accent="border-emerald-500/20 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.15),transparent_45%),#0c0c1e]"
               />
@@ -2047,7 +2048,7 @@ export default function PowerRankingsPanel({
                           week: String(rankingsMeta.week),
                           updated: rankingsMeta.computedAt
                             ? tInterpolate("powerRankingsPage.updatedPrefix", {
-                                time: new Date(rankingsMeta.computedAt).toLocaleString(),
+                                time: new Date(rankingsMeta.computedAt).toLocaleString(getAppIntlLocale()),
                               })
                             : t("powerRankingsPage.freshLoad"),
                         })

@@ -14,6 +14,7 @@ import {
   tradeCardGradeLine,
   type TradeCardGrade,
 } from '@/lib/league-chat/tradeCardGradeView'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 type TradeAsset = { id: string; name: string | null; position?: string | null; team?: string | null }
 
@@ -90,7 +91,7 @@ export function TradeCardView({
   return <CompletedTradeView card={card} />
 }
 
-const fmtValue = (n: number) => Math.round(n).toLocaleString('en-US')
+const fmtValue = (n: number) => Math.round(n).toLocaleString(getAppIntlLocale())
 
 function CompletedTradeView({ card }: { card: TradeCard }) {
   const side = (assets: TradeAsset[], picks: number, extras: string[] = []) => {
