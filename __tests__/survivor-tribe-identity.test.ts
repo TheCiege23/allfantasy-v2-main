@@ -1,18 +1,23 @@
 import { describe, it, expect } from 'vitest'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
+import { renderTribeEmblemRequest } from '@/lib/survivor/tribeEmblemRoute'
 import { SURVIVOR_TRIBE_CATALOG, defaultTribeSlots, validateTribeSlots, tribeCrestUrl } from '@/lib/survivor/survivorTribeIdentity'
 import { computeTribeAssignment } from '@/lib/survivor/survivorTribeAssignmentEngine'
 import { buildSurvivorSettingsSnapshotPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { formatOptionsApplyToLeagueType, DEFAULT_WIZARD_FORMAT_OPTIONS } from '@/lib/league-creation-wizard/wizard-format-options'
 const participants = Array.from({ length: 20 }, (_, i) => ({ userId: `u${i}`, rosterId: `r${i}`, displayName: `Manager ${i}` }))
 describe('Survivor tribe identity and assignment', () => {
-  it('ships every supplied crest for every supported sport, with no executable SVG content', () => {
+  it('composes every crest for every supported sport, with no executable SVG content', () => {
     expect(SURVIVOR_TRIBE_CATALOG).toHaveLength(50)
     expect(new Set(SURVIVOR_TRIBE_CATALOG.map(t => t.id)).size).toBe(50)
     for (const sport of ['NFL','NBA','NHL','NCAAF','NCAAB','MLB','SOCCER']) for (const tribe of SURVIVOR_TRIBE_CATALOG) {
-      const url = tribeCrestUrl(tribe.id, sport)!
-      expect(existsSync(`public${url}`), url).toBe(true)
-      expect(readFileSync(`public${url}`, 'utf8')).not.toMatch(/<script|<foreignObject|\bon\w+\s*=/i)
+      const url = new URL(tribeCrestUrl(tribe.id, sport)!, 'https://allfantasy.test')
+      expect(url.pathname).toBe('/api/survivor/tribe-emblem/crest')
+      const res = renderTribeEmblemRequest('crest', url.searchParams)
+      expect(res.status, url.search).toBe(200)
+      expect(res.ok && res.svg).not.toMatch(/<script|<foreignObject|\bon\w+\s*=/i)
+      // The pre-built crest stays as the visual-regression baseline.
+      expect(existsSync(`public/survivor/tribes/crests/${sport.toLowerCase()}/${tribe.id}.svg`)).toBe(true)
     }
     expect(tribeCrestUrl('../../secret', 'NBA')).toBeNull()
     expect(tribeCrestUrl('crab', '../../NBA')).toBeNull()

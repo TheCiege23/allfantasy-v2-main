@@ -74,6 +74,11 @@ export function ImportedLeaguePreviewPanel({
             <CardTitle className="text-lg text-white">Import preview: {league.name}</CardTitle>
             <div className="flex flex-wrap items-center gap-2 text-sm text-white/70 mt-0.5">
               <span>{league.sport}</span>
+              {league.seasonPhase && (
+                <span className="rounded border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-amber-200" data-testid="fantrax-season-phase">
+                  {league.seasonPhase === 'pre_draft' ? 'Pre-draft' : 'Offseason'}
+                </span>
+              )}
               <span>·</span>
               <span>{league.type}</span>
               <span>·</span>

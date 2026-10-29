@@ -18,6 +18,7 @@ import { getUpgradeUrlWithHighlightForFeature } from '@/lib/subscription/feature
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import type { DraftOrderSlotRow } from '@/lib/draft/pick-order'
 import { pickTimerSecondsFromLeagueSettings } from '@/lib/league/league-settings-pick-timer'
+import { startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 import { COMMON_TIMEZONES, formatInTz, isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { DraftOrderList } from './settings/DraftOrderList'
 import { KeeperModal } from './settings/KeeperModal'
@@ -559,12 +560,19 @@ export function LeagueSettingsTab({
         title="Automation"
         description="Control how the draft handles timers, pauses, and auto-picks."
       >
-        <SettingsRow
-          label="Autostart Draft"
-          description="Draft begins automatically at the scheduled time."
-          faqText="When enabled, the draft starts automatically at your scheduled time. Works for both live and slow drafts. Requires a draft time to be set."
-          control={<Toggle checked={Boolean(s?.autostart)} onChange={(v) => void patch({ autostart: v })} />}
-        />
+        {/* Native redraft drafts start at their time whatever this says, so it is hidden for them. */}
+        {startsAtScheduledTimeRegardlessOfAutostart(league) ? (
+          <p className="border-b border-white/[0.04] py-2 text-[12px] text-white/60" data-testid="draft-autostart-scheduled-note">
+            {t('draft.autostartScheduledNote')}
+          </p>
+        ) : (
+          <SettingsRow
+            label="Autostart Draft"
+            description="Draft begins automatically at the scheduled time."
+            faqText="When enabled, the draft starts automatically at your scheduled time. Works for both live and slow drafts. Requires a draft time to be set."
+            control={<Toggle checked={Boolean(s?.autostart)} onChange={(v) => void patch({ autostart: v })} />}
+          />
+        )}
         <SettingsRow
           label="Slow Draft Auto-Pause"
           description="Pause the draft daily during a quiet window."

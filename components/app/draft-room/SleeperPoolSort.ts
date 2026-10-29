@@ -21,6 +21,7 @@ export interface PoolSortPlayer {
   name: string
   adp?: number | null
   aiAdp?: number | null
+  afAdp?: number | null
   byeWeek?: number | null
   /** Pool row display (same shape as **`PlayerPanel.PlayerEntry`**). */
   display?: PlayerDisplayModel | null
@@ -42,7 +43,7 @@ function num(v: number | null | undefined): number | null {
 }
 
 export function defaultSortDirectionForKey(key: PoolSortKey): PoolSortDirection {
-  if (key === 'adp' || key === 'aiAdp' || key === 'name' || key === 'bye') return 'asc'
+  if (key === 'adp' || key === 'aiAdp' || key === 'afAdp' || key === 'name' || key === 'bye') return 'asc'
   return 'desc'
 }
 
@@ -60,6 +61,8 @@ export function sortValueForKey(
       return num(p.adp)
     case 'aiAdp':
       return num(p.aiAdp)
+    case 'afAdp':
+      return num(p.afAdp)
     case 'bye':
       return num(p.byeWeek)
     case 'projected':
@@ -175,6 +178,7 @@ export function ariaSortValue(
 export const DEFAULT_SORT_DIRECTIONS: Record<string, PoolSortDirection> = {
   adp: 'asc',
   aiAdp: 'asc',
+  afAdp: 'asc',
   name: 'asc',
   bye: 'asc',
   projected: 'desc',
@@ -196,7 +200,7 @@ export const COLUMN_TO_SORT_KEY: Record<string, PoolSortKey | null> = {
   rk: 'adp',
   player: 'name',
   adp: 'adp',
-  aiAdp: 'aiAdp',
+  afAdp: 'afAdp',
   bye: 'bye',
   pts: 'pts',
   avg: 'projected',

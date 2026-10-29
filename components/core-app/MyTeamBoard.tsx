@@ -32,6 +32,7 @@ import { rowScoreOf, summariseWeekScores, type RowScore, type WeekScoreSummary }
 import { boardFilterHref } from '@/lib/core-app/myTeamBoardFilter'
 import type { LineupReminderStatus } from '@/lib/core-app/lineupReminderStatus'
 import { InfoTip } from '@/components/core-app/InfoTip'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 const REMINDER_SETTINGS_HREF = `/settings?tab=notifications&returnTo=${encodeURIComponent('/core/my-team')}`
 
@@ -709,8 +710,8 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
                     : language === 'es' ? `Primeros ${rows.length} · sin problemas, ordenados por hora de cierre` : `Top ${rows.length} · nothing is broken, so ranked by lock time`
           }
           count={language === 'es'
-            ? `${pulse.checked.toLocaleString()} de ${activeTotal.toLocaleString()} equipos ${pulse.paused ? 'activos ' : ''}revisados`
-            : `${pulse.checked.toLocaleString()} of ${activeTotal.toLocaleString()} ${pulse.paused ? 'active ' : ''}teams read`}
+            ? `${pulse.checked.toLocaleString(getAppIntlLocale())} de ${activeTotal.toLocaleString(getAppIntlLocale())} equipos ${pulse.paused ? 'activos ' : ''}revisados`
+            : `${pulse.checked.toLocaleString(getAppIntlLocale())} of ${activeTotal.toLocaleString(getAppIntlLocale())} ${pulse.paused ? 'active ' : ''}teams read`}
           /* Only over rows: on an empty list there is nothing to read. */
           info={rows.length > 0 ? <BoardReadingTip es={es} scores={weekRecord != null} /> : undefined}
         />
@@ -760,8 +761,8 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
                 {pulse.automatic
                   ? copy('No manual lineup problems found in the available data. Best Ball scoring lineups are selected automatically; review those leagues for roster injuries and depth.')
                   : language === 'es'
-                    ? `Las ${pulse.checked.toLocaleString()} alineaciones que pudimos leer están listas: sin posiciones vacías ni jugadores descartados${pulse.byeChecked ? ', y nadie descansa' : ''}. ${questionableFirst ? 'Primero las que tienen titulares dudosos, luego las que cierran antes.' : 'Estas son las que cierran primero.'}`
-                    : <>Every one of the {pulse.checked.toLocaleString()} lineups we could read is set —
+                    ? `Las ${pulse.checked.toLocaleString(getAppIntlLocale())} alineaciones que pudimos leer están listas: sin posiciones vacías ni jugadores descartados${pulse.byeChecked ? ', y nadie descansa' : ''}. ${questionableFirst ? 'Primero las que tienen titulares dudosos, luego las que cierran antes.' : 'Estas son las que cierran primero.'}`
+                    : <>Every one of the {pulse.checked.toLocaleString(getAppIntlLocale())} lineups we could read is set —
                       no empty slots, nobody ruled out
                       {pulse.byeChecked ? ', nobody on a bye' : ''}. {questionableFirst
                         ? 'Lineups with questionable starters come first, then the ones locking soonest.'
@@ -812,8 +813,8 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
         ) : (
           <p className="af-bd-note">
             {language === 'es'
-              ? `Las ${pulse.checked.toLocaleString()} alineaciones que pudimos leer están listas: sin posiciones vacías ni jugadores descartados${pulse.byeChecked ? ', y nadie descansa' : ''}.`
-              : <>Every one of the {pulse.checked.toLocaleString()} lineups we could read is set — no
+              ? `Las ${pulse.checked.toLocaleString(getAppIntlLocale())} alineaciones que pudimos leer están listas: sin posiciones vacías ni jugadores descartados${pulse.byeChecked ? ', y nadie descansa' : ''}.`
+              : <>Every one of the {pulse.checked.toLocaleString(getAppIntlLocale())} lineups we could read is set — no
                 empty slots, nobody ruled out
                 {pulse.byeChecked ? ', nobody on a bye' : ''}.</>}
           </p>
@@ -839,8 +840,8 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
         <p className="af-bd-note">
           <strong>
             {language === 'es'
-              ? `${unreadable} de tus ${activeTotal.toLocaleString()} equipos asignados${pulse.paused ? ' activos' : ''} no se pudieron revisar.`
-              : <>{unreadable} of your {activeTotal.toLocaleString()} {pulse.paused ? 'active ' : ''}claimed{' '}
+              ? `${unreadable} de tus ${activeTotal.toLocaleString(getAppIntlLocale())} equipos asignados${pulse.paused ? ' activos' : ''} no se pudieron revisar.`
+              : <>{unreadable} of your {activeTotal.toLocaleString(getAppIntlLocale())} {pulse.paused ? 'active ' : ''}claimed{' '}
                   {activeTotal === 1 ? 'team' : 'teams'} could not be checked.</>}
           </strong>{' '}
           {/* Singular counts read as broken copy on a screen full of real numbers. */}

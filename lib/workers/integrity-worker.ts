@@ -6,9 +6,7 @@ import { Worker, Job, type ConnectionOptions } from "bullmq"
 import { getRedisConnection, isRedisConfigured } from "@/lib/queues/bullmq"
 import { QUEUE_NAMES } from "@/lib/jobs/types"
 import type { IntegrityJobPayload } from "@/lib/jobs/types"
-import { checkLeagueCommissionerEntitlement } from "@/lib/integrity/leagueEntitlement"
-import { fullLeagueCollusionScan, scanTradeForCollusion } from "@/lib/integrity/CollusionDetectionEngine"
-import { scanWeekForTanking } from "@/lib/integrity/TankingDetectionEngine"
+import { runIntegrityJob } from "@/lib/integrity/runIntegrityJob"
 
 export type IntegrityJobResult = {
   ok: boolean
@@ -28,42 +26,9 @@ function getConnection(): ConnectionOptions {
 }
 
 async function processIntegrityJob(job: Job<IntegrityJobPayload, IntegrityJobResult>): Promise<IntegrityJobResult> {
-  const { type, leagueId } = job.data
-  const entitled = await checkLeagueCommissionerEntitlement(leagueId)
-  if (!entitled) {
-    console.log(`[integrity-worker] League ${leagueId} not entitled — skip`)
-    return { ok: true, skipped: true }
-  }
-
-  try {
-    switch (type) {
-      case "collusion_scan_trade": {
-        const tid = job.data.tradeTransactionId
-        if (!tid) throw new Error("Missing tradeTransactionId")
-        await scanTradeForCollusion(leagueId, tid, job.data.tradeRef)
-        return { ok: true, jobId: job.id }
-      }
-      case "collusion_scan_league": {
-        await fullLeagueCollusionScan(leagueId)
-        return { ok: true, jobId: job.id }
-      }
-      case "tanking_scan_week": {
-        const w = job.data.weekNumber ?? 1
-        await scanWeekForTanking(leagueId, w, job.data.seasonId)
-        return { ok: true, jobId: job.id }
-      }
-      case "tanking_scan_league": {
-        const w = job.data.weekNumber ?? 1
-        await scanWeekForTanking(leagueId, w)
-        return { ok: true, jobId: job.id }
-      }
-      default:
-        throw new Error(`Unknown integrity job type: ${type}`)
-    }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return { ok: false, jobId: job.id, error: msg }
-  }
+  const outcome = await runIntegrityJob(job.data)
+  if (outcome.skipped) console.log(`[integrity-worker] League ${job.data.leagueId} not entitled — skip`)
+  return { ...outcome, jobId: job.id }
 }
 
 export function startIntegrityWorker(): Worker<IntegrityJobPayload, IntegrityJobResult> | null {

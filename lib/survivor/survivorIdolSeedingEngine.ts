@@ -166,7 +166,9 @@ export interface PlayerBoundIdolCandidate {
   playerName?: string
 }
 
-export interface PlayerBoundIdolAssignment extends IdolSeedAssignment {
+export interface PlayerBoundIdolAssignment extends Omit<IdolSeedAssignment, 'powerType'> {
+  /** An engine power (e.g. vote_shield) or an underscored catalog idol id (e.g. point_surge). */
+  powerType: string
   playerId: string
   playerName?: string
   expiresAtMerge: boolean
@@ -181,9 +183,17 @@ export function computePlayerBoundIdolSeedPlan(input: {
   candidates: PlayerBoundIdolCandidate[]
   idolCount: number
   powerPool?: SurvivorIdolPowerType[]
+  /**
+   * The league's resolved idol types (survivor-theme draw), one idol each. When given it replaces
+   * the cycled power pool and must have exactly `idolCount` entries.
+   */
+  powerTypes?: string[]
   seed: number
 }): { ok: true; assignments: PlayerBoundIdolAssignment[]; seed: number } | { ok: false; code: string; error: string } {
   const { candidates, idolCount, seed } = input
+  if (input.powerTypes && input.powerTypes.length !== idolCount) {
+    return { ok: false, code: 'invalid_count', error: 'The resolved idol types do not match the idol count.' }
+  }
   if (!Number.isInteger(idolCount) || idolCount < 1 || idolCount > candidates.length) {
     return { ok: false, code: 'invalid_count', error: 'Idol count must be positive and cannot exceed drafted player count.' }
   }
@@ -192,7 +202,7 @@ export function computePlayerBoundIdolSeedPlan(input: {
     return { ok: false, code: 'invalid_draft_players', error: 'Draft picks need distinct stable player IDs and roster owners before idols can be seeded.' }
   }
   const powerPool = input.powerPool?.length ? input.powerPool : ['vote_shield', 'extra_vote', 'skip_tribal', 'vote_steal', 'triple_steal', 'island_raid'] as SurvivorIdolPowerType[]
-  if (powerPool.some(power => SURVIVOR_IDOL_CATALOG[power]?.resolution !== 'phase2')) {
+  if (!input.powerTypes && powerPool.some(power => SURVIVOR_IDOL_CATALOG[power]?.resolution !== 'phase2')) {
     return { ok: false, code: 'unavailable_power', error: 'The selected idol pool contains a power whose roster or vote effect is not implemented.' }
   }
   const rand = mulberry32(seed)
@@ -217,12 +227,14 @@ export function computePlayerBoundIdolSeedPlan(input: {
   if (selected.length !== idolCount) {
     return { ok: false, code: 'invalid_count', error: 'The selected idol holders do not have enough distinct drafted players for this many idols.' }
   }
-  const powerOrder = shuffled(Array.from({ length: idolCount }, (_, index) => powerPool[index % powerPool.length]))
+  const powerOrder: string[] = shuffled(input.powerTypes
+    ? [...input.powerTypes]
+    : Array.from({ length: idolCount }, (_, index) => powerPool[index % powerPool.length]))
   const mergeExpiryOrder = shuffled(Array.from({ length: idolCount }, (_, index) => index < Math.floor(idolCount / 2)))
   return { ok: true, seed, assignments: selected.map((candidate, index) => ({
     ...candidate,
     powerType: powerOrder[index],
-    expiresAtRemainingPlayers: SURVIVOR_IDOL_CATALOG[powerOrder[index]].expiresAtRemainingPlayers,
+    expiresAtRemainingPlayers: SURVIVOR_IDOL_CATALOG[powerOrder[index] as SurvivorIdolPowerType]?.expiresAtRemainingPlayers ?? 5,
     expiresAtMerge: mergeExpiryOrder[index],
   })) }
 }

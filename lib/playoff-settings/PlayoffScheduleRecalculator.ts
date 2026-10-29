@@ -12,13 +12,21 @@ import type { SportType } from '@/lib/sport-defaults/types'
 /**
  * Calculate the schedule impact of enabling/disabling playoff stages.
  * Returns a summary of changes + new week numbers.
+ *
+ * `options.playoffStartWeek` (native leagues): the commissioner's chosen start week, from
+ * resolvePlayoffStartWeek. The start week is then FIXED — stages only change the playoff length,
+ * and a season-shortening stage does not move it (the quick "Playoff start week" field does).
+ * Without it (imported leagues), the original sport-default computation is unchanged.
  */
 export function calculateScheduleAdjustment(
   sport: string,
   currentConfig: PlayoffConfig,
   newIncludedStages: string[],
-  variant?: string | null
+  variant?: string | null,
+  options?: { playoffStartWeek?: number | null }
 ): ScheduleAdjustmentSummary {
+  const fixedStartWeek =
+    typeof options?.playoffStartWeek === 'number' && options.playoffStartWeek > 0 ? options.playoffStartWeek : null
   const sportType = sport.toUpperCase() as SportType
   const defaults = resolveDefaultPlayoffConfig(sportType, variant)
   const allStages = getPlayoffStagesBySport(sport)
@@ -33,8 +41,14 @@ export function calculateScheduleAdjustment(
     if (!stage) continue
     additionalWeeks += stage.additionalWeeks
     if (stage.shortensSeason) {
-      seasonShortenedWeeks += stage.additionalWeeks || 1
-      changes.push(`Regular season shortened by ${stage.additionalWeeks || 1} week(s) for ${stage.label}`)
+      if (fixedStartWeek != null) {
+        changes.push(
+          `${stage.label}: playoffs still start Week ${fixedStartWeek} - change "Playoffs start (week)" in Quick schedule to end the regular season earlier`
+        )
+      } else {
+        seasonShortenedWeeks += stage.additionalWeeks || 1
+        changes.push(`Regular season shortened by ${stage.additionalWeeks || 1} week(s) for ${stage.label}`)
+      }
     }
     if (stage.additionalWeeks > 0) {
       changes.push(`${stage.label} adds ${stage.additionalWeeks} playoff week(s)`)
@@ -61,7 +75,7 @@ export function calculateScheduleAdjustment(
     changes.unshift(`Removed: ${removedLabels.join(', ')}`)
   }
 
-  const basePlayoffStartWeek = defaults.playoff_start_week ?? 15
+  const basePlayoffStartWeek = fixedStartWeek ?? defaults.playoff_start_week ?? 15
   const basePlayoffWeeks = defaults.playoff_weeks ?? 3
 
   const newRegularSeasonEndWeek = basePlayoffStartWeek - 1 - seasonShortenedWeeks

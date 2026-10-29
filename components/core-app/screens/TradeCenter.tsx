@@ -73,9 +73,13 @@ import type { ProposalCardInput } from '@/lib/share/proposalCard'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { PickTradeDeadlineChip, TradeDeadlineCountdownChip } from '@/components/core-app/TradeDeadlineCountdown'
+import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
+import type { PickTradeDeadlineView } from '@/lib/trade-deadline/pickTradeDeadline'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { isBlockingFormatNote } from '@/lib/trade-intel/formatNoteBlocking'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 36a — Trade Center.
@@ -296,7 +300,7 @@ type AnalyzeResult = {
  * cannot price is not worthless, and rendering 0 would say he is.
  */
 function money(v: number | null | undefined): string {
-  return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString() : '—'
+  return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString(getAppIntlLocale()) : '—'
 }
 
 /**
@@ -313,7 +317,7 @@ function totalOf(lines: Line[]): string {
     .map(valueOf)
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
   if (priced.length === 0) return '—'
-  return priced.reduce((a, b) => a + b, 0).toLocaleString()
+  return priced.reduce((a, b) => a + b, 0).toLocaleString(getAppIntlLocale())
 }
 
 /**
@@ -549,6 +553,10 @@ export function TradeCenter(props: {
   /** Opponent label, when the caller knows one. */
   opponentLabel?: string | null
   deadlineLabel?: string | null
+  /** The enforced deadline as a countdown ("Trade deadline in 3d 4h" / "Trades closed"). Wins over `deadlineLabel`. */
+  deadlineCountdown?: TradeDeadlineCountdown | null
+  /** A dynasty league's separate rule for pick-only trades; null when pick trades follow the deadline. */
+  pickTradeDeadline?: PickTradeDeadlineView | null
   /** Source platform id (sleeper, espn, …) — drives the platform marks. */
   platform?: string | null
   /** Resolved league type key (redraft, dynasty, keeper, …) — scopes the asset legend. */
@@ -1540,6 +1548,7 @@ export function TradeCenter(props: {
         teamCount={props.league?.teamCount ?? null}
         rosterKnown={Boolean(r)}
         pickCoverage={rosterData?.pickCoverage}
+        pickPolicy={rosterData?.pickPolicy ?? null}
         /*
           Same rule as the picks directly above, for the same reason: each column sends
           from its OWN roster. Offering a player from the wrong side builds an asset the
@@ -1670,9 +1679,12 @@ export function TradeCenter(props: {
           </span>
           <span className="af-tc-spacer" />
           {props.opponentLabel ? <span className="af-tc-chip">{props.opponentLabel}</span> : null}
-          {props.deadlineLabel ? (
+          {props.deadlineCountdown && props.deadlineCountdown.state !== 'none' ? (
+            <TradeDeadlineCountdownChip countdown={props.deadlineCountdown} className="af-tc-chip af-tc-chip--deadline" />
+          ) : props.deadlineLabel ? (
             <span className="af-tc-chip af-tc-chip--deadline">{props.deadlineLabel}</span>
           ) : null}
+          <PickTradeDeadlineChip view={props.pickTradeDeadline} className="af-tc-chip af-tc-chip--deadline" />
         </div>
       ) : null}
 
@@ -1824,7 +1836,7 @@ export function TradeCenter(props: {
             {balance?.diff != null && balance.diff !== 0 ? (
               <span className="af-tc-stepbar-delta" data-tone={balance.diff > 0 ? 'good' : 'bad'}>
                 {balance.diff > 0 ? '+' : '−'}
-                {Math.abs(balance.diff).toLocaleString()}
+                {Math.abs(balance.diff).toLocaleString(getAppIntlLocale())}
               </span>
             ) : null}
           </span>
@@ -2247,7 +2259,7 @@ export function TradeCenter(props: {
                 ? copy('Nothing priced on one side')
                 : balance.diff === 0
                   ? copy('Even on priced value')
-                  : `${balance.diff > 0 ? '+' : '−'}${Math.abs(balance.diff).toLocaleString()} ${copy('to you')} · ${balance.pct}% ${copy('apart')}`}
+                  : `${balance.diff > 0 ? '+' : '−'}${Math.abs(balance.diff).toLocaleString(getAppIntlLocale())} ${copy('to you')} · ${balance.pct}% ${copy('apart')}`}
             </span>
           </div>
           {balance.givePct != null ? (

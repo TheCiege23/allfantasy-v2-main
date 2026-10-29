@@ -1,6 +1,7 @@
 import "server-only"
 import { prisma } from "@/lib/prisma"
 import { cfpSeedMapByHalf, readCfpSeeds } from "./cfpSeeds"
+import { nbaCupSeedMap, readNbaCupField } from "./nbaCupSeeds"
 import type { PlayoffSport } from "./types"
 
 /**
@@ -158,6 +159,20 @@ export async function resolvePlayoffSeedField(
       seeds: record ? cfpSeedMapByHalf(record.seeds) : new Map(),
       rowsRead: record ? record.seeds.length : 0,
       isFinal: Boolean(record),
+      minGamesPlayed: null,
+      warnings,
+    }
+  }
+
+  if (sport === "nba_cup") {
+    const season = Number(seasonYear)
+    const field = await readNbaCupField(season)
+    if (!field) warnings.push(`no NBA Cup knockout field saved for ${season}`)
+    return {
+      sport, season: String(season),
+      seeds: field ? nbaCupSeedMap(field) : new Map(),
+      rowsRead: field ? 8 : 0,
+      isFinal: Boolean(field),
       minGamesPlayed: null,
       warnings,
     }

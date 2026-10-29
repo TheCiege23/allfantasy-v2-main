@@ -69,6 +69,10 @@ export interface SalaryCapSummary {
   rookieContractCount: number
   events: { eventType: string; metadata: unknown; createdAt: string }[]
   lottery: { seed: string | null; order: unknown } | null
+  /** League identity for the specialty hero; absent on older responses. */
+  league?: { name: string | null; sport: string; season: number; teamCount: number | null; capYear: number } | null
+  /** Cut contracts still charging dead money this cap year. */
+  deadContracts?: { id: string; playerName: string | null; position: string | null; deadThisYear: number }[]
 }
 
 export type SalaryCapView = 'home' | 'cap-dashboard' | 'contracts' | 'team-builder' | 'draft' | 'ai' | 'rules'

@@ -15,7 +15,7 @@ import { createCanonicalLeagueInTransaction } from '@/lib/league-creation/canoni
 
 const prismaMock = vi.hoisted(() => ({
   league: { findUnique: vi.fn() },
-  guillotineSeason: { findFirst: vi.fn(), findUnique: vi.fn() },
+  guillotineSeason: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   guillotineElimination: { findFirst: vi.fn(), findMany: vi.fn() },
   guillotinePeriodScore: { findMany: vi.fn() },
   guillotineRosterState: {
@@ -56,6 +56,7 @@ const getDraftSlotByRosterMock = vi.hoisted(() => vi.fn())
 const releaseChoppedRostersMock = vi.hoisted(() => vi.fn())
 const appendEventMock = vi.hoisted(() => vi.fn())
 const postChopToLeagueChatMock = vi.hoisted(() => vi.fn())
+const postAutomaticGuillotineRecapMock = vi.hoisted(() => vi.fn())
 const standingsMock = vi.hoisted(() => vi.fn())
 const dangerMock = vi.hoisted(() => vi.fn())
 const eventsMock = vi.hoisted(() => vi.fn())
@@ -97,9 +98,16 @@ vi.mock('@/lib/guillotine/GuillotineEventLog', () => ({
   appendEvent: appendEventMock,
   getRecentEvents: eventsMock,
 }))
+vi.mock('@/lib/guillotine/weeklyRecap', () => ({ postAutomaticGuillotineRecap: postAutomaticGuillotineRecapMock }))
+const redistributeChoppedFaabMock = vi.hoisted(() => vi.fn())
+const createLeagueChatMessageMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/guillotine/faabOnChopApply', () => ({ redistributeChoppedFaab: redistributeChoppedFaabMock }))
+vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({ createLeagueChatMessage: createLeagueChatMessageMock }))
 vi.mock('@/lib/guillotine/guillotineChat', () => ({
   postChopToLeagueChat: postChopToLeagueChatMock,
 }))
+const sendChopResultAlertsMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/guillotine/chopAlerts', () => ({ sendChopResultAlerts: sendChopResultAlertsMock }))
 vi.mock('@/lib/guillotine/GuillotineStandingsProjectionService', () => ({
   getSurvivalStandings: standingsMock,
 }))
@@ -116,7 +124,7 @@ vi.mock('@/components/guillotine/GuillotineAIPanel', () => ({
   GuillotineAIPanel: () => <div data-testid="guillotine-ai-panel" />,
 }))
 
-describe('Guillotine full regression matrix', () => {
+describe('Guilly full regression matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaMock.guillotinePeriodScore.findMany.mockResolvedValue([])
@@ -139,7 +147,7 @@ describe('Guillotine full regression matrix', () => {
     prismaMock.redraftRoster.update.mockResolvedValue({ id: 'ok' })
   })
 
-  it('supports all 7 sports with valid guillotine config and waivers after chop', () => {
+  it('supports all 7 sports with valid Guilly config and waivers after chop', () => {
     expect(SUPPORTED_SPORTS).toEqual(['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])
 
     for (const sport of SUPPORTED_SPORTS) {
@@ -159,7 +167,7 @@ describe('Guillotine full regression matrix', () => {
     }
   })
 
-  it('supports guillotine draft types for all sports (snake/linear/auction)', () => {
+  it('supports Guilly draft types for all sports (snake/linear/auction)', () => {
     expect(DRAFT_TYPES_BY_LEAGUE_FORMAT.guillotine).toEqual(['snake', 'linear', 'auction'])
 
     for (const sport of SUPPORTED_SPORTS) {
@@ -282,6 +290,65 @@ describe('Guillotine full regression matrix', () => {
     expect(resolveTiebreakMock).toHaveBeenCalledWith(expect.objectContaining({ teamsPerChop: 1 }))
   })
 
+  describe('chop rules (lib/guillotine/chopSchedule.ts, AF Commissioner)', () => {
+    const five = ['a', 'b', 'c', 'd', 'e'].map((rosterId, index) => ({ rosterId, periodPoints: index + 10, seasonPointsCumul: index + 10 }))
+    const withRules = (advanced: Record<string, unknown>) =>
+      prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing', settings: { guillotine_advanced: advanced } })
+    beforeEach(() => {
+      getGuillotineConfigMock.mockResolvedValue({ eliminationStartWeek: 1, eliminationEndWeek: 18, teamsPerChop: 1, tiebreakerOrder: ['season_points'] })
+      evaluateWeekMock.mockResolvedValue({ pastCutoff: true, activeRosterIds: five.map((r) => r.rosterId), scores: five })
+      getDraftSlotByRosterMock.mockResolvedValue(new Map())
+      resolveTiebreakMock.mockReturnValue({ choppedRosterIds: [], stepUsed: null, reason: 'resolver boundary' })
+    })
+
+    it('a schedule step changes how many go from that week on', async () => {
+      withRules({ steps: [{ fromWeek: 10, chops: 2 }], overrides: {}, immunity: 'off' })
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 9, skipChat: true })
+      expect(resolveTiebreakMock).toHaveBeenLastCalledWith(expect.objectContaining({ teamsPerChop: 1 }))
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 10, skipChat: true })
+      expect(resolveTiebreakMock).toHaveBeenLastCalledWith(expect.objectContaining({ teamsPerChop: 2 }))
+    })
+
+    it('a no-chop week chops nobody and says so', async () => {
+      withRules({ steps: [], overrides: { 6: 0 }, immunity: 'off' })
+      const out = await runElimination({ leagueId: 'league-1', weekOrPeriod: 6, skipChat: true })
+      expect(out).toMatchObject({ choppedRosterIds: [], reason: 'no chop scheduled' })
+      expect(resolveTiebreakMock).not.toHaveBeenCalled()
+      expect(prismaMock.guillotineRosterState.upsert).not.toHaveBeenCalled()
+    })
+
+    it('a no-chop week moves the season past it, so the weekly driver goes on to the next week', async () => {
+      withRules({ steps: [], overrides: { 6: 0 }, immunity: 'off' })
+      prismaMock.guillotineSeason.findFirst.mockResolvedValue({ id: 'gs1' })
+      prismaMock.guillotineSeason.findUnique.mockResolvedValue({ createdAt: new Date('2026-01-01'), currentScoringPeriod: 5 })
+      prismaMock.guillotineSeason.update.mockResolvedValue({})
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 6, season: 2026, skipChat: true })
+      expect(prismaMock.guillotineSeason.update).toHaveBeenCalledWith({ where: { id: 'gs1' }, data: { currentScoringPeriod: 6 } })
+    })
+
+    it('immunity takes last week’s top scorer out of the chop', async () => {
+      withRules({ steps: [], overrides: {}, immunity: 'top_scorer' })
+      // 'a' is lowest this week but topped last week.
+      prismaMock.guillotinePeriodScore.findMany.mockResolvedValue([{ rosterId: 'a', periodPoints: 150 }, { rosterId: 'b', periodPoints: 90 }])
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, skipChat: true })
+      const candidates = resolveTiebreakMock.mock.calls.at(-1)![0].candidates as Array<{ rosterId: string }>
+      expect(candidates.map((c) => c.rosterId)).toEqual(['b', 'c', 'd', 'e'])
+      expect(prismaMock.guillotinePeriodScore.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ weekOrPeriod: 2 }) }))
+    })
+
+    it('immunity is skipped when it would leave too few teams to chop', async () => {
+      withRules({ steps: [], overrides: { 3: 2 }, immunity: 'top_scorer' })
+      const two = five.slice(0, 2)
+      evaluateWeekMock.mockResolvedValue({ pastCutoff: true, activeRosterIds: ['a', 'b', 'x'], scores: [...two, { rosterId: 'x', periodPoints: 99, seasonPointsCumul: 99 }] })
+      // 'a' and 'b' tied for last week's top score: protecting both would leave one team for two chops.
+      prismaMock.guillotinePeriodScore.findMany.mockResolvedValue([{ rosterId: 'a', periodPoints: 150 }, { rosterId: 'b', periodPoints: 150 }])
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, skipChat: true })
+      const call = resolveTiebreakMock.mock.calls.at(-1)![0]
+      expect(call.teamsPerChop).toBe(2)
+      expect((call.candidates as Array<{ rosterId: string }>).map((c) => c.rosterId)).toEqual(['a', 'b', 'x'])
+    })
+  })
+
   it('eliminates lowest score, marks roster eliminated, releases players to waivers, and emits events', async () => {
     getGuillotineConfigMock.mockResolvedValue({
       eliminationStartWeek: 1,
@@ -331,14 +398,15 @@ describe('Guillotine full regression matrix', () => {
       where: { id: 'rr-low' },
       data: { isEliminated: true },
     })
+    // A chopped manager loses the team, not the league: the team is marked eliminated and the
+    // claim that `assertLeagueMember` admits them by is left alone.
     expect(prismaMock.leagueTeam.updateMany).toHaveBeenCalledWith({
-      where: { leagueId: 'league-1', externalId: 'r-low' },
-      data: {
-        claimedByUserId: null,
-        platformUserId: null,
-        isOrphan: true,
-      },
+      where: { leagueId: 'league-1', externalId: 'r-low', eliminatedAt: null },
+      data: { eliminatedAt: expect.any(Date), lifecycleState: 'CURRENT' },
     })
+    const teamWrite = prismaMock.leagueTeam.updateMany.mock.calls[0][0].data
+    expect(teamWrite).not.toHaveProperty('claimedByUserId')
+    expect(teamWrite).not.toHaveProperty('isOrphan')
     expect(releaseChoppedRostersMock).toHaveBeenCalledWith({
       leagueId: 'league-1',
       rosterIds: ['r-low'],
@@ -350,6 +418,63 @@ describe('Guillotine full regression matrix', () => {
     // The announcement is read by the whole league: a name, never the fixture's email.
     expect(postChopToLeagueChatMock.mock.calls[0][0].displayNames).toEqual({ 'r-low': 'Lowest Team' })
     expect(JSON.stringify(postChopToLeagueChatMock.mock.calls[0][0])).not.toContain('@test.com')
+    // Chop alerts (lib/guillotine/chopAlerts.ts): everyone scored this week, and the same names.
+    expect(sendChopResultAlertsMock).toHaveBeenCalledWith(expect.objectContaining({
+      leagueId: 'league-1',
+      week: 3,
+      choppedRosterIds: ['r-low'],
+      aliveRosterIds: ['r-low', 'r-mid'],
+      displayNames: { 'r-low': 'Lowest Team' },
+      rosterReleaseTiming: 'next_waiver_run',
+    }))
+  })
+
+  describe("a chopped team's unspent FAAB (lib/guillotine/faabOnChop.ts)", () => {
+    function chopLowOfTwo() {
+      getGuillotineConfigMock.mockResolvedValue({
+        eliminationStartWeek: 1, eliminationEndWeek: 18, teamsPerChop: 1, tiebreakerOrder: ['bench_points'], rosterReleaseTiming: 'next_waiver_run',
+      })
+      evaluateWeekMock.mockResolvedValue({
+        pastCutoff: true,
+        activeRosterIds: ['r-low', 'r-mid', 'r-top'],
+        scores: [
+          { rosterId: 'r-low', periodPoints: 77 },
+          { rosterId: 'r-mid', periodPoints: 100 },
+          { rosterId: 'r-top', periodPoints: 120 },
+        ],
+      })
+      getDraftSlotByRosterMock.mockResolvedValue(new Map())
+      resolveTiebreakMock.mockReturnValue({ choppedRosterIds: ['r-low'], stepUsed: null, reason: 'lowest score' })
+      prismaMock.roster.findMany.mockResolvedValue([])
+      prismaMock.appUser.findMany.mockResolvedValue([])
+    }
+
+    it('with "split", hands it to the teams still alive and says so in chat', async () => {
+      chopLowOfTwo()
+      prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing', settings: { guillotineFaabOnChop: 'split' } })
+      redistributeChoppedFaabMock.mockResolvedValue({ pool: 60, perTeam: 30, survivors: 2, shares: new Map([['r-mid', 30], ['r-top', 30]]) })
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, season: 2026, systemUserId: 'system' })
+      expect(redistributeChoppedFaabMock).toHaveBeenCalledWith({ choppedRosterIds: ['r-low'], survivorRosterIds: ['r-mid', 'r-top'] })
+      expect(appendEventMock).toHaveBeenCalledWith('league-1', 'faab_split', expect.objectContaining({ pool: 60 }))
+      expect(createLeagueChatMessageMock).toHaveBeenCalledWith('league-1', 'system', expect.stringContaining('$60'), expect.objectContaining({
+        idempotencyKey: 'guillotine-faab-split:league-1:2026:w3',
+      }))
+    })
+
+    it('by default (keep), moves nothing', async () => {
+      chopLowOfTwo()
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, systemUserId: 'system' })
+      expect(redistributeChoppedFaabMock).not.toHaveBeenCalled()
+    })
+
+    it('a failed split does not fail the chop', async () => {
+      chopLowOfTwo()
+      prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing', settings: { guillotineFaabOnChop: 'split' } })
+      redistributeChoppedFaabMock.mockRejectedValue(new Error('db down'))
+      const out = await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, skipChat: true })
+      expect(out?.choppedRosterIds).toEqual(['r-low'])
+      expect(releaseChoppedRostersMock).toHaveBeenCalled()
+    })
   })
 
   it('🛑 a chat post that fails does not fail the chop (the week is already chopped)', async () => {
@@ -376,11 +501,28 @@ describe('Guillotine full regression matrix', () => {
     resolveRedraftRosterIdsMock.mockResolvedValue(new Map([['r-low', 'rr-low']]))
     prismaMock.redraftRoster.findMany.mockResolvedValue([{ id: 'rr-low', teamName: 'Lowest Team', ownerName: 'u1', ownerId: 'u1' }])
     postChopToLeagueChatMock.mockRejectedValueOnce(new Error('chat down'))
+    postAutomaticGuillotineRecapMock.mockRejectedValueOnce(new Error('recap down'))
+    sendChopResultAlertsMock.mockRejectedValueOnce(new Error('alerts down'))
 
     const out = await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, systemUserId: 'owner' })
 
     expect(out?.choppedRosterIds).toEqual(['r-low'])
+    // Alerts are sent even though chat failed, and their own failure does not undo the chop either.
+    expect(sendChopResultAlertsMock).toHaveBeenCalledTimes(1)
     expect(postChopToLeagueChatMock).toHaveBeenCalledTimes(1)
+    // The weekly recap follows the announcement, from this week's scores, and a failure in either
+    // never undoes the chop (lib/guillotine/weeklyRecap.ts).
+    expect(postAutomaticGuillotineRecapMock).toHaveBeenCalledWith({
+      leagueId: 'league-1',
+      week: 3,
+      season: undefined,
+      scores: [
+        { rosterId: 'r-low', periodPoints: 77 },
+        { rosterId: 'r-mid', periodPoints: 100 },
+      ],
+      choppedRosterIds: ['r-low'],
+      authorUserId: 'owner',
+    })
     expect(appendEventMock).toHaveBeenCalledWith('league-1', 'chop_animation_trigger', expect.any(Object))
   })
 
@@ -476,7 +618,7 @@ describe('Guillotine full regression matrix', () => {
     expect(summary!.dangerTiers?.some((d) => d.tier === 'danger')).toBe(true)
   })
 
-  it('home view renders bubble teams, waivers section, settings link, and storyline panel', async () => {
+  it('home view renders the chop line, waivers section, settings link, and storyline panel', async () => {
     const summary = {
       leagueId: 'league-1',
       weekOrPeriod: 4,
@@ -509,12 +651,16 @@ describe('Guillotine full regression matrix', () => {
 
     render(<GuillotineHome leagueId="league-1" sport="NFL" leagueName="Blade League" />)
 
+    // The specialty home (2026-10-18) replaced the Survival Board: the chop line carries the
+    // engine's tiers, with the cut drawn above the chop-zone team.
     await waitFor(() => {
-      expect(screen.getByText('On The Bubble (Bottom 4)')).toBeTruthy()
+      expect(screen.getByTestId('guillotine-chop-line')).toBeTruthy()
     })
+    expect(screen.getByTestId('guillotine-row-chop_zone').textContent).toContain('Team 2')
+    expect(screen.getByTestId('guillotine-row-danger').textContent).toContain('Team 3')
+    expect(screen.getByTestId('guillotine-cut-line')).toBeTruthy()
 
     expect(screen.getByText('Waiver & FAAB')).toBeTruthy()
-    expect(screen.getByTestId('guillotine-bubble-separator')).toBeTruthy()
     expect(screen.getByTestId('guillotine-ai-panel')).toBeTruthy()
     expect(screen.getByTestId('guillotine-open-waivers')).toBeTruthy()
     expect(screen.getByTestId('guillotine-league-settings')).toBeTruthy()

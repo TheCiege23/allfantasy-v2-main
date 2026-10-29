@@ -16,6 +16,7 @@ import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 import { ImpactNowReview, type ImpactNowRef } from './ImpactNowReview'
 import { TradeReaction, TradeReactionSettings, AcceptedTradeReaction } from './TradeReactions'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -271,7 +272,7 @@ function valueNet(given?: number | null, received?: number | null): number | nul
 
 function formatTradeValue(value: number | null): string {
   if (value == null) return '—'
-  return `${value >= 0 ? '+' : '−'}${Math.abs(Math.round(value)).toLocaleString()}`
+  return `${value >= 0 ? '+' : '−'}${Math.abs(Math.round(value)).toLocaleString(getAppIntlLocale())}`
 }
 
 function assetGlyph(asset: TimelineAsset): string {
@@ -305,7 +306,7 @@ function TimelineAssetList({ assets, values, language }: { assets: TimelineAsset
               <b>{asset.label}</b>
               {asset.sublabel ? <small>{asset.sublabel}</small> : null}
             </span>
-            {value != null ? <em className="af-num">{Math.round(value).toLocaleString()}</em> : null}
+            {value != null ? <em className="af-num">{Math.round(value).toLocaleString(getAppIntlLocale())}</em> : null}
           </li>
         )
       })}
@@ -348,13 +349,15 @@ export function nativeItemsToAssets(
     const str = (k: string): string | null => (typeof meta[k] === 'string' && meta[k] ? (meta[k] as string) : null)
 
     if (it.itemType === 'rookie_pick' || it.itemType === 'future_pick') {
-      const year = Number(meta.pickYear)
+      // A native future pick's item carries `pickSeason`, and `pickLabel` when it has terms
+      // (lib/league-trade-engine/pickTerms.ts) — the label is how the receiver sees them.
+      const year = Number(meta.pickYear ?? meta.pickSeason)
       const round = Number(meta.pickRound)
       bucket.push({
         kind: 'pick',
         year: Number.isFinite(year) ? year : 0,
         round: Number.isFinite(round) ? round : 0,
-        label: str('playerName') ?? (Number.isFinite(year) && Number.isFinite(round) ? `${year} round ${round}` : 'Pick'),
+        label: str('pickLabel') ?? str('playerName') ?? (Number.isFinite(year) && Number.isFinite(round) ? `${year} round ${round}` : 'Pick'),
         // The stored id is the whole point — a pick without one cannot be proposed.
         pickId: it.itemReference,
         itemType: it.itemType,
@@ -638,8 +641,8 @@ export function TradeInbox(props: {
                 <p className="af-tc-offer-grade" data-letter={o.leagueGrade.letter}>
                   <strong className="af-num">{o.leagueGrade.letter}</strong>
                   <span>
-                    {copy(o.leagueGrade.label)} · {copy('you get')} {o.leagueGrade.getValue.toLocaleString()} {language === 'es' ? 'por' : 'for'}{' '}
-                    {o.leagueGrade.giveValue.toLocaleString()} {copy('in league value')}
+                    {copy(o.leagueGrade.label)} · {copy('you get')} {o.leagueGrade.getValue.toLocaleString(getAppIntlLocale())} {language === 'es' ? 'por' : 'for'}{' '}
+                    {o.leagueGrade.giveValue.toLocaleString(getAppIntlLocale())} {copy('in league value')}
                   </span>
                 </p>
               ) : (
@@ -952,7 +955,7 @@ export function TradeInbox(props: {
                         <span title={sideAName}>{sideAName}</span>
                         <strong>{teamGrades.letter}</strong>
                         <TradeReaction letter={teamGrades.letter} completed />
-                        <small>{teamGrades.getValue.toLocaleString()} {language === 'es' ? 'por' : 'for'} {teamGrades.giveValue.toLocaleString()}</small>
+                        <small>{teamGrades.getValue.toLocaleString(getAppIntlLocale())} {language === 'es' ? 'por' : 'for'} {teamGrades.giveValue.toLocaleString(getAppIntlLocale())}</small>
                         {teamGrades.current && teamGrades.current.letter !== teamGrades.letter
                           ? <small>{copy('Today')} {teamGrades.current.letter}</small>
                           : null}
@@ -961,7 +964,7 @@ export function TradeInbox(props: {
                         <span title={sideBName}>{sideBName}</span>
                         <strong>{teamGrades.partnerLetter}</strong>
                         <TradeReaction letter={teamGrades.partnerLetter} completed />
-                        <small>{teamGrades.giveValue.toLocaleString()} {language === 'es' ? 'por' : 'for'} {teamGrades.getValue.toLocaleString()}</small>
+                        <small>{teamGrades.giveValue.toLocaleString(getAppIntlLocale())} {language === 'es' ? 'por' : 'for'} {teamGrades.getValue.toLocaleString(getAppIntlLocale())}</small>
                         {teamGrades.current && teamGrades.current.partnerLetter !== teamGrades.partnerLetter
                           ? <small>{copy('Today')} {teamGrades.current.partnerLetter}</small>
                           : null}

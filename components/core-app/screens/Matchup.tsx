@@ -22,6 +22,7 @@ import type {
   MatchupSlot,
   MatchupTeam,
 } from '@/lib/core-app/matchup'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 5 — Matchup.
@@ -341,7 +342,7 @@ function Kickoff({ iso }: { iso: string }) {
     const at = new Date(iso)
     if (Number.isNaN(at.getTime())) return
     setLabel(
-      at.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }),
+      at.toLocaleString(getAppIntlLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit' }),
     )
   }, [iso])
   return label ? <time dateTime={iso}>{label}</time> : null
@@ -938,7 +939,7 @@ export function Matchup({ data }: MatchupProps) {
           </>
         ) : data.league.elimination ? (
           <span className="af-label af-mu-week-label">
-            {copy(data.league.elimination === 'survivor_guillotine' ? 'Survivor Guillotine' : 'Guillotine')}
+            {copy(data.league.elimination === 'survivor_guillotine' ? 'Survivor Guilly' : 'Guilly')}
           </span>
         ) : (
           <span className="af-mu-unavailable">{matchupReasonText(data.week.reason, language)}</span>
@@ -1002,8 +1003,8 @@ export function Matchup({ data }: MatchupProps) {
           </header>
           <p className="af-mu-basis">
             {language === 'es'
-              ? 'En una liga guillotina compites contra toda la liga: cada semana se elimina la puntuación más baja, así que no hay un único rival.'
-              : 'In a guillotine league you play the whole field: the lowest score each week is eliminated, so there is no single opponent to face.'}
+              ? 'En una liga Guilly compites contra toda la liga: cada semana se elimina la puntuación más baja, así que no hay un único rival.'
+              : 'In a Guilly league you play the whole field: the lowest score each week is eliminated, so there is no single opponent to face.'}
           </p>
           <p className="af-mu-basis">
             <Link href={`/core/standings?league=${encodeURIComponent(data.league.id)}`} prefetch={false}>
@@ -1133,6 +1134,10 @@ export function Matchup({ data }: MatchupProps) {
         ) : (
           <p className="af-mu-unavailable af-mu-unavailable--block">{matchupReasonText(data.teams.reason, language)}</p>
         )}
+        {/* An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts). */}
+        {data.extraMatchup ? (
+          <p className="af-mu-basis" data-testid="matchup-extra-matchup">{data.extraMatchup.line}</p>
+        ) : null}
       </section>
 
       {/* ── Per-player scoring ──────────────────────────────────────── */}

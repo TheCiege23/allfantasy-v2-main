@@ -19,6 +19,7 @@
 import { Bot, Check, Copy, Share2 } from "lucide-react"
 import { useState } from "react"
 import { ChimmyFreshnessChip } from "../ChimmyFreshnessChip"
+import { WorldCupChatRichTextRenderer } from "./WorldCupChatRichText"
 import type {
   WorldCupChatGifAttachment,
   WorldCupChatImageAttachment,
@@ -287,9 +288,7 @@ export function WorldCupChatMessageBubble({
           </span>
           <span className="text-[11px] text-amber-300/40">{time}</span>
         </div>
-        <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-amber-50/88">
-          {message.body}
-        </p>
+        <WorldCupChatRichTextRenderer text={message.body} className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-amber-50/88" />
         {message.gif ? <GifPreviewInline gif={message.gif} /> : null}
         {message.image ? <ImagePreviewInline image={message.image} /> : null}
       </div>
@@ -309,9 +308,7 @@ export function WorldCupChatMessageBubble({
           <span className="text-xs font-black text-cyan-100/80">You</span>
           <span className="text-[11px] text-cyan-300/40">{time}</span>
         </div>
-        <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-slate-100/90">
-          {message.body}
-        </p>
+        <WorldCupChatRichTextRenderer text={message.body} className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-slate-100/90" />
         {message.gif ? <GifPreviewInline gif={message.gif} /> : null}
         {message.image ? <ImagePreviewInline image={message.image} /> : null}
         {message.poll && onVote ? (
@@ -321,6 +318,12 @@ export function WorldCupChatMessageBubble({
             isVoting={isVoting}
             onVote={onVote}
           />
+        ) : null}
+        {/* A private @chimmy prompt says so on your own side too, not only on Chimmy's reply. */}
+        {message.isPrivate ? (
+          <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-cyan-100/55">
+            {labels.privateLabel ?? "Private"}
+          </p>
         ) : null}
       </div>
     )
@@ -337,9 +340,7 @@ export function WorldCupChatMessageBubble({
         <span className="text-sm font-black text-slate-50">{message.authorName}</span>
         <span className="text-[11px] text-slate-300/55">{time}</span>
       </div>
-      <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-slate-100/86">
-        {message.body}
-      </p>
+      <WorldCupChatRichTextRenderer text={message.body} className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-slate-100/86" />
       {message.gif ? <GifPreviewInline gif={message.gif} /> : null}
       {message.image ? <ImagePreviewInline image={message.image} /> : null}
       {message.poll && onVote ? (

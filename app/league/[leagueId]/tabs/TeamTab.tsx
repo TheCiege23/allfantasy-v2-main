@@ -34,7 +34,7 @@ import type { SwapCandidate } from '@/components/league/TeamLineupSwapModal'
 import { StartVsComparisonLauncher } from '@/components/app/player-comparison/StartVsComparisonLauncher'
 import {
   applyLineupPick,
-  buildPlayerRow,
+  buildLineupSaveRoster,
   buildReserveSwapCandidates,
   buildSwapCandidates,
   initOrSyncLineupLists,
@@ -54,6 +54,8 @@ import { teamDefenseDisplayNameFromId } from '@/lib/redraft/teamDefenseIdentity'
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { CollegeRightsSection } from '@/app/league/[leagueId]/components/CollegeRightsSection'
 import type { CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
+import { CampusLineupPanel } from '@/app/league/[leagueId]/components/CampusLineupPanel'
+import type { CampusLineupView } from '@/lib/c2c/campusLineupView'
 
 const TeamTabMatchupBanner = dynamic(
   () =>
@@ -134,6 +136,8 @@ type DbRosterPayload = {
   canEditLineup?: boolean
   lineupLockHelp?: string | null
   collegeRights?: CollegeRightsViewModel | null
+  /** The C2C campus lineup (native football C2C only). */
+  campus?: CampusLineupView | null
 }
 
 type SleeperRosterBody = {
@@ -1407,6 +1411,8 @@ export function TeamTab({
     league.isDynasty === true &&
     ((dbParts?.taxi.length ?? 0) > 0 || ((payload as DbRosterPayload)?.slotLimits?.taxi ?? 0) > 0)
   const showDevySectionDb = ((payload as DbRosterPayload)?.slotLimits?.devy ?? 0) > 0
+  const campusView =
+    payload && payload.source !== 'sleeper' ? ((payload as DbRosterPayload).campus ?? null) : null
   const collegeRights =
     payload && payload.source !== 'sleeper'
       ? ((payload as DbRosterPayload).collegeRights ?? null)
@@ -1452,18 +1458,16 @@ const maxWeekMenu = useMemo(() => {
     !weekLock!.locked
 
   const saveLineup = useCallback(
-    async (next: RosterLineupLists): Promise<boolean> => {
+    async (next: RosterLineupLists, campus?: string[]): Promise<boolean> => {
       if (!dbRosterMeta?.rosterId || !lineupEditable) return false
       setSavingLineup(true)
       try {
+        // Each starter carries his slot index, so FLEX vs RB2 (or UTIL 2) is still his after a reload.
+        // IR rows carry the player's real designation; the save route refuses an IR row marked healthy.
+        // A C2C campus change sends the campus list too; any other save leaves it as it is.
         const roster = {
-          starters: next.starters
-            .map((id) => (id ? buildPlayerRow(id, players) : null))
-            .filter((x): x is Record<string, unknown> => x != null),
-          bench: next.bench.map((id) => buildPlayerRow(id, players)),
-          ir: next.ir.map((id) => buildPlayerRow(id, players)),
-          taxi: next.taxi.map((id) => buildPlayerRow(id, players)),
-          devy: next.devy.map((id) => buildPlayerRow(id, players)),
+          ...buildLineupSaveRoster(next, players, payload && payload.source !== 'sleeper' ? payload.roster : null),
+          ...(campus ? { campus } : {}),
         }
         const res = await fetch('/api/leagues/roster/save', {
           method: 'POST',
@@ -1502,7 +1506,7 @@ const maxWeekMenu = useMemo(() => {
         setSavingLineup(false)
       }
     },
-    [dbRosterMeta, lineupEditable, players, league.id, week, load, lineupWriteCopy],
+    [dbRosterMeta, lineupEditable, players, payload, league.id, week, load, lineupWriteCopy],
   )
 
   const replacementContextsByPlayer = useMemo(() => {
@@ -2288,6 +2292,18 @@ const maxWeekMenu = useMemo(() => {
                 )}
               </div>
             </section>
+          ) : null}
+
+          {campusView ? (
+            <CampusLineupPanel
+              view={campusView}
+              editable={lineupEditable}
+              saving={savingLineup}
+              onChange={(ids) => {
+                if (lineupLists) void saveLineup(lineupLists, ids)
+              }}
+              onAskChimmy={(prompt) => openChimmyWithPrompt({ leagueId: league.id, source: 'roster', prompt })}
+            />
           ) : null}
 
           <TeamLineupSwapModal

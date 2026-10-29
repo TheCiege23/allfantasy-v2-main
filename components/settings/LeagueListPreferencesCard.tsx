@@ -77,6 +77,18 @@ export default function LeagueListPreferencesCard() {
     void load()
   }, [load])
 
+  /*
+   * The /core rail's "Show N hidden leagues" row links to `#your-leagues`. This card sits at the
+   * bottom of Preferences and fills in after a fetch, so the browser's own hash scroll has already
+   * run against a shorter page — scroll once the rows are in.
+   */
+  const sectionRef = useRef<HTMLElement>(null)
+  const loaded = rows !== null && prefs !== null
+  useEffect(() => {
+    if (!loaded || typeof window === "undefined" || window.location.hash !== "#your-leagues") return
+    sectionRef.current?.scrollIntoView?.({ block: "start" })
+  }, [loaded])
+
   const ordered = useMemo(() => (rows && prefs ? applyLeagueOrder(rows, prefs.order) : []), [rows, prefs])
   const q = query.trim().toLowerCase()
   const shown = q ? ordered.filter((r) => r.name.toLowerCase().includes(q)) : ordered
@@ -132,6 +144,8 @@ export default function LeagueListPreferencesCard() {
 
   return (
     <section
+      ref={sectionRef}
+      id="your-leagues"
       className="space-y-3 rounded-xl border p-4"
       style={{ borderColor: "var(--border)", background: "var(--panel2)" }}
       aria-labelledby="league-list-prefs-title"

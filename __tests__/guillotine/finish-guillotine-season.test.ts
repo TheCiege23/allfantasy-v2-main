@@ -180,7 +180,7 @@ describe('finishGuillotineSeason', () => {
     expect(db.tx.leagueChampionship.upsert).toHaveBeenCalledTimes(2)
   })
 
-  it('with no guillotine season row, the single survivor is still the champion', async () => {
+  it('with no Guilly season row, the single survivor is still the champion', async () => {
     const r = await finishGuillotineSeason({ seasonId: 's1', guillotineSeasonId: null })
     expect(m.champion).not.toHaveBeenCalled()
     expect(r.championRosterId).toBe('rr-d')

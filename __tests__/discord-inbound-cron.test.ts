@@ -1,7 +1,8 @@
 // @vitest-environment node
 import {beforeEach,describe,expect,it,vi} from 'vitest'
 import {NextRequest} from 'next/server'
-const h=vi.hoisted(()=>({auth:vi.fn(),relay:vi.fn(),inbound:vi.fn(),job:vi.fn()}))
+const h=vi.hoisted(()=>({auth:vi.fn(),relay:vi.fn(),inbound:vi.fn(),job:vi.fn(),engagement:vi.fn()}))
+vi.mock('@/lib/engagement-alerts/runSportsEngagement',()=>({runSportsEngagement:h.engagement}))
 vi.mock('@/app/api/cron/_auth',()=>({requireCronAuth:h.auth}))
 vi.mock('@/lib/notifications/outboxRelay',()=>({relayNotificationOutbox:h.relay}))
 vi.mock('@/lib/discord/inboundPass',()=>({runDiscordInboundPass:h.inbound}))
@@ -9,16 +10,16 @@ vi.mock('@/lib/production-health/syncJobRunTelemetry',()=>({withSyncJobRun:h.job
 import {GET} from '@/app/api/cron/notification-outbox-relay/route'
 const req=(query='')=>new NextRequest(`https://example.test/api/cron/notification-outbox-relay${query}`)
 beforeEach(()=>{
- vi.resetAllMocks();h.auth.mockReturnValue(true)
+ vi.resetAllMocks();h.auth.mockReturnValue(true);h.engagement.mockResolvedValue({games:0,delivered:0,errors:[]})
  h.inbound.mockResolvedValue({channels:1,deferred:0,imported:1,errors:0})
  h.relay.mockResolvedValue({claimed:0,sent:0,skipped:0,retried:0,failed:0})
  h.job.mockImplementation(async (_info,run)=>run())
 })
-describe('authenticated five-minute Discord inbound host',()=>{
- it('runs a bounded pass independently before the notification relay',async()=>{
+describe('authenticated minute Discord inbound host',()=>{
+ it('runs a bounded pass independently alongside the notification relay',async()=>{
   const result=await GET(req());expect(result.status).toBe(200)
   expect(h.inbound).toHaveBeenCalledWith({budgetMs:8_000})
-  expect(h.job.mock.calls[0][0]).toMatchObject({jobName:'cron-discord-inbound'})
+  expect(h.job).toHaveBeenCalledWith(expect.objectContaining({jobName:'cron-discord-inbound'}),expect.any(Function),expect.any(Function))
   expect((await result.json()).discordInbound).toMatchObject({imported:1,errors:0})
   expect(h.relay).toHaveBeenCalledTimes(1)
  })
@@ -39,4 +40,11 @@ describe('authenticated five-minute Discord inbound host',()=>{
   expect((await result.json()).discordInbound).toMatchObject({errors:1})
   expect(h.relay).toHaveBeenCalledTimes(1)
  })
+})
+
+it('returns a structured failure if the relay fails while Discord completes',async()=>{
+ h.relay.mockRejectedValue(new Error('Outbox unavailable'))
+ const result=await GET(req())
+ expect(result.status).toBe(500)
+ expect(await result.json()).toMatchObject({ok:false,error:'Outbox unavailable',discordInbound:{imported:1}})
 })

@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import catalog from '@/design-refs/native-league-handoff/survivor-theme/idols/catalog.json'
 import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
 import { SurvivorIdolPlay } from '@/components/survivor/SurvivorIdolPlay'
-import { SurvivorScrollReveal } from '@/components/survivor/SurvivorScrollReveal'
+import { SurvivorVoteRevealScrolls } from '@/components/league/survivor/SurvivorVoteRevealScrolls'
 let fetchMock: any
 beforeEach(() => {
   fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ playable: true, deadline: '2099-10-20T20:00:00Z', targets: [{ userId: 'b', name: 'Manager B', disabled: false }, { userId: 'c', name: 'Manager C', disabled: true, reason: 'Immune this week' }] }) }))
@@ -49,6 +49,8 @@ it.each(catalog.filter(i => !['steal-three', 'immunity', 'vote-steal', 'extra-vo
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
 })
 it('prints the Taken stamp from the canonical server tally at the read', () => {
-  render(<SurvivorScrollReveal councilWeek={4} revealSequence={[{ order: 0, targetName: 'Manager B', status: 'taken_by_vote_steal', isExtraVote: false }]} />)
-  expect(screen.getByRole('status').textContent).toBe('Manager B - Taken - Does not count')
+  render(<SurvivorVoteRevealScrolls revealMode="all_at_once" scrolls={[{ order: 1, targetName: 'Manager B', status: 'taken_by_vote_steal', isExtraVote: false }]} eliminatedName={null} isTie={false} tiePhase={null} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Break the seal' }))
+  const slip = screen.getByRole('list', { name: 'Votes read' }).querySelector('li')
+  expect(slip?.textContent).toBe('Only voteManager BTaken · Does not count')
 })

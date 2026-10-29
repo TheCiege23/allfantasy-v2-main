@@ -85,7 +85,7 @@ export async function buildGuillotineWarRoomContext(
   })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
   const isGuillotine = league.guillotineMode === true || String(league.leagueVariant ?? '') === 'guillotine'
-  if (!isGuillotine) return { ok: false, status: 404, error: 'Not a guillotine league' }
+  if (!isGuillotine) return { ok: false, status: 404, error: 'Not a Guilly league' }
 
   const sport = String(league.sport ?? 'NFL')
   const season = Number(league.season ?? new Date().getFullYear())
@@ -121,7 +121,10 @@ export async function buildGuillotineWarRoomContext(
   } catch {
     rosterRulesState = 'missing'
   }
-  if (flexCount > 0) {
+  // The RB/WR/TE flex split only means anything for football; for NBA/MLB/NHL a UTIL slot
+  // takes any position, so it adds no positional requirement rather than fake RB/WR/TE needs.
+  const isFootball = /^(NFL|NCAAF|NCAAFB|CFB)$/i.test(sport)
+  if (flexCount > 0 && isFootball) {
     requiredByPosition.RB = (requiredByPosition.RB ?? 0) + Math.ceil(flexCount * 0.4)
     requiredByPosition.WR = (requiredByPosition.WR ?? 0) + Math.ceil(flexCount * 0.4)
     requiredByPosition.TE = (requiredByPosition.TE ?? 0) + Math.ceil(flexCount * 0.2)
@@ -287,7 +290,7 @@ export async function buildGuillotineWarRoomContext(
   }
 
   const missingDataFlags: string[] = []
-  if (availability.config === 'missing') missingDataFlags.push('Guillotine config not found — elimination cadence unknown.')
+  if (availability.config === 'missing') missingDataFlags.push('Guilly config not found — elimination cadence unknown.')
   if (availability.eliminationLine === 'missing')
     missingDataFlags.push('No projected/period scores yet — the elimination line and survival margin cannot be computed (limited).')
   if (availability.periodScores === 'missing')

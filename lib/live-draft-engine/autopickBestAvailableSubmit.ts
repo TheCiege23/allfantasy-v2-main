@@ -26,6 +26,9 @@ import { getAllowedPositionsAndRosterSize } from '@/lib/live-draft-engine/Roster
 import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
 import type { CurrentOnTheClock } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
+import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
+import { fitsOpenStarterSlot, mustFillStarter, openStarterSlots, starterSlotsFromTemplate } from '@/lib/live-draft-engine/autopickStarterNeeds'
 
 export type AutopickFallbackPoolEntry = {
   playerName: string
@@ -77,7 +80,7 @@ export type BestAvailableAutopickResolved = {
   playerId: string | null
   byeWeek: number | null
   reason: string
-  strategy: 'need-based' | 'bpa'
+  strategy: 'need-based' | 'bpa' | 'draft-as-me'
 }
 
 function normalizeName(value: string): string {
@@ -165,7 +168,8 @@ async function loadWarmPoolCandidates(
   leagueId: string,
   draftedNames: Set<string>,
 ): Promise<AutopickFallbackPoolEntry[] | null> {
-  let snap = await getWarmDraftPoolSnapshotFast(leagueId)
+  // An expired snapshot is still the right pool mid-draft: take it and let the rebuild run behind.
+  let snap = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
   if (!snap.warm) {
     const ensured = await ensureDraftPoolReady(leagueId)
     if (!ensured.ok) return null
@@ -282,14 +286,21 @@ export async function loadAutopickDraftContextForOnClock(
       nbaSurvivorPlayerIdMatches(roster, candidate.playerName, candidate.playerId),
     )
   }
-  const fallbackPool = fallbackPoolRaw.filter((entry) => {
-    if (!entry.playerName || !entry.position) return false
-    if (draftedNames.has(normalizeName(entry.playerName))) return false
-    if (draftEligiblePositions && !draftPoolRowMatchesEligiblePositions(entry.position, draftEligiblePositions)) {
-      return false
-    }
-    return true
-  })
+  const fallbackPool = await filterCandidatesForPlayerPool(
+    leagueId,
+    (draftSession as { playerPool?: string | null }).playerPool,
+    fallbackPoolRaw.filter((entry) => {
+      if (!entry.playerName || !entry.position) return false
+      if (draftedNames.has(normalizeName(entry.playerName))) return false
+      if (draftEligiblePositions && !draftPoolRowMatchesEligiblePositions(entry.position, draftEligiblePositions)) {
+        return false
+      }
+      return true
+    }),
+    // Same verdict pick validation applies to `auto` picks, so autopick never chooses a player it
+    // would then be refused — a refused autopick retries the same player and stalls the clock.
+    (entry) => ({ playerId: entry.playerId, playerName: entry.playerName }),
+  )
 
   if (fallbackPool.length === 0) return null
 
@@ -383,6 +394,27 @@ export async function resolveBestAvailableAutopickCandidate(
 
   let selected: BestAvailableAutopickResolved | null = null
 
+  // Draft as me (AF Commissioner league-wide, or the manager's own AF Pro "Draft like me"): a live
+  // draft's missed pick is made the way this manager drafts.
+  // Any miss — no plan, no history, no board — falls through to the ordinary autopick below.
+  if (draftSession.sessionKind !== 'mock') {
+    const { tryDraftAsMePick } = await import('@/lib/draft-room/draftAsMeAutopick')
+    const mine = await tryDraftAsMePick({
+      leagueId,
+      draftSessionId: draftSession.id,
+      rosterId: rid,
+      overall: ctx.overallPick,
+      board: fallbackPool,
+      ownPositions: draftSession.picks.filter((pick) => pick.rosterId === rid).map((pick) => pick.position),
+      eligible: draftEligiblePositions,
+      aiAdpByKey,
+      sport,
+    }).catch(() => null)
+    if (mine) {
+      return { playerName: mine.playerName, position: mine.position, team: mine.team, playerId: mine.playerId, byeWeek: mine.byeWeek, reason: mine.reason, strategy: 'draft-as-me' }
+    }
+  }
+
   const rosterSlots = await getRosterSlotLabelsForLeagueDraft(leagueId, sport)
 
   if (autopickBehavior === 'need-based') {
@@ -431,7 +463,19 @@ export async function resolveBestAvailableAutopickCandidate(
   }
 
   if (!selected) {
-    const sorted = [...fallbackPool].sort((a, b) => {
+    // Last chance to fill the starting lineup: when this team's remaining picks only just cover its
+    // open starting spots, take only players who can start in one of them.
+    let pool = fallbackPool
+    const template = (await getLeagueDraftTemplatePayload(leagueId).catch(() => null))?.template
+    if (template) {
+      const ownPositions = draftSession.picks.filter((pick) => pick.rosterId === rid).map((pick) => pick.position)
+      const open = openStarterSlots(starterSlotsFromTemplate(template.slots), ownPositions)
+      if (mustFillStarter(open, draftSession.rounds - ownPositions.length)) {
+        const starters = fallbackPool.filter((entry) => fitsOpenStarterSlot(entry.position, open))
+        if (starters.length > 0) pool = starters
+      }
+    }
+    const sorted = [...pool].sort((a, b) => {
       const keyA = `${normalizeName(a.playerName)}|${(a.position || '').toLowerCase()}|${(a.team || '').toLowerCase()}`
       const keyB = `${normalizeName(b.playerName)}|${(b.position || '').toLowerCase()}|${(b.team || '').toLowerCase()}`
       const adpA = aiAdpByKey?.[keyA] ?? a.adp ?? 999

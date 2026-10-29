@@ -60,7 +60,7 @@ export const NCAAB_ROSTER_TEMPLATES: NcaabRosterTemplate[] = [
     slots: { G: 2, F: 2, C: 1, UTIL: 3, BN: 6, IL: 2 } },
   { key: 'category', label: 'Category League', leagueTypes: ['redraft'], description: 'Category-based scoring.',
     slots: { G: 2, F: 2, C: 1, UTIL: 3, BN: 5, IL: 2 } },
-  { key: 'guillotine', label: 'Guillotine', leagueTypes: ['guillotine'], description: 'Lean guillotine roster.',
+  { key: 'guillotine', label: 'Guilly', leagueTypes: ['guillotine'], description: 'Lean Guilly roster.',
     slots: { G: 2, F: 2, C: 1, UTIL: 2, BN: 3 } },
   { key: 'survivor', label: 'Survivor', leagueTypes: ['survivor'], description: 'Standard survivor roster.',
     slots: { G: 2, F: 2, C: 1, UTIL: 3, BN: 5 } },

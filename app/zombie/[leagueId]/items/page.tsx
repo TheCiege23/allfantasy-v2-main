@@ -4,9 +4,20 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { ZombieStatusBadge } from '@/app/zombie/components/ZombieStatusBadge'
 import { useZombieDmCommand } from '@/app/zombie/components/chimmy/useZombieDmCommand'
-import { ZOMBIE_ITEM_ICON } from '@/lib/zombie/iconSystem'
+import { ZombieStatusChip, zombieChipStatus } from '@/components/zombie/ZombieStatusChip'
+
+/*
+ * The Armory (design handoff ZombieArmory), read-only for this season.
+ *
+ * What is live: serums. A serum registered before kickoff ("protect myself") really does keep you human
+ * if you lose to the horde that week (infectionEngine skips a pending serum), and enough serums really do
+ * revive a Zombie (serumEngine.processRevive). Those two actions stay.
+ *
+ * What is not: weapons, the bomb, ambushes and powers are awarded and tracked, but nothing applies them to
+ * a score or a matchup. The old page offered "Use via @Chimmy" and "Detonate", which spent the item for
+ * nothing; those are gone, and Chimmy now refuses them without spending anything.
+ */
 
 type ItemRow = {
   id: string
@@ -16,42 +27,45 @@ type ItemRow = {
   isExpired: boolean
   acquiredAt: string
   acquiredReason: string | null
-  activationState?: string
+  activationState?: string | null
+  activatesAtWeek?: number | null
+  usedAtWeek?: number | null
 }
 
 type InvPayload = {
   items: ItemRow[]
   teamStatus: string
-  rules: { reviveThreshold: number; serumMaxHold: number; weaponShieldThreshold: number; weaponAmbushThreshold: number }
+  rules: {
+    reviveThreshold: number
+    serumMaxHold: number
+    weaponShieldThreshold: number
+    weaponAmbushThreshold: number
+    weaponAxeMargin?: number
+  }
   history: Array<{ id: string; actionType: string; week: number; createdAt: string; isValid: boolean }>
   resolution: { status: string } | null
-  isWhisperer: boolean
-  ambushesRemaining: number | null
-  week: number
   isCommissionerView: boolean
 }
 
-function iconForType(t: string): string {
-  const k = t.toLowerCase()
-  if (k.includes('serum')) return ZOMBIE_ITEM_ICON.serum_antidote
-  if (k.includes('knife')) return ZOMBIE_ITEM_ICON.weapon_knife
-  if (k.includes('axe')) return ZOMBIE_ITEM_ICON.weapon_axe
-  if (k.includes('bow')) return ZOMBIE_ITEM_ICON.weapon_bow
-  if (k.includes('gun')) return ZOMBIE_ITEM_ICON.weapon_gun
-  if (k.includes('bomb')) return ZOMBIE_ITEM_ICON.weapon_bomb
-  return '⚔️'
+const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 1 })
+
+/** The five weapons, how the engine awards each (weaponEngine.checkAndAwardWeapons). */
+function weaponCatalog(rules: InvPayload['rules']) {
+  return [
+    { type: 'weapon_knife', label: 'Knife', art: 'weapon-knife', earn: `Score ${fmt(rules.weaponShieldThreshold)}+ in a week` },
+    { type: 'weapon_bow', label: 'Bow', art: 'weapon-bow', earn: `Score ${fmt(rules.weaponAmbushThreshold)}+ in a week` },
+    { type: 'weapon_axe', label: 'Axe', art: 'weapon-axe', earn: rules.weaponAxeMargin != null ? `Win a matchup by ${fmt(rules.weaponAxeMargin)}+` : 'Win a matchup big' },
+    { type: 'weapon_gun', label: 'Gun', art: 'weapon-gun', earn: 'Survive 3 Zombie attacks' },
+    { type: 'weapon_bomb', label: 'Bomb', art: 'weapon-bomb', earn: 'Win 5 straight as a Survivor' },
+  ]
 }
 
-function chatPrefill(leagueId: string, text: string) {
-  return `/league/${leagueId}?zombieChimmy=${encodeURIComponent(text)}`
-}
+const isSerum = (i: ItemRow) => i.itemType.toLowerCase().includes('serum')
 
-export default function ZombieItemsPage() {
-  const { leagueId  } = useParams<{ leagueId: string }>() ?? ({} as { leagueId: string })
+export default function ZombieArmoryPage() {
+  const { leagueId } = useParams<{ leagueId: string }>() ?? ({} as { leagueId: string })
   const [data, setData] = useState<InvPayload | null>(null)
-  const [showRules, setShowRules] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
-  const [bombOpen, setBombOpen] = useState(false)
   const { isSending, feedback, sendCommand } = useZombieDmCommand(leagueId ?? '')
 
   const load = useCallback(() => {
@@ -66,235 +80,186 @@ export default function ZombieItemsPage() {
     load()
   }, [load])
 
-  const serums = useMemo(() => data?.items.filter((i) => i.itemType.toLowerCase().includes('serum') && !i.isUsed) ?? [], [data])
-  const weapons = useMemo(() => data?.items.filter((i) => !i.itemType.toLowerCase().includes('serum') && !i.isUsed) ?? [], [data])
-  const serumCount = serums.length
-  const maxSerum = data?.rules.serumMaxHold ?? 5
-  const reviveNeed = data?.rules.reviveThreshold ?? 3
-  const isZombie = (data?.teamStatus ?? '').toLowerCase().includes('zombie')
-  const isSurvivor = (data?.teamStatus ?? '').toLowerCase().includes('survivor')
-  const bomb = weapons.find((w) => w.itemType.toLowerCase().includes('bomb'))
-  const nonBombWeapons = weapons.filter((w) => !w.itemType.toLowerCase().includes('bomb'))
+  const held = useMemo(() => (data?.items ?? []).filter((i) => !i.isUsed && !i.isExpired), [data])
+  const serums = held.filter(isSerum)
+  const registered = serums.find((s) => s.activationState === 'pending_activation') ?? null
+  const readySerums = serums.filter((s) => s.activationState !== 'pending_activation')
 
   if (!leagueId) return null
-  if (!data) {
-    return <p className="text-[13px] text-[var(--zombie-text-dim)]">Loading inventory…</p>
+  if (!data) return <p className="text-[13px] text-[var(--zombie-text-dim)]">Loading the armory…</p>
+
+  const chip = zombieChipStatus(data.teamStatus)
+  const isZombie = chip === 'zombie'
+  const isHuman = chip === 'survivor' || chip === 'revived'
+  const reviveNeed = data.rules.reviveThreshold
+  const canAct = !data.isCommissionerView
+  const run = async (cmd: string) => {
+    const ok = await sendCommand(cmd)
+    if (ok) load()
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <header className="rounded-xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <ZombieStatusBadge status={data.teamStatus} />
-          <div>
-            <h1 className="text-lg font-bold text-[var(--zombie-text-full)]">Your Arsenal</h1>
-            <p className="text-[12px] text-[var(--zombie-text-dim)]">
-              {serumCount} serums · {nonBombWeapons.length} weapons · {data.items.filter((i) => !i.isUsed).length} total
-              items
+    <div className="mx-auto max-w-4xl space-y-5">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-lime-300">The Armory</h1>
+          <p className="text-[13px] text-white/60">
+            {serums.length} serum{serums.length === 1 ? '' : 's'} · {held.length - serums.length} weapon
+            {held.length - serums.length === 1 ? '' : 's'}
+            {data.isCommissionerView ? ' · commissioner view of another manager' : ''}
+          </p>
+        </div>
+        <ZombieStatusChip status={chip} size="md" />
+      </header>
+
+      {/* Serums — live */}
+      <section className="rounded-2xl border border-teal-500/25 bg-teal-950/15 p-4 sm:p-5" data-testid="armory-serums">
+        <div className="flex items-start gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
+          <img src="/zombie/art/serum.svg" alt="" className="h-12 w-12 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-bold text-teal-100">Serums ×{serums.length}</h2>
+            <p className="text-[13px] text-white/65">
+              Max {data.rules.serumMaxHold}. One keeps you human for a week; {reviveNeed} bring a Zombie back.
             </p>
           </div>
         </div>
-        {data.isCommissionerView ? (
-          <p className="mt-2 text-[11px] text-amber-200/80">Commissioner view — another manager&apos;s inventory.</p>
-        ) : null}
-      </header>
 
-      <section className="rounded-xl border border-teal-500/25 bg-teal-950/20 p-4">
-        <h2 className="text-[14px] font-bold text-teal-200">🧪 Serums</h2>
-        <p className="mt-1 text-3xl font-black text-white">
-          {serumCount}
-          <span className="text-[14px] font-normal text-[var(--zombie-text-dim)]"> / {maxSerum} max</span>
-        </p>
-        <div className="mt-2 flex flex-wrap gap-1 text-2xl" aria-hidden>
-          {Array.from({ length: maxSerum }).map((_, i) => (
-            <span key={i}>{i < serumCount ? '🧪' : '⬜'}</span>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowRules((s) => !s)}
-          className="mt-3 text-[12px] text-teal-300/90 underline"
-        >
-          {showRules ? 'Hide' : 'Show'} serum rules
-        </button>
-        {showRules ? (
-          <ul className="mt-2 list-inside list-disc text-[12px] text-[var(--zombie-text-mid)]">
-            <li>Use before kickoff via @Chimmy to protect yourself or an ally this week (1 serum).</li>
-            <li>Revive requires {reviveNeed} serums.</li>
-          </ul>
-        ) : null}
-        {!data.isCommissionerView ? (
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <button
-              type="button"
-              onClick={() => void sendCommand('@Chimmy use serum protect myself')}
-              disabled={isSending}
-              className="flex min-h-[56px] items-center justify-center rounded-xl bg-teal-600/30 px-4 text-center text-[13px] font-semibold text-teal-100 hover:bg-teal-600/40 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              🧪 Use Serum — Protect Myself
-            </button>
-            <Link
-              href={chatPrefill(leagueId, '@Chimmy use serum protect ally ')}
-              className="flex min-h-[56px] items-center justify-center rounded-xl bg-teal-600/20 px-4 text-center text-[13px] font-semibold text-teal-100/90 hover:bg-teal-600/30"
-            >
-              🧪 Use Serum — Protect Ally
-            </Link>
-            {isZombie && serumCount >= reviveNeed ? (
+        {isZombie ? (
+          <div className="mt-4">
+            <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">Revive</p>
+            <div className="mt-2 flex gap-1.5" aria-label={`${Math.min(serums.length, reviveNeed)} of ${reviveNeed} serums`}>
+              {Array.from({ length: reviveNeed }).map((_, i) => (
+                <span key={i} className={clsx('h-8 w-5 rounded-md border', i < serums.length ? 'border-lime-300 bg-lime-400' : 'border-lime-500/40')} />
+              ))}
+            </div>
+            {canAct && serums.length >= reviveNeed ? (
               <button
                 type="button"
-                onClick={() => void sendCommand('@Chimmy revive')}
+                onClick={() => void run('@Chimmy revive')}
                 disabled={isSending}
-                className="flex min-h-[56px] items-center justify-center rounded-xl bg-amber-500/25 px-4 text-center text-[13px] font-semibold text-amber-100 hover:bg-amber-500/35 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-3 min-h-[48px] rounded-xl bg-amber-400 px-5 font-bold text-black disabled:opacity-50"
               >
-                ⚡ Revive
+                Revive — spend {reviveNeed} serums
               </button>
-            ) : null}
+            ) : (
+              <p className="mt-2 text-[13px] text-white/60">
+                {Math.max(0, reviveNeed - serums.length)} more to come back as a Survivor.
+              </p>
+            )}
           </div>
         ) : null}
+
+        {isHuman ? (
+          <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
+            <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">Serum shield</p>
+            {registered ? (
+              <p className="mt-1 text-[13px] text-teal-100">
+                Registered for week {registered.activatesAtWeek ?? '—'}. Lose to the horde that week and you stay human
+                (the serum is spent); win and it comes back to you.
+              </p>
+            ) : (
+              <>
+                <p className="mt-1 text-[13px] text-white/70">
+                  Register one before kickoff: if you lose to a Zombie or the Whisperer that week, you stay human and the
+                  serum is spent. If you win, you keep it.
+                </p>
+                {canAct && readySerums.length ? (
+                  <button
+                    type="button"
+                    onClick={() => void run('@Chimmy use serum protect myself')}
+                    disabled={isSending}
+                    className="mt-3 min-h-[48px] rounded-xl bg-teal-500/30 px-5 font-semibold text-teal-50 hover:bg-teal-500/40 disabled:opacity-50"
+                  >
+                    Shield me this week
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
+        ) : null}
+
         {feedback ? (
-          <p className={feedback.kind === 'success' ? 'mt-3 text-[12px] text-emerald-200/90' : 'mt-3 text-[12px] text-red-200/90'}>
+          <p className={clsx('mt-3 text-[13px]', feedback.kind === 'success' ? 'text-emerald-200' : 'text-red-200')} role="status">
             {feedback.text}
           </p>
         ) : null}
       </section>
 
-      <section className="rounded-xl border border-amber-500/20 bg-[var(--zombie-panel)] p-4">
-        <h2 className="text-[14px] font-bold text-amber-200">⚔️ Weapons</h2>
-        <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
-          {nonBombWeapons.length === 0 ? (
-            <div className="col-span-2 rounded-lg border border-dashed border-white/15 p-4 text-center text-[12px] text-[var(--zombie-text-dim)] md:col-span-4">
-              No weapons held. Earn by scoring {data.rules.weaponShieldThreshold}+ (shield) or{' '}
-              {data.rules.weaponAmbushThreshold}+ (offense) — sport rules apply.
-            </div>
-          ) : null}
-          {nonBombWeapons.map((w) => {
-            const zombieLocked = isZombie && !w.itemType.toLowerCase().includes('knife')
+      {/* Weapons — tracked */}
+      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="armory-weapons">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-bold text-white">Weapons</h2>
+          <p className="text-[12px] text-white/50">Earned automatically. Tracked this season — they don&apos;t change scores yet.</p>
+        </div>
+        <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {weaponCatalog(data.rules).map((w) => {
+            const count = held.filter((i) => i.itemType === w.type).length
             return (
-              <div
-                key={w.id}
-                className="rounded-lg border border-white/[0.08] bg-black/20 p-3 text-center"
+              <li
+                key={w.type}
+                className={clsx('rounded-xl border p-3 text-center', count ? 'border-amber-400/40 bg-amber-500/[0.06]' : 'border-white/10 bg-black/20 opacity-70')}
               >
-                <div className="text-4xl">{iconForType(w.itemType)}</div>
-                <p className="mt-1 text-[11px] font-semibold text-white">{w.itemLabel}</p>
-                <p className="text-[11px] text-[var(--zombie-text-dim)]">{w.activationState ?? 'READY'}</p>
-                {!data.isCommissionerView && !zombieLocked ? (
-                  <button
-                    type="button"
-                    onClick={() => void sendCommand(`@Chimmy use ${w.itemType.replace(/_/g, ' ')}`)}
-                    disabled={isSending}
-                    className="mt-2 inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-orange-500/20 text-[11px] font-semibold text-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Use via @Chimmy
-                  </button>
-                ) : (
-                  <p className="mt-2 text-[11px] text-[var(--zombie-text-dim)]" title={zombieLocked ? 'Zombies cannot activate most weapons' : ''}>
-                    {zombieLocked ? '🔒 Locked' : '—'}
-                  </p>
-                )}
-              </div>
+                {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
+                <img src={`/zombie/art/${w.art}.svg`} alt="" className="mx-auto h-12 w-12" />
+                <p className="mt-1 text-sm font-bold text-white">
+                  {w.label} <span className="font-mono text-amber-300">×{count}</span>
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-white/55">{w.earn}</p>
+              </li>
             )
           })}
-        </div>
+        </ul>
       </section>
 
-      {bomb ? (
-        <section className="rounded-xl border-2 border-[var(--zombie-red)]/50 bg-red-950/30 p-4">
-          <h2 className="text-[15px] font-bold text-red-200">💣 BOMB</h2>
-          <p className="mt-1 text-[12px] text-red-100/80">
-            ONE USE PER SEASON. Destroys the top Zombie&apos;s weekly winnings (when rules allow).
-          </p>
-          {!data.isCommissionerView && isSurvivor ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setBombOpen(true)}
-                className="mt-3 w-full min-h-[56px] rounded-xl bg-red-600/40 text-[13px] font-bold text-white hover:bg-red-600/55"
-              >
-                🔴 Detonate via @Chimmy
-              </button>
-              {bombOpen ? (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-                  <div className="max-w-sm rounded-2xl border border-red-500/40 bg-[#1a0a0a] p-4">
-                    <p className="text-[13px] text-red-100">
-                      Are you sure? Type DETONATE in chat after confirm. This cannot be undone.
-                    </p>
-                    <div className="mt-4 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setBombOpen(false)}
-                        className="flex-1 rounded-lg bg-white/10 py-3 text-[13px]"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const ok = await sendCommand('@Chimmy 💣 detonate bomb')
-                          if (ok) setBombOpen(false)
-                        }}
-                        disabled={isSending}
-                        className="flex flex-1 items-center justify-center rounded-lg bg-red-600 py-3 text-center text-[13px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {isSending ? 'Sending…' : 'Confirm'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <p className="mt-2 text-[11px] text-red-200/70">{isSurvivor ? '' : '🔒 Only Survivors can arm the bomb.'}</p>
-          )}
-          {feedback ? (
-            <p className={feedback.kind === 'success' ? 'mt-3 text-[12px] text-emerald-200/90' : 'mt-3 text-[12px] text-red-200/90'}>
-              {feedback.text}
-            </p>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="rounded-xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-4">
-        <h2 className="text-[13px] font-bold text-white">Active bonuses (this week)</h2>
-        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-          <span className="rounded-full bg-white/10 px-2 py-1 text-[var(--zombie-text-mid)]">
-            Passive modifiers apply when held — see rules doc
-          </span>
-          {data.resolution?.status === 'resolving' ? (
-            <span className="rounded-full bg-amber-500/20 px-2 py-1 text-amber-100">Week resolving…</span>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-4">
+      {/* Ledger */}
+      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+        <h2 className="text-lg font-bold text-white">Ledger</h2>
+        {data.items.length === 0 ? (
+          <p className="mt-2 text-[13px] text-white/55">Nothing earned yet.</p>
+        ) : (
+          <ul className="mt-2 divide-y divide-white/[0.06]">
+            {data.items.map((i) => (
+              <li key={i.id} className="flex items-center justify-between gap-3 py-2 text-[13px]">
+                <span className="min-w-0 truncate text-white/85">
+                  {i.itemLabel}
+                  {i.acquiredReason ? <span className="text-white/45"> · {i.acquiredReason}</span> : null}
+                </span>
+                <span className="shrink-0 text-[12px] text-white/50">
+                  {i.isUsed
+                    ? `used${i.usedAtWeek ? ` week ${i.usedAtWeek}` : ''}`
+                    : i.activationState === 'pending_activation'
+                      ? `shield, week ${i.activatesAtWeek ?? '—'}`
+                      : `held · ${new Date(i.acquiredAt).toLocaleDateString()}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
         <button
           type="button"
           onClick={() => setShowHistory((s) => !s)}
-          className="flex w-full min-h-[44px] items-center justify-between text-left text-[13px] font-semibold text-white"
+          className="mt-3 min-h-[40px] text-[12px] font-semibold text-white/60 underline"
         >
-          Item history
-          <span className="text-[var(--zombie-text-dim)]">{showHistory ? '▲' : '▼'}</span>
+          {showHistory ? 'Hide' : 'Show'} @Chimmy actions
         </button>
         {showHistory ? (
-          <ul className="mt-2 space-y-2 border-t border-white/[0.06] pt-2 text-[12px] text-[var(--zombie-text-mid)]">
-            {data.history.length === 0 ? <li>No logged actions yet.</li> : null}
+          <ul className="mt-2 space-y-1 text-[12px] text-white/60">
+            {data.history.length === 0 ? <li>None yet.</li> : null}
             {data.history.map((h) => (
-              <li key={h.id} className="flex gap-2">
-                <span>{h.isValid ? '✓' : '✗'}</span>
-                <span>
-                  Week {h.week} · {h.actionType} · {new Date(h.createdAt).toLocaleDateString()}
-                </span>
+              <li key={h.id}>
+                {h.isValid ? '✓' : '✗'} Week {h.week} · {h.actionType} · {new Date(h.createdAt).toLocaleDateString()}
               </li>
             ))}
           </ul>
         ) : null}
       </section>
 
-      <p className="text-center text-[11px] text-[var(--zombie-text-dim)]">
-        Actions post to league chat via @Chimmy — open{' '}
-        <Link href={`/zombie/${leagueId}/chat`} className="text-sky-400 underline">
-          Zombie chat hub
+      <p className="text-center text-[12px] text-white/45">
+        Serum actions go through @Chimmy.{' '}
+        <Link href={`/zombie/${leagueId}/rules`} className="text-lime-300 underline">
+          Full rules
         </Link>
-        .
       </p>
     </div>
   )

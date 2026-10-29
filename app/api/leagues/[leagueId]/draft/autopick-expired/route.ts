@@ -38,7 +38,7 @@ type AutoPickCandidate = {
   playerId: string | null
   byeWeek: number | null
   reason: string
-  strategy: 'queue-first' | 'need-based' | 'bpa' | 'ai-powered'
+  strategy: 'queue-first' | 'need-based' | 'bpa' | 'ai-powered' | 'draft-as-me'
 }
 
 export const dynamic = 'force-dynamic'

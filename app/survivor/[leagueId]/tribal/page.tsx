@@ -2,11 +2,17 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import clsx from 'clsx'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { SurvivorVoteRevealScrolls, type RevealScroll } from '@/components/league/survivor/SurvivorVoteRevealScrolls'
 import { SurvivorRevote } from '@/components/survivor/SurvivorRevote'
+import { SurvivorVoteCast } from '@/components/survivor/weekly/SurvivorVoteCast'
+import { SurvivorWeeklyMoments } from '@/components/survivor/weekly/SurvivorWeeklyMoments'
+import { SurvivorAvatar, survivorAvatarStatus } from '@/components/survivor/weekly/SurvivorAvatar'
+import { stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
+import { SurvivorStateCard } from '@/components/survivor/core/SurvivorStateCard'
+import { SurvivorMissedVoteNotice } from '@/components/survivor/core/SurvivorMissedVoteNotice'
 
 export default function SurvivorTribalPage() {
   const params = useParams()
@@ -17,7 +23,6 @@ export default function SurvivorTribalPage() {
   const week = council?.week ?? ctx.currentWeek
   const tribe = ctx.season?.tribes?.find((t) => t.id === council?.attendingTribeId)
 
-  const [revealOpen, setRevealOpen] = useState(false)
   const attendingPlayers = useMemo(() => {
     const tid = council?.attendingTribeId
     const all = ctx.season?.players ?? []
@@ -27,13 +32,29 @@ export default function SurvivorTribalPage() {
 
   const revealSteps: RevealScroll[] = useMemo(() => {
     if (!council?.isRevealed || !Array.isArray(council.revealSequence)) return []
-    return council.revealSequence.map((step, index) => ({ order: index + 1, targetUserId: null, targetName: step.targetName ?? null, status: (step.status ?? 'counts') as RevealScroll['status'], isExtraVote: step.isExtraVote === true }))
+    return council.revealSequence.map((step, index) => ({ order: index + 1, targetName: step.targetName ?? null, status: (step.status ?? 'counts') as RevealScroll['status'], isExtraVote: step.isExtraVote === true }))
   }, [council?.isRevealed, council?.revealSequence])
 
   const status = council?.status
-  const quiet = status === 'revealing' || status === 'voting_closed' || status === 'closed'
+  const quiet = !council?.isRevealed && (status === 'revealing' || status === 'voting_closed' || status === 'closed')
 
   if (council?.phase === 'revote') return <SurvivorRevote leagueId={leagueId} />
+
+  if (status === 'voting_open') {
+    return (
+      <div className="relative px-0 pb-28 pt-0 md:px-6 md:pb-10 md:pt-4" data-testid="survivor-tribal-vote">
+        <SurvivorVoteCast
+          leagueId={leagueId}
+          tribeName={tribe?.name ? stripLeadingTribeIcon(tribe.name) || tribe.name : null}
+          backHref={base}
+          idolHref={`/league/${encodeURIComponent(leagueId)}?tab=survivor`}
+        />
+        <p className="mx-auto mt-4 max-w-lg px-3 text-center text-[12px] text-white/45">
+          Prefer chat? You can still vote privately with <Link href={`${base}/chimmy`} className="text-amber-200 underline">@Chimmy</Link>. It is the same ballot.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="relative min-h-[75vh] px-3 pb-32 pt-4 md:px-6">
@@ -44,14 +65,16 @@ export default function SurvivorTribalPage() {
         }}
       />
       <div className="relative">
+        <div className="mx-auto mb-6 max-w-3xl"><SurvivorWeeklyMoments leagueId={leagueId} exileHref={`${base}/exile`} /></div>
         <p className="text-center text-[11px] font-bold uppercase tracking-[0.35em] text-red-300/80">Elimination Council</p>
         <h1 className="mt-2 text-center text-2xl font-black uppercase tracking-[0.15em] text-white">
           Week {week} · {tribe?.name ?? 'Tribe'} beach
         </h1>
 
         {attendingPlayers.some((p) => p.hasImmunityThisWeek) ? (
-          <div className="mx-auto mt-4 max-w-lg rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-4 py-3 text-center text-[13px] text-cyan-100">
-            🛡 {(attendingPlayers.find((p) => p.hasImmunityThisWeek)?.displayName ?? 'A player')} is immune this week.
+          <div className="mx-auto mt-4 max-w-lg rounded-xl border border-amber-400/35 bg-amber-400/10 px-4 py-3 text-center text-[13px] text-amber-100">
+            <img src="/survivor/weekly/immunity-necklace-icon.svg" alt="" width={20} height={20} className="mr-1 inline-block h-5 w-5 align-[-4px]" />
+            {(attendingPlayers.find((p) => p.hasImmunityThisWeek)?.displayName ?? 'A player')} is immune this week.
           </div>
         ) : null}
 
@@ -61,12 +84,10 @@ export default function SurvivorTribalPage() {
               key={p.userId}
               className={clsx(
                 'survivor-panel flex flex-col items-center rounded-xl p-3 text-center',
-                p.hasImmunityThisWeek && 'ring-1 ring-cyan-400/40',
+                p.hasImmunityThisWeek && 'bg-amber-400/[0.07] ring-1 ring-amber-300/40',
               )}
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-sm font-bold text-white/80">
-                {p.displayName.slice(0, 1)}
-              </div>
+              <SurvivorAvatar name={p.displayName} size={48} status={survivorAvatarStatus({ immune: p.hasImmunityThisWeek, out: p.playerState === 'eliminated' })} imageUrl={p.avatarUrl ?? null} />
               <p className="mt-2 truncate text-[12px] font-semibold text-white">{p.displayName}</p>
               <p className="mt-1 text-[11px] uppercase tracking-wide text-white/40">
                 {p.hasImmunityThisWeek ? 'Immune' : status === 'voting_open' ? 'Voting' : '—'}
@@ -76,41 +97,34 @@ export default function SurvivorTribalPage() {
         </div>
 
         <div className="mx-auto mt-6 max-w-lg text-center">
-          {status === 'voting_open' ? (
-            <>
-              <p className="font-mono text-[13px] tabular-nums text-orange-200">Vote before the commissioner&apos;s deadline.</p>
-              <Link
-                href={`${base}/chimmy`}
-                className="mt-4 inline-flex min-h-[56px] w-full items-center justify-center rounded-xl bg-red-600/80 text-[15px] font-bold uppercase tracking-wide text-white shadow-lg shadow-red-900/40"
-              >
-                🗳 Vote now via @Chimmy
-              </Link>
-            </>
-          ) : quiet ? (
-            <div className="space-y-2">
-              <img src="/survivor/exile/scroll-sealed.svg" alt="Council results sealed" width={200} height={140} className="mx-auto" /><p className="text-lg font-bold uppercase tracking-[0.2em] text-white/90">The votes are in.</p>
-              <p className="text-[13px] text-white/50">Results remain sealed until the Torch Ceremony is published.</p>
-            </div>
-          ) : council?.isRevealed ? (
-            <p className="text-[13px] text-white/65">The Torch Ceremony has been published. Replay the sealed scrolls below.</p>
-          ) : (
+          {quiet ? (
+            // survivor-core §7: "Counting the votes" while the read is being prepared, "Votes are closed" otherwise.
+            <SurvivorStateCard state={status === 'revealing' ? 'scroll_counting' : 'votes_closed'} />
+          ) : council?.isRevealed ? null : (
             <p className="text-[13px] text-white/45">No open council. Chimmy will announce the next voting window in league chat.</p>
           )}
         </div>
-
-        <div className="mx-auto mt-6 flex max-w-lg flex-col gap-2">
-          {council?.isRevealed && revealSteps.length > 0 ? <button
-            type="button"
-            className="min-h-[48px] rounded-xl border border-white/15 text-[12px] text-white/70"
-            onClick={() => setRevealOpen(true)}
-          >
-            Replay Torch Ceremony
-          </button> : null}
-        </div>
       </div>
 
-      {revealOpen ? (
-        <div className="relative mx-auto mt-6 max-w-2xl"><SurvivorVoteRevealScrolls scrolls={revealSteps} eliminatedName={council?.eliminatedName ?? null} isTie={council?.isTie === true} tiePhase={null} /></div>
+      {council?.isRevealed ? (
+        <div className="relative mx-auto mt-6 max-w-2xl">
+          {/* Only the viewer's own "you didn't vote" card, and only once the read has started. */}
+          <SurvivorMissedVoteNotice leagueId={leagueId} councilId={council.id} />
+          <SurvivorVoteRevealScrolls
+            key={council.id}
+            scrolls={revealSteps}
+            totalSteps={council.revealTotalSteps ?? revealSteps.length}
+            eliminatedName={council.eliminatedName ?? null}
+            isTie={council.isTie === true}
+            tiePhase={null}
+            revealMode={council.revealMode ?? 'one_at_a_time'}
+            nextStepAt={council.revealNextStepAt ?? null}
+            onRequestMore={ctx.refetch}
+            exileEnabled={ctx.season?.exileEnabled !== false}
+            week={council.week}
+            tribeName={tribe?.name ?? null}
+          />
+        </div>
       ) : null}
     </div>
   )

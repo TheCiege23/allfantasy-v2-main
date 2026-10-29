@@ -2,26 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { hasLeagueCommissionerRights } from '@/lib/league/permissions'
 import { advanceNflRedraftPlayoffRuntimeRound } from '@/lib/playoff-runtime'
 
 export const dynamic = 'force-dynamic'
 
-async function canManageLeague(leagueId: string, userId: string): Promise<boolean> {
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: {
-      userId: true,
-      teams: {
-        where: { claimedByUserId: userId },
-        select: { isCommissioner: true, isCoCommissioner: true },
-      },
-    },
-  })
-  if (!league) return false
-  if (league.userId === userId) return true
-  return (league.teams as { isCommissioner: boolean; isCoCommissioner: boolean }[]).some(
-    (t) => t.isCommissioner || t.isCoCommissioner,
-  )
+/** Owner, team commissioner / co-commissioner, or tournament co-commissioner (no team needed). */
+function canManageLeague(leagueId: string, userId: string): Promise<boolean> {
+  return hasLeagueCommissionerRights(leagueId, userId, 'league')
 }
 
 /**

@@ -5,6 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { ZombieOwnerStatus } from './types'
+import { syncZombieTeamNames } from './zombieTeamNames'
 
 export async function getStatus(leagueId: string, rosterId: string): Promise<ZombieOwnerStatus | null> {
   const row = await prisma.zombieLeagueTeam.findUnique({
@@ -116,4 +117,6 @@ export async function ensureLeagueTeamRows(leagueId: string, zombieLeagueId?: st
       },
     })
   }
+  // Name the rows: without this every hub screen falls back to printing the roster id.
+  await syncZombieTeamNames(leagueId).catch(() => 0)
 }

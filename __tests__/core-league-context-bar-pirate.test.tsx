@@ -76,10 +76,10 @@ describe('league type picker — Pirate', () => {
     expect(values).toEqual(expect.arrayContaining(['pirate', 'efl', 'survivor_guillotine', 'survivor', 'guillotine']))
     expect(screen.getByRole('option', { name: 'Pirate' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'EFL' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Survivor Guillotine' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Survivor Guilly' })).toBeInTheDocument()
   })
 
-  it('saves Survivor Guillotine immediately as one type', async () => {
+  it('saves Survivor Guilly immediately as one type', async () => {
     stubFetch({ canConfirm: true, storedType: 'redraft', confirmation: null })
     render(bar())
     const select = await loadedTypeSelect()
@@ -91,14 +91,14 @@ describe('league type picker — Pirate', () => {
     expect(screen.queryByLabelText('Rosters carry over?')).toBeNull()
   })
 
-  it('shows a confirmed Survivor Guillotine league as that, not as its guillotine column', async () => {
+  it('shows a confirmed Survivor Guilly league as that, not as its guillotine column', async () => {
     stubFetch({
       canConfirm: false,
       storedType: 'guillotine',
       confirmation: { type: 'survivor_guillotine', baseFormat: null },
     })
     render(bar())
-    expect(await screen.findByText('Survivor Guillotine')).toBeInTheDocument()
+    expect(await screen.findByText('Survivor Guilly')).toBeInTheDocument()
   })
 
   it('asks whether rosters carry over, and saves nothing until it is answered', async () => {

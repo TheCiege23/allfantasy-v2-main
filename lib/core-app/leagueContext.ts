@@ -59,6 +59,8 @@ export const LEAGUE_CONTEXT_SELECT = {
   isDynasty: true,
   starters: true,
   settings: true,
+  // A native league's playoff field (readPlayoffFormat reads it for native leagues only).
+  playoffTeams: true,
   status: true,
   lifecycleState: true,
   guillotineMode: true,

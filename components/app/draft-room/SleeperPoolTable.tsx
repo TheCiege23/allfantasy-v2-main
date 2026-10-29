@@ -41,7 +41,8 @@ import {
   sortKeyForColumn,
   type PoolSortState,
 } from './SleeperPoolSort'
-import { aiAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
+import { AF_BLUE, afAdpCellTitle, aiAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
+import { formatSurvival, survivalProbability, survivalTone } from '@/lib/draft-room/draftPulse'
 
 /** Re-export sizing constants for stories/tests that imported them from this module. */
 export {
@@ -76,6 +77,8 @@ export interface SleeperPoolTableProps {
   sortState?: PoolSortState | null
   onSortChange?: (columnKey: string) => void
   aiOverlaySignals?: Record<string, DraftAiOverlaySignal>
+  /** Viewer's next pick — adds the LEFT @ column. Null for spectators / idle drafts. */
+  leftAtPick?: { overall: number; label: string } | null
 }
 
 function rowKey(p: PlayerEntry): string {
@@ -156,6 +159,7 @@ interface SleeperRowProps {
   onNominateRequest?: () => void
   testIdBase: string
   aiOverlaySignal?: DraftAiOverlaySignal
+  leftAtOverall: number | null
 }
 
 function SleeperRow(props: SleeperRowProps) {
@@ -181,6 +185,7 @@ function SleeperRow(props: SleeperRowProps) {
     onNominateRequest,
     testIdBase,
     aiOverlaySignal,
+    leftAtOverall,
   } = props
 
   const normalized = useMemo(
@@ -207,6 +212,7 @@ function SleeperRow(props: SleeperRowProps) {
 
   const adpDisplay = p.adp != null ? p.adp.toFixed(1) : '—'
   const aiAdpDisplay = p.aiAdp != null ? p.aiAdp.toFixed(1) : '—'
+  const afAdpDisplay = p.afAdp != null && Number.isFinite(Number(p.afAdp)) ? Number(p.afAdp).toFixed(1) : '—'
   const byeDisplay = p.byeWeek != null ? String(p.byeWeek) : '—'
 
   const tipFor = (columnKey: string, statLabel: string, rawValue: number | null | undefined): string =>
@@ -344,8 +350,8 @@ function SleeperRow(props: SleeperRowProps) {
       case 'adp': {
         const delta =
           p.adp != null && Number.isFinite(Number(p.adp)) &&
-          p.aiAdp != null && Number.isFinite(Number(p.aiAdp))
-            ? Math.round(p.adp - p.aiAdp)
+          p.afAdp != null && Number.isFinite(Number(p.afAdp))
+            ? Math.round(p.adp - Number(p.afAdp))
             : null
         return (
           <Cell key={col.key} width={col.width} align="right">
@@ -359,7 +365,7 @@ function SleeperRow(props: SleeperRowProps) {
                 <span
                   aria-hidden
                   data-testid={`${testIdBase}-adp-delta`}
-                  title={`vs AI ADP: ${delta > 0 ? 'undervalued' : 'overvalued'} by ${Math.abs(delta)} spots`}
+                  title={`vs AF ADP: ${delta > 0 ? 'undervalued' : 'overvalued'} by ${Math.abs(delta)} spots`}
                   className={`text-[11px] font-medium tabular-nums leading-none ${
                     delta > 0 ? 'text-emerald-300/85' : 'text-rose-300/70'
                   }`}
@@ -371,6 +377,52 @@ function SleeperRow(props: SleeperRowProps) {
           </Cell>
         )
       }
+      case 'leftAt': {
+        const odds = !drafted && leftAtOverall != null ? survivalProbability(p.adp, leftAtOverall) : null
+        const tone = odds == null ? null : survivalTone(odds)
+        return (
+          <Cell key={col.key} width={col.width} align="right">
+            <span
+              data-testid={`${testIdBase}-left-at`}
+              data-tone={tone ?? 'none'}
+              title={
+                odds == null
+                  ? 'No market ADP — no estimate'
+                  : `About ${formatSurvival(odds)} chance ${p.name} is still available at your next pick`
+              }
+              className={`font-semibold tabular-nums ${
+                tone === 'likely'
+                  ? 'text-emerald-300'
+                  : tone === 'coin_flip'
+                    ? 'text-amber-300'
+                    : tone === 'unlikely'
+                      ? 'text-rose-300'
+                      : 'text-white/35'
+              }`}
+            >
+              {odds == null ? '—' : formatSurvival(odds)}
+            </span>
+          </Cell>
+        )
+      }
+      case 'afAdp':
+        return (
+          <Cell key={col.key} width={col.width} align="right">
+            <span
+              data-testid={`${testIdBase}-af-adp`}
+              title={afAdpCellTitle({
+                hasValue: p.afAdp != null && Number.isFinite(Number(p.afAdp)),
+                contributions: p.afAdpContributions ?? null,
+                importedSampleSize: p.afAdpImportedSampleSize ?? null,
+                ownSampleSize: p.afAdpOwnSampleSize ?? null,
+              })}
+              className="font-semibold tabular-nums"
+              style={p.afAdp != null ? { color: AF_BLUE } : undefined}
+            >
+              {afAdpDisplay}
+            </span>
+          </Cell>
+        )
       case 'aiAdp':
         return (
           <Cell key={col.key} width={col.width} align="right">
@@ -577,11 +629,14 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
     sortState = null,
     onSortChange,
     aiOverlaySignals,
+    leftAtPick = null,
   } = props
 
+  const leftAtPickLabel = leftAtPick?.label ?? null
+  const leftAtOverall = leftAtPick?.overall ?? null
   const layout = useMemo(
-    () => buildSleeperPoolTableLayout(draftSport, statColumnOptions),
-    [draftSport, statColumnOptions],
+    () => buildSleeperPoolTableLayout(draftSport, statColumnOptions, { leftAtPickLabel }),
+    [draftSport, statColumnOptions, leftAtPickLabel],
   )
 
   const statByKey = useMemo(() => new Map(layout.statDefs.map((d) => [d.key, d])), [layout.statDefs])
@@ -644,7 +699,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                       : 'text-white/58 hover:text-white/88'
                   }`}
                 >
-                  <span>{col.label}</span>
+                  <span style={col.key === 'afAdp' ? { color: AF_BLUE } : undefined}>{col.label}</span>
                   {indicator ? (
                     <span aria-hidden className="text-[11px] leading-none text-cyan-300/85">
                       {indicator}
@@ -658,7 +713,12 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
           // Non-sortable column (actions, or sort handlers disabled).
           return (
             <Cell key={col.key} width={col.width} align={col.align} title={col.title}>
-              <span data-testid={`sleeper-pool-table-header-${col.key}`}>{col.label}</span>
+              <span
+                data-testid={`sleeper-pool-table-header-${col.key}`}
+                style={col.key === 'afAdp' ? { color: AF_BLUE } : undefined}
+              >
+                {col.label}
+              </span>
             </Cell>
           )
         })}
@@ -700,6 +760,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                 onNominateRequest={onNominateRequest ? () => onNominateRequest(p) : undefined}
                 testIdBase={`sleeper-pool-row-${idx}`}
                 aiOverlaySignal={aiOverlaySignals?.[k]}
+                leftAtOverall={leftAtOverall}
               />
             )
           })
@@ -743,6 +804,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                   onDraftRequest={() => onDraftRequest(p)}
                   onNominateRequest={onNominateRequest ? () => onNominateRequest(p) : undefined}
                   testIdBase={`sleeper-pool-row-${virtualRow.index}`}
+                  leftAtOverall={leftAtOverall}
                   aiOverlaySignal={aiOverlaySignals?.[k]}
                 />
               </div>

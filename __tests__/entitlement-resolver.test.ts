@@ -34,6 +34,21 @@ describe("EntitlementResolver", () => {
     })
   })
 
+  it('rejects subscription read failures when a charging caller requires known allowance status', async () => {
+    userSubscriptionFindManyMock.mockRejectedValueOnce(new Error('subscriptions unavailable'))
+    const { EntitlementResolver } = await import('@/lib/subscription/EntitlementResolver')
+    await expect(new EntitlementResolver().resolveForUser('u1', 'ai_chat', null, { strictReads: true }))
+      .rejects.toThrow('subscriptions unavailable')
+  })
+
+  it('rejects grant read failures in strict mode instead of assuming a free account', async () => {
+    userSubscriptionFindManyMock.mockResolvedValueOnce([])
+    adminSubscriptionGrantFindManyMock.mockRejectedValueOnce(new Error('grants unavailable'))
+    const { EntitlementResolver } = await import('@/lib/subscription/EntitlementResolver')
+    await expect(new EntitlementResolver().resolveSnapshot('u1', null, { strictReads: true }))
+      .rejects.toThrow('grants unavailable')
+  })
+
   it("maps supreme plan and inherits other feature groups", async () => {
     userSubscriptionFindManyMock.mockResolvedValueOnce([
       {
@@ -53,7 +68,7 @@ describe("EntitlementResolver", () => {
     expect(snapshot.plans).toContain("supreme")
     expect(resolver.hasFeatureAccess(snapshot, "trade_analyzer")).toBe(true)
     expect(resolver.hasFeatureAccess(snapshot, "commissioner_automation")).toBe(true)
-    expect(resolver.hasFeatureAccess(snapshot, "draft_strategy_build")).toBe(true)
+    expect(resolver.hasFeatureAccess(snapshot, "draft_strategy_build")).toBe(false)
   })
 
   it("treats expired subscriptions as locked features", async () => {
@@ -84,7 +99,7 @@ describe("EntitlementResolver", () => {
     const snapshot = await resolver.resolveSnapshot("dev-user-1")
 
     expect(snapshot).toMatchObject({
-      plans: ["supreme"],
+      plans: ["supreme", "war_room", "enterprise"],
       status: "active",
       currentPeriodEnd: null,
       gracePeriodEnd: null,
@@ -98,7 +113,7 @@ describe("EntitlementResolver", () => {
     const snapshot = await resolver.resolveSnapshot("normal-id", "CJABAR.HENSON@GMAIL.COM")
 
     expect(snapshot).toMatchObject({
-      plans: ["supreme"],
+      plans: ["supreme", "war_room", "enterprise"],
       status: "active",
       currentPeriodEnd: null,
       gracePeriodEnd: null,

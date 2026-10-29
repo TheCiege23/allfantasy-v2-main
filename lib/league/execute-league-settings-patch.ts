@@ -7,23 +7,52 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
 import { keeperProvenanceFromCommissionerSave } from '@/lib/league-contract/keeperProvenance'
+import { CO_COMMISSIONER_SCOPES_KEY, scopesForSettingsPatch } from '@/lib/league/coCommissionerScopes'
 import { requireCommissionerRole } from '@/lib/league/permissions'
+import { SETTINGS_LOCK_KEY, lockedMessage } from '@/lib/league/settingsLock'
+import { lockedGroupsForPatch } from '@/lib/league/settingsLockService'
 import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 import { isValidIanaTimeZone } from '@/lib/timezone'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
+import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
 import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { syncCommissionerDerivedLeagueState } from '@/lib/league/commissioner-settings-derived-sync'
 import { assertSettingsEditAllowed } from '@/server/services/commissionerService'
+import {
+  decideSettingsEdit,
+  lifecycleSectionsTouchedByPatch,
+  recordMidSeasonSettingsChange,
+  type SettingsEditDecision,
+  type LifecycleGatedSection,
+} from '@/lib/league/settingsLifecycleGate'
+import { MID_SEASON_CONFIRM_FLAG } from '@/lib/league/midSeasonConfirmation'
 import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
-import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { checkByePlan, isNaturalByePlan } from '@/lib/playoff-brackets/byePlan'
+import { nativeFormatPatch } from '@/lib/league/nativeFormatPatch'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { resizeNativeLeague } from '@/lib/league/resizeNativeLeague'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
+import { parseDeadlineAtInput, TRADE_DEADLINE_AT_KEY } from '@/lib/trade-deadline/tradeDeadlineTime'
+import { parsePickTradeDeadline, PICK_TRADE_DEADLINE_KEY } from '@/lib/trade-deadline/pickTradeDeadline'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { LEAGUE_LOG_VISIBILITY_KEY, parseLeagueLogVisibility } from '@/lib/league-log/leagueLog'
+import { ELIMINATED_LINEUP_RULE_KEY, parseEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLineups'
+import { IR_AUTO_MOVE_KEY, parseIrAutoMoveRule } from '@/lib/ir-activation/irAutoMove'
+import { FILL_EMPTY_STARTERS_KEY } from '@/lib/lineup-automation/fillEmptyStarters'
+import { ORPHAN_AUCTION_KEY } from '@/lib/orphan-auction/orphanAuction'
+import { parsePickTermsRule, PICK_TERMS_KEY, PICK_TERMS_RULE_KEY } from '@/lib/league-trade-engine/pickTerms'
+import { parseTaxiStealingRule, readTaxiStealingRule, TAXI_STEAL_CLAIMS_KEY, TAXI_STEALING_KEY } from '@/lib/taxi/taxiStealing'
+import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
+import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
 import {
   DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY,
   DAILY_WAIVER_SCHEDULE_SETTINGS_KEY,
@@ -37,7 +66,64 @@ import {
   type PriorWaiverProcessing,
 } from '@/lib/waivers/dailyWaiverSchedule'
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
+import { parseWaiverEngineConfig } from '@/lib/waiver-wire/waiver-engine-config'
+import {
+  HUB_WAIVER_OPTION_KEYS,
+  hasHubWaiverOptions,
+  hubWaiverEngineConfigPatch,
+  parseHubWaiverOptions,
+  weeklyResetSurvivorRefusal,
+} from '@/lib/waiver-wire/hub-waiver-options'
+import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import { refreshLeagueWaiverNextRunAt } from '@/lib/waiver-wire/waiver-state-service'
+import {
+  PROSPECT_STASH_UNAVAILABLE_CODE,
+  PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+  isTaxiIncreaseRefused,
+} from '@/lib/league-creation/prospectStashPolicy'
+import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import {
+  PLAYOFF_SERIES_SETTINGS_KEY,
+  parsePlayoffSeriesLengths,
+  playoffSeriesChangeNeedsPlan,
+  playoffSeriesNeedsPlan,
+  playoffSeriesSettingsValue,
+  playoffSeriesSportSupported,
+  readPlayoffSeriesLengths,
+  samePlayoffSeriesLengths,
+} from '@/lib/playoff-runtime/playoffSeries'
+import { MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY } from '@/lib/redraft/medianGame'
+import { medianGameChangeRefusal } from '@/lib/redraft/medianGameSwitch'
+import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
+import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
+import { playoffStartWeekCapRefusal, regularSeasonCapApplies, settingsMergeCapRefusal } from '@/lib/redraft/regularSeasonCap'
+import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
+import { EXTRA_MATCHUP_SETTINGS_KEY, parseExtraMatchupSettings, readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
+import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
+import { readThirdPlaceGameEnabled, THIRD_PLACE_GAME_SETTINGS_KEY } from '@/lib/playoff-runtime/thirdPlaceGame'
+import {
+  CONSOLATION_PICK_GOES_TO_KEY,
+  CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY,
+  CONSOLATION_PLAYS_FOR_SETTINGS_KEY,
+  parseConsolationPickGoesTo,
+  parseConsolationPlaysFor,
+  type ConsolationPickGoesTo,
+  type ConsolationPlaysFor,
+} from '@/lib/playoff-runtime/consolationPlaysFor'
+import { GAMES_LIMITS_SETTINGS_KEY, parseGamesLimits, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
+import {
+  keepLineupModeFields,
+  lineupModeSwitchRefusal,
+  parseLineupMode,
+  readLineupMode,
+  withLineupMode,
+  type LineupMode,
+} from '@/lib/redraft/lineupModeSwitch'
+import { gamesCountSportConfigError } from '@/lib/redraft/gamesCount'
+import { gamesCountChangeRefusal, gamesCountSettingOf, keepGamesCountFields } from '@/lib/redraft/gamesCountSwitch'
+import { ruleSnapshotFromLeague } from '@/lib/league-rules-explainer/snapshot'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -132,6 +218,21 @@ function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status })
 }
 
+/**
+ * `League.settings` as it is NOW. This patch writes `settings` in several separate blocks, so each
+ * block must merge onto the latest stored copy: spreading the one read at the top of the request
+ * silently reverted whatever an earlier block in the same save had just written.
+ */
+async function readCurrentLeagueSettings(leagueId: string): Promise<Record<string, unknown>> {
+  const cur = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const s = cur?.settings
+  return s && typeof s === 'object' && !Array.isArray(s) ? { ...(s as Record<string, unknown>) } : {}
+}
+
+function asPlainObject(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+}
+
 function hasLeagueSettingsRowPatch(body: Record<string, unknown>): boolean {
   return Object.keys(body).some((k) => LEAGUE_SETTINGS_ROW_PATCH_KEYS.has(k))
 }
@@ -146,19 +247,72 @@ function requestedPremiumCommissionerKeys(body: Record<string, unknown>): string
 
 export type LeagueSettingsPatchBody = Record<string, unknown> & { leagueId: string }
 
+export type LeagueSettingsPatchOptions = {
+  section?: string
+  scoringOverrideInPlayoffs?: boolean
+  /**
+   * The person who actually made the change, when `userId` is the account the write is authorized
+   * AS. The tournament schedules a conference league's draft as the league's commissioner (the
+   * tournament owner) after checking the actor may change tournament settings; the row, the league
+   * audit entry and the league event must still name whoever set the time. Authorization, the
+   * entitlement check and every refusal use `userId` alone — this changes attribution only.
+   */
+  actingUserId?: string
+  /**
+   * `'tournament'`: the write IS the tournament → league draft-time sync, so the league → tournament
+   * copy-back is skipped (lib/tournament/divisions/leagueDraftTimeToTournament.ts). The copy-back
+   * would be a no-op anyway — both sides already hold the same time — but skipping it means the two
+   * directions can never chase each other.
+   */
+  source?: 'tournament'
+}
+
+/**
+ * Commissioner-granted playoff byes (multi-round byes, stepladders) are AF Commissioner
+ * (`advanced_playoff_setup`, docs/AF_COMMISSIONER_SETTINGS_SPEC.md §1.3). Odd team counts are
+ * FREE: the bracket engine pads any field to a power of two with natural byes (owner's rule,
+ * Oct 15 paywall; pinned by __tests__/free-commissioner-locks.test.ts).
+ *
+ * Checked only when the plan CHANGES, so a league keeps a plan saved before its sub lapsed.
+ */
+export async function customPlayoffBracketRefusal(
+  userId: string,
+  body: LeagueSettingsPatchBody,
+  current: { playoffTeams: number | null; byePlan: unknown },
+): Promise<{ status: number; message: string } | null> {
+  const merge = body.settingsMerge && typeof body.settingsMerge === 'object' && !Array.isArray(body.settingsMerge)
+    ? (body.settingsMerge as Record<string, unknown>)
+    : null
+  if (!merge || !('playoff_bye_plan' in merge) || merge.playoff_bye_plan == null) return null
+  const teams = body.playoffTeams != null ? Number(body.playoffTeams) : current.playoffTeams ?? 0
+  const raw = merge.playoff_bye_plan
+  const plan = Array.isArray(raw) ? raw.map((v) => Number(v)) : []
+  const check = checkByePlan(teams, plan)
+  if (!check.ok) return { status: 400, message: check.error }
+  if (isNaturalByePlan(teams, plan)) return null
+  const unchanged = Array.isArray(current.byePlan) && current.byePlan.map(Number).join() === plan.join()
+  if (unchanged) return null
+  const access = await new FeatureGateService().evaluateUserFeatureAccess(userId, 'advanced_playoff_setup').catch(() => null)
+  if (access?.allowed) return null
+  return { status: 403, message: 'Custom playoff byes require AF Commissioner.' }
+}
+
 /**
  * Applies commissioner-only updates to `League`, `League.settings` JSON, and `LeagueSettings` row.
  */
 export async function executeLeagueSettingsPatch(
   userId: string,
   body: LeagueSettingsPatchBody,
-  patchOptions?: { section?: string; scoringOverrideInPlayoffs?: boolean },
+  patchOptions?: LeagueSettingsPatchOptions,
 ): Promise<Response> {
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId.trim() : ''
   if (!leagueId) return jsonError('leagueId required', 400)
+  /** Who the change is recorded as. Never used to authorize anything — see `actingUserId`. */
+  const actorUserId = patchOptions?.actingUserId?.trim() || userId
 
   try {
-    await requireCommissionerRole(leagueId, userId)
+    // A co-commissioner may only change the areas the head commissioner granted (coCommissionerScopes).
+    await requireCommissionerRole(leagueId, userId, scopesForSettingsPatch(body, patchOptions?.section))
   } catch (err) {
     if (err instanceof Response) return err
     console.error('[executeLeagueSettingsPatch]', err)
@@ -179,6 +333,23 @@ export async function executeLeagueSettingsPatch(
     }
   }
 
+  /*
+   * 🛑 THE DECLARED SECTION IS NOT WHAT THE PATCH WRITES. The section-less door (useAutosave → this
+   * function with no `section`) never ran the lifecycle gate at all, and a sectioned request can
+   * name one section while carrying another's keys. So a body that writes scoring or roster columns
+   * runs those sections' gates too — the scoring/roster policy in settingsLifecycleGate.ts, where a
+   * mid-season change needs `confirmMidSeasonChange: true` in the body.
+   */
+  const confirmedMidSeason: Array<{ section: LifecycleGatedSection; decision: SettingsEditDecision }> = []
+  for (const touched of lifecycleSectionsTouchedByPatch(body)) {
+    if (touched === patchOptions?.section) continue
+    const decision = await decideSettingsEdit(leagueId, userId, touched, body)
+    if (!decision.ok) return NextResponse.json(decision.body, { status: decision.status })
+    if (decision.midSeason) confirmedMidSeason.push({ section: touched, decision })
+  }
+  // A request flag, never a column or a settings key.
+  delete (body as Record<string, unknown>)[MID_SEASON_CONFIRM_FLAG]
+
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
     include: { leagueSettings: true, teams: true },
@@ -189,20 +360,53 @@ export async function executeLeagueSettingsPatch(
   // regardless of which door (sectioned or not) the request came through.
   const structuralRefusal = await structuralPatchRefusal(leagueId, body, league)
   if (structuralRefusal) return jsonError(structuralRefusal, 409)
+
+  // The hub's waiver options (lib/waiver-wire/hub-waiver-options.ts): the minimum bid is checked
+  // against the budget this save leaves in place; the option keys are written after the columns.
+  const hubWaiver = parseHubWaiverOptions(body as Record<string, unknown>, {
+    budget: body.waiverBudget != null ? Number(body.waiverBudget) : league.waiverBudget,
+  })
+  if (!hubWaiver.ok) return jsonError(hubWaiver.error, 400)
+  // Owner's decision 2026-10-25: a survivor league's priority carries survivor boosts, which a weekly
+  // reset would erase, so it stays rolling (lib/waiver-wire/weekly-priority-reset.ts).
+  if (hubWaiver.options.waiverOrderResetPolicy === 'weekly') {
+    const refusal = weeklyResetSurvivorRefusal(hubWaiver.options, league.survivorMode === true || (await isSurvivorLeague(leagueId)))
+    if (refusal) return jsonError(refusal, 400)
+  }
   if (body.leagueSize != null) {
     const size = Number(body.leagueSize)
     if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
   }
 
-  // The entitlement alone: OR-ing the profile flag kept a lapsed plan's access (livePlanFlags.ts).
-  const commissionerEntitlement = await new EntitlementResolver()
-    .resolveForUser(userId, 'commissioner_ai_tools')
-    .catch(() => ({ hasAccess: false }))
-  const hasSub = Boolean(commissionerEntitlement.hasAccess)
+  // The one shared AF Commissioner check (lib/entitlements/afCommissionerPlan.ts) — the same answer
+  // GET /api/league/settings reports as `hasAfCommissionerSub`, so the page never shows a paid control
+  // unlocked that this save then refuses. (It used EntitlementResolver alone, which disagreed for the
+  // allowlisted AllFantasy accounts.) Still the plan alone: OR-ing the profile flag kept a lapsed
+  // plan's access (livePlanFlags.ts).
+  let planUser: { email: string | null; username: string | null } | null = null
+  try {
+    planUser = await prisma.appUser.findUnique({ where: { id: userId }, select: { email: true, username: true } })
+  } catch {
+    planUser = null // no allowlist match; the plan check still runs
+  }
+  const hasSub = await hasAfCommissionerPlan({ id: userId, email: planUser?.email ?? null, username: planUser?.username ?? null })
 
   const premiumCommissionerKeys = requestedPremiumCommissionerKeys(body)
   if (premiumCommissionerKeys.length > 0 && !hasSub) {
     return jsonError('AF Commissioner or AF Supreme is required for Commissioner Intelligence and League Helper settings.', 403)
+  }
+
+  // A pre-draft resize to an odd keeper size is the same AF Commissioner option creation offers
+  // (lib/league/oddTeamLeagues.ts). Redraft odd sizes stay free.
+  if (body.leagueSize != null && Number(body.leagueSize) !== league.leagueSize &&
+      oddTeamCountNeedsAfCommissioner(league.leagueType, Number(body.leagueSize)) && !hasSub) {
+    return NextResponse.json(
+      {
+        error: `A ${Number(body.leagueSize)}-team keeper league is part of AF Commissioner. Choose an even team count or upgrade.`,
+        code: 'ODD_TEAM_COUNT_REQUIRES_AF_COMMISSIONER',
+      },
+      { status: 403 },
+    )
   }
 
   // ⚠ 7- and 9-team playoff brackets are NOT a paid feature. They were refused here without
@@ -218,6 +422,51 @@ export async function executeLeagueSettingsPatch(
 
   if (body.sport != null && !LEAGUE_SPORTS.has(String(body.sport))) {
     return jsonError('Invalid sport', 400)
+  }
+
+  // NHL / MLB have no prospect pool: the Taxi squad section may keep or lower `taxiSlots`, never grow it.
+  if (body.taxiSlots != null && isTaxiIncreaseRefused(String(league.sport ?? ''), Number(body.taxiSlots), Number(league.taxiSlots ?? 0))) {
+    return NextResponse.json(
+      { error: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE },
+      { status: 400 },
+    )
+  }
+
+  // "Which games count" (lib/redraft/gamesCount.ts) rides in `sportConfig`: a bad mode, a best-N other
+  // than 2 or 3, or a non-all mode outside NBA/NHL/MLB is refused here — before any write below. The
+  // `settingsMerge` door can replace `sportConfig` wholesale too, so it is checked the same way.
+  for (const sportConfig of [body.sportConfig, (body.settingsMerge as { sportConfig?: unknown } | null | undefined)?.sportConfig]) {
+    if (sportConfig === undefined) continue
+    const gamesCountError = gamesCountSportConfigError(sportConfig, String(body.sport ?? league.sport ?? ''))
+    if (gamesCountError) return jsonError(gamesCountError, 400)
+  }
+  // A valid value may still not be a permitted CHANGE: not while a season is under way, and never off
+  // "All games" before the tables exist (lib/redraft/gamesCountSwitch.ts). A blob that does not mention
+  // the keys keeps the stored values, so a stale blob cannot turn the rule off by omission.
+  {
+    const storedSportConfig = (league.settings as { sportConfig?: unknown } | null)?.sportConfig
+    const merge = body.settingsMerge as { sportConfig?: unknown } | null | undefined
+    if (body.sportConfig !== undefined) body.sportConfig = keepGamesCountFields(storedSportConfig, body.sportConfig)
+    if (merge && typeof merge === 'object' && !Array.isArray(merge) && 'sportConfig' in merge) {
+      body.settingsMerge = { ...merge, sportConfig: keepGamesCountFields(storedSportConfig, merge.sportConfig) }
+    }
+    const from = gamesCountSettingOf(storedSportConfig, league.sport)
+    for (const sportConfig of [body.sportConfig, (body.settingsMerge as { sportConfig?: unknown } | null | undefined)?.sportConfig]) {
+      if (sportConfig === undefined) continue
+      const to = gamesCountSettingOf(sportConfig, String(body.sport ?? league.sport ?? ''))
+      const refusal = await gamesCountChangeRefusal({ leagueId, from, to })
+      if (refusal) return NextResponse.json({ error: refusal.message, code: refusal.code }, { status: refusal.status })
+    }
+  }
+
+  // The league median game: a boolean only, and not once the season's first week is final — a change
+  // then would add or remove a median result in every played week (lib/redraft/medianGameSwitch.ts).
+  let medianGameChanged = false
+  if (body.medianGame !== undefined) {
+    if (typeof body.medianGame !== 'boolean') return jsonError('medianGame must be true or false', 400)
+    const refusal = await medianGameChangeRefusal({ leagueId, from: league.medianGame === true, to: body.medianGame })
+    if (refusal) return NextResponse.json({ error: refusal.message, code: refusal.code }, { status: refusal.status })
+    medianGameChanged = body.medianGame !== (league.medianGame === true)
   }
 
   if (body.season != null) {
@@ -281,19 +530,422 @@ export async function executeLeagueSettingsPatch(
     const k = Number(body.keeperCount)
     if (!Number.isFinite(k) || k < 0 || k > 10) return jsonError('keeperCount must be 0–10', 400)
   }
+  const keeperRefusal = await keeperRuleSettingsRefusal(userId, body, { keeperConflictRule: league.keeperConflictRule })
+  if (keeperRefusal) return jsonError(keeperRefusal.message, keeperRefusal.status)
 
-  const teamCount = league.leagueSize ?? league.teams.length
+  const teamCount = body.leagueSize != null ? Number(body.leagueSize) : league.leagueSize ?? league.teams.length
   if (body.playoffTeams != null) {
     const pt = Number(body.playoffTeams)
     if (Number.isFinite(pt) && pt > Math.max(1, teamCount)) {
       return jsonError(`playoffTeams cannot exceed league size (${teamCount})`, 400)
     }
+    // The bracket engine runs at most four rounds (canonicalNflRedraftPlayoffRuntime warns past 16 and
+    // nothing reads the warning), and no sport's season has room for a fifth.
+    if (Number.isFinite(pt) && pt > MAX_PLAYOFF_TEAMS) {
+      return jsonError(`playoffTeams can be at most ${MAX_PLAYOFF_TEAMS}`, 400)
+    }
+  }
+  const bracketRefusal = await customPlayoffBracketRefusal(userId, body, {
+    playoffTeams: league.playoffTeams,
+    byePlan: (league.settings as Record<string, unknown> | null)?.playoff_bye_plan,
+  })
+  if (bracketRefusal) return jsonError(bracketRefusal.message, bracketRefusal.status)
+
+  /*
+   * A redraft or keeper league's regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts):
+   * the playoff start week, and the settings-JSON copies of it and of the season length a
+   * `settingsMerge` can write. Refused only when the value CHANGES past the cap, so re-saving a league
+   * as it stands never fails.
+   */
+  const capSport = body.sport ?? league.sport
+  if (regularSeasonCapApplies({ leagueType: typeof body.leagueType === 'string' ? body.leagueType : league.leagueType, sport: capSport })) {
+    if (body.playoffStartWeek != null && Number(body.playoffStartWeek) !== league.playoffStartWeek) {
+      const refusal = playoffStartWeekCapRefusal(body.playoffStartWeek, capSport)
+      if (refusal) return jsonError(refusal, 400)
+    }
+    const mergeRefusal = settingsMergeCapRefusal(body.settingsMerge, league.settings, capSport)
+    if (mergeRefusal) return jsonError(mergeRefusal, 400)
+  }
+
+  // The extra matchup an odd-team league can play instead of the bye (lib/redraft/oddTeamExtraMatchupRules.ts)
+  // is an AF Commissioner setting. Checked only when it is turned on or changed while on, so turning
+  // it off is always allowed and a league keeps a setting saved before its plan lapsed.
+  {
+    const merge = body.settingsMerge && typeof body.settingsMerge === 'object' && !Array.isArray(body.settingsMerge)
+      ? (body.settingsMerge as Record<string, unknown>)
+      : null
+    if (merge && EXTRA_MATCHUP_SETTINGS_KEY in merge) {
+      const parsed = parseExtraMatchupSettings(merge[EXTRA_MATCHUP_SETTINGS_KEY])
+      if (!parsed.ok) return jsonError(parsed.error, 400)
+      const next = parsed.value
+      if (next.enabled) {
+        const size = body.leagueSize != null ? Number(body.leagueSize) : league.leagueSize ?? league.teams.length
+        if (!isOddTeamCount(size)) return jsonError('The extra matchup is for leagues with an odd number of teams.', 400)
+        if (!ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(String(league.leagueType ?? 'redraft'))) {
+          return jsonError('The extra matchup is available for redraft and keeper leagues.', 400)
+        }
+        const mode = String((league.settings as Record<string, unknown> | null)?.scoring_mode ?? 'points')
+        if (mode !== 'points') return jsonError('The extra matchup needs a points league.', 400)
+        const stored = readExtraMatchupSettings(league.settings)
+        const unchanged = stored.enabled && stored.opponent === next.opponent && stored.scoring === next.scoring
+        if (!unchanged && !hasSub) {
+          return NextResponse.json(
+            { error: 'The extra matchup is part of AF Commissioner.', code: 'EXTRA_MATCHUP_REQUIRES_AF_COMMISSIONER' },
+            { status: 403 },
+          )
+        }
+      }
+      body.settingsMerge = { ...merge, [EXTRA_MATCHUP_SETTINGS_KEY]: next }
+    }
+  }
+
+  /*
+   * League median in the playoffs (lib/redraft/medianGame.ts) — off unless stored true. A boolean only:
+   * anything else is refused rather than read as off, so a bad client cannot silently flip it.
+   */
+  if (body.medianGameInPlayoffs !== undefined && typeof body.medianGameInPlayoffs !== 'boolean') {
+    return jsonError('medianGameInPlayoffs must be true or false', 400)
+  }
+
+  /*
+   * Championship length — how many weeks the final is scored over (lib/playoff-runtime/playoffRoundWeeks.ts).
+   * Stored in `settings.playoff_structure`, where creation writes the sport default (2 for MLB/NHL).
+   * ⚠ REFUSED WHILE THE PLAYOFFS ARE BEING PLAYED: the scorer reads it live, so changing it mid-final
+   * would move the week the title is decided on — shortening it could crown a champion on one week of
+   * a two-week final that is half played. Also refused (400) when the final would end after the
+   * season's last week (lib/playoff-runtime/championshipLengthFit.ts).
+   */
+  let championshipLengthToStore: number | null = null
+  if (body.championshipLength !== undefined) {
+    const n = Number(body.championshipLength)
+    if (!Number.isInteger(n) || n < 1 || n > 4) return jsonError('championshipLength must be 1–4 weeks', 400)
+    if (n !== (readChampionshipLength(league.settings) ?? 1)) {
+      const inPlayoffs = await prisma.redraftSeason.findFirst({
+        where: { leagueId, status: REDRAFT_SEASON_STATUS.PLAYOFFS },
+        select: { id: true },
+      })
+      if (inPlayoffs) return jsonError('Championship length cannot change while the playoffs are being played.', 409)
+    }
+    championshipLengthToStore = n
+  }
+
+  /*
+   * Best-of-N playoff series (lib/playoff-runtime/playoffSeries.ts): `playoffSeriesLengths` is one
+   * length per round, each 1, 3, 5 or 7; null or all-1 turns series off (today's cumulative rounds).
+   *  - Native NBA / NHL / MLB redraft leagues only (400 elsewhere) — turning it OFF is never refused.
+   *  - Any N > 1 is AF Commissioner (403 without the plan), checked only when the lengths CHANGE: a
+   *    lapsed plan keeps the series it set and can always turn series off, never set a new one.
+   *  - Refused (409) while the playoffs are being played: the scorer reads it live, and a series
+   *    under way must finish as configured.
+   *  - Fit-checked below with the rest of the playoff window (a best-of-5 round is five weeks).
+   * `settingsMerge` would write `playoff_series` around all of that, so it is refused there.
+   */
+  {
+    const merge = body.settingsMerge
+    if (merge && typeof merge === 'object' && !Array.isArray(merge) && PLAYOFF_SERIES_SETTINGS_KEY in merge) {
+      return jsonError('Set playoff series lengths with playoffSeriesLengths, not settingsMerge.', 400)
+    }
+  }
+  let playoffSeriesToStore: { value: number[] | null } | null = null
+  if (body.playoffSeriesLengths !== undefined) {
+    const parsed = parsePlayoffSeriesLengths(body.playoffSeriesLengths)
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    const currentSeries = readPlayoffSeriesLengths(league.settings)
+    if (!samePlayoffSeriesLengths(parsed.value, currentSeries)) {
+      if (playoffSeriesNeedsPlan(parsed.value)) {
+        const leagueType = String(league.leagueType ?? 'redraft').trim().toLowerCase()
+        if (!isNativePlatform(league.platform) || !playoffSeriesSportSupported(league.sport) || leagueType !== 'redraft') {
+          return jsonError('Playoff series are available for AllFantasy NBA, NHL and MLB redraft leagues.', 400)
+        }
+      }
+      if (playoffSeriesChangeNeedsPlan(parsed.value, currentSeries) && !hasSub) {
+        return NextResponse.json(
+          { error: 'Best-of-3, 5 and 7 playoff series are part of AF Commissioner.', code: 'PLAYOFF_SERIES_REQUIRES_AF_COMMISSIONER' },
+          { status: 403 },
+        )
+      }
+      const inPlayoffs = await prisma.redraftSeason.findFirst({
+        where: { leagueId, status: REDRAFT_SEASON_STATUS.PLAYOFFS },
+        select: { id: true },
+      })
+      if (inPlayoffs) return jsonError('Playoff series lengths cannot change while the playoffs are being played.', 409)
+      playoffSeriesToStore = { value: parsed.value }
+    }
+  }
+
+  /*
+   * Third-place game (lib/playoff-runtime/thirdPlaceGame.ts). A boolean only. Stored in
+   * `settings.playoff_structure`, which the bracket reads when it is generated — so it is REFUSED
+   * (409) once a bracket is being played: the game is in that bracket or it is not, and a save that
+   * changed nothing the league can see would read as a bug.
+   */
+  let thirdPlaceGameToStore: boolean | null = null
+  if (body.thirdPlaceGameEnabled !== undefined) {
+    if (typeof body.thirdPlaceGameEnabled !== 'boolean') return jsonError('thirdPlaceGameEnabled must be true or false', 400)
+    if (body.thirdPlaceGameEnabled !== readThirdPlaceGameEnabled(league.settings, league.sport)) {
+      const inPlayoffs = await prisma.redraftSeason.findFirst({
+        where: { leagueId, status: REDRAFT_SEASON_STATUS.PLAYOFFS },
+        select: { id: true },
+      })
+      if (inPlayoffs) return jsonError('The third-place game cannot change while the playoffs are being played.', 409)
+    }
+    thirdPlaceGameToStore = body.thirdPlaceGameEnabled
+  }
+
+  /*
+   * What the lower bracket plays for (lib/playoff-runtime/consolationPlaysFor.ts): 'pick' | 'cash' |
+   * 'none', stored in `settings.playoff_structure`. A save ALSO stamps the draft-order flag: the
+   * owner's rollout rule is that an existing league's next draft order follows the setting only once
+   * its commissioner saves it, so this is the one place an existing league opts in.
+   */
+  let consolationPlaysForToStore: ConsolationPlaysFor | null = null
+  if (body.consolationPlaysFor !== undefined) {
+    consolationPlaysForToStore = parseConsolationPlaysFor(body.consolationPlaysFor)
+    if (!consolationPlaysForToStore) return jsonError("consolationPlaysFor must be 'pick', 'cash' or 'none'", 400)
+  }
+  // Toilet bowl only: which finalist takes pick 1 ('loser' = last place, the default; or 'winner').
+  // Stored on its own — it does not opt a league's draft order in; only `consolationPlaysFor` does.
+  let consolationPickGoesToStore: ConsolationPickGoesTo | null = null
+  if (body.consolationPickGoesTo !== undefined) {
+    consolationPickGoesToStore = parseConsolationPickGoesTo(body.consolationPickGoesTo)
+    if (!consolationPickGoesToStore) return jsonError("consolationPickGoesTo must be 'loser' or 'winner'", 400)
+  }
+
+  /*
+   * Lineups: daily or weekly (NBA/NHL/MLB; lib/redraft/lineupModeSwitch.ts). Checked here, before the
+   * first write below, so a refused switch leaves the rest of the save unapplied too. Refused (400) for
+   * any other sport, and (409) while a season is under way — a week is scored under one mode.
+   */
+  let lineupModeToStore: LineupMode | null = null
+  if (body.lineupMode !== undefined) {
+    const mode = parseLineupMode(body.lineupMode)
+    if (!mode) return jsonError("lineupMode must be 'daily' or 'weekly'", 400)
+    const refusal = await lineupModeSwitchRefusal(prisma, {
+      leagueId,
+      sport: league.sport,
+      from: readLineupMode(league.settings, league.sport),
+      to: mode,
+    })
+    if (refusal) return NextResponse.json({ error: refusal.message, code: refusal.code }, { status: refusal.status })
+    lineupModeToStore = mode
+  }
+
+  /*
+   * Games limits — GP caps (NBA/NHL/MLB), NHL goalie minimum, MLB innings min/max (lib/redraft/gamesLimits.ts).
+   * Stored in `settings.games_limits`; null/{} turns them off. Sport-gated and range-checked (400), and
+   * refused for a league that is not on daily lineups: only the per-day lineup and stat rows say which slot
+   * a game was played in, so anywhere else the setting would save and silently do nothing.
+   * `settingsMerge` can write the same key, so it is held to the same rule.
+   */
+  let gamesLimitsToStore: GamesLimits | null | undefined = undefined
+  {
+    const merge = body.settingsMerge as Record<string, unknown> | null | undefined
+    const viaMerge = merge && typeof merge === 'object' && !Array.isArray(merge) && GAMES_LIMITS_SETTINGS_KEY in merge
+    const raw = body.gamesLimits !== undefined ? body.gamesLimits : viaMerge ? merge[GAMES_LIMITS_SETTINGS_KEY] : undefined
+    if (body.gamesLimits !== undefined || viaMerge) {
+      const effectiveSettings = {
+        ...((league.settings as Record<string, unknown> | null) ?? {}),
+        ...(body.sportConfig !== undefined ? { sportConfig: body.sportConfig } : {}),
+      }
+      const parsed = parseGamesLimits(raw, String(league.sport ?? ''), effectiveSettings)
+      if (!parsed.ok) return jsonError(parsed.error, 400)
+      // Daily or weekly is decided by the lineup switch above (a sportConfig blob cannot change it).
+      const modeAfter = lineupModeToStore ?? readLineupMode(league.settings, league.sport)
+      if (parsed.value && modeAfter !== 'daily') {
+        return jsonError('Games-played caps, goalie minimums and innings limits need daily lineups to be on for this league.', 400)
+      }
+      gamesLimitsToStore = parsed.value
+      if (viaMerge) merge[GAMES_LIMITS_SETTINGS_KEY] = parsed.value
+    }
+  }
+  // Games limits and a "which games count" rule other than all games are not combined yet: whether a
+  // cap should count every game played or only the games that counted is undecided. Refuse the pair,
+  // whichever side this request changes, before any write.
+  {
+    const storedSettings = (league.settings as Record<string, unknown> | null) ?? {}
+    const sport = String(body.sport ?? league.sport ?? '')
+    const limitsAfter =
+      gamesLimitsToStore !== undefined ? gamesLimitsToStore : readGamesLimits(storedSettings, sport)
+    const mergeSportConfig = (body.settingsMerge as { sportConfig?: unknown } | null | undefined)?.sportConfig
+    const sportConfigAfter =
+      body.sportConfig !== undefined ? body.sportConfig : mergeSportConfig !== undefined ? mergeSportConfig : storedSettings.sportConfig
+    if (limitsAfter && lineupModeToStore === 'weekly') {
+      return jsonError(
+        'Turn off games-played caps, goalie minimums and innings limits before switching this league to weekly lineups.',
+        400,
+      )
+    }
+    if (limitsAfter && gamesCountSettingOf(sportConfigAfter, sport).mode !== 'all') {
+      return jsonError(
+        'Games-played caps, goalie minimums and innings limits can’t be combined with a “which games count” rule yet. Set games count to All games, or turn the limits off.',
+        400,
+      )
+    }
+  }
+
+  /*
+   * 🛑 A FINAL THAT ENDS AFTER THE SEASON'S LAST WEEK NEVER SEALS, SO THE SEASON NEVER COMPLETES
+   * (lib/playoff-runtime/championshipLengthFit.ts). The team count, start week, weeks per round and
+   * championship length all move the final, so a save that changes any of them is checked as one
+   * bracket — the playoff fields saved in the same request are what it will be built from. Only a
+   * change that moves the final later is refused. Imported leagues are checked on championship length
+   * alone, as before: their stored season length is a regular-season length (leagueSeasonWeek.ts).
+   */
+  const fitChange: PlayoffFitChange = {}
+  const changedNumber = (raw: unknown, current: number | null | undefined) =>
+    raw != null && Number.isFinite(Number(raw)) && Number(raw) !== current ? Number(raw) : undefined
+  if (championshipLengthToStore != null && championshipLengthToStore !== (readChampionshipLength(league.settings) ?? 1)) {
+    fitChange.championshipLength = championshipLengthToStore
+  }
+  if (playoffSeriesToStore) fitChange.seriesLengths = playoffSeriesToStore.value
+  if (isNativePlatform(league.platform)) {
+    const teams = changedNumber(body.playoffTeams, league.playoffTeams)
+    const start = changedNumber(body.playoffStartWeek, league.playoffStartWeek)
+    const perRound = changedNumber(body.playoffWeeksPerRound, league.playoffWeeksPerRound)
+    if (teams !== undefined) fitChange.playoffTeams = teams
+    if (start !== undefined) fitChange.playoffStartWeek = start
+    if (perRound !== undefined) fitChange.playoffWeeksPerRound = perRound
+  } else if (fitChange.championshipLength !== undefined) {
+    // As before: the other playoff fields saved alongside the length describe the bracket it joins.
+    if (body.playoffTeams != null) fitChange.playoffTeams = Number(body.playoffTeams)
+    if (body.playoffStartWeek != null) fitChange.playoffStartWeek = Number(body.playoffStartWeek)
+    if (body.playoffWeeksPerRound != null) fitChange.playoffWeeksPerRound = Number(body.playoffWeeksPerRound)
+  }
+  if (Object.keys(fitChange).length > 0) {
+    const overflow = await playoffFitOverflow({
+      league: { ...league, leagueSize: teamCount },
+      change: fitChange,
+    })
+    if (overflow) return jsonError(playoffFitOverflowMessage(overflow), 400)
   }
 
   // `settingsMerge` spreads any key into `League.settings`, the chat link included, so it is checked
   // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
   const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
   if (chatLinkRefusal) return jsonError(chatLinkRefusal, 400)
+  // 🛑 Co-commissioner permissions have ONE writer, the head-commissioner-only co-commissioners
+  // route. Through `settingsMerge` they would be classified as league setup, so a co-commissioner
+  // holding only that permission could grant themselves every other one.
+  if (
+    body.settingsMerge && typeof body.settingsMerge === 'object' &&
+    Object.prototype.hasOwnProperty.call(body.settingsMerge, CO_COMMISSIONER_SCOPES_KEY)
+  ) {
+    return jsonError('Co-commissioner permissions are changed in Co-commissioner settings, not here.', 400)
+  }
+
+  /*
+   * The commissioner's tiebreaker order (lib/standings/tiebreakerOrder.ts) — a Commissioner-plan
+   * setting with its own key. `settingsMerge` would write it around the plan check, so it is refused
+   * there. Clearing it back to the default is free, so a lapsed plan is never stuck with a custom order.
+   */
+  const merge = body.settingsMerge
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TIEBREAKER_ORDER_KEY in merge) {
+    return jsonError('Set the tiebreaker order with tiebreakerOrder, not settingsMerge.', 400)
+  }
+  let tiebreakerOrderToStore: { value: TiebreakerKey[] | null } | null = null
+  if (body.tiebreakerOrder !== undefined) {
+    const parsed = parseTiebreakerOrder(body.tiebreakerOrder)
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value && !hasSub) return jsonError('A custom tiebreaker order is part of the AF Commissioner plan.', 403)
+    tiebreakerOrderToStore = { value: parsed.value }
+  }
+
+  // The trade close time is read by every trade gate (lib/trade-deadline/tradeDeadlineTime.ts), where an
+  // unreadable value would mean "no close time" — so it is refused here, and stored as one ISO instant.
+  // (`merge` is the settingsMerge read for the tiebreaker check above.)
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TRADE_DEADLINE_AT_KEY in merge) {
+    const parsed = parseDeadlineAtInput((merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    ;(merge as Record<string, unknown>)[TRADE_DEADLINE_AT_KEY] = parsed.value
+  }
+
+  // A separate deadline for pick trades (lib/trade-deadline/pickTradeDeadline.ts) — dynasty-family
+  // leagues only, where the trade gates read it; anywhere else a stored value would do nothing. Free.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && PICK_TRADE_DEADLINE_KEY in merge) {
+    const parsed = parsePickTradeDeadline((merge as Record<string, unknown>)[PICK_TRADE_DEADLINE_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (!isDynastyFamilyLeague(league)) return jsonError('A separate pick trade deadline is for dynasty leagues.', 400)
+    ;(merge as Record<string, unknown>)[PICK_TRADE_DEADLINE_KEY] = parsed.value
+  }
+
+  // The orphan auction (lib/orphan-auction) is state, not a setting: its assets, bids and result are
+  // written only by its own service, so a settings save could otherwise rewrite who won what.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && ORPHAN_AUCTION_KEY in merge) {
+    return jsonError('The orphan auction is run from the Commissioner Hub, not saved as a setting.', 400)
+  }
+
+  // Lineup minimums for eliminated teams (lib/eliminated-lineups) — an AF Commissioner rule. Stored only
+  // in the shape the reader knows, so a malformed value can never read as "on"; switching it off is free.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && ELIMINATED_LINEUP_RULE_KEY in merge) {
+    const parsed = parseEliminatedLineupRule((merge as Record<string, unknown>)[ELIMINATED_LINEUP_RULE_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value.enabled && !hasSub) return jsonError('Lineup minimums for eliminated teams are part of the AF Commissioner plan.', 403)
+    ;(merge as Record<string, unknown>)[ELIMINATED_LINEUP_RULE_KEY] = parsed.value
+  }
+
+  // IR auto-move (lib/ir-activation) — an AF Commissioner rule, stored only in the shape the reader
+  // knows; switching it off is free.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && IR_AUTO_MOVE_KEY in merge) {
+    const parsed = parseIrAutoMoveRule((merge as Record<string, unknown>)[IR_AUTO_MOVE_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value.enabled && !hasSub) return jsonError('IR auto-move is part of the AF Commissioner plan.', 403)
+    ;(merge as Record<string, unknown>)[IR_AUTO_MOVE_KEY] = parsed.value
+  }
+
+  // Fill an empty starting spot before lock (lib/lineup-automation/fillEmptyStarters.ts) — free, on by
+  // default; the commissioner can switch it off. Only a true/false is stored, so nothing else reads as off.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && FILL_EMPTY_STARTERS_KEY in merge) {
+    if (typeof (merge as Record<string, unknown>)[FILL_EMPTY_STARTERS_KEY] !== 'boolean') return jsonError('Send true or false to fill empty starting spots.', 400)
+  }
+
+  // Conditional and protected picks (lib/league-trade-engine/pickTerms.ts) — an AF Commissioner rule;
+  // switching it off is free. The terms themselves are written only by a settled trade.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && PICK_TERMS_KEY in merge) {
+    return jsonError('Pick terms are agreed in a trade, not saved as a setting.', 400)
+  }
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && PICK_TERMS_RULE_KEY in merge) {
+    const parsed = parsePickTermsRule((merge as Record<string, unknown>)[PICK_TERMS_RULE_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value.enabled && !hasSub) return jsonError('Conditional and protected picks are part of the AF Commissioner plan.', 403)
+    ;(merge as Record<string, unknown>)[PICK_TERMS_RULE_KEY] = parsed.value
+  }
+  // Taxi stealing (lib/taxi/taxiStealing.ts) — an AF Commissioner rule, stored only in the shape the
+  // reader knows; switching it off is free. Its claims are state written only by its own service.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TAXI_STEAL_CLAIMS_KEY in merge) {
+    return jsonError('Taxi steal claims are made on the Waivers page, not saved as a setting.', 400)
+  }
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && TAXI_STEALING_KEY in merge) {
+    const parsed = parseTaxiStealingRule((merge as Record<string, unknown>)[TAXI_STEALING_KEY], readTaxiStealingRule(league.settings))
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+    if (parsed.value.enabled && !hasSub) return jsonError('Taxi stealing is part of the AF Commissioner plan.', 403)
+    ;(merge as Record<string, unknown>)[TAXI_STEALING_KEY] = parsed.value
+  }
+
+  // Who may read the league log (lib/league-log/leagueLog.ts). A value the reader does not know would
+  // fall back to "visible to league", so it is refused rather than stored.
+  if (merge && typeof merge === 'object' && !Array.isArray(merge) && LEAGUE_LOG_VISIBILITY_KEY in merge) {
+    const parsed = parseLeagueLogVisibility((merge as Record<string, unknown>)[LEAGUE_LOG_VISIBILITY_KEY])
+    if (!parsed.ok) return jsonError(parsed.error, 400)
+  }
+
+  /*
+   * Settings lock (lib/league/settingsLock.ts): an area the league locked for the season changes only
+   * after a league vote. Checked HERE — after every validation, before the first write, and before
+   * the daily-waiver block below rewrites `body` with derived keys — against the values that would
+   * actually change, so re-saving a section unchanged is never refused. The lock itself is not
+   * writable through `settingsMerge`: that would make it removable by the very save it guards.
+   */
+  if (
+    body.settingsMerge && typeof body.settingsMerge === 'object' &&
+    Object.prototype.hasOwnProperty.call(body.settingsMerge, SETTINGS_LOCK_KEY)
+  ) {
+    return jsonError('The settings lock is changed in Settings lock, not here.', 400)
+  }
+  const lockedNow = await lockedGroupsForPatch(leagueId, league as unknown as Record<string, unknown>, body).catch((e) => {
+    console.warn('[executeLeagueSettingsPatch] settings lock check failed, allowing the save', e instanceof Error ? e.message : e)
+    return []
+  })
+  if (lockedNow.length) return jsonError(lockedMessage(lockedNow), 423)
 
   /*
    * Per-day waiver schedule (lib/waivers/dailyWaiverSchedule.ts). Stored in `League.settings`, and
@@ -347,10 +999,58 @@ export async function executeLeagueSettingsPatch(
     dailyWaiverScheduleToStore = schedule
   }
 
+  /*
+   * The main draft's rules before the writes (lib/league-rules-explainer/loadDraftRules.ts), when this
+   * save can move one: they live on LeagueSettings and the draft session, which the league-row diff
+   * below cannot see. Dynamic import, best-effort: a failed read only drops the draft lines.
+   */
+  const draftRulesModule = await import('@/lib/league-rules-explainer/loadDraftRules').catch(() => null)
+  const draftRules = draftRulesModule?.patchTouchesDraftRules(body) ? draftRulesModule : null
+  const draftRulesBefore = draftRules ? await draftRules.loadDraftRulesSafe(leagueId) : null
+
   const updatedFieldNames: string[] = []
 
   const { data: leaguePatch, keys: leagueKeys } = buildLeagueUpdateFromBody(body)
-  if (Object.keys(leaguePatch).length > 0) {
+  if (typeof body.leagueType === 'string' && isNativePlatform(league.platform)) {
+    Object.assign(leaguePatch, nativeFormatPatch(body.leagueType, league.settings))
+  }
+  if (body.leagueSize != null && Number(body.leagueSize) !== league.leagueSize && isNativePlatform(league.platform)) {
+    // An even league resized to an odd size starts with league median on, as a new odd league does:
+    // otherwise the team without an opponent each week gets no result. A choice sent in the same
+    // request wins, and an odd-to-odd resize keeps whatever the league already had.
+    const scoringModeNow = String((league.settings as Record<string, unknown> | null)?.scoring_mode ?? 'points')
+    if (body.medianGame == null && isOddTeamCount(Number(body.leagueSize)) && !isOddTeamCount(league.leagueSize) &&
+        ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(String(league.leagueType ?? 'redraft')) && scoringModeNow === 'points' &&
+        !league.medianGame && !leagueKeys.includes('medianGame')) {
+      leaguePatch.medianGame = true
+      leagueKeys.push('medianGame')
+    }
+    // An untouched default bracket follows the new size; a commissioner's own is kept, clamped to it
+    // (lib/league-defaults/redraftPlayoffFit.ts). Playoff fields saved in the same request win.
+    if (body.playoffTeams == null && body.playoffStartWeek == null) {
+      const playoffColumns = resizedPlayoffColumns({
+        sport: String(league.sport ?? ''),
+        leagueType: league.leagueType,
+        settings: league.settings,
+        oldSize: league.leagueSize ?? league.teams.length,
+        newSize: Number(body.leagueSize),
+        playoffTeams: league.playoffTeams,
+        playoffStartWeek: league.playoffStartWeek,
+        weeksPerRound: league.playoffWeeksPerRound,
+        championshipLength: readChampionshipLength(league.settings),
+      })
+      if (playoffColumns) {
+        Object.assign(leaguePatch, playoffColumns)
+        for (const key of Object.keys(playoffColumns)) if (!leagueKeys.includes(key)) leagueKeys.push(key)
+      }
+    }
+    try {
+      await resizeNativeLeague(leagueId, Number(body.leagueSize), leaguePatch)
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : 'Could not change league size', 409)
+    }
+    updatedFieldNames.push(...leagueKeys)
+  } else if (Object.keys(leaguePatch).length > 0) {
     await prisma.league.update({
       where: { id: leagueId },
       data: leaguePatch,
@@ -366,14 +1066,13 @@ export async function executeLeagueSettingsPatch(
    * unchanged. Submitting the field is the evidence — comparing values would
    * miss exactly the case this exists for.
    *
-   * ⚠ WRITTEN AS A READ-MODIFY-WRITE ON `settings`, matching the sportConfig and
-   * devyLeagueConfig blocks below. `league.settings` was loaded before the
-   * column update above and the column update does not touch `settings`, so it
-   * is still current.
+   * ⚠ WRITTEN AS A READ-MODIFY-WRITE ON `settings`, like the sportConfig,
+   * devyLeagueConfig and settingsMerge blocks below — each one re-reads the
+   * stored copy first, so no block reverts another's write in the same save.
    */
   const keeperProv = keeperProvenanceFromCommissionerSave({ submittedKeys: leagueKeys, body })
   if (keeperProv) {
-    const prevSettings = (league.settings as Record<string, unknown> | null) ?? {}
+    const prevSettings = await readCurrentLeagueSettings(leagueId)
     const prevConcept =
       prevSettings.conceptRules && typeof prevSettings.conceptRules === 'object' && !Array.isArray(prevSettings.conceptRules)
         ? (prevSettings.conceptRules as Record<string, unknown>)
@@ -401,25 +1100,44 @@ export async function executeLeagueSettingsPatch(
     if (body.sportConfig !== null && typeof body.sportConfig !== 'object') {
       return jsonError('sportConfig must be an object or null', 400)
     }
-    const prev = (league.settings as Record<string, unknown> | null) ?? {}
+    const prev = await readCurrentLeagueSettings(leagueId)
+    // The blob keeps the stored daily/weekly state; only `lineupMode` above may change it.
+    const nextSportConfig = keepLineupModeFields(
+      asPlainObject(prev.sportConfig),
+      body.sportConfig as Record<string, unknown> | null,
+      league.sport,
+    )
     await prisma.league.update({
       where: { id: leagueId },
       data: {
         settings: {
           ...prev,
-          sportConfig:
-            body.sportConfig === null ? Prisma.JsonNull : (body.sportConfig as Prisma.InputJsonValue),
+          sportConfig: nextSportConfig === null ? Prisma.JsonNull : (nextSportConfig as Prisma.InputJsonValue),
         } as Prisma.InputJsonValue,
       },
     })
     updatedFieldNames.push('sportConfig')
   }
 
+  if (lineupModeToStore != null) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          sportConfig: withLineupMode(asPlainObject(prev.sportConfig), lineupModeToStore),
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push('lineupMode')
+  }
+
   if (body.devyLeagueConfig !== undefined) {
     if (body.devyLeagueConfig !== null && typeof body.devyLeagueConfig !== 'object') {
       return jsonError('devyLeagueConfig must be an object or null', 400)
     }
-    const prev = (league.settings as Record<string, unknown> | null) ?? {}
+    const prev = await readCurrentLeagueSettings(leagueId)
     await prisma.league.update({
       where: { id: leagueId },
       data: {
@@ -438,23 +1156,75 @@ export async function executeLeagueSettingsPatch(
     if (body.settingsMerge === null || typeof body.settingsMerge !== 'object' || Array.isArray(body.settingsMerge)) {
       return jsonError('settingsMerge must be a plain object', 400)
     }
-    const prev = (league.settings as Record<string, unknown> | null) ?? {}
+    const prev = await readCurrentLeagueSettings(leagueId)
+    const merge = { ...(body.settingsMerge as Record<string, unknown>) }
+    // A `sportConfig` merged here keeps the stored daily/weekly state too (see the sportConfig block).
+    if (merge.sportConfig === null || (merge.sportConfig && typeof merge.sportConfig === 'object' && !Array.isArray(merge.sportConfig))) {
+      merge.sportConfig = keepLineupModeFields(
+        asPlainObject(prev.sportConfig),
+        merge.sportConfig as Record<string, unknown> | null,
+        league.sport,
+      )
+    }
     await prisma.league.update({
       where: { id: leagueId },
       data: {
         settings: {
           ...prev,
-          ...(body.settingsMerge as Record<string, unknown>),
+          ...merge,
         } as Prisma.InputJsonValue,
       },
     })
     updatedFieldNames.push('settingsMerge')
   }
 
+  if (body.gamesLimits !== undefined && gamesLimitsToStore !== undefined) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          [GAMES_LIMITS_SETTINGS_KEY]: gamesLimitsToStore === null ? null : (gamesLimitsToStore as Prisma.InputJsonValue),
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push(GAMES_LIMITS_SETTINGS_KEY)
+  }
+
+  if (tiebreakerOrderToStore) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [TIEBREAKER_ORDER_KEY]: tiebreakerOrderToStore.value } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(TIEBREAKER_ORDER_KEY)
+  }
+
+  /*
+   * Draft rounds are stored three times: `LeagueSettings.rounds` (the row below), the pre-draft
+   * `DraftSession.rounds` (syncDraftSessionFromLeagueSettings below) and `League.settings.draft_rounds`,
+   * which the draft-room config resolver reads. The draft settings PATCH writes all three; this
+   * path wrote only the first two, so a rounds change saved here read back differently in the draft
+   * room. Same read-modify-write as the blocks above.
+   */
+  if (body.rounds != null) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          draft_rounds: Math.max(1, Math.min(50, Math.round(Number(body.rounds)))),
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push('draft_rounds')
+  }
+
   if (dailyWaiverScheduleToStore) {
     // Fresh read: the blocks above may already have rewritten `settings` this request.
-    const cur = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-    const prev = { ...((cur?.settings as Record<string, unknown> | null) ?? {}) }
+    const prev = await readCurrentLeagueSettings(leagueId)
     if (priorProcessingToStore === null) delete prev[DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY]
     else if (priorProcessingToStore) prev[DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY] = priorProcessingToStore
     await prisma.league.update({
@@ -467,6 +1237,96 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push(DAILY_WAIVER_SCHEDULE_SETTINGS_KEY)
+  }
+
+  // The season copy (`RedraftSeason.medianGame`, taken at the draft) is what the weekly history, the
+  // season outlook and the next season's shell read. The timing rule above has already settled that no
+  // running season has a final week, so its copy follows the league; a completed season keeps its own.
+  if (medianGameChanged) {
+    await prisma.redraftSeason.updateMany({
+      where: { leagueId, status: { not: REDRAFT_SEASON_STATUS.COMPLETE } },
+      data: { medianGame: body.medianGame as boolean },
+    })
+  }
+
+  if (typeof body.medianGameInPlayoffs === 'boolean') {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY]: body.medianGameInPlayoffs } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY)
+  }
+
+  if (championshipLengthToStore != null) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    const prevStructure =
+      prev.playoff_structure && typeof prev.playoff_structure === 'object' && !Array.isArray(prev.playoff_structure)
+        ? (prev.playoff_structure as Record<string, unknown>)
+        : {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          playoff_structure: { ...prevStructure, championship_length: championshipLengthToStore },
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push('championship_length')
+  }
+
+  if (playoffSeriesToStore) {
+    const { [PLAYOFF_SERIES_SETTINGS_KEY]: _previousSeries, ...rest } = await readCurrentLeagueSettings(leagueId)
+    const value = playoffSeriesSettingsValue(playoffSeriesToStore.value)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: (value ? { ...rest, [PLAYOFF_SERIES_SETTINGS_KEY]: value } : rest) as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(PLAYOFF_SERIES_SETTINGS_KEY)
+  }
+
+  if (thirdPlaceGameToStore != null) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    const prevStructure =
+      prev.playoff_structure && typeof prev.playoff_structure === 'object' && !Array.isArray(prev.playoff_structure)
+        ? (prev.playoff_structure as Record<string, unknown>)
+        : {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          playoff_structure: { ...prevStructure, [THIRD_PLACE_GAME_SETTINGS_KEY]: thirdPlaceGameToStore },
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push(THIRD_PLACE_GAME_SETTINGS_KEY)
+  }
+
+  if (consolationPlaysForToStore != null || consolationPickGoesToStore != null) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    const prevStructure =
+      prev.playoff_structure && typeof prev.playoff_structure === 'object' && !Array.isArray(prev.playoff_structure)
+        ? (prev.playoff_structure as Record<string, unknown>)
+        : {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prev,
+          playoff_structure: {
+            ...prevStructure,
+            ...(consolationPlaysForToStore != null
+              ? { [CONSOLATION_PLAYS_FOR_SETTINGS_KEY]: consolationPlaysForToStore, [CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY]: true }
+              : {}),
+            ...(consolationPickGoesToStore != null ? { [CONSOLATION_PICK_GOES_TO_KEY]: consolationPickGoesToStore } : {}),
+          },
+        } as Prisma.InputJsonValue,
+      },
+    })
+    if (consolationPlaysForToStore != null) updatedFieldNames.push(CONSOLATION_PLAYS_FOR_SETTINGS_KEY)
+    if (consolationPickGoesToStore != null) updatedFieldNames.push(CONSOLATION_PICK_GOES_TO_KEY)
   }
 
   const derivedSyncKeys = new Set([
@@ -486,10 +1346,41 @@ export async function executeLeagueSettingsPatch(
   ])
   if (leagueKeys.some((k) => derivedSyncKeys.has(k))) {
     try {
-      await syncCommissionerDerivedLeagueState(leagueId)
+      // Only the columns this save wrote: the playoffs and waivers panels write the derived copies
+      // directly, and mirroring an untouched (stale) column would revert what they saved.
+      await syncCommissionerDerivedLeagueState(leagueId, leagueKeys)
       updatedFieldNames.push('derived_playoff_waiver_sync')
     } catch (e) {
       console.warn('[executeLeagueSettingsPatch] syncCommissionerDerivedLeagueState', e)
+    }
+  }
+
+  if (hasHubWaiverOptions(hubWaiver.options)) {
+    // After the derived sync, which rewrites waiverEngineConfig from the columns: re-read the row so
+    // the engine keys merge into what that sync just wrote.
+    const row = await prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverEngineConfig: true } })
+    const { tiebreakRule, waiverOrderResetPolicy } = hubWaiver.options
+    // The $0-bid flag and the season-phase rules (lib/waiver-wire/season-phase-policy.ts) all live in
+    // waiverEngineConfig, so they merge into one write.
+    const engineKeys = hubWaiverEngineConfigPatch(hubWaiver.options)
+    await upsertLeagueWaiverSettings(leagueId, {
+      ...(Object.keys(engineKeys).length > 0
+        ? { waiverEngineConfig: { ...parseWaiverEngineConfig(row?.waiverEngineConfig ?? null), ...engineKeys } }
+        : {}),
+      ...(tiebreakRule !== undefined ? { tiebreakRule } : {}),
+      ...(waiverOrderResetPolicy !== undefined ? { waiverOrderResetPolicy } : {}),
+    })
+    updatedFieldNames.push(...HUB_WAIVER_OPTION_KEYS.filter((k) => body[k] !== undefined))
+    // The free-agency mode moves a daily sport's run days (lib/waiver-wire/daily-sport-waiver-runs.ts):
+    // reschedule now rather than at the next run under the old days. The per-day schedule's own
+    // follow-up below refreshes it too when both change.
+    if (hubWaiver.options.freeAgencyMode !== undefined && !dailyWaiverScheduleToStore) {
+      try {
+        await refreshLeagueWaiverNextRunAt(leagueId)
+        updatedFieldNames.push('waiver_next_run_at')
+      } catch (e) {
+        console.warn('[executeLeagueSettingsPatch] free agency mode next run refresh', e)
+      }
     }
   }
 
@@ -510,7 +1401,7 @@ export async function executeLeagueSettingsPatch(
     }
   }
 
-  const lsUpdate: Prisma.LeagueSettingsUpdateInput = { updatedBy: userId }
+  const lsUpdate: Prisma.LeagueSettingsUpdateInput = { updatedBy: actorUserId }
 
   if (body.draftDateUtc !== undefined) {
     lsUpdate.draftDateUtc =
@@ -568,7 +1459,7 @@ export async function executeLeagueSettingsPatch(
       where: { leagueId },
       create: {
         leagueId,
-        updatedBy: userId,
+        updatedBy: actorUserId,
         ...(createFields as Omit<Prisma.LeagueSettingsUncheckedCreateInput, 'leagueId' | 'updatedBy'>),
       },
       update: lsUpdate,
@@ -592,6 +1483,16 @@ export async function executeLeagueSettingsPatch(
     }
   }
 
+  // A draft time set directly on a tournament conference league goes back onto the tournament's record
+  // for that conference. Not when this patch IS the tournament → league sync (see `source`).
+  if (shouldPatchLs && updated && body.draftDateUtc !== undefined && patchOptions?.source !== 'tournament') {
+    try {
+      await copyLeagueDraftTimeToTournament(leagueId, updated.draftDateUtc ?? null, actorUserId)
+    } catch (e) {
+      console.warn('[executeLeagueSettingsPatch] tournament draft time copy-back', e instanceof Error ? e.message : 'unknown error')
+    }
+  }
+
   const fresh = await prisma.league.findFirst({
     where: { id: leagueId },
     include: { leagueSettings: true },
@@ -600,7 +1501,7 @@ export async function executeLeagueSettingsPatch(
 
   await logAction({
     leagueId,
-    userId,
+    userId: actorUserId,
     actionType: 'settings_patch',
     entityType: 'league',
     entityId: leagueId,
@@ -609,6 +1510,32 @@ export async function executeLeagueSettingsPatch(
       section: patchOptions?.section ?? null,
     },
   }).catch(() => {})
+
+  for (const { section, decision } of confirmedMidSeason) {
+    await recordMidSeasonSettingsChange(decision, {
+      leagueId,
+      userId: actorUserId,
+      section,
+      source: patchOptions?.section ? `settings-patch:${patchOptions.section}` : 'settings-patch',
+      detail: { updatedFields: [...new Set(updatedFieldNames)].slice(0, 40) },
+    })
+  }
+
+  /*
+   * Before/after for the rules this save changed, for the league home's "What changed" card
+   * (lib/league-rules-explainer). Only the explainer's own snapshot keys — non-secret league rules a
+   * member can already read — never the request body. Computed from the row read BEFORE the writes
+   * and the row read after them, with the same readers the rules popup uses.
+   */
+  let ruleChanges: ReturnType<typeof diffRuleSnapshots> = []
+  try {
+    if (fresh) ruleChanges = diffRuleSnapshots(ruleSnapshotFromLeague(league), ruleSnapshotFromLeague(fresh))
+    if (draftRules && draftRulesBefore) {
+      ruleChanges = [...ruleChanges, ...draftRules.draftRuleChanges(draftRulesBefore, await draftRules.loadDraftRulesSafe(leagueId))]
+    }
+  } catch (e) {
+    console.warn('[executeLeagueSettingsPatch] rule change diff', e instanceof Error ? e.message : 'unknown error')
+  }
 
   void import('@/lib/league-events/publisher')
     .then(({ publishLeagueFanoutEvent }) =>
@@ -621,17 +1548,19 @@ export async function executeLeagueSettingsPatch(
           : 'League settings were updated.',
         category: 'league_announcements',
         visibility: 'all_members',
-        actorUserId: userId,
+        actorUserId,
         meta: {
           section: patchOptions?.section ?? null,
           updatedFields: [...new Set(updatedFieldNames)].slice(0, 40),
+          actorUserId,
+          ...(ruleChanges.length ? { ruleChanges } : {}),
         },
       }),
     )
     .catch(() => {})
 
   recordProductEvent(ENGAGEMENT.COMMISSIONER_SETTINGS, {
-    userId,
+    userId: actorUserId,
     meta: {
       leagueId,
       fieldCount: [...new Set(updatedFieldNames)].length,

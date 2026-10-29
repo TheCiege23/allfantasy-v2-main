@@ -7,6 +7,7 @@ import type {
   FantraxImportTransaction,
 } from '@/lib/league-import/adapters/fantrax/types'
 import { assignFantraxTeamIds } from './fantraxTeamIds'
+import { isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxRosterSlots } from './fantraxProSports'
 
 type LegacyStanding = {
   rank?: unknown
@@ -269,22 +270,44 @@ const FANTRAX_RESERVE_STATUSES = new Set(['INJURED_RESERVE', 'INJURED RESERVE', 
  * and `bench` is the one that gets derived rather than persisted.
  */
 export function splitLineup(
-  players: LegacyRosterPlayer[]
-): { starters: string[]; bench: string[]; reserve: string[] } | null {
+  players: LegacyRosterPlayer[],
+  sport?: string,
+): { starters: string[]; bench: string[]; reserve: string[]; taxi?: string[] } | null {
+  /*
+   * ⚠ MINORS → TAXI FOR NBA/NHL/MLB. A dynasty basketball/hockey/baseball league's
+   * minor-league stash is what our catalogs call the taxi squad, and filing it as
+   * bench made a prospect look like a rostered player and counted him against the
+   * active roster. `MINORS` is the status this file's tests already name; it is not
+   * in a captured response for any sport (contracts/fantrax/GAPS.md F-04), so a
+   * different spelling falls through to bench — the old behaviour, never IR.
+   *
+   * MLB joined 2026-10-26: it was left out because native MLB has no taxi slots, but
+   * the Team tab shows an imported roster's taxi list whatever the sport, and a taxi
+   * player is kept out of the roster limit (lib/league/rosterLimit.ts). The football
+   * sports keep their split unchanged.
+   */
+  const taxiStatuses =
+    isFantraxSplitSeasonSport(sport) || String(sport ?? '').trim().toLowerCase() === 'mlb'
+      ? FANTRAX_MINORS_STATUSES
+      : null
   const starters: string[] = []
   const bench: string[] = []
   const reserve: string[] = []
+  const taxi: string[] = []
   for (const p of players) {
     const id = asString(p.fantraxId)
     if (!id) continue
     const status = asString(p.status).trim().toUpperCase()
     if (status === 'ACTIVE') starters.push(id)
     else if (FANTRAX_RESERVE_STATUSES.has(status)) reserve.push(id)
+    else if (taxiStatuses?.has(status)) taxi.push(id)
     else bench.push(id)
   }
   if (starters.length === 0) return null
-  return { starters, bench, reserve }
+  return taxiStatuses ? { starters, bench, reserve, taxi } : { starters, bench, reserve }
 }
+
+const FANTRAX_MINORS_STATUSES = new Set(['MINORS', 'MINOR', 'MINOR_LEAGUE', 'MINOR LEAGUE'])
 
 function parseRoster(raw: unknown): LegacyRosterPlayer[] {
   if (!Array.isArray(raw)) return []
@@ -670,7 +693,7 @@ export async function fetchFantraxLeagueForImport(
      * the player map can never describe different squads.
      */
     const lineupSource = ownPlayers.length > 0 ? ownPlayers : isUserTeam ? rosterPlayers : []
-    const lineup = splitLineup(lineupSource)
+    const lineup = splitLineup(lineupSource, sport)
     return {
       teamId,
       managerId: isUserTeam ? `fantrax-user:${username}` : `fantrax-manager:${slugify(teamName) || teamId}`,
@@ -710,6 +733,8 @@ export async function fetchFantraxLeagueForImport(
        * to. Filing 39 healthy players as injured is not a safe default.
        */
       reservePlayerIds: lineup?.reserve ?? [],
+      /* Minor-leaguers in an NBA/NHL league; always empty for every other sport. */
+      taxiPlayerIds: lineup?.taxi ?? [],
       playerMap: teamPlayerMap,
     }
   })
@@ -834,6 +859,18 @@ export async function fetchFantraxLeagueForImport(
     })
     .filter(Boolean) as FantraxImportDraftPick[]
 
+  /*
+   * ⚠ NBA/NHL ONLY: THE LINEUP SLOTS ARE IN `rosterInfo`, AND THEY ARE MAPPED
+   * ONTO OUR CATALOGS. `buildRosterPositionCounts` stays empty for every other
+   * sport — unchanged — but a basketball or hockey league arrives with its real
+   * PG/SG/…/UTIL or C/LW/RW/D/G slots instead of none. A Fantrax code with no
+   * native equivalent is reported as `rosterSlotGaps`, never coerced.
+   */
+  const splitSeason = isFantraxSplitSeasonSport(sport)
+  const proSlots = splitSeason && (sport === 'NBA' || sport === 'NHL')
+    ? mapFantraxRosterSlots(sport, sourceSettings?.rosterInfo)
+    : null
+
   const previousSeasonRecords = await prisma.fantraxLeague.findMany({
     where: {
       userId: leagueRecord.userId,
@@ -857,15 +894,26 @@ export async function fetchFantraxLeagueForImport(
       season,
       size: leagueRecord.teamCount || teams.length,
       currentWeek,
-      isFinished: sourceSeasonState === 'complete' || season < new Date().getFullYear(),
+      /*
+       * ⚠ A 2025-26 NBA/NHL SEASON IS KEYED 2025 AND IS STILL LIVE IN MARCH
+       * 2026, so "season < this calendar year" would archive every basketball
+       * and hockey league from New Year onward. Those are finished only once the
+       * following summer arrives; other sports keep the year comparison.
+       */
+      isFinished:
+        sourceSeasonState === 'complete' ||
+        (splitSeason ? isFantraxSplitSeasonFinished(season) : season < new Date().getFullYear()),
       url: null,
       isDevy: Boolean(leagueRecord.isDevy),
     },
     settings: {
-      scoringType: sport === 'MLB' ? String(sourceSettings?.scoringSystem?.type ?? 'unknown') : leagueRecord.isDevy ? 'devy' : null,
-      rosterPositions: buildRosterPositionCounts(),
+      scoringType: sport === 'MLB' || splitSeason ? String(sourceSettings?.scoringSystem?.type ?? 'unknown') : leagueRecord.isDevy ? 'devy' : null,
+      rosterPositions: proSlots ? proSlots.slots : buildRosterPositionCounts(),
       /* The real per-team size, so the mapper stops deriving it from the pool. */
-      rosterSize: medianRosterSize(rosterPlayers),
+      rosterSize: medianRosterSize(rosterPlayers) ?? (() => {
+        const total = sourceSettings?.rosterInfo?.maxTotalPlayers
+        return typeof total === 'number' && Number.isSafeInteger(total) && total > 0 ? total : null
+      })(),
       scoringRules: liveScoringRules.map((r) => ({ statKey: r.stat_key, points: r.points_value })),
       raw: {
         isDevy: leagueRecord.isDevy,
@@ -876,6 +924,7 @@ export async function fetchFantraxLeagueForImport(
         /* Categories the mapper could not place. Surfaced as coverage rather
            than dropped: a scoring rule we silently skipped is a wrong score. */
         ...(liveScoringGaps.length > 0 ? { scoringGaps: liveScoringGaps } : {}),
+        ...(proSlots && proSlots.gaps.length > 0 ? { rosterSlotGaps: proSlots.gaps } : {}),
       },
     },
     teams,

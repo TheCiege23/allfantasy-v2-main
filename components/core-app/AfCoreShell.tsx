@@ -1,11 +1,15 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
+import { CoreLanguageChip } from '@/components/core-app/CoreLanguageChip'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
+import { leagueSportLabel, leagueSportSections } from '@/lib/core-app/leagueSports'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
@@ -28,9 +32,11 @@ import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import { coreRefreshIntervalMs, shellRouteRefreshMs } from '@/lib/core-app/coreRefreshPolicy'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useLiveRailScores } from './useLiveRailScores'
+import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
 import { saveRailScroll, useRailScrollMemory, type RailLayout } from './useRailScrollMemory'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
+import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
@@ -45,9 +51,8 @@ import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { ageText, badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '@/lib/core-app/shellCopy'
-import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
-import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
+import { RailRowBody, mergeRailMatchup } from '@/components/core-app/RailRowBody'
 import {
   currentRailCareerLines,
   RAIL_CAREER_EVENT,
@@ -56,6 +61,7 @@ import {
 } from '@/lib/core-app/railCareerChannel'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The chrome every AF Core screen sits inside: league rail, primary nav, top bar.
@@ -93,6 +99,8 @@ export type RailLeague = {
   alertTone?: 'bad' | 'warn'
   /** The viewer commissions this league — draws the blue C (CommissionerBadge). */
   isCommissioner?: boolean
+  /** League sport (NFL / NBA / …). The rail splits into one section per sport when there are two or more. */
+  sport?: string | null
 }
 
 /**
@@ -153,6 +161,12 @@ export type RailMatchupSummary = {
   scored: boolean
   freshAt?: string | null
   source?: 'live_cache' | 'history_fallback'
+  /** A native guillotine league's score line (lib/core-app/railGuillotineLine.ts). Drawn instead of `standing`. */
+  guillotine?: RailGuillotineLine | null
+  /** Built from the native tables; polled through /api/core/rail-scores like a Sleeper row. */
+  native?: boolean
+  /** An odd-team native league's extra matchup this week (lib/core-app/railMatchups.ts). */
+  extraMatchup?: { label: string; line: string; yourScore: number | null; theirScore: number | null } | null
 }
 
 export type CoreNavKey =
@@ -191,6 +205,7 @@ export type CoreNavKey =
   // not orphan them. No /core segment maps to these keys, so they are never the
   // active item — they are exits, not screens.
   | 'live-scores'
+  | 'brackets'
   | 'my-leagues'
   | 'settings'
   | 'plans'
@@ -533,6 +548,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
 
   return [
     { key: 'home', label: 'Home', glyph: '▣', href: inLeague('/core') },
+    { key: 'brackets', label: 'Brackets', glyph: '⚑', href: '/brackets' },
     // My team is league-scoped in the handoff, so the link carries the selected
     // league rather than dropping the user on a screen that has to ask which one.
     {
@@ -853,7 +869,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
  * a nav item can never silently drop it off the rail.
  */
 const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey[] }> = [
-  { id: 'top', heading: null, keys: ['home'] },
+  { id: 'top', heading: null, keys: ['home', 'brackets'] },
   {
     id: 'league',
     heading: 'This league',
@@ -907,7 +923,15 @@ function navSections(props: AfCoreShellProps): NavSection[] {
  * `home` is included even when a league is selected: on a phone the league
  * switcher is off-screen, so the way back to the league list has to be here.
  */
-const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'trades', 'week', 'live']
+const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'matchup', 'trades', 'live']
+
+/**
+ * Stand-ins, in order, for bar slots whose item is hidden. Matchup (and Your week)
+ * only exist once the selected league has a scored week (`ifScored`), and Trades
+ * only where the platform publishes trades, so without these the bar shrank to
+ * four. Player Finder is unconditional, so the bar stays at five in every state.
+ */
+const MOBILE_BAR_FALLBACK_KEYS: CoreNavKey[] = ['week', 'players']
 
 /** The league-first Play sheet: starting or joining something, as opposed to a league you are in. */
 const LEAGUE_FIRST_PLAY_LINKS: ReadonlyArray<{ href: string; label: string; glyph: string }> = [
@@ -1004,7 +1028,7 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
   function go(hit: TopSearchHit) {
     setOpen(false)
     setQ('')
-    router.push(hit.kind === 'league' ? `/core?league=${encodeURIComponent(hit.id)}` : `/players/${hit.slug}`)
+    router.push(hit.kind === 'league' ? leagueEntryHref(leagues.find(row => row.id === hit.id) ?? { id: hit.id, platform: 'unknown' }) : `/players/${hit.slug}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -1124,149 +1148,6 @@ function RailMark({ src, letter }: { src: string | null | undefined; letter: str
   return <LeagueMark src={src} letter={letter} className="af-rail-tile-img" />
 }
 
-/**
- * One team in a rail row: their platform avatar, their name, their score, and
- * the two projected totals under it.
- *
- * ⚠ THE AVATAR IS THE MANAGER'S, NOT THE LEAGUE'S. The league crest is already
- * the 42px mark at the head of the row; repeating it here would say nothing. The
- * loader resolves both sides' `avatarUrl` through `managerArtUrl` — Sleeper
- * stores an avatar *id* where other platforms store a link, and 85 of this
- * account's 94 claimed teams have one.
- *
- * ⚠ AND THE INITIAL IS `Array.from`, NOT `slice`. A team name starting with an
- * emoji sliced mid-surrogate serialises differently on server and client and
- * takes hydration down — the same trap the profile mark in the rail foot
- * carries a note about, and half this account's league names begin with 🪓.
- */
-function RailSide({
-  name,
-  avatarUrl,
-  score,
-  projection,
-  them,
-}: {
-  name: string
-  avatarUrl: string | null
-  /** Null while the fixture is unplayed, which draws a dash rather than 0.0. */
-  score: number | null
-  projection: RailSideProjectionSummary | null
-  them?: boolean
-}) {
-  const { language } = useOptionalLanguage()
-  const initial = (Array.from(name.trim() || '•')[0] ?? '•').toUpperCase()
-  /*
-   * ⚠ `pricedFrom > 0` MATTERS: a side where NOTHING priced already draws a dash,
-   * and marking that dash as partial rendered it as a dotted "⋯" that read like a
-   * third state. Partial means "some of the lineup", which is the only case the
-   * mark has anything to add.
-   */
-  const partial =
-    projection != null &&
-    projection.pricedFrom > 0 &&
-    projection.pricedFrom < projection.starterCount
-  /* Two projections, side by side: the provider's (Sleeper) line under this league's rules, and
-     AllFantasy's own engine. Neither replaces the other — the user asked to see both. */
-  const projected = projection?.afProjected ?? projection?.projected ?? null
-  const afEngine = projection?.afEngine ?? null
-
-  return (
-    <span
-      className="af-rail-row-side"
-      data-side={them ? 'them' : undefined}
-      data-partial={partial ? 'true' : undefined}
-      title={projection
-        ? language === 'es'
-          ? `Proyección base semanal — ${PROJECTION_PROVIDER_LABEL} (SLPR): proyección de ${PROJECTION_PROVIDER_LABEL} con ${projection.pricedFrom} de ${projection.starterCount} titulares${
-              projection.afProjected == null
-                ? ', PPR genérico porque no se pudo recalcular con la puntuación de esta liga'
-                : ', recalculada con la configuración de esta liga'
-            } · AF: motor de AllFantasy con ${projection.afEngineFrom ?? 0} de ${projection.starterCount} titulares · el marcador en vivo se muestra aparte`
-          : `Weekly baseline projection — ${PROJECTION_PROVIDER_LABEL} (SLPR): ${PROJECTION_PROVIDER_LABEL}’s projection from ${projection.pricedFrom} of ${projection.starterCount} starters${
-              projection.afProjected == null
-                ? ', generic PPR because this league’s scoring could not be re-scored'
-                : ', re-scored with this league’s settings'
-            } · AF: AllFantasy engine from ${projection.afEngineFrom ?? 0} of ${projection.starterCount} starters · live score is shown separately`
-        : undefined}
-    >
-      <span className="af-rail-row-av" aria-hidden>
-        <RailMark src={avatarUrl} letter={initial} />
-      </span>
-      <span className="af-rail-row-team">{name}</span>
-      <span className="af-rail-row-score">{score == null ? '—' : score.toFixed(1)}</span>
-      <span className="af-rail-row-projected">{projected == null ? '—' : projected.toFixed(1)}</span>
-      <span className="af-rail-row-projected" data-kind="af">{afEngine == null ? '—' : afEngine.toFixed(1)}</span>
-    </span>
-  )
-}
-
-/** 1st, 2nd, 3rd, 4th … and 11th/12th/13th, which are the ones a naive rule gets wrong. */
-function ordinal(n: number): string {
-  const teens = n % 100
-  if (teens >= 11 && teens <= 13) return `${n}th`
-  const unit = n % 10
-  if (unit === 1) return `${n}st`
-  if (unit === 2) return `${n}nd`
-  if (unit === 3) return `${n}rd`
-  return `${n}th`
-}
-
-/**
- * The rank block that replaces the opponent in a league with no head-to-head.
- *
- * ⚠ IT SAYS WHAT THE NUMBER IS MEASURED FROM, because before kickoff it is not
- * measured from points — every score in the league is 0 in that window and the
- * order comes entirely from the projections. Printing "14th of 18" without
- * saying so would present a projected ordering as a played one.
- */
-function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
-  const es = useOptionalLanguage().language === 'es'
-  if (!standing) {
-    return (
-      <span className="af-rail-row-side" data-side="them">
-        <span className="af-rail-row-team">
-          {es ? 'sin enfrentamiento directo: posición aún no medible' : 'no head-to-head — rank not yet measurable'}
-        </span>
-      </span>
-    )
-  }
-
-  const last = standing.overCut == null
-  const tone = last ? 'bad' : standing.rank > standing.outOf * 0.75 ? 'warn' : undefined
-
-  return (
-    <span className="af-rail-row-rank" data-tone={tone}>
-      <span className="af-rail-row-rank-pos">
-        {standing.tied ? (es ? 'E-' : 'T-') : ''}{es ? `#${standing.rank}` : ordinal(standing.rank)}
-        <span className="af-rail-row-rank-of">{es ? ' de ' : ' of '}{standing.outOf}</span>
-      </span>
-      <span className="af-rail-row-rank-cut">
-        {es
-          ? standing.overCut == null
-            ? standing.tied ? 'empatado en el último lugar' : standing.elimination
-              ? 'en la línea de corte'
-              : 'último de la liga'
-            : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'sobre el corte' : 'sobre el último'}`
-          : standing.overCut == null
-            ? standing.tied ? 'tied lowest' : standing.elimination
-              ? 'on the block'
-              : 'bottom of the league'
-            : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'over the cut' : 'over last'}`}
-      </span>
-      <span className="af-rail-row-rank-space">
-        {standing.placesAboveCut === 0
-          ? es ? 'posición de corte' : 'cut position'
-          : es
-            ? `${standing.placesAboveCut} ${standing.placesAboveCut === 1 ? 'puesto' : 'puestos'} de margen`
-            : `${standing.placesAboveCut} ${standing.placesAboveCut === 1 ? 'place' : 'places'} clear`}
-      </span>
-      <span className="af-rail-row-rank-basis">
-        {standing.basis === 'points' ? (es ? 'por puntos' : 'on points') : es ? 'por proyección' : 'on projection'}
-      </span>
-    </span>
-  )
-}
-
 function HelpDot({ title, body }: { title: string; body: string }) {
   const [open, setOpen] = useState(false)
   return (
@@ -1319,8 +1200,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const sections = useMemo(() => navSections(props), [props])
   const mobileItems = useMemo(() => {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
-    return MOBILE_BAR_KEYS.flatMap((k) => {
+    const fallbacks = MOBILE_BAR_FALLBACK_KEYS.flatMap((k) => {
       const item = byKey.get(k)
+      return item ? [item] : []
+    })
+    return MOBILE_BAR_KEYS.flatMap((k) => {
+      const item = byKey.get(k) ?? fallbacks.shift()
       return item ? [item] : []
     })
   }, [props])
@@ -1413,7 +1298,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     if (!speculationGate.tryAcquire()) return
     railWarmedRef.current.add(leagueId)
     /* FULL by default — `router.prefetch` is the only path that warms the data. */
-    router.prefetch(`/core?league=${encodeURIComponent(leagueId)}`)
+    const league = props.leagues.find(row => row.id === leagueId)
+    if (league) router.prefetch(leagueEntryHref(league))
   }
   /*
    * A warm needs the pointer (or focus) to REST on a crest for `RAIL_WARM_DWELL_MS`; leaving
@@ -1577,12 +1463,19 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * is `railOpen` — whether the list is expanded — which says nothing about whether a game is
    * on, so the CADENCE is what has to answer that. See the note on `useLiveRailScores`.
    */
+  /* Native rows (guillotine line, native head-to-head) refresh through the same route — DB-first there. */
+  const nativeRailIds = useMemo(
+    () => Object.entries(props.railMatchups ?? {}).filter(([, m]) => m.native).map(([id]) => id),
+    [props.railMatchups],
+  )
   const liveRail = useLiveRailScores(
     leagues,
     railOpen,
     coreRefreshIntervalMs(Boolean(props.gameDayActive), props.liveGameCount ?? 0),
+    nativeRailIds,
   )
-  const liveWeek = Object.values(liveRail.scores)[0]?.week
+  /* The heading names the NFL provider week; a native row runs on its own league's calendar. */
+  const liveWeek = Object.values(liveRail.scores).find((s) => !s.native)?.week
   const railWeekLabel = liveWeek ? `Week ${liveWeek}` : props.railWeekLabel
   const railRef = useRef<HTMLElement>(null)
   const railHandleRef = useRef<HTMLButtonElement>(null)
@@ -1702,6 +1595,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     [leagues, archivedLeagueKey, props.selectedLeagueId],
   )
   const railRows = useMemo(() => groupLeagueHubs(railLeagues), [railLeagues])
+  /*
+   * One section per sport, each headed by its sport, once the account plays two or more. Within a
+   * section the rail keeps the account's own order; only the grouping is new.
+   */
+  const railSections = useMemo(() => leagueSportSections(railRows), [railRows])
   const railLabels = useMemo(() => distinctLeagueLabels(railRows.filter((l) => !l.hub)), [railRows])
   const selectedLeague = leagues.find((league) => league.id === props.selectedLeagueId)
   const selectedLeagueName = selectedLeague ? (railLabels.get(selectedLeague.id) ?? selectedLeague.name) : null
@@ -1798,6 +1696,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         ref={railRef}
         className="af-rail"
         id="af-rail"
+        data-has-hidden={hiddenRailCount > 0 ? 'true' : undefined}
         aria-label={copy('Leagues')}
         onClick={(event) => {
           if (mobileRailOpen && (event.target as HTMLElement).closest('a[href]')) {
@@ -1827,20 +1726,26 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           aria-expanded={railOpen}
           aria-controls="af-rail-scroll"
           onClick={toggleRail}
+          /*
+           * On a phone this row IS the tray's header and its way out, so it says "close" and draws a ✕
+           * (moved to the right edge by af-core-shell.css) rather than the desktop's « collapse arrow.
+           * The floating handle still closes it too; this is the control a reader looks for at the top.
+           */
+          aria-label={mobileRailOpen ? (language === 'es' ? 'Cerrar ligas' : 'Close leagues') : undefined}
           title={
-            railOpen
-              ? language === 'es' ? 'Contraer la barra de ligas' : 'Collapse the league rail'
-              : language === 'es' ? 'Expandir la barra de ligas' : 'Expand the league rail'
+            mobileRailOpen
+              ? language === 'es' ? 'Cerrar ligas' : 'Close leagues'
+              : railOpen
+                ? language === 'es' ? 'Contraer la barra de ligas' : 'Collapse the league rail'
+                : language === 'es' ? 'Expandir la barra de ligas' : 'Expand the league rail'
           }
         >
           <span className="af-rail-toggle-icon" aria-hidden>
-            {railOpen ? '«' : '»'}
+            {mobileRailOpen ? '✕' : railOpen ? '«' : '»'}
           </span>
           <span className="af-rail-toggle-text">
             {leagues.length}{' '}
             {language === 'es' ? (leagues.length === 1 ? 'liga' : 'ligas') : leagues.length === 1 ? 'league' : 'leagues'}
-            {/* The rail draws fewer rows than the count when some are hidden; say so. */}
-            {hiddenRailCount > 0 ? (language === 'es' ? ` · ${hiddenRailCount} ocultas` : ` · ${hiddenRailCount} hidden`) : ''}
             {railWeekLabel ? ` · ${language === 'es' ? railWeekLabel.replace(/^Week (\d+)/, 'Semana $1') : railWeekLabel}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
               <span className="af-rail-live-state">
@@ -1850,6 +1755,28 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             ) : null}
           </span>
         </button>
+
+        {/*
+          The rail draws fewer rows than the count when some are hidden; say so — and make it
+          tappable. It used to be " · 2 hidden" inside the toggle above, where tapping it only
+          closed the tray. A link cannot live inside a button, so it is a sibling: on a phone it
+          takes the line under the header, in the expanded desktop rail it sits under the toggle,
+          and in the 42px collapsed rail it is not drawn (the list's last row carries the count).
+        */}
+        {hiddenRailCount > 0 ? (
+          <Link
+            href="/settings?tab=preferences&returnTo=%2Fcore#your-leagues"
+            className="af-rail-hidden-count"
+            data-testid="rail-hidden-count-link"
+            aria-label={
+              language === 'es'
+                ? `${hiddenRailCount} ${hiddenRailCount === 1 ? 'liga oculta' : 'ligas ocultas'}: mostrarlas en Ajustes`
+                : `${hiddenRailCount} hidden ${hiddenRailCount === 1 ? 'league' : 'leagues'}: show them in Settings`
+            }
+          >
+            {language === 'es' ? `${hiddenRailCount} ocultas · Mostrar` : `${hiddenRailCount} hidden · Show`}
+          </Link>
+        ) : null}
 
         {/*
           ⚠ EVERY LEAGUE, NOT THE FIRST EIGHT.
@@ -1867,36 +1794,38 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           second screen.
         */}
         <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef}>
-          {railRows.map((l) => {
+          {railSections.map((section) => [
+            /*
+             * The sport heading. Short form ("NFL", "CBB") so it fits the 42px collapsed rail as well
+             * as the open one, and not a heading element: the rail is a list of links, and seven
+             * <h2>s would crowd the page outline every /core screen shares.
+             */
+            railSections.length > 1 ? (
+              <div
+                key={`sport-${section.key ?? 'other'}`}
+                className="af-rail-sport"
+                title={leagueSportLabel(section.key)}
+                data-testid="rail-sport-heading"
+              >
+                {leagueSportLabel(section.key, { short: true })}
+              </div>
+            ) : null,
+            ...section.rows.map((l) => {
             if (l.hub) return <ConnectedLeagueRailGroup key={l.hub.id} hub={l.hub} selectedLeagueId={props.selectedLeagueId} expanded={railOpen} onNavigate={(href, event) => { saveRailScroll(railScrollRef.current, railLayout); if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720 && !event.metaKey && !event.ctrlKey) { event.preventDefault(); setRailChoice('closed'); router.push(href) } }} />
             const saved = props.railMatchups?.[l.id]
             const live = l.syncPaused ? undefined : liveRail.scores[l.id]
-            const sameWeek = live && saved?.season === live.season && saved?.week === live.week
-            const fieldRace = saved?.standing?.elimination === true
-            const standing = fieldRace ? live?.fieldStanding : live?.standing
-            const m = live ? {
-              ...live,
-              freshAt: live.updatedAt,
-              source: 'live_cache' as const,
-              unpaired: fieldRace || live.unpaired,
-              yourProjection: sameWeek ? saved?.yourProjection : null,
-              opponentProjection: sameWeek && saved?.opponentTeam === live.opponentTeam ? saved?.opponentProjection : null,
-              standing: standing ? { ...standing, elimination: fieldRace || standing.elimination } : null,
-            } : saved
+            // The live poll overlaid on the server snapshot — shared with the /league rail (RailRowBody.tsx).
+            const m = mergeRailMatchup(saved, live)
             const delayed = liveRail.delayed.includes(l.id) || Boolean(live && (railClock ?? Date.now()) - Date.parse(live.updatedAt) > 90_000)
-            const mFreshAt = m?.freshAt ? Date.parse(m.freshAt) : Number.NaN
-            const mFreshMinutes = railClock != null && Number.isFinite(mFreshAt)
-              ? Math.max(0, Math.floor((railClock - mFreshAt) / 60_000))
-              : null
             const railName = railLabels.get(l.id) ?? l.name
             // Keyed on the league's own name, not the rail's disambiguated label: that is Career's identity.
             const careerRaw = railCareer?.[railLeagueKey(l.name)] ?? null
             const careerLine = careerRaw ? careerLineText(careerRaw, language) : null
             /* League-first opens a league on its matchup when it has a head-to-head this week —
                the same rule the /core landing uses (resolveLeagueFirstLanding). */
-            const leagueHref = props.leagueFirst && m && !m.unpaired
+            const leagueHref = !isNativePlatform(l.platform) && props.leagueFirst && m && !m.unpaired
               ? `/core/matchup?league=${encodeURIComponent(l.id)}`
-              : `/core?league=${encodeURIComponent(l.id)}`
+              : leagueEntryHref(l)
             return (
               <Link
                 key={l.id}
@@ -1977,97 +1906,50 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   rail then costs no re-render of sixty rows, and the row keeps
                   one accessible name either way.
                 */}
-                <span className="af-rail-row">
-                  <span className="af-rail-row-headline">
-                    <span className="af-rail-row-name">{railName}</span>
-                    {l.isCommissioner ? <CommissionerBadge /> : null}
-                    {railSwings[l.id] != null ? (
-                      <span className="af-rail-swing">
-                        {railSwings[l.id] > 0 ? '+' : ''}{railSwings[l.id].toFixed(1)} swing
-                      </span>
-                    ) : null}
-                    {m ? (
-                      <span className="af-rail-row-fresh" data-stale={m.source === 'history_fallback' || (mFreshMinutes != null && mFreshMinutes > 10) ? 'true' : undefined}>
-                        {m.source === 'history_fallback'
-                          ? language === 'es' ? 'última importación' : 'last import'
-                          : mFreshMinutes == null
-                            ? language === 'es' ? 'antigüedad desconocida' : 'sync age unknown'
-                            : mFreshMinutes < 1 ? (language === 'es' ? 'ahora' : 'now') : `${mFreshMinutes}m`}
-                      </span>
-                    ) : null}
-                  </span>
-                  {/* On the Career screen only: your finished-season record and titles in this league. */}
-                  {careerLine ? <span className="af-rail-row-career">{careerLine}</span> : null}
-                  {l.platform.toLowerCase() === 'sleeper' && railOpen ? (
-                    <span className="af-rail-score-status" data-delayed={!l.syncPaused && delayed || undefined}>
-                      {language === 'es'
-                        ? l.syncPaused ? 'Sincronización de la cuenta en pausa' : delayed ? 'Actualización de marcadores con retraso' : live ? `Marcadores S${live.week} actualizados ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Actualizando marcadores...'
-                        : l.syncPaused ? 'Account sync paused' : delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
-                    </span>
-                  ) : null}
-                  {m ? (
-                    <span className="af-rail-row-line">
-                      <span className="af-rail-row-labels" aria-hidden>
-                        <span />
-                        <span>{m.source === 'history_fallback' ? (language === 'es' ? 'ÚLT' : 'LAST') : language === 'es' ? 'PTS' : 'SCORE'}</span>
-                        {/*
-                          "SLPR", not "API" (2026-10-03) and not "SLEEPER": the column is 38px of
-                          11px monospace, where the full word measures ~52px. The tooltip spells it.
-                        */}
-                        <span title={language === 'es' ? `Proyección de ${PROJECTION_PROVIDER_LABEL}` : `${PROJECTION_PROVIDER_LABEL} projection`}>SLPR</span>
-                        <span title={language === 'es' ? 'Proyección del motor de AllFantasy' : 'AllFantasy engine projection'}>AF</span>
-                      </span>
-                      <RailSide
-                        name={m.yourTeam ?? (language === 'es' ? 'Tu equipo' : 'Your team')}
-                        avatarUrl={m.yourAvatarUrl}
-                        /*
-                          ⚠ A DASH, NOT 0.00, ON AN UNPLAYED FIXTURE. A scheduled
-                          row carries zeroes as soon as the schedule exists;
-                          printing them says the game was played and finished
-                          nil-all.
-                        */
-                        score={m.scored ? m.yourScore : null}
-                        projection={m.yourProjection ?? null}
-                      />
-
-                      {/*
-                        An elimination league has no opponent BY DESIGN — every
-                        roster writes its own matchupId — so "v opponent not
-                        named" was an honest answer to a question the league does
-                        not ask. What its manager wants is the distance between
-                        them and the cut.
-                      */}
-                      {m.unpaired ? (
-                        <RailStanding standing={m.standing ?? null} />
-                      ) : (
-                        <>
-                          <RailSide
-                            them
-                            name={m.opponentTeam ?? (language === 'es' ? 'rival sin nombre' : 'opponent not named')}
-                            avatarUrl={m.opponentAvatarUrl}
-                            score={m.scored ? m.opponentScore : null}
-                            projection={m.opponentProjection ?? null}
-                          />
-                        </>
-                      )}
-                    </span>
-                  ) : (
-                    <span className="af-rail-row-line">
-                      <span className="af-rail-row-team">
-                        {String(l.platform).toLowerCase() === 'espn'
-                          ? language === 'es'
-                            ? 'ESPN no devolvió un calendario de enfrentamientos para esta liga'
-                            : 'ESPN did not return a matchup schedule for this league'
-                          : language === 'es'
-                            ? 'sin enfrentamiento directo registrado esta semana'
-                            : 'no head-to-head on file this week'}
-                      </span>
-                    </span>
-                  )}
-                </span>
+                <RailRowBody
+                  name={railName}
+                  platform={String(l.platform)}
+                  m={m}
+                  live={live}
+                  isCommissioner={l.isCommissioner}
+                  syncPaused={l.syncPaused}
+                  delayed={delayed}
+                  showScoreStatus={railOpen}
+                  swing={railSwings[l.id]}
+                  careerLine={careerLine}
+                />
               </Link>
             )
-          })}
+          }),
+          ])}
+          {/*
+            ⚠ THE WAY BACK TO A HIDDEN LEAGUE. The header counts hidden leagues, but that count sits
+            inside the expand/collapse button and cannot be a link of its own. Without this row an
+            account that hid every league opened the tray to "2 leagues · 2 hidden" and nothing else —
+            no rows and no pointer to Settings, where unhiding lives. Reported by a user 2026-10-29.
+          */}
+          {hiddenRailCount > 0 ? (
+            <Link
+              href="/settings?tab=preferences&returnTo=%2Fcore#your-leagues"
+              className="af-rail-tile af-rail-add af-rail-hidden-link"
+              data-all-hidden={railLeagues.length === 0 ? 'true' : undefined}
+              data-testid="rail-hidden-leagues-link"
+              title={language === 'es' ? 'Mostrar u ocultar ligas en Ajustes' : 'Show or hide leagues in Settings'}
+            >
+              {/* The count, so the collapsed 42px rail still says how many are tucked away. */}
+              <span className="af-rail-foot-icon af-num" aria-hidden>
+                {hiddenRailCount}
+              </span>
+              <span className="af-rail-foot-copy">
+                <strong>
+                  {language === 'es'
+                    ? `Mostrar ${hiddenRailCount} ${hiddenRailCount === 1 ? 'liga oculta' : 'ligas ocultas'}`
+                    : `Show ${hiddenRailCount} hidden ${hiddenRailCount === 1 ? 'league' : 'leagues'}`}
+                </strong>
+                <small>{language === 'es' ? 'Gestionar en Ajustes' : 'Manage in Settings'}</small>
+              </span>
+            </Link>
+          ) : null}
         </div>
 
         {/*
@@ -2200,7 +2082,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
       {/* ── Main column ─────────────────────────────────────────────── */}
       <div className="af-main">
-        <header className="af-topbar" data-lf-search-open={props.leagueFirst && lfSearchOpen ? 'true' : undefined}>
+        <header className="af-topbar" data-lf-search-open={lfSearchOpen ? 'true' : undefined}>
           {/*
             ⚠ THE CREST, PHONE ONLY — `display: none` above 720px.
 
@@ -2242,7 +2124,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           */}
           {props.scope ? (
             <ScopeSwitcher
-              leagues={props.scope.leagues}
+              leagues={props.scope.leagues.map((league) => ({ ...league, imageUrl: leagues.find((row) => row.id === league.id)?.imageUrl }))}
               scopeValue={props.scope.value}
               label={props.scope.label}
               selectedLeagueId={props.selectedLeagueId ?? null}
@@ -2252,21 +2134,31 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               archivedIds={props.archivedLeagueIds}
             />
           ) : null}
-          {props.leagueFirst ? (
-            <button
-              type="button"
-              className="af-lf-search-btn"
-              aria-label={
-                language === 'es'
-                  ? lfSearchOpen ? 'Cerrar búsqueda' : 'Buscar jugadores y ligas'
-                  : lfSearchOpen ? 'Close search' : 'Search players and leagues'
+          {/*
+            The search icon. Phone only in both modes (hidden above 720px by af-core-shell.css): the
+            phone header folds the full-width search behind it so the topbar stays one row.
+          */}
+          <button
+            type="button"
+            className="af-lf-search-btn"
+            aria-label={
+              language === 'es'
+                ? lfSearchOpen ? 'Cerrar búsqueda' : 'Buscar jugadores y ligas'
+                : lfSearchOpen ? 'Close search' : 'Search players and leagues'
+            }
+            aria-expanded={lfSearchOpen}
+            onClick={(event) => {
+              const opening = !lfSearchOpen
+              setLfSearchOpen(opening)
+              // Put the cursor in the field it just revealed, so one tap is enough to start typing.
+              if (opening) {
+                const header = event.currentTarget.closest('.af-topbar')
+                requestAnimationFrame(() => header?.querySelector<HTMLInputElement>('.af-search-input')?.focus())
               }
-              aria-expanded={lfSearchOpen}
-              onClick={() => setLfSearchOpen((open) => !open)}
-            >
-              <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
-            </button>
-          ) : null}
+            }}
+          >
+            <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
+          </button>
           {/*
             League-first: the inbox — trade offers, waiver results, mentions, lineup alerts — one tap
             from every screen. The phone header hides `.af-topbar-right` and the nav, so without this
@@ -2305,31 +2197,22 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 {copy('Admin')}
               </Link>
             ) : null}
-            <span className="af-readonly">
-              {props.nativeLeague ? (language === 'es' ? 'Liga nativa' : 'Native league') : (language === 'es' ? 'Solo lectura' : 'Provider read-only')}
-              <HelpDot
-                title={props.nativeLeague ? 'AllFantasy is the league record' : 'Provider read-only'}
-                body={props.nativeLeague ? 'Validated roster changes are saved to this native AllFantasy league. Roster rules and game locks apply.' : 'AllFantasy reads imported leagues and points you to the provider where you make lineup changes. Provider writes are not supported.'}
-              />
-            </span>
-
             {weekLabel ? <span className="af-week af-num">{weekLabel}</span> : null}
 
-            {/*
-              `describeAge` says "never synced" for an account with no sync at all; prefixing
-              "synced" to that read "⚠ synced never synced".
-            */}
-            <span
-              className="af-sync af-num"
-              data-stale={syncAge.stale}
-              title={language === 'es' ? 'Última sincronización' : 'Last sync'}
-            >
-              {syncAge.stale ? '⚠ ' : ''}
-              {syncChipText(syncAge.label, language)}
-            </span>
+            <details className="af-data-menu">
+              <summary aria-label={language === 'es' ? 'Actualizaciones de liga' : 'League updates and refresh'}>↻ <span>{language === 'es' ? 'Actualizaciones' : 'Updates'}</span></summary>
+              <div className="af-data-menu-panel">
+                <strong>{language === 'es' ? 'Actualizaciones de liga' : 'League updates'}</strong>
+                <p>{syncChipText(syncAge.label, language)}</p>
+                <SyncNowButton eligibleCount={syncEligibleCount} />
+                <p>{props.nativeLeague ? (language === 'es' ? 'Los cambios se guardan en AllFantasy.' : 'Changes save to AllFantasy.') : (language === 'es' ? 'Cambia la alineación en la plataforma de tu liga.' : 'Make lineup changes on your league’s platform.')}</p>
+              </div>
+            </details>
 
             {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
             <ModeToggle className="af-mode-chip" />
+            {/* Language beside it, so switching never means leaving /core for /settings. */}
+            <CoreLanguageChip className="af-mode-chip" />
 
             {/*
               The COMPACT form, and only where the visible panel is not already
@@ -2337,14 +2220,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               "Sync now" controls on one screen is the kind of duplication that
               makes people wonder whether they do different things.
             */}
-            {active === 'home' ? null : <SyncNowButton eligibleCount={syncEligibleCount} />}
 
             {plan ? (
               <span className="af-plan">
                 <span className="af-plan-name af-label">{plan.name}</span>
                 {plan.tokensLeft != null ? (
                   <>
-                    <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString()}</span>
+                    <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString(getAppIntlLocale())}</span>
                     <span className="af-label">{language === 'es' ? 'tokens restantes' : 'tokens left'}</span>
                   </>
                 ) : null}
@@ -2371,6 +2253,23 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             one remembering.
           */}
           <GeoRestrictionNotice />
+          {active === 'home' ? (
+            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry">
+              <div className="af-core-bracket-promo-copy">
+                <p className="af-core-bracket-promo-kicker">{language === 'es' ? 'LIGAS DE BRACKETS' : 'BRACKET LEAGUES'}</p>
+                <h2 id="af-core-bracket-promo-title">{language === 'es' ? 'Crea un bracket. Invita a tus amigos.' : 'Build a bracket. Bring your friends.'}</h2>
+                <p>{language === 'es' ? 'Elige ganadores, comparte tus picks y compite en la clasificación.' : 'Pick winners, share your bracket, and climb the leaderboard.'}</p>
+              </div>
+              <div className="af-core-bracket-promo-actions">
+                <Link href="/brackets" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
+                  {language === 'es' ? 'Explorar y crear' : 'Explore and create'}
+                </Link>
+                <Link href="/brackets/join" className="af-core-bracket-promo-browse">
+                  {language === 'es' ? 'Unirme a una liga' : 'Join a league'}
+                </Link>
+              </div>
+            </section>
+          ) : null}
           {/*
             Game-day nudge, in the shell for the same reason the notice above is: every
             /core screen inherits it rather than each one remembering. It renders itself to
@@ -2379,20 +2278,24 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             It LINKS to /core/notifications rather than asking for permission itself; there
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
-          {active === 'home' ? <GameDayAlertsBanner /> : null}
-          {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
-          {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
-          {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
-          {active === 'home' ? <CoreWelcomeTour leagueCount={leagues.length} /> : null}
+          {/*
+            The optional prompts queue for ONE slot on home (HomePromptSlot) instead of stacking
+            up to four deep above the content. Off home the slot is disabled; the tour shows on home only.
+          */}
+          <HomePromptSlot enabled={active === 'home'}>
+            {active === 'home' ? <GameDayAlertsBanner /> : null}
+            {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
+            {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
+            {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
+            {active === 'home' ? <CoreWelcomeTour leagueCount={leagues.length} /> : null}
+          </HomePromptSlot>
           {/*
             The VISIBLE button, on the /core home screen: a real action row
             above the dashboard rather than a chip in the chrome. This is the
             surface a manager reaches for after importing a league, so it sits
             where they land, not where they have to go looking.
           */}
-          {active === 'home' ? (
-            <SyncNowButton variant="panel" eligibleCount={syncEligibleCount} syncAge={syncAge} totalLeagues={leagues.length} />
-          ) : null}
+
           {/*
             The player card pop-up (design handoff 2026-09-07, STATE 6/7), mounted
             once for the whole shell like the overlays below.

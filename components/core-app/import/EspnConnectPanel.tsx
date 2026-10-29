@@ -47,6 +47,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
  */
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-espn.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 type EspnAuthStatus = {
   connected: boolean
@@ -509,7 +510,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
           <span className="af-espn-badge af-num">{t('import.espn.badge')}</span>
           {updatedAt ? (
             <span className="af-espn-since">
-              {tInterpolate('import.espn.since', { date: new Date(updatedAt).toLocaleDateString() })}
+              {tInterpolate('import.espn.since', { date: new Date(updatedAt).toLocaleDateString(getAppIntlLocale()) })}
             </span>
           ) : null}
           <span className="af-espn-connected-actions">

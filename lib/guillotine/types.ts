@@ -117,4 +117,8 @@ export type GuillotineEventType =
   | 'weekly_recap'
   | 'chop_animation_trigger'
   | 'roster_released'
+  /** A chopped team's unspent FAAB was split among the survivors (./faabOnChop.ts). */
+  | 'faab_split'
   | 'removal_request'
+  /** The once-a-week chop-zone warning went out (./chopAlerts.ts); its presence stops a resend. */
+  | 'chop_zone_warning'

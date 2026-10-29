@@ -15,6 +15,7 @@ import {
   type TeamCompareSide,
 } from '@/lib/core-app/rankings'
 import '@/components/core-app/af-rankings-screen.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Compare — handoff 14c, widened from managers to four kinds.
@@ -177,7 +178,7 @@ function ManagerCard({ m, side }: { m: CompareManager; side: 'you' | 'them' }) {
             {side === 'you' ? <span className="af-rk-sr"> (you)</span> : null}
           </p>
           <p className="af-rk-vsmeta">
-            Lvl {m.level} {m.levelName} · {m.leagueSeasons.toLocaleString()} league-seasons · {m.confidence} confidence
+            Lvl {m.level} {m.levelName} · {m.leagueSeasons.toLocaleString(getAppIntlLocale())} league-seasons · {m.confidence} confidence
           </p>
         </div>
         <div className="af-rk-vsgrade">

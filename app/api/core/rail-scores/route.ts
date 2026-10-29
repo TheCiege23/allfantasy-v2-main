@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { currentSleeperWeek, sleeperRailFeed } from '@/lib/core-app/sleeperRailFeed'
 import { parseLiveMatchups, summarizeLiveScores } from '@/lib/core-app/liveRailScores'
 import { managerArtUrl } from '@/lib/core-app/leagueArt'
+import { realManagerName, rosterLabel } from '@/lib/core-app/managerName'
+import { getNativeRailMatchups } from '@/lib/core-app/nativeRailMatchups'
 
 export const dynamic = 'force-dynamic'
 const headers = { 'Cache-Control': 'private, no-store' }
@@ -23,14 +25,37 @@ export async function GET(request: NextRequest) {
       select: { externalId: true, league: { select: { id: true, platform: true, platformLeagueId: true, guillotineMode: true } } },
     })
     const authorized = owned.filter(team => team.league?.platform?.toLowerCase() === 'sleeper')
+    /*
+     * NATIVE leagues are answered from the database — the guillotine line and the native head-to-head
+     * (lib/core-app/nativeRailMatchups.ts). No provider call, and the loader returns a row only where
+     * the signed-in user owns a roster (or, pre-draft, a team), so it is authorized by construction.
+     * A failure here is that league "unavailable", never the whole response.
+     */
+    const native = await getNativeRailMatchups(session.user.id, ids.filter(id => !authorized.some(team => team.league?.id === id)))
+      .catch(() => ({ byLeague: {} as Awaited<ReturnType<typeof getNativeRailMatchups>>['byLeague'] }))
+    const updates: Record<string, unknown> = {}
+    const now = new Date().toISOString()
+    for (const [leagueId, row] of Object.entries(native.byLeague)) {
+      /*
+       * `updatedAt` is when this answer was READ (the client calls a row older than 90 s "delayed");
+       * `freshAt` stays the newest stat row behind it, which is what the row's age label shows.
+       * `fieldStanding` is what the client overlays on a field-race row (mergeRailMatchup).
+       */
+      updates[leagueId] = { ...row, updatedAt: now, fieldStanding: row.standing ?? null }
+    }
+    const unavailable = ids.filter(id => !authorized.some(team => team.league?.id === id) && !native.byLeague[id])
+    if (authorized.length === 0) return NextResponse.json({ updates, unavailable }, { headers })
     const teams = await prisma.leagueTeam.findMany({
       where: { leagueId: { in: authorized.map(team => team.league!.id) } },
       select: { leagueId: true, externalId: true, teamName: true, ownerName: true, avatarUrl: true },
     })
     const current = currentSleeperWeek(await sleeperRailFeed('state/nfl', 60_000))
-    if (!current) return NextResponse.json({ error: 'No active NFL regular-season week' }, { status: 503, headers })
-    const updates: Record<string, unknown> = {}
-    const unavailable = ids.filter(id => !authorized.some(team => team.league?.id === id))
+    if (!current) {
+      if (Object.keys(updates).length > 0) {
+        return NextResponse.json({ updates, unavailable: [...unavailable, ...authorized.map(team => team.league!.id)] }, { headers })
+      }
+      return NextResponse.json({ error: 'No active NFL regular-season week' }, { status: 503, headers })
+    }
     // Four bounded workers keep a large league list from opening dozens of connections.
     for (let start = 0; start < authorized.length; start += 4) {
       await Promise.all(authorized.slice(start, start + 4).map(async team => {
@@ -45,9 +70,17 @@ export async function GET(request: NextRequest) {
           const mine = teams.find(row => row.leagueId === league.id && row.externalId === team.externalId)
           const other = teams.find(row => row.leagueId === league.id && row.externalId === scores.opponentRosterId)
           updates[league.id] = { ...scores, ...current, updatedAt: new Date().toISOString(),
-            yourTeam: mine?.teamName || mine?.ownerName || null,
+            /*
+             * ⚠ THE SAME NAMING RULE AS THE SERVER-RENDERED RAIL (railMatchups.ts), OR THIS REFRESH UNDOES
+             * IT. Every unowned Sleeper roster is stored as teamName/ownerName "Unknown"; railMatchups.ts
+             * learned to print "Team N" for it on 2026-10-05, but this route kept `teamName || ownerName`,
+             * so the live refresh overwrote "Team 3" with "Unknown" seconds after paint (reported from an
+             * iPhone 2026-10-08). The mismatch also dropped the opponent projection, which the client
+             * keeps only while the saved and live opponent names agree.
+             */
+            yourTeam: realManagerName(mine?.teamName) || realManagerName(mine?.ownerName) || null,
             yourAvatarUrl: managerArtUrl({ avatarUrl: mine?.avatarUrl, platform: 'sleeper' }),
-            opponentTeam: other?.teamName || other?.ownerName || null,
+            opponentTeam: scores.opponentRosterId ? rosterLabel([other?.teamName, other?.ownerName], scores.opponentRosterId) : null,
             opponentAvatarUrl: managerArtUrl({ avatarUrl: other?.avatarUrl, platform: 'sleeper' }),
             standing: scores.standing ? { ...scores.standing, elimination: league.guillotineMode } : null,
           }

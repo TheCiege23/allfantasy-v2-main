@@ -22,13 +22,14 @@ function legalNflLineup(overrides: Partial<Record<string, Partial<RedraftLineupP
   const rows = [
     player({ playerId: 'qb-1', playerName: 'QB One', position: 'QB', slotType: 'QB' }),
     player({ playerId: 'rb-1', playerName: 'RB One', position: 'RB', slotType: 'RB' }),
+    player({ playerId: 'rb-2', playerName: 'RB Two', position: 'RB', slotType: 'RB' }),
     player({ playerId: 'wr-1', playerName: 'WR One', position: 'WR', slotType: 'WR' }),
     player({ playerId: 'wr-2', playerName: 'WR Two', position: 'WR', slotType: 'WR' }),
     player({ playerId: 'te-1', playerName: 'TE One', position: 'TE', slotType: 'TE' }),
+    player({ playerId: 'flex-1', playerName: 'Flex One', position: 'RB', slotType: 'FLEX' }),
+    player({ playerId: 'k-1', playerName: 'K One', position: 'K', slotType: 'K' }),
     player({ playerId: 'def-1', playerName: 'Defense One', position: 'DEF', slotType: 'DEF' }),
     player({ playerId: 'bench-1', playerName: 'Bench One', position: 'WR', slotType: 'bench' }),
-    player({ playerId: 'bench-rb-2', playerName: 'RB Two', position: 'RB', slotType: 'bench' }),
-    player({ playerId: 'bench-k-1', playerName: 'K One', position: 'K', slotType: 'bench' }),
   ]
   return rows.map((row) => ({ ...row, ...(overrides[row.playerId] ?? {}) }))
 }

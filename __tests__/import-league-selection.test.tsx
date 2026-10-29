@@ -24,6 +24,11 @@ vi.mock('@/lib/league-import/LeagueCreationImportSubmissionService', () => ({
   fetchImportPreview: (...a: unknown[]) => fetchImportPreview(...a),
 }))
 
+const posthogCapture = vi.fn()
+vi.mock('posthog-js', () => ({
+  default: { capture: (...a: unknown[]) => posthogCapture(...a) },
+}))
+
 // next/link renders an <a> in jsdom without a router.
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -136,6 +141,60 @@ describe('handoff 4d — choosing which discovered leagues to import', () => {
     const submitted = submitImportCreation.mock.calls.map((c) => c[1])
     expect(submitted).toEqual(['l1', 'l2', 'l3'])
     expect(submitted).not.toContain('l4')
+  })
+
+  /**
+   * One commit can take a minute. A label that counts FINISHED leagues sits on
+   * "1 of 3" for the whole of league 2 and reads as frozen.
+   */
+  it('names the league in progress while the run goes', async () => {
+    await renderWithLeagues()
+    const pending: Array<(v: unknown) => void> = []
+    submitImportCreation.mockImplementation(
+      () => new Promise((resolve) => pending.push(resolve)),
+    )
+
+    fireEvent.click(screen.getAllByRole('checkbox')[3])
+    fireEvent.click(screen.getByRole('button', { name: /Import 3 leagues/i }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Importing league 1 of 3/i })).toBeInTheDocument(),
+    )
+    pending[0]({ ok: true })
+    await waitFor(() => expect(submitImportCreation).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('button', { name: /Importing league 2 of 3/i })).toBeInTheDocument()
+
+    pending[1]({ ok: true })
+    await waitFor(() => expect(submitImportCreation).toHaveBeenCalledTimes(3))
+    expect(screen.getByRole('button', { name: /Importing league 3 of 3/i })).toBeInTheDocument()
+    pending[2]({ ok: true })
+  })
+
+  it('captures one outcome event for the whole run', async () => {
+    await renderWithLeagues()
+    posthogCapture.mockReset()
+    submitImportCreation
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: true, existed: true })
+      .mockResolvedValueOnce({ ok: false, status: 500, error: 'Boom.' })
+
+    fireEvent.click(screen.getAllByRole('checkbox')[3])
+    fireEvent.click(screen.getByRole('button', { name: /Import 3 leagues/i }))
+
+    await waitFor(() =>
+      expect(posthogCapture).toHaveBeenCalledWith(
+        'league_bulk_import_completed',
+        expect.objectContaining({
+          platform: 'sleeper',
+          league_count: 3,
+          done_count: 1,
+          exists_count: 1,
+          failed_count: 1,
+          duration_ms: expect.any(Number),
+        }),
+      ),
+    )
+    expect(posthogCapture).toHaveBeenCalledTimes(1)
   })
 })
 

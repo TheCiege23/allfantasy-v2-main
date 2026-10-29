@@ -188,14 +188,14 @@ describe('the connect-a-league flow', () => {
    * ⚠ One map being unavailable must not fail the import — a league is one
    * sport, so the other map's outage is irrelevant to it.
    */
-  it('needs only one of the three player maps to load', () => {
-    expect(SERVICE_IMPORT).toMatch(/if \(!cfb\.ok && !nfl\.ok && !mlb\.ok\)/)
+  it('needs only one of the five player maps to load', () => {
+    expect(SERVICE_IMPORT).toMatch(/if \(!cfb\.ok && !nfl\.ok && !mlb\.ok && !nba\.ok && !nhl\.ok\)/)
   })
 
   it('aborts when almost nothing resolves, rather than storing anonymous ids', () => {
     expect(SERVICE_IMPORT).toMatch(/named \/ total < 0\.5|< 0\.5/)
     // All supported maps are tried; reaching the guard means none fits.
-    expect(SERVICE_IMPORT).toMatch(/against the college, NFL or MLB player maps/)
+    expect(SERVICE_IMPORT).toMatch(/against the college, NFL, MLB, NBA or NHL player maps/)
   })
 })
 

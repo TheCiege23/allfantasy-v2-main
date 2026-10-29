@@ -1,0 +1,78 @@
+/* Big Brother specialty home + eviction night. Layered on components/league/specialty/specialty.module.css. */
+.ph { display: flex; align-items: flex-start; gap: 0; margin: 4px 0 0; padding: 0; list-style: none; }
+.ph>li { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; min-width: 0; }
+.ph>li::before { content: ''; position: absolute; top: 15px; left: -50%; right: 50%; height: 3px; background: #22305a; }
+.ph>li:first-child::before { display: none; }
+.ph>li>i {
+  position: relative; z-index: 1; width: 32px; height: 32px; border-radius: 99px; display: grid; place-items: center;
+  font: 700 12px 'JetBrains Mono', monospace; font-style: normal; background: #10131c; border: 2px solid #22305a; color: #7d84a3;
+}
+.ph>li>span { font: 600 11.5px 'Archivo', sans-serif; color: #7d84a3; text-align: center; }
+.ph>li.done>i { background: #1d4ed8; border-color: #3b82f6; color: #fff; }
+.ph>li.done::before { background: #3b82f6; }
+.ph>li.on>i { background: #ff5ec8; border-color: #ff9ad8; color: #fff; box-shadow: 0 0 0 5px rgba(255, 94, 200, .18); }
+.ph>li.on>span { color: #ffb3e3; }
+.ph>li.on::before { background: #3b82f6; }
+
+.spots { display: flex; flex-wrap: wrap; gap: 16px; }
+.spot {
+  flex: 1 1 200px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px; border-radius: 14px;
+  background: #10131c; border: 1px solid rgba(255, 255, 255, .07); text-align: center; min-width: 0;
+}
+.spotWide { flex: 2 1 320px; }
+.spotIcon { width: 52px; height: 52px; }
+.ring { width: 64px; height: 64px; border: 3px solid transparent; font-size: 15px; }
+.ringGold { border-color: #f2c94c; }
+.ringPink { border-color: #ff5ec8; }
+.ringBlue { border-color: #7fc8ff; }
+.spotName { font-weight: 700; font-size: 14.5px; overflow-wrap: anywhere; }
+.noms { display: flex; flex-wrap: wrap; justify-content: center; gap: 28px; }
+.nom { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+
+.hgGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.hg { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 12px; background: #10131c; border: 1px solid rgba(255, 255, 255, .06); text-align: center; min-width: 0; }
+.hgOut { opacity: .55; }
+.hgOut .grey { filter: grayscale(1); }
+.hgName { font-size: 12.5px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hgMe { border-color: rgba(59, 130, 246, .55); background: #111a2e; }
+
+.desktopOnly { display: contents; }
+.phoneOnly { display: none; }
+@container (max-width: 640px) {
+  .desktopOnly { display: none; }
+  .phoneOnly { display: flex; }
+  .ph>li>span { font-size: 11px; }
+}
+.phone { flex-direction: column; gap: 14px; }
+.phoneHead { position: relative; overflow: hidden; border-radius: 16px; min-height: 170px; padding: 18px 16px; display: flex; align-items: flex-end; gap: 12px; }
+.phoneHead>img.bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.phoneHead>.veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7, 8, 13, .3), rgba(7, 8, 13, .92)); }
+.phoneHead>img.key { position: relative; width: 56px; flex: none; }
+.phoneHeadText { position: relative; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.phoneTitle { margin: 0; font: 800 28px/1.05 'Archivo', sans-serif; color: #fff; }
+.pick { width: 100%; text-align: left; cursor: pointer; color: inherit; font: inherit; min-height: 56px; }
+.pick[aria-pressed='true'] { border-color: #ff5ec8; background: #1d1020; }
+.pick:disabled { opacity: .45; cursor: not-allowed; }
+.pick:focus-visible { outline: 2px solid var(--acc2); outline-offset: 2px; }
+.lockBar { position: sticky; bottom: 0; padding: 12px 0 4px; background: linear-gradient(180deg, transparent, #07080d 30%); }
+.lockBar>button { width: 100%; min-height: 52px; }
+
+/* ---------- eviction night ---------- */
+.evictStage { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
+.evictCard {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 26px 16px;
+  border-radius: 16px; background: #10131c; border: 1px solid rgba(255, 94, 200, .35); text-align: center; min-width: 0;
+  transition: background .3s, opacity .3s;
+}
+.evictCount { font: 800 64px/1 'Archivo', sans-serif; color: #fff; font-variant-numeric: tabular-nums; }
+.evictOut { background: #0a0b10; }
+.evictOut .fade { opacity: .35; filter: grayscale(1); }
+.door { position: absolute; top: 90px; left: 50%; width: 76px; margin-left: -38px; z-index: 2; animation: bbPop .5s ease-out both; }
+.evictedWord { font: 800 30px 'Archivo', sans-serif; letter-spacing: .14em; color: #ff8fc8; animation: bbPop .5s ease-out .15s both; }
+.result { margin: 0; text-align: center; font-size: 15px; font-weight: 600; color: #ffd0ec; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+@keyframes bbPop { 0% { transform: scale(.6); opacity: 0; } 60% { transform: scale(1.06); opacity: 1; } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .door, .evictedWord { animation: none; }
+  .evictCard { transition: none; }
+}

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import '@/components/core-app/af-core-boards.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The shared parts of every cross-league board in the 2026-09-07 core-pages
@@ -147,14 +148,14 @@ export function FooterSummary({
       <p className="af-bd-foot-text">
         {hidden > 0
           ? language === 'es'
-            ? `${hidden.toLocaleString()} ${hidden === 1 ? 'liga más' : 'ligas más'} ${quiet}`
-            : `${hidden.toLocaleString()} more ${hidden === 1 ? 'league' : 'leagues'} ${quiet}`
+            ? `${hidden.toLocaleString(getAppIntlLocale())} ${hidden === 1 ? 'liga más' : 'ligas más'} ${quiet}`
+            : `${hidden.toLocaleString(getAppIntlLocale())} more ${hidden === 1 ? 'league' : 'leagues'} ${quiet}`
           : language === 'es' && emptyText === 'Every league you hold is on this board.'
             ? 'Todas tus ligas aparecen en esta lista.'
             : emptyText}
       </p>
       <Link className="af-bd-foot-cta" href={href}>
-        {language === 'es' ? `Ver ${total.toLocaleString()} ${total === 1 ? 'liga' : 'ligas'}` : `View all ${total.toLocaleString()}`} &rarr;
+        {language === 'es' ? `Ver ${total.toLocaleString(getAppIntlLocale())} ${total === 1 ? 'liga' : 'ligas'}` : `View all ${total.toLocaleString(getAppIntlLocale())}`} &rarr;
       </Link>
     </div>
   )

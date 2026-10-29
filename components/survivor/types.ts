@@ -2,6 +2,8 @@
  * Frontend types for Survivor league summary (PROMPT 347).
  */
 
+import type { SurvivorAdvice } from '@/lib/survivor/survivorWeekAdvice'
+
 export type SurvivorView =
   | 'tribe-board'
   | 'challenge'
@@ -41,14 +43,13 @@ export interface SurvivorSummaryConfig {
   faqSeededAt?: string | null
 }
 
-/** Matches `ScrollRevealStep` from `lib/survivor/votingEngine.ts` (JSON on council). */
-export type SurvivorScrollRevealStep =
-  | { type: 'vote'; voterName: string; targetName: string }
-  | { type: 'ballot'; targetName: string; stamp: string }
-  | { type: 'pause' }
-  | { type: 'does_not_count'; voterName: string }
-  | { type: 'elimination'; userName: string }
-  | { type: 'idol_play'; powerLabel: string }
+/** One released ballot on the Tribal Council scroll (server-gated; see lib/survivor/survivorRevealGate.ts). */
+export type SurvivorScrollRevealStep = {
+  order: number
+  targetName: string | null
+  status: 'counts' | 'late_does_not_count' | 'forfeited_by_shot' | 'blocked_by_idol' | 'blocked_by_shot' | 'target_safe' | 'taken_by_vote_steal'
+  isExtraVote: boolean
+}
 
 export interface SurvivorSeasonCalendar {
   firstWeek: number
@@ -58,24 +59,43 @@ export interface SurvivorSeasonCalendar {
 }
 
 export interface SurvivorSummaryTribe {
+  /** Full crest with the tribe's current name in the banner. */
   logoUrl?: string | null
+  /** Round mark for small placements (decorative next to a visible name). */
+  markUrl?: string | null
+  mascot?: string | null
+  colorHex?: string | null
   id: string
   name: string
   emoji?: string | null
   slotIndex: number
   members: { rosterId: string; isLeader: boolean }[]
+  /** Voted-out castaways from this tribe, for the struck-through "Out · Wk N" rows. */
+  outMembers?: { rosterId: string; week: number | null }[]
 }
 
 export interface SurvivorSummaryCouncil {
   id: string
   week: number
+  /** Which of the week's votes this is, on a double-elimination week (see councilWeekLabel). */
+  weekPosition?: { ordinal: number; planned: number } | null
+  /** "Vote 2 of 2 this week" on a double-elimination week; null otherwise. */
+  weekLabel?: string | null
   phase: string
   attendingTribeId: string | null
   voteDeadlineAt: string
   closedAt: string | null
   eliminatedRosterId: string | null
   revealSequence?: SurvivorScrollRevealStep[] | null
+  /** When the read-out began; set only once the council is revealed. Drives the night mood. */
+  revealStartsAt?: string | null
   isRevealed?: boolean
+  revealMode?: 'one_at_a_time' | 'all_at_once'
+  revealTotalSteps?: number | null
+  revealComplete?: boolean
+  revealNextStepAt?: string | null
+  eliminatedName?: string | null
+  isTie?: boolean
 }
 
 export interface SurvivorSummaryChallenge {
@@ -103,6 +123,12 @@ export interface SurvivorSummary {
   seasonCalendar?: SurvivorSeasonCalendar
   currentWeek: number
   tribeScores?: Record<string, number>
+  /** This week's counted score per main roster. */
+  memberScores?: Record<string, number>
+  /** Main rosters holding individual immunity this week. */
+  immunityRosterIds?: string[]
+  /** Weekly necklaces still worn (top score in each tribe headed to Tribal Council). */
+  immunity?: { rosterId: string; tribeId: string; week: number; score: number; displayName: string | null; expiresAt: string | null }[]
   scoresFinalized?: boolean
   nbaWeeklyScoringMode?: 'all_games' | 'one_game_per_player'
   tribes: SurvivorSummaryTribe[]
@@ -117,6 +143,10 @@ export interface SurvivorSummary {
   myTribeId?: string
   myTribeSource?: string | null
   myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[]
+  /** The league's idol expiry rule, as the holder reads it (survivorIdolExpiry). */
+  idolExpiryText?: string | null
+  /** This week's strategy for the viewer: at risk, idol play, lineup (survivorWeekAdvice). */
+  weekAdvice?: SurvivorAdvice[]
   myActiveEffects?: {
     rewardType: string
     week: number
@@ -156,5 +186,7 @@ export interface SurvivorSummary {
     bonusVotesByFinalist: Record<string, number> | null
     tieBreakSeasonPoints: Record<string, number> | null
   } | null
+  /** The commissioner paused Survivor events (survivor-core §7). */
+  paused?: boolean
   rosterDisplayNames?: Record<string, string>
 }

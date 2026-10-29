@@ -6,6 +6,7 @@ import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { applyAmbush, selectWhisperer } from '@/lib/zombie/whispererEngine'
 import { canViewerSeeWhisperer } from '@/lib/zombie/whispererVisibility'
 import { resolveLeagueAccess } from '@/lib/league-access'
+import { withWhispererDisplayName } from '@/lib/zombie/zombieTeamNames'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,7 +64,7 @@ export async function GET(req: Request) {
   if (!z?.whispererRecord) return NextResponse.json({ whisperer: null })
 
   const isComm = z.league.userId === userId
-  const rec = z.whispererRecord
+  const rec = (await withWhispererDisplayName(z.whispererRecord))!
   if (isComm) return NextResponse.json({ whisperer: rec })
 
   // The league's secrecy setting wins over the record. `isPubliclyRevealed` defaults to true and

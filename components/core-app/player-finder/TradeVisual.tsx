@@ -16,6 +16,7 @@ import {
   tradeValueReasonText,
   type TradeValueCopy,
 } from '@/lib/core-app/finderTradeValueCopy'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The trade visual — what it takes to get him, and what we recommend.
@@ -36,7 +37,7 @@ import {
 
 function fmtValue(n: number | null): string {
   if (n == null) return '—'
-  return n.toLocaleString('en-US')
+  return n.toLocaleString(getAppIntlLocale())
 }
 
 /** Your letter's tone: even or better reads good, a slight overpay warns, a big one is bad. */

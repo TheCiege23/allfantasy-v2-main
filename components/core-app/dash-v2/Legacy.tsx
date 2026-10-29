@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { CareerData } from '@/lib/core-app/career'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Rankings & Legacy — wired to the real career engine.
@@ -62,7 +63,7 @@ export function Legacy({ data }: { data: CareerData | null }) {
           </span>
           {xp && xp.toNext != null && data.nextLevelName ? (
             <span className="af-d2-legacy-xp af-num">
-              {xp.total.toLocaleString()} XP · {xp.toNext.toLocaleString()} to{' '}
+              {xp.total.toLocaleString(getAppIntlLocale())} XP · {xp.toNext.toLocaleString(getAppIntlLocale())} to{' '}
               {data.nextLevelName}
             </span>
           ) : null}

@@ -47,3 +47,25 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 - UNVERIFIED: private connected-account league response. Synthetic cookie tests are not a live private-provider verification.
 - UNVERIFIED: MLB communication/activity endpoint and earlier-season response variants. Import reports unavailable coverage and never uses the NFL endpoint for MLB.
 - OPEN: custom category and roster pitching-limit fidelity. Native conversion must reject unrepresentable rules while retaining the source archive.
+
+## NFL game summary, 2026-10-25
+
+- RESOLVED: `summary?event=401873011` (PIT at NO, final) captured via probe.sh, committed untrimmed; counts in ENDPOINTS.yaml. Do not re-probe for shape.
+- `S-01` FOUND BY THE FIXTURE: a play erased by a penalty keeps its original wording ("field goal is GOOD, NULLIFIED by Penalty … - No Play") under type `Penalty`. `footballPlayKind` read it as a made field goal and sent a scoring alert; fixed in the same commit, pinned by `__tests__/engagement-alerts/espn-nfl-summary-fixture.test.ts`.
+- UNVERIFIED: an IN-PROGRESS summary (`drives.current`, `situation`, live `winprobability`). This capture is a final. Capture one live game, once, the next time a probe is justified.
+- UNVERIFIED: college football (`football/college-football`) summaries — not probed.
+
+## Fantasy activity (trades), 2026-10-27 — recorded without probing
+
+- `T-01` UNVERIFIED: the shape of `view=kona_league_communication`, the feed
+  `EspnLeagueFetchService` reads for transactions. It is not in `ENDPOINTS.yaml` and has no
+  fixture. Production code already parses it (`parseEspnTransactions`).
+- `T-02` SUSPECTED DEFECT, from reading the code: each trade message becomes its own
+  transaction, keyed on that message's id. A multi-player ESPN trade is therefore stored as
+  several one-player "trades" in `LeagueTrade`, not as one trade with two sides. The messages
+  appear to share a topic id, which is probably the key to group them on. Confirm it against a
+  capture before changing the parser.
+- Blocks the collusion check for imported ESPN leagues
+  (docs/integrity/IMPORTED_LEAGUE_INTEGRITY.md). **Needed:** one capture of a league with a
+  completed multi-player trade, via `scripts/probe.sh`, from a league the owner chooses (cookies
+  if private), committed with the grouping fix.

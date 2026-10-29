@@ -94,7 +94,7 @@ export type RedraftTradeSnapshotInput = {
   receiverRosterId: string
   executedByActorId: string
   /** `commissioner` when a commissioner forced it through, `league_vote` after a vote, else `user`. */
-  executedByActorRole: 'user' | 'commissioner' | 'league_vote'
+  executedByActorRole: 'user' | 'commissioner' | 'league_vote' | 'review_window'
   governance: Record<string, unknown>
   validations: Record<string, unknown>
   assetSummary: Record<string, unknown>

@@ -8,6 +8,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteCommand'
+import { getShotInTheDarkStatus, playShotInTheDark } from '@/lib/survivor/survivorShotInTheDark'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,8 +24,24 @@ export async function POST(
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status ?? 403 })
 
-  let body: { message?: unknown }
+  let body: { message?: unknown; action?: unknown }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  if (body.action === 'shot_in_the_dark') {
+    const result = await playShotInTheDark(leagueId, userId)
+    return NextResponse.json(result, { status: result.ok ? 200 : result.status })
+  }
   const result = await submitPrivateVoteCommand(leagueId, userId, typeof body.message === 'string' ? body.message : '')
   return NextResponse.json(result, { status: result.ok ? 200 : result.status })
+}
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { leagueId: string } },
+) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const gate = await assertLeagueMember(params.leagueId, userId)
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status ?? 403 })
+  return NextResponse.json(await getShotInTheDarkStatus(params.leagueId, userId))
 }

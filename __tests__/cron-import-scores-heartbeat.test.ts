@@ -169,8 +169,15 @@ describe('import-scores heartbeat contract', () => {
     expect(outcome.metadata?.gatedSports?.length).toBeGreaterThan(0)
   })
 
+  it('leaves the legacy followed-team score alerts off by default — the game engine sends them now', async () => {
+    gateIsClosed()
+    await importScoresGET(req('/api/cron/import-scores'))
+    expect(scoreAlertsMock).not.toHaveBeenCalled()
+  })
+
   it('runs the followed-team score alerts after the sports and reports them in metadata', async () => {
     gateIsClosed()
+    process.env.AF_LEGACY_GAME_ALERTS = '1'
     await importScoresGET(req('/api/cron/import-scores'))
 
     expect(scoreAlertsMock).toHaveBeenCalledTimes(1)
@@ -180,6 +187,7 @@ describe('import-scores heartbeat contract', () => {
 
   it('a failing score-alert path never fails the scores run', async () => {
     gateIsClosed()
+    process.env.AF_LEGACY_GAME_ALERTS = '1'
     scoreAlertsMock.mockRejectedValueOnce(new Error('boom'))
     const res = await importScoresGET(req('/api/cron/import-scores'))
 

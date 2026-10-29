@@ -9,6 +9,7 @@ import {
   type BoardTeam,
   type StandingsBoard,
   type Zone,
+  leagueTiebreakReason,
 } from '@/lib/core-app/standingsModel'
 import {
   DEFAULT_STANDINGS_SORT,
@@ -29,6 +30,7 @@ import { StandingsPointsChart } from './StandingsPointsChart'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { standingsBoardCopy } from '@/lib/core-app/standingsUiCopy'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The league table, two ways — items 1–8 and 10 of the 2026-09-17 standings brief.
@@ -94,7 +96,7 @@ const LAYOUT_STORAGE_KEY = 'af-standings-layout'
 const PHONE_QUERY = '(max-width: 640px)'
 
 function pts(v: number | null): string {
-  return v == null ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  return v == null ? '—' : v.toLocaleString(getAppIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
 function pct(v: number | null): string {
@@ -1272,6 +1274,9 @@ function spanishOrderReason(upper: BoardTeam, lower: BoardTeam, board: Standings
       : `${platform} coloca a ${upper.name} delante pese a tener peor récord (${formatRecord(upper.record)} frente a ${formatRecord(lower.record)}).`
   }
   const level = `Empatados a ${formatRecord(upper.record)}`
+  if (board.rules.tiebreakerSource === 'league' && !board.platformOrder) {
+    return `${level}; ${leagueTiebreakReason(upper, lower, { h2h: board.h2h, hasHeadToHead: board.hasHeadToHead, tiebreakers: board.rules.tiebreakers, coinSeed: board.rules.coinSeed }, 'es')}`
+  }
   if (upper.pointsFor > lower.pointsFor) {
     return `${level}; ${upper.name} va delante por puntos a favor (${pts(upper.pointsFor)} frente a ${pts(lower.pointsFor)}), ${board.rules.tiebreakerSource === 'platform' ? `según el desempate de ${platform}` : 'según el desempate supuesto para esta plataforma'}.`
   }
@@ -1328,6 +1333,7 @@ function WhyAbove({ board, view }: { board: StandingsBoard; view: StandingsViewK
         h2h: board.h2h,
         hasHeadToHead: board.hasHeadToHead,
         tiebreakers: board.rules.tiebreakers,
+        coinSeed: board.rules.coinSeed,
         tiebreakerSource: board.rules.tiebreakerSource,
         platformLabel: board.rules.platformLabel,
         platformOrder: board.platformOrder,

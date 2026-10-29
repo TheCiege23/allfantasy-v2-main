@@ -51,7 +51,7 @@ describe.runIf(RUN)('Exile persisted roster isolation and weekly release', () =>
       await prisma.league.create({ data: { id: leagueId, userId, platform: 'allfantasy', platformLeagueId: leagueId, name: 'Exile fixture', sport, season: 2026, leagueSize: 16, survivorMode: true, leagueVariant: 'survivor', settings: { starter_slots: { [anchor]: 1, [teammate]: 1, BN: 1 } } } })
       leagues.push(leagueId)
       await prisma.survivorGameState.create({ data: { leagueId, phase: 'pre_merge', currentWeek: week } })
-      await prisma.exileIsland.create({ data: { leagueId, isActive: true, currentWeek: week } })
+      await prisma.exileIsland.create({ data: { leagueId, isActive: true, currentWeek: week, bossWinsEnabled: false } })
       await prisma.survivorPlayer.createMany({ data: ['a', 'b', 'main'].map(suffix => ({ leagueId, userId: `${prefix}-${sport}-${suffix}`, displayName: suffix, playerState: suffix === 'main' ? 'active' : 'exile' })) })
       const ids = ['anchor', 'mate', 'other', 'foreign'].map(suffix => `${leagueId}-${suffix}`)
       await prisma.player.createMany({ data: ids.map((id, i) => ({ id, name: id, sport: i === 3 ? 'MLB' : sport, league: sport, position: i === 0 ? anchor : teammate, team: i === 2 ? 'OTHER' : team })) })

@@ -544,6 +544,7 @@ export function serializeDecisionOsGroundingForPrompt(
           ['Imported history', packet.contextFacts.importedHistory],
           ['Replay insights', packet.contextFacts.replayInsights],
           ['Devy board', packet.contextFacts.devy],
+          ['League office', packet.contextFacts.leagueOffice],
         ] as Array<[string, GroundedSlice<unknown>]>)
       : []),
   ]

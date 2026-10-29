@@ -315,4 +315,42 @@ test.describe("@db @mobile authenticated phone contract", () => {
       ).toEqual([])
     })
   }
+
+  /*
+   * 🛑 THE LEAGUE TRAY IS CLOSED IN EVERY ROUTE ABOVE, SO NONE OF THEM COULD SEE IT BREAK. Reported from
+   * an iPhone 2026-10-08: the open tray was wider than the screen, so iOS panned it sideways and swipes
+   * never reached the league list. The page-level overflow probe cannot see that — the tray is
+   * `position: fixed` and scrolls itself. `league-tray-layout.spec.ts` gates every PR on the same
+   * contract with copied markup; this is the real tray, opened the way a user opens it.
+   */
+  test("the league tray opens full width and does not pan sideways", async ({ page }) => {
+    await loginAs(page, TC_TRADE_SEED.managerLogins[0]!, TC_TRADE_SEED.password)
+    const response = await page.goto("/core", { waitUntil: "domcontentloaded" })
+    expect(response?.status(), "/core should not be an error page").toBeLessThan(400)
+    expect(new URL(page.url()).pathname, "/core redirected — the session or the seeded league is missing").toBe("/core")
+    await expect(page.locator(".af-topbar")).toBeVisible({ timeout: 30_000 })
+    await expect(page.locator(".af-sk-block")).toHaveCount(0, { timeout: 30_000 })
+
+    // The standard shell opens it from the floating handle; league-first from the header switcher.
+    await page.locator(".af-rail-handle:visible, .af-lf-switch:visible").first().click()
+    const rail = page.locator(".af-rail")
+    await expect(rail).toBeVisible()
+    await expect(page.locator(".af-rail-scroll .af-rail-tile").first(), "the tray opened with no leagues in it").toBeVisible()
+    // Let the 180ms slide-in finish, or the tiles are measured mid-transform.
+    await expect.poll(() => rail.evaluate((el) => getComputedStyle(el).transform)).toBe("none")
+
+    const g = await rail.evaluate((el) => {
+      el.scrollLeft = 200
+      const panned = el.scrollLeft
+      el.scrollLeft = 0
+      const outside = [...el.querySelectorAll<HTMLElement>(".af-rail-scroll > .af-rail-tile, .af-rail-foot > .af-rail-tile")]
+        .map((t) => t.getBoundingClientRect())
+        .filter((r) => r.left < -0.5 || r.right > window.innerWidth + 0.5)
+        .map((r) => `${Math.round(r.left)}..${Math.round(r.right)}`)
+      return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, panned, outside, innerWidth: window.innerWidth }
+    })
+    expect(g.scrollWidth, `the open tray is ${g.scrollWidth}px wide in a ${g.clientWidth}px box`).toBeLessThanOrEqual(g.clientWidth)
+    expect(g.panned, `a sideways swipe moved the tray ${g.panned}px`).toBe(0)
+    expect(g.outside, `tray tiles drawn past the ${g.innerWidth}px screen`).toEqual([])
+  })
 })

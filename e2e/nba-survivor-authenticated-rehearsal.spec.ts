@@ -33,9 +33,14 @@ function seedPick(args: { leagueId: string; userId: string; rosterId: string; pl
   ], { env: process.env, stdio: 'pipe', timeout: 180_000 })
 }
 
+// AF_NBA_SURVIVOR_CAST=16 rehearses the 16-seat cast; 20 is the default.
+const CAST = Number(process.env.AF_NBA_SURVIVOR_CAST ?? 20)
+const TOTAL_PICKS = CAST * 12
+
 test('two signed-in NBA Survivor managers verify pick correction and private idol vault @db', async ({ browser, page }) => {
   test.skip(process.env.AF_NBA_SURVIVOR_BROWSER_DB !== '1', 'Explicit isolated database opt-in required')
   test.setTimeout(1_800_000)
+  if (CAST !== 16 && CAST !== 20) throw new Error('AF_NBA_SURVIVOR_CAST must be 16 or 20')
   if (identifyTarget(process.env.DATABASE_URL).kind !== 'safe') throw new Error('ALLOWLISTED_TEST_DATABASE_REQUIRED')
   if (process.env.UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_TOKEN) {
     throw new Error('SHARED_REDIS_MUST_BE_DISABLED')
@@ -43,7 +48,7 @@ test('two signed-in NBA Survivor managers verify pick correction and private ido
   configureEventInfrastructure({ outboxStore: new InMemoryOutboxStore() })
 
   const marker = `nba-browser-${randomUUID().slice(0, 8)}`
-  const userIds = Array.from({ length: 20 }, (_, index) => `${marker}-u${index + 1}`)
+  const userIds = Array.from({ length: CAST }, (_, index) => `${marker}-u${index + 1}`)
   const password = randomUUID()
   const passwordHash = await bcrypt.hash(password, 6)
   let leagueId: string | null = null
@@ -55,7 +60,7 @@ test('two signed-in NBA Survivor managers verify pick correction and private ido
       emailVerified: new Date(), passwordHash: index < 2 ? passwordHash : null,
     })) })
     const validated = validateCreatePayload({
-      concept: 'survivor', sport: 'NBA', teamCount: 20, draftType: 'snake', scoringPreset: 'nba_points',
+      concept: 'survivor', sport: 'NBA', teamCount: CAST, draftType: 'snake', scoringPreset: 'nba_points',
       leagueName: `${marker} Survivor`, timezone: 'America/New_York',
       conceptSetup: { commissionerParticipationMode: 'participating_player', survivorTribeCount: 4 },
     })
@@ -67,11 +72,11 @@ test('two signed-in NBA Survivor managers verify pick correction and private ido
       { timeout: 120_000 },
     )).leagueId
     await upsertSurvivorConfig(leagueId, {
-      tribeCount: 4, tribeSize: 5, idolCount: 7, exileReturnEnabled: true,
-      mergeTrigger: 'player_count', mergePlayerCount: 10,
+      tribeCount: 4, tribeSize: CAST / 4, idolCount: Math.ceil(CAST / 3), exileReturnEnabled: true,
+      mergeTrigger: 'player_count', mergePlayerCount: CAST / 2,
     })
     const rosters = await prisma.roster.findMany({ where: { leagueId }, orderBy: { id: 'asc' } })
-    expect(rosters).toHaveLength(20)
+    expect(rosters).toHaveLength(CAST)
     rosters.sort((a, b) => Number(b.platformUserId === userIds[0]) - Number(a.platformUserId === userIds[0]))
     for (let i = 0; i < rosters.length; i++) {
       await prisma.roster.update({ where: { id: rosters[i].id }, data: { platformUserId: userIds[i] } })
@@ -92,7 +97,7 @@ test('two signed-in NBA Survivor managers verify pick correction and private ido
     } })
 
     // Use the already-copied NBA player rows on this isolated branch; no provider calls.
-    const eligibility = await loadNbaSurvivorRosterEligibility(240)
+    const eligibility = await loadNbaSurvivorRosterEligibility(TOTAL_PICKS)
     expect(eligibility.ready, eligibility.reason).toBeTruthy()
     const rows = await prisma.sportsPlayer.findMany({ where: {
       sport: 'NBA', source: 'thesportsdb', status: 'Active',
@@ -106,7 +111,7 @@ test('two signed-in NBA Survivor managers verify pick correction and private ido
       seen.add(key)
       return true
     })
-    expect(players.length).toBeGreaterThanOrEqual(240)
+    expect(players.length).toBeGreaterThanOrEqual(TOTAL_PICKS)
     const firstPlayer = players.find(row => row.position === 'PG')!
     const replacement = players.find(row => row.position === 'PG' && row.id !== firstPlayer.id)!
     const cache = await resolveDraftPoolCacheContext(leagueId)
@@ -119,7 +124,7 @@ test('two signed-in NBA Survivor managers verify pick correction and private ido
       entryCount: entries.length, sport: 'NBA', poolType: 'pro', expiresAt: new Date(Date.now() + 3_600_000),
       payload: { entries, sport: 'NBA', count: entries.length, rosterConfigurationIncomplete: false },
     } })
-    console.log('NBA browser fixture: 20 seats and local NBA pool ready')
+    console.log(`NBA browser fixture: ${CAST} seats and local NBA pool ready`)
 
     await signIn(page, `${userIds[0]}@example.invalid`, password, userIds[0])
     await signIn(managerPage, `${userIds[1]}@example.invalid`, password, userIds[1])

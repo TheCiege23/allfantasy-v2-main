@@ -1,5 +1,6 @@
 import type { LeagueSport } from '@prisma/client'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
+import { GUILLOTINE_MAX_TEAMS, GUILLOTINE_MIN_TEAMS } from './teamCountLimits'
 
 export type GuillotineSportProfile = {
   /** All guillotine leagues use weekly scoring periods */
@@ -10,7 +11,7 @@ export type GuillotineSportProfile = {
   regularSeasonWeeks: number
   /** Default team count = regularSeasonWeeks - 1 (one chop per week, last team standing at playoffs) */
   defaultTeamCount: number
-  /** Min/max team limits */
+  /** Min/max team limits — the same for every sport (./teamCountLimits.ts). */
   minTeams: number
   maxTeams: number
 
@@ -68,8 +69,8 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 18,
     defaultTeamCount: 17,     // 18 weeks - 1 = 17 teams
-    minTeams: 4,
-    maxTeams: 17,
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
     scoringWindowStartDay: 4, // Thursday (TNF)
     scoringWindowEndDay: 1,   // Monday (MNF)
     dailyGames: false,
@@ -88,18 +89,22 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 24,   // ~82 games over 24 scoring weeks
     defaultTeamCount: 23,     // 24 - 1 = 23 teams (large league!)
-    minTeams: 8,
-    maxTeams: 23,
-    scoringWindowStartDay: 1, // Monday
-    scoringWindowEndDay: 0,   // Sunday
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
+    // NBA periods are 7 Eastern days from the Tuesday opener (lib/season-week/dailySportSeasonStarts.ts),
+    // so a week runs Tuesday–Monday. The native chop (lib/guillotine/nativeGuillotineWeek.ts) fires once
+    // the week is sealed (12h after the last tip) AND the 24h correction window has passed: Tuesday
+    // night ET after a Monday slate. These labels said "Monday noon", a day before the week even ended.
+    scoringWindowStartDay: 2, // Tuesday
+    scoringWindowEndDay: 1,   // Monday
     dailyGames: true,
     primaryGameDays: [0, 1, 2, 3, 4, 5, 6],
-    chopDay: 1,               // Monday (start of next window = chop of last window)
-    chopHourUtc: 16,          // Monday noon ET
-    chopLabel: 'Monday 12:00 PM ET',
-    waiverDay: 2,             // Tuesday
-    waiverHourUtc: 12,        // Tuesday 7am ET
-    waiverLabel: 'Tuesday 7:00 AM ET',
+    chopDay: 3,               // Wednesday (UTC) — the chop lands Tuesday night ET
+    chopHourUtc: 11,          // by Wednesday 7am ET
+    chopLabel: 'By Wednesday 7:00 AM ET',
+    waiverDay: 4,             // Thursday — a full day to bid on the chopped team's players
+    waiverHourUtc: 12,        // Thursday 7am ET
+    waiverLabel: 'Thursday 7:00 AM ET',
     correctionWindowHours: 24,
     rosterSize: 13,
     notes: 'NBA: 3-5 games per team per week. Load management and back-to-backs are survival risks. Uneven game counts across teams each week.',
@@ -108,18 +113,23 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 26,   // ~162 games over 26 scoring weeks
     defaultTeamCount: 25,     // 26 - 1 = 25 teams
-    minTeams: 8,
-    maxTeams: 25,
-    scoringWindowStartDay: 1, // Monday
-    scoringWindowEndDay: 0,   // Sunday
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
+    // MLB periods are 7 Eastern days from the opener (lib/season-week/dailySportSeasonStarts.ts), and the
+    // 2026 and 2027 openers are both Wednesdays, so a week runs Wednesday–Tuesday — the same correction
+    // the NBA entry carries, one day later. These labels said "Monday 11am", before the week had ended.
+    // A year whose opener falls on another weekday is still covered by the hold anchored on the chop
+    // itself (getChopHoldStart below).
+    scoringWindowStartDay: 3, // Wednesday
+    scoringWindowEndDay: 2,   // Tuesday
     dailyGames: true,
     primaryGameDays: [0, 1, 2, 3, 4, 5, 6],
-    chopDay: 1,               // Monday
-    chopHourUtc: 15,          // Monday 11am ET
-    chopLabel: 'Monday 11:00 AM ET',
-    waiverDay: 2,             // Tuesday
-    waiverHourUtc: 10,        // Tuesday 6am ET
-    waiverLabel: 'Tuesday 6:00 AM ET',
+    chopDay: 4,               // Thursday (UTC) — the chop lands Wednesday night ET
+    chopHourUtc: 11,          // by Thursday 7am ET (EDT, the season's clock)
+    chopLabel: 'By Thursday 7:00 AM ET',
+    waiverDay: 5,             // Friday — a full day to bid on the chopped team's players
+    waiverHourUtc: 11,        // Friday 7am ET (EDT)
+    waiverLabel: 'Friday 7:00 AM ET',
     correctionWindowHours: 24,
     rosterSize: 23,
     notes: 'MLB: 6-7 games per team per week. Pitcher/hitter splits crucial. High game volume = depth is king. Off-days and doubleheaders add variance.',
@@ -128,18 +138,21 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 24,   // ~82 games over 24 weeks
     defaultTeamCount: 23,     // 24 - 1 = 23 teams
-    minTeams: 8,
-    maxTeams: 23,
-    scoringWindowStartDay: 1, // Monday
-    scoringWindowEndDay: 0,   // Sunday
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
+    // NHL periods are 7 Eastern days from the Tuesday opener (2026-09-29), so a week runs Tuesday–Monday,
+    // exactly like NBA, and the chop lands the same way. These labels said "Monday noon", a day before
+    // the week even ended, and a Tuesday waiver run fell before the chop it was meant to follow.
+    scoringWindowStartDay: 2, // Tuesday
+    scoringWindowEndDay: 1,   // Monday
     dailyGames: true,
     primaryGameDays: [1, 2, 3, 4, 5, 6],
-    chopDay: 1,               // Monday
-    chopHourUtc: 16,          // Monday noon ET
-    chopLabel: 'Monday 12:00 PM ET',
-    waiverDay: 2,             // Tuesday
-    waiverHourUtc: 12,        // Tuesday 7am ET
-    waiverLabel: 'Tuesday 7:00 AM ET',
+    chopDay: 3,               // Wednesday (UTC) — the chop lands Tuesday night ET
+    chopHourUtc: 11,          // by Wednesday 7am ET
+    chopLabel: 'By Wednesday 7:00 AM ET',
+    waiverDay: 4,             // Thursday — a full day to bid on the chopped team's players
+    waiverHourUtc: 12,        // Thursday 7am ET
+    waiverLabel: 'Thursday 7:00 AM ET',
     correctionWindowHours: 24,
     rosterSize: 16,
     notes: 'NHL: 3-4 games per team per week. Goalie starts are volatile. Back-to-backs matter for goaltender scoring.',
@@ -148,8 +161,8 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 14,   // 14-week regular season
     defaultTeamCount: 13,     // 14 - 1 = 13 teams
-    minTeams: 8,
-    maxTeams: 13,
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
     scoringWindowStartDay: 4, // Thursday (some games)
     scoringWindowEndDay: 6,   // Saturday (main slate)
     dailyGames: false,
@@ -168,8 +181,8 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 20,   // ~20 scoring weeks through March
     defaultTeamCount: 19,     // 20 - 1 = 19 teams
-    minTeams: 6,
-    maxTeams: 19,
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
     scoringWindowStartDay: 1, // Monday
     scoringWindowEndDay: 0,   // Sunday
     dailyGames: true,
@@ -188,8 +201,8 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 38,   // Most leagues: 38 matchweeks
     defaultTeamCount: 20,     // Cap at 20 (38 would be too many)
-    minTeams: 6,
-    maxTeams: 20,
+    minTeams: GUILLOTINE_MIN_TEAMS,
+    maxTeams: GUILLOTINE_MAX_TEAMS,
     scoringWindowStartDay: 5, // Friday (some matches)
     scoringWindowEndDay: 1,   // Monday (occasional)
     dailyGames: false,
@@ -244,6 +257,49 @@ export function getNextWaiverTime(sport: string, fromDate?: Date): Date {
   result.setUTCDate(result.getUTCDate() + daysUntil)
   result.setUTCHours(config.waiverHourUtc, 0, 0, 0)
   return result
+}
+
+/** How long before each scheduled waiver run claims are held for the blind FAAB auction. */
+export const WAIVER_BLIND_WINDOW_HOURS = 36
+
+/**
+ * When `fromDate` falls inside the blind window before the next scheduled waiver run, the moment that
+ * window opened; otherwise null. The window covers the chop (Tuesday night ET for NFL and NBA), so
+ * every bid on a chopped team's players is settled together at the run, highest bid first. Outside
+ * it, claims settle as they come, which is how managers make mid-week free-agent pickups.
+ */
+export function getWaiverBlindWindowStart(sport: string, fromDate?: Date): Date | null {
+  if (!getGuillotineSportConfig(sport)) return null
+  const now = fromDate ?? new Date()
+  const next = getNextWaiverTime(sport, now)
+  const opensAt = new Date(next.getTime() - WAIVER_BLIND_WINDOW_HOURS * 60 * 60 * 1000)
+  return now >= opensAt ? opensAt : null
+}
+
+/** A chop this soon after a waiver run belongs to that run's week: it landed late, after its window closed. */
+const LATE_CHOP_HOURS = 72
+/** How long a late chop's released players are held for their own blind round. */
+export const LATE_CHOP_HOLD_HOURS = 24
+
+/**
+ * The blind window is fixed to the calendar, but the chop is not: it fires when the week's stats seal,
+ * so an NBA week with no Monday games chops a day early, and late stats can push a chop past the run.
+ * Either way the chopped team's players would go out first-come-first-served. This anchors a hold on
+ * the chop itself: an early chop holds claims from the chop until the scheduled run; a late chop (one
+ * that landed within LATE_CHOP_HOURS after a run) holds them for LATE_CHOP_HOLD_HOURS. Null when the
+ * latest chop is already settled.
+ */
+export function getChopHoldStart(sport: string, choppedAt: Date | null | undefined, fromDate?: Date): Date | null {
+  if (!choppedAt || !getGuillotineSportConfig(sport)) return null
+  const now = fromDate ?? new Date()
+  if (choppedAt > now) return null
+  const lastRun = new Date(getNextWaiverTime(sport, now).getTime() - 7 * 24 * 60 * 60 * 1000)
+  if (choppedAt <= lastRun) return null
+  const hoursAfterRun = (choppedAt.getTime() - lastRun.getTime()) / (60 * 60 * 1000)
+  if (hoursAfterRun < LATE_CHOP_HOURS) {
+    return now.getTime() < choppedAt.getTime() + LATE_CHOP_HOLD_HOURS * 60 * 60 * 1000 ? choppedAt : null
+  }
+  return choppedAt
 }
 
 /**

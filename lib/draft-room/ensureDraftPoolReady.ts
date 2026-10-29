@@ -45,6 +45,7 @@ export type DraftPoolSnapshotPayload = {
   devyConfig?: unknown
   c2cConfig?: unknown
   isIdp?: boolean
+  rookieFilterState?: string
   meta?: {
     source?: 'db-cache' | 'memory-cache'
     entryCount?: number
@@ -63,6 +64,8 @@ export type WarmDraftPoolSnapshotFastResult =
       entryCount: number
       syncedAt: string | null
       cacheKey: string
+      /** Past its expiry: served while a background rebuild runs (`allowStale` callers only). */
+      stale?: boolean
     }
   | {
       warm: false
@@ -104,7 +107,7 @@ function buildStandardPoolApiCacheKey(leagueId: string): string {
 
 function resolveRosterFingerprint(effectiveLeagueTemplate: EffectiveLeagueTemplate): string {
   const starterEligible = starterEligiblePlayerPositionsFromTemplate(effectiveLeagueTemplate.template)
-  return `${effectiveLeagueTemplate.hasPersistedRosterSchema ? 'cfg' : 'nocfg'}:starters:${rosterFingerprintFromEligible(
+  return `${effectiveLeagueTemplate.sport === 'NBA' ? 'nba-current-roster-v2:' : ''}${effectiveLeagueTemplate.hasPersistedRosterSchema ? 'cfg' : 'nocfg'}:starters:${rosterFingerprintFromEligible(
     starterEligible.size > 0 ? starterEligible : new Set(effectiveLeagueTemplate.allowedPositions),
   )}`
 }
@@ -124,6 +127,48 @@ export async function resolveDraftPoolCacheContext(
     effectiveLeagueTemplate,
     rosterFp,
     standardCacheKey: buildDraftPoolCacheKey(leagueId, rosterFp, buildStandardPoolApiCacheKey(leagueId)),
+  }
+}
+
+/**
+ * 🛑 A DRAFT OUTLIVES ITS POOL CACHE BY HOURS. Rows expire after `AF_DRAFT_POOL_CACHE_TTL_SECONDS`
+ * (300 s by default) and a draft runs for hours, so without this every expiry handed the next
+ * autopick, room load or lookahead a full cold build — 60–90 s on a quiet container, 522 s
+ * logged on a loaded one — while the pick clock ran. The full-season Survivor rehearsal showed it as
+ * the pool being rebuilt from scratch over and over through one draft.
+ *
+ * Readers that opt in (`allowStale`) now take the last good row, up to this old, and start ONE
+ * background rebuild (`ensureDraftPoolReady` is single-flight per league). Readiness checks stay
+ * fresh-only, so the rebuild still happens; nobody waits for it.
+ */
+export const DRAFT_POOL_MAX_STALE_MS = 6 * 60 * 60 * 1000
+
+type StaleDraftPoolRow = { payload: DraftPoolSnapshotPayload; entryCount: number; syncedAt: string | null; cacheKey: string }
+
+/** The newest expired-but-recent row for this pool: the exact key first, then any row of the same roster fingerprint. */
+export async function readStaleDraftPoolRow(
+  leagueId: string,
+  context: { cacheKey: string; rosterFp: string },
+  now: Date = new Date(),
+): Promise<StaleDraftPoolRow | null> {
+  const model = getDraftPoolCacheModel()
+  if (!model) return null
+  const floor = new Date(now.getTime() - DRAFT_POOL_MAX_STALE_MS)
+  const select = { payload: true, entryCount: true, syncedAt: true, cacheKey: true }
+  const exact = await model.findFirst({ where: { cacheKey: context.cacheKey, expiresAt: { gt: floor } }, select })
+  const row = hasDraftableEntries(exact?.payload)
+    ? exact
+    : await model.findFirst({
+      where: { leagueId, sourceFingerprint: context.rosterFp, expiresAt: { gt: floor } },
+      orderBy: { syncedAt: 'desc' },
+      select,
+    })
+  if (!row || !hasDraftableEntries(row.payload)) return null
+  return {
+    payload: row.payload,
+    entryCount: Number(row.entryCount ?? inferEntryCountFromPayload(row.payload)),
+    syncedAt: row.syncedAt instanceof Date ? row.syncedAt.toISOString() : null,
+    cacheKey: typeof row.cacheKey === 'string' ? row.cacheKey : context.cacheKey,
   }
 }
 
@@ -172,7 +217,11 @@ function withWarmSnapshotMeta(
 
 export async function getWarmDraftPoolSnapshotFast(
   leagueId: string,
-  options?: { effectiveLeagueTemplate?: EffectiveLeagueTemplate },
+  options?: {
+    effectiveLeagueTemplate?: EffectiveLeagueTemplate
+    /** Serve an expired row (see `DRAFT_POOL_MAX_STALE_MS`) and rebuild in the background instead of reporting cold. */
+    allowStale?: boolean
+  },
 ): Promise<WarmDraftPoolSnapshotFastResult> {
   const model = getDraftPoolCacheModel()
   if (!model) {
@@ -257,6 +306,27 @@ export async function getWarmDraftPoolSnapshotFast(
       }
     }
 
+    if (options?.allowStale) {
+      const stale = await readStaleDraftPoolRow(leagueId, { cacheKey: cacheContext.standardCacheKey, rosterFp: cacheContext.rosterFp }, now)
+      if (stale) {
+        triggerDraftPoolPrewarmBackground(leagueId)
+        return {
+          warm: true,
+          source: 'db-cache',
+          stale: true,
+          payload: withWarmSnapshotMeta(stale.payload, {
+            source: 'db-cache',
+            entryCount: stale.entryCount,
+            cacheKey: stale.cacheKey,
+            cachedAt: stale.syncedAt,
+          }),
+          entryCount: stale.entryCount,
+          syncedAt: stale.syncedAt,
+          cacheKey: stale.cacheKey,
+        }
+      }
+    }
+
     return {
       warm: false,
       source: 'cold',
@@ -335,7 +405,40 @@ export function triggerDraftPoolPrewarmBackground(leagueId: string): void {
     })
 }
 
-export async function ensureDraftPoolReady(leagueId: string): Promise<EnsureDraftPoolReadyResult> {
+/**
+ * 🛑 ONE COLD BUILD PER LEAGUE PER PROCESS, SHARED BY EVERY CALLER.
+ *
+ * The cron, the draft-room open (`triggerDraftPoolPrewarmBackground`) and autopick all call this,
+ * and its only race guard was a DB read — which sees nothing until a build FINISHES. Meanwhile a
+ * cold build is 60-90s on a quiet container and was logged at `{ ms: 522060 }` on a loaded one,
+ * and `draft-pool-prewarm` abandons its wait at 120s (`withTimeout` races; it does not cancel). So
+ * an overrunning build stayed alive and the next caller — the next 30-minute tick, a second user,
+ * autopick — started ANOTHER full build of the same league beside it. Measured on production
+ * `sync_job_runs` 2026-10-11..17: `cron-draft-pool-prewarm` ran past 5 minutes 46 times, and 115 of
+ * 587 stalls of normally sub-second crons began while it was running. Piling identical builds onto
+ * one thread is how a slow container becomes a stalled one.
+ *
+ * Callers that arrive while a build is in flight now await THAT build. Per process only: with two
+ * worker replicas, each can still run one — bounded, rather than one per caller per tick.
+ */
+const inFlightPoolBuilds = new Map<string, Promise<EnsureDraftPoolReadyResult>>()
+
+export function ensureDraftPoolReady(leagueId: string): Promise<EnsureDraftPoolReadyResult> {
+  const existing = inFlightPoolBuilds.get(leagueId)
+  if (existing) return existing
+  const build = ensureDraftPoolReadyOnce(leagueId).finally(() => {
+    if (inFlightPoolBuilds.get(leagueId) === build) inFlightPoolBuilds.delete(leagueId)
+  })
+  inFlightPoolBuilds.set(leagueId, build)
+  return build
+}
+
+/** Test seam: how many league builds this process is running right now. */
+export function inFlightDraftPoolBuildCount(): number {
+  return inFlightPoolBuilds.size
+}
+
+async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPoolReadyResult> {
   const model = getDraftPoolCacheModel()
 
   const readiness = await getDraftPoolReadiness(leagueId)
@@ -404,6 +507,8 @@ export async function ensureDraftPoolReady(leagueId: string): Promise<EnsureDraf
             devyConfig: resolved.devyConfig,
             c2cConfig: resolved.c2cConfig,
             isIdp: resolved.isIdp,
+            rookieFilterState: resolved.rookieFilterState,
+            provenNonRookies: resolved.provenNonRookies,
           } as unknown as object,
           expiresAt,
         },
@@ -421,6 +526,8 @@ export async function ensureDraftPoolReady(leagueId: string): Promise<EnsureDraf
             devyConfig: resolved.devyConfig,
             c2cConfig: resolved.c2cConfig,
             isIdp: resolved.isIdp,
+            rookieFilterState: resolved.rookieFilterState,
+            provenNonRookies: resolved.provenNonRookies,
           } as unknown as object,
           syncedAt: new Date(),
           expiresAt,

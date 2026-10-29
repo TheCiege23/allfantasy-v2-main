@@ -1,0 +1,114 @@
+/* Survivor idol cards, vault and commissioner setup (survivor-theme handoff). */
+.svi-card{--glow:#f2c94c;position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;min-width:0;padding:18px 14px 16px;border-radius:12px;border:1px solid var(--glow-faint,rgba(255,255,255,.08));background:radial-gradient(120% 70% at 50% 22%,var(--glow-soft,rgba(242,201,76,.28)) 0%,transparent 62%),#0d1018;color:#e8eaf2;text-align:center;transition:border-color .15s,opacity .15s}
+.svi-card[data-selected]{border-color:var(--glow)}
+.svi-card[data-dimmed]{opacity:.42}
+.svi-art{height:150px;width:auto;max-width:100%;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(0,0,0,.45))}
+.svi-copy{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
+.svi-name{margin:0;font:700 17px/1.2 'Cinzel',Georgia,serif;letter-spacing:.04em;color:var(--glow);overflow-wrap:anywhere}
+.svi-short{margin:0;font-size:13px;line-height:1.45;color:#a3a9c2}
+.svi-tag{display:inline-flex;align-items:center;padding:2px 9px;border-radius:5px;border:1px solid rgba(255,255,255,.14);background:rgba(7,8,13,.55);font-size:11.5px;color:#c9cde0;white-space:nowrap;letter-spacing:.02em}
+.svi-tag[data-always]{border-color:rgba(242,201,76,.55);color:#f1d58a}
+.svi-tag.svi-soon{border-style:dashed;border-color:rgba(255,255,255,.28);color:#c9cde0;font-family:inherit}
+.svs-values label .svi-soon{align-self:flex-start}
+.svi-card[data-layout=row]{flex-direction:row;align-items:center;text-align:left;gap:14px;padding:14px 16px;background:linear-gradient(90deg,var(--glow-soft,rgba(242,201,76,.25)) 0%,transparent 55%),#0d1018}
+.svi-card[data-layout=row] .svi-art{height:64px;flex:none}
+.svi-card[data-layout=row] .svi-copy{align-items:flex-start;flex:1}
+.svi-card[data-layout=row] .svi-name{font-size:16px}
+.svi-tag-row{margin-left:auto;font-family:var(--font-jetbrains-mono,'JetBrains Mono',monospace);background:transparent;border:0;color:#8f95ad}
+.svi-tag-row[data-always]{border:1px solid rgba(242,201,76,.55);color:#f1d58a;font-family:inherit}
+.svi-sealed{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:12px;border:1px solid rgba(217,180,90,.28);background:#0d1018}
+.svi-sealed-mark{display:grid;place-items:center;width:64px;height:64px;flex:none;border-radius:10px;border:1px dashed rgba(217,180,90,.45);background:#141826;color:#e5bd52;font:700 26px 'Cinzel',Georgia,serif}
+.svi-sealed strong{display:block;font:700 16px 'Cinzel',Georgia,serif;color:#e8eaf2;letter-spacing:.04em}
+.svi-sealed span{font-size:13px;color:#a3a9c2}
+
+/* Commissioner IdolSetup */
+.svs{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,330px);gap:20px;align-items:start;color:#e8eaf2;font-size:13px}
+.svs p{margin:0}
+.svs-main,.svs-side{display:flex;flex-direction:column;gap:16px;min-width:0}
+.svs-panel{border-radius:12px;border:1px solid rgba(255,255,255,.07);background:#0b0d14;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.svs-lbl{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#8a90a8}
+.svs-lbl small{margin-left:10px;font-size:12px;letter-spacing:0;text-transform:none;font-weight:500;color:#6f7590}
+.svs-gold{color:#e5bd52}
+.svs-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.svs-grow{flex:1;min-width:0}
+.svs-choose{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:end}
+.svs-seg{display:flex;gap:4px;padding:4px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:#07080d}
+.svs-seg button{flex:1;min-height:44px;padding:0 16px;border-radius:7px;border:0;background:transparent;color:#a3a9c2;font-weight:600;font-size:13.5px;cursor:pointer}
+.svs-seg button[aria-checked=true]{background:#161a26;color:#fff;box-shadow:inset 0 -2px 0 #d9b45a}
+.svs-seg button:disabled{cursor:not-allowed;opacity:.55}
+.svs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.svs-pick{position:relative;cursor:pointer}
+.svs-pick input{position:absolute;opacity:0;pointer-events:none}
+.svs-box{display:grid;place-items:center;width:22px;height:22px;flex:none;border-radius:5px;border:1.5px solid rgba(255,255,255,.25);background:#07080d;color:#07080d}
+.svs-pick input:checked+.svi-card .svs-box{background:var(--glow);border-color:var(--glow)}
+.svs-pick input:focus-visible+.svi-card{outline:2px solid #f1d58a;outline-offset:2px}
+.svs-pick input:disabled+.svi-card{cursor:not-allowed}
+.svs-chips{display:flex;flex-wrap:wrap;gap:6px}
+.svs-chip{min-height:36px;padding:0 12px;border-radius:7px;border:1px solid rgba(255,255,255,.12);background:transparent;color:#c9cde0;font-size:12.5px;cursor:pointer}
+.svs-chip[aria-pressed=true]{border-color:#d9b45a;color:#f1d58a;background:rgba(217,180,90,.08)}
+.svs-check{display:inline-flex;align-items:center;gap:10px;min-height:44px;font-size:13.5px;color:#e8eaf2;cursor:pointer}
+.svs-check input{width:20px;height:20px;accent-color:#d9b45a}
+.svs-btn{min-height:44px;padding:0 18px;border-radius:9px;border:1px solid rgba(255,255,255,.14);background:#141826;color:#fff;font-weight:700;font-size:13.5px;cursor:pointer}
+.svs-btn-gold{width:100%;min-height:48px;border-color:transparent;background:linear-gradient(180deg,#e7c46a,#d4a94a);color:#1d1406}
+.svs-btn:disabled{opacity:.5;cursor:not-allowed}
+.svs-count{display:flex;align-items:baseline;gap:12px}
+.svs-count b{font:700 40px/1 'Cinzel',Georgia,serif;color:#e5bd52}
+.svs-icons{display:flex;flex-wrap:wrap;gap:8px}
+.svs-icon{display:grid;place-items:center;width:40px;height:40px;border-radius:9px;border:1px solid rgba(255,255,255,.08);background:#141826}
+.svs-icon img{width:28px;height:28px}
+.svs-icon[data-sealed]{color:#e5bd52;font:700 16px 'Cinzel',Georgia,serif}
+.svs-note{font-size:12.5px;line-height:1.5;color:#7f859c}
+.svs-know p{font-size:13.5px;line-height:1.5;color:#a3a9c2}
+.svs-know p:first-of-type{color:#e8eaf2}
+.svs-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.svs-values label{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:#a3a9c2}
+.svs-values input{min-height:44px;padding:0 12px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:#07080d;color:#fff;font-size:15px}
+.svs-status{font-size:13.5px;line-height:1.5;color:#c9cde0}
+.svs-alert{color:#fda4af}
+@media (max-width:1100px){.svs{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.svs-choose{grid-template-columns:minmax(0,1fr)}.svs-values{grid-template-columns:minmax(0,1fr)}.svs-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* Idol vault */
+.svv{display:flex;flex-direction:column;gap:16px;color:#e8eaf2}
+.svv p{margin:0}
+.svv-head{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px}
+.svv-head h2{margin:0;font-size:22px;font-weight:700;color:#fff}
+.svv-sub{font-size:13px;color:#a3a9c2}
+.svv-seal{margin-left:auto;padding:4px 10px;border-radius:6px;border:1px solid rgba(217,180,90,.5);color:#f1d58a;font-size:12px}
+.svv-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,380px);gap:16px;align-items:start}
+.svv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.svv-tile{display:block;width:100%;padding:0;border:0;background:none;text-align:inherit;cursor:pointer;border-radius:12px}
+.svv-tile:focus-visible{outline:2px solid #f1d58a;outline-offset:2px}
+.svv-detail{position:sticky;top:12px;display:flex;flex-direction:column;gap:14px;padding:18px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:radial-gradient(110% 55% at 50% 18%,var(--glow-soft,rgba(242,201,76,.25)) 0%,transparent 60%),#0b0d14;text-align:center}
+.svv-detail img{height:220px;width:auto;margin:0 auto;filter:drop-shadow(0 14px 22px rgba(0,0,0,.5))}
+.svv-detail h3{margin:0;font:700 24px/1.15 'Cinzel',Georgia,serif;letter-spacing:.04em;color:var(--glow)}
+.svv-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;text-align:left}
+.svv-facts div{padding:10px 12px;border-radius:9px;border:1px solid rgba(255,255,255,.07);background:#0f121b}
+.svv-facts dt{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#7f859c}
+.svv-facts dd{margin:4px 0 0;font-size:13px;color:#e8eaf2}
+.svv-play{min-height:48px;border-radius:9px;border:0;background:linear-gradient(180deg,#e7c46a,#d4a94a);color:#1d1406;font-weight:700;font-size:14px;cursor:pointer}
+.svv-held{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.svv-held .svi-card{gap:8px}
+.svv-held-btn{min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--glow-line,rgba(242,201,76,.5));background:rgba(7,8,13,.6);color:#fff;font-weight:700;font-size:13px;cursor:pointer}
+.svv-player{display:flex;align-items:center;gap:8px;font-size:12px;color:#c9cde0}
+.svv-player img,.svv-player>span:first-child{width:28px;height:28px;border-radius:50%;object-fit:cover;flex:none}
+.svv-player>span:first-child{display:grid;place-items:center;background:rgba(242,201,76,.12);color:#f1d58a;font-weight:700}
+@media (max-width:980px){.svv-layout{grid-template-columns:minmax(0,1fr)}.svv-detail{position:static}}
+@media (max-width:520px){.svv-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.svi-art{height:110px}.svi-card{padding:14px 10px}}
+@media (prefers-reduced-motion:reduce){.svi-card{transition:none}}
+
+html[data-mode='light'] .svi-card,html[data-mode='light'] .svs-panel,html[data-mode='light'] .svv-detail,html[data-mode='light'] .svi-sealed{background-color:#fffaf0;color:#1d1a14;border-color:rgba(40,30,10,.1)}
+html[data-mode='light'] .svi-name,html[data-mode='light'] .svv-detail h3{filter:brightness(.62) saturate(1.2)}
+html[data-mode='light'] .svi-short,html[data-mode='light'] .svs-know p,html[data-mode='light'] .svv-sub{color:#5d5648}
+html[data-mode='light'] .svi-tag{background:#f3eee3;color:#5d5648;border-color:rgba(40,30,10,.14)}
+html[data-mode='light'] .svi-tag[data-always],html[data-mode='light'] .svs-gold,html[data-mode='light'] .svs-count b{color:#946a0c}
+html[data-mode='light'] .svs-seg,html[data-mode='light'] .svs-values input{background:#f3eee3;border-color:rgba(40,30,10,.14);color:#1d1a14}
+html[data-mode='light'] .svs-seg button[aria-checked=true]{background:#fffaf0;color:#1d1a14}
+html[data-mode='light'] .svv-facts div{background:#f7f1e4;border-color:rgba(40,30,10,.08)}
+html[data-mode='light'] .svv-facts dd,html[data-mode='light'] .svv-head h2,html[data-mode='light'] .svs-check{color:#1d1a14}
+/* Pick mode (2026-10-20): a quantity per idol type. */
+.svs-qty{display:inline-flex;align-items:center;gap:6px;flex:none}
+.svs-qty-btn{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1.5px solid rgba(255,255,255,.25);background:#07080d;color:#fff;cursor:pointer}
+.svs-qty-btn:disabled{opacity:.35;cursor:default}
+.svs-qty-btn:focus-visible{outline:2px solid #f1d58a;outline-offset:2px}
+.svs-qty-val{min-width:22px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}

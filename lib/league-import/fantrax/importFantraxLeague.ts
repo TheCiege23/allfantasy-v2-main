@@ -17,6 +17,7 @@ import { mapFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxDraft
 import type { NormalizedDraftPick } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
 import { fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
+import { fantraxImportSeason, isFantraxSplitSeasonSport } from './fantraxProSports'
 import {
   fetchFantraxScheduleWithScores,
   getFantraxLeagueInfo,
@@ -136,7 +137,12 @@ export async function importFantraxLeague(args: {
   if (!info.ok) return { ok: false, error: info.failure.message, kind: info.failure.kind }
   // The live endpoint can roll into another season. Never overwrite an archive
   // or stamp its old roster as freshly fetched when that happens.
-  if (refreshTarget && Number(info.data.seasonYear) !== refreshTarget.season) {
+  // NBA/NHL seasons are keyed by the year they begin, so compare in that key;
+  // every other sport keeps the exact comparison it always had.
+  const liveSeasonForRefresh = refreshTarget && isFantraxSplitSeasonSport(refreshTarget.sport)
+    ? fantraxImportSeason(info.data, refreshTarget.sport)
+    : Number(info.data.seasonYear)
+  if (refreshTarget && liveSeasonForRefresh !== refreshTarget.season) {
     return { ok: false, error: 'Fantrax source season differs from the stored snapshot', kind: 'unavailable' }
   }
 
@@ -161,19 +167,28 @@ export async function importFantraxLeague(args: {
    * drafted, or whose draft could not be read, is still worth importing. The
    * coverage note reports which of those happened.
    */
-  const [rosters, standings, cfb, nfl, mlb, schedule, draft] = await Promise.all([
+  /*
+   * ⚠ NBA AND NHL ARE TWO MORE CANDIDATE MAPS, NOT A SPORT SWITCH. Fantrax's
+   * league info still does not say which sport it is, so basketball and hockey
+   * are detected the same way MLB is: whichever map names the most roster ids.
+   * Their `getPlayerIds` shape is not captured (contracts/fantrax/GAPS.md); a
+   * map that fails to load fails soft below, exactly like the others.
+   */
+  const [rosters, standings, cfb, nfl, mlb, nba, nhl, schedule, draft] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     getFantraxPlayerIds('CFB'),
     getFantraxPlayerIds('NFL'),
     getFantraxPlayerIds('MLB'),
+    getFantraxPlayerIds('NBA'),
+    getFantraxPlayerIds('NHL'),
     fetchFantraxScheduleWithScores(args.leagueId, info.data),
     getFantraxDraftResults(args.leagueId).catch(() => null),
   ])
   if (!rosters.ok) return { ok: false, error: rosters.failure.message, kind: rosters.failure.kind }
   /* Only one map has to load. A league is one sport, so failing the whole
      import because the OTHER sport's map was unavailable would be wrong. */
-  if (!cfb.ok && !nfl.ok && !mlb.ok) return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
+  if (!cfb.ok && !nfl.ok && !mlb.ok && !nba.ok && !nhl.ok) return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
 
   /*
    * ⚠ THE SPORT IS NOT IN THE LEAGUE INFO, SO IT IS MEASURED RATHER THAN
@@ -187,19 +202,48 @@ export async function importFantraxLeague(args: {
     cfb.ok ? { sport: 'cfb' as const, isDevy: true, resolved: resolveRosters(rosters.data, refreshTarget?.sport === 'cfb' ? preserveSnapshotNames(cfb.data, refreshTarget.roster) : cfb.data) } : null,
     nfl.ok ? { sport: 'nfl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nfl.data) } : null,
     mlb.ok ? { sport: 'mlb' as const, isDevy: false, resolved: resolveRosters(rosters.data, mlb.data) } : null,
+    nba.ok ? { sport: 'nba' as const, isDevy: false, resolved: resolveRosters(rosters.data, nba.data) } : null,
+    nhl.ok ? { sport: 'nhl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nhl.data) } : null,
   ].filter((c): c is NonNullable<typeof c> => c !== null)
 
+  /*
+   * ⚠ A LEAGUE THAT HAS NOT DRAFTED HAS NO ROSTER IDS TO MEASURE, so every map names zero players
+   * and the import used to refuse it — the most common moment to move a league. The league's own
+   * player pool (`getLeagueInfo.playerInfo`, every player the league can roster) is the same id
+   * space, so when every roster is empty the pool is measured instead. Captured 2026-10-26 on four
+   * pre-draft public leagues: 1,287 of 1,287 NBA pool ids are in the NBA map and 0 in NHL; 8,757 of
+   * 8,757 NHL ids in NHL and 0 in NBA (tests/fixtures/fantrax/*-public-2026.json).
+   */
+  const rosterPlayers = candidates[0]?.resolved.reduce((a, r) => a + r.total, 0) ?? 0
+  const poolIds = rosterPlayers === 0 ? Object.keys(recordOf(info.data.playerInfo)) : []
+  const mapFor: Record<string, Record<string, unknown> | null> = {
+    cfb: cfb.ok ? cfb.data : null, nfl: nfl.ok ? nfl.data : null, mlb: mlb.ok ? mlb.data : null,
+    nba: nba.ok ? nba.data : null, nhl: nhl.ok ? nhl.data : null,
+  }
   const scored = candidates
-    .map((c) => ({ ...c, named: c.resolved.reduce((a, r) => a + r.resolved, 0) }))
+    .map((c) => ({
+      ...c,
+      named: poolIds.length > 0
+        ? poolIds.filter((id) => mapFor[c.sport]?.[id] != null).length
+        : c.resolved.reduce((a, r) => a + r.resolved, 0),
+    }))
     .sort((a, b) => b.named - a.named)
 
   const best = scored[0]
   if (!best || best.named === 0 || scored[1]?.named === best.named) {
-    return { ok: false, error: 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.' }
+    return {
+      ok: false,
+      error: rosterPlayers === 0 && poolIds.length === 0
+        ? 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.'
+        : best && best.named > 0
+          ? 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.'
+          : "This league's players do not match the college, NFL, MLB, NBA or NHL player lists, so it was not imported. Nothing was saved.",
+    }
   }
   const resolved = best.resolved
   const total = resolved.reduce((a, r) => a + r.total, 0)
-  const named = best.named
+  // A pre-draft league names no rostered players: the pool count picked the sport, nothing more.
+  const named = poolIds.length > 0 ? 0 : best.named
 
   /*
    * ⚠ A LEAGUE WHERE ALMOST NOTHING RESOLVED IS THE WRONG SPORT MAP, NOT AN
@@ -210,7 +254,7 @@ export async function importFantraxLeague(args: {
   if (total > 0 && named / total < 0.5) {
     return {
       ok: false,
-      error: `Only ${named} of ${total} players could be named against the college, NFL or MLB player maps. Nothing was imported.`,
+      error: `Only ${named} of ${total} players could be named against the college, NFL, MLB, NBA or NHL player maps. Nothing was imported.`,
     }
   }
 
@@ -225,7 +269,13 @@ export async function importFantraxLeague(args: {
     }
   }
 
-  const season = Number(info.data.seasonYear) || new Date().getFullYear()
+  /*
+   * ⚠ NBA AND NHL SEASONS SPAN TWO CALENDAR YEARS AND ARE KEYED BY THE YEAR
+   * THEY BEGIN (2025-26 → 2025). A bare `seasonYear` is not trusted alone for
+   * them — whether Fantrax means the start or the end year is not captured — so
+   * the league's own calendar decides. Other sports are unchanged.
+   */
+  const season = fantraxImportSeason(info.data, best.sport)
   const scoring = fantraxScoringRules(info.data)
 
   const fantraxUser = refreshTarget ? null : await prisma.fantraxUser.upsert({
@@ -494,4 +544,8 @@ export async function attachToFranchise(args: {
   }
 
   return { ok: true, linkId: link.id }
+}
+
+function recordOf(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }

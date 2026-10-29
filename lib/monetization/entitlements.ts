@@ -36,6 +36,16 @@ export const ENTITLEMENTS = {
     upgradeLabel: 'Unlock Competitive Edge',
     highlightParam: 'manager_psychology',
   },
+  commissioner_draft_as_me: {
+    key: 'commissioner_draft_as_me',
+    label: 'Draft As Me',
+    description:
+      'When a manager misses a pick, Chimmy drafts the way that manager drafts: their usual reach or patience and the positions they favour. Requires AF Commissioner subscription.',
+    requiredPlan: ['af_commissioner', 'af_supreme'],
+    upgradeUrl: '/commissioner-upgrade',
+    upgradeLabel: 'Get AF Commissioner',
+    highlightParam: 'draft_as_me',
+  },
   commissioner_ai_tools: {
     key: 'commissioner_ai_tools',
     label: 'Commissioner AI Tools',
@@ -177,6 +187,16 @@ export const ENTITLEMENTS = {
     upgradeLabel: 'Get AF Commissioner',
     highlightParam: 'dispersal_draft',
   },
+  commissioner_chimmy_autopilot: {
+    key: 'commissioner_chimmy_autopilot',
+    label: 'Chimmy Autopilot',
+    description:
+      'Chimmy runs a team whose manager has left or gone quiet, playing like a dynasty owner until someone takes over. Requires AF Commissioner subscription.',
+    requiredPlan: ['af_commissioner', 'af_supreme'],
+    upgradeUrl: '/commissioner-upgrade',
+    upgradeLabel: 'Get AF Commissioner',
+    highlightParam: 'chimmy_autopilot',
+  },
   commissioner_integrity_monitoring: {
     key: 'commissioner_integrity_monitoring',
     label: 'Integrity Monitoring',
@@ -290,7 +310,7 @@ export const ENTITLEMENTS = {
     key: 'war_room_dynasty_projections',
     label: 'Dynasty Projections',
     description: 'Multi-year dynasty value projections with confidence scoring.',
-    requiredPlan: ['af_war_room', 'af_supreme'],
+    requiredPlan: ['af_war_room'],
     // Not `/war-room`: that is the product page, and it cannot take a payment.
     upgradeUrl: '/upgrade?plan=war_room',
     upgradeLabel: 'Get AF Legacy',
@@ -300,7 +320,7 @@ export const ENTITLEMENTS = {
     key: 'war_room_devy_rankings',
     label: 'Devy Rankings',
     description: 'AI-generated college player rankings with campus scoring and pro projection scores.',
-    requiredPlan: ['af_war_room', 'af_supreme'],
+    requiredPlan: ['af_war_room'],
     upgradeUrl: '/upgrade?plan=war_room',
     upgradeLabel: 'Get AF Legacy',
   },
@@ -308,7 +328,7 @@ export const ENTITLEMENTS = {
     key: 'war_room_draft_strategy',
     label: 'Draft Strategy AI',
     description: 'Real-time draft board advice with tier-break alerts and positional scarcity callouts.',
-    requiredPlan: ['af_war_room', 'af_supreme'],
+    requiredPlan: ['af_war_room'],
     upgradeUrl: '/upgrade?plan=war_room',
     upgradeLabel: 'Get AF Legacy',
     highlightParam: 'draft_strategy',
@@ -317,7 +337,7 @@ export const ENTITLEMENTS = {
     key: 'war_room_pipeline_analysis',
     label: 'Pipeline Health Analysis',
     description: "AI assessment of your dynasty roster's campus/taxi/active pipeline health.",
-    requiredPlan: ['af_war_room', 'af_supreme'],
+    requiredPlan: ['af_war_room'],
     upgradeUrl: '/upgrade?plan=war_room',
     upgradeLabel: 'Get AF Legacy',
   },
@@ -362,6 +382,7 @@ export const LEAGUE_SETTINGS_AI_PANEL_FEATURE: Record<string, SubscriptionFeatur
 
 /** Maps `?highlight=` query keys to plan cards on pricing surfaces (scroll + ring). */
 export const HIGHLIGHT_TO_PLAN_FAMILY: Record<string, SubscriptionPlanFamily> = {
+  draft_as_me: 'af_commissioner',
   supreme: 'af_supreme',
   ai_tools: 'af_commissioner',
   ai_narration: 'af_commissioner',
@@ -384,5 +405,6 @@ export const HIGHLIGHT_TO_PLAN_FAMILY: Record<string, SubscriptionPlanFamily> = 
   manager_psychology: 'af_pro',
   dispersal_draft: 'af_commissioner',
   integrity_monitoring: 'af_commissioner',
+  chimmy_autopilot: 'af_commissioner',
   commissioner_waiver_ai: 'af_commissioner',
 }
