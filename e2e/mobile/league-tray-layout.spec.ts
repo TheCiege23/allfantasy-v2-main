@@ -78,7 +78,6 @@ function trayMarkup(leagues: number, avatar: "letter" | "image"): string {
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>${PREFLIGHT}\n${css}</style></head><body>
 <div class="af-core af-shell" data-rail-open="true">
-  <button type="button" class="af-rail-handle"><span class="af-rail-handle-mark">AF</span><span class="af-rail-handle-text">Close</span></button>
   <nav class="af-rail" id="af-rail">
     <a href="#" class="af-rail-logo">AF</a>
     <div class="af-rail-divider"></div>
