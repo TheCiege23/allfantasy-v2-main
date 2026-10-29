@@ -20,8 +20,10 @@ async function comfortableFields(page: Page, selector: string) {
 test('tablet sign-in and signup fields stay readable through rotation and split view', async ({ browser, browserName, baseURL }) => {
   const context = await browser.newContext({ ...tablet(browserName), baseURL })
   try {
-    const page = await context.newPage()
     for (const route of ['/login', '/signup']) {
+      // Isolate entry routes: a late hydration refresh on the previous auth
+      // page must not interrupt the next page's navigation in WebKit.
+      const page = await context.newPage()
       await page.goto(route)
       await expect(page.locator('.af-au-field input').first()).toBeVisible()
       for (const size of tabletSizes) {
@@ -29,6 +31,7 @@ test('tablet sign-in and signup fields stay readable through rotation and split 
         await comfortableFields(page, '.af-au-field input')
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width)
       }
+      await page.close()
     }
   } finally { await context.close() }
 })
