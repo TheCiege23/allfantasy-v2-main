@@ -24,6 +24,7 @@ import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { resolveGuillotineWeekState } from '@/lib/guillotine/guillotineCurrentWeek'
 import { getDangerTiers } from '@/lib/guillotine/GuillotineDangerEngine'
+import { claimedPlayerIds } from '@/lib/guillotine/choppedReleases'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
 import type {
@@ -260,7 +261,9 @@ export async function buildGuillotineWarRoomContext(
       take: 60,
     })
     .catch(() => [])) as ReleaseRow[]
-  const droppedPlayers: GuillotineDroppedPlayer[] = releases.map((r) => ({
+  // The pool is who is still out there: a released player on a team again has been claimed.
+  const claimedReleases = await claimedPlayerIds(leagueId, releases.map((r) => r.playerId)).catch(() => new Set<string>())
+  const droppedPlayers: GuillotineDroppedPlayer[] = releases.filter((r) => !claimedReleases.has(r.playerId)).map((r) => ({
     playerId: r.playerId,
     playerName: r.playerName,
     position: (r.position || 'UNK').toUpperCase(),

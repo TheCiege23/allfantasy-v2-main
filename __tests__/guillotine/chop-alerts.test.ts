@@ -158,6 +158,9 @@ describe('the chop', () => {
     expect(survived.userIds).not.toContain('u-gone')
     expect(out.dedupePrefix).toBe('guillotine-chop:lg1:2026:w5:guillotine_chopped')
     expect(survived.dedupePrefix).toBe('guillotine-chop:lg1:2026:w5:guillotine_survived')
+    // Survivors go straight to the released players on the league home; the chopped team to the league.
+    expect(survived).toMatchObject({ actionHref: '/league/lg1#guillotine-chop', actionLabel: 'See the players' })
+    expect(out).toMatchObject({ actionHref: '/league/lg1', actionLabel: 'Open league' })
   })
 
   it('a manager chopped with one team and alive with another is told about the chop only', async () => {
