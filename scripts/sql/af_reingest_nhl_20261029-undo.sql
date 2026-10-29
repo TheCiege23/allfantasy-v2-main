@@ -79,3 +79,21 @@ COMMIT;
 --   af_reingest_nhl_20261029_league_teams, af_reingest_nhl_20261029_players,
 --   af_reingest_nhl_20261029_player_weekly_scores, af_reingest_nhl_20261029_player_daily_scores,
 --   af_reingest_nhl_20261029_lpws;
+
+-- ---------------------------------------------------------------------------------------------
+-- STEP 2 (2026-10-29, owner-approved): standings correction after the Apply.
+-- The Apply rebuilt standings through the RESCORED week (2), not the live week (5); fixed in
+-- #2902. Pre-fix snapshot: af_reingest_nhl_20261029_standings_fix (8 rows: 4 redraft_rosters +
+-- 4 league_teams). The fix set wins/losses/ties/pointsFor/pointsAgainst from all final matchups
+-- through week 5. Measured: the snapshot ALREADY held those values (a scheduled standings
+-- rebuild had run in between), so this step changed no value. Its undo, for completeness:
+--
+-- UPDATE redraft_rosters r SET wins = s.wins, losses = s.losses, ties = s.ties,
+--   "pointsFor" = s."pointsFor", "pointsAgainst" = s."pointsAgainst"
+-- FROM af_reingest_nhl_20261029_standings_fix s WHERE s.src = 'redraft_rosters' AND r.id = s.id;
+-- UPDATE league_teams t SET wins = s.wins, losses = s.losses, ties = s.ties,
+--   "pointsFor" = s."pointsFor", "pointsAgainst" = s."pointsAgainst"
+-- FROM af_reingest_nhl_20261029_standings_fix s WHERE s.src = 'league_teams' AND t.id = s.id;
+--
+-- Running the STEP 1 block above instead restores the pre-Apply standings (week 1 at 7.8).
+-- Drop with the others: DROP TABLE af_reingest_nhl_20261029_standings_fix;
