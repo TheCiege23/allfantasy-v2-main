@@ -92,14 +92,17 @@ describe('isPlaceholderHeadshot', () => {
 })
 
 describe('alternateTheSportsDbImageUrl', () => {
+  const r2 = 'https://r2.thesportsdb.com/images/media/player/cutout/76jpuo1792493279.png'
+  const www = 'https://www.thesportsdb.com/images/media/player/cutout/76jpuo1792493279.png'
   it('retries only the same image path on the other known host', () => {
-    const path = '/images/media/player/cutout/76jpuo1792493279.png'
-    expect(alternateTheSportsDbImageUrl('https://r2.thesportsdb.com' + path)).toBe('https://www.thesportsdb.com' + path)
-    expect(alternateTheSportsDbImageUrl('https://www.thesportsdb.com' + path)).toBe('https://r2.thesportsdb.com' + path)
-    expect(alternateTheSportsDbImageUrl('https://r2.thesportsdb.com' + path + '?preview=1')).toBe('https://www.thesportsdb.com' + path + '?preview=1')
+    expect(alternateTheSportsDbImageUrl(r2)).toBe(www)
+    expect(alternateTheSportsDbImageUrl(www)).toBe(r2)
+    expect(alternateTheSportsDbImageUrl(r2 + '?preview=1')).toBe(www + '?preview=1')
   })
   it('never rewrites other providers, pages, insecure URLs or lookalike hosts', () => {
-    for (const url of ['https://sleepercdn.com/a.jpg', 'https://www.thesportsdb.com/player/1', 'http://r2.thesportsdb.com/images/a.png', 'https://r2.thesportsdb.com.evil.example/images/a.png']) {
+    const page = new URL(www)
+    page.pathname = '/player/1'
+    for (const url of ['https://sleepercdn.com/a.jpg', page.href, 'http://r2.thesportsdb.com/images/a.png', 'https://r2.thesportsdb.com.evil.example/images/a.png']) {
       expect(alternateTheSportsDbImageUrl(url)).toBeNull()
     }
   })

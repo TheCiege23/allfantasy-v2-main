@@ -8,11 +8,10 @@ afterEach(cleanup)
 describe('draft image CDN recovery', () => {
   it('tries the same vendor image on the alternate host before reporting failure', () => {
     const onError = vi.fn()
-    const path = '/images/media/player/cutout/new-photo.png'
-    const props = { src: 'https://r2.thesportsdb.com' + path, alt: 'Player', width: 40, height: 40, lazy: false, onError }
+    const props = { src: 'https://r2.thesportsdb.com/images/media/player/cutout/new-photo.png', alt: 'Player', width: 40, height: 40, lazy: false, onError }
     const view = render(<LazyDraftImage {...props} />)
     fireEvent.error(screen.getByAltText('Player'))
-    expect(screen.getByAltText('Player').getAttribute('src')).toBe('https://www.thesportsdb.com' + path)
+    expect(screen.getByAltText('Player').getAttribute('src')).toBe('https://www.thesportsdb.com/images/media/player/cutout/new-photo.png')
     expect(onError).not.toHaveBeenCalled()
     fireEvent.error(screen.getByAltText('Player'))
     expect(onError).toHaveBeenCalledTimes(1)
