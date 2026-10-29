@@ -251,12 +251,13 @@ export function DraftRoomShell({
           {/* D.6.2 — collapse arrow toggle between the board and the dock.
               Two stacked chevrons that flip direction based on state. Click → toggle. */}
           {allowPremiumDockCollapse ? (
-            <div className="relative shrink-0">
-              {/* Panel size: hide it, split the screen, or give it most of the screen. */}
+            <div className="flex shrink-0 items-center justify-center border-b border-white/[0.06] bg-[#081022] py-1">
+              {/* Panel size: hide it, split the screen, or give it most of the screen. It sits on its
+                  own divider bar; floating across the edge, the panel below clipped it. */}
               <div
                 role="group"
                 aria-label="Player panel size"
-                className="absolute left-1/2 top-0 z-20 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-0.5 rounded-full border border-white/15 bg-[#0a1228] p-0.5 shadow-[0_8px_22px_rgba(0,0,0,0.45)]"
+                className="inline-flex items-center gap-0.5 rounded-full border border-white/15 bg-[#0a1228] p-0.5 shadow-[0_6px_16px_rgba(0,0,0,0.4)]"
                 data-testid="draft-dock-size-control"
               >
                 <button

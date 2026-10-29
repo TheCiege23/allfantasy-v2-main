@@ -3,9 +3,7 @@
 import React from 'react'
 import { ArrowLeft, ArrowLeftRight, ArrowRight, Gavel, History, Pencil } from 'lucide-react'
 import { withAlpha } from '@/lib/draft-room'
-import { LazyDraftImage } from './LazyDraftImage'
 import { PlayerAvatar } from './PlayerAvatar'
-import { isDefRowForAvatar } from '@/lib/draft-room/classify-avatar-source'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { buildDraftPlayerDisplayModel } from '@/lib/draft-sports-models/build-display-model'
 import { normalizePlayer } from '@/lib/players/normalizePlayer'
@@ -63,14 +61,14 @@ function TinyHeadshot({
   /** F.1 — DEF picks render the team logo as the primary avatar. */
   position?: string | null
   /** F.1 — passed only for DEF picks; non-DEF cells keep the existing
-   * separate `TinyTeamLogo` badge so the layout doesn't change for normal players. */
+   * team on the line under the name. */
   teamLogoUrl?: string | null
   teamAbbr?: string | null
   size?: number
 }) {
   /** E.1: delegate to the shared PlayerAvatar so the URL classifier (which rejects data URIs and
    * team logos) is applied uniformly. The board cell stays at 22px and skips the team-logo badge
-   * because TinyTeamLogo is rendered separately in this layout. 26px since the 56px tile redesign. */
+   * because the tile prints the team under the name. 40px on the square tiles. */
   return (
     <PlayerAvatar
       headshotUrl={src}
@@ -81,34 +79,6 @@ function TinyHeadshot({
       size={size}
       testIdBase="draft-board-cell-headshot"
     />
-  )
-}
-
-function TinyTeamLogo({
-  team,
-  src,
-}: {
-  team: string | null
-  src: string | null
-}) {
-  const [imgError, setImgError] = React.useState(false)
-  if (src && !imgError) {
-    return (
-      <LazyDraftImage
-        src={src}
-        alt=""
-        width={14}
-        height={14}
-        className="rounded object-contain"
-        lazy
-        onError={() => setImgError(true)}
-      />
-    )
-  }
-  return (
-    <span className="inline-flex h-[14px] min-w-[14px] items-center justify-center rounded border border-cyan-300/50 bg-[#1a2844] px-0.5 text-[11px] font-bold text-cyan-100">
-      {team ? team.slice(0, 3).toUpperCase() : '—'}
-    </span>
   )
 }
 
@@ -459,13 +429,8 @@ function DraftBoardCellInner({
               teamAbbr={pick.team}
               size={40}
             />
-            {/* F.1 — DEF picks already use the team logo as the primary avatar
-                (see PlayerAvatar's DEF branch). Skip the duplicate corner overlay. */}
-            {isDefRowForAvatar(pick.position) ? null : (
-              <div className="absolute -bottom-0.5 -right-1 rounded border border-white/12 bg-[#232c40] p-px">
-                <TinyTeamLogo team={pick.team} src={teamLogoSrc} />
-              </div>
-            )}
+            {/* No team-logo corner badge on the square tile: the team is printed under the name,
+                and at this size the badge covered the headshot's initials. */}
           </div>
           <div className="w-full min-w-0">
             <span
