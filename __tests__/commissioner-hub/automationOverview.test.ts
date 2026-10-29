@@ -29,13 +29,19 @@ describe('buildAutomationOverview', () => {
       },
     }))
     expect(row(rows, 'fill_empty_starters')).toMatchObject({ state: 'off', href: '#ch-fill-empty-starters' })
-    expect(row(rows, 'managed_teams')).toMatchObject({ state: 'on', detail: '2 teams, 1 on Chimmy autopilot' })
+    expect(row(rows, 'managed_teams')).toMatchObject({ state: 'on', detail: '2 teams, 1 on Chimmy autopilot', detailEs: '2 equipos, 1 con piloto automático de Chimmy' })
     expect(row(rows, 'eliminated_lineups')).toMatchObject({ state: 'on', detail: 'Short spots filled from the bench' })
-    expect(row(rows, 'rookie_draft_starts')).toMatchObject({ state: 'on', detail: '7 days after it opens', href: '/league/L1?view=settings' })
+    expect(row(rows, 'rookie_draft_starts')).toMatchObject({ state: 'on', detail: '7 days after it opens', detailEs: '7 días después de abrirse', href: '/league/L1?view=settings' })
     expect(row(rows, 'taxi_rules')).toMatchObject({ state: 'on' })
     expect(row(rows, 'auto_handover')).toMatchObject({ state: 'on', detail: 'After 14 days, to Chimmy autopilot', href: '#ch-inactive-managers' })
     expect(row(rows, 'tanking')).toMatchObject({ state: 'on', detail: 'Warning, then the penalty you chose', href: '/league/L1/commissioner/integrity' })
     expect(row(rows, 'hold_flagged_trades')).toMatchObject({ state: 'on', detail: 'Serious flags only' })
+  })
+
+  it('every row that says what it is doing says it in Spanish too', () => {
+    const rows = buildAutomationOverview(facts({ settings: { af_managed_lineups: { r1: { since: 's', byUserId: 'c' } }, eliminated_lineup_minimum: { enabled: true, standard: 'playable', autoFill: false }, ir_auto_move: { enabled: true } }, liveRookieOrderOn: true }))
+    for (const r of rows) expect(Boolean(r.detail)).toBe(Boolean(r.detailEs))
+    expect(row(rows, 'eliminated_lineups').detailEs).toBe('Se avisa a los mánagers')
   })
 
   it('defaults: fill empty spots on, nothing managed, the rookie draft does not start itself', () => {

@@ -42,6 +42,14 @@ describe('planAutomationPreset', () => {
     ])
   })
 
+  it('says every change in Spanish too', () => {
+    const plan = planAutomationPreset('run_it', facts({ commissionerPlan: false }))
+    expect(plan.changes.map((c) => c.labelEs)).toEqual([
+      'El draft de novatos se abre solo', 'El draft de novatos empieza solo 7 días después de abrirse', 'Pasar un equipo tras 14 días sin actividad, a AllFantasy',
+    ])
+    expect(plan.needsPlanEs).toHaveLength(plan.needsPlan.length)
+  })
+
   it('a redraft league gets no rookie-draft steps', () => {
     expect(keys(planAutomationPreset('recommended', facts({ dynasty: false })))).toEqual(['eliminated_lineups', 'ir_auto_move', 'tanking_monitor'])
   })

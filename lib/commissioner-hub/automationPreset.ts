@@ -52,9 +52,10 @@ export type PresetStep =
 export type PresetPlan = {
   preset: AutomationPreset
   /** What saving will change, in order. Steps already in place are not listed. */
-  changes: Array<{ step: PresetStep; label: string }>
+  changes: Array<{ step: PresetStep; label: string; labelEs: string }>
   /** Steps the preset includes that need AF Commissioner, which the league owner does not have. */
   needsPlan: string[]
+  needsPlanEs: string[]
 }
 
 const LABELS: Record<PresetStep['key'], string> = {
@@ -67,6 +68,18 @@ const LABELS: Record<PresetStep['key'], string> = {
   rookie_draft_starts: 'Rookie draft starts itself 7 days after it opens',
   live_rookie_order: 'Rookie draft order kept up to date',
   auto_handover: 'Hand over a team after 14 days with no activity',
+}
+
+const LABELS_ES: Record<PresetStep['key'], string> = {
+  fill_empty_starters: 'Llenar puestos titulares vacíos antes del cierre',
+  draft_as_me: 'Picks perdidos hechos como drafta el mánager',
+  eliminated_lineups: 'Alineación mínima para equipos eliminados',
+  ir_auto_move: 'Sacar de IR a los jugadores sanos',
+  tanking_monitor: 'Monitor anti-tanking',
+  rookie_draft_opens: 'El draft de novatos se abre solo',
+  rookie_draft_starts: 'El draft de novatos empieza solo 7 días después de abrirse',
+  live_rookie_order: 'Orden del draft de novatos siempre al día',
+  auto_handover: 'Pasar un equipo tras 14 días sin actividad',
 }
 
 const PAID: ReadonlySet<PresetStep['key']> = new Set(['draft_as_me', 'eliminated_lineups', 'ir_auto_move', 'tanking_monitor', 'live_rookie_order'])
@@ -116,21 +129,28 @@ export function planAutomationPreset(preset: AutomationPreset, f: PresetFacts): 
     }
   }
 
-  const plan: PresetPlan = { preset, changes: [], needsPlan: [] }
+  const plan: PresetPlan = { preset, changes: [], needsPlan: [], needsPlanEs: [] }
   for (const step of wanted) {
     const turningOn = !('on' in step) || step.on
     if (PAID.has(step.key) && turningOn && !f.commissionerPlan) {
       plan.needsPlan.push(LABELS[step.key])
+      plan.needsPlanEs.push(LABELS_ES[step.key])
       continue
     }
     if (current(step)) continue
-    plan.changes.push({ step, label: hands(step) })
+    plan.changes.push({ step, label: hands(step, 'en'), labelEs: hands(step, 'es') })
   }
   return plan
 }
 
-function hands(step: PresetStep): string {
-  if (step.key === 'auto_handover') return step.rule ? `${LABELS.auto_handover}, to ${step.rule.to === 'autopilot' ? 'Chimmy autopilot' : 'AllFantasy'}` : 'Stop handing over teams with no activity'
-  if ('on' in step && !step.on) return `Turn off: ${LABELS[step.key].toLowerCase()}`
-  return LABELS[step.key]
+function hands(step: PresetStep, lang: 'en' | 'es'): string {
+  const es = lang === 'es'
+  const labels = es ? LABELS_ES : LABELS
+  if (step.key === 'auto_handover') {
+    if (!step.rule) return es ? 'Dejar de pasar equipos sin actividad' : 'Stop handing over teams with no activity'
+    const to = step.rule.to === 'autopilot' ? (es ? 'al piloto automático de Chimmy' : 'to Chimmy autopilot') : es ? 'a AllFantasy' : 'to AllFantasy'
+    return `${labels.auto_handover}, ${to}`
+  }
+  if ('on' in step && !step.on) return `${es ? 'Desactivar' : 'Turn off'}: ${labels[step.key].toLowerCase()}`
+  return labels[step.key]
 }

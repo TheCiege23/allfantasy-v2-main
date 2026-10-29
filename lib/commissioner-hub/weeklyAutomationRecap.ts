@@ -65,23 +65,40 @@ export function countRecapActions(actions: ReadonlyArray<{ action: string; n: nu
   return out
 }
 
+export type RecapLanguage = 'en' | 'es'
+
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 /** The lines the commissioner reads, most common first; empty when there is nothing to report. */
-export function recapLines(c: RecapCounts): string[] {
-  const lines: Array<[number, string]> = [
-    [c.emptySpotsFilled, `filled ${plural(c.emptySpotsFilled, 'empty starting spot', 'empty starting spots')}`],
-    [c.byesBenched, `benched starters on bye for managers who asked, ${plural(c.byesBenched, 'time', 'times')}`],
-    [c.managedLineupsSet, `set ${plural(c.managedLineupsSet, 'lineup', 'lineups')} for teams it runs`],
-    [c.eliminatedLineupsFilled, `filled short lineups for eliminated teams ${plural(c.eliminatedLineupsFilled, 'time', 'times')}`],
-    [c.irMoves, `moved ${plural(c.irMoves, 'healthy player', 'healthy players')} off IR`],
-    [c.autopilotClaims, `made ${plural(c.autopilotClaims, 'waiver claim', 'waiver claims')} for teams on Chimmy autopilot`],
-    [c.autoPicks, `made ${plural(c.autoPicks, 'draft pick', 'draft picks')} for managers who were not there`],
-    [c.tankingWarnings, `sent ${plural(c.tankingWarnings, 'tanking warning', 'tanking warnings')}`],
-    [c.tankingPenalties, `applied ${plural(c.tankingPenalties, 'tanking penalty', 'tanking penalties')} you chose`],
-    [c.newOwnerHandovers, `handed ${plural(c.newOwnerHandovers, 'team', 'teams')} back to a new owner`],
-    [c.autoHandovers, `took over ${plural(c.autoHandovers, 'team', 'teams')} with no activity, as you set up`],
-  ]
+export function recapLines(c: RecapCounts, lang: RecapLanguage = 'en'): string[] {
+  const es = lang === 'es'
+  const lines: Array<[number, string]> = es
+    ? [
+        [c.emptySpotsFilled, `llenó ${plural(c.emptySpotsFilled, 'puesto titular vacío', 'puestos titulares vacíos')}`],
+        [c.byesBenched, `mandó a la banca a titulares en semana de descanso, ${plural(c.byesBenched, 'vez', 'veces')}, para quienes lo pidieron`],
+        [c.managedLineupsSet, `puso ${plural(c.managedLineupsSet, 'alineación', 'alineaciones')} de equipos que maneja`],
+        [c.eliminatedLineupsFilled, `completó alineaciones de equipos eliminados ${plural(c.eliminatedLineupsFilled, 'vez', 'veces')}`],
+        [c.irMoves, `sacó de IR a ${plural(c.irMoves, 'jugador sano', 'jugadores sanos')}`],
+        [c.autopilotClaims, `hizo ${plural(c.autopilotClaims, 'reclamo de waivers', 'reclamos de waivers')} para equipos con piloto automático de Chimmy`],
+        [c.autoPicks, `hizo ${plural(c.autoPicks, 'selección', 'selecciones')} del draft por mánagers ausentes`],
+        [c.tankingWarnings, `envió ${plural(c.tankingWarnings, 'aviso de tanking', 'avisos de tanking')}`],
+        [c.tankingPenalties, `aplicó ${plural(c.tankingPenalties, 'sanción por tanking', 'sanciones por tanking')} que elegiste`],
+        [c.newOwnerHandovers, `devolvió ${plural(c.newOwnerHandovers, 'equipo', 'equipos')} a un nuevo dueño`],
+        [c.autoHandovers, `se hizo cargo de ${plural(c.autoHandovers, 'equipo', 'equipos')} sin actividad, como lo configuraste`],
+      ]
+    : [
+        [c.emptySpotsFilled, `filled ${plural(c.emptySpotsFilled, 'empty starting spot', 'empty starting spots')}`],
+        [c.byesBenched, `benched starters on bye for managers who asked, ${plural(c.byesBenched, 'time', 'times')}`],
+        [c.managedLineupsSet, `set ${plural(c.managedLineupsSet, 'lineup', 'lineups')} for teams it runs`],
+        [c.eliminatedLineupsFilled, `filled short lineups for eliminated teams ${plural(c.eliminatedLineupsFilled, 'time', 'times')}`],
+        [c.irMoves, `moved ${plural(c.irMoves, 'healthy player', 'healthy players')} off IR`],
+        [c.autopilotClaims, `made ${plural(c.autopilotClaims, 'waiver claim', 'waiver claims')} for teams on Chimmy autopilot`],
+        [c.autoPicks, `made ${plural(c.autoPicks, 'draft pick', 'draft picks')} for managers who were not there`],
+        [c.tankingWarnings, `sent ${plural(c.tankingWarnings, 'tanking warning', 'tanking warnings')}`],
+        [c.tankingPenalties, `applied ${plural(c.tankingPenalties, 'tanking penalty', 'tanking penalties')} you chose`],
+        [c.newOwnerHandovers, `handed ${plural(c.newOwnerHandovers, 'team', 'teams')} back to a new owner`],
+        [c.autoHandovers, `took over ${plural(c.autoHandovers, 'team', 'teams')} with no activity, as you set up`],
+      ]
   return lines.filter(([n]) => n > 0).sort((a, b) => b[0] - a[0]).map(([, text]) => text)
 }
 
@@ -99,10 +116,11 @@ export function previousRecapWeek(now: Date): { start: Date; end: Date; key: str
   return { start, end, key: start.toISOString().slice(0, 10) }
 }
 
-export function recapMessage(leagueName: string, lines: readonly string[]): { title: string; body: string } {
-  const body =
-    lines.length === 1
-      ? `This week AllFantasy ${lines[0]}.`
-      : `This week AllFantasy ${lines.slice(0, -1).join('; ')}; and ${lines[lines.length - 1]}.`
-  return { title: `What AllFantasy did this week · ${leagueName}`, body: `${body} Every action is in the league log.` }
+export function recapMessage(leagueName: string, lines: readonly string[], lang: RecapLanguage = 'en'): { title: string; body: string } {
+  const es = lang === 'es'
+  const and = es ? 'y' : 'and'
+  const joined = lines.length === 1 ? lines[0] : `${lines.slice(0, -1).join('; ')}; ${and} ${lines[lines.length - 1]}`
+  return es
+    ? { title: `Lo que hizo AllFantasy esta semana · ${leagueName}`, body: `Esta semana AllFantasy ${joined}. Cada acción está en el registro de la liga.` }
+    : { title: `What AllFantasy did this week · ${leagueName}`, body: `This week AllFantasy ${joined}. Every action is in the league log.` }
 }

@@ -127,7 +127,7 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
                   <p>{t('Saving will:', 'Al guardar:')}</p>
                   <ul>
                     {preview.changes.map((c) => (
-                      <li key={c.label}>{c.label}</li>
+                      <li key={c.label}>{es ? c.labelEs : c.label}</li>
                     ))}
                   </ul>
                 </>
@@ -135,7 +135,7 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
               {preview.needsPlan.length > 0 ? (
                 <p>
                   {t('Needs AF Commissioner, so not included: ', 'Requiere AF Commissioner, así que no se incluye: ')}
-                  {preview.needsPlan.join(', ')}.
+                  {(es ? preview.needsPlanEs : preview.needsPlan).join(', ')}.
                 </p>
               ) : null}
               {preview.changes.length > 0 ? (
@@ -158,7 +158,7 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
                   {inGroup.map((r) => (
                     <li key={r.key} data-testid={`automation-${r.key}`} data-state={r.state}>
                       <strong>{es ? LABELS_ES[r.key] ?? r.label : r.label}</strong> · {stateText(r)}
-                      {r.detail && !es ? ` · ${r.detail}` : ''}{' '}
+                      {(es ? r.detailEs : r.detail) ? ` · ${es ? r.detailEs : r.detail}` : ''}{' '}
                       {r.href.startsWith('#') ? <a href={r.href}>{t('Change', 'Cambiar')}</a> : <Link href={r.href}>{t('Change', 'Cambiar')}</Link>}
                     </li>
                   ))}

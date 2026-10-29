@@ -41,8 +41,8 @@ describe('the preset buttons', () => {
     const calls: Array<[string, RequestInit | undefined]> = []
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
       calls.push([url, init])
-      if (url.includes('automation-preset') && init?.method === 'POST') return json({ preset: 'recommended', changes: [{ step: { key: 'ir_auto_move', on: true }, label: 'Move healthy players off IR' }], needsPlan: [] })
-      if (url.includes('automation-preset')) return json({ preset: 'recommended', changes: [{ step: { key: 'ir_auto_move', on: true }, label: 'Move healthy players off IR' }], needsPlan: ['Anti-tanking monitor'] })
+      if (url.includes('automation-preset') && init?.method === 'POST') return json({ preset: 'recommended', changes: [{ step: { key: 'ir_auto_move', on: true }, label: 'Move healthy players off IR', labelEs: 'x' }], needsPlan: [], needsPlanEs: [] })
+      if (url.includes('automation-preset')) return json({ preset: 'recommended', changes: [{ step: { key: 'ir_auto_move', on: true }, label: 'Move healthy players off IR', labelEs: 'x' }], needsPlan: ['Anti-tanking monitor'], needsPlanEs: ['y'] })
       return json({ supported: true, commissionerPlan: true, rows: [] })
     }))
     render(<AutomationOverview leagueId="L1" />)
