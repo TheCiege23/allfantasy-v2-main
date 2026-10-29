@@ -68,7 +68,9 @@ export function summarizeResult(body, job) {
   if (job.kind === 'market_adp') {
     const reads = body.providerRowsReadBySport
     if (!reads || !SPORTS.every(sport => Number.isInteger(reads[sport]) && reads[sport] > 0)) return { status: 'failed', rows: 0 }
-    return { status: 'success', rows: SPORTS.reduce((sum, sport) => sum + reads[sport], 0) }
+    const staleFfcFormats = ['standard', 'ppr', 'half-ppr', '2qb'].filter(format => body.ffcByFormat?.[format]?.fresh !== true)
+    return { status: staleFfcFormats.length ? 'partial' : 'success',
+      rows: SPORTS.reduce((sum, sport) => sum + reads[sport], 0), staleFfcFormats }
   }
   if (job.kind === 'sleeper_rows') {
     const row = body.sleeperRows

@@ -47,3 +47,5 @@ Keep historical replay, controlled completed-season fixtures and live-calendar r
 ## Other open provider exceptions
 
 Verified missing portraits, the unprofiled NBA identity and undocumented NHL goalie season wins/shutouts remain visible exceptions. No guessed images, roles or stat values may fill them.
+
+Daily staging maintenance reports stale or undated FFC boards as partial work even when provider row counts are positive. The draft shows a market-ADP-unavailable message when no usable ranks exist. This does not assert that a licensed replacement board has been supplied.

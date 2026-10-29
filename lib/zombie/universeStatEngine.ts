@@ -206,10 +206,15 @@ export async function executePromotionRelegation(universeId: string, season: num
       if (row.wins + row.losses + row.ties === 0) throw new Error('MOVEMENT_STANDINGS_INCOMPLETE')
     }
     if (standings.length !== owners.length) throw new Error('MOVEMENT_STANDINGS_INCOMPLETE')
+    const names = await tx.zombieLeagueTeam.findMany({
+      where: { leagueId: { in: u.leagues.map(l => l.leagueId) } },
+      select: { rosterId: true, displayName: true, fantasyTeamName: true },
+    })
+    const nameByRoster = new Map(names.map(t => [t.rosterId, t.displayName || t.fantasyTeamName]))
     const plan = planUniverseMovement(standings, u.levels, u).filter(row => row.reason !== 'watch')
     for (const row of plan) await tx.zombieMovementRecord.create({ data: {
       universeId, season, userId: ownerByRoster.get(row.rosterId)!,
-      displayName: ownerByRoster.get(row.rosterId)!,
+      displayName: nameByRoster.get(row.rosterId) || ownerByRoster.get(row.rosterId)!,
       fromTierLabel: row.fromTierLabel, toTierLabel: row.toTierLabel,
       movementType: row.reason === 'promotion' ? 'promoted' : 'relegated',
       reason: 'record_performance', finalRecord: row.wins + '-' + row.losses + '-' + row.ties,

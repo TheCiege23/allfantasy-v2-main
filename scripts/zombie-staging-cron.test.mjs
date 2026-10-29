@@ -186,8 +186,20 @@ test('daily quality refresh includes one bounded four-sport ADP ingest and detec
   const jobs = qualityJobs(2026).filter(job => job.kind === 'market_adp')
   assert.equal(jobs.length, 1)
   assert.equal(jobs[0].path, '/api/cron/adp-refresh?sport=NFL,NBA,NHL,MLB')
-  const body = { ok: true, providerRowsReadBySport: { NFL: 330, NBA: 440, NHL: 880, MLB: 620 }, providerRowsWritten: 0 }
+  const body = { ok: true, providerRowsReadBySport: { NFL: 330, NBA: 440, NHL: 880, MLB: 620 }, providerRowsWritten: 0,
+    ffcByFormat: Object.fromEntries(['standard','ppr','half-ppr','2qb'].map(format => [format, { fresh: true }])) }
   assert.equal(summarizeResult(body, jobs[0]).status, 'success')
   assert.equal(summarizeResult({ ...body, providerRowsReadBySport: { ...body.providerRowsReadBySport, NHL: 0 } }, jobs[0]).status, 'failed')
   assert.equal(summarizeResult({ ok: true }, jobs[0]).status, 'failed')
+})
+
+test('old or undated NFL samples are partial even when every sport returned positive row counts', () => {
+  const job = qualityJobs(2026).find(j => j.kind === 'market_adp')
+  const body = { ok: true, providerRowsReadBySport: { NFL: 330, NBA: 440, NHL: 880, MLB: 620 },
+    ffcByFormat: Object.fromEntries(['standard','ppr','half-ppr','2qb'].map(format => [format, { fresh: true }])) }
+  body.ffcByFormat['half-ppr'] = { fresh: false }
+  assert.deepEqual(summarizeResult(body, job).staleFfcFormats, ['half-ppr'])
+  assert.equal(summarizeResult(body, job).status, 'partial')
+  delete body.ffcByFormat
+  assert.equal(summarizeResult(body, job).status, 'partial')
 })

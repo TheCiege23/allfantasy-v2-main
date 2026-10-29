@@ -409,6 +409,7 @@ function PlayerPanelInner({
   rookieFilterState,
 }: PlayerPanelProps) {
   const effectiveUseAiAdp = canDisplayAiAdp(useAiAdp, aiAdpUnavailable, players)
+  const marketAdpUnavailable = !loading && players.length > 0 && !players.some(p => typeof p.adp === 'number' && Number.isFinite(p.adp) && p.adp > 0)
   const rs = presentationVariant === 'redraft_snake'
   const draftedIdsForRows = draftedPlayerIds?.size ? draftedPlayerIds : undefined
   const { t } = useLanguage()
@@ -1059,7 +1060,12 @@ function PlayerPanelInner({
               Use AI ADP
             </label>
           )}
-          {aiAdpUnavailable && (
+          {marketAdpUnavailable && (
+            <span className="text-[11px] text-amber-300/90" data-testid="draft-market-adp-unavailable" role="status">
+              Market ADP unavailable. Unranked players appear by name.
+            </span>
+          )}
+          {aiAdpUnavailable && !marketAdpUnavailable && (
             <span
               className="text-[11px] text-amber-400/90"
               data-testid="draft-ai-adp-unavailable-banner"
