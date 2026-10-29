@@ -53,6 +53,7 @@ import { DraftIntroGate } from '@/components/draft/DraftIntroGate'
 import type { DraftAiOverlaySignal, PlayerEntry } from '@/components/app/draft-room/PlayerPanel'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { resolvePickAnnouncementAssets } from '@/lib/draft-room/resolvePickAnnouncementAssets'
+import { fillPickHeadshotsFromPool } from '@/lib/draft-room/fillPickHeadshotsFromPool'
 import type { DraftWarRoomSnapshot } from '@/components/draft/ai/DraftWarRoom'
 import { LiveDraftStatusColumn } from '@/components/draft/live/LiveDraftStatusColumn'
 
@@ -718,6 +719,11 @@ export function DraftRoomPageClient({
   )
   const boardAdpDeltaByOverall = useMemo(
     () => buildAdpDeltaByOverall(session?.picks ?? [], buildAdpLookup(players)),
+    [session?.picks, players],
+  )
+  // Picks saved without a photo (auto / AI picks outside the NFL) take the pool's headshot.
+  const boardPicks = useMemo(
+    () => fillPickHeadshotsFromPool(session?.picks ?? [], players),
     [session?.picks, players],
   )
 
@@ -5510,7 +5516,7 @@ export function DraftRoomPageClient({
               ) : null}
               <div className="min-h-0 flex-1 overflow-auto overscroll-contain [overflow-anchor:none]">
                 <DraftBoard
-                  picks={session.picks ?? []}
+                  picks={boardPicks}
                   slotOrder={slotOrder}
                   tradedPicks={(session as any).tradedPicks ?? []}
                   teamCount={safeBoardTeamCount}
