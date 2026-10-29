@@ -27,6 +27,7 @@ function database() {
     survivorTribeSwap: { create: vi.fn() },
     survivorChatMessage: { create: vi.fn() },
     survivorAuditEntry: { create: vi.fn() },
+    survivorCommissionerAction: { findMany: vi.fn().mockResolvedValue([]) },
   }
 }
 
@@ -45,6 +46,31 @@ describe('commissioner-approved tribe redraw engine', () => {
     expect(provision).toHaveBeenCalledWith('league', expect.objectContaining({ db }))
     expect(db.survivorChatMessage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ channelId: 'league-chat', senderName: 'Chimmy' }) })
     expect(db.survivorTribeSwap.create).toHaveBeenCalledWith({ data: expect.objectContaining({ swapType: 'random_shuffle' }) })
+  })
+
+  it('gives every larger tribe a manager who did not sit out last week', async () => {
+    // NBA rehearsal week 7: a plain shuffle put all five of week 6's sit-outs into the one tribe of
+    // five; it had to sit someone out and nobody in it could, so the week never settled.
+    const tribes = ['t1', 't2', 't3', 't4'].map(id => ({ id, members: [] as Array<{ rosterId: string }> }))
+    const players = Array.from({ length: 17 }, (_, i) => ({ userId: `u${i}`, redraftRosterId: `r${i}`, tribeId: tribes[i % 4].id }))
+    players.forEach(player => tribes.find(tribe => tribe.id === player.tribeId)!.members.push({ rosterId: player.redraftRosterId }))
+    const rested = new Set(players.slice(0, 13).map(player => player.userId))
+    for (let seed = 1; seed <= 50; seed++) {
+      const db = database()
+      db.survivorGameState.findUnique.mockResolvedValue({ phase: 'pre_merge', activeCouncilId: null, currentWeek: 7 })
+      db.survivorTribe.findMany.mockResolvedValue(tribes)
+      db.survivorPlayer.findMany.mockResolvedValue(players)
+      db.survivorCommissionerAction.findMany.mockResolvedValue([...rested].map(targetUserId => ({ targetUserId })))
+      expect(await runShuffle('league', { db: db as never, seed })).toEqual({ ok: true })
+      expect(db.survivorCommissionerAction.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ week: 6, actionType: 'sit_out_accepted' }) }))
+      const byTribe = new Map<string, string[]>()
+      for (const [call] of db.survivorTribeMember.create.mock.calls) byTribe.set(call.data.tribeId, [...(byTribe.get(call.data.tribeId) ?? []), call.data.rosterId])
+      const smallest = Math.min(...[...byTribe.values()].map(members => members.length))
+      for (const members of byTribe.values()) {
+        if (members.length === smallest) continue
+        expect(members.some(rosterId => !rested.has(rosterId.replace('r', 'u')))).toBe(true)
+      }
+    }
   })
 
   it('refuses to redraw during an open council without changing memberships', async () => {
