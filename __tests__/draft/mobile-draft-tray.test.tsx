@@ -40,9 +40,27 @@ describe('mobile draft tray', () => {
   it('starts collapsed on the board tab and opens to half when a tab is chosen', () => {
     render(<Room />)
     expect(tray().getAttribute('data-snap')).toBe('peek')
-    fireEvent.click(screen.getByTestId('draft-mobile-tab-players'))
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-queue'))
     expect(tray().getAttribute('data-snap')).toBe('half')
+    expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('queue')
+  })
+
+  it('opens the Players tab at full height — half leaves room for only ~2 player cards', () => {
+    render(<Room />)
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-players'))
+    expect(tray().getAttribute('data-snap')).toBe('full')
     expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('players')
+  })
+
+  it('gives the player panel a definite-height column, so its own list is the scroller', () => {
+    render(<Room initial="players" />)
+    const sheet = screen.getByTestId('draft-mobile-players-sheet')
+    const scroll = screen.getByTestId('draft-mobile-players-scroll')
+    // An auto-height wrapper here let PlayerPanel grow to every row, and touch scrolling died.
+    expect(sheet.className).toMatch(/\bh-full\b/)
+    expect(sheet.className).toMatch(/\bflex-col\b/)
+    expect(scroll.className).toMatch(/\bflex-1\b/)
+    expect(scroll.className).toMatch(/\bmin-h-0\b/)
   })
 
   it('the Board tab collapses the tray', () => {
@@ -64,7 +82,7 @@ describe('mobile draft tray', () => {
   })
 
   it('the handle is keyboard-operable and announces its state', () => {
-    render(<Room initial="players" />)
+    render(<Room initial="queue" />)
     expect(handle().getAttribute('aria-expanded')).toBe('true')
     fireEvent.keyDown(handle(), { key: 'Enter' })
     expect(tray().getAttribute('data-snap')).toBe('full')

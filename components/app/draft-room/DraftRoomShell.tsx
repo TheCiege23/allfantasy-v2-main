@@ -393,6 +393,7 @@ export function DraftRoomShell({
           onRequestExpand={expandTray}
           layoutRef={layoutRef}
           fullOnInputFocus={mobileTab === 'chat'}
+          openSnap={mobileTab === 'players' ? 'full' : 'half'}
           testIdPrefix="draft-mobile"
           ariaLabel={t('draftRoom.shell.aria.draftSections')}
           accessory={mobileDockAccessory}
@@ -477,10 +478,19 @@ export function DraftRoomShell({
               data-testid="draft-mobile-content"
               data-active-tab={mobileTab}
             >
+              {/*
+                ⚠ THE PLAYERS SHEET MUST GIVE THE PANEL A DEFINITE HEIGHT. PlayerPanel pins its search
+                and filters (`sticky`) and scrolls its own list (`draft-player-list-scroll`). Under an
+                auto-height wrapper its `h-full` resolved to auto, so the panel grew to every row: the
+                header scrolled away with the list, and a touch landing on the list's own
+                `overscroll-contain` scroller (which had nothing to scroll) was swallowed instead of
+                chaining up — reported on Android as "can't scroll the draft board". Every wrapper
+                down to the panel is a full-height flex column so the LIST is the scroller.
+              */}
               {mobileTab === 'players' && (
-                <div className="overflow-hidden" data-testid="draft-mobile-players-sheet">
+                <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="draft-mobile-players-sheet">
                   <div
-                    className="min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth"
+                    className="flex min-h-0 flex-1 flex-col min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth"
                     data-testid="draft-mobile-players-scroll"
                   >
                     {playerPanel}
