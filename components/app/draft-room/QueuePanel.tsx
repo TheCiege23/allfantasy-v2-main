@@ -163,14 +163,12 @@ export function QueuePanel({
 
   return (
     <section
-      className={`flex flex-col overflow-hidden rounded-lg border bg-[#101a30] ${
-        rs ? 'border-cyan-500/18 shadow-[0_10px_28px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.04)]' : 'border-white/[0.07]'
-      }`}
+      className="flex flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#151b2e]"
       data-testid="draft-queue-panel"
     >
-      <div className={`flex items-center justify-between gap-2 border-b px-2.5 py-1 ${rs ? 'border-cyan-500/15 bg-[linear-gradient(90deg,rgba(34,211,238,0.08),transparent)]' : 'border-white/[0.06]'}`}>
+      <div className={`flex items-center justify-between gap-2 border-b px-2.5 py-1 ${rs ? 'border-white/[0.06] bg-[#0d1424]' : 'border-white/[0.06]'}`}>
         <div className="flex items-center gap-2">
-          <ListOrdered className="h-3.5 w-3.5 text-cyan-400" />
+          <ListOrdered className="h-3.5 w-3.5 text-[#8b91a7]" />
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/92">Queue</span>
         </div>
         <label className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-white/75">
@@ -200,7 +198,7 @@ export function QueuePanel({
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search queued players"
           data-testid="draft-queue-search"
-          className="h-7 rounded-lg border border-white/12 bg-[#0b1328] px-2 text-[11px] text-white placeholder:text-white/40 outline-none transition focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-500/15"
+          className="h-7 rounded-lg border border-transparent bg-[#1d2236] px-2 text-[11px] text-white placeholder:text-white/40 outline-none transition focus:ring-2 focus:ring-white/20"
         />
         {/* Position filter — chip row matches the player pool's position pills
             so users see consistent affordances across both surfaces. */}
@@ -221,9 +219,9 @@ export function QueuePanel({
                 onClick={() => setPositionFilter(position)}
                 data-testid={`draft-queue-position-pill-${position.toLowerCase()}`}
                 data-active={isActive ? 'true' : 'false'}
-                className={`inline-flex h-6 items-center rounded-full border px-2 text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
+                className={`inline-flex h-6 items-center rounded-full border px-2 text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
                   isActive
-                    ? 'border-cyan-400/45 bg-gradient-to-r from-cyan-500/22 to-violet-600/18 text-cyan-50 shadow-[0_0_14px_rgba(34,211,238,0.18)]'
+                    ? 'border-transparent bg-white text-[#14172a]'
                     : 'border-white/15 bg-black/20 text-white/65 hover:border-white/28 hover:text-white/90'
                 }`}
               >
@@ -236,7 +234,7 @@ export function QueuePanel({
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value as QueueSortMode)}
           data-testid="draft-queue-sort"
-          className="h-7 rounded-lg border border-white/12 bg-[#0b1328] px-2 text-[11px] text-white outline-none transition focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-500/15"
+          className="h-7 rounded-lg border border-transparent bg-[#1d2236] px-2 text-[11px] text-white outline-none transition focus:ring-2 focus:ring-white/20"
         >
           <option value="queue">Sort: Queue order</option>
           <option value="adp">Sort: ADP</option>
@@ -246,10 +244,10 @@ export function QueuePanel({
       </div>
       {rs ? (
         <details className="group border-b border-white/[0.06]" data-testid="draft-queue-ai-options">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90 [&::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/85 [&::-webkit-details-marker]:hidden">
             <span>Queue &amp; AI options</span>
             <ChevronDown
-              className="h-4 w-4 shrink-0 text-cyan-200/75 transition group-open:rotate-180"
+              className="h-4 w-4 shrink-0 text-[#8b91a7] transition group-open:rotate-180"
               aria-hidden
             />
           </summary>
@@ -257,7 +255,7 @@ export function QueuePanel({
             {onAiReorder && (
               <>
                 {onAiReorderEnabledChange && (
-                  <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-cyan-100/85 touch-manipulation">
+                  <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/85 touch-manipulation">
                     <input
                       type="checkbox"
                       checked={aiReorderEnabled}
@@ -271,7 +269,7 @@ export function QueuePanel({
                         onAiReorderEnabledChange(e.target.checked)
                       }}
                       data-testid="draft-queue-ai-reorder-toggle"
-                      className="rounded border-cyan-300/40 w-4 h-4"
+                      className="rounded border-white/[0.06] w-4 h-4"
                     />
                     AI explanation for reorder
                   </label>
@@ -289,7 +287,7 @@ export function QueuePanel({
                   }}
                   disabled={aiReorderLoading || !aiReorderEnabled || queue.length < 2}
                   data-testid="draft-queue-ai-reorder"
-                  className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/35 bg-cyan-500/10 px-3 py-2.5 text-xs text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50 touch-manipulation"
+                  className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-[#1d2236] px-3 py-2.5 text-xs text-white/85 hover:bg-[#2a2f45] disabled:opacity-50 touch-manipulation"
                 >
                   <Zap className="h-3.5 w-3.5" />
                   {aiReorderLoading ? 'Reordering…' : 'Auto reorder'}
@@ -342,7 +340,7 @@ export function QueuePanel({
           {onAiReorder && (
             <>
               {onAiReorderEnabledChange && (
-                <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-cyan-100/85 touch-manipulation">
+                <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/85 touch-manipulation">
                   <input
                     type="checkbox"
                     checked={aiReorderEnabled}
@@ -356,7 +354,7 @@ export function QueuePanel({
                       onAiReorderEnabledChange(e.target.checked)
                     }}
                     data-testid="draft-queue-ai-reorder-toggle"
-                    className="rounded border-cyan-300/40 w-4 h-4"
+                    className="rounded border-white/[0.06] w-4 h-4"
                   />
                   AI explanation for reorder
                 </label>
@@ -374,7 +372,7 @@ export function QueuePanel({
                 }}
                 disabled={aiReorderLoading || !aiReorderEnabled || queue.length < 2}
                 data-testid="draft-queue-ai-reorder"
-                className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/35 bg-cyan-500/10 px-3 py-2.5 text-xs text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50 touch-manipulation"
+                className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-[#1d2236] px-3 py-2.5 text-xs text-white/85 hover:bg-[#2a2f45] disabled:opacity-50 touch-manipulation"
               >
                 <Zap className="h-3.5 w-3.5" />
                 {aiReorderLoading ? 'Reordering…' : 'Auto reorder'}
@@ -433,7 +431,7 @@ export function QueuePanel({
         </p>
       )}
       {aiReorderExplanation && (
-        <p className="border-b border-white/8 px-2 py-1.5 text-[11px] text-cyan-100/90" title="AI reorder explanation">
+        <p className="border-b border-white/8 px-2 py-1.5 text-[11px] text-white/85" title="AI reorder explanation">
           {aiReorderExplanation}
         </p>
       )}
@@ -447,13 +445,13 @@ export function QueuePanel({
           <div className="flex h-full min-h-[72px] flex-col items-center justify-center gap-1 px-2 py-2 text-center">
             <div
               className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
-                rs ? 'border-cyan-400/20 bg-cyan-500/8' : 'border-white/10 bg-white/[0.03]'
+                rs ? 'border-transparent bg-[#1d2236]' : 'border-white/10 bg-white/[0.03]'
               }`}
               aria-hidden
             >
-              <ListOrdered className={`h-3.5 w-3.5 ${rs ? 'text-cyan-200/70' : 'text-white/45'}`} />
+              <ListOrdered className={`h-3.5 w-3.5 ${rs ? 'text-[#8b91a7]' : 'text-white/45'}`} />
             </div>
-            <p className={`text-[11px] font-semibold ${rs ? 'text-cyan-100/88' : 'text-white/82'}`}>
+            <p className={`text-[11px] font-semibold ${rs ? 'text-white/85' : 'text-white/82'}`}>
               No players in your queue
             </p>
             <p className="max-w-[220px] text-[11px] leading-relaxed text-white/45">
@@ -536,7 +534,7 @@ export function QueuePanel({
                         <span
                           className={`rounded border px-1.5 py-[1px] ${
                             aiOverlaySignal.badge === 'ai_pick'
-                              ? 'border-cyan-300/35 bg-cyan-500/14 text-cyan-100'
+                              ? 'border-transparent bg-[#1d2236] text-white/85'
                               : aiOverlaySignal.badge === 'risky'
                                 ? 'border-amber-300/35 bg-amber-500/14 text-amber-100'
                                 : 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
@@ -553,7 +551,7 @@ export function QueuePanel({
                         <span className="rounded border border-white/15 bg-white/5 px-1.5 py-[1px] text-white/65">{entry.team}</span>
                       ) : null}
                       {adpText ? (
-                        <span className="rounded border border-cyan-300/35 bg-cyan-500/12 px-1.5 py-[1px] text-cyan-100">ADP {adpText}</span>
+                        <span className="rounded border border-transparent bg-[#1d2236] px-1.5 py-[1px] text-white/85">ADP {adpText}</span>
                       ) : null}
                       {leftAtPick && survivalProbability(meta.adp, leftAtPick.overall) != null
                         ? (() => {
@@ -620,14 +618,14 @@ export function QueuePanel({
                         </span>
                       ) : null}
                       {meta.experienceBadge ? (
-                        <span className="rounded border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-[1px] text-cyan-50">
+                        <span className="rounded border border-transparent bg-[#1d2236] px-1.5 py-[1px] text-white">
                           {meta.experienceBadge}
                         </span>
                       ) : null}
                     </div>
                     {aiConfidencePct != null ? (
-                      <div className="mt-1 h-1 w-full max-w-[180px] overflow-hidden rounded-full border border-cyan-400/20 bg-slate-900/80" title={`AI confidence ${aiConfidencePct}%`}>
-                        <div className="h-full bg-gradient-to-r from-cyan-400/75 to-violet-400/75" style={{ width: `${aiConfidencePct}%` }} />
+                      <div className="mt-1 h-1 w-full max-w-[180px] overflow-hidden rounded-full border border-white/[0.06] bg-slate-900/80" title={`AI confidence ${aiConfidencePct}%`}>
+                        <div className="h-full bg-gradient-to-r from-white/60 to-white/60" style={{ width: `${aiConfidencePct}%` }} />
                       </div>
                     ) : null}
                   </div>
@@ -668,7 +666,7 @@ export function QueuePanel({
                       type="button"
                       onClick={() => onDraftFromQueue(entry)}
                       data-testid="draft-queue-draft-button"
-                      className="draft-live-action-btn min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border border-cyan-300/35 bg-cyan-500/12 px-2.5 py-1.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/20 touch-manipulation"
+                      className="draft-live-action-btn min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-[#1d2236] px-2.5 py-1.5 text-[11px] font-semibold text-white/85 hover:bg-[#2a2f45] touch-manipulation"
                     >
                       <Play className="h-3.5 w-3.5" /> Draft
                     </button>

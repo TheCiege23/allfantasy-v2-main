@@ -152,9 +152,9 @@ export function DraftRightDockTabs({
       data-testid={testIdBase}
       data-active-tab={effectiveTab}
       aria-label="Draft right dock"
-      className="flex h-full min-h-0 flex-col overflow-hidden rounded-l-xl border-l border-white/[0.06] bg-[linear-gradient(180deg,#0d1428_0%,#0b1324_100%)]"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-l-xl border-l border-white/[0.06] bg-[#0d1424]"
     >
-      {/* Tab header row. Active tab uses cyan-100 + bottom underline; inactives are muted. */}
+      {/* Tab header row. Active tab is white with a solid underline, as on the board; inactives are muted. */}
       <div
         role="tablist"
         aria-label="Draft right dock tabs"
@@ -162,7 +162,7 @@ export function DraftRightDockTabs({
         /* Column count follows the tabs actually rendered — it was hardcoded 3-or-4 and would
            have squeezed or stranded a column as soon as a fifth tab existed. */
         style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
-        className="grid shrink-0 border-b border-white/[0.05] bg-[#101a30]" 
+        className="grid shrink-0 border-b border-white/[0.06] bg-[#0d1424]"
       >
         {tabs.map((tab) => {
           const isActive = effectiveTab === tab.id
@@ -178,14 +178,14 @@ export function DraftRightDockTabs({
               onClick={() => onSelect(tab.id)}
               className={`relative flex items-center justify-center gap-1 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] transition ${
                 isActive
-                  ? 'text-cyan-100'
-                  : 'text-white/50 hover:bg-white/[0.04] hover:text-white/85'
+                  ? 'text-white'
+                  : 'text-[#8b91a7] hover:bg-[#1d2236] hover:text-white'
               }`}
             >
               <span>{tab.label}</span>
               {tab.id === 'queue' && typeof queueCount === 'number' && queueCount > 0 ? (
                 <span
-                  className="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full border border-cyan-300/35 bg-cyan-500/20 px-1 text-[11px] font-bold text-cyan-100"
+                  className="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-white px-1 text-[11px] font-bold text-[#14172a]"
                   aria-label={`${queueCount} queued`}
                   data-testid={`${testIdBase}-queue-count`}
                 >
@@ -195,7 +195,7 @@ export function DraftRightDockTabs({
               {isActive ? (
                 <span
                   aria-hidden
-                  className="absolute inset-x-3 bottom-0 h-px rounded-full bg-gradient-to-r from-cyan-400 to-violet-400 shadow-[0_0_10px_rgba(34,211,238,0.3)]"
+                  className="absolute inset-x-3 bottom-0 h-[2px] rounded-full bg-white"
                 />
               ) : null}
             </button>
