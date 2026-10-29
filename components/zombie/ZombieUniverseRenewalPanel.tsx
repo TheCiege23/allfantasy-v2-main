@@ -34,7 +34,7 @@ export function ZombieUniverseRenewalPanel({ universeId, leagueId, season }: { u
       {busy?'Preparing…':'Preview next season'}
     </button>}
     {universeId && !result && <button type="button" disabled={busy} onClick={()=>{invalidate();setEditing(!editing)}} className="ml-2 mt-3 min-h-[44px] rounded-lg border border-emerald-400/40 px-4 disabled:opacity-50">{editing?'Close placement editor':'Edit placements and capacity'}</button>}
-    {universeId && editing && !result && <fieldset disabled={busy}><ZombieUniverseAllocationEditor universeId={universeId} season={season} onInvalidate={invalidate} onPreview={(data,accepted)=>{setPreview(data as Preview);setProposal(accepted);setReviewed(false);setError('')}} /></fieldset>}
+    {universeId && editing && !result && <fieldset disabled={busy}><ZombieUniverseAllocationEditor universeId={universeId} season={season} onInvalidate={invalidate} onPreview={(data,accepted)=>{const value=data as Preview;if(value.completed&&value.result){setResult(value.result);setPreview(null);setEditing(false)}else{setPreview(value)}setProposal(accepted);setReviewed(false);setError('')}} /></fieldset>}
     {error && <p role="alert" className="mt-3 text-amber-200">{error}</p>}
     {preview && <div className="mt-4 space-y-3">
       <p className="font-semibold">{preview.assignments.length} managers · {preview.pools.length} leagues · Season {preview.nextSeason} · {preview.openSeats??0} open seats</p>

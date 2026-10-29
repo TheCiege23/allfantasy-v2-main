@@ -44,6 +44,7 @@ export function ZombieUniverseAllocationEditor({universeId,season,onInvalidate,o
       if(!active.current)return
       if(!res.ok){setHash(null);onInvalidate();throw new Error(value.error||'Could not review the proposal.')}
       if(save)setMessage('Review draft saved. Restore it here after reopening; no leagues have been created.')
+      else if(value.completed){setHash(null);onPreview(value,proposal)}
       else {setHash(value.previewHash);onPreview(value,proposal);setMessage('Preview updated. Review every destination and open seat before creating the season.')}
     }catch(e){setError(e instanceof Error?e.message:'Request failed.')}
     finally{setBusy(false)}
