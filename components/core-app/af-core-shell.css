@@ -2570,9 +2570,73 @@ html[data-mode='light'] .af-core {
   }
 }
 
-/* Every league hidden: this row is the whole tray, so it reads as the primary thing to do. */
-.af-core .af-rail-tile.af-rail-hidden-link[data-all-hidden='true'] {
+/*
+ * Every league hidden: this row is the whole tray, so it reads as the primary thing to do.
+ * Specific enough to beat the open tray's card rule (`[data-rail-open='true'] .af-rail-scroll
+ * .af-rail-tile`, later in this file), which would otherwise repaint the border `--line`.
+ */
+.af-core.af-shell .af-rail-scroll .af-rail-tile.af-rail-hidden-link[data-all-hidden='true'] {
   border-color: var(--accent);
+}
+
+/*
+ * "2 hidden · Show" — the header's hidden count as its own link, under the toggle. Shown exactly
+ * where `.af-rail-toggle-text` is shown (expanded desktop rail, phone tray) and nowhere else: the
+ * collapsed 42px rail has no room, and the list's last row carries the count there.
+ */
+.af-core .af-rail-hidden-count {
+  display: none;
+  align-self: stretch;
+  margin-top: -4px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  color: var(--accent);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.af-core .af-rail-hidden-count:hover,
+.af-core .af-rail-hidden-count:focus-visible {
+  background: var(--chip);
+}
+
+.af-shell[data-rail-open='true'] .af-rail-hidden-count {
+  display: block;
+}
+
+@media (min-width: 1281px) {
+  .af-shell:not([data-rail-open='false']) .af-rail-hidden-count {
+    display: block;
+  }
+}
+
+/* The phone tray is a grid (logo | header, then list, then foot); give the link its own row under the header. */
+@media (max-width: 720px) {
+  .af-core .af-rail-hidden-count {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] {
+    grid-template-rows: auto auto minmax(0, max-content) auto;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] .af-rail-hidden-count {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] .af-rail-scroll {
+    grid-row: 3;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] .af-rail-foot {
+    grid-row: 4;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
