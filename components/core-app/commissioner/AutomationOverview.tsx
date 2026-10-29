@@ -6,6 +6,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { AutomationOverviewView } from '@/lib/commissioner-hub/automationOverviewService'
 import type { AutomationGroup, AutomationRow } from '@/lib/commissioner-hub/automationOverview'
 import type { AutomationPreset, PresetPlan } from '@/lib/commissioner-hub/automationPreset'
+import { automationToggleRequest, isToggleableAutomation } from '@/lib/commissioner-hub/automationToggles'
 
 /**
  * "What runs itself" (lib/commissioner-hub/automationOverview.ts) on the Commissioner Hub: every
@@ -69,6 +70,25 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
       setPreview(body)
     } catch (e) {
       setMessage(e instanceof Error && e.message ? e.message : t('Could not load. Refresh and try again.', 'No se pudo cargar. Actualiza e inténtalo de nuevo.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** A free automation switched right here, through its own endpoint. */
+  const flip = async (r: AutomationRow) => {
+    if (!isToggleableAutomation(r.key)) return
+    setBusy(true)
+    setMessage('')
+    try {
+      const req = automationToggleRequest(leagueId, r.key, r.state !== 'on')
+      const res = await fetch(req.url, { method: req.method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req.body) })
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(body.error || '')
+      setMessage(t('Saved.', 'Guardado.'))
+      await load()
+    } catch (e) {
+      setMessage(e instanceof Error && e.message ? e.message : t('Could not save. Refresh and try again.', 'No se pudo guardar. Actualiza e inténtalo de nuevo.'))
     } finally {
       setBusy(false)
     }
@@ -157,6 +177,16 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
                 <ul>
                   {inGroup.map((r) => (
                     <li key={r.key} data-testid={`automation-${r.key}`} data-state={r.state}>
+                      {isToggleableAutomation(r.key) ? (
+                        <input
+                          type="checkbox"
+                          checked={r.state === 'on'}
+                          disabled={busy}
+                          onChange={() => void flip(r)}
+                          aria-label={es ? LABELS_ES[r.key] ?? r.label : r.label}
+                          data-testid={`automation-toggle-${r.key}`}
+                        />
+                      ) : null}{' '}
                       <strong>{es ? LABELS_ES[r.key] ?? r.label : r.label}</strong> · {stateText(r)}
                       {(es ? r.detailEs : r.detail) ? ` · ${es ? r.detailEs : r.detail}` : ''}{' '}
                       {r.href.startsWith('#') ? <a href={r.href}>{t('Change', 'Cambiar')}</a> : <Link href={r.href}>{t('Change', 'Cambiar')}</Link>}
