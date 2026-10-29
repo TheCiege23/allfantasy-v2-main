@@ -114,26 +114,24 @@ describe('DraftManagerStrip — label column width (Commit 21)', () => {
 // 6. DraftBoardCell height — tighter tiles
 // ---------------------------------------------------------------------------
 
-describe('DraftBoardCell — tile height (56px readability redesign, supersedes Commit 21)', () => {
-  // Commit 21 shrank tiles to 42/44px; at that height and an 88px column the player name
-  // truncated to a few characters and the team/bye line clipped. Tiles are now 56/60px.
-  it('cell base height is h-[56px]', () => {
-    expect(cellSrc).toMatch(/flex h-\[56px\] min-h-\[56px\]/)
+describe('DraftBoardCell — square tiles (2026-10-28, supersedes the 56px tiles)', () => {
+  // 56/60px-tall tiles in a `1fr` column stretched to ~190px wide on an 8-team board: wide
+  // rectangles. Tiles are now square, and columns are capped so they stay square.
+  it('cell is aspect-square and has no fixed pixel height', () => {
+    expect(cellSrc).toMatch(/flex aspect-square w-full flex-col/)
+    expect(cellSrc).not.toMatch(/flex h-\[56px\] min-h-\[56px\]/)
+    expect(cellSrc).not.toMatch(/sm:h-\[60px\] sm:min-h-\[60px\]/)
   })
 
-  it('cell sm height is sm:h-[60px] sm:min-h-[60px]', () => {
-    expect(cellSrc).toMatch(/sm:h-\[60px\] sm:min-h-\[60px\]/)
-  })
-
-  it('old 42px / 44px tile heights are gone', () => {
-    expect(cellSrc).not.toMatch(/flex h-\[42px\] min-h-\[42px\]/)
-    expect(cellSrc).not.toMatch(/sm:h-\[44px\] sm:min-h-\[44px\]/)
-  })
-
-  it('board columns are at least 104px and round labels match the tile height', () => {
-    expect(boardSrc).toMatch(/minmax\(104px, 1fr\)/)
+  it('board columns are capped at 96–124px instead of stretching with 1fr', () => {
+    expect(boardSrc).toMatch(/const BOARD_COLUMN = 'minmax\(96px, 124px\)'/)
+    expect(boardSrc).not.toMatch(/minmax\(104px, 1fr\)/)
     expect(boardSrc).not.toMatch(/minmax\(88px, 1fr\)/)
-    expect(boardSrc).toMatch(/min-h-\[56px\][^`"]*sm:min-h-\[60px\]/)
+  })
+
+  it('filled tiles take their position color', () => {
+    expect(cellSrc).toMatch(/positionTintHex\(pick\.position\)/)
+    expect(cellSrc).toMatch(/style=\{tint \?\? positionTint \?\? managerTint\}/)
   })
 })
 

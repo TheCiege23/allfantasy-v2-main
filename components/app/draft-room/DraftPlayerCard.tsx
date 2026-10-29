@@ -11,6 +11,7 @@ import { PlayerAvatar } from './PlayerAvatar'
 import { normalizePlayer } from '@/lib/players/normalizePlayer'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
+import { isDisplayableInjuryDesignation } from '@/lib/injuries/injuryStatusDisplay'
 import { DraftPlayerLabelBadge } from './DraftPlayerLabelBadge'
 
 export type DraftPlayerCardProps = {
@@ -196,8 +197,13 @@ function DraftPlayerCardInner({
   const displayName = display?.displayName ?? name
   const primaryStat = display?.stats?.primaryStatValue ?? adp
   const bye = display?.metadata?.byeWeek ?? display?.stats?.byeWeek ?? byeWeek
-  const injuryStatus =
+  const rawInjuryStatus =
     display?.metadata?.injuryStatus ?? unifiedProductView?.unified.injuryStatus ?? unifiedProductView?.injuryStatus ?? null
+  // The pool stores 'UNKNOWN' (and 'ACTIVE' for a healthy player) as the status; neither is an
+  // injury, and badging them put a red UNKNOWN chip on every NBA/NHL player (2026-10-28).
+  const injuryStatus = isDisplayableInjuryDesignation(rawInjuryStatus) ? rawInjuryStatus : null
+  // Bye weeks exist only in football.
+  const showBye = isNfl || String(draftSport).toUpperCase() === 'NCAAF'
   const resolvedSchool = school ?? display?.metadata?.collegeOrPipeline ?? null
   const resolvedClassYearLabel = display?.metadata?.classYearLabel ?? classYearLabel
   const resolvedDraftGrade = display?.metadata?.draftGrade ?? draftGrade
@@ -244,6 +250,9 @@ function DraftPlayerCardInner({
       poolType,
     ],
   )
+  // The ADP cell shows the value its label names. `normalized.adp` falls back to the display
+  // model's primary stat, so an "AI ADP" label could sit over market ADP or even FPPG.
+  const adpCellValue = adp ?? (adpMetricLabel === 'ADP' ? normalized.adp : null)
 
   const headshotUrl =
     getPlayerImage(normalized, draftSport) ??
@@ -354,7 +363,7 @@ function DraftPlayerCardInner({
               )}
             </div>
             <p className="mt-1 text-[11px] text-white/65">
-              {[adpMetricLabel, formatAdpDisplay(normalized.adp), 'Bye', formatBye(normalized.byeWeek)].join(' · ')}
+              {[adpMetricLabel, formatAdpDisplay(adpCellValue), ...(showBye ? ['Bye', formatBye(normalized.byeWeek)] : [])].join(' · ')}
             </p>
             {injuryStatus ? (
               <span className="mt-1 inline-flex max-w-full truncate rounded-md border border-rose-400/35 bg-rose-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-rose-100">
@@ -535,18 +544,20 @@ function DraftPlayerCardInner({
               className="text-cyan-300"
               data-testid={testId ? `${testId}-adp` : 'draft-player-adp'}
             >
-              {formatAdpDisplay(normalized.adp)}
+              {formatAdpDisplay(adpCellValue)}
             </span>
           </div>
-          <div className={rs ? 'mt-0.5' : ''}>
-            Bye{' '}
-            <span
-              className="text-cyan-300"
-              data-testid={testId ? `${testId}-bye` : 'draft-player-bye'}
-            >
-              {formatBye(normalized.byeWeek)}
-            </span>
-          </div>
+          {showBye ? (
+            <div className={rs ? 'mt-0.5' : ''}>
+              Bye{' '}
+              <span
+                className="text-cyan-300"
+                data-testid={testId ? `${testId}-bye` : 'draft-player-bye'}
+              >
+                {formatBye(normalized.byeWeek)}
+              </span>
+            </div>
+          ) : null}
         </div>
         <div className="flex items-center gap-1">{compareAction}{secondaryAction}{primaryAction}</div>
       </div>
