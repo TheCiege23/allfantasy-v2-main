@@ -14,6 +14,8 @@ import { GuillotineChopAnimation } from './GuillotineChopAnimation'
 import { GuillotineAIPanel } from './GuillotineAIPanel'
 import { shareCardImage } from '@/components/decide/shareCard'
 import { GuillotineSpecialtyHome } from './GuillotineSpecialtyHome'
+import { GuillotineNextChopPick } from './GuillotineNextChopPick'
+import type { NextChopPickState } from '@/lib/guillotine/nextChopPickStore'
 import type { GuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 
 function leagueQueryPath(leagueId: string, params: Record<string, string>) {
@@ -42,6 +44,8 @@ type Summary = {
   myRosterId?: string | null
   /** Specialty-home extras (counts, chopped chips, next chop time, last chop). Null when unavailable. */
   home?: GuillotineHomeExtras | null
+  /** "Who's next?" for chopped managers (lib/guillotine/nextChopPick.ts). */
+  nextChopPick?: NextChopPickState | null
   config?: {
     eliminationStartWeek: number
     eliminationEndWeek: number | null
@@ -240,6 +244,8 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
           </ul>
         )}
       </section>
+
+      {summary?.nextChopPick ? <GuillotineNextChopPick leagueId={leagueId} state={summary.nextChopPick} /> : null}
 
       {/* Waiver Fallout / Next release */}
       <section id="guillotine-waivers" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
