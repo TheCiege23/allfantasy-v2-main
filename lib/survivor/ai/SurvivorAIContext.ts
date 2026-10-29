@@ -21,6 +21,8 @@ import { getRosterTeamMap } from '@/lib/zombie/rosterTeamMap'
 import { resolveSurvivorAccessContext } from '../survivorAccessControl'
 import { survivorPublicCouncil } from '../survivorPublicCouncil'
 import { isCouncilReadComplete } from '../survivorRevealGate'
+import { normalizeSurvivorFoundationSettings } from '../survivorSettings'
+import { survivorIdolExpiryRule, survivorIdolExpiryText, survivorIdolPlayCutoffText, survivorIdolPlayDeadline } from '../survivorIdolExpiry'
 import { prisma } from '@/lib/prisma'
 import type { LeagueSport } from '@prisma/client'
 import { buildHistoricalContext, type HistoricalContext } from '@/lib/ai/historicalContextBuilder'
@@ -37,6 +39,9 @@ export type SurvivorAIType =
   | 'tribal_help'
   | 'exile_help'
   | 'bestball_help'
+  | 'idol_timing_help'
+  | 'jury_help'
+  | 'weekly_plan'
 
 export interface SurvivorAIDeterministicContext {
   leagueId: string
@@ -77,6 +82,8 @@ export interface SurvivorAIDeterministicContext {
   myIdols: { id: string; playerId: string; powerType: string }[]
   myActiveEffects: { rewardType: string; week: number; appliedMode: 'full' | 'record_only' | 'queued'; rosterId?: string | null; tribeId?: string | null; sourceRosterId?: string | null }[]
   myExileStatus: { exileRosterId: string; tokens: number; eliminated: boolean; eligibleToReturn: boolean; reason: string | null } | null
+  /** The league's idol rules: last moment to play this week (open council only), the cutoff and the expiry rule, in words. */
+  idolRules: { playDeadlineAt: Date | null; cutoffText: string | null; expiryText: string }
   finale: {
     open: boolean
     closed: boolean
@@ -104,7 +111,7 @@ export async function buildSurvivorAIContext(args: {
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, survivorRevealMode: true },
+    select: { sport: true, survivorRevealMode: true, settings: true },
   })
   const sport = (league?.sport ?? 'NFL') as LeagueSport
 
@@ -206,10 +213,18 @@ export async function buildSurvivorAIContext(args: {
     }
   }
 
+  const foundation = normalizeSurvivorFoundationSettings(league?.settings as Record<string, unknown> | null)
+  const idolRules = {
+    playDeadlineAt: council && !council.closedAt ? survivorIdolPlayDeadline(council, foundation.idolPlayCutoffHours) : null,
+    cutoffText: survivorIdolPlayCutoffText(foundation.idolPlayCutoffHours),
+    expiryText: survivorIdolExpiryText(survivorIdolExpiryRule(foundation)),
+  }
+
   return {
     leagueId,
     sport,
     currentWeek,
+    idolRules,
     config: {
       mode: config.mode,
       tribeCount: config.tribeCount,

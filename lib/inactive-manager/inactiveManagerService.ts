@@ -16,6 +16,8 @@ import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineup
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import type { LineupPlayerInfo } from '@/lib/league/native/nativeScreenModels'
+import { startersOnBye } from '@/lib/league/native/lineupMoves'
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { DRAFT_AS_ME_FEATURE, DRAFT_AS_ME_SETTING } from '@/lib/draft-room/draftAsMeAutopick'
 import {
@@ -23,6 +25,7 @@ import {
   autopilotRosterIds,
   DEFAULT_AUTOPILOT_STYLE,
   isAutopilotStyle,
+  managedForOwner,
   planBestLineup,
   readManagedLineups,
   suggestInactiveTeams,
@@ -114,7 +117,7 @@ export async function setInactiveManagerMode(leagueId: string, userId: string, r
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'AllFantasy can only set lineups in leagues it runs.' }
-  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true } })
+  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true } })
   if (!roster) return { ok: false, status: 404, error: 'That team is not in this league.' }
 
   let changed = false
@@ -122,7 +125,7 @@ export async function setInactiveManagerMode(leagueId: string, userId: string, r
     if (Boolean(current[rosterId]) === on) return null
     changed = true
     const next = { ...current }
-    if (on) next[rosterId] = { since: new Date().toISOString(), byUserId: userId }
+    if (on) next[rosterId] = { since: new Date().toISOString(), byUserId: userId, ownerUserId: roster.platformUserId ?? null }
     else delete next[rosterId]
     return next
   })
@@ -149,7 +152,7 @@ export async function setChimmyAutopilot(leagueId: string, userId: string, roste
   if (nextStyle !== null && !(await autopilotEntitled(league.userId))) {
     return { ok: false, status: 402, error: 'Chimmy autopilot is part of the AF Commissioner plan.' }
   }
-  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true } })
+  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true } })
   if (!roster) return { ok: false, status: 404, error: 'That team is not in this league.' }
 
   let changed = false
@@ -164,7 +167,7 @@ export async function setChimmyAutopilot(leagueId: string, userId: string, roste
     }
     if (entry?.autopilot?.style === nextStyle) return null
     changed = true
-    const base = entry ?? { since: now, byUserId: userId }
+    const base = entry ?? { since: now, byUserId: userId, ownerUserId: roster.platformUserId ?? null }
     return { ...current, [rosterId]: { ...base, autopilot: { style: nextStyle, since: entry?.autopilot?.since ?? now, byUserId: userId } } }
   })
   if (changed) {
@@ -222,10 +225,76 @@ export async function setDraftAsMe(leagueId: string, userId: string, on: unknown
  */
 export async function isOwnerOnAutopilot(leagueId: string, ownerId: string): Promise<boolean> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-  const ids = autopilotRosterIds(readManagedLineups(league?.settings))
+  const managed = readManagedLineups(league?.settings)
+  const ids = autopilotRosterIds(managed)
   if (ids.length === 0) return false
   const hit = await prisma.roster.findFirst({ where: { leagueId, id: { in: ids }, platformUserId: ownerId }, select: { id: true } })
-  return Boolean(hit)
+  // Autopilot switched on for a previous owner does not speak for this one: their trades go through.
+  return Boolean(hit) && managedForOwner(managed[hit!.id]!, ownerId) !== 'new_owner'
+}
+
+export const NEW_OWNER_ENDED_ACTION = 'inactive_manager_mode.ended_new_owner'
+
+/**
+ * A team that changed hands since its mode was switched on is its new owner's now: end the mode and tell
+ * the commissioner who switched it on (and the league owner). Entries from before owners were recorded
+ * are stamped with the current owner, so a later change is caught. Returns the roster ids ended.
+ */
+export async function endManagedForNewOwners(leagueId: string, commissionerId: string | null, leagueName: string | null): Promise<string[]> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const managed = readManagedLineups(league?.settings)
+  const ids = Object.keys(managed)
+  if (ids.length === 0) return []
+  const rosters = await prisma.roster.findMany({ where: { leagueId, id: { in: ids } }, select: { id: true, platformUserId: true } })
+  const owner = new Map(rosters.map((r) => [r.id, r.platformUserId ?? null]))
+  const changed = ids.filter((id) => owner.has(id) && managedForOwner(managed[id]!, owner.get(id)) === 'new_owner')
+  const unstamped = ids.filter((id) => owner.has(id) && managedForOwner(managed[id]!, owner.get(id)) === 'unstamped')
+  if (changed.length === 0 && unstamped.length === 0) return []
+  const ended: Array<{ rosterId: string; entry: ManagedLineup }> = []
+  await updateManaged(leagueId, (current) => {
+    const next = { ...current }
+    let touched = false
+    for (const id of ids) {
+      const entry = next[id]
+      if (!entry || !owner.has(id)) continue
+      const state = managedForOwner(entry, owner.get(id))
+      if (state === 'new_owner') {
+        ended.push({ rosterId: id, entry })
+        delete next[id]
+        touched = true
+      } else if (state === 'unstamped') {
+        next[id] = { ...entry, ownerUserId: owner.get(id) ?? null }
+        touched = true
+      }
+    }
+    return touched ? next : null
+  })
+  for (const { rosterId, entry } of ended) {
+    const wasAutopilot = Boolean(entry.autopilot)
+    await logAction({
+      leagueId,
+      userId: entry.byUserId,
+      actionType: NEW_OWNER_ENDED_ACTION,
+      entityType: 'roster',
+      entityId: rosterId,
+      metadata: { rosterId, reason: 'new_owner', previousOwnerId: entry.ownerUserId ?? null, newOwnerId: owner.get(rosterId) ?? null, autopilot: wasAutopilot },
+    }).catch(() => {})
+    const to = [...new Set([entry.byUserId, commissionerId].filter((v): v is string => Boolean(v)))]
+    await dispatchNotification({
+      userIds: to,
+      category: 'commissioner_alerts',
+      type: 'inactive_manager_new_owner',
+      title: `A team has a new owner · ${leagueName ?? 'your league'}`,
+      body: `${wasAutopilot ? 'Chimmy autopilot' : 'AllFantasy lineup management'} was switched on for a team that now has a new owner, so it has been turned off. The new owner runs the team from here, and trades offered to them go through as normal.`,
+      severity: 'low',
+      leagueId,
+      actionHref: `/league/${leagueId}`,
+      actionLabel: 'Open league',
+      dedupePrefix: `inactive-manager-new-owner:${leagueId}:${rosterId}:${entry.since}`,
+      meta: { leagueId, rosterId },
+    }).catch(() => {})
+  }
+  return ended.map((e) => e.rosterId)
 }
 
 /**
@@ -288,7 +357,14 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
     try {
       const league = await prisma.league.findUnique({ where: { id: leagueId } })
       if (!league) continue
-      const managed = Object.keys(readManagedLineups(league.settings))
+      // A team that has changed hands is its new owner's: end its mode before anything acts on it.
+      const endedForNewOwner = new Set(await endManagedForNewOwners(leagueId, league.userId, league.name ?? null).catch((e) => {
+        console.warn('[inactive-manager] new-owner sweep skipped', { leagueId, error: String(e) })
+        return [] as string[]
+      }))
+      for (const _ of endedForNewOwner) skip('new_owner')
+      const managedEntries = readManagedLineups(league.settings)
+      const managed = Object.keys(managedEntries).filter((id) => !endedForNewOwner.has(id))
       const status = String(league.status ?? league.lifecycleState ?? '').toLowerCase()
       const week = leagueWeekFromSettings(league.settings)
       const season = league.season
@@ -341,9 +417,15 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
           }
           const rows = await getNormalizedPlayerData({ surface: 'roster', leagueId, userId: roster.platformUserId, limit: 200 })
           const players: Record<string, LineupPlayerInfo> = {}
-          for (const p of rows.map(serializeUnifiedPlayerForApi)) players[p.id] = { position: p.position, projectedPoints: p.projectedPoints }
+          const byeFacts: Record<string, { byeWeek: number | null }> = {}
+          for (const p of rows.map(serializeUnifiedPlayerForApi)) {
+            players[p.id] = { position: p.position, projectedPoints: p.projectedPoints }
+            byeFacts[p.id] = { byeWeek: p.product?.byeWeek ?? p.nflRedraftGameContext?.byeWeek ?? null }
+          }
+          // The lineup screen's own bye test: a starter whose bye week is this week.
+          const onBye = new Set(startersOnBye(Object.keys(byeFacts), (id) => byeFacts[id], week))
           const locked = new Set(lock.lockedPlayerIds)
-          const plan = planBestLineup({ slots, playerData: roster.playerData, players, isLocked: (id) => locked.has(id) })
+          const plan = planBestLineup({ slots, playerData: roster.playerData, players, isLocked: (id) => locked.has(id), onBye: (id) => onBye.has(id) })
           if (plan.kind === 'skip') {
             if (plan.reason === 'already_best') result.unchanged += 1
             else skip(plan.reason)
@@ -363,7 +445,8 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
             automationAudit: {
               id: `inactive-manager-lineup:${JSON.stringify([leagueId, rosterId, season, week, Date.now()])}`,
               action: 'inactive_manager.lineup_set',
-              message: `AllFantasy set the best lineup while the manager is away: ${plan.changes.map((c) => `${c.slot} ${c.out ?? 'empty'} → ${c.in}`).join('; ')}.`,
+              // A team on Chimmy autopilot is Chimmy's to run; the free lineup mode is AllFantasy's.
+              message: `${managedEntries[rosterId]?.autopilot ? 'Chimmy' : 'AllFantasy'} set the best lineup while the manager is away: ${plan.changes.map((c) => `${c.slot} ${c.out ?? 'empty'} → ${c.in}`).join('; ')}.`,
               metadata: { season, week, changes: plan.changes },
             },
           })
@@ -406,7 +489,8 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
     WHERE settings ? ${AF_MANAGED_LINEUPS_KEY} AND settings -> ${AF_MANAGED_LINEUPS_KEY} <> '{}'::jsonb
     ORDER BY id LIMIT ${Math.max(1, Math.min(opts?.limit ?? DEFAULT_LEAGUE_LIMIT, 100))}`
 
-  const { planAutopilotWaivers } = await import('./autopilotWaivers')
+  const { planAutopilotWaivers, autopilotFaabBid } = await import('./autopilotWaivers')
+  const { getEffectiveLeagueWaiverSettings } = await import('@/lib/waiver-wire/settings-service')
   const { createClaim, getClaimsByRoster } = await import('@/lib/waiver-wire/claim-service')
   const { buildLineupListsFromPlayerData } = await import('@/lib/league/lineup-swap')
   const { assertLifecycleActionAllowed } = await import('@/server/services/leagueLifecycleService')
@@ -418,7 +502,14 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
       const league = await prisma.league.findUnique({ where: { id: leagueId } })
       if (!league) continue
       const managed = readManagedLineups(league.settings)
-      const autopilot = autopilotRosterIds(managed)
+      // A team that has changed hands is its new owner's: Chimmy claims nothing for it.
+      const endedForNewOwner = autopilotRosterIds(managed).length
+        ? new Set(await endManagedForNewOwners(leagueId, league.userId, league.name ?? null).catch((e) => {
+        console.warn('[inactive-manager] new-owner sweep skipped', { leagueId, error: String(e) })
+        return [] as string[]
+      }))
+        : new Set<string>()
+      const autopilot = autopilotRosterIds(managed).filter((id) => !endedForNewOwner.has(id))
       if (autopilot.length === 0) continue
       result.leagues += 1
       const status = String(league.status ?? league.lifecycleState ?? '').toLowerCase()
@@ -442,6 +533,8 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
       const benchCapacity = template ? template.slots.reduce((sum, s) => sum + (s.benchCount ?? 0), 0) || null : null
       const pool = (await getNormalizedPlayerData({ surface: 'waivers', leagueId, limit: 300 })).map(serializeUnifiedPlayerForApi)
       const freeAgents = pool.map((p) => ({ id: p.id, position: p.position, projectedPoints: p.projectedPoints, injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }))
+      const playerNames = new Map(pool.map((p) => [p.id, p.name]))
+      const waiverSettings = await getEffectiveLeagueWaiverSettings(leagueId)
 
       for (const rosterId of autopilot) {
         if (Date.now() >= deadline) break
@@ -469,6 +562,7 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
           const players: Record<string, { id: string; position: string | null; projectedPoints: number | null; injuryStatus: string | null; yearsExp: number | null }> = {}
           for (const p of rows.map(serializeUnifiedPlayerForApi)) {
             players[p.id] = { id: p.id, position: p.position, projectedPoints: p.projectedPoints, injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }
+            playerNames.set(p.id, p.name)
           }
           const pending = ((await getClaimsByRoster(rosterId, 'pending')) as Array<{ addPlayerId: string }>).map((c) => String(c.addPlayerId))
           const style = managed[rosterId]!.autopilot!.style
@@ -477,24 +571,55 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
             skip(plan.unfilled.length ? 'no_fitting_free_agent' : 'no_holes')
             continue
           }
+          // FAAB left for this run's claims: each bid comes out of it, so two claims cannot overspend.
+          let faabLeft = roster.faabRemaining ?? null
           for (const c of plan.claims) {
+            const bid = autopilotFaabBid({
+              style,
+              faab: waiverSettings.normalizedWaiverType === 'faab',
+              budget: waiverSettings.faabBudget,
+              remaining: faabLeft,
+              minBid: waiverSettings.faabMinBid,
+              allowZero: waiverSettings.allowZeroFaabBid,
+            })
+            if (bid === 'unaffordable') {
+              skip('faab_unaffordable')
+              continue
+            }
             try {
               await createClaim(leagueId, rosterId, {
                 addPlayerId: c.addPlayerId,
                 dropPlayerId: c.dropPlayerId,
-                faabBid: null,
+                faabBid: bid,
                 userId: roster.platformUserId,
                 metadata: { source: 'chimmy_autopilot', style, slot: c.slot },
               })
               result.claims += 1
+              if (bid != null && faabLeft != null) faabLeft -= bid
+              const addPlayerName = playerNames.get(c.addPlayerId) ?? null
+              const dropPlayerName = c.dropPlayerId ? playerNames.get(c.dropPlayerId) ?? null : null
               await logAction({
                 leagueId,
                 userId: managed[rosterId]!.autopilot!.byUserId,
                 actionType: AUTOPILOT_CLAIM_ACTION,
                 entityType: 'roster',
                 entityId: rosterId,
-                metadata: { rosterId, style, slot: c.slot, addPlayerId: c.addPlayerId, dropPlayerId: c.dropPlayerId },
+                metadata: { rosterId, style, slot: c.slot, addPlayerId: c.addPlayerId, dropPlayerId: c.dropPlayerId, addPlayerName, dropPlayerName },
               })
+              // The commissioner who handed the team to Chimmy hears about each move it makes. Never the
+              // bid: bids are sealed, and the commissioner usually manages a team in this league too.
+              await dispatchNotification({
+                userIds: [managed[rosterId]!.autopilot!.byUserId],
+                category: 'commissioner_alerts',
+                type: 'chimmy_autopilot_claim',
+                title: `Chimmy made a waiver claim · ${league.name ?? 'your league'}`,
+                body: `${addPlayerName ?? 'A player'} for ${c.slot}${dropPlayerName ? `, dropping ${dropPlayerName}` : ''}.`,
+                severity: 'low',
+                leagueId,
+                actionHref: `/league/${leagueId}`,
+                dedupePrefix: `chimmy-autopilot-claim:${leagueId}:${rosterId}:${c.addPlayerId}`,
+                meta: { leagueId, rosterId, addPlayerId: c.addPlayerId },
+              }).catch(() => {})
             } catch {
               // A league rule said no (waivers closed, roster full, a hold on the player): normal, not a fault.
               skip('claim_refused')

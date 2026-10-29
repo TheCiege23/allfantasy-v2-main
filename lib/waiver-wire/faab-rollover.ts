@@ -49,6 +49,39 @@ export function renewalFamilyForLeague(league: {
   return shouldResetRostersForRenewal(kind) ? 'redraft' : 'carry_rosters'
 }
 
+/** League formats whose FAAB carries over by default: keeper and the dynasty family. */
+const CARRY_OVER_FORMATS: ReadonlySet<string> = new Set(['keeper', 'dynasty', 'devy', 'c2c', 'salary_cap'])
+
+/**
+ * The family whose DEFAULT applies to this league's FAAB when the commissioner has chosen no rollover
+ * rule: a keeper or dynasty league carries its balances over, a redraft league resets them.
+ *
+ * ⚠ THE LEAGUE'S OWN FORMAT DECIDES, NOT ONLY THE RENEWAL CLASSIFIER. `renewalFamilyForLeague` reads
+ * `leagueVariant` before `settings.league_type`, so a keeper league whose variant is a modifier (an IDP
+ * keeper league is created with `leagueVariant: 'idp'`) classifies as redraft and its FAAB defaulted to
+ * reset. `League.leagueType` and `settings.league_type` / `leagueType` are read first; either naming
+ * keeper or a dynasty format means carry over, as does `isDynasty` on a league with no variant; the
+ * classifier decides the rest. An explicit stored rule still wins (`effectiveFaabRolloverRule`).
+ */
+export function faabRolloverFamilyForLeague(league: {
+  leagueType?: string | null
+  leagueVariant?: string | null
+  settings?: unknown
+  isDynasty?: boolean | null
+}): RenewalFamily {
+  const settings =
+    league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+      ? (league.settings as Record<string, unknown>)
+      : {}
+  for (const format of [league.leagueType, settings.league_type, settings.leagueType]) {
+    if (typeof format === 'string' && CARRY_OVER_FORMATS.has(format.trim().toLowerCase())) return 'carry_rosters'
+  }
+  // A dynasty flag with no variant at all: the classifier falls back to 'redraft' before it reads the
+  // flag. An explicit `redraft` variant is left to the classifier, as the renew route reads it.
+  if (league.isDynasty === true && !String(league.leagueVariant ?? '').trim()) return 'carry_rosters'
+  return renewalFamilyForLeague(league)
+}
+
 /** The rule a renewal applies: the commissioner's, else the family's historical behaviour. */
 export function effectiveFaabRolloverRule(stored: FaabRolloverRule | null | undefined, family: RenewalFamily): FaabRolloverRule {
   if (stored === 'reset' || stored === 'carry_over') return stored

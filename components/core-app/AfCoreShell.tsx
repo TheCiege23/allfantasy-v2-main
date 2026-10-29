@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
@@ -200,6 +202,7 @@ export type CoreNavKey =
   // not orphan them. No /core segment maps to these keys, so they are never the
   // active item — they are exits, not screens.
   | 'live-scores'
+  | 'brackets'
   | 'my-leagues'
   | 'settings'
   | 'plans'
@@ -542,6 +545,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
 
   return [
     { key: 'home', label: 'Home', glyph: '▣', href: inLeague('/core') },
+    { key: 'brackets', label: 'Brackets', glyph: '⚑', href: '/brackets' },
     // My team is league-scoped in the handoff, so the link carries the selected
     // league rather than dropping the user on a screen that has to ask which one.
     {
@@ -862,7 +866,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
  * a nav item can never silently drop it off the rail.
  */
 const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey[] }> = [
-  { id: 'top', heading: null, keys: ['home'] },
+  { id: 'top', heading: null, keys: ['home', 'brackets'] },
   {
     id: 'league',
     heading: 'This league',
@@ -1013,7 +1017,7 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
   function go(hit: TopSearchHit) {
     setOpen(false)
     setQ('')
-    router.push(hit.kind === 'league' ? `/core?league=${encodeURIComponent(hit.id)}` : `/players/${hit.slug}`)
+    router.push(hit.kind === 'league' ? leagueEntryHref(leagues.find(row => row.id === hit.id) ?? { id: hit.id, platform: 'unknown' }) : `/players/${hit.slug}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -1279,7 +1283,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     if (!speculationGate.tryAcquire()) return
     railWarmedRef.current.add(leagueId)
     /* FULL by default — `router.prefetch` is the only path that warms the data. */
-    router.prefetch(`/core?league=${encodeURIComponent(leagueId)}`)
+    const league = props.leagues.find(row => row.id === leagueId)
+    if (league) router.prefetch(leagueEntryHref(league))
   }
   /*
    * A warm needs the pointer (or focus) to REST on a crest for `RAIL_WARM_DWELL_MS`; leaving
@@ -1676,6 +1681,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         ref={railRef}
         className="af-rail"
         id="af-rail"
+        data-has-hidden={hiddenRailCount > 0 ? 'true' : undefined}
         aria-label={copy('Leagues')}
         onClick={(event) => {
           if (mobileRailOpen && (event.target as HTMLElement).closest('a[href]')) {
@@ -1725,8 +1731,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <span className="af-rail-toggle-text">
             {leagues.length}{' '}
             {language === 'es' ? (leagues.length === 1 ? 'liga' : 'ligas') : leagues.length === 1 ? 'league' : 'leagues'}
-            {/* The rail draws fewer rows than the count when some are hidden; say so. */}
-            {hiddenRailCount > 0 ? (language === 'es' ? ` · ${hiddenRailCount} ocultas` : ` · ${hiddenRailCount} hidden`) : ''}
             {railWeekLabel ? ` · ${language === 'es' ? railWeekLabel.replace(/^Week (\d+)/, 'Semana $1') : railWeekLabel}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
               <span className="af-rail-live-state">
@@ -1736,6 +1740,28 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             ) : null}
           </span>
         </button>
+
+        {/*
+          The rail draws fewer rows than the count when some are hidden; say so — and make it
+          tappable. It used to be " · 2 hidden" inside the toggle above, where tapping it only
+          closed the tray. A link cannot live inside a button, so it is a sibling: on a phone it
+          takes the line under the header, in the expanded desktop rail it sits under the toggle,
+          and in the 42px collapsed rail it is not drawn (the list's last row carries the count).
+        */}
+        {hiddenRailCount > 0 ? (
+          <Link
+            href="/settings?tab=preferences&returnTo=%2Fcore#your-leagues"
+            className="af-rail-hidden-count"
+            data-testid="rail-hidden-count-link"
+            aria-label={
+              language === 'es'
+                ? `${hiddenRailCount} ${hiddenRailCount === 1 ? 'liga oculta' : 'ligas ocultas'}: mostrarlas en Ajustes`
+                : `${hiddenRailCount} hidden ${hiddenRailCount === 1 ? 'league' : 'leagues'}: show them in Settings`
+            }
+          >
+            {language === 'es' ? `${hiddenRailCount} ocultas · Mostrar` : `${hiddenRailCount} hidden · Show`}
+          </Link>
+        ) : null}
 
         {/*
           ⚠ EVERY LEAGUE, NOT THE FIRST EIGHT.
@@ -1782,9 +1808,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             const careerLine = careerRaw ? careerLineText(careerRaw, language) : null
             /* League-first opens a league on its matchup when it has a head-to-head this week —
                the same rule the /core landing uses (resolveLeagueFirstLanding). */
-            const leagueHref = props.leagueFirst && m && !m.unpaired
+            const leagueHref = !isNativePlatform(l.platform) && props.leagueFirst && m && !m.unpaired
               ? `/core/matchup?league=${encodeURIComponent(l.id)}`
-              : `/core?league=${encodeURIComponent(l.id)}`
+              : leagueEntryHref(l)
             return (
               <Link
                 key={l.id}
@@ -1881,6 +1907,34 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             )
           }),
           ])}
+          {/*
+            ⚠ THE WAY BACK TO A HIDDEN LEAGUE. The header counts hidden leagues, but that count sits
+            inside the expand/collapse button and cannot be a link of its own. Without this row an
+            account that hid every league opened the tray to "2 leagues · 2 hidden" and nothing else —
+            no rows and no pointer to Settings, where unhiding lives. Reported by a user 2026-10-29.
+          */}
+          {hiddenRailCount > 0 ? (
+            <Link
+              href="/settings?tab=preferences&returnTo=%2Fcore#your-leagues"
+              className="af-rail-tile af-rail-add af-rail-hidden-link"
+              data-all-hidden={railLeagues.length === 0 ? 'true' : undefined}
+              data-testid="rail-hidden-leagues-link"
+              title={language === 'es' ? 'Mostrar u ocultar ligas en Ajustes' : 'Show or hide leagues in Settings'}
+            >
+              {/* The count, so the collapsed 42px rail still says how many are tucked away. */}
+              <span className="af-rail-foot-icon af-num" aria-hidden>
+                {hiddenRailCount}
+              </span>
+              <span className="af-rail-foot-copy">
+                <strong>
+                  {language === 'es'
+                    ? `Mostrar ${hiddenRailCount} ${hiddenRailCount === 1 ? 'liga oculta' : 'ligas ocultas'}`
+                    : `Show ${hiddenRailCount} hidden ${hiddenRailCount === 1 ? 'league' : 'leagues'}`}
+                </strong>
+                <small>{language === 'es' ? 'Gestionar en Ajustes' : 'Manage in Settings'}</small>
+              </span>
+            </Link>
+          ) : null}
         </div>
 
         {/*
@@ -2172,6 +2226,23 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             one remembering.
           */}
           <GeoRestrictionNotice />
+          {active === 'home' ? (
+            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry">
+              <div className="af-core-bracket-promo-copy">
+                <p className="af-core-bracket-promo-kicker">{language === 'es' ? 'LIGAS DE BRACKETS' : 'BRACKET LEAGUES'}</p>
+                <h2 id="af-core-bracket-promo-title">{language === 'es' ? 'Crea un bracket. Invita a tus amigos.' : 'Build a bracket. Bring your friends.'}</h2>
+                <p>{language === 'es' ? 'Elige ganadores, comparte tus picks y compite en la clasificación.' : 'Pick winners, share your bracket, and climb the leaderboard.'}</p>
+              </div>
+              <div className="af-core-bracket-promo-actions">
+                <Link href="/brackets" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
+                  {language === 'es' ? 'Explorar y crear' : 'Explore and create'}
+                </Link>
+                <Link href="/brackets/join" className="af-core-bracket-promo-browse">
+                  {language === 'es' ? 'Unirme a una liga' : 'Join a league'}
+                </Link>
+              </div>
+            </section>
+          ) : null}
           {/*
             Game-day nudge, in the shell for the same reason the notice above is: every
             /core screen inherits it rather than each one remembering. It renders itself to

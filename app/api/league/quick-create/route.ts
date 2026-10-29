@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { openaiChatJson } from '@/lib/openai-client'
-import { MAX_REGULAR_SEASON_WEEKS, regularSeasonCapApplies } from '@/lib/redraft/regularSeasonCap'
+import { maxRegularSeasonWeeksForSport, regularSeasonCapApplies } from '@/lib/redraft/regularSeasonCap'
 import { isSurvivorCreationSportAvailable, SURVIVOR_CREATION_UNAVAILABLE_MESSAGE } from '@/lib/survivor/survivorCreationAvailability'
 
 export const dynamic = 'force-dynamic'
@@ -83,11 +83,12 @@ export async function POST(req: Request) {
 
     // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts).
     const suggestedWeeks = Number(settings.regularSeasonWeeks)
+    const maxRegularWeeks = maxRegularSeasonWeeksForSport(settings.sport)
     if (
-      Number.isFinite(suggestedWeeks) && suggestedWeeks > MAX_REGULAR_SEASON_WEEKS &&
+      Number.isFinite(suggestedWeeks) && suggestedWeeks > maxRegularWeeks &&
       regularSeasonCapApplies({ leagueType: String(settings.leagueType ?? 'redraft'), sport: settings.sport })
     ) {
-      settings.regularSeasonWeeks = MAX_REGULAR_SEASON_WEEKS
+      settings.regularSeasonWeeks = maxRegularWeeks
     }
 
     return NextResponse.json({ ok: true, settings })

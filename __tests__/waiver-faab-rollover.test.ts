@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import {
   effectiveFaabRolloverRule,
   faabBalanceAfterRollover,
+  faabRolloverFamilyForLeague,
   renewalFamilyForLeague,
   storedFaabRolloverRule,
 } from '@/lib/waiver-wire/faab-rollover'
@@ -53,6 +54,34 @@ describe('renewalFamilyForLeague: the renew route\'s own classifier', () => {
     expect(renewalFamilyForLeague({ leagueVariant: 'redraft', isDynasty: true })).toBe('redraft')
     expect(renewalFamilyForLeague({ leagueVariant: 'redraft', isDynasty: false })).toBe('redraft')
     expect(renewalFamilyForLeague({})).toBe('redraft')
+  })
+})
+
+describe('faabRolloverFamilyForLeague: keeper and dynasty carry FAAB over by default', () => {
+  it('an IDP keeper league (variant idp, which the renewal classifier reads as redraft) carries over', () => {
+    const idpKeeper = { leagueType: 'keeper', leagueVariant: 'idp', settings: { league_type: 'keeper' }, isDynasty: false }
+    expect(renewalFamilyForLeague(idpKeeper)).toBe('redraft')
+    expect(faabRolloverFamilyForLeague(idpKeeper)).toBe('carry_rosters')
+    expect(effectiveFaabRolloverRule(null, faabRolloverFamilyForLeague(idpKeeper))).toBe('carry_over')
+  })
+
+  it('the League.leagueType column alone is enough (no settings, no variant)', () => {
+    expect(faabRolloverFamilyForLeague({ leagueType: 'keeper', leagueVariant: null, settings: null, isDynasty: false })).toBe('carry_rosters')
+    expect(faabRolloverFamilyForLeague({ leagueType: 'dynasty' })).toBe('carry_rosters')
+    expect(faabRolloverFamilyForLeague({ leagueType: 'redraft', settings: { leagueType: 'Devy' } })).toBe('carry_rosters')
+  })
+
+  it('the classifier still decides the rest: isDynasty and dynasty variants carry, redraft resets', () => {
+    expect(faabRolloverFamilyForLeague({ leagueType: 'redraft', leagueVariant: 'dynasty', isDynasty: true })).toBe('carry_rosters')
+    expect(faabRolloverFamilyForLeague({ leagueType: 'redraft', leagueVariant: null, isDynasty: true })).toBe('carry_rosters')
+    expect(faabRolloverFamilyForLeague({ leagueType: 'redraft', leagueVariant: 'idp', settings: { league_type: 'redraft' }, isDynasty: false })).toBe('redraft')
+    expect(faabRolloverFamilyForLeague({ leagueType: 'redraft' })).toBe('redraft')
+    expect(faabRolloverFamilyForLeague({})).toBe('redraft')
+  })
+
+  it('a stored choice is never overridden: only the unset default moved', () => {
+    expect(effectiveFaabRolloverRule('reset', faabRolloverFamilyForLeague({ leagueType: 'keeper' }))).toBe('reset')
+    expect(effectiveFaabRolloverRule('carry_over', faabRolloverFamilyForLeague({ leagueType: 'redraft' }))).toBe('carry_over')
   })
 })
 

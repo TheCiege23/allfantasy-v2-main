@@ -6,19 +6,24 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { TAXI_LOCK_BEHAVIOR_COPY, TAXI_SECTION_COPY, dynastyFormatLang } from '@/lib/i18n/dynasty-format-copy'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import type { DynastySettingsSnapshot } from './useDynastySettingsSnapshot'
-import { SettingsHelper, SettingsSectionLabel, SettingsToggleRow, controlClassSm } from './settings-ui'
+import { SettingsSectionLabel, SettingsToggleRow, controlClassSm } from './settings-ui'
 
 /**
  * The ONE place a commissioner edits taxi squad settings.
  *
  * It holds what used to be split across two editors, and saves each value where it was saved before:
- *   - League columns (`taxiSlots`, `taxiAllowNonRookies`, `taxiYearsLimit`, `taxiDeadlineWeek`) —
- *     moved verbatim out of the Roster tab's "Advanced reserve settings", same `debouncedSave` keys
+ *   - League columns (`taxiSlots`, `taxiAllowNonRookies`, `taxiYearsLimit`) — moved verbatim out of
+ *     the Roster tab's "Advanced reserve settings", same `debouncedSave` keys
  *     (PATCH /api/league/settings). These are what the roster validator reads.
  *   - Dynasty-config rules (`taxiLockBehavior`, `taxiInSeasonMoves`, `taxiPostseasonMoves`,
  *     `taxiScoringOn`, `taxiPromotionDeadlineWeek`) — previously editable only in
  *     `components/app/settings/DynastySettingsPanel`, same PUT /api/leagues/[id]/dynasty-settings.
  *     Shown for dynasty leagues only, once that route has answered.
+ *
+ * ⚠ NO TAXI DEADLINE HERE. This section used to offer "Taxi deadline (week)", saved to
+ * `League.taxiDeadlineWeek`, which no roster save reads. The deadline that is enforced is the lock
+ * week in `components/league-settings/TaxiRulesPanel.tsx` (`DynastyLeagueConfig.taxiDeadlineWeek`,
+ * applied when the commissioner turns on "Enforce these rules"). A second, inert copy only misled.
  *
  * NHL / MLB have no prospect pool (`lib/league-creation/prospectStashPolicy.ts`): the slot count can
  * only stay or go down (PATCH refuses an increase), and a league with no taxi sees a note instead of
@@ -45,13 +50,11 @@ export function TaxiSquadSettingsSection({
   const [taxiSlots, setTaxiSlots] = useState(initialData.taxiSlots ?? 0)
   const [taxiNonRookies, setTaxiNonRookies] = useState(Boolean(initialData.taxiAllowNonRookies))
   const [taxiYears, setTaxiYears] = useState(initialData.taxiYearsLimit ?? 2)
-  const [taxiDeadline, setTaxiDeadline] = useState(initialData.taxiDeadlineWeek ?? 4)
 
   useEffect(() => {
     setTaxiSlots(initialData.taxiSlots ?? 0)
     setTaxiNonRookies(Boolean(initialData.taxiAllowNonRookies))
     setTaxiYears(initialData.taxiYearsLimit ?? 2)
-    setTaxiDeadline(initialData.taxiDeadlineWeek ?? 4)
   }, [initialData])
 
   const effective = dynasty?.effective ?? null
@@ -159,28 +162,6 @@ export function TaxiSquadSettingsSection({
             </option>
           ))}
         </select>
-      </div>
-
-      <div>
-        <SettingsSectionLabel>{copy.deadline}</SettingsSectionLabel>
-        <select
-          className={controlClassSm}
-          disabled={disabled}
-          value={taxiDeadline}
-          data-testid="taxi-deadline-week"
-          onChange={(e) => {
-            const n = Number(e.target.value)
-            setTaxiDeadline(n)
-            debouncedSave({ taxiDeadlineWeek: n })
-          }}
-        >
-          {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
-            <option key={w} value={w}>
-              {copy.week(w)}
-            </option>
-          ))}
-        </select>
-        <SettingsHelper>{copy.deadlineHelp}</SettingsHelper>
       </div>
 
       {rules ? (

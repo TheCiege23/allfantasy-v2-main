@@ -13,6 +13,7 @@ import { expandLockedRedraftStarterSlots, resolveLockedRedraftStarterLayout } fr
 import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
 import { buildWriteAuthorityEnvelope, resolveWriteAuthority } from '@/lib/league/write-authority'
 import { loadDailyLineupView, type DailyLineupView } from '@/lib/redraft/dailyLineupView'
+import { loadCampusLineupView, type CampusLineupView } from '@/lib/c2c/campusLineupView'
 import { isDailyFormSport } from '@/lib/projections/dailySportForm'
 import { applyDailySportOutlook, isDayKey, loadDailySportOutlook } from '@/lib/projections/dailySportOutlook'
 
@@ -302,6 +303,17 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    // C2C campus lineup (lib/c2c/campusLineup.ts): native football C2C only, null everywhere else.
+    // A load failure degrades to null (logged) rather than blocking the roster.
+    const campus: CampusLineupView | null = await loadCampusLineupView(prisma, {
+      league: { id: league.id, platform: league.platform, sport: league.sport, leagueVariant: league.leagueVariant },
+      playerData: roster.playerData,
+      redraftRosterId: roster.redraftRosterId ?? null,
+    }).catch((e: unknown) => {
+      console.warn('[league/roster] campus lineup view failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+      return null
+    })
+
     // Daily-lineup leagues: the week day by day, for the lineup screen's day picker (null otherwise).
     let dailyLineups: DailyLineupView | null = null
     if (resolveWriteAuthority(league.platform) === 'NATIVE' && roster.redraftRosterId) {
@@ -330,6 +342,7 @@ export async function GET(req: NextRequest) {
       rosterId: roster.id,
       dailyLineups,
       collegeRights,
+      campus,
       roster: roster.playerData,
       unifiedRoster,
       faabRemaining: roster.faabRemaining,

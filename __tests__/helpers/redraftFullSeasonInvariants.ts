@@ -51,6 +51,19 @@ export function expectedRecords(sim: FullSeasonSimResult, rows: Row[], week: num
     tally(bye.homeRosterId, bye.homeScore, theirs)
     if (pick.scoring === 'both') tally(pick.opponentRosterId, theirs, bye.homeScore, false)
   }
+  // A plain bye (no extra matchup) earns the week's median head-to-head score as points for, once every
+  // game of that regular-season week is final; no result, no points against.
+  for (let w = 1; w <= Math.min(week, sim.regularSeasonWeeks); w++) {
+    const weekRows = upTo.filter((r) => r.week === w && !r.isMedianMatchup)
+    const games = weekRows.filter((r) => r.awayRosterId)
+    if (!games.length || !games.every(final)) continue
+    const sorted = games.flatMap((g) => [g.homeScore, g.awayScore]).sort((a, b) => a - b)
+    const mid = Math.floor(sorted.length / 2)
+    const median = sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2
+    for (const bye of weekRows.filter((r) => !r.awayRosterId && !readExtraMatchupRecord(r.lineupSnapshots))) {
+      out.get(bye.homeRosterId)!.pointsFor += round2(median)
+    }
+  }
   if (sim.input.medianGame) {
     for (let w = 1; w <= Math.min(week, sim.regularSeasonWeeks); w++) {
       const weekRows = upTo.filter((r) => r.week === w)
@@ -164,6 +177,12 @@ export function describeFullSeason(label: string, input: FullSeasonSimInput, opt
         expect(games.length).toBe(Math.floor(n / 2))
         expect(games.every((m) => m.status === 'final')).toBe(true)
         for (const check of week.scoreChecks) expect({ week: week.week, ...check, engine: check.engine }).toEqual({ week: week.week, ...check, engine: check.expected })
+      }
+    })
+
+    it('every team scores points every week (an all-zero season would match its expected zeros)', () => {
+      for (const week of sim.weeks) {
+        for (const check of week.scoreChecks) expect({ week: week.week, rosterId: check.rosterId, scored: check.engine > 0 }).toEqual({ week: week.week, rosterId: check.rosterId, scored: true })
       }
     })
 
@@ -332,7 +351,46 @@ export function describeFullSeason(label: string, input: FullSeasonSimInput, opt
       expect(new Set(active.map((r) => r.playerId)).size).toBe(active.length)
     })
 
-    it('rolls over to a fresh season: next year, empty rosters, zero records, a new draft order', async () => {
+    it.runIf(Boolean(input.dynasty))('dynasty: carries every roster into next season, records reset', () => {
+      const next = sim.dynastyRollover?.next
+      expect(next).toBeTruthy()
+      if (!next) return
+      expect(next.season).toBe(sim.seasonYear + 1)
+      expect(inMemoryPrisma.table('redraftSeason').find((r) => r.id === next.id)!.status).toBe('setup')
+      const finished = inMemoryPrisma.table('redraftRoster').filter((r) => r.seasonId === sim.seasonId)
+      const carried = inMemoryPrisma.table('redraftRoster').filter((r) => r.seasonId === next.id)
+      expect(carried).toHaveLength(n)
+      const keep = (rosterId: string) =>
+        inMemoryPrisma.table('redraftRosterPlayer').filter((p) => p.rosterId === rosterId && p.droppedAt == null).map((p) => p.playerId).sort()
+      let total = 0
+      for (const before of finished) {
+        const after = carried.find((r) => r.ownerId === before.ownerId)!
+        expect(after).toBeTruthy()
+        expect([after.wins, after.losses, after.ties, after.pointsFor]).toEqual([0, 0, 0, 0])
+        expect(keep(after.id)).toEqual(keep(before.id))
+        total += keep(before.id).length
+      }
+      expect(next.playersCarried).toBe(total)
+    })
+
+    it.runIf(Boolean(input.dynasty))('dynasty: the rookie order seats non-playoff teams worst first, then the playoff field, the champion last', () => {
+      const order = sim.dynastyRollover!.rookieOrder
+      expect(order.slots).toHaveLength(n)
+      const teams = inMemoryPrisma.table('leagueTeam').filter((t) => t.leagueId === sim.leagueId)
+      const ownerOf = (teamId: string) => teams.find((t) => t.id === teamId)!.claimedByUserId as string
+      const rosterOfOwner = (owner: string) => inMemoryPrisma.table('redraftRoster').find((r) => r.seasonId === sim.seasonId && r.ownerId === owner)!
+      const seats = order.slots.map((s) => rosterOfOwner(ownerOf(s.teamId)))
+      expect(new Set(seats.map((r) => r.id)).size).toBe(n)
+      // The playoff field is the bracket's, not a re-sort of wins.
+      const seeded = new Set(sim.bracket.seedsAtBracket.filter((r) => r.playoffSeed != null).map((r) => r.id))
+      expect(new Set(seats.filter((_, i) => order.slots[i]!.isPlayoffTeam).map((r) => r.id))).toEqual(seeded)
+      const firstPlayoff = order.slots.findIndex((s) => s.isPlayoffTeam)
+      expect(order.slots.slice(firstPlayoff).every((s) => s.isPlayoffTeam)).toBe(true)
+      // The team that won the final picks last.
+      expect(seats.at(-1)!.id).toBe(sim.finalized.championRosterId)
+    })
+
+    it.runIf(!input.dynasty)('rolls over to a fresh season: next year, empty rosters, zero records, a new draft order', async () => {
       expect(sim.renewal.ok).toBe(true)
       if (!sim.renewal.ok) return
       expect(sim.renewal.season).toBe(sim.seasonYear + 1)

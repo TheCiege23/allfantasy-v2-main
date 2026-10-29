@@ -117,5 +117,9 @@ repo; that is enough to find the right logs and code.
 - Imported leagues: completed trades in leagues imported from **Sleeper** get the
   collusion check (within about 15 minutes of the trade going through on Sleeper), and a
   flagged trade alerts the commissioner. "Hold flagged trades" is not available there,
-  because the trade goes through on Sleeper. Tanking checks, and every check in leagues
-  imported from other platforms, run only in leagues created in AllFantasy.
+  because the trade goes through on Sleeper. Imported Sleeper **NFL** leagues with the
+  tanking monitor on also get a tanking flag, once a day, for a finished week in which a
+  team started a player on a bye or left a starting slot empty (the same lineup check the
+  commissioner's lineup-integrity panel shows). No pick penalty or manager warning there:
+  picks and managers live on Sleeper. Every check in leagues imported from other platforms
+  runs only in leagues created in AllFantasy.

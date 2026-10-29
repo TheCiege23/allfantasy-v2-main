@@ -36,7 +36,9 @@ type Effective = {
   taxiDeadlineWeek?: number | null
   taxiPromotionDeadlineWeek?: number | null
   rookieDraftAutoOpen?: boolean
+  rookieDraftAutoOpenSource?: 'commissioner' | 'plan_default' | 'plan_default_predates' | 'free_default'
   rookieDraftCustomOpenDate?: string | null
+  rookieDraftAutoStartDays?: 3 | 7 | 14 | null
   rookieDraftWindowLabel?: string | null
 }
 
@@ -567,8 +569,14 @@ export default function DynastySettingsPanel({
               ? effective.rookieDraftCustomOpenDate
                 ? `Opens automatically on ${effective.rookieDraftCustomOpenDate}.`
                 : 'Opens automatically when the window opens.'
-              : 'Created by the commissioner (auto-open is off).'}
-            {' '}An opened draft waits in pre-draft until the commissioner starts it.
+              : effective.rookieDraftAutoOpenSource === 'plan_default_predates'
+                ? 'Auto-open is off for this offseason, which started before AF Commissioner opened rookie drafts automatically. Turn it on below.'
+                : 'Created by the commissioner (auto-open is off).'}
+            {effective.rookieDraftAutoOpenSource === 'plan_default' && ' Included with AF Commissioner.'}
+            {' '}
+            {effective.rookieDraftAutoOpen && effective.rookieDraftAutoStartDays
+              ? `It then starts by itself ${effective.rookieDraftAutoStartDays} days later, at 8 pm Eastern, and members are told the time when it opens.`
+              : 'An opened draft waits in pre-draft until the commissioner starts it.'}
           </p>
           {isCommissioner && (
             <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -594,6 +602,24 @@ export default function DynastySettingsPanel({
                   }
                   onChange={(e) => setPatch((p) => ({ ...p, rookieDraftCustomOpenDate: e.target.value || null }))}
                 />
+              </label>
+              <label className="flex items-center gap-1 text-xs text-white/80">
+                Then start it
+                <select
+                  data-testid="rookie-draft-auto-start-days"
+                  className="rounded border border-white/20 bg-black/40 px-2 py-0.5 text-xs text-white"
+                  value={String(
+                    patch.rookieDraftAutoStartDays !== undefined ? patch.rookieDraftAutoStartDays ?? '' : effective.rookieDraftAutoStartDays ?? '',
+                  )}
+                  onChange={(e) =>
+                    setPatch((p) => ({ ...p, rookieDraftAutoStartDays: e.target.value ? (Number(e.target.value) as 3 | 7 | 14) : null }))
+                  }
+                >
+                  <option value="">when I press Start</option>
+                  <option value="3">by itself 3 days after it opens</option>
+                  <option value="7">by itself 7 days after it opens</option>
+                  <option value="14">by itself 14 days after it opens</option>
+                </select>
               </label>
             </div>
           )}

@@ -20,6 +20,8 @@ import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster
 import { starterSlotIndexOf } from '@/lib/league/lineupSlotPositions'
 import { resolveLineupStarterSlots } from '@/lib/league/lineupStarterSlots'
 import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+import { checkTaxiSave, logTaxiPromotions, type TaxiSaveCheck } from '@/lib/taxi/taxiRulesService'
+import { checkCampusSave } from '@/lib/c2c/campusLineupCheck'
 
 /**
  * Locked starters keep their exact slot; a locked bench/IR player stays in that section.
@@ -51,6 +53,29 @@ export function movedLockedLineupPlayer(before: unknown, after: unknown, lockedP
     return a.slot != null && b.slot != null ? a.slot !== b.slot : a.compact !== b.compact
   }
   return lockedPlayerIds.find((id) => moved(original.get(id), proposed.get(id))) ?? null
+}
+
+/** Player ids in a lineup payload: one section's, or every section's. */
+function lineupPlayerIds(data: unknown, only?: RosterSectionKey): string[] {
+  const sections = getNormalizedLineupSections(data)
+  const keys = only ? [only] : (Object.keys(sections) as RosterSectionKey[])
+  return keys.flatMap((k) => sections[k].map((row) => String(row.id ?? '').trim())).filter(Boolean)
+}
+
+/** A player's name from either lineup, for a refusal the manager can read. */
+function lineupPlayerNames(...payloads: unknown[]): (playerId: string) => string {
+  const names = new Map<string, string>()
+  for (const data of payloads) {
+    const sections = getNormalizedLineupSections(data)
+    for (const k of Object.keys(sections) as RosterSectionKey[]) {
+      for (const row of sections[k]) {
+        const o = row as Record<string, unknown>
+        const name = String(o.name ?? o.playerName ?? '').trim()
+        if (name) names.set(String(o.id ?? '').trim(), name)
+      }
+    }
+  }
+  return (id) => names.get(id) ?? `Player ${id}`
 }
 
 /** The per-slot check is extra safety: a layout that cannot be resolved skips it, never fails the save. */
@@ -87,6 +112,8 @@ export type PersistRosterLineupInput = {
   automationAudit?: { id: string; action: string; message: string; metadata: Record<string,unknown> }
   expectedOwnerUserId?: string
   expectedStarters?: string[]
+  /** Taxi players this save promotes to answer a steal claim (lib/taxi/taxiStealing.ts). */
+  taxiProtection?: readonly string[]
 }
 
 function canonicalLineupEventTypeForSource(source: PersistRosterLineupInput['source']): string {
@@ -181,6 +208,35 @@ export async function persistRosterLineupWithEngine(
     }
   }
 
+  // The taxi move rules the commissioner switched on (lib/taxi/taxiMoveRules.ts). Native only; a
+  // commissioner override or an import is never refused.
+  const taxiRosterId = resolveWriteAuthority(league.platform) === 'NATIVE' ? (roster.redraftRosterId ?? null) : null
+  let taxiCheck: TaxiSaveCheck | null = null
+  if (taxiRosterId && (input.source === 'user_save' || input.source === 'system')) {
+    taxiCheck = await checkTaxiSave({
+      leagueId: input.leagueId,
+      redraftRosterId: taxiRosterId,
+      week: input.week,
+      beforeTaxi: lineupPlayerIds(roster.playerData, 'taxi'),
+      afterTaxi: lineupPlayerIds(input.nextPlayerData, 'taxi'),
+      afterRoster: lineupPlayerIds(input.nextPlayerData),
+      nameOf: lineupPlayerNames(roster.playerData, input.nextPlayerData),
+      protectedPromotions: input.taxiProtection,
+    })
+    if (taxiCheck.issues.length) return { ok: false, error: taxiCheck.issues.map((i) => i.message).join(' '), status: 400 }
+  }
+
+  // The C2C campus lineup (lib/c2c/campusLineup.ts). A commissioner override or an import is never refused.
+  if (input.source === 'user_save' || input.source === 'system') {
+    const campusIssues = await checkCampusSave(prisma, {
+      league,
+      redraftRosterId: roster.redraftRosterId ?? null,
+      before: roster.playerData,
+      after: input.nextPlayerData,
+    })
+    if (campusIssues.length) return { ok: false, error: campusIssues.map((i) => i.message).join(' '), status: 400 }
+  }
+
   const leagueWeek = weekFromLeagueSettings(league.settings)
 
   if (!input.skipLockCheck) {
@@ -257,6 +313,7 @@ export async function persistRosterLineupWithEngine(
           )
         : undefined
       await syncRedraftSlotTypesForLineup(tx, { redraftRosterId, playerData: input.nextPlayerData })
+      if (taxiCheck) await logTaxiPromotions(tx, { leagueId: input.leagueId, redraftRosterId, week: input.week, actorUserId: input.actorUserId, check: taxiCheck })
       // A daily-lineup league is scored per day: pin the synced slots to every day the save decides.
       if (dailyLineups) {
         await writeDailyLineupForSave(tx, {

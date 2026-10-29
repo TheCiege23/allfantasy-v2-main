@@ -38,6 +38,10 @@ import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkfl
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
 import { EliminatedLineups } from '@/components/core-app/commissioner/EliminatedLineups'
+import { FillEmptyStarters } from '@/components/core-app/commissioner/FillEmptyStarters'
+import { AutomationOverview } from '@/components/core-app/commissioner/AutomationOverview'
+import { IrAutoMove } from '@/components/core-app/commissioner/IrAutoMove'
+import { OrphanAuction } from '@/components/core-app/commissioner/OrphanAuction'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { StorylineStudio } from '@/components/core-app/commissioner/StorylineStudio'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
@@ -260,9 +264,13 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       <TaskCards data={data} language={language} />
       {data.role === 'commissioner' && <CommissionerActionQueue leagueId={league.id} />}
       {data.role === 'commissioner' && <CommissionerWeeklyPlan key={league.id} leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <AutomationOverview leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <NativeAutoSubsCommissioner leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <InactiveManagerCommissioner leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <FillEmptyStarters leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <EliminatedLineups leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <IrAutoMove leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <OrphanAuction leagueId={league.id} />}
 
       <HubSection id="ch-intelligence" title={t('Commissioner intelligence')}>
         <CommissionerOsActionsSummary leagueId={league.id} sport={league.sport} />

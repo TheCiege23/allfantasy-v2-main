@@ -94,3 +94,56 @@ describe('expirePendingOffersAtDeadline', () => {
     expect(deps.notify).not.toHaveBeenCalled()
   })
 })
+
+describe('a dynasty league whose pick trades have their own deadline (lib/trade-deadline/pickTradeDeadline.ts)', () => {
+  const PICKS_ONLY = { id: 'tPicks', items: [{ itemType: 'rookie_pick' }, { itemType: 'future_pick' }] }
+  const MIXED = { id: 'tMixed', items: [{ itemType: 'rookie_pick' }, { itemType: 'player' }] }
+
+  function dynastyDeps(week: number, rule: unknown) {
+    const built = makeDeps({ week, deadlineWeek: 11 })
+    const league = {
+      id: L, settings: { pick_trade_deadline: rule }, platform: 'allfantasy', lifecycleState: 'in_season', tradeDeadlineWeek: 11,
+      timezone: 'America/New_York', lockAllMoves: false, bestBallMode: false, guillotineMode: false, leagueVariant: null, leagueType: 'dynasty',
+    }
+    const deps = {
+      ...built.deps,
+      leagueDb: { league: { findUnique: vi.fn(async () => league) } } as never,
+      db: {
+        ...(built.deps.db as unknown as Record<string, unknown>),
+        afLeagueTrade: { findMany: vi.fn(async ({ distinct }: { distinct?: string[] }) => (distinct ? [{ leagueId: L }] : [PICKS_ONLY, MIXED])) },
+        redraftTradeProposal: { findMany: vi.fn(async () => []) },
+      } as never,
+    }
+    return deps
+  }
+  const expired = (deps: { expireAf: ReturnType<typeof vi.fn> }) => deps.expireAf.mock.calls.map((c) => (c[0] as { tradeId: string }).tradeId)
+
+  it('open all season: past the trade deadline only the offer with a player in it expires', async () => {
+    const deps = dynastyDeps(12, { mode: 'open' })
+    const out = await expirePendingOffersAtDeadline({ deps })
+    expect(expired(deps)).toEqual(['tMixed'])
+    expect(out).toMatchObject({ leaguesPastDeadline: 1, expiredAf: 1 })
+  })
+
+  it('🛑 a pick week before the trade deadline expires the picks-only offer while player trades are open', async () => {
+    const deps = dynastyDeps(9, { mode: 'week', week: 8 })
+    await expirePendingOffersAtDeadline({ deps })
+    expect(expired(deps)).toEqual(['tPicks'])
+    expect(deps.expireAf).toHaveBeenCalledWith({ tradeId: 'tPicks', leagueId: L, reason: 'Pick trades closed after Week 8.' })
+  })
+
+  it('past both, each offer expires with the reason its own rule gives', async () => {
+    const deps = dynastyDeps(17, { mode: 'week', week: 16 })
+    await expirePendingOffersAtDeadline({ deps })
+    expect(deps.expireAf.mock.calls.map((c) => c[0])).toEqual([
+      { tradeId: 'tPicks', leagueId: L, reason: 'Pick trades closed after Week 16.' },
+      { tradeId: 'tMixed', leagueId: L, reason: 'Trade deadline passed after Week 11.' },
+    ])
+  })
+
+  it('before either, nothing expires and nothing is read past the verdicts', async () => {
+    const deps = dynastyDeps(8, { mode: 'week', week: 16 })
+    const out = await expirePendingOffersAtDeadline({ deps })
+    expect(out).toMatchObject({ leaguesPastDeadline: 0, expiredAf: 0 })
+  })
+})

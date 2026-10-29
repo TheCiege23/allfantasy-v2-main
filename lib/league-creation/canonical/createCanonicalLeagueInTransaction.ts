@@ -41,6 +41,8 @@ import { dynastyDefaultRegularSeasonWeeksFor } from '@/lib/dynasty-core/constant
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
 import { defaultTradeDeadlineWeek } from '@/lib/trade-deadline/tradeDeadlineDefaults'
+import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
+import { dailyLineupTablesExist, defaultsToDailyLineups, withLineupMode } from '@/lib/redraft/lineupModeSwitch'
 
 type Tx = Prisma.TransactionClient
 
@@ -399,6 +401,24 @@ export async function createCanonicalLeagueInTransaction(
     mergedSettings.playoffSettings = { ...foundationDefaults.playoffSettings, playoff_team_count: 0, playoff_start_week: end + 1 }
   }
 
+  /*
+   * DAILY LINEUPS ARE THE DEFAULT FOR A NEW NBA OR NHL REDRAFT POINTS LEAGUE (owner, 2026-10-27): both
+   * halves of the daily gate, written by the same helper the commissioner's switch uses. Only new
+   * leagues — nothing here touches one that exists. Without the per-day tables a daily league fails
+   * every lineup save (P2021), so the default stays weekly until the migration is applied, exactly as
+   * the switch refuses daily then.
+   */
+  if (
+    defaultsToDailyLineups({ sport, leagueType: formatId, scoringMode: String(mergedSettings.scoring_mode ?? 'points') }) &&
+    (await dailyLineupTablesExist(tx))
+  ) {
+    const sportConfig = mergedSettings.sportConfig
+    mergedSettings.sportConfig = withLineupMode(
+      sportConfig && typeof sportConfig === 'object' && !Array.isArray(sportConfig) ? (sportConfig as Record<string, unknown>) : {},
+      'daily',
+    )
+  }
+
   // The concept choice must replace the preset's inherited standings mode before bootstrap.
   if (bestBallSettings && (bestBallSettings.matchupFormat === 'cumulative' || bestBallSettings.playoffFormat === 'advancement')) {
     const structure = mergedSettings.playoff_structure
@@ -482,10 +502,10 @@ export async function createCanonicalLeagueInTransaction(
       endWeek: typeof setup.survivorSeasonEndWeek === 'number' ? setup.survivorSeasonEndWeek : undefined })
     // Persist the same slots consumed by the draft, lineup, waivers, and readiness resolver. NFL
     // keeps its existing roster path; only the daily sports carry this per-sport slot record.
-    if (sport === 'NBA' || sport === 'NHL') mergedSettings[sport.toLowerCase() + '_roster_config'] = { slots: {
+    if (sport === 'NBA' || sport === 'NHL' || sport === 'MLB') mergedSettings[sport.toLowerCase() + '_roster_config'] = { slots: {
       ...(foundationDefaults.rosterSettings.starter_slots as Record<string, number>),
       BN: readNumber(foundationDefaults.rosterSettings, 'benchSlots', 0),
-      [sport === 'NBA' ? 'IL' : 'IR']: readNumber(foundationDefaults.rosterSettings, 'irSlots', 0),
+      [sport === 'NHL' ? 'IR' : 'IL']: readNumber(foundationDefaults.rosterSettings, 'irSlots', 0),
     } }
     // Keep creation-time Exile choices consistent with the saved season calendar.
     Object.assign(mergedSettings, { exileIslandEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: plan.exileReturnWeek ?? exileSettings.exileReturnWeek, exileReturnTokens: exileSettings.exileReturnTokens })
@@ -558,8 +578,14 @@ export async function createCanonicalLeagueInTransaction(
   }
   const playoffTeamsDefault = readNumber(playoffSettings, 'playoffTeams', isGuillotine ? 1 : 6)
   const playoffStartWeekRaw = playoffSettings.playoffStartWeek
-  const playoffStartWeekDefault =
+  const playoffStartWeekParsed =
     playoffStartWeekRaw == null ? null : Number.isFinite(Number(playoffStartWeekRaw)) ? Number(playoffStartWeekRaw) : null
+  // A redraft or keeper regular season is capped (lib/redraft/regularSeasonCap.ts). The fitted sports'
+  // shape already respects it; soccer's playoff default (week 36) would start past its 34-week cap.
+  const playoffStartWeekCap =
+    (formatId === 'redraft' || formatId === 'keeper') && scoringMode !== 'roto' ? maxPlayoffStartWeekFor({ leagueType: formatId, sport }) : null
+  const playoffStartWeekDefault =
+    playoffStartWeekParsed != null && playoffStartWeekCap != null ? Math.min(playoffStartWeekParsed, playoffStartWeekCap) : playoffStartWeekParsed
   /*
    * 🛑 THE COLUMN IS WHAT THE RESOLVER READS FIRST, SO EVERY JSON COPY IS WRITTEN FROM IT
    * (lib/playoff-settings/playoffStartWeekCopies.ts). Per format:

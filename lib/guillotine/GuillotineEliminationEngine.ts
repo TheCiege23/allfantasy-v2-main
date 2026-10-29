@@ -534,6 +534,27 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     }
   }
 
+  /*
+   * Chop alerts (./chopAlerts.ts): the chopped team is told it is out, this week's survivors who went and
+   * when those players can be claimed — push, email and the bell, by each manager's own settings.
+   * Not tied to `skipChat`: a league with no owner to author a chat post still has managers to tell.
+   * A retry of the same week is deduped per person. Best-effort for the same reason as the chat post.
+   */
+  try {
+    const { sendChopResultAlerts } = await import('./chopAlerts')
+    await sendChopResultAlerts({
+      leagueId: input.leagueId,
+      season: input.season,
+      week: input.weekOrPeriod,
+      choppedRosterIds,
+      aliveRosterIds: evalResult.scores.map((s) => s.rosterId),
+      displayNames: await getDisplayNamesForRosters(input.leagueId, choppedRosterIds),
+      rosterReleaseTiming: config.rosterReleaseTiming,
+    })
+  } catch (e) {
+    console.warn('[guillotine] chop alerts not sent; the chop stands', e instanceof Error ? e.message : 'unknown error')
+  }
+
   await appendEvent(input.leagueId, 'chop_animation_trigger', {
     weekOrPeriod: input.weekOrPeriod,
     choppedRosterIds,

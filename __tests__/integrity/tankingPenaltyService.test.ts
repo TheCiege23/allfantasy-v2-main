@@ -98,3 +98,24 @@ describe('the commissioner confirms a flag', () => {
     expect(m.notify).not.toHaveBeenCalled()
   })
 })
+
+describe('an imported league', () => {
+  // Its picks and managers live on the host platform: a flag is the commissioner's finding, nothing more.
+  const imported = (status: string) => ({ ...flagRow(status), league: { settings: m.settings, platform: 'sleeper' } })
+
+  it('opening a flag sends no warning that promises a pick penalty', async () => {
+    m.flag.mockResolvedValue(imported('open'))
+    m.strikes.mockResolvedValue(0)
+    await onTankingFlagOpened('f1')
+    expect(m.notify).not.toHaveBeenCalled()
+    expect(m.log).not.toHaveBeenCalled()
+  })
+
+  it('confirming a flag takes no pick and records no strike', async () => {
+    m.flag.mockResolvedValue(imported('escalated'))
+    m.strikes.mockResolvedValue(2)
+    expect(await onTankingFlagConfirmed('f1', 'commish')).toEqual([])
+    expect(m.upsert).not.toHaveBeenCalled()
+    expect(m.notify).not.toHaveBeenCalled()
+  })
+})

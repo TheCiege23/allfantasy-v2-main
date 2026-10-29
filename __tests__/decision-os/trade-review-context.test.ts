@@ -92,6 +92,7 @@ function deps(over: Partial<TradeReviewDeps> = {}): Partial<TradeReviewDeps> {
     forecast: async () => ({ week: 10, teamForecasts: [{ teamId: '1', playoffProbability: 0.5 }, { teamId: '2', playoffProbability: 81 }] }),
     deadlineKickoff: async () => new Date(NOW.getTime() + 30 * 3_600_000),
     managerDivisions: async () => new Map(),
+    nativeStandings: async () => ({ ok: false, reason: 'Standings are read from the season forecast in an imported league.' }),
     now: () => NOW,
     ...over,
   }
@@ -278,9 +279,17 @@ describe('sideLineup', () => {
     expect(a).toMatchObject({ receivedValue: null, receivedBenchValue: null })
   })
 
-  it('no roster impact → null', () => {
+  it('no roster impact (every sport but NFL): who starts comes from the saved lineup, its points are unknown', () => {
     const r = receipt({ canonical: null })
-    expect(sideLineup({ receipt: r, side: trade().sideA as never, other: trade().sideB as never, isGradedSide: true, world: w })).toBeNull()
+    expect(sideLineup({ receipt: r, side: trade().sideA as never, other: trade().sideB as never, isGradedSide: true, world: w })).toEqual({
+      startingBefore: null, startingDelta: null, receivedValue: null, receivedBenchValue: null, sentStarterNames: ['Star Runner'],
+    })
+  })
+
+  it('no roster impact and no saved lineup for the team → null', () => {
+    const r = receipt({ canonical: null })
+    const empty = { ...world, rosters: [] } as never
+    expect(sideLineup({ receipt: r, side: trade().sideA as never, other: trade().sideB as never, isGradedSide: true, world: empty })).toBeNull()
   })
 })
 
@@ -341,5 +350,45 @@ describe('imported pair history — the graded completed-trade cache', () => {
     expect(leanForSideA(g, t('1', [3, 7], ''), '3')).toBe(30)
     expect(leanForSideA(g, t('1', [7, 3], ''), '3')).toBe(-30)
     expect(leanForSideA({ graded: false } as never, t('1', [3, 7], ''), '3')).toBeNull()
+  })
+})
+
+describe('elimination from a native league\'s own standings (no season forecast)', () => {
+  const noForecast = { forecast: async () => null }
+  const standing = (a: { eliminated: boolean; holdsPlayoffSpot: boolean }, b: { eliminated: boolean; holdsPlayoffSpot: boolean }) => ({
+    nativeStandings: async () => ({ ok: true as const, value: new Map([['rA', a], ['rB', b]]) }),
+  })
+  const OUT = { eliminated: true, holdsPlayoffSpot: false }
+  const IN = { eliminated: false, holdsPlayoffSpot: true }
+  const BUBBLE = { eliminated: false, holdsPlayoffSpot: false }
+
+  it('an eliminated team sending a starter to a team in a playoff spot is raised, without any forecast', async () => {
+    const r = await reviewStoredTrade({ leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' }, deps({ ...noForecast, ...standing(OUT, IN) }))
+    if (!r.ok) throw new Error('refused')
+    const check = r.review.checks.find((c) => c.code === 'eliminated_team_dumping')!
+    expect(check.status).toBe('raised')
+    expect(check.explanation).toContain('Star Runner')
+    expect(check.explanation).toContain('can no longer reach the playoffs')
+  })
+
+  it('clear when the receiver does not hold a playoff spot, or the sender is still alive', async () => {
+    expect((await statusOf({ ...noForecast, ...standing(OUT, BUBBLE) })).eliminated_team_dumping).toBe('clear')
+    expect((await statusOf({ ...noForecast, ...standing(BUBBLE, IN) })).eliminated_team_dumping).toBe('clear')
+  })
+
+  it('a current forecast still wins over the standings', async () => {
+    // The default forecast: A at 0.5% (eliminated), B at 81% — raised from the forecast, not standings.
+    const r = await reviewStoredTrade({ leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' }, deps(standing(BUBBLE, BUBBLE)))
+    if (!r.ok) throw new Error('refused')
+    expect(r.review.checks.find((c) => c.code === 'eliminated_team_dumping')!.explanation).toContain('odds')
+    expect(r.facts.standing).toBeUndefined()
+  })
+
+  it('not computed, with the forecast\'s reason, when neither source can answer', async () => {
+    const r = await reviewStoredTrade({ leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' }, deps(noForecast))
+    if (!r.ok) throw new Error('refused')
+    const check = r.review.checks.find((c) => c.code === 'eliminated_team_dumping')!
+    expect(check.status).toBe('not_computed')
+    expect(check.explanation).toBe('No season forecast has been run for this league.')
   })
 })

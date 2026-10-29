@@ -12,6 +12,7 @@ import {
 } from '@/lib/waiver-wire/roster-utils'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import { parseInventoryPickId, transferNativeFuturePick } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { recordSettledPickTerms } from '@/lib/league-trade-engine/pickTermsService'
 import {
   CodedTradeError,
   checkRedraftPickAsset,
@@ -147,6 +148,8 @@ export async function applyTradeAssetsInTransaction(
           toRosterId: toId,
           tradeId: input.tradeId ?? null,
         })
+        // Terms the offer gave this pick (./pickTerms.ts) are recorded with the move, in this transaction.
+        await recordSettledPickTerms(tx, { leagueId: input.leagueId, assets: [a], tradeId: input.tradeId ?? null })
         continue
       }
       const fromData = dataByRoster.get(fromId)

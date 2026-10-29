@@ -199,6 +199,8 @@ export async function runAdpImporter(options?: {
   staticAdpCoverage: StaticAdpCoverage | null
   /** Null when the NBA Fantrax fetch did not run (sport not requested, or no `allowProviderFetch`). */
   fantraxNba: FantraxNbaAdpRunStats | null
+  /** Every Fantrax ADP fetch that ran (NBA, MLB, NHL), keyed by sport. */
+  fantraxBySport: Record<string, FantraxNbaAdpRunStats>
 }> {
   const season = currentSeason()
   const week = currentWeekOfYear()
@@ -217,6 +219,7 @@ export async function runAdpImporter(options?: {
   const consensusRowsBySport: Record<string, number> = {}
   let staticAdpCoverage: StaticAdpCoverage | null = null
   let fantraxNba: FantraxNbaAdpRunStats | null = null
+  const fantraxBySport: Record<string, FantraxNbaAdpRunStats> = {}
 
   for (const sport of sports) {
     const previousMap = await loadPreviousMap(sport)
@@ -331,17 +334,22 @@ export async function runAdpImporter(options?: {
        * lib/adp/fantraxNbaAdp.ts. Scoring is `standard`: Fantrax publishes one board, and the pool
        * falls back to any scoring for non-NFL sports when the league's own has no rows.
        */
-      if (sport === 'NBA' && options?.allowProviderFetch) {
-        const { loadFantraxNbaAdp } = await import('@/lib/adp/fantraxNbaAdp')
-        const load = await loadFantraxNbaAdp().catch((err: unknown) => ({
+      /*
+       * MLB and NHL had no market ADP either — the same alphabetical fallback. They read the same
+       * Fantrax `getAdp` board (matched on Fantrax's own id first; see lib/adp/fantraxNbaAdp.ts).
+       */
+      if ((sport === 'NBA' || sport === 'MLB' || sport === 'NHL') && options?.allowProviderFetch) {
+        const { loadFantraxAdp } = await import('@/lib/adp/fantraxNbaAdp')
+        const load = await loadFantraxAdp(sport).catch((err: unknown) => ({
           ok: false as const,
           reason: err instanceof Error ? err.message : String(err),
         }))
+        let stats: FantraxNbaAdpRunStats
         if (!load.ok) {
-          fantraxNba = { ok: false, reason: load.reason }
+          stats = { ok: false, reason: load.reason }
         } else {
           const { matched, ambiguous, unmatched, duplicates } = load.result
-          fantraxNba = {
+          stats = {
             ok: true,
             priced: load.priced,
             matched: matched.length,
@@ -351,7 +359,7 @@ export async function runAdpImporter(options?: {
             unmatchedSample: [...unmatched, ...ambiguous].slice(0, 10),
           }
           for (const m of matched) {
-            const playerId = `NBA:af:${m.identityId}`
+            const playerId = `${sport}:af:${m.identityId}`
             const key = `${sport}:redraft:standard:${playerId}:fantrax`
             rows.push({
               sport,
@@ -369,6 +377,8 @@ export async function runAdpImporter(options?: {
             })
           }
         }
+        fantraxBySport[sport] = stats
+        if (sport === 'NBA') fantraxNba = stats
       }
 
       const snapshots = isAiAdpConsumerEnabled()
@@ -458,5 +468,6 @@ export async function runAdpImporter(options?: {
      */
     staticAdpCoverage,
     fantraxNba,
+    fantraxBySport,
   }
 }

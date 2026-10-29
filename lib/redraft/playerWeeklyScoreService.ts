@@ -46,7 +46,8 @@ import { teamDefenseSleeperId } from '@/lib/core-app/teamDefenseCrosswalk'
 import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
-import { dayKey, isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { addDatedGameRow, buildPlayerDailyStatLines, type DatedGameRows } from '@/lib/redraft/playerDailyStatLines'
 import { gamesCountActive } from '@/lib/redraft/gamesCount'
 import {
   gamesCountDb,
@@ -401,7 +402,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
    */
   const dailyRowsByPlayer = new Map<string, unknown[]>()
   /** Daily-lineup leagues only: the same rows, keyed by their Eastern game day. */
-  const datedRowsByPlayer = new Map<string, Map<string, { day: Date; rows: unknown[] }>>()
+  const datedRowsByPlayer = new Map<string, DatedGameRows>()
   /** Games-count leagues only: the same rows, keyed by the provider game id (one real game). */
   const gameRowsByPlayer = new Map<string, Map<string, { day: Date; rows: unknown[] }>>()
   /** Schedule start instants by game id, read once and only for a games-count league. */
@@ -514,11 +515,8 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       rows.push(row.normalizedStatMap)
       dailyRowsByPlayer.set(rosterId, rows)
       if (dailyLineupScoring && row.gameDate) {
-        const byDay = datedRowsByPlayer.get(rosterId) ?? new Map<string, { day: Date; rows: unknown[] }>()
-        const key = dayKey(row.gameDate)
-        const entry = byDay.get(key) ?? { day: row.gameDate, rows: [] }
-        entry.rows.push(row.normalizedStatMap)
-        byDay.set(key, entry)
+        const byDay: DatedGameRows = datedRowsByPlayer.get(rosterId) ?? new Map()
+        addDatedGameRow(byDay, row.gameDate, row.normalizedStatMap)
         datedRowsByPlayer.set(rosterId, byDay)
       }
       if (gamesCountScoring && row.gameDate) {
@@ -1043,28 +1041,27 @@ async function writePlayerDailyScores(args: {
   season: number
   week: number
   window: { start: Date; end: Date }
-  byDay: Map<string, { day: Date; rows: unknown[] }>
+  byDay: DatedGameRows
   normalizer: NonNullable<ReturnType<typeof getDailySportNormalizer>>
 }): Promise<number> {
   const keep: Date[] = []
   let written = 0
-  for (const { day, rows } of args.byDay.values()) {
-    const aggregate = aggregateWeeklyStats(rows, args.normalizer)
-    if (aggregate.gamesCounted === 0 || !Object.keys(aggregate.stats).length) continue
+  // The per-day lines come from the shared builder the admin re-ingest preview also uses.
+  for (const { day, stats, gamesPlayed } of buildPlayerDailyStatLines(args.byDay, args.normalizer)) {
     keep.push(day)
     await prisma.playerDailyScore.upsert({
       where: {
         playerId_sport_season_scoringDay: { playerId: args.playerId, sport: args.sport, season: args.season, scoringDay: day },
       },
-      update: { week: args.week, stats: aggregate.stats, gamesPlayed: aggregate.gamesCounted, isFinalized: false },
+      update: { week: args.week, stats, gamesPlayed, isFinalized: false },
       create: {
         playerId: args.playerId,
         sport: args.sport,
         season: args.season,
         week: args.week,
         scoringDay: day,
-        stats: aggregate.stats,
-        gamesPlayed: aggregate.gamesCounted,
+        stats,
+        gamesPlayed,
         isFinalized: false,
       },
     })

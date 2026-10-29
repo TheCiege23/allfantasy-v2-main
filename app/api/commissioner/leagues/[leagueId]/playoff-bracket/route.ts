@@ -26,7 +26,8 @@ import {
   parseStoredByePlan,
   validByePlans,
 } from '@/lib/playoff-brackets/byePlan'
-import { normalizeWeeksPerRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { lastWeekOfPlayoffRound, normalizeWeeksPerRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 import { detectPlayIn, playInOptions } from '@/lib/playoff-brackets/playIn'
 
 export const dynamic = 'force-dynamic'
@@ -36,6 +37,15 @@ const LAST_PLAYOFF_WEEK: Record<string, number> = { NFL: 18 }
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+/**
+ * The week a bracket of `roundCount` rounds ends. Cumulative mode is `start + rounds × weeksPerRound - 1`
+ * as before; in series mode each round lasts its best-of length (lib/playoff-runtime/playoffSeries.ts).
+ */
+function bracketFinalWeek(startWeek: number, roundCount: number, weeksPerRound: number, seriesLengths: number[] | null): number {
+  if (!seriesLengths || roundCount < 1) return startWeek + roundCount * weeksPerRound - 1
+  return lastWeekOfPlayoffRound({ playoffStartWeek: startWeek, roundNumber: roundCount, seriesLengths })
 }
 
 async function load(leagueId: string) {
@@ -71,13 +81,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
   const savedPlan = teams === savedTeams ? parseStoredByePlan(asRecord(league.settings).playoff_bye_plan, teams) : null
   const startWeek = league.playoffStartWeek ?? 15
   const weeksPerRound = normalizeWeeksPerRound(league.playoffWeeksPerRound)
+  const seriesLengths = readPlayoffSeriesLengths(league.settings)
   const lastWeek = LAST_PLAYOFF_WEEK[String(league.sport).toUpperCase()] ?? null
 
   const fits = (finalWeek: number) => lastWeek == null || finalWeek <= lastWeek
   const options = validByePlans(teams).map((plan) => {
     const check = checkByePlan(teams, plan)
     const roundCount = check.ok ? check.roundCount : 0
-    const finalWeek = startWeek + roundCount * weeksPerRound - 1
+    const finalWeek = bracketFinalWeek(startWeek, roundCount, weeksPerRound, seriesLengths)
     return {
       plan,
       natural: isNaturalByePlan(teams, plan),
@@ -94,7 +105,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
   const playIn = playInOptions(savedPlayIn ? savedPlayIn.qualifiers : teams).map((p) => {
     const check = checkByePlan(p.seeds, p.plan)
     const roundCount = check.ok ? check.roundCount : 0
-    const finalWeek = startWeek + roundCount * weeksPerRound - 1
+    const finalWeek = bracketFinalWeek(startWeek, roundCount, weeksPerRound, seriesLengths)
     return { ...p, rounds: check.ok ? check.rounds : [], roundCount, finalWeek, fitsSeason: fits(finalWeek) }
   })
 
@@ -138,7 +149,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 })
 
   const lastWeek = LAST_PLAYOFF_WEEK[String(league.sport).toUpperCase()]
-  const finalWeek = (league.playoffStartWeek ?? 15) + check.roundCount * normalizeWeeksPerRound(league.playoffWeeksPerRound) - 1
+  const finalWeek = bracketFinalWeek(
+    league.playoffStartWeek ?? 15,
+    check.roundCount,
+    normalizeWeeksPerRound(league.playoffWeeksPerRound),
+    readPlayoffSeriesLengths(league.settings),
+  )
   if (lastWeek != null && finalWeek > lastWeek) {
     return NextResponse.json(
       { error: `This bracket needs ${check.roundCount} rounds and would end in week ${finalWeek}, after week ${lastWeek}. Start the playoffs earlier or pick fewer rounds.` },

@@ -118,12 +118,14 @@ export async function createPlayoffBracketEntryClient(input: {
 export async function submitPlayoffBracketEntryClient(input: {
   challengeId: string
   entryId: string
+  tiebreakerTotalScore?: number
 }): Promise<{ challengeId: string; entryId: string; redirectUrl: string }> {
   const response = await fetch(`/api/brackets/playoffs/${input.challengeId}/entries/${input.entryId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       action: "submit_entry",
+      tiebreakerTotalScore: input.tiebreakerTotalScore,
     }),
   })
 

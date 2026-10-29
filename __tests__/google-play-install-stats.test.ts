@@ -221,6 +221,26 @@ describe("getPlayInstallStats (end to end with Google mocked)", () => {
     expect(result).toEqual({ status: "error", reason: expect.stringContaining("Play Console permissions") })
   })
 
+  it("shares one cold Play Console request across concurrent admin loads", async () => {
+    let releaseToken: (() => void) | undefined
+    const tokenGate = new Promise<void>((resolve) => { releaseToken = resolve })
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.startsWith("https://oauth2.googleapis.com/token")) {
+        await tokenGate
+        return new Response(JSON.stringify({ access_token: "tok" }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ items: [] }), { status: 200 })
+    })
+
+    const first = getPlayInstallStats()
+    const second = getPlayInstallStats()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    releaseToken?.()
+    const [a, b] = await Promise.all([first, second])
+    expect(a).toEqual(b)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it("does not call Google at all when unconfigured", async () => {
     vi.stubEnv("GOOGLE_PLAY_REPORTS_BUCKET", "")
     const result = await getPlayInstallStats()

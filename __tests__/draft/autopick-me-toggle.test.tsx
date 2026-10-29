@@ -181,6 +181,25 @@ describe('AutopickMeToggle — mode selection', () => {
   })
 })
 
+describe('AutopickMeToggle — draft like me (AF Pro)', () => {
+  it('is locked for non-Pro users and says why', () => {
+    renderToggle({ ...enabledAutopick, isProEligible: false })
+    const btn = screen.getByTestId('autopick-mode-draft-as-me')
+    expect(btn.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(btn)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.getByTestId('autopick-me-error').textContent).toMatch(/AF Pro/)
+  })
+
+  it('posts { enabled: true, mode: "draft_as_me" } for a Pro user', async () => {
+    mockFetchOk({ ...enabledAutopick, mode: 'draft_as_me', isProEligible: true })
+    renderToggle({ ...enabledAutopick, isProEligible: true })
+    fireEvent.click(screen.getByTestId('autopick-mode-draft-as-me'))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ enabled: true, mode: 'draft_as_me' })
+  })
+})
+
 describe('AutopickMeToggle — success response', () => {
   it('calls onUpdate with server-returned viewerAutopick after success', async () => {
     const updated: ViewerAutopickData = { enabled: true, mode: 'standard', isProEligible: true, updatedAt: '2026-01-01T00:00:00Z' }

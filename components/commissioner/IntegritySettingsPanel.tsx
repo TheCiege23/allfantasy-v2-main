@@ -3,6 +3,12 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import {
+  HOLD_FLAGGED_TRADES_LABELS,
+  HOLD_FLAGGED_TRADES_MODES,
+  holdModeFromResponse,
+  type HoldFlaggedTradesMode,
+} from '@/lib/integrity/holdFlaggedTradesMode'
 
 type IntegrityApi = {
   settings: {
@@ -16,13 +22,21 @@ type IntegrityApi = {
     tankingBenchPatternCheck: boolean
     /** Suspicious-trade alerts (League.settings, lib/integrity/tradeAlerts.ts). Absent = on. */
     tradeAlertsEnabled?: boolean
-    /** Hold flagged trades for commissioner review (lib/integrity/holdFlaggedTrades.ts). Absent = off. */
+    /** Hold flagged trades for commissioner review (lib/integrity/holdFlaggedTrades.ts). Default: serious flags only. */
     holdFlaggedTrades?: boolean
+    holdFlaggedTradesMode?: HoldFlaggedTradesMode
     /** False in an imported league: its trades go through on the host, so there is nothing to hold. */
     holdFlaggedTradesSupported?: boolean
     tankingWaiverPatternCheck: boolean
     /** Anti-tanking penalties (League.settings, lib/integrity/tankingPenalties.ts). Default: warning, then a 1st-round pick. */
-    tankingPenalties?: { enabled: boolean; pickAtStrike: number; pickRound: number }
+    tankingPenalties?: {
+      enabled: boolean
+      penalty?: 'forfeit_pick' | 'lottery_odds' | 'faab'
+      pickAtStrike: number
+      pickRound: number
+      lotteryOddsCutPct?: number
+      faabPercent?: number
+    }
   }
   stats: {
     openCollusion: number
@@ -79,7 +93,7 @@ export function IntegritySettingsPanel(props: {
           tankingBenchPatternCheck: data.settings.tankingBenchPatternCheck,
           tankingWaiverPatternCheck: data.settings.tankingWaiverPatternCheck,
           tradeAlertsEnabled: data.settings.tradeAlertsEnabled !== false,
-          holdFlaggedTrades: data.settings.holdFlaggedTrades === true,
+          holdFlaggedTradesMode: holdModeFromResponse(data.settings),
           ...(data.settings.tankingPenalties ? { tankingPenalties: data.settings.tankingPenalties } : {}),
         }),
       })
@@ -122,6 +136,11 @@ export function IntegritySettingsPanel(props: {
   }
 
   const s = data.settings
+  const pen = s.tankingPenalties
+  const setPenalty = (patch: Partial<NonNullable<typeof pen>>) =>
+    setData((d) =>
+      d && d.settings.tankingPenalties ? { ...d, settings: { ...d.settings, tankingPenalties: { ...d.settings.tankingPenalties, ...patch } } } : d
+    )
   const stats = data.stats
 
   return (
@@ -189,24 +208,25 @@ export function IntegritySettingsPanel(props: {
             platform. Completed trades are still checked, and a flagged one alerts you.
           </p>
         ) : (
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <p className="text-white/80">Hold flagged trades for my review</p>
-            <p className="text-[11px] text-white/45">A flagged trade waits for you to approve or veto it instead of going through.</p>
+        <div>
+          <p className="text-white/80">Hold flagged trades for my review</p>
+          <div className="mt-1 flex gap-1" role="radiogroup" aria-label="Hold flagged trades">
+            {HOLD_FLAGGED_TRADES_MODES.map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={holdModeFromResponse(s) === m}
+                onClick={() => setData((d) => (d ? { ...d, settings: { ...d.settings, holdFlaggedTradesMode: m, holdFlaggedTrades: m !== 'off' } } : d))}
+                className={`rounded-lg border px-2 py-1 text-[11px] ${
+                  holdModeFromResponse(s) === m ? 'border-emerald-400/40 bg-emerald-500/15' : 'border-white/15'
+                }`}
+              >
+                {HOLD_FLAGGED_TRADES_LABELS[m].label}
+              </button>
+            ))}
           </div>
-          <button
-            type="button"
-            aria-pressed={s.holdFlaggedTrades === true}
-            aria-label="Hold flagged trades"
-            onClick={() =>
-              setData((d) => (d ? { ...d, settings: { ...d.settings, holdFlaggedTrades: d.settings.holdFlaggedTrades !== true } } : d))
-            }
-            className={`rounded-lg border px-2 py-1 text-[11px] ${
-              s.holdFlaggedTrades === true ? 'border-emerald-400/40 bg-emerald-500/15' : 'border-white/15'
-            }`}
-          >
-            {s.holdFlaggedTrades === true ? 'On' : 'Off'}
-          </button>
+          <p className="mt-1 text-[11px] text-white/45">{HOLD_FLAGGED_TRADES_LABELS[holdModeFromResponse(s)].detail}</p>
         </div>
         )}
 
@@ -266,39 +286,41 @@ export function IntegritySettingsPanel(props: {
             Flag suspicious waiver drops (experimental)
           </label>
 
-          {s.tankingPenalties ? (
+          {pen ? (
             <div className="mt-3 rounded-lg border border-white/[0.08] p-2" data-testid="tanking-penalties">
               <label className="flex items-center gap-2 text-[11px]">
                 <input
                   type="checkbox"
-                  checked={s.tankingPenalties.enabled}
-                  onChange={(e) =>
-                    setData((d) =>
-                      d && d.settings.tankingPenalties
-                        ? { ...d, settings: { ...d.settings, tankingPenalties: { ...d.settings.tankingPenalties, enabled: e.target.checked } } }
-                        : d
-                    )
-                  }
+                  checked={pen.enabled}
+                  onChange={(e) => setPenalty({ enabled: e.target.checked })}
                 />
-                Penalties: a warning first, then a lost draft pick
+                Penalties: a warning first, then a penalty
               </label>
               <p className="mt-1 text-[11px] text-white/45">
-                A flag only warns the manager. Confirming a flag (Escalate) is a strike. At the strike below, the team loses its own pick
-                in the round below, from the nearest draft it still holds one.
+                A flag only warns the manager. Confirming a flag (Escalate) is a strike. At the strike below, the team pays the penalty you
+                choose.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
                 <label className="flex items-center gap-1">
-                  Pick lost at strike
+                  Penalty
                   <select
-                    value={s.tankingPenalties.pickAtStrike}
-                    disabled={!s.tankingPenalties.enabled}
-                    onChange={(e) =>
-                      setData((d) =>
-                        d && d.settings.tankingPenalties
-                          ? { ...d, settings: { ...d.settings, tankingPenalties: { ...d.settings.tankingPenalties, pickAtStrike: Number(e.target.value) } } }
-                          : d
-                      )
-                    }
+                    data-testid="tanking-penalty-kind"
+                    value={pen.penalty ?? 'forfeit_pick'}
+                    disabled={!pen.enabled}
+                    onChange={(e) => setPenalty({ penalty: e.target.value as 'forfeit_pick' | 'lottery_odds' | 'faab' })}
+                    className="rounded border border-white/15 bg-transparent px-1"
+                  >
+                    <option value="forfeit_pick">Lose a draft pick</option>
+                    <option value="lottery_odds">Worse rookie-lottery odds</option>
+                    <option value="faab">Lose FAAB</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1">
+                  At strike
+                  <select
+                    value={pen.pickAtStrike}
+                    disabled={!pen.enabled}
+                    onChange={(e) => setPenalty({ pickAtStrike: Number(e.target.value) })}
                     className="rounded border border-white/15 bg-transparent px-1"
                   >
                     {[1, 2, 3, 4].map((n) => (
@@ -308,28 +330,67 @@ export function IntegritySettingsPanel(props: {
                     ))}
                   </select>
                 </label>
-                <label className="flex items-center gap-1">
-                  Round of the pick
-                  <select
-                    value={s.tankingPenalties.pickRound}
-                    disabled={!s.tankingPenalties.enabled}
-                    onChange={(e) =>
-                      setData((d) =>
-                        d && d.settings.tankingPenalties
-                          ? { ...d, settings: { ...d.settings, tankingPenalties: { ...d.settings.tankingPenalties, pickRound: Number(e.target.value) } } }
-                          : d
-                      )
-                    }
-                    className="rounded border border-white/15 bg-transparent px-1"
-                  >
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {(pen.penalty ?? 'forfeit_pick') === 'forfeit_pick' ? (
+                  <label className="flex items-center gap-1">
+                    Round of the pick
+                    <select
+                      value={pen.pickRound}
+                      disabled={!pen.enabled}
+                      onChange={(e) => setPenalty({ pickRound: Number(e.target.value) })}
+                      className="rounded border border-white/15 bg-transparent px-1"
+                    >
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {pen.penalty === 'lottery_odds' ? (
+                  <label className="flex items-center gap-1">
+                    Odds cut
+                    <select
+                      data-testid="tanking-lottery-cut"
+                      value={pen.lotteryOddsCutPct ?? 50}
+                      disabled={!pen.enabled}
+                      onChange={(e) => setPenalty({ lotteryOddsCutPct: Number(e.target.value) })}
+                      className="rounded border border-white/15 bg-transparent px-1"
+                    >
+                      {[25, 50, 75, 100].map((n) => (
+                        <option key={n} value={n}>
+                          {n === 100 ? 'All (left out of the lottery)' : `${n}%`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {pen.penalty === 'faab' ? (
+                  <label className="flex items-center gap-1">
+                    FAAB taken
+                    <select
+                      data-testid="tanking-faab-percent"
+                      value={pen.faabPercent ?? 25}
+                      disabled={!pen.enabled}
+                      onChange={(e) => setPenalty({ faabPercent: Number(e.target.value) })}
+                      className="rounded border border-white/15 bg-transparent px-1"
+                    >
+                      {[10, 25, 50, 100].map((n) => (
+                        <option key={n} value={n}>
+                          {n}% of the budget
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </div>
+              <p className="mt-1 text-[11px] text-white/45">
+                {pen.penalty === 'lottery_odds'
+                  ? 'Applies to the next rookie-draft lottery that has not been drawn yet. Only matters if your rookie draft order is a lottery.'
+                  : pen.penalty === 'faab'
+                    ? 'Taken from what the team has left, never below $0. Only matters if your league uses FAAB waivers.'
+                    : 'The team loses its own pick in that round, from the nearest draft it still holds one.'}
+              </p>
             </div>
           ) : null}
 

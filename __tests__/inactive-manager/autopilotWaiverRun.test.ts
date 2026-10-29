@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 
 const m = vi.hoisted(() => {
-  const state = { settings: {} as Record<string, unknown>, ownerHasPlan: true, lifecycleOk: true }
+  const state = {
+    settings: {} as Record<string, unknown>,
+    ownerHasPlan: true,
+    lifecycleOk: true,
+    waivers: { normalizedWaiverType: 'rolling', faabBudget: null as number | null, faabMinBid: null as number | null, allowZeroFaabBid: true },
+    faabRemaining: null as number | null,
+  }
   return {
     state,
     prisma: {
@@ -13,20 +19,21 @@ const m = vi.hoisted(() => {
       league: {
         findUnique: vi.fn(async () => ({ id: 'L', userId: 'owner', platform: 'allfantasy', sport: 'NFL', status: 'in_season', lifecycleState: 'in_season', lockAllMoves: false, leagueVariant: null, settings: state.settings })),
       },
-      roster: { findFirst: vi.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id, platformUserId: `orphan-${where.id}`, playerData: { lineup_sections: { starters: [{ id: 'qb', position: 'QB' }, { id: 'rb', position: 'RB' }], bench: [{ id: 'te', position: 'TE' }], ir: [], taxi: [], devy: [] } } })) },
+      roster: { findFirst: vi.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id, platformUserId: `orphan-${where.id}`, faabRemaining: state.faabRemaining, playerData: { lineup_sections: { starters: [{ id: 'qb', position: 'QB' }, { id: 'rb', position: 'RB' }], bench: [{ id: 'te', position: 'TE' }], ir: [], taxi: [], devy: [] } } })) },
     },
     createClaim: vi.fn(async () => ({ id: 'c1' })),
+    notify: vi.fn(async () => ({})),
     pending: vi.fn(async () => []),
     log: vi.fn(async () => ({})),
     lifecycle: vi.fn(async () => (state.lifecycleOk ? { ok: true } : { ok: false, err: {} })),
     legality: vi.fn(async () => ({ ok: true })),
     data: vi.fn(async ({ surface }: { surface: string }) =>
       surface === 'waivers'
-        ? [{ id: 'faRb', position: 'RB', projectedPoints: 9, injuryStatus: null, product: { yearsExp: 4 } }]
+        ? [{ id: 'faRb', name: 'Free Back', position: 'RB', projectedPoints: 9, injuryStatus: null, product: { yearsExp: 4 } }]
         : [
             { id: 'qb', position: 'QB', projectedPoints: 20, injuryStatus: null, product: { yearsExp: 5 } },
             { id: 'rb', position: 'RB', projectedPoints: 12, injuryStatus: 'Out', product: { yearsExp: 5 } },
-            { id: 'te', position: 'TE', projectedPoints: 1, injuryStatus: null, product: { yearsExp: 8 } },
+            { id: 'te', name: 'Spare End', position: 'TE', projectedPoints: 1, injuryStatus: null, product: { yearsExp: 8 } },
           ],
     ),
   }
@@ -53,6 +60,8 @@ vi.mock('@/lib/league/lineupStarterSlots', () => ({
   ],
 }))
 vi.mock('@/lib/commissioner-hub/managerHealth', () => ({ getLeagueManagerHealth: vi.fn() }))
+vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: m.notify }))
+vi.mock('@/lib/waiver-wire/settings-service', () => ({ getEffectiveLeagueWaiverSettings: vi.fn(async () => m.state.waivers) }))
 vi.mock('@/lib/roster-lineup-engine/lineupLockService', () => ({ resolveFullLineupLockContext: vi.fn() }))
 vi.mock('@/lib/roster-lineup-engine/lineupService', () => ({ persistRosterLineupWithEngine: vi.fn() }))
 
@@ -64,6 +73,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   m.state.ownerHasPlan = true
   m.state.lifecycleOk = true
+  m.state.waivers = { normalizedWaiverType: 'rolling', faabBudget: null, faabMinBid: null, allowZeroFaabBid: true }
+  m.state.faabRemaining = null
   m.state.settings = { af_managed_lineups: { r1: { since: 's', byUserId: 'commish', autopilot: ap }, r2: { since: 's', byUserId: 'commish' } } }
 })
 
@@ -80,7 +91,28 @@ describe('runAutopilotWaivers', () => {
       metadata: { source: 'chimmy_autopilot', style: 'dynasty_owner', slot: 'RB' },
     }))
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: AUTOPILOT_CLAIM_ACTION, entityId: 'r1', userId: 'commish' }))
+    // The league log names the players in Chimmy's move, and the commissioner who handed it the team hears.
+    expect(m.log.mock.calls[0]![0]).toMatchObject({ metadata: { addPlayerName: 'Free Back', dropPlayerName: 'Spare End' } })
+    expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({ userIds: ['commish'], type: 'chimmy_autopilot_claim', body: 'Free Back for RB, dropping Spare End.' }))
     expect(m.legality).toHaveBeenCalledWith(expect.objectContaining({ rosterIds: ['r1'], kind: 'waiver_claim' }))
+  })
+
+  it('bids FAAB in a FAAB league, and keeps the bid out of the log and the commissioner’s alert', async () => {
+    m.state.waivers = { normalizedWaiverType: 'faab', faabBudget: 100, faabMinBid: null, allowZeroFaabBid: false }
+    m.state.faabRemaining = 60
+    expect(await runAutopilotWaivers()).toMatchObject({ claims: 1 })
+    expect(m.createClaim).toHaveBeenCalledWith('L', 'r1', expect.objectContaining({ faabBid: 4 }))
+    expect(JSON.stringify(m.log.mock.calls[0]![0])).not.toContain('faab')
+    expect(String((m.notify.mock.calls[0]![0] as { body: string }).body)).not.toContain('$')
+  })
+
+  it('makes no claim a FAAB league would refuse for want of money', async () => {
+    m.state.waivers = { normalizedWaiverType: 'faab', faabBudget: 100, faabMinBid: 5, allowZeroFaabBid: true }
+    m.state.faabRemaining = 3
+    const r = await runAutopilotWaivers()
+    expect(r.claims).toBe(0)
+    expect(r.skipped.faab_unaffordable).toBe(1)
+    expect(m.createClaim).not.toHaveBeenCalled()
   })
 
   it('stands down when the league owner no longer holds AF Commissioner', async () => {
