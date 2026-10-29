@@ -28,6 +28,7 @@ import { leagueJoinUrl } from '@/lib/league/league-invite-link'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DiscordLeagueSyncPanel } from './DiscordLeagueSyncPanel'
+import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '@/components/league-settings/TournamentLeagueNotes'
 import { PlayoffSettingsEditor as PlayoffSettingsEditorLazy } from '@/components/league-settings/PlayoffSettingsEditor'
 import { RosterSettingsEditor as RosterSettingsEditorLazy } from '@/components/league-settings/RosterSettingsEditor'
 import {
@@ -58,6 +59,8 @@ import { NbaScoringSettingsPanel } from '@/components/league-settings/NbaScoring
 import { NcaabScoringSettingsPanel } from '@/components/league-settings/NcaabScoringSettingsPanel'
 import { MlbScoringSettingsPanel } from '@/components/league-settings/MlbScoringSettingsPanel'
 import { NhlScoringSettingsPanel } from '@/components/league-settings/NhlScoringSettingsPanel'
+import ScoringSettingsPanel from '@/components/app/settings/ScoringSettingsPanel'
+import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
 import { NcaafScoringSettingsPanel } from '@/components/league-settings/NcaafScoringSettingsPanel'
 import { SoccerScoringSettingsPanel } from '@/components/league-settings/SoccerScoringSettingsPanel'
 import { DraftSettingsCommissionerPanel } from '@/components/league-settings/DraftSettingsCommissionerPanel'
@@ -777,6 +780,8 @@ export function SettingsSubPanelBody({
         </div>
       )
     case 'playoffs':
+      // A tournament conference league has no league playoffs (lib/tournament/divisions/conferenceSeasonPlan.ts).
+      if (tournamentRunsPlayoffs(ctx.league.settings)) return <TournamentPlayoffsNote settings={ctx.league.settings} />
       return (
         <>
           <PlayoffSettingsReadonlyPanel ctx={ctx} />
@@ -826,7 +831,11 @@ export function SettingsSubPanelBody({
               isCommissioner={ctx.isCommissioner}
             />
           )}
-          {ctx.league.sport === 'NHL' && (
+          {/* NHL category leagues have no point weights: show the stored categories, as NBA's panel does. */}
+          {ctx.league.sport === 'NHL' && nativeCategoryScoringContext(ctx.league.settings, 'NHL') && (
+            <ScoringSettingsPanel leagueId={ctx.league.id} />
+          )}
+          {ctx.league.sport === 'NHL' && !nativeCategoryScoringContext(ctx.league.settings, 'NHL') && (
             <NhlScoringSettingsPanel
               leagueId={ctx.league.id}
               isCommissioner={ctx.isCommissioner}

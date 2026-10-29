@@ -44,7 +44,7 @@ export interface AnalyzeGuillotineTradeInput {
 export function guillotineTradeFacts(context: GuillotineWarRoomContext, input: AnalyzeGuillotineTradeInput): GuillotineTradeAnalysis {
   const missingDataFlags = [...context.missingDataFlags]
   if (!context.guillotine.tradesEnabled) {
-    return { valueDelta: null, rosterFitDelta: 0, riskFlags: [], explanationFacts: ['Trades are disabled in this guillotine league.'], missingDataFlags: [...new Set(missingDataFlags)] }
+    return { valueDelta: null, rosterFitDelta: 0, riskFlags: [], explanationFacts: ['Trades are disabled in this Guilly league.'], missingDataFlags: [...new Set(missingDataFlags)] }
   }
 
   const facts: string[] = []

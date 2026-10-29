@@ -30,7 +30,7 @@ function matchupRelativeAge(loadedAt: number | null, nowMs: number): string {
   return `${hours}h ago`
 }
 
-function maxWeekForSport(sportU: string): number {
+export function maxWeekForSport(sportU: string): number {
   switch (sportU.toUpperCase()) {
     case 'NBA':
     case 'NHL':

@@ -60,8 +60,8 @@ describe('Pool resolver derives isRookie from yearsExp via normalizeDraftPlayer'
 describe('Resolved draft pool feeds isRookie + yearsExp through to entries', () => {
   const src = read('lib/draft-room/getResolvedDraftPoolForLeague.ts')
 
-  it('runs enriched rows through normalizePlayerList (NormalizedDraftEntry shape)', () => {
-    expect(src).toMatch(/normalizePlayerList\(dedupedEnrichedList, sport\)/)
+  it('cooperatively normalizes enriched rows (NormalizedDraftEntry shape)', () => {
+    expect(src).toMatch(/cooperativeMap\(dedupedEnrichedList,[\s\S]*?normalizePlayer\(row, sport\)/)
   })
 
   it('explicitly stamps yearsExp on NFL rows (Sleeper years_exp lookup chain)', () => {
@@ -90,8 +90,8 @@ describe('DraftPlayerCard renders the rookie chip from isRookie', () => {
     expect(src).toMatch(/isRookie\?: boolean/)
   })
 
-  it('the rookie chip is gated on Boolean(isRookie)', () => {
-    expect(src).toMatch(/showRookieBadge = Boolean\(isRookie\)/)
+  it('the rookie chip is fed from isRookie via the shared Rookie/Prospect badge', () => {
+    expect(src).toMatch(/const labelInput = \{ isRookie, isDevy, graduatedToNFL, poolType \}/)
   })
 })
 

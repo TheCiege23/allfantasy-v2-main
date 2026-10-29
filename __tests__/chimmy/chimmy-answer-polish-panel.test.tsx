@@ -24,12 +24,12 @@ vi.mock('@/lib/tokens/client-confirm', () => ({ confirmTokenSpend: vi.fn(), prev
 import { ChimmyChatPageClient } from '@/app/chimmy/chat/ChimmyChatPageClient'
 import { ChatMessageList, type ChatListMessage } from '@/components/core-app/comms/ChatMessageList'
 
-const LEAGUES = [{ id: 'L1', name: 'Test Guillotine', platform: 'sleeper', platformLeagueId: '99', isCommissioner: false, teamCount: 12 }]
-const GROUNDING = { grounded: true, leagueId: 'L1', leagueName: 'Test Guillotine', platform: 'sleeper', season: 2026, lastSyncedAt: null }
+const LEAGUES = [{ id: 'L1', name: 'Test Guilly', platform: 'sleeper', platformLeagueId: '99', isCommissioner: false, teamCount: 12 }]
+const GROUNDING = { grounded: true, leagueId: 'L1', leagueName: 'Test Guilly', platform: 'sleeper', season: 2026, lastSyncedAt: null }
 
-const SAVE_CARD = { version: 1, leagueName: 'Test Guillotine', outcome: 'save', elimination: true, remaining: 150, seasonBudget: 200,
+const SAVE_CARD = { version: 1, leagueName: 'Test Guilly', outcome: 'save', elimination: true, remaining: 150, seasonBudget: 200,
   lineupAssumed: false, valuesAsOf: '2026-09-28', bids: [], moreCount: 0, nonUpgrades: 0, pricedCount: 41, waiverLink: null }
-const BID_CARD = { version: 1, leagueName: 'Test Guillotine', outcome: 'bid', elimination: true, remaining: 150, seasonBudget: 200,
+const BID_CARD = { version: 1, leagueName: 'Test Guilly', outcome: 'bid', elimination: true, remaining: 150, seasonBudget: 200,
   lineupAssumed: false, valuesAsOf: '2026-09-28',
   bids: [
     { name: 'Casey Runner', position: 'RB', ceiling: 31, sharePct: 62, displacedName: 'Jordan Slow' },
@@ -128,7 +128,7 @@ describe('the Chimmy panel shows the engine\'s call above the prose', () => {
    * SAFE / OUT (2026-09-28): a guillotine week that is DECIDED, from the settle verdict the matchup
    * tool read. Good news in the good tone, bad news in the bad one — colour AND words.
    */
-  it('a decided guillotine week reads SAFE in the good tone, and OUT in the bad one', async () => {
+  it('a decided Guilly week reads SAFE in the good tone, and OUT in the bad one', async () => {
     render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
     answers.push({ response: 'You cannot be chopped this week.', meta: { leagueGrounding: GROUNDING, toolsUsed: ['get_my_matchup'],
       verdict: { key: 'safe', source: 'elimination_settle', detail: 'Week decided' } } })

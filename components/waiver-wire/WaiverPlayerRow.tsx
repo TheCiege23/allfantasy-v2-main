@@ -22,6 +22,8 @@ type Props = {
     aiAdp?: number | null
     byeWeek?: number | null
     rank?: number | null
+    /** NBA / NHL / MLB: "C12". Shown in place of the overall rank, which those sports do not have. */
+    positionRank?: string | null
     ownershipPercent?: number | null
     projectionSourceLabel?: string | null
     adpSourceLabel?: string | null
@@ -41,6 +43,10 @@ type Props = {
   watchlisted?: boolean
   alreadyClaimed?: boolean
   trendScore?: number
+  /** "On waivers until …" for a recently dropped player (lib/waiver-wire/dropped-player-waivers.ts). */
+  waiverHoldLabel?: string | null
+  /** The season phase closes every move (offseason / playoff rules); the button is disabled. */
+  movesClosedReason?: string | null
 }
 
 function formatDecimal(value: number | null | undefined, digits = 1): string {
@@ -111,6 +117,8 @@ export default function WaiverPlayerRow({
   watchlisted,
   alreadyClaimed,
   trendScore,
+  waiverHoldLabel,
+  movesClosedReason,
 }: Props) {
   const pos = player.position || "UNK"
   const team = player.team || "FA"
@@ -172,6 +180,11 @@ export default function WaiverPlayerRow({
                 {player.injuryStatus}
               </span>
             ) : null}
+            {waiverHoldLabel ? (
+              <span data-testid={`waiver-player-hold-${player.id}`}>
+                <SourcePill label={waiverHoldLabel} tone="warn" />
+              </span>
+            ) : null}
             {watchlisted ? <SourcePill label="Watchlist" tone="good" /> : null}
             {limitedData ? <SourcePill label={normalizedSport === "NCAAF" ? "NCAAF limited data" : "Limited data"} tone="warn" /> : null}
           </div>
@@ -181,7 +194,11 @@ export default function WaiverPlayerRow({
             <Metric label="ADP" value={formatDecimal(player.adp)} testId={`waiver-player-adp-${player.id}`} />
             <Metric label="AF ADP" value={player.aiAdp != null ? formatDecimal(player.aiAdp) : "Soon"} />
             <Metric label="Bye" value={player.byeWeek != null ? String(player.byeWeek) : "-"} />
-            <Metric label="Rank" value={player.rank != null ? `#${Math.round(player.rank)}` : "-"} />
+            {player.positionRank ? (
+              <Metric label="Pos rank" value={player.positionRank} testId={`waiver-player-position-rank-${player.id}`} />
+            ) : (
+              <Metric label="Rank" value={player.rank != null ? `#${Math.round(player.rank)}` : "-"} />
+            )}
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted)]">
@@ -241,7 +258,8 @@ export default function WaiverPlayerRow({
         ) : addMode ? (
           <button
             type="button"
-            disabled={actionLoading}
+            disabled={actionLoading || Boolean(movesClosedReason)}
+            title={movesClosedReason ?? undefined}
             onClick={(e) => {
               e.stopPropagation()
               ;(onAdd ?? onAddClick)()
@@ -255,7 +273,8 @@ export default function WaiverPlayerRow({
         ) : (
           <button
             type="button"
-            disabled={actionLoading}
+            disabled={actionLoading || Boolean(movesClosedReason)}
+            title={movesClosedReason ?? undefined}
             onClick={(e) => {
               e.stopPropagation()
               onAddClick()

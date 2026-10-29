@@ -266,6 +266,7 @@
 .af3a-mono { font-family: 'JetBrains Mono', monospace; }
 
 .af3a-body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.af3a-body[data-no-side] { grid-template-columns: minmax(0, 1fr); }
 .af3a-col-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
 .af3a-col-side { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 
@@ -751,3 +752,34 @@
   font-size: 12px;
   cursor: pointer;
 }
+
+
+/* Focused home cards, matching the league dashboard's identity hierarchy. */
+.af-core .af3a-card { border-radius: 16px; box-shadow: none; padding: 18px; background: var(--surface); border: 1px solid var(--line); }
+.af-core .af3a-cardhead { margin-bottom: 14px; }
+.af-core .af3a-cardhead .af3a-label { font: 750 15px/1.3 system-ui, sans-serif; letter-spacing: -.01em; text-transform: none; color: var(--text); }
+.af-core .af3a-leagues { display: grid; gap: 8px; }
+.af-core .af3a-league { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface2); }
+.af-core .af3a-league:hover { border-color: var(--accent-line); }
+.af-core .af3a-league .af3a-tile { width: 44px; height: 44px; flex: 0 0 44px; overflow: hidden; border-radius: 12px; }
+.af-core .af3a-league-body { flex: 1; min-width: 0; }
+.af-core .af3a-league-body b { display: block; color: var(--text); font-size: 14px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
+.af-core .af3a-league-body em { display: block; margin-top: 3px; color: var(--muted); font: 500 12px/1.4 system-ui, sans-serif; }
+.af-core .af3a-league-arrow { font-size: 24px; color: var(--muted); }
+.af-core .af3a-league-score { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.af-core .af3a-league-score strong { font-size: 17px; color: var(--text); }
+.af-core .af3a-league-score small { color: var(--muted); font-size: 12px; }
+@media (max-width: 720px) {
+  .af-core .af3a-card { padding: 14px; border-radius: 14px; }
+  .af-core .af3a-league { padding: 10px; }
+  .af-core .af3a-reason { font-size: 14px; line-height: 1.5; }
+}
+
+
+.af-core .af3a-home-leagues { margin-bottom: 18px; }
+.af-core .af3a-home-leagues .af3a-leagues { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.af-core .af3a-insights { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 6px; }
+.af-core .af3a-insights > summary { min-height: 56px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: var(--text); font-size: 15px; font-weight: 650; cursor: pointer; }
+.af-core .af3a-insights > summary span { font-size: 12px; font-weight: 400; color: var(--muted); }
+.af-core .af3a-insights > .af3a-bottom { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+@media (max-width: 720px) { .af-core .af3a-insights > .af3a-bottom { grid-template-columns: minmax(0, 1fr); } }

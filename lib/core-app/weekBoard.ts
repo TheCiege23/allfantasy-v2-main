@@ -16,6 +16,9 @@ import { leagueArtUrl, managerArtUrl } from './leagueArt'
 import { MIN_WEEKS_FOR_PROJECTION } from './weekBoardRules'
 import type { EliminationSettle } from './eliminationSettle'
 import { loadEliminationSettle } from './eliminationSettleLoader'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { readExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchup'
+import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
 
 /**
  * 24a "Your Week" and 24b "Rivalry Radar" — one read, two views.
@@ -79,7 +82,7 @@ import { COIN_FLIP_POINTS } from './weekBoardRules'
  */
 export function isEliminationFormat(leagueType: string | null | undefined): boolean {
   const t = String(leagueType ?? '').toLowerCase()
-  return t.includes('guillotine') || t.includes('survivor')
+  return t.includes('guillotine') || t.includes('guilly') || t.includes('survivor')
 }
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -222,6 +225,11 @@ export type LeagueWeekBoard = {
   yourTeamName: string | null
   /** Your team's avatar, resolved the same way as `WeekOpponent.avatarUrl`. */
   yourAvatarUrl: string | null
+  /**
+   * An odd-team native league's extra matchup involving your team this week (the game the leftover
+   * team plays instead of a bye). Null otherwise.
+   */
+  extraMatchup?: ExtraMatchupView | null
 }
 
 export type WeekBoard = {
@@ -1433,6 +1441,11 @@ export async function getWeekBoard(
           yourRosterId != null ? (rosterNames.get(`${pid}:${yourRosterId}`) ?? null) : null,
         yourAvatarUrl:
           yourRosterId != null ? (rosterAvatars.get(`${pid}:${yourRosterId}`) ?? null) : null,
+        // A native league's roster ids here are its season roster ids (nativeWeeklyHistory.ts).
+        extraMatchup:
+          yourRosterId != null && isNativePlatform(meta.platform)
+            ? await readExtraMatchupView({ leagueId: meta.id, season: period.season, week: period.week, redraftRosterId: yourRosterId })
+            : null,
       }
     }
   }

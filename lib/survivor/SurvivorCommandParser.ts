@@ -50,6 +50,10 @@ export function parseSurvivorCommand(raw: string): SurvivorParsedCommand {
     return { intent: 'vote', targetDisplayName: withoutChimmy, raw }
   }
 
+  if (/^(?:play\s+|use\s+)?(?:my\s+)?shot\s+in\s+the\s+dark[.!]?$/.test(withoutChimmy)) {
+    return { intent: 'shot_in_the_dark', raw }
+  }
+
   for (const pattern of JURY_VOTE_PATTERNS) {
     const m = withoutChimmy.match(pattern)
     if (m) {

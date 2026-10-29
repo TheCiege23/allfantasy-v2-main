@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { useSession } from "next-auth/react"
 import { RefreshCw, Trophy, Plus, Link2, Clipboard, Settings2, ArrowRightCircle, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
@@ -39,8 +40,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
   const safeChallenge = {
     id: view?.challenge?.id || "unknown-challenge",
-    sport: String(view?.challenge?.sport ?? "bracket").toLowerCase(),
     name: view?.challenge?.name || "Pool Dashboard",
+    sport: view?.challenge?.sport || "nba",
     seasonYear: view?.challenge?.seasonYear ?? new Date().getUTCFullYear(),
     maxEntriesPerParticipant: Number(view?.challenge?.maxEntriesPerParticipant ?? 5),
     inviteUrl: view?.challenge?.inviteUrl || "/brackets",
@@ -56,11 +57,18 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const entries = Array.isArray(view?.entries) ? view.entries : []
   const series = Array.isArray(view?.series) ? view.series : []
   const totalSeries = series.length
-  const hasTemplateSeries = series.some((item) => /^Winner\s+S\d+$/i.test(item.homeTeamName) || /^Winner\s+S\d+$/i.test(item.awayTeamName)) ||
-    (safeChallenge.isTestMode && !series.some((item) => item.winnerTeamName || item.status === "in_progress" || item.status === "final"))
+  const singleGameSport = ["ncaaf", "nba_cup"].includes(String(safeChallenge.sport ?? "").toLowerCase())
+  const hasTemplateSeries = singleGameSport
+    ? !safeChallenge.isTestMode && series.some((item) => !item.startsAt || /^(?:CFP|EAST|WEST)\d+$/i.test(item.homeTeamName) || /^(?:CFP|EAST|WEST)\d+$/i.test(item.awayTeamName))
+    : series.some((item) => /^Winner\s+S\d+$/i.test(item.homeTeamName) || /^Winner\s+S\d+$/i.test(item.awayTeamName)) ||
+      (safeChallenge.isTestMode && !series.some((item) => item.winnerTeamName || item.status === "in_progress" || item.status === "final"))
   const myEntries = entries.filter((entry) => entry.userId === view?.viewerUserId)
   const viewerEntryCount = myEntries.length
-  const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant
+  const tournamentLimit = view.viewerTournamentBracketLimit ?? null
+  const tournamentUsed = view.viewerTournamentBracketUsed ?? null
+  const tournamentQuotaReached = tournamentLimit != null && tournamentUsed != null && tournamentUsed >= tournamentLimit
+  const tournamentLocked = singleGameSport && !safeChallenge.isTestMode && view.challenge.firstGameStartsAt != null && Date.now() >= Date.parse(view.challenge.firstGameStartsAt)
+  const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant && !tournamentLocked && !tournamentQuotaReached
   const primaryEntry = useMemo(() => {
     if (myEntries.length === 0) return null
     const activeViewerEntry = view.activeEntry && view.activeEntry.userId === view?.viewerUserId
@@ -69,7 +77,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     return myEntries.find((entry) => !entry.isComplete) ?? activeViewerEntry ?? myEntries[0] ?? null
   }, [myEntries, view.activeEntry, view?.viewerUserId])
   const primaryButtonLabel = !primaryEntry
-    ? "Create Your First Bracket"
+    ? tournamentLocked ? "Bracket entry closed" : !canCreateEntry ? "Bracket limit reached" : "Create Your First Bracket"
     : primaryEntry.isComplete
       ? "View/Edit Bracket"
       : "Complete Bracket"
@@ -77,30 +85,42 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     () => {
       const hasScoredResults = entries.some((entry) => (entry.resolvedPicks ?? 0) > 0 || (entry.totalScore ?? 0) > 0 || (entry.correctPicks ?? 0) > 0)
       return [...entries]
-        .sort((a, b) => {
-          if (hasScoredResults) {
-            return (b.totalScore ?? 0) - (a.totalScore ?? 0) || (b.correctPicks ?? 0) - (a.correctPicks ?? 0) || b.pickCount - a.pickCount
-          }
-          return b.pickCount - a.pickCount
-        })
+        .filter((entry) => !singleGameSport || entry.isComplete)
+        .sort((a, b) => singleGameSport
+          ? (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER)
+          : hasScoredResults
+            ? (b.totalScore ?? 0) - (a.totalScore ?? 0) || (b.correctPicks ?? 0) - (a.correctPicks ?? 0) || b.pickCount - a.pickCount
+            : b.pickCount - a.pickCount)
         .map((entry, index) => ({
-          rank: index + 1,
+          rank: singleGameSport ? entry.rank ?? index + 1 : index + 1,
           id: entry.id,
+          userId: entry.userId,
           name: entry.name || `Bracket ${index + 1}`,
           picks: entry.pickCount,
           totalScore: entry.totalScore ?? 0,
+          potentialTotal: entry.potentialTotal ?? 0,
           correctPicks: entry.correctPicks ?? 0,
           resolvedPicks: entry.resolvedPicks ?? 0,
           hasScoredResults,
         }))
     },
-    [entries]
+    [entries, singleGameSport]
   )
+  const bestViewerRow = singleGameSport && view.viewerUserId
+    ? leaderboardRows.find((row) => row.userId === view.viewerUserId) ?? null
+    : null
+  const nearbyRivals = bestViewerRow
+    ? leaderboardRows
+      .filter((row) => row.userId !== view.viewerUserId)
+      .sort((a, b) => Math.abs(a.rank - bestViewerRow.rank) - Math.abs(b.rank - bestViewerRow.rank) || a.rank - b.rank)
+      .slice(0, 2)
+    : []
   const hasScoredLeaderboard = leaderboardRows.some((row) => row.hasScoredResults)
   const hasClientAdminAccess = hasPoolAdminAccess(session?.user)
   const hasServerAdminAccess = view.lockDiagnostics?.hasPoolAdminAccess === true
   const hasAdminAccess = hasClientAdminAccess || hasServerAdminAccess
   const canManagePlayoffPool = safeChallenge.ownerUserId === view?.viewerUserId || hasAdminAccess
+  const canSyncPlayoffPool = canManagePlayoffPool && !singleGameSport
   const canUseAutofillResults = safeChallenge.isTestMode && hasAdminAccess
   const isOwner = safeChallenge.ownerUserId === view?.viewerUserId
 
@@ -120,7 +140,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
       try {
         const nextEntryIndex = viewerEntryCount + 1
         if (nextEntryIndex > safeChallenge.maxEntriesPerParticipant) {
-          toast.error("Entry limit reached (max 5 per user)")
+          toast.error(`This pool allows ${safeChallenge.maxEntriesPerParticipant} brackets per user.`)
           return
         }
 
@@ -190,6 +210,17 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     }
   }
 
+  async function copyBestBracket() {
+    if (!bestViewerRow) return
+    try {
+      const path = `/brackets/leagues/${safeChallenge.id}/entries/${bestViewerRow.id}/view`
+      await navigator.clipboard.writeText(`${window.location.origin}${path}`)
+      toast.success("Read-only bracket link copied. Private leagues require membership to view it.")
+    } catch {
+      toast.error("Could not copy bracket link")
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-5 p-4 sm:p-6">
       <section className="rounded-3xl border border-slate-300 bg-[linear-gradient(130deg,#fff7ed_0%,#ecfeff_45%,#eef2ff_100%)] p-6 shadow-[0_20px_50px_rgba(30,41,59,0.15)]">
@@ -219,14 +250,17 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           <span className="rounded-full bg-indigo-100 px-3 py-1 text-indigo-900">
             {participants.length} participant{participants.length !== 1 ? "s" : ""}
           </span>
-          <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-900">{totalSeries} series</span>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-900">{totalSeries} {singleGameSport ? "games" : "series"}</span>
+          {singleGameSport && <span className="rounded-full bg-violet-100 px-3 py-1 text-violet-900">Finalized picks lock at the first game</span>}
           {safeChallenge.isTestMode ? <span className="rounded-full bg-sky-100 px-3 py-1 text-sky-900">Test mode</span> : null}
         </div>
         {hasTemplateSeries ? (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
-              <span data-testid="playoff-template-warning">Template teams shown until playoff series sync runs. Teams/Schedule sync does not import winners. Results sync scores finalized picks.</span>
+              <span data-testid="playoff-template-warning">{singleGameSport
+                ? "Official teams and game times must be published by an admin before picks open."
+                : "Template teams shown until playoff series sync runs. Teams/Schedule sync does not import winners. Results sync scores finalized picks."}</span>
             </div>
           </div>
         ) : null}
@@ -259,7 +293,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                 }
                 openEntry(primaryEntry.id)
               }}
-              disabled={creatingEntry}
+              disabled={creatingEntry || (!canCreateEntry && !primaryEntry)}
               data-testid="playoff-fill-bracket-cta"
               className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -288,7 +322,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                 Invite
               </button>
             )}
-            {canManagePlayoffPool ? (
+            {canSyncPlayoffPool ? (
               <button
                 type="button"
                 onClick={() => syncToolsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -299,8 +333,21 @@ export default function PlayoffBracketShell({ initialView }: Props) {
               </button>
             ) : null}
           </div>
+          {singleGameSport && tournamentLimit != null && tournamentUsed != null ? (
+            <p className="mt-2 text-xs font-semibold text-slate-600">
+              {tournamentUsed} of {tournamentLimit} brackets used across this tournament.
+              {tournamentLimit === 1 ? " AF Pro includes five brackets per tournament." : ""}
+              {" "}AllFantasy offers no prizes or gambling; paid plans only allow extra brackets.
+            </p>
+          ) : null}
           {!canCreateEntry ? (
-            <p className="mt-2 text-xs font-semibold text-rose-700">Entry limit reached. Bracket 6 is blocked.</p>
+            <p className="mt-2 text-xs font-semibold text-rose-700">
+              {tournamentLocked
+                ? "Bracket entry closed when the first game began."
+                : tournamentQuotaReached
+                  ? `Tournament bracket limit reached (${tournamentLimit}).`
+                  : `This league allows up to ${safeChallenge.maxEntriesPerParticipant} brackets per person.`}
+            </p>
           ) : null}
         </article>
 
@@ -340,7 +387,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         )}
       </section>
 
-      {canManagePlayoffPool ? (
+      {canSyncPlayoffPool ? (
         <section
           ref={syncToolsRef}
           id="playoff-commissioner-sync-tools"
@@ -466,7 +513,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{entry.name || `Bracket ${index + 1}`}</p>
                     <p className="text-xs text-slate-600">
-                      {entry.pickCount}/{totalSeries} picks · {entry.isComplete ? "Complete" : "In progress"}
+                      {entry.pickCount}/{totalSeries} picks · {entry.isComplete ? singleGameSport ? "Finalized" : "Complete" : "Draft"}
                     </p>
                   </div>
                   <button
@@ -483,10 +530,75 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         </article>
       </section>
 
+      {singleGameSport && myEntries.length > 0 ? (
+        <section
+          data-testid="playoff-dashboard-your-race"
+          className="rounded-3xl border border-teal-300/30 bg-slate-950 p-5 text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)] sm:p-6"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-5">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-300">Your league race</p>
+              {bestViewerRow ? (
+                <>
+                  <h2 className="mt-2 text-3xl font-black tracking-tight">
+                    #{bestViewerRow.rank} <span className="text-base font-semibold text-slate-300">of {leaderboardRows.length} finalized brackets</span>
+                  </h2>
+                  <p className="mt-2 text-sm font-semibold text-slate-200">
+                    Best bracket: {bestViewerRow.name} · {bestViewerRow.totalScore} points · {bestViewerRow.potentialTotal} potential · {bestViewerRow.correctPicks} correct
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="mt-2 text-xl font-black">Finish your picks to join the board</h2>
+                  <p className="mt-2 text-sm text-slate-300">Finalize before the first game to see your rank and nearby competitors.</p>
+                </>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {bestViewerRow ? (
+                <button
+                  type="button"
+                  onClick={copyBestBracket}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-300 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-teal-200"
+                >
+                  <Clipboard className="h-4 w-4" />
+                  Share your bracket
+                </button>
+              ) : null}
+              {canManagePlayoffPool && safeChallenge.inviteCode ? (
+                <button
+                  type="button"
+                  onClick={copyInvite}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/30 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/10"
+                >
+                  <Link2 className="h-4 w-4" />
+                  Copy league invite
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {nearbyRivals.length > 0 ? (
+            <div className="mt-5 border-t border-white/15 pt-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Closest competitors</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {nearbyRivals.map((row) => (
+                  <div key={row.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm">
+                    <span className="truncate font-semibold">#{row.rank} {row.name}</span>
+                    <span className="shrink-0 text-teal-200">{row.totalScore} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="playoff-dashboard-leaderboard">
         <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Leaderboard</h2>
+        {singleGameSport && <Link className="mt-2 inline-block text-sm font-bold text-teal-700 underline" href={`/brackets/standings?sport=${safeChallenge.sport}&season=${safeChallenge.seasonYear}`}>View universal board →</Link>}
         <p className="mt-1 text-xs font-semibold text-slate-500">
-          {hasScoredLeaderboard ? "Scored leaderboard from completed series results." : "Pick-count leaderboard until series results sync."}
+          {singleGameSport ? "Finalized brackets only. Potential is the highest score still reachable from saved picks." : hasScoredLeaderboard
+            ? "Scored leaderboard from completed series results." : "Pick-count leaderboard until series results sync."}
         </p>
         {leaderboardRows.length === 0 ? (
           <p className="mt-2 text-sm text-slate-600">No leaderboard entries yet.</p>
@@ -496,14 +608,15 @@ export default function PlayoffBracketShell({ initialView }: Props) {
               <li key={row.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
                 <span className="font-semibold text-slate-800">#{row.rank} {row.name}</span>
                 <span className="text-slate-600">
-                  {row.hasScoredResults ? `${row.totalScore} pts · ${row.correctPicks}/${row.resolvedPicks} correct · ` : ""}
-                  {row.picks} picks
+                  {singleGameSport ? `${row.totalScore} pts · ${row.potentialTotal} potential · ${row.correctPicks} correct` :
+                    row.hasScoredResults ? `${row.totalScore} pts · ${row.correctPicks}/${row.resolvedPicks} correct · ${row.picks} picks` : `${row.picks} picks`}
                 </span>
               </li>
             ))}
           </ol>
         )}
       </section>
+      {singleGameSport && <p className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950">AllFantasy offers no prizes, gambling, betting, entry fees, or in-app payouts. Paid subscriptions only increase the number of brackets you can create. Commissioners manage any external arrangements independently under applicable AllFantasy terms.</p>}
     </div>
   )
 }

@@ -47,6 +47,7 @@ import {
   captureRedraftRosterState,
   type RedraftRosterStateSnapshot,
 } from '@/lib/redraft/tradeExecutionSnapshot'
+import { copyRedraftFaabToGeneric } from '@/lib/league/faabMirror'
 
 type Db = Prisma.TransactionClient | typeof prisma
 
@@ -282,6 +283,7 @@ export async function reverseNativeTrade(input: ReverseNativeTradeInput): Promis
       for (const r of before) {
         await tx.redraftRoster.update({ where: { id: r.rosterId }, data: { faabBalance: r.faabBalance } })
       }
+      await copyRedraftFaabToGeneric(tx, before.map((r) => r.rosterId))
 
       // IDP cap: move each salary record back, then APPEND reversing ledger rows.
       const { moves } = await readCapMoves(tx, readSourceTransactionIds(snapshot.dependencies))

@@ -1,5 +1,7 @@
 import type { LeagueSport } from '@prisma/client'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
+import { NFL_CONFIG } from '@/lib/sportConfig/configs/nfl'
+import { firstRoundByesForTeams, fittedPlayoffStartWeek, playoffRoundsForTeams } from '@/lib/playoff-runtime/playoffFit'
 
 export type FootballRedraftSport = 'NFL' | 'NCAAF'
 export type RedraftDraftType =
@@ -659,7 +661,7 @@ function buildTradeSettings(sport: FootballRedraftSport): Record<string, unknown
     tradeDeadlineWeek: sport === 'NCAAF' ? 9 : 11,
     rosterLegalityValidation: true,
     tradeHistoryAudit: true,
-    draftPickTradingEnabled: false,
+    draftPickTradingEnabled: true,
     redraftDraftAssetsEnabled: false,
     dynastyValueHidden: true,
     dynastyLanguageHidden: true,
@@ -675,7 +677,7 @@ function buildTradeSettings(sport: FootballRedraftSport): Record<string, unknown
  * agreeing with it, so the two records cannot tell a commissioner different
  * things about the same league.
  */
-function derivePlayoffTeams(teamCount: number): number {
+export function derivePlayoffTeams(teamCount: number): number {
   const seats = Math.max(2, Math.floor(teamCount) || 2)
   const target = seats >= 10 ? 6 : 4
   const fitted = Math.min(target, seats)
@@ -686,15 +688,22 @@ function buildPlayoffSettings(sport: FootballRedraftSport, teamCount: number): R
   const playoffTeams = derivePlayoffTeams(teamCount)
   // NCAAF brackets end on week 13, the last full college slate (ncaafPlayoffWindow.ts).
   const ncaaf = sport === 'NCAAF' ? ncaafPlayoffWindow(playoffTeams) : null
+  // NFL: the final lands in the season's last week (17), whatever the bracket's size — a 4-team
+  // bracket starts in week 16, not in the 6-team bracket's week 15 (lib/playoff-runtime/playoffFit.ts).
+  const nflSeasonWeeks = NFL_CONFIG.defaultSeasonWeeks
+  const nflStart = fittedPlayoffStartWeek({ teams: playoffTeams, weeksPerRound: 1, seasonWeeks: nflSeasonWeeks }) ?? 15
+  const byes = firstRoundByesForTeams(playoffTeams)
   return {
     enabled: true,
     regularSeasonStartWeek: 1,
-    regularSeasonEndWeek: ncaaf ? ncaaf.regularSeasonEndWeek : 14,
+    regularSeasonEndWeek: ncaaf ? ncaaf.regularSeasonEndWeek : nflStart - 1,
     playoffTeams,
-    playoffStartWeek: ncaaf ? ncaaf.playoffStartWeek : 15,
-    championshipWeek: ncaaf ? ncaaf.championshipWeek : 17,
+    playoffStartWeek: ncaaf ? ncaaf.playoffStartWeek : nflStart,
+    championshipWeek: ncaaf ? ncaaf.championshipWeek : nflSeasonWeeks,
     playoffWeeksPerRound: 1,
-    topSeedByes: teamCount >= 10,
+    firstRoundByes: byes,
+    totalRounds: playoffRoundsForTeams(playoffTeams),
+    topSeedByes: byes > 0,
     tiebreakers: ['points_for', 'head_to_head', 'division_record'],
     standingsRule: 'record_then_points_for',
     lowerBracket: 'consolation',

@@ -62,16 +62,20 @@ export async function POST(req: Request) {
   })
   if (!item) return NextResponse.json({ error: 'Item not found or already used' }, { status: 400 })
 
-  await prisma.zombieTeamItem.update({
-    where: { id: item.id },
-    data: {
-      isUsed: true,
-      usedAtWeek: week,
-      usedOnUserId: typeof body.targetUserId === 'string' ? body.targetUserId : null,
-      usedEffect: 'used',
+  /*
+   * 🛑 THIS SPENT THE ITEM AND APPLIED NOTHING. It marked any item used — a serum included — without
+   * registering a serum shield or applying any weapon effect, so a caller lost the item for nothing. No
+   * screen calls it. Serums work through the real flow (Chimmy "use serum protect" / "revive"); weapons,
+   * bombs, ambushes and powers are tracked only this season. Refuse rather than spend.
+   */
+  return NextResponse.json(
+    {
+      error: item.itemType.includes('serum')
+        ? 'Use serums through @Chimmy ("use serum protect" or "revive") so they take effect.'
+        : 'Weapons are tracked this season but have no effect yet, so nothing was spent.',
+      code: 'not_active_this_season',
     },
-  })
-
-  return NextResponse.json({ ok: true })
+    { status: 409 },
+  )
 }
 

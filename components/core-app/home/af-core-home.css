@@ -93,6 +93,19 @@
   color: var(--accent);
   font-weight: 800;
 }
+/* ── Customize link (the foot of the home → Settings → Home page) ─────── */
+.af-home-customize {
+  margin: 18px 0 8px;
+  text-align: center;
+  font: 700 13px/1.35 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-home-customize a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  color: var(--accent);
+}
 .af-home-scope-empty {
   max-width: 720px;
   padding: 24px;

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/commissioner-workspace/operationalTasks',()=>({readOperationalTasks:vi.fn(async()=>[])}))
+vi.mock('@/lib/lineup-integrity/lineupIntegrityService',()=>({readLineupIntegrityTasks:vi.fn(async()=>[])}))
+vi.mock('@/lib/commissioner-workspace/commissionerFeatureTasks',()=>({readCommissionerFeatureTasks:vi.fn(async()=>[])}))
 
 /**
  * Commissioner Workspace — the inactive-managers detector must be able to see the managers who
@@ -19,11 +21,13 @@ const mocks = vi.hoisted(() => ({
   readActivityWindow: vi.fn(),
   readManagerActivity: vi.fn(),
   teamFindMany: vi.fn(),
+  leagueFindUnique: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     leagueTeam: { findMany: mocks.teamFindMany },
+    league: { findUnique: mocks.leagueFindUnique },
   },
 }))
 
@@ -58,6 +62,27 @@ beforeEach(() => {
   mocks.readActivityWindow.mockResolvedValue({ lastActivityAt: daysAgo(1), tradeCount: 3, waiverCount: 9, eventCount: 250 })
   mocks.readManagerActivity.mockResolvedValue([])
   mocks.teamFindMany.mockResolvedValue([])
+  mocks.leagueFindUnique.mockResolvedValue({ platform: 'sleeper' })
+})
+
+describe('a league native to AllFantasy has no import feed to judge', () => {
+  it('files no "never imported" or idle-manager task, but still reports an empty seat', async () => {
+    mocks.leagueFindUnique.mockResolvedValue({ platform: 'allfantasy' })
+    mocks.readActivityWindow.mockResolvedValue({ lastActivityAt: null, tradeCount: 0, waiverCount: 0, eventCount: 0 })
+    mocks.teamFindMany.mockResolvedValue([owned('Hawks', 'u1'), { ...owned('Empty', ''), isOrphan: true, platformUserId: null }])
+    const tasks = await detectLeagueTasks('lg-native', NOW)
+    expect(mocks.readActivityWindow).not.toHaveBeenCalled()
+    expect(mocks.readManagerActivity).not.toHaveBeenCalled()
+    const keys = tasks.map((t) => t.sourceKey)
+    expect(keys.some((k) => /orphan/i.test(k))).toBe(true)
+    expect(keys.some((k) => /never|import|stale|inactive/i.test(k))).toBe(false)
+  })
+
+  it('an imported league with no events still gets the "never imported" task', async () => {
+    mocks.readActivityWindow.mockResolvedValue({ lastActivityAt: null, tradeCount: 0, waiverCount: 0, eventCount: 0 })
+    const tasks = await detectLeagueTasks('lg-sleeper', NOW)
+    expect(tasks.some((t) => /never/i.test(t.sourceKey))).toBe(true)
+  })
 })
 
 describe('the inactive-managers task names managers with no moves at all', () => {

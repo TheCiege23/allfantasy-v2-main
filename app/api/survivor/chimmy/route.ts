@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { parsePrivateVoteMention, submitPrivateVoteCommand } from '@/lib/survivor/survivorPrivateVoteCommand'
+import { parseSurvivorCommand } from '@/lib/survivor/SurvivorCommandParser'
+import { playShotInTheDark } from '@/lib/survivor/survivorShotInTheDark'
 import { handleChimmyPrivateMessage } from '@/lib/survivor/chimmyHandler'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { activateSGLivePower } from '@/lib/survivor-guillotine/live'
@@ -37,6 +39,12 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       return NextResponse.json({ reply: error instanceof Error ? error.message : 'Power activation failed.' })
     }
+  }
+
+  if (parseSurvivorCommand(body.message).intent === 'shot_in_the_dark') {
+    const shot = await playShotInTheDark(body.leagueId, userId)
+    if (!shot.ok) return NextResponse.json({ error: shot.error }, { status: shot.status })
+    return NextResponse.json({ reply: shot.message })
   }
 
   if (parsePrivateVoteMention(body.message) || /^@chimmy\s+(?:i\s+)?vote\b/i.test(body.message.trim())) {

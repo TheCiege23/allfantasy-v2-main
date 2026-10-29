@@ -97,7 +97,7 @@ describe('choppedBefore', () => {
   })
 })
 
-describe('the rail in a guillotine league', () => {
+describe('the rail in a Guilly league', () => {
   it('is on the provider’s week 4, not stuck on week 2', async () => {
     const result = await call()
     expect(result.byLeague['AF-G']?.week).toBe(4)

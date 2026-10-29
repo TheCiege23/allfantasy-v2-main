@@ -4,6 +4,7 @@ import { appendSurvivorAudit } from './SurvivorAuditLog'
 import { logSurvivorAuditEntry } from './auditEntry'
 import { postHostMessage } from './hostEngine'
 import type { IdolPowerType } from './types'
+import { survivorIdolPlayBlockReason } from './juryGuards'
 
 export type IdolPlayResult = { ok: true; message: string } | { ok: false; error: string }
 
@@ -464,14 +465,31 @@ export async function playIdol(
 
   const selfRosterId = await resolveRosterIdForUser(council.leagueId, playingUserId)
   if (!selfRosterId) return { ok: false, error: 'Could not resolve your roster for this league.' }
+  const ownsIdol = idol.currentOwnerUserId
+    ? idol.currentOwnerUserId === playingUserId
+    : idol.rosterId === selfRosterId
+  if (!ownsIdol) return { ok: false, error: 'Invalid idol' }
+
+  // Jurors (and anyone else out of the game) cannot play idols. Legacy leagues may have no
+  // SurvivorPlayer row, so the jury table is checked independently of it.
+  const [castRow, juryRow] = await Promise.all([
+    prisma.survivorPlayer.findUnique({ where: { leagueId_userId: { leagueId: council.leagueId, userId: playingUserId } }, select: { playerState: true, isJuryMember: true } }),
+    prisma.survivorJuryMember.findUnique({ where: { leagueId_rosterId: { leagueId: council.leagueId, rosterId: selfRosterId } }, select: { id: true } }),
+  ])
+  if (juryRow) return { ok: false, error: 'Jurors cannot play idols.' }
+  if (castRow) {
+    const blocked = survivorIdolPlayBlockReason(castRow)
+    if (blocked) return { ok: false, error: blocked }
+  }
 
   let allyRosterId: string | null = null
   if (protectedUserId) {
     allyRosterId = await resolveRosterIdForUser(council.leagueId, protectedUserId)
   }
 
-  await prisma.survivorIdol.update({
-    where: { id: idolId },
+  // Conditional on still being hidden, so two concurrent plays cannot both win.
+  const claimed = await prisma.survivorIdol.updateMany({
+    where: { id: idolId, status: 'hidden' },
     data: {
       status: 'used',
       usedAt: new Date(),
@@ -480,6 +498,7 @@ export async function playIdol(
       isUsed: true,
     },
   })
+  if (claimed.count !== 1) return { ok: false, error: 'Invalid idol' }
 
   await prisma.survivorIdolLedgerEntry.create({
     data: {

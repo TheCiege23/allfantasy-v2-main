@@ -62,6 +62,7 @@ function buildSections(
     'INFECTION RULES',
     '- A Survivor who loses their weekly matchup to the Whisperer becomes a Zombie.',
     '- A Survivor who loses their weekly matchup to any Zombie becomes a Zombie.',
+    '- A Survivor who registers a serum before kickoff stays human if they lose that week (the serum is spent; a win keeps it).',
     `- A Zombie who collects ${reviveSerums} serums can use them to return as a Survivor.`,
     `- ${cfg.infectionTiming}`,
     '',

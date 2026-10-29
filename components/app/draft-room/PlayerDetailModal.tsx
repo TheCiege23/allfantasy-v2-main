@@ -25,6 +25,8 @@ import type { NflDraftProjectionSplits } from '@/lib/draft/analytics/nfl-draft-p
 import { formatNflStatCell } from '@/lib/draft/analytics/nfl-draft-pool-projection-splits'
 import { NflDraftPoolStatsGroupHeader, NflDraftPoolStatsRow } from '@/components/app/draft-room/NflDraftPoolStatsStrip'
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
+import type { PlayerDraftOutlook } from '@/lib/draft-room/playerDraftOutlook'
+import { PlayerDraftOutlookSection } from './PlayerDraftOutlookSection'
 
 export interface PlayerDetailPlayer {
   id?: string | null
@@ -85,6 +87,8 @@ export interface PlayerDetailModalProps {
   draftUnavailableReason?: 'already_drafted' | 'not_your_pick' | null
   /** NFL: season projection + splits from `/draft/pool` (mobile detail access without list grid). */
   nflDraftProjectionSplits?: NflDraftProjectionSplits | null
+  /** Live draft: survival to the viewer's next pick, falling, who's circling. */
+  draftOutlook?: PlayerDraftOutlook | null
 }
 
 /** Matches lib/player-card-analytics/types.ts PlayerCardAnalyticsPayload */
@@ -203,6 +207,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
     adpDisplayLabel = 'ADP',
     draftUnavailableReason = null,
     nflDraftProjectionSplits = null,
+    draftOutlook = null,
   } = props
 
   const rsModal = presentationVariant === 'redraft_snake'
@@ -530,6 +535,10 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
               position={player.position}
               rsModal={rsModal}
             />
+          ) : null}
+
+          {draftOutlook && draftUnavailableReason !== 'already_drafted' ? (
+            <PlayerDraftOutlookSection outlook={draftOutlook} position={String(player.position ?? '').toUpperCase()} />
           ) : null}
 
           {draftCopilot && draftCopilot.bullets.length > 0 ? (

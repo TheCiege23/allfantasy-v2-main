@@ -69,11 +69,12 @@ function staleProfile(flags: Record<string, boolean>) {
 }
 
 describe('planFlagsFromSnapshot', () => {
-  it('a live plan sets its own family, and Supreme sets all three', () => {
+  it('a live plan sets its own family, and Supreme includes Pro and Commissioner', () => {
     expect(planFlagsFromSnapshot(LIVE(['pro']))).toEqual({ pro: true, commissioner: false, warRoom: false })
     expect(planFlagsFromSnapshot(LIVE(['commissioner'], 'grace'))).toEqual({ pro: false, commissioner: true, warRoom: false })
     expect(planFlagsFromSnapshot(LIVE(['war_room']))).toEqual({ pro: false, commissioner: false, warRoom: true })
-    expect(planFlagsFromSnapshot(LIVE(['supreme']))).toEqual({ pro: true, commissioner: true, warRoom: true })
+    expect(planFlagsFromSnapshot(LIVE(['supreme']))).toEqual({ pro: true, commissioner: true, warRoom: false })
+    expect(planFlagsFromSnapshot(LIVE(['supreme', 'war_room']))).toEqual({ pro: true, commissioner: true, warRoom: true })
   })
 
   it('🛑 a plan that is past due, expired or absent sets nothing', () => {

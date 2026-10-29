@@ -16,12 +16,14 @@ describe('simple creation team choices agree with the server', () => {
     const next = { ...state, ...onChange.mock.calls[0][0] }
     expect(next.teamCount).toBe(12)
     view.rerender(<LeagueBasicsStep state={next} onChange={onChange} fieldErrors={null} />)
+    // Keeper runs to 20 (free even sizes; the odd ones are AF Commissioner and not in a free stepper).
+    const evens = concept === 'keeper' ? [4, 6, 8, 10, 12, 14, 16, 18, 20] : [4, 6, 8, 10, 12, 14, 16]
     const count = screen.getByTestId('g30-team-count')
     expect(count).toHaveAttribute('min', '4')
-    expect(count).toHaveAttribute('max', '16')
+    expect(count).toHaveAttribute('max', String(evens.at(-1)))
     expect(count).toHaveAttribute('step', '2')
-    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4, 6, 8, 10, 12, 14, 16')
-    for (const teamCount of [4, 6, 8, 10, 12, 14, 16]) {
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent(evens.join(', '))
+    for (const teamCount of evens) {
       const validation = validateCreatePayload({ concept, sport: next.sport, teamCount, draftType: next.draftType, scoringPreset: next.scoringPresetId, leagueName: 'Accepted choices' })
       expect(validation.ok, JSON.stringify(validation)).toBe(true)
     }

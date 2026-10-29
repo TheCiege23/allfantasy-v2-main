@@ -5,21 +5,10 @@ export const NHL_SCORING_CATEGORY_KEYS = NHL_CONFIG.scoringCategories.map((c) =>
 
 export const nhlAdapter: SportAdapter = {
   parseRawStats(raw: Record<string, number>): ParsedStats {
-    return {
-      g: raw.g ?? 0,
-      a: raw.a ?? 0,
-      plusminus: raw.plusminus ?? 0,
-      ppp: raw.ppp ?? 0,
-      shp: raw.shp ?? 0,
-      sog: raw.sog ?? 0,
-      hits: raw.hits ?? 0,
-      blks: raw.blks ?? 0,
-      pim: raw.pim ?? 0,
-      g_win: raw.g_win ?? 0,
-      g_sv: raw.g_sv ?? 0,
-      g_so: raw.g_so ?? 0,
-      g_ga: raw.g_ga ?? 0,
-    }
+    // Every engine category, so a category added to the config is never silently dropped here.
+    const parsed: ParsedStats = {}
+    for (const key of NHL_SCORING_CATEGORY_KEYS) parsed[key] = raw[key] ?? 0
+    return parsed
   },
   getLineupLockTime(_sport: string, gameTimeIso: string): Date {
     return new Date(gameTimeIso)

@@ -69,6 +69,8 @@ export type DraftTopBarProps = {
   isReconnecting?: boolean
   /** Orphan roster on clock: show CPU/AI Manager badge and allow Run pick */
   isOrphanOnClock?: boolean
+  /** The team on the clock is a Chimmy AI manager slot, which picks on its own after a short delay. */
+  chimmyManagerOnClock?: boolean
   /** When orphan on clock: 'cpu' | 'ai' - label shows "CPU Manager" or "AI Manager" */
   orphanDrafterMode?: 'cpu' | 'ai'
   /** Selected setting mode; used to show fallback state when requested AI runs in CPU fallback. */
@@ -222,6 +224,7 @@ export function DraftTopBar({
   commissionerPauseControlsEnabled = true,
   isReconnecting = false,
   isOrphanOnClock = false,
+  chimmyManagerOnClock = false,
   orphanDrafterMode = 'cpu',
   orphanDrafterRequestedMode = orphanDrafterMode,
   orphanFallbackActive = false,
@@ -338,8 +341,20 @@ export function DraftTopBar({
         setMenuOpen(false)
       }
     }
-    window.addEventListener('mousedown', handlePointerDown)
-    return () => window.removeEventListener('mousedown', handlePointerDown)
+    const closeOnResize = () => setMenuOpen(false)
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setMenuOpen(false); menuButtonRef.current?.focus() }
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('resize', closeOnResize)
+    window.visualViewport?.addEventListener('resize', closeOnResize)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('resize', closeOnResize)
+      window.visualViewport?.removeEventListener('resize', closeOnResize)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
   }, [menuOpen])
 
   const effectiveRemaining =
@@ -454,7 +469,7 @@ export function DraftTopBar({
           <span data-testid="draft-topbar-timer-value">{timerDisplay}</span>
           <span className="sr-only" data-testid="draft-topbar-clock-time">{timerDisplay}</span>
           {isPausedCommissioner ? (
-            <span className="rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-50">
+            <span className="hidden sm:inline rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-50">
               Resume
             </span>
           ) : draftStatus === 'paused' ? (
@@ -464,7 +479,7 @@ export function DraftTopBar({
           ) : null}
         </>
       )
-      const pillClassName = `inline-flex min-h-[36px] items-center gap-2 rounded-full border px-3.5 py-1.5 text-base font-extrabold tabular-nums shadow-[0_8px_24px_rgba(0,0,0,0.4)] transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 ${
+      const pillClassName = `inline-flex min-h-[36px] items-center gap-2 rounded-full border px-3.5 py-1.5 text-xl font-extrabold tabular-nums sm:text-2xl shadow-[0_8px_24px_rgba(0,0,0,0.4)] transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 ${
         criticalLowTimer
           ? 'animate-pulse border-rose-500/65 bg-gradient-to-br from-rose-600/35 to-rose-500/20 text-rose-50 ring-2 ring-rose-500/55 shadow-[0_0_48px_rgba(239,68,68,0.5)]'
           : urgentLowTimer
@@ -565,7 +580,12 @@ export function DraftTopBar({
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/25 to-transparent"
         aria-hidden
       />
-      <div className="grid gap-1.5 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-2">
+      {/*
+        Phones get two rows, not six: row 1 is back · league · controls, row 2 is the on-clock
+        card (who + timer). The meta line and the Format/Status/Current/Clock card are md+ only;
+        the sticky bar under the header carries the pick number, and the menu carries Invite.
+      */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-2">
         <div className="min-w-0">
           <div className="flex items-start gap-2">
             {backHref ? (
@@ -621,7 +641,12 @@ export function DraftTopBar({
                   inline meta line below (`{teamCount} Teams · {rounds} Rounds ·
                   {sport} · {draftTypeLabel}`). Removing them de-clutters the
                   draft-room header without losing any information. */}
-          <div className="mt-0 flex flex-wrap items-center gap-x-1 gap-y-0 text-[11px] text-[#97a8d7]">
+              {poolReadinessLabel && !poolReadiness?.ready ? (
+                <p className="mt-0 truncate text-[11px] text-amber-200 md:hidden" data-testid="draft-topbar-pool-readiness-mobile">
+                  {poolReadinessLabel}
+                </p>
+              ) : null}
+          <div className="mt-0 hidden flex-wrap items-center gap-x-1 gap-y-0 text-[11px] text-[#97a8d7] md:flex">
                 <span>{timerSummary}</span>
                 <span className="text-white/24">·</span>
                 <span>{teamCount} Teams</span>
@@ -633,7 +658,7 @@ export function DraftTopBar({
                 <span title={`Draft type: ${draftTypeLabel}`}>{draftFormatLabel}</span>
                 {poolReadinessLabel ? (
                   <>
-                    <span className="text-white/24">Â·</span>
+                    <span className="text-white/24">·</span>
                     <span
                       data-testid="draft-topbar-pool-readiness"
                       className={poolReadiness?.ready ? 'text-emerald-200' : 'text-amber-200'}
@@ -668,120 +693,10 @@ export function DraftTopBar({
                 </button>
                 {copyFeedback === 'copied' ? <span className="text-cyan-300">Copied</span> : null}
               </div>
-              <div
-                className="mt-2 grid grid-cols-2 gap-1.5 rounded-lg border border-white/10 bg-black/20 p-2 text-[11px] text-white/75 md:hidden"
-                data-testid="draft-topbar-mobile-compact"
-              >
-                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Format</span>
-                  <span className="block font-semibold text-cyan-100">{draftFormatLabel}</span>
-                </div>
-                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Status</span>
-                  <span className="block font-semibold text-white">{statusLabel}</span>
-                </div>
-                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Current</span>
-                  <span className="block font-semibold text-white">{pickLabel ?? '—'}</span>
-                </div>
-                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Clock</span>
-                  <span className="block font-semibold text-cyan-100" data-testid="draft-topbar-mobile-timer-value">
-                    {timerDisplay}
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
 
           <div className="mt-0 flex flex-wrap items-center gap-1 sm:gap-1">
-            {pickLabel ? (
-              <div
-                className={`inline-flex items-center gap-2 rounded-lg border px-2 py-1 shadow-[0_4px_24px_rgba(34,211,238,0.12)] ring-1 ring-cyan-400/15 ${
-                  rs
-                    ? 'border-cyan-400/35 bg-gradient-to-br from-cyan-500/18 via-[#0c1828]/95 to-[#081018]/98 shadow-[0_8px_36px_rgba(34,211,238,0.18)]'
-                    : 'border-cyan-400/25 bg-gradient-to-br from-cyan-500/[0.12] to-[#0a1528]/90'
-                }`}
-              >
-                <Hash className="h-4 w-4 shrink-0 text-cyan-300" />
-                <span className="text-[13px] font-bold tracking-tight text-white">{pickLabel}</span>
-                {overallPickNumber != null ? (
-                  <span className="rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white/60">
-                    #{overallPickNumber}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-
-            {currentManagerOnClock ? (
-              /*
-                8b: gold is the "act now, and it is YOU" signal.
-
-                This chip previously rendered violet for whoever was on the clock, which made your
-                own turn look exactly like everybody else's — the one state on this screen that
-                demands you do something was styled identically to the eleven states that do not.
-                Gold + pulse now fires only when `isCurrentUserOnClock`; another manager's turn
-                stays violet, because it is information, not a call to act.
-
-                ⚠ 8b build rule 1 asks for gold to appear NOWHERE ELSE in the product, and this
-                file alone already spends amber on six other meanings: the paused state, the ≤30s
-                danger timer, pool-not-ready, reach warnings, bye conflicts, and a toggle. Making
-                gold literally exclusive is a colour audit across the whole draft room, not a
-                top-bar change, so it is deliberately not attempted here — flagged rather than
-                half-done.
-              */
-              <div
-                className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 ring-1 ${
-                  isCurrentUserOnClock
-                    ? 'animate-pulse border-amber-400/60 bg-[radial-gradient(ellipse_at_30%_0%,rgba(251,191,36,0.30),transparent),linear-gradient(145deg,rgba(180,83,9,0.28),rgba(8,15,28,0.96))] shadow-[0_12px_40px_rgba(251,191,36,0.28)] ring-amber-400/35'
-                    : rs
-                      ? 'border-violet-400/40 bg-[radial-gradient(ellipse_at_30%_0%,rgba(139,92,246,0.28),transparent),linear-gradient(145deg,rgba(109,40,217,0.22),rgba(8,15,28,0.96))] shadow-[0_12px_40px_rgba(139,92,246,0.22)] ring-violet-400/25'
-                      : 'border-violet-400/25 bg-gradient-to-br from-violet-500/[0.14] to-[#0a1228]/95 shadow-[0_6px_28px_rgba(139,92,246,0.15)] ring-violet-400/10'
-                }`}
-                data-on-clock-self={isCurrentUserOnClock ? 'true' : undefined}
-              >
-                {currentManagerAvatarUrl ? (
-                  <Image
-                    src={currentManagerAvatarUrl}
-                    alt=""
-                    width={20}
-                    height={20}
-                    aria-hidden
-                    className="h-5 w-5 shrink-0 rounded-full border border-white/20 object-cover"
-                    unoptimized
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none'
-                    }}
-                  />
-                ) : (
-                  <User
-                    className={`h-4 w-4 shrink-0 ${
-                      isCurrentUserOnClock ? 'text-amber-300' : 'text-violet-300'
-                    }`}
-                  />
-                )}
-                <span
-                  className="min-w-0 truncate text-[13px] font-bold text-white"
-                  data-testid="draft-topbar-on-clock-manager"
-                >
-                  {currentManagerOnClock}
-                </span>
-                <span
-                  /* Test hook for the orphan CPU/AI label. Only set while an orphan roster is
-                     on the clock, because this span otherwise renders "You're on the clock". */
-                  data-testid={isOrphanOnClock ? 'draft-topbar-orphan-mode-label' : undefined}
-                  className={`shrink-0 text-[11px] font-semibold uppercase tracking-wide ${
-                    isCurrentUserOnClock ? 'text-amber-100' : 'text-violet-200/75'
-                  }`}
-                >
-                  {isOrphanOnClock
-                    ? orphanModeLabel
-                    : isCurrentUserOnClock
-                      ? "You're on the clock"
-                      : t('draftRoom.topBar.onTheClock')}
-                </span>
-              </div>
-            ) : null}
             {showAiOverlays && aiRecommendationOverlay ? (
               <div
                 className="inline-flex max-w-full items-center gap-1 rounded-lg border border-cyan-300/35 bg-cyan-500/12 px-2 py-1 text-[11px] text-cyan-100"
@@ -819,14 +734,108 @@ export function DraftTopBar({
           </div>
         </div>
 
+        {/*
+          On-the-clock card: the pick number and who is on the clock sit beside the clock, so the
+          one question this header answers ("whose pick, how long") reads as a single unit.
+          These chips used to sit under the league name, away from the timer.
+        */}
         <div
-          className="flex min-h-[36px] w-full items-center justify-center lg:w-auto lg:min-w-[9.5rem]"
+          className="order-3 col-span-2 flex min-h-[36px] w-full flex-nowrap items-center justify-center gap-1.5 md:flex-wrap lg:order-none lg:col-span-1 lg:w-auto lg:min-w-[9.5rem] lg:flex-nowrap"
           data-testid="draft-topbar-center-slot"
         >
+          {pickLabel ? (
+            <div
+              className={`hidden items-center gap-2 rounded-lg border px-2 py-1 shadow-[0_4px_24px_rgba(34,211,238,0.12)] ring-1 ring-cyan-400/15 md:inline-flex ${
+                rs
+                  ? 'border-cyan-400/35 bg-gradient-to-br from-cyan-500/18 via-[#0c1828]/95 to-[#081018]/98 shadow-[0_8px_36px_rgba(34,211,238,0.18)]'
+                  : 'border-cyan-400/25 bg-gradient-to-br from-cyan-500/[0.12] to-[#0a1528]/90'
+              }`}
+            >
+              <Hash className="h-4 w-4 shrink-0 text-cyan-300" />
+              <span className="text-[13px] font-bold tracking-tight text-white">{pickLabel}</span>
+              {overallPickNumber != null ? (
+                <span className="rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white/60">
+                  #{overallPickNumber}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {currentManagerOnClock ? (
+            /*
+              8b: gold is the "act now, and it is YOU" signal.
+
+              This chip previously rendered violet for whoever was on the clock, which made your
+              own turn look exactly like everybody else's — the one state on this screen that
+              demands you do something was styled identically to the eleven states that do not.
+              Gold + pulse now fires only when `isCurrentUserOnClock`; another manager's turn
+              stays violet, because it is information, not a call to act.
+
+              ⚠ 8b build rule 1 asks for gold to appear NOWHERE ELSE in the product, and this
+              file alone already spends amber on six other meanings: the paused state, the ≤30s
+              danger timer, pool-not-ready, reach warnings, bye conflicts, and a toggle. Making
+              gold literally exclusive is a colour audit across the whole draft room, not a
+              top-bar change, so it is deliberately not attempted here — flagged rather than
+              half-done.
+            */
+            <div
+              className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 ring-1 ${
+                isCurrentUserOnClock
+                  ? 'animate-pulse border-amber-400/60 bg-[radial-gradient(ellipse_at_30%_0%,rgba(251,191,36,0.30),transparent),linear-gradient(145deg,rgba(180,83,9,0.28),rgba(8,15,28,0.96))] shadow-[0_12px_40px_rgba(251,191,36,0.28)] ring-amber-400/35'
+                  : rs
+                    ? 'border-violet-400/40 bg-[radial-gradient(ellipse_at_30%_0%,rgba(139,92,246,0.28),transparent),linear-gradient(145deg,rgba(109,40,217,0.22),rgba(8,15,28,0.96))] shadow-[0_12px_40px_rgba(139,92,246,0.22)] ring-violet-400/25'
+                    : 'border-violet-400/25 bg-gradient-to-br from-violet-500/[0.14] to-[#0a1228]/95 shadow-[0_6px_28px_rgba(139,92,246,0.15)] ring-violet-400/10'
+              }`}
+              data-on-clock-self={isCurrentUserOnClock ? 'true' : undefined}
+            >
+              {currentManagerAvatarUrl ? (
+                <Image
+                  src={currentManagerAvatarUrl}
+                  alt=""
+                  width={20}
+                  height={20}
+                  aria-hidden
+                  className="h-5 w-5 shrink-0 rounded-full border border-white/20 object-cover"
+                  unoptimized
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
+              ) : (
+                <User
+                  className={`h-4 w-4 shrink-0 ${
+                    isCurrentUserOnClock ? 'text-amber-300' : 'text-violet-300'
+                  }`}
+                />
+              )}
+              <span
+                className="min-w-0 truncate text-[13px] font-bold text-white"
+                data-testid="draft-topbar-on-clock-manager"
+              >
+                {currentManagerOnClock}
+              </span>
+              <span
+                /* Test hook for the orphan CPU/AI label. Only set while an orphan roster is
+                   on the clock, because this span otherwise renders "You're on the clock". */
+                data-testid={isOrphanOnClock ? 'draft-topbar-orphan-mode-label' : undefined}
+                className={`shrink-0 text-[11px] font-semibold uppercase tracking-wide ${
+                  isCurrentUserOnClock ? 'text-amber-100' : 'text-violet-200/75'
+                }`}
+              >
+                {isOrphanOnClock && chimmyManagerOnClock
+                  ? 'Chimmy is picking…'
+                  : isOrphanOnClock
+                  ? orphanModeLabel
+                  : isCurrentUserOnClock
+                    ? "You're on the clock"
+                    : t('draftRoom.topBar.onTheClock')}
+              </span>
+            </div>
+          ) : null}
           {centerCta}
         </div>
 
-        <div className="flex flex-wrap items-center justify-start gap-1 lg:justify-end">
+        <div className="order-2 flex flex-wrap items-center justify-end gap-1 lg:order-none">
           {isCommissioner && (draftStatus === 'in_progress' || draftStatus === 'paused') && ((draftStatus === 'in_progress' && onPause) || (draftStatus === 'paused' && onResume)) ? (
             <button
               type="button"
@@ -860,7 +869,9 @@ export function DraftTopBar({
               className={`h-2 w-2 rounded-full ${autoPickEnabled ? 'bg-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-white/35'}`}
               aria-hidden
             />
-            Auto-pick {autoPickEnabled ? 'On' : 'Off'}
+            <span className="hidden sm:inline">Auto-pick </span>
+            <span className="sm:hidden">Auto </span>
+            {autoPickEnabled ? 'On' : 'Off'}
           </button>
 
           <button
@@ -901,8 +912,8 @@ export function DraftTopBar({
               ? createPortal(
                 <div
                   ref={menuDropdownRef}
-                  className="fixed z-[9999] w-64 overflow-hidden rounded-2xl border border-white/12 bg-[#1d2638] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
-                  style={{ top: menuPos.top, right: menuPos.right }}
+                  className="fixed z-[9999] w-64 overflow-y-auto overscroll-contain rounded-2xl border border-white/12 bg-[#1d2638] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+                  style={{ top: menuPos.top, right: Math.max(8, menuPos.right), maxHeight: `calc(100dvh - ${menuPos.top + 16}px - env(safe-area-inset-bottom, 0px))`, maxWidth: 'calc(100vw - 16px)' }}
                   data-testid="draft-topbar-menu"
                 >
                 <button

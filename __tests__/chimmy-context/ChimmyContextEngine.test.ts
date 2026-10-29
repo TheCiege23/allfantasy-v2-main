@@ -175,6 +175,7 @@ describe("ChimmyContextEngine", () => {
       'importedHistory',
       'league',
       'leagueDifficulty',
+      'leagueOffice',
       'matchup',
       'ranking',
       'replayInsights',

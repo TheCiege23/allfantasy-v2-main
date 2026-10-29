@@ -1,0 +1,119 @@
+/* Survivor league home (survivor-core handoff, SurvivorHome). Uses the native workspace tokens. */
+.svh{--svh-gold:#f1d58a;--svh-ember:#ff9a3c;--svh-surface:var(--surface,#10131c);--svh-line:var(--line,rgba(255,255,255,.06));display:flex;flex-direction:column;gap:0;color:var(--text,#e8eaf2);
+  /* The AF and Chimmy launchers float over the bottom-right corner; let the last card scroll clear of both. */
+  padding-bottom:var(--af-fab-slot-2,160px)}
+.svh p{margin:0}
+/* Island header (survivor-theme handoff): the scene sits only behind the header, 420px desktop /
+   330px phone, fades into the page, and the cards overlap its bottom by 64px on solid surfaces. */
+.svh{--svh-page:var(--bg,#07080d);--svh-card:rgba(16,19,28,.92);--svh-card-strong:rgba(18,21,33,.92)}
+.svh-hero{position:relative;isolation:isolate;overflow:hidden;min-height:420px;background:#0b0d14}
+.svh-hero-veil{position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(7,8,13,.25) 0%,rgba(7,8,13,.1) 40%,var(--svh-page) 100%),linear-gradient(90deg,rgba(7,8,13,.72) 0%,rgba(7,8,13,.25) 45%,transparent 70%)}
+.svh-hero-in{display:flex;flex-wrap:wrap;align-items:flex-end;gap:24px;padding:22px 28px 88px;min-height:420px}
+.svh-hero-copy{flex:1 1 460px;align-self:stretch;display:flex;flex-direction:column;gap:10px;min-width:0;color:#fff;text-shadow:0 2px 18px rgba(0,0,0,.45)}
+.svh-kicker{font:700 12px/1.2 'Cinzel',Georgia,serif;letter-spacing:.2em;text-transform:uppercase;color:#f1d58a;margin-top:auto}
+.svh-body{position:relative;margin-top:-64px;padding:0 28px 28px}
+.svh-chips{display:flex;flex-wrap:wrap;gap:8px}
+.svh-chips span{padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.14);background:rgba(7,8,13,.45);font-size:12px;color:#d6d9e6}
+.svh-title{margin:0;font:700 clamp(30px,4.6vw,46px)/1 var(--font-archivo,'Archivo'),system-ui,sans-serif;color:#fff;letter-spacing:-.03em;text-wrap:balance;overflow-wrap:anywhere}
+.svh-headline{font-size:15px;color:rgba(255,255,255,.86)!important;max-width:62ch}
+.svh-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.svh-actions-tight{margin-top:12px;align-items:center}
+.svh-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:0 18px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:rgba(16,19,28,.85);color:var(--text,#e8eaf2)!important;font-weight:600;font-size:14px;white-space:nowrap}
+.svh-btn:hover{background:#1a1e2b}
+.svh-btn-gold{background:linear-gradient(180deg,#e7c46a,#d4a94a);border-color:transparent;color:#1d1406!important;padding:0 22px}
+.svh-btn-gold:hover{background:linear-gradient(180deg,#f0cf78,#dcb255)}
+.svh-btn-sm{min-height:40px;padding:0 14px;font-size:13px}
+.svh-clock{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 26px;border-radius:14px;background:rgba(7,8,13,.6);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(2px)}
+.svh-clock-num{font:700 40px/1 var(--font-jetbrains-mono,'JetBrains Mono',monospace);color:#ffd0b0;font-variant-numeric:tabular-nums}
+.svh-body{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+.svh-main{flex:1 1 520px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.svh-rail{flex:0 1 380px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.svh-card,.svh-card2{border-radius:12px;border:1px solid var(--svh-line);background:var(--svh-card);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.svh-card2{background:var(--svh-card-strong);border-color:rgba(242,201,76,.35)}
+.svh-idol-name{font:700 17px/1.2 'Cinzel',Georgia,serif;letter-spacing:.02em}
+.svh-pad{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.svh-row{display:flex;align-items:center;gap:12px;min-width:0}
+.svh-grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.svh-row>.svh-lbl.svh-grow{display:block}
+.svh-lbl{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--faint,#6f7590)}
+.svh-gold{color:#e5bd52}
+.svh-ember{color:var(--svh-ember)}
+.svh-sub{color:var(--text2,#a3a9c2)}
+.svh-faint{color:var(--faint,#6f7590)}
+.svh-sm{font-size:12.5px}
+.svh-num{font-family:var(--font-jetbrains-mono,'JetBrains Mono',monospace);font-variant-numeric:tabular-nums}
+.svh-link{background:none;border:0;padding:0;color:#d9b45a!important;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px;min-height:32px}
+.svh-race-legend{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 18px}
+.svh-tribe-name,.svh-tribe-title{font-family:'Cinzel',Georgia,serif;font-weight:700;letter-spacing:.06em}
+.svh-race-legend .svh-num{color:var(--text,#e8eaf2);font-size:15px}
+.svh-race{display:flex;height:14px;border-radius:99px;overflow:hidden;background:#151926}
+.svh-race span{flex-basis:0;transition:flex-grow .6s ease}
+.svh-tribes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.svh-tribes[data-count='3']{grid-template-columns:repeat(3,minmax(0,1fr))}
+.svh-tribe{padding:16px;display:flex;flex-direction:column;gap:10px}
+.svh-crest{width:46px;height:46px;flex:none;object-fit:contain}
+.svh-crest-emoji{display:grid;place-items:center;font-size:28px;border-radius:12px;background:#151926}
+.svh-tribe-title{font-size:18px}
+.svh-mem{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:#151926;border:1px solid rgba(255,255,255,.05)}
+.svh-mem[data-immune=true]{border-color:rgba(242,201,76,.25);background:rgba(242,201,76,.07)}
+.svh-mem-necklace{width:22px;height:22px;flex:none}
+.svh-mem[data-you=true]{background:#181d2c}
+.svh-mem[data-out=true]{color:#6f7590;background:#0b0d14}
+.svh-mem[data-out=true] .svh-mem-name{text-decoration:line-through;color:#6f7590}
+.svh-mem-name{font-weight:600;font-size:14px;flex-direction:row;align-items:center;gap:8px;display:flex}
+.svh-mem-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.svh-you{flex:none;padding:1px 6px;border-radius:4px;background:rgba(34,211,238,.14);color:#7ee6f5;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.svh-av{position:relative;display:grid;place-items:center;width:38px;height:38px;flex:none;border-radius:50%;background:#1f2638;color:#e8eaf2;font-size:13px;font-weight:700;box-shadow:0 0 0 2px #151926,0 0 0 3.5px var(--ring,#9b8ae0)}
+.svh-av-badge{position:absolute;right:-8px;bottom:-8px;width:20px;height:20px}
+.svh-torch{width:22px;height:22px;flex:none}
+.svh-idols{flex-direction:row;align-items:center}
+.svh-idols>.svh-idol{flex:1}
+.svh-idol img{height:72px;width:auto;flex:none}
+.svh-idol strong{font-size:15px}
+.svh-coins{display:flex;gap:3px}
+.svh-coins img{width:16px;height:16px}
+.svh-feed-card{gap:0}
+.svh-feed{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.svh-feed:last-of-type{border-bottom:0}
+.svh-feed img{width:34px;height:34px;flex:none}
+.svh-feed strong{font-size:13.5px}
+.svh-feed-card>.svh-lbl{margin-bottom:4px}
+.svh-feed-card>p{padding:8px 0}
+.svh-steps{margin:0;padding:0;list-style:none;counter-reset:svh;display:flex;flex-direction:column;gap:10px}
+.svh-steps li{counter-increment:svh;display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:10px;font-size:13.5px}
+.svh-steps li::before{content:counter(svh);grid-row:span 2;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#151926;border:1px solid rgba(217,180,90,.4);color:#e5bd52;font:600 12px var(--font-jetbrains-mono,'JetBrains Mono',monospace)}
+.svh-steps strong{color:var(--text,#e8eaf2)}
+.svh-steps span{color:var(--text2,#a3a9c2);line-height:1.5}
+@media (max-width:1100px){.svh-tribes[data-count='3']{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:720px){
+  .svh-tribes,.svh-tribes[data-count='3']{grid-template-columns:minmax(0,1fr)}
+  .svh-hero{min-height:330px}
+  .svh-hero-in{padding:18px 16px 84px;gap:16px;min-height:330px}
+  .svh-body{padding:0 16px 20px}
+  .svh-clock{width:100%;flex-direction:row;justify-content:space-between;flex-wrap:wrap;padding:12px 14px}
+  .svh-clock-num{font-size:28px}
+  .svh-actions .svh-btn{flex:1 1 auto}
+  .svh-rail{flex-basis:100%}
+}
+@media (prefers-reduced-motion:reduce){.svh-race span{transition:none}}
+/* Light mode: same scenes, cream page and cards; header text stays white over the dark-left veil. */
+.svh-advice ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.svh-advice-item{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;border-left:3px solid var(--svh-line);background:rgba(255,255,255,.03)}
+.svh-advice-warn{border-left-color:var(--svh-ember)}
+.svh-advice-good{border-left-color:#6fbf7a}
+.svh-advice-info{border-left-color:var(--svh-gold)}
+html[data-mode='light'] .svh{--svh-page:#f3eee3;--svh-card:rgba(255,252,245,.92);--svh-card-strong:rgba(255,250,240,.92);--svh-line:rgba(40,30,10,.10);--svh-surface:#fffaf0;background:var(--svh-page);color:#1d1a14}
+html[data-mode='light'] .svh-hero-veil{background:linear-gradient(180deg,rgba(243,238,227,0) 0%,rgba(243,238,227,.05) 45%,var(--svh-page) 100%),linear-gradient(90deg,rgba(20,16,8,.55) 0%,rgba(20,16,8,.15) 45%,transparent 70%)}
+html[data-mode='light'] .svh-card2{border-color:rgba(148,106,12,.35)}
+html[data-mode='light'] .svh-card .svh-gold,html[data-mode='light'] .svh-card2 .svh-gold,html[data-mode='light'] .svh-link{color:#946a0c!important}
+html[data-mode='light'] .svh-sub{color:#5d5648}
+html[data-mode='light'] .svh-faint,html[data-mode='light'] .svh-lbl{color:#8a816f}
+html[data-mode='light'] .svh-idol-name{filter:brightness(.62) saturate(1.2)}
+html[data-mode='light'] .svh-body .svh-btn:not(.svh-btn-gold){background:#fffaf0;border-color:rgba(40,30,10,.14);color:#1d1a14!important}
+html[data-mode='light'] .svh-mem{background:#fffaf0;border-color:rgba(40,30,10,.08)}
+html[data-mode='light'] .svh-mem[data-you=true]{background:#f7efdc}
+html[data-mode='light'] .svh-race,html[data-mode='light'] .svh-crest-emoji{background:#ece4d2}
+html[data-mode='light'] .svh-race-legend .svh-num,html[data-mode='light'] .svh-steps strong{color:#1d1a14}
+html[data-mode='light'] .svh-steps span{color:#5d5648}
+html[data-mode='light'] .svh-steps li::before{background:#fffaf0;color:#946a0c}
+html[data-mode='light'] .svh-feed{border-bottom-color:rgba(40,30,10,.08)}

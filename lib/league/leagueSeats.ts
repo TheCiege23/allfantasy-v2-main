@@ -119,7 +119,7 @@ export async function assignLeagueSeat(
       where: { id: rosterId, leagueId },
       select: { id: true, platformUserId: true, playerData: true, settings: true },
     }),
-    tx.appUser.findUnique({ where: { id: userId }, select: { id: true, username: true, displayName: true, email: true } }),
+    tx.appUser.findUnique({ where: { id: userId }, select: { id: true, username: true, displayName: true, email: true, avatarUrl: true } }),
   ])
   if (!league || !roster) return { ok: false, code: 'ROSTER_NOT_FOUND', message: 'Roster not found in this league.' }
   if (!user) return { ok: false, code: 'USER_NOT_FOUND', message: 'That user does not exist.' }
@@ -162,7 +162,7 @@ export async function assignLeagueSeat(
 
   const team = await tx.leagueTeam.findFirst({
     where: { leagueId, externalId: rosterId },
-    select: { id: true, platformUserId: true, claimedByUserId: true, teamName: true },
+    select: { id: true, platformUserId: true, claimedByUserId: true, teamName: true, avatarUrl: true },
   })
 
   const claimed = await tx.roster.updateMany({
@@ -194,6 +194,8 @@ export async function assignLeagueSeat(
       data: {
         ownerName: name,
         teamName,
+        // The manager's face on the team: a native open team takes it; an imported team keeps its own.
+        ...(user.avatarUrl && (wasOpenTeam || !team.avatarUrl) ? { avatarUrl: user.avatarUrl } : {}),
         claimedByUserId: userId,
         isOrphan: false,
         // `getLeagueRole` trusts these flags on the claimed team, so a new holder must not
@@ -224,6 +226,7 @@ export async function assignLeagueSeat(
     const seat = {
       ownerName: name,
       teamName,
+      ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
       claimedByUserId: userId,
       platformUserId: userId,
       isOrphan: false,

@@ -24,6 +24,8 @@ const FOLLOW_UP_CHIPS = [
 
 export interface ChimmyConversationThreadProps {
   messages: ChimmyConversationMessage[]
+  analysisUnlockId?: string
+  onAnalysisUnlock?: (id: string) => void
   isTyping?: boolean
   onFollowUpClick?: (chip: ChimmyFollowUpChip) => void
   onFeedbackSubmit?: (args: { messageId: string; feedback: 'helpful' | 'unhelpful' }) => void
@@ -46,6 +48,8 @@ export interface ChimmyConversationThreadProps {
  */
 export default function ChimmyConversationThread({
   messages,
+  analysisUnlockId,
+  onAnalysisUnlock,
   isTyping = false,
   onFollowUpClick,
   onFeedbackSubmit,
@@ -77,6 +81,8 @@ export default function ChimmyConversationThread({
           content={msg.content}
           imageUrl={msg.imageUrl}
           meta={msg.meta}
+          onAnalysisUnlock={msg.id === analysisUnlockId && onAnalysisUnlock ? () => onAnalysisUnlock(msg.id) : undefined}
+          analysisBusy={isTyping}
           onFeedbackSubmit={onFeedbackSubmit}
           feedbackSelection={feedbackByMessageId[msg.id] ?? null}
           followUpChips={

@@ -30,6 +30,9 @@ import { syncNFLDepthChartsToDb } from "@/lib/rolling-insights"
 import { syncRollingInsightsDepthChartsToDb } from "@/lib/sports-data/rollingInsightsDepthCharts"
 import { riSupports } from "@/lib/sports-data/rollingInsightsSupport"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
+import { recordSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+
+const JOB_NAME = "cron-import-depth-charts"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -108,6 +111,8 @@ async function runOneSport(sport: string, season: string | undefined): Promise<S
         /** Non-zero means the payload has a shape this parser does not model — see GAPS.md G-07,
          *  which still lists the depth-chart field list as UNVERIFIED for every sport. */
         unrecognisedKeys: r.unrecognisedKeys.length ? r.unrecognisedKeys : undefined,
+        /** A 200 that parsed to zero teams carries its key layout, so the next run is a diagnosis. */
+        shapeHint: r.shapeHint,
         errors: r.errors.length ? r.errors.slice(0, 5) : undefined,
         durationMs: Date.now() - startedAt,
       },
@@ -128,6 +133,7 @@ async function handle(req: NextRequest) {
   const explicit = url.searchParams.get("sport")
   const season = url.searchParams.get("season") ?? undefined
 
+  const startedAt = Date.now()
   const budget = createRunBudget()
   const results: SportOutcome[] = []
   const deferred: string[] = []
@@ -147,6 +153,21 @@ async function handle(req: NextRequest) {
   }
 
   const anyFailed = results.some((r) => r.failed)
+  /*
+   * ⚠ A HEARTBEAT, BECAUSE THIS JOB HAD NONE. NBA, NHL and MLB returned zero teams on every weekly
+   * fire for months and the only record was the dispatcher's log line; `sync_job_runs` never heard
+   * of this route, so nothing that reads it could go red.
+   */
+  await recordSyncJobRun(
+    { jobName: JOB_NAME, jobScope: results.map((r) => String(r.body.sport)).join(","), trigger: "cron" },
+    {
+      rowsWritten: results.reduce((a, r) => a + (typeof r.body.synced === "number" ? r.body.synced : 0), 0),
+      rowsSkipped: deferred.length,
+      errors: results.filter((r) => r.failed).map((r) => `${String(r.body.sport)}: zero rows or error`),
+      metadata: { sports: results.map((r) => r.body), deferredForBudget: deferred },
+    },
+    Date.now() - startedAt,
+  )
   return NextResponse.json(
     {
       ok: !anyFailed,

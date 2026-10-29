@@ -59,6 +59,8 @@ function mapImportCommitErrorStatus(code: string): number {
   if (code === 'PROVIDER_UNAVAILABLE') return 503
   if (code === 'UNAUTHORIZED') return 401
   if (code === 'CONNECTION_REQUIRED') return 400
+  /* A sport this provider's import does not support: understood, and a retry will not change it. */
+  if (code === 'UNSUPPORTED_SPORT') return 422
   return 500
 }
 

@@ -116,7 +116,7 @@ export function GuillotineAIPanel({
     <section className="rounded-2xl border border-cyan-500/20 bg-cyan-950/20 p-4 sm:p-6">
       <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
         <Sparkles className="h-5 w-5 text-cyan-400" />
-        Guillotine AI
+        Guilly AI
       </h2>
       <p className="mb-4 text-sm text-white/70">
         Strategy and explanation only. Elimination and standings are computed by the league engine.
@@ -151,7 +151,7 @@ export function GuillotineAIPanel({
         ))}
       </div>
 
-      <FeatureGate featureId="guillotine_ai" featureNameOverride="Guillotine AI" className="mt-2">
+      <FeatureGate featureId="guillotine_ai" featureNameOverride="Guilly AI" className="mt-2">
         <button
           type="button"
           onClick={runAI}

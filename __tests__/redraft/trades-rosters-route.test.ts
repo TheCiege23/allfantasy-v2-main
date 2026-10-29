@@ -496,6 +496,9 @@ describe('🛑 the bye week, which no column supplies', () => {
 
 describe('🛑 draft picks carry a value, in the players\' own units', () => {
   it('prices a pick off the league chart instead of returning nothing', async () => {
+    // A 2027 pick is a FUTURE pick: a redraft league no longer offers it (redraftDraftPicks.ts), so
+    // these pricing cases run on a dynasty league, where it is still listed.
+    findUniqueLeague.mockResolvedValue({ season: 2026, leagueType: 'dynasty' })
     /*
      * Guap's report: "the draft pick has no shown value". The route built picks as
      * `{ ...p, itemType }` with no `value` at all, so the builder rendered an em dash and reported
@@ -524,6 +527,9 @@ describe('🛑 draft picks carry a value, in the players\' own units', () => {
   })
 
   it('🛑 a pick the chart has no market for is null WITH the reason — not the formula curve, not "could not be loaded"', async () => {
+    // A 2027 pick is a FUTURE pick: a redraft league no longer offers it (redraftDraftPicks.ts), so
+    // these pricing cases run on a dynasty league, where it is still listed.
+    findUniqueLeague.mockResolvedValue({ season: 2026, leagueType: 'dynasty' })
     // A redraft chart (guillotine, survivor, zombie) carries no pick rows. The curve priced a 2027 1st
     // at 7,360 against FantasyCalc's ~2,900 (trade price coverage audit, 2026-09-28).
     getFantasyCalcValues.mockResolvedValue([{ player: { name: 'Some Receiver', position: 'WR', sleeperId: 'x' }, value: 3000 }])
@@ -815,6 +821,9 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
   })
 
   it('a pick with no round says so; a priced pick carries no reason', async () => {
+    // A 2027 pick is a FUTURE pick: a redraft league no longer offers it (redraftDraftPicks.ts), so
+    // these pricing cases run on a dynasty league, where it is still listed.
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', leagueType: 'dynasty' })
     getFantasyCalcValues.mockResolvedValue(DYNASTY_PICK_ROWS)
     const { pickCode } = await load()
     expect(pickCode('pk-none')).toBe('pick_without_round')
@@ -822,6 +831,9 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
   })
 
   it('a pick with a round but no market row says THAT, not "could not be loaded"', async () => {
+    // A 2027 pick is a FUTURE pick: a redraft league no longer offers it (redraftDraftPicks.ts), so
+    // these pricing cases run on a dynasty league, where it is still listed.
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', leagueType: 'dynasty' })
     // beforeEach's chart holds one player and no picks — the redraft-chart case.
     const { pickCode } = await load()
     expect(pickCode('pk-r1')).toBe('no_pick_market')
@@ -961,7 +973,8 @@ describe('🛑 an imported league lists its real draft picks', () => {
       { season: 2021, _max: { round: 20 }, _count: { _all: 40 } },
       { season: 2026, _max: { round: 2 }, _count: { _all: 4 } },
     ])
-    findManyFuturePick.mockResolvedValue([
+    // Only the `active` read returns rows; the `forfeited` read (penalty-lost picks) finds none.
+    findManyFuturePick.mockImplementation(async (args: { where: { status?: string } }) => args.where.status !== 'active' ? [] : [
       // Bravo's 2027 1st now belongs to Alpha.
       { pickSeason: 2027, round: 1, originalRosterId: '2', currentOwnerId: '1' },
       // A 2026 pick: that draft is over, so the pick is spent.
@@ -1104,7 +1117,8 @@ describe('🛑 a native dynasty league lists picks it can actually trade', () =>
     findFirstDraftSession.mockResolvedValue(null)
     findUniqueDynastyConfig.mockResolvedValue({ rookieDraftRounds: 2 })
     // Bravo's 2027 1st now belongs to Alpha.
-    findManyFuturePick.mockResolvedValue([{ pickSeason: 2027, round: 1, originalRosterId: 'R-2', currentOwnerId: 'R-1' }])
+    findManyFuturePick.mockImplementation(async (args: { where: { status?: string } }) =>
+      args.where.status !== 'active' ? [] : [{ pickSeason: 2027, round: 1, originalRosterId: 'R-2', currentOwnerId: 'R-1' }])
   })
 
   type Pick = { pickId: string; season: number; round: number; label: string; proposable?: boolean; fromTeam?: string | null }
@@ -1184,5 +1198,84 @@ describe('AllFantasy projection on the roster players (display only)', () => {
     // No engine row: the key is absent, never a 0.
     expect(byId.get('p2') && 'afProjection' in byId.get('p2')!).toBe(false)
     expect(byId.get('p2')?.weeklyProjection).toBe(8.1)
+  })
+})
+
+describe('a REDRAFT league lists this season’s draft picks only (redraftDraftPicks.ts)', () => {
+  const team = (id: string, externalId: string, platformUserId: string, teamName: string) => ({
+    id, externalId, platformUserId, claimedByUserId: null, teamName,
+    avatarUrl: null, wins: 0, losses: 0, ties: 0,
+  })
+  const SESSION = {
+    id: 'ds-1', status: 'in_progress', draftType: 'snake', rounds: 2, teamCount: 2, thirdRoundReversal: false, version: 1,
+    slotOrder: [{ slot: 1, rosterId: 'R-1', displayName: 'Alpha' }, { slot: 2, rosterId: 'R-2', displayName: 'Bravo' }],
+    // Bravo already sold its 2nd-rounder to Alpha in the draft room.
+    tradedPicks: [{ round: 2, originalRosterId: 'R-2', previousOwnerName: 'Bravo', newRosterId: 'R-1', newOwnerName: 'Alpha' }],
+    // Overall 1 (Alpha's 1st) is already made.
+    picks: [{ overall: 1, playerName: 'X', position: 'RB', pickMetadata: null }],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getServerSession.mockResolvedValue({ user: { id: 'user-1' } })
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findUniqueLeague.mockResolvedValue({
+      season: 2026, sport: 'NBA', platform: 'manual', leagueType: 'redraft', isDynasty: false, draftPickTrading: true, starters: null, settings: {},
+    })
+    findManyAppUser.mockResolvedValue([])
+    findManyLeagueTeam.mockResolvedValue([team('t1', 'R-1', 'user-1', 'Alpha'), team('t2', 'R-2', 'user-2', 'Bravo')])
+    findFirstLeagueTeam.mockResolvedValue(null)
+    findUniqueUserProfile.mockResolvedValue(null)
+    findManyRoster.mockResolvedValue([
+      // A stray future pick in the JSON must not be offered in a redraft league.
+      { id: 'R-1', platformUserId: 'user-1', playerData: { players: [], draftPicks: [{ id: 'p2027r1', season: 2027, round: 1 }] }, faabRemaining: 100 },
+      { id: 'R-2', platformUserId: 'user-2', playerData: { players: [] }, faabRemaining: 100 },
+    ])
+    findManySportsPlayer.mockResolvedValue([])
+    getFantasyCalcValues.mockResolvedValue(new Map())
+    resolveTeamByeWeeks.mockResolvedValue(new Map())
+    resolveProviderPlayers.mockResolvedValue(new Map())
+    findFirstDraftSession.mockResolvedValue(SESSION)
+  })
+
+  type Pick = { pickId: string; season: number; round: number; label: string; itemType: string; proposable?: boolean; fromTeam?: string | null }
+  async function load() {
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const body = (await res.json()) as {
+      rosters: Array<{ rosterId: string; picks: Pick[] }>
+      pickPolicy?: { mode: string; futurePicksAllowed: boolean; futurePicksReason: string | null; draftClosedReason: string | null }
+    }
+    return { body, picksOf: (id: string) => body.rosters.find((r) => r.rosterId === id)!.picks }
+  }
+
+  it('shows both sides’ unmade current-season picks, proposable, and no future pick', async () => {
+    const { body, picksOf } = await load()
+    // Alpha: own 2nd + Bravo's 2nd; its 1st is made. Bravo: its 1st.
+    expect(picksOf('R-1').map((p) => p.pickId).sort()).toEqual(['rdp:ds-1:2:R-1', 'rdp:ds-1:2:R-2'])
+    expect(picksOf('R-2').map((p) => p.pickId)).toEqual(['rdp:ds-1:1:R-2'])
+    for (const p of [...picksOf('R-1'), ...picksOf('R-2')]) {
+      expect(p).toMatchObject({ season: 2026, itemType: 'rookie_pick', proposable: true })
+    }
+    expect(picksOf('R-1').find((p) => p.pickId === 'rdp:ds-1:2:R-2')).toMatchObject({ fromTeam: 'Bravo' })
+    expect(picksOf('R-1').some((p) => p.season === 2027)).toBe(false)
+    expect(body.pickPolicy).toMatchObject({ mode: 'redraft_current_draft', futurePicksAllowed: false })
+    expect(body.pickPolicy?.futurePicksReason).toMatch(/Future draft picks cannot be traded in a redraft league/)
+  })
+
+  it('after the draft completes, lists nothing and says why', async () => {
+    findFirstDraftSession.mockResolvedValue({ ...SESSION, status: 'completed' })
+    const { body, picksOf } = await load()
+    expect(picksOf('R-1')).toEqual([])
+    expect(picksOf('R-2')).toEqual([])
+    expect(body.pickPolicy?.draftClosedReason).toMatch(/draft is complete/)
+  })
+
+  it('[control] a dynasty league keeps the standard policy and its future picks', async () => {
+    findUniqueLeague.mockResolvedValue({
+      season: 2026, sport: 'NFL', platform: 'sleeper', leagueType: 'dynasty', isDynasty: true, draftPickTrading: true, starters: null, settings: {},
+    })
+    const { body, picksOf } = await load()
+    expect(body.pickPolicy).toMatchObject({ mode: 'standard', futurePicksAllowed: true })
+    expect(picksOf('R-1').some((p) => p.pickId === 'p2027r1')).toBe(true)
   })
 })

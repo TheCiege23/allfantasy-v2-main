@@ -1,5 +1,10 @@
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { tournamentRoundEnds, isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
+import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
+import { readChampionshipLength, weeksForPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { playoffBracketWeeks } from '@/lib/playoff-runtime/playoffFit'
+import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
+import { cappedSeasonWeeks, maxRegularSeasonWeeksForSport, regularSeasonCapApplies } from './regularSeasonCap'
 /** Respect a dynasty commissioner's regular season length when materializing the first season. */
 export function resolveCreatedSeasonWeeks(league: {
   bestBallMode?: boolean | null
@@ -8,16 +13,51 @@ export function resolveCreatedSeasonWeeks(league: {
   dynastyConfig?: { regularSeasonWeeks: number } | null
   playoffTeams?: number | null
   playoffWeeksPerRound?: number | null
+  /** With `sport`: a redraft or keeper league's regular season is capped at 24 weeks (regularSeasonCap.ts). */
+  leagueType?: string | null
+  sport?: unknown
 }, sportDefaultWeeks: number): number {
   const survivorPlan = readSurvivorFullSeasonPlan(league.settings)
   if (survivorPlan) return survivorPlan.endWeek
+  // A divisions-tournament conference league plays through the tournament's championship week.
+  const conferencePlan = readConferenceSeasonPlan(league.settings)
+  if (conferencePlan) return conferencePlan.lastWeek
   if (isNativeTournamentLeague(league)) {
     const settings = (league.settings as { best_ball_settings?: { regularSeasonLength: number; tournamentAdvancementRounds: number; roundEndWeeks?: number[] } } | null)?.best_ball_settings
     if (settings) return tournamentRoundEnds(settings).at(-1)!
   }
   const regularWeeks = league.dynastyConfig?.regularSeasonWeeks
-  if (!Number.isInteger(regularWeeks) || Number(regularWeeks) < 1) return sportDefaultWeeks
+  if (!Number.isInteger(regularWeeks) || Number(regularWeeks) < 1) {
+    // A capped league whose 24 regular weeks plus its bracket end before the sport's last week (an NHL
+    // bracket under six teams) ends its season with the final, as creation's shape placed it.
+    const roto = (league.settings as { scoring_mode?: unknown } | null)?.scoring_mode === 'roto'
+    if (league.leagueType !== undefined && league.sport !== undefined && !roto && regularSeasonCapApplies(league)) {
+      return cappedSeasonWeeks(sportDefaultWeeks, playoffBracketWeeks({
+        teams: league.playoffTeams,
+        weeksPerRound: league.playoffWeeksPerRound,
+        championshipLength: readChampionshipLength(league.settings),
+        // A best-of-N series round lasts N weeks (lib/playoff-runtime/playoffSeries.ts).
+        seriesLengths: readPlayoffSeriesLengths(league.settings),
+      }), maxRegularSeasonWeeksForSport(league.sport))
+    }
+    return sportDefaultWeeks
+  }
   const teams = league.playoffTeams ?? 0
   const rounds = teams >= 2 ? Math.ceil(Math.log2(teams)) : 0
-  return Number(regularWeeks) + rounds * Math.max(1, league.playoffWeeksPerRound ?? 1)
+  const perRound = Math.max(1, league.playoffWeeksPerRound ?? 1)
+  if (rounds === 0) return Number(regularWeeks)
+  // The final can run longer than the other rounds (`championship_length`, 2 for MLB/NHL); size the
+  // season to the weeks the bracket will actually be played in (lib/playoff-runtime/playoffRoundWeeks.ts).
+  const finalWeeks = weeksForPlayoffRound({
+    roundNumber: rounds,
+    weeksPerRound: perRound,
+    finalRoundNumber: rounds,
+    championshipLength: readChampionshipLength(league.settings),
+  })
+  return Number(regularWeeks) + (rounds - 1) * perRound + finalWeeks
+}
+
+/** A guillotine season ends at its last chop week; without one, the created length stands. */
+export function resolveGuillotineSeasonWeeks(eliminationEndWeek: number | null | undefined, createdWeeks: number): number {
+  return Number.isInteger(eliminationEndWeek) && Number(eliminationEndWeek) >= 1 ? Number(eliminationEndWeek) : createdWeeks
 }

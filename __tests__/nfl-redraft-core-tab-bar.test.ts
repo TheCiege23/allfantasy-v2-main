@@ -112,9 +112,14 @@ describe('NFL redraft core — LeagueShell tabDefs branch', () => {
     // Settings is no longer gear-only: commissioners get a Settings tab. But it
     // must stay commissioner-gated — a non-commissioner redraft member must not
     // see it. Lock that the only `id: 'settings'` in the branch is the gated push.
+    //
+    // ⚠ 2026-10-18: NATIVE leagues are the one exception — their Settings tab is the read-only
+    // League Settings page for members (components/league-settings/home). That second push must
+    // be the `else if (nativeWorkspace)` arm and nothing broader.
     const settingsCount = (branch.match(/id:\s*'settings'/g) ?? []).length
-    expect(settingsCount).toBe(1)
+    expect(settingsCount).toBe(2)
     expect(branch).toMatch(/if \(isCommissioner\) core\.push\(\{ id: 'settings'/)
+    expect(branch).toMatch(/else if \(nativeWorkspace\) core\.push\(\{ id: 'settings'/)
   })
 
   it('the generic withSettings append path (non-redraft branch) lives AFTER the redraft return', () => {
@@ -135,7 +140,8 @@ describe('NFL redraft core — deep-link blocker', () => {
     // The normalizer maps `?view=...` and `?tab=...` to a tab id. For the
     // redraft shell, settings has no tab — the early return below stops
     // setActiveTab('settings') from ever firing.
-    expect(src).toMatch(/if \(target === 'settings' && nflRedraftCore\) return/)
+    // Native leagues are exempt (2026-10-18): there ?view=settings IS the League Settings page.
+    expect(src).toMatch(/if \(target === 'settings' && nflRedraftCore && !nativeWorkspace\) return/)
   })
 
   it('only fires setActiveTab when the resolved target id is in tabDefs', () => {

@@ -13,6 +13,11 @@ import {
   normalizeRedraftSettingsSnapshot,
 } from '@/lib/league-concepts/redraftDefaults'
 import {
+  buildDailyRedraftSettingsSnapshot,
+  isDailyRedraftDefaultsSport,
+  normalizeDailyRedraftSettingsSnapshot,
+} from '@/lib/league-concepts/dailySportRedraftDefaults'
+import {
   buildDynastySettingsSnapshot,
   isDynastyEligibleSport,
   normalizeDynastySettingsSnapshot,
@@ -124,7 +129,14 @@ function buildSettingsSnapshot(preset: ConceptPresetSeed): Record<string, unknow
           scoringPresetId: preset.scoringPreset,
           teamCount: preset.defaultTeamCount,
         })
-      : null
+      : preset.leagueType === 'redraft' && isDailyRedraftDefaultsSport(preset.sport)
+        ? buildDailyRedraftSettingsSnapshot({
+            sport: preset.sport,
+            draftType: preset.draftTypesAllowed[0] ?? 'snake',
+            scoringPresetId: preset.scoringPreset,
+            teamCount: preset.defaultTeamCount,
+          })
+        : null
   const dynastySnapshot =
     preset.leagueType === 'dynasty' && isDynastyEligibleSport(preset.sport)
       ? buildDynastySettingsSnapshot({
@@ -338,6 +350,14 @@ export function resolveConceptPreset(args: {
           teamCount: preset.defaultTeamCount,
           settings: snapshotBase,
         })
+      : preset.leagueType === 'redraft' && isDailyRedraftDefaultsSport(sport)
+        ? normalizeDailyRedraftSettingsSnapshot({
+            sport,
+            draftType,
+            scoringPresetId: preset.scoringPreset,
+            teamCount: preset.defaultTeamCount,
+            settings: snapshotBase,
+          })
       : preset.leagueType === 'dynasty' && isDynastyEligibleSport(sport)
         ? normalizeDynastySettingsSnapshot({
             sport,

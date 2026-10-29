@@ -44,3 +44,43 @@ transaction carries `status_updated`, now stored by `SleeperHistoricalTransactio
 | `S-06` | **What timezone does Sleeper process waivers in — and is `daily_waivers_hour` that hour?** | **RESOLVED 2026-10-03 (measured): Pacific, and yes** | — | Pacific measured 2026-10-02 (5 leagues across PST and PDT: one Pacific hour, two UTC hours). Then, once the raw settings landed: `daily_waivers_hour` equals the observed Pacific run hour in **246 of 249** leagues, across ~20 distinct hours — not just the default 0. `daily_waivers = 1` → observed daily in 213 of 222; `0` → weekly in 20 of 27. Used by `lib/waivers/sleeperWaiverSchedule.ts`: a league nothing has been observed for, and Sleeper says runs daily, runs every day at that hour, Pacific. |
 | `S-07` | **Is a completed waiver claim's `status_updated` the processing instant?** | **RESOLVED 2026-10-02 (measured): yes** | — | Same 237 claims, 5 leagues: the busiest Pacific weekday-hour held an average **31%** of a league's claims by `status_updated` against **12%** by `created`, and within a league resolutions land on the same minute (`00:05`, `09:06`, `20:05` PT). `created` is submission time; `status_updated` is the run. |
 | `S-08` | **Is a Sleeper league's waiver processing weekly or daily?** | **MEASURED 2026-10-02: daily at a league-specific time** | — | Those 5 leagues each resolved claims at one fixed Pacific time on whichever days claims came due — the busiest weekday held ~3 of 10 runs. So the observer reads a schedule as DAILY unless one weekday holds 80% of the agreeing runs (`WEEKLY_SHARE`); the first version keyed on the busiest weekday and printed "Thursday 00:05" for a league that processes nightly. What the weekly `waiver_day_of_week` setting then controls (presumably when the post-game wave clears) is part of S-05. |
+
+## Players feed for NBA — `api.sleeper.app/v1/players/nba` (recorded 2026-10-20, no probe)
+
+`lib/sleeper-client.ts` `getPlayersBySport('nba')` already calls this from request paths
+(`app/api/trade-evaluator`, `app/api/trade-finder/matchmaking`), and `SleeperPlayerSeedService`
+lists `NBA: 'nba'` — but nothing has ever captured it, and no scheduled writer stores it.
+
+| ID | Gap | Status | Blocks | How the code copes today |
+|---|---|---|---|---|
+| `S-09` | **Does the NBA players feed carry `years_exp`, and is `0` a first-year player the way it is for NFL?** Also unknown: whether Sleeper serves any NHL or MLB players feed (the code maps only NFL and NBA). | **UNVERIFIED — no fixture** | Filling `SportsPlayer.yearsExp` for NBA rows, which the draft pool now reads for the Rookie badge (`lib/draft-room/nonNflRookieFields.ts`) | Nothing writes NBA `yearsExp`: `refreshSleeperPlayerRows` is scheduled for `NFL` only (`/api/cron/import-players`), and `SleeperPlayerSeedService` (which would write NBA) has no caller and must not get one (it deletes by source). So NBA rows are labelled only where a row already carries experience; otherwise the badge stays off, which is the honest "unknown". **To resolve:** add an `ENDPOINTS.yaml` + `scripts/probe.sh` for Sleeper, capture `players/nba` once with the fixture committed in the same change, then extend the scheduled `refreshSleeperPlayerRows` phase to `NBA` (it upserts by `sleeperId` and never deletes). |
+
+**S-09 update, 2026-10-20 (no probe).** The owner approved Sleeper `players/nba` `years_exp` as the
+NBA source ("yes [use Sleeper players/nba years_exp]"). It is still blocked, for a contract reason
+rather than a product one: **this directory has no `ENDPOINTS.yaml` and no `scripts/probe.sh`**, so
+there is no sanctioned way to capture the fixture CLAUDE.md requires before a new endpoint/sport
+combination is wired. Nothing in the repo documents the NBA shape either: `FeedPlayer`
+(`lib/sleeper/refreshSleeperPlayerRows.ts`) and `SleeperPlayerRecord` (`SleeperPlayerSeedService`)
+are typed from the NFL feed, and no test or fixture holds an NBA payload.
+
+What is needed, in one change: (1) `contracts/sleeper/ENDPOINTS.yaml` with `players/{sport}` and a
+`scripts/probe.sh` that writes `fixtures/players.nba.json` (the feed is ~5 MB for NFL; commit a
+trimmed sample of ~20 players including at least one 2026 draftee and one 10+ year veteran, plus a
+count of how many entries carry a numeric `years_exp`); (2) from that fixture, answer whether
+`years_exp` is present and whether `0` means a first-year player; (3) only then add `NBA` to the
+scheduled `refreshSleeperPlayerRows` phase in `/api/cron/import-players`.
+
+Two things the later writer must respect, read from code on `main`:
+
+- **NHL and MLB: no Sleeper path exists in code.** `SleeperSport` is `'nfl' | 'nba'`
+  (`lib/autocoach/status-sources/SleeperStatusAdapter.ts`) and `SLEEPER_ENDPOINT_SPORTS` maps only
+  `NFL` and `NBA`. Whether Sleeper serves those sports at all is not established from the network
+  and should not be.
+- **Precedence falls out of the pool, with one trap.** A known `yearsExp` already outranks the
+  stats-derived `rookieVerdict` in `getResolvedDraftPoolForLeague` (`resolveNonNflRookieFields`
+  runs first), so Sleeper wins over history without extra code. But the writer creates
+  `source = 'sleeper'` rows beside the Rolling Insights ones, and `SportPlayerPoolResolver` merges
+  duplicates with `mergeKnownYearsExp`, which returns NULL when two known values disagree. Nothing
+  writes `yearsExp` on the RI rows today, so there is nothing to disagree with — keep it that way,
+  or copy Sleeper's value onto the linked RI row (`PlayerIdentityMap.rollingInsightsId` +
+  `sleeperId`) rather than writing a second opinion.

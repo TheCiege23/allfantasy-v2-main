@@ -5,7 +5,7 @@ import { SurvivorGuillotineLeague } from '@/components/survivor-guillotine/Survi
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-describe('Survivor Guillotine league home', () => {
+describe('Survivor Guilly league home', () => {
   it('keeps commissioner controls and concealed reward weeks out of a member view', async () => {
     const fetcher = vi.fn(async (url: string) => url.endsWith('/operations')
       ? { ok: false, json: async () => ({ error: 'Commissioner access required' }) }

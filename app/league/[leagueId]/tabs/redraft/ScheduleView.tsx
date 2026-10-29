@@ -95,7 +95,7 @@ export function ScheduleView({ schedule }: { schedule: RedraftScheduleClient | n
           >
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-[11px] uppercase tracking-[0.12em] text-white/35">
-                {matchup.bye ? 'Bye week' : matchup.divisionGame ? 'Division matchup' : 'Matchup'}
+                {matchup.bye ? (matchup.extraMatchup ? 'Extra matchup' : 'Bye week') : matchup.divisionGame ? 'Division matchup' : 'Matchup'}
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/50">
                 {matchup.status}
@@ -103,7 +103,13 @@ export function ScheduleView({ schedule }: { schedule: RedraftScheduleClient | n
             </div>
 
             {matchup.bye ? (
-              <p className="text-sm font-semibold text-white">{matchup.homeName}</p>
+              <>
+                <p className="text-sm font-semibold text-white">{matchup.homeName}</p>
+                {/* An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts). */}
+                {matchup.extraMatchup ? (
+                  <p className="text-[11px] text-white/60" data-testid="redraft-schedule-extra-matchup">{matchup.extraMatchup.line}</p>
+                ) : null}
+              </>
             ) : (
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                 <div>

@@ -30,8 +30,8 @@ export const dynamic = "force-dynamic"
  * picks had been locked since the first kickoff. v3, per the owner's call:
  * the World Cup is switched off as a destination, MLB and NHL lead (pools are
  * creatable now, and picks lock per series, so mid-postseason is fine), and
- * the College Football Playoff (December) and NFL playoffs (January) are
- * shown as up next, not as links — no playoff template exists for either.
+ * the College Football Playoff and NBA Cup now link to their single-game
+ * bracket league creation flow. NFL remains up next.
  *
  * Same stage as v2 (dark-teal wash, grid overlay, trophy lockup, two-line
  * gradient title); the badge, CTAs and the up-next row are what changed.
@@ -72,6 +72,7 @@ type SportCard = {
   key:
     | "worldCup"
     | "nbaPlayoffs"
+    | "nbaCup"
     | "nhlPlayoffs"
     | "nflPlayoffs"
     | "mlbPostseason"
@@ -106,20 +107,19 @@ type SportCard = {
  * see app/api/brackets/playoffs/route.ts. Anything else drops through to the
  * legacy stack, whose league page is a dead end.
  */
-const playoffPoolHref = (sport: "NBA" | "NHL" | "MLB") =>
+const playoffPoolHref = (sport: "NBA" | "NHL" | "MLB" | "NCAAF" | "NBA_CUP") =>
   `/brackets/leagues/new?sport=${sport}&challengeType=playoff_challenge`
 
 /*
- * Order is the season, as of the 2026-10-01 owner call: MLB and NHL are open
- * now; the College Football Playoff is up next in December and the NFL
- * playoffs in January (no playoff template exists for either yet, so they are
- * not links); the World Cup ended in July and is switched off as a destination.
+ * The grid lists creatable bracket leagues first. CFP and NBA Cup share the
+ * playoff challenge service but keep separate tournament formats and seeds.
  * When the calendar moves, move these — a card's status is a claim about today.
  */
 const SPORT_CARDS: SportCard[] = [
   { key: "mlbPostseason", href: playoffPoolHref("MLB"), status: "live", Icon: Trophy },
   { key: "nhlPlayoffs", href: playoffPoolHref("NHL"), status: "live", Icon: Trophy },
-  { key: "collegeFootball", href: null, status: "soon", soonLabelKey: "brk.hub.sports.statusDecember", Icon: Trophy },
+  { key: "collegeFootball", href: playoffPoolHref("NCAAF"), status: "live", Icon: Trophy },
+  { key: "nbaCup", href: playoffPoolHref("NBA_CUP"), status: "live", Icon: Trophy },
   { key: "nflPlayoffs", href: null, status: "soon", soonLabelKey: "brk.hub.sports.statusJanuary", Icon: Trophy },
   { key: "nbaPlayoffs", href: playoffPoolHref("NBA"), status: "live", Icon: Trophy },
   { key: "marchMadness", href: null, status: "soon", Icon: Trophy },
@@ -228,9 +228,8 @@ export default async function BracketsHomePage() {
       {/* ─────────────────────────────────────────────────────────────
           CENTERED HERO — AF Playoff Bracket Challenge
           Owner call 2026-10-01: the World Cup is over and switched off as
-          a destination; MLB and NHL brackets are open now; the College
-          Football Playoff (December) and NFL playoffs (January) are up
-          next. Every claim here is about TODAY — when the season moves,
+          a destination; CFP, NBA Cup, MLB and NHL brackets are available;
+          NFL playoffs (January) are up next. Every claim here is about TODAY — when the season moves,
           move the copy with it, or it goes as stale as the World Cup
           "Registration Open" badge this replaced (still live in October,
           three months after the final).
@@ -292,6 +291,22 @@ export default async function BracketsHomePage() {
             {t("brk.hub.v3.cta.nhl")}
           </Link>
           <Link
+            href={playoffPoolHref("NCAAF")}
+            data-testid="brackets-hub-cta-cfp"
+            className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-cyan-300 to-cyan-400 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_10px_40px_-10px_rgba(34,211,238,0.65)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Trophy className="h-4 w-4" />
+            {t("brk.hub.v3.cta.cfp")}
+          </Link>
+          <Link
+            href={playoffPoolHref("NBA_CUP")}
+            data-testid="brackets-hub-cta-nba-cup"
+            className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-cyan-300 to-cyan-400 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_10px_40px_-10px_rgba(34,211,238,0.65)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Trophy className="h-4 w-4" />
+            {t("brk.hub.v3.cta.nbaCup")}
+          </Link>
+          <Link
             href="/brackets/join"
             className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-violet-400/35 bg-violet-500/[0.06] px-6 py-3 text-sm font-bold text-violet-200 transition-colors hover:border-violet-400/55 hover:bg-violet-500/[0.10] hover:text-violet-100"
           >
@@ -300,13 +315,12 @@ export default async function BracketsHomePage() {
           </Link>
         </div>
 
-        {/* Up next — NOT links: neither sport has a playoff template yet. */}
+        {/* The NFL bracket is up next; its template is not published yet. */}
         <div
           data-testid="brackets-hub-up-next"
           className="mt-10 inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/60 backdrop-blur sm:text-xs"
         >
           <span className="font-black uppercase tracking-wider text-white/75">{t("brk.hub.v3.upNext.title")}</span>
-          <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white/75">{t("brk.hub.v3.upNext.ncaaf")}</span>
           <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white/75">{t("brk.hub.v3.upNext.nfl")}</span>
         </div>
       </section>

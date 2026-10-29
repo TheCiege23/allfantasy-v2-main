@@ -1,5 +1,7 @@
 "use client"
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-transactions.css'
 
@@ -45,7 +47,18 @@ import CommissionerWaiverInsightsPanel from "@/components/waivers/CommissionerWa
 import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from "@/lib/waiver-wire/waiver-outcome-labels"
 import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 import { adaptWaiverWirePlayer } from "@/lib/player-data/adapters/waiverPlayerAdapter"
-import { isImmediateAddAllowedToday, dailyModeLabel, type DailyPolicySnapshot } from "@/lib/waiver-wire/immediate-add-policy"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import { confirmLineupWarning, isLineupWarningResponse } from "@/lib/waiver-wire/lineup-warning-prompt"
+import {
+  claimProcessesAfterDate,
+  isImmediateAddAllowedToday,
+  dailyModeLabel,
+  onWaiversUntilLabel,
+  phaseMoveBlockReason,
+  playerWaiverHoldUntil,
+  type DailyPolicySnapshot,
+} from "@/lib/waiver-wire/immediate-add-policy"
+import type { WaiverPhasePolicy } from "@/lib/waiver-wire/season-phase-policy"
 
 type WaiverSettings = {
   leagueId?: string
@@ -62,6 +75,8 @@ type WaiverSettings = {
   instantFaAfterClear?: boolean
   /** Today under the per-day waiver schedule; null/absent when the league has none. */
   dailyPolicy?: DailyPolicySnapshot | null
+  /** The season phase's rule for my team (offseason / playoffs); `code` null when nothing changes. */
+  phasePolicy?: WaiverPhasePolicy | null
 }
 
 type Player = UnifiedPlayerWireDto
@@ -239,6 +254,7 @@ export default function WaiverWirePage({
   const isShadow = writeAuthority?.shadow === true
   const shadowSource = writeAuthority?.sourceLabel ?? "your host platform"
   const [players, setPlayers] = useState<Player[]>([])
+  const { language, tInterpolate } = useOptionalLanguage()
   const [claims, setClaims] = useState<Claim[]>([])
   const [history, setHistory] = useState<{ claims: Claim[]; transactions: Transaction[] }>({ claims: [], transactions: [] })
   const [loading, setLoading] = useState(true)
@@ -434,16 +450,27 @@ export default function WaiverWirePage({
     if (claimLoading) return
     setClaimLoading(true)
     try {
-      const res = await fetch(`/api/waiver-wire/leagues/${leagueId}/claims`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          addPlayerId: player.id,
-          dropPlayerId: opts.dropPlayerId,
-          faabBid: opts.faabBid,
-          priorityOrder: opts.priorityOrder,
-        }),
-      })
+      const send = (confirmed: boolean) =>
+        fetch(`/api/waiver-wire/leagues/${leagueId}/claims`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            addPlayerId: player.id,
+            dropPlayerId: opts.dropPlayerId,
+            faabBid: opts.faabBid,
+            priorityOrder: opts.priorityOrder,
+            ...(confirmed ? { confirmLineupWarning: true } : {}),
+          }),
+        })
+      let res = await send(false)
+      if (res.status === 409) {
+        // The drop leaves a starting slot unfillable: a warning the manager confirms, not a block.
+        const warn = await res.clone().json().catch(() => null)
+        if (isLineupWarningResponse(warn)) {
+          if (!confirmLineupWarning(warn, tInterpolate)) return
+          res = await send(true)
+        }
+      }
       if (res.ok) {
         const json = await res.json().catch(() => ({}))
         if (typeof json?.fcfsProcessWarning === "string" && json.fcfsProcessWarning.trim()) {
@@ -503,12 +530,23 @@ export default function WaiverWirePage({
         return next.includes(player.id) ? next : [...next, player.id]
       })
       try {
-        const res = await fetch(`/api/waiver-wire/leagues/${leagueId}/add-drop`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ addPlayerId: player.id, dropPlayerId }),
-        })
-        const json = await res.json().catch(() => ({}))
+        const send = (confirmed: boolean) =>
+          fetch(`/api/waiver-wire/leagues/${leagueId}/add-drop`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ addPlayerId: player.id, dropPlayerId, ...(confirmed ? { confirmLineupWarning: true } : {}) }),
+          })
+        let res = await send(false)
+        let json = await res.json().catch(() => ({}))
+        if (isLineupWarningResponse(json)) {
+          // The drop leaves a starting slot unfillable: a warning the manager confirms, not a block.
+          if (!confirmLineupWarning(json, tInterpolate)) {
+            setRosterPlayerIds(prevRosterIds)
+            return
+          }
+          res = await send(true)
+          json = await res.json().catch(() => ({}))
+        }
         if (res.ok && json?.ok) {
           setDrawerOpen(false)
           setDrawerPlayer(null)
@@ -552,12 +590,13 @@ export default function WaiverWirePage({
         setActionPlayerId(null)
       }
     },
-    [actionPlayerId, leagueId, rosterPlayerIds, refreshAfterMutation],
+    [actionPlayerId, leagueId, rosterPlayerIds, refreshAfterMutation, tInterpolate],
   )
 
   const handleAddClick = useCallback(
     (player: Player) => {
-      const immediateAddAllowed = isImmediateAddAllowedToday(settings)
+      // A player still on waivers after a drop needs a claim even when free agents are instant adds.
+      const immediateAddAllowed = isImmediateAddAllowedToday(settings) && !playerWaiverHoldUntil(player, settings)
       if (!immediateAddAllowed) {
         // Waiver league — use the existing claim drawer.
         setImmediateMode(false)
@@ -634,6 +673,11 @@ export default function WaiverWirePage({
   const isFaab = settings?.waiverType === "faab"
   const hasOpenRosterSpot = rosterCapacity == null ? true : rosterPlayerIds.length < rosterCapacity
   const immediateAddAllowed = isImmediateAddAllowedToday(settings)
+  // Why the season phase limits moves (offseason / playoff rules), and whether it closes them all.
+  const phaseReason = phaseMoveBlockReason(settings)
+  const movesClosed = Boolean(
+    settings?.phasePolicy?.code && !settings.phasePolicy.claimsAllowed && !settings.phasePolicy.immediateAddsAllowed,
+  )
   const watchlistIdSet = useMemo(() => new Set(watchlistPlayerIds), [watchlistPlayerIds])
   const uniqueTeams = useMemo(
     () =>
@@ -937,7 +981,7 @@ export default function WaiverWirePage({
         maxResults: 8,
       }
 
-      const response = await fetch("/api/waiver-ai/engine", {
+      const response = await paidToolFetchWithConfirm("/api/waiver-ai/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -1069,6 +1113,12 @@ export default function WaiverWirePage({
         </div>
       )}
 
+      {phaseReason && (
+        <div className="rounded-lg border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100" data-testid="waiver-phase-reason" role="status">
+          {phaseReason}
+        </div>
+      )}
+
       <section className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-4" data-testid="waiver-automation-status">
         <h2 className="text-sm font-semibold text-[var(--text)]">Waiver automation status</h2>
         <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
@@ -1151,6 +1201,7 @@ export default function WaiverWirePage({
               visiblePlayerList.map((p) => {
                 const alreadyClaimed = claims.some((c) => c.addPlayerId === p.id)
                 const row = adaptWaiverWirePlayer(p)
+                const holdUntil = playerWaiverHoldUntil(p, settings)
                 return (
                   <WaiverPlayerRow
                     key={p.id}
@@ -1168,6 +1219,7 @@ export default function WaiverWirePage({
                       aiAdp: row.displayAiAdp,
                       byeWeek: row.displayByeWeek,
                       rank: playerNumber(p, ["rank", "overallRank", "ecr", "consensusRank"]),
+                      positionRank: row.displayPositionRank,
                       ownershipPercent: playerNumber(p, ["ownershipPercent", "rosteredPercent", "rosterPercent"]),
                       projectionSourceLabel: row.projectionSourceLabel,
                       adpSourceLabel: row.adpSourceLabel,
@@ -1177,11 +1229,13 @@ export default function WaiverWirePage({
                     }}
                     sport={settings?.sport ?? null}
                     trendScore={trendScoreByPlayerId.get(p.id) ?? 0}
-                    addMode={immediateAddAllowed}
+                    addMode={immediateAddAllowed && !holdUntil}
+                    waiverHoldLabel={holdUntil ? onWaiversUntilLabel(holdUntil, { tInterpolate, language }) : null}
+                    movesClosedReason={movesClosed ? phaseReason : null}
                     actionLoading={actionPlayerId === p.id}
                     onRowClick={() => {
-                      if (alreadyClaimed) return
-                      if (immediateAddAllowed) handleAddClick(p)
+                      if (alreadyClaimed || movesClosed) return
+                      if (immediateAddAllowed && !holdUntil) handleAddClick(p)
                       else {
                         setImmediateMode(false)
                         setDrawerPlayer(p)
@@ -1282,6 +1336,11 @@ export default function WaiverWirePage({
           onCancel={cancelClaimById}
           onReorder={(claimId, direction) => {
             void reorderClaim(claimId, direction)
+          }}
+          processesAfterLabel={(c) => {
+            // A claim on a player still on waivers after a drop runs at the first waiver run after he clears.
+            const until = playerWaiverHoldUntil(players.find((p) => p.id === c.addPlayerId), settings)
+            return until ? tInterpolate("waiverClaim.processesAfter", { date: claimProcessesAfterDate(until, language) }) : null
           }}
         />
       )}

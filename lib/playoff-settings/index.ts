@@ -12,4 +12,9 @@ export {
   hasPremiumStages,
 } from './PlayoffStageRegistry'
 export { calculateScheduleAdjustment } from './PlayoffScheduleRecalculator'
-export { getPlayoffConfig, savePlayoffConfig } from './PlayoffConfigService'
+export { getPlayoffConfig, savePlayoffConfig, stageEditorPlayoffStartWeek } from './PlayoffConfigService'
+export {
+  resolvePlayoffStartWeek,
+  readChosenPlayoffStartWeek,
+  sportDefaultPlayoffStartWeek,
+} from './resolvePlayoffStartWeek'

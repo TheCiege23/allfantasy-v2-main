@@ -1,8 +1,11 @@
+import { readHiddenLeagueSections, type LeagueSectionId } from '@/lib/league/leagueSections'
 import LeagueSchedule from '@/components/core-app/screens/LeagueSchedule'
+import { loadTradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import LeagueMoves from '@/components/core-app/screens/LeagueMoves'
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { canonicalCoreScreen } from '@/lib/core-app/leagueNavigation'
 import { cookies, headers } from 'next/headers'
 import { LANG_COOKIE_KEY, resolveLanguage } from '@/lib/i18n/constants'
 import { ScreenUnavailable } from '@/components/core-app/ScreenUnavailable'
@@ -68,6 +71,7 @@ import {
   LEAGUE_DATA_COVERAGE_ANCHOR,
 } from '@/components/core-app/LeagueDataCoverage'
 import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core-app/leagueDataCoverage'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
@@ -265,7 +269,7 @@ import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
 import CareerShare from '@/components/core-app/screens/CareerShare'
 import { buildToolsHub } from '@/lib/core-app/toolsHub'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
-import { planAllowanceMeta, readChimmyPlanAllowance } from '@/lib/chimmy/planAllowance'
+import { planAllowanceMeta, readChimmyAnswerAllowance } from '@/lib/chimmy/planAllowance'
 import { getCoreActivitySnapshot } from '@/lib/core-app/coreActivity'
 import { isCoreSurfaceKey, type CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import CoreLeagueContextBar, {
@@ -300,6 +304,7 @@ import {
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { leagueDataFreshness } from '@/lib/core-app/cardFreshness'
 import { CARD_USE_COOKIE, orderHomeCards, parseCardUsage, timeSensitiveCards } from '@/lib/core-app/homeCardOrder'
+import { resolveHiddenHomeSections, type HomeSectionId } from '@/lib/core-app/homeSections'
 
 export const dynamic = 'force-dynamic'
 
@@ -472,7 +477,7 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   sync: { title: 'Sync', description: 'What AllFantasy reads for this league, and when it last read it.' },
   hubs: {
     title: 'Format hubs',
-    description: 'Every Zombie, Tournament, Survivor, C2C, Guillotine and EFL league you play in, one hub per format.',
+    description: 'Every Zombie, Tournament, Survivor, C2C, Guilly and EFL league you play in, one hub per format.',
   },
 }
 
@@ -512,7 +517,7 @@ export async function generateMetadata({
 }) {
   const { screen } = await params
   const sp = await searchParams
-  const segment = (screen?.[0] ?? '').toLowerCase()
+  const segment = canonicalCoreScreen(screen?.[0] ?? '')
   const meta = TAB_META[segment]
 
   /*
@@ -575,7 +580,7 @@ export default async function AfCorePage({
   const selectedLeagueId = typeof sp.league === 'string' ? sp.league.trim() || null : null
   const playerQuery = typeof sp.q === 'string' ? sp.q : ''
   const selectedPlayerId = typeof sp.player === 'string' ? sp.player : null
-  const segment = (screen?.[0] ?? '').toLowerCase()
+  const segment = canonicalCoreScreen(screen?.[0] ?? '')
   const navKey = SCREEN_KEYS[segment]
 
   /*
@@ -734,7 +739,7 @@ export default async function AfCorePage({
    * after the whole shell wave — a third serial stage on every /core render for a value the wave
    * never needed. Same inputs, same fallback, same place it is read.
    */
-  const chimmyPlanRead = readChimmyPlanAllowance({
+  const chimmyPlanRead = readChimmyAnswerAllowance({
     userId,
     email: (session?.user as { email?: string | null } | undefined)?.email ?? null,
   }).catch(() => null)
@@ -752,7 +757,7 @@ export default async function AfCorePage({
    * follows available. Read in the same wave; it never throws (a failed read answers false).
    */
   const [leagueListPayload, pausedSyncKeys, leaguePrefs, teamFollowPromptEligible] = await Promise.all([
-    getDashboardLeagueListForUser(userId, { rosterDetail: 'count' }).catch(() => null),
+    getDashboardLeagueListForUser(userId, { rosterDetail: 'count', requireCoreLeagues: true }).catch(() => null),
     getPausedSyncKeys(userId).catch(() => null),
     getLeaguePreferences(userId),
     shouldShowTeamFollowPrompt(userId),
@@ -837,6 +842,11 @@ export default async function AfCorePage({
     redirect(`/core${segment ? `/${segment}` : ''}${query ? `?${query}` : ''}`)
   }
 
+  // Canonical entry for AF-hosted leagues, after the membership check and before dashboard reads.
+  if (activeKey === 'home' && selectedLeagueRow && !isImportedPlatform(selectedLeagueRow.platform?.trim())) {
+    redirect(leagueEntryHref(selectedLeagueRow))
+  }
+
   // This demand signal moves the league into the five-minute active import
   // lane. The helper ignores prefetches and swallows write failures.
   if (selectedLeagueRow) void touchLeagueViewed(selectedLeagueRow.id)
@@ -885,6 +895,8 @@ export default async function AfCorePage({
     id: l.id,
     name: l.name,
     platform: String(l.platform ?? 'manual').toLowerCase(),
+    // Splits the rail into one section per sport (AfCoreShell `railSections`).
+    sport: l.sport ?? null,
     syncPaused: pausedSyncLeagueIds?.has(l.id) ?? false,
     // The same flag the More menu's "Commissioner N" counts — see CommissionerBadge.
     isCommissioner: Boolean(l.isCommissioner),
@@ -1333,6 +1345,13 @@ export default async function AfCorePage({
     : false
 
   /*
+   * The home sections this viewer switched off in Settings → Home page (lib/core-app/homeSections.ts).
+   * Same row as the SMS nudge above, so it costs no query. A failed read hides nothing.
+   */
+  const hiddenHomeSections = resolveHiddenHomeSections(shellUser?.profile?.notificationPreferences)
+  const hiddenLeagueSections = readHiddenLeagueSections(shellUser?.profile?.notificationPreferences)
+
+  /*
    * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never
    * synced" — with a comment saying a per-league timestamp was not wired through.
    * It is: the league list already selects `League.lastSyncedAt`. Measured on
@@ -1603,6 +1622,8 @@ export default async function AfCorePage({
         weekLineups: railMatchups
           ? { byLeague: railMatchups.byLeague, projectionWeek: railMatchups.projectionWeek }
           : null,
+        hiddenHomeSections,
+        hiddenLeagueSections,
       }}
     />
   )
@@ -1928,6 +1949,9 @@ type CoreScreenContext = {
    * Your Week screens show them without a second load. Null when the rail read failed.
    */
   weekLineups: WeekLineups | null
+  /** Home sections switched off in Settings → Home page — lib/core-app/homeSections.ts. */
+  hiddenHomeSections: ReadonlySet<HomeSectionId>
+  hiddenLeagueSections: LeagueSectionId[]
 }
 
 /**
@@ -1979,6 +2003,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     leagueCtx,
     homeScope,
     favoriteIds,
+    hiddenHomeSections,
+    hiddenLeagueSections,
   } = ctx
   /*
    * The reader's language for server-rendered copy on this screen. Read from the `af_lang` cookie,
@@ -2046,6 +2072,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           leagueCtx,
         ).catch(() => null)
       : null
+
+  // The enforced trade deadline, as a countdown chip on the Overview. A failed read costs the chip only.
+  const homeTradeDeadline = leagueHome
+    ? await loadTradeDeadlineCountdown(leagueHome.league.id).catch(() => null)
+    : null
 
   /*
    * This week's lineups, projected — AF beside API — as two columns on the Overview's Power board.
@@ -4450,8 +4481,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         <>
         {chimmyMovesCard}
         {segment === 'schedule' ? <LeagueSchedule data={leagueHome} /> : segment === 'moves' ? <LeagueMoves data={leagueHome} /> :         <LeagueHome
+          hiddenSections={hiddenLeagueSections}
           data={leagueHome}
           identityInShell={leagueHeaderShown}
+          tradeDeadline={homeTradeDeadline}
           lineups={homeLineups}
           /*
            * "What's on file", streamed. Its nine counts wait behind their own boundary so the rest
@@ -4632,6 +4665,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   ? `Deadline · week ${trades.deadline.data.week}`
                   : null
               }
+              deadlineCountdown={trades.deadlineCountdown ?? null}
+              pickTradeDeadline={trades.pickTradeDeadline ?? null}
               platform={trades.league.platform}
               sourceLink={trades.league.sourceLink}
               leagueType={tradeLeagueTypeKey}
@@ -5412,6 +5447,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               }),
             })}
             prefetch={{ unreadNotifications, gameDayActive: coreActivity.gameDayActive }}
+            hiddenSections={hiddenHomeSections}
             lead={
               <>
                 {/* Pre-launch, no plan: "Everything's free until Oct 15" + countdown. Null otherwise. */}

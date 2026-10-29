@@ -1,3 +1,6 @@
+import { dbFirstMode } from '@/lib/db-first-mode'
+const readOnlyImporter = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/workers/adp-importer', () => ({ runAdpImporter: readOnlyImporter }))
 /**
  * A 1QB league and a superflex league read different ADP boards.
  *
@@ -145,5 +148,19 @@ describe('non-football leagues read the one board when their own scoring has non
     state.rows = [{ playerName: 'Josh Allen', position: 'QB', team: 'BUF', source: 'sleeper', adp: 18.7, scoring: 'standard', season: 2026 }]
     const rows = await loadLatestAveragedAdpRowsFromDb('NFL' as never, 'redraft', false, { season: 2026, scoring: 'ppr' })
     expect(rows).toEqual([])
+  })
+})
+
+
+describe('read-only market lookup for mock pools', () => {
+  it('returns missing data without triggering a live importer', async () => {
+    state.rows = []
+    readOnlyImporter.mockClear()
+    const previous = { useDbCacheOnly: dbFirstMode.useDbCacheOnly, disableLiveApiOnPageLoad: dbFirstMode.disableLiveApiOnPageLoad, disableAdpLiveMergeOnPageLoad: dbFirstMode.disableAdpLiveMergeOnPageLoad }
+    Object.assign(dbFirstMode, { useDbCacheOnly: false, disableLiveApiOnPageLoad: false, disableAdpLiveMergeOnPageLoad: false })
+    try {
+      expect(await loadLatestAveragedAdpRowsFromDb('NBA', 'redraft', false, { season: 2026, scoring: 'Points' }, { allowLiveImport: false })).toEqual([])
+      expect(readOnlyImporter).not.toHaveBeenCalled()
+    } finally { Object.assign(dbFirstMode, previous) }
   })
 })

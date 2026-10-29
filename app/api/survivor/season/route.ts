@@ -12,6 +12,7 @@ import { readSurvivorVisualThemeId, extractLeadingTribeIcon } from '@/lib/surviv
 import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
+import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,7 +99,9 @@ export async function GET(req: NextRequest) {
       survivorMode: true,
       survivorTribeCount: true,
       survivorMergeWeek: true,
+      survivorRevealMode: true,
       settings: true,
+      sport: true,
     },
   })
   const tribes = await prisma.survivorTribe.findMany({ where: { leagueId }, include: { members: true } })
@@ -109,7 +112,8 @@ export async function GET(req: NextRequest) {
   })
   const challenge = await prisma.survivorChallenge.findFirst({
     where: { leagueId, status: { in: ['open', 'locked'] } },
-    orderBy: { week: 'desc' },
+    // The slate (challenge 1 or 2) first; the weekly call (3) has its own card on the challenges page.
+    orderBy: [{ week: 'desc' }, { challengeNumber: 'asc' }],
   })
   const exile = await prisma.exileIsland.findUnique({ where: { leagueId } })
   const jury = await prisma.jurySession.findUnique({ where: { leagueId } })
@@ -132,25 +136,27 @@ export async function GET(req: NextRequest) {
     phase: league?.survivorPhase,
     mode: league?.survivorMode,
     visualThemeId: readSurvivorVisualThemeId((await prisma.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { engineSpecV2: true } }))?.engineSpecV2, leagueId),
-    tribes: tribes.map((tribe: (typeof tribes)[number]) => ({
-      ...tribe,
-      emoji: extractLeadingTribeIcon(tribe.name),
-    })),
+    tribes: tribes.map((tribe: (typeof tribes)[number]) => {
+      const emblem = resolveTribeEmblem(tribe, String(league?.sport ?? 'NFL'))
+      return { ...tribe, emoji: extractLeadingTribeIcon(tribe.name), logoUrl: emblem.crestUrl, markUrl: emblem.markUrl, mascot: emblem.mascot }
+    }),
     players: access.decisions.canSeeHiddenIdolAssignments ? players : players.map(p => ({
       id: p.id, userId: p.userId, displayName: p.displayName, avatarUrl: p.avatarUrl,
       tribeId: p.tribeId, playerState: p.playerState, eliminatedWeek: p.eliminatedWeek,
       isJuryMember: p.isJuryMember, isFinalist: p.isFinalist,
       hasImmunityThisWeek: p.hasImmunityThisWeek,
     })),
-    activeCouncil: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes),
+    activeCouncil: survivorPublicCouncil(council, access.decisions.canSeePrivateVotes, { revealMode: league?.survivorRevealMode }),
     currentChallenge: access.decisions.canSeeHiddenIdolAssignments ? challenge : challenge && {
       id: challenge.id, week: challenge.week, title: challenge.title, description: challenge.description,
       instructions: challenge.instructions, scope: challenge.scope, status: challenge.status,
+      submissionMode: challenge.submissionMode, challengeType: challenge.challengeType,
       locksAt: challenge.locksAt, lockAt: challenge.lockAt, closesAt: challenge.closesAt,
       rewardType: challenge.rewardType, rewardAmount: challenge.rewardAmount,
       resultSummary: challenge.status === 'resolved' ? challenge.resultSummary : null,
     },
     exileStatus: exile,
+    exileEnabled: access.settings.exileIslandEnabled !== false,
     juryStatus: access.decisions.canSeePrivateVotes ? jury : jury && {
       id: jury.id, status: jury.status, finalistUserIds: jury.finalistUserIds,
       jurorUserIds: jury.jurorUserIds, questionsDeadline: jury.questionsDeadline, votingDeadline: jury.votingDeadline,

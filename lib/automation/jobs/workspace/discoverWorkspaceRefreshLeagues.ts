@@ -29,15 +29,22 @@
  */
 
 import { buildIdempotencyKey, hashIdempotencyKey } from '@/lib/automation/idempotency'
+import { NATIVE_PLATFORM_VALUES } from '@/lib/dashboard/platform-label'
 import { prisma } from '@/lib/prisma'
+import { engineSeasonScope, SCORING_SEASON_STATUSES } from '@/lib/redraft/seasonStatus'
 
 export const WORKSPACE_REFRESH_JOB_TYPE = 'workspace.refreshTasks'
 
 export interface DueWorkspaceLeague {
   leagueId: string
   idempotencyKey: string
-  /** Newest imported event for the league at discovery time — the staleness the scan will judge. */
-  lastActivityAt: Date
+  /**
+   * Newest imported event for the league at discovery time — the staleness the scan will judge.
+   * Null for a native league found only by the native path: it has no imported feed to be stale.
+   */
+  lastActivityAt: Date | null
+  /** True when the native-in-season path found the league (it may also have imported rows). */
+  native: boolean
   /** When this league was last scanned, or null if it never has been. Null sorts to the front. */
   lastScannedAt: Date | null
   scheduledFor: Date
@@ -68,7 +75,54 @@ export function buildWorkspaceRefreshIdempotencyKey(leagueId: string, scheduledF
 }
 
 /**
- * Leagues with imported activity, LEAST-RECENTLY-SCANNED FIRST.
+ * Draft statuses that mean a native draft is happening NOW.
+ *
+ * ⚠ `pre_draft` IS DELIBERATELY ABSENT. It is the column's DEFAULT — every `DraftSession` is born in
+ * it — so a league somebody created and abandoned sits in `pre_draft` forever. Admitting it would
+ * fill the batch with dead leagues competing for the same `limit` as live ones. `in_progress` and
+ * `paused` are states a draft only reaches once someone actually started it.
+ */
+export const ACTIVE_NATIVE_DRAFT_STATUSES: readonly string[] = ['in_progress', 'paused']
+
+/**
+ * Native AllFantasy leagues that are actively in season, or mid-draft.
+ *
+ * 🛑 WHY THIS PATH EXISTS: imported activity is written ONLY by the provider emitters (Sleeper,
+ * ESPN, Yahoo, MFL, Fleaflicker — `lib/decision-os/ingestion/platformActivityEmitter.ts` and the
+ * Sleeper ingest). A native league never has a `decision_os_imported_activity` row, so the imported
+ * path alone could never reach one — a native NBA guillotine league in week 6 was simply not in
+ * this job's universe.
+ *
+ * "Active native league" reuses the engines' own definition rather than inventing one:
+ * `engineSeasonScope({ statuses: SCORING_SEASON_STATUSES })` is exactly what waiver-process runs
+ * over — native platform values only, regular season OR playoffs, both status spellings. A league
+ * mid-draft has no running season yet, so an `in_progress`/`paused` draft also qualifies.
+ */
+async function discoverActiveNativeLeagueIds(leagueId?: string): Promise<string[]> {
+  const [seasons, drafts] = await Promise.all([
+    prisma.redraftSeason.findMany({
+      where: {
+        AND: [engineSeasonScope({ statuses: SCORING_SEASON_STATUSES }), ...(leagueId ? [{ leagueId }] : [])],
+      },
+      select: { leagueId: true },
+      orderBy: { leagueId: 'asc' },
+    }),
+    prisma.draftSession.findMany({
+      where: {
+        status: { in: [...ACTIVE_NATIVE_DRAFT_STATUSES] },
+        league: { platform: { in: [...NATIVE_PLATFORM_VALUES] } },
+        ...(leagueId ? { leagueId } : {}),
+      },
+      select: { leagueId: true },
+      orderBy: { leagueId: 'asc' },
+    }),
+  ])
+  return [...new Set([...seasons, ...drafts].map((row) => row.leagueId).filter(Boolean))]
+}
+
+/**
+ * Leagues with imported activity, plus native leagues in season or mid-draft
+ * (`discoverActiveNativeLeagueIds`), LEAST-RECENTLY-SCANNED FIRST.
  *
  * ⚠ EVERY LEAGUE IS IN SCOPE, NOT ONLY THE STALE ONES. A league whose feed recovered still needs
  * a scan — that is the run which CLOSES its stale-data task — so filtering to "currently stale"
@@ -97,7 +151,7 @@ export async function discoverWorkspaceRefreshLeagues(
   const limit = options?.limit ?? 25
   const now = options?.now ?? new Date()
 
-  const [grouped, scans] = await Promise.all([
+  const [grouped, scans, nativeIds] = await Promise.all([
     prisma.decisionOsImportedActivity.groupBy({
       by: ['afLeagueId'],
       where: { afLeagueId: options?.leagueId ? options.leagueId : { not: null } },
@@ -108,6 +162,7 @@ export async function discoverWorkspaceRefreshLeagues(
       where: { jobType: WORKSPACE_REFRESH_JOB_TYPE, leagueId: { not: null } },
       _max: { startedAt: true },
     }),
+    discoverActiveNativeLeagueIds(options?.leagueId),
   ])
 
   const lastScanned = new Map<string, Date>()
@@ -115,12 +170,39 @@ export async function discoverWorkspaceRefreshLeagues(
     if (row.leagueId && row._max.startedAt) lastScanned.set(row.leagueId, row._max.startedAt)
   }
 
-  const rows = grouped.flatMap((row) => {
+  /*
+   * One row per league, whichever path found it. A league found by BOTH keeps its imported
+   * `lastActivityAt` — that is the staleness the scan judges — and is flagged native as well.
+   */
+  const byLeague = new Map<
+    string,
+    { leagueId: string; lastActivityAt: Date | null; lastScannedAt: Date | null; native: boolean }
+  >()
+  for (const row of grouped) {
     const leagueId = row.afLeagueId
     const lastActivityAt = row._max.occurredAt
-    if (!leagueId || !lastActivityAt) return []
-    return [{ leagueId, lastActivityAt, lastScannedAt: lastScanned.get(leagueId) ?? null }]
-  })
+    if (!leagueId || !lastActivityAt) continue
+    byLeague.set(leagueId, {
+      leagueId,
+      lastActivityAt,
+      lastScannedAt: lastScanned.get(leagueId) ?? null,
+      native: false,
+    })
+  }
+  for (const leagueId of nativeIds) {
+    const existing = byLeague.get(leagueId)
+    if (existing) {
+      existing.native = true
+      continue
+    }
+    byLeague.set(leagueId, {
+      leagueId,
+      lastActivityAt: null,
+      lastScannedAt: lastScanned.get(leagueId) ?? null,
+      native: true,
+    })
+  }
+  const rows = [...byLeague.values()]
 
   rows.sort((a, b) => {
     // Never scanned goes first — a league the queue has not reached yet is showing its users an
@@ -131,13 +213,32 @@ export async function discoverWorkspaceRefreshLeagues(
       const byScan = a.lastScannedAt.getTime() - b.lastScannedAt.getTime()
       if (byScan !== 0) return byScan
     }
-    return a.lastActivityAt.getTime() - b.lastActivityAt.getTime()
+    /*
+     * Among equally-overdue leagues, stalest imported data first. A league with no imported feed
+     * (native-only) has no staleness to be urgent about, so it follows those that do. It is still
+     * reached: being scanned is what sends the others to the back.
+     */
+    if (a.lastActivityAt && b.lastActivityAt) {
+      const byActivity = a.lastActivityAt.getTime() - b.lastActivityAt.getTime()
+      if (byActivity !== 0) return byActivity
+    } else if (a.lastActivityAt) {
+      return -1
+    } else if (b.lastActivityAt) {
+      return 1
+    }
+    /*
+     * ⚠ FINAL TIE-BREAK ON THE ID, SO THE ORDER IS A FUNCTION OF THE DATA AND NOT OF THE QUERY
+     * PLAN. Without it equal keys keep whatever order Postgres returned the rows in — the same
+     * shape as the waiver job's old `take: 20` with no `orderBy`, which starved seasons.
+     */
+    return a.leagueId < b.leagueId ? -1 : a.leagueId > b.leagueId ? 1 : 0
   })
 
   return rows.slice(0, limit).map((row) => ({
     leagueId: row.leagueId,
     lastActivityAt: row.lastActivityAt,
     lastScannedAt: row.lastScannedAt,
+    native: row.native,
     scheduledFor: now,
     idempotencyKey: buildWorkspaceRefreshIdempotencyKey(row.leagueId, now),
   }))

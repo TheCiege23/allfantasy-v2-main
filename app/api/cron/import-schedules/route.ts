@@ -27,9 +27,10 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
-import { createRunBudget, rotateForFairness, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
+import { createRunBudget, CRON_RUN_BUDGET_MS, rotateForFairness, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
 import { selectRiProfileSports } from "@/lib/cron/riProfileSports"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { prisma } from "@/lib/prisma"
 import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
 import {
   syncAPISportsGamesToDb,
@@ -82,6 +83,26 @@ const JOB_RI_PROFILES = "cron-import-schedules-ri-profiles"
  */
 const JOB_ODDS = "cron-import-schedules-odds"
 
+/**
+ * What the most recent COMPLETED six-sport `?riProfiles=1` fire deferred for budget — read from its
+ * own heartbeat, which already records `metadata.deferredSports`. The NCAAF half and an operator's
+ * single-sport run are excluded by scope, so neither can reset the list. Best-effort: a failed read
+ * means plain rotation, exactly the behaviour before this existed.
+ */
+async function readLastSixSportDeferral(): Promise<string[]> {
+  try {
+    const last = await prisma.syncJobRun.findFirst({
+      where: { jobName: JOB_RI_PROFILES, completedAt: { not: null }, jobScope: { contains: "," } },
+      orderBy: { startedAt: "desc" },
+      select: { metadata: true },
+    })
+    const deferred = (last?.metadata as { deferredSports?: unknown } | null)?.deferredSports
+    return Array.isArray(deferred) ? deferred.filter((s): s is string => typeof s === "string") : []
+  } catch {
+    return []
+  }
+}
+
 /** Every league the TheSportsDB ingest covers. */
 const TSDB_SPORTS: IngestSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER']
 
@@ -131,7 +152,7 @@ function resolveSports(param: string | null): Array<"NFL" | "NCAAF"> {
   return [resolveSport(param)]
 }
 
-async function handle(req: NextRequest) {
+async function handle(req: NextRequest, signal?: AbortSignal) {
   const url = new URL(req.url)
   const sports = resolveSports(url.searchParams.get("sport"))
   const sport = sports[0]
@@ -156,7 +177,7 @@ async function handle(req: NextRequest) {
   const runScheduleBlocks = !rostersOnly && !riProfilesOnly && !oddsOnly
 
   const startedAt = Date.now()
-  const budget = createRunBudget()
+  const budget = createRunBudget(CRON_RUN_BUDGET_MS, Date.now, signal)
   const results: Record<string, unknown> = {}
   const diagnostics: Record<string, unknown> = {}
 
@@ -483,6 +504,7 @@ async function handle(req: NextRequest) {
       const profileSports = selectRiProfileSports({
         allSports: RI_PROFILE_SPORTS,
         explicitSport: url.searchParams.get("sport"),
+        deferredLastRun: await readLastSixSportDeferral(),
       })
 
       /*
@@ -638,7 +660,7 @@ async function handle(req: NextRequest) {
 async function handleBoundedByEdge(req: NextRequest) {
   const startedAt = Date.now()
   const { result, overran } = await respondBeforeEdge<NextResponse | null>(
-    () => handle(req),
+    (signal) => handle(req, signal),
     () => null,
     CRON_HARD_RESPONSE_MS,
     'import-schedules',

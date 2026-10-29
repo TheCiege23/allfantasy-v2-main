@@ -1,3 +1,4 @@
+import { playServerConfigured } from "@/lib/google-play/billingConfig"
 import {maintainDraftResults} from '@/lib/draft-archive/ingestion/maintenance'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
@@ -123,6 +124,13 @@ export async function GET(request: NextRequest) {
     keptFetchedAt: null,
   }))
   if (privateRelay.status === 'failed') purgeWarnings.push(`private relay ranges: ${privateRelay.error}`)
+
+  // Play refunds, consumption retries and renewals share this existing hourly slot.
+  // The pass skips immediately until configured; failures remain visible in maintenance warnings.
+  const playBilling = playServerConfigured()
+    ? await import("@/lib/google-play/billingReconciliation").then(m => m.reconcileGooglePlayBilling(30_000)).catch(() => ({ failures: 1, refreshed: 0, voids: 0 }))
+    : { skipped: true, failures: 0, refreshed: 0, voids: 0 }
+  if (playBilling.failures) purgeWarnings.push("Google Play billing reconciliation needs a retry")
 
   // Recorded AFTER the `available` guard above, so an unreachable telemetry model cannot write a
   // clean-looking heartbeat for a sweep that never swept. The 503 path deliberately records
@@ -275,6 +283,7 @@ export async function GET(request: NextRequest) {
     cutoff,
     cachePurge,
     privateRelay,
+    playBilling,
     renewalReminders,
     tradeAgent,
     tradeLearning,

@@ -2373,6 +2373,13 @@ on). Emergency escape hatch, for a genuine emergency only:
 
 ## Deploys cost money, and pushes are the meter
 
+⚠ **VERCEL IS RETIRED. PRODUCTION IS RAILWAY ONLY.** Production moved to Railway on
+2026-09-02; the Vercel account is now blocked, and `vercel.json` plus its CI gate
+were deleted 2026-10-29. The Vercel figures below are kept as the measurement that
+set push cadence, which still matters on Railway — but `vercel ls` measures nothing
+now, and a red `Vercel` commit status ("Account is blocked") is a dead GitHub
+integration, not a failure. It is not a required check.
+
 🛑 **A PUSH TO `main` IS A DEPLOY. A COMMIT IS NOT.** Commit as often as you like;
 push at the end of a work unit.
 
@@ -2549,13 +2556,9 @@ in flight. A burst of merges becomes at most two builds.
 
 ### What is enforced for you, and what is not
 
-- **`vercel.json` gates builds to `main` only.** `ignoreCommand` skips every
-  other ref, so feature branches cost seconds instead of ~4.6 minutes. This is
-  server-side and needs no cooperation.
-  🛑 **Never commit a working-tree `vercel.json`.** Most checkouts here predate
-  the gate and still hold `{}`; committing one silently reverts it and restores
-  ~$26/mo, with nothing failing or warning. Rebuild from
-  `git show origin/main:vercel.json` and re-apply your edit.
+- **`vercel.json` no longer exists.** It held only the Vercel branch-build gate,
+  deleted with Vercel's retirement on 2026-10-29. A checkout that still has one on
+  disk is stale; do not commit it back. Cron schedules live in `cron-schedule.json`.
 - **A pre-push hook refuses a push to `main` while a production build is running**
   (`.githooks/pre-push`, installed by `npm run hooks:install`). It fails open on
   every error, and only ever inspects pushes whose *remote* ref is
