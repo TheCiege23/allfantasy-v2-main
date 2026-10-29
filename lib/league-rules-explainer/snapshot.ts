@@ -411,6 +411,11 @@ const LOTTERY_REST = new Map<string, RookieDraftLotteryRule['rest']>([
   ['reverse_max_pf', 'reverse_max_pf'],
   ['manual', 'reverse_standings'], // buildFullSlotOrder has no commissioner order to read
 ])
+const LOTTERY_TIEBREAKS = new Map<string, NonNullable<RookieDraftLotteryRule['tiebreak']>>([
+  ['lower_points_for', 'points_for'],
+  ['lower_max_pf', 'max_pf'],
+  ['seeded_random', 'random'],
+])
 
 /**
  * The rookie lottery as a rule, from the parsed `draft_lottery_config` (readDraftOrderModeAndLotteryConfig)
@@ -420,13 +425,14 @@ const LOTTERY_REST = new Map<string, RookieDraftLotteryRule['rest']>([
  *
  * Each field is mapped to what the draw DOES (see RookieDraftLotteryRule), so a save that changes a
  * stored value without changing the draw — `custom` → `all_teams`, `manual` → `reverse_standings`,
- * `bottomN` (which the engine never reads) — publishes no change. `tiebreakMode` and
- * `allowCommissionerOverride` are not described: no engine path reads the latter, and the former only
- * reorders teams on an exactly equal rank.
+ * `bottomN` (which the engine never reads) — publishes no change. `allowCommissionerOverride` is not
+ * described: no engine path reads it. `tiebreakMode` is, now that a tie has one meaning everywhere the
+ * engine reads it (`applyTiebreak`); a value it does not know is sorted as `lower_points_for`, so it
+ * reads as that here.
  */
 export function rookieDraftLotteryRule(
   rookieOrder: string | null | undefined,
-  c: Pick<WeightedLotteryConfig, 'lotteryTeamCount' | 'lotteryPickCount' | 'eligibilityMode' | 'weightingMode' | 'fallbackOrder'> | null | undefined,
+  c: Pick<WeightedLotteryConfig, 'lotteryTeamCount' | 'lotteryPickCount' | 'eligibilityMode' | 'weightingMode' | 'fallbackOrder' | 'tiebreakMode'> | null | undefined,
 ): RookieDraftLotteryRule | null {
   if (rookieOrder !== 'weighted_lottery' || !c) return null
   const teams = posInt(c.lotteryTeamCount)
@@ -435,7 +441,8 @@ export function rookieDraftLotteryRule(
   const odds = LOTTERY_ODDS.get(String(c.weightingMode))
   const rest = LOTTERY_REST.get(String(c.fallbackOrder))
   if (!teams || !picks || !pool || !odds || !rest) return null
-  return { teams, picks: Math.min(picks, teams), pool, odds, rest }
+  const tiebreak = LOTTERY_TIEBREAKS.get(String(c.tiebreakMode)) ?? 'points_for'
+  return { teams, picks: Math.min(picks, teams), pool, odds, rest, tiebreak }
 }
 
 /**

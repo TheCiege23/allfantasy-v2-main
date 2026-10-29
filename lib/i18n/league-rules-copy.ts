@@ -454,6 +454,14 @@ export const leagueRulesCopyEn: Record<string, string> = {
   'leagueRules.v.lottery.odds.equal': 'equal odds',
   'leagueRules.v.lottery.rest.reverse_standings': 'the rest in reverse standings',
   'leagueRules.v.lottery.rest.reverse_max_pf': 'the rest by reverse max PF',
+  // The lottery's tiebreak (2026-10-29): which team of a tie in the standings is the worse finish.
+  'leagueRules.dynasty.lottery.tiebreak.points_for': 'A tie in the standings goes to the team that scored fewer points.',
+  'leagueRules.dynasty.lottery.tiebreak.max_pf': 'A tie in the standings goes to the team with the lower max PF.',
+  'leagueRules.dynasty.lottery.tiebreak.random': 'A tie in the standings goes to the team that scored fewer points, then to a seeded random draw.',
+  'leagueRules.v.lottery.withTiebreak': '{{pool}} for {{picks}}, {{odds}}, {{rest}}, {{tiebreak}}',
+  'leagueRules.v.lottery.tiebreak.points_for': 'ties to fewer points',
+  'leagueRules.v.lottery.tiebreak.max_pf': 'ties to the lower max PF',
+  'leagueRules.v.lottery.tiebreak.random': 'ties to fewer points, then a seeded draw',
 
   // The main draft (lib/league-rules-explainer/loadDraftRules.ts).
   'leagueRules.section.draft': 'Draft',
@@ -975,6 +983,13 @@ export const leagueRulesCopyEs: Record<string, string> = {
   'leagueRules.v.lottery.odds.equal': 'mismas probabilidades',
   'leagueRules.v.lottery.rest.reverse_standings': 'el resto en orden inverso a la clasificación',
   'leagueRules.v.lottery.rest.reverse_max_pf': 'el resto por max PF inverso',
+  'leagueRules.dynasty.lottery.tiebreak.points_for': 'Un empate en la clasificación favorece al equipo que anotó menos puntos.',
+  'leagueRules.dynasty.lottery.tiebreak.max_pf': 'Un empate en la clasificación favorece al equipo con menor max PF.',
+  'leagueRules.dynasty.lottery.tiebreak.random': 'Un empate en la clasificación favorece al equipo que anotó menos puntos y, si sigue el empate, lo decide un sorteo con semilla.',
+  'leagueRules.v.lottery.withTiebreak': '{{pool}} por {{picks}}, {{odds}}, {{rest}}, {{tiebreak}}',
+  'leagueRules.v.lottery.tiebreak.points_for': 'empates a favor de menos puntos',
+  'leagueRules.v.lottery.tiebreak.max_pf': 'empates a favor del menor max PF',
+  'leagueRules.v.lottery.tiebreak.random': 'empates a favor de menos puntos y luego un sorteo con semilla',
 
   // El draft principal (lib/league-rules-explainer/loadDraftRules.ts).
   'leagueRules.section.draft': 'Draft',

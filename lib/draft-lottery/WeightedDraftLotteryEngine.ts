@@ -14,6 +14,7 @@ import type {
 import {
   getStandingsForLottery,
   applyTiebreak,
+  bestFirst,
   selectEligibleTeams,
   buildEligibleTeamsWithOdds,
 } from './standingsForLottery'
@@ -159,7 +160,8 @@ async function withTankingPenalties(leagueId: string, eligible: LotteryEligibleT
  * stored result's snapshot and Draft HQ's odds note all said Max PF.
  *
  * `allStandings` arrives best-first (`applyTiebreak`), so its first `playoffTeamCount` rows are the
- * playoff teams — the same line `selectEligibleTeams` draws for the pool.
+ * playoff teams — the same line `selectEligibleTeams` draws for the pool, and on a tied rank the same
+ * team: the worse of the tie, which also picks first here.
  */
 export function buildFullSlotOrder(
   lotteryDraws: LotteryDrawResult[],
@@ -168,10 +170,12 @@ export function buildFullSlotOrder(
   fallbackOrder: LotteryFallbackOrder,
   playoffTeamCount: number
 ): { slot: number; rosterId: string; displayName: string }[] {
-  const playoff = new Set(allStandings.slice(0, Math.max(0, playoffTeamCount)).map((r) => r.rosterId))
-  const remaining = allStandings.filter((r) => !drawnRosterIds.has(r.rosterId))
-  // Stable sorts, so a tie keeps the order `applyTiebreak` gave it.
-  remaining.sort((a, b) => b.rank - a.rank)
+  const ordered = bestFirst(allStandings)
+  const playoff = new Set(ordered.slice(0, Math.max(0, playoffTeamCount)).map((r) => r.rosterId))
+  // Worst finish first: the best-first order reversed, so on a tied rank the worse team of the tie
+  // (the one `applyTiebreak` placed later) picks first. The sort below is stable, so a Max PF tie
+  // keeps this order too.
+  const remaining = ordered.reverse().filter((r) => !drawnRosterIds.has(r.rosterId))
   if (fallbackOrder === 'reverse_max_pf') {
     remaining.sort((a, b) => {
       const pa = playoff.has(a.rosterId) ? 1 : 0

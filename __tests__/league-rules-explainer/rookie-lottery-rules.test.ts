@@ -79,7 +79,7 @@ function expectClean(lines: string[], lang: 'en' | 'es') {
 }
 
 const cfg = (over: Partial<WeightedLotteryConfig> = {}): WeightedLotteryConfig => ({ ...DEFAULT_WEIGHTED_LOTTERY_CONFIG, enabled: true, ...over })
-const rule = (over: Partial<RookieDraftLotteryRule> = {}): RookieDraftLotteryRule => ({ teams: 6, picks: 6, pool: 'non_playoff', odds: 'record', rest: 'reverse_max_pf', ...over })
+const rule = (over: Partial<RookieDraftLotteryRule> = {}): RookieDraftLotteryRule => ({ teams: 6, picks: 6, pool: 'non_playoff', odds: 'record', rest: 'reverse_max_pf', tiebreak: 'max_pf', ...over })
 
 const dynastyRow: RulesLeagueRow = {
   platform: 'allfantasy', sport: 'NFL', leagueType: 'dynasty', isDynasty: true, leagueSize: 12, scoring: 'ppr',
@@ -187,7 +187,7 @@ describe('the Dynasty section explains the lottery, only while it orders the roo
 
   it('no lottery lines when the rookie order is not the lottery, even with a stored lottery value', () => {
     expect(lotteryLineIds(dynasty('max_pf', rule()))).toEqual([])
-    expect(lotteryLineIds(dynasty('weighted_lottery', rule()))).toEqual(['dynasty-lottery-draw', 'dynasty-lottery-odds', 'dynasty-lottery-rest'])
+    expect(lotteryLineIds(dynasty('weighted_lottery', rule()))).toEqual(['dynasty-lottery-draw', 'dynasty-lottery-odds', 'dynasty-lottery-rest', 'dynasty-lottery-tiebreak'])
   })
 
   it('an unknown or malformed value drops the lottery lines, never shows them raw', () => {
@@ -215,12 +215,12 @@ describe('a lottery change gets a "What changed" line', () => {
 
   it('the number of lottery picks, in English and Spanish, with the new rule as the consequence', () => {
     expect(line(rule(), rule({ picks: 4 }))).toBe(
-      'Rookie draft lottery: The 6 worst non-playoff teams for the first 6 picks, odds by record, the rest by reverse max PF → The 6 worst non-playoff teams for the first 4 picks, odds by record, the rest by reverse max PF — The 6 worst teams that missed the playoffs draw for the first 4 picks.',
+      'Rookie draft lottery: The 6 worst non-playoff teams for the first 6 picks, odds by record, the rest by reverse max PF, ties to the lower max PF → The 6 worst non-playoff teams for the first 4 picks, odds by record, the rest by reverse max PF, ties to the lower max PF — The 6 worst teams that missed the playoffs draw for the first 4 picks.',
     )
     const es = line(rule(), rule({ picks: 4 }), 'es')!
     expectClean([es], 'es')
     expect(es).toBe(
-      'Lotería del draft de novatos: Los 6 peores equipos fuera de playoffs por las primeras 6 selecciones, probabilidades según el récord, el resto por max PF inverso → Los 6 peores equipos fuera de playoffs por las primeras 4 selecciones, probabilidades según el récord, el resto por max PF inverso — Los 6 peores equipos que no llegaron a los playoffs sortean las primeras 4 selecciones.',
+      'Lotería del draft de novatos: Los 6 peores equipos fuera de playoffs por las primeras 6 selecciones, probabilidades según el récord, el resto por max PF inverso, empates a favor del menor max PF → Los 6 peores equipos fuera de playoffs por las primeras 4 selecciones, probabilidades según el récord, el resto por max PF inverso, empates a favor del menor max PF — Los 6 peores equipos que no llegaron a los playoffs sortean las primeras 4 selecciones.',
     )
   })
 
@@ -314,11 +314,19 @@ describe('PUT /draft-lottery/config → settings_changed.meta.ruleChanges', () =
     expect(changes()).toEqual([{ key: 'rookieDraftLottery', before: rule(), after: rule({ teams: 8, picks: 8 }) }])
   })
 
-  it('a mode change on a main draft still to come is the Draft section’s draftOrderMethod — one event, no duplicate', async () => {
+  it('a mode change on a main draft still to come: the lottery still seats the order, so no false "→ set by the commissioner" line', async () => {
+    // draft_order_mode is not what seats the draw — rookiePickOrderMethod is (resolveWeightedLotterySlotOrderForLeague).
     m.state.db.session = { ...m.state.db.session!, draftModeLabel: null }
     await put({ draftOrderMode: 'manual' })
-    expect(m.publish).toHaveBeenCalledTimes(1)
-    expect(changes()).toEqual([{ key: 'draftOrderMethod', before: 'weighted_lottery', after: 'manual' }])
+    expect(m.publish).not.toHaveBeenCalled()
+  })
+
+  it('switching the rookie order off the lottery is what the Draft section reports — one event, no duplicate', async () => {
+    m.state.db.session = { ...m.state.db.session!, draftModeLabel: null }
+    m.state.db.dynasty = { rookiePickOrderMethod: 'max_pf' }
+    // With no lottery behind it, draft_order_mode → manual moves nothing the engine seats.
+    await put({ draftOrderMode: 'manual' })
+    expect(m.publish).not.toHaveBeenCalled()
   })
 
   it('a rookie draft ordered some other way: lottery settings change nothing, so no card', async () => {

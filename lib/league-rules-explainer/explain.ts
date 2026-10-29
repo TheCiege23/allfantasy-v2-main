@@ -286,7 +286,10 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       return typeof value === 'string' && ORPHAN_DRAFTERS.has(value) ? text(`v.orphan.${value}`) : null
     case 'rookieDraftLottery': {
       const l = lotteryOf(value)
-      return l ? text('v.lottery', { pool: lotteryPool('v.lottery.pool', l), picks: lotteryPicks(l), odds: text(`v.lottery.odds.${l.odds}`), rest: text(`v.lottery.rest.${l.rest}`) }) : null
+      if (!l) return null
+      const parts = { pool: lotteryPool('v.lottery.pool', l), picks: lotteryPicks(l), odds: text(`v.lottery.odds.${l.odds}`), rest: text(`v.lottery.rest.${l.rest}`) }
+      // A value stored before the tiebreak was described has none, and reads as it did.
+      return l.tiebreak ? text('v.lottery.withTiebreak', { ...parts, tiebreak: text(`v.lottery.tiebreak.${l.tiebreak}`) }) : text('v.lottery', parts)
     }
     case 'tankingPenalty': {
       if (!value || typeof value !== 'object') return null
@@ -302,6 +305,7 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
 const LOTTERY_POOLS = new Set(['non_playoff', 'worst'])
 const LOTTERY_ODDS = new Set(['record', 'points_for', 'max_pf', 'equal'])
 const LOTTERY_REST = new Set(['reverse_standings', 'reverse_max_pf'])
+const LOTTERY_TIEBREAKS = new Set(['points_for', 'max_pf', 'random'])
 
 /** A stored rookie-lottery value this module has sentences for, or null (an unknown part drops it whole). */
 function lotteryOf(value: unknown): RookieDraftLotteryRule | null {
@@ -311,6 +315,7 @@ function lotteryOf(value: unknown): RookieDraftLotteryRule | null {
   if (typeof v.pool !== 'string' || !LOTTERY_POOLS.has(v.pool)) return null
   if (typeof v.odds !== 'string' || !LOTTERY_ODDS.has(v.odds)) return null
   if (typeof v.rest !== 'string' || !LOTTERY_REST.has(v.rest)) return null
+  if (v.tiebreak !== undefined && (typeof v.tiebreak !== 'string' || !LOTTERY_TIEBREAKS.has(v.tiebreak))) return null
   return value as RookieDraftLotteryRule
 }
 
@@ -528,6 +533,7 @@ function lotteryLines(l: RookieDraftLotteryRule | null): Array<RuleLine | null> 
     line('dynasty-lottery-draw', lotteryDraw(l)),
     line('dynasty-lottery-odds', text(`dynasty.lottery.odds.${l.odds}`)),
     line('dynasty-lottery-rest', text(`dynasty.lottery.rest.${l.rest}`)),
+    line('dynasty-lottery-tiebreak', l.tiebreak ? text(`dynasty.lottery.tiebreak.${l.tiebreak}`) : null),
   ]
 }
 
@@ -727,9 +733,11 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       const a = lotteryOf(after)
       if (!b || !a) return null
       const drawMoved = b.teams !== a.teams || b.picks !== a.picks || b.pool !== a.pool
-      const moved = [drawMoved, b.odds !== a.odds, b.rest !== a.rest].filter(Boolean).length
+      const tiebreakMoved = b.tiebreak !== a.tiebreak
+      const moved = [drawMoved, b.odds !== a.odds, b.rest !== a.rest, tiebreakMoved].filter(Boolean).length
       if (moved !== 1) return null
       if (drawMoved) return lotteryDraw(a)
+      if (tiebreakMoved) return a.tiebreak ? text(`dynasty.lottery.tiebreak.${a.tiebreak}`) : null
       return b.odds !== a.odds ? text(`dynasty.lottery.odds.${a.odds}`) : text(`dynasty.lottery.rest.${a.rest}`)
     }
     case 'tankingPenalty':
