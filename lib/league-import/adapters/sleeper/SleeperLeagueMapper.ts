@@ -160,6 +160,13 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       // See the `isKeeper` note above: max_keepers is a Sleeper default, this is the real flag.
       is_keeper: isKeeper,
       /*
+       * Sleeper's weekly median game (1 = every week is also a game against the league median).
+       * Dropped at import until 2026-10-29, so Season Outlook and the public standings ignored it;
+       * `lib/core-app/medianGame.ts` reads it, and falls back to the platform records for leagues
+       * imported before. contracts/sleeper/GAPS.md S-10.
+       */
+      league_average_match: toIntOrUndef(settings.league_average_match),
+      /*
        * 🛑 SLEEPER'S WAIVER SCHEDULE FIELDS, STORED RAW — AND ONLY ONE OF THEM IS INTERPRETED.
        *
        * Dropped at import until 2026-10-02 (`lib/chimmy-alerts/waiverCheck.ts` measured no league
