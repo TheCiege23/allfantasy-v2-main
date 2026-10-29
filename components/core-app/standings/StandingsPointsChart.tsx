@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { formatRecord, type BoardTeam, type StandingsBoard } from '@/lib/core-app/standingsModel'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The points picture — item 5 of the standings brief.
@@ -23,7 +24,7 @@ const H = 300
 const PAD = { l: 48, r: 16, t: 16, b: 38 }
 
 function pts(v: number): string {
-  return v.toLocaleString('en-US', { maximumFractionDigits: 1, minimumFractionDigits: 1 })
+  return v.toLocaleString(getAppIntlLocale(), { maximumFractionDigits: 1, minimumFractionDigits: 1 })
 }
 
 function niceBounds(values: number[]): [number, number] {

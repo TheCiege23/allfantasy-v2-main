@@ -1015,7 +1015,9 @@
     display: grid;
     grid-template-columns: repeat(6, 1fr);
     gap: 2px;
-    padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    /* Side insets too: in landscape on a notched phone the end tabs sat under the notch. */
+    padding: 6px calc(6px + env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px))
+      calc(6px + env(safe-area-inset-left, 0px));
     background: color-mix(in srgb, var(--surface2) 92%, transparent);
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
@@ -2527,6 +2529,118 @@ html[data-mode='light'] .af-core {
   }
 }
 
+/*
+ * "Show N hidden leagues" — the last row of the scroller, not the foot: it belongs with the leagues
+ * it stands in for. It borrows the foot tiles' icon + two-line copy, so it repeats their expanded
+ * layout here (those rules are scoped to `.af-rail-foot`). Collapsed, it is a square showing the count.
+ */
+.af-core .af-rail-tile.af-rail-hidden-link {
+  flex: 0 0 auto;
+  margin-top: 6px;
+  background: var(--chip);
+  border-color: var(--chip-line);
+  color: var(--muted);
+}
+
+.af-core .af-rail-hidden-link .af-rail-foot-icon {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+@media (min-width: 721px) {
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-tile.af-rail-hidden-link,
+  .af-core.af-shell[data-rail-open='true'] .af-rail-tile.af-rail-hidden-link {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    padding: 6px 8px;
+  }
+}
+
+@media (max-width: 720px) {
+  .af-core .af-rail-tile.af-rail-hidden-link {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;
+    padding: 8px 12px;
+  }
+}
+
+/*
+ * Every league hidden: this row is the whole tray, so it reads as the primary thing to do.
+ * Specific enough to beat the open tray's card rule (`[data-rail-open='true'] .af-rail-scroll
+ * .af-rail-tile`, later in this file), which would otherwise repaint the border `--line`.
+ */
+.af-core.af-shell .af-rail-scroll .af-rail-tile.af-rail-hidden-link[data-all-hidden='true'] {
+  border-color: var(--accent);
+}
+
+/*
+ * "2 hidden · Show" — the header's hidden count as its own link, under the toggle. Shown exactly
+ * where `.af-rail-toggle-text` is shown (expanded desktop rail, phone tray) and nowhere else: the
+ * collapsed 42px rail has no room, and the list's last row carries the count there.
+ */
+.af-core .af-rail-hidden-count {
+  display: none;
+  align-self: stretch;
+  margin-top: -4px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  color: var(--accent);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.af-core .af-rail-hidden-count:hover,
+.af-core .af-rail-hidden-count:focus-visible {
+  background: var(--chip);
+}
+
+.af-shell[data-rail-open='true'] .af-rail-hidden-count {
+  display: block;
+}
+
+@media (min-width: 1281px) {
+  .af-shell:not([data-rail-open='false']) .af-rail-hidden-count {
+    display: block;
+  }
+}
+
+/* The phone tray is a grid (logo | header, then list, then foot); give the link its own row under the header. */
+@media (max-width: 720px) {
+  .af-core .af-rail-hidden-count {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] {
+    grid-template-rows: auto auto minmax(0, max-content) auto;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] .af-rail-hidden-count {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] .af-rail-scroll {
+    grid-row: 3;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] .af-rail-foot {
+    grid-row: 4;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .af-core .af-rail-live-state::before {
     animation: af-rail-live-pulse 1.8s ease-out infinite;
@@ -3556,6 +3670,85 @@ html[data-mode='light'] .af-core {
     width: 24px;
     height: 24px;
     border-radius: 8px;
+  }
+}
+
+/* ── Phone header: one row, search behind an icon (default mode) ─────────────
+ *
+ * ⚠ APPENDED AT END OF FILE ON PURPOSE — the one insertion point with no enclosing
+ * query (see the window-controls-overlay note above).
+ *
+ * Below 720px the default topbar wrapped to two rows because the search took a full-width
+ * row of its own, and with the league bars under it roughly a third of a phone was chrome
+ * before any content. League-first already folded search into an icon (`.af-lf-search-btn`);
+ * the default header now does the same, so it is one row until the manager asks to search.
+ * Desktop and tablet are untouched.
+ *
+ * `overscroll-behavior-y: contain` stops Android Chrome's own pull-to-refresh firing alongside
+ * PullToRefresh.tsx, whose listeners are passive and so cannot cancel the native gesture.
+ */
+@media (max-width: 720px) {
+  html:has(.af-core.af-shell) {
+    overscroll-behavior-y: contain;
+  }
+
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar .af-search-wrap {
+    display: none;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar[data-lf-search-open='true'] .af-search-wrap {
+    display: block;
+    flex-basis: 100%;
+    order: 10;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar-right {
+    flex: 1 1 0;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-lf-search-btn {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    order: 5;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--line2);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text2);
+    font: inherit;
+    font-size: 20px;
+    cursor: pointer;
+  }
+}
+
+/* ── Tap areas for small close / remove / search buttons ─────────────────────
+ * Same technique as `.af-help-dot` and `.af-mu-weeknav-btn`: the paint stays small, a
+ * transparent centred ::after makes the touch target 44px. Coarse pointers only.
+ */
+@media (pointer: coarse) {
+  .af-sp-close,
+  .af-olk-chip-x,
+  .af-cm-close,
+  .af-pf-search-btn {
+    position: relative;
+  }
+  .af-sp-close::after,
+  .af-olk-chip-x::after,
+  .af-cm-close::after,
+  .af-pf-search-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: 44px;
+    transform: translate(-50%, -50%);
+    background: transparent;
   }
 }
 

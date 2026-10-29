@@ -61,7 +61,21 @@ export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'rookieDraftRounds',
   'rookieDraftType',
   'rookieDraftAutoStartDays',
+  // The rookie lottery's own settings (./loadDraftRules.ts loadRookieLotteryRules).
+  'rookieDraftLottery',
   'tankingPenalty',
+  // The main draft (./loadDraftRules.ts). `draftStatus` and `draftAuctionMinBid` are never changes.
+  'draftType',
+  'draftRounds',
+  'draftPickSeconds',
+  'draftOvernightPause',
+  'draftOnTimeout',
+  'draftOrderMethod',
+  'draftThirdRoundReversal',
+  'draftAuctionBudget',
+  'draftStartAt',
+  'draftAutostart',
+  'draftOrphanPicks',
 ]
 
 const CHANGEABLE = new Set<string>(CHANGEABLE_RULE_KEYS)

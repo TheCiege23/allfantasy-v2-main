@@ -74,6 +74,9 @@ export function slotTypeFor(playerData: unknown, playerId: string, position: str
     if (s === 'taxi') return 'taxi'
     if (s === 'ir') return 'ir'
     if (s === 'devy') return 'devy'
+    // C2C campus starters (lib/c2c/campusLineup.ts) are college players: devy to every generic reader,
+    // so pro scoring never counts them. Only the C2C campus scorer adds their points.
+    if (s === 'campus') return 'devy'
     return s
   }
 

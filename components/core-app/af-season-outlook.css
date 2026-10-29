@@ -447,3 +447,21 @@
     min-height: 44px;
   }
 }
+
+/*
+ * The team column stays put while the six numeric columns scroll under it. The table has a
+ * 720px floor and scrolls inside its own box on a phone, which left a manager reading a row of
+ * odds with no idea whose they were. The cell needs an opaque background or the scrolled
+ * columns show through it; the hover row repaints it to match.
+ */
+.af-so-table thead th:first-child,
+.af-so-table th[scope='row'] {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: inset -1px 0 0 var(--line);
+}
+.af-so-table tbody tr:hover th[scope='row'] {
+  background: var(--surface2);
+}

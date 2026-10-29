@@ -33,6 +33,7 @@ import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/dr
 import { classifySeconds } from '@/lib/draft/timer-presets'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
 import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 
 export const dynamic = 'force-dynamic'
 
@@ -578,6 +579,14 @@ export async function PATCH(
     )
   }
 
+  // The draft rules as members read them, before the writes — for the "What changed" card. Loaded
+  // lazily and best-effort (lib/league-rules-explainer/loadDraftRules.ts): it never fails the save.
+  const draftRules = await import('@/lib/league-rules-explainer/loadDraftRules').catch(() => null)
+  const draftRulesBefore = draftRules ? await draftRules.loadDraftRulesSafe(leagueId) : null
+  // The rookie lottery's own settings, only when this save writes them (the same keys the lottery
+  // config PUT diffs). Not suppressed by a completed draft: they govern the NEXT draw.
+  const lotteryRulesBefore = draftRules && orderModePatch?.lotteryConfig ? await draftRules.loadRookieLotteryRulesSafe(leagueId) : null
+
   try {
     if (hasOrderMode && orderModePatch) {
       await setDraftOrderModeAndLotteryConfig(leagueId, {
@@ -643,6 +652,18 @@ export async function PATCH(
         console.warn('[draft/settings PATCH] rounds override flag', e instanceof Error ? e.message : 'unknown error'),
       )
     }
+    // Published silently (no push / email): the league home's "What changed" card is how members hear.
+    await publishRuleChangesEvent({
+      leagueId,
+      actorUserId: userId,
+      section: 'draft',
+      changes: draftRules
+        ? [
+            ...draftRules.draftRuleChanges(draftRulesBefore, await draftRules.loadDraftRulesSafe(leagueId)),
+            ...(lotteryRulesBefore ? draftRules.rookieLotteryRuleChanges(lotteryRulesBefore, await draftRules.loadRookieLotteryRulesSafe(leagueId)) : []),
+          ]
+        : [],
+    })
     if (orphanManagerSettingTouched) {
       const orphanModeChanged = current.draftUISettings.orphanDrafterMode !== updated.draftUISettings.orphanDrafterMode
       const orphanEnabledChanged =

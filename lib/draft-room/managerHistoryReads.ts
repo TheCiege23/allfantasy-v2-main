@@ -20,6 +20,7 @@ import { buildAdpLookup, type AdpLookup } from './draftPulse'
 import { readLeaguePoolEntries } from './adpAtPick'
 import { CURRENT_DRAFT_SESSION_ORDER } from './currentDraftSession'
 import { summarizeManagerHistory, type HistoryPick, type ManagerHistorySummary } from './managerDraftHistory'
+import { draftMeanAges, loadDraftPlayerAges } from './draftPlayerAges'
 
 /** Past drafts considered per manager, newest first. */
 export const MAX_HISTORY_DRAFTS_PER_MANAGER = 5
@@ -180,7 +181,7 @@ export async function loadManagerHistoryForLeague(
 export async function loadManagerPastPicks(
   leagueId: string,
   rosterId: string,
-): Promise<Array<{ overall: number; adpAtPick: number | null; position: string }>> {
+): Promise<Array<{ overall: number; adpAtPick: number | null; position: string; age: number | null; draftMeanAge: number | null }>> {
   const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { platformUserId: true } })
   const identity = managerIdentity(roster?.platformUserId)
   if (!identity) return []
@@ -217,9 +218,17 @@ export async function loadManagerPastPicks(
     const entries = await readLeaguePoolEntries(lid)
     if (entries.length > 0) lookupByLeague.set(lid, buildAdpLookup(entries))
   }
+  // Youth lean (./draftAsMe.ts): every player picked in those drafts, aged, for the room's average.
+  const room = await prisma.draftPick
+    .findMany({ where: { sessionId: { in: order }, assetType: 'player' }, select: { sessionId: true, playerId: true } })
+    .catch(() => [] as Array<{ sessionId: string; playerId: string | null }>)
+  const ages = await loadDraftPlayerAges(current?.sportType, [...room, ...kept].map((p) => p.playerId))
+  const roomAge = draftMeanAges(room, ages)
   return kept.map((p) => ({
     overall: p.overall,
     position: p.position,
+    age: p.playerId ? ages.get(p.playerId) ?? null : null,
+    draftMeanAge: roomAge.get(p.sessionId) ?? null,
     adpAtPick:
       adpFromPickMetadata(p.pickMetadata) ??
       lookupByLeague.get(sessionLeague.get(p.sessionId)!)?.({ playerId: p.playerId, playerName: p.playerName, position: p.position }) ??

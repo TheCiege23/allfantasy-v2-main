@@ -1,4 +1,5 @@
 import { defineMessages } from '@/lib/i18n/messages'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Commissioner Hub cards in components/core-app/commissioner/ — WeeklyChecklist, RolloverWizard,
@@ -108,7 +109,7 @@ export const commissionerScreensMessages = defineMessages({
     autopilotKeeperDeadline: 'Keeper deadline',
     autopilotStillToSubmit: (n: number) => `${n} still to submit`,
     autopilotManagers: (n: number) => `${n} managers`,
-    autopilotLastReminder: (lastSent: string) => ` · last reminder ${new Date(lastSent).toLocaleString()}`,
+    autopilotLastReminder: (lastSent: string) => ` · last reminder ${new Date(lastSent).toLocaleString(getAppIntlLocale())}`,
     autopilotRemindNow: 'Remind now',
     autopilotYourDeadlines: 'Your deadlines',
     autopilotYourDeadlinesDesc:

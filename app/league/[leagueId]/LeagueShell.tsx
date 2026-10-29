@@ -6,6 +6,7 @@ import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNa
 import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
+import { usesNativeLineupScreen } from '@/lib/league/native/lineupScreenRouting'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { KickerValuePanel } from '@/components/league/KickerValuePanel'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
@@ -2324,8 +2325,9 @@ function LeagueTabRouter({
       case 'team':
       case 'roster':
       case 'squad':
-        // Dynasty keeps the classic Team tab for now: taxi, devy and college-rights moves live there.
-        if (!idpLeagueActive && !bestBall && !selectedLeague.isDynasty) return <NativeLineupScreen league={selectedLeague} userTeam={userTeam} onSelectTab={goTo} />
+        // Dynasty uses the lineup screen too (taxi and IR live there, with tap to swap). Devy and C2C keep the
+        // classic Team tab: their devy squad and college-rights moves live only there.
+        if (usesNativeLineupScreen({ leagueVariant: selectedLeague.leagueVariant, idp: idpLeagueActive, bestBall })) return <NativeLineupScreen league={selectedLeague} userTeam={userTeam} onSelectTab={goTo} />
         break
       case 'waivers':
         return <NativeWaiversScreen league={selectedLeague} />

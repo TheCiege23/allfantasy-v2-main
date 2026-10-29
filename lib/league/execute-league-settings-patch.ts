@@ -999,6 +999,15 @@ export async function executeLeagueSettingsPatch(
     dailyWaiverScheduleToStore = schedule
   }
 
+  /*
+   * The main draft's rules before the writes (lib/league-rules-explainer/loadDraftRules.ts), when this
+   * save can move one: they live on LeagueSettings and the draft session, which the league-row diff
+   * below cannot see. Dynamic import, best-effort: a failed read only drops the draft lines.
+   */
+  const draftRulesModule = await import('@/lib/league-rules-explainer/loadDraftRules').catch(() => null)
+  const draftRules = draftRulesModule?.patchTouchesDraftRules(body) ? draftRulesModule : null
+  const draftRulesBefore = draftRules ? await draftRules.loadDraftRulesSafe(leagueId) : null
+
   const updatedFieldNames: string[] = []
 
   const { data: leaguePatch, keys: leagueKeys } = buildLeagueUpdateFromBody(body)
@@ -1521,6 +1530,9 @@ export async function executeLeagueSettingsPatch(
   let ruleChanges: ReturnType<typeof diffRuleSnapshots> = []
   try {
     if (fresh) ruleChanges = diffRuleSnapshots(ruleSnapshotFromLeague(league), ruleSnapshotFromLeague(fresh))
+    if (draftRules && draftRulesBefore) {
+      ruleChanges = [...ruleChanges, ...draftRules.draftRuleChanges(draftRulesBefore, await draftRules.loadDraftRulesSafe(leagueId))]
+    }
   } catch (e) {
     console.warn('[executeLeagueSettingsPatch] rule change diff', e instanceof Error ? e.message : 'unknown error')
   }

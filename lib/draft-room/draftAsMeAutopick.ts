@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { buildDraftStyle, pickLikeManager, type DraftStyle } from './draftAsMe'
 import { loadManagerPastPicks } from './managerHistoryReads'
+import { loadDraftPlayerAges } from './draftPlayerAges'
 import { isAutopilotRoster } from '@/lib/live-draft-engine/instantAutopick'
 import { getViewerAutopickPreference } from '@/lib/live-draft-engine/LiveDraftAutopickPreferenceService'
 import type { AutopickFallbackPoolEntry } from '@/lib/live-draft-engine/autopickBestAvailableSubmit'
@@ -32,7 +33,11 @@ export function describeDraftStyle(style: DraftStyle): string {
       : style.reachDelta >= 3
         ? `you usually wait about ${Math.round(style.reachDelta)} picks past ADP for value`
         : 'you usually draft close to ADP'
-  return `Picked the way you draft: ${timing}${lean ? `, and ${Math.round(lean[1] * 100)}% of your picks are ${lean[0]}s` : ''}.`
+  const youth =
+    style.youthLean != null && Math.abs(style.youthLean) >= 1
+      ? `, and you draft about ${Math.round(Math.abs(style.youthLean))} year${Math.round(Math.abs(style.youthLean)) === 1 ? '' : 's'} ${style.youthLean > 0 ? 'younger' : 'older'} than the room`
+      : ''
+  return `Picked the way you draft: ${timing}${lean ? `, ${youth ? '' : 'and '}${Math.round(lean[1] * 100)}% of your picks are ${lean[0]}s` : ''}${youth}.`
 }
 
 /**
@@ -77,6 +82,8 @@ export async function tryDraftAsMePick(args: {
   eligible?: ReadonlySet<string> | null
   /** The draft's own ADP, keyed `name|position|team`, preferred over the pool's market ADP. */
   aiAdpByKey?: Record<string, number>
+  /** The draft's sport, for player ages. */
+  sport?: string | null
 }): Promise<DraftAsMePick | null> {
   const on =
     (args.draftSessionId ? await personalDraftAsMeOn(args.draftSessionId, args.rosterId).catch(() => false) : false) ||
@@ -85,7 +92,9 @@ export async function tryDraftAsMePick(args: {
   const style = buildDraftStyle(await loadManagerPastPicks(args.leagueId, args.rosterId))
   if (!style) return null
   const key = (e: AutopickFallbackPoolEntry) => `${e.playerName.trim().toLowerCase()}|${(e.position || '').toLowerCase()}|${(e.team || '').toLowerCase()}`
-  const board = args.board.map((e) => ({ ...e, adp: args.aiAdpByKey?.[key(e)] ?? e.adp }))
+  // Ages only matter when this manager has a youth lean; otherwise the board is not read for them.
+  const ages = style.youthLean != null ? await loadDraftPlayerAges(args.sport, args.board.map((e) => e.playerId)).catch(() => new Map<string, number>()) : new Map<string, number>()
+  const board = args.board.map((e) => ({ ...e, adp: args.aiAdpByKey?.[key(e)] ?? e.adp, age: e.playerId ? ages.get(e.playerId) ?? null : null }))
   const chosen = pickLikeManager({ style, overall: args.overall, board, ownPositions: args.ownPositions, eligible: args.eligible })
   if (!chosen) return null
   const original = args.board.find((e) => key(e) === key(chosen.player))

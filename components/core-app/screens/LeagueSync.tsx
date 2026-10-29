@@ -4,6 +4,7 @@ import SyncPauseButton from '../SyncPauseButton'
 import RemoveLeagueButton from '../RemoveLeagueButton'
 import type { LeagueSyncResult, SyncDataRow } from '@/lib/core-app/leagueSync'
 import '@/components/core-app/af-league-sync.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 38a·10 — is THIS league fresh, and what did we actually read.
@@ -31,7 +32,7 @@ function fmtDate(d: Date | string | null): string {
   if (!d) return '—'
   const date = typeof d === 'string' ? new Date(d) : d
   if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+  return date.toLocaleDateString(getAppIntlLocale(), { month: 'short', year: 'numeric' })
 }
 
 export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
@@ -104,7 +105,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         <div className="af-sy-alert" data-tone="bad">
           <span className="af-label">Last run never finished</span>
           <p>
-            The collector started at {new Date(orphanedRun.startedAt).toLocaleString()} and never
+            The collector started at {new Date(orphanedRun.startedAt).toLocaleString(getAppIntlLocale())} and never
             reported a result — no rows read, no rows written, no completion. That is a job that was
             killed mid-run, not one that ran and found nothing. Anything below dated before then is
             the last good read, not the current state.
@@ -122,7 +123,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         <div className="af-sy-alert" data-tone="warn" data-testid="league-sync-provider-gone">
           <span className="af-label">{platformLabel} no longer has this league</span>
           <p>
-            When we last asked {platformLabel} ({new Date(providerGone.checkedAt).toLocaleString()}), it
+            When we last asked {platformLabel} ({new Date(providerGone.checkedAt).toLocaleString(getAppIntlLocale())}), it
             said this league does not exist. That usually means it was deleted, or the commissioner
             started a new season under a new league ID. Nothing on this page is being refreshed until
             that changes. We check again once a day on our own; "Sync this league" above checks now.

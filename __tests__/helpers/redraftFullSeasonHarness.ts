@@ -18,7 +18,9 @@
  *   - playoffs: `generateNflRedraftPlayoffRuntimeBracket` (rules from `resolveCanonicalLeagueRules`),
  *     `scoreActivePlayoffRound`, `advanceNflRedraftPlayoffRuntimeRound`,
  *     `finalizeNflRedraftPlayoffRuntimeSeason`;
- *   - rollover: `renewRedraftLeague`.
+ *   - rollover: `renewRedraftLeague`, or for a dynasty league (`dynasty: true`, phase 8, 2026-10-29)
+ *     `ensureDynastyNextSeason` (next season's shell + every roster carried) and the rookie draft
+ *     order (`computeRookieDraftOrder`, worst to first).
  *
  * The only stand-ins: stat lines are generated (seeded, deterministic) instead of ingested, and the
  * week finalizer's seal is granted (it needs a live game slate) — `finalizeWeek` is the one injected dep.
@@ -48,6 +50,8 @@ import {
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 import { resolveNflRedraftScheduleRuntime } from '@/lib/schedule-runtime/resolveNflRedraftScheduleRuntime'
 import { renewRedraftLeague } from '@/lib/redraft/offseason/renewRedraftLeague'
+import { ensureDynastyNextSeason } from '@/lib/redraft/offseason/startDynastyNewSeason'
+import { computeRookieDraftOrder } from '@/lib/league/rookieDraftOrder'
 import type { InMemoryPrisma } from './inMemoryPrisma'
 
 export type SimSport = 'NFL' | 'MLB' | 'NBA' | 'NHL'
@@ -64,6 +68,8 @@ export type FullSeasonSimInput = {
   tieWeeks?: number[]
   /** Every playoff week ties too, so each playoff game is settled by its tiebreak. */
   tiePlayoffs?: boolean
+  /** A dynasty league: same season, but it rolls over by carrying every roster, not by a redraft. */
+  dynasty?: boolean
 }
 
 type Row = Record<string, any>
@@ -79,7 +85,8 @@ export type SimWeekSnapshot = {
 }
 
 export type FullSeasonSimResult = {
-  input: Required<Omit<FullSeasonSimInput, 'extraMatchup' | 'tieWeeks' | 'tiePlayoffs'>> & {
+  input: Required<Omit<FullSeasonSimInput, 'extraMatchup' | 'tieWeeks' | 'tiePlayoffs' | 'dynasty'>> & {
+    dynasty: boolean
     extraMatchup: ExtraMatchupSettings | null
     tieWeeks: number[]
     tiePlayoffs: boolean
@@ -116,7 +123,13 @@ export type FullSeasonSimResult = {
   }
   finalized: Awaited<ReturnType<typeof finalizeNflRedraftPlayoffRuntimeSeason>>
   seasonAtEnd: Row
+  /** The redraft renewal; never run for a dynasty league (its value is then a refusal placeholder). */
   renewal: Awaited<ReturnType<typeof renewRedraftLeague>>
+  /** A dynasty league's rollover: next season, every roster carried, and the rookie draft order. */
+  dynastyRollover: {
+    next: Awaited<ReturnType<typeof ensureDynastyNextSeason>>
+    rookieOrder: Awaited<ReturnType<typeof computeRookieDraftOrder>>
+  } | null
   previousDraftSlotOrder: DraftRuntimeSlot[]
   db: InMemoryPrisma
 }
@@ -298,14 +311,15 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
   const extraMatchup = input.extraMatchup ?? null
   const tieWeeks = input.tieWeeks ?? []
   const tiePlayoffs = input.tiePlayoffs ?? false
+  const dynasty = input.dynasty ?? false
   const daily = isDailySport(sport)
   // The first season each daily sport's opener is recorded for (dailySportSeasonStarts.ts).
   const seasonYear = sport === 'MLB' ? 2027 : 2026
-  const leagueId = `sim-${sport.toLowerCase()}-${teamCount}${medianGame ? '-median' : ''}${extraMatchup?.enabled ? '-extra' : ''}`
+  const leagueId = `sim-${sport.toLowerCase()}-${teamCount}${medianGame ? '-median' : ''}${extraMatchup?.enabled ? '-extra' : ''}${dynasty ? '-dynasty' : ''}`
   const commissionerId = 'user-1'
 
   // ─── League, created with the sport's real defaults. ───
-  const shape = redraftPlayoffShapeFor({ sport, leagueSize: teamCount, leagueType: 'redraft' })
+  const shape = redraftPlayoffShapeFor({ sport, leagueSize: teamCount, leagueType: dynasty ? 'dynasty' : 'redraft' })
   if (!shape) throw new Error(`no playoff shape for ${sport} ${teamCount}`)
   const concept =
     daily
@@ -329,8 +343,8 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
       userId: commissionerId,
       sport,
       season: seasonYear,
-      leagueType: 'redraft',
-      isDynasty: false,
+      leagueType: dynasty ? 'dynasty' : 'redraft',
+      isDynasty: dynasty,
       leagueSize: teamCount,
       platform: 'allfantasy',
       status: 'active',
@@ -685,10 +699,19 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
   const matchupsAtEnd = db.table('redraftPlayoffMatchup').filter((r) => r.seasonId === seasonId).map((r) => ({ ...r }))
 
   // ─── Rollover. ───
-  const renewal = await renewRedraftLeague(leagueId, commissionerId, { random: rngFor(seed, 'renew') })
+  let renewal: Awaited<ReturnType<typeof renewRedraftLeague>>
+  let dynastyRollover: FullSeasonSimResult['dynastyRollover'] = null
+  if (dynasty) {
+    renewal = { ok: false, status: 409, code: 'DYNASTY_LEAGUE', error: 'A dynasty league carries its rosters.' } as never
+    // Order first: it reads the season just played, before a new season exists.
+    const rookieOrder = await computeRookieDraftOrder(leagueId, 'worst_to_first')
+    dynastyRollover = { next: await ensureDynastyNextSeason(leagueId, seasonId), rookieOrder }
+  } else {
+    renewal = await renewRedraftLeague(leagueId, commissionerId, { random: rngFor(seed, 'renew') })
+  }
 
   return {
-    input: { sport, teamCount, medianGame, extraMatchup, seed, tieWeeks, tiePlayoffs },
+    input: { sport, teamCount, medianGame, extraMatchup, seed, tieWeeks, tiePlayoffs, dynasty },
     leagueId,
     seasonId,
     seasonYear,
@@ -706,6 +729,7 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
     finalized,
     seasonAtEnd,
     renewal,
+    dynastyRollover,
     previousDraftSlotOrder: slotOrder.map((s) => ({ ...s, rosterId: `generic-${s.slot}` })),
     db,
   }

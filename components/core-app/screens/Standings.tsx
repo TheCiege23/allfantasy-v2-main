@@ -23,6 +23,7 @@ import { formatOdds, type StandingsOdds } from '@/lib/core-app/standingsOdds'
 import type { LineupEfficiency } from '@/lib/core-app/lineupEfficiency'
 import type { DraftOrderPreview } from '@/lib/core-app/standingsDraftOrder'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 38a·7 — Standings: the league table and AllFantasy's power ranking, side by side.
@@ -85,7 +86,7 @@ function n1(v: number): string {
 
 /** "1,412.6" — grouped, one decimal. The locale is fixed so server and client render the same string. */
 function pts1(v: number): string {
-  return v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  return v.toLocaleString(getAppIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
 const ZONE_WORD: Record<Zone, string> = {
@@ -315,7 +316,7 @@ function DraftOrderSection({ order }: { order: DraftOrderPreview }) {
               {p.isYou ? <span className="af-stb-you">You</span> : null}
             </span>
             <span className="af-st-draft-rec af-num">
-              {p.record} · {p.pointsFor.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} PF
+              {p.record} · {p.pointsFor.toLocaleString(getAppIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} PF
             </span>
             {lottery ? (
               <span className="af-st-draft-odds af-num">
@@ -584,7 +585,7 @@ export function Standings({
               {projection.available ? (
                 <>
                   <p className="af-st-proj-v">
-                    <span className="af-num">~{Math.round(projection.data.mid).toLocaleString('en-US')}</span>
+                    <span className="af-num">~{Math.round(projection.data.mid).toLocaleString(getAppIntlLocale())}</span>
                     <span className="af-st-proj-range af-num">
                       {projection.data.weeksRemaining} {copy(projection.data.weeksRemaining === 1 ? 'game' : 'games')} {copy('left')}
                     </span>
@@ -599,12 +600,12 @@ export function Standings({
                     <div className="af-st-projrow" data-tone="good">
                       <span className="af-label">{copy('High')}</span>
                       <span className="af-st-projrow-note">{copy('Top of the projected range')}</span>
-                      <span className="af-num">{Math.round(projection.data.high).toLocaleString('en-US')}</span>
+                      <span className="af-num">{Math.round(projection.data.high).toLocaleString(getAppIntlLocale())}</span>
                     </div>
                     <div className="af-st-projrow" data-tone="bad">
                       <span className="af-label">{copy('Low')}</span>
                       <span className="af-st-projrow-note">{copy('Bottom of the projected range')}</span>
-                      <span className="af-num">{Math.round(projection.data.low).toLocaleString('en-US')}</span>
+                      <span className="af-num">{Math.round(projection.data.low).toLocaleString(getAppIntlLocale())}</span>
                     </div>
                   </div>
                 </>
