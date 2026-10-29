@@ -59,7 +59,7 @@ function NavGroupBar({ groups, currentPath }: { groups: NavGroup[]; currentPath:
     href === "/admin" ? currentPath.startsWith("/admin") : isNavItemActive(currentPath, href)
 
   return (
-    <div ref={barRef} className="hidden gap-1 overflow-x-auto pb-1 lg:flex">
+    <div ref={barRef} className="hidden flex-wrap gap-1 pb-1 lg:flex">
       {groups.map((group) => {
         const groupActive = group.items.some((item) => isItemActive(item.href))
         const pillStyle = groupActive
