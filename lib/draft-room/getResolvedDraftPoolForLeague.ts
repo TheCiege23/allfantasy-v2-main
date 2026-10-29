@@ -1,3 +1,4 @@
+import { buildObservedAdpIdentityIndex, observedAdpCanonicalId, observedAdpForPlayer } from './observedAdpIdentity'
 import { nflDraftSeasonLine } from './nflDraftSeasonLine'
 import { observedAdpSeason } from './observedAdpSeason'
 import { reconcileCurrentDraftSeeds } from './reconcileCurrentDraftSeeds'
@@ -410,6 +411,7 @@ function adpLookupKeyLoose(name: string, position: string): string {
 }
 
 type AveragedAdpRow = {
+  canonicalPlayerIds?: string[]
   name: string
   position: string
   team: string | null
@@ -511,6 +513,7 @@ async function loadLatestAveragedAdpRowsForScorings(
       source: { notIn: sourceExclusions },
     },
     select: {
+      playerId: true,
       playerName: true,
       position: true,
       team: true,
@@ -520,7 +523,7 @@ async function loadLatestAveragedAdpRowsForScorings(
     take: 30000,
   })
 
-  const perPlayerSource = new Map<string, { name: string; position: string; team: string | null; perSource: Map<string, number[]> }>()
+  const perPlayerSource = new Map<string, { name: string; position: string; team: string | null; canonicalPlayerIds: Set<string>; perSource: Map<string, number[]> }>()
   for (const row of rows) {
     const name = String(row.playerName ?? '').trim()
     const position = String(row.position ?? '').trim().toUpperCase()
@@ -532,10 +535,12 @@ async function loadLatestAveragedAdpRowsForScorings(
         name,
         position,
         team,
+        canonicalPlayerIds: new Set<string>(),
         perSource: new Map<string, number[]>(),
       })
     }
     const bucket = perPlayerSource.get(key)!
+    if (observedAdpCanonicalId(sport, String(row.playerId ?? ''))) bucket.canonicalPlayerIds.add(row.playerId)
     const sourceKey = String(row.source ?? '').trim().toLowerCase() || 'unknown'
     const sourceValues = bucket.perSource.get(sourceKey) ?? []
     sourceValues.push(Number(row.adp))
@@ -553,6 +558,7 @@ async function loadLatestAveragedAdpRowsForScorings(
     if (!sourceMeans.length) continue
     const avg = sourceMeans.reduce((acc, v) => acc + v, 0) / sourceMeans.length
     out.push({
+      ...(item.canonicalPlayerIds.size ? { canonicalPlayerIds: [...item.canonicalPlayerIds] } : {}),
       name: item.name,
       position: item.position,
       team: item.team,
@@ -1178,6 +1184,13 @@ async function buildResolvedDraftPoolForLeague(
     () => [] as AveragedAdpRow[],
   )
   perfAdpRows()
+  const canonicalAdpIds = [...new Set(averagedAdpRows.flatMap(row => (row.canonicalPlayerIds ?? [])
+    .flatMap(value => { const id = observedAdpCanonicalId(sport, value); return id ? [id] : [] })))]
+  const adpIdentities = canonicalAdpIds.length ? await prisma.playerIdentityMap.findMany({
+    where: { sport, id: { in: canonicalAdpIds } },
+    select: { id: true, sport: true, canonicalName: true, rollingInsightsId: true },
+  }).catch(() => []) : []
+  const observedAdpByRiId = buildObservedAdpIdentityIndex(sport, averagedAdpRows, adpIdentities)
   const averagedAdpStrict = new Map<string, number>()
   const averagedAdpLoose = new Map<string, number>()
   for (const row of averagedAdpRows) {
@@ -2350,6 +2363,7 @@ async function buildResolvedDraftPoolForLeague(
     const averagedAdpHit =
       averagedAdpStrict.get(adpLookupKey(name ?? '', position ?? '', team ?? null)) ??
       averagedAdpLoose.get(adpLookupKeyLoose(name ?? '', position ?? '')) ??
+      observedAdpForPlayer(observedAdpByRiId, rollingInsightsIdOfPoolRow(poolMatch), name ?? '') ??
       null
     const resolvedAdp =
       resolvePreferredAdp(row.adp ?? null, averagedAdpHit) ??
