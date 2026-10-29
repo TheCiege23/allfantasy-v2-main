@@ -47,7 +47,7 @@ import { RAIL_WARM_DWELL_MS, railAutoPrefetchEnabled, shouldWarmRailLeague } fro
 import { speculationGate } from '@/components/core-app/speculationGate'
 import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
 import { CORE_NAV_ATTRIBUTE, CoreNavPendingContext, pendingCoreNavTarget } from '@/components/core-app/coreNavPending'
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -924,7 +924,18 @@ function navSections(props: AfCoreShellProps): NavSection[] {
  * `home` is included even when a league is selected: on a phone the league
  * switcher is off-screen, so the way back to the league list has to be here.
  */
-const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'matchup', 'trades', 'live']
+const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'matchup', 'trades']
+
+/*
+ * ⚠ "LEAGUES" IS A BAR SLOT, NOT A LINK, AND IT TOOK LIVE'S PLACE (2026-10-29). A user on Android
+ * reported that getting into their leagues was "too complicated and not straightforward": the bar
+ * had no Leagues entry, the floating pill (`.af-rail-handle`) read as an action button rather than
+ * navigation, and the text route was the last group of More. The tab opens the SAME league tray
+ * the pill does — not /leagues, whose ProductShell chrome swaps the whole header and bar and was
+ * itself part of the confusion. Trades stays pinned (see mobile-trade-access.test.ts); Live moves
+ * to More → This week, one tap further.
+ */
+const MOBILE_BAR_LEAGUES_AFTER_INDEX = 0
 
 /**
  * Stand-ins, in order, for bar slots whose item is hidden. Matchup (and Your week)
@@ -2419,21 +2430,38 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         </nav>
       ) : (
         <nav className="af-tabbar" aria-label={language === 'es' ? 'Principal' : 'Main'}>
-          {mobileItems.map((item) => (
-            <Link
-              key={item.key}
-              href={item.href}
-              className="af-tabbar-item"
-              data-core-nav=""
-              data-active={item.key === active}
-              aria-current={item.key === active ? 'page' : undefined}
-            >
-              <span className="af-tabbar-glyph" aria-hidden>
-                <CoreNavIcon navKey={item.key} size={20} />
-                {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
-              </span>
-              <span className="af-tabbar-label">{copy(item.label)}</span>
-            </Link>
+          {mobileItems.map((item, index) => (
+            <Fragment key={item.key}>
+              <Link
+                href={item.href}
+                className="af-tabbar-item"
+                data-core-nav=""
+                data-active={item.key === active}
+                aria-current={item.key === active ? 'page' : undefined}
+              >
+                <span className="af-tabbar-glyph" aria-hidden>
+                  <CoreNavIcon navKey={item.key} size={20} />
+                  {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
+                </span>
+                <span className="af-tabbar-label">{copy(item.label)}</span>
+              </Link>
+              {index === MOBILE_BAR_LEAGUES_AFTER_INDEX ? (
+                <button
+                  type="button"
+                  className="af-tabbar-item"
+                  data-testid="af-tabbar-leagues"
+                  data-active={mobileRailOpen}
+                  aria-expanded={railOpen}
+                  aria-controls="af-rail"
+                  onClick={toggleRail}
+                >
+                  <span className="af-tabbar-glyph" aria-hidden>
+                    <CoreNavIcon navKey="my-leagues" size={20} />
+                  </span>
+                  <span className="af-tabbar-label">{copy('Leagues')}</span>
+                </button>
+              ) : null}
+            </Fragment>
           ))}
           <button
             type="button"
