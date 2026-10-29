@@ -1,3 +1,5 @@
+import { nflDraftSeasonLine } from './nflDraftSeasonLine'
+import { observedAdpSeason } from './observedAdpSeason'
 import { reconcileCurrentDraftSeeds } from './reconcileCurrentDraftSeeds'
 import { loadStoredDraftSeasonStats } from './storedDraftSeasonStats'
 /**
@@ -458,6 +460,9 @@ async function loadLatestAveragedAdpRowsForScorings(
   season?: number,
   allowLiveImport = true,
 ): Promise<AveragedAdpRow[]> {
+  // The importer records current market observations. Forward-season drafts read that
+  // current board; historical drafts retain their own year and the seven-day freshness gate.
+  const marketSeason = observedAdpSeason(season)
   const sourceExclusions = sport === 'NFL' && season != null && !('in' in scoring && scoring.in.some(value => QB_HEAVY_ADP_SCORINGS.includes(value)))
     ? [...ADP_IMPORT_SOURCES_EXCLUDED, 'fantrax', 'sleeper', 'espn', 'mfl', 'nffc']
     : ADP_IMPORT_SOURCES_EXCLUDED
@@ -467,7 +472,7 @@ async function loadLatestAveragedAdpRowsForScorings(
       where: {
         sport,
         format,
-        ...(season != null ? { season } : {}),
+        ...(marketSeason != null ? { season: marketSeason } : {}),
         ...(observedSince ? { createdAt: { gte: observedSince } } : {}),
         scoring,
         source: { notIn: sourceExclusions },
@@ -2038,6 +2043,9 @@ async function buildResolvedDraftPoolForLeague(
     mismatchCollector,
   )
   perfSprMaps()
+  const nflStatScorer = sport === 'NFL' && league
+    ? (await import('@/lib/redraft/scoringEngine')).buildLeagueStatScorer(league)
+    : null
   const storedSeasonStats = await loadStoredDraftSeasonStats(String(sport),
     poolRows.flatMap((row) => { const id = rollingInsightsIdOfPoolRow(row); return id ? [id] : [] }),
     Number.isInteger(league?.season) ? Number(league?.season) : new Date().getUTCFullYear(),
@@ -2284,8 +2292,13 @@ async function buildResolvedDraftPoolForLeague(
           })
         : null
 
+    const observedNfl = sport === 'NFL' ? nflDraftSeasonLine(
+      effectiveRiSlice,
+      idn ? riDetailByPlayerId.get(idn.rollingInsightsPlayerId)?.stats : undefined,
+      position, Number(nflStatsSeason), nflStatScorer,
+    ) : null
     const nflDraftProjectionSplits =
-      sport === 'NFL'
+      observedNfl?.splits ?? (sport === 'NFL'
         ? (buildNflDraftProjectionSplits({
             position,
             statsJson: idn ? riDetailByPlayerId.get(idn.rollingInsightsPlayerId)?.stats ?? null : null,
@@ -2298,7 +2311,7 @@ async function buildResolvedDraftPoolForLeague(
             projectedPointsPerGame:
               resolvedAnalytics?.fantasyPointsPerGame ?? analytics?.fantasyPointsPerGame ?? null,
           }) ?? emptyNflDraftProjectionSplits())
-        : null
+        : null)
 
     /** E.1.5: real headshot lookup from the backfilled SportsPlayer cache, keyed by
      * (normalizedName | normalizedPosition). Wins over synth/data-URI/team-logo URLs that the
@@ -2516,13 +2529,14 @@ async function buildResolvedDraftPoolForLeague(
       school: row.school ?? promoted?.school ?? null,
       college: row.college ?? promoted?.school ?? null,
       fantasyPointsPerGame:
+        observedNfl?.fantasyPointsPerGame ??
         resolvedAnalytics?.fantasyPointsPerGame ??
         analytics?.fantasyPointsPerGame ??
         sprSupplementFppg ??
         (row as RawRow).fantasyPointsPerGame ??
         undefined,
       nbaDraftStats: sport === 'NBA' ? (storedSeason?.nbaDraftStats ?? sprAug?.nbaDraftStats ?? null) : null,
-      statSeason: storedSeason?.statSeason ?? null,
+      statSeason: observedNfl?.season ?? storedSeason?.statSeason ?? null,
       seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (storedSeason?.seasonStatLine ?? sprAug?.seasonStatLine ?? null) : null,
       afProjectionPerGame: afProjectionsByRiId?.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null,
       lifetimeValue:

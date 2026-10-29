@@ -313,6 +313,7 @@ async function handle(req: NextRequest) {
       season: result.season,
       week: result.week,
       providerRowsRead: result.providerRowsRead,
+      providerRowsReadBySport: result.providerRowsReadBySport,
       providerRowsWritten: result.providerRowsWritten,
       consensusRowsAttempted: result.consensusRowsAttempted,
       consensusRowsWritten: result.consensusRowsWritten,

@@ -60,6 +60,13 @@ export interface PlayerStatSnapshotModel {
   pointsPerGame?: number | null
   reboundsPerGame?: number | null
   minutesPerGame?: number | null
+  assistsPerGame?: number | null
+  stealsPerGame?: number | null
+  blocksPerGame?: number | null
+  threePointersMadePerGame?: number | null
+  fieldGoalPercentage?: number | null
+  freeThrowPercentage?: number | null
+  gamesPlayed?: number | null
   lifetimeValue?: number | null
   /** Rolling Insights numbers when RI did not replace snapshot PPG (supplemental only). */
   rollingInsightsSupplemental?: {

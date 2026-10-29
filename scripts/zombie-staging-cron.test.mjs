@@ -181,3 +181,13 @@ test('quality maintenance scopes roster and stats calls without changing league 
   assert.equal(summarizeResult({ ok: true, written: 5, unresolved: 1 }, jobs.find(j => j.kind === 'season_stats')).unresolved, 1)
   assert.equal(summarizeResult({ ok: true, results: { thesportsdb_rosters: { NBA: { players: 5, deferredTeams: 2 } } } }, { kind: 'rosters', sport: 'NBA' }).status, 'partial')
 })
+
+test('daily quality refresh includes one bounded four-sport ADP ingest and detects missing feeds', () => {
+  const jobs = qualityJobs(2026).filter(job => job.kind === 'market_adp')
+  assert.equal(jobs.length, 1)
+  assert.equal(jobs[0].path, '/api/cron/adp-refresh?sport=NFL,NBA,NHL,MLB')
+  const body = { ok: true, providerRowsReadBySport: { NFL: 330, NBA: 440, NHL: 880, MLB: 620 }, providerRowsWritten: 0 }
+  assert.equal(summarizeResult(body, jobs[0]).status, 'success')
+  assert.equal(summarizeResult({ ...body, providerRowsReadBySport: { ...body.providerRowsReadBySport, NHL: 0 } }, jobs[0]).status, 'failed')
+  assert.equal(summarizeResult({ ok: true }, jobs[0]).status, 'failed')
+})

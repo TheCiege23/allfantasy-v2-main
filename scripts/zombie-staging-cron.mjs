@@ -57,6 +57,7 @@ export function qualityJobs(season) {
         : '/api/cron/import-stat-lines?sport=' + sport + '&season=' + year,
     }))),
     ...photoJobs(),
+    { name: 'market_adp_four_sports', sport: 'NFL', kind: 'market_adp', path: '/api/cron/adp-refresh?sport=NFL,NBA,NHL,MLB' },
   ]
 }
 
@@ -64,6 +65,11 @@ export function qualityJobs(season) {
 export function summarizeResult(body, job) {
   if (body?.deferredForBudget) return { status: 'partial', rows: 0 }
   if (body?.ok !== true) return { status: 'failed', rows: 0 }
+  if (job.kind === 'market_adp') {
+    const reads = body.providerRowsReadBySport
+    if (!reads || !SPORTS.every(sport => Number.isInteger(reads[sport]) && reads[sport] > 0)) return { status: 'failed', rows: 0 }
+    return { status: 'success', rows: SPORTS.reduce((sum, sport) => sum + reads[sport], 0) }
+  }
   if (job.kind === 'sleeper_rows') {
     const row = body.sleeperRows
     if (!row || row.feedUnavailable || !Number.isInteger(row.updated) || !Number.isInteger(row.created)) return { status: 'failed', rows: 0 }

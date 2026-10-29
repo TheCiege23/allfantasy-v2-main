@@ -201,7 +201,8 @@ export function normalizeDraftPlayer(
               : null,
     adp: adp ?? null,
     byeWeek: bye ?? null,
-    fantasyPointsPerGame: fppg,
+    fantasyPointsPerGame: sportNorm === 'NFL' && raw.statSeason && raw.nflDraftProjectionSplits?.projectedPointsPerGame != null
+      ? raw.nflDraftProjectionSplits.projectedPointsPerGame : fppg,
     ...(sportNorm === 'NBA' && raw.nbaDraftStats ? raw.nbaDraftStats : {}),
     ...((sportNorm === 'MLB' || sportNorm === 'NHL') && raw.seasonStatLine ? raw.seasonStatLine : {}),
     ...((sportNorm === 'MLB' || sportNorm === 'NHL') &&

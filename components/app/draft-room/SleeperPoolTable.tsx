@@ -282,6 +282,7 @@ function SleeperRow(props: SleeperRowProps) {
               <div className="flex min-w-0 items-center gap-1">
                 <PositionChip pos={p.position} />
                 {p.team ? <span className="truncate text-[11px] text-white/38">{p.team}</span> : null}
+                {p.display?.stats?.seasonLabel ? <span className="shrink-0 text-[10px] text-cyan-200/70" title="Recorded season statistics. Projections are labeled separately.">{p.display.stats.seasonLabel}</span> : null}
               </div>
               {showAi ? (
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1">

@@ -22,6 +22,8 @@ export type SnapshotAnalyticsSlice = {
 }
 
 export type RollingInsightsSeasonSlice = {
+  /** Box score from this exact selected season, including identity-checked fallback rows. */
+  stats?: unknown
   fantasyPointsPerGame: number | null
   fantasyPointsSeason: number | null
   gamesPlayed: number | null
@@ -431,6 +433,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
           playerId: true,
           season: true,
           fantasyPointsPerGame: true,
+          stats: true,
           fantasyPoints: true,
           gamesPlayed: true,
           updatedAt: true,
@@ -454,6 +457,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
             gamesPlayed: statsRow.gamesPlayed ?? null,
             season: statsRow.season ?? null,
             updatedAt: statsRow.updatedAt,
+            stats: statsRow.stats,
           })
           diagnostics.exactIdHits += 1
         }
@@ -510,6 +514,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
             playerId: true,
             season: true,
             fantasyPointsPerGame: true,
+          stats: true,
             fantasyPoints: true,
             gamesPlayed: true,
             updatedAt: true,
@@ -537,6 +542,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
                 gamesPlayed: statsRow.gamesPlayed ?? null,
                 season: statsRow.season ?? null,
                 updatedAt: statsRow.updatedAt,
+            stats: statsRow.stats,
               })
               diagnostics.namePositionHits += 1
             }
@@ -563,6 +569,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
         position: true,
         season: true,
         fantasyPointsPerGame: true,
+          stats: true,
         fantasyPoints: true,
         gamesPlayed: true,
         updatedAt: true,
@@ -606,6 +613,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
             gamesPlayed: statsRow.gamesPlayed ?? null,
             season: statsRow.season ?? null,
             updatedAt: statsRow.updatedAt,
+            stats: statsRow.stats,
           })
           diagnostics.namePositionHits += 1
         }
