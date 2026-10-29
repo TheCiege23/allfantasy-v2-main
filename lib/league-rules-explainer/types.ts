@@ -124,6 +124,25 @@ export type RuleSnapshot = {
   taxiMaxYears?: number | null
   /** `settings.taxi_stealing` (lib/taxi/taxiStealing.ts): null when off; claims 0 = no limit. */
   taxiStealing?: { hours: number; claims: number } | null
+  /** Dynasty: how the rookie draft order is set (`DynastyLeagueConfig.rookiePickOrderMethod`; read path). */
+  rookieDraftOrder?: string | null
+  rookieDraftRounds?: number | null
+  /** `linear` | `snake`. */
+  rookieDraftType?: string | null
+  /** Days after an automatic open that the rookie draft starts by itself; null = the commissioner starts it. */
+  rookieDraftAutoStartDays?: number | null
+  /** Dynasty: what a confirmed tanking strike costs (lib/integrity/tankingPenalties.ts). */
+  tankingPenalty?: TankingPenaltyRule | null
+}
+
+/** A dynasty league's tanking penalty as a rule, non-secret. */
+export type TankingPenaltyRule = {
+  enabled: boolean
+  penalty: string
+  atStrike: number
+  pickRound: number
+  lotteryOddsCutPct: number
+  faabPercent: number
 }
 
 /** Every snapshot key that can appear in a change. */

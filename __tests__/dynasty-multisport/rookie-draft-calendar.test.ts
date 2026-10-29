@@ -82,11 +82,11 @@ describe('rookie-draft windows, per sport', () => {
 describe('commissioner settings', () => {
   it('auto-open is OFF unless a commissioner turns it on', () => {
     expect(ROOKIE_DRAFT_AUTO_OPEN_DEFAULT).toBe(false)
-    expect(readRookieDraftCalendarSettings({})).toEqual({ autoOpen: false, customOpenDate: null })
+    expect(readRookieDraftCalendarSettings({})).toEqual({ autoOpen: false, customOpenDate: null, autoStartDays: null })
     expect(readRookieDraftCalendarSettings(null).autoOpen).toBe(false)
     expect(
       readRookieDraftCalendarSettings({ [ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]: { autoOpen: true, customOpenDate: '2027-05-10' } }),
-    ).toEqual({ autoOpen: true, customOpenDate: '2027-05-10' })
+    ).toEqual({ autoOpen: true, customOpenDate: '2027-05-10', autoStartDays: null })
   })
 
   it('accepts only real YYYY-MM-DD dates', () => {
@@ -166,5 +166,21 @@ describe('resolveRookieDraftAutoOpen', () => {
   it('a custom date alone is not a switch', () => {
     const dateOnly = { [ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]: { customOpenDate: '2027-06-01' } }
     expect(resolveRookieDraftAutoOpen({ settings: dateOnly, commissionerPlan: true, offseasonStartedAt: after }).source).toBe('plan_default')
+  })
+})
+
+describe('starting an opened rookie draft by itself (phase 6, 2026-10-29)', () => {
+  it('offers 3, 7 or 14 days and nothing else', async () => {
+    const { normalizeAutoStartDays } = await import('@/lib/dynasty-core/rookieDraftCalendar')
+    expect([3, 7, 14].map(normalizeAutoStartDays)).toEqual([3, 7, 14])
+    expect([0, 5, '7', null, undefined].map(normalizeAutoStartDays)).toEqual([null, null, null, null, null])
+    expect(readRookieDraftCalendarSettings({ [ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]: { autoStartDays: 7 } }).autoStartDays).toBe(7)
+  })
+
+  it('starts that many days after the day it opened, at 8 pm Eastern, and says so plainly', async () => {
+    const { rookieDraftAutoStartAt, describeRookieDraftStart } = await import('@/lib/dynasty-core/rookieDraftCalendar')
+    const start = rookieDraftAutoStartAt(new Date('2027-05-01T12:00:00Z'), 7)
+    expect(start.toISOString()).toBe('2027-05-09T00:00:00.000Z')
+    expect(describeRookieDraftStart(start)).toBe('Saturday, May 8 at 8:00 PM ET')
   })
 })

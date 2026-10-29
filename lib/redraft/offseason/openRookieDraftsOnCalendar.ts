@@ -21,15 +21,26 @@
  *
  * Then `createNextLeagueDraft` creates it exactly as the button does — rosters carried, order set
  * (stored/auto-run lottery, live order, worst-to-first), league in `pre_draft` — and members are told
- * through the same league announcement that names the champion. Picking is NOT started: the
- * commissioner still starts the draft.
+ * through the same league announcement that names the champion.
+ *
+ * Picking starts by itself only when the commissioner chose "start it N days after it opens"
+ * (`autoStartDays`, phase 6 2026-10-29): the draft's date is set to that evening and Autostart is
+ * switched on, so the minute draft tick (`startScheduledDynastyDrafts`) starts it then, and the
+ * announcement names the time. Otherwise the commissioner still starts the draft.
  */
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { createNextLeagueDraft } from '@/lib/live-draft-engine/createNextLeagueDraft'
 import { publishLeagueFanoutEvent } from '@/lib/league-events/publisher'
-import { readExplicitAutoOpen, resolveRookieDraftAutoOpen, resolveRookieDraftWindow } from '@/lib/dynasty-core/rookieDraftCalendar'
+import {
+  describeRookieDraftStart,
+  readExplicitAutoOpen,
+  readRookieDraftCalendarSettings,
+  resolveRookieDraftAutoOpen,
+  resolveRookieDraftWindow,
+  rookieDraftAutoStartAt,
+} from '@/lib/dynasty-core/rookieDraftCalendar'
 import { commissionerHasRookieDraftAutoOpenPlan } from '@/lib/dynasty-core/rookieDraftAutoOpenPlan'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { isDynastyFamilyLeague } from './carryDynastyRosters'
@@ -219,6 +230,17 @@ export async function openDynastyRookieDraftsOnCalendar(options: {
         continue
       }
 
+      // The commissioner's "start it N days after it opens": the date and Autostart the draft tick reads.
+      const autoStartDays = readRookieDraftCalendarSettings(c.league.settings).autoStartDays
+      const startsAt = autoStartDays ? rookieDraftAutoStartAt(options.now, autoStartDays) : null
+      if (startsAt) {
+        await prisma.leagueSettings.upsert({
+          where: { leagueId: c.leagueId },
+          create: { leagueId: c.leagueId, draftDateUtc: startsAt, autostart: true },
+          update: { draftDateUtc: startsAt, autostart: true },
+        })
+      }
+
       // Re-read: `createNextLeagueDraft` has just written the lifecycle metadata.
       const fresh = await prisma.league.findUnique({ where: { id: c.leagueId }, select: { lifecycleMetadata: true } })
       await prisma.league.update({
@@ -233,6 +255,7 @@ export async function openDynastyRookieDraftsOnCalendar(options: {
               openedAt: options.now.toISOString(),
               windowSource: window.source,
               orderSource: created.orderSource,
+              ...(startsAt ? { startsAt: startsAt.toISOString() } : {}),
             },
           } as Prisma.InputJsonValue,
         },
@@ -242,14 +265,24 @@ export async function openDynastyRookieDraftsOnCalendar(options: {
         leagueId: c.leagueId,
         eventType: 'rookie_draft_opened',
         title: `The ${created.season} rookie draft is open`,
-        message:
+        message: `${
           created.orderSource === 'lottery'
-            ? `The ${created.season} rookie draft has been created and its order set by the weighted lottery. Your commissioner will start it — check the draft room for the order and settings.`
-            : `The ${created.season} rookie draft has been created. Your commissioner will start it — check the draft room for the order and settings.`,
+            ? `The ${created.season} rookie draft has been created and its order set by the weighted lottery.`
+            : `The ${created.season} rookie draft has been created.`
+        } ${
+          startsAt
+            ? `It starts by itself on ${describeRookieDraftStart(startsAt)} — set your queue before then, or Auto-pick picks for you when your clock runs out.`
+            : 'Your commissioner will start it — check the draft room for the order and settings.'
+        }`,
         category: 'league_announcements',
         visibility: 'all_members',
         actorUserId: options.actorUserId,
-        meta: { seasonId: created.seasonId, draftSessionId: created.sessionId, orderSource: created.orderSource },
+        meta: {
+          seasonId: created.seasonId,
+          draftSessionId: created.sessionId,
+          orderSource: created.orderSource,
+          ...(startsAt ? { startsAt: startsAt.toISOString() } : {}),
+        },
         dedupeKey: `rookie-draft-open:${c.id}`,
         actionHref: `/league/${c.leagueId}/draft`,
         actionLabel: 'Open draft room',

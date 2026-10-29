@@ -6,7 +6,7 @@ import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConf
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { HEADLINE_STATS } from './explain'
-import { normalizeRosterSlots, ruleSnapshotFromLeague, type RulesLeagueRow } from './snapshot'
+import { dynastyRulesFromConfig, normalizeRosterSlots, ruleSnapshotFromLeague, type RulesLeagueRow } from './snapshot'
 import { parseSettingsChangeEvents } from './view'
 import type { RuleSnapshot, SettingsChangeEvent } from './types'
 
@@ -19,7 +19,7 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
   const snapshot = ruleSnapshotFromLeague(row)
   const sport = snapshot.sport
 
-  const [slots, scoring, guillotine, taxi] = await Promise.all([
+  const [slots, scoring, guillotine, taxi, rookieDraft] = await Promise.all([
     (async () => {
       const registry = getRosterEngineRegistry()
       if (!registry.isSupported(sport as never)) return null
@@ -29,7 +29,15 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
     snapshot.format === 'guillotine' ? getGuillotineConfig(leagueId).catch(() => null) : Promise.resolve(null),
     // The taxi squad lives in the dynasty config (Devy / C2C override the slot count), not on the row.
     snapshot.format === 'dynasty' ? getEffectiveTaxiSettings(leagueId).catch(() => null) : Promise.resolve(null),
+    // The rookie draft's order, rounds and type, also on the dynasty config.
+    snapshot.format === 'dynasty' && !snapshot.importedFrom
+      ? prisma.dynastyLeagueConfig
+          .findUnique({ where: { leagueId }, select: { rookiePickOrderMethod: true, rookieDraftRounds: true, rookieDraftType: true } })
+          .then(dynastyRulesFromConfig)
+          .catch(() => null)
+      : Promise.resolve(null),
   ])
+  if (rookieDraft) Object.assign(snapshot, rookieDraft)
 
   if (taxi) {
     snapshot.taxiSlots = taxi.taxiSlotCount
