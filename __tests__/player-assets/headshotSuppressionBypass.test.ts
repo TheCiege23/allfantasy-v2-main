@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
   $queryRaw: vi.fn(async () => [] as unknown[]),
+  sportsDataCache: { findUnique: vi.fn(async () => null), upsert: vi.fn(async () => ({})) },
   player: { findMany: vi.fn(async (_args?: unknown) => [] as unknown[]), update: vi.fn(async () => ({})) },
   sportsPlayer: {
     findMany: vi.fn(async (_args?: unknown) => [] as unknown[]),
