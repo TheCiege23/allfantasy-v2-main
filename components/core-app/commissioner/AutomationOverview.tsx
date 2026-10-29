@@ -149,7 +149,7 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
                   <p>{t('Saving will:', 'Al guardar:')}</p>
                   <ul>
                     {preview.changes.map((c) => (
-                      <li key={c.label}>{es ? c.labelEs : c.label}</li>
+                      <li key={c.label}>{t(c.label, c.labelEs)}</li>
                     ))}
                   </ul>
                 </>
@@ -157,7 +157,7 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
               {preview.needsPlan.length > 0 ? (
                 <p>
                   {t('Needs AF Commissioner, so not included: ', 'Requiere AF Commissioner, así que no se incluye: ')}
-                  {(es ? preview.needsPlanEs : preview.needsPlan).join(', ')}.
+                  {t(preview.needsPlan.join(', '), preview.needsPlanEs.join(', '))}.
                 </p>
               ) : null}
               {preview.changes.length > 0 ? (
@@ -185,12 +185,12 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
                           checked={r.state === 'on'}
                           disabled={busy}
                           onChange={() => void flip(r)}
-                          aria-label={es ? LABELS_ES[r.key] ?? r.label : r.label}
+                          aria-label={t(r.label, LABELS_ES[r.key] ?? r.label)}
                           data-testid={`automation-toggle-${r.key}`}
                         />
                       ) : null}{' '}
-                      <strong>{es ? LABELS_ES[r.key] ?? r.label : r.label}</strong> · {stateText(r)}
-                      {(es ? r.detailEs : r.detail) ? ` · ${es ? r.detailEs : r.detail}` : ''}{' '}
+                      <strong>{t(r.label, LABELS_ES[r.key] ?? r.label)}</strong> · {stateText(r)}
+                      {t(r.detail ?? '', r.detailEs ?? '') ? ` · ${t(r.detail ?? '', r.detailEs ?? '')}` : ''}{' '}
                       {r.href.startsWith('#') ? <a href={r.href}>{t('Change', 'Cambiar')}</a> : <Link href={r.href}>{t('Change', 'Cambiar')}</Link>}
                     </li>
                   ))}
