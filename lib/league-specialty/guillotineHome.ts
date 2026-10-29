@@ -15,7 +15,7 @@
 import { prisma } from '@/lib/prisma'
 import { resolveRosterDisplayNames } from '@/lib/guillotine/rosterDisplayNames'
 import { getGuillotineSportConfig, getNextChopTime, getNextWaiverTime } from '@/lib/guillotine/sportConfig'
-import { getDangerTiers } from '@/lib/guillotine/GuillotineDangerEngine'
+import { getLiveDangerTiers } from '@/lib/guillotine/chopWatchLoad'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { DEFAULT_DANGER_MARGIN_POINTS } from '@/lib/guillotine/constants'
 import { buildSurvivalHistory, type SurvivalHistory } from '@/lib/guillotine/survivalHistory'
@@ -85,7 +85,7 @@ export async function buildGuillotineHomeExtras(
       select: { rosterId: true, choppedInPeriod: true, choppedAt: true },
       orderBy: { choppedAt: 'asc' },
     }),
-    getDangerTiers({ leagueId, weekOrPeriod }).catch(() => []),
+    getLiveDangerTiers({ leagueId, weekOrPeriod }).then((r) => r.rows).catch(() => []),
   ])
 
   const choppedWeeks = [...new Set(states.map((s) => s.choppedInPeriod).filter((w): w is number => w != null))]

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { useMessages } from '@/components/i18n/useMessages'
+import { commissionerScreensMessages } from '@/lib/core-app/messages/commissionerScreens'
 import { CUSTOM_KINDS, CUSTOM_MAX, LABEL_MAX, type CustomKind } from '@/lib/deadline-autopilot/autopilot'
 import type { AutopilotView } from '@/lib/deadline-autopilot/autopilotService'
 
@@ -15,22 +16,24 @@ import type { AutopilotView } from '@/lib/deadline-autopilot/autopilotService'
 
 type Row = { id?: string; kind: CustomKind; label: string; local: string }
 
-const KIND_LABEL: Record<CustomKind, [string, string]> = {
-  trade: ['Trade deadline', 'Fecha límite de intercambios'],
-  taxi: ['Taxi squad', 'Escuadrón taxi'],
-  franchise_tag: ['Franchise tag', 'Franchise tag'],
-  contract: ['Contracts', 'Contratos'],
-  keeper: ['Keepers', 'Keepers'],
-  other: ['Other', 'Otro'],
+type M = typeof commissionerScreensMessages.en
+
+const KIND_LABEL: Record<CustomKind, (m: M) => string> = {
+  trade: (m) => m.autopilotKindTrade,
+  taxi: (m) => m.autopilotKindTaxi,
+  franchise_tag: (m) => m.autopilotKindFranchiseTag,
+  contract: (m) => m.autopilotKindContract,
+  keeper: (m) => m.autopilotKindKeeper,
+  other: (m) => m.autopilotKindOther,
 }
 
-const ERRORS: Record<string, [string, string]> = {
-  not_entitled: ['Automatic reminders are part of the AF Commissioner plan. "Remind now" stays free.', 'Los recordatorios automáticos son parte del plan AF Commissioner. «Recordar ahora» sigue siendo gratis.'],
-  cooldown: ['A reminder for this deadline went out in the last 6 hours.', 'Ya se envió un recordatorio de esta fecha en las últimas 6 horas.'],
-  no_recipients: ['Nobody left to remind — everyone has acted.', 'No queda nadie a quien recordar: todos ya actuaron.'],
-  label_required: ['Give every deadline a name.', 'Ponle nombre a cada fecha límite.'],
-  invalid_time: ['Pick a date and time for every deadline.', 'Elige fecha y hora para cada fecha límite.'],
-  too_many: [`Up to ${CUSTOM_MAX} deadlines.`, `Hasta ${CUSTOM_MAX} fechas límite.`],
+const ERRORS: Record<string, (m: M) => string> = {
+  not_entitled: (m) => m.autopilotErrNotEntitled,
+  cooldown: (m) => m.autopilotErrCooldown,
+  no_recipients: (m) => m.autopilotErrNoRecipients,
+  label_required: (m) => m.autopilotErrLabelRequired,
+  invalid_time: (m) => m.autopilotErrInvalidTime,
+  too_many: (m) => m.autopilotErrTooMany(CUSTOM_MAX),
 }
 
 /** ISO → the value an <input type="datetime-local"> wants, in the viewer's own time zone. */
@@ -42,8 +45,7 @@ function toLocalInput(iso: string): string {
 
 export function DeadlineAutopilot({ leagueId }: { leagueId: string }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
-  const t = (en: string, spanish: string) => (es ? spanish : en)
+  const m = useMessages(commissionerScreensMessages)
   const endpoint = `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/deadline-autopilot`
 
   const [view, setView] = useState<AutopilotView | null>(null)
@@ -75,7 +77,7 @@ export function DeadlineAutopilot({ leagueId }: { leagueId: string }) {
 
   const say = (code: string | undefined, status: number) => {
     const known = code ? ERRORS[code] : undefined
-    setMessage(known ? t(known[0], known[1]) : code ?? t(`Could not save (${status}).`, `No se pudo guardar (${status}).`))
+    setMessage(known ? known(m) : code ?? m.autopilotCouldNotSave(status))
   }
 
   async function save(payload: Record<string, unknown>, done: string) {
@@ -99,7 +101,7 @@ export function DeadlineAutopilot({ leagueId }: { leagueId: string }) {
       const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ action: 'remind_now', key }) })
       const body = (await res.json().catch(() => null)) as { sent?: number; error?: string } | null
       if (!res.ok) return say(body?.error, res.status)
-      setMessage(t(`Reminder sent to ${body?.sent ?? 0} managers.`, `Recordatorio enviado a ${body?.sent ?? 0} mánagers.`))
+      setMessage(m.autopilotReminderSent(body?.sent ?? 0))
       const fresh = await fetch(endpoint, { credentials: 'same-origin', cache: 'no-store' })
       if (fresh.ok) adopt((await fresh.json()) as AutopilotView)
     } finally {
@@ -113,34 +115,28 @@ export function DeadlineAutopilot({ leagueId }: { leagueId: string }) {
   }
 
   if (!view) {
-    return <p className="af-ch-muted">{message ?? t('Loading deadlines…', 'Cargando fechas límite…')}</p>
+    return <p className="af-ch-muted">{message ?? m.autopilotLoading}</p>
   }
 
   return (
     <div className="af-ch-recipes" data-testid="deadline-autopilot">
       {!view.sendEnabled && view.enabled ? (
         <p className="af-ch-recipes-banner">
-          {t(
-            'Your choice is saved. Automatic reminders start once AllFantasy switches automated sending on. "Remind now" works today.',
-            'Tu elección quedó guardada. Los recordatorios automáticos empiezan cuando AllFantasy active los envíos automáticos. «Recordar ahora» ya funciona.',
-          )}
+          {m.autopilotSavedNotSending}
         </p>
       ) : null}
 
       <ul className="af-ch-recipe-list">
         <li data-on={view.enabled && view.entitled}>
           <div className="af-ch-recipe-body">
-            <p className="af-ch-recipe-label">{t('Deadline autopilot', 'Piloto automático de fechas límite')}</p>
+            <p className="af-ch-recipe-label">{m.autopilotTitle}</p>
             <p className="af-ch-recipe-desc">
-              {t(
-                'Reminders 72 hours, 24 hours and 1 hour before every deadline below. Keeper reminders go only to managers who have not submitted; your own deadlines go to every manager.',
-                'Recordatorios 72 horas, 24 horas y 1 hora antes de cada fecha límite de abajo. Los de keepers van solo a quien no los envió; tus fechas propias van a todos los mánagers.',
-              )}
+              {m.autopilotDesc}
             </p>
             <p className="af-ch-recipe-meta">
               {view.entitled
-                ? t('AF Commissioner · notifications to managers', 'AF Commissioner · notificaciones a los mánagers')
-                : t('AF Commissioner plan — "Remind now" below is free', 'Plan AF Commissioner — «Recordar ahora» es gratis')}
+                ? m.autopilotMetaEntitled
+                : m.autopilotMetaUpsell}
             </p>
           </div>
           <label className="af-ch-switch">
@@ -149,8 +145,8 @@ export function DeadlineAutopilot({ leagueId }: { leagueId: string }) {
               role="switch"
               checked={view.enabled}
               disabled={busy || (!view.entitled && !view.enabled)}
-              aria-label={t('Deadline autopilot', 'Piloto automático de fechas límite')}
-              onChange={(e) => save({ enabled: e.target.checked }, e.target.checked ? t('Autopilot on.', 'Piloto automático activado.') : t('Autopilot off.', 'Piloto automático desactivado.'))}
+              aria-label={m.autopilotTitle}
+              onChange={(e) => save({ enabled: e.target.checked }, e.target.checked ? m.autopilotOn : m.autopilotOff)}
             />
             <span aria-hidden className="af-ch-switch-track">
               <span className="af-ch-switch-thumb" />
@@ -160,50 +156,45 @@ export function DeadlineAutopilot({ leagueId }: { leagueId: string }) {
 
         {view.deadlines.length === 0 ? (
           <li>
-            <p className="af-ch-recipe-desc">{t('No upcoming deadlines. Add one below.', 'No hay fechas límite próximas. Agrega una abajo.')}</p>
+            <p className="af-ch-recipe-desc">{m.autopilotNoDeadlines}</p>
           </li>
         ) : (
           view.deadlines.map((d) => (
             <li key={d.key}>
               <div className="af-ch-recipe-body">
-                <p className="af-ch-recipe-label">{d.kind === 'keeper' && d.targeted ? t('Keeper deadline', 'Fecha límite de keepers') : d.label}</p>
+                <p className="af-ch-recipe-label">{d.kind === 'keeper' && d.targeted ? m.autopilotKeeperDeadline : d.label}</p>
                 <p className="af-ch-recipe-meta">
-                  {new Date(d.at).toLocaleString(es ? 'es' : 'en', { dateStyle: 'medium', timeStyle: 'short' })} ·{' '}
-                  {d.targeted
-                    ? t(`${d.recipients} still to submit`, `${d.recipients} sin enviar`)
-                    : t(`${d.recipients} managers`, `${d.recipients} mánagers`)}
-                  {d.lastSent ? t(` · last reminder ${new Date(d.lastSent).toLocaleString(getAppIntlLocale())}`, ` · último recordatorio ${new Date(d.lastSent).toLocaleString('es')}`) : ''}
+                  {new Date(d.at).toLocaleString(language === 'es' ? 'es' : 'en', { dateStyle: 'medium', timeStyle: 'short' })} ·{' '}
+                  {d.targeted ? m.autopilotStillToSubmit(d.recipients) : m.autopilotManagers(d.recipients)}
+                  {d.lastSent ? m.autopilotLastReminder(d.lastSent) : ''}
                 </p>
               </div>
               <button type="button" className="af-btn" disabled={busy || !d.manualAllowed || d.recipients === 0} onClick={() => remindNow(d.key)}>
-                {t('Remind now', 'Recordar ahora')}
+                {m.autopilotRemindNow}
               </button>
             </li>
           ))
         )}
       </ul>
 
-      <h4 className="af-ch-recipe-label" style={{ marginTop: 16 }}>{t('Your deadlines', 'Tus fechas límite')}</h4>
+      <h4 className="af-ch-recipe-label" style={{ marginTop: 16 }}>{m.autopilotYourDeadlines}</h4>
       <p className="af-ch-recipe-desc">
-        {t(
-          'Add the deadlines AllFantasy cannot see — trade, taxi, franchise tag, contracts, or any deadline on the platform your league lives on. Times are in your time zone.',
-          'Agrega las fechas límite que AllFantasy no puede ver: intercambios, taxi, franchise tag, contratos o cualquier fecha de la plataforma donde vive tu liga. Las horas están en tu zona horaria.',
-        )}
+        {m.autopilotYourDeadlinesDesc}
       </p>
       <ul className="af-ch-recipe-list">
         {rows.map((r, i) => (
           <li key={r.id ?? `new-${i}`} style={{ gap: 8, flexWrap: 'wrap' }}>
-            <select value={r.kind} disabled={busy} aria-label={t('Type', 'Tipo')} onChange={(e) => edit(i, { kind: e.target.value as CustomKind })}>
+            <select value={r.kind} disabled={busy} aria-label={m.autopilotType} onChange={(e) => edit(i, { kind: e.target.value as CustomKind })}>
               {CUSTOM_KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {t(...KIND_LABEL[k])}
+                  {KIND_LABEL[k](m)}
                 </option>
               ))}
             </select>
-            <input value={r.label} maxLength={LABEL_MAX} disabled={busy} aria-label={t('Name', 'Nombre')} placeholder={t('e.g. Trade deadline', 'p. ej. Fecha límite de intercambios')} onChange={(e) => edit(i, { label: e.target.value })} />
-            <input type="datetime-local" value={r.local} disabled={busy} aria-label={t('Date and time', 'Fecha y hora')} onChange={(e) => edit(i, { local: e.target.value })} />
+            <input value={r.label} maxLength={LABEL_MAX} disabled={busy} aria-label={m.autopilotName} placeholder={m.autopilotNamePlaceholder} onChange={(e) => edit(i, { label: e.target.value })} />
+            <input type="datetime-local" value={r.local} disabled={busy} aria-label={m.autopilotDateTime} onChange={(e) => edit(i, { local: e.target.value })} />
             <button type="button" className="af-btn" disabled={busy} onClick={() => { setRows(rows.filter((_, j) => j !== i)); setDirty(true) }}>
-              {t('Remove', 'Quitar')}
+              {m.autopilotRemove}
             </button>
           </li>
         ))}
@@ -214,11 +205,11 @@ export function DeadlineAutopilot({ leagueId }: { leagueId: string }) {
           className="af-btn"
           disabled={busy || rows.length >= CUSTOM_MAX}
           onClick={() => {
-            setRows([...rows, { kind: 'trade', label: t('Trade deadline', 'Fecha límite de intercambios'), local: '' }])
+            setRows([...rows, { kind: 'trade', label: m.autopilotKindTrade, local: '' }])
             setDirty(true)
           }}
         >
-          {t('Add a deadline', 'Agregar fecha límite')}
+          {m.autopilotAdd}
         </button>
         <button
           type="button"
@@ -227,11 +218,11 @@ export function DeadlineAutopilot({ leagueId }: { leagueId: string }) {
           onClick={() =>
             save(
               { custom: rows.map((r) => ({ id: r.id, kind: r.kind, label: r.label, at: r.local ? new Date(r.local).toISOString() : '' })) },
-              t('Deadlines saved.', 'Fechas límite guardadas.'),
+              m.autopilotSaved,
             )
           }
         >
-          {t('Save deadlines', 'Guardar fechas límite')}
+          {m.autopilotSaveDeadlines}
         </button>
       </div>
       {message ? (

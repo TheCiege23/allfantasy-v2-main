@@ -32,6 +32,8 @@ import type { CalendarEvent } from './calendar'
 import type { HealthFlag } from './health'
 import { reviewSignalCards, type LeagueReviewSignals } from './signals'
 import { issueText } from '@/lib/core-app/decisionQueueCopy'
+import { commissionerToolsMessages } from '@/lib/core-app/messages/commissionerTools'
+import { messagesFor } from '@/lib/i18n/messages'
 
 export type TaskCard = {
   id: string
@@ -103,7 +105,7 @@ export function buildTaskCards(input: {
   /** The reader's language for the cards this builder writes; default English. */
   language?: string
 }): TaskCardsResult {
-  const es = input.language === 'es'
+  const m = messagesFor(commissionerToolsMessages, input.language)
   const limit = input.limit ?? 6
   const cards: Array<TaskCard & { sortAt: number }> = []
   // Finite on purpose: Infinity - Infinity is NaN, which makes the sort comparator lie.
@@ -133,12 +135,10 @@ export function buildTaskCards(input: {
       id: 'stale-sync',
       severity: days > 7 ? 'bad' : 'warn',
       source: 'issue',
-      title: es ? `Los datos de esta liga tienen ${days} días` : `This league’s data is ${days} days old`,
-      detail: es
-        ? `AllFantasy no los ha leído de ${platformLabel} desde entonces, así que no se puede revisar la actividad, las alineaciones ni los mánagers inactivos.`
-        : `AllFantasy hasn’t read it from ${platformLabel} since then, so activity, lineups and inactive managers can’t be checked.`,
+      title: m.tasksStaleTitle(days),
+      detail: m.tasksStaleDetail(platformLabel),
       due: null,
-      action: { label: es ? 'Volver a sincronizar' : 'Re-sync', href, external: false },
+      action: { label: m.tasksResync, href, external: false },
       sortAt: 0,
     })
   }
@@ -183,7 +183,7 @@ export function buildTaskCards(input: {
       title: e.title,
       detail: e.detail,
       due: e.whenLabel,
-      action: { label: es ? 'Ver el calendario' : 'See calendar', href: '#ch-calendar', external: false },
+      action: { label: m.tasksSeeCalendar, href: '#ch-calendar', external: false },
       sortAt: e.at ? Date.parse(e.at) : far,
     })
   }
@@ -205,7 +205,7 @@ export function buildTaskCards(input: {
       title: w.title,
       detail: w.description,
       due: null,
-      action: w.href ? { label: es ? 'Abrir' : 'Open', href: w.href, external: false } : null,
+      action: w.href ? { label: m.tasksOpen, href: w.href, external: false } : null,
       sortAt: w.dueAt ? w.dueAt.getTime() : far,
     })
   }

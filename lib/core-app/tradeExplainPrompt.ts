@@ -1,4 +1,6 @@
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
+import { tradeExplainPromptMessages } from '@/lib/core-app/messages/tradeExplainPrompt'
+import { messagesFor } from '@/lib/i18n/messages'
 
 /**
  * The question the Trade Center's "Explain with Chimmy" button pre-fills. Pure, so its shape is
@@ -49,9 +51,9 @@ export function tradeExplainPrompt(args: {
   getValue: ExplainSideValue
   verdict: string | null
 }): string {
-  const league = args.leagueName ? ` in ${args.leagueName}` : ''
+  const m = messagesFor(tradeExplainPromptMessages, args.language)
   if (args.give.length === 0 || args.get.length === 0) {
-    return args.language === 'es' ? `Ayúdame a evaluar un intercambio${args.leagueName ? ` en ${args.leagueName}` : ''}. Responde en español.` : `Help me think about a trade${league}.`
+    return m.emptyTrade(args.leagueName)
   }
   const side = (list: readonly PickedAsset[], owner: string | null) =>
     list.map((a) => describeAssetForChimmy(a, owner)).join(' and ')
@@ -61,14 +63,12 @@ export function tradeExplainPrompt(args: {
       : (args.partnerTeamName ?? args.partnerName)
   const parts = [
     `${side(args.give, args.myName)} for ${side(args.get, args.partnerName ?? args.partnerTeamName)}.`,
-    args.language === 'es' ? `Explica este intercambio${args.leagueName ? ` en ${args.leagueName}` : ''}${partner ? ` con ${partner}` : ''}. Responde en español; conserva los nombres, las calificaciones y los valores.` : `Explain this trade${league}${partner ? ` with ${partner}` : ''}.`,
+    m.explainTrade(args.leagueName, partner),
   ]
   if (args.giveValue != null && args.getValue != null) {
-    parts.push(
-      args.language === 'es' ? `En el analizador envío ${fmt(args.giveValue)} y recibo ${fmt(args.getValue)} en valor de liga. Explica usando esos valores.` : `On the trade screen I give ${fmt(args.giveValue)} and get ${fmt(args.getValue)} in league value — explain using those numbers.`,
-    )
+    parts.push(m.screenValues(fmt(args.giveValue), fmt(args.getValue)))
   }
   if (args.verdict) parts.push(args.verdict)
-  parts.push(args.language === 'es' ? '¿Qué riesgos o datos me faltan?' : 'What am I missing?')
+  parts.push(m.missing)
   return parts.join(' ')
 }

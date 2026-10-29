@@ -8,7 +8,9 @@ import 'server-only'
  * Never throws: a watch that cannot be built leaves the chop line on its old source.
  */
 import { loadChopPreview } from './chopPreviewLoad'
-import { chopWatchFromPreview, type ChopWatch } from './chopWatch'
+import { chopWatchDangerRows, chopWatchFromPreview, type ChopWatch } from './chopWatch'
+import { getDangerTiers } from './GuillotineDangerEngine'
+import type { GuillotineDangerRow } from './types'
 
 export const CHOP_WATCH_TTL_MS = 60 * 1000
 
@@ -32,6 +34,23 @@ export async function loadChopWatch(
     for (const [k, v] of cache) if (now - v.at >= CHOP_WATCH_TTL_MS) cache.delete(k)
   }
   return value
+}
+
+/**
+ * The danger tiers for `weekOrPeriod`, live when Chop Watch can build them, else the danger engine's.
+ *
+ * 🛑 USE THIS, NOT `getDangerTiers`, WHEREVER A WEEK IS BEING PLAYED. The engine ranks on
+ * `GuillotinePeriodScore`, which is written only when a week is chopped, so during the week it ranked
+ * on last week's season totals with one team always in the chop zone (./chopWatch.ts). `live` says
+ * which source answered: only a live row's `projectedPoints` is this week's score.
+ */
+export async function getLiveDangerTiers(
+  input: { leagueId: string; weekOrPeriod: number },
+  deps: { loadWatch?: typeof loadChopWatch; loadTiers?: typeof getDangerTiers } = {},
+): Promise<{ rows: GuillotineDangerRow[]; live: boolean }> {
+  const watch = await (deps.loadWatch ?? loadChopWatch)(input.leagueId, input.weekOrPeriod).catch(() => null)
+  if (watch) return { rows: chopWatchDangerRows(watch), live: true }
+  return { rows: await (deps.loadTiers ?? getDangerTiers)(input), live: false }
 }
 
 /** Tests only. */
