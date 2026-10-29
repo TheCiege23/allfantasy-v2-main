@@ -6,7 +6,9 @@ import { useSearchParams } from "next/navigation"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
 import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget"
-import { isAppleApp, manageAppleSubscriptions } from "@/lib/monetization/apple-iap-client"
+import { isTrustedWebActivity } from "@/lib/platform/isTrustedWebActivity"
+import { manageNativeSubscriptions } from "@/lib/monetization/native-iap-client"
+import { isAppleApp } from "@/lib/monetization/apple-iap-client"
 
 /** Status-chip copy per EntitlementStatus; an unlisted status still renders its raw value. */
 const BILLING_STATUS_KEYS: Record<string, string> = {
@@ -30,7 +32,7 @@ export function BillingSettingsSection() {
   const [appleApp, setAppleApp] = useState(false)
   const [appleManageError, setAppleManageError] = useState<string | null>(null)
   useEffect(() => {
-    setAppleApp(isAppleApp())
+    setAppleApp(isAppleApp() || isTrustedWebActivity())
   }, [])
 
   if (ents.loading) {
@@ -175,7 +177,7 @@ export function BillingSettingsSection() {
             type="button"
             onClick={() => {
               setAppleManageError(null)
-              void manageAppleSubscriptions().catch(() => setAppleManageError(t("settings.billing.appleManageError")))
+              void manageNativeSubscriptions().catch(() => setAppleManageError(isTrustedWebActivity() ? "Open Google Play → Payments & subscriptions → Subscriptions to manage your plan." : t("settings.billing.appleManageError")))
             }}
             className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border px-4 py-2 text-sm font-semibold transition hover:opacity-90"
             style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}

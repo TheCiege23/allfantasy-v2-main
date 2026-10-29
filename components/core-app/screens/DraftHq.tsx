@@ -9,6 +9,7 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { DraftCompetitiveEdge, type DraftEdgeState } from '@/components/core-app/screens/DraftCompetitiveEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { draftHqUiCopy } from '@/lib/core-app/draftHqUiCopy'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
 
 /**
  * Screen 8 — Draft HQ.
@@ -41,6 +42,15 @@ const STATUS_TONE: Record<string, string> = {
   completed: 'done',
 }
 
+const LIVE_STATUSES = new Set(['in_progress', 'paused'])
+
+/** The board-head link into the live draft room. Exported for tests. */
+export function draftRoomCtaLabel(status: string): string {
+  if (LIVE_STATUSES.has(status)) return 'Join live draft'
+  if (status === 'completed') return 'Open draft board'
+  return 'Enter draft room'
+}
+
 export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => draftHqUiCopy(value, language)
@@ -58,6 +68,16 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
               >
                 {copy(data.session.data.status.replace(/_/g, ' '))}
               </span>
+              {/* A plain anchor, not next/link: a full navigation always lands even when
+                  a deploy has rotated the client chunks under an open tab (Android PWA). */}
+              <a
+                className="af-dh-enter"
+                href={draftRoomHref(data.league.id)}
+                data-testid="draft-hq-enter-room"
+                data-live={LIVE_STATUSES.has(data.session.data.status) ? 'true' : 'false'}
+              >
+                {copy(draftRoomCtaLabel(data.session.data.status))}
+              </a>
             </div>
 
             <div className="af-dh-facts">
@@ -89,7 +109,11 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
         )}
       </section>
 
-      {data.preparation && <DraftPreparation data={data.preparation} leagueId={data.league.id} />}
+      {data.preparation && <DraftPreparation
+          data={data.preparation}
+          leagueId={data.league.id}
+          draftComplete={data.session.available && data.session.data.status === 'completed'}
+        />}
 
       {/* ── Pick inventory ──────────────────────────────────────────── */}
       {/*

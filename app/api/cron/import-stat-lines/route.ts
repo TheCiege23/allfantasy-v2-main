@@ -38,7 +38,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
-import { createRunBudget, rotateForFairness, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
+import { createRunBudget, CRON_RUN_BUDGET_MS, rotateForFairness, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
 import { syncRollingInsightsPlayerStatsToDb } from "@/lib/stats/rollingInsightsPlayerStats"
 import { syncCfbdPlayerStatsToDb } from "@/lib/stats/cfbdPlayerStats"
 import { backfillCfbdIdsForNcaaf } from "@/lib/sports-data/cfbdIdentityBridge"
@@ -292,7 +292,8 @@ async function handle(req: NextRequest) {
   const season = seasonParam && /^\d{4}$/.test(seasonParam) ? Number(seasonParam) : undefined
   const skipIdentityBackfill = url.searchParams.get("skipIdentityBackfill") === "1"
 
-  const budget = createRunBudget()
+  const controller = new AbortController()
+  const budget = createRunBudget(CRON_RUN_BUDGET_MS, Date.now, controller.signal)
   const results: SportOutcome[] = []
   const deferred: string[] = []
   const sports = resolveSports(explicit)
@@ -308,12 +309,14 @@ async function handle(req: NextRequest) {
    * the overrun path reports exactly what finished — the in-flight sport and everything after it
    * come back as deferred rather than as a severed connection with nothing recorded.
    *
-   * ⚠ The in-flight sport keeps running; there is no signal to cancel it with. See the header on
-   * `respondBeforeEdge`: the edge kills that work either way, and the difference is whether a run
-   * gets recorded at all.
+   * ⚠ The in-flight sport keeps running; nothing below it accepts a signal. What the guard's abort
+   * does stop is the sweep: the budget reads as spent, so no further sport is started after the
+   * response has gone (see the header on `respondBeforeEdge`).
    */
   const { overran } = await respondBeforeEdge(
-    async () => {
+    async (signal) => {
+      // The guard's signal stops the sweep at its next sport once the response has gone.
+      signal.addEventListener('abort', () => controller.abort(), { once: true })
       for (const sport of sports) {
         if (!explicit && budget.exhausted()) {
           deferred.push(sport)

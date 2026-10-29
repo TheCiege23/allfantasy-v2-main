@@ -18,8 +18,8 @@ const {
   openFinaleMock,
   openJuryPhaseMock,
   openJuryVotingMock,
-  revealWinnerMock,
-  tallyJuryVotesMock,
+  getFinaleStateMock,
+  recordCrownedWinnerMock,
   submitJuryVoteMock,
   resolveSurvivorCurrentWeekMock,
   prismaMock,
@@ -41,13 +41,16 @@ const {
   openFinaleMock: vi.fn(),
   openJuryPhaseMock: vi.fn(),
   openJuryVotingMock: vi.fn(),
-  revealWinnerMock: vi.fn(),
-  tallyJuryVotesMock: vi.fn(),
+  getFinaleStateMock: vi.fn(),
+  recordCrownedWinnerMock: vi.fn(),
   submitJuryVoteMock: vi.fn(),
   resolveSurvivorCurrentWeekMock: vi.fn(),
   prismaMock: {
     survivorTribalCouncil: {
       findUnique: vi.fn(),
+    },
+    league: {
+      findUnique: vi.fn(async () => ({ survivorRevealMode: 'dramatic_sequential' })),
     },
     roster: {
       findFirst: vi.fn(),
@@ -77,6 +80,10 @@ vi.mock('@/app/api/cron/_auth', () => ({
 vi.mock('@/lib/league/league-access', () => ({
   assertLeagueCommissioner: assertLeagueCommissionerMock,
   assertLeagueMember: assertLeagueMemberMock,
+}))
+
+vi.mock('@/lib/survivor/survivorCouncilReadFinish', () => ({
+  finishCouncilReadIfComplete: vi.fn(async () => ({ ok: true, complete: true, elimination: null })),
 }))
 
 vi.mock('@/lib/survivor/votingEngine', () => ({
@@ -115,13 +122,16 @@ vi.mock('@/lib/survivor/juryEngine', () => ({
   openFinale: openFinaleMock,
   openJuryPhase: openJuryPhaseMock,
   openJuryVoting: openJuryVotingMock,
-  revealWinner: revealWinnerMock,
-  tallyJuryVotes: tallyJuryVotesMock,
 }))
 
 vi.mock('@/lib/survivor/SurvivorFinaleEngine', () => ({
   submitJuryVote: submitJuryVoteMock,
+  getFinaleState: getFinaleStateMock,
+  settleFinaleIfDue: getFinaleStateMock,
+  recordCrownedWinner: recordCrownedWinnerMock,
 }))
+
+vi.mock('@/lib/survivor/finaleView', () => ({ getFinaleRevealView: vi.fn() }))
 
 vi.mock('@/lib/survivor/SurvivorTimelineResolver', () => ({
   resolveSurvivorCurrentWeek: resolveSurvivorCurrentWeekMock,
@@ -132,6 +142,7 @@ describe('Survivor tribal eliminate route behavior', () => {
     vi.clearAllMocks()
     getServerSessionMock.mockResolvedValue({ user: { id: 'u-1' } })
     assertLeagueCommissionerMock.mockResolvedValue({ ok: true })
+    lockVotingMock.mockResolvedValue({ ok: true, readOpened: true, complete: true })
   })
 
   it('wires eliminate action to real lock/elimination pipeline', async () => {
@@ -147,6 +158,10 @@ describe('Survivor tribal eliminate route behavior', () => {
         eliminatedRosterId: 'roster-x',
         closedAt: now,
         status: 'completed',
+        isRevealed: true,
+        revealStartsAt: null,
+        revealStep: 0,
+        revealSequence: [],
       })
 
     const { POST } = await import('@/app/api/survivor/tribal/route')
@@ -172,12 +187,17 @@ describe('Survivor tribal eliminate route behavior', () => {
 
   it('returns alreadyClosed payload without re-locking', async () => {
     const closedAt = new Date('2026-04-20T13:00:00.000Z')
-    ;(prismaMock.survivorTribalCouncil.findUnique as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    const row = {
       leagueId: 'league-1',
       closedAt,
       eliminatedRosterId: 'roster-y',
       status: 'completed',
-    })
+      isRevealed: true,
+      revealStartsAt: null,
+      revealStep: 0,
+      revealSequence: [],
+    }
+    ;(prismaMock.survivorTribalCouncil.findUnique as ReturnType<typeof vi.fn>).mockResolvedValueOnce(row).mockResolvedValueOnce(row)
 
     const { POST } = await import('@/app/api/survivor/tribal/route')
     const req = new Request('http://localhost/api/survivor/tribal', {
@@ -225,7 +245,7 @@ describe('Survivor jury vote route normalization', () => {
     ;(prismaMock.roster.findFirst as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ id: 'juror-roster' })
       .mockResolvedValueOnce({ id: 'finalist-roster' })
-    submitJuryVoteMock.mockResolvedValue({ ok: true, state: { open: true } })
+    submitJuryVoteMock.mockResolvedValue({ ok: true, state: { open: true, votes: [{ jurorRosterId: 'other-juror', finalistRosterId: 'f' }], voteCount: { f: 1 } } })
 
     const { POST } = await import('@/app/api/survivor/jury/route')
     const req = new Request('http://localhost/api/survivor/jury', {
@@ -252,6 +272,25 @@ describe('Survivor jury vote route normalization', () => {
       }),
     )
     expect(json).toEqual(expect.objectContaining({ ok: true }))
+    // A juror's submit must not receive anyone else's ballot or the running tally.
+    expect(JSON.stringify(json)).not.toContain('other-juror')
+    expect(json).not.toHaveProperty('state')
+  })
+
+  it('reveals only the winner the finale engine crowned', async () => {
+    const { POST } = await import('@/app/api/survivor/jury/route')
+    const reveal = () => POST(new Request('http://localhost/api/survivor/jury', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ intent: 'reveal', leagueId: 'league-1' }),
+    }) as never)
+    getFinaleStateMock.mockResolvedValueOnce({ closed: false, winnerRosterId: null, votesSubmitted: 3, votesRequired: 7 })
+    const pending = await reveal()
+    expect(pending.status).toBe(409)
+    expect(recordCrownedWinnerMock).not.toHaveBeenCalled()
+    getFinaleStateMock.mockResolvedValueOnce({ closed: true, winnerRosterId: 'finalist-roster', votesSubmitted: 7, votesRequired: 7 })
+    recordCrownedWinnerMock.mockResolvedValueOnce({ winnerUserId: 'finalist-user' })
+    const done = await reveal()
+    expect(await done.json()).toEqual({ winnerId: 'finalist-user' })
   })
 
   it('surfaces strict finale validation errors as 400', async () => {

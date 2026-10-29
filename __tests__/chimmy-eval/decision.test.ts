@@ -18,6 +18,14 @@ vi.mock('@/lib/chimmy/tradeFinderGrounding', () => ({ buildTradeFinder: h.finder
 vi.mock('@/lib/chimmy/pendingTradeQuestions', () => ({ pendingTradeQuestions: h.pending }))
 vi.mock('@/lib/chimmy/tradeSeasonOutlook', () => ({ tradeSeasonOutlook: () => h.season }))
 vi.mock('@/lib/openai-client', () => ({ openaiChatText: h.model }))
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/chimmy/planAllowance')>(),
+  readChimmyPlanAllowance: async () => null,
+  readChimmyAnswerAllowance: async () => ({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+    used: 0, remaining: 2, resetsAt: '2026-10-26T00:00:00.000Z' }),
+  takeChimmyPlanAllowance: async ({ state }: { state: Record<string, unknown> }) => ({ ...state, used: 1, remaining: 1 }),
+  releaseChimmyPlanAllowance: async () => true,
+}))
 vi.mock('@/lib/chimmy/leagueStandingsGrounding', () => ({ buildLeagueStandingsContext: async () => null }))
 vi.mock('@/lib/chimmy/headToHeadGrounding', () => ({ buildHeadToHeadGrounding: async () => null }))
 vi.mock('@/lib/chimmy-advice/chatStartSitAdvice', () => ({ recordChatStartSitAdvice: async () => null }))

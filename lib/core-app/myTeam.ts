@@ -1358,7 +1358,7 @@ async function loadMyTeamData(
        */
       if (benchProj == null || bench.onBye || bench.ruledOut) continue
       if (bench.kickoff && bench.kickoff.getTime() <= adviceAt) continue
-      if (!isEligibleForSlot(slot.slotLabel, bench.position)) continue
+      if (!isEligibleForSlot(slot.slotLabel, bench.position, sport)) continue
       if (benchProj <= starterProj) continue
       benchCandidates.push({
         slotIndex,
@@ -1673,6 +1673,7 @@ async function loadMyTeamData(
           isDynasty: league.isDynasty ?? null,
           season: league.season ?? null,
           status: league.status ?? null,
+          sport,
         },
         teamExternalId: myTeamRow.externalId ?? null,
         rosterCandidates: candidates,

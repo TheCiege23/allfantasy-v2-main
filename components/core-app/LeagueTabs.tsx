@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { LeagueTabsPrewarm } from '@/components/core-app/LeagueTabsPrewarm'
+import { LeagueTabsScroller } from '@/components/core-app/LeagueTabsScroller'
 import '@/components/core-app/af-league-tabs.css'
 
 /**
@@ -172,7 +173,7 @@ export function LeagueTabs({
         const restActiveTab = rest.find((t) => t.key === activeKey)
         return (
           <div className="af-lt-compact" data-compact={compact}>
-            <div className="af-lt-compact-row" style={{ gridTemplateColumns: `repeat(${primary.length}, minmax(0, 1fr))` }}>{primary.map((t) => tab(t.key, language === 'es' ? t.labelEs : t.label))}</div>
+            <LeagueTabsScroller className="af-lt-compact-row" activeKey={activeKey}>{primary.map((t) => tab(t.key, language === 'es' ? t.labelEs : t.label))}</LeagueTabsScroller>
             {tab('live', language === 'es' ? 'En vivo' : 'Live')}
             {commissionerHref && <Link className="af-lt-tab" href={commissionerHref}>{language === 'es' ? 'Comisionado' : 'Commissioner'}</Link>}
             {rest.length ? (

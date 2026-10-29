@@ -51,8 +51,8 @@ function onGuillotine(grade: GradeMomentInput | null | undefined): boolean {
   return lines.length > 0 && lines.every((l) => l.valueSource === 'guillotine_points' || l.valueSource === 'guillotine_faab')
 }
 
-const GUILLOTINE_NOTE_EN = '(guillotine lineup and FAAB values)'
-const GUILLOTINE_NOTE_ES = '(valores de guillotina: alineación y FAAB)'
+const GUILLOTINE_NOTE_EN = '(Guilly lineup and FAAB values)'
+const GUILLOTINE_NOTE_ES = '(valores Guilly: alineación y FAAB)'
 const MARKET_NOTE_EN = '(no market record from the trade date)'
 const MARKET_NOTE_ES = '(no hay registro del mercado de la fecha del traspaso)'
 
@@ -138,10 +138,10 @@ export function gradeMomentToSpanish(english: string): string | null {
     const d = esDate(atTrade[1]!, atTrade[2]!)
     return d ? `en la fecha del traspaso (${d})` : null
   }
-  const from = /^from ([A-Z][a-z]{2}) (\d{1,2}), (\d{4}), (?:the day of the trade|(\d+) days? after the trade) \((no market record from the trade date|guillotine lineup and FAAB values)\)$/.exec(english)
+  const from = /^from ([A-Z][a-z]{2}) (\d{1,2}), (\d{4}), (?:the day of the trade|(\d+) days? after the trade) \((no market record from the trade date|(?:guillotine|Guilly) lineup and FAAB values)\)$/.exec(english)
   if (from) {
     const d = esDate(from[1]!, from[2]!, from[3]!)
-    const note = from[5] === 'guillotine lineup and FAAB values' ? GUILLOTINE_NOTE_ES : MARKET_NOTE_ES
+    const note = from[5]!.endsWith('lineup and FAAB values') ? GUILLOTINE_NOTE_ES : MARKET_NOTE_ES
     return d ? `del ${d}, ${afterTrade(from[4] ? Number(from[4]) : 0, true)} ${note}` : null
   }
   const first = /^when first graded ([A-Z][a-z]{2}) (\d{1,2})$/.exec(english)

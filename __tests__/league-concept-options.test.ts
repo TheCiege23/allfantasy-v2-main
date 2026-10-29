@@ -24,11 +24,11 @@ describe('league concept selection', () => {
    * guillotine league, combines the 2 league types." One option — and the two
    * parents stay, because plain Survivor and plain Guillotine leagues exist too.
    */
-  it('offers Survivor Guillotine as ONE option, alongside Survivor and Guillotine', () => {
+  it('offers Survivor Guilly as ONE option, alongside Survivor and Guilly', () => {
     expect(isLeagueConceptType('survivor_guillotine')).toBe(true)
-    expect(leagueConceptLabel('survivor_guillotine')).toBe('Survivor Guillotine')
+    expect(leagueConceptLabel('survivor_guillotine')).toBe('Survivor Guilly')
     expect(leagueConceptLabel('survivor')).toBe('Survivor')
-    expect(leagueConceptLabel('guillotine')).toBe('Guillotine')
+    expect(leagueConceptLabel('guillotine')).toBe('Guilly')
     // The id matches the catalog entry, so the rules resolver can find it.
     expect(isLeagueConceptType('survivor_all_stars')).toBe(false)
   })

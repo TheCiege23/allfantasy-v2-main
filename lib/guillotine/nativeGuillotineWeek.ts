@@ -44,6 +44,8 @@ export type NativeGuillotineOutcome =
   | 'refused'
   | 'chopped'
   | 'final_stage_scored'
+  /** The commissioner's schedule skips this week (lib/guillotine/chopSchedule.ts); the season moved past it. */
+  | 'no_chop'
 
 export type NativeGuillotineResult = {
   seasonId: string
@@ -149,11 +151,36 @@ export async function runNativeGuillotineWeek(
       return { ...base, outcome: 'chopped', week, choppedRedraftRosterIds: repairedIds, reason: 'recovered previously selected chop' }
     }
 
+    /*
+     * ⚠ THE CORRECTION WINDOW WAITED FOR NOTHING. The chop is held until the stat-correction cutoff so
+     * a late correction can still decide who goes — but score-sync only pulls the CURRENT week, so the
+     * sealed week's stats were never fetched again and every chop ran on the numbers as they stood at
+     * the seal. Pull the week once more now, past the cutoff, and re-seal it from the corrected stats.
+     * The stat sync writes `isFinalized: false`, so the re-seal is what makes the week chop-ready again;
+     * a re-seal that refuses (a refresh that came back short) waits rather than chop on half a week.
+     * A refresh that throws chops on the sealed stats, exactly as before, rather than stall the season.
+     */
+    if (config.correctionWindow !== 'immediate' && deps.syncWeekStats) {
+      let refreshed = false
+      try {
+        await deps.syncWeekStats({ seasonId: season.id, week })
+        refreshed = true
+      } catch (error) {
+        console.error('[native-guillotine] pre-chop stat refresh failed; chopping on the sealed stats', { seasonId: season.id, week, error })
+      }
+      if (refreshed) {
+        const resealed = await finalizeRedraftWeek({ seasonId: season.id, week })
+        if (resealed.refusal) return { ...base, outcome: 'waiting', week, reason: `pre_chop_refresh:${resealed.refusal}` }
+      }
+    }
+
     // Every surviving team, scored from the sealed week. Bench/IR never count; best ball starts its best.
     const points = new Map<string, number>()
+    const benchPoints = new Map<string, number>()
     for (const r of active) {
-      const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week, seasonYear: season.season })
+      const s = await scoreRosterForWeek({ leagueId: season.leagueId, rosterId: r.id, week, seasonYear: season.season, includeBench: true })
       points.set(r.id, s.points)
+      if (typeof s.benchPoints === 'number') benchPoints.set(r.id, s.benchPoints)
     }
 
     // Into the engine's id space. A team that cannot be placed would silently escape the chop.
@@ -185,14 +212,28 @@ export async function runNativeGuillotineWeek(
     // This season only: `GuillotinePeriodScore` is keyed by league, so last year's weeks are here too.
     const previous = await prisma.guillotinePeriodScore.findMany({
       where: { leagueId: season.leagueId, season: season.season, weekOrPeriod: { lt: week } },
-      select: { rosterId: true, periodPoints: true },
+      select: { rosterId: true, periodPoints: true, weekOrPeriod: true },
     })
     const cumulBefore = new Map<string, number>()
-    for (const p of previous) cumulBefore.set(p.rosterId, (cumulBefore.get(p.rosterId) ?? 0) + p.periodPoints)
+    const lastWeek = new Map<string, number>()
+    for (const p of previous) {
+      cumulBefore.set(p.rosterId, (cumulBefore.get(p.rosterId) ?? 0) + p.periodPoints)
+      if (p.weekOrPeriod === week - 1) lastWeek.set(p.rosterId, p.periodPoints)
+    }
+    /*
+     * The tiebreak's `bench_points` and `previous_period` steps read these. They were never filled on the
+     * native path, so both compared 0 with 0 and every tie fell through to season points.
+     */
     const periodScores = active.map((r) => {
       const rosterId = rosterForRedraft.get(r.id)!
       const periodPoints = points.get(r.id) ?? 0
-      return { rosterId, periodPoints, seasonPointsCumul: Math.round(((cumulBefore.get(rosterId) ?? 0) + periodPoints) * 100) / 100 }
+      return {
+        rosterId,
+        periodPoints,
+        seasonPointsCumul: Math.round(((cumulBefore.get(rosterId) ?? 0) + periodPoints) * 100) / 100,
+        ...(benchPoints.has(r.id) ? { benchPoints: benchPoints.get(r.id) } : {}),
+        ...(lastWeek.has(rosterId) ? { previousPeriodPoints: lastWeek.get(rosterId) } : {}),
+      }
     })
     await savePeriodScores({ leagueId: season.leagueId, weekOrPeriod: week, season: season.season, scores: periodScores })
 
@@ -213,6 +254,7 @@ export async function runNativeGuillotineWeek(
     // because score-sync only re-offers it while the league is unarchived.
     if (result?.reason === 'final stage complete') return { ...(await completeSeason(season.id, gSeason, base)), week }
     if (result?.reason === 'final stage scored') return { ...base, outcome: 'final_stage_scored', week }
+    if (result?.reason === 'no chop scheduled') return { ...base, outcome: 'no_chop', week }
     if (!result || result.choppedRosterIds.length === 0) {
       return { ...base, outcome: 'refused', week, reason: result?.reason ?? 'engine_returned_nothing' }
     }

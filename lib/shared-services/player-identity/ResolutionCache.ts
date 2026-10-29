@@ -7,6 +7,7 @@
  */
 
 import type { ResolutionResult } from './types'
+import { boundMap } from '@/lib/ttl-memo'
 
 interface CacheEntry {
   result: ResolutionResult
@@ -24,7 +25,12 @@ export class InMemoryResolutionCache {
   private hits = 0
   private misses = 0
 
-  constructor(private readonly ttlMs: number = 5 * 60 * 1000) {}
+  // maxEntries: keyed by provider + source id, and a key is only dropped when read after expiry,
+  // so without a cap every id ever resolved stays for the life of the process.
+  constructor(
+    private readonly ttlMs: number = 5 * 60 * 1000,
+    private readonly maxEntries: number = 20_000,
+  ) {}
 
   private key(provider: string, sourceId: string): string {
     return `${provider}:${sourceId}`
@@ -42,6 +48,7 @@ export class InMemoryResolutionCache {
   }
 
   set(provider: string, sourceId: string, result: ResolutionResult): void {
+    boundMap(this.store, (e) => e.expiresAt < Date.now(), this.maxEntries)
     this.store.set(this.key(provider, sourceId), { result, expiresAt: Date.now() + this.ttlMs })
   }
 

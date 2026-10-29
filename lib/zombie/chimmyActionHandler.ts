@@ -1,9 +1,6 @@
 import type { ZombieChimmyAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { processAmbushFromChimmy } from '@/lib/zombie/ambushEngine'
 import { processSerumAction, processRevive } from '@/lib/zombie/serumEngine'
-import { processWeaponAction, processBombAction } from '@/lib/zombie/weaponEngine'
-import { activateWhispererPower } from '@/lib/zombie/whispererEngine'
 import { getStatus } from '@/lib/zombie/ZombieOwnerStatusService'
 import { getSerumBalance } from '@/lib/zombie/ZombieSerumEngine'
 import { getWeaponBalance } from '@/lib/zombie/ZombieWeaponEngine'
@@ -211,14 +208,26 @@ export async function handleZombieChimmyAction(
       }
     }
 
-    if (intent === 'trigger_ambush') {
-      const row = (await processAmbushFromChimmy(leagueId, userId, rawMessage, week)) as ZombieChimmyAction
+    /*
+     * 🛑 WEAPONS, BOMBS, AMBUSHES AND POWERS SPENT THE ITEM AND DID NOTHING. `processWeaponAction` marked the
+     * weapon used ("Your weapon is active for week N") but nothing reads `usedEffect: 'active_weapon'`; a
+     * bomb waited on a commissioner approval nothing processes; an ambush decremented the Whisperer's count
+     * and re-paired no matchup; a power announced itself and changed nothing. Until those mechanics exist
+     * (the 2026-10-17 decision: read-only for this season), the command keeps the item and says so.
+     * Serums are different and stay live: a registered serum really does block an infection, and a revive
+     * really does bring a Zombie back.
+     */
+    if (intent === 'use_weapon' || intent === 'declare_bomb' || intent === 'trigger_ambush' || intent === 'activate_power') {
+      const what = {
+        use_weapon: 'Weapons are',
+        declare_bomb: 'The bomb is',
+        trigger_ambush: 'Ambushes are',
+        activate_power: 'Whisperer powers are',
+      }[intent]
       return {
-        ok: row.isValid,
-        chimmyActionId: row.id,
-        publicMessage: row.publicResponse,
-        privateMessage: row.privateResponse,
-        error: row.validationError ?? undefined,
+        ok: false,
+        privateMessage: `${what} tracked this season but don't change matchups or scores yet, so nothing was spent — it's still yours.`,
+        error: 'not_active_this_season',
       }
     }
     if (intent === 'use_serum') {
@@ -252,36 +261,6 @@ export async function handleZombieChimmyAction(
           error: row.validationError ?? undefined,
         }
       }
-    }
-    if (intent === 'declare_bomb') {
-      const row = await processBombAction(leagueId, userId, rawMessage, week)
-      const full = await prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: row.id } })
-      return {
-        ok: full.isValid,
-        chimmyActionId: full.id,
-        publicMessage: full.publicResponse,
-        privateMessage: full.privateResponse,
-        error: full.validationError ?? undefined,
-      }
-    }
-    if (intent === 'use_weapon') {
-      const row = await processWeaponAction(leagueId, userId, rawMessage, week)
-      const full = await prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: row.id } })
-      return {
-        ok: full.isValid,
-        chimmyActionId: full.id,
-        publicMessage: full.publicResponse,
-        privateMessage: full.privateResponse,
-        error: full.validationError ?? undefined,
-      }
-    }
-    if (intent === 'activate_power') {
-      let key = 'power_horde_command'
-      if (lower.includes('dark whisper')) key = 'power_dark_whisper'
-      if (lower.includes('infection override')) key = 'power_infection_override'
-      if (lower.includes('mass serum')) key = 'power_mass_serum_burn'
-      await activateWhispererPower(leagueId, userId, key, rawMessage)
-      return { ok: true, publicMessage: '🔴 A Whisperer power resonates across the island.' }
     }
 
     // Unknown intent

@@ -339,7 +339,8 @@ export function DraftChatPanel({
         metadata.poll = {
           question: payload.poll.question,
           options: payload.poll.options.map((t, i) => ({ id: `opt-${i}-${Date.now()}`, text: t, votes: [] as string[] })),
-          closeAt: payload.poll.closeAt.toISOString(),
+          ...(payload.poll.closeAt ? { closeAt: payload.poll.closeAt.toISOString() } : {}),
+          ...(payload.poll.resultsVisibility === 'after_close' ? { resultsVisibility: 'after_close' } : {}),
           allowMultiple: payload.poll.allowMultiple,
           anonymous: Boolean(payload.poll.anonymous),
         }

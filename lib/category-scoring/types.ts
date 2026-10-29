@@ -2,8 +2,8 @@
  * Canonical scoring-mode identifier persisted on league settings as
  * `settings.scoring_mode`. Default `'points'` keeps existing behavior for every
  * pre-existing league. `'h2h_category'` activates the weekly category matchup
- * path (weeklyProcessor + matchupEngine branches, added in a later turn).
- * `'roto'` is scaffolded but not yet implemented.
+ * path (weeklyProcessor + matchupEngine branches). `'roto'` ranks season-long
+ * category totals (`rankRotisserieTeams`); its matchup rows carry no score.
  */
 export type ScoringMode = 'points' | 'h2h_category' | 'roto'
 
@@ -22,9 +22,9 @@ export function isScoringMode(value: unknown): value is ScoringMode {
  * resolves to a category definition list at runtime via
  * `getCategoryPresetDefinitions(id)`.
  */
-export type CategoryPresetId = 'nba_8cat' | 'nba_8cat_standard' | 'nba_9cat' | 'mlb_5x5' | 'mlb_6x6'
+export type CategoryPresetId = 'nba_8cat' | 'nba_8cat_standard' | 'nba_9cat' | 'mlb_5x5' | 'mlb_6x6' | 'nhl_standard'
 
-export const CATEGORY_PRESET_IDS = ['nba_8cat', 'nba_8cat_standard', 'nba_9cat', 'mlb_5x5', 'mlb_6x6'] as const
+export const CATEGORY_PRESET_IDS = ['nba_8cat', 'nba_8cat_standard', 'nba_9cat', 'mlb_5x5', 'mlb_6x6', 'nhl_standard'] as const
 
 export function isCategoryPresetId(value: unknown): value is CategoryPresetId {
   return (

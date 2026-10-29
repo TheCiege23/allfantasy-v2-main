@@ -161,7 +161,7 @@ describe('🛑 the format fit is a SEPARATE number', () => {
   it('shows a closed trade window as a warning, not as a discount', () => {
     render(<TradeValueBreakdown snapshot={snap([player({
       formatFit: {
-        formatId: 'guillotine', label: 'Guillotine', fit: null,
+        formatId: 'guillotine', label: 'Guilly', fit: null,
         legality: { ok: false, reason: 'Trades closed after week 11.' },
       },
     })])} />)

@@ -76,6 +76,8 @@ export type SimRunView = {
   /** Roster ids that made the field in this run. */
   field: ReadonlySet<string>
   finalWins: (rosterId: string) => number
+  /** Final regular-season points for, in this run. Draft-order odds rank non-playoff teams by it. */
+  finalPoints: (rosterId: string) => number
   /**
    * Who won one remaining game in this run, by its week and pairing (either order). Null when the game
    * is not on the schedule or was not played out — a game with an unmodelled team is skipped.
@@ -135,8 +137,8 @@ function clampShare(v: number | undefined): number {
   return v == null || !Number.isFinite(v) ? 1 : Math.min(1, Math.max(0, v))
 }
 
-/** Box–Muller, one value per call. */
-function gaussian(rng: () => number, mu: number, sigma: number): number {
+/** Box–Muller, one value per call. Exported for the scenario explainer's chop simulation. */
+export function gaussian(rng: () => number, mu: number, sigma: number): number {
   const u = Math.max(rng(), 1e-12)
   const v = rng()
   return mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
@@ -467,6 +469,10 @@ function runSeasons(
           finalWins: (id) => {
             const i = p.index.get(id)
             return i == null ? 0 : wins[i]
+          },
+          finalPoints: (id) => {
+            const i = p.index.get(id)
+            return i == null ? 0 : points[i]
           },
           winnerOf: (week, a, b) => {
             const k = p.slotOf.get(`${week}|${a}|${b}`)

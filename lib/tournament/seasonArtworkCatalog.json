@@ -565,6 +565,7 @@
   },
   "library": [
     "library/alien.svg",
+    "library/anchor.svg",
     "library/angel.svg",
     "library/antler.svg",
     "library/basketball.svg",
@@ -591,6 +592,7 @@
     "library/paw.svg",
     "library/rebels.svg",
     "library/robot.svg",
+    "library/rocket.svg",
     "library/scales.svg",
     "library/shieldstar.svg",
     "library/shuriken.svg",

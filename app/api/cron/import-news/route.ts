@@ -14,7 +14,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
-import { createRunBudget, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
+import { createRunBudget, CRON_RUN_BUDGET_MS, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
 import { runNewsImporter } from "@/lib/workers/news-importer"
 import { recordSyncJobRun, extractCommonCounts } from "@/lib/production-health/syncJobRunTelemetry"
 
@@ -51,13 +51,13 @@ export const dynamic = "force-dynamic"
  */
 export const maxDuration = 300
 
-async function handle(req: NextRequest) {
+async function handle(req: NextRequest, signal?: AbortSignal) {
   /*
    * ⚠ ONE BUDGET FOR THE WHOLE HANDLER, not one per phase. `lib/cron/runBudget.ts` records why:
    * a budget bolted onto an inner loop leaves the phases free to overrun each other, and the
    * ceiling applies to the request, not to any one phase of it.
    */
-  const budget = createRunBudget()
+  const budget = createRunBudget(CRON_RUN_BUDGET_MS, Date.now, signal)
   const url = new URL(req.url)
   // Manual clip-only refresh reuses this authenticated route without triggering news notifications.
   if (url.searchParams.get('clips') === '1') {
@@ -323,7 +323,7 @@ async function handle(req: NextRequest) {
 async function handleBoundedByEdge(req: NextRequest) {
   const startedAt = Date.now()
   const { result, overran } = await respondBeforeEdge<NextResponse | null>(
-    () => handle(req),
+    (signal) => handle(req, signal),
     () => null,
     CRON_HARD_RESPONSE_MS,
     'import-news',

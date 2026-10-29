@@ -47,3 +47,10 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 - UNVERIFIED: private connected-account league response. Synthetic cookie tests are not a live private-provider verification.
 - UNVERIFIED: MLB communication/activity endpoint and earlier-season response variants. Import reports unavailable coverage and never uses the NFL endpoint for MLB.
 - OPEN: custom category and roster pitching-limit fidelity. Native conversion must reject unrepresentable rules while retaining the source archive.
+
+## NFL game summary, 2026-10-25
+
+- RESOLVED: `summary?event=401873011` (PIT at NO, final) captured via probe.sh, committed untrimmed; counts in ENDPOINTS.yaml. Do not re-probe for shape.
+- `S-01` FOUND BY THE FIXTURE: a play erased by a penalty keeps its original wording ("field goal is GOOD, NULLIFIED by Penalty … - No Play") under type `Penalty`. `footballPlayKind` read it as a made field goal and sent a scoring alert; fixed in the same commit, pinned by `__tests__/engagement-alerts/espn-nfl-summary-fixture.test.ts`.
+- UNVERIFIED: an IN-PROGRESS summary (`drives.current`, `situation`, live `winprobability`). This capture is a final. Capture one live game, once, the next time a probe is justified.
+- UNVERIFIED: college football (`football/college-football`) summaries — not probed.

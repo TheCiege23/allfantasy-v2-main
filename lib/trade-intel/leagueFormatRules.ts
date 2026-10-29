@@ -477,7 +477,7 @@ export function readFormatRules(league: {
      */
     futurePicksTradeable = false
     notes.push(
-      'Guillotine: one team is chopped every week and its whole roster hits waivers. There is no next season to trade into, a trade is worth less every week the field shrinks, and FAAB is the currency that actually converts into starters here.',
+      'Guilly: one team is chopped every week and its whole roster hits waivers. There is no next season to trade into, a trade is worth less every week the field shrinks, and FAAB is the currency that actually converts into starters here.',
     )
   } else if (concept === 'king_of_the_hill') {
     /*

@@ -61,7 +61,7 @@ describe('WorkbookBarChart keys', () => {
 describe('FormatHub league comparison', () => {
   const league = (leagueId: string) => ({
     leagueId,
-    name: 'Guillotine League 26',
+    name: 'Guilly League 26',
     platform: 'sleeper',
     sub: 'Sleeper · 18 managers',
     meter: { pct: leagueId === 'L1' ? 80 : 40, value: leagueId === 'L1' ? '14 of 18 left' : '7 of 18 left', tone: 'accent' as const },

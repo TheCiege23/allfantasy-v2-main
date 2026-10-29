@@ -8,6 +8,7 @@ import { createTribes } from './SurvivorTribeService'
 import { appendSurvivorAudit } from './SurvivorAuditLog'
 import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { postHostMessage } from './hostEngine'
+import { PROVISIONAL_MERGED_TRIBE_NAME } from './tribeSwapReveal'
 
 function fisherYatesShuffle<T>(arr: T[]): T[] {
   const out = [...arr]
@@ -178,54 +179,21 @@ export async function rebalanceTribes(leagueId: string): Promise<void> {
   })
 }
 
+/**
+ * Tribe swap (phase change or commissioner). The draw is made on the server with a crypto RNG and
+ * SEALED: memberships, chats and idols do not change until the reveal at the next lineup lock
+ * (lib/survivor/tribeSwapService.revealDueTribeSwap). Returns the swap id.
+ */
 export async function executeTribeSwap(
   leagueId: string,
   week: number,
   swapType: string,
 ): Promise<{ id: string }> {
+  const { sealTribeSwap } = await import('./tribeSwapService')
+  const sealed = await sealTribeSwap(leagueId, week, swapType)
   const config = await getSurvivorConfig(leagueId)
-  if (!config) throw new Error('No Survivor config')
-
-  const tribes = await prisma.survivorTribe.findMany({
-    where: { configId: config.configId },
-    include: { members: true },
-  })
-  const beforeSnapshot = tribes.map((t) => ({
-    tribeId: t.id,
-    rosterIds: t.members.map((m) => m.rosterId),
-  }))
-  const allRosterIds = tribes.flatMap((t) => t.members.map((m) => m.rosterId))
-  const shuffled = fisherYatesShuffle(allRosterIds)
-  const n = Math.max(1, tribes.length)
-  const per = Math.ceil(shuffled.length / n)
-  for (let ti = 0; ti < tribes.length; ti++) {
-    const t = tribes[ti]!
-    const slice = shuffled.slice(ti * per, (ti + 1) * per)
-    await prisma.survivorTribeMember.deleteMany({ where: { tribeId: t.id } })
-    for (const rid of slice) {
-      await prisma.survivorTribeMember.create({ data: { tribeId: t.id, rosterId: rid } })
-    }
-  }
-
-  const afterSnapshot = await prisma.survivorTribe
-    .findMany({
-      where: { configId: config.configId },
-      include: { members: true },
-    })
-    .then((rows) => rows.map((t) => ({ tribeId: t.id, rosterIds: t.members.map((m) => m.rosterId) })))
-
-  const swap = await prisma.survivorTribeSwap.create({
-    data: {
-      leagueId,
-      week,
-      swapType,
-      beforeSnapshot: beforeSnapshot as object,
-      afterSnapshot: afterSnapshot as object,
-    },
-  })
-
-  await appendSurvivorAudit(leagueId, config.configId, 'tribe_shuffle', { swapId: swap.id, swapType })
-  return { id: swap.id }
+  if (config) await appendSurvivorAudit(leagueId, config.configId, 'tribe_shuffle', { swapId: sealed.id, swapType, sealedUntil: sealed.revealAt.toISOString() })
+  return { id: sealed.id }
 }
 
 export async function executeMerge(leagueId: string, week: number): Promise<void> {
@@ -236,7 +204,8 @@ export async function executeMerge(leagueId: string, week: number): Promise<void
   const config = await getSurvivorConfig(leagueId)
   if (!config) return
 
-  const mergedName = `Merged — Week ${week}`
+  // Named later by the commissioner or a manager vote (tribeSwapService.nameMergedTribe).
+  const mergedName = PROVISIONAL_MERGED_TRIBE_NAME
   const tribe = await prisma.survivorTribe.create({
     data: {
       leagueId,

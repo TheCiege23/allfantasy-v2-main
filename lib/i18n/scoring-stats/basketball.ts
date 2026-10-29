@@ -105,8 +105,8 @@ export const BASKETBALL_STATS_ES: StatTable = {
     'Puntuación NBA equilibrada, optimizada para los tipos de liga de AllFantasy, incluidos los formatos especiales.',
   "Sleeper-compatible NBA scoring categories. Based on Sleeper's documented default basketball scoring settings.":
     'Categorías de puntuación NBA compatibles con Sleeper, basadas en la puntuación de baloncesto predeterminada que documenta Sleeper.',
-  "This scoring preset is based on Sleeper's default format. Specialty leagues (Zombie, Survivor, Tournament, Guillotine, Big Brother) are optimized for AllFantasy scoring and may not score exactly as intended under this preset.":
-    'Este preset se basa en el formato predeterminado de Sleeper. Las ligas especiales (Zombie, Survivor, Torneo, Guillotina, Big Brother) están optimizadas para la puntuación de AllFantasy y quizá no puntúen exactamente como se espera con este preset.',
+  "This scoring preset is based on Sleeper's default format. Specialty leagues (Zombie, Survivor, Tournament, Guilly, Big Brother) are optimized for AllFantasy scoring and may not score exactly as intended under this preset.":
+    'Este preset se basa en el formato predeterminado de Sleeper. Las ligas especiales (Zombie, Survivor, Torneo, Guilly, Big Brother) están optimizadas para la puntuación de AllFantasy y quizá no puntúen exactamente como se espera con este preset.',
   'ESPN default points-league scoring values for NBA.': 'Valores de puntuación predeterminados de ESPN para ligas de puntos de NBA.',
   "This scoring preset is based on ESPN's default format. Specialty leagues are optimized for AllFantasy scoring and may not score exactly as intended under this preset.":
     'Este preset se basa en el formato predeterminado de ESPN. Las ligas especiales están optimizadas para la puntuación de AllFantasy y quizá no puntúen exactamente como se espera con este preset.',

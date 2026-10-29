@@ -56,7 +56,9 @@ export async function expireDueRedraftTradeProposals(opts?: {
 
   // Oldest deadline first, so a backlog drains in order across runs.
   const due = await prisma.redraftTradeProposal.findMany({
-    where: { status: 'pending', expiresAt: { lt: now } },
+    // An ACCEPTED trade past its deadline is a review window that ended with no veto: it goes through,
+    // by ./tradeReviewWindowSweep.ts, never expires here.
+    where: { status: 'pending', acceptedAt: null, expiresAt: { lt: now } },
     orderBy: { expiresAt: 'asc' },
     take: limit,
     select: { id: true, leagueId: true, seasonId: true, proposerRosterId: true },
@@ -68,7 +70,7 @@ export async function expireDueRedraftTradeProposals(opts?: {
     try {
       const claimed = await prisma.$transaction(async (tx) => {
         const claim = await tx.redraftTradeProposal.updateMany({
-          where: { id: proposal.id, status: 'pending', expiresAt: { lt: now } },
+          where: { id: proposal.id, status: 'pending', acceptedAt: null, expiresAt: { lt: now } },
           data: { status: 'expired' },
         })
         if (claim.count === 0) return false

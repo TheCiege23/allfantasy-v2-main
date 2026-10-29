@@ -225,13 +225,16 @@ export async function closeCouncil(
 }
 
 /**
- * Get council for a week.
+ * The council a week is on now. A week can hold two councils (double-elimination weeks) plus
+ * revotes, each its own row numbered in order, so this is the open one if any, else the latest.
  */
 export async function getCouncil(leagueId: string, week: number) {
   const config = await getSurvivorConfig(leagueId)
   if (!config) return null
-  return prisma.survivorTribalCouncil.findUnique({
-    where: { configId_week_councilNumber: { configId: config.configId, week, councilNumber: 1 } },
-    include: { votes: true },
-  })
+  const where = { configId: config.configId, week }
+  const order = [{ councilNumber: 'desc' as const }]
+  return (
+    (await prisma.survivorTribalCouncil.findFirst({ where: { ...where, isRevealed: false, status: { not: 'cancelled' } }, orderBy: order, include: { votes: true } })) ??
+    (await prisma.survivorTribalCouncil.findFirst({ where, orderBy: order, include: { votes: true } }))
+  )
 }

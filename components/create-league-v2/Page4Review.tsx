@@ -21,7 +21,7 @@ const LEAGUE_TYPE_LABEL: Record<string, string> = {
   best_ball: 'Best Ball',
   salary_cap: 'Salary Cap',
   survivor: 'Survivor',
-  guillotine: 'Guillotine',
+  guillotine: 'Guilly',
   devy: 'Devy',
   c2c: 'College to Pros',
   zombie: 'Zombie',

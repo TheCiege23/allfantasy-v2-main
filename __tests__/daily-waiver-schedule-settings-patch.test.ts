@@ -86,7 +86,7 @@ describe('daily waiver schedule through executeLeagueSettingsPatch', () => {
     const written = lastSettingsWrite()
     expect(written[KEY]).toEqual(s)
     expect(written[PRIOR]).toEqual({ processingDays: [2], processingTimeUtc: '09:00', waiverSchedule: null, waiverProcessTime: '02:00' })
-    expect(m.derivedSync).toHaveBeenCalledWith('L')
+    expect(m.derivedSync).toHaveBeenCalledWith('L', expect.arrayContaining(['customDailyWaivers', 'waiverSchedule', 'waiverProcessTime']))
     expect(m.refreshNextRun).toHaveBeenCalledWith('L')
     expect(m.upsertWaiverSettings).not.toHaveBeenCalled()
   })

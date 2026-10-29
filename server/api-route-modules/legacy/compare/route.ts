@@ -61,7 +61,7 @@ Note: Superflex leagues are classified under their base type (redraft or dynasty
 
 ## EXCLUDED FORMATS (Track but don't grade for comparison)
 The following are EXCLUDED from head-to-head comparison:
-- **Guillotine leagues**: Elimination format creates artificial losses
+- **Guilly leagues**: Elimination format creates artificial losses
 - **Best Ball leagues**: No in-season management
 - **Survivor leagues**: Elimination format with skewed records
 - **Draft-only leagues**: No in-season component
@@ -219,7 +219,7 @@ function getLeagueTypeExtended(league: SleeperLeague): string {
   const positions = league.roster_positions || []
   const nameLower = (league.name || '').toLowerCase()
   
-  const isGuillotine = nameLower.includes('guillotine') || nameLower.includes('guilotine') || nameLower.includes('survivor elimination')
+  const isGuillotine = nameLower.includes('guillotine') || nameLower.includes('guilly') || nameLower.includes('guilotine') || nameLower.includes('survivor elimination')
   const isSurvivor = nameLower.includes('survivor') && !nameLower.includes('survivor elimination')
   const isDraftOnly = settings['type'] === 3 || nameLower.includes('draft only') || nameLower.includes('draft-only')
   const hasBestball = nameLower.includes('bestball') || nameLower.includes('best ball') || settings['best_ball'] === 1

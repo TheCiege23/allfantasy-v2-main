@@ -1,11 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { leagueWorkspaceHref } from '@/lib/league/league-workspace-navigation'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { useMemo, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { groupLeagueHubs } from '@/lib/core-app/leagueHubGroups'
+import { leagueSportCounts, leagueSportKey, leagueSportLabel } from '@/lib/core-app/leagueSports'
 import type { MyLeaguesData, MyLeaguesLeague, MyLeaguesTier } from '@/lib/core-app/myLeagues'
 import { LeagueHistoryVirtualList } from './LeagueHistoryVirtualList'
 // af-core.css carries the .af-core token layer (--surface, --line, --chip, --accent,
@@ -127,6 +129,8 @@ export function MyLeaguesV4({
   const copy = (english: string) => coreUiCopy(english, language)
   const [query, setQuery] = useState('')
   const [platform, setPlatform] = useState<string>('all')
+  /** `undefined` = all sports; `null` = the leagues with no sport recorded ("Other"). */
+  const [sport, setSport] = useState<string | null | undefined>(undefined)
   const [showHistory, setShowHistory] = useState(false)
   const [view, setView] = useState<ViewMode>('grid')
   const [chip, setChip] = useState<ChipKey | null>(null)
@@ -142,6 +146,7 @@ export function MyLeaguesV4({
     return leagues.filter((l) => {
       if (!q && hiddenSet.has(l.id)) return false
       if (platform !== 'all' && String(l.platform).toLowerCase() !== platform) return false
+      if (sport !== undefined && leagueSportKey(l.sport) !== sport) return false
       if (q && ![l.name, l.hub?.name, ...(l.hub?.members.map((m) => m.name) ?? [])].filter(Boolean).join(' ').toLowerCase().includes(q)) return false
       if (chip === 'needs' && l.tier !== 'needs') return false
       if (chip === 'playing' && l.tier !== 'playing') return false
@@ -156,7 +161,14 @@ export function MyLeaguesV4({
       }
       return true
     })
-  }, [leagues, platform, q, chip, hiddenSet])
+  }, [leagues, platform, sport, q, chip, hiddenSet])
+
+  /*
+   * Sport tabs. Counted over every live league the account holds (hidden ones included, as the
+   * chip counts are), so a tab's number does not move as other filters change. Shown only when
+   * the account plays two or more sports: a single "NFL 12" tab separates nothing.
+   */
+  const sportTabs = useMemo(() => leagueSportCounts(leagues), [leagues])
 
   /* History is only searched when the "+ history" toggle is on — the handoff's
      "543 past seasons searchable via + history". */
@@ -301,6 +313,32 @@ export function MyLeaguesV4({
         </div>
       </div>
 
+      {sportTabs.length > 1 ? (
+        <div className="af-ml-chips af-ml-sports" role="group" aria-label={copy('Filter by sport')}>
+          <button
+            type="button"
+            className="af-ml-chip"
+            data-on={sport === undefined}
+            onClick={() => setSport(undefined)}
+            aria-pressed={sport === undefined}
+          >
+            {copy('All sports')} <span className="af-ml-chip-n af-num">{leagues.length}</span>
+          </button>
+          {sportTabs.map((s) => (
+            <button
+              key={s.key ?? 'other'}
+              type="button"
+              className="af-ml-chip"
+              data-on={sport === s.key}
+              onClick={() => setSport((cur) => (cur === s.key ? undefined : s.key))}
+              aria-pressed={sport === s.key}
+            >
+              {leagueSportLabel(s.key)} <span className="af-ml-chip-n af-num">{s.count}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* Filter chips — counts are the whole account, so they stay stable as you filter. */}
       <div className="af-ml-chips">
         {CHIPS.map((c) => (
@@ -364,6 +402,7 @@ export function MyLeaguesV4({
                 onClick={() => {
                   setQuery('')
                   setPlatform('all')
+                  setSport(undefined)
                   setChip(null)
                 }}
               >
@@ -544,7 +583,9 @@ function LeagueCard({
             {league.hub?.name ?? league.name}
           </h3>
           <p className="af-ml-card-meta">
-            {league.hub ? `${league.hub.members.length} connected leagues · shared hub` : platformLabel(String(league.platform))}
+            <span className="af-ml-sport">{leagueSportLabel(leagueSportKey(league.sport), { short: true })}</span>
+            {' · '}
+            {league.hub ?`${league.hub.members.length} connected leagues · shared hub` : platformLabel(String(league.platform))}
             {league.formatLabel ? ` · ${league.formatLabel}` : null}
           </p>
         </div>
@@ -583,12 +624,9 @@ function LeagueCard({
       ) : null}
 
       <div className="af-ml-card-actions">
-        <Link href={league.hub?.href ?? league.href} className="af-ml-open">
-          {league.hub ? (es ? 'Abrir centro compartido →' : 'Open shared hub →') : dashboardLabel}
+        <Link href={league.hub?.href ?? (isNativePlatform(league.platform) ? leagueEntryHref(league) : league.href)} className="af-ml-open">
+          {league.hub ? (es ? 'Abrir centro compartido →' : 'Open shared hub →') : isNativePlatform(league.platform) ? (es ? 'Abrir liga ↗' : 'Open League ↗') : dashboardLabel}
         </Link>
-        {!league.hub ? (
-          <Link href={leagueWorkspaceHref(league.id)} className="af-ml-open af-ml-open--workspace">{es ? 'Abrir liga ↗' : 'Open League ↗'}</Link>
-        ) : null}
       </div>
     </article>
   )

@@ -8,6 +8,8 @@ import {
   type RosterLineupLists,
 } from '@/lib/league/lineup-swap'
 import type { PlayerMap } from '@/lib/hooks/useSleeperPlayers'
+import type { DisplayPlayerMap } from '@/lib/player-data/adapters/redraftDisplayPlayers'
+import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import type { SwapCandidate } from '@/components/league/TeamLineupSwapModal'
 
 export function rosterSectionBadge(lists: RosterLineupLists, playerId: string): string {
@@ -32,6 +34,38 @@ export function buildPlayerRow(id: string, players: PlayerMap): Record<string, u
     gameTime: '—',
     projection: 0,
     status: 'healthy',
+  }
+}
+
+/**
+ * The `roster` body `/api/leagues/roster/save` stores, from the slot-aligned lists the tab edits.
+ * Each starter row carries `slotIndex`, the expanded starter slot he holds (QB, RB1, …, FLEX,
+ * lib/league/lineupSlotPositions.ts), so FLEX vs RB2 or UTIL 2 survives a reload. Without it the save
+ * stored a compacted list and the next load re-seated everyone.
+ */
+export function buildLineupSaveRoster(
+  lists: RosterLineupLists,
+  players: PlayerMap | DisplayPlayerMap,
+  storedPlayerData?: unknown,
+): Record<string, Array<Record<string, unknown>>> {
+  // The save route admits an IR row by its STATUS (`validateIrSectionAgainstLeague`), so an IR row
+  // carries the player's real designation — as the native lineup screen sends it — never 'healthy'.
+  // Without a live designation (a Sleeper-map player), the status already stored on his row stands.
+  const storedStatus = new Map<string, string>()
+  for (const section of Object.values(getNormalizedLineupSections(storedPlayerData))) {
+    for (const row of section) {
+      const st = row.status ?? row.injury_status
+      if (typeof st === 'string' && st.trim()) storedStatus.set(String(row.id), st)
+    }
+  }
+  const irStatus = (id: string) =>
+    String((players as DisplayPlayerMap)[id]?.injuryStatus || storedStatus.get(id) || 'healthy').toLowerCase()
+  return {
+    starters: lists.starters.flatMap((id, slotIndex) => (id ? [{ ...buildPlayerRow(id, players), slotIndex }] : [])),
+    bench: lists.bench.map((id) => buildPlayerRow(id, players)),
+    ir: lists.ir.map((id) => ({ ...buildPlayerRow(id, players), status: irStatus(id) })),
+    taxi: lists.taxi.map((id) => buildPlayerRow(id, players)),
+    devy: lists.devy.map((id) => buildPlayerRow(id, players)),
   }
 }
 

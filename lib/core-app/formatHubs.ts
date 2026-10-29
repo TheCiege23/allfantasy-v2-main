@@ -1,5 +1,6 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { nativeGuillotineState } from '@/lib/league/nativeFormatPatch'
 import { readCommissionerTemplatePin } from '@/lib/commissioner-os/profile/templatePin'
 import { listSendableLeagueIds } from '@/lib/commissioner/broadcastAccess'
 import { getTradesBoard } from './tradesBoard'
@@ -33,7 +34,9 @@ export const HUB_FORMATS = ['zombie', 'tournament', 'survivor', 'c2c', 'guilloti
 export type HubFormat = (typeof HUB_FORMATS)[number]
 
 export function parseHubFormat(raw: unknown): HubFormat | null {
-  const v = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  const lowered = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  // "Guilly" is the display name for the guillotine format; the id stays `guillotine`.
+  const v = lowered === 'guilly' ? 'guillotine' : lowered
   return (HUB_FORMATS as readonly string[]).includes(v) ? (v as HubFormat) : null
 }
 
@@ -118,6 +121,7 @@ export type MemberLeague = {
   leagueSize: number | null
   userId: string
   leagueType: string | null
+  leagueVariant?: string | null
   guillotineMode: boolean | null
   lastSyncedAt: Date | null
   syncStatus: string | null
@@ -210,6 +214,7 @@ export async function readFormatMembership(
         leagueSize: true,
         userId: true,
         leagueType: true,
+        leagueVariant: true,
         guillotineMode: true,
         lastSyncedAt: true,
         syncStatus: true,
@@ -271,9 +276,14 @@ export async function readFormatMembership(
     new Set(rows.map((r) => r.leagueId).filter((v): v is string => typeof v === 'string'))
   const byType = (t: string) => members.filter((m) => (m.leagueType ?? '').toLowerCase() === t).map((m) => m.id)
 
+  const byId = new Map(members.map(m => [m.id, m]))
+  const currentGuillotineRows = guillotineRows.filter(row => {
+    const league = byId.get(row.leagueId)
+    return league && nativeGuillotineState(league) !== false
+  })
   const formatIds: Record<HubFormat, Set<string>> = {
     guillotine: new Set([
-      ...setOf(guillotineRows),
+      ...setOf(currentGuillotineRows),
       ...members.filter((m) => m.guillotineMode === true).map((m) => m.id),
       ...byType('guillotine'),
     ]),

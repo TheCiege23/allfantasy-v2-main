@@ -233,6 +233,11 @@ export const ROUND_SHORT_LABELS: Record<string, SportRoundLabels> = {
     conference_finals: "Conf. Finals",
     finals: "Stanley Cup",
   },
+  nba_cup: {
+    cup_quarterfinals: "Quarterfinals",
+    cup_semifinals: "Semifinals",
+    cup_championship: "Championship",
+  },
   ncaaf: {
     cfp_first_round: "First Round",
     cfp_quarterfinals: "Quarterfinal",

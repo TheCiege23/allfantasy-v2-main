@@ -1,5 +1,6 @@
 import type { ParsedStats, SportAdapter } from './types'
 import { NFL_CONFIG } from '@/lib/sportConfig/configs/nfl'
+import { NFL_EXTRA_PLAYER_STAT_KEYS } from '@/lib/scoring-runtime/nflExtraStatKeys'
 
 /** After `parseRawStats`, use `calculateScoreFromSportConfig` from `@/lib/redraft/scoringEngine` for league-aware points. */
 
@@ -41,6 +42,7 @@ export const nflAdapter: SportAdapter = {
       idp_safety: apiStats.idp_safety ?? 0,
       idp_tfl: apiStats.idp_tfl ?? 0,
       idp_qb_hit: apiStats.idp_qb_hit ?? 0,
+      ...Object.fromEntries(NFL_EXTRA_PLAYER_STAT_KEYS.map((key) => [key, apiStats[key] ?? 0])),
     }
   },
   getLineupLockTime(_sport: string, gameTimeIso: string): Date {

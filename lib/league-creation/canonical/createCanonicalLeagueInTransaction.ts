@@ -1,6 +1,12 @@
+import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, defaultMedianGameFor } from '@/lib/league/oddTeamLeagues'
 import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
-import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
-import { buildScoringFromPresetId, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
+import { buildSurvivorFullSeasonPlan, readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { isSurvivorTwistPresetId, SURVIVOR_TWIST_PRESET_DEFAULT, SURVIVOR_TWIST_PRESET_SETTING, survivorTwistFoundationPatch } from '@/lib/survivor/survivorTwistPresets'
+import { withPlayoffStartWeekCopies } from '@/lib/playoff-settings/playoffStartWeekCopies'
+import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
+import { readSurvivorEntryFee, survivorDuesTrackerSeed } from '@/lib/survivor/survivorCreationAvailability'
+import { buildScoringFromPresetId, isNativeCategoryScoringPreset, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 /**
@@ -29,6 +35,14 @@ import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
+import { applyPlayoffShapeToSettings, redraftPlayoffShapeFor } from '@/lib/league-defaults/redraftPlayoffFit'
+import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { dynastyDefaultRegularSeasonWeeksFor } from '@/lib/dynasty-core/constants'
+import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
+import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
+import { defaultTradeDeadlineWeek } from '@/lib/trade-deadline/tradeDeadlineDefaults'
+import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
+import { dailyLineupTablesExist, defaultsToDailyLineups, withLineupMode } from '@/lib/redraft/lineupModeSwitch'
 
 type Tx = Prisma.TransactionClient
 
@@ -90,8 +104,9 @@ function leagueModeColumns(formatId: LeagueFormatId): Partial<Prisma.LeagueUnche
     // 🛑 `draftPickTrading` defaults to false, and nothing at create set it — so every native dynasty
     // league refused future-pick trades (PICK_TRADING_BLOCKED) until a commissioner found the toggle.
     // A league that holds a rookie draft every year trades its picks by default; the commissioner can
-    // still switch it off.
-    draftPickTrading: isDynasty,
+    // still switch it off. A redraft league trades its current draft's picks by default too (future
+    // picks are refused there by the trade engine). Keeper and the specialty formats stay off.
+    draftPickTrading: isDynasty || formatId === 'redraft',
     bestBallMode: formatId === 'best_ball',
     guillotineMode: formatId === 'guillotine',
     survivorMode: formatId === 'survivor',
@@ -201,12 +216,16 @@ export async function createCanonicalLeagueInTransaction(
     managerCount: body.teamCount,
     scoringPreset: body.scoringPreset,
   })
-  if (sport === 'MLB' && /^mlb_[56]x[56]_/.test(body.scoringPreset ?? '')) {
-    const ctx = { sport: 'MLB' as const, leagueType: formatId as any, idpSelected: false }
-    if (!isScoringPresetValidForContext(body.scoringPreset!, ctx)) throw new Error('MLB category scoring requires redraft, dynasty or keeper.')
+  if ((sport === 'MLB' || sport === 'NHL') && isNativeCategoryScoringPreset(sport, body.scoringPreset)) {
+    const ctx = { sport, leagueType: formatId as any, idpSelected: false }
+    if (!isScoringPresetValidForContext(body.scoringPreset!, ctx)) throw new Error(`${sport} category scoring requires redraft, dynasty or keeper.`)
     Object.assign(foundationDefaults.scoringSettings, buildScoringFromPresetId(body.scoringPreset!, ctx).scoringSettings)
   }
-  if (sport === 'NBA' && foundationDefaults.scoringSettings.scoringMode === 'h2h_category') {
+  // Category leagues lock one lineup per week, as MLB and NBA do: a category week is one team total.
+  if (
+    (sport === 'NBA' && foundationDefaults.scoringSettings.scoringMode === 'h2h_category') ||
+    (sport === 'NHL' && ['h2h_category', 'roto'].includes(String(foundationDefaults.scoringSettings.scoringMode)))
+  ) {
     Object.assign(foundationDefaults.scoringSettings, { lineupLockType: 'first_game_of_week' })
     foundationDefaults.scheduleSettings.lineupLockType = 'first_game_of_week'
   }
@@ -321,7 +340,7 @@ export async function createCanonicalLeagueInTransaction(
     sport_type: sport,
     trade_review_mode: tradeReview,
     requested_draft_type: body.draftType,
-    ...(foundationDefaults.scoringSettings.scoringMode !== 'points' && (sport === 'MLB' || sport === 'NBA') ? {sportConfig:{...((engine.settingsSnapshot.sportConfig as Record<string,unknown>)??{}),lineupLockType:'first_game_of_week'}} : {}),
+    ...(foundationDefaults.scoringSettings.scoringMode !== 'points' && (sport === 'MLB' || sport === 'NBA' || sport === 'NHL') ? {sportConfig:{...((engine.settingsSnapshot.sportConfig as Record<string,unknown>)??{}),lineupLockType:'first_game_of_week'}} : {}),
     canonical_draft_mode: body.draftType,
     third_round_reversal: thirdRoundReversal,
     draft_third_round_reversal: thirdRoundReversal,
@@ -382,6 +401,24 @@ export async function createCanonicalLeagueInTransaction(
     mergedSettings.playoffSettings = { ...foundationDefaults.playoffSettings, playoff_team_count: 0, playoff_start_week: end + 1 }
   }
 
+  /*
+   * DAILY LINEUPS ARE THE DEFAULT FOR A NEW NBA OR NHL REDRAFT POINTS LEAGUE (owner, 2026-10-27): both
+   * halves of the daily gate, written by the same helper the commissioner's switch uses. Only new
+   * leagues — nothing here touches one that exists. Without the per-day tables a daily league fails
+   * every lineup save (P2021), so the default stays weekly until the migration is applied, exactly as
+   * the switch refuses daily then.
+   */
+  if (
+    defaultsToDailyLineups({ sport, leagueType: formatId, scoringMode: String(mergedSettings.scoring_mode ?? 'points') }) &&
+    (await dailyLineupTablesExist(tx))
+  ) {
+    const sportConfig = mergedSettings.sportConfig
+    mergedSettings.sportConfig = withLineupMode(
+      sportConfig && typeof sportConfig === 'object' && !Array.isArray(sportConfig) ? (sportConfig as Record<string, unknown>) : {},
+      'daily',
+    )
+  }
+
   // The concept choice must replace the preset's inherited standings mode before bootstrap.
   if (bestBallSettings && (bestBallSettings.matchupFormat === 'cumulative' || bestBallSettings.playoffFormat === 'advancement')) {
     const structure = mergedSettings.playoff_structure
@@ -437,23 +474,38 @@ export async function createCanonicalLeagueInTransaction(
 
   if (formatId === 'survivor') {
     const setup = body.conceptSetup ?? {}
-    const settings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...setup, defaultTeamCount: managerCount,
-      tribeCount: setup.survivorTribeCount ?? normalizeSurvivorFoundationSettings(mergedSettings).tribeCount })
+    const tribeCount = setup.survivorTribeCount ?? normalizeSurvivorFoundationSettings(mergedSettings).tribeCount
+    // The twist preset sets the twist switches; anything the payload names itself still wins.
+    const preset = isSurvivorTwistPresetId(setup.survivorTwistPreset) ? setup.survivorTwistPreset : SURVIVOR_TWIST_PRESET_DEFAULT
+    const settings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...survivorTwistFoundationPatch(preset, Number(tribeCount)), ...setup, defaultTeamCount: managerCount, tribeCount })
     Object.assign(mergedSettings, buildSurvivorSettingsSnapshotPatch({ ...settings }))
+    mergedSettings[SURVIVOR_TWIST_PRESET_SETTING] = preset
+    // Free/paid is a label; validateCreatePayload already refused a bad amount. A paid league
+    // starts with League Dues on so the commissioner can mark managers paid (dues are off-app).
+    const fee = readSurvivorEntryFee(setup.survivorEntryFeeMode ?? setup.survivor_entry_fee_mode,
+      setup.survivorEntryFeeAmountCents ?? setup.survivor_entry_fee_amount_cents)
+    if (!('error' in fee)) {
+      mergedSettings.survivor_entry_fee_mode = fee.mode
+      mergedSettings.survivor_entry_fee_amount_cents = fee.amountCents
+      if (fee.mode === 'paid') mergedSettings.dues_tracker = survivorDuesTrackerSeed(fee.amountCents)
+    }
+    // A new league defaults to the score boss (median); a missing value would read as legacy Chimmy.
+    Object.assign(mergedSettings, withNewLeagueLateSeasonDefaults(mergedSettings))
   }
 
-  if (formatId === 'survivor' && (sport === 'NBA' || sport === 'NHL')) {
+  if (formatId === 'survivor' && isSurvivorPlanSport(sport)) {
     const setup = body.conceptSetup ?? {}
     const draftAt = typeof setup.draftDate === 'string' && typeof setup.draftTime === 'string'
       ? toUtc(setup.draftDate, setup.draftTime, String(setup.draftTimezone ?? body.timezone ?? 'America/New_York')) : undefined
     const exileSettings = normalizeSurvivorFoundationSettings({ ...mergedSettings, ...setup })
-    const plan = buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, sport, season: seasonYear, castSize: managerCount, draftAt,
+    const plan = buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: typeof setup.exileReturnWeek === 'number' || typeof setup.survivorExileReturnWeek === 'number' ? exileSettings.exileReturnWeek : undefined, finalistCount: readSurvivorLateSeasonSettings({ ...mergedSettings, ...setup }).finalistCount, sport, season: seasonYear, castSize: managerCount, draftAt,
       endWeek: typeof setup.survivorSeasonEndWeek === 'number' ? setup.survivorSeasonEndWeek : undefined })
-    // Persist the same slots consumed by the draft, lineup, waivers, and readiness resolver.
-    mergedSettings[sport.toLowerCase() + '_roster_config'] = { slots: {
+    // Persist the same slots consumed by the draft, lineup, waivers, and readiness resolver. NFL
+    // keeps its existing roster path; only the daily sports carry this per-sport slot record.
+    if (sport === 'NBA' || sport === 'NHL' || sport === 'MLB') mergedSettings[sport.toLowerCase() + '_roster_config'] = { slots: {
       ...(foundationDefaults.rosterSettings.starter_slots as Record<string, number>),
       BN: readNumber(foundationDefaults.rosterSettings, 'benchSlots', 0),
-      [sport === 'NBA' ? 'IL' : 'IR']: readNumber(foundationDefaults.rosterSettings, 'irSlots', 0),
+      [sport === 'NHL' ? 'IR' : 'IL']: readNumber(foundationDefaults.rosterSettings, 'irSlots', 0),
     } }
     // Keep creation-time Exile choices consistent with the saved season calendar.
     Object.assign(mergedSettings, { exileIslandEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: plan.exileReturnWeek ?? exileSettings.exileReturnWeek, exileReturnTokens: exileSettings.exileReturnTokens })
@@ -474,7 +526,6 @@ export async function createCanonicalLeagueInTransaction(
     scoringSettings.scoringFormat ?? scoringSettings.preset ?? body.scoringPreset ?? 'standard',
   )
   const scoringMode = String(scoringSettings.scoringMode ?? 'points')
-  const playoffTeamsDefault = readNumber(playoffSettings, 'playoffTeams', isGuillotine ? 1 : 6)
 
   /**
    * 🛑 A bracket cannot seat more teams than the league has managers.
@@ -490,9 +541,74 @@ export async function createCanonicalLeagueInTransaction(
    * the first place.
    */
   const clampPlayoffTeams = (value: number | null | undefined): number | null => fitPlayoffTeamsToLeague(value, managerCount)
+
+  /*
+   * 🛑 A REDRAFT BRACKET IS SIZED TO THE LEAGUE AND ITS FINAL LANDS IN THE SEASON'S LAST WEEK
+   * (lib/league-defaults/redraftPlayoffFit.ts). NFL, NBA, NHL and MLB: the field comes from the league
+   * size (a 6-team daily-sport league no longer sends all six), the start week from the bracket's
+   * length (a 4-team NFL bracket plays weeks 16-17, not 15-16 with week 17 unplayed), and the one
+   * shape is written to the columns AND every JSON copy — they used to say 4 teams and 6 teams / 2
+   * byes about the same league.
+   *
+   * Keeper leagues play the same season and get the same field, start week and one shape.
+   */
+  const redraftShape =
+    (formatId === 'redraft' || formatId === 'keeper') && scoringMode !== 'roto'
+      ? redraftPlayoffShapeFor({
+          sport,
+          leagueSize: managerCount,
+          leagueType: formatId,
+          weeksPerRound: readNumber(playoffSettings, 'playoffWeeksPerRound', 1),
+          championshipLength: readChampionshipLength(mergedSettings),
+        })
+      : null
+  if (redraftShape) {
+    Object.assign(playoffSettings, {
+      playoffTeams: redraftShape.playoffTeams,
+      playoff_team_count: redraftShape.playoffTeams,
+      playoffStartWeek: redraftShape.playoffStartWeek,
+      playoff_start_week: redraftShape.playoffStartWeek,
+    })
+    Object.assign(mergedSettings, applyPlayoffShapeToSettings(mergedSettings, redraftShape))
+    // The schedule hands over to the playoffs in the week the bracket opens.
+    foundationDefaults.scheduleSettings.playoff_transition_point = redraftShape.playoffStartWeek
+    if (mergedSettings.schedule_playoff_transition_point != null) {
+      mergedSettings.schedule_playoff_transition_point = redraftShape.playoffStartWeek
+    }
+  }
+  const playoffTeamsDefault = readNumber(playoffSettings, 'playoffTeams', isGuillotine ? 1 : 6)
   const playoffStartWeekRaw = playoffSettings.playoffStartWeek
-  const playoffStartWeekDefault =
+  const playoffStartWeekParsed =
     playoffStartWeekRaw == null ? null : Number.isFinite(Number(playoffStartWeekRaw)) ? Number(playoffStartWeekRaw) : null
+  // A redraft or keeper regular season is capped (lib/redraft/regularSeasonCap.ts). The fitted sports'
+  // shape already respects it; soccer's playoff default (week 36) would start past its 34-week cap.
+  const playoffStartWeekCap =
+    (formatId === 'redraft' || formatId === 'keeper') && scoringMode !== 'roto' ? maxPlayoffStartWeekFor({ leagueType: formatId, sport }) : null
+  const playoffStartWeekDefault =
+    playoffStartWeekParsed != null && playoffStartWeekCap != null ? Math.min(playoffStartWeekParsed, playoffStartWeekCap) : playoffStartWeekParsed
+  /*
+   * 🛑 THE COLUMN IS WHAT THE RESOLVER READS FIRST, SO EVERY JSON COPY IS WRITTEN FROM IT
+   * (lib/playoff-settings/playoffStartWeekCopies.ts). Per format:
+   *  - a bracket league: its fitted start (redraft/keeper) or the sport default;
+   *  - best ball: the week after its own regular season (`best_ball_settings.regularSeasonLength`),
+   *    and a tournament the week after its last round;
+   *  - survivor has NO playoffs — the season is the full-season plan through `endWeek`. The week after
+   *    it, as the season builder writes (finalizeDraftToRedraftSeason), so no reader finds a playoff
+   *    start inside the season. A sport without a plan keeps its default;
+   *  - guillotine, zombie and roto have no bracket: null everywhere.
+   */
+  const survivorPlanEnd = formatId === 'survivor' ? readSurvivorFullSeasonPlan(mergedSettings)?.endWeek ?? null : null
+  const playoffStartWeekColumn: number | null =
+    scoringMode === 'roto' || isGuillotine
+      ? null
+      : survivorPlanEnd != null
+        ? survivorPlanEnd + 1
+        : bestBallSettings?.contestStructure === 'tournament'
+          ? tournamentRoundEnds(bestBallSettings).at(-1)! + 1
+          : bestBallSettings && bestBallSettings.playoffTeams > 0
+            ? bestBallSettings.regularSeasonLength + 1
+            : playoffStartWeekDefault
+  Object.assign(mergedSettings, withPlayoffStartWeekCopies(mergedSettings, playoffStartWeekColumn))
   const playoffWeeksPerRoundDefault = readNumber(playoffSettings, 'playoffWeeksPerRound', 1)
   const playoffSeedingRuleDefault = readString(playoffSettings, 'seedingRule', 'record_then_points')
   const playoffLowerBracketDefault = readString(playoffSettings, 'lowerBracket', 'consolation')
@@ -569,22 +685,29 @@ export async function createCanonicalLeagueInTransaction(
           : bestBallSettings?.playoffFormat === 'advancement'
             ? 'points_only'
             : playoffSeedingRuleDefault,
-      playoffStartWeek:
-        bestBallSettings && bestBallSettings.playoffTeams > 0
-          ? bestBallSettings.regularSeasonLength + 1
-          : playoffStartWeekDefault,
+      playoffStartWeek: playoffStartWeekColumn,
       playoffWeeksPerRound:
         bestBallSettings && bestBallSettings.playoffTeams > 0 && bestBallSettings.playoffFormat !== 'none'
           ? 1
           : playoffWeeksPerRoundDefault,
       playoffLowerBracket: playoffLowerBracketDefault,
+      /*
+       * A redraft or keeper league starts with a trade deadline three weeks before its own playoffs
+       * (lib/trade-deadline/tradeDeadlineDefaults.ts). Every native league was created with NULL here —
+       * no deadline at all — while the sport configs carried defaults nothing read. The commissioner
+       * changes or clears it in settings; roto and other formats keep no default.
+       */
+      ...(redraftShape ? { tradeDeadlineWeek: defaultTradeDeadlineWeek(redraftShape.playoffStartWeek) } : {}),
       // `keeperCount` defaults to 3 in the schema, so a league that says nothing reads as a
       // three-keeper league to every consumer that trusts the column. A league created here
       // without keepers has decided: none.
       ...(keeperBootstrap ? keeperBootstrap.league : { keeperCount: 0 }),
-      // League-median game — the standings engine plays it when this is on.
-      medianGame: scoringMode === 'points' && conceptSetupForPrivacy.medianGame === true,
-      ...(scoringMode === 'roto' ? {playoffTeams:0,playoffStartWeek:null} : {}),
+      // League-median game — the standings engine plays it when this is on. An odd redraft or keeper
+      // league starts with it on when the request says nothing (lib/league/oddTeamLeagues.ts).
+      medianGame: scoringMode === 'points' && (ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(String(formatId))
+        ? defaultMedianGameFor(managerCount, typeof conceptSetupForPrivacy.medianGame === 'boolean' ? conceptSetupForPrivacy.medianGame : null)
+        : conceptSetupForPrivacy.medianGame === true),
+      ...(scoringMode === 'roto' ? {playoffTeams:0} : {}),
       ...(isGuillotine
         ? {
             playoffStartWeek: null,
@@ -783,15 +906,20 @@ export async function createCanonicalLeagueInTransaction(
     const str = (v: unknown, fallback: string) => (v !== undefined && v !== null ? String(v) : fallback)
     const dynastyFallbackTaxiSlots =
       formatId === 'devy' ? readNumber(foundationDefaults.rosterSettings, 'taxiSlots', 6) : 4
+    // NHL / MLB: no prospect pool, so a new league's taxi squad is 0 whatever the request carried.
+    const taxiSlotsForCreate = sportSupportsProspectStash(sport) ? num(ds.taxiSlots, dynastyFallbackTaxiSlots) : 0
     const dynastyFallbackRookieRounds =
       formatId === 'devy' ? readNumber(foundationDefaults.devyConfig, 'rookieDraftRounds', 4) : 4
+    // NCAAF's bracket window first, then the sport's own season length (dailySportSeasonShape.ts for
+    // NBA/NHL/MLB) — never a flat 14, which left a daily sport's playoff start past its season's end.
+    const dynastyFallbackRegularSeasonWeeks = ncaafRegularSeasonEndWeek ?? dynastyDefaultRegularSeasonWeeksFor(sport)
     const dynastyFallbackRookieDraftType =
       formatId === 'devy' ? readString(foundationDefaults.devyConfig, 'rookieDraftType', 'linear') : 'linear'
     await tx.dynastyLeagueConfig.upsert({
       where: { leagueId: league.id },
       create: {
         leagueId: league.id,
-        regularSeasonWeeks: num(ds.regularSeasonWeeks, ncaafRegularSeasonEndWeek ?? 14),
+        regularSeasonWeeks: num(ds.regularSeasonWeeks, dynastyFallbackRegularSeasonWeeks),
         rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
         useMaxPfForNonPlayoff: true,
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
@@ -799,7 +927,7 @@ export async function createCanonicalLeagueInTransaction(
         divisionsEnabled: num(ds.divisionCount, 0) > 0,
         futurePicksYearsOut: num(ds.futurePicksYearsOut, 3),
         waiverTypeRecommended: str(ds.waiverTypeRecommended, 'faab'),
-        taxiSlots: num(ds.taxiSlots, dynastyFallbackTaxiSlots),
+        taxiSlots: taxiSlotsForCreate,
         taxiEligibilityYears: num(ds.taxiEligibilityYears, 1),
         taxiLockBehavior: 'once_promoted_no_return',
         taxiInSeasonMoves: true,
@@ -808,14 +936,14 @@ export async function createCanonicalLeagueInTransaction(
         taxiDeadlineWeek: ds.taxiLockDeadlineWeek != null ? num(ds.taxiLockDeadlineWeek, 0) || null : null,
       },
       update: {
-        regularSeasonWeeks: num(ds.regularSeasonWeeks, ncaafRegularSeasonEndWeek ?? 14),
+        regularSeasonWeeks: num(ds.regularSeasonWeeks, dynastyFallbackRegularSeasonWeeks),
         rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
         rookieDraftType: str(ds.rookieDraftType, dynastyFallbackRookieDraftType),
         divisionsEnabled: num(ds.divisionCount, 0) > 0,
         futurePicksYearsOut: num(ds.futurePicksYearsOut, 3),
         waiverTypeRecommended: str(ds.waiverTypeRecommended, 'faab'),
-        taxiSlots: num(ds.taxiSlots, dynastyFallbackTaxiSlots),
+        taxiSlots: taxiSlotsForCreate,
         taxiEligibilityYears: num(ds.taxiEligibilityYears, 1),
         taxiDeadlineWeek: ds.taxiLockDeadlineWeek != null ? num(ds.taxiLockDeadlineWeek, 0) || null : null,
       },
@@ -862,6 +990,7 @@ export async function createCanonicalLeagueInTransaction(
     },
   })
 
+  const defaultWaiverDaysList = defaultProcessingDaysList(waiverDefaults.processing_days)
   await tx.leagueWaiverSettings.create({
     data: {
       leagueId: league.id,
@@ -873,6 +1002,8 @@ export async function createCanonicalLeagueInTransaction(
       tiebreakRule: (waiverDefaults.claim_priority_behavior as string) ?? null,
       lockType: (waiverDefaults.game_lock_behavior as string) ?? null,
       instantFaAfterClear: waiverDefaults.free_agent_unlock_behavior === 'instant',
+      // Daily sports run on every default day; single-day sports (NFL) write no list — unchanged.
+      ...(defaultWaiverDaysList ? { processingDays: defaultWaiverDaysList } : {}),
     },
   })
 

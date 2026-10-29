@@ -33,10 +33,13 @@ import { BASH_TRANSFER_SHARE, MAUL_TRANSFER_SHARE } from '@/lib/zombie/winningsS
 import {
   buildZombieWeeklyBoard,
   pickMyMatchup,
+  pickTurnMoment,
   resolveSummaryWeek,
+  withBoardDetail,
   zombieRosterDisplayNames,
   zombieThemeForLeague,
 } from '@/lib/zombie/zombieHomeSummary'
+import { buildZombieMatchups, infectionPairsForWeek } from '@/lib/zombie/zombieMatchupBoard'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +70,7 @@ export async function GET(
         name: true,
         zombieLeague: {
           select: {
+            id: true,
             universeId: true,
             sport: true,
             season: true,
@@ -74,6 +78,7 @@ export async function GET(
             totalWeeks: true,
             themeLabel: true,
             status: true,
+            whispererIsPublic: true,
           },
         },
       },
@@ -181,13 +186,50 @@ export async function GET(
   // Statuses only ever come from the redacted list, so a hidden Whisperer reads as a Survivor here too.
   const statusOf = (rosterId: string) => shownStatuses.find((s) => s.rosterId === rosterId)?.status ?? 'Survivor'
   const mine = pickMyMatchup(weekResults, myRosterId)
-  const weeklyBoard = buildZombieWeeklyBoard({
-    week,
+  const hiddenRoster = (rosterId: string) => !viewer.canSee && identity.rosterIds.has(rosterId)
+  const nameOf = (rosterId: string) => rosterDisplayNames[rosterId] ?? 'A team'
+  const lossToZombieInfects = config.infectionLossToZombie !== false
+  const views = buildZombieMatchups({
     results: weekResults,
-    teams: zombieTeams,
-    bashingMargin: rules.bashingThreshold,
-    maulingMargin: rules.maulingThreshold,
-    hiddenInfector: (rosterId) => !viewer.canSee && identity.rosterIds.has(rosterId),
+    statusOf,
+    nameOf,
+    infected: infectionPairsForWeek(zombieTeams, week),
+    rules,
+    lossToZombieInfects,
+    myRosterId,
+  })
+  const weeklyBoard = withBoardDetail(
+    buildZombieWeeklyBoard({
+      week,
+      results: weekResults,
+      teams: zombieTeams,
+      bashingMargin: rules.bashingThreshold,
+      maulingMargin: rules.maulingThreshold,
+      hiddenInfector: hiddenRoster,
+    }),
+    views,
+  )
+
+  // The overlay announces the latest RESOLVED week's change, whichever week the viewer is browsing.
+  const lastResolved = zl?.id
+    ? await prisma.zombieWeeklyResolution.findFirst({
+        where: { zombieLeagueId: zl.id, status: 'complete' },
+        orderBy: { week: 'desc' },
+        select: { week: true },
+      }).catch(() => null) // the overlay is optional; it must never take the home down
+    : null
+  const lastResolvedWeek = lastResolved?.week ?? null
+  const turnResults =
+    lastResolvedWeek == null ? null : lastResolvedWeek === week ? weekResults : await loadNativeWeekResults(leagueId, lastResolvedWeek, season).catch(() => null)
+  const meRow = myRosterId ? zombieTeams.find((t) => t.rosterId === myRosterId) ?? null : null
+  const turnMoment = pickTurnMoment({
+    lastResolvedWeek,
+    // My own status, as I may see it: a Whisperer viewer always can.
+    me: meRow ? { ...meRow, status: statusOf(meRow.rosterId) } : null,
+    results: turnResults,
+    statusOf,
+    nameOf,
+    hiddenRoster,
   })
 
   return NextResponse.json({
@@ -217,6 +259,8 @@ export async function GET(
       status: zl?.status ?? null,
       backgroundTheme: zombieThemeForLeague(zl?.themeLabel, leagueId),
       teamCount: rosters.length,
+      /** For the universe map on the home (null when the league is not in a universe). */
+      universeId: zl?.universeId ?? null,
     },
     myStatus: myRosterId ? statusOf(myRosterId) : null,
     // A Whisperer is never revived, so this list cannot single one out.
@@ -232,6 +276,16 @@ export async function GET(
         }
       : null,
     myWinnings,
+    /** My matchup as the Bashing card draws it (scores, lines, what moved). */
+    myMatchupView: views.find((v) => v.mySide) ?? null,
+    lastResolvedWeek,
+    turnMoment,
+    /**
+     * The teams the viewer turned — their own deeds, so no secrecy question for the viewer. The Whisperer's
+     * lair lists its horde from this; it is empty for anyone who has bitten nobody.
+     */
+    myInfections: myRosterId ? zombieTeams.filter((t) => t.killedByRosterId === myRosterId).map((t) => t.rosterId) : [],
+    whispererPublic: zl?.whispererIsPublic !== false,
     rules: {
       bashingMargin: rules.bashingThreshold,
       maulingMargin: rules.maulingThreshold,

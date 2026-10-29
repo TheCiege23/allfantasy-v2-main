@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -50,7 +51,7 @@ async function tellStory(leagueId: string, event: DramaEvent) {
  * spent only when the client says the person confirmed the cost (`lib/tokens/clientTokenConfirm.ts`,
  * which turns the gate's 409 into that question), and a story that fails after the charge is refunded.
  */
-export async function POST(
+async function paidToolPost(
   req: Request,
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
@@ -105,6 +106,7 @@ export async function POST(
       throw e
     }
 
+    if (story.source !== 'ai') paidToolNotDelivered()
     return NextResponse.json({
       eventId,
       leagueId,
@@ -130,3 +132,5 @@ export async function POST(
     )
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

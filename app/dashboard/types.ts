@@ -63,6 +63,8 @@ export interface UserLeague {
   tradeDeadlineWeek?: number | null
   /** Prisma `League.playoffStartWeek` (default 14 when unset). */
   playoffStartWeek?: number | null
+  /** Prisma `League.playoffLowerBracket` — `toilet` | `consolation` | `none`; what the bracket is built from. */
+  playoffLowerBracket?: string | null
 }
 
 /** First tab to show in `LeftChatPanel` (from `?openChat=` on `/league/[id]`). */

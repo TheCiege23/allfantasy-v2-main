@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 
-const dispersalDraftClient = (prisma as typeof prisma & { dispersalDraft: any }).dispersalDraft
+const dispersalDraftClient = prisma.dispersalDraft
 
 /** Resolves Sleeper-style roster id (`LeagueTeam.externalId`) for the logged-in user. */
 export async function getRosterIdForLeagueUser(leagueId: string, userId: string): Promise<string | null> {

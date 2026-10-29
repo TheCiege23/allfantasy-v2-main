@@ -197,5 +197,6 @@ export async function readWeekGames(
       ? dropUnlabelledRowsFromAnotherPhase(rawRows)
       : rawRows
   const selectable: WeekGameRow[] = windowed ? inWindow.map((row) => ({ ...row, week: null })) : inWindow
-  return pickFreshestSourceRows(selectable, (args.now ?? new Date()).getTime())
+  // A week read wants the whole slate, not the freshest partial one — see `coverageBarIncludesStale`.
+  return pickFreshestSourceRows(selectable, (args.now ?? new Date()).getTime(), 'week', { coverageBarIncludesStale: true })
 }

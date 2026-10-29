@@ -31,8 +31,11 @@ export interface DynastyPlayoffPresetDto {
   label: string
   firstRoundByes: number
   playoffWeeks: number
-  /** Suggested start week (NFL) */
-  playoffStartWeek: number
+  /**
+   * Suggested start week. NFL only — null for every other sport, whose season length differs, so
+   * callers keep the league's existing start week instead of overwriting it.
+   */
+  playoffStartWeek: number | null
 }
 
 export interface DynastyLeagueConfigDto {
@@ -86,6 +89,16 @@ export interface DynastySettingsEffectiveDto {
   taxiScoringOn: boolean
   taxiDeadlineWeek: number | null
   taxiPromotionDeadlineWeek: number | null
+  /** Open the rookie draft automatically when its window opens (`rookieDraftCalendar.ts`). */
+  rookieDraftAutoOpen: boolean
+  /** Why auto-open is what it is: the commissioner's switch, or the plan default (`resolveRookieDraftAutoOpen`). */
+  rookieDraftAutoOpenSource: 'commissioner' | 'plan_default' | 'plan_default_predates' | 'free_default'
+  /** `YYYY-MM-DD` overriding the sport's window for one offseason; null = sport default. */
+  rookieDraftCustomOpenDate: string | null
+  /** Days after an automatic open that the rookie draft starts by itself; null = the commissioner presses Start. */
+  rookieDraftAutoStartDays: 3 | 7 | 14 | null
+  /** The sport's default window in words ("May", "November–January"); null when the sport has none. */
+  rookieDraftWindowLabel: string | null
 }
 
 export interface DynastyDraftOrderAuditEntryDto {

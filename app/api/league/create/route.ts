@@ -50,15 +50,16 @@ import {
 import {
   isSurvivorCreationSportAvailable,
   SURVIVOR_CREATION_UNAVAILABLE_MESSAGE,
-  SURVIVOR_PAID_CREATION_ENABLED,
-  SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE,
+  readSurvivorEntryFee,
+  survivorDuesTrackerSeed,
 } from '@/lib/survivor/survivorCreationAvailability';
 
 const createSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   platform: z.enum(['sleeper', 'espn', 'manual']),
   platformLeagueId: z.string().optional(),
-  leagueSize: z.number().min(4).max(32).optional(),
+  // 35 is the Guilly ceiling (lib/guillotine/teamCountLimits.ts); every other format stops at 32 below.
+  leagueSize: z.number().min(4).max(35).optional(),
   rosterSize: z.number().min(1).max(64).optional(),
   scoring: z.string().optional(),
   isDynasty: z.boolean().optional(),
@@ -415,6 +416,17 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  {
+    const isGuillotineRequest =
+      String(leagueVariantEffective ?? '').toLowerCase() === 'guillotine' ||
+      String(requestedLeagueType ?? '').toLowerCase() === 'guillotine';
+    if (!isGuillotineRequest && typeof leagueSizeInput === 'number' && leagueSizeInput > 32) {
+      return NextResponse.json(
+        { error: 'Leagues support up to 32 teams (Guilly leagues up to 35).' },
+        { status: 400 }
+      );
+    }
+  }
   let name = nameInput;
   let leagueSize = leagueSizeInput;
   let rosterSize = rosterSizeInput;
@@ -586,26 +598,13 @@ export async function POST(req: Request) {
               ? Number(sw.survivor_creation_team_count)
               : effectiveLeagueSize;
         effectiveLeagueSize = clampSurvivorCastSize(raw);
-        const feeMode = String(sw.survivor_entry_fee_mode ?? 'free')
-          .toLowerCase()
-          .trim();
-        if (feeMode === 'paid') {
-          if (!SURVIVOR_PAID_CREATION_ENABLED) {
-            return NextResponse.json({ success: false, error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }, { status: 400 });
-          }
-          const centsRaw = sw.survivor_entry_fee_amount_cents;
-          const cents = typeof centsRaw === 'number' ? centsRaw : Number(centsRaw);
-          if (!Number.isFinite(cents) || cents < 1) {
-            return NextResponse.json(
-              {
-                success: false,
-                error:
-                  'Paid Survivor leagues require a buy-in amount greater than zero (set by the commissioner).',
-                errors: [{ path: 'survivor_entry_fee_amount_cents', message: 'Invalid buy-in amount' }],
-              },
-              { status: 400 }
-            );
-          }
+        // "Paid" is a label only (dues are collected off the app); a bad optional amount is refused.
+        const fee = readSurvivorEntryFee(sw.survivor_entry_fee_mode, sw.survivor_entry_fee_amount_cents);
+        if ('error' in fee) {
+          return NextResponse.json(
+            { success: false, error: fee.error, errors: [{ path: 'survivor_entry_fee_amount_cents', message: fee.error }] },
+            { status: 400 }
+          );
         }
       }
 
@@ -636,7 +635,7 @@ export async function POST(req: Request) {
           return NextResponse.json(
             {
               success: false,
-              error: gResult.error ?? 'Invalid guillotine league',
+              error: gResult.error ?? 'Invalid Guilly league',
               errors: [{ path: 'guillotine', message: gResult.error ?? '' }],
             },
             { status: 400 }
@@ -1046,9 +1045,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Survivor: cast size is clamped to SURVIVOR_CAST_SIZE_OPTIONS (16-20 today; this
-    // comment said 16/20/24 long after the constant stopped saying so) — align Prisma
-    // `leagueSize` + settings JSON (wizard may send size only under settings).
+    // Survivor: cast size is clamped to SURVIVOR_CAST_SIZE_OPTIONS (12–24 since 2026-10-20;
+    // read the constant, not this comment) — align Prisma `leagueSize` + settings JSON
+    // (wizard may send size only under settings).
     if (String(requestedLeagueType ?? '').toLowerCase() === 'survivor') {
       const { clampSurvivorCastSize } = await import('@/lib/league-creation-wizard/sport-team-limits');
       const raw =
@@ -1064,22 +1063,24 @@ export async function POST(req: Request) {
       (initialSettings as Record<string, unknown>).league_size = cast;
       (initialSettings as Record<string, unknown>).survivor_creation_team_count = cast;
       (initialSettings as Record<string, unknown>).teamCount = cast;
+      // The Survivor foundation normalizer (and the concept snapshot merge below) read
+      // `default_team_count` / `cast_size`, never `league_size`. Left alone, `default_team_count`
+      // is the sport's REDRAFT default (10), so `League.survivorPlayerCount` — which sizes the
+      // idol pool and the tribe plan — used to disagree with `leagueSize` on every league.
+      (initialSettings as Record<string, unknown>).default_team_count = cast;
+      (initialSettings as Record<string, unknown>).cast_size = cast;
       initialSettings.roster_mode = 'redraft';
-      const feeMode = String((initialSettings as Record<string, unknown>).survivor_entry_fee_mode ?? 'free')
-        .toLowerCase()
-        .trim();
-      if (feeMode === 'paid') {
-        if (!SURVIVOR_PAID_CREATION_ENABLED) {
-          return NextResponse.json({ error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }, { status: 400 });
-        }
-        const centsRaw = (initialSettings as Record<string, unknown>).survivor_entry_fee_amount_cents;
-        const cents = typeof centsRaw === 'number' ? centsRaw : Number(centsRaw);
-        if (!Number.isFinite(cents) || cents < 1) {
-          return NextResponse.json(
-            { error: 'Paid Survivor leagues require a buy-in amount greater than zero (set by the commissioner).' },
-            { status: 400 }
-          );
-        }
+      const fee = readSurvivorEntryFee(
+        (initialSettings as Record<string, unknown>).survivor_entry_fee_mode,
+        (initialSettings as Record<string, unknown>).survivor_entry_fee_amount_cents,
+      );
+      if ('error' in fee) {
+        return NextResponse.json({ error: fee.error }, { status: 400 });
+      }
+      (initialSettings as Record<string, unknown>).survivor_entry_fee_mode = fee.mode;
+      (initialSettings as Record<string, unknown>).survivor_entry_fee_amount_cents = fee.amountCents;
+      if (fee.mode === 'paid' && !(initialSettings as Record<string, unknown>).dues_tracker) {
+        (initialSettings as Record<string, unknown>).dues_tracker = survivorDuesTrackerSeed(fee.amountCents);
       }
     }
 

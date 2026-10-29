@@ -1,6 +1,8 @@
 'use client'
 
 import { FormEvent, useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { CommishReputationBadge } from '@/components/commish-reputation/CommishReputationBadge'
+import type { PublicReputation } from '@/lib/commish-reputation/reputation'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Bot, CheckCircle2, Loader2, Lock, Search, UserPlus, Users } from 'lucide-react'
@@ -29,6 +31,7 @@ type OrphanTeamCard = {
   memberCount: number
   aiEvaluationPreview: string
   myRequestStatus: 'pending' | 'approved' | 'rejected' | null
+  commissionerReputation?: PublicReputation | null
 }
 
 type OrphanDiscoverResponse = {
@@ -604,6 +607,7 @@ export default function OrphanTeamsClient({ leagueId }: { leagueId?: string }) {
                   <div className="mt-3 flex items-center justify-between gap-2">
                     <p className="text-[11px] text-white/50">
                       Commissioner: {card.commissionerName}
+                      <CommishReputationBadge reputation={card.commissionerReputation} className="ml-1.5" />
                     </p>
                     <span className="text-[11px] text-white/45">{card.memberCount} teams filled</span>
                   </div>

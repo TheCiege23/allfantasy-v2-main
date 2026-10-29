@@ -1276,7 +1276,11 @@ export async function tryDeterministicAnswerDetailed(
   if (isScopedRosterReviewQuestion(message, leagueRequested)) return null
   // A result or schedule is evidence for analysis, never a probability or a recommendation.
   // Yield before ANY shortcut so incidental "live", "tonight", or "worth" cannot hijack it.
-  if (/\b(?:probabilit(?:y|ies)|chances?|odds|likely|likelihood)\b|\b(?:should\s+(?:i|we)|recommend(?:ation|ations)?|trade\s+block|worth\s+(?:me\s+)?trading)\b/i.test(message)) {
+  // ⚠ EXCEPT unsupported live data: the router has already classified it blocked_no_charge, and
+  // ChimmyChat skips the spend preflight on that policy. Yielding sent "live World Cup odds" on
+  // to the paid model path with no confirmation and no live data behind it; the refusal below is
+  // the free, honest answer the client was promised.
+  if (intentRoute.category !== 'unsupported_live_data' && /\b(?:probabilit(?:y|ies)|chances?|odds|likely|likelihood)\b|\b(?:should\s+(?:i|we)|recommend(?:ation|ations)?|trade\s+block|worth\s+(?:me\s+)?trading)\b/i.test(message)) {
     return null
   }
   /*

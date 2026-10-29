@@ -152,7 +152,7 @@ export function LeagueManagersStandingsSection({
 
   const heading = useMemo(() => {
     if (preDraft) return 'Team'
-    if (standingsPresentation.mode === 'guillotine') return 'Standings · Guillotine'
+    if (standingsPresentation.mode === 'guillotine') return 'Standings · Guilly'
     if (standingsPresentation.mode === 'survivor') return 'Standings · Tribes'
     if (standingsPresentation.mode === 'divisions') return 'Standings · Divisions'
     return 'Standings'

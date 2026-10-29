@@ -1,5 +1,7 @@
 'use client';
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { FlaskConical, Search, Loader2, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
@@ -229,7 +231,7 @@ export function PlayerComparisonPage() {
 
   const fetchAiInsight = useCallback(async (): Promise<ComparisonAIInsight | null> => {
     if (!comparison) return null;
-    const res = await fetch('/api/player-comparison/insight', {
+    const res = await paidToolFetchWithConfirm('/api/player-comparison/insight', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -8,6 +8,8 @@ import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISetting
 import { getOrphanRosterIdsForLeague } from './orphanRosterResolver'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
+import type { SubmitPickResult } from '@/lib/live-draft-engine/PickSubmissionService'
+import { DRAFT_PICK_STALE_OVERALL } from '@/lib/live-draft-engine/pickAuthorityCodes'
 import { appendPickToRosterDraftSnapshot } from '@/lib/live-draft-engine/RosterAssignmentService'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { computeCPUPick } from '@/lib/automated-drafter/CPUDrafterService'
@@ -18,6 +20,7 @@ import type { LeagueSport } from '@prisma/client'
 import { getAssignmentForRoster, parseCommissionerAiManagers } from '@/lib/commissioner-ai-draft-manager'
 import { mapAiStyleToCpuMode } from '@/lib/commissioner-ai-draft-manager/mapAiStyle'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
 
 export type AiManagerAuditAction = 'draft_pick' | 'trade_accept' | 'trade_reject' | 'trade_counter' | 'trade_send'
 
@@ -46,11 +49,19 @@ export async function logAction(input: LogActionInput): Promise<void> {
 export interface ExecuteDraftPickForOrphanInput {
   leagueId: string
   triggeredByUserId: string | null
+  /**
+   * The pick the caller means. When set, a board that has moved on refuses the pick
+   * (DRAFT_PICK_STALE_OVERALL) instead of spending the AI on the next one — several rooms can
+   * trigger the same automatic pick, and only the first may land.
+   */
+  expectedOverall?: number
 }
 
 export interface ExecuteDraftPickForOrphanResult {
   success: boolean
   error?: string
+  /** Pick-authority code from submitPick (e.g. DRAFT_PICK_STALE_OVERALL) when the pick was refused. */
+  code?: SubmitPickResult['code']
   pick?: { playerName: string; position: string; overall: number; round: number; slot: number }
   reason?: string
   requestedMode?: 'cpu' | 'ai'
@@ -196,6 +207,10 @@ export async function executeDraftPickForOrphan(
     return { success: false, error: 'No draft in progress or no current pick.' }
   }
 
+  if (input.expectedOverall != null && snapshot.currentPick.overall !== input.expectedOverall) {
+    return { success: false, error: 'Draft board moved; this pick was already made.', code: DRAFT_PICK_STALE_OVERALL }
+  }
+
   const orphanRosterIds = await getOrphanRosterIdsForLeague(leagueId)
   const currentRosterId = snapshot.currentPick.rosterId
   if (!orphanRosterIds.includes(currentRosterId)) {
@@ -211,7 +226,16 @@ export async function executeDraftPickForOrphan(
   const draftedNames = new Set(snapshot.picks.map((p) => p.playerName))
   const sport = (league.sport as LeagueSport) ?? 'NFL'
   const pool = await getPlayerPoolForLeague(leagueId, sport, { limit: 500 })
-  const available = pool
+  const sessionPool = await prisma.draftSession.findFirst({
+    where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { playerPool: true },
+  })
+  // Pick validation refuses an ineligible `auto` pick in a rookies-only / veterans-only draft.
+  const eligiblePool = await filterCandidatesForPlayerPool(leagueId, sessionPool?.playerPool, pool, (p) => ({
+    playerName: p.full_name,
+  }))
+  const available = eligiblePool
     .filter((p) => !draftedNames.has(p.full_name))
     .slice(0, 250)
     .map((p) => ({
@@ -287,10 +311,11 @@ export async function executeDraftPickForOrphan(
     team: pickResult.player.team ?? null,
     rosterId: currentRosterId,
     source: 'auto',
+    ...(input.expectedOverall != null ? { expectedOverall: input.expectedOverall } : {}),
   })
 
   if (!submitResult.success) {
-    return { success: false, error: submitResult.error }
+    return { success: false, error: submitResult.error, code: submitResult.code }
   }
 
   const reasonBits = [

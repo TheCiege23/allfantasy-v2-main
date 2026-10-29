@@ -6,7 +6,10 @@ import { discoverWorkspaceRefreshLeagues } from '@/lib/automation/jobs/workspace
 import { refreshWorkspaceTasksBatch } from '@/lib/automation/jobs/workspace/refreshWorkspaceTasksJob'
 import { generateScheduledReportsBatch } from '@/lib/automation/jobs/reports/generateScheduledReportsJob'
 import { runCommissionerRecipesBatch } from '@/lib/automation/jobs/commissioner/runCommissionerRecipesJob'
+import { postUntouchedRecapDrafts } from '@/lib/recap-review/recapReviewService'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { runScheduledAiCommissionerAlerts } from '@/lib/ai-commissioner/scheduledAlertsBatch'
+import { scanImportedLeaguesForTanking } from '@/lib/integrity/scanImportedTanking'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -14,8 +17,8 @@ export const dynamic = 'force-dynamic'
 /**
  * Heartbeat job name, probed by scripts/cron-freshness-check.mjs.
  *
- * ⚠ UNLIKE `cron-waivers`, THIS ONE IS NOT CONDITIONAL. Every league with imported activity is in
- * scope every day — a healthy league still needs the scan that closes yesterday's findings — so an
+ * ⚠ UNLIKE `cron-waivers`, THIS ONE IS NOT CONDITIONAL. Every league with imported activity (and
+ * every native league in season) is in scope every day — a healthy league still needs the scan that closes yesterday's findings — so an
  * output probe on `automation_runs` is a valid liveness signal here, not merely a seasonal one.
  * The `sync_job_runs` row is still written on every fire, for the same reason the waiver sweep
  * writes one: it is what proves the scheduler is alive independently of whether work was found.
@@ -72,7 +75,8 @@ export async function GET(request: Request) {
         discovered: rows.length,
         results: rows.map((r) => ({
           leagueId: r.leagueId,
-          lastActivityAt: r.lastActivityAt.toISOString(),
+          lastActivityAt: r.lastActivityAt?.toISOString() ?? null,
+          native: r.native,
         })),
       })
     } catch (error) {
@@ -122,7 +126,36 @@ export async function GET(request: Request) {
         console.error('[cron-commissioner] recipes failed:', toErrorMessage(e))
         return { enabled: true, discovered: 0, completed: 0, skipped: 0, failed: 1 }
       })
-      return { ...workspace, reports, recipes }
+      /*
+       * Weekly recaps held for review (lib/recap-review): a draft nobody touched by this morning
+       * posts now, in leagues that asked for that. Off for every league until a commissioner picks
+       * review mode, so on most runs this is one indexed read that finds nothing.
+       */
+      const recapDrafts = leagueId
+        ? { checked: 0, posted: 0, failed: 0 }
+        : await postUntouchedRecapDrafts().catch((e) => {
+            console.error('[cron-commissioner] recap drafts failed:', toErrorMessage(e))
+            return { checked: 0, posted: 0, failed: 1 }
+          })
+      /*
+       * "Commissioner AI alerts" (League.leagueAiCommissionerAlerts): the AI commissioner cycle for
+       * every league that switched it on and whose owner has AF Commissioner. It used to run only
+       * when a commissioner pressed Run. New alerts only, so a daily run never repeats itself.
+       */
+      const aiAlerts = await runScheduledAiCommissionerAlerts({ leagueId }).catch((e) => {
+        console.error('[cron-commissioner] ai alerts failed:', toErrorMessage(e))
+        return { discovered: 0, ran: 0, skippedNoPlan: 0, failed: 1, created: 0 }
+      })
+      /*
+       * The tanking monitor for IMPORTED Sleeper leagues (lib/integrity/scanImportedTanking.ts): the
+       * latest finished week's lineup audit, opened as an integrity flag in leagues whose commissioner
+       * switched tanking monitoring on. A native league's week is scanned by its own finalizer instead.
+       */
+      const importedTanking = await scanImportedLeaguesForTanking({ leagueId }).catch((e) => {
+        console.error('[cron-commissioner] imported tanking scan failed:', toErrorMessage(e))
+        return { discovered: 0, scanned: 0, flagged: 0, failed: 1 }
+      })
+      return { ...workspace, reports, recipes, recapDrafts, aiAlerts, importedTanking }
     },
     (r) => ({
       rowsRead: r.discovered,
@@ -147,6 +180,14 @@ export async function GET(request: Request) {
         recipesEnabled: r.recipes.enabled,
         recipesCompleted: r.recipes.completed,
         recipesFailed: r.recipes.failed,
+        recapDraftsPosted: r.recapDrafts.posted,
+        recapDraftsFailed: r.recapDrafts.failed,
+        aiAlertsRan: r.aiAlerts.ran,
+        aiAlertsCreated: r.aiAlerts.created,
+        aiAlertsFailed: r.aiAlerts.failed,
+        importedTankingScanned: r.importedTanking.scanned,
+        importedTankingFlagged: r.importedTanking.flagged,
+        importedTankingFailed: r.importedTanking.failed,
       },
     }),
   )
@@ -161,6 +202,8 @@ export async function GET(request: Request) {
     failed: outcome.failed,
     reports: outcome.reports,
     recipes: outcome.recipes,
+    aiAlerts: outcome.aiAlerts,
+    importedTanking: outcome.importedTanking,
     results: outcome.leagues,
   })
 }
