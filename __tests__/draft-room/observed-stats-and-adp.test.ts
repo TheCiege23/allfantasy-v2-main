@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+const mocks = vi.hoisted(() => ({ stats: vi.fn(), identities: vi.fn() }))
+vi.mock('@/lib/prisma', () => ({ prisma: { playerSeasonStats: { findMany: mocks.stats }, playerIdentityMap: { findMany: mocks.identities } } }))
+import { loadPlayerSeasonStatsFallback } from '@/lib/draft/analytics/nfl-rolling-insights-draft-analytics'
+import { canonicalName } from '@/lib/draft-room/player-canonical-identity'
 import { nflDraftSeasonLine } from '@/lib/draft-room/nflDraftSeasonLine'
 import { observedAdpSeason } from '@/lib/draft-room/observedAdpSeason'
 import { extractNbaDraftSeasonRates } from '@/lib/draft-room/sportsPlayerRecordDraftEnrichment'
@@ -45,4 +49,14 @@ describe('market ADP is the default across the four sports', () => {
     expect(observedAdpSeason(2025, now)).toBe(2025)
     expect(observedAdpSeason(undefined, now)).toBeUndefined()
   })
+})
+
+it('keeps the selected NFL box with its played season when the new season has zero games', async () => {
+  mocks.identities.mockResolvedValue([])
+  const previous = { ...row, playerId: '4876', playerName: 'A.J. Brown', position: 'WR', season: '2025', gamesPlayed: 10 }
+  mocks.stats.mockResolvedValue([{ ...previous, season: '2026', gamesPlayed: 0, fantasyPointsPerGame: null, stats: {} }, previous])
+  const result = await loadPlayerSeasonStatsFallback({ rows: [{
+    poolKey: 'brown|wr', nk: canonicalName('A.J. Brown'), pk: 'wr', sleeperCandidate: '5859', existingRiId: null,
+  }] })
+  expect(result.seasonByPoolKey.get('brown|wr')).toMatchObject({ season: '2025', gamesPlayed: 10, stats: row.stats })
 })
