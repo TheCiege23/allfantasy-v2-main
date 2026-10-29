@@ -7,7 +7,8 @@ import { getEffectiveLeagueWaiverSettings } from '@/lib/waiver-wire/settings-ser
 import { loadWaiverPhasePolicy } from '@/lib/waiver-wire/season-phase-gate'
 import { loadDailyTransactionPolicy, dailyScheduleImmediateAddRefusal, dailyUnlockImmediateAddRefusal } from '@/lib/waiver-wire/daily-schedule-gate'
 import { loadDroppedPlayerHold, loadDroppedPlayerHoldPolicy } from '@/lib/waiver-wire/dropped-player-waivers'
-import { assertWaiverClaimEligibility } from '@/lib/waiver-wire/transaction-eligibility'
+import { assertWaiverClaimEligibility, previewWaiverClaimEligibility } from '@/lib/waiver-wire/transaction-eligibility'
+import { countClaimsThisWeekUtc } from '@/lib/waiver-wire/waiver-validation'
 
 vi.mock('@/lib/prisma', () => ({ prisma: { leagueWaiverState: { findUnique: vi.fn() }, waiverClaim: { findFirst: vi.fn() } } }))
 vi.mock('@/server/services/leagueActionGate', () => ({ assertLeagueActionGate: vi.fn() }))
@@ -16,7 +17,11 @@ vi.mock('@/lib/waiver-wire/settings-service', () => ({ getEffectiveLeagueWaiverS
 vi.mock('@/lib/waiver-wire/season-phase-gate', () => ({ loadWaiverPhasePolicy: vi.fn() }))
 vi.mock('@/lib/waiver-wire/daily-schedule-gate', () => ({ loadDailyTransactionPolicy: vi.fn(), dailyScheduleImmediateAddRefusal: vi.fn(), dailyUnlockImmediateAddRefusal: vi.fn() }))
 vi.mock('@/lib/waiver-wire/dropped-player-waivers', () => ({ loadDroppedPlayerHold: vi.fn(), loadDroppedPlayerHoldPolicy: vi.fn() }))
-vi.mock('@/lib/waiver-wire/transaction-eligibility', () => ({ assertWaiverClaimEligibility: vi.fn() }))
+vi.mock('@/lib/waiver-wire/transaction-eligibility', () => ({ assertWaiverClaimEligibility: vi.fn(), previewWaiverClaimEligibility: vi.fn() }))
+vi.mock('@/lib/waiver-wire/free-agent-unlock', () => ({ isDailyFreeAgentUnlock: (value: string) => value === 'daily' }))
+vi.mock('@/lib/waiver-wire/after-run-free-agency', () => ({ loadAfterRunFreeAgencyState: vi.fn(), afterRunRefusalMessage: vi.fn() }))
+vi.mock('@/lib/waiver-wire/waiver-validation', () => ({ countClaimsThisWeekUtc: vi.fn(), conceptOverridesBlockWaivers: vi.fn() }))
+vi.mock('@/lib/devy/waiver/DevyWaiverRules', () => ({ validateDevyWaiverClaim: vi.fn().mockResolvedValue({ allowed: true }) }))
 
 const input = { leagueId: 'league', rosterId: 'af-roster', actorUserId: 'manager', playerId: 'candidate', now: new Date('2026-10-26T00:18:00Z') }
 const settings = { normalizedWaiverType: 'fcfs', instantFaAfterClear: false, freeAgencyMode: 'standard', freeAgentUnlockBehavior: null }
@@ -99,5 +104,19 @@ describe('Pirate waiver evidence uses real immediate-add gates', () => {
     expect(await certifyPirateWaiverWitness(input)).toBe(false)
     vi.mocked(getEffectiveLeagueWaiverSettings).mockRejectedValue(new Error('Unavailable'))
     expect(await certifyPirateWaiverWitness(input)).toBe(false)
+  })
+  it('checks each combined acquisition against its virtual roster and shared acquisition budget', async () => {
+    vi.mocked(countClaimsThisWeekUtc).mockResolvedValue(0)
+    vi.mocked(getEffectiveLeagueWaiverSettings).mockResolvedValue({ ...settings, claimLimitPerWeek: 1 } as never)
+    const projection = { playerData: { players: ['first-pickup'] }, priorDrops: 0, priorAcquisitions: 1 }
+    expect(await certifyPirateWaiverWitness(input, projection)).toBe(false)
+    expect(previewWaiverClaimEligibility).not.toHaveBeenCalled()
+    vi.mocked(getEffectiveLeagueWaiverSettings).mockResolvedValue({ ...settings, claimLimitPerWeek: 2 } as never)
+    // The separately tested devy gate must explicitly affirm this candidate.
+    const { validateDevyWaiverClaim } = await import('@/lib/devy/waiver/DevyWaiverRules')
+    vi.mocked(validateDevyWaiverClaim).mockResolvedValue({ allowed: true })
+    expect(await certifyPirateWaiverWitness(input, projection)).toBe(true)
+    expect(previewWaiverClaimEligibility).toHaveBeenCalledWith(expect.objectContaining({ addPlayerId: 'candidate' }), projection)
+    expect(assertWaiverClaimEligibility).not.toHaveBeenCalled()
   })
 })

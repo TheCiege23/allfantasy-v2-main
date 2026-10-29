@@ -9,8 +9,9 @@ type Protection = { rosterId: string; week: number; playerIds: string[]; status:
 type LineupRuling = { claimId: string; decision: 'forfeit' | 'excused'; reason: string; createdAt: string; source?: 'automatic' | 'commissioner' }
 type LineupEvidence = {
   decision: string; reason: string; issues: string[]; eventAt: string; snapshotCount: number
-  snapshot: { capturedAt: string; injurySyncAt: string | null; lineupCertified: boolean; waiverWitnessCount: number
-    players: Array<{ playerId: string; playerName: string; slotType: string; injuryStatus: string | null; kickoffAt: string | null; availabilityKnown: boolean; waiverVerified: boolean; dropPlayerName?: string | null }> }
+  snapshot: { capturedAt: string; injurySyncAt: string | null; lineupCertified: boolean; waiverWitnessCount: number; scoringDay?: string | null
+    movePlans?: Array<{ checkedAt: string; steps: Array<{ kind: string; playerName: string; fromSlot: string | null; dropPlayerName: string | null }> }>
+    players: Array<{ playerId: string; playerName: string; slotType: string; injuryStatus: string | null; kickoffAt: string | null; availabilityKnown: boolean; waiverVerified: boolean; dropPlayerName?: string | null; jointPlanOnly?: boolean; hasGameOnScoringDay?: boolean }> }
 }
 type Claim = {
   id: string; week: number; winnerRosterId: string; loserRosterId: string
@@ -292,19 +293,28 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                           {evidence && <details className="mt-3 rounded-xl border border-cyan-300/25 bg-cyan-300/5 p-3">
                             <summary className="min-h-[44px] cursor-pointer text-sm font-bold text-cyan-200">Captured lineup evidence · {evidence.snapshotCount} snapshots</summary>
                             <p className="text-xs leading-5 text-slate-300">{evidence.reason}</p>
+                            {evidence.snapshot.scoringDay && <p className="mt-2 text-xs font-semibold text-cyan-200">Daily lineup: {evidence.snapshot.scoringDay} · Eastern time</p>}
                             {evidence.issues.length > 0 && <p className="mt-2 text-xs text-amber-200">{evidence.issues.join('; ')}</p>}
                             <p className="mt-2 text-xs leading-5 text-slate-400">Game lock: {dateText(evidence.eventAt)}. Captured: {dateText(evidence.snapshot.capturedAt)}. Injury feed checked: {evidence.snapshot.injurySyncAt ? dateText(evidence.snapshot.injurySyncAt) : 'Unverified'}.</p>
                             {!evidence.snapshot.lineupCertified && <p className="mt-2 text-xs text-amber-200">The saved starting slots need commissioner verification.</p>}
                             <ul className="mt-3 divide-y divide-white/10">
                               {evidence.snapshot.players.map((player) => <li key={player.playerId} className="py-2 text-xs leading-5">
                                 <span className="font-semibold text-white">{player.playerName}</span><span className="ml-2 text-cyan-200">{player.slotType}</span>
-                                <p className="text-slate-400">{player.availabilityKnown ? player.injuryStatus || 'No reported restriction' : 'Availability unverified'} · {dateText(player.kickoffAt)}</p>
+                                <p className="text-slate-400">{player.availabilityKnown ? player.hasGameOnScoringDay === false ? 'No game on this scoring day' : player.injuryStatus || 'No reported restriction' : 'Availability unverified'} · {dateText(player.kickoffAt)}</p>
                                 {player.slotType === 'WAIVER' && <p className="text-cyan-200">{player.waiverVerified
-                                  ? player.dropPlayerName ? `Verified option before lock: add this player and drop ${player.dropPlayerName}.` : 'Verified immediate pickup before this lock; no drop required.'
+                                  ? player.jointPlanOnly ? 'Available only as part of the verified move plan below.' : player.dropPlayerName ? `Verified option before lock: add this player and drop ${player.dropPlayerName}.` : 'Verified immediate pickup before this lock; no drop required.'
                                   : 'Pickup availability needs verification for this lock.'}</p>}
                               </li>)}
                             </ul>
-                            <p className="mt-2 text-xs leading-5 text-slate-400">{evidence.snapshot.waiverWitnessCount > 0 ? 'The recorded option passed the league’s add and drop checks before lock. No roster move was made. ' : ''}Multiple pickups, reserve activations, and daily lineup cases need commissioner review.</p>
+                            {evidence.snapshot.movePlans?.map((plan, i) => <div key={i} className="mt-3 rounded-lg border border-cyan-300/20 p-3">
+                              <p className="text-xs font-bold text-cyan-200">Verified move plan · {dateText(plan.checkedAt)}</p>
+                              <ol className="mt-2 list-decimal space-y-2 pl-5 text-xs leading-5 text-slate-200">
+                                {plan.steps.map((step, j) => <li key={j}>{step.kind === 'activate' ? `Activate ${step.playerName} from ${step.fromSlot}.`
+                                  : `Add ${step.playerName}${step.dropPlayerName ? ` and drop ${step.dropPlayerName}` : ''}.`}</li>)}
+                                <li>Save the complete active starting lineup.</li>
+                              </ol>
+                            </div>)}
+                            <p className="mt-2 text-xs leading-5 text-slate-400">Recorded move options passed the league’s checks before lock. Evidence collection does not move players. Unverified cases keep protections for commissioner review.</p>
                           </details>}
                           {['awaiting_selection', 'selection_expired', 'pending', 'countered'].includes(claim.status) && (
                             <div className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/5 p-3">

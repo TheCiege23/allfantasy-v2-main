@@ -125,6 +125,19 @@ function canonicalLineupEventTypeForSource(source: PersistRosterLineupInput['sou
 export async function persistRosterLineupWithEngine(
   input: PersistRosterLineupInput,
 ): Promise<{ ok: true } | { ok: false; error: string; status?: number }> {
+  return runRosterLineupWithEngine(input, true)
+}
+
+/** Read-only rehearsal of the same validation, taxi and lock gates as a member save. */
+export async function previewRosterLineupWithEngine(
+  input: Omit<PersistRosterLineupInput, 'source' | 'skipLockCheck' | 'taxiProtection' | 'transactionCheck'>,
+): Promise<{ ok: true } | { ok: false; error: string; status?: number }> {
+  return runRosterLineupWithEngine({ ...input, source: 'user_save', skipLockCheck: false, taxiProtection: undefined }, false)
+}
+
+async function runRosterLineupWithEngine(
+  input: PersistRosterLineupInput, persist: boolean,
+): Promise<{ ok: true } | { ok: false; error: string; status?: number }> {
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
   })
@@ -254,6 +267,9 @@ export async function persistRosterLineupWithEngine(
       return { ok: false, error: 'That player\'s game has started, so their lineup position is locked.', status: 403 }
     }
   }
+
+  // Evidence collection must end before transactions, history, promotions or notifications.
+  if (!persist) return { ok: true }
 
   const before = roster.playerData as Prisma.InputJsonValue
 

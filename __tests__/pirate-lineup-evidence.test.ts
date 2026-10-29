@@ -9,6 +9,7 @@ vi.mock('@/lib/redraft/lineupLock', async (original) => ({ ...await original<typ
 vi.mock('@/lib/redraft/lineupLockCurrentTeam', () => ({ resolveCurrentLockTeams: vi.fn() }))
 vi.mock('@/lib/waiver-wire/current-nba-player-pool', () => ({ loadLeagueWaiverPlayerPool: vi.fn() }))
 vi.mock('@/lib/pirate/waiverEvidence', () => ({ certifyPirateWaiverWitness: vi.fn() }))
+vi.mock('@/lib/roster-lineup-engine/lineupService', () => ({ previewRosterLineupWithEngine: vi.fn().mockResolvedValue({ ok: false }) }))
 vi.mock('@/lib/multi-sport/MultiSportRosterService', () => ({ getRosterTemplateForLeague: vi.fn().mockResolvedValue({
   slots: [{ slotName: 'QB', slotOrder: 1, starterCount: 1, allowedPositions: ['QB'], isFlexibleSlot: false }],
 }) }))
@@ -38,6 +39,71 @@ describe('immutable Pirate lineup evidence', () => {
 
   it('keeps protections for review when historical addable waivers are unknown', () => {
     expect(evaluatePirateEvidencePair(evidence('before', { players: [] }), evidence('after', { players: [] })).decision).toBe('review')
+  })
+
+  it.each([['NBA', 'PG'], ['MLB', '1B'], ['NHL', 'C']])('uses an exact-day daily snapshot for %s', (sport, slot) => {
+    const before = evidence('before', { version: 3, sport, mode: 'daily', scoringDay: '2026-10-25', starterSlots: [[slot, 1]] })
+    before.players[0] = { ...before.players[0], position: slot, hasGameOnScoringDay: true }
+    const after = evidence('after', { ...before, phase: 'after', capturedAt: '2026-10-26T00:22:00.000Z' })
+    expect(evaluatePirateEvidencePair(before, after).decision).toBe('forfeit')
+    expect(evaluatePirateEvidencePair(before, { ...after, scoringDay: '2026-10-26' }).decision).toBe('review')
+    expect(evaluatePirateEvidencePair({ ...before, lineupCertified: false }, after).decision).toBe('review')
+    expect(evaluatePirateEvidencePair({ ...before, version: 2 }, { ...after, version: 2 }).decision).toBe('review')
+  })
+
+  it('does not use an off-day player or another day’s later evidence as a daily replacement', () => {
+    const before = evidence('before', { version: 3, sport: 'NBA', mode: 'daily', scoringDay: '2026-10-25', starterSlots: [['PG', 1]] })
+    before.players[0] = { ...before.players[0], position: 'PG', hasGameOnScoringDay: false, kickoffAt: null }
+    const after = evidence('after', { ...before, phase: 'after', capturedAt: '2026-10-26T00:22:00.000Z' })
+    expect(evaluatePirateEvidencePair(before, after).decision).toBe('review')
+    const futureAt = '2026-10-26T02:20:00.000Z'
+    before.players[0] = { ...before.players[0], hasGameOnScoringDay: true, kickoffAt: futureAt }
+    after.players = structuredClone(before.players)
+    const later = evidence('after', { ...after, eventAt: futureAt, capturedAt: '2026-10-26T02:22:00.000Z', scoringDay: '2026-10-26' })
+    expect(evaluatePirateEvidencePair(before, after, [later]).decision).toBe('review')
+    expect(evaluatePirateEvidencePair(before, after, [{ ...later, scoringDay: '2026-10-25' }]).decision).toBe('forfeit')
+  })
+
+  it('accepts combined pickups only with the same joint proof on both sides of lock', () => {
+    const waivers = ['QB', 'WR'].map((position) => ({ ...evidence('before').players[0], playerId: position,
+      playerName: position, position, slotType: 'WAIVER', jointPlanOnly: true,
+      certifiedEventAt: lockAt, checkedAt: '2026-10-26T00:18:00.000Z' }))
+    const plan = { eventAt: lockAt, checkedAt: '2026-10-26T00:18:00.000Z', steps: [
+      { kind: 'pickup' as const, playerId: 'QB' }, { kind: 'pickup' as const, playerId: 'WR' }],
+      assignment: [{ playerId: 'QB', slotType: 'QB', slotIndex: 0 }, { playerId: 'WR', slotType: 'WR', slotIndex: 1 }] }
+    const before = evidence('before', { version: 3, starterSlots: [['QB', 1], ['WR', 1]], players: [], waivers, plans: [plan] })
+    const after = evidence('after', { ...before, phase: 'after', capturedAt: '2026-10-26T00:22:00.000Z' })
+    expect(evaluatePirateEvidencePair(before, after).decision).toBe('forfeit')
+    expect(evaluatePirateEvidencePair(before, { ...after, plans: [] }).decision).toBe('review')
+    expect(evaluatePirateEvidencePair(before, { ...after, plans: [{ ...plan, checkedAt: after.capturedAt }] }).decision).toBe('review')
+  })
+
+  it.each(['IR', 'TAXI'])('requires a joint canonical proof for %s activation', (slotType) => {
+    const before = evidence('before', { version: 3 })
+    before.players[0] = { ...before.players[0], slotType, addableBeforeLock: false, activationBeforeLock: true }
+    const plan = { eventAt: lockAt, checkedAt: '2026-10-26T00:18:00.000Z', steps: [
+      { kind: 'activate' as const, playerId: 'bench', fromSlot: slotType }], assignment: [{ playerId: 'bench', slotType: 'QB', slotIndex: 0 }] }
+    before.plans = [plan]
+    const after = evidence('after', { ...before, phase: 'after', capturedAt: '2026-10-26T00:22:00.000Z' })
+    expect(evaluatePirateEvidencePair(before, after).decision).toBe('forfeit')
+    expect(evaluatePirateEvidencePair({ ...before, plans: [] }, after).decision).toBe('review')
+    expect(evaluatePirateEvidencePair({ ...before, players: [{ ...before.players[0], activationBeforeLock: false }] }, after).decision).toBe('review')
+  })
+
+  it('verifies the same saved daily lineup when assessing the completed week', async () => {
+    const before = evidence('before', { version: 3, sport: 'NBA', mode: 'daily', scoringDay: '2026-10-25', starterSlots: [['PG', 1]] })
+    before.players[0].position = 'PG'
+    const after = evidence('after', { ...before, phase: 'after', capturedAt: '2026-10-26T00:22:00.000Z' })
+    const db = { redraftLeagueTransaction: { findMany: vi.fn().mockResolvedValue([
+      { id: 'before', metadata: before }, { id: 'after', metadata: after },
+    ]) }, redraftDailyLineup: { findMany: vi.fn().mockResolvedValue([{ playerId: 'bench', slotType: 'BENCH' }]) } }
+    const input = { leagueId: 'L', seasonId: 'S', rosterId: 'R', week: 8 }
+    expect((await assessPirateLineupEvidence(input, db as never))?.decision).toBe('forfeit')
+    expect(db.redraftDailyLineup.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      scoringDay: new Date('2026-10-25T00:00:00Z'), week: 8, rosterId: 'R', leagueId: 'L',
+    }) }))
+    db.redraftDailyLineup.findMany.mockResolvedValue([{ playerId: 'bench', slotType: 'PG' }])
+    expect((await assessPirateLineupEvidence(input, db as never))?.decision).toBe('review')
   })
 
   it('keeps older snapshots for review because they lack provider agreement checks', () => {

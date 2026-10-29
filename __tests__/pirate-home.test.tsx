@@ -9,7 +9,8 @@ afterEach(() => {
 })
 
 describe('Pirate Deck', () => {
-  it.each([null, 'Bench Player'])('shows commissioner recovery and the exact verified pickup option (drop: %s)', async (dropPlayerName) => {
+  it.each([null, 'Bench Player', 'joint'])('shows commissioner recovery and the exact verified pickup option (drop: %s)', async (dropPlayerName) => {
+    const joint = dropPlayerName === 'joint'
     const dashboard = {
       league: { id: 'league', name: 'Sea Wolves', sport: 'NFL', rosterLimit: 1 },
       rules: { protectionLimit: 3, claimHours: 24, playoffClaims: false },
@@ -31,9 +32,14 @@ describe('Pirate Deck', () => {
       lineupRulings: [{ claimId: 'claim', source: 'automatic', decision: 'forfeit', reason: 'A legal lineup was available from a verified pickup.' }],
       lineupEvidence: { claim: { decision: 'forfeit', reason: 'One verified pickup could complete the lineup.', issues: ['QB: 1 empty'],
         eventAt: '2026-10-26T00:20:00Z', snapshotCount: 2, snapshot: { capturedAt: '2026-10-26T00:22:00Z',
-          injurySyncAt: '2026-10-26T00:15:00Z', lineupCertified: true, waiverWitnessCount: 1, players: [
+          injurySyncAt: '2026-10-26T00:15:00Z', lineupCertified: true, waiverWitnessCount: 1,
+          scoringDay: joint ? '2026-10-25' : null,
+          movePlans: joint ? [{ checkedAt: '2026-10-26T00:18:00Z', steps: [
+            { kind: 'pickup', playerName: 'Verified Free QB', fromSlot: null, dropPlayerName: 'Bench Player' },
+            { kind: 'activate', playerName: 'Reserve Player', fromSlot: 'TAXI', dropPlayerName: null },
+          ] }] : [], players: [
             { playerId: 'free-qb', playerName: 'Verified Free QB', slotType: 'WAIVER', injuryStatus: null,
-              kickoffAt: '2026-10-26T00:20:00Z', availabilityKnown: true, waiverVerified: true, dropPlayerName },
+              kickoffAt: '2026-10-26T00:20:00Z', availabilityKnown: true, waiverVerified: true, dropPlayerName, jointPlanOnly: joint },
           ] } } },
       claims: [{ id: 'claim', week: 8, winnerRosterId: 'winner', loserRosterId: 'loser', playerId: null,
         offeredPlayerId: null, counterPlayerId: null, status: 'awaiting_selection', deadlineAt: null,
@@ -48,7 +54,12 @@ describe('Pirate Deck', () => {
     expect(screen.getByText(/Automatic lineup ruling/)).toBeTruthy()
     fireEvent.click(screen.getByText(/Captured lineup evidence/))
     expect(screen.getByText('Verified Free QB')).toBeTruthy()
-    expect(screen.getByText(dropPlayerName ? /add this player and drop Bench Player/ : /Verified immediate pickup before this lock/)).toBeTruthy()
-    expect(screen.getByText(/No roster move was made/)).toBeTruthy()
+    expect(screen.getByText(joint ? /Available only as part of the verified move plan/ : dropPlayerName ? /add this player and drop Bench Player/ : /Verified immediate pickup before this lock/)).toBeTruthy()
+    expect(screen.getByText(/Evidence collection does not move players/)).toBeTruthy()
+    if (joint) {
+      expect(screen.getByText(/Daily lineup: 2026-10-25/)).toBeTruthy()
+      expect(screen.getByText(/Activate Reserve Player from TAXI/)).toBeTruthy()
+      expect(screen.getByText(/Add Verified Free QB and drop Bench Player/)).toBeTruthy()
+    }
   })
 })

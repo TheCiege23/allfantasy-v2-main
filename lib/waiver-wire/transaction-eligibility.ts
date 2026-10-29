@@ -96,6 +96,20 @@ function sectionForPlayerId(playerData: unknown, pid: string): RosterSectionKey 
  * Deterministic checks before creating a waiver claim. Throws `Error` with a user-facing message.
  */
 export async function assertWaiverClaimEligibility(input: WaiverClaimEligibilityInput): Promise<void> {
+  await checkWaiverEligibility(input)
+}
+
+/** Trusted server-side simulation only; never accepted from a claim request payload. No writes. */
+export async function previewWaiverClaimEligibility(input: WaiverClaimEligibilityInput, projection: {
+  playerData: unknown; priorDrops: number
+}): Promise<void> {
+  if (!Number.isSafeInteger(projection.priorDrops) || projection.priorDrops < 0) throw new Error('Invalid simulated drop count.')
+  await checkWaiverEligibility(input, projection)
+}
+
+async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projection?: {
+  playerData: unknown; priorDrops: number
+}): Promise<void> {
   const { leagueId, rosterId, addPlayerId, dropPlayerId } = input
   const addId = String(addPlayerId).trim()
   if (!addId) throw new Error('Add player is required.')
@@ -125,6 +139,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   ])
 
   if (!league || !roster) throw new Error('Roster not found or does not belong to this league.')
+  if (projection) roster.playerData = projection.playerData as typeof roster.playerData
   if (await isCommissionerRosterLocked(leagueId, rosterId)) {
     throw new Error('This roster is locked by the commissioner.')
   }
@@ -186,7 +201,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
       leagueId,
       rosterId,
       eff.maxDropsPerWeek,
-      input.excludeClaimId ? { excludeClaimId: input.excludeClaimId } : undefined,
+      { ...(input.excludeClaimId ? { excludeClaimId: input.excludeClaimId } : {}), additionalDrops: projection?.priorDrops ?? 0 },
     )
     if (!dropLimit.ok) throw new Error(dropLimit.message)
   }
@@ -236,6 +251,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   }
 
   const ev = await evaluateLegalityForProjectedRoster({ id: roster.id, leagueId, playerData: roster.playerData }, projected)
+  if (projection && !ev) throw new Error('Projected roster legality is unavailable.')
   if (ev) {
     // `isLegal` folds in the whole-roster weekly lineup lock (e.g. "Mon-Tue" football_weekly
     // policy), which exists to freeze STARTER edits during game windows. A free-agent add/drop

@@ -1,6 +1,6 @@
 {
-  "tag": "pirate-lineup-4f27f854",
-  "runAt": "2026-10-28T20:53:14.334Z",
+  "tag": "pirate-lineup-abab8865",
+  "runAt": "2026-10-29T02:52:19.163Z",
   "scope": "Synthetic lock snapshots on isolated staging; fixture leagues and users removed after validation.",
   "results": [
     {
@@ -14,7 +14,12 @@
       "repeatedTickHonoredOverride": true,
       "singleDropForfeit": true,
       "dropEvidenceAuditLinked": true,
-      "noRosterMoveMade": true
+      "noRosterMoveMade": true,
+      "reservePlanAssessment": true,
+      "dailySavedDayVerified": null,
+      "dailyMissingDayKeptLocks": null,
+      "jointAcquisitionAssessment": true,
+      "missingJointProofKeptLocks": true
     },
     {
       "sport": "NBA",
@@ -27,7 +32,12 @@
       "repeatedTickHonoredOverride": true,
       "singleDropForfeit": true,
       "dropEvidenceAuditLinked": true,
-      "noRosterMoveMade": true
+      "noRosterMoveMade": true,
+      "reservePlanAssessment": true,
+      "dailySavedDayVerified": true,
+      "dailyMissingDayKeptLocks": true,
+      "jointAcquisitionAssessment": true,
+      "missingJointProofKeptLocks": true
     },
     {
       "sport": "MLB",
@@ -40,7 +50,12 @@
       "repeatedTickHonoredOverride": true,
       "singleDropForfeit": true,
       "dropEvidenceAuditLinked": true,
-      "noRosterMoveMade": true
+      "noRosterMoveMade": true,
+      "reservePlanAssessment": true,
+      "dailySavedDayVerified": true,
+      "dailyMissingDayKeptLocks": true,
+      "jointAcquisitionAssessment": true,
+      "missingJointProofKeptLocks": true
     },
     {
       "sport": "NHL",
@@ -53,7 +68,12 @@
       "repeatedTickHonoredOverride": true,
       "singleDropForfeit": true,
       "dropEvidenceAuditLinked": true,
-      "noRosterMoveMade": true
+      "noRosterMoveMade": true,
+      "reservePlanAssessment": true,
+      "dailySavedDayVerified": true,
+      "dailyMissingDayKeptLocks": true,
+      "jointAcquisitionAssessment": true,
+      "missingJointProofKeptLocks": true
     }
   ]
 }

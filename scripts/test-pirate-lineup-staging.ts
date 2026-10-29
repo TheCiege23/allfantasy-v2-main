@@ -21,6 +21,8 @@ const results: Array<Record<string, unknown>> = []
 
 async function main() {
   const service = await import('../lib/pirate/service')
+  const { assessPirateLineupEvidence } = await import('../lib/pirate/lineupEvidence')
+  const { easternDayKey } = await import('../lib/redraft/lineupLock')
   const event = new Date(Date.now() - 60 * 60 * 1000)
   for (let index = 0; index < 4; index++) {
     const user = await db.appUser.create({ data: { email: `${tag}-${index}@example.invalid`, username: `${tag}_${index}`, displayName: `Lineup QA ${index}` } })
@@ -117,16 +119,75 @@ async function main() {
       rosterId: rosters[3].id, type: 'pirate_lineup_ruling' } })
     assert.deepEqual(new Set((dropAudit.metadata as Record<string, unknown>).evidenceIds as string[]), new Set(dropEvidenceIds))
     assert.equal(await db.redraftRosterPlayer.count({ where: { rosterId: rosters[3].id, droppedAt: null } }), 2)
+    // These are explicitly synthetic proof records, not provider observations.
+    // Exercise persisted v3 assessment and daily final-lineup reads without
+    // touching the separate live-game fixture or moving anyone's players.
+    const target = rosters[3]
+    await db.redraftRosterPlayer.updateMany({ where: { rosterId: target.id, playerId: target.bench }, data: { position: slot, slotType: 'IR' } })
+    await db.afRosterLineupAssignment.updateMany({ where: { rosterId: (await db.roster.findFirstOrThrow({
+      where: { redraftRosterId: target.id } })).id, playerId: target.bench }, data: { section: 'ir' } })
+    const reservePair = captured.map((original): PirateLineupEvidence => ({ ...original, version: 3,
+      players: original.players.map(p => ({ ...p, playerId: p.slotType === 'BENCH' ? target.bench : target.star,
+        ...(p.slotType === 'BENCH' ? { slotType: 'IR', position: slot, addableBeforeLock: false, activationBeforeLock: true } : {}),
+      })), plans: [{ eventAt: event.toISOString(), checkedAt: new Date(event.getTime() - 120000).toISOString(),
+        steps: [{ kind: 'activate', playerId: target.bench, fromSlot: 'IR' }],
+        assignment: [{ playerId: target.bench, slotType: slot, slotIndex: 0 }] }] }))
+    const persistPair = async (pair: PirateLineupEvidence[]) => {
+      for (const snapshot of pair) await db.redraftLeagueTransaction.create({ data: { leagueId: league.id, seasonId: season.id,
+        rosterId: target.id, type: 'pirate_lineup_evidence', metadata: snapshot as unknown as Prisma.InputJsonValue } })
+    }
+    const assess = () => assessPirateLineupEvidence({ leagueId: league.id, seasonId: season.id, rosterId: target.id, week: 1 }, db)
+    await persistPair(reservePair)
+    assert.equal((await assess())?.decision, 'forfeit')
+    let dailySavedDayVerified: boolean | null = null, dailyMissingDayKeptLocks: boolean | null = null
+    if (sport !== 'NFL') {
+      const scoringDay = easternDayKey(event)!
+      const day = new Date(`${scoringDay}T00:00:00Z`)
+      await db.redraftDailyLineup.createMany({ data: [
+        { leagueId: league.id, rosterId: target.id, season: 2097, week: 1, scoringDay: day, playerId: target.star, slotType: slot },
+        { leagueId: league.id, rosterId: target.id, season: 2097, week: 1, scoringDay: day, playerId: target.bench, slotType: 'IR' },
+      ] })
+      const dailyPair = reservePair.map(e => ({ ...e, mode: 'daily', scoringDay,
+        players: e.players.map(p => ({ ...p, hasGameOnScoringDay: true })) }))
+      await persistPair(dailyPair)
+      assert.equal((await assess())?.decision, 'forfeit'); dailySavedDayVerified = true
+      await db.redraftDailyLineup.deleteMany({ where: { rosterId: target.id, scoringDay: day } })
+      assert.equal((await assess())?.decision, 'review'); dailyMissingDayKeptLocks = true
+    }
+    const legacy = await db.roster.findFirstOrThrow({ where: { redraftRosterId: target.id } })
+    const drops = [`${tag}-${sport}-drop-a`, `${tag}-${sport}-drop-b`]
+    await db.redraftRosterPlayer.createMany({ data: drops.map(playerId => ({ rosterId: target.id, playerId,
+      playerName: 'Joint-plan bench drop', position: benchPosition, team: 'QA', sport, slotType: 'BENCH' })) })
+    await db.roster.update({ where: { id: legacy.id }, data: { playerData: { players: [target.star, target.bench, ...drops], starters: [target.star] } } })
+    await db.afRosterLineupAssignment.createMany({ data: drops.map((playerId, index) => ({ leagueId: league.id,
+      rosterId: legacy.id, season: 2097, week: 1, playerId, section: 'bench', slotIndex: index })) })
+    const jointPair = reservePair.map((e): PirateLineupEvidence => {
+      const waivers = ['a', 'b'].map(suffix => ({ ...e.players[1], playerId: `${tag}-${sport}-add-${suffix}`, slotType: 'WAIVER',
+        addableBeforeLock: true, lockedAtSnapshot: false, activationBeforeLock: false, jointPlanOnly: true, certifiedEventAt: e.eventAt,
+        checkedAt: new Date(event.getTime() - 120000).toISOString() }))
+      return { ...e, starterSlots: [[slot, 2]], players: [e.players[0], e.players[1], ...drops.map(playerId => ({ ...e.players[1],
+        playerId, position: benchPosition, slotType: 'BENCH', addableBeforeLock: true, activationBeforeLock: false }))], waivers,
+        plans: [{ eventAt: e.eventAt, checkedAt: new Date(event.getTime() - 120000).toISOString(),
+          steps: waivers.map((p, i) => ({ kind: 'pickup', playerId: p.playerId, dropPlayerId: drops[i] })),
+          assignment: waivers.map((p, i) => ({ playerId: p.playerId, slotType: slot, slotIndex: i })) }] }
+    })
+    await persistPair(jointPair)
+    assert.equal((await assess())?.decision, 'forfeit')
+    await persistPair(jointPair.map(e => ({ ...e, plans: [] })))
+    assert.equal((await assess())?.decision, 'review')
+    assert.equal(await db.redraftRosterPlayer.count({ where: { rosterId: target.id, droppedAt: null } }), 4)
     results.push({ sport, automaticForfeit: true, originalLocksRetained: true, missingEvidenceKeptLocks: true,
       evidenceAuditLinked: true, commissionerRestored: true, winnerSelectionReopened: true, repeatedTickHonoredOverride: true,
-      singleDropForfeit: true, dropEvidenceAuditLinked: true, noRosterMoveMade: true })
+      singleDropForfeit: true, dropEvidenceAuditLinked: true, noRosterMoveMade: true,
+      reservePlanAssessment: true, dailySavedDayVerified, dailyMissingDayKeptLocks,
+      jointAcquisitionAssessment: true, missingJointProofKeptLocks: true })
     console.log(`${sport}: automatic lineup evidence lifecycle passed`)
   }
   fs.writeFileSync('docs/pirate-validation/lineup-evidence-staging.json', JSON.stringify({ tag, runAt: new Date().toISOString(),
     scope: 'Synthetic lock snapshots on isolated staging; fixture leagues and users removed after validation.', results }, null, 2))
 }
 
-main().catch((error) => { console.error('Pirate lineup staging validation failed:', error.code || error.message); process.exitCode = 1 })
+main().catch((error) => { console.error('Pirate lineup staging validation failed:', error.code === 'ERR_ASSERTION' ? error.stack : error.code || error.message); process.exitCode = 1 })
   .finally(async () => {
     try {
       await db.league.deleteMany({ where: { id: { in: leagueIds } } })

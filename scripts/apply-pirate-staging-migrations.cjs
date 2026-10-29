@@ -1,4 +1,4 @@
-/** Apply only Pirate migrations to the separately configured staging database. */
+/** Apply only Pirate migrations and their daily-lineup prerequisite to verified isolated staging. */
 const fs = require('node:fs')
 const { createHash, randomUUID } = require('node:crypto')
 const dotenv = require('dotenv')
@@ -15,7 +15,7 @@ const productionHosts = [production.DATABASE_URL, production.DIRECT_URL, local.D
 if (!target.hostname.includes('winter-salad') || productionHosts.includes(target.hostname.replace('-pooler', ''))) {
   throw Error('Refusing an unverified or production database target.')
 }
-const names = ['20261027000000_pirate_league', '20261027010000_pirate_claim_governance', '20261027020000_pirate_claim_cycles', '20261027030000_pirate_playoff_claims']
+const names = ['20261020120000_daily_lineups', '20261027000000_pirate_league', '20261027010000_pirate_claim_governance', '20261027020000_pirate_claim_cycles', '20261027030000_pirate_playoff_claims']
 const migrations = names.map((name) => {
   const sql = fs.readFileSync(`prisma/migrations/${name}/migration.sql`, 'utf8')
   return { name, sql, checksum: createHash('sha256').update(sql).digest('hex') }

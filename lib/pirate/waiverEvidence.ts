@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
  */
 export async function certifyPirateWaiverWitness(input: {
   leagueId: string; rosterId: string; actorUserId: string; playerId: string; dropPlayerId?: string | null; now?: Date
-}): Promise<boolean> {
+}, projection?: { playerData: unknown; priorDrops: number; priorAcquisitions: number }): Promise<boolean> {
   try {
     // The transaction validator loads the specialty registry, which also
     // registers Pirate League. Load it only for an actual candidate, after
@@ -35,6 +35,14 @@ export async function certifyPirateWaiverWitness(input: {
       prisma.waiverClaim.findFirst({ where: { leagueId: input.leagueId, addPlayerId: input.playerId, status: 'pending' }, select: { id: true } }),
     ])
     if (state?.processingLocked || pending) return false
+    if (projection) {
+      const validation = await import('@/lib/waiver-wire/waiver-validation')
+      const limits = [settings.claimLimitPerWeek, settings.claimLimitPerPeriod].filter((n): n is number => n != null && n > 0)
+      if (limits.length && await validation.countClaimsThisWeekUtc(input.leagueId, input.rosterId) + projection.priorAcquisitions >= Math.min(...limits)) return false
+      if (validation.conceptOverridesBlockWaivers(settings.specialtyConceptOverrides)) return false
+      const devy = await import('@/lib/devy/waiver/DevyWaiverRules')
+      if (!(await devy.validateDevyWaiverClaim({ leagueId: input.leagueId, addPlayerId: input.playerId })).allowed) return false
+    }
     if (!phase.firstComeAdds) {
       const daily = await dailyService.loadDailyTransactionPolicy(input.leagueId, now)
       const afterRun = settings.freeAgencyMode === 'after_run' && settings.normalizedWaiverType !== 'fcfs'
@@ -55,9 +63,11 @@ export async function certifyPirateWaiverWitness(input: {
         if (await holds.loadDroppedPlayerHold(input.leagueId, input.playerId, policy, now)) return false
       }
     }
-    await eligibility.assertWaiverClaimEligibility({ leagueId: input.leagueId, rosterId: input.rosterId,
+    const eligibilityInput = { leagueId: input.leagueId, rosterId: input.rosterId,
       addPlayerId: input.playerId, dropPlayerId: input.dropPlayerId ?? null, faabBid: null, claimMetadata: { source: 'free_agent_immediate' },
-      ...(phase.firstComeAdds ? { offseasonFreeAgency: true } : {}) })
+      ...(phase.firstComeAdds ? { offseasonFreeAgency: true } : {}) }
+    if (projection) await eligibility.previewWaiverClaimEligibility(eligibilityInput, projection)
+    else await eligibility.assertWaiverClaimEligibility(eligibilityInput)
     return true
   } catch {
     return false
