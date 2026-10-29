@@ -7,10 +7,23 @@
  * is omitted, never shown as JSON.
  */
 
-/** The scope of this feature (owner's decision): these three sports, these two formats. */
-export const RULES_EXPLAINER_SPORTS = ['NFL', 'NBA', 'NHL'] as const
+/**
+ * The scope of this feature. First NFL / NBA / NHL redraft and guillotine (2026-10-28); widened to
+ * every sport AllFantasy hosts and to dynasty leagues at the owner's request (2026-10-29).
+ */
+export const RULES_EXPLAINER_SPORTS = ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const
 export type RulesSport = (typeof RULES_EXPLAINER_SPORTS)[number]
-export type RulesFormat = 'redraft' | 'guillotine'
+export type RulesFormat = 'redraft' | 'guillotine' | 'dynasty'
+
+/** A dynasty league's tanking penalty as a rule (lib/integrity/tankingPenalties.ts), non-secret. */
+export type TankingPenaltyRule = {
+  enabled: boolean
+  penalty: string
+  atStrike: number
+  pickRound: number
+  lotteryOddsCutPct: number
+  faabPercent: number
+}
 
 export type GuillotineChopStep = { fromWeek: number; chops: number }
 
@@ -75,6 +88,18 @@ export type RuleSnapshot = {
   dangerMarginPoints?: number | null
   releaseTiming?: string | null
   faabOnChop?: string | null
+  /** Dynasty: how the rookie draft order is set (`DynastyLeagueConfig.rookiePickOrderMethod`; read path). */
+  rookieDraftOrder?: string | null
+  rookieDraftRounds?: number | null
+  /** `linear` | `snake`. */
+  rookieDraftType?: string | null
+  /** Days after an automatic open that the rookie draft starts by itself; null = the commissioner starts it. */
+  rookieDraftAutoStartDays?: number | null
+  taxiSlots?: number | null
+  /** 1 = rookies only, 2 = + second-year, 3 = + third-year. */
+  taxiEligibilityYears?: number | null
+  futurePicksYearsOut?: number | null
+  tankingPenalty?: TankingPenaltyRule | null
 }
 
 /** Every snapshot key that can appear in a change. */
@@ -95,7 +120,7 @@ export type RuleText = { k: string; vars?: Record<string, RuleVar> }
 
 export type RuleLine = { id: string; text: RuleText }
 
-export type RuleSectionId = 'overview' | 'scoring' | 'roster' | 'lineups' | 'playoffs' | 'trades' | 'waivers' | 'guillotine'
+export type RuleSectionId = 'overview' | 'scoring' | 'roster' | 'lineups' | 'playoffs' | 'trades' | 'waivers' | 'guillotine' | 'dynasty'
 
 export type RuleSection = { id: RuleSectionId; title: RuleText; lines: RuleLine[] }
 

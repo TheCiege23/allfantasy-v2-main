@@ -43,13 +43,26 @@ const FAAB_ON_CHOP = new Set(['keep', 'split'])
 const IMMUNITY = new Set(['off', 'top_scorer'])
 const TIEBREAKS = new Set(['bench_points', 'season_points', 'previous_period', 'draft_slot', 'commissioner', 'random'])
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
+const ROOKIE_ORDERS = new Set(['max_pf', 'reverse_standings', 'commissioner', 'weighted_lottery'])
+const DRAFT_TYPES = new Set(['linear', 'snake'])
+const TAXI_YEARS = new Set([1, 2, 3])
+const TANKING_PENALTIES = new Set(['forfeit_pick', 'lottery_odds', 'faab'])
 
 /** The stats worth a line per sport, in reading order. Keys are the scoring engine's stat keys. */
 export const HEADLINE_STATS: Record<string, readonly string[]> = {
   NFL: ['passing_td', 'interception', 'rushing_td', 'receptions', 'receiving_td'],
   NBA: ['points', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'three_pointers_made'],
   NHL: ['goal', 'assist', 'shot_on_goal', 'blocked_shot', 'power_play_point', 'save', 'goal_allowed', 'win', 'shutout'],
+  NCAAF: ['passing_td', 'interception', 'rushing_td', 'receptions', 'receiving_td'],
+  NCAAB: ['points', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'three_pointers_made'],
+  // MLB's `win` is a pitcher win and NHL's is a goalie win: they share a stat key but not a sentence,
+  // so MLB lists no `win` rather than calling it a goalie win.
+  MLB: ['home_run', 'rbi', 'run', 'stolen_base', 'strikeouts_pitched', 'save'],
+  SOCCER: ['goal', 'assist', 'clean_sheet', 'save', 'yellow_card', 'red_card'],
 }
+
+/** Sports scored like American football, where a catch can be worth points. */
+const RECEPTION_SPORTS = new Set(['NFL', 'NCAAF'])
 
 const BENCH_SLOTS = new Set(['BN', 'BENCH'])
 const RESERVE_SLOTS = new Set(['IR', 'IR_PLUS', 'IL', 'IL_PLUS', 'RESERVE'])
@@ -99,6 +112,8 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       case 'chopSteps':
       case 'chopOverrides':
         return text('v.noSpecialWeeks')
+      case 'rookieDraftAutoStartDays':
+        return text('v.autoStart.off')
       default:
         return null
     }
@@ -185,9 +200,42 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       const items = overrideItems(value)
       return items ? (items.length ? text('v.list', { list: { list: items } }) : text('v.noSpecialWeeks')) : null
     }
+    case 'rookieDraftOrder':
+      return typeof value === 'string' && ROOKIE_ORDERS.has(value) ? text(`v.rookieOrder.${value}`) : null
+    case 'rookieDraftType':
+      return typeof value === 'string' && DRAFT_TYPES.has(value) ? text(`v.draftType.${value}`) : null
+    case 'rookieDraftRounds':
+      return isPosInt(value) ? plural('v.rounds', value) : null
+    case 'rookieDraftAutoStartDays':
+      return isPosInt(value) ? text('v.autoStart.days', { n: value }) : null
+    case 'taxiSlots':
+      return isNum(value) && Number.isInteger(value) && value >= 0 ? text('v.count', { n: value }) : null
+    case 'taxiEligibilityYears':
+      return typeof value === 'number' && TAXI_YEARS.has(value) ? text(`v.taxiYears.${value}`) : null
+    case 'futurePicksYearsOut':
+      return isPosInt(value) ? plural('v.seasonsAhead', value) : null
+    case 'tankingPenalty': {
+      const cost = tankingCost(value)
+      if (!value || typeof value !== 'object') return null
+      if ((value as { enabled?: unknown }).enabled === false) return text('v.off')
+      return cost ? text('v.tanking.on', { strike: (value as { atStrike: number }).atStrike, cost }) : null
+    }
     default:
       return null
   }
+}
+
+/** What a confirmed tanking strike costs, as a phrase ("its round 1 draft pick"), or null. */
+function tankingCost(value: unknown): RuleText | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const v = value as Record<string, unknown>
+  if (typeof v.penalty !== 'string' || !TANKING_PENALTIES.has(v.penalty) || !isPosInt(v.atStrike)) return null
+  if (v.penalty === 'forfeit_pick') return isPosInt(v.pickRound) ? text('tankingCost.forfeit_pick', { round: v.pickRound }) : null
+  if (v.penalty === 'lottery_odds') {
+    if (!isPosInt(v.lotteryOddsCutPct)) return null
+    return v.lotteryOddsCutPct >= 100 ? text('tankingCost.lottery_all') : text('tankingCost.lottery_odds', { pct: v.lotteryOddsCutPct })
+  }
+  return isPosInt(v.faabPercent) ? text('tankingCost.faab', { pct: v.faabPercent }) : null
 }
 
 function overrideItems(value: unknown): RuleText[] | null {
@@ -232,7 +280,7 @@ function scoringLines(s: RuleSnapshot): RuleLine[] {
     ? headline.filter((k) => isNum(values[k]) && values[k] !== 0).map((k) => text('scoring.statValue', { stat: text(`stat.${k}`), pts: values[k]! }))
     : []
   let ppr: RuleText | null = null
-  if (s.sport === 'NFL') {
+  if (RECEPTION_SPORTS.has(s.sport)) {
     const rec = values && isNum(values.receptions) ? values.receptions : s.scoringPreset === 'ppr' ? 1 : s.scoringPreset === 'half_ppr' ? 0.5 : s.scoringPreset === 'standard' ? 0 : null
     if (rec === 1) ppr = text('scoring.ppr.full')
     else if (rec === 0.5) ppr = text('scoring.ppr.half')
@@ -334,6 +382,37 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
   ])
 }
 
+function dynastyLines(s: RuleSnapshot): RuleLine[] {
+  const order = s.rookieDraftOrder && ROOKIE_ORDERS.has(s.rookieDraftOrder) ? s.rookieDraftOrder : null
+  const type = s.rookieDraftType && DRAFT_TYPES.has(s.rookieDraftType) ? s.rookieDraftType : null
+  const tanking = s.tankingPenalty ?? null
+  const cost = tanking?.enabled ? tankingCost(tanking) : null
+  return compact([
+    line('dynasty-order', order ? text(`dynasty.order.${order}`) : null),
+    line('dynasty-rounds', isPosInt(s.rookieDraftRounds) ? plural(`dynasty.rounds.${type ?? 'generic'}`, s.rookieDraftRounds) : null),
+    line('dynasty-auto-start', isPosInt(s.rookieDraftAutoStartDays) ? text('dynasty.autoStart', { n: s.rookieDraftAutoStartDays }) : null),
+    line(
+      'dynasty-taxi',
+      s.taxiSlots === 0
+        ? text('dynasty.taxi.none')
+        : isPosInt(s.taxiSlots) && typeof s.taxiEligibilityYears === 'number' && TAXI_YEARS.has(s.taxiEligibilityYears)
+          ? plural('dynasty.taxi', s.taxiSlots, { who: text(`dynasty.taxiWho.${s.taxiEligibilityYears}`) })
+          : null,
+    ),
+    line('dynasty-future-picks', isPosInt(s.futurePicksYearsOut) ? plural('dynasty.futurePicks', s.futurePicksYearsOut) : null),
+    line(
+      'dynasty-tanking',
+      tanking && tanking.enabled === false
+        ? text('dynasty.tanking.off')
+        : cost && tanking
+          ? tanking.atStrike <= 1
+            ? text('dynasty.tanking.onFirst', { cost })
+            : text('dynasty.tanking.on', { strike: tanking.atStrike, cost })
+          : null,
+    ),
+  ])
+}
+
 /** The full rules popup: one section per area, empty sections dropped. */
 export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): RuleSection[] {
   const format = s.format
@@ -341,7 +420,7 @@ export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): R
     line('overview-commissioner', ctx.isCommissioner ? text('overview.commissionerPreview') : null),
     line('overview-teams', isPosInt(s.teamCount) ? plural('overview.teams', s.teamCount) : null),
     line('overview-format', format ? text(`overview.format.${format}`) : null),
-    line('overview-median', format === 'redraft' && s.medianGame === true ? text('overview.median') : null),
+    line('overview-median', (format === 'redraft' || format === 'dynasty') && s.medianGame === true ? text('overview.median') : null),
   ])
   const lineups =
     (s.sport === 'NBA' || s.sport === 'NHL') && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
@@ -350,10 +429,11 @@ export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): R
   const sections: RuleSection[] = [
     { id: 'overview', title: text('section.overview'), lines: overview },
     ...(format === 'guillotine' ? [{ id: 'guillotine' as const, title: text('section.guillotine'), lines: guillotineLines(s) }] : []),
+    ...(format === 'dynasty' ? [{ id: 'dynasty' as const, title: text('section.dynasty'), lines: dynastyLines(s) }] : []),
     { id: 'scoring', title: text('section.scoring'), lines: scoringLines(s) },
     { id: 'roster', title: text('section.roster'), lines: rosterLines(s) },
     { id: 'lineups', title: text('section.lineups'), lines: lineups },
-    ...(format === 'redraft' ? [{ id: 'playoffs' as const, title: text('section.playoffs'), lines: playoffLines(s) }] : []),
+    ...(format === 'redraft' || format === 'dynasty' ? [{ id: 'playoffs' as const, title: text('section.playoffs'), lines: playoffLines(s) }] : []),
     { id: 'trades', title: text('section.trades'), lines: tradeLines(s) },
     { id: 'waivers', title: text('section.waivers'), lines: waiverLines(s, format) },
   ]
@@ -425,6 +505,16 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       return typeof after === 'string' && TRADE_REVIEWS.has(after) ? text(`trades.review.${after}`) : null
     case 'thirdPlaceGame':
       return after === true ? text('playoffs.thirdPlace') : null
+    case 'rookieDraftOrder':
+      return typeof after === 'string' && ROOKIE_ORDERS.has(after) ? text(`dynasty.order.${after}`) : null
+    case 'rookieDraftAutoStartDays':
+      return isPosInt(after) ? text('dynasty.autoStart', { n: after }) : after == null ? text('change.autoStart.off') : null
+    case 'tankingPenalty': {
+      if (after && typeof after === 'object' && (after as { enabled?: unknown }).enabled === false) return text('dynasty.tanking.off')
+      const cost = tankingCost(after)
+      const strike = (after as { atStrike?: number } | null)?.atStrike
+      return cost && isPosInt(strike) ? (strike <= 1 ? text('dynasty.tanking.onFirst', { cost }) : text('dynasty.tanking.on', { strike, cost })) : null
+    }
     default:
       return null
   }

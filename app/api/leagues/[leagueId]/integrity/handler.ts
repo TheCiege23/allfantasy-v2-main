@@ -12,6 +12,9 @@ import { resolveWriteAuthority } from "@/lib/league/write-authority"
 import { readTradeAlertsEnabled, TRADE_ALERTS_KEY } from "@/lib/integrity/tradeAlerts"
 import { HOLD_FLAGGED_TRADES_KEY, parseHoldFlaggedTradesMode, readHoldFlaggedTradesMode } from "@/lib/integrity/holdFlaggedTrades"
 import { parseTankingPenaltyPolicyPatch, readTankingPenaltyPolicy, TANKING_PENALTIES_KEY } from "@/lib/integrity/tankingPenalties"
+import { tankingPenaltyRule } from "@/lib/league-rules-explainer/snapshot"
+import { diffRuleSnapshots } from "@/lib/league-rules-explainer/changeKeys"
+import { publishRuleChangesEvent } from "@/lib/league-rules-explainer/publishRuleChanges"
 
 export const dynamic = "force-dynamic"
 
@@ -166,11 +169,13 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   })
 
   let leagueSettings: unknown
+  let settingsBefore: unknown = null
   if (Object.keys(settingsPatch).length > 0 || penaltyPatch) {
     leagueSettings = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
       const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
       const current = (row?.settings as Record<string, unknown> | null) ?? {}
+      settingsBefore = current
       const next = {
         ...current,
         ...settingsPatch,
@@ -184,6 +189,16 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   }
 
   const platform = (await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }))?.platform ?? null
+
+  // A tanking-penalty edit is a rule members read in a dynasty league's rules popup: say what changed.
+  if (penaltyPatch && settingsBefore && resolveWriteAuthority(platform) === "NATIVE") {
+    await publishRuleChangesEvent({
+      leagueId,
+      actorUserId: userId,
+      section: "integrity",
+      changes: diffRuleSnapshots({ tankingPenalty: tankingPenaltyRule(settingsBefore) }, { tankingPenalty: tankingPenaltyRule(leagueSettings) }),
+    })
+  }
 
   return NextResponse.json({
     settings: {

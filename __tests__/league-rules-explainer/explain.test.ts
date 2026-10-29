@@ -124,13 +124,16 @@ function withGuillotineConfig(row: RulesLeagueRow): RuleSnapshot {
 }
 
 describe('scope', () => {
-  it('covers native NFL / NBA / NHL redraft and guillotine leagues only', () => {
+  it('covers native redraft, guillotine and dynasty leagues in every sport AF hosts', () => {
     expect(isRulesExplainerLeague(NFL_REDRAFT)).toBe(true)
     expect(isRulesExplainerLeague(NBA_REDRAFT)).toBe(true)
     expect(isRulesExplainerLeague(guillotineRow('NHL'))).toBe(true)
-    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, sport: 'MLB' })).toBe(false)
+    for (const sport of ['MLB', 'NCAAF', 'NCAAB', 'SOCCER']) expect(isRulesExplainerLeague({ ...NFL_REDRAFT, sport })).toBe(true)
+    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, sport: 'CRICKET' })).toBe(false)
     expect(isRulesExplainerLeague({ ...NFL_REDRAFT, platform: 'sleeper' })).toBe(false)
-    expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueType: 'dynasty' })).toBe(false)
+    expect(resolveRulesFormat({ ...NFL_REDRAFT, leagueType: 'dynasty' })).toBe('dynasty')
+    expect(resolveRulesFormat({ ...NFL_REDRAFT, leagueType: 'redraft', isDynasty: true })).toBe('dynasty')
+    expect(resolveRulesFormat({ ...NFL_REDRAFT, leagueType: 'devy' })).toBe('dynasty')
     expect(isRulesExplainerLeague({ ...NFL_REDRAFT, leagueVariant: 'survivor' })).toBe(false)
     expect(isRulesExplainerLeague({ ...NFL_REDRAFT, bestBallMode: true })).toBe(false)
     expect(resolveRulesFormat({ leagueType: 'redraft', leagueVariant: 'survivor_guillotine', guillotineMode: true })).toBeNull()
@@ -407,5 +410,80 @@ describe('grouping changes into cards', () => {
 
   it('a group with nothing explainable produces no card', () => {
     expect(groupSettingsChanges([ev('a', 0, [{ key: 'notARule', before: 1, after: 2 }])], { sport: 'NFL' })).toEqual([])
+  })
+})
+
+describe('every sport and dynasty leagues (2026-10-29)', () => {
+  const DYNASTY_NFL: RulesLeagueRow = {
+    ...NFL_REDRAFT,
+    leagueType: 'dynasty',
+    isDynasty: true,
+    settings: {
+      ...(NFL_REDRAFT.settings as Record<string, unknown>),
+      integrity_tanking_penalties: { penalty: 'lottery_odds', lotteryOddsCutPct: 50, pickAtStrike: 2 },
+      dynasty_rookie_draft_calendar: { autoOpen: true, autoStartDays: 7 },
+    },
+  }
+  const dynastySnapshot = (): RuleSnapshot => ({
+    ...ruleSnapshotFromLeague(DYNASTY_NFL),
+    rookieDraftOrder: 'weighted_lottery',
+    rookieDraftRounds: 4,
+    rookieDraftType: 'linear',
+    taxiSlots: 3,
+    taxiEligibilityYears: 2,
+    futurePicksYearsOut: 3,
+  })
+
+  it('a dynasty league explains its rookie draft, taxi squad, future picks and tanking penalty, and keeps its playoffs', () => {
+    const sections = explainLeagueRules(dynastySnapshot())
+    expect(sections.map((s) => s.id)).toEqual(['overview', 'dynasty', 'scoring', 'playoffs', 'trades', 'waivers'])
+    const en = render(sections, 'en')
+    expectClean(en)
+    expect(en).toEqual(
+      expect.arrayContaining([
+        'Dynasty: you keep your whole roster from season to season. Each offseason a rookie draft adds the new players.',
+        'The rookie draft order is set by a weighted lottery: teams with worse records get better odds at the top picks.',
+        'The rookie draft has 4 rounds, in the same order every round.',
+        'The rookie draft starts by itself 7 days after it opens.',
+        'Each team has 3 taxi squad spots for players in their first two seasons. Players there stay on your team without using roster spots.',
+        'Draft picks up to 3 seasons ahead can be traded.',
+        'Tanking: when the commissioner confirms a team lost on purpose, that is a strike. Strike 2 costs the team 50% of its rookie-lottery odds; strikes before that are warnings.',
+      ]),
+    )
+    const es = render(sections, 'es')
+    expectClean(es)
+    for (const l of es) expect(l.toLowerCase()).not.toContain('waiver')
+  })
+
+  it('tanking penalties off, a first-strike pick penalty, and no taxi squad read plainly', () => {
+    const off = render(explainLeagueRules({ ...dynastySnapshot(), tankingPenalty: { enabled: false, penalty: 'forfeit_pick', atStrike: 2, pickRound: 1, lotteryOddsCutPct: 50, faabPercent: 25 }, taxiSlots: 0 }), 'en')
+    expect(off).toEqual(expect.arrayContaining(['This league has no tanking penalties.', 'There is no taxi squad.']))
+    const first = render(explainLeagueRules({ ...dynastySnapshot(), tankingPenalty: { enabled: true, penalty: 'forfeit_pick', atStrike: 1, pickRound: 2, lotteryOddsCutPct: 50, faabPercent: 25 } }), 'en')
+    expect(first).toContain('Tanking: when the commissioner confirms a team lost on purpose, the team loses its round 2 draft pick.')
+  })
+
+  it('a dynasty change is explained like any other', () => {
+    const line = explainRuleChange({ key: 'tankingPenalty', before: { enabled: true, penalty: 'forfeit_pick', atStrike: 2, pickRound: 1, lotteryOddsCutPct: 50, faabPercent: 25 }, after: { enabled: true, penalty: 'faab', atStrike: 2, pickRound: 1, lotteryOddsCutPct: 50, faabPercent: 25 } })!
+    expect(renderChangeLine(line, tEn, 'en')).toBe(
+      'Tanking penalty: Strike 2: its round 1 draft pick → Strike 2: 25% of its FAAB budget — Tanking: when the commissioner confirms a team lost on purpose, that is a strike. Strike 2 costs the team 25% of its FAAB budget; strikes before that are warnings.',
+    )
+    const start = explainRuleChange({ key: 'rookieDraftAutoStartDays', before: null, after: 7 })!
+    expect(renderChangeLine(start, tEn, 'en')).toBe('Rookie draft start: When the commissioner starts it → 7 days after it opens — The rookie draft starts by itself 7 days after it opens.')
+  })
+
+  it.each([
+    ['MLB', { home_run: 4, rbi: 1, win: 5 }, 'Key values: home run 4 pts, RBI 1 pts.'],
+    ['SOCCER', { goal: 6, clean_sheet: 4 }, 'Key values: goal 6 pts and clean sheet 4 pts.'],
+  ])('%s scoring names its own key stats (and MLB never calls a pitcher win a goalie win)', (sport, values, _expected) => {
+    const lines = render(explainLeagueRules({ ...ruleSnapshotFromLeague({ ...NFL_REDRAFT, sport }), scoringValues: values }), 'en')
+    expectClean(lines)
+    const keyLine = lines.find((l) => l.startsWith('Key values'))!
+    expect(keyLine).toBeTruthy()
+    expect(keyLine).not.toContain('goalie win')
+    expect(lines.join(' ')).not.toMatch(/catch/i)
+  })
+
+  it('a college football league gets the reception line, like the NFL', () => {
+    expect(render(explainLeagueRules(ruleSnapshotFromLeague({ ...NFL_REDRAFT, sport: 'NCAAF' })), 'en')).toContain('Full PPR: every catch is worth 1 point.')
   })
 })

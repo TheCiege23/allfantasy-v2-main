@@ -76,11 +76,21 @@ describe('GET', () => {
     expect(m.prisma.league.findUnique).not.toHaveBeenCalled()
   })
 
-  it('reports out-of-scope leagues as unsupported (MLB, imported, dynasty)', async () => {
-    for (const league of [{ ...NFL, sport: 'MLB' }, { ...NFL, platform: 'sleeper' }, { ...NFL, leagueType: 'dynasty' }]) {
+  it('reports out-of-scope leagues as unsupported (imported, survivor, best ball)', async () => {
+    for (const league of [{ ...NFL, platform: 'sleeper' }, { ...NFL, leagueVariant: 'survivor' }, { ...NFL, bestBallMode: true }]) {
       m.league = league
       expect(await (await GET(req(), ctx)).json()).toEqual({ supported: false })
     }
+  })
+
+  it('covers every sport AF hosts, and dynasty leagues with their own section (2026-10-29)', async () => {
+    for (const sport of ['MLB', 'NCAAF', 'NCAAB', 'SOCCER']) {
+      m.league = { ...NFL, sport }
+      expect((await (await GET(req(), ctx)).json()).supported).toBe(true)
+    }
+    m.league = { ...NFL, leagueType: 'dynasty', isDynasty: true }
+    const body = await (await GET(req(), ctx)).json()
+    expect(body.sections.map((s: { id: string }) => s.id)).toContain('dynasty')
   })
 
   it('a member who has not seen the rules gets the popup', async () => {

@@ -5,7 +5,7 @@ import { getRosterEngineRegistry } from '@/lib/roster-engine'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { HEADLINE_STATS } from './explain'
-import { normalizeRosterSlots, ruleSnapshotFromLeague, type RulesLeagueRow } from './snapshot'
+import { dynastyRulesFromConfig, normalizeRosterSlots, ruleSnapshotFromLeague, type RulesLeagueRow } from './snapshot'
 import { parseSettingsChangeEvents } from './view'
 import type { RuleSnapshot, SettingsChangeEvent } from './types'
 
@@ -18,7 +18,7 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
   const snapshot = ruleSnapshotFromLeague(row)
   const sport = snapshot.sport
 
-  const [slots, scoring, guillotine] = await Promise.all([
+  const [slots, scoring, guillotine, dynasty] = await Promise.all([
     (async () => {
       const registry = getRosterEngineRegistry()
       if (!registry.isSupported(sport as never)) return null
@@ -26,7 +26,9 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
     })().catch(() => null),
     getLeagueScoringConfig(leagueId).catch(() => null),
     snapshot.format === 'guillotine' ? getGuillotineConfig(leagueId).catch(() => null) : Promise.resolve(null),
+    snapshot.format === 'dynasty' ? loadDynastyRules(leagueId).catch(() => null) : Promise.resolve(null),
   ])
+  if (dynasty) Object.assign(snapshot, dynasty)
 
   const rosterSlots = normalizeRosterSlots(slots)
   if (rosterSlots) snapshot.rosterSlots = rosterSlots
@@ -54,6 +56,18 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
     snapshot.releaseTiming = guillotine.rosterReleaseTiming === 'immediate' ? 'immediate' : 'next_waiver_run'
   }
   return snapshot
+}
+
+/**
+ * A dynasty league's rookie-draft and taxi rules (DynastyLeagueConfig). A league with no config row
+ * reads the same defaults the dynasty settings page shows.
+ */
+export async function loadDynastyRules(leagueId: string): Promise<Partial<RuleSnapshot>> {
+  const c = await prisma.dynastyLeagueConfig.findUnique({
+    where: { leagueId },
+    select: { rookiePickOrderMethod: true, rookieDraftRounds: true, rookieDraftType: true, taxiSlots: true, taxiEligibilityYears: true, futurePicksYearsOut: true },
+  })
+  return dynastyRulesFromConfig(c)
 }
 
 /** How far back the change history reaches. */

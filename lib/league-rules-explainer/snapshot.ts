@@ -25,7 +25,9 @@ import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
 import { readAdvanced, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { readFaabOnChop } from '@/lib/guillotine/faabOnChop'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
-import { RULES_EXPLAINER_SPORTS, type RuleSnapshot, type RulesFormat } from './types'
+import { readTankingPenaltyPolicy } from '@/lib/integrity/tankingPenalties'
+import { readRookieDraftCalendarSettings } from '@/lib/dynasty-core/rookieDraftCalendar'
+import { RULES_EXPLAINER_SPORTS, type RuleSnapshot, type RulesFormat, type TankingPenaltyRule } from './types'
 
 /** The `League` columns a snapshot reads. A full Prisma `League` row satisfies it. */
 export type RulesLeagueRow = {
@@ -92,18 +94,58 @@ export function rulesSportOf(sport: unknown): string {
   return String(sport ?? '').trim().toUpperCase()
 }
 
-/** Redraft, guillotine, or null when the league is outside this feature's scope. */
+const DYNASTY_TYPES = new Set(['dynasty', 'devy', 'c2c'])
+
+/** Redraft, guillotine, dynasty, or null when the league is outside this feature's scope. */
 export function resolveRulesFormat(row: RulesLeagueRow): RulesFormat | null {
   const variant = String(row.leagueVariant ?? '').trim().toLowerCase()
   const type = String(row.leagueType ?? '').trim().toLowerCase()
   if (variant === 'survivor_guillotine' || row.survivorMode) return null
   if (row.guillotineMode === true || type === 'guillotine' || variant === 'guillotine') return 'guillotine'
   if (SPECIALTY_VARIANTS.has(variant)) return null
-  if (row.isDynasty || row.bestBallMode) return null
+  if (row.bestBallMode) return null
+  if (row.isDynasty || DYNASTY_TYPES.has(type)) return 'dynasty'
   return type === 'redraft' ? 'redraft' : null
 }
 
-/** In scope: an AllFantasy-hosted NFL / NBA / NHL redraft or guillotine league. */
+/** A dynasty league's tanking penalty, as the rule members read. */
+export function tankingPenaltyRule(settings: unknown): TankingPenaltyRule {
+  const p = readTankingPenaltyPolicy(settings)
+  return {
+    enabled: p.enabled,
+    penalty: p.penalty,
+    atStrike: p.pickAtStrike,
+    pickRound: p.pickRound,
+    lotteryOddsCutPct: p.lotteryOddsCutPct,
+    faabPercent: p.faabPercent,
+  }
+}
+
+/**
+ * A dynasty league's rookie-draft and taxi rules from its DynastyLeagueConfig row. No row reads the
+ * same defaults the dynasty settings page shows. Shared by the popup and the dynasty settings save.
+ */
+export function dynastyRulesFromConfig(
+  c: {
+    rookiePickOrderMethod?: string | null
+    rookieDraftRounds?: number | null
+    rookieDraftType?: string | null
+    taxiSlots?: number | null
+    taxiEligibilityYears?: number | null
+    futurePicksYearsOut?: number | null
+  } | null,
+): Partial<RuleSnapshot> {
+  return {
+    rookieDraftOrder: c?.rookiePickOrderMethod ?? 'max_pf',
+    rookieDraftRounds: c?.rookieDraftRounds ?? 4,
+    rookieDraftType: c?.rookieDraftType ?? 'linear',
+    taxiSlots: c?.taxiSlots ?? 4,
+    taxiEligibilityYears: c?.taxiEligibilityYears ?? 1,
+    futurePicksYearsOut: c?.futurePicksYearsOut ?? 3,
+  }
+}
+
+/** In scope: an AllFantasy-hosted redraft, guillotine or dynasty league in any sport AF hosts. */
 export function isRulesExplainerLeague(row: RulesLeagueRow): boolean {
   if (!isNativePlatform(row.platform ?? null)) return false
   if (!(RULES_EXPLAINER_SPORTS as readonly string[]).includes(rulesSportOf(row.sport))) return false
@@ -188,6 +230,11 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
     snapshot.playoffSeries = sport === 'NBA' || sport === 'NHL' ? readPlayoffSeriesLengths(row.settings) : null
     snapshot.playoffByes = playoffByes(settings, playoffTeams)
     snapshot.thirdPlaceGame = playoffTeams ? readThirdPlaceGameEnabled(row.settings, sport, row.leagueVariant) : null
+  }
+  if (format === 'dynasty') {
+    // The rookie-draft order, rounds and taxi squad live on DynastyLeagueConfig (read path, ./load.ts).
+    snapshot.tankingPenalty = tankingPenaltyRule(row.settings)
+    snapshot.rookieDraftAutoStartDays = readRookieDraftCalendarSettings(row.settings).autoStartDays
   }
   return snapshot
 }
