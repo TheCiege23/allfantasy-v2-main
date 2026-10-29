@@ -267,6 +267,9 @@
 
 /* Touch controls need room for a thumb in both phone orientations. */
 @media (pointer: coarse) {
+  .af-core .af-sp-input,
+  .af-core .af-sp-select,
+  .af-core .af-sp-textarea { font-size: 16px; min-height: 44px; }
   .af-core .af-sp-close { width: 44px; height: 44px; }
   .af-core .af-sp-chip,
   .af-core .af-sp-btn { min-height: 44px; min-width: 44px; }
