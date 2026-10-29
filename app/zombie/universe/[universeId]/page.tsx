@@ -1,6 +1,7 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
+import { ZombieUniverseRenewalPanel } from '@/components/zombie/ZombieUniverseRenewalPanel'
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import {
@@ -46,6 +47,7 @@ type UniverseHubPayload = {
     id: string
     name: string
     sport: string
+    season: number
     levels?: LevelRow[]
     leagues: HubLeague[]
   }
@@ -211,6 +213,7 @@ export default function ZombieUniverseHubPage() {
       </section>
 
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
+        <ZombieUniverseRenewalPanel key={u.id+':'+u.season} universeId={u.id} season={u.season} />
         <CommissionerFeederGrid
           leagues={feederCards}
           accent={zombieAccent}

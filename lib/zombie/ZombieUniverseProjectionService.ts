@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function refreshMovementProjections(universeId: string, season?: number): Promise<void> {
   const universe = await prisma.zombieUniverse.findUniqueOrThrow({ where: { id: universeId }, include: { levels: true } })
-  const se = season ?? new Date().getUTCFullYear()
+  const se = season ?? (await prisma.zombieLeague.aggregate({ where: { universeId }, _max: { season: true } }))._max.season ?? new Date().getUTCFullYear()
   const standings = await getUniverseStandings(universeId, se)
   const plan = planUniverseMovement(standings, universe.levels, universe)
   for (const row of plan) await upsertMovementProjection(universeId, row.rosterId, row.leagueId, {

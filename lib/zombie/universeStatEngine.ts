@@ -186,17 +186,18 @@ export async function executePromotionRelegation(universeId: string, season: num
     })
     if (prior) return { recorded: 0, alreadyRecorded: true, scope: 'movement_record_only' as const }
     if (u.promotionMode !== 'auto') throw new Error('MOVEMENT_MANUAL_REVIEW_REQUIRED')
-    if (!u.leagues.length || u.leagues.some(l => l.season !== season || l.status !== 'complete')) throw new Error('MOVEMENT_SEASONS_INCOMPLETE')
-    const native = await tx.redraftSeason.findMany({ where: { leagueId: { in: u.leagues.map(l => l.leagueId) }, season } })
-    if (native.length !== u.leagues.length || native.some(s => s.status !== 'complete')) throw new Error('MOVEMENT_SEASONS_INCOMPLETE')
+    const seasonLeagues = u.leagues.filter(l => l.season === season)
+    if (!seasonLeagues.length || seasonLeagues.some(l => l.status !== 'complete')) throw new Error('MOVEMENT_SEASONS_INCOMPLETE')
+    const native = await tx.redraftSeason.findMany({ where: { leagueId: { in: seasonLeagues.map(l => l.leagueId) }, season } })
+    if (native.length !== seasonLeagues.length || native.some(s => s.status !== 'complete')) throw new Error('MOVEMENT_SEASONS_INCOMPLETE')
     const unsettled = await tx.zombieWeeklyResolution.count({
-      where: { zombieLeagueId: { in: u.leagues.map(l => l.id) },
+      where: { zombieLeagueId: { in: seasonLeagues.map(l => l.id) },
         OR: [{ status: { not: 'complete' } }, { requiresStatCorrection: true }] },
     })
     if (unsettled) throw new Error('MOVEMENT_RECONCILIATION_REQUIRED')
     if (await tx.zombieMovementRecord.count({ where: { universeId, season } })) throw new Error('MOVEMENT_LEGACY_REVIEW_REQUIRED')
     const standings = await getUniverseStandings(universeId, season, tx)
-    const owners = await tx.roster.findMany({ where: { leagueId: { in: u.leagues.map(l => l.leagueId) } }, select: { id: true, platformUserId: true } })
+    const owners = await tx.roster.findMany({ where: { leagueId: { in: seasonLeagues.map(l => l.leagueId) } }, select: { id: true, platformUserId: true } })
     const ownerByRoster = new Map(owners.map(r => [r.id, r.platformUserId]))
     const used = new Set<string>()
     for (const row of standings) {
@@ -207,7 +208,7 @@ export async function executePromotionRelegation(universeId: string, season: num
     }
     if (standings.length !== owners.length) throw new Error('MOVEMENT_STANDINGS_INCOMPLETE')
     const names = await tx.zombieLeagueTeam.findMany({
-      where: { leagueId: { in: u.leagues.map(l => l.leagueId) } },
+      where: { leagueId: { in: seasonLeagues.map(l => l.leagueId) } },
       select: { rosterId: true, displayName: true, fantasyTeamName: true },
     })
     const nameByRoster = new Map(names.map(t => [t.rosterId, t.displayName || t.fantasyTeamName]))
@@ -221,7 +222,7 @@ export async function executePromotionRelegation(universeId: string, season: num
       finalPPW: row.pointsPerWeek, finalTierRank: row.finalTierRank, approvedBy: actorUserId,
     } })
     await tx.zombieAuditLog.create({ data: {
-      universeId, leagueId: u.leagues[0].leagueId, eventType: 'UNIVERSE_MOVEMENT_RECORDED',
+      universeId, leagueId: seasonLeagues[0].leagueId, eventType: 'UNIVERSE_MOVEMENT_RECORDED',
       metadata: { version: 1, season, recorded: plan.length, actorUserId, scope: 'movement_record_only' },
     } })
     return { recorded: plan.length, alreadyRecorded: false, scope: 'movement_record_only' as const }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { ZombieUniverseRenewalPanel } from '@/components/zombie/ZombieUniverseRenewalPanel'
 import { SettingsSection, SettingsRow, Input } from '@/app/league/[leagueId]/tabs/settings/components'
 
 type Universe = {
@@ -8,6 +9,7 @@ type Universe = {
   name: string
   promotionCount: number
   relegationCount: number
+  season: number
   levels: { id: string; name: string; rankOrder: number }[]
   leagues: { id: string; name: string | null; levelId: string | null; status: string }[]
 }
@@ -96,6 +98,7 @@ export function ZombieUniversePanel({ leagueId, canEdit }: { leagueId: string; c
               {saving ? 'Saving…' : 'Save movement rules'}
             </button>
           )}
+          {canEdit && <ZombieUniverseRenewalPanel key={universe.id+':'+universe.season} universeId={universe.id} season={universe.season} />}
           <section aria-label="Universe levels" className="space-y-2">
             {universe.levels.map((level) => (
               <div key={level.id} className="rounded-lg border border-white/10 bg-white/[0.03] p-3">

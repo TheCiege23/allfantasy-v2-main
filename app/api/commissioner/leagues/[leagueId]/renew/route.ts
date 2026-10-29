@@ -241,6 +241,13 @@ export async function POST(
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const zombie = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { universeId: true } })
+  if (zombie || league.leagueVariant === 'zombie' || league.leagueType === 'zombie') return NextResponse.json({
+    error: 'zombie_season_renewal_required',
+    message: 'Use Zombie season renewal to preserve role, item, prize and movement history.',
+    renewFromHubPath: zombie?.universeId ? '/zombie/universe/' + zombie.universeId : '/league/' + leagueId + '/zombie-commissioner',
+  }, { status: 409 })
+
   /*
    * 🛑 AN IMPORTED LEAGUE IS RENEWED ON ITS PLATFORM. Writing `season + 1` here left the row pointing at
    * last season's provider league, and every sync then refused it for a season mismatch. A Sleeper

@@ -9,6 +9,7 @@ import { ensureZombieSeasonActivated } from '../lib/zombie/activateNativeZombieL
 import { getUniverseStandings } from '../lib/zombie/ZombieUniverseStandingsService'
 import { refreshMovementProjections } from '../lib/zombie/ZombieUniverseProjectionService'
 import { executePromotionRelegation } from '../lib/zombie/universeStatEngine'
+import { previewZombieUniverseRenewal, renewZombieUniverse } from '../lib/zombie/renewZombieUniverse'
 import { runWeeklyResolution } from '../lib/zombie/weeklyResolutionEngine'
 
 const SPORTS = [
@@ -273,6 +274,8 @@ test('four-sport universe allocations use finished native standings and record o
         expect(created.ok(), await created.text()).toBeTruthy()
         const leagueId = String((await created.json()).league.id)
         leagues.push(leagueId)
+        await prisma.league.update({ where: { id: leagueId }, data: { season: 2026, status: 'complete' } })
+        await prisma.draftSession.updateMany({ where: { leagueId }, data: { status: 'completed', completedAt: new Date() } })
         const z = await prisma.zombieLeague.update({ where: { leagueId }, data: {
           universeId: u.id, levelId: level.id, season: 2026, status: 'complete', totalWeeks: 1, currentWeek: 1,
         } })
@@ -335,7 +338,77 @@ test('four-sport universe allocations use finished native standings and record o
         const visible = await member.request.get('/api/zombie-universe/' + u.id + '/standings?season=2026')
         expect(visible.ok(), await visible.text()).toBeTruthy()
       } finally { await memberContext.close() }
-      console.log(sport + ': 3 levels, configured counts, native standings, incomplete/correction gates, concurrent retry and member access passed; allocation records only')
+      const renewalPath='/api/zombie-universe/'+u.id+'/renew'
+      const previewRes=await page.request.get(renewalPath+'?season=2026')
+      expect(previewRes.ok(),await previewRes.text()).toBeTruthy()
+      const preview=await previewRes.json()
+      expect(preview.assignments).toHaveLength(24)
+      expect(preview.pools).toHaveLength(3)
+      const countBefore=await prisma.league.count({where:{userId:userIds[0]}})
+      const stale=await page.request.post(renewalPath,{data:{season:2026,previewHash:'0'.repeat(64)}})
+      expect(stale.status()).toBe(409)
+      expect(await prisma.league.count({where:{userId:userIds[0]}})).toBe(countBefore)
+      // A database failure on the final destination must roll back earlier newly-created leagues, seats and drafts.
+      const trigger='zombie_renewal_'+randomUUID().replace(/-/g,'')
+      try {
+        await prisma.$executeRawUnsafe('CREATE FUNCTION '+trigger+'() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION \'fixture renewal failure\'; END $$')
+        await prisma.$executeRawUnsafe('CREATE TRIGGER '+trigger+' BEFORE INSERT ON zombie_leagues FOR EACH ROW WHEN (NEW."universeId" = \''+u.id+'\' AND NEW.season = 2027 AND NEW."levelId" = \''+levels[2].id+'\') EXECUTE FUNCTION '+trigger+'()')
+        await expect(renewZombieUniverse(u.id,2026,userIds[0],preview.previewHash)).rejects.toThrow('fixture renewal failure')
+        expect(await prisma.league.count({where:{userId:userIds[0]}})).toBe(countBefore)
+        expect(await prisma.zombieLeague.count({where:{universeId:u.id,season:2027}})).toBe(0)
+      } finally {
+        await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS '+trigger+' ON zombie_leagues')
+        await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS '+trigger+'()')
+      }
+      const renewalAttempts=await Promise.all([
+        renewZombieUniverse(u.id,2026,userIds[0],preview.previewHash),
+        renewZombieUniverse(u.id,2026,userIds[0],preview.previewHash),
+      ])
+      expect(renewalAttempts.filter(r=>!r.alreadyRenewed)).toHaveLength(1)
+      const renewal=renewalAttempts.find(r=>!r.alreadyRenewed)!
+      const nextLeagues=renewal.leagues as Array<{leagueId:string;previousLeagueId:string;draftId:string}>
+      leagues.push(...nextLeagues.map(l=>l.leagueId))
+      expect(nextLeagues).toHaveLength(3)
+      expect(await prisma.roster.findMany({where:{leagueId:{in:rows.map(r=>r.leagueId)}},orderBy:{id:'asc'},select:{id:true,leagueId:true,platformUserId:true,playerData:true}})).toEqual(before)
+      expect(await prisma.zombieMovementRecord.count({where:{universeId:u.id,season:2026}})).toBe(8)
+      for(const next of nextLeagues) {
+        const expected=preview.assignments.filter((m:{destinationLeagueId:string})=>m.destinationLeagueId===next.previousLeagueId)
+        const roster=await prisma.roster.findMany({where:{leagueId:next.leagueId}})
+        expect(roster).toHaveLength(8)
+        expect(new Set(roster.map(r=>r.platformUserId))).toEqual(new Set(expected.map((m:{userId:string})=>m.userId)))
+        expect(roster.every(r=>(r.playerData as {players:string[]}).players.length===0)).toBe(true)
+        const draft=await prisma.draftSession.findUniqueOrThrow({where:{id:next.draftId}})
+        expect(draft).toMatchObject({status:'pre_draft',startedAt:null,sportType:sport,teamCount:8})
+        expect((draft.slotOrder as unknown[]).length).toBe(8)
+        const newLeague=await prisma.league.findUniqueOrThrow({where:{id:next.leagueId}})
+        const oldLeague=await prisma.league.findUniqueOrThrow({where:{id:next.previousLeagueId}})
+        expect(newLeague).toMatchObject({season:2027,sport,tenantId:oldLeague.tenantId,rosterSize:oldLeague.rosterSize,scoring:oldLeague.scoring,status:'setup',leagueVariant:'zombie'})
+        expect(await prisma.zombieLeague.findUniqueOrThrow({where:{leagueId:next.leagueId}})).toMatchObject({season:2027,status:'setup',currentWeek:0,potTotal:0})
+        expect(await prisma.zombieLeagueTeam.count({where:{leagueId:next.leagueId}})).toBe(0)
+        expect(await prisma.zombieResourceLedger.count({where:{leagueId:next.leagueId}})).toBe(0)
+        expect(await prisma.zombieWeeklyWinnings.count({where:{leagueId:next.leagueId}})).toBe(0)
+        const oldConfig=await prisma.zombieLeagueConfig.findUniqueOrThrow({where:{leagueId:next.previousLeagueId}})
+        expect(await prisma.zombieLeagueConfig.findUniqueOrThrow({where:{leagueId:next.leagueId}})).toMatchObject({serumReviveCount:oldConfig.serumReviveCount,autoSerumRevive:oldConfig.autoSerumRevive,zombieTradeBlocked:oldConfig.zombieTradeBlocked})
+      }
+      const repeated=await page.request.post(renewalPath,{data:{season:2026,previewHash:preview.previewHash}})
+      expect(repeated.ok(),await repeated.text()).toBeTruthy()
+      expect((await repeated.json()).alreadyRenewed).toBe(true)
+      expect((await previewZombieUniverseRenewal(u.id,2026,userIds[0])).completed).toBe(true)
+      const hub=await page.request.get('/api/zombie/universe-hub?universeId='+u.id)
+      expect(hub.ok(),await hub.text()).toBeTruthy()
+      const hubData=await hub.json()
+      expect(hubData.universe.season).toBe(2027)
+      expect(hubData.counts.leagueCount).toBe(3)
+      expect(hubData.universe.leagues.every((l:{season:number})=>l.season===2027)).toBe(true)
+      expect(await getUniverseStandings(u.id,2026)).toHaveLength(24)
+      const memberCtx=await page.context().browser()!.newContext()
+      try {
+        const member=await memberCtx.newPage()
+        await signIn(member,userIds[1]+'@example.invalid',password,userIds[1])
+        expect((await member.request.get(renewalPath+'?season=2026')).status()).toBe(403)
+        expect((await member.request.post(renewalPath,{data:{season:2026,previewHash:preview.previewHash}})).status()).toBe(403)
+      } finally {await memberCtx.close()}
+      console.log(sport+': 3-level full renewal, placements, empty drafts, old-history preservation, rollback, concurrent retry and owner access passed')
     }
   } finally {
     await prisma.zombieMovementProjection.deleteMany({ where: { universeId: { in: universes } } })

@@ -11,7 +11,11 @@ The opt-in disposable-Postgres Zombie lane exercises:
 - Historical recorded-provider scoring remains a separate replay.
 - Four sport universes with three levels each: native season standings, configurable movement counts, actual adjacent level labels, unplayed/ambiguous standing refusal, finished-season and correction gates, owner-only execution, concurrent retry and idempotency.
 
-Movement execution currently records approved next-level allocations. It does **not** renew the universe, create next-season drafts or transfer managers into new league seats. Those remain release work. Current-season rosters and player holdings must not be moved by recording an allocation.
+Universe renewal now has an owner-only preview and an atomic execution path. It creates separate next-season native leagues, places registered managers into their destination levels and leagues, and installs fresh unstarted drafts with empty player holdings. Previous-season leagues, roles, resources, prizes and draft history remain in place. The reviewed fingerprint covers placements and copied policies; changes require another preview. A parent-universe lock, serializable retry and durable audit make repeated or concurrent requests idempotent.
+
+Renewal refuses unfinished seasons/drafts, unresolved or missing weekly settlements, ambiguous memberships, cross-tenant or imported leagues, mismatched movement history, newer seasons and unbalanced tier capacity. It supports the automatic movement policy and fixed existing league capacities. Manual allocation overrides and changing the number of leagues during renewal are separate future work. No schema migration is required.
+
+The disposable four-sport rehearsal also injects a database failure on the last destination to verify that earlier league creation rolls back. No staging universe is advanced by that fixture.
 
 ## NFL market ADP exception
 

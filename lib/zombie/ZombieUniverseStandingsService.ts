@@ -8,8 +8,9 @@ export interface UniverseStandingsRow {
   winnings: number; serums: number; weapons: number; weekKilled: number | null; killedByRosterId: string | null
 }
 export async function getUniverseStandings(universeId: string, season?: number, db: Prisma.TransactionClient = prisma): Promise<UniverseStandingsRow[]> {
+  const selectedSeason = season ?? (await db.zombieLeague.aggregate({ where: { universeId }, _max: { season: true } }))._max.season
   const leagues = await db.zombieLeague.findMany({
-    where: { universeId, ...(season != null ? { season } : {}) }, include: { level: true },
+    where: { universeId, ...(selectedSeason != null ? { season: selectedSeason } : {}) }, include: { level: true },
   })
   const out: UniverseStandingsRow[] = []
   for (const z of leagues) {

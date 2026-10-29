@@ -17,18 +17,23 @@ export async function GET(req: Request) {
   // This endpoint includes unredacted role records; only the universe commissioner may read it.
   const owner = await prisma.zombieUniverse.findUnique({
     where: { id: universeId },
-    select: { commissionedByUserId: true },
+    select: { commissionedByUserId: true, createdByUserId: true },
   })
   if (!owner) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (owner.commissionedByUserId !== session.user.id) {
+  if ((owner.commissionedByUserId ?? owner.createdByUserId) !== session.user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const latest = await prisma.zombieLeague.aggregate({ where: { universeId }, _max: { season: true } })
+  const rawSeason = searchParams.get('season')
+  if (rawSeason != null && !/^\d{4}$/.test(rawSeason)) return NextResponse.json({ error: 'Invalid season' }, { status: 400 })
+  const season = rawSeason ? Number(rawSeason) : latest._max.season ?? new Date().getFullYear()
   const u = await prisma.zombieUniverse.findUnique({
     where: { id: universeId },
     include: {
       levels: { orderBy: { rankOrder: 'asc' } },
       leagues: {
+        where: { season },
         include: {
           teams: true,
           whispererRecord: true,
@@ -65,13 +70,13 @@ export async function GET(req: Request) {
   })
 
   const stats = await prisma.zombieUniverseStat.findMany({
-    where: { universeId, season: new Date().getFullYear() },
+    where: { universeId, season },
     orderBy: { currentSeasonPPW: 'desc' },
     take: 30,
   })
 
   return NextResponse.json({
-    universe: u,
+    universe: { ...u, season },
     counts: { survivorCount, zombieCount, whispererCount, leagueCount: u.leagues.length },
     animations,
     announcements,
@@ -93,14 +98,16 @@ export async function PATCH(req: Request) {
     where: { id: universeId },
     select: {
       commissionedByUserId: true,
-      leagues: { select: { status: true } },
+      createdByUserId: true,
+      leagues: { select: { status: true, season: true } },
     },
   })
   if (!universe) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (universe.commissionedByUserId !== session.user.id) {
+  if ((universe.commissionedByUserId ?? universe.createdByUserId) !== session.user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-  if (universe.leagues.some((league) => !['setup', 'registering'].includes(league.status))) {
+  const currentSeason = Math.max(...universe.leagues.map(l => l.season))
+  if (universe.leagues.some((league) => league.season === currentSeason && !['setup', 'registering'].includes(league.status))) {
     return NextResponse.json({ error: 'Promotion and relegation rules lock when a league starts.' }, { status: 409 })
   }
 
