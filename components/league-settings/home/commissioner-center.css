@@ -1,5 +1,5 @@
 /* Commissioner center (Commissioner.png). /core tokens only (af-core.css); no palette of its own. */
-.af-core .cc-root { padding: 24px; max-width: 1180px; margin: 0 auto; }
+.af-core .cc-root { padding: 24px; max-width: 1180px; margin: 0 auto; container-type: inline-size; }
 .af-core .cc-head { margin-bottom: 20px; }
 .af-core .cc-back {
   display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0;
@@ -67,6 +67,9 @@
 .af-core .cc-setup-guide summary, .af-core .cc-tools > summary { min-height: 44px; cursor: pointer; font-size: 15px; font-weight: 700; color: var(--text); }
 @media (max-width: 767px) {
   .af-core .cc-root { width: 100%; padding: 16px 12px; }
+}
+/* The native league rail also takes space on tablets and smaller desktops. */
+@container (max-width: 700px) {
   .af-core .cc-head h1 { font-size: 24px; }
   .af-core .cc-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .af-core .cc-nav { display: none; }
