@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { ZombieReadinessPanel } from '@/components/zombie/ZombieReadinessPanel'
 import { ZombieUniverseRenewalPanel } from '@/components/zombie/ZombieUniverseRenewalPanel'
 import { SettingsSection, SettingsRow, Input } from '@/app/league/[leagueId]/tabs/settings/components'
 
@@ -83,6 +84,7 @@ export function ZombieUniversePanel({ leagueId, canEdit }: { leagueId: string; c
     <div className="space-y-5 px-4 py-5 text-[13px] text-white/85 sm:px-6">
       {loading ? <p className="text-white/60">Loading universe…</p> : universe ? (
         <>
+          {canEdit && <ZombieReadinessPanel key={universe.id} universeId={universe.id} />}
           <p className="text-white/65">{universe.name} · {universe.leagues.length} leagues across {universe.levels.length} levels</p>
           <SettingsSection id="zm-uni" title="Season movement">
             <SettingsRow label="Promotion count" description="Managers moving up at season end."

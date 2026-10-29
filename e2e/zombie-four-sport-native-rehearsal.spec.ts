@@ -9,7 +9,7 @@ import { ensureZombieSeasonActivated } from '../lib/zombie/activateNativeZombieL
 import { getUniverseStandings } from '../lib/zombie/ZombieUniverseStandingsService'
 import { refreshMovementProjections } from '../lib/zombie/ZombieUniverseProjectionService'
 import { executePromotionRelegation, syncUniverseStats, buildUniverseWeeklyDigest } from '../lib/zombie/universeStatEngine'
-import { previewZombieUniverseRenewal, renewZombieUniverse } from '../lib/zombie/renewZombieUniverse'
+import { previewZombieUniverseRenewal, renewZombieUniverse, previewStandaloneZombieRenewal, renewStandaloneZombieLeague } from '../lib/zombie/renewZombieUniverse'
 import { runWeeklyResolution } from '../lib/zombie/weeklyResolutionEngine'
 
 const SPORTS = [
@@ -431,6 +431,55 @@ test('four-sport universe allocations use finished native standings and record o
         expect((await member.request.post(renewalPath,{data:{season:2026,previewHash:preview.previewHash}})).status()).toBe(403)
       } finally {await memberCtx.close()}
       console.log(sport+': 3-level full renewal, placements, empty drafts, old-history preservation, rollback, concurrent retry and owner access passed')
+      const ready=await page.request.get('/api/zombie/readiness?universeId='+u.id)
+      expect(ready.ok(),await ready.text()).toBeTruthy()
+      const readyReport=await ready.json()
+      expect(readyReport.leagues).toHaveLength(3)
+      expect(readyReport.leagues.every((l:{season:number})=>l.season===2027)).toBe(true)
+      expect(readyReport.leagues[0].checks.find((c:{id:string})=>c.id==='managers').status).toBe('ready')
+      // Reuse a completed controlled fixture only after all universe/history assertions above.
+      // A linked league cannot bypass whole-universe renewal.
+      const soloId=z.leagueId, soloPath='/api/zombie/league/'+soloId+'/renew'
+      expect((await page.request.get(soloPath+'?season=2026')).status()).toBe(409)
+      await prisma.zombieLeague.update({where:{leagueId:soloId},data:{universeId:null,levelId:null,isSingleLeague:true}})
+      await prisma.zombieLeagueConfig.update({where:{leagueId:soloId},data:{universeId:null}})
+      const soloBefore=await prisma.roster.findMany({where:{leagueId:soloId},orderBy:{id:'asc'}})
+      const soloPreview=await page.request.get(soloPath+'?season=2026')
+      expect(soloPreview.ok(),await soloPreview.text()).toBeTruthy()
+      const soloPlan=await soloPreview.json()
+      expect(soloPlan.assignments).toHaveLength(8)
+      const wrongActor=await page.context().browser()!.newContext()
+      try {
+        const member=await wrongActor.newPage()
+        await signIn(member,userIds[1]+'@example.invalid',password,userIds[1])
+        expect((await member.request.get(soloPath+'?season=2026')).status()).toBe(403)
+        expect((await member.request.post(soloPath,{data:{season:2026,previewHash:soloPlan.previewHash}})).status()).toBe(403)
+        expect((await member.request.get('/api/zombie/readiness?leagueId='+soloId)).status()).toBe(403)
+        expect((await member.request.get('/api/zombie/readiness?universeId='+u.id)).status()).toBe(403)
+      } finally {await wrongActor.close()}
+      const soloResults=await Promise.all([
+        renewStandaloneZombieLeague(soloId,2026,userIds[0],soloPlan.previewHash),
+        renewStandaloneZombieLeague(soloId,2026,userIds[0],soloPlan.previewHash),
+      ])
+      expect(soloResults.filter(r=>!r.alreadyRenewed)).toHaveLength(1)
+      const soloNext=soloResults[0].leagues[0]
+      leagues.push(soloNext.leagueId)
+      expect(await prisma.zombieLeague.findUniqueOrThrow({where:{leagueId:soloNext.leagueId}})).toMatchObject({universeId:null,levelId:null,isSingleLeague:true,season:2027,status:'setup',currentWeek:0,potTotal:0})
+      expect(await prisma.draftSession.findUniqueOrThrow({where:{id:soloNext.draftId}})).toMatchObject({status:'pre_draft',startedAt:null,teamCount:8})
+      const soloRoster=await prisma.roster.findMany({where:{leagueId:soloNext.leagueId}})
+      expect(new Set(soloRoster.map(r=>r.platformUserId))).toEqual(new Set(soloBefore.map(r=>r.platformUserId)))
+      expect(soloRoster.every(r=>(r.playerData as {players:string[]}).players.length===0)).toBe(true)
+      expect(await prisma.roster.findMany({where:{leagueId:soloId},orderBy:{id:'asc'}})).toEqual(soloBefore)
+      expect(await prisma.whispererRecord.count({where:{zombieLeagueId:(await prisma.zombieLeague.findUniqueOrThrow({where:{leagueId:soloNext.leagueId}})).id}})).toBe(0)
+      const soloAgain=await page.request.post(soloPath,{data:{season:2026,previewHash:soloPlan.previewHash}})
+      expect(soloAgain.ok(),await soloAgain.text()).toBeTruthy()
+      expect((await soloAgain.json()).alreadyRenewed).toBe(true)
+      expect((await previewStandaloneZombieRenewal(soloId,2026,userIds[0])).completed).toBe(true)
+      const soloReady=await page.request.get('/api/zombie/readiness?leagueId='+soloNext.leagueId)
+      expect(soloReady.ok(),await soloReady.text()).toBeTruthy()
+      expect((await soloReady.json()).leagues[0].checks.find((c:{id:string})=>c.id==='draft').status).toBe('waiting')
+      console.log(sport+': standalone renewal, registered manager readiness, universe archive isolation and nonowner API protections passed')
+
     }
   } finally {
     await prisma.zombieMovementProjection.deleteMany({ where: { universeId: { in: universes } } })

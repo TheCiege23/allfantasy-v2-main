@@ -4,13 +4,13 @@ type Placement = { userId: string; rosterId: string; displayName: string; destin
 type Result = { nextSeason: number; leagues: Array<{ previousLeagueId: string; leagueId: string; draftId: string }> }
 type Preview = { completed: boolean; result?: Result; season: number; nextSeason: number; previewHash: string;
   pools: Array<{ leagueId: string; name: string; levelId: string }>; assignments: Placement[] }
-export function ZombieUniverseRenewalPanel({ universeId, season }: { universeId: string; season: number }) {
+export function ZombieUniverseRenewalPanel({ universeId, leagueId, season }: { universeId?: string; leagueId?: string; season: number }) {
   const [preview,setPreview]=useState<Preview|null>(null),[result,setResult]=useState<Result|null>(null)
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[reviewed,setReviewed]=useState(false)
   async function request(execute: boolean) {
     setBusy(true);setError('')
     try {
-      const path='/api/zombie-universe/'+encodeURIComponent(universeId)+'/renew'
+      const path=universeId ? '/api/zombie-universe/'+encodeURIComponent(universeId)+'/renew' : '/api/zombie/league/'+encodeURIComponent(leagueId || '')+'/renew'
       const res=await fetch(execute?path:path+'?season='+season,{
         method: execute?'POST':'GET', credentials:'include', cache:'no-store',
         ...(execute?{headers:{'Content-Type':'application/json'},body:JSON.stringify({season,previewHash:preview?.previewHash})}:{}),
@@ -25,7 +25,7 @@ export function ZombieUniverseRenewalPanel({ universeId, season }: { universeId:
   }
   return <section className="rounded-2xl border border-emerald-500/25 bg-emerald-950/20 p-4 text-sm text-white/85" aria-label="Zombie season renewal">
     <h2 className="font-bold text-emerald-100">Prepare season {season+1}</h2>
-    <p className="mt-2 text-xs leading-relaxed text-white/65">Review every manager’s next league before creating the season. Completed results, roles, items and prizes stay in their original leagues. New rosters start empty, items and prizes start fresh, and drafts stay unstarted. FAAB follows the destination league’s rollover setting. The universe commissioner manages the new leagues; Whisperers are selected after each draft.</p>
+    <p className="mt-2 text-xs leading-relaxed text-white/65">Available after the season and every weekly settlement finish. Review every manager’s next league before creating the season. Completed results, roles, items and prizes stay in their original leagues. New rosters start empty, items and prizes start fresh, and drafts stay unstarted. FAAB follows the destination league’s rollover setting. The commissioner manages the new leagues; Whisperers are selected after each draft.</p>
     {!result && <button type="button" className="mt-3 min-h-[44px] rounded-lg border border-emerald-400/40 px-4 font-semibold disabled:opacity-50" disabled={busy} onClick={()=>void request(false)}>
       {busy?'Preparing…':'Preview next season'}
     </button>}
@@ -38,7 +38,7 @@ export function ZombieUniverseRenewalPanel({ universeId, season }: { universeId:
           <li key={m.rosterId} className="flex flex-wrap items-center justify-between gap-2">
             <span className="min-w-0 break-words">{m.slot}. {m.displayName}<span className="ml-2 text-white/50">FAAB {m.nextFaab} · {m.faabRule==='carry_over'?'Carry over':'Reset'}</span></span>
             <span className={m.movement==='promotion'?'text-emerald-200':m.movement==='relegation'?'text-rose-200':'text-white/55'}>
-              {m.movement==='watch'?'Same level':m.movement==='promotion'?'Promoted':'Relegated'}
+              {m.movement==='watch'?(universeId?'Same level':'Returning manager'):m.movement==='promotion'?'Promoted':'Relegated'}
             </span>
           </li>)}</ul>
       </div>)}

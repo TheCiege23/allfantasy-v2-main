@@ -64,3 +64,35 @@ Counts join roster ownership to actual AppUser records; placeholder team IDs do 
 Follow-up regression: the C2C renewal fixture was missing the new non-Zombie lookup. Adding a null-returning ZombieLeague mock preserves all three original assertions; all three passed locally. This changes no deployed application code or failure baseline.
 
 Recommended next coding: dedicated standalone Zombie renewal, then a commissioner readiness panel covering genuine managers, draft/lineup readiness and provider exceptions. Physical iPhone and live-calendar acceptance remain distinct owner/participant work.
+
+
+## Standalone renewal and commissioner readiness follow-up
+
+Commissioner → Zombie → General now contains Survival readiness and standalone season renewal. The dedicated Zombie commissioner page uses the same General panel. Linked universes retain their renewal and multi-league readiness in Universe controls.
+
+Standalone renewal requires the native/Zombie season and draft to be complete, all required weekly settlements resolved, complete native standings and distinct registered managers. Preview and execution are owner-only; linked leagues must renew from their universe. An archived league row lock, content fingerprint, serializable retry and durable LEAGUE_SEASON_RENEWED receipt prevent partial/duplicate next seasons. It creates a separate league, copies approved rules, returns managers with fresh deterministic slots, applies the FAAB rule, and leaves old rosters/resources/roles/prizes in the old season. New drafts are unscheduled and unstarted; old Whisperers are not carried into a role.
+
+Survival readiness is read-only. It counts distinct registered AppUser owners, reports draft progress, validates saved weekly/daily lineup slots with canonical rules, reports missing/flagged settlements and weekly posting approval, and measures the exact saved draft snapshot's numeric statistics, positions, portrait URLs and market ADP. Unknown or expired data is not treated as accepted. It does not fetch vendors, rebuild pools, spend AI credits, transfer money or certify a live beta.
+
+Verification before publication: 30 focused tests passed in six files. Real disposable PostgreSQL checks passed standalone plus universe renewal for NFL, NBA, NHL and MLB, including forced rollback, concurrent retries, owner access, fresh draft/roster state, FAAB, archived history and latest-season readiness. Physical iPhone and live-calendar acceptance are still pending.
+
+### Owner/device report template
+
+- iPhone model and iOS version:
+- Sport and QA league URL:
+- Cold / repeat draft load seconds:
+- Numeric stats and available ADP order:
+- Search keyboard, filters, queue reorder:
+- Portrait/landscape and safe-area clipping:
+- Commissioner General: readiness cards fit, refresh works:
+- Screenshot or observed issue:
+
+Use only the separate QA rooms for start/pick/pause checks. Keep the original four drafts unstarted until real managers are ready.
+
+### Recommended remaining work
+
+1. Complete physical iPhone acceptance and a real-manager live scoring window when participants are ready.
+2. Complete manual universe movement review/capacity-change workflows with preview and audit protections.
+3. Resume current NFL ADP integration when the owner obtains licensed access; continue verified portrait/profile/stat exceptions without fabricating data.
+
+Renewal UX reference reviewed: [Sleeper commissioner controls](https://support.sleeper.com/en/articles/3971182-what-can-a-commissioner-do). The new Zombie flow uses an explicit preview and a separate next-season league to preserve the completed season.

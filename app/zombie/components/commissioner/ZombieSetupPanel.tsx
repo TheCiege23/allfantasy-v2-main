@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { ZombieReadinessPanel } from '@/components/zombie/ZombieReadinessPanel'
+import { ZombieUniverseRenewalPanel } from '@/components/zombie/ZombieUniverseRenewalPanel'
 
 type LeagueOverview = {
   name?: string | null
@@ -73,6 +75,8 @@ export function ZombieSetupPanel({ leagueId, canEdit }: { leagueId: string; canE
 
   return (
     <div className="space-y-4 px-4 py-5 text-[13px] text-white/85 sm:px-6">
+      {canEdit && <ZombieReadinessPanel key={leagueId} leagueId={leagueId} />}
+      {canEdit && !league.universeId && league.season != null && <ZombieUniverseRenewalPanel key={leagueId+':'+league.season} leagueId={leagueId} season={league.season} />}
       <h3 className="font-semibold text-white">League structure</h3>
       <fieldset className="rounded-xl border border-white/10 bg-white/[0.04] p-3" disabled={!editable || saving}>
         <legend className="px-1 font-semibold text-white">Experience</legend>
