@@ -510,11 +510,11 @@ function DraftPlayerCardInner({
           <span className="md:hidden" data-testid={testId ? `${testId}-adp-inline` : 'draft-player-adp-inline'}>
             {/* Same value and Bye rule as the md+ box: adpCellValue, and Bye only where the sport has one. */}
             {` · ${adpMetricLabel} `}
-            <span className="text-cyan-300">{formatAdpDisplay(adpCellValue)}</span>
+            <span className="text-white">{formatAdpDisplay(adpCellValue)}</span>
             {showBye ? (
               <>
                 {' · Bye '}
-                <span className="text-cyan-300">{formatBye(normalized.byeWeek)}</span>
+                <span className="text-white">{formatBye(normalized.byeWeek)}</span>
               </>
             ) : null}
           </span>
