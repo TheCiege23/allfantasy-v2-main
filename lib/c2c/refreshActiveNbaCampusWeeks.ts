@@ -9,7 +9,7 @@ type Db = Pick<PrismaClient, 'redraftSeason' | 'sportsDataCache' | 'teamProvider
 /** Refresh active weekly slates once per worker pass, with a shared time and event budget. */
 export async function refreshActiveNbaCampusWeeks(db: Db, input: { now: Date; deadlineAt: number; maxEvents: number; refresh?: typeof refreshNbaCampusWeek }) {
   const seasons = await db.redraftSeason.findMany({
-    where: { sport: 'NBA', status: { in: ['active', 'regular_season_complete'] }, currentWeek: { gt: 0 } },
+    where: { sport: 'NBA', status: { in: ['active', 'regular_season_complete', 'playoffs'] }, currentWeek: { gt: 0 } },
     select: { season: true, currentWeek: true, league: { select: { platform: true, sport: true, leagueVariant: true } } },
   })
   const weeks = new Map<string, { season: number; week: number }>()

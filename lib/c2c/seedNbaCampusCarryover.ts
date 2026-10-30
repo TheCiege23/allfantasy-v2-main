@@ -11,7 +11,7 @@ import { canCaptureNbaCampusCarryover } from './nbaCampusCarryover'
 
 /** Seed an untouched week's campus assignments before any college game can start. */
 export async function seedNbaCampusCarryover(db: PrismaClient, input: { now: Date; deadlineAt: number; maxRosters: number }) {
-  const seasons = await db.redraftSeason.findMany({ where: { sport: 'NBA', status: { in: ['active', 'regular_season_complete'] }, currentWeek: { gt: 0 } }, select: { leagueId: true, season: true, currentWeek: true, league: { select: { platform: true, sport: true, leagueVariant: true } } } })
+  const seasons = await db.redraftSeason.findMany({ where: { sport: 'NBA', status: { in: ['active', 'regular_season_complete', 'playoffs'] }, currentWeek: { gt: 0 } }, select: { leagueId: true, season: true, currentWeek: true, league: { select: { platform: true, sport: true, leagueVariant: true } } } })
   const eligible = seasons.filter(s => isNativePlatform(s.league.platform) && isBasketballC2CLeague(s.league) && dailySportWeekForInstant('NBA', s.season, input.now) === s.currentWeek)
   if (!eligible.length || Date.now() >= input.deadlineAt) return { considered: 0, seeded: 0, held: 0 }
   const evidence = await currentNcaabRosterEvidence(db, input.now)

@@ -12,6 +12,7 @@ describe('active NBA campus worker refresh', () => {
     const refresh = vi.fn().mockResolvedValue({ boxesStored: 1, blocked: false })
     const result = await refreshActiveNbaCampusWeeks(db, { now: new Date(), deadlineAt: Date.now() + 10000, maxEvents: 5, refresh: refresh as any })
     expect(result.periods).toBe(2)
+    expect(db.redraftSeason.findMany.mock.calls[0][0].where.status.in).toContain('playoffs')
     expect(refresh.mock.calls.map(c => c[1].week).sort()).toEqual([2, 3])
   })
   it('counts attempted boxes, including failed requests, against the shared limit', async () => {

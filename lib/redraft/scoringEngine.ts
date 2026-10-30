@@ -795,7 +795,16 @@ export async function scoreRosterForWeek(args: {
 }): Promise<RosterScoreSummary> {
   const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
-  return scoreRosterStarters({ ...args, useDevyEngine, bestBall })
+  const result = await scoreRosterStarters({ ...args, useDevyEngine, bestBall })
+  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { platform: true, sport: true, leagueVariant: true, settings: true } })
+  const { isBasketballC2CLeague } = await import('@/lib/c2c/campusLineup')
+  if (!league || !isNativePlatform(league.platform) || !isBasketballC2CLeague(league)) return result
+  const settings = settingsForScoringWeek(league.settings as Record<string, any> | null, args.seasonYear, args.week)
+  const mode = settings?.scoring_mode ?? settings?.scoringSettings?.scoringMode ?? 'points'
+  if (mode !== 'points' || bestBall || useDevyEngine) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
+  const campus = await loadBasketballCampusPoints(league, { leagueId: args.leagueId, season: args.seasonYear, week: args.week, homeRosterId: args.rosterId, awayRosterId: args.rosterId })
+  if (!campus) return result
+  return { ...result, points: Math.round((result.points + campus.home.points) * 100) / 100, missingPlayerIds: [...new Set([...result.missingPlayerIds, ...campus.home.missingPlayerIds])], allFinal: result.allFinal && campus.home.allFinal && campus.home.missingPlayerIds.length === 0 }
 }
 
 /**

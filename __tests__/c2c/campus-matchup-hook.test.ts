@@ -30,7 +30,7 @@ vi.mock('@/lib/c2c/scoringEngine', () => ({ leagueUsesC2CEngine: vi.fn(async () 
 vi.mock('@/lib/events', () => ({ getPlatformEvents: () => ({ emit: vi.fn(async () => undefined) }), EVENT: {} }))
 vi.mock('@/lib/sports-evidence/gates', () => ({ isSportsDataEnabled: () => false }))
 
-import { updateMatchupScores } from '@/lib/redraft/scoringEngine'
+import { scoreRosterForWeek, updateMatchupScores } from '@/lib/redraft/scoringEngine'
 
 const CAMPUS = {
   cfbWeeks: [2],
@@ -94,6 +94,15 @@ describe('campus points in the matchup score', () => {
     const data = db.redraftMatchup.update.mock.calls[0]![0].data
     expect(data.status).toBe('active')
     expect(data.lineupSnapshots.redraftScoring.missingPlayerIds).toContain('college-1')
+  })
+
+  it('includes NBA campus points and finality in roster scores used by playoffs', async () => {
+    db.league.findFirst.mockResolvedValue(league({ sport: 'NBA' }))
+    nbaCampusPointsForMatchup.mockResolvedValue({ home: { points: 15, missingPlayerIds: ['college-1'], allFinal: false }, away: { points: 15, missingPlayerIds: ['college-1'], allFinal: false } })
+    const score = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'H', week: 3, seasonYear: 2026 })
+    expect(score.points).toBeGreaterThanOrEqual(15)
+    expect(score.missingPlayerIds).toContain('college-1')
+    expect(score.allFinal).toBe(false)
   })
 
   it('any other league is never asked', async () => {
