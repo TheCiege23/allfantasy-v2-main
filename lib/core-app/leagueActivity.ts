@@ -386,7 +386,8 @@ export async function describeImportedActivityRows(
   const players = everyPlayerId.size
     ? await prisma.sportsPlayer
         .findMany({
-          where: { sleeperId: { in: [...everyPlayerId] } },
+          // Scoped to the league's sport when known: Sleeper numbers its NFL and NBA pools independently.
+          where: { ...(args.sport ? { sport: args.sport.toUpperCase() } : {}), sleeperId: { in: [...everyPlayerId] } },
           select: {
             sleeperId: true,
             name: true,
