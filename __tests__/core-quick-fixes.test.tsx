@@ -88,15 +88,20 @@ describe('phone bottom bar, platform without trades', () => {
 
 describe('language chip in the /core top bar', () => {
   it('switches language without leaving /core', () => {
-    const { getByRole } = render(
+    const { getAllByRole } = render(
       <AfCoreShell active="home" leagues={[]} syncAge={{ label: 'just now', stale: false }} syncEligibleCount={0}>
         <div>screen</div>
       </AfCoreShell>,
     )
-    const chip = getByRole('button', { name: /^Language: English\. Switch to/ })
-    expect(chip.textContent).toBe('EN')
-    fireEvent.click(chip)
-    expect(lang.setLanguage).toHaveBeenCalledWith('es')
+    // Two copies by design: the top bar's, and the phone ↻ menu's (CSS shows exactly one per width).
+    const chips = getAllByRole('button', { name: /^Language: English\. Switch to/ })
+    expect(chips).toHaveLength(2)
+    for (const chip of chips) {
+      expect(chip.textContent).toBe('EN')
+      lang.setLanguage.mockClear()
+      fireEvent.click(chip)
+      expect(lang.setLanguage).toHaveBeenCalledWith('es')
+    }
   })
 })
 

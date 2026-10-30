@@ -2,9 +2,9 @@
  * The Fantrax import's draft and transaction coverage notes are true for BOTH import paths.
  *
  * They read "No Fantrax … was available from uploaded data." On a live (league-id) import nothing was
- * uploaded, and the draft board IS read (`getFantraxDraftResults` in importFantraxLeague.ts) — it is
- * returned rather than stored, because `FantraxLeague` has no draft column — so the note blamed an
- * upload that never happened for a gap in what we keep. Transactions: Fantrax publishes no
+ * uploaded, and the draft board IS read (`getFantraxDraftResults` in importFantraxLeague.ts) — and,
+ * since fantraxSnapshotHistory.ts, stored in the snapshot's `transactions` column — so the note
+ * blamed an upload that never happened. Transactions: Fantrax publishes no
  * transactions endpoint, so a league-id import reads none; only an uploaded export supplies them.
  */
 import { describe, expect, it } from 'vitest'
@@ -29,11 +29,13 @@ const payload = (over: Partial<FantraxImportPayload> = {}): FantraxImportPayload
 })
 
 describe('FantraxAdapter coverage notes — draft and transactions', () => {
-  it('an empty draft does not blame an upload, and says a league-id import does not store the draft', async () => {
+  it('an empty draft does not blame an upload, and says when a league-id import stores the board', async () => {
     const note = (await FantraxAdapter.normalize(payload())).coverage?.draftHistory?.note ?? ''
     expect(note).not.toMatch(/uploaded data/)
     expect(note).toMatch(/league-id import/i)
-    expect(note).toMatch(/not stored|does not store|is not stored/i)
+    /* The board IS stored now (fantraxSnapshotHistory.ts); an empty one means the league has not drafted. */
+    expect(note).toMatch(/stores the draft board once the league has drafted/i)
+    expect(note).not.toMatch(/not stored|does not store|is not stored/i)
   })
 
   it('empty transactions do not blame an upload, and say where they can come from', async () => {

@@ -54,7 +54,7 @@ vi.mock('@/lib/core-app/matchupWinInputs', async (original) => ({
       starters: [{ playerId: id, projectedPoints: pts, actualPoints: 0, isFinal: false }],
       unprojected: 0,
       projectedRemaining: pts,
-      lineup: [{ playerId: id, projected: pts }],
+      lineup: [{ playerId: id, projected: pts, afEngine: pts + 1 }],
     })
     return { you: side('1001', 20), opponent: side('2002', 15), leagueScoring: { available: true }, atRiskBySleeperId: {} }
   }),
@@ -85,6 +85,10 @@ describe('Matchup — points forecast only for head-to-head points leagues', () 
     const data = await getMatchupData('L', 'u', null, context())
     expect(data?.projectedFinal.available).toBe(true)
     expect(data?.winProbability.available).toBe(true)
+    const slot = data?.lineups.available ? data.lineups.data[0] : null
+    expect(slot?.you?.projected).toBe(20)
+    expect(slot?.you?.afEngine).toBe(21)
+    expect(slot?.opponent?.projected).toBe(15)
   })
 
   it.each([
@@ -104,5 +108,19 @@ describe('Matchup — points forecast only for head-to-head points leagues', () 
     expect(matchupReasonText(reason, 'es')).not.toBe(reason)
     /* The matchup itself — who you play — is still shown. */
     expect(data?.teams.available).toBe(true)
+    /*
+     * 🛑 AND NO PER-PLAYER POINTS PROJECTION EITHER. Withholding the projected final while every
+     * starter's cell still showed a points projection left the same claim on screen one row down.
+     * The lineup itself — who starts where — is still shown.
+     */
+    expect(data?.lineups.available).toBe(true)
+    const slot = data?.lineups.available ? data.lineups.data[0] : null
+    expect(slot?.you?.playerId).toBe('1001')
+    expect(slot?.you?.projected).toBeNull()
+    expect(slot?.you?.afEngine ?? null).toBeNull()
+    expect(slot?.opponent?.projected).toBeNull()
+    expect(slot?.opponent?.afEngine ?? null).toBeNull()
+    /* Nor may the per-player note claim each column is a projection. */
+    expect(data?.playerScoring.available === false ? data.playerScoring.reason : '').toBe(reason)
   })
 })

@@ -2199,13 +2199,39 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 <p>{syncChipText(syncAge.label, language)}</p>
                 <SyncNowButton eligibleCount={syncEligibleCount} />
                 <p>{props.nativeLeague ? (language === 'es' ? 'Los cambios se guardan en AllFantasy.' : 'Changes save to AllFantasy.') : (language === 'es' ? 'Cambia la alineación en la plataforma de tu liga.' : 'Make lineup changes on your league’s platform.')}</p>
+                {/*
+                  Phone only (af-core-shell.css): the theme and language chips move in here. Beside the
+                  crest, the scope pill, this menu and the search icon they made the row ~520px wide on a
+                  ~370px phone, so "AF LEGACY" ran under the search icon and the language chip off-screen
+                  (reported 2026-10-30).
+                */}
+                <div className="af-data-menu-display">
+                  {/*
+                    The plan chip is hidden on phones, so a tester granted access saw nothing change
+                    (reported 2026-10-30). The same line, readable here.
+                  */}
+                  {plan ? (
+                    <p className="af-data-menu-plan">
+                      Plan:{' '}
+                      <span className="af-data-menu-plan-name">{plan.name}</span>
+                      {plan.tokensLeft != null
+                        ? ` · ${plan.tokensLeft.toLocaleString(getAppIntlLocale())} ${copy('tokens left')}`
+                        : null}
+                    </p>
+                  ) : null}
+                  <strong>{copy('Display')}</strong>
+                  <div className="af-data-menu-display-row">
+                    <ModeToggle className="af-mode-chip" />
+                    <CoreLanguageChip className="af-mode-chip" />
+                  </div>
+                </div>
               </div>
             </details>
 
             {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
-            <ModeToggle className="af-mode-chip" />
+            <ModeToggle className="af-mode-chip af-topbar-chip" />
             {/* Language beside it, so switching never means leaving /core for /settings. */}
-            <CoreLanguageChip className="af-mode-chip" />
+            <CoreLanguageChip className="af-mode-chip af-topbar-chip" />
 
             {/*
               The COMPACT form, and only where the visible panel is not already
