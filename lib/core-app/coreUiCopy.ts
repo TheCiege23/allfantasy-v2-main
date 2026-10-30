@@ -11,6 +11,9 @@ const spanish: Record<string, string> = {
   'A long-shot forecast; a nonzero probability is not mathematical elimination.': 'Un pronóstico poco probable; una probabilidad distinta de cero no es eliminación matemática.',
   'Divisions and head-to-head tiebreaks are not modelled: seeding is wins plus half a win per final tie, then points for.': 'No se modelan divisiones ni desempates por enfrentamientos: se ordena por victorias más media victoria por empate final y luego por puntos a favor.',
   Home: 'Inicio',
+  // The phone ↻ menu's Display section (theme and language) and its plan line (AfCoreShell).
+  Display: 'Pantalla',
+  'tokens left': 'tokens restantes',
   Brackets: 'Brackets',
   'My team': 'Mi equipo',
   'Defense Hub': 'Defensa',

@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   states: {} as Record<string, Record<string, unknown> | null>,
   importer: 'user-1' as string | null,
+  platform: 'sleeper',
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -44,7 +45,7 @@ function ctx(): LeagueContext {
     league: vi.fn(async () => ({
       id: L,
       name: 'Deleted League',
-      platform: 'sleeper',
+      platform: h.platform,
       platformLeagueId: 'SL1',
       season: 2026,
       userId: h.importer,
@@ -73,6 +74,7 @@ const gone = (attemptMinsAgo: number) => ({
 beforeEach(() => {
   h.states = {}
   h.importer = U
+  h.platform = 'sleeper'
 })
 
 describe('Sync screen: a league the provider deleted', () => {
@@ -109,10 +111,14 @@ describe('Sync screen: a league the provider deleted', () => {
     expect(r.providerGone).toBeNull()
   })
 
-  it('offers removal only on the viewer’s own imported row', async () => {
-    h.states[FULL] = gone(90)
+  it('offers removal on the viewer’s own row, and on an imported league someone else imported', async () => {
+    // Since 2026-10-30 the delete route tombstones a member's imported league for them alone.
     expect((await load()).canRemove).toBe(true)
     h.importer = 'someone-else'
+    expect((await load()).canRemove).toBe(true)
+    // A native league the viewer only joined is not a list preference.
+    h.platform = 'allfantasy'
     expect((await load()).canRemove).toBe(false)
+    h.platform = 'sleeper'
   })
 })
