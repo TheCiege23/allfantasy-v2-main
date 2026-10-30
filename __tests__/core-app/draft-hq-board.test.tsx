@@ -17,8 +17,8 @@ describe('Draft HQ board', () => {
   it('shows the future board before any selections are made', () => {
     render(<Board columns={columns} cells={[]} rounds={3} draftType="snake" thirdRoundReversal={true} />)
     const thirdRound = screen.getByText('R3').closest('tr')!
-    expect(thirdRound.children[1].textContent).toBe('3.02')
-    expect(thirdRound.children[2].textContent).toBe('3.01')
+    expect(thirdRound.children[1].textContent).toBe('3.2')
+    expect(thirdRound.children[2].textContent).toBe('3.1')
   })
   it('keeps auction selections in a list instead of placing bids in a snake grid', () => {
     render(<Board columns={columns} cells={cells} rounds={3} draftType="auction" thirdRoundReversal={false} />)

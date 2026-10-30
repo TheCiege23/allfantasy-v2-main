@@ -412,14 +412,16 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
               return (
                 <li key={`${pick.overall}-${pick.playerName}`} data-testid={`mock-draft-session-pick-${index}`}>
                   <p className="mb-1 text-[11px] text-white/60">#{pick.overall} · {pick.manager}</p>
-                  <DraftPlayerCard
-                    display={display}
-                    name={pick.playerName}
-                    position={pick.position}
-                    team={pick.team ?? null}
-                    byeWeek={pick.byeWeek ?? null}
-                    variant="row"
-                  />
+                  <ul>
+                    <DraftPlayerCard
+                      display={display}
+                      name={pick.playerName}
+                      position={pick.position}
+                      team={pick.team ?? null}
+                      byeWeek={pick.byeWeek ?? null}
+                      variant="row"
+                    />
+                  </ul>
                 </li>
               )
             })}

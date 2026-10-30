@@ -21,6 +21,8 @@ describe('stored and legacy board coverage', () => {
     expect(cell).toHaveTextContent('Example Center')
     expect(cell).toHaveAttribute('data-owner-roster', '1')
     expect(screen.getByTestId('draft-board-round-2-direction')).toHaveAttribute('data-direction', 'forward')
+    const recentPick = screen.getByTestId('mock-draft-session-pick-0')
+    expect(recentPick.querySelector('[data-draft-player-card]')?.parentElement?.tagName).toBe('UL')
   })
 
   it('keeps unqualified historical provider IDs as text without inventing a headshot', async () => {
