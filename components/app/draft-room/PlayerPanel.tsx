@@ -293,10 +293,10 @@ function PlayerListCards({
                   type="button"
                   onClick={() => onCompareTap(p)}
                   data-testid={`draft-compare-player-${index}`}
-                  className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border px-2 transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/45 active:scale-95 sm:min-w-0 sm:px-2 ${
+                  className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border px-2 transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 active:scale-95 sm:min-w-0 sm:px-2 ${
                     compareAnchor?.name === p.name
-                      ? 'border-amber-400/60 bg-gradient-to-br from-amber-500/20 to-amber-600/10 text-amber-100 shadow-[0_0_18px_rgba(251,191,36,0.15)]'
-                      : 'border-white/15 bg-black/25 text-white/75 hover:border-white/28 hover:bg-white/12'
+                      ? 'border-amber-400/60 bg-amber-500/15 text-amber-100'
+                      : SKIN_PILL_IDLE
                   }`}
                   aria-label={
                     compareAnchor?.name === p.name
@@ -990,7 +990,7 @@ function PlayerPanelInner({
           </div>
         )}
         {isProRound && (
-          <div className="border-b border-cyan-400/20 bg-cyan-500/8 px-2 py-1 text-[11px] text-cyan-100">
+          <div className="border-b border-transparent bg-[#1d2236] px-2 py-1 text-[11px] text-white/85">
             Pro round (C2C) — select an NFL player.
           </div>
         )}
@@ -1069,7 +1069,7 @@ function PlayerPanelInner({
             type="button"
             onClick={() => setShowRosterView((v) => !v)}
             data-testid="draft-toggle-roster-view"
-            className="ml-auto min-h-[30px] flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] text-white/70 hover:bg-white/10 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 transition"
+            className="ml-auto min-h-[30px] flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] text-white/70 hover:bg-white/10 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 transition"
           >
             <User className="h-3.5 w-3.5" />
             {showRosterView ? 'Pool' : 'My roster'}
@@ -1368,7 +1368,7 @@ function PlayerPanelInner({
                   type="button"
                   onClick={clearAllFilters}
                   data-testid="draft-empty-clear-filters"
-                  className="rounded-full border border-cyan-400/35 bg-cyan-500/12 px-4 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45"
+                  className="rounded-full border border-transparent bg-[#1d2236] px-4 py-2 text-xs font-medium text-white/85 transition hover:bg-[#2a2f45] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
                 >
                   Clear filters
                 </button>
@@ -1457,7 +1457,7 @@ function PlayerPanelInner({
         <div className="border-t border-white/8 bg-[#050c1d] p-2.5 space-y-2" data-testid="draft-pick-confirmation">
           <p className="text-xs text-white/80">
             Confirm nomination:
-            <span className="ml-1 font-medium text-cyan-200">
+            <span className="ml-1 font-medium text-[#8b91a7]">
               {getPickConfirmationLabel(pendingNomination.name, pendingNomination.position, pendingNomination.team)}
             </span>
           </p>
@@ -1469,7 +1469,7 @@ function PlayerPanelInner({
                 onNominate?.(pendingNomination)
                 setPendingNomination(null)
               }}
-              className="rounded border border-cyan-300/35 bg-cyan-500/12 px-3 py-1.5 text-xs text-cyan-100 hover:bg-cyan-500/20 transition"
+              className="rounded border border-transparent bg-[#1d2236] px-3 py-1.5 text-xs text-white/85 hover:bg-[#2a2f45] transition"
             >
               Confirm
             </button>
