@@ -1,3 +1,4 @@
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 /**
  * GET: Effective dynasty settings + presets (roster, scoring, playoff).
  * PUT: Update dynasty config and optional League.settings (roster_format_type, scoring_format_type, playoff, regular_season_weeks).
@@ -92,9 +93,7 @@ export async function GET(
 
   const rookiePickOrderMethods = [
     ...ROOKIE_PICK_ORDER_METHODS,
-    ...(lotteryEligibility.eligible
-      ? [{ value: 'weighted_lottery', label: '🎱 Weighted Lottery (NBA-style, year 2+)' }]
-      : []),
+    ...(isDynasty ? [{ value: 'weighted_lottery', label: 'Weighted lottery (future rookie drafts)' }] : []),
   ]
 
   return NextResponse.json({
@@ -278,14 +277,14 @@ export async function PUT(
     const method = String(body.rookiePickOrderMethod)
     if (method === 'weighted_lottery') {
       const el = await checkDynastyLotteryEligibility(leagueId)
-      if (!el.eligible) {
+      if (!el.eligible && !el.isStartupLeague) {
         return NextResponse.json({ error: el.reason }, { status: 400 })
       }
       await setDraftOrderModeAndLotteryConfig(leagueId, {
-        draftOrderMode: 'weighted_lottery',
+        ...(el.eligible ? { draftOrderMode: 'weighted_lottery' as const } : {}),
         lotteryConfig: { enabled: true },
       })
-    } else if (priorDynasty?.rookiePickOrderMethod === 'weighted_lottery' && method !== 'weighted_lottery') {
+    } else if (isWeightedRookieLottery(priorDynasty?.rookiePickOrderMethod) && method !== 'weighted_lottery') {
       await setDraftOrderModeAndLotteryConfig(leagueId, { draftOrderMode: 'randomize' })
     }
   }

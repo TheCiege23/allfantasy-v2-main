@@ -5,23 +5,44 @@ import { CommishReputationBadge } from "@/components/commish-reputation/CommishR
 import { Calendar, User, Sparkles, Zap } from "lucide-react"
 import { trackDiscoveryJoinClick } from "@/lib/discovery-analytics/client"
 import { getFanCredBoundaryDisclosureShort } from "@/lib/legal/FanCredBoundaryDisclosure"
-import type { DiscoveryCard } from "@/lib/public-discovery/types"
+import type { DiscoveryCard, RankBand } from "@/lib/public-discovery/types"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
+import {
+  RANK_BAND_HINTS,
+  RANK_BAND_LABELS,
+  TIME_ZONE_REGION_LABELS,
+  resolveViewerTimeZone,
+  timeZoneRegionFor,
+} from "@/lib/public-discovery/findLeagueFilters"
 
 export interface FindLeagueCardProps {
   league: DiscoveryCard
 }
 
-function formatDraftDate(
-  iso: string | null,
-  formatDateInTimezone: (date: Date | string | number) => string
-): string {
-  if (!iso) return "—"
+/** "Sun, Sep 6, 7:30 PM EDT" on the viewer's clock (see resolveViewerTimeZone). */
+function formatDraftTime(iso: string | null, timeZone: string | null): string {
+  if (!iso) return "Draft not scheduled"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return "Draft not scheduled"
   try {
-    return formatDateInTimezone(iso)
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+      ...(timeZone ? { timeZone } : {}),
+    }).format(d)
   } catch {
-    return "—"
+    return "Draft not scheduled"
   }
+}
+
+const RANK_BAND_STYLES: Record<RankBand, { background: string; color: string }> = {
+  step_up: { background: "rgba(244, 114, 182, 0.14)", color: "rgb(249, 168, 212)" },
+  your_level: { background: "rgba(56, 189, 248, 0.14)", color: "rgb(125, 211, 252)" },
+  chill: { background: "rgba(52, 211, 153, 0.14)", color: "rgb(110, 231, 183)" },
 }
 
 function isNew(createdAt: string): boolean {
@@ -65,7 +86,10 @@ function getSourceBadgeStyle(source: DiscoveryCard["source"]): {
 }
 
 export function FindLeagueCard({ league }: FindLeagueCardProps) {
-  const { formatDateInTimezone } = useUserTimezone()
+  const { timezone: profileTimeZone } = useUserTimezone()
+  const viewerZone = resolveViewerTimeZone(profileTimeZone)
+  const leagueRegion = timeZoneRegionFor(league.timezone)
+  const rankBand = league.rankBand ?? null
   const paidBoundaryDisclosure = getFanCredBoundaryDisclosureShort()
   const isFull = league.maxMembers > 0 && league.memberCount >= league.maxMembers
   const fillingFast =
@@ -168,7 +192,16 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
               AI-enabled
             </span>
           )}
-          {rankFitScore > 0 && (
+          {rankBand ? (
+            <span
+              data-testid={`find-league-rank-band-${league.id}`}
+              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-semibold"
+              title={RANK_BAND_HINTS[rankBand]}
+              style={RANK_BAND_STYLES[rankBand]}
+            >
+              {RANK_BAND_LABELS[rankBand]}
+            </span>
+          ) : rankFitScore > 0 && (
             <span
               className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               title="Ranking effect score based on league tier fit and direct-join eligibility."
@@ -211,10 +244,14 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             {league.teamCount > 0 ? ` / ${league.teamCount}` : ""}
           </span>
           <span>AI features: {hasAI ? league.aiFeatures.join(", ") : "None"}</span>
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1" data-testid={`find-league-draft-time-${league.id}`}>
             <Calendar className="h-3.5 w-3.5 shrink-0" />
-            {formatDraftDate(league.draftDate, formatDateInTimezone)}
+            {formatDraftTime(league.draftDate, viewerZone)}
+            {league.draftDate ? <span className="opacity-70">(your time)</span> : null}
           </span>
+          {leagueRegion ? (
+            <span>League runs on {TIME_ZONE_REGION_LABELS[leagueRegion]} time</span>
+          ) : null}
           <span className="flex items-center gap-1">
             <User className="h-3.5 w-3.5 shrink-0" />
             {league.commissionerName || "Commissioner"}

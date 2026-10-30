@@ -1038,6 +1038,31 @@ export function LeagueBasicsStep({
         </span>
       </label>
       )}
+
+      {/* Guilly only: lineups set themselves (lib/guillotine/guillotineBestBall.ts). */}
+      {getEffectiveLeagueType(state) === 'guillotine' ? (
+      <label
+        className={cx(
+          'flex min-h-12 cursor-pointer touch-manipulation items-start gap-3 rounded-xl border px-4 py-3 text-sm transition',
+          state.guillotineBestBall === true
+            ? 'border-violet-500 bg-violet-600/10'
+            : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]',
+        )}
+        data-testid="g30-guillotine-best-ball"
+      >
+        <CheckBox
+          className="mt-0.5"
+          checked={state.guillotineBestBall === true}
+          onChange={(checked) => onChange({ guillotineBestBall: checked })}
+        />
+        <span>
+          <span className="block font-bold">{t('createLeague.g30.guillotineBestBall.label')}</span>
+          <span className="block text-xs leading-5 text-[color:var(--text-secondary)]">
+            {t('createLeague.g30.guillotineBestBall.body')}
+          </span>
+        </span>
+      </label>
+      ) : null}
     </section>
   )
 }

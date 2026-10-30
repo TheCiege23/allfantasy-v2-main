@@ -1060,7 +1060,7 @@ export async function getCommissionerHub(input: {
             available: true,
             data: (() => {
               const kind = String(waiverSettings.waiverType).toLowerCase()
-              const label = (language === 'es' ? WAIVER_TYPE_LABEL_ES : WAIVER_TYPE_LABEL)[kind] ?? kind
+              const label = m.waiverTypeLabel(kind, WAIVER_TYPE_LABEL[kind], WAIVER_TYPE_LABEL_ES[kind])
               return kind === 'faab' && waiverSettings.faabBudget != null ? `${label} · $${waiverSettings.faabBudget}` : label
             })(),
           }
@@ -1189,18 +1189,8 @@ export async function getCommissionerHub(input: {
   }
 }
 
-const STATUS_ES: Record<string, string> = {
-  excellent: 'Excelente',
-  healthy: 'Saludable',
-  watch: 'En observación',
-  at_risk: 'En riesgo',
-  critical: 'Crítica',
-}
-
 function humanStatus(status: string, language = 'en'): string {
-  if (language === 'es' && STATUS_ES[status.toLowerCase()]) return STATUS_ES[status.toLowerCase()]
-  const s = status.replace(/_/g, ' ').toLowerCase()
-  return s.charAt(0).toUpperCase() + s.slice(1)
+  return messagesFor(commissionerHubMessages, language).healthStatus(status)
 }
 
 function describeSyncAge(ms: number | null, language = 'en'): string {

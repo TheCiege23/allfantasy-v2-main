@@ -1,6 +1,7 @@
 import type { CoreDepth } from './coreDepthAccess'
 import { messagesFor } from '@/lib/i18n/messages'
 import { coreDepthLockMessages, coreDepthLockSubjectMessages } from './messages/coreDepthLock'
+import { coreLang } from './messages/coreLocale'
 
 /**
  * The /core depth paywall's words in the reader's language (2026-10-06): the lock card, its
@@ -27,7 +28,7 @@ export type CoreDepthLockLang = 'en' | 'es'
 
 /** Anything that is not Spanish reads English — the same rule every /core copy module uses. */
 export function lockLang(language: string | null | undefined): CoreDepthLockLang {
-  return language === 'es' ? 'es' : 'en'
+  return coreLang(language)
 }
 
 export type CoreDepthLockCopy = {

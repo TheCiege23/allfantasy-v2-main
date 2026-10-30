@@ -101,6 +101,9 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
       enabledPremiumAdvancedSettings.map((key) => [key, true]),
     )
   }
+  if (lt === 'guillotine' && state.guillotineBestBall === true) {
+    conceptSetup.guillotineBestBall = true
+  }
   if (lt === 'survivor') {
     conceptSetup.survivorTribeCount = state.survivorTribeCount
     conceptSetup.commissionerParticipationMode = state.survivorCommissionerParticipationMode ?? 'non_participating_host'
@@ -131,7 +134,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     }
     conceptSetup.rookieDraftRounds = d.rookieDraftRounds
     conceptSetup.rookieDraftType = d.rookieDraftType
-    conceptSetup.rookieDraftOrderMethod = d.rookieDraftOrderMethod
+    conceptSetup.rookieDraftOrderMethod = d.rookieDraftOrderMethod === 'lottery' ? 'weighted_lottery' : d.rookieDraftOrderMethod
     conceptSetup.futurePicksYearsOut = d.futurePickTradeYears
     conceptSetup.regularSeasonWeeks = d.regularSeasonLength
     conceptSetup.playoffTeamCount = d.playoffTeamCount

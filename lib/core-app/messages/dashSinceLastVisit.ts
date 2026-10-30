@@ -31,6 +31,8 @@ export const dashSinceLastVisitMessages = defineMessages({
     openAlerts: 'Open alerts',
     comparisonPending:
       'Injury and standings changes appear from your next visit — this is the first time we have a picture to compare against.',
+    /** A trade's summary: the loader's English, or (Spanish) its rebuild from `parts` when there is one. */
+    tradeSummary: (summary: string, _rebuilt: string | null): string => summary,
   },
   es: {
     title: 'Desde tu última visita',
@@ -55,5 +57,6 @@ export const dashSinceLastVisitMessages = defineMessages({
     openAlerts: 'Abrir alertas',
     comparisonPending:
       'Los cambios de lesiones y clasificaciones aparecen desde tu próxima visita: es la primera vez que tenemos una referencia con la que comparar.',
+    tradeSummary: (summary, rebuilt) => rebuilt ?? summary,
   },
 })

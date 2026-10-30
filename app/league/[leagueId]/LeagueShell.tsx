@@ -1,5 +1,7 @@
 'use client'
 
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
 import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
@@ -7,6 +9,7 @@ import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQu
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
 import { usesNativeLineupScreen } from '@/lib/league/native/lineupScreenRouting'
+import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { KickerValuePanel } from '@/components/league/KickerValuePanel'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
@@ -2324,7 +2327,8 @@ function LeagueTabRouter({
             : id === 'settings' ? firstTab('settings', 'commissioner', 'league')
               : id,
       )
-    const bestBall = isBestBallLeague(selectedLeague.leagueVariant ?? null, selectedLeague.bestBallMode ?? null)
+    // A best ball Guilly league keeps the classic tab like a Best Ball league: its lineup sets itself.
+    const bestBall = isBestBallLeague(selectedLeague.leagueVariant ?? null, selectedLeague.bestBallMode ?? null) || isBestBallGuillotine(selectedLeague)
     switch (activeTab) {
       case 'matchups':
       case 'matchup':
@@ -2549,6 +2553,7 @@ function LeagueTabRouter({
           <LeagueChatSurface
             leagueId={leagueId}
             leagueName={selectedLeague.name ?? 'League'}
+            dynastyBackground={usesDynastyBackground(selectedLeague)}
             platform={selectedLeague.platform}
             isCommissioner={isCommissioner}
             teamCount={selectedLeague.teamCount ?? null}

@@ -1,3 +1,4 @@
+import { defineMessages, messagesFor } from '@/lib/i18n/messages'
 import { coreUiCopy } from './coreUiCopy'
 import { FOREIGN_IDS_UNREADABLE, FOREIGN_IDS_UNREADABLE_CLAUSE } from './foreignIdSpaceCopy'
 import { weekdayEs } from './kickoffText'
@@ -20,7 +21,8 @@ import type { RoutineStep, RoutineStepKey, RoutineSummaryParts } from './weeklyR
  *   - FIXED LOADER STRINGS (a panel's `reason`, a placeholder name). Matched WHOLE against the English
  *     the loader writes; anything not listed passes through as written.
  *
- * Everything else the cards say is written inline (`es ? … : …`) beside its English.
+ * The fixed-table lookups go through `dashboard3aTableMessages` below, one block per language.
+ * Everything else the cards say is written beside its English in the card itself.
  *
  * ⚠ REUSED, NOT DUPLICATED: weekdays go through `weekdayEs`, scope labels through `scopeLabelText`,
  * league types through `leagueConceptText`, injury designations and shared labels through
@@ -44,7 +46,7 @@ const STEP_TITLE_ES: Record<RoutineStepKey, string> = {
 
 /** A routine step's name — the English is the loader's own `title`. */
 export function routineStepTitle(step: Pick<RoutineStep, 'key' | 'title'>, language: string): string {
-  return language === 'es' ? (STEP_TITLE_ES[step.key] ?? step.title) : step.title
+  return messagesFor(dashboard3aTableMessages, language).stepTitle(step)
 }
 
 const WEEKDAY_FULL_ES: Record<string, string> = {
@@ -60,7 +62,7 @@ const WEEKDAY_FULL_ES: Record<string, string> = {
 
 /** `routineDayFor`'s label: "Wednesday" → "Miércoles". */
 export function routineTodayLabel(label: string, language: string): string {
-  return language === 'es' ? (WEEKDAY_FULL_ES[label] ?? label) : label
+  return messagesFor(dashboard3aTableMessages, language).todayLabel(label)
 }
 
 /** A step's summary: the English as written, or the Spanish rebuilt from its parts. */
@@ -105,7 +107,7 @@ const AWARD_ES: Record<string, string> = {
 }
 
 export function awardLabelText(award: { kind: string; label: string }, language: string): string {
-  return language === 'es' ? (AWARD_ES[award.kind] ?? award.label) : award.label
+  return messagesFor(dashboard3aTableMessages, language).awardLabel(award)
 }
 
 /* ── Following ─────────────────────────────────────────────────────────────────────────────────── */
@@ -145,15 +147,36 @@ const PLACEHOLDER_ES: Record<string, string> = {
 
 /** A loader's placeholder for a missing name. A real name passes through. */
 export function placeholderNameText(name: string, language: string): string {
-  return language === 'es' ? (PLACEHOLDER_ES[name] ?? name) : name
+  return messagesFor(dashboard3aTableMessages, language).placeholderName(name)
 }
 
 /** The "if he sits" breakdown's slot (playerLeagueImpact.ts `ImpactSlot`). */
 const IMPACT_SLOT_ES: Record<string, string> = { starter: 'titular', bench: 'banca', ir: 'IR', taxi: 'taxi' }
 
 export function impactSlotText(slot: string, english: string, language: string): string {
-  return language === 'es' ? (IMPACT_SLOT_ES[slot] ?? english) : english
+  return messagesFor(dashboard3aTableMessages, language).impactSlot(slot, english)
 }
+
+/**
+ * The fixed tables above, per language: English passes the loader's own words through; Spanish
+ * looks them up and falls back to that English for anything not listed.
+ */
+const dashboard3aTableMessages = defineMessages({
+  en: {
+    stepTitle: (step: Pick<RoutineStep, 'key' | 'title'>): string => step.title,
+    todayLabel: (label: string): string => label,
+    awardLabel: (award: { kind: string; label: string }): string => award.label,
+    placeholderName: (name: string): string => name,
+    impactSlot: (_slot: string, english: string): string => english,
+  },
+  es: {
+    stepTitle: (step) => STEP_TITLE_ES[step.key] ?? step.title,
+    todayLabel: (label) => WEEKDAY_FULL_ES[label] ?? label,
+    awardLabel: (award) => AWARD_ES[award.kind] ?? award.label,
+    placeholderName: (name) => PLACEHOLDER_ES[name] ?? name,
+    impactSlot: (slot, english) => IMPACT_SLOT_ES[slot] ?? english,
+  },
+})
 
 /**
  * Why a league in the breakdown has no number — playerLeagueImpact.ts's `no_matchup` reasons and

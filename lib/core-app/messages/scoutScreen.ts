@@ -103,6 +103,8 @@ export const scoutScreenMessages = defineMessages({
     seasonFinal: ' — final',
     noStandingsYet: 'No standings yet',
     edgeLockWhat: 'Every manager’s trade and waiver record',
+    // The "Sep 21, 2025" day format's locale
+    dayLocale: 'en-US',
   },
   es: {
     // EdgeLine
@@ -195,5 +197,6 @@ export const scoutScreenMessages = defineMessages({
     seasonFinal: ' (final)',
     noStandingsYet: 'Todavía no hay clasificación',
     edgeLockWhat: 'El historial de intercambios y reclamos de cada mánager',
+    dayLocale: 'es-US',
   },
 })

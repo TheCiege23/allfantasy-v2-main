@@ -309,6 +309,30 @@ describe('the blind FAAB auction', () => {
   })
 })
 
+describe('best ball Guilly (settings.best_ball, lib/guillotine/guillotineBestBall.ts)', () => {
+  const lineupsOf = (snapshot: RuleSnapshot) => explainLeagueRules(snapshot).find((x) => x.id === 'lineups')?.lines.map((l) => l.id) ?? []
+
+  it.each(['NFL', 'NBA', 'MLB', 'NHL'])('a %s best ball Guilly league says lineups set themselves, with no lineup mode or lock, in English and Spanish', (sport) => {
+    const row = guillotineRow(sport)
+    const snapshot = withGuillotineConfig({ ...row, settings: { ...((row.settings as Record<string, unknown>) ?? {}), best_ball: true } })
+    expect(snapshot.bestBallLineups).toBe(true)
+    expect(lineupsOf(snapshot)).toEqual(['lineups-best-ball'])
+    const sections = explainLeagueRules(snapshot)
+    expect(sections.find((x) => x.id === 'guillotine')?.lines.map((l) => l.id)).toContain('guillotine-best-ball')
+    expect(render(sections, 'en').join(' ')).toContain('Lineups set themselves')
+    const es = render(sections, 'es')
+    expectClean(es)
+    expect(es.join(' ')).toContain('Las alineaciones se arman solas')
+  })
+
+  it('a Guilly league without it keeps its lineup lines and says nothing about best ball', () => {
+    const snapshot = withGuillotineConfig(guillotineRow('NFL'))
+    expect(snapshot.bestBallLineups).toBe(false)
+    expect(lineupsOf(snapshot)).not.toContain('lineups-best-ball')
+    expect(explainLeagueRules(snapshot).find((x) => x.id === 'guillotine')?.lines.map((l) => l.id)).not.toContain('guillotine-best-ball')
+  })
+})
+
 describe.each(['NFL', 'NBA', 'NHL'])('full rules — %s guillotine', (sport) => {
   const snapshot = withGuillotineConfig(guillotineRow(sport))
   const sections = explainLeagueRules(snapshot)

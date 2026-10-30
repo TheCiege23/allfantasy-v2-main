@@ -87,6 +87,7 @@ export const leagueRulesCopyEn: Record<string, string> = {
 
   'leagueRules.lineups.daily': 'Daily lineups: you can change your starters every day, until each player’s game starts.',
   'leagueRules.lineups.weekly': 'Weekly lineups: you set one lineup for the whole scoring week.',
+  'leagueRules.lineups.bestBall': 'Lineups set themselves: after each week your highest scorers fill your starting spots. There is nothing to set and nothing to lock.',
   'leagueRules.lineups.lock.per_player': 'Each player locks when his team’s first game of the week starts. Until then you can still swap him out.',
   'leagueRules.lineups.lock.first_game': 'Your whole lineup locks when the first game of the week starts.',
   'leagueRules.lineups.lock.manual': 'Your commissioner locks lineups each week.',
@@ -147,6 +148,7 @@ export const leagueRulesCopyEn: Record<string, string> = {
   'leagueRules.guillotine.faab.keep': 'A chopped team’s unspent FAAB leaves with it; survivors keep the budgets they have.',
   'leagueRules.guillotine.faab.split': 'A chopped team’s unspent FAAB is shared evenly by every team still alive.',
   'leagueRules.guillotine.blindAuction': 'Waiver claims are blind: in the hours before each waiver run, bids are hidden and held, then settled together, highest bid first. A chopped team’s players go to the highest bidder, not the fastest.',
+  'leagueRules.guillotine.bestBall': 'Best ball lineups: nobody sets a lineup. Each week every team is scored on its best possible lineup from its players’ points, and that score is the one that faces the chop.',
 
   'leagueRules.tiebreak.bench_points': 'fewer bench points is chopped',
   'leagueRules.tiebreak.season_points': 'fewer season points is chopped',
@@ -662,6 +664,7 @@ export const leagueRulesCopyEs: Record<string, string> = {
 
   'leagueRules.lineups.daily': 'Alineaciones diarias: puedes cambiar a tus titulares cada día, hasta que empiece el partido de cada jugador.',
   'leagueRules.lineups.weekly': 'Alineaciones semanales: fijas una sola alineación para toda la semana de puntuación.',
+  'leagueRules.lineups.bestBall': 'Las alineaciones se arman solas: al terminar cada semana tus jugadores con más puntos ocupan tus puestos de titular. No hay nada que fijar ni que bloquear.',
   'leagueRules.lineups.lock.per_player': 'Cada jugador se bloquea cuando empieza el primer partido de su equipo en la semana. Hasta entonces todavía puedes cambiarlo.',
   'leagueRules.lineups.lock.first_game': 'Toda tu alineación se bloquea cuando empieza el primer partido de la semana.',
   'leagueRules.lineups.lock.manual': 'Tu comisionado bloquea las alineaciones cada semana.',
@@ -722,6 +725,7 @@ export const leagueRulesCopyEs: Record<string, string> = {
   'leagueRules.guillotine.faab.keep': 'El FAAB sin gastar de un equipo eliminado se pierde con él; los supervivientes conservan sus presupuestos.',
   'leagueRules.guillotine.faab.split': 'El FAAB sin gastar de un equipo eliminado se reparte a partes iguales entre los equipos que siguen vivos.',
   'leagueRules.guillotine.blindAuction': 'Los reclamos son a ciegas: en las horas antes de cada procesamiento de reclamos, las pujas quedan ocultas y retenidas, y luego se resuelven juntas, de la puja más alta a la más baja. Los jugadores de un equipo eliminado van al que más puja, no al más rápido.',
+  'leagueRules.guillotine.bestBall': 'Alineaciones best ball: nadie arma su alineación. Cada semana cada equipo suma su mejor alineación posible con los puntos de sus jugadores, y esa puntuación es la que enfrenta la guillotina.',
 
   'leagueRules.tiebreak.bench_points': 'se elimina al que tenga menos puntos en el banquillo',
   'leagueRules.tiebreak.season_points': 'se elimina al que tenga menos puntos en la temporada',

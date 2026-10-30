@@ -15,6 +15,7 @@ import { describeTrackRecord, readTrackRecordLine } from '@/lib/chimmy-outcomes/
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { receiptsCardMessages } from '@/lib/core-app/messages/receiptsCard'
+import { spanishFlag } from '@/lib/core-app/messages/coreLocale'
 import { trackRecordText } from '@/lib/core-app/dashboard3aCopy'
 import { AfSavedShare } from '@/components/core-app/screens/AfSavedShare'
 
@@ -201,7 +202,7 @@ function CallNotes({
 
 export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null; help?: ReactNode }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const es = spanishFlag(language)
   const m = useMessages(receiptsCardMessages)
   if (!data) return null
   const waivers = data.waivers ?? []

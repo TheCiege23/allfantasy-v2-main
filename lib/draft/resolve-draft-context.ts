@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { getDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 import { checkDynastyLotteryEligibility } from '@/lib/draft-lottery/dynastyYearGuard'
 import { normalizeToSupportedSport, DEFAULT_SPORT } from '@/lib/sport-scope'
 
@@ -34,7 +35,7 @@ export async function resolveWeightedLotterySlotOrderForLeague(
     (league.leagueVariant != null &&
       ['devy_dynasty', 'merged_devy_c2c'].includes(String(league.leagueVariant).toLowerCase()))
   if (!isDynasty) return null
-  if (league.dynastyConfig?.rookiePickOrderMethod !== 'weighted_lottery') return null
+  if (!isWeightedRookieLottery(league.dynastyConfig?.rookiePickOrderMethod)) return null
 
   const { lotteryLastResult } = await getDraftOrderModeAndLotteryConfig(leagueId)
   const order = lotteryLastResult?.slotOrder

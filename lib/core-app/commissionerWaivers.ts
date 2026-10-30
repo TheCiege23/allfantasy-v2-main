@@ -99,23 +99,6 @@ function waiverTypeLabels(m: (typeof commissionerWaiversMessages)['en']): Record
   }
 }
 
-/*
- * The shared outcome labels (`waiver-outcome-labels`) serve the waivers history, notifications and
- * exports in English. The hub's panel words the same codes in the reader's language here, so that
- * module's other callers are untouched. A code with no entry keeps the shared English label.
- */
-const OUTCOME_LABEL_ES: Record<string, string> = {
-  won: 'Concedida',
-  lost_priority: 'Perdida: prioridad',
-  lost_tiebreaker: 'Perdida: desempate',
-  insufficient_faab: 'No concedida: FAAB',
-  invalid_due_to_roster: 'Bloqueada: plantilla',
-  player_no_longer_available: 'No concedida: jugador ya fichado',
-  blocked_by_lineup_lock: 'Bloqueada: alineación cerrada',
-  blocked_by_ir_taxi_devy_violation: 'Bloqueada: IR / taxi / devy',
-  failed: 'No concedida',
-}
-
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return '?'
@@ -143,8 +126,7 @@ export function classifyResult(
 ): { result: WaiverRunResult; label: string } {
   const m = messagesFor(commissionerWaiversMessages, language)
   // In Spanish a known code gets its own label; the claim's free-text message is English server prose.
-  const outcome = (c: string | undefined) =>
-    language === 'es' && c && OUTCOME_LABEL_ES[c] ? OUTCOME_LABEL_ES[c]! : formatWaiverOutcomeLabel(c, fallbackMessage)
+  const outcome = (c: string | undefined) => m.outcomeLabel(c ?? '', formatWaiverOutcomeLabel(c, fallbackMessage))
   if (resultType === 'awarded') return { result: 'won', label: m.resultWon }
   const code = outcomeCodeFromMetadata(metadata)
   const meta = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : {}
@@ -160,7 +142,7 @@ export function classifyResult(
 
 function formatRunSlot(iso: string, language = 'en'): string {
   const d = new Date(iso)
-  const parts = new Intl.DateTimeFormat(language === 'es' ? 'es-US' : 'en-US', {
+  const parts = new Intl.DateTimeFormat(messagesFor(commissionerWaiversMessages, language).runSlotLocale, {
     weekday: 'short',
     hour: 'numeric',
     minute: '2-digit',

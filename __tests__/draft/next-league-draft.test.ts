@@ -380,14 +380,21 @@ describe('a saved rookie order wins over standings', () => {
     expect(m.lotterySlots).toHaveBeenCalledWith({ leagueId: 'L1', season: 2027, previousDraftEndedAt: completedAt, actorUserId: 'commish' })
   })
 
-  it('a lottery league whose draw cannot run falls back to worst-to-first, never to a stale stored draw', async () => {
+  it('a weighted lottery league refuses to create a draft when its draw cannot seat every team', async () => {
     rookieLeague()
     m.dynastyFindUnique.mockResolvedValue({ rookieDraftRounds: 4, rookieDraftType: 'linear', rookiePickOrderMethod: 'weighted_lottery' })
     const r = await createNextLeagueDraft('L1', 'commish')
-    expect(r).toMatchObject({ ok: true, orderSource: 'standings' })
+    expect(r).toMatchObject({ ok: false, code: 'ROOKIE_LOTTERY_UNAVAILABLE' })
     expect(m.buildSlotOrder).not.toHaveBeenCalled()
-    expect(seated()[0]).toBe('R-b')
-    expect(seated().at(-1)).toBe('R-a')
+    expect(m.draftSessionCreate).not.toHaveBeenCalled()
+  })
+
+  it('also refuses a stale draw that includes a departed team', async () => {
+    rookieLeague()
+    m.dynastyFindUnique.mockResolvedValue({ rookieDraftRounds: 4, rookieDraftType: 'linear', rookiePickOrderMethod: 'lottery' })
+    m.lotterySlots.mockResolvedValue(seat(['R-a', 'R-b', 'R-c', 'R-gone']))
+    expect(await createNextLeagueDraft('L1', 'commish')).toMatchObject({ ok: false, code: 'ROOKIE_LOTTERY_UNAVAILABLE' })
+    expect(m.draftSessionCreate).not.toHaveBeenCalled()
   })
 
   it('[control] with neither, the automatic order seats worst-to-first from standings', async () => {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import { describePickTerms, type PickTermsOutcome } from '@/lib/league-trade-engine/pickTerms'
 import { usePickTermsView } from '@/components/core-app/PickTermsEditor'
 
@@ -14,7 +15,7 @@ const K = 'pickTerms.'
 export function PickTermsCard({ leagueId }: { leagueId: string }) {
   const { language, t, tInterpolate } = useOptionalLanguage()
   const tx = (key: string, vars?: Record<string, string | number>) => (vars ? tInterpolate(K + key, vars) : t(K + key))
-  const lang = language === 'es' ? 'es' : 'en'
+  const lang = coreLang(language)
   const view = usePickTermsView(leagueId)
   if (!view || view.picks.length === 0) return null
 

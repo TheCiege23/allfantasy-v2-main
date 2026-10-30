@@ -24,6 +24,8 @@ export const recentClipsMessages = defineMessages({
     hourlyRefresh: 'Hourly pilot refresh',
     privacyNote: 'Loading a post shares browser data with X. Some videos only play on X.',
     xPrivacy: 'X privacy',
+    /** The locale a clip's time and the feed's check time are formatted in. */
+    timeLocale: 'en',
   },
   es: {
     xPosts: 'Publicaciones de X',
@@ -44,5 +46,6 @@ export const recentClipsMessages = defineMessages({
     hourlyRefresh: 'Actualización cada hora',
     privacyNote: 'Al cargar una publicación, X recibe datos del navegador. Algunos videos solo se reproducen en X.',
     xPrivacy: 'Privacidad de X',
+    timeLocale: 'es',
   },
 })

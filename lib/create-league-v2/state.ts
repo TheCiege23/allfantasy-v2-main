@@ -46,7 +46,7 @@ export type SoccerPipeline = 'mls' | 'euro'
 export type LeaguePrivacy = 'public' | 'private'
 
 export type DynastyDraftMode = 'scheduled' | 'offline'
-export type DynastyRookieOrderMethod = 'reverse_standings' | 'max_pf' | 'lottery' | 'commissioner'
+export type DynastyRookieOrderMethod = 'reverse_standings' | 'max_pf' | 'lottery' | 'weighted_lottery' | 'commissioner'
 export type DynastyVisibility = 'public' | 'private'
 export type DynastyMonetization = 'free' | 'paid'
 
@@ -175,6 +175,8 @@ export interface CreateLeagueV2State {
   privacy: LeaguePrivacy
   /** Every team also plays the week's median score (`League.medianGame`). */
   medianGame: boolean
+  /** Guilly only: lineups set themselves — every team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
+  guillotineBestBall: boolean
   draftDate: string
   draftTime: string
   /**
@@ -366,6 +368,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   description: '',
   privacy: 'private',
   medianGame: false,
+  guillotineBestBall: false,
   draftDate: '',
   draftTime: '',
   draftScheduleLater: false,

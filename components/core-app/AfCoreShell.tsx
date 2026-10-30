@@ -156,7 +156,9 @@ export type RailStandingSummary = {
   outOf: number
   /** Points over the lowest team in the league. Null when you ARE the lowest. */
   overCut: number | null
-  basis: 'points' | 'projected'
+  basis: 'points' | 'projected' | 'best_ball'
+  /** `best_ball` only: a game that can still change a total is not final. */
+  provisional?: boolean
   placesAboveCut: number
   cutLine: number
   /** The bottom of this table goes home, so the copy says "cut" rather than "last". */
@@ -239,6 +241,7 @@ export type CoreNavKey =
   // active item — they are exits, not screens.
   | 'live-scores'
   | 'brackets'
+  | 'find-league'
   | 'my-leagues'
   | 'settings'
   | 'plans'
@@ -595,6 +598,9 @@ function navItems(props: AfCoreShellProps): NavItem[] {
   return [
     { key: 'home', label: navLabel('home'), glyph: '▣', href: inLeague('/core') },
     { key: 'brackets', label: 'Brackets', glyph: '⚑', href: '/brackets' },
+    // Top level rather than only in the Play sheet: finding a league to join is how a
+    // new player starts, and the sheet is two taps deep.
+    { key: 'find-league', label: 'Find a League', glyph: '⌕', href: '/find-league' },
     // My team is league-scoped in the handoff, so the link carries the selected
     // league rather than dropping the user on a screen that has to ask which one.
     {

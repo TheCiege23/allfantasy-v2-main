@@ -2,9 +2,9 @@
  * Spanish copy for the in-shell Live Scores screen (`components/core-app/screens/LiveScores.tsx`).
  *
  * Every function returns its English input (or the exact English sentence the screen printed before)
- * unless `language === 'es'`, so the English screen is byte-identical. Exact-match strings live in
+ * in any language but Spanish, so the English screen is byte-identical. Exact-match strings live in
  * `ES`; sentences carrying numbers or names get their own function, which reads both languages from
- * the `liveScoresMessages` catalog (lib/core-app/messages/liveScores.ts).
+ * the `liveScoresMessages` catalog (lib/core-app/messages/liveScores.ts), as do the label localisers.
  *
  * Style: informal "tú", Latin-American neutral. Proper nouns, team abbreviations, player names, sport
  * codes and product names (AllFantasy, Chimmy) stay as they are.
@@ -132,18 +132,13 @@ const ES: Record<string, string> = {
     'Cámbiala en tu plataforma: AllFantasy no puede fijar tu alineación por ti. Las ligas que se bloquean semanalmente podrían estar cerradas ya.',
 }
 
-const isEs = (language: string | null | undefined) => language === 'es'
+/** The number- and name-carrying sentences, in the reader's language (lib/core-app/messages/liveScores.ts). */
+const msg = (language: string | null | undefined) => messagesFor(liveScoresMessages, language)
 
 /** Exact-match lookup. English (or any untranslated string) comes back unchanged. */
 export function liveScoresCopy(english: string, language: string | null | undefined): string {
-  if (!isEs(language)) return english
-  return ES[english] ?? english
+  return msg(language).exact(english, ES[english])
 }
-
-const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
-
-/** The number- and name-carrying sentences, in the reader's language (lib/core-app/messages/liveScores.ts). */
-const msg = (language: string | null | undefined) => messagesFor(liveScoresMessages, language)
 
 /** " · updated 12s ago" */
 export function updatedAgo(age: string, language: string | null | undefined): string {
@@ -186,12 +181,7 @@ export function starterStageDetailCopy(
   english: string,
   language: string | null | undefined,
 ): string {
-  if (!isEs(language)) return english
-  const parts: string[] = []
-  if (impact.livePlayers > 0) parts.push(`en ${impact.liveGames} ${plural(impact.liveGames, 'partido', 'partidos')}`)
-  if (impact.upcomingPlayers) parts.push(`${impact.upcomingPlayers} por jugar`)
-  if (impact.finishedPlayers) parts.push(`${impact.finishedPlayers} ${plural(impact.finishedPlayers, 'terminado', 'terminados')}`)
-  return parts.join(' · ')
+  return msg(language).starterStageDetail(english, impact)
 }
 
 /** "None on the field right now · <detail>" */
@@ -201,21 +191,12 @@ export function noneOnField(detail: string, language: string | null | undefined)
 
 /** Localises `playAgeLabel` output: "just now", "4 min ago", "2 hr ago". */
 export function playAgeCopy(label: string, language: string | null | undefined): string {
-  if (!isEs(language)) return label
-  if (label === 'just now') return 'justo ahora'
-  const min = /^(\d+) min ago$/.exec(label)
-  if (min) return `hace ${min[1]} min`
-  const hr = /^(\d+) hr ago$/.exec(label)
-  if (hr) return `hace ${hr[1]} h`
-  return label
+  return msg(language).playAge(label)
 }
 
 /** Localises projection labels from lib/live/liveTieInGroups: "out", "proj 14.2", "proj 9.1–12.0". */
 export function projectionCopy(label: string, language: string | null | undefined): string {
-  if (!isEs(language)) return label
-  if (label === 'out') return 'fuera'
-  if (label.startsWith('proj ')) return `proy. ${label.slice(5)}`
-  return label
+  return msg(language).projection(label)
 }
 
 /** Card tag: "NFL · Week 6" */

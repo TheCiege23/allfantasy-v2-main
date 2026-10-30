@@ -9,7 +9,9 @@ import { decideDivisionGate, getLeagueDivisions } from "@/lib/class-rating/divis
 import { getManagerClass, type ManagerClass } from "@/lib/class-rating/reads"
 import { isSupportedSport } from "@/lib/sport-scope"
 import { searchLeagues } from "@/lib/league-search"
+import { isValidIanaTimeZone } from "@/lib/timezone"
 import { getDiscoverySports } from "./discovery-sports"
+import { draftFitsWindow, rankBandFor, timeZoneRegionFor } from "./findLeagueFilters"
 import {
   getCachedBracketCards,
   getCachedComputedDiscoveryList,
@@ -34,10 +36,14 @@ import type {
   DiscoveryFormat,
   DraftStatusFilter,
   DraftTypeFilter,
+  DraftWhenFilter,
   DiscoveryLeagueStyle,
   DiscoverySort,
   EntryFeeFilter,
   LeagueStyleFilter,
+  RankBand,
+  RankBandFilter,
+  TimeZoneRegionFilter,
 } from "./types"
 
 export function clearDiscoveryCache(): void {
@@ -181,6 +187,46 @@ function applyEntryFee(cards: DiscoveryCard[], entryFee: EntryFeeFilter): Discov
   return cards.filter((card) => card.isPaid)
 }
 
+const DRAFT_WHEN_VALUES: DraftWhenFilter[] = ["any", "upcoming", "next_7_days", "weeknight", "weekend"]
+const TZ_REGION_VALUES: TimeZoneRegionFilter[] = [
+  "any",
+  "eastern",
+  "central",
+  "mountain",
+  "pacific",
+  "alaska_hawaii",
+  "outside_us",
+]
+const RANK_BAND_VALUES: RankBandFilter[] = ["all", "step_up", "your_level", "chill"]
+
+function normalizeDraftWhen(value: unknown): DraftWhenFilter {
+  return DRAFT_WHEN_VALUES.includes(value as DraftWhenFilter) ? (value as DraftWhenFilter) : "any"
+}
+
+function normalizeTimeZoneRegion(value: unknown): TimeZoneRegionFilter {
+  return TZ_REGION_VALUES.includes(value as TimeZoneRegionFilter) ? (value as TimeZoneRegionFilter) : "any"
+}
+
+function normalizeRankBand(value: unknown): RankBandFilter {
+  return RANK_BAND_VALUES.includes(value as RankBandFilter) ? (value as RankBandFilter) : "all"
+}
+
+function applyDraftWhen(cards: DiscoveryCard[], draftWhen: DraftWhenFilter, viewerTimeZone: string | null): DiscoveryCard[] {
+  if (draftWhen === "any") return cards
+  const now = new Date()
+  return cards.filter((card) => draftFitsWindow(card.draftDate, draftWhen, viewerTimeZone, now))
+}
+
+function applyTimeZoneRegion(cards: DiscoveryCard[], tzRegion: TimeZoneRegionFilter): DiscoveryCard[] {
+  if (tzRegion === "any") return cards
+  return cards.filter((card) => timeZoneRegionFor(card.timezone) === tzRegion)
+}
+
+function applyRankBand(cards: DiscoveryCard[], rankBand: RankBandFilter): DiscoveryCard[] {
+  if (rankBand === "all") return cards
+  return cards.filter((card) => card.rankBand === rankBand)
+}
+
 function applyLeagueStyle(cards: DiscoveryCard[], style: LeagueStyleFilter): DiscoveryCard[] {
   if (style === "all") return cards
   return cards.filter((card) => matchesDiscoveryLeagueStyle(card, style))
@@ -225,6 +271,11 @@ async function getFastSearchCandidateLeagueIds(options: {
       limit: DISCOVERY_TAKE,
       offset: 0,
     })
+    // No hits is not "no leagues": the index matches the whole phrase against names
+    // only, so "dynasty degens" or a commissioner's name misses it while the
+    // word-by-word scan in queryPublicFantasyLeagueCards would find them. An empty
+    // list here would restrict that scan to nothing.
+    if (result.hits.length === 0) return null
     return result.hits.map((hit) => hit.id)
   } catch {
     return null
@@ -383,6 +434,24 @@ export function isCardInViewerRange(
   return isLeagueVisibleForCareerTier(ctx.viewerTier, ctx.leagueTier, 1)
 }
 
+/**
+ * Step up / your level / chill, for FANTASY cards only, and only when both sides have a
+ * Class division: the viewer is established and the league has rated members.
+ *
+ * Bracket and creator cards get none. Their only rank signal is a career tier that
+ * defaults to 1 when a league never set one, so a band there would call most of them
+ * "Chill" for any experienced viewer — and career XP measures volume, not skill
+ * (ADR F2.10a), which is exactly what a band claims to say.
+ */
+function rankBandForCard(
+  card: Pick<DiscoveryCard, "source" | "id">,
+  viewerClass: ManagerClass,
+  fantasyDivisions: Map<string, number | null>
+): RankBand | null {
+  if (card.source !== "fantasy" || viewerClass.status !== "established") return null
+  return rankBandFor(fantasyDivisions.get(card.id) ?? null, viewerClass.division)
+}
+
 async function applyTierPolicy(
   cards: DiscoveryCard[],
   viewerContext?: DiscoveryViewerContext
@@ -409,6 +478,7 @@ async function applyTierPolicy(
   for (const card of cards) {
     const leagueTier = clampCareerTier(card.leagueTier, viewerTier)
     const inRange = isCardInViewerRange(card, { viewerTier, leagueTier, viewerClass, fantasyDivisions })
+    const rankBand = rankBandForCard(card, viewerClass, fantasyDivisions)
 
     if (inRange) {
       const rankingTierDelta = Math.abs(leagueTier - viewerTier)
@@ -423,6 +493,7 @@ async function applyTierPolicy(
         canJoinByRanking: true,
         rankingTierDelta,
         rankingEffectScore,
+        rankBand,
       })
       continue
     }
@@ -445,6 +516,7 @@ async function applyTierPolicy(
         canJoinByRanking: false,
         rankingTierDelta,
         rankingEffectScore,
+        rankBand,
       })
     } else {
       hiddenCount += 1
@@ -473,6 +545,13 @@ export async function discoverPublicLeagues(
   const aiEnabled = input.aiEnabled === true
   const draftType = normalizeDraftType(input.draftType)
   const draftStatus = normalizeDraftStatus(input.draftStatus)
+  const draftWhen = normalizeDraftWhen(input.draftWhen)
+  const tzRegion = normalizeTimeZoneRegion(input.tzRegion)
+  const rankBand = normalizeRankBand(input.rankBand)
+  const viewerTimeZone =
+    typeof input.viewerTimeZone === "string" && isValidIanaTimeZone(input.viewerTimeZone)
+      ? input.viewerTimeZone
+      : null
   const viewerTierSeed = clampCareerTier(viewerContext?.viewerTier, 1)
   const viewerIdKey = viewerContext?.viewerUserId ? String(viewerContext.viewerUserId) : null
   const computedCacheKey = getComputedDiscoveryListCacheKey(baseUrl, {
@@ -488,6 +567,12 @@ export async function discoverPublicLeagues(
     aiEnabled,
     draftType,
     draftStatus,
+    draftWhen,
+    tzRegion,
+    rankBand,
+    // Only the windows that read a wall clock depend on the viewer's zone; keeping it
+    // out of the key otherwise stops every zone from caching its own copy.
+    viewerTimeZone: draftWhen === "weeknight" || draftWhen === "weekend" ? viewerTimeZone ?? "" : "",
     viewerTier: viewerTierSeed,
     viewerIsAdmin: viewerContext?.viewerIsAdmin === true,
     viewerUserId: viewerIdKey ?? "anonymous",
@@ -533,6 +618,9 @@ export async function discoverPublicLeagues(
   combined = applyDraftStatus(combined, draftStatus)
   combined = applyAiEnabled(combined, aiEnabled)
   combined = applyEntryFee(combined, entryFee)
+  combined = applyDraftWhen(combined, draftWhen, viewerTimeZone)
+  combined = applyTimeZoneRegion(combined, tzRegion)
+  combined = applyRankBand(combined, rankBand)
   combined = applySort(combined, sort)
   setCachedComputedDiscoveryList(computedCacheKey, {
     cards: combined,

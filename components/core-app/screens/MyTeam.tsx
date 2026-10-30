@@ -92,6 +92,7 @@ function LockCountdown({
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const { lockTimeLocale } = messagesFor(myTeamScreenMessages, language)
   const [now, setNow] = useState<number>(() => asOf ?? Date.now())
   /*
    * ⚠ THE LOCK TIME WAS ALWAYS PRINTED IN UTC — a Sunday 1pm Eastern kickoff read "17:00 UTC".
@@ -103,7 +104,7 @@ function LockCountdown({
   useEffect(() => {
     try {
       setLocalTime(
-        new Intl.DateTimeFormat(language === 'es' ? 'es' : undefined, {
+        new Intl.DateTimeFormat(lockTimeLocale || undefined, {
           weekday: 'short',
           month: 'short',
           day: 'numeric',
@@ -115,7 +116,7 @@ function LockCountdown({
     } catch {
       setLocalTime(null)
     }
-  }, [atMs, language])
+  }, [atMs, lockTimeLocale])
 
   useEffect(() => {
     setNow(Date.now())
@@ -375,7 +376,7 @@ function gradeSubtitle(g: RosterGrade, language: string | null | undefined): str
   parts.push(
     Math.abs(vsMedian) < g.median * 0.03
       ? m.rightOnMedian
-      : m.vsMedian(Math.abs(vsMedian).toLocaleString(language === 'es' ? 'es' : getAppIntlLocale()), vsMedian > 0),
+      : m.vsMedian(m.vsMedianAmount(Math.abs(vsMedian)), vsMedian > 0),
   )
   if (g.strongest) {
     parts.push(m.bestPosition(g.strongest.position, g.strongest.rank))
@@ -728,16 +729,6 @@ function abbreviate(status: string): { short: string; tone: string; full: string
   return { short: status.slice(0, 3).toUpperCase(), tone: 'none', full: status }
 }
 
-/**
- * The status in Spanish, by its abbreviation — the same words as `RosterKey`. `full` is the
- * provider's own text ("Questionable"), so without this a screen reader said English in Spanish.
- * An unfamiliar designation keeps the provider's text, as `abbreviate` does.
- */
-const STATUS_ES: Record<string, string> = {
-  H: 'sano', Q: 'dudoso', D: 'poco probable', O: 'fuera', IR: 'reserva de lesionados', DNP: 'no entrenó',
-  P: 'probable', SUS: 'suspendido', PUP: 'no apto físicamente', INA: 'inactivo',
-}
-
 function StatusChip({ status }: { status: string | null }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -753,7 +744,7 @@ function StatusChip({ status }: { status: string | null }) {
     )
   }
   const { short, tone, full: provider } = abbreviate(status)
-  const full = language === 'es' ? STATUS_ES[short] ?? provider : provider
+  const full = messagesFor(myTeamScreenMessages, language).statusFull(short, provider)
   return (
     <span className="af-mt-status" data-tone={tone} title={full} aria-label={full}>
       {short}

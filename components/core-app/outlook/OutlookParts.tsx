@@ -2,9 +2,8 @@ import Link from 'next/link'
 import type { Milestones, ScheduleStrength } from '@/lib/core-app/outlookSim'
 import type { OddsRange, OutlookAssumptions, OutlookTeam } from '@/lib/core-app/seasonOutlook'
 import type { OutlookDriver, OutlookDurability, OutlookMove } from '@/lib/core-app/seasonOutlookFocus'
-import { ageLabel, band, ordinal, pct, rangeLabel, signedPts } from '@/lib/core-app/outlookCopy'
-import { outlookText, ordinalEs } from '@/lib/core-app/outlookSpanish'
-import { ageText } from '@/lib/core-app/shellCopy'
+import { band, pct, rangeLabel, signedPts } from '@/lib/core-app/outlookCopy'
+import { outlookText } from '@/lib/core-app/outlookSpanish'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { messagesFor } from '@/lib/i18n/messages'
@@ -25,8 +24,8 @@ import { outlookPartsMessages } from '@/lib/core-app/messages/outlookParts'
  * the server-built sentences it is handed go through `outlookText`.
  */
 
-function useEs(): boolean {
-  return useOptionalLanguage().language === 'es'
+function useLanguage(): string {
+  return useOptionalLanguage().language
 }
 
 /** This file's copy in the reader's language (lib/core-app/messages/outlookParts.ts). */
@@ -96,9 +95,9 @@ export function StatusPill({ status }: { status: OutlookTeam['status'] }) {
  * drawn both sides of the centre, because their sign is not known yet.
  */
 export function DriverList({ drivers, limit }: { drivers: OutlookDriver[]; limit?: number }) {
-  const es = useEs()
+  const language = useLanguage()
   const msg = useOutlookMessages()
-  const say = (english: string) => outlookText(english, es ? 'es' : 'en')
+  const say = (english: string) => outlookText(english, language)
   const shown = limit ? drivers.slice(0, limit) : drivers
   if (shown.length === 0) {
     return (
@@ -143,9 +142,9 @@ export function DriverList({ drivers, limit }: { drivers: OutlookDriver[]; limit
 // ── Moves ──────────────────────────────────────────────────────────────
 
 export function MoveList({ moves, leagueHref }: { moves: OutlookMove[]; leagueHref?: string }) {
-  const es = useEs()
+  const language = useLanguage()
   const msg = useOutlookMessages()
-  const say = (english: string) => outlookText(english, es ? 'es' : 'en')
+  const say = (english: string) => outlookText(english, language)
   if (moves.length === 0) {
     return (
       <p className="af-olk-empty">
@@ -191,10 +190,9 @@ export function MoveList({ moves, leagueHref }: { moves: OutlookMove[]; leagueHr
 // ── Milestones ─────────────────────────────────────────────────────────
 
 export function MilestonePanel({ m, playoffTeams }: { m: Milestones; playoffTeams: number }) {
-  const es = useEs()
   const msg = useOutlookMessages()
-  const seed = es ? ordinalEs(playoffTeams) : ordinal(playoffTeams)
-  const num = (n: number) => Math.round(n).toLocaleString(es ? 'es-ES' : 'en-US')
+  const seed = msg.seedOrdinal(playoffTeams)
+  const num = (n: number) => Math.round(n).toLocaleString(msg.numberLocale)
   const losses = (w: number) => m.totalGames - w
   const record = (w: number | null) => (w == null ? '—' : `${w}–${losses(w)}`)
   const rows = m.oddsByWins
@@ -334,9 +332,9 @@ export function SchedulePanel({ teams }: { teams: Array<OutlookTeam & { schedule
 // ── Durability ─────────────────────────────────────────────────────────
 
 export function DurabilityPanel({ d }: { d: OutlookDurability }) {
-  const es = useEs()
+  const language = useLanguage()
   const msg = useOutlookMessages()
-  const say = (english: string) => outlookText(english, es ? 'es' : 'en')
+  const say = (english: string) => outlookText(english, language)
   const share = (n: number) => `${Math.round(n * 100)}%`
   return (
     <div className="af-olk-dur">
@@ -496,10 +494,10 @@ export function AssumptionsPanel({
   nowMs: number | null
   extra?: { branchIterations?: number; basisWeek?: { season: string; week: number } | null; notes?: string[] }
 }) {
-  const es = useEs()
-  const say = (english: string) => outlookText(english, es ? 'es' : 'en')
-  const n = (v: number) => v.toLocaleString(es ? 'es-ES' : 'en-US')
+  const language = useLanguage()
+  const say = (english: string) => outlookText(english, language)
   const msg = useOutlookMessages()
+  const n = (v: number) => v.toLocaleString(msg.numberLocale)
   const source = (key: string) => (SOURCE[key] ? msg[SOURCE[key]] : undefined)
   return (
     <div className="af-olk-assume">
@@ -566,11 +564,7 @@ export function AssumptionsPanel({
             <time dateTime={a.computedAt}>
               {nowMs == null
                 ? new Date(a.computedAt).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
-                : es
-                  ? ageLabel(a.computedAt, nowMs) === 'unknown'
-                    ? 'desconocida'
-                    : ageText(ageLabel(a.computedAt, nowMs), 'es')
-                  : ageLabel(a.computedAt, nowMs)}
+                : msg.lastRunAge(a.computedAt, nowMs)}
             </time>
             {a.reused ? msg.reused : ''}
           </dd>

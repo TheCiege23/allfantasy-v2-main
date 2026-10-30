@@ -193,7 +193,6 @@ export const NO_LEAGUE_ACTIONS = [
 ] as const
 
 export function NoLeaguesYet({ what, language = 'en' }: { what: string; language?: string }) {
-  const es = language === 'es'
   const m = messagesFor(boardKitMessages, language)
   return (
     <section className="af-bd-noleagues" data-testid="board-no-leagues" aria-label={m.noLeaguesAria}>
@@ -203,7 +202,7 @@ export function NoLeaguesYet({ what, language = 'en' }: { what: string; language
       <div className="af-bd-noleagues-actions">
         {NO_LEAGUE_ACTIONS.map((a) => (
           <Link key={a.href} href={a.href} className={a.primary ? 'af-btn' : 'af-btn af-btn--ghost'}>
-            {es ? ({ 'Connect a league': 'Conectar una liga', 'Try a mock draft': 'Probar un draft simulado', 'Grade a trade': 'Evaluar un intercambio' } as Record<string, string>)[a.label] ?? a.label : a.label}
+            {m.noLeagueAction(a.label)}
           </Link>
         ))}
       </div>

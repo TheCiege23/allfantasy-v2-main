@@ -15,7 +15,20 @@ import type {
   VisibilityFilter,
   DraftTypeFilter,
   DraftStatusFilter,
+  DraftWhenFilter,
+  RankBandFilter,
+  TimeZoneRegionFilter,
 } from "@/lib/public-discovery/types"
+import {
+  DRAFT_WHEN_LABELS,
+  RANK_BAND_HINTS,
+  RANK_BAND_LABELS,
+  TIME_ZONE_REGION_LABELS,
+  parseLeagueSearch,
+  resolveViewerTimeZone,
+  type ParsedLeagueSearch,
+} from "@/lib/public-discovery/findLeagueFilters"
+import { useUserTimezone } from "@/hooks/useUserTimezone"
 
 type RecsStatus = 'ok' | 'no-snapshot' | 'anonymous' | 'empty' | 'error'
 
@@ -171,6 +184,37 @@ const SORT_OPTIONS: { value: DiscoverySort; label: string }[] = [
   { value: "filling_fast", label: "Filling fast" },
 ]
 
+const DRAFT_WHEN_OPTIONS = (Object.keys(DRAFT_WHEN_LABELS) as DraftWhenFilter[]).map((value) => ({
+  value,
+  label: DRAFT_WHEN_LABELS[value],
+}))
+
+const TZ_REGION_OPTIONS = (Object.keys(TIME_ZONE_REGION_LABELS) as TimeZoneRegionFilter[]).map((value) => ({
+  value,
+  label: TIME_ZONE_REGION_LABELS[value],
+}))
+
+const RANK_BAND_OPTIONS: { value: RankBandFilter; label: string }[] = [
+  { value: "all", label: "All levels" },
+  { value: "step_up", label: RANK_BAND_LABELS.step_up },
+  { value: "your_level", label: RANK_BAND_LABELS.your_level },
+  { value: "chill", label: RANK_BAND_LABELS.chill },
+]
+
+/** "NFL · Dynasty · 12 teams · Snake" — what the search box was read as, so a person can see and undo it. */
+function describeParsedSearch(parsed: ParsedLeagueSearch): string[] {
+  const parts: string[] = []
+  if (parsed.sport) parts.push(parsed.sport)
+  if (parsed.style) parts.push(parsed.style.replace(/_/g, " "))
+  if (parsed.teamCount) parts.push(`${parsed.teamCount} teams`)
+  if (parsed.draftType) parts.push(parsed.draftType)
+  if (parsed.entryFee) parts.push(parsed.entryFee)
+  if (parsed.draftWhen) parts.push(DRAFT_WHEN_LABELS[parsed.draftWhen].toLowerCase())
+  if (parsed.tzRegion) parts.push(`${TIME_ZONE_REGION_LABELS[parsed.tzRegion]} time`)
+  if (parsed.text) parts.push(`"${parsed.text}"`)
+  return parts
+}
+
 const VISIBILITY_OPTIONS: { value: VisibilityFilter; label: string }[] = [
   { value: "public", label: "Public" },
   { value: "all", label: "Public & private" },
@@ -179,7 +223,7 @@ const VISIBILITY_OPTIONS: { value: VisibilityFilter; label: string }[] = [
 export function FindLeagueClient() {
   const searchParams = useSearchParams()
   const hasInitializedFiltersRef = useRef(false)
-  const skipNextFilterFetchRef = useRef(false)
+  const { timezone: profileTimeZone } = useUserTimezone()
   const [query, setQuery] = useState("")
   const [appliedQuery, setAppliedQuery] = useState("")
   const [sport, setSport] = useState("")
@@ -190,6 +234,10 @@ export function FindLeagueClient() {
   const [draftStatus, setDraftStatus] = useState<DraftStatusFilter>("all")
   const [entryFee, setEntryFee] = useState<EntryFeeFilter>("all")
   const [aiEnabled, setAiEnabled] = useState(false)
+  const [draftWhen, setDraftWhen] = useState<DraftWhenFilter>("any")
+  const [tzRegion, setTzRegion] = useState<TimeZoneRegionFilter>("any")
+  const [rankBand, setRankBand] = useState<RankBandFilter>("all")
+  const [searchReadAs, setSearchReadAs] = useState<string[]>([])
   const [visibility, setVisibility] = useState<VisibilityFilter>("public")
   const [sort, setSort] = useState<DiscoverySort>("ranking_match")
   const [page, setPage] = useState(1)
@@ -211,6 +259,8 @@ export function FindLeagueClient() {
     aiEnabled,
     teamCountMin !== '',
     teamCountMax !== '',
+    draftWhen !== 'any',
+    tzRegion !== 'any',
   ].filter(Boolean).length
 
   const buildParams = useCallback(
@@ -229,6 +279,13 @@ export function FindLeagueClient() {
       if (tMin != null && !Number.isNaN(tMin)) params.set("teamCountMin", String(tMin))
       if (tMax != null && !Number.isNaN(tMax)) params.set("teamCountMax", String(tMax))
       if (aiEnabled) params.set("aiEnabled", "true")
+      if (draftWhen !== "any") params.set("draftWhen", draftWhen)
+      if (tzRegion !== "any") params.set("tzRegion", tzRegion)
+      if (rankBand !== "all") params.set("rankBand", rankBand)
+      // Same zone the cards print draft times in (FindLeagueCard), so a filter and the
+      // time it is filtering on can never disagree.
+      const tz = resolveViewerTimeZone(profileTimeZone)
+      if (tz) params.set("viewerTz", tz)
       params.set("page", String(p))
       params.set("limit", "12")
       return params
@@ -245,6 +302,10 @@ export function FindLeagueClient() {
       teamCountMin,
       teamCountMax,
       aiEnabled,
+      draftWhen,
+      tzRegion,
+      rankBand,
+      profileTimeZone,
     ]
   )
 
@@ -287,34 +348,50 @@ export function FindLeagueClient() {
     if (styleParam !== "all") setLeagueType(styleParam)
     if (q.trim()) {
       setQuery(q)
-      setAppliedQuery(q.trim())
+      applyParsedSearch(parseLeagueSearch(q))
     }
     hasInitializedFiltersRef.current = true
   }, [searchParams])
 
   useEffect(() => {
     if (!hasInitializedFiltersRef.current) return
-    if (skipNextFilterFetchRef.current) {
-      skipNextFilterFetchRef.current = false
-      return
-    }
     if (page !== 1) {
       setPage(1)
       return
     }
     fetchLeagues(1)
-  }, [sport, leagueType, draftType, draftStatus, teamCountMin, teamCountMax, entryFee, aiEnabled, visibility, sort, fetchLeagues])
+  }, [sport, leagueType, draftType, draftStatus, teamCountMin, teamCountMax, entryFee, aiEnabled, visibility, sort, draftWhen, tzRegion, rankBand, fetchLeagues])
+
+  /**
+   * The search box takes plain English: "12 team dynasty snake, free, weeknights".
+   * Recognised words set the filter controls below it, so the person can see and undo
+   * each one, and only the leftover words are searched against league names.
+   */
+  function applyParsedSearch(parsed: ParsedLeagueSearch) {
+    if (parsed.sport) setSport(parsed.sport)
+    if (parsed.style) setLeagueType(parsed.style)
+    if (parsed.draftType) setDraftType(parsed.draftType)
+    if (parsed.entryFee) setEntryFee(parsed.entryFee)
+    if (parsed.draftWhen) setDraftWhen(parsed.draftWhen)
+    if (parsed.tzRegion) setTzRegion(parsed.tzRegion)
+    if (parsed.teamCount) {
+      setTeamCountMin(String(parsed.teamCount))
+      setTeamCountMax(String(parsed.teamCount))
+    }
+    setAppliedQuery(parsed.text)
+    const readAs = describeParsedSearch(parsed)
+    // Only worth saying when something was recognised; a plain name search reads as itself.
+    setSearchReadAs(readAs.length > 1 || (readAs.length === 1 && !parsed.text) ? readAs : [])
+  }
 
   const handleSearch = () => {
-    const nextQuery = query.trim()
-    skipNextFilterFetchRef.current = true
-    setAppliedQuery(nextQuery)
-    if (page === 1) {
-      fetchLeagues(1)
-      return
-    }
+    applyParsedSearch(parseLeagueSearch(query))
     setPage(1)
   }
+
+  // Bands exist only for a viewer with an established Class against rated leagues, so
+  // the chips appear once there is something for them to split (or one is selected).
+  const showRankBands = rankBand !== "all" || leagues.some((l) => l.rankBand != null)
 
   const sports = getDiscoverySports().map((s) => ({
     value: s.value,
@@ -367,7 +444,7 @@ export function FindLeagueClient() {
         <div className="flex gap-2">
           <input
             type="search"
-            placeholder="Search leagues…"
+            placeholder='Try "12 team dynasty snake, free, weeknights"'
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
@@ -405,6 +482,12 @@ export function FindLeagueClient() {
             </span>
           )}
         </button>
+        {searchReadAs.length > 0 ? (
+          <p className="text-xs" style={{ color: "var(--muted)" }} data-testid="find-league-search-read-as">
+            Searching for <span style={{ color: "var(--text)" }}>{searchReadAs.join(" · ")}</span>. Change any of it in
+            the filters below.
+          </p>
+        ) : null}
       </div>
 
       {/* Filters — collapsible on mobile */}
@@ -562,6 +645,46 @@ export function FindLeagueClient() {
         </label>
         <label className="block">
           <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+            Draft time (your clock)
+          </span>
+          <select
+            value={draftWhen}
+            onChange={(e) => {
+              setDraftWhen(e.target.value as DraftWhenFilter)
+            }}
+            data-testid="find-league-draft-when"
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+            style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+          >
+            {DRAFT_WHEN_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+            League time zone
+          </span>
+          <select
+            value={tzRegion}
+            onChange={(e) => {
+              setTzRegion(e.target.value as TimeZoneRegionFilter)
+            }}
+            data-testid="find-league-tz-region"
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+            style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+          >
+            {TZ_REGION_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
             Visibility
           </span>
           <select
@@ -602,6 +725,30 @@ export function FindLeagueClient() {
 
       {/* Results */}
       <section>
+        {showRankBands ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label="Rank level" data-testid="find-league-rank-bands">
+            {RANK_BAND_OPTIONS.map((o) => {
+              const active = rankBand === o.value
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  aria-pressed={active}
+                  title={o.value === "all" ? undefined : RANK_BAND_HINTS[o.value]}
+                  onClick={() => setRankBand(o.value)}
+                  className="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+                  style={{
+                    borderColor: active ? "var(--accent)" : "var(--border)",
+                    background: active ? "color-mix(in srgb, var(--accent) 16%, var(--panel))" : "var(--panel)",
+                    color: active ? "var(--text)" : "var(--muted)",
+                  }}
+                >
+                  {o.label}
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--muted)" }} />
@@ -616,7 +763,9 @@ export function FindLeagueClient() {
               No leagues match your filters
             </p>
             <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-              Try changing sport, league type, or search.
+              {draftWhen !== "any"
+                ? "Only leagues with a scheduled draft can match a draft time. Try \"Any time\"."
+                : "Try changing sport, league type, or search."}
             </p>
           </div>
         ) : (
