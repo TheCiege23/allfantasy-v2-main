@@ -13,6 +13,8 @@ import { getPlayerImage } from '@/lib/players/getPlayerImage'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
 import { isDisplayableInjuryDesignation } from '@/lib/injuries/injuryStatusDisplay'
 import { DraftPlayerLabelBadge } from './DraftPlayerLabelBadge'
+import { positionTintHex } from '@/lib/draft-room/positionTint'
+import { SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
 
 export type DraftPlayerCardProps = {
   /** Normalized display model (preferred) */
@@ -254,6 +256,9 @@ function DraftPlayerCardInner({
   // model's primary stat, so an "AI ADP" label could sit over market ADP or even FPPG.
   const adpCellValue = adp ?? (adpMetricLabel === 'ADP' ? normalized.adp : null)
 
+  // Position tag filled in the board's colour for that position (null for a blank position).
+  const positionTint = positionTintHex(position)
+  const positionChipStyle = positionTint ? { backgroundColor: positionTint, color: SKIN_ON_FILL } : undefined
   const headshotUrl =
     getPlayerImage(normalized, draftSport) ??
     assets?.headshotUrl ??
@@ -325,8 +330,8 @@ function DraftPlayerCardInner({
         }}
         role={onSelect ? 'button' : undefined}
         tabIndex={onSelect ? 0 : undefined}
-        className={`rounded-2xl border bg-gradient-to-b from-[#1b2f49] via-[#14263e] to-[#0f1a30] p-3.5 shadow-[0_18px_46px_rgba(0,0,0,0.35)] transition duration-200 hover:border-white/30 hover:shadow-[0_20px_52px_rgba(0,0,0,0.42)] ${
-          isDrafted ? 'border-white/5 opacity-75' : 'border-white/12'
+        className={`rounded-2xl border bg-[#151b2e] p-3.5 transition duration-200 hover:bg-[#1d2236] ${
+          isDrafted ? 'border-white/5 opacity-75' : 'border-white/[0.06]'
         } ${isDevy ? 'ring-1 ring-inset ring-violet-500/35' : ''}`}
       >
         <div className="flex items-start gap-3.5">
@@ -337,17 +342,17 @@ function DraftPlayerCardInner({
               size={54}
               testIdBase={headshotTestBase}
             />
-            <div className="absolute -bottom-1 -right-1 rounded border border-white/18 bg-[#141e35] p-px shadow-md">
+            <div className="absolute -bottom-1 -right-1 rounded border border-white/10 bg-[#0d1424] p-px">
               <TeamLogoOrFallback logoUrl={teamLogoUrl} teamAbbr={teamAbbr} size={20} testIdBase={teamLogoTestBase} />
             </div>
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="truncate text-[15px] font-bold tracking-tight text-white/98">{displayName}</p>
-              <span className="rounded-md border border-cyan-300/30 bg-cyan-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-100">
+              <span className="rounded-md px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.08em]" style={positionChipStyle}>
                 {position}
               </span>
-              <span className="rounded-md border border-white/18 bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/90">
+              <span className="rounded-md bg-[#1d2236] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/85">
                 {teamAbbr ?? 'FA'}
               </span>
               <DraftPlayerLabelBadge player={labelInput} />
@@ -402,18 +407,12 @@ function DraftPlayerCardInner({
       }}
       role={onSelect ? 'button' : undefined}
       tabIndex={onSelect ? 0 : undefined}
-      className={`group flex min-w-0 flex-col gap-0.5 rounded-xl border px-2 py-1.5 text-[11px] backdrop-blur-sm transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 active:scale-[0.98] ${
-        rs
-          ? `shadow-[0_8px_28px_rgba(0,0,0,0.35)] ${
-              isDrafted
-                ? 'border-white/10 bg-black/40 opacity-50 saturate-50 hover:translate-y-0 hover:scale-100'
-                : isSelected
-                  ? 'border-cyan-300/55 bg-[linear-gradient(118deg,rgba(24,52,78,0.98)_0%,rgba(12,28,48,0.96)_100%)] ring-2 ring-cyan-400/35 ring-offset-2 ring-offset-[#040915] shadow-[0_12px_44px_rgba(34,211,238,0.15)]'
-                  : 'border-cyan-500/25 bg-[linear-gradient(118deg,rgba(18,36,58,0.95)_0%,rgba(8,16,32,0.92)_55%,rgba(6,12,24,0.96)_100%)] hover:-translate-y-0.5 hover:scale-[1.01] hover:border-cyan-400/45 hover:shadow-[0_12px_40px_rgba(34,211,238,0.12)]'
-            }`
-          : `shadow-md transition duration-200 hover:-translate-y-1.5 hover:scale-[1.03] hover:border-cyan-300/70 hover:bg-[#1f3a52] hover:shadow-lg hover:shadow-cyan-500/20 ${
-              isDrafted ? 'border-cyan-400/20 bg-[#0a1228]/70 opacity-60' : 'border-cyan-400/40 bg-gradient-to-r from-[#1a2f48] via-[#142438] to-[#0a1228] shadow-cyan-500/10'
-            }`
+      className={`group flex min-w-0 flex-col gap-0.5 rounded-xl border px-2 py-1.5 text-[11px] backdrop-blur-sm transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 active:scale-[0.98] ${
+        isDrafted
+          ? 'border-white/[0.06] bg-black/30 opacity-50 saturate-50'
+          : isSelected
+            ? 'border-white/40 bg-[#2a2f45]'
+            : 'border-white/[0.06] bg-[#151b2e] hover:bg-[#1d2236]'
       } ${isDevy ? 'border-l-[3px] border-l-violet-500/70' : ''}`}
     >
       <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
@@ -424,7 +423,7 @@ function DraftPlayerCardInner({
           size={rowHeadshotSize}
           testIdBase={headshotTestBase}
         />
-        <div className="absolute -bottom-0.5 -right-0.5 rounded border border-white/15 bg-[#0a1228] p-px shadow-md">
+        <div className="absolute -bottom-0.5 -right-0.5 rounded border border-white/10 bg-[#0d1424] p-px">
           <TeamLogoOrFallback logoUrl={teamLogoUrl} teamAbbr={teamAbbr} size={rowLogoSize} testIdBase={teamLogoTestBase} />
         </div>
       </div>
@@ -438,16 +437,16 @@ function DraftPlayerCardInner({
             {displayName}
           </p>
           {rs && (
-            <span className="shrink-0 rounded-md border border-white/15 bg-black/35 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-100/90">
+            <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide" style={positionChipStyle}>
               {position}
             </span>
           )}
           {!rs ? (
-            <span className="shrink-0 rounded-md border border-cyan-300/30 bg-cyan-500/12 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-100/90">
+            <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.08em]" style={positionChipStyle}>
               {position}
             </span>
           ) : null}
-          <span className="shrink-0 rounded-md border border-white/16 bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/88">
+          <span className="shrink-0 rounded-md bg-[#1d2236] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/85">
             {teamAbbr ?? 'FA'}
           </span>
           <DraftPlayerLabelBadge player={labelInput} className="shrink-0" />
@@ -460,7 +459,7 @@ function DraftPlayerCardInner({
             </span>
           )}
           {showProBadge && (
-            <span className="rounded bg-gradient-to-r from-cyan-500/40 to-cyan-400/25 px-1 py-0.5 text-[11px] font-medium text-cyan-100 shrink-0 border border-cyan-400/40 shadow-sm shadow-cyan-500/15" title="Pro / NFL">
+            <span className="rounded bg-[#1d2236] px-1 py-0.5 text-[11px] font-semibold text-white/85 shrink-0" title="Pro / NFL">
               Pro
             </span>
           )}
@@ -495,7 +494,7 @@ function DraftPlayerCardInner({
             </span>
           )}
         </div>
-        <p className={`${rs ? 'text-[11px] text-white/75' : 'text-[11px] text-cyan-100/75'}`}>
+        <p className="text-[11px] text-white/70">
           <span className="font-medium text-white/88">{teamAbbr ?? '—'}</span>
           {!rs ? ` · ${position}` : ''}
           {resolvedClassYearLabel ? ` · ${resolvedClassYearLabel}` : ''}
@@ -513,7 +512,7 @@ function DraftPlayerCardInner({
         ) : null}
         <p
           data-testid={testId ? `${testId}-stats-summary` : 'draft-player-stats-summary'}
-          className={`truncate ${rs ? 'mt-1 text-[11px] text-emerald-100/80' : 'text-[11px] text-cyan-100/55'}`}
+          className={`truncate text-[11px] text-white/60 ${rs ? 'mt-1' : ''}`}
           title={displayStatLine}
         >
           {displayStatLine}
@@ -522,7 +521,7 @@ function DraftPlayerCardInner({
         display?.stats?.secondaryStatLabel != null &&
         display.stats.secondaryStatValue != null ? (
           <p
-            className="text-[11px] text-emerald-200/75 truncate"
+            className="text-[11px] text-white/55 truncate"
             title={`${display.stats.secondaryStatLabel} ${display.stats.secondaryStatValue}`}
           >
             {display.stats.secondaryStatLabel} {display.stats.secondaryStatValue}
@@ -536,12 +535,12 @@ function DraftPlayerCardInner({
         onKeyDown={(event) => event.stopPropagation()}
       >
         <div
-          className={`text-right text-[11px] tabular-nums font-semibold ${rs ? 'rounded-lg border border-white/10 bg-black/25 px-1.5 py-1 text-cyan-50' : 'text-cyan-100'}`}
+          className={`text-right text-[11px] tabular-nums font-semibold text-white ${rs ? 'rounded-lg bg-[#1d2236] px-1.5 py-1' : ''}`}
         >
           <div>
             <span className={rs ? 'text-[11px] font-medium text-white/45' : ''}>{adpMetricLabel}</span>{' '}
             <span
-              className="text-cyan-300"
+              className="text-white"
               data-testid={testId ? `${testId}-adp` : 'draft-player-adp'}
             >
               {formatAdpDisplay(adpCellValue)}
@@ -551,7 +550,7 @@ function DraftPlayerCardInner({
             <div className={rs ? 'mt-0.5' : ''}>
               Bye{' '}
               <span
-                className="text-cyan-300"
+                className="text-white"
                 data-testid={testId ? `${testId}-bye` : 'draft-player-bye'}
               >
                 {formatBye(normalized.byeWeek)}
