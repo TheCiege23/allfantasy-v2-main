@@ -39,7 +39,7 @@ vi.mock('@/lib/zombie/commissionerNotificationService', () => ({
   notifyZombiePlayer: vi.fn(async () => undefined),
 }))
 
-import { scheduleWeeklyUpdate } from '@/lib/zombie/weeklyUpdateEngine'
+import { buildWeeklyUpdate, scheduleWeeklyUpdate } from '@/lib/zombie/weeklyUpdateEngine'
 import { runZombieHousekeeping } from '@/lib/zombie/zombieAutomation'
 
 // Thursday 2026-10-08 18:00 UTC — the league posts its update on Thursdays at 18:00.
@@ -127,5 +127,16 @@ describe('runZombieHousekeeping', () => {
     expect(r.errors).toEqual(['announcements: db blip'])
     // The weekly update still posted.
     expect(created('zombieAnnouncement.upsert')).toEqual([expect.objectContaining({ week: 3 })])
+  })
+})
+
+
+describe('weekly report revival', () => {
+  it('lists a currently revived survivor using the stored revival timestamp', async () => {
+    overrides.set('zombieLeague.findUnique', async () => ({ ...zombie, teams: [{ rosterId: 'r1', status: 'Survivor', revivedAt: NOW, wins: 2, losses: 1, pointsFor: 123 }] }))
+    overrides.set('roster.findUnique', async () => ({ platformUserId: 'u1' }))
+    overrides.set('appUser.findUnique', async () => ({ displayName: 'Alex' }))
+    const draft = await buildWeeklyUpdate('L1', 3)
+    expect(draft.sectionSurvivors).toContain('REVIVED: Alex')
   })
 })
