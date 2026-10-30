@@ -104,6 +104,15 @@ describe('dashboard league list — a removed member league', () => {
     expect(await ids()).toEqual(['kept', 'native'])
   })
 
+  it('does not resurface a removed import through a linked Sleeper row', async () => {
+    db.answers['sleeperLeague.findMany'] = () => [
+      { id: 'sleeper-copy', name: 'Sleeper copy', sleeperLeagueId: '999', totalTeams: 12, season: 2026, status: 'in_season', rosters: [] },
+      { id: 'other-copy', name: 'Other copy', sleeperLeagueId: '777', totalTeams: 12, season: 2026, status: 'in_season', rosters: [] },
+    ]
+    expect(await ids()).not.toContain('sleeper-copy')
+    expect(await ids()).toContain('other-copy')
+  })
+
   it('CONTROL: with no tombstones, all four are listed', async () => {
     db.answers['deletedLeagueTombstone.findMany'] = () => []
     expect(await ids()).toEqual(['kept', 'mine', 'native', 'shared'])
