@@ -121,6 +121,8 @@ export type RuleSnapshot = {
   faabOnChop?: string | null
   /** Guilly: claims are held before each waiver run and settled as one blind FAAB auction (fixed by sport). */
   blindAuction?: boolean | null
+  /** Guilly: best ball — lineups set themselves; each team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
+  bestBallLineups?: boolean | null
   /** Keeper leagues: `League.keeperCount`, `keeperCostSystem`, `keeperMaxYears`. */
   keeperCount?: number | null
   keeperCost?: string | null

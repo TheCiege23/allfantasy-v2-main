@@ -33,6 +33,7 @@ import { mapKeeperCreationFromWizard } from '@/lib/keeper/mapKeeperCreationFromW
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { GUILLOTINE_BEST_BALL_KEY } from '@/lib/guillotine/guillotineBestBall'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
 import { applyPlayoffShapeToSettings, redraftPlayoffShapeFor } from '@/lib/league-defaults/redraftPlayoffFit'
@@ -518,6 +519,9 @@ export async function createCanonicalLeagueInTransaction(
   const isGuillotine = formatId === 'guillotine'
   const guillotineEndgame = resolveGuillotineEndgame({ settings: { ...mergedSettings, conceptSetup: body.conceptSetup } })
   if (isGuillotine) mergedSettings.guillotineEndgame = guillotineEndgame.format
+  // Best ball Guilly: lineups set themselves (lib/guillotine/guillotineBestBall.ts). The settings flag,
+  // never `bestBallMode`, which would make this a Best Ball league everywhere.
+  if (isGuillotine && body.conceptSetup?.guillotineBestBall === true) mergedSettings[GUILLOTINE_BEST_BALL_KEY] = true
   const guillotineProfile = isGuillotine ? getGuillotineSportConfig(sport) : undefined
   const guillotineDefaultWaiverDelayHours = guillotineProfile?.dailyGames ? 48 : 24
   const scoringSettings = foundationDefaults.scoringSettings

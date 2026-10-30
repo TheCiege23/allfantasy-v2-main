@@ -79,7 +79,7 @@ const TEAMS: Team[] = [
 
 const created = { leagueIds: [] as string[], userIds: [] as string[], playerIds: [] as string[] }
 
-async function league(teams: Team[] = TEAMS) {
+async function league(teams: Team[] = TEAMS, opts: { settings?: Record<string, unknown> } = {}) {
   const tag = randomUUID().slice(0, 8)
   const users = []
   for (let i = 0; i < teams.length; i++) {
@@ -91,6 +91,7 @@ async function league(teams: Team[] = TEAMS) {
     data: {
       userId: users[0]!.id, platform: 'allfantasy', platformLeagueId: `chop-${tag}`, name: `Chop Week ${tag}`,
       season: SEASON, sport: 'NFL', leagueType: 'guillotine', leagueVariant: 'guillotine', guillotineMode: true,
+      ...(opts.settings ? { settings: opts.settings } : {}),
     },
   })
   created.leagueIds.push(lg.id)
@@ -302,5 +303,44 @@ describe.runIf(enabled)('a Guilly chop week against a real database', () => {
     expect(await sync(lg, 2, afterWeek(1))).toMatchObject({ outcome: 'chopped', week: 1, choppedRedraftRosterIds: [lg.byName('Daggers').redraftId] })
     const [chop] = (await state(lg)).eliminations
     expect(chop).toMatchObject({ eliminatedTeamName: 'Daggers', wasTiebreaker: true })
+  })
+
+  describe('best ball Guilly (settings.best_ball, lib/guillotine/guillotineBestBall.ts)', () => {
+    // Blades' starter had a bad week and its backup a big one: a lineup league chops Blades, a best
+    // ball league starts the backup and chops Daggers instead.
+    const SWAP: Team[] = [
+      { name: 'Axes', starter: [300], bench: [100] },
+      { name: 'Blades', starter: [150], bench: [280] },
+      { name: 'Cleavers', starter: [250], bench: [100] },
+      { name: 'Daggers', starter: [200], bench: [100] },
+    ]
+
+    it('scores every team on its best lineup, so the benched big week counts and a different team is chopped', async () => {
+      const lg = await league(SWAP, { settings: { best_ball: true } })
+      expect(await sync(lg, 2, afterWeek(1))).toMatchObject({ outcome: 'chopped', week: 1, choppedRedraftRosterIds: [lg.byName('Daggers').redraftId] })
+      const scores = await prisma.guillotinePeriodScore.findMany({ where: { leagueId: lg.leagueId, weekOrPeriod: 1 } })
+      const points = Object.fromEntries(scores.map((p) => [lg.rosters.find((x) => x.rosterId === p.rosterId)!.name, p.periodPoints]))
+      // Blades scored its backup's line, not its starter's.
+      const lineupLeague = await league(SWAP)
+      await sync(lineupLeague, 2, afterWeek(1))
+      const lineupScores = await prisma.guillotinePeriodScore.findMany({ where: { leagueId: lineupLeague.leagueId, weekOrPeriod: 1 } })
+      const lineupPoints = Object.fromEntries(lineupScores.map((p) => [lineupLeague.rosters.find((x) => x.rosterId === p.rosterId)!.name, p.periodPoints]))
+      expect(points.Blades).toBeGreaterThan(lineupPoints.Blades!)
+      expect(points.Axes).toBe(lineupPoints.Axes)
+      expect((await state(lineupLeague)).choppedByWeek).toEqual({ Blades: 1 })
+      expect((await state(lg)).choppedByWeek).toEqual({ Daggers: 1 })
+    })
+
+    it('a tie at the bottom still goes to bench points: the players the best lineup left out', async () => {
+      // Cleavers and Daggers both start 200 yards; Daggers' left-out quarterback scored less.
+      const lg = await league([
+        { name: 'Axes', starter: [300], bench: [100] },
+        { name: 'Blades', starter: [280], bench: [100] },
+        { name: 'Cleavers', starter: [200], bench: [150] },
+        { name: 'Daggers', starter: [200], bench: [50] },
+      ], { settings: { best_ball: true } })
+      expect(await sync(lg, 2, afterWeek(1))).toMatchObject({ outcome: 'chopped', week: 1, choppedRedraftRosterIds: [lg.byName('Daggers').redraftId] })
+      expect((await state(lg)).eliminations[0]).toMatchObject({ eliminatedTeamName: 'Daggers', wasTiebreaker: true })
+    })
   })
 })

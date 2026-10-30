@@ -238,7 +238,10 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
 
       {/* Tools */}
       <div className="flex flex-wrap gap-2">
-        {(['roster-risk', 'lineup-safety', 'faab-plan', 'waivers', 'dropped-players'] as const).map((t) => (
+        {/* No "Lineup safety" in a best ball Guilly league: lineups set themselves (featureAvailability). */}
+        {(['roster-risk', 'lineup-safety', 'faab-plan', 'waivers', 'dropped-players'] as const)
+          .filter((t) => t !== 'lineup-safety' || context?.featureAvailability?.lineupSafety !== false)
+          .map((t) => (
           <button key={t} type="button" onClick={() => void runTool(t)} disabled={toolBusy} data-testid={`guillotine-war-room-tool-${t}`}
             className="rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold text-white/80 transition hover:border-violet-400/30 hover:bg-violet-500/10 disabled:opacity-50">
             {t === 'roster-risk' ? 'Roster risk' : t === 'lineup-safety' ? 'Lineup safety' : t === 'faab-plan' ? 'FAAB plan' : t === 'waivers' ? 'Waivers' : 'Dropped pool'}

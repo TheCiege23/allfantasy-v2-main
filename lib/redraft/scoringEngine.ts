@@ -11,6 +11,7 @@ import type { StatCategoryRow } from './types'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedScoringIntegrationService } from '@/lib/sports-evidence/scoringIntegration'
 import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
+import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
 import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment } from '@/lib/lineup-optimizer/optimalLineup'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
@@ -150,11 +151,26 @@ export function countsTowardScore(slotType: string | null | undefined, bestBall:
   return bestBall ? isBestBallCandidateSlot(slotType) : isScoringStarterSlot(slotType)
 }
 
+/**
+ * Lineups set themselves: a Best Ball league, or a Guilly league its commissioner made best ball
+ * (lib/guillotine/guillotineBestBall.ts — `settings.best_ball`, which only a guillotine league's
+ * scoring reads here, so an imported league carrying the provider's flag scores as before). A caller
+ * that wants the Guilly half must select `settings` and `guillotineMode` too.
+ */
 export function leagueIsBestBall(
-  league: { bestBallMode?: boolean | null; leagueVariant?: string | null; leagueType?: string | null } | null | undefined,
+  league:
+    | {
+        bestBallMode?: boolean | null
+        leagueVariant?: string | null
+        leagueType?: string | null
+        guillotineMode?: boolean | null
+        settings?: unknown
+      }
+    | null
+    | undefined,
 ): boolean {
   if (!league) return false
-  return isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType)
+  return isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType) || isBestBallGuillotine(league)
 }
 
 /**
@@ -710,6 +726,8 @@ async function scoreRosterBestBall(args: {
   seasonYear: number
   bestBall: BestBallScoringContext
   collectPlayerPoints?: boolean
+  /** Also return `benchPoints`: the scored players the optimal lineup left out (the guillotine tiebreak). */
+  includeBench?: boolean
 }): Promise<RosterScoreSummary> {
   const players = await prisma.redraftRosterPlayer.findMany({
     where: { rosterId: args.rosterId, droppedAt: null },
@@ -759,6 +777,13 @@ async function scoreRosterBestBall(args: {
     starterCount: candidates.length,
     scoredStarterCount: scored,
     points: Math.round(lineup.total * 100) / 100,
+    /*
+     * A best ball team's bench is everyone the optimal lineup left out. Without it a best ball Guilly
+     * league's `bench_points` tiebreak compared nothing with nothing and fell straight through.
+     */
+    ...(args.includeBench
+      ? { benchPoints: Math.round(inputs.filter((i) => !started.has(i.playerId)).reduce((sum, i) => sum + i.points, 0) * 100) / 100 }
+      : {}),
     missingPlayerIds,
     allFinal,
     bestBall: { assignments: lineup.assignments, unfilledSlots: lineup.unfilledSlots },
@@ -771,7 +796,7 @@ async function scoreRosterBestBall(args: {
 async function loadBestBallContext(leagueId: string): Promise<BestBallScoringContext | null> {
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true },
+    select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true },
   })
   if (!league || !leagueIsBestBall(league)) return null
   const sport = String(league.sport ?? 'NFL')
