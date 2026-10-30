@@ -505,7 +505,7 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
 function keeperLines(s: RuleSnapshot): RuleLine[] {
   const cost = s.keeperCost && KEEPER_COSTS.has(s.keeperCost) ? s.keeperCost : null
   return compact([
-    line('keeper-count', isNum(s.keeperCount) && Number.isInteger(s.keeperCount) && s.keeperCount > 0 ? plural('keeper.count', s.keeperCount) : null),
+    line('keeper-count', isNum(s.keeperCount) && Number.isInteger(s.keeperCount) && s.keeperCount >= 0 ? plural('keeper.count', s.keeperCount) : null),
     line('keeper-cost', cost ? text(`keeper.cost.${cost}`) : null),
     line('keeper-years', isPosInt(s.keeperMaxYears) ? plural('keeper.maxYears', s.keeperMaxYears) : null),
   ])

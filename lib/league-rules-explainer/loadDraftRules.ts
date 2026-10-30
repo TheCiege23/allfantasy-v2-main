@@ -47,7 +47,7 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
       orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: {
         status: true, draftType: true, rounds: true, timerSeconds: true, thirdRoundReversal: true,
-        auctionBudgetPerTeam: true, cpuAutoPick: true, draftModeLabel: true, devyConfig: true, c2cConfig: true,
+        auctionBudgetPerTeam: true, cpuAutoPick: true, draftModeLabel: true, devyConfig: true, c2cConfig: true, keeperConfig: true,
       },
     }),
     prisma.leagueSettings.findUnique({
@@ -93,7 +93,7 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
         // and a `weighted_lottery` with no lottery behind it both seat what `manual` does.
         (rawMode === 'randomize' || rawMode === 'manual' || rawMode === 'weighted_lottery' ? 'manual' : null)
 
-  return draftRulesFromInputs({
+  const rules = draftRulesFromInputs({
     sessionLabel: session?.draftModeLabel ?? null,
     sessionStatus: session?.status ?? null,
     draftType,
@@ -118,6 +118,14 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
     // draft settings save write them onto the session).
     collegeRounds: { applies: isDevyOrC2CLeague(league), devy: session?.devyConfig ?? null, c2c: session?.c2cConfig ?? null },
   })
+  // The keeper editor and selection validator use the current draft session's config.
+  // A missing or malformed value leaves the league-level setting as the fallback.
+  const keeper = session?.keeperConfig
+  if (resolveRulesFormat(league) === 'keeper' && keeper && typeof keeper === 'object' && !Array.isArray(keeper)) {
+    const count = (keeper as Record<string, unknown>).maxKeepers
+    if (typeof count === 'number' && Number.isInteger(count) && count >= 0) rules.keeperCount = count
+  }
+  return rules
 }
 
 /**
