@@ -231,6 +231,7 @@ export type CoreNavKey =
   // active item — they are exits, not screens.
   | 'live-scores'
   | 'brackets'
+  | 'find-league'
   | 'my-leagues'
   | 'settings'
   | 'plans'
@@ -587,6 +588,9 @@ function navItems(props: AfCoreShellProps): NavItem[] {
   return [
     { key: 'home', label: navLabel('home'), glyph: '▣', href: inLeague('/core') },
     { key: 'brackets', label: 'Brackets', glyph: '⚑', href: '/brackets' },
+    // Top level rather than only in the Play sheet: finding a league to join is how a
+    // new player starts, and the sheet is two taps deep.
+    { key: 'find-league', label: 'Find a League', glyph: '⌕', href: '/find-league' },
     // My team is league-scoped in the handoff, so the link carries the selected
     // league rather than dropping the user on a screen that has to ask which one.
     {

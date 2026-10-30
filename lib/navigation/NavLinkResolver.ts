@@ -60,7 +60,8 @@ export const PRIMARY_NAV_GROUPS: NavGroup[] = [
       // "My Leagues" (incl. every imported league) lives on the dashboard rail —
       // named here so imported leagues are one obvious click from anywhere.
       { href: "/dashboard", label: "My Leagues" },
-      { href: "/discover/leagues", label: "Find Leagues" },
+      // /find-league is the rank-matched search; /discover/leagues is the per-sport browse.
+      { href: "/find-league", label: "Find a League" },
       { href: "/core/rankings", label: "Rankings" },
       { href: "/war-room", label: "AF Legacy" },
     ],

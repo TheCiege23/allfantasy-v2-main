@@ -3,6 +3,7 @@ import type { LeagueSport } from "@prisma/client"
 import { extractLeagueCareerTier } from "@/lib/ranking/tier-visibility"
 import { isSupportedSport, normalizeToSupportedSport } from "@/lib/sport-scope"
 import { CURRENT_DRAFT_SESSION_ORDER } from "@/lib/draft-room/currentDraftSession"
+import { matchesSearchText } from "./findLeagueFilters"
 import type { DiscoveryCard, DiscoveryLeagueStyle } from "./types"
 
 const DEFAULT_BASE_URL =
@@ -207,8 +208,15 @@ export async function queryPublicFantasyLeagueCards(options: {
       scoring: true,
       isDynasty: true,
       settings: true,
+      timezone: true,
       createdAt: true,
       updatedAt: true,
+      leagueSettings: {
+        select: {
+          draftDateUtc: true,
+          timezone: true,
+        },
+      },
       draftSessions: {
         orderBy: CURRENT_DRAFT_SESSION_ORDER,
         take: 1,
@@ -246,13 +254,13 @@ export async function queryPublicFantasyLeagueCards(options: {
           ? String(settings[LEAGUE_DESCRIPTION_KEY]).trim()
           : null
 
+      // Word by word, not the whole phrase: "dynasty degens" finds "Dynasty Degenerates".
       if (
         query &&
-        !name.toLowerCase().includes(query) &&
-        !(description?.toLowerCase().includes(query) ?? false) &&
-        !String(league.user?.displayName ?? league.user?.username ?? "")
-          .toLowerCase()
-          .includes(query)
+        !matchesSearchText(
+          [name, description, league.user?.displayName, league.user?.username],
+          query
+        )
       ) {
         return null
       }
@@ -303,10 +311,14 @@ export async function queryPublicFantasyLeagueCards(options: {
         draftType,
         draftStatus,
         teamCount: maxMembers,
+        // `LeagueSettings.draftDateUtc` is what league creation and the commissioner
+        // calendar write; `settings.draftDate` is an older JSON key few leagues carry.
         draftDate:
-          typeof settings.draftDate === "string" && settings.draftDate.trim()
+          league.leagueSettings?.draftDateUtc?.toISOString() ??
+          (typeof settings.draftDate === "string" && settings.draftDate.trim()
             ? String(settings.draftDate)
-            : null,
+            : null),
+        timezone: league.timezone ?? league.leagueSettings?.timezone ?? null,
         commissionerName: league.user?.displayName ?? league.user?.username ?? "Commissioner",
         aiFeatures: resolveAiFeatures(settings),
         leagueTier,
@@ -531,9 +543,7 @@ export async function queryPublicCreatorLeagueCards(options: {
 
       if (
         query &&
-        !league.name.toLowerCase().includes(query) &&
-        !(description?.toLowerCase().includes(query) ?? false) &&
-        !creatorName.toLowerCase().includes(query)
+        !matchesSearchText([league.name, description, creatorName], query)
       ) {
         return null
       }

@@ -7,10 +7,13 @@ import { prisma } from "@/lib/prisma"
 import type {
   DraftStatusFilter,
   DraftTypeFilter,
+  DraftWhenFilter,
   DiscoveryFormat,
   DiscoverySort,
   EntryFeeFilter,
   LeagueStyleFilter,
+  RankBandFilter,
+  TimeZoneRegionFilter,
   VisibilityFilter,
 } from "@/lib/public-discovery/types"
 import { resolveUserCareerTier } from "@/lib/ranking/tier-visibility"
@@ -58,6 +61,11 @@ export async function GET(req: NextRequest) {
     const teamCountMin = parseIntParam(sp, "teamCountMin")
     const teamCountMax = parseIntParam(sp, "teamCountMax")
     const aiEnabled = sp?.get("aiEnabled") === "true"
+    // Unknown values fall back to "any"/"all" inside discoverPublicLeagues.
+    const draftWhen = (sp?.get("draftWhen") as DraftWhenFilter) ?? "any"
+    const tzRegion = (sp?.get("tzRegion") as TimeZoneRegionFilter) ?? "any"
+    const rankBand = (sp?.get("rankBand") as RankBandFilter) ?? "all"
+    const viewerTimeZone = sp?.get("viewerTz")?.slice(0, 64) ?? null
     const page = Math.max(1, parseInt(sp?.get("page") ?? "1", 10))
     const limit = Math.min(24, Math.max(6, parseInt(sp?.get("limit") ?? "12", 10)))
 
@@ -75,6 +83,10 @@ export async function GET(req: NextRequest) {
         teamCountMin: teamCountMin ?? null,
         teamCountMax: teamCountMax ?? null,
         aiEnabled: aiEnabled || null,
+        draftWhen,
+        tzRegion,
+        rankBand,
+        viewerTimeZone,
         page,
         limit,
       },
@@ -94,8 +106,17 @@ export async function GET(req: NextRequest) {
         l.source === "fantasy" && reputations.has(l.id) ? { ...l, commissionerReputation: reputations.get(l.id) } : l
       )
     }
+    // ⚠ A signed-in response is PERSONAL — rank bands, tier gating and the invite-only
+    // flags are all computed for this viewer — so a shared cache must never hold it and
+    // hand it to the next person asking for the same URL. Only anonymous results, which
+    // are the same for everyone, may be cached publicly.
     return NextResponse.json(result, {
-      headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" },
+      headers: {
+        "Cache-Control": viewerUserId
+          ? "private, max-age=30"
+          : "public, s-maxage=60, stale-while-revalidate=120",
+        Vary: "Cookie",
+      },
     })
   } catch (err: unknown) {
     console.error("[discover/leagues]", err)
