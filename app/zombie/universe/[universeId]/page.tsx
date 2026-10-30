@@ -27,6 +27,8 @@ import {
 } from '@/components/commissioner-hub/CommissionerFeederGrid'
 import { resolveHubAccent } from '@/lib/commissioner-hub/feeder-accent'
 
+type UniverseLoadError = 'sign-in' | 'forbidden' | 'not-found' | 'unavailable' | 'timeout'
+
 type LevelRow = {
   id: string
   name: string
@@ -76,15 +78,42 @@ export default function ZombieUniverseHubPage() {
   const { universeId } = useParams<{ universeId: string }>() ?? ({} as { universeId: string })
   const [data, setData] = useState<UniverseHubPayload | null>(null)
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null)
+  const [loadError, setLoadError] = useState<UniverseLoadError | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [retry, setRetry] = useState(0)
   const router = useRouter()
 
   useEffect(() => {
     if (!universeId) return
-    fetch(`/api/zombie/universe-hub?universeId=${encodeURIComponent(universeId)}${selectedSeason ? '&season='+selectedSeason : ''}`, { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setData)
-      .catch(() => setData(null))
-  }, [universeId, selectedSeason])
+    let cancelled = false
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15000)
+    setLoading(true)
+    setLoadError(null)
+    async function loadUniverse() {
+      try {
+        const response = await fetch(`/api/zombie/universe-hub?universeId=${encodeURIComponent(universeId)}${selectedSeason ? '&season='+selectedSeason : ''}`, {
+          credentials: 'include', cache: 'no-store', signal: controller.signal,
+        })
+        if (cancelled) return
+        if (!response.ok) {
+          setLoadError(response.status === 401 ? 'sign-in' : response.status === 403 ? 'forbidden' : response.status === 404 ? 'not-found' : 'unavailable')
+          return
+        }
+        const payload: UniverseHubPayload = await response.json()
+        if (cancelled) return
+        if (!payload?.universe) { setLoadError('unavailable'); return }
+        setData(payload)
+      } catch {
+        if (!cancelled) setLoadError(controller.signal.aborted ? 'timeout' : 'unavailable')
+      } finally {
+        clearTimeout(timeout)
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void loadUniverse()
+    return () => { cancelled = true; clearTimeout(timeout); controller.abort() }
+  }, [universeId, selectedSeason, retry])
 
   // Solo zombie universes (single_gamma tier) skip the universe hub entirely —
   // there's nothing to commission across multiple leagues, so route the user
@@ -124,8 +153,34 @@ export default function ZombieUniverseHubPage() {
     })
   }, [sortedLeagues, preset.sport])
 
-  if (!data?.universe) {
-    return <p className="text-[13px] text-[var(--zombie-text-dim)]">Loading universe…</p>
+  if (loadError) {
+    const messages = {
+      'sign-in': ['Sign in to your Zombie universe', 'Your session is missing or has expired in this browser. Sign in to continue to this universe.'],
+      forbidden: ['Commissioner access required', 'This universe is available to its commissioner. Sign in with the account that owns it.'],
+      'not-found': ['Universe not found', 'Check the universe link or return to your leagues.'],
+      unavailable: ['Unable to load your universe', 'Check your connection and try again. Your saved review has not been changed.'],
+      timeout: ['The universe is taking too long to load', 'Check your connection and try again. Your saved review has not been changed.'],
+    } satisfies Record<UniverseLoadError, [string, string]>
+    const [title, message] = messages[loadError]
+    const returnPath = `/zombie/universe/${encodeURIComponent(universeId)}${selectedSeason ? '?season='+selectedSeason : ''}`
+    return (
+      <main className="flex min-h-[100svh] items-center justify-center bg-slate-950 px-4 py-8 text-white">
+        <section role="alert" className="w-full max-w-lg rounded-2xl border border-emerald-400/25 bg-slate-900 p-5 sm:p-8">
+          <Skull className="mb-4 h-8 w-8 text-emerald-300" aria-hidden />
+          <h1 className="text-2xl font-bold">{title}</h1>
+          <p className="mt-3 text-base leading-relaxed text-slate-300">{message}</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            {(loadError === 'sign-in' || loadError === 'forbidden') && <a className="inline-flex min-h-[44px] items-center rounded-xl bg-emerald-300 px-4 py-2 text-base font-semibold text-slate-950" href={`/login?callbackUrl=${encodeURIComponent(returnPath)}`}>Sign in</a>}
+            <button type="button" className="min-h-[44px] rounded-xl border border-slate-500 px-4 py-2 text-base font-semibold text-white" onClick={() => setRetry(value => value + 1)}>Try again</button>
+            <a className="inline-flex min-h-[44px] items-center px-2 py-2 text-base text-slate-300 underline" href="/app">My leagues</a>
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  if (loading || !data?.universe) {
+    return <main className="flex min-h-[100svh] items-center justify-center bg-slate-950 px-4 text-slate-200"><p role="status" className="text-base">Loading universe…</p></main>
   }
 
   const u = data.universe

@@ -2,6 +2,14 @@
 
 ## Current verification checkpoint
 
+### iPhone loading correction
+
+Owner reported a blank screen/spinner on iPhone Safari. Railway remained online; the iPhone page, JavaScript and CSS requests returned 200, while repeated universe-hub reads returned 401 in 9–12 ms. A separate signed-in desktop request returned 200. The client incorrectly mapped every failed response to null and rendered `Loading universe` indefinitely; this is not evidence of a server outage or an iOS rendering crash.
+
+The targeted page fix adds visible sign-in with a local universe return URL, distinct commissioner-access/not-found/error messages, retry, a 15-second fetch timeout and request cancellation to prevent stale responses replacing a later load. Loading/error colors are explicit so they do not depend on theme variables. No authentication policy, database or saved review is changed. The owner was given the direct staging login callback link; signing into the Codex browser does not sign into iPhone Safari.
+
+Sixteen focused tests in three files passed, covering 401/403/404/500, network retry, timeout, malformed successful payload, stale responses, unmount cancellation and existing renewal controls. Actual changed-component Chromium and WebKit checks at 320/390/844 px passed overflow, 44 px controls and 16 px text with synthetic 401 responses. CSS was generated from the changed page with the repository Tailwind configuration; heading size and panel padding were asserted and the WebKit screenshot inspected. DB-first and decision-engine guards passed. This correction is not live yet; hosted CI and staging deployment remain pending.
+
 - Isolated Railway staging now serves renewal visual source `29c796f1f2f1c18e2887e7ecbeaee495eac6c386`, deployment `e9024206-0266-4201-9622-aed8ee56bb08`. SHA, database health, login/universe HTTP 200, signed-out renewal HTTP 401, linked CSS and shipped renewal copy all passed. Production is untouched.
 - Actual shipped page assets passed Chromium and WebKit at 320, 390, 844 and 1440 pixel widths, with synthetic browser API responses, service workers disabled for fixture routing and all unhandled API writes blocked. Expansion preview/save/restore and invalidation after edits passed. These checks do not certify an authenticated owner session, a physical iPhone or a live scoring week.
 - Read-only staging audit confirms the owner's saved review: two ten-seat destinations, 16 distinct returning managers, four open seats, zero unassigned managers, and no next-season creation. The original NFL/NBA/NHL/MLB drafts remain unstarted at week zero with one registered manager each.
