@@ -39,5 +39,5 @@ export async function refreshNbaCampusWeek(db: Db, input: { season: number; week
   const data = toPrismaJsonInput({ season: input.season, week: input.week, mappings, observedAt: input.now.toISOString() })
   const expiresAt = new Date(input.now.getTime() + 730 * 24 * 60 * 60 * 1000)
   await db.sportsDataCache.upsert({ where: { cacheKey: key }, create: { cacheKey: key, data, expiresAt }, update: { data, expiresAt } })
-  return { schools: espnTeams.size, unresolvedSchools: teamBridge.unresolved.length, games: games.length, matched: mappings.length, unresolvedGames: refresh.unresolved.length, boxesStored: refresh.stored, boxesRemaining: refresh.remaining, blocked: refresh.blocked }
+  return { schools: espnTeams.size, unresolvedSchools: teamBridge.unresolved.length, games: games.length, matched: mappings.length, unresolvedGames: refresh.unresolved.length, boxesAttempted: 'attempted' in refresh ? refresh.attempted : 0, boxesStored: refresh.stored, boxesRemaining: refresh.remaining, blocked: refresh.blocked }
 }

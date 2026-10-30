@@ -160,6 +160,16 @@ async function handle(req: NextRequest) {
     // Fetch the complete college slate before daily stat sweeps can exhaust the run budget.
     await syncSchedule("NCAAB")
 
+    // NBA C2C uses college boxes only for saved campus lineups. Reserve a small part of the
+    // existing pass, and report a provider refusal without retrying elsewhere in this run.
+    let nbaCampus: unknown = null
+    if (!dryRun && !fromDate && !toDate && candidates.includes("NCAAB") && budget.remainingMs() > 45_000) {
+      try {
+        const { refreshActiveNbaCampusWeeks } = await import("@/lib/c2c/refreshActiveNbaCampusWeeks")
+        nbaCampus = await refreshActiveNbaCampusWeeks(prisma, { now: new Date(), deadlineAt: Date.now() + Math.min(30_000, budget.remainingMs() - 15_000), maxEvents: 20 })
+      } catch (err) { nbaCampus = { error: String(err).slice(0, 200) } }
+    }
+
     // Rotated so a budget cut does not starve the same sport every night.
     for (const s of rotateForFairness(candidates)) {
       if (!explicit && budget.exhausted()) {
@@ -281,6 +291,7 @@ async function handle(req: NextRequest) {
           deferredSports: deferred,
           explicitSport: explicit ?? null,
           schedule,
+          nbaCampus,
           // `season_type` labels riSeasonType.ts could not classify (GAPS N-13). Persisted here
           // because the route's response is read by nobody; an NHL preseason / MLB postseason
           // label we have not seen yet is how that gap gets closed without a probe.
@@ -301,6 +312,7 @@ async function handle(req: NextRequest) {
       written,
       sports: perSport,
       schedule,
+      nbaCampus,
       deferredForBudget: deferred.length ? deferred : undefined,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),

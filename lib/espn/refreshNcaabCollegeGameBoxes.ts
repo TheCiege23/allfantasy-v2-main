@@ -42,5 +42,5 @@ export async function refreshEspnCollegeGameBoxes(db: Db, input: {
   const recentFinals = new Set(games.filter(g => { const day = Date.parse(`${g.day}T00:00:00Z`); return Number.isFinite(day) && input.now.getTime() - day <= 7 * 86400000 && input.now.getTime() >= day }).map(g => mapping.matched.get(g.gameId)))
   const pending = [...finalIds.filter(id => !complete.has(id)), ...finalIds.filter(id => complete.has(id) && recentFinals.has(id) && (!Number.isFinite(updatedAt.get(id)) || input.now.getTime() - updatedAt.get(id)! >= 12 * 60 * 60 * 1000))]
   const result = await ingestEspnCollegeBoxes(db, { eventIds: pending, deadlineAt: input.deadlineAt, maxEvents: input.maxEvents, now: input.now, fetchBox: input.fetchBox })
-  return { ...mapping, stored: result.stored, remaining: Math.max(0, pending.length - result.stored), blocked: result.blocked, error: result.errors || result.rejected ? 'box unavailable' : null }
+  return { ...mapping, attempted: result.attempted, stored: result.stored, remaining: Math.max(0, pending.length - result.stored), blocked: result.blocked, error: result.errors || result.rejected ? 'box unavailable' : null }
 }
