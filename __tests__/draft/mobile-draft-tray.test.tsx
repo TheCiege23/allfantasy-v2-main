@@ -40,9 +40,19 @@ describe('mobile draft tray', () => {
   it('starts collapsed on the board tab and opens to half when a tab is chosen', () => {
     render(<Room />)
     expect(tray().getAttribute('data-snap')).toBe('peek')
-    fireEvent.click(screen.getByTestId('draft-mobile-tab-chat'))
+    fireEvent.click(screen.getByTestId('draft-mobile-more'))
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-roster'))
     expect(tray().getAttribute('data-snap')).toBe('half')
-    expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('chat')
+    expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('roster')
+  })
+
+  it('opens the Chat tab at full height, filling the tray so the composer is on screen', () => {
+    render(<Room />)
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-chat'))
+    expect(tray().getAttribute('data-snap')).toBe('full')
+    const sheet = screen.getByTestId('draft-mobile-chat-sheet')
+    expect(sheet.className).toMatch(/\bh-full\b/)
+    expect(sheet.className).toMatch(/\[&>\*\]:flex-1/)
   })
 
   it('opens the Players tab at full height — half leaves room for only ~2 player cards', () => {
@@ -75,7 +85,7 @@ describe('mobile draft tray', () => {
   })
 
   it('the Board tab collapses the tray', () => {
-    render(<Room initial="chat" />)
+    render(<Room initial="roster" />)
     expect(tray().getAttribute('data-snap')).toBe('half')
     fireEvent.click(screen.getByTestId('draft-mobile-tab-board'))
     expect(tray().getAttribute('data-snap')).toBe('peek')

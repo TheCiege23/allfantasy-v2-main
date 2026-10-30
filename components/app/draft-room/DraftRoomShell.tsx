@@ -393,7 +393,10 @@ export function DraftRoomShell({
           onRequestExpand={expandTray}
           layoutRef={layoutRef}
           fullOnInputFocus={mobileTab === 'chat'}
-          openSnap={mobileTab === 'players' || mobileTab === 'queue' ? 'full' : 'half'}
+          // Lists and the conversation open full: at half (~325px on a Pixel 7) Players showed ~2 cards,
+          // Queue 0.8 of a row, and Chat ~1.5 messages above its composer. Chat already went full on
+          // focus; opening there saves the user the first tap.
+          openSnap={mobileTab === 'players' || mobileTab === 'queue' || mobileTab === 'chat' ? 'full' : 'half'}
           testIdPrefix="draft-mobile"
           ariaLabel={t('draftRoom.shell.aria.draftSections')}
           accessory={mobileDockAccessory}
@@ -503,7 +506,12 @@ export function DraftRoomShell({
                   {queuePanel}
                 </div>
               )}
-              {mobileTab === 'chat' && chatPanel}
+              {/* Definite height again: the chat fills the tray, so its composer is always on screen. */}
+              {mobileTab === 'chat' && (
+                <div className="flex h-full min-h-0 flex-col [&>*]:min-h-0 [&>*]:flex-1" data-testid="draft-mobile-chat-sheet">
+                  {chatPanel}
+                </div>
+              )}
               {intelPanel && mobileTab === 'intel' && intelPanel}
               {helperPanel && mobileTab === 'helper' && helperPanel}
               {rosterPanel && mobileTab === 'roster' && rosterPanel}

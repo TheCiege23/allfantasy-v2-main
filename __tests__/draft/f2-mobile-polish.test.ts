@@ -79,7 +79,10 @@ describe('F.2 — DraftRoomShell mobile structure', () => {
     const queueWrap = src.match(/mobileTab === 'queue' && \(\s*<div className="([^"]+)" data-testid="draft-mobile-queue-sheet"/)
     expect(queueWrap?.[1]).toMatch(/\bh-full\b/)
     expect(queueWrap?.[1]).not.toMatch(/overflow-x/)
-    expect(src).toMatch(/\{mobileTab === 'chat' && chatPanel\}/)
+    // Chat gained a definite-HEIGHT column (2026-10-29) so its composer stays on screen — still no x-scroll.
+    const chatWrap = src.match(/mobileTab === 'chat' && \(\s*<div className="([^"]+)" data-testid="draft-mobile-chat-sheet"/)
+    expect(chatWrap?.[1]).toMatch(/\bh-full\b/)
+    expect(chatWrap?.[1]).not.toMatch(/overflow-x/)
     expect(src).toMatch(/rosterPanel && mobileTab === 'roster' && rosterPanel/)
   })
 
@@ -198,7 +201,8 @@ describe('F.2 — DraftChatPanel input stays inside the panel (mobile-safe)', ()
     // The composer wrapper has `border-t` so it visually pins to the panel's
     // bottom edge. It does NOT use position: fixed (which would float the
     // input over the iOS keyboard region).
-    expect(src).toMatch(/border-t.*p-2\.5 sm:p-3/)
+    // Padding trimmed on phones (p-1.5) 2026-10-29; still an in-flow border-t section.
+    expect(src).toMatch(/af-dc-composer border-t p-1\.5 sm:p-3/)
     expect(src).not.toMatch(/composer[\s\S]{0,200}position:\s*fixed/i)
   })
 
