@@ -53,7 +53,7 @@ done
 
 OUT="${FIXTURE_DIR}/${LABEL}.json"
 mkdir -p "$FIXTURE_DIR"
-node "$(dirname "${BASH_SOURCE[0]}")/redact-capture.mjs" "$TMP" "$LEAGUE_ID" "$OUT"
+node "$(dirname "${BASH_SOURCE[0]}")/redact-capture.mjs" "$TMP" "$LEAGUE_ID" "$OUT" "$BASE_URL"
 
 echo >&2
 echo "✅ fixture written: ${OUT}" >&2

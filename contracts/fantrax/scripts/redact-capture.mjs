@@ -2,7 +2,10 @@
 /**
  * Redact one league's three raw `fxea` responses into ONE committable fixture. Called by probe.sh.
  *
- *   node redact-capture.mjs <dir holding getLeagueInfo.json, getTeamRosters.json, getStandings.json> <leagueId> <out.json>
+ *   node redact-capture.mjs <dir holding getLeagueInfo.json, getTeamRosters.json, getStandings.json> <leagueId> <out.json> <baseUrl>
+ *
+ * Makes no request itself: probe.sh fetches, and passes its base URL in only so the fixture can
+ * record where the capture came from.
  *
  * Prints the key paths of the RAW responses first (array indices collapsed to []), and any key
  * that looks like a picture, so the question being asked is answered before redaction can hide it.
@@ -11,9 +14,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const [dir, leagueId, out] = process.argv.slice(2)
-if (!dir || !leagueId || !out) {
-  console.error('usage: redact-capture.mjs <dir> <leagueId> <out.json>')
+const [dir, leagueId, out, baseUrl] = process.argv.slice(2)
+if (!dir || !leagueId || !out || !baseUrl) {
+  console.error('usage: redact-capture.mjs <dir> <leagueId> <out.json> <baseUrl>')
   process.exit(2)
 }
 
@@ -135,7 +138,7 @@ if (trimmedRosters?.rosters) {
 const fixture = {
   provenance: {
     capturedAt: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
-    source: 'https://www.fantrax.com/fxea/general/{getLeagueInfo,getTeamRosters,getStandings}?leagueId=<withheld>',
+    source: `${baseUrl}/{getLeagueInfo,getTeamRosters,getStandings}?leagueId=<withheld>`,
     note: "One of the owner's own leagues, captured with the owner's consent by contracts/fantrax/scripts/probe.sh. No credentials (fxea/general is unauthenticated). League id and name, team ids and names replaced with placeholders; URL paths withheld (host and extension kept); playerInfo trimmed to 1 entry; rosterItems trimmed to 2 per team.",
     pictureKeys,
   },
