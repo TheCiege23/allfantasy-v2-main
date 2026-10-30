@@ -84,7 +84,7 @@ export function LeagueSettingsSubPageBody({
           <LeagueDuesTrackerPanel leagueId={leagueId} />
           <LeagueHistoryPanel leagueId={leagueId} />
           {ctx.isHeadCommissioner ? (
-            <DeleteLeagueFromAfPanel leagueId={leagueId} currentUserId={ctx.userId} leagueOwnerUserId={ctx.league.userId} />
+            <DeleteLeagueFromAfPanel leagueId={leagueId} currentUserId={ctx.userId} leagueOwnerUserId={ctx.league.userId} platform={ctx.league.platform} leagueName={ctx.league.name} />
           ) : null}
         </div>
       )
