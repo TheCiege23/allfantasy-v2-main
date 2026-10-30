@@ -52,7 +52,8 @@ describe('RailRowBody — native guillotine line', () => {
   it('eliminated: "Chopped wk N" and no score', () => {
     const el = draw(line({ state: 'eliminated', choppedWeek: 10, rank: null, chopMargin: null, points: null, projected: null, basis: null }))
     expect(text(el)).toContain('Chopped wk 10')
-    expect(el.querySelector('.af-rail-row-score')?.textContent).toBe('—')
+    // No score at all — not a 0.0 that would read as a played week.
+    expect(el.querySelector('.af-rail-row-score')).toBeNull()
   })
 
   it('before the first chop week: names it', () => {
@@ -65,7 +66,7 @@ describe('RailRowBody — native guillotine line', () => {
     const el = draw(line({ state: 'no_scores', rank: null, chopMargin: null, points: null, projected: null, basis: null }))
     expect(text(el)).toContain('16 alive')
     expect(text(el)).toContain('no scores yet')
-    expect(el.querySelector('.af-rail-row-score')?.textContent).toBe('—')
+    expect(el.querySelector('.af-rail-row-score')).toBeNull()
   })
 
   it('preseason: draft time, else "Season not started"', () => {

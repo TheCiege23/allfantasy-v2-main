@@ -1,8 +1,7 @@
 import { defineMessages } from '@/lib/i18n/messages'
 
 /**
- * One league row in the league rail (components/core-app/RailRowBody.tsx). Every string is the one the
- * row printed before the move, byte for byte, in both languages — this is a relocation, not a rewrite.
+ * One league row in the league rail (components/core-app/RailRowBody.tsx).
  */
 
 /** 1st, 2nd, 3rd, 4th … and 11th/12th/13th, which are the ones a naive rule gets wrong. */
@@ -19,12 +18,14 @@ function ordinal(n: number): string {
 export const railRowMessages = defineMessages({
   en: {
     /* RailSide — the projection tooltip. `genericPpr` is "afProjected == null". */
-    sideTitle: (provider: string, pricedFrom: number, starterCount: number, genericPpr: boolean, afEngineFrom: number): string =>
-      `Weekly baseline projection — ${provider} (SLPR): ${provider}’s projection from ${pricedFrom} of ${starterCount} starters${
+    sideTitle: (provider: string, pricedFrom: number, starterCount: number, genericPpr: boolean): string =>
+      `Weekly baseline projection — ${provider}’s projection from ${pricedFrom} of ${starterCount} starters${
         genericPpr
           ? ', generic PPR because this league’s scoring could not be re-scored'
           : ', re-scored with this league’s settings'
-      } · AF: AllFantasy engine from ${afEngineFrom} of ${starterCount} starters · live score is shown separately`,
+      } · live score is shown separately`,
+    /* The small label in front of each side's projected total. */
+    projShort: 'proj',
     /* RailStanding */
     noHeadToHead: 'no head-to-head — rank not yet measurable',
     tiedPrefix: 'T-',
@@ -57,26 +58,24 @@ export const railRowMessages = defineMessages({
     aboveChop: (margin: string) => `+${margin} above chop`,
     alive: 'alive',
     /* RailRowBody */
-    week: 'Week',
     syncPaused: 'Sync paused',
     updatesDelayed: 'Updates delayed',
     lastResult: 'Last result',
-    colLast: 'LAST',
-    colScore: 'SCORE',
-    providerProjection: (provider: string) => `${provider} projection`,
-    afEngineProjection: 'AllFantasy engine projection',
+    /* Between the two managers of a head-to-head. */
+    vs: 'VS',
     yourTeam: 'Your team',
     opponentNotNamed: 'opponent not named',
     espnUnavailable: 'Matchup unavailable from ESPN',
     matchupNotAvailable: 'Matchup not available yet',
   },
   es: {
-    sideTitle: (provider, pricedFrom, starterCount, genericPpr, afEngineFrom) =>
-      `Proyección base semanal — ${provider} (SLPR): proyección de ${provider} con ${pricedFrom} de ${starterCount} titulares${
+    sideTitle: (provider, pricedFrom, starterCount, genericPpr) =>
+      `Proyección base semanal — proyección de ${provider} con ${pricedFrom} de ${starterCount} titulares${
         genericPpr
           ? ', PPR genérico porque no se pudo recalcular con la puntuación de esta liga'
           : ', recalculada con la configuración de esta liga'
-      } · AF: motor de AllFantasy con ${afEngineFrom} de ${starterCount} titulares · el marcador en vivo se muestra aparte`,
+      } · el marcador en vivo se muestra aparte`,
+    projShort: 'proy',
     noHeadToHead: 'sin enfrentamiento directo: posición aún no medible',
     tiedPrefix: 'E-',
     rank: (n) => `#${n}`,
@@ -106,14 +105,10 @@ export const railRowMessages = defineMessages({
     tiedAtLine: 'empatado en la línea',
     aboveChop: (margin) => `+${margin} sobre el corte`,
     alive: 'vivo',
-    week: 'Semana',
     syncPaused: 'Sincronización en pausa',
     updatesDelayed: 'Actualizaciones retrasadas',
     lastResult: 'Último resultado',
-    colLast: 'ÚLT',
-    colScore: 'PTS',
-    providerProjection: (provider) => `Proyección de ${provider}`,
-    afEngineProjection: 'Proyección del motor de AllFantasy',
+    vs: 'VS',
     yourTeam: 'Tu equipo',
     opponentNotNamed: 'rival sin nombre',
     espnUnavailable: 'ESPN no devolvió un calendario de enfrentamientos para esta liga',

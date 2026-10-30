@@ -179,8 +179,7 @@ export function LeagueRailRow({
           badges={
             <>
               {view.isLive ? <span className="af-rail-live-state">LIVE</span> : null}
-              <span className="af-platform af-platform-chip nl-rail-chip" data-platform={view.platform}>{view.platformLabel}</span>
-              <span className="nl-rail-week">{view.weekLabel}</span>
+              <span className="af-platform af-platform-chip af-rail-row-plat nl-rail-chip" data-platform={view.platform}>{view.platformLabel}</span>
             </>
           }
         />
