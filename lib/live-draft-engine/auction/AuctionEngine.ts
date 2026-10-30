@@ -26,6 +26,7 @@ import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
 import { processWinningContractBid } from '@/lib/salary-cap/ContractBidService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { recordArchiveEvent, updateSessionWithArchive, json } from '@/lib/draft-archive/events'
+import { isEligibleForPlayerPool, isRookieRestrictedPlayerPool, resolveServerRookieStatus } from '@/lib/live-draft-engine/serverRookieStatus'
 
 const DEFAULT_BUDGET = 200
 const DEFAULT_MIN_BID = 1
@@ -168,6 +169,10 @@ async function _nominatePlayerCore(
     return { success: false, error: 'A player is already on the block' }
   }
 
+  if (isRookieRestrictedPlayerPool(session.playerPool)) {
+    const rookie = await resolveServerRookieStatus({ leagueId, playerId: nomination.playerId, playerName: nomination.playerName })
+    if (!isEligibleForPlayerPool(session.playerPool, rookie)) return { success: false, error: 'That player is not eligible for this draft pool.' }
+  }
   const seasonError = await validateSeasonDraftPlayer(leagueId, season && options?.autoMinimumBid ? nominatorRosterId : null, session.picks, nomination)
   if (seasonError) return { success: false, error: seasonError }
   const playerName = nomination.playerName?.trim()
@@ -394,6 +399,11 @@ async function _resolveAuctionWinCore(
       winnerRosterId = null
       amount = 0
     }
+  }
+
+  if (winnerRosterId && isRookieRestrictedPlayerPool(session.playerPool)) {
+    const rookie = await resolveServerRookieStatus({ leagueId, playerId: state.currentNomination.playerId, playerName: state.currentNomination.playerName })
+    if (!isEligibleForPlayerPool(session.playerPool, rookie)) return { success: false, error: 'That player is not eligible for this draft pool.' }
   }
 
   const sold = Boolean(winnerRosterId && amount > 0)
