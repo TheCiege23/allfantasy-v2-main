@@ -5,8 +5,10 @@ import { useEffect, useMemo, useState } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
 import type { RailLeague, RailMatchupSummary } from '@/components/core-app/AfCoreShell'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
-import { RailRowBody, mergeRailMatchup, railTapTarget } from '@/components/core-app/RailRowBody'
+import { RailRowBody, mergeRailMatchup, railTapTarget, type RailAttention } from '@/components/core-app/RailRowBody'
 import { useRailOdds } from '@/components/core-app/useRailOdds'
+import type { useRailHold } from '@/components/core-app/RailLeagueMenu'
+import type { RailRecord } from '@/lib/core-app/railRecordRank'
 import { useLiveRailScores, type LiveRailScore } from '@/components/core-app/useLiveRailScores'
 import { coreRefreshIntervalMs } from '@/lib/core-app/coreRefreshPolicy'
 import { importedPlatformLabel, isNativePlatform } from '@/lib/dashboard/platform-label'
@@ -26,6 +28,16 @@ export type LeagueRailData = {
   matchups: Record<string, RailMatchupSummary>
   /** Resolved crest per league id (logo, Sleeper avatar, or the league type's artwork). */
   imageUrls: Record<string, string | null>
+  /** Your record and place per league — "6-3 · 2nd" (lib/core-app/railRecords.ts). */
+  records?: Record<string, RailRecord>
+  /** The account's favorites, pinned on top, and its saved order (leaguePreferences.ts). */
+  favoriteIds?: string[]
+  order?: string[]
+  /** Leagues the account hid from its lists; the rail leaves them out (the open league always stays). */
+  hiddenIds?: string[]
+  /** What needs you, from the /core tab badges' cached facts (urgencyBadges.ts `readUrgencyLeagueIds`). */
+  lineupLeagueIds?: string[]
+  offerLeagueIds?: string[]
 }
 
 export type LeagueRailRowView = {
@@ -51,6 +63,10 @@ export type LeagueRailRowView = {
   pWin?: number | null
   /** An imported league's Matchup screen, for a tap on the head-to-head. Null for a native league. */
   matchupHref?: string | null
+  /** Your record and place. Null in a field-race league, or before any game. */
+  record?: RailRecord | null
+  /** What needs you here: an empty or ruled-out starter, an offer waiting. */
+  attention?: RailAttention[]
 }
 
 const markOf = (name: string) =>
@@ -92,6 +108,12 @@ export function leagueRailRowView(
     weekLabel,
     status: leagueRailStatus({ m, phase, weekLabel }),
     matchupHref: !native && m && !m.unpaired && !m.guillotine ? `/core/matchup?league=${encodeURIComponent(row.id)}` : null,
+    /* A field race's line is its place among the survivors; a W-L record says nothing there. */
+    record: m?.guillotine || m?.standing?.elimination ? null : rail?.records?.[row.id] ?? null,
+    attention: [
+      ...(rail?.lineupLeagueIds?.includes(row.id) ? ['lineup' as const] : []),
+      ...(rail?.offerLeagueIds?.includes(row.id) ? ['offer' as const] : []),
+    ],
   }
 }
 
@@ -138,6 +160,8 @@ export function LeagueRailRow({
   isCommissioner,
   onClick,
   unread = 0,
+  favorite,
+  hold,
 }: {
   view: LeagueRailRowView
   href: string
@@ -148,6 +172,10 @@ export function LeagueRailRow({
   onClick?: () => void
   /** Unread league-chat messages (`/api/chat/unread` → byLeague). */
   unread?: number
+  /** Pinned on top of the list — draws the star after the name. */
+  favorite?: boolean
+  /** Press-and-hold / right-click for Pin and Move (RailLeagueMenu.tsx). Absent: no menu. */
+  hold?: ReturnType<typeof useRailHold>
 }) {
   const badge = unreadBadgeText(unread)
   const { status } = view
@@ -162,7 +190,10 @@ export function LeagueRailRow({
       data-ring={status.tone ?? undefined}
       aria-label={`${view.name} on ${view.platformLabel}, ${status.line}${badge ? `, ${badge} unread` : ''}${view.isLive ? ', live' : ''}`}
       title={`${view.name} · ${status.line} · ${status.mini}`}
+      data-favorite={favorite ? 'true' : undefined}
+      {...(hold ? hold.handlers(view.id) : {})}
       onClick={(event) => {
+        if (hold?.swallowClick(event)) return
         /*
          * A tap on the head-to-head opens the Matchup screen; anywhere else, the league. One link
          * either way (see `railTapTarget`). The Matchup screen is /core's, so this is a full
@@ -195,6 +226,8 @@ export function LeagueRailRow({
           showScoreStatus={false}
           pWin={view.pWin ?? null}
           matchupHref={view.matchupHref ?? null}
+          record={view.record ?? null}
+          attention={view.attention}
           badges={
             <>
               {view.isLive ? <span className="af-rail-live-state">LIVE</span> : null}

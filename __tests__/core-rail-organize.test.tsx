@@ -87,7 +87,7 @@ describe('favorites pinned on top', () => {
   })
 })
 
-describe('Pin and Move', () => {
+describe('Pin, Move and Hide', () => {
   it('right-click opens the sheet; Pin moves the league to the top at once and saves the favorites', async () => {
     const c = open()
     fireEvent.contextMenu(tile(c, 'f3'))
@@ -111,6 +111,24 @@ describe('Pin and Move', () => {
     })
     expect(order(c)).toEqual(['# NFL', 'f1', 'f2', 'f3', '# NBA', 'b2', 'b1', 'b3'])
     expect(posts()).toEqual([{ field: 'order', leagueIds: ['f1', 'f2', 'f3', 'b2', 'b1', 'b3'] }])
+  })
+
+  it('Hide takes the league off the list at once and adds it to the saved hidden list, not over it', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) =>
+      String(url).includes('league-preferences') && !init?.method
+        ? new Response(JSON.stringify({ favorites: null, hidden: ['elsewhere'], order: [] }), { status: 200 })
+        : new Response(JSON.stringify({ ok: true, odds: {} }), { status: 200 }),
+    )
+    const c = open()
+    fireEvent.contextMenu(tile(c, 'b2'))
+    await act(async () => {
+      fireEvent.click(within(c.querySelector<HTMLElement>('.af-rail-menu')!).getByText('Hide from this list'))
+    })
+    expect(order(c)).toEqual(['# NFL', 'f1', 'f2', 'f3', '# NBA', 'b1', 'b3'])
+    expect(c.querySelector('.af-rail-menu')).toBeNull()
+    expect(c.querySelector('[data-testid="rail-hidden-leagues-link"]')?.textContent).toContain('1')
+    expect(posts()).toEqual([{ field: 'hidden', leagueIds: ['elsewhere', 'b2'] }])
+    expect(nav.router.refresh).toHaveBeenCalled()
   })
 
   it('a press and hold opens the sheet and the lift does not open the league', () => {

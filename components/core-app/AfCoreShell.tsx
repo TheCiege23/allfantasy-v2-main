@@ -73,6 +73,7 @@ import { badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { RailRowBody, mergeRailMatchup, railTapTarget, type RailAttention } from '@/components/core-app/RailRowBody'
 import { useRailOdds } from '@/components/core-app/useRailOdds'
+import { hideLeagueForAccount, RailLeagueMenu, saveLeaguePreference, useRailHold } from '@/components/core-app/RailLeagueMenu'
 import { railRowMessages } from '@/lib/core-app/messages/railRow'
 import {
   currentRailCareerLines,
@@ -1666,7 +1667,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     [favoriteOverride, serverFavoriteKey],
   )
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds])
-  const hiddenLeagueKey = (props.hiddenLeagueIds ?? []).join('.')
+  const serverHiddenKey = (props.hiddenLeagueIds ?? []).join('.')
+  // Leagues hidden from the sheet this visit, gone at once; the next server render carries them.
+  const [hiddenAdded, setHiddenAdded] = useState<string[]>([])
+  useEffect(() => setHiddenAdded([]), [serverHiddenKey])
+  const hiddenLeagueKey = [serverHiddenKey, ...hiddenAdded].filter(Boolean).join('.')
   const railLeagues = useMemo(
     () => withoutHidden(orderedLeagues, hiddenLeagueKey ? hiddenLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
     [orderedLeagues, hiddenLeagueKey, props.selectedLeagueId],
@@ -1744,33 +1749,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * stays one link, so the actions live in a sheet beside it rather than as buttons inside it.
    */
   const [railMenuId, setRailMenuId] = useState<string | null>(null)
-  const railMenuRef = useRef<HTMLDivElement>(null)
-  const railMenuScrimRef = useRef<HTMLButtonElement>(null)
-  const railHold = useRef<{ timer: number | null; fired: boolean; x: number; y: number }>({ timer: null, fired: false, x: 0, y: 0 })
-  useOverlayContainment({
-    active: railMenuId != null,
-    containerRef: railMenuRef,
-    onClose: () => setRailMenuId(null),
-    keepClickableRefs: [railMenuScrimRef],
-  })
-  const saveLeaguePreference = (field: 'favorites' | 'order', leagueIds: string[]) => {
-    void fetch('/api/core/league-preferences', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify({ field, leagueIds }),
-    })
-      .then((res) => {
-        if (res.ok) router.refresh()
-      })
-      .catch(() => {
-        /* the on-screen change stays until the next render shows what was saved */
-      })
-  }
+  const railHold = useRailHold(setRailMenuId)
   const pinLeague = (id: string) => {
     const next = toggleFavorite(favoriteIds, id)
     setFavoriteOverride(next)
-    saveLeaguePreference('favorites', next)
+    saveLeaguePreference('favorites', next, () => router.refresh())
   }
   const moveLeague = (id: string, direction: -1 | 1) => {
     const section = railSections.find((sec) => sec.rows.some((r) => !r.hub && r.id === id))
@@ -1783,7 +1766,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     )
     if (!next) return
     setOrderOverride(next)
-    saveLeaguePreference('order', next)
+    saveLeaguePreference('order', next, () => router.refresh())
+  }
+  const hideLeague = (id: string) => {
+    setHiddenAdded((prev) => (prev.includes(id) ? prev : [...prev, id]))
+    hideLeagueForAccount(id, () => router.refresh())
   }
   const railMenuSection = railMenuId ? railSections.find((sec) => sec.rows.some((r) => !r.hub && r.id === railMenuId)) : null
   const railMenuIds = railMenuSection ? railMenuSection.rows.filter((r) => !r.hub).map((r) => r.id) : []
@@ -2092,41 +2079,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                  * Move for this league. A hold that fired swallows the click that follows it, so lifting
                  * the finger does not also open the league.
                  */
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  setRailMenuId(l.id)
-                }}
-                onTouchStart={(event) => {
-                  const t = event.touches[0]
-                  const hold = railHold.current
-                  if (hold.timer) window.clearTimeout(hold.timer)
-                  hold.fired = false
-                  hold.x = t?.clientX ?? 0
-                  hold.y = t?.clientY ?? 0
-                  hold.timer = window.setTimeout(() => {
-                    hold.timer = null
-                    hold.fired = true
-                    setRailMenuId(l.id)
-                  }, 550)
-                }}
-                onTouchMove={(event) => {
-                  const t = event.touches[0]
-                  const hold = railHold.current
-                  if (hold.timer && t && Math.hypot(t.clientX - hold.x, t.clientY - hold.y) > 10) {
-                    window.clearTimeout(hold.timer)
-                    hold.timer = null
-                  }
-                }}
-                onTouchEnd={() => {
-                  const hold = railHold.current
-                  if (hold.timer) window.clearTimeout(hold.timer)
-                  hold.timer = null
-                }}
-                onTouchCancel={() => {
-                  const hold = railHold.current
-                  if (hold.timer) window.clearTimeout(hold.timer)
-                  hold.timer = null
-                }}
+                {...railHold.handlers(l.id)}
                 /*
                   ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
                   for it, and it matters: the tray is full-screen, so navigating
@@ -2136,12 +2089,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   preference the user set, not a transient overlay.
                 */
                 onClick={(event) => {
-                  if (railHold.current.fired) {
-                    railHold.current.fired = false
-                    event.preventDefault()
-                    event.stopPropagation()
-                    return
-                  }
+                  if (railHold.swallowClick(event)) return
                   // Before anything navigates: the next screen may rebuild this rail from the top.
                   saveRailScroll(railScrollRef.current, railLayout)
                   const target = railTapTarget(event) ?? leagueHref
@@ -2266,61 +2214,20 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       </nav>
 
       {/*
-        Pin and Move for one league — opened by a press-and-hold or a right-click on its row. A sibling
+        Pin, Move and Hide for one league — opened by a press-and-hold or a right-click on its row. A sibling
         of the rail, not inside it, so the rail's own tray rules (close on any link) never touch it.
       */}
       {railMenuLeague ? (
-        <>
-          <button
-            ref={railMenuScrimRef}
-            type="button"
-            className="af-rail-menu-scrim"
-            aria-label={railMsg.menuClose}
-            tabIndex={-1}
-            onClick={() => setRailMenuId(null)}
-          />
-          <div
-            ref={railMenuRef}
-            className="af-rail-menu"
-            role="dialog"
-            aria-modal="true"
-            aria-label={railMsg.menuTitle(railLabels.get(railMenuLeague.id) ?? railMenuLeague.name)}
-          >
-            <p className="af-rail-menu-title">{railLabels.get(railMenuLeague.id) ?? railMenuLeague.name}</p>
-            <button
-              type="button"
-              className="af-rail-menu-item"
-              onClick={() => {
-                pinLeague(railMenuLeague.id)
-                setRailMenuId(null)
-              }}
-            >
-              <span aria-hidden>{favoriteSet.has(railMenuLeague.id) ? '☆' : '★'}</span>
-              {favoriteSet.has(railMenuLeague.id) ? railMsg.unpin : railMsg.pin}
-            </button>
-            <button
-              type="button"
-              className="af-rail-menu-item"
-              disabled={railMenuIds.indexOf(railMenuLeague.id) <= 0}
-              onClick={() => moveLeague(railMenuLeague.id, -1)}
-            >
-              <span aria-hidden>↑</span>
-              {railMsg.moveUp}
-            </button>
-            <button
-              type="button"
-              className="af-rail-menu-item"
-              disabled={railMenuIds.indexOf(railMenuLeague.id) >= railMenuIds.length - 1}
-              onClick={() => moveLeague(railMenuLeague.id, 1)}
-            >
-              <span aria-hidden>↓</span>
-              {railMsg.moveDown}
-            </button>
-            <button type="button" className="af-rail-menu-item" data-kind="done" onClick={() => setRailMenuId(null)}>
-              {railMsg.menuDone}
-            </button>
-          </div>
-        </>
+        <RailLeagueMenu
+          name={railLabels.get(railMenuLeague.id) ?? railMenuLeague.name}
+          pinned={favoriteSet.has(railMenuLeague.id)}
+          canMoveUp={railMenuIds.indexOf(railMenuLeague.id) > 0}
+          canMoveDown={railMenuIds.indexOf(railMenuLeague.id) < railMenuIds.length - 1}
+          onPin={() => pinLeague(railMenuLeague.id)}
+          onMove={(direction) => moveLeague(railMenuLeague.id, direction)}
+          onHide={() => hideLeague(railMenuLeague.id)}
+          onClose={() => setRailMenuId(null)}
+        />
       ) : null}
 
       {/* ── Primary nav ─────────────────────────────────────────────── */}

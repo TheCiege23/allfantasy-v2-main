@@ -21,6 +21,7 @@ import {
   draftLeagueIds,
   getUrgencyBadges,
   lineupLeagueIds,
+  readUrgencyLeagueIds,
   recordPendingOffers,
   type UrgencyCache,
 } from '@/lib/core-app/urgencyBadges'
@@ -224,5 +225,21 @@ describe('independent lineup and offer writes', () => {
     const result = await getUrgencyBadges({ userId: 'u1', leagues: LEAGUES,
       liveDraftLeagueIds: [], now: NOW, loadLineupLeagues: async () => null })
     expect(result.myTeam).toBe(2)
+  })
+})
+
+describe('readUrgencyLeagueIds — the badge facts per league, read only', () => {
+  it('names the fresh lineup and offer leagues and never recomputes or writes', async () => {
+    cached({
+      lineup: { at: ago(2 * MIN), leagueIds: ['L2'] },
+      offers: { L1: { at: ago(MIN), waiting: 2 }, L3: { at: ago(MIN), waiting: 0 }, L2: { at: ago(URGENCY_TTL_MS + MIN), waiting: 1 } },
+    })
+    expect(await readUrgencyLeagueIds('u1', NOW)).toEqual({ lineupLeagueIds: ['L2'], offerLeagueIds: ['L1'] })
+    expect(h.cacheUpsert).not.toHaveBeenCalled()
+  })
+
+  it('a stale lineup read is null — no flag from an old answer', async () => {
+    cached({ lineup: { at: ago(URGENCY_TTL_MS + MIN), leagueIds: ['L2'] } })
+    expect((await readUrgencyLeagueIds('u1', NOW)).lineupLeagueIds).toBeNull()
   })
 })
