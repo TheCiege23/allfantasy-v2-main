@@ -137,3 +137,31 @@ it('kill switch "matchups" restores the always-replace behaviour', async () => {
     delete process.env.AF_CHANGE_AWARE_WRITES_OFF
   }
 })
+
+/*
+ * 🛑 A ROW WITH NO OPPONENT IS NOT A WIN. Sleeper leaves a roster unpaired (`matchup_id` null, or a
+ * `matchup_id` nobody else shares) on a bye or in a league with no head-to-head pairing. The writer
+ * compared its points against a phantom 0 and stored `win = 1` for every such roster that scored —
+ * which is how fifteen leagues showed all twelve teams at 1-0.
+ */
+it('stores no win for a roster that has no opponent, paired or not', async () => {
+  db.groupBy.mockResolvedValue([])
+  db.fetch.mockResolvedValueOnce([
+    { roster_id: 1, matchup_id: 1, points: 30 },
+    { roster_id: 2, matchup_id: 1, points: 20 },
+    { roster_id: 3, matchup_id: null, points: 25 },
+    { roster_id: 4, matchup_id: 7, points: 40 },
+    { roster_id: 5, matchup_id: 2, points: 50 },
+    { roster_id: 6, matchup_id: 2, points: 50 },
+  ])
+  await ensureMatchupsCached('P', 1, 2026)
+  const rows = db.create.mock.calls[0][0].data as Array<{ rosterId: string; win: number; pointsAgainst: number }>
+  const win = (id: string) => rows.find((r) => r.rosterId === id)?.win
+  expect(win('1')).toBe(1)
+  expect(win('2')).toBe(0)
+  expect(win('3')).toBe(0)
+  expect(win('4')).toBe(0)
+  // A tie stays 0 for both sides: readers tell it from a loss by the equal points.
+  expect(win('5')).toBe(0)
+  expect(win('6')).toBe(0)
+})

@@ -15,6 +15,14 @@ import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draf
 import { mergePoolPlayerIntoBoardPickDisplay } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
 
+/**
+ * One board column. Sleeper-style: the board spans the full width with short, wide tiles; past
+ * 84px per column (a large league on a narrow screen) it scrolls sideways instead of squashing.
+ */
+const BOARD_COLUMN = 'minmax(84px, 1fr)'
+/** Narrow round-label column: Sleeper shows the snake direction on the tiles themselves. */
+const ROUND_COLUMN = '28px'
+
 export type DraftBoardProps = {
   picks: DraftPickSnapshot[]
   slotOrder: SlotOrderEntry[]
@@ -656,14 +664,14 @@ function DraftBoardInner({
         </div>
       ) : (
         <div className="snap-x snap-mandatory overflow-x-auto overscroll-x-contain overflow-y-visible px-2 py-2 pb-3 [-webkit-overflow-scrolling:touch]">
-          <div className="min-w-max" data-testid="draft-board-grid">
+          <div className="min-w-max sm:min-w-full" data-testid="draft-board-grid">
             <div
-              className={`sticky top-0 z-10 grid gap-0 border-b pb-0.5 backdrop-blur-md sm:gap-0.5 ${
+              className={`sticky top-0 z-10 grid gap-[2px] border-b pb-0.5 backdrop-blur-md ${
                 rs
                   ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
                   : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
               }`}
-              style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(104px, 1fr))` }}
+              style={{ gridTemplateColumns: `${ROUND_COLUMN} repeat(${teamCount}, ${BOARD_COLUMN})` }}
               data-testid="draft-board-team-header"
             >
               <div
@@ -734,23 +742,19 @@ function DraftBoardInner({
               })}
             </div>
 
-            <div className="space-y-[3px] pt-0.5">
+            <div className="space-y-[2px] pt-0.5">
               {visibleRounds.map((round) => (
                 <section key={round} data-testid={`draft-board-round-${round}`}>
                     <div
-                      className="grid gap-[3px]"
-                      style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(104px, 1fr))` }}
+                      className="grid gap-[2px]"
+                      style={{ gridTemplateColumns: `${ROUND_COLUMN} repeat(${teamCount}, ${BOARD_COLUMN})` }}
                     >
                     {(() => {
                       const reversed = isSnakeRoundReversed(round, draftType, thirdRoundReversal)
                       const isSnake = draftType === 'snake'
                       return (
                         <div
-                          className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-xl border text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:min-h-[60px] ${
-                            round === 1
-                              ? 'border-amber-300/35 bg-gradient-to-br from-amber-500/18 via-[#1d2236] to-[#0a1228] text-amber-100/95'
-                              : 'border-white/[0.1] bg-gradient-to-br from-[#0d1629] to-[#0a1228] text-white/75'
-                          }`}
+                          className="flex h-full flex-col items-center justify-center gap-0.5 rounded-[4px] text-[11px] text-white/55"
                           title={
                             isSnake
                               ? reversed
@@ -761,11 +765,11 @@ function DraftBoardInner({
                           data-testid={`draft-board-round-${round}-direction`}
                           data-direction={reversed ? 'reverse' : 'forward'}
                         >
-                          <span className="font-semibold uppercase tracking-[0.14em]">R{round}</span>
+                          <span className="font-bold tabular-nums">{round}</span>
                           {reversed ? (
-                            <ArrowLeft className="h-3 w-3 text-amber-300/80" aria-label="reverse" />
+                            <ArrowLeft className="h-3 w-3 text-white/40" aria-label="reverse" />
                           ) : (
-                            <ArrowRight className="h-3 w-3 text-cyan-300/80" aria-label="forward" />
+                            <ArrowRight className="h-3 w-3 text-white/40" aria-label="forward" />
                           )}
                         </div>
                       )
@@ -777,7 +781,7 @@ function DraftBoardInner({
                         return (
                           <div
                             key={`${round}-${slotEntry.slot}-missing`}
-                            className="min-h-[56px] rounded-xl border border-dashed border-red-400/30 bg-red-500/8 sm:min-h-[60px]"
+                            className="h-[50px] rounded-[4px] bg-red-500/15"
                             title="Missing cell data for this slot"
                           />
                         )
