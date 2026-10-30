@@ -101,6 +101,9 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
       enabledPremiumAdvancedSettings.map((key) => [key, true]),
     )
   }
+  if (lt === 'guillotine' && state.guillotineBestBall === true) {
+    conceptSetup.guillotineBestBall = true
+  }
   if (lt === 'survivor') {
     conceptSetup.survivorTribeCount = state.survivorTribeCount
     conceptSetup.commissionerParticipationMode = state.survivorCommissionerParticipationMode ?? 'non_participating_host'

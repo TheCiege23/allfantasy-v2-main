@@ -12,6 +12,7 @@
  *   dangerMarginPoints    GuillotineDangerEngine (who shows as "in danger")
  *   rosterReleaseTiming   GuillotineEliminationEngine → releaseChoppedRosters
  *   faabOnChop            GuillotineEliminationEngine → redistributeChoppedFaab (./faabOnChop.ts)
+ *   bestBall              scoringEngine.leagueIsBestBall → each team's best lineup (./guillotineBestBall.ts)
  *
  * components/league/GuillotineFormatTab.tsx used to list ~25 settings, most of which nothing read
  * (AI toggles, "Chop Clock", "FAAB visible"…) and whose save always failed. It was deleted rather
@@ -35,6 +36,11 @@ export type GuillotineRules = {
   aiRecapAuto: boolean
   /** What happens to a chopped team's unspent FAAB. Stored in League.settings (FAAB_ON_CHOP_KEY). */
   faabOnChop: FaabOnChop
+  /**
+   * Lineups set themselves: every team is scored on its best possible lineup each week. Stored as
+   * League.settings.best_ball (./guillotineBestBall.ts); changeable only before the draft.
+   */
+  bestBall: boolean
 }
 
 /** League.settings key for `aiRecapAuto`. Absent = on. */
@@ -179,6 +185,10 @@ export function normalizeGuillotineRulesPatch(
       return { ok: false, error: { field: 'faabOnChop', message: "Pick what happens to a chopped team's FAAB." } }
     }
     out.faabOnChop = r.faabOnChop as FaabOnChop
+  }
+  if ('bestBall' in r) {
+    if (typeof r.bestBall !== 'boolean') return { ok: false, error: { field: 'bestBall', message: 'Turn best ball lineups on or off.' } }
+    out.bestBall = r.bestBall
   }
   if (Object.keys(out).length === 0) return { ok: false, error: { field: null, message: 'Nothing to save.' } }
   return { ok: true, value: out }

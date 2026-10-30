@@ -516,6 +516,7 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
     line('guillotine-danger', isNum(s.dangerMarginPoints) && s.dangerMarginPoints > 0 ? plural('guillotine.danger', s.dangerMarginPoints) : null),
     line('guillotine-faab', s.faabOnChop && FAAB_ON_CHOP.has(s.faabOnChop) ? text(`guillotine.faab.${s.faabOnChop}`) : null),
     line('guillotine-blind-auction', s.blindAuction === true ? text('guillotine.blindAuction') : null),
+    line('guillotine-best-ball', s.bestBallLineups === true ? text('guillotine.bestBall') : null),
   ])
 }
 
@@ -694,13 +695,16 @@ export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): R
     line('overview-format', overviewFormat(s)),
     line('overview-median', seasonal && s.medianGame === true ? text('overview.median') : null),
   ])
-  const lineups: RuleLine[] =
-    !imported && format !== 'best_ball' && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
+  // A best ball Guilly league sets no lineup: one line saying so, and no lineup mode or lock to explain.
+  const autoLineups = !imported && format === 'guillotine' && s.bestBallLineups === true
+  const lineups: RuleLine[] = autoLineups
+    ? [{ id: 'lineups-best-ball', text: text('lineups.bestBall') }]
+    : !imported && format !== 'best_ball' && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
       ? [{ id: 'lineups-mode', text: text(`lineups.${s.lineupMode}`) }]
       : []
   // When a weekly lineup locks. Every football league gets this line too, which had none.
   // Daily lineups carry no lock here: the lock reads as 'daily' and their own line explains it.
-  if (!imported && format !== 'best_ball' && format !== 'specialty' && s.lineupLock && LINEUP_LOCKS.has(s.lineupLock)) {
+  if (!autoLineups && !imported && format !== 'best_ball' && format !== 'specialty' && s.lineupLock && LINEUP_LOCKS.has(s.lineupLock)) {
     lineups.push({ id: 'lineups-lock', text: text(`lineups.lock.${s.lineupLock}`) })
   }
   const ownRules = !imported && format !== 'specialty' && format !== 'best_ball'
