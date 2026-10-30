@@ -63,6 +63,18 @@ export const railRowMessages = defineMessages({
     lastResult: 'Last result',
     /* Between the two managers of a head-to-head. */
     vs: 'VS',
+    /* The pill beside a league whose scores are moving right now. */
+    live: 'LIVE',
+    /* Flags on a league that needs you (urgencyBadges.ts). */
+    fixLineup: 'Fix lineup',
+    tradeOffer: 'Trade offer',
+    /* The head-to-head's tooltip: a tap there opens the Matchup screen. */
+    openMatchup: 'Open matchup',
+    /* The odds bar's accessible name. */
+    winOdds: (pct: number) => `${pct}% chance to win`,
+    /* Appended to a flagged league row's accessible name, which the visible flags sit inside. */
+    attentionAria: (lineup: boolean, offer: boolean) =>
+      `${lineup ? ', lineup needs fixing' : ''}${offer ? ', trade offer waiting' : ''}`,
     yourTeam: 'Your team',
     opponentNotNamed: 'opponent not named',
     espnUnavailable: 'Matchup unavailable from ESPN',
@@ -109,6 +121,13 @@ export const railRowMessages = defineMessages({
     updatesDelayed: 'Actualizaciones retrasadas',
     lastResult: 'Último resultado',
     vs: 'VS',
+    live: 'EN VIVO',
+    fixLineup: 'Corregir la alineación',
+    tradeOffer: 'Oferta de intercambio',
+    openMatchup: 'Abrir el enfrentamiento',
+    winOdds: (pct) => `${pct}% de probabilidad de ganar`,
+    attentionAria: (lineup, offer) =>
+      `${lineup ? ', hay que corregir la alineación' : ''}${offer ? ', oferta de intercambio pendiente' : ''}`,
     yourTeam: 'Tu equipo',
     opponentNotNamed: 'rival sin nombre',
     espnUnavailable: 'ESPN no devolvió un calendario de enfrentamientos para esta liga',
