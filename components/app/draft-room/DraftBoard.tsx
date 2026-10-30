@@ -202,8 +202,8 @@ function DraftBoardInner({
     if (draftType === 'auction' || currentOverallPick == null) return
     const raf = window.requestAnimationFrame(() => {
       const el = boardRef.current?.querySelector<HTMLElement>(`[data-testid="draft-board-cell-${currentOverallPick}"]`)
-      el?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      el?.scrollIntoView?.({
+        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
         block: 'nearest',
         inline: 'nearest',
       })
