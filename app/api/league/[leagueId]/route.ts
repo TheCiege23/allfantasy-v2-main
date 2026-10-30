@@ -77,7 +77,10 @@ export async function DELETE(
       select: { id: true },
     });
 
-    if (league && isImportedPlatform(league.platform) && league.platformLeagueId) {
+    if (league && isImportedPlatform(league.platform)) {
+      if (!league.platformLeagueId) {
+        return NextResponse.json({ error: 'Imported league has no provider ID to remove from this account' }, { status: 409 });
+      }
       const tombstoned = await recordLeagueTombstone({
         userId,
         platform: String(league.platform),
