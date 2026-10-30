@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
 import { starterSlotIndexOf } from '@/lib/league/lineupSlotPositions'
+import { campusStarterIds } from '@/lib/c2c/campusLineup'
 
 type Db = Parameters<Parameters<typeof prisma.$transaction>[0]>[0] | typeof prisma
 
@@ -18,6 +19,7 @@ export async function syncAfRosterLineupAssignments(
   db: Db = prisma,
 ): Promise<void> {
   const sections = getNormalizedLineupSections(input.playerData)
+  const campus = new Set(campusStarterIds(input.playerData))
   const rows: Array<{
     leagueId: string
     rosterId: string
@@ -49,7 +51,8 @@ export async function syncAfRosterLineupAssignments(
         rosterId: input.rosterId,
         season: input.season,
         week: input.week,
-        section,
+        // A campus starter still belongs to devy, but its weekly role must survive future saves.
+        section: section === 'devy' && /^espn:ncaab:\d+$/.test(id) && campus.has(id) ? 'campus' : section,
         slotIndex: section === 'starters' && usePositions ? (starterSlots[k] as number) : order,
         playerId: id,
       })

@@ -3,7 +3,7 @@ import { ESPN_NCAAB_ROSTER_KEY_PREFIX, currentNcaabSeasonYear, type EspnNcaabRos
 const FRESH_MS = 14 * 24 * 60 * 60 * 1000
 export const ESPN_NCAAB_DEVY_ID_PREFIX = 'espn:ncaab:'
 export type RosterEvidenceRow = { cacheKey: string; data: unknown; expiresAt: Date }
-export type CurrentCollegeAthlete = { id: string; espnId: string; name: string; school: string; position: string; jersey: string | null; observedAt: Date }
+export type CurrentCollegeAthlete = { id: string; espnId: string; teamId: string; name: string; school: string; position: string; jersey: string | null; observedAt: Date }
 
 /** Provider ID is namespaced, stable across transfers, and distinguishable from RI and NFL IDs. */
 export function espnNcaabDevyId(espnId: string): string { return `${ESPN_NCAAB_DEVY_ID_PREFIX}${espnId}` }
@@ -26,7 +26,7 @@ export function selectCurrentNcaabAthletes(rows: readonly RosterEvidenceRow[], n
       const name = typeof athlete?.fullName === 'string' ? athlete.fullName.trim() : ''
       const position = typeof athlete?.position === 'string' ? athlete.position.trim().toUpperCase() : ''
       if (!/^\d+$/.test(id) || !name || !['G', 'F', 'C', 'PG', 'SG', 'SF', 'PF'].includes(position)) continue
-      const item = { id: espnNcaabDevyId(id), espnId: id, name, school: snapshot.school.trim(), position, jersey: typeof athlete.jersey === 'string' ? athlete.jersey : null, observedAt }
+      const item = { id: espnNcaabDevyId(id), espnId: id, teamId: snapshot.teamId, name, school: snapshot.school.trim(), position, jersey: typeof athlete.jersey === 'string' ? athlete.jersey : null, observedAt }
       candidates.set(id, [...(candidates.get(id) ?? []), item])
     }
   }
