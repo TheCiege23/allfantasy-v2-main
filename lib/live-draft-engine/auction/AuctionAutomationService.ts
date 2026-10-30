@@ -1,3 +1,4 @@
+import { loadRookieAuctionAvailability } from './rookieAuctionAvailability'
 import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
 import { loadSeasonDraftContext, loadSeasonDraftPlayers } from '@/lib/tournament/seasonDraftRuntime'
 import { nextSeasonNominator } from '@/lib/tournament/seasonAuctionPolicy'
@@ -20,12 +21,14 @@ import type { AuctionNomination, SlotOrderEntry } from '@/lib/live-draft-engine/
 import {
   getAuctionConfigForLeague,
   getAuctionStateFromSession,
+  getAuctionNominationOrder,
   getBudgetsFromSession,
   nominatePlayer,
   placeBid,
   resolveAuctionWin,
 } from './AuctionEngine'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { isEligibleForPlayerPool, isRookieRestrictedPlayerPool, loadServerRookieStatusResolver } from '@/lib/live-draft-engine/serverRookieStatus'
 
 export type AuctionAutomationAction =
   | { type: 'auto_bid'; rosterId: string; amount: number }
@@ -159,8 +162,9 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
   const budgets = getBudgetsFromSession(session)
   const season = await loadSeasonDraftContext(leagueId)
   if (season && await prepareSeasonDraftPool(leagueId)) return { changed: false, actions }
-  const nominationIndex = season ? nextSeasonNominator(slotOrder, state.nominationOrderIndex, session.picks, session.rounds, budgets, config.minBid) : normalizeNominationIndex(state.nominationOrderIndex, slotOrder.length)
-  const currentNominator = nominationIndex === null ? undefined : slotOrder[nominationIndex]
+  const nominationOrder = getAuctionNominationOrder(slotOrder, state)
+  const nominationIndex = season ? nextSeasonNominator(slotOrder, state.nominationOrderIndex, session.picks, session.rounds, budgets, config.minBid) : normalizeNominationIndex(state.nominationOrderIndex, nominationOrder.length)
+  const currentNominator = nominationIndex === null ? undefined : nominationOrder[nominationIndex]
   const orphanRosterIds = uiSettings.orphanTeamAiManagerEnabled
     ? await getOrphanRosterIdsForLeague(leagueId)
     : []
@@ -228,7 +232,12 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
         playerId: selected.playerId,
         byeWeek: null,
       } : undefined
-    } else first = (await loadAutoNominationCandidates(leagueId, normalizedSport, draftedNames))[0]
+    } else {
+      const candidates = await loadAutoNominationCandidates(leagueId, normalizedSport, draftedNames)
+      const resolve = isRookieRestrictedPlayerPool(session.playerPool) ? await loadServerRookieStatusResolver(leagueId) : null
+      const available = session.draftModeLabel === 'rookie' ? await loadRookieAuctionAvailability(leagueId) : () => true
+      first = candidates.find(candidate => available(candidate) && isEligibleForPlayerPool(session.playerPool, resolve?.({ playerId: candidate.playerId, playerName: candidate.playerName }) ?? null))
+    }
     if (!first) return { changed: false, actions }
 
     const nominate = await nominatePlayer(leagueId, first, currentNominator.rosterId, season ? { autoMinimumBid: true } : undefined)

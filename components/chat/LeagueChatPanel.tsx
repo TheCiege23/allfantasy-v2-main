@@ -41,6 +41,7 @@ import { LEAGUE_CHAT_CHANNELS, type LeagueChatChannelId } from "@/lib/league-cha
 type Props = {
   leagueId: string
   leagueName?: string
+  dynastyBackground?: boolean
   isCommissioner?: boolean
   /** Kept for callers; the panel is always open where it is mounted. */
   defaultOpen?: boolean
@@ -71,6 +72,7 @@ function buildDmChimmyPrompt(ask: ThreadAskChimmy): string {
 export default function LeagueChatPanel({
   leagueId,
   leagueName = "League",
+  dynastyBackground = false,
   isCommissioner = false,
   onClose,
   className = "",
@@ -155,6 +157,7 @@ export default function LeagueChatPanel({
       style={{ borderColor: "var(--border)", background: "var(--panel)" }}
       aria-label="League chat"
       data-testid="league-chat-panel"
+      data-dynasty-background={dynastyBackground ? "true" : undefined}
     >
       <header className="flex items-center justify-between gap-2 border-b px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
         <div className="flex min-w-0 items-center gap-2">

@@ -117,6 +117,13 @@ describe('RailRowBody — imported guillotine standing', () => {
     expect(c.querySelector('.af-rail-row-rank-low')?.textContent).toBe('To pass: Late Sunday · 118.2')
   })
 
+  it('a best-ball league says its rank is a projected final, provisional until the last game', () => {
+    const provisional = drawStanding(saved(standing({ basis: 'best_ball', provisional: true })))
+    expect(provisional.querySelector('.af-rail-row-rank-basis')?.textContent).toBe('on projected best-ball final · provisional · 11 weeks left')
+    const final = drawStanding(saved(standing({ basis: 'best_ball', provisional: false })))
+    expect(final.querySelector('.af-rail-row-rank-basis')?.textContent).toBe('on final best-ball points · 11 weeks left')
+  })
+
   it('a head-to-head-less redraft league keeps its old line: no "alive", no chop line', () => {
     const c = drawStanding(saved(standing({ elimination: false, outOf: 12 })))
     expect(text(c.querySelector('.af-rail-row-rank-pos')!)).toBe('4th of 12')
@@ -134,6 +141,11 @@ describe('RailRowBody — imported guillotine standing', () => {
     const merged = mergeRailMatchup(saved(standing()), live({}) as never)
     expect(merged?.standing).toMatchObject({ basis: 'projected', rank: 4, outOf: 11, weeksLeft: 11 })
     expect(merged?.yourScore).toBe(0)
+  })
+
+  it('a best-ball rank is never replaced by the live points rank, however many have played', () => {
+    const merged = mergeRailMatchup(saved(standing({ basis: 'best_ball', provisional: true })), live({ fieldStanding: { ...live({}).fieldStanding, played: 11, rank: 10 } }) as never)
+    expect(merged?.standing).toMatchObject({ basis: 'best_ball', rank: 4, provisional: true })
   })
 
   it('once most have played (6 of 11), the live points rank takes over', () => {

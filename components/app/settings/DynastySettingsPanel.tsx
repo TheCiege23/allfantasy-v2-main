@@ -1,5 +1,6 @@
 'use client'
 
+import { DEFAULT_ROOKIE_AUCTION_SETTINGS, type RookieAuctionSettings } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeRookieOrderMethod } from '@/lib/draft-lottery/rookieOrderMethod'
 import { LotteryReveal } from '@/components/draft/LotteryReveal'
@@ -22,6 +23,7 @@ type Effective = {
   useMaxPfForNonPlayoff: boolean
   rookieDraftRounds: number
   rookieDraftType: string
+  rookieAuction?: RookieAuctionSettings
   divisionsEnabled: boolean
   tradeDeadlineWeek: number | null
   waiverTypeRecommended: string
@@ -247,6 +249,8 @@ export default function DynastySettingsPanel({
   }
 
   const effective = data.effective
+  const rookieAuction = (patch.rookieAuction as RookieAuctionSettings | undefined) ?? effective?.rookieAuction ?? DEFAULT_ROOKIE_AUCTION_SETTINGS
+  const rookieDraftType = typeof patch.rookieDraftType === 'string' ? patch.rookieDraftType : effective?.rookieDraftType
   const presets = data.presets
   const constants = data.constants
 
@@ -363,20 +367,49 @@ export default function DynastySettingsPanel({
               </select>
               <select
                 className="rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
-                value={effective.rookieDraftType}
+                value={rookieDraftType}
                 onChange={(e) => setPatch((p) => ({ ...p, rookieDraftType: e.target.value }))}
               >
                 <option value="linear">Linear</option>
                 <option value="snake">Snake</option>
+                <option value="auction">Auction</option>
               </select>
               <input
                 type="number"
                 min={1}
                 max={10}
                 className="w-14 rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
-                value={effective.rookieDraftRounds}
+                value={typeof patch.rookieDraftRounds === 'number' ? patch.rookieDraftRounds : effective.rookieDraftRounds}
                 onChange={(e) => setPatch((p) => ({ ...p, rookieDraftRounds: Number(e.target.value) || 4 }))}
               />
+            </div>
+          )}
+
+          {isCommissioner && rookieDraftType === 'auction' && (
+            <div className="mt-3 space-y-3 rounded-lg border border-white/15 p-3 text-xs text-white/80">
+              <label className="block">Auction budget per team
+                <input aria-label="Rookie auction budget per team" type="number" min={1} max={100000} value={rookieAuction.budgetPerTeam}
+                  onChange={(e) => setPatch((p) => ({ ...p, rookieAuction: { ...rookieAuction, budgetPerTeam: Number(e.target.value) } }))}
+                  className="ml-2 w-24 rounded border border-white/20 bg-black/40 p-1 text-white" />
+              </label>
+              <label className="block">Traded rookie picks
+                <select aria-label="Traded rookie pick treatment" value={rookieAuction.policy}
+                  onChange={(e) => setPatch((p) => ({ ...p, rookieAuction: { ...rookieAuction, policy: e.target.value as RookieAuctionSettings['policy'] } }))}
+                  className="ml-2 rounded border border-white/20 bg-black/40 p-1 text-white">
+                  <option value="block">Require commissioner resolution (default)</option>
+                  <option value="budget">Convert picks to auction budget</option>
+                  <option value="nominations">Convert picks to nomination turns</option>
+                </select>
+              </label>
+              <p>Require resolution: the auction cannot open until traded picks are resolved. Budget: transfer the set round value from the original team to the pick owner. Nomination turns: the pick owner receives the original team’s turn for that round.</p>
+              {rookieAuction.policy === 'budget' && Array.from({ length: Math.max(1, Math.min(12, Number(patch.rookieDraftRounds ?? effective.rookieDraftRounds) || 1)) }, (_, index) => {
+                const round = String(index + 1)
+                return <label key={round} className="mr-3 inline-block">Round {round} value
+                  <input aria-label={`Round ${round} auction value`} type="number" min={0} max={100000} value={rookieAuction.valuesByRound[round] ?? 0}
+                    onChange={(e) => setPatch((p) => ({ ...p, rookieAuction: { ...rookieAuction, valuesByRound: { ...rookieAuction.valuesByRound, [round]: Number(e.target.value) } } }))}
+                    className="ml-1 w-20 rounded border border-white/20 bg-black/40 p-1 text-white" />
+                </label>
+              })}
             </div>
           )}
 

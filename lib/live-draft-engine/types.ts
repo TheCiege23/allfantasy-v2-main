@@ -281,6 +281,10 @@ export interface AuctionNomination {
 }
 
 export interface AuctionState {
+  /** One-time transferred nomination turns followed by the ordinary repeating rotation. */
+  nominationOrder?: SlotOrderEntry[]
+  nominationFallbackStart?: number
+  rookieAuction?: unknown
   /** Index into slotOrder for who nominates next (0-based). */
   nominationOrderIndex: number
   /** Currently nominated player (on the block). */

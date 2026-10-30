@@ -48,6 +48,9 @@ export const railRowMessages = defineMessages({
     placesClear: (n: number): string => `${n} ${n === 1 ? 'place' : 'places'} clear`,
     onPoints: 'on points',
     onProjection: 'on projection',
+    /* A best-ball league ranks on projected finals: banked points plus the best lineup still possible. */
+    onBestBallProvisional: 'on projected best-ball final · provisional',
+    onBestBallFinal: 'on final best-ball points',
     /* RailGuillotine */
     ofAlive: (n: number) => ` of ${n} alive`,
     choppedWeek: (week: number) => `Chopped wk ${week}`,
@@ -141,6 +144,8 @@ export const railRowMessages = defineMessages({
     placesClear: (n) => `${n} ${n === 1 ? 'puesto' : 'puestos'} de margen`,
     onPoints: 'por puntos',
     onProjection: 'por proyección',
+    onBestBallProvisional: 'por final proyectado de best ball · provisional',
+    onBestBallFinal: 'por puntos finales de best ball',
     ofAlive: (n) => ` de ${n} vivos`,
     choppedWeek: (week) => `Eliminado sem ${week}`,
     chopped: 'Eliminado',

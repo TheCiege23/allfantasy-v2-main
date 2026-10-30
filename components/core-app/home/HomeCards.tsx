@@ -468,6 +468,7 @@ async function LeaguesCard({ dash34, leagueStamp }: { dash34: HomeLoads['dash34'
   return (
     <Dash3ALeagues
       leagues={data.leagues ?? []}
+      allLeagues={data.allLeagues}
       totalLeagues={data.totalLeagues ?? null}
       freshness={<Stamps stamps={[leagueStamp]} />}
     />

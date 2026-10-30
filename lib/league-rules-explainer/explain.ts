@@ -52,7 +52,7 @@ const IMMUNITY = new Set(['off', 'top_scorer'])
 const TIEBREAKS = new Set(['bench_points', 'season_points', 'previous_period', 'draft_slot', 'commissioner', 'random'])
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
 const ROOKIE_ORDERS = new Set(['max_pf', 'reverse_standings', 'commissioner', 'weighted_lottery', 'live', 'auto_worst_to_first', 'auto_reverse_max_pf'])
-const DRAFT_TYPES = new Set(['linear', 'snake'])
+const DRAFT_TYPES = new Set(['linear', 'snake', 'auction'])
 /** The main draft (./loadDraftRules.ts). */
 const MAIN_DRAFT_TYPES = new Set(['snake', 'linear', 'auction'])
 const MAIN_DRAFT_ORDERS = new Set(['weighted_lottery', 'random', 'manual', 'standings', 'reverse_standings'])
@@ -516,6 +516,7 @@ function guillotineLines(s: RuleSnapshot): RuleLine[] {
     line('guillotine-danger', isNum(s.dangerMarginPoints) && s.dangerMarginPoints > 0 ? plural('guillotine.danger', s.dangerMarginPoints) : null),
     line('guillotine-faab', s.faabOnChop && FAAB_ON_CHOP.has(s.faabOnChop) ? text(`guillotine.faab.${s.faabOnChop}`) : null),
     line('guillotine-blind-auction', s.blindAuction === true ? text('guillotine.blindAuction') : null),
+    line('guillotine-best-ball', s.bestBallLineups === true ? text('guillotine.bestBall') : null),
   ])
 }
 
@@ -541,9 +542,9 @@ function dynastyLines(s: RuleSnapshot): RuleLine[] {
       'dynasty-taxi-stealing',
       slots && steal ? (steal.claims > 0 ? plural('dynasty.taxiStealing', steal.claims, { hours: steal.hours }) : text('dynasty.taxiStealingUnlimited', { hours: steal.hours })) : null,
     ),
-    line('dynasty-rookie-order', s.rookieDraftOrder && ROOKIE_ORDERS.has(s.rookieDraftOrder) ? text(`dynasty.order.${s.rookieDraftOrder}`) : null),
+    line('dynasty-rookie-order', s.rookieDraftOrder && ROOKIE_ORDERS.has(s.rookieDraftOrder) ? (s.rookieDraftType === 'auction' ? text(s.rookieDraftOrder === 'weighted_lottery' ? 'dynasty.auction.weightedOrder' : 'dynasty.auction.order') : text(`dynasty.order.${s.rookieDraftOrder}`)) : null),
     // The lottery's own settings, only while it is what orders the rookie draft.
-    ...lotteryLines(s.rookieDraftOrder === 'weighted_lottery' ? lotteryOf(s.rookieDraftLottery) : null),
+    ...lotteryLines(s.rookieDraftOrder === 'weighted_lottery' ? lotteryOf(s.rookieDraftLottery) : null, s.rookieDraftType === 'auction'),
     line(
       'dynasty-rookie-rounds',
       isPosInt(s.rookieDraftRounds)
@@ -555,12 +556,12 @@ function dynastyLines(s: RuleSnapshot): RuleLine[] {
   ])
 }
 
-function lotteryLines(l: RookieDraftLotteryRule | null): Array<RuleLine | null> {
+function lotteryLines(l: RookieDraftLotteryRule | null, auction = false): Array<RuleLine | null> {
   if (!l) return []
   return [
-    line('dynasty-lottery-draw', lotteryDraw(l)),
+    line('dynasty-lottery-draw', auction ? text('dynasty.auction.draw', { pool: lotteryPool('v.lottery.pool', l), n: l.picks }) : lotteryDraw(l)),
     line('dynasty-lottery-odds', text(`dynasty.lottery.odds.${l.odds}`)),
-    line('dynasty-lottery-rest', text(`dynasty.lottery.rest.${l.rest}`)),
+    line('dynasty-lottery-rest', text(`${auction ? 'dynasty.auction.rest' : 'dynasty.lottery.rest'}.${l.rest}`)),
     line('dynasty-lottery-tiebreak', l.tiebreak ? text(`dynasty.lottery.tiebreak.${l.tiebreak}`) : null),
   ]
 }
@@ -694,13 +695,16 @@ export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): R
     line('overview-format', overviewFormat(s)),
     line('overview-median', seasonal && s.medianGame === true ? text('overview.median') : null),
   ])
-  const lineups: RuleLine[] =
-    !imported && format !== 'best_ball' && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
+  // A best ball Guilly league sets no lineup: one line saying so, and no lineup mode or lock to explain.
+  const autoLineups = !imported && format === 'guillotine' && s.bestBallLineups === true
+  const lineups: RuleLine[] = autoLineups
+    ? [{ id: 'lineups-best-ball', text: text('lineups.bestBall') }]
+    : !imported && format !== 'best_ball' && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
       ? [{ id: 'lineups-mode', text: text(`lineups.${s.lineupMode}`) }]
       : []
   // When a weekly lineup locks. Every football league gets this line too, which had none.
   // Daily lineups carry no lock here: the lock reads as 'daily' and their own line explains it.
-  if (!imported && format !== 'best_ball' && format !== 'specialty' && s.lineupLock && LINEUP_LOCKS.has(s.lineupLock)) {
+  if (!autoLineups && !imported && format !== 'best_ball' && format !== 'specialty' && s.lineupLock && LINEUP_LOCKS.has(s.lineupLock)) {
     lineups.push({ id: 'lineups-lock', text: text(`lineups.lock.${s.lineupLock}`) })
   }
   const ownRules = !imported && format !== 'specialty' && format !== 'best_ball'

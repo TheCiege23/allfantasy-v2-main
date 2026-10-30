@@ -680,3 +680,4 @@ describe('/core home cards stream independently', () => {
 })
 
 vi.mock('@/lib/core-app/attachLeagueHubs', () => ({ attachLeagueHubs: vi.fn(async () => {}) }))
+vi.mock('@/lib/core-app/attachSurvivorExileLinks', () => ({ attachSurvivorExileLinks: vi.fn(async () => {}) }))

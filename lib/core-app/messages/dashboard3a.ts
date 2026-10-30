@@ -81,6 +81,8 @@ export const dashboard3aMessages = defineMessages({
     leagueAlt: 'League',
     untitledLeague: 'Untitled league',
     showAllLeagues: (total: number) => `Show all ${total} →`,
+    exileIsland: 'Exile Island',
+    exileIslandFor: (league: string) => `Exile Island for ${league}`,
   },
   es: {
     // Dashboard3A shell
@@ -147,5 +149,7 @@ export const dashboard3aMessages = defineMessages({
     leagueAlt: 'Liga',
     untitledLeague: 'Liga sin nombre',
     showAllLeagues: (total) => `Ver las ${total} →`,
+    exileIsland: 'Isla del Exilio',
+    exileIslandFor: (league) => `Isla del Exilio de ${league}`,
   },
 })

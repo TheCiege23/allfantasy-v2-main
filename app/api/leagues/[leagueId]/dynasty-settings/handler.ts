@@ -1,3 +1,4 @@
+import { parseRookieAuctionSettings, ROOKIE_AUCTION_SETTINGS_KEY } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 /**
  * GET: Effective dynasty settings + presets (roster, scoring, playoff).
@@ -191,6 +192,11 @@ export async function PUT(
   }
 
   const settingsPatch: Record<string, unknown> = {}
+  if (body.rookieAuction !== undefined) {
+    const parsed = parseRookieAuctionSettings(body.rookieAuction)
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+    settingsPatch[ROOKIE_AUCTION_SETTINGS_KEY] = parsed.value
+  }
   if (body.roster_format_type != null) settingsPatch.roster_format_type = String(body.roster_format_type)
   if (body.scoring_format_type != null) settingsPatch.scoring_format_type = String(body.scoring_format_type)
   if (body.playoff_team_count != null) settingsPatch.playoff_team_count = Number(body.playoff_team_count)
