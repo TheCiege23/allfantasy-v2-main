@@ -48,7 +48,7 @@ vi.mock('@/lib/prisma', () => {
   return { prisma, default: prisma }
 })
 
-import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { getActivityLeaguesForUser, getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 
 const USER = 'tester'
 const row = (id: string, owner: string, platform: string, platformLeagueId: string | null) => ({
@@ -111,6 +111,18 @@ describe('dashboard league list — a removed member league', () => {
     ]
     expect(await ids()).not.toContain('sleeper-copy')
     expect(await ids()).toContain('other-copy')
+  })
+
+  it('keeps removed imports out of the account activity feed', async () => {
+    db.answers['sleeperLeague.findMany'] = () => [
+      { id: 'sleeper-copy', name: 'Sleeper copy', sleeperLeagueId: '999', totalTeams: 12, season: 2026, status: 'in_season' },
+    ]
+    const activityIds = (await getActivityLeaguesForUser(USER)).map((league) => league.id)
+    expect(activityIds).not.toContain('mine')
+    expect(activityIds).not.toContain('shared')
+    expect(activityIds).not.toContain('sleeper-copy')
+    expect(activityIds).toContain('kept')
+    expect(activityIds).toContain('native')
   })
 
   it('CONTROL: with no tombstones, all four are listed', async () => {
