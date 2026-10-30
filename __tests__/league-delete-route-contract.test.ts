@@ -172,11 +172,11 @@ describe('DELETE /api/league/[leagueId] contract', () => {
       id: 'lg-1',
       platform: 'sleeper',
       platformLeagueId: 'sleeper-123',
+      name: 'Shared Sleeper',
     })
     sleeperLeagueFindFirstMock.mockResolvedValueOnce(null)
 
     const { DELETE } = await import('@/app/api/league/[leagueId]/route')
-
     const res = await DELETE(new Request('http://localhost/api/league/lg-1', { method: 'DELETE' }), {
       params: Promise.resolve({ leagueId: 'lg-1' }),
     })
@@ -184,42 +184,22 @@ describe('DELETE /api/league/[leagueId] contract', () => {
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toEqual({
       ok: true,
-      /*
-       * ⚠ `tombstoned` IS PART OF THE CONTRACT NOW (de9bda225). The route records a
-       * tombstone so a deleted league cannot be recreated by the next import or sync, and
-       * reports whether it managed to. The idempotent "not found" case above returns
-       * EARLY, before that step, which is why it still has no `tombstoned` key — the
-       * asymmetry is the route's, not an oversight here.
-       */
       tombstoned: true,
       removed: {
-        leagueRows: 1,
-        sleeperLeagueRows: 1,
+        leagueRows: 0,
+        sleeperLeagueRows: 0,
         tournamentRows: 0,
+        memberLeagues: 1,
       },
     })
-
-    expect(leagueDeleteManyMock).toHaveBeenCalledWith({
-      where: {
-        userId: 'user-1',
-        OR: [
-          { id: 'lg-1' },
-          {
-            platform: 'sleeper',
-            platformLeagueId: 'sleeper-123',
-          },
-        ],
-      },
+    expect(tombstoneUpsertMock.mock.calls[0][0].create).toMatchObject({
+      userId: 'user-1',
+      platform: 'sleeper',
+      platformLeagueId: 'sleeper-123',
     })
-
-    expect(sleeperLeagueDeleteManyMock).toHaveBeenCalledWith({
-      where: {
-        userId: 'user-1',
-        OR: [{ id: 'lg-1' }, { sleeperLeagueId: 'sleeper-123' }],
-      },
-    })
-
-    expect(transactionMock).toHaveBeenCalledTimes(1)
+    expect(transactionMock).not.toHaveBeenCalled()
+    expect(leagueDeleteManyMock).not.toHaveBeenCalled()
+    expect(sleeperLeagueDeleteManyMock).not.toHaveBeenCalled()
   })
 
   it('deletes linked rows when request id matches sleeper league row', async () => {
