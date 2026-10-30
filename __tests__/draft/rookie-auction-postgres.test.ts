@@ -1,7 +1,11 @@
 // @vitest-environment node
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
-const mocks = vi.hoisted(() => ({ order: [] as Array<{ slot: number; rosterId: string; displayName: string }> }))
+const mocks = vi.hoisted(() => ({ order: [] as Array<{ slot: number; rosterId: string; displayName: string }>, finalize: vi.fn(async () => {}) }))
+vi.mock('@/lib/draft/draftLock', () => ({ withAuctionLock: async (_id: string, run: () => Promise<unknown>) => ({ acquired: true, value: await run() }) }))
+vi.mock('@/lib/league/league-roster-draft-gate', () => ({ isLeagueRosterDraftReady: async () => true }))
+vi.mock('@/lib/live-draft-engine/postDraftFinalizeArtifacts', () => ({ runPostDraftFinalizationArtifacts: mocks.finalize }))
+vi.mock('@/lib/live-draft-engine/serverRookieStatus', () => ({ isRookieRestrictedPlayerPool: (pool: string) => pool === 'rookies_only', resolveServerRookieStatus: async () => true, isEligibleForPlayerPool: (_pool: string, status: boolean | null) => status !== false }))
 vi.mock('@/lib/live-draft-engine/DraftSessionService', () => ({ buildSlotOrderForLeague: async () => mocks.order }))
 vi.mock('@/lib/redraft/offseason/carryDynastyRosters', async original => ({ ...await original<typeof import('@/lib/redraft/offseason/carryDynastyRosters')>(), carryDynastyRostersForward: async () => ({ playersCopied: 0 }) }))
 vi.mock('@/lib/rookie-order/automaticRookieOrder', () => ({ automaticRookieOrderMethod: async () => null }))
@@ -10,6 +14,7 @@ vi.mock('@/lib/draft-lottery/rookieDraftLottery', () => ({ ensureRookieDraftLott
 vi.mock('@/server/services/auditService', () => ({ logAction: async () => null }))
 import { prisma } from '@/lib/prisma'
 import { createNextLeagueDraft } from '@/lib/live-draft-engine/createNextLeagueDraft'
+import { buildInitialAuctionSessionUpdate, nominatePlayer, placeBid, resolveAuctionWin } from '@/lib/live-draft-engine/auction/AuctionEngine'
 import { consumeNativeFuturePicksForDraft, lockNativeFuturePicks, transferNativeFuturePick } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { planRookieAuction } from '@/lib/live-draft-engine/auction/rookieAuctionPickPolicy'
 
@@ -61,7 +66,7 @@ pilot('rookie auction pick settlement on isolated Postgres', () => {
         { leagueId: id, sport: 'NFL', season: 2027, status: 'complete', totalWeeks: 14, playoffStartWeek: 15 },
         { leagueId: id, sport: 'NFL', season: 2028, status: 'setup', totalWeeks: 14, playoffStartWeek: 15 },
       ] })
-      await prisma.dynastyLeagueConfig.create({ data: { leagueId: id, rookieDraftType: 'auction', rookieDraftRounds: 2, rookiePickOrderMethod: 'commissioner' } })
+      await prisma.dynastyLeagueConfig.create({ data: { leagueId: id, rookieDraftType: 'auction', rookieDraftRounds: 1, rookiePickOrderMethod: 'commissioner' } })
       await prisma.draftSession.create({ data: { leagueId: id, status: 'completed', draftType: 'snake', rounds: 2, teamCount: 2, slotOrder: order, completedAt: new Date('2027-01-01') } })
       const pick = await prisma.futureDraftPick.create({ data: { leagueId: id, pickSeason: 2028, round: 1, originalRosterId: order[0]!.rosterId, currentOwnerId: order[1]!.rosterId, traded: true } })
       expect(await createNextLeagueDraft(id, userId)).toMatchObject({ ok: false, code: 'ROOKIE_AUCTION_PICKS_UNRESOLVED' })
@@ -75,6 +80,22 @@ pilot('rookie auction pick settlement on isolated Postgres', () => {
       expect(created).toMatchObject({ draftType: 'auction', playerPool: 'rookies_only', auctionBudgetPerTeam: 20 })
       expect(created.auctionState).toMatchObject({ rookieAuction: { policy: 'budget', trades: [{ originalRosterId: order[0]!.rosterId, newRosterId: order[1]!.rosterId }] } })
       expect(await prisma.futureDraftPick.findUniqueOrThrow({ where: { id: pick.id } })).toMatchObject({ status: 'used', usedInDraftSessionId: created.id })
+      const initial = await buildInitialAuctionSessionUpdate(id, created)
+      expect(initial.auctionBudgets).toEqual({ [order[0]!.rosterId]: 14, [order[1]!.rosterId]: 26 })
+      await prisma.league.update({ where: { id }, data: { lifecycleState: 'drafting' } })
+      await prisma.draftSession.update({ where: { id: created.id }, data: { ...initial, status: 'in_progress' } })
+      expect(await nominatePlayer(id, { playerId: 'rookie-1', playerName: 'Rookie One', position: 'RB', team: 'NYG' }, order[0]!.rosterId)).toMatchObject({ success: true })
+      expect(await placeBid(id, order[1]!.rosterId, 3)).toMatchObject({ success: true })
+      expect(await resolveAuctionWin(id, { force: true })).toMatchObject({ success: true, sold: true, winnerRosterId: order[1]!.rosterId })
+      expect(await nominatePlayer(id, { playerId: 'rookie-2', playerName: 'Rookie Two', position: 'WR', team: 'SEA' }, order[1]!.rosterId)).toMatchObject({ success: true })
+      expect(await placeBid(id, order[0]!.rosterId, 2)).toMatchObject({ success: true })
+      expect(await resolveAuctionWin(id, { force: true })).toMatchObject({ success: true, sold: true, winnerRosterId: order[0]!.rosterId })
+      const final = await prisma.draftSession.findUniqueOrThrow({ where: { id: created.id }, include: { picks: { orderBy: { overall: 'asc' } } } })
+      expect(final.status).toBe('completed')
+      expect(final.auctionBudgets).toEqual({ [order[0]!.rosterId]: 12, [order[1]!.rosterId]: 23 })
+      expect(final.picks.map(row => row.rosterId)).toEqual([order[1]!.rosterId, order[0]!.rosterId])
+      expect((await prisma.league.findUniqueOrThrow({ where: { id } })).lifecycleState).toBe('post_draft')
+      expect(mocks.finalize).toHaveBeenCalledWith(id)
     } finally {
       await prisma.league.deleteMany({ where: { id } })
       await prisma.appUser.deleteMany({ where: { id: userId } })
