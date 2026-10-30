@@ -100,7 +100,7 @@ describe('GET', () => {
     m.league = { ...NFL, leagueType: 'dynasty', draftPickTrading: true, settings: { pick_trade_deadline: { mode: 'open' } } }
     const body = await (await GET(req(), ctx)).json()
     expect(body.format).toBe('dynasty')
-    expect(body.sections.map((s: { id: string }) => s.id)).toEqual(['overview', 'scoring', 'dynasty', 'playoffs', 'trades', 'waivers'])
+    expect(body.sections.map((s: { id: string }) => s.id)).toEqual(['overview', 'scoring', 'lineups', 'dynasty', 'playoffs', 'trades', 'waivers'])
   })
 
   it('a member who has not seen the rules gets the popup', async () => {
@@ -108,7 +108,7 @@ describe('GET', () => {
     expect(body.supported).toBe(true)
     expect(body.showRulesPopup).toBe(true)
     expect(body.isCommissioner).toBe(false)
-    expect(body.sections.map((s: { id: string }) => s.id)).toEqual(['overview', 'scoring', 'playoffs', 'trades', 'waivers'])
+    expect(body.sections.map((s: { id: string }) => s.id)).toEqual(['overview', 'scoring', 'lineups', 'playoffs', 'trades', 'waivers'])
   })
 
   it('a member who has seen them gets a card for a newer commissioner change, unless broadcasts are off', async () => {

@@ -15,6 +15,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveRosterDisplayNames } from '@/lib/guillotine/rosterDisplayNames'
 import { getGuillotineSportConfig, getNextChopTime, getNextWaiverTime } from '@/lib/guillotine/sportConfig'
 import { getLiveDangerTiers } from '@/lib/guillotine/chopWatchLoad'
+import { claimedPlayerIds } from '@/lib/guillotine/choppedReleases'
 
 export interface GuillotineHomeChopped {
   rosterId: string
@@ -117,6 +118,8 @@ export async function buildGuillotineHomeExtras(
         take: 40,
       })
       .catch(() => [])
+    // Nothing updates a row when a claim lands: a player on a team again reads as claimed.
+    const claimed = await claimedPlayerIds(leagueId, releaseRows.map((r) => r.playerId)).catch(() => new Set<string>())
     lastChop = {
       week: lastWeek,
       bottom: bottom.map((b) => ({ ...b, name: nameOf(b.rosterId) })),
@@ -127,7 +130,7 @@ export async function buildGuillotineHomeExtras(
         position: (r.position || '').toUpperCase(),
         team: r.team ?? null,
         availableAt: r.availableAt ? r.availableAt.toISOString() : null,
-        status: r.releaseStatus,
+        status: claimed.has(r.playerId) ? 'claimed' : r.releaseStatus,
       })),
     }
   }
