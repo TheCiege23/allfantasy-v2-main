@@ -124,7 +124,8 @@ describe('DraftBoardCell — Sleeper-style tiles (2026-10-28)', () => {
   })
 
   it('board columns fill the width with a 84px floor, and gaps are 2px', () => {
-    expect(boardSrc).toMatch(/const BOARD_COLUMN = 'minmax\(84px, 1fr\)'/)
+    // Phones cap the track via --af-board-col-max (2026-10-29); md+ leaves it unset, so 1fr fills.
+    expect(boardSrc).toMatch(/const BOARD_COLUMN = 'minmax\(84px, var\(--af-board-col-max, 1fr\)\)'/)
     expect(boardSrc).toMatch(/grid gap-\[2px\]/)
   })
 
