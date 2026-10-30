@@ -115,7 +115,12 @@ export async function POST(
     return NextResponse.json({ error: 'Rights not found' }, { status: 404 })
   }
 
-  if (!(await canSubmitPickForRoster(leagueId, userId, right.rosterId))) {
+  const canManageRoster = await canSubmitPickForRoster(leagueId, userId, right.rosterId)
+    || Boolean(await prisma.leagueTeam.findFirst({
+      where: { leagueId, externalId: right.rosterId, claimedByUserId: userId },
+      select: { id: true },
+    }))
+  if (!canManageRoster) {
     return NextResponse.json({ error: 'Only the rights holder or commissioner can promote' }, { status: 403 })
   }
 
