@@ -179,7 +179,7 @@ export function LeagueSettingsHomeContainer({
 
   const renderSubPage = useCallback(
     (id: SettingsSubPageId): SettingsSubPageRender | null => {
-      if (!ctx.isCommissioner) return null
+      if (!ctx.isCommissioner && id !== 'previous-leagues') return null
       if (id === 'survivor-tribes') {
         return {
           title: SUB_PAGE_TITLES[id],

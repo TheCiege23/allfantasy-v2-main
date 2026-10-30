@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterService'
 import { getFormatTypeForVariant } from '@/lib/sport-defaults/LeagueVariantRegistry'
 import { validateCanonicalRosterPayload } from '@/lib/roster-lineup-engine/rosterValidationService'
@@ -30,7 +31,7 @@ export async function POST(
     where: { leagueId, platformUserId: session.user.id },
     select: { id: true },
   })
-  if (!isComm && !memberRoster) {
+  if (!isComm && !memberRoster && !await acceptedCoOwnerRosterId(leagueId, session.user.id)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

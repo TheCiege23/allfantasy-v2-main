@@ -11,6 +11,8 @@ import type { RuleChange, RuleKey, RuleSnapshot } from './types'
  */
 export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'teamCount',
+  'feederScoring', 'feederRosterSize', 'feederBenchSize', 'feederWaiverType',
+  'feederFaabBudget', 'feederFaabReset', 'feederTradeDeadline', 'feederTradeLockHours',
   'scoringMode',
   'scoringPreset',
   'categoryRecordMode',
@@ -26,6 +28,7 @@ export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'tradeDeadlineWeek',
   'tradeDeadlineAt',
   'tradeReview',
+  'vetoThreshold',
   'tradeReviewHours',
   'waiverType',
   'waiverBudget',

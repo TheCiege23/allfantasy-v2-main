@@ -35,6 +35,8 @@ const NAV_GROUPS: ReadonlyArray<{ title: string; items: ReadonlyArray<NavItem> }
       { id: 'general', label: 'General' },
       { id: 'format', label: 'League format' },
       { id: 'members', label: 'Managers & invites' },
+      { id: 'team-settings', label: 'Team settings' },
+      { id: 'previous-leagues', label: 'Previous Leagues' },
       { id: 'co-commissioners', label: 'Co-commissioners' },
       { id: 'divisions', label: 'Divisions' },
     ],

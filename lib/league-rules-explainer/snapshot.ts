@@ -1,3 +1,5 @@
+import { readVetoRule } from '@/lib/league-trade-engine/vetoRule'
+import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 /**
  * Build a league's RuleSnapshot (./types.ts) from the stored rows. No database access here: the
  * read path (./load.ts) passes the extras it fetched, and the settings save passes the league row it
@@ -95,6 +97,7 @@ const SPECIALTY_CONCEPTS: Record<string, RulesConcept> = {
   big_brother: 'big_brother',
   zombie: 'zombie',
   tournament: 'tournament',
+  tournament_mode: 'tournament',
   salary_cap: 'salary_cap',
   contract_dynasty: 'salary_cap',
   king_of_the_hill: 'king_of_the_hill',
@@ -212,6 +215,12 @@ export function waiverRulesFromEffective(e: {
   return out
 }
 
+/** Read the same effective veto rule used by the native trade engine. */
+export function effectiveVetoRule(settings: unknown) {
+  const snapshot = parseSettingsSnapshot(settings)
+  return readVetoRule(settings, snapshot?.conceptRules?.extensions?.vetoThresholdPercent)
+}
+
 /** The trade review the popup shows. Exported for saves that write it outside the settings patch. */
 export function tradeReviewMode(settings: Record<string, unknown>): string | null {
   const json = record(settings.settingsJson)
@@ -257,6 +266,7 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
     tradeDeadlineWeek: posInt(row.tradeDeadlineWeek),
     tradeDeadlineAt: deadlineAt ? deadlineAt.toISOString() : null,
     tradeReview: tradeReviewMode(settings),
+    vetoThreshold: effectiveVetoRule(row.settings),
     tradeReviewHours: nonNegNumber(row.tradeReviewHours),
     waiverType: normalizedWaiverType(row.waiverType),
     waiverBudget: nonNegNumber(row.waiverBudget),

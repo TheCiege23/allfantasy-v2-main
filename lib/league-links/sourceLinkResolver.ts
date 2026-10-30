@@ -304,6 +304,21 @@ const PROVIDERS: Record<SourcePlatform, ProviderConfig> = {
       const fx = normalizeFantraxLeagueId(id)
       return fx ? `${PROVIDERS.fantrax.homepage}/fantasy/league/${encodeURIComponent(fx)}/home` : null
     },
+    screens: {
+      /*
+       * UNVERIFIED — a `candidate` only, never a destination, so a "Fix lineup" button keeps landing
+       * on the league page above. Flip `verified` in the same change that records the league and the
+       * signed-in account it was opened on and landed on that account's own lineup (VERIFIED_SCREENS
+       * is pinned by a test, which fails if this flips without that record).
+       */
+      lineup: {
+        verified: false,
+        build: ({ leagueId }) => {
+          const fx = normalizeFantraxLeagueId(leagueId)
+          return fx ? `${PROVIDERS.fantrax.homepage}/fantasy/league/${encodeURIComponent(fx)}/team/roster` : null
+        },
+      },
+    },
   },
   fleaflicker: {
     key: 'fleaflicker',

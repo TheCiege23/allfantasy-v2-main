@@ -104,6 +104,11 @@ describe('the commissioner settings save', () => {
     expect(card(changes, 'es')).toBe('Revisión de intercambios: Revisión del comisionado → Votación de la liga — Los miembros de la liga pueden votar para vetar un intercambio antes de que se haga efectivo.')
   })
 
+  it('publishes the effective veto rule when the commissioner changes its threshold', async () => {
+    await updateLeagueSettings('L1', { vetoThreshold: 6, vetoThresholdMode: 'count' }, 'boss')
+    expect(published()).toEqual([{ key: 'vetoThreshold', before: { mode: 'count', value: 4 }, after: { mode: 'count', value: 6 } }])
+  })
+
   it('saving the mode the league already has publishes no change', async () => {
     await updateLeagueSettings('L1', { tradeReviewType: 'commissioner' }, 'boss')
     expect(published()).toEqual([])
@@ -124,6 +129,12 @@ describe('the commissioner league PATCH route', () => {
     m.update.mockImplementation((args: unknown) => ({ __update: args }))
     m.updateMany.mockImplementation((args: unknown) => ({ __updateMany: args }))
     m.transaction.mockResolvedValue([{ id: 'L1', name: 'L', settings: { trade_review_mode: 'instant' }, updatedAt: new Date(0) }, { count: 1 }])
+  })
+
+  it('publishes threshold changes from the commissioner PATCH route', async () => {
+    const res = await commissionerPatch(new NextRequest('http://x/api/commissioner/leagues/L1', { method: 'PATCH', body: JSON.stringify({ vetoThreshold: 60, vetoThresholdMode: 'percent' }) }), { params: Promise.resolve({ leagueId: 'L1' }) })
+    expect(res.status).toBe(200)
+    expect(published()).toEqual([{ key: 'vetoThreshold', before: { mode: 'count', value: 4 }, after: { mode: 'percent', value: 60 } }])
   })
 
   it('takes the same path: one transaction, the card, and the updated row back', async () => {

@@ -42,4 +42,7 @@ export function kickoffText(text: string | null | undefined, language: string): 
     // "Oct 4" — month then day.
     .replace(new RegExp(`\\b${MO} (\\d{1,2})\\b`, 'g'), (_, mo: string, d: string) => `${d} ${MONTH_ES[mo]}`)
     .replace(/^Locked$/, 'Bloqueado')
+    // A weekly NBA / NHL / MLB row's game line (lib/core-app/myTeamDailySport.ts `dailyGameContext`).
+    .replace(/^(\d+) games? this week$/, (_, n: string) => `${n} ${n === '1' ? 'partido' : 'partidos'} esta semana`)
+    .replace(/^no games this week$/, 'sin partidos esta semana')
 }

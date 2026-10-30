@@ -51,8 +51,7 @@ import { rotatingBatch } from '@/lib/redraft/scoreSyncBatch'
  * Every step checks `shouldStop` (the invocation's shared run budget) before starting the next
  * unit of work, so a slow night cannot run the tick past its cron interval.
  *
- * NBA runs by default; NHL/MLB remain opt-in. `resolveDailyLiveSports` returns nothing unless `DAILY_SPORT_LIVE_SCORING` is set,
- * and an explicit off value issues no query at all.
+ * NBA, NHL and MLB run by default; an explicit off value issues no query at all.
  */
 
 export const DAILY_LIVE_SPORTS = ['NBA', 'NHL', 'MLB'] as const
@@ -81,12 +80,12 @@ export const MAX_GAME_LENGTH_MS: Record<DailyLiveSport, number> = {
 export const DAILY_LIVE_MAX_SEASONS_PER_SPORT = 25
 
 /**
- * The flag. Unset / empty → NBA. Explicit `0` / `false` / `off` → nothing enabled.
+ * The flag. Unset / empty → all supported sports. Explicit `0` / `false` / `off` → nothing enabled.
  * `1` / `true` / `on` / `all` → NBA, NHL and MLB. Otherwise a comma list of those three.
  */
 export function resolveDailyLiveSports(env: Record<string, string | undefined> = process.env): DailyLiveSport[] {
   const raw = env.DAILY_SPORT_LIVE_SCORING?.trim().toLowerCase() ?? ''
-  if (!raw) return ['NBA']
+  if (!raw) return [...DAILY_LIVE_SPORTS]
   if (['0', 'false', 'off', 'no'].includes(raw)) return []
   if (['1', 'true', 'on', 'yes', 'all'].includes(raw)) return [...DAILY_LIVE_SPORTS]
   const wanted = new Set(raw.split(',').map((s) => s.trim().toUpperCase()))
@@ -98,6 +97,13 @@ export function resolveDailyLiveIntervalMs(env: Record<string, string | undefine
   const seconds = Number(env.DAILY_SPORT_LIVE_INTERVAL_SECONDS)
   if (!Number.isFinite(seconds) || seconds <= 0) return DAILY_LIVE_DEFAULT_INTERVAL_MS
   return Math.min(MAX_INTERVAL_MS, Math.max(MIN_INTERVAL_MS, Math.round(seconds * 1000)))
+}
+
+/** Rotate the first sport each cadence so a busy slate cannot repeatedly exhaust the shared budget. */
+export function rotateDailyLiveSports(sports: readonly DailyLiveSport[], nowMs: number, intervalMs: number): DailyLiveSport[] {
+  if (sports.length < 2) return [...sports]
+  const first = Math.floor(nowMs / Math.max(1, intervalMs)) % sports.length
+  return [...sports.slice(first), ...sports.slice(0, first)]
 }
 
 const NOT_LIVE_STATUS = /final|complete|postpon|cancel|abandon|forfeit/i
@@ -246,7 +252,7 @@ export async function runDailySportLiveTick(opts: {
   }
   const changed: DailyLiveSport[] = []
 
-  for (const sport of opts.sports) {
+  for (const sport of rotateDailyLiveSports(opts.sports, now.getTime(), intervalMs)) {
     const outcome: DailySportOutcome = {
       status: 'deferred',
       dates: [],

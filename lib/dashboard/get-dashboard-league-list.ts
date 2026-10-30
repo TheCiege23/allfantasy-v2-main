@@ -3,6 +3,7 @@
  * immediately without waiting for a client-side fetch.
  */
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId, coOwnerTableMissing } from '@/lib/team-coowners/access'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
 import { isRealLeague, EXCLUDED_VARIANTS } from '@/lib/leagues/leagueListFilter'
 import { resolveLeagueListSeasonYear } from '@/lib/leagues/resolveLeagueListSeasonYear'
@@ -13,6 +14,12 @@ import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { tombstoneLookupKey } from '@/lib/league-delete/leagueTombstones'
 
 const VARIANT_NOT_IN = Array.from(EXCLUDED_VARIANTS)
+
+async function validCoOwnedLeagues(userId: string): Promise<string[]> {
+  const invitations = await prisma.teamCoOwner?.findMany({ where: { userId, acceptedAt: { not: null } }, select: { leagueId: true } }).catch((error: unknown) => { if (coOwnerTableMissing(error)) return []; throw error }) ?? []
+  const verified = await Promise.all(invitations.map(async ({ leagueId }) => await acceptedCoOwnerRosterId(leagueId, userId) ? leagueId : null))
+  return verified.filter((id): id is string => id !== null)
+}
 
 /**
  * `NOT (sleeper import-shaped)` sub-clause shared by the full dashboard list and the lean activity
@@ -56,7 +63,8 @@ const NOT_SLEEPER_IMPORT_SHAPED = {
  * that already skips `hasUnifiedRecord === false` rows.
  */
 export async function getActivityLeaguesForUser(userId: string): Promise<ActivityLeagueEntry[]> {
-  const [nativeLeagues, sleeperLeagues] = await Promise.all([
+  const coOwnedLeagueIds = await validCoOwnedLeagues(userId)
+  const [nativeLeagues, sleeperLeagues, removedKeys] = await Promise.all([
     (prisma as any).league
       .findMany({
         where: {
@@ -89,6 +97,7 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
                 { rosters: { some: { platformUserId: userId } } },
+                { id: { in: coOwnedLeagueIds } },
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
@@ -127,6 +136,7 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
         console.error('[Activity Leagues] sleeper leagues query failed', err)
         return [] as Array<Record<string, unknown>>
       }),
+    removedLeagueKeysFor(userId),
   ])
 
   const native: ActivityLeagueEntry[] = (nativeLeagues as Array<Record<string, unknown>>)
@@ -140,6 +150,10 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
         settings: lg.settings,
       }),
     )
+    .filter((lg) =>
+      !isImportedPlatform(lg.platform as string | null) ||
+      !removedKeys.has(tombstoneLookupKey(String(lg.platform ?? ''), String(lg.platformLeagueId ?? ''))),
+    )
     .map((lg) => ({
       id: lg.id as string,
       name: (lg.name as string | null) ?? undefined,
@@ -150,7 +164,9 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
       sport: (lg.sport as string | null) ?? null,
     }))
 
-  const sleeper: ActivityLeagueEntry[] = (sleeperLeagues as Array<Record<string, unknown>>).map((lg) => ({
+  const sleeper: ActivityLeagueEntry[] = (sleeperLeagues as Array<Record<string, unknown>>)
+    .filter((lg) => !removedKeys.has(tombstoneLookupKey('sleeper', String(lg.sleeperLeagueId ?? ''))))
+    .map((lg) => ({
     id: lg.id as string,
     name: (lg.name as string | null) ?? undefined,
     platform: 'sleeper',
@@ -509,6 +525,7 @@ export async function getDashboardLeagueListForUser(
       .catch(() => null),
   ])
 
+  const coOwnedLeagueIds = await validCoOwnedLeagues(userId)
   const [genericLeaguesRead, sleeperLeagues, tournaments, legacyBoardItems, removedKeys] = await Promise.all([
     (prisma as any).league
       .findMany({
@@ -542,6 +559,7 @@ export async function getDashboardLeagueListForUser(
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
                 { rosters: { some: { platformUserId: userId } } },
+                { id: { in: coOwnedLeagueIds } },
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
@@ -686,12 +704,12 @@ export async function getDashboardLeagueListForUser(
   /*
    * A league someone else imported, which this viewer removed from their list (DELETE
    * /api/league/[id] writes only their tombstone for it — the league is shared, so nothing is
-   * deleted). Their own copies need no filter: those rows are gone. Native leagues are never
-   * tombstoned by that route, and the check is imported-only so a stray key cannot hide one.
+   * deleted). Viewer-owned imported rows can also be shared through claims, so their
+   * tombstones hide the row without deleting it. Native leagues are never tombstoned by
+   * that route, and the check is imported-only so a stray key cannot hide one.
    */
   const genericLeagues = (genericLeaguesRead as Array<{ userId?: unknown; platform?: unknown; platformLeagueId?: unknown }>).filter(
     (lg) =>
-      String(lg.userId ?? '') === userId ||
       !isImportedPlatform(String(lg.platform ?? '')) ||
       !removedKeys.has(tombstoneLookupKey(String(lg.platform ?? ''), String(lg.platformLeagueId ?? ''))),
   ) as any[]
@@ -825,6 +843,7 @@ export async function getDashboardLeagueListForUser(
   })
 
   const normalizedSleeper = sleeperLeagues
+    .filter((lg: any) => !removedKeys.has(tombstoneLookupKey('sleeper', String(lg.sleeperLeagueId ?? ''))))
     .map((lg: any) => {
       const unifiedLeagueId = unifiedSleeperLeagueIdMap.get(lg.sleeperLeagueId) ?? null
       return {

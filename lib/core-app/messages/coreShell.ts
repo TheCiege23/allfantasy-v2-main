@@ -62,6 +62,10 @@ export const coreShellMessages = defineMessages({
     leagueUpdates: 'League updates',
     nativeChangesSave: 'Changes save to AllFantasy.',
     platformLineupChanges: 'Make lineup changes on your league’s platform.',
+    // The updates menu's handoff to the open league's platform (lib/core-app/shellLineupHandoff.ts).
+    readOnlyChangesIn: (platform: string) => `AllFantasy only reads this league — changes are made in ${platform}.`,
+    fixLineupIn: (platform: string) => `Fix lineup in ${platform}`,
+    openLeagueIn: (platform: string) => `Open league in ${platform}`,
     tokensLeft: 'tokens left',
     planTokens: 'Plan tokens',
     planTokensBody:
@@ -124,6 +128,9 @@ export const coreShellMessages = defineMessages({
     leagueUpdates: 'Actualizaciones de liga',
     nativeChangesSave: 'Los cambios se guardan en AllFantasy.',
     platformLineupChanges: 'Cambia la alineación en la plataforma de tu liga.',
+    readOnlyChangesIn: (platform) => `AllFantasy solo lee esta liga: los cambios se hacen en ${platform}.`,
+    fixLineupIn: (platform) => `Arreglar la alineación en ${platform}`,
+    openLeagueIn: (platform) => `Abrir la liga en ${platform}`,
     tokensLeft: 'tokens restantes',
     planTokens: 'Tokens del plan',
     planTokensBody:

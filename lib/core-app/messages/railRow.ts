@@ -1,8 +1,7 @@
 import { defineMessages } from '@/lib/i18n/messages'
 
 /**
- * One league row in the league rail (components/core-app/RailRowBody.tsx). Every string is the one the
- * row printed before the move, byte for byte, in both languages — this is a relocation, not a rewrite.
+ * One league row in the league rail (components/core-app/RailRowBody.tsx).
  */
 
 /** 1st, 2nd, 3rd, 4th … and 11th/12th/13th, which are the ones a naive rule gets wrong. */
@@ -19,12 +18,14 @@ function ordinal(n: number): string {
 export const railRowMessages = defineMessages({
   en: {
     /* RailSide — the projection tooltip. `genericPpr` is "afProjected == null". */
-    sideTitle: (provider: string, pricedFrom: number, starterCount: number, genericPpr: boolean, afEngineFrom: number): string =>
-      `Weekly baseline projection — ${provider} (SLPR): ${provider}’s projection from ${pricedFrom} of ${starterCount} starters${
+    sideTitle: (provider: string, pricedFrom: number, starterCount: number, genericPpr: boolean): string =>
+      `Weekly baseline projection — ${provider}’s projection from ${pricedFrom} of ${starterCount} starters${
         genericPpr
           ? ', generic PPR because this league’s scoring could not be re-scored'
           : ', re-scored with this league’s settings'
-      } · AF: AllFantasy engine from ${afEngineFrom} of ${starterCount} starters · live score is shown separately`,
+      } · live score is shown separately`,
+    /* The small label in front of each side's projected total. */
+    projShort: 'proj',
     /* RailStanding */
     noHeadToHead: 'no head-to-head — rank not yet measurable',
     tiedPrefix: 'T-',
@@ -57,26 +58,56 @@ export const railRowMessages = defineMessages({
     aboveChop: (margin: string) => `+${margin} above chop`,
     alive: 'alive',
     /* RailRowBody */
-    week: 'Week',
     syncPaused: 'Sync paused',
     updatesDelayed: 'Updates delayed',
     lastResult: 'Last result',
-    colLast: 'LAST',
-    colScore: 'SCORE',
-    providerProjection: (provider: string) => `${provider} projection`,
-    afEngineProjection: 'AllFantasy engine projection',
+    /* Between the two managers of a head-to-head. */
+    vs: 'VS',
+    /* The pill beside a league whose scores are moving right now. */
+    live: 'LIVE',
+    /* Flags on a league that needs you (urgencyBadges.ts). */
+    fixLineup: 'Fix lineup',
+    tradeOffer: 'Trade offer',
+    /* The head-to-head's tooltip: a tap there opens the Matchup screen. */
+    openMatchup: 'Open matchup',
+    /* The odds bar's accessible name. */
+    winOdds: (pct: number) => `${pct}% chance to win`,
+    /* Appended to a flagged league row's accessible name, which the visible flags sit inside. */
+    attentionAria: (lineup: boolean, offer: boolean) =>
+      `${lineup ? ', lineup needs fixing' : ''}${offer ? ', trade offer waiting' : ''}`,
+    /* Appended to a row's accessible name when its league chat has unread messages. */
+    unreadAria: (count: string) => `, ${count} unread chat ${count === '1' ? 'message' : 'messages'}`,
+    /* The favorites section at the top of the list (pinned leagues). */
+    favoritesHeading: 'Favorites',
+    favoritesShort: 'Favorites',
+    sectionToggleAria: (name: string, count: number, folded: boolean) =>
+      `${name}, ${count} ${count === 1 ? 'league' : 'leagues'} — ${folded ? 'show' : 'hide'}`,
+    /* Filter chips above the list. */
+    filterGroupAria: 'Filter leagues',
+    filterLabel: (f: 'all' | 'live' | 'commissioner' | 'needs'): string =>
+      f === 'all' ? 'All' : f === 'live' ? 'Live' : f === 'commissioner' ? 'Commissioner' : 'Needs action',
+    holdHint: 'Press and hold a league (or right-click it) to pin it or move it.',
+    /* The Pin and Move sheet. */
+    menuTitle: (name: string) => `Options for ${name}`,
+    menuClose: 'Close',
+    pin: 'Pin to top',
+    unpin: 'Unpin',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    menuDone: 'Done',
     yourTeam: 'Your team',
     opponentNotNamed: 'opponent not named',
     espnUnavailable: 'Matchup unavailable from ESPN',
     matchupNotAvailable: 'Matchup not available yet',
   },
   es: {
-    sideTitle: (provider, pricedFrom, starterCount, genericPpr, afEngineFrom) =>
-      `Proyección base semanal — ${provider} (SLPR): proyección de ${provider} con ${pricedFrom} de ${starterCount} titulares${
+    sideTitle: (provider, pricedFrom, starterCount, genericPpr) =>
+      `Proyección base semanal — proyección de ${provider} con ${pricedFrom} de ${starterCount} titulares${
         genericPpr
           ? ', PPR genérico porque no se pudo recalcular con la puntuación de esta liga'
           : ', recalculada con la configuración de esta liga'
-      } · AF: motor de AllFantasy con ${afEngineFrom} de ${starterCount} titulares · el marcador en vivo se muestra aparte`,
+      } · el marcador en vivo se muestra aparte`,
+    projShort: 'proy',
     noHeadToHead: 'sin enfrentamiento directo: posición aún no medible',
     tiedPrefix: 'E-',
     rank: (n) => `#${n}`,
@@ -106,14 +137,33 @@ export const railRowMessages = defineMessages({
     tiedAtLine: 'empatado en la línea',
     aboveChop: (margin) => `+${margin} sobre el corte`,
     alive: 'vivo',
-    week: 'Semana',
     syncPaused: 'Sincronización en pausa',
     updatesDelayed: 'Actualizaciones retrasadas',
     lastResult: 'Último resultado',
-    colLast: 'ÚLT',
-    colScore: 'PTS',
-    providerProjection: (provider) => `Proyección de ${provider}`,
-    afEngineProjection: 'Proyección del motor de AllFantasy',
+    vs: 'VS',
+    live: 'EN VIVO',
+    fixLineup: 'Corregir la alineación',
+    tradeOffer: 'Oferta de intercambio',
+    openMatchup: 'Abrir el enfrentamiento',
+    winOdds: (pct) => `${pct}% de probabilidad de ganar`,
+    attentionAria: (lineup, offer) =>
+      `${lineup ? ', hay que corregir la alineación' : ''}${offer ? ', oferta de intercambio pendiente' : ''}`,
+    unreadAria: (count) => `, ${count} ${count === '1' ? 'mensaje' : 'mensajes'} de chat sin leer`,
+    favoritesHeading: 'Favoritas',
+    favoritesShort: 'Favoritas',
+    sectionToggleAria: (name, count, folded) =>
+      `${name}, ${count} ${count === 1 ? 'liga' : 'ligas'} — ${folded ? 'mostrar' : 'ocultar'}`,
+    filterGroupAria: 'Filtrar ligas',
+    filterLabel: (f) =>
+      f === 'all' ? 'Todas' : f === 'live' ? 'En vivo' : f === 'commissioner' ? 'Comisionado' : 'Requieren acción',
+    holdHint: 'Mantén pulsada una liga (o haz clic derecho) para fijarla o moverla.',
+    menuTitle: (name) => `Opciones de ${name}`,
+    menuClose: 'Cerrar',
+    pin: 'Fijar arriba',
+    unpin: 'Quitar de arriba',
+    moveUp: 'Subir',
+    moveDown: 'Bajar',
+    menuDone: 'Listo',
     yourTeam: 'Tu equipo',
     opponentNotNamed: 'rival sin nombre',
     espnUnavailable: 'ESPN no devolvió un calendario de enfrentamientos para esta liga',

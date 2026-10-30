@@ -1,5 +1,7 @@
 'use client'
 
+import { TeamCoOwnerPanel } from './settings/TeamCoOwnerPanel'
+
 import {
   ArrowLeft,
   CalendarDays,
@@ -1064,6 +1066,8 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
         </p>
       </div>
 
+      {native && ctx.userTeam.claimedByUserId === ctx.userId && ctx.userTeam.externalId && <TeamCoOwnerPanel leagueId={ctx.league.id} rosterId={ctx.userTeam.externalId} />}
+
       {error ? (
         <p role="alert" className="text-[12px] text-[#fda4af]">
           {error}
@@ -1809,6 +1813,8 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
               leagueId={ctx.league.id}
               currentUserId={ctx.userId}
               leagueOwnerUserId={ctx.league.userId}
+          platform={ctx.league.platform}
+          leagueName={ctx.league.name}
             />
           </div>
         </div>

@@ -56,7 +56,8 @@ export function optimizeC2CCollegeBestBall(
 ): { totalPoints: number; starters: BestBallPlayerInput[] } {
   const collegeOnly = players.filter((p) => p.isNcaaDevy && !p.isProRookie)
   const adapterId = getC2CAdapterForSport(config.sport)
-  const slots = adapterId === 'nfl_c2c' ? NFL_C2C_COLLEGE_LINEUP_DEFAULT : NBA_C2C_COLLEGE_LINEUP_DEFAULT
+  const slots = config.collegeActiveLineupSlots ??
+    (adapterId === 'nfl_c2c' ? NFL_C2C_COLLEGE_LINEUP_DEFAULT : NBA_C2C_COLLEGE_LINEUP_DEFAULT)
 
   if (adapterId === 'nfl_c2c') {
     const byPos: Record<string, typeof collegeOnly> = { QB: [], RB: [], WR: [], TE: [] }
@@ -80,13 +81,13 @@ export function optimizeC2CCollegeBestBall(
         n++
       }
     }
-    take('QB', slots.QB ?? 1)
-    take('RB', slots.RB ?? 2)
-    take('WR', slots.WR ?? 3)
-    take('TE', slots.TE ?? 1)
+    take('QB', slots.QB ?? 0)
+    take('RB', slots.RB ?? 0)
+    take('WR', slots.WR ?? 0)
+    take('TE', slots.TE ?? 0)
     const flexPool = collegeOnly.filter((p) => !used.has(p.playerId) && ['RB', 'WR', 'TE'].includes(p.position?.toUpperCase() ?? ''))
     flexPool.sort((a, b) => b.points - a.points)
-    for (let i = 0; i < (slots.FLEX ?? 2) && i < flexPool.length; i++) {
+    for (let i = 0; i < (slots.FLEX ?? 0) && i < flexPool.length; i++) {
       used.add(flexPool[i].playerId)
       starters.push(flexPool[i])
     }
@@ -125,12 +126,12 @@ export function optimizeC2CCollegeBestBall(
       n++
     }
   }
-  take('G', slots.G ?? 2)
-  take('F', slots.F ?? 2)
-  take('C', slots.C ?? 1)
+  take('G', slots.G ?? 0)
+  take('F', slots.F ?? 0)
+  take('C', slots.C ?? 0)
   const flexPool = withSlot.filter((p) => !used.has(p.playerId))
   flexPool.sort((a, b) => b.points - a.points)
-  for (let i = 0; i < (slots.FLEX ?? 2) && i < flexPool.length; i++) {
+  for (let i = 0; i < (slots.FLEX ?? 0) && i < flexPool.length; i++) {
     used.add(flexPool[i].playerId)
     starters.push(flexPool[i])
   }

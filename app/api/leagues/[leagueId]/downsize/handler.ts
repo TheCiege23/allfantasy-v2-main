@@ -11,6 +11,7 @@ import { isLeagueEligibleForDispersalDraft } from '@/lib/league/dispersal-draft-
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -210,6 +211,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
         lastDownsizeSourceRosterIds: sourceRosterIds,
       }),
     },
+  })
+
+  await publishRuleChangesEvent({
+    leagueId,
+    actorUserId: userId,
+    section: 'league-size',
+    changes: league.leagueSize === newTeamCount ? [] : [{ key: 'teamCount', before: league.leagueSize, after: newTeamCount }],
   })
 
   return NextResponse.json({

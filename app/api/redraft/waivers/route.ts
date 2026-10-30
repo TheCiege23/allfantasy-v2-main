@@ -1,4 +1,5 @@
 import { loadWaiverPhasePolicy } from '@/lib/waiver-wire/season-phase-gate'
+import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
     select: { ownerId: true },
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-  if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(season.leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const phasePolicy = await loadWaiverPhasePolicy(leagueId, null)
   if (!phasePolicy.claimsAllowed) return NextResponse.json({ error: phasePolicy.reason, code: phasePolicy.code }, { status: 409 })
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
     select: { ownerId: true, waiverPriority: true },
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-  if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // The commissioner's move lock, which the waiver screen's claim path (assertWaiverClaimEligibility) and the
   // NFL runtime already refuse under. This route has no UI caller; without it a claim was queued anyway.
@@ -174,7 +175,7 @@ export async function DELETE(req: NextRequest) {
     select: { ownerId: true },
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-  if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(c.leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (c.status !== 'pending') return NextResponse.json({ error: 'Only pending claims can be cancelled' }, { status: 409 })
 
   await prisma.redraftWaiverClaim.update({
@@ -184,4 +185,3 @@ export async function DELETE(req: NextRequest) {
 
   return NextResponse.json({ ok: true })
 }
-

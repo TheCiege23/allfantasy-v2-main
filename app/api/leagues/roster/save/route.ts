@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -117,12 +118,13 @@ export async function POST(req: NextRequest) {
     where: { leagueId, platformUserId: userId },
     select: { id: true },
   })
+  const coOwnerRosterId = memberRoster ? null : await acceptedCoOwnerRosterId(leagueId, userId)
   const canActAsCommissioner = league.userId === userId
-  if (!memberRoster && !canActAsCommissioner) {
+  if (!memberRoster && !coOwnerRosterId && !canActAsCommissioner) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  let targetRosterId = rosterIdInput ?? memberRoster?.id ?? null
+  let targetRosterId = rosterIdInput ?? memberRoster?.id ?? coOwnerRosterId ?? null
   if (!targetRosterId && canActAsCommissioner) {
     const firstRoster = await (prisma as any).roster.findFirst({
       where: { leagueId },
@@ -135,7 +137,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
   }
 
-  if (!canActAsCommissioner && memberRoster && targetRosterId !== memberRoster.id) {
+  if (!canActAsCommissioner && targetRosterId !== (memberRoster?.id ?? coOwnerRosterId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
