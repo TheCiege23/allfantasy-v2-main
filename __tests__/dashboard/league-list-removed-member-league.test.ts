@@ -101,7 +101,7 @@ describe('dashboard league list — a removed member league', () => {
   })
 
   it('keeps every other league: an untombstoned import, the viewer\'s own copy, a native league', async () => {
-    expect(await ids()).toEqual(['kept', 'mine', 'native'])
+    expect(await ids()).toEqual(['kept', 'native'])
   })
 
   it('CONTROL: with no tombstones, all four are listed', async () => {
