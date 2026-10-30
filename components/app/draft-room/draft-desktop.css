@@ -10,6 +10,6 @@
   }
 
   .draft-touch-room[data-player-space-priority="true"] [data-testid="draft-premium-main-zones"][data-dock-expanded="true"] {
-    min-height: min(360px, 55dvh);
+    min-height: min(400px, 58dvh);
   }
 }
