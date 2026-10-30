@@ -183,6 +183,15 @@ export const standingsBoardMessages = defineMessages({
       `’s simulation of the rest of the season (${runs} runs), which seeds on wins then points for. “In” and “Out” are printed only where this table’s own arithmetic has settled it.`,
     luckNote: (medianGames: boolean) =>
       `Expected wins count, each week, the share of the league a team outscored. Luck is actual head-to-head wins minus expected wins${medianGames ? ' (median games are not part of it)' : ''}.`,
+    /** The odds note's run count. */
+    numberLocale: 'en-US',
+    /**
+     * Why one team sits above another. The English is the model's own `explainOrder` sentence; a
+     * language that rebuilds it is handed the component's builder (called only for that language) and
+     * falls back to the English where the builder has nothing.
+     */
+    orderReason: (english: string, _rebuild: () => string): string => english,
+    tiebreak: (english: string, _rebuild: () => string | null): string => english,
   },
   es: {
     formLabel: (form) => `Últimos ${form.length}: ${form.map((r) => r === 'W' ? 'victoria' : r === 'L' ? 'derrota' : 'empate').join(', ')}`,
@@ -222,6 +231,9 @@ export const standingsBoardMessages = defineMessages({
       ` (${runs} simulaciones), que ordena por victorias y luego por puntos a favor. «Dentro» y «Fuera» solo aparecen cuando la propia aritmética de esta tabla lo ha decidido.`,
     luckNote: (medianGames) =>
       `Las victorias esperadas miden, cada semana, a qué parte de la liga superó un equipo. La suerte es la diferencia entre las victorias reales y las esperadas${medianGames ? '; no incluye partidos contra la mediana' : ''}.`,
+    numberLocale: 'es-ES',
+    orderReason: (_english, rebuild) => rebuild(),
+    tiebreak: (english, rebuild) => rebuild() ?? english,
   },
 })
 
