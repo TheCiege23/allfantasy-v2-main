@@ -55,6 +55,8 @@ const spanish: Record<string, string> = {
   'Your record': 'Tu historial',
   Manage: 'Administrar',
   'Create a league': 'Crear una liga',
+  'Exile Island': 'Isla del Exilio',
+  'Exile Island for': 'Isla del Exilio de',
   'Find a league': 'Buscar una liga',
   'Import a league': 'Importar una liga',
   'Mock draft': 'Draft simulado',
