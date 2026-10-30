@@ -38,6 +38,7 @@ import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, resolveSourceScreenLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { identityGapNote } from './identityGap'
+import { applyDailySportToLineup } from './myTeamDailySport'
 import { kickoffClock, LOCK_ZONE } from './lineupLock'
 import { readLineupGameDay, summariseStarterGameDay, type PlayerGameDay, type StarterGameDaySummary } from './myTeamGameDay'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
@@ -1210,6 +1211,17 @@ async function loadMyTeamData(
     scoringSettings,
     String(league.platform ?? '')
   ))
+
+  // NBA / NHL / MLB: projection and game from the daily-sport outlook — see lib/core-app/myTeamDailySport.ts.
+  // Before the bye pass and everything else that reads a projection; a no-op for every other sport.
+  await timing.read('projections', () =>
+    applyDailySportToLineup(resolved, {
+      sport,
+      season: league.season ?? null,
+      settings: league.settings,
+      platform: league.platform ?? null,
+    }).catch(() => undefined),
+  )
 
   /*
    * ⚠ THE BYE PASS RUNS HERE, BEFORE ANYTHING READS A PROJECTION. It ran after the bench check,
