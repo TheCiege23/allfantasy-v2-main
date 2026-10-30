@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { resetRailOddsCache } from '@/components/core-app/useRailOdds'
@@ -129,6 +129,38 @@ describe('Pin, Move and Hide', () => {
     expect(c.querySelector('[data-testid="rail-hidden-leagues-link"]')?.textContent).toContain('1')
     expect(posts()).toEqual([{ field: 'hidden', leagueIds: ['elsewhere', 'b2'] }])
     expect(nav.router.refresh).toHaveBeenCalled()
+  })
+
+  it('a mouse drags a league within its sport: the order is saved and the drop does not open it', async () => {
+    const c = open()
+    Array.from(scroll(c).querySelectorAll<HTMLElement>('[data-rail-id]')).forEach((el, i) => {
+      el.getBoundingClientRect = () => ({ top: i * 50, height: 40, bottom: i * 50 + 40, left: 0, right: 200, width: 200, x: 0, y: i * 50, toJSON: () => ({}) })
+    })
+    // NFL rows sit at 0, 50, 100: drag f1 below f3.
+    fireEvent.pointerDown(tile(c, 'f1'), { button: 0, pointerType: 'mouse', clientX: 10, clientY: 20 })
+    fireEvent.pointerMove(window, { pointerType: 'mouse', clientX: 10, clientY: 140 })
+    expect(tile(c, 'f3').getAttribute('data-drop')).toBe('after')
+    await act(async () => {
+      fireEvent.pointerUp(window, { pointerType: 'mouse', clientX: 10, clientY: 140 })
+    })
+    expect(order(c)).toEqual(['# NFL', 'f2', 'f3', 'f1', '# NBA', 'b1', 'b2', 'b3'])
+    expect(posts()).toEqual([{ field: 'order', leagueIds: ['f2', 'f3', 'f1', 'b1', 'b2', 'b3'] }])
+    const click = createEvent.click(tile(c, 'f1'))
+    fireEvent(tile(c, 'f1'), click)
+    expect(click.defaultPrevented).toBe(true)
+    expect(nav.router.push).not.toHaveBeenCalled()
+  })
+
+  it('a small wobble is a click, not a drag', () => {
+    const c = open()
+    fireEvent.pointerDown(tile(c, 'f1'), { button: 0, pointerType: 'mouse', clientX: 10, clientY: 20 })
+    fireEvent.pointerMove(window, { pointerType: 'mouse', clientX: 12, clientY: 22 })
+    fireEvent.pointerUp(window, { pointerType: 'mouse', clientX: 12, clientY: 22 })
+    expect(posts()).toEqual([])
+    const click = createEvent.click(tile(c, 'f1'))
+    fireEvent(tile(c, 'f1'), click)
+    expect(click.defaultPrevented).toBe(false)
+    expect(tile(c, 'f1').getAttribute('data-dragging')).toBeNull()
   })
 
   it('a press and hold opens the sheet and the lift does not open the league', () => {

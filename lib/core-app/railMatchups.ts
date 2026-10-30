@@ -14,6 +14,7 @@ import { loadUnavailableBySport } from './unavailableStarters'
 import { isForeignIdSpace } from './rosterIdSpace'
 import type { RailGuillotineLine } from './railGuillotineLine'
 import { getNativeRailMatchups } from './nativeRailMatchups'
+import { mostHavePlayed } from './liveRailScores'
 
 /**
  * This week's head-to-head for every league, for the expanded league rail.
@@ -184,6 +185,16 @@ export type RailStanding = {
    * Optional so callers that build a standing by hand need not carry it.
    */
   bubble?: string[]
+  /** Teams in the field with points on the board — the live overlay keeps the projected rank until most have played. */
+  played?: number
+  /**
+   * The lowest team in the field OTHER than you, and its value on the same basis: the one the cut falls on
+   * while you stay above it, or the one you must pass when you are at the bottom. Null when unnamed.
+   */
+  cutTeam?: string | null
+  cutTeamValue?: number | null
+  /** An elimination league's weeks left, this one included (its last scheduled week minus this one, plus one). */
+  weeksLeft?: number | null
 }
 
 /** How many teams from the bottom of an elimination week's field count as "on the bubble". */
@@ -500,10 +511,14 @@ async function getImportedRailMatchups(userId: string, leagues: RailLeagueInput[
    * that was already gone, and "#13 of 18" counted three of them.
    */
   const outByLeague = new Map<string, Set<string>>()
+  const weeksLeftByLeague = new Map<string, number | null>()
   for (const leagueId of eliminationWithSeason) {
     const rows = eliminationSeasonRows.filter((r) => r.leagueId === leagueId)
     const current = currentByLeague.get(leagueId)
-    if (rows.length && current) outByLeague.set(leagueId, choppedBefore(rows, current.week))
+    if (rows.length && current) {
+      outByLeague.set(leagueId, choppedBefore(rows, current.week))
+      weeksLeftByLeague.set(leagueId, weeksLeftFrom(rows, current.week))
+    }
   }
   let matchups = weekRows
 
@@ -767,6 +782,11 @@ async function getImportedRailMatchups(userId: string, leagues: RailLeagueInput[
             yourRosterId: String(row.rosterId),
             sides: priced?.sides ?? new Map(),
             elimination: f.elimination || priced?.elimination === true,
+            nameOf: (rosterId) => {
+              const team = teamByKey.get(`${row.leagueId}:${rosterId}`)
+              return team ? rosterLabel([team.name], rosterId) : null
+            },
+            weeksLeft: weeksLeftByLeague.get(row.leagueId) ?? null,
           })
         : null,
       eliminated: outByLeague.get(row.leagueId)?.has(String(row.rosterId)) === true,
@@ -1122,10 +1142,8 @@ export async function loadRailProjections(args: {
   return { byLeague, projectionWeek }
 }
 
-/** "Most teams have played": strictly more than half of the field has points on the board. */
-export function mostHavePlayed(played: number, fieldSize: number): boolean {
-  return played * 2 > fieldSize
-}
+// One rule for the server row and the live refresh that overlays it (liveRailScores.ts).
+export { mostHavePlayed }
 
 /**
  * Where you sit in a league with no head-to-head.
@@ -1153,6 +1171,8 @@ export function standingIn(args: {
   yourRosterId: string
   sides: Map<string, RailSideProjection>
   elimination: boolean
+  nameOf?: (rosterId: string) => string | null
+  weeksLeft?: number | null
 }): RailStanding | null {
   const { field, yourRosterId } = args
   if (field.length < 2) return null
@@ -1192,6 +1212,8 @@ export function standingIn(args: {
   /* The bottom BUBBLE_SIZE (valued is sorted high → low), widened to include ties with the last of them. */
   const edge = valued[Math.max(0, valued.length - BUBBLE_SIZE)]!.value
   const bubble = valued.filter((team) => team.value <= edge).map((team) => team.rosterId)
+  // valued is sorted high → low, so the last entry that is not you is the lowest other team.
+  const cut = [...valued].reverse().find((team) => team.rosterId !== yourRosterId) ?? null
 
   return {
     rank: 1 + valued.filter(team => team.value > yours.value).length,
@@ -1202,6 +1224,10 @@ export function standingIn(args: {
     cutLine: Math.round(lowest.value * 100) / 100,
     elimination: args.elimination,
     bubble,
+    played,
+    cutTeam: cut ? (args.nameOf?.(cut.rosterId) ?? null) : null,
+    cutTeamValue: cut ? Math.round(cut.value * 100) / 100 : null,
+    weeksLeft: args.weeksLeft ?? null,
   }
 }
 
@@ -1237,4 +1263,27 @@ export function choppedBefore(
     if (lowest.length === 1) out.add(String(lowest[0]!.rosterId))
   }
   return out
+}
+
+/** An elimination league's weeks left, this one included: its last scheduled week minus `currentWeek`, plus one. */
+export function weeksLeftFrom(rows: ReadonlyArray<{ week: number }>, currentWeek: number): number | null {
+  if (rows.length === 0) return null
+  const last = Math.max(...rows.map((r) => r.week))
+  return last >= currentWeek ? last - currentWeek + 1 : null
+}
+
+/**
+ * The live field of one elimination league for the live refresh (app/api/core/rail-scores): who is out, and
+ * the weeks left — the same two facts the server-rendered row derives from the same rows.
+ */
+export async function readEliminationField(
+  platformLeagueId: string,
+  seasonYear: number,
+  week: number,
+): Promise<{ out: Set<string>; weeksLeft: number | null }> {
+  const rows = await prisma.weeklyMatchup.findMany({
+    where: { leagueId: platformLeagueId, seasonYear },
+    select: { week: true, rosterId: true, pointsFor: true },
+  })
+  return { out: choppedBefore(rows, week), weeksLeft: weeksLeftFrom(rows, week) }
 }

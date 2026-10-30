@@ -47,6 +47,7 @@ import {
   RAIL_FILTERS,
   RAIL_FILTER_MIN_LEAGUES,
   moveInOrder,
+  reorderWithinSection,
   passesRailFilter,
   railFilterCounts,
   railSections as arrangeRailSections,
@@ -73,7 +74,7 @@ import { badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { RailRowBody, mergeRailMatchup, railTapTarget, type RailAttention } from '@/components/core-app/RailRowBody'
 import { useRailOdds } from '@/components/core-app/useRailOdds'
-import { hideLeagueForAccount, RailLeagueMenu, saveLeaguePreference, useRailHold } from '@/components/core-app/RailLeagueMenu'
+import { hideLeagueForAccount, RailLeagueMenu, saveLeaguePreference, useRailDrag, useRailHold } from '@/components/core-app/RailLeagueMenu'
 import { railRowMessages } from '@/lib/core-app/messages/railRow'
 import {
   currentRailCareerLines,
@@ -160,6 +161,13 @@ export type RailStandingSummary = {
   cutLine: number
   /** The bottom of this table goes home, so the copy says "cut" rather than "last". */
   elimination: boolean
+  /** Teams with points on the board (railMatchups.ts `RailStanding`). */
+  played?: number
+  /** The lowest team other than you, and its value on the same basis. */
+  cutTeam?: string | null
+  cutTeamValue?: number | null
+  /** An elimination league's weeks left, this one included. */
+  weeksLeft?: number | null
 }
 
 /**
@@ -1750,6 +1758,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    */
   const [railMenuId, setRailMenuId] = useState<string | null>(null)
   const railHold = useRailHold(setRailMenuId)
+  // Drag to reorder (a mouse straight away, a finger in reorder mode): the same saved order Move writes.
+  const railDrag = useRailDrag((sectionIds, id, toIndex) => {
+    const next = reorderWithinSection(orderedLeagues.map((l) => l.id), sectionIds, id, toIndex)
+    if (!next) return
+    setOrderOverride(next)
+    saveLeaguePreference('order', next, () => router.refresh())
+  })
   const pinLeague = (id: string) => {
     const next = toggleFavorite(favoriteIds, id)
     setFavoriteOverride(next)
@@ -1904,7 +1919,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <span className="af-rail-toggle-text">
             {leagues.length}{' '}
             {msg.leagueNoun(leagues.length)}
-            {railWeekLabel ? ` · ${language === 'es' ? railWeekLabel.replace(/^Week (\d+)/, 'Semana $1') : railWeekLabel}` : ''}
+            {railWeekLabel ? ` · ${railMsg.weekLabel(railWeekLabel)}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
               <span className="af-rail-live-state">
                 {badgeText('LIVE', language)}
@@ -1947,7 +1962,15 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           scroll, but nothing is out of reach and no count is hidden behind a
           second screen.
         */}
-        <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef}>
+        <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef} data-reorder={railDrag.reorderMode ? 'true' : undefined}>
+          {railDrag.reorderMode && railOpen ? (
+            <div className="af-rail-reorder-bar" role="status">
+              <span>{railMsg.reorderHint}</span>
+              <button type="button" className="af-rail-reorder-done" onClick={() => railDrag.setReorderMode(false)}>
+                {railMsg.menuDone}
+              </button>
+            </div>
+          ) : null}
           {/*
             The filter chips are the list's first child, held at its top while it scrolls. Inside the
             scroller rather than beside it: the phone tray is a grid with fixed rows (header, list, foot),
@@ -2079,7 +2102,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                  * Move for this league. A hold that fired swallows the click that follows it, so lifting
                  * the finger does not also open the league.
                  */
-                {...railHold.handlers(l.id)}
+                {...(railDrag.reorderMode ? {} : railHold.handlers(l.id))}
+                /* Drag to reorder within this section; see useRailDrag. */
+                {...railDrag.rowProps(l.id, sectionKey)}
                 /*
                   ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
                   for it, and it matters: the tray is full-screen, so navigating
@@ -2089,6 +2114,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   preference the user set, not a transient overlay.
                 */
                 onClick={(event) => {
+                  if (railDrag.swallowClick(event)) return
                   if (railHold.swallowClick(event)) return
                   // Before anything navigates: the next screen may rebuild this rail from the top.
                   saveRailScroll(railScrollRef.current, railLayout)
@@ -2107,6 +2133,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   }
                 }}
               >
+                {railDrag.reorderMode ? <span className="af-rail-drag-handle" aria-hidden>⠿</span> : null}
                 <span className="af-rail-tile-art">
                   <RailMark src={l.imageUrl} letter={l.mark} />
                   {alertTone ? (
@@ -2143,7 +2170,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           }),
           ]
           })}
-          {railOpen && railRows.length > 1 ? <p className="af-rail-hint">{railMsg.holdHint}</p> : null}
+          {railOpen && railRows.length > 1 && !railDrag.reorderMode ? <p className="af-rail-hint">{railMsg.holdHint}</p> : null}
           {/*
             ⚠ THE WAY BACK TO A HIDDEN LEAGUE. The header counts hidden leagues, but that count sits
             inside the expand/collapse button and cannot be a link of its own. Without this row an
@@ -2226,6 +2253,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           onPin={() => pinLeague(railMenuLeague.id)}
           onMove={(direction) => moveLeague(railMenuLeague.id, direction)}
           onHide={() => hideLeague(railMenuLeague.id)}
+          onReorder={() => railDrag.setReorderMode(true)}
           onClose={() => setRailMenuId(null)}
         />
       ) : null}

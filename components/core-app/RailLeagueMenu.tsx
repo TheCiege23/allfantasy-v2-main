@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, type MouseEvent, type TouchEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type TouchEvent } from 'react'
 import { useMessages } from '@/components/i18n/useMessages'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { railRowMessages } from '@/lib/core-app/messages/railRow'
@@ -61,6 +61,102 @@ export function useRailHold(open: (id: string) => void) {
   }
 }
 
+/**
+ * Drag a league up or down within its section. A mouse drags a row straight away; a finger drags only in
+ * reorder mode (opened from the sheet), where the rows stop being links and show a handle, because on a
+ * touch screen an ordinary drag is a scroll. Rows carry `data-rail-id` and `data-rail-section`; the drop
+ * point is read from the rendered rows of that section, so a filtered or folded list reorders exactly
+ * what the reader sees. `onReorder(sectionIds, id, toIndex)` gets the visible ids of the section, the
+ * dragged id and its new index among the others — `reorderWithinSection` in railArrange.ts takes those.
+ */
+export function useRailDrag(onReorder: (sectionIds: string[], id: string, toIndex: number) => void) {
+  const [reorderMode, setReorderMode] = useState(false)
+  const [drag, setDrag] = useState<{ id: string; overId: string | null; after: boolean } | null>(null)
+  const live = useRef<{ id: string; rows: HTMLElement[]; x: number; y: number; active: boolean; toIndex: number; ids: string[] } | null>(null)
+  const swallow = useRef(false)
+  const reorderRef = useRef(onReorder)
+  reorderRef.current = onReorder
+
+  useEffect(() => {
+    if (!reorderMode) return
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setReorderMode(false)
+    }
+    window.addEventListener('keydown', escape)
+    return () => window.removeEventListener('keydown', escape)
+  }, [reorderMode])
+
+  const start = (event: ReactPointerEvent<HTMLElement>, id: string, section: string) => {
+    if (event.button !== 0) return
+    if (!reorderMode && event.pointerType !== 'mouse') return
+    const list = event.currentTarget.parentElement
+    if (!list) return
+    const rows = Array.from(list.querySelectorAll<HTMLElement>('[data-rail-id][data-rail-section]')).filter(
+      (el) => el.getAttribute('data-rail-section') === section,
+    )
+    const ids = rows.map((el) => el.getAttribute('data-rail-id')!)
+    if (ids.length < 2) return
+    live.current = { id, rows, x: event.clientX, y: event.clientY, active: false, toIndex: ids.indexOf(id), ids }
+    const move = (e: PointerEvent) => {
+      const d = live.current
+      if (!d) return
+      if (!d.active) {
+        if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < (reorderMode ? 4 : 6)) return
+        d.active = true
+      }
+      e.preventDefault()
+      // Where would it land: the number of OTHER rows whose middle is above the pointer.
+      const others = d.rows.filter((el) => el.getAttribute('data-rail-id') !== d.id)
+      const mids = others.map((el) => {
+        const r = el.getBoundingClientRect()
+        return r.top + r.height / 2
+      })
+      const toIndex = mids.filter((m) => m < e.clientY).length
+      d.toIndex = toIndex
+      const target = others[Math.min(toIndex, others.length - 1)]
+      setDrag({ id: d.id, overId: target?.getAttribute('data-rail-id') ?? null, after: toIndex >= others.length })
+    }
+    const end = (e: PointerEvent) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      const d = live.current
+      live.current = null
+      setDrag(null)
+      if (!d?.active) return
+      swallow.current = true
+      if (e.type === 'pointerup') reorderRef.current(d.ids, d.id, d.toIndex)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+  }
+
+  return {
+    reorderMode,
+    setReorderMode,
+    /** Spread onto the row's link, next to the hold handlers. */
+    rowProps: (id: string, section: string) => ({
+      'data-rail-id': id,
+      'data-rail-section': section,
+      'data-dragging': drag?.id === id ? 'true' : undefined,
+      'data-drop': drag && drag.overId === id && drag.id !== id ? (drag.after ? 'after' : 'before') : undefined,
+      // The browser's own link drag would take the pointer away from ours.
+      draggable: false,
+      onDragStart: (event: DragEvent) => event.preventDefault(),
+      onPointerDown: (event: ReactPointerEvent<HTMLElement>) => start(event, id, section),
+    }),
+    /** Call first in the row's onClick: true when the click is the end of a drag, or the list is being reordered. */
+    swallowClick: (event: MouseEvent): boolean => {
+      if (!swallow.current && !reorderMode) return false
+      swallow.current = false
+      event.preventDefault()
+      event.stopPropagation()
+      return true
+    },
+  }
+}
+
 /** Save one of the account's league lists (favorites, order or hidden) through the existing preferences route. */
 export function saveLeaguePreference(field: 'favorites' | 'order' | 'hidden', leagueIds: string[], onSaved?: () => void): void {
   void fetch('/api/core/league-preferences', {
@@ -103,6 +199,7 @@ export function RailLeagueMenu({
   onPin,
   onMove,
   onHide,
+  onReorder,
   onClose,
 }: {
   name: string
@@ -112,6 +209,8 @@ export function RailLeagueMenu({
   onPin: () => void
   onMove: (direction: -1 | 1) => void
   onHide: () => void
+  /** Reorder mode: the list's rows become draggable by finger (see useRailDrag). */
+  onReorder?: () => void
   onClose: () => void
 }) {
   const msg = useMessages(railRowMessages)
@@ -149,6 +248,20 @@ export function RailLeagueMenu({
           <span aria-hidden>↓</span>
           {msg.moveDown}
         </button>
+        {onReorder ? (
+          <button
+            type="button"
+            className="af-rail-menu-item"
+            data-kind="reorder"
+            onClick={() => {
+              onReorder()
+              onClose()
+            }}
+          >
+            <span aria-hidden>⠿</span>
+            {msg.reorder}
+          </button>
+        ) : null}
         <button
           type="button"
           className="af-rail-menu-item"
