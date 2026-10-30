@@ -67,7 +67,7 @@ export function PlayerAvatar({
 
   const initials = initialsFor(displayName)
   const iconSize = Math.max(14, size * 0.55)
-  const ringClass = highlighted ? 'ring-2 ring-cyan-400/50' : 'ring-1 ring-white/10'
+  const ringClass = highlighted ? 'ring-2 ring-white/60' : 'ring-1 ring-white/10'
   // For DEF rows the badge would duplicate the primary avatar — suppress it.
   const showBadge = !isDefRow
   const badgeSize = Math.max(12, Math.round(size * 0.36))

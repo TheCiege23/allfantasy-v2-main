@@ -230,7 +230,7 @@ describe('Settings › Your leagues', () => {
 
 describe('Settings › Your leagues › Remove', () => {
   let deletes: string[]
-  /** Alpha and Charlie are the viewer's own imports; Bravo and Delta reached them through a claimed team. */
+  /** Alpha and Charlie the route can remove (an import, theirs or a member's); Bravo and Delta it cannot. */
   const stub = (deleteResponse: (id: string) => Response) => {
     deletes = []
     vi.stubGlobal(
@@ -245,7 +245,7 @@ describe('Settings › Your leagues › Remove', () => {
         if (url.startsWith('/api/league/list'))
           return new Response(
             JSON.stringify({
-              leagues: LIST.map((l) => ({ ...l, platform: 'sleeper', hasUnifiedRecord: true, viewerOwnsRow: l.id === 'a' || l.id === 'c' })),
+              leagues: LIST.map((l) => ({ ...l, platform: 'sleeper', hasUnifiedRecord: true, viewerCanRemove: l.id === 'a' || l.id === 'c' })),
             }),
           )
         return new Response(JSON.stringify({ favorites: null, hidden: ['a'], order: [] }))
@@ -255,7 +255,7 @@ describe('Settings › Your leagues › Remove', () => {
   const removed = (n: number) => () =>
     new Response(JSON.stringify({ ok: true, removed: { leagueRows: n, sleeperLeagueRows: 0, tournamentRows: 0 } }))
 
-  it('offers Remove only on leagues the viewer imported', async () => {
+  it('offers Remove only on leagues the route can remove', async () => {
     stub(removed(1))
     render(<LeagueListPreferencesCard />)
     await screen.findByTestId('league-list-row-a')
@@ -276,6 +276,15 @@ describe('Settings › Your leagues › Remove', () => {
     await waitFor(() => expect(screen.queryByTestId('league-list-row-a')).toBeNull())
     expect(deletes).toEqual(['a'])
     expect(screen.queryByTestId('league-list-row-c')).not.toBeNull()
+  })
+
+  it('a league someone else imported is removed by the viewer\'s tombstone (memberLeagues)', async () => {
+    stub(() => new Response(JSON.stringify({ ok: true, removed: { leagueRows: 0, sleeperLeagueRows: 0, tournamentRows: 0, memberLeagues: 1 } })))
+    render(<LeagueListPreferencesCard />)
+    fireEvent.click(await screen.findByTestId('league-remove-c'))
+    fireEvent.click(screen.getByTestId('league-remove-go-c'))
+    await waitFor(() => expect(screen.queryByTestId('league-list-row-c')).toBeNull())
+    expect(deletes).toEqual(['c'])
   })
 
   it('Cancel deletes nothing', async () => {

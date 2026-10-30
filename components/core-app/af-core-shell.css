@@ -1793,15 +1793,12 @@
   color: var(--faint);
 }
 
-/* ── the mobile handle and tray ────────────────────────────────────────── */
+/* ── the mobile tray ─────────────────────────────────────────────────── */
 
 /*
- * Desktop never shows the handle: the rail is always visible there and its own
- * header carries the toggle.
+ * The floating "Leagues" handle that used to open this tray is gone (2026-10-29):
+ * the phone bar's Leagues tab opens it, and its ✕ header row closes it.
  */
-.af-core .af-rail-handle {
-  display: none;
-}
 
 @media (max-width: 720px) {
   /*
@@ -1813,40 +1810,6 @@
    * a sibling block equivalent and impossible to get wrong. See CLAUDE.md.
    */
 
-  .af-core .af-rail-handle {
-    position: fixed;
-    left: 12px;
-    top: auto;
-    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
-    z-index: 60;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 0 12px;
-    border: 1px solid var(--accent-line);
-    border-radius: 999px;
-    background: var(--accent);
-    color: var(--accent-ink);
-    cursor: pointer;
-    /* This is the only way into the league list on a phone. */
-    min-width: 44px;
-    max-width: min(58vw, 240px);
-    min-height: 44px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-  }
-
-  .af-core .af-rail-handle-text {
-    font: 800 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    writing-mode: horizontal-tb;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   /*
    * The rail leaves the flow. Its grid track then has no in-flow content and
    * collapses to zero on its own, so the content row keeps the space.
@@ -1857,7 +1820,8 @@
     z-index: 59;
     flex-direction: column;
     align-items: stretch;
-    padding: max(16px, env(safe-area-inset-top)) 14px calc(132px + env(safe-area-inset-bottom));
+    /* The tray covers the tab bar (z 59 over 40); nothing floats over its foot now, so no 132px reserve. */
+    padding: max(16px, env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
     overscroll-behavior: contain;
     background: var(--rail);
     border-right: 0;
@@ -2836,7 +2800,6 @@ html[data-mode='light'] .af-core {
 }
 
 @media (max-width: 720px) {
-  .af-core.af-shell[data-league-first='true'] .af-rail-handle,
   .af-core.af-shell[data-league-first='true'] .af-topbar .af-scope {
     display: none;
   }
@@ -3938,3 +3901,30 @@ html[data-mode='light'] .af-core {
   .af-core .af-core-bracket-promo-actions { flex: 1 1 100%; justify-content: flex-start; }
   .af-core .af-core-bracket-promo-button { flex: 1 1 145px; }
 }
+
+/* ── Phone header: theme and language live in the ↻ menu ─────────────────────
+ * The default (not league-first) phone header kept the theme and language chips in the top
+ * row. With the crest, the scope pill, the ↻ menu and the search icon that is ~520px of
+ * controls on a ~370px phone, so the AF Legacy theme's long name ran under the search icon and
+ * the language chip off the edge (reported from a real phone 2026-10-30). Below 720px the two
+ * chips render inside the ↻ panel instead (`.af-data-menu-display`); above it they stay put.
+ * The plan line rides along: the topbar's plan chip is hidden on phones, so a tester granted access
+ * had no way to see it. Its own top-level @media, appended — never nested inside an earlier block.
+ */
+.af-core .af-data-menu-display { display: none; }
+@media (max-width: 720px) {
+  .af-core .af-topbar-right > .af-topbar-chip { display: none; }
+  .af-core .af-topbar .af-topbar-right { flex: 0 0 auto; min-width: 0; }
+  .af-core .af-topbar .af-scope { flex: 1 1 auto; min-width: 0; }
+  .af-core .af-topbar .af-scope-btn { max-width: 100%; }
+  .af-core .af-data-menu-display {
+    display: block;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .af-core .af-data-menu-display-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .af-core .af-data-menu-panel .af-data-menu-plan { margin: 0 0 10px; color: var(--muted); }
+  .af-core .af-data-menu-plan-name { color: var(--text); font-weight: 700; }
+}
+

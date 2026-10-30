@@ -37,18 +37,54 @@ describe('mobile draft tray', () => {
     expect(mobile().getByText('Player list')).toBeTruthy()
   })
 
-  it('starts on the board, opens queue halfway, and gives players the full tray', () => {
+  it('starts collapsed on the board tab and opens to half when a tab is chosen', () => {
     render(<Room />)
     expect(tray().getAttribute('data-snap')).toBe('peek')
-    fireEvent.click(screen.getByTestId('draft-mobile-tab-queue'))
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-roster'))
     expect(tray().getAttribute('data-snap')).toBe('half')
+    expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('roster')
+  })
+
+  it('opens the Chat tab at full height, filling the tray so the composer is on screen', () => {
+    render(<Room />)
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-chat'))
+    expect(tray().getAttribute('data-snap')).toBe('full')
+    const sheet = screen.getByTestId('draft-mobile-chat-sheet')
+    expect(sheet.className).toMatch(/\bh-full\b/)
+    expect(sheet.className).toMatch(/\[&>\*\]:flex-1/)
+  })
+
+  it('opens the Players tab at full height — half leaves room for only ~2 player cards', () => {
+    render(<Room />)
     fireEvent.click(screen.getByTestId('draft-mobile-tab-players'))
     expect(tray().getAttribute('data-snap')).toBe('full')
     expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('players')
   })
 
+  it('opens the Queue tab at full height too — half showed less than one queued row', () => {
+    render(<Room />)
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-queue'))
+    expect(tray().getAttribute('data-snap')).toBe('full')
+    // The queue panel's own list must be the scroller, as with players.
+    const sheet = screen.getByTestId('draft-mobile-queue-sheet')
+    expect(sheet.className).toMatch(/\bh-full\b/)
+    expect(sheet.className).toMatch(/\[&>section\]:flex-1/)
+    expect(sheet.textContent).toBe('Queue list')
+  })
+
+  it('gives the player panel a definite-height column, so its own list is the scroller', () => {
+    render(<Room initial="players" />)
+    const sheet = screen.getByTestId('draft-mobile-players-sheet')
+    const scroll = screen.getByTestId('draft-mobile-players-scroll')
+    // An auto-height wrapper here let PlayerPanel grow to every row, and touch scrolling died.
+    expect(sheet.className).toMatch(/\bh-full\b/)
+    expect(sheet.className).toMatch(/\bflex-col\b/)
+    expect(scroll.className).toMatch(/\bflex-1\b/)
+    expect(scroll.className).toMatch(/\bmin-h-0\b/)
+  })
+
   it('the Board tab collapses the tray', () => {
-    render(<Room initial="queue" />)
+    render(<Room initial="roster" />)
     expect(tray().getAttribute('data-snap')).toBe('half')
     fireEvent.click(screen.getByTestId('draft-mobile-tab-board'))
     expect(tray().getAttribute('data-snap')).toBe('peek')
@@ -56,21 +92,18 @@ describe('mobile draft tray', () => {
 
   it('collapsing from the handle reports "board", and reopening restores the previous tab', () => {
     const onChange = vi.fn()
-    render(<Room initial="queue" onChange={onChange} />)
+    render(<Room initial="roster" onChange={onChange} />)
     fireEvent.keyDown(handle(), { key: 'ArrowDown' })
     expect(tray().getAttribute('data-snap')).toBe('peek')
     expect(onChange).toHaveBeenLastCalledWith('board')
     fireEvent.keyDown(handle(), { key: 'ArrowUp' })
     expect(tray().getAttribute('data-snap')).toBe('half')
-    expect(onChange).toHaveBeenLastCalledWith('queue')
+    expect(onChange).toHaveBeenLastCalledWith('roster')
   })
 
   it('the handle is keyboard-operable and announces its state', () => {
-    render(<Room initial="players" />)
+    render(<Room initial="roster" />)
     expect(handle().getAttribute('aria-expanded')).toBe('true')
-    expect(tray().getAttribute('data-snap')).toBe('full')
-    fireEvent.keyDown(handle(), { key: 'ArrowDown' })
-    expect(tray().getAttribute('data-snap')).toBe('half')
     fireEvent.keyDown(handle(), { key: 'Enter' })
     expect(tray().getAttribute('data-snap')).toBe('full')
     fireEvent.keyDown(handle(), { key: 'Enter' })

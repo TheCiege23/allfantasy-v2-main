@@ -1,4 +1,6 @@
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { screenLoadErrorMessages } from '@/lib/core-app/messages/screenLoadError'
+import { messagesFor } from '@/lib/i18n/messages'
 
 /**
  * "This screen's data did not load" — for a league-scoped /core screen whose
@@ -35,17 +37,15 @@ export function ScreenLoadError({
   /** Server-rendered, so it cannot read the client provider; page.tsx passes the cookie's language. */
   language?: string
 }) {
-  const es = language === 'es'
+  const m = messagesFor(screenLoadErrorMessages, language)
   const name = coreUiCopy(screen, language)
   return (
     <div className="af-card" role="alert" style={{ padding: 24, maxWidth: 720 }}>
       <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-        {es ? `${name}: no se pudo cargar` : `${name} did not load`}
+        {m.title(name)}
       </h1>
       <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-        {es
-          ? 'Algo falló de nuestra parte al leer esta liga. Tu liga y su configuración no se han tocado: no cambió nada.'
-          : 'Something failed on our side while reading this league. Your league and its settings are untouched — nothing has changed.'}
+        {m.body}
       </p>
       {/*
         A plain link, not a button: this is a server component, and re-requesting

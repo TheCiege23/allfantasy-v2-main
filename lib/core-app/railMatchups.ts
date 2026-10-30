@@ -9,6 +9,7 @@ import { realManagerName, rosterLabel } from './managerName'
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
 import { eliminationFormat, resolveRailMatchupMode } from './railMatchupMode'
+import { WEEKLY_FORMAT_SETTINGS_BLOCKS, WEEKLY_FORMAT_SETTINGS_KEYS, weeklyFormat } from './weeklyCapabilities'
 import { loadUnavailableBySport } from './unavailableStarters'
 import { isForeignIdSpace } from './rosterIdSpace'
 import type { RailGuillotineLine } from './railGuillotineLine'
@@ -830,7 +831,21 @@ type LeagueMetaRow = {
   confirmedType: string | null
   leagueType: string | null
   guillotineMode: boolean | null
+  /** Only the settings keys `weeklyFormat` reads (`FORMAT_SETTINGS_SQL`). */
+  formatSettings: unknown
 }
+
+/*
+ * The scoring-format keys as a small object, built in SQL so the rail still never selects `settings`
+ * whole (see the cost note at the top). Every name is a constant from `weeklyCapabilities.ts`, so
+ * nothing user-supplied reaches the statement.
+ */
+const formatKeysSql = (path: string) => WEEKLY_FORMAT_SETTINGS_KEYS.map((k) => `'${k}', ${path}->'${k}'`).join(', ')
+const FORMAT_SETTINGS_SQL = `jsonb_build_object(${[
+  formatKeysSql('settings::jsonb'),
+  ...WEEKLY_FORMAT_SETTINGS_BLOCKS.map((b) => `'${b}', jsonb_build_object(${formatKeysSql(`(settings::jsonb->'${b}')`)})`),
+  `'fantrax_settings', jsonb_build_object('scoringSystem', jsonb_build_object('type', settings::jsonb->'fantrax_settings'->'scoringSystem'->'type'))`,
+].join(', ')})`
 
 type StarterRow = {
   leagueId: string
@@ -888,7 +903,8 @@ export async function loadRailProjections(args: {
                 settings->'yahoo_settings'   AS "yahoo_settings",
                 settings->'leagueTypeConfirmation'->>'type' AS "confirmedType",
                 "leagueType",
-                "guillotineMode"
+                "guillotineMode",
+                ${FORMAT_SETTINGS_SQL} AS "formatSettings"
            FROM leagues
           WHERE id = ANY($1::text[])`,
         dbLeagueIds,
@@ -989,7 +1005,16 @@ export async function loadRailProjections(args: {
   const sportByLeague = new Map(leagueMeta.map((l) => [l.id, String(l.sport ?? 'NFL').toUpperCase()]))
   const scoringByLeague = new Map<string, Record<string, unknown> | null>()
   const eliminationByLeague = new Map<string, boolean>()
+  /*
+   * 🛑 A CATEGORY OR ROTO LEAGUE IS NOT WON ON FANTASY POINTS, so a points projection on its chip
+   * describes nothing. Those sides stay unpriced (`PROJ —`). Elimination and season-points leagues are
+   * not withheld: both are scored in points, and a guillotine standing reads these projections.
+   */
+  const pointsWithheld = new Set<string>()
   for (const l of leagueMeta) {
+    // `yahoo_settings` is already selected whole for the scoring bridge; `weeklyFormat` reads its `scoring_type`.
+    const format = weeklyFormat({ leagueType: l.leagueType, settings: { ...(l.formatSettings && typeof l.formatSettings === 'object' ? (l.formatSettings as Record<string, unknown>) : {}), yahoo_settings: l.yahoo_settings } })
+    if (format === 'categories' || format === 'roto') pointsWithheld.add(l.id)
     scoringByLeague.set(
       l.id,
       extractScoringSettings({
@@ -1017,6 +1042,7 @@ export async function loadRailProjections(args: {
 
   const byLeague = new Map<string, SidesForLeague>()
   for (const side of sides) {
+    if (pointsWithheld.has(side.dbLeagueId)) continue
     const scoring = scoringByLeague.get(side.dbLeagueId) ?? null
 
     let vendor = 0

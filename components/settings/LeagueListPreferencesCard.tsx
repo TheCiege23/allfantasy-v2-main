@@ -21,8 +21,9 @@ import { applyLeagueOrder, type LeaguePreferences } from "@/lib/core-app/leagueP
  * Remove is offered here too, because this is where people manage their list — before it lived
  * only on a league's Overview tab, which league-first navigation skips, so users hid leagues they
  * meant to remove. It is `DELETE /api/league/[id]`: the viewer's own copy and a tombstone, nothing
- * on the provider. Only rows the viewer imported (`viewerOwnsRow`) get the button; for any other
- * row that route answers 200 with nothing removed, so a zero count is treated as a failure here.
+ * on the provider; for an imported league someone else imported, only the viewer's tombstone, which
+ * takes it off their list (`memberLeagues`). Rows the route can remove carry `viewerCanRemove`; for
+ * any other row it answers 200 with nothing removed, so a zero count is treated as a failure here.
  */
 
 type Row = { id: string; name: string; platform: string; removable: boolean }
@@ -67,7 +68,7 @@ export default function LeagueListPreferencesCard() {
           id: String(l.id),
           name: typeof l.name === "string" && l.name ? l.name : "League",
           platform: String(l.platform ?? ""),
-          removable: l.viewerOwnsRow === true,
+          removable: l.viewerCanRemove === true,
         }))
       const ids = played.map((r) => r.id)
       setRows(played)
@@ -153,10 +154,13 @@ export default function LeagueListPreferencesCard() {
       const res = await fetch(`/api/league/${encodeURIComponent(id)}`, { method: "DELETE" })
       if (!res.ok) throw new Error(String(res.status))
       const data = (await res.json().catch(() => ({}))) as {
-        removed?: { leagueRows?: number; sleeperLeagueRows?: number; tournamentRows?: number }
+        removed?: { leagueRows?: number; sleeperLeagueRows?: number; tournamentRows?: number; memberLeagues?: number }
       }
       const removed =
-        (data.removed?.leagueRows ?? 0) + (data.removed?.sleeperLeagueRows ?? 0) + (data.removed?.tournamentRows ?? 0)
+        (data.removed?.leagueRows ?? 0) +
+        (data.removed?.sleeperLeagueRows ?? 0) +
+        (data.removed?.tournamentRows ?? 0) +
+        (data.removed?.memberLeagues ?? 0)
       // 200 with nothing removed means the row was not this account's copy — not a success.
       if (removed === 0) {
         setRemoveError(t("settings.leagues.removeNotOwned"))

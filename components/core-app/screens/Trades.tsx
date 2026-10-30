@@ -11,6 +11,8 @@ import { useFocusTradeFromUrl } from '@/components/core-app/useFocusTradeFromUrl
 import { assetValues, gradeReasons } from '@/lib/core-app/importedTradeTimeline'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { tradesScreenMessages } from '@/lib/core-app/messages/tradesScreen'
 import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
@@ -191,6 +193,7 @@ function AgentIdeas({ state }: { state: NonNullable<TradesData['agentIdeas']> })
 
 function TradeCard({ trade }: { trade: TradeRecord }) {
   const language = useOptionalLanguage().language
+  const m = useMessages(tradesScreenMessages)
   const copy = (value: string) => tradeUiCopy(value, language)
   const assets = trade.playersIn + trade.playersOut + trade.picks
   /*
@@ -226,7 +229,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
         </span>
       </header>
 
-      <div className="af-tr-sides" aria-label={trade.yourSide === 'unknown' ? (language === 'es' ? `Intercambio desde la perspectiva de ${trade.players[0]?.manager ?? 'el primer mánager'}` : `Trade from ${trade.players[0]?.manager ?? 'the first manager'}'s perspective`) : copy('Your trade')}>
+      <div className="af-tr-sides" aria-label={trade.yourSide === 'unknown' ? m.perspectiveAria(trade.players[0]?.manager) : copy('Your trade')}>
         <div className="af-tr-side">
           <div className="af-label">{copy(trade.yourSide === 'unknown' ? 'Received' : 'In')}</div>
           <div className="af-tr-count af-num">{trade.playersIn}</div>
@@ -240,7 +243,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
         </div>
 
         <div className="af-tr-side">
-          <div className="af-label">{trade.yourSide === 'unknown' ? copy('Sent') : language === 'es' ? 'Sale' : 'Out'}</div>
+          <div className="af-label">{trade.yourSide === 'unknown' ? copy('Sent') : m.out}</div>
           <div className="af-tr-count af-num">{trade.playersOut}</div>
           <div className="af-tr-count-label">
             {copy(trade.playersOut === 1 ? 'player' : 'players')}
@@ -305,9 +308,12 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                 <div className="af-tr-leaguegrade" data-letter={letter}>
                   <span className="af-tr-leaguegrade-letter af-num">{letter}</span>
                   <span className="af-tr-leaguegrade-line">
-                    {language === 'es'
-                      ? `Calificación de la liga · recibió ${(i === 0 ? graded.getValue : graded.giveValue).toLocaleString(getAppIntlLocale())} por ${(i === 0 ? graded.giveValue : graded.getValue).toLocaleString(getAppIntlLocale())} en valor de liga ${copy(gradeMoment(graded))}`
-                      : `League grade · got ${(i === 0 ? graded.getValue : graded.giveValue).toLocaleString(getAppIntlLocale())} for ${(i === 0 ? graded.giveValue : graded.getValue).toLocaleString(getAppIntlLocale())} in league value ${gradeMoment(graded)}`}
+                    {m.leagueGradeLine(
+                      (i === 0 ? graded.getValue : graded.giveValue).toLocaleString(getAppIntlLocale()),
+                      (i === 0 ? graded.giveValue : graded.getValue).toLocaleString(getAppIntlLocale()),
+                      gradeMoment(graded),
+                      copy(gradeMoment(graded)),
+                    )}
                   </span>
                 </div>
               ) : null}
@@ -356,6 +362,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
 
 export function Trades({ data, hidePending = false }: TradesProps) {
   const language = useOptionalLanguage().language
+  const m = useMessages(tradesScreenMessages)
   const copy = (value: string) => tradeUiCopy(value, language)
   // A trade email or push lands here with `?trade=`; bring that trade into view.
   useFocusTradeFromUrl()
@@ -376,7 +383,7 @@ export function Trades({ data, hidePending = false }: TradesProps) {
         <div className="af-tr-context">
           <span className="af-label">{copy('Scored for this league only')}</span>
           <p className="af-tr-context-body">
-            {language === 'es' ? 'Las calificaciones y recomendaciones usan las reglas de ' : 'Grades and recommendations on this page are calculated against '}
+            {m.gradingIntro}
             <strong>{data.gradingContext.data.leagueName}</strong>
             {data.gradingContext.data.format ? ` — ${data.gradingContext.data.format}` : ''}, {' '}
             {data.gradingContext.data.teamCount} {copy('teams')}. {copy('The same trade grades differently in a different league.')}
@@ -400,7 +407,7 @@ export function Trades({ data, hidePending = false }: TradesProps) {
               {copy('Week')} <span className="af-num">{data.deadline.data.week}</span>
               {data.deadline.data.regularSeasonLength != null ? (
                 <span className="af-tr-deadline-why">
-                  {language === 'es' ? `de una temporada regular de ${data.deadline.data.regularSeasonLength} semanas` : `of a ${data.deadline.data.regularSeasonLength}-week regular season`}
+                  {m.regularSeason(data.deadline.data.regularSeasonLength)}
                 </span>
               ) : null}
             </span>
@@ -492,7 +499,7 @@ export function Trades({ data, hidePending = false }: TradesProps) {
                   </span>
                   <span className="af-tr-graderow-why">
                     {g.letter
-                      ? language === 'es' ? `recibió el ${g.sharePct}% del valor intercambiado` : `received ${g.sharePct}% of the traded value`
+                      ? m.sharePct(g.sharePct)
                       : copy(g.withheldReason ?? '')}
                   </span>
                   {/*

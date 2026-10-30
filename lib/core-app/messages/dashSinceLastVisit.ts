@@ -10,6 +10,8 @@ export const dashSinceLastVisitMessages = defineMessages({
   en: {
     title: 'Since your last visit',
     lastWeek: 'last 7 days',
+    /** A span of time, "5m" / "5 min" — fed to `since` and `reaches`. */
+    span: (n: number, unit: 'm' | 'h' | 'd'): string => `${n}${unit}`,
     since: (span: string) => `since ${span} ago`,
     reaches: (span: string) => `reaches ${span} further back`,
     noDesignation: 'no designation',
@@ -33,6 +35,7 @@ export const dashSinceLastVisitMessages = defineMessages({
   es: {
     title: 'Desde tu última visita',
     lastWeek: 'últimos 7 días',
+    span: (n, unit) => `${n} ${unit === 'm' ? 'min' : unit}`,
     since: (span) => `desde hace ${span}`,
     reaches: (span) => `llega ${span} más atrás`,
     noDesignation: 'sin designación',

@@ -14,6 +14,7 @@
  *     always returned whole, which no engine here can tell apart from a narrower select.
  *   - `orderBy` (object or array, `{ sort, nulls }`), `take`, `skip`.
  *   - `create` / `createMany` / `update` / `updateMany` / `upsert` / `delete` / `deleteMany` / `count`,
+ *     `groupBy` (by, where, _max, _min, _count._all),
  *     with the schema defaults in `DEFAULTS` and `{ increment, decrement, set }` updates.
  *   - `$transaction(fn | array)` runs against the same store (no rollback); raw SQL returns nothing.
  * Any model nobody seeded reads as empty, so optional side paths (devy, c2c, survivor, feeds) no-op.
@@ -396,7 +397,35 @@ export function createInMemoryPrisma(): InMemoryPrisma {
         return { count }
       },
       aggregate: async () => ({ _sum: {}, _max: {}, _min: {}, _count: 0 }),
-      groupBy: async () => [],
+      /*
+       * `by` + `where`, with `_max` / `_min` of fields and `_count: { _all: true }` (phase 11). Enough for
+       * "the newest row per roster" reads; any other aggregate shape is not modelled.
+       */
+      groupBy: async (args: Row = {}) => {
+        const by: string[] = Array.isArray(args.by) ? args.by : [args.by]
+        const groups = new Map<string, Row[]>()
+        for (const r of table(model).filter((row) => matches(model, row, args.where))) {
+          const key = JSON.stringify(by.map((f) => r[f] ?? null))
+          groups.set(key, [...(groups.get(key) ?? []), r])
+        }
+        const pick = (rows: Row[], field: string, dir: 1 | -1) =>
+          rows.reduce<unknown>((best, r) => {
+            const v = r[field]
+            if (v == null) return best
+            if (best == null) return v
+            const a = v instanceof Date ? v.getTime() : (v as number)
+            const b = best instanceof Date ? best.getTime() : (best as number)
+            return (a - b) * dir > 0 ? v : best
+          }, null)
+        return [...groups.values()].map((rows) => {
+          const out: Row = {}
+          for (const f of by) out[f] = rows[0]![f] ?? null
+          if (args._max) out._max = Object.fromEntries(Object.keys(args._max).map((f) => [f, pick(rows, f, 1)]))
+          if (args._min) out._min = Object.fromEntries(Object.keys(args._min).map((f) => [f, pick(rows, f, -1)]))
+          if (args._count) out._count = { _all: rows.length }
+          return out
+        })
+      },
     }
   }
 

@@ -509,7 +509,7 @@ jobs:
         # the config blanked NODE_OPTIONS for it, so it ran on the 4096MB default and restarted
         # up to three times a run.
         NODE_OPTIONS: --max-old-space-size=8192
-        # TWO playwright runs, so each gets its own `next dev`. One server for all five specs grew
+        # Separate playwright runs, so each gets its own `next dev`. One server for all five specs grew
         # past Next's restart line (80% of the heap limit) late in the run: on 2026-10-27 the lane
         # failed on #2798, #2804 and #2813 with "Server is approaching the used memory threshold,
         # restarting..." and ECONNRESET, a different test timing out each time, while the same
@@ -522,7 +522,7 @@ jobs:
       run: |
         # Refuse if a tagged spec exists that neither run below lists -- it would silently not run.
         tagged=$(grep -rlE "@draft-room|@mock-draft-room" e2e | sort | tr '\n' ' ')
-        listed="e2e/draft-room-click-audit.spec.ts e2e/draft-room-commissioner-regression.spec.ts e2e/draft-roster-configuration-gate.spec.ts e2e/mobile-draft-production.spec.ts e2e/mock-draft-room-click-audit.spec.ts "
+        listed="e2e/draft-board-coverage.spec.ts e2e/draft-room-click-audit.spec.ts e2e/draft-room-commissioner-regression.spec.ts e2e/draft-roster-configuration-gate.spec.ts e2e/mobile-draft-production.spec.ts e2e/mock-draft-room-click-audit.spec.ts "
         if [ "$tagged" != "$listed" ]; then
           echo "::error::@draft-room specs changed. Tagged: $tagged -- add new ones to a run in this step."
           exit 1
@@ -549,6 +549,10 @@ jobs:
             e2e/draft-roster-configuration-gate.spec.ts \
             e2e/mobile-draft-production.spec.ts \
             e2e/mock-draft-room-click-audit.spec.ts \
+            --grep "@draft-room|@mock-draft-room" --project=chromium || rc=1
+        E2E_WARM_ROUTES=/,/e2e/draft-board-coverage \
+        PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/board-coverage \
+          npx playwright test e2e/draft-board-coverage.spec.ts \
             --grep "@draft-room|@mock-draft-room" --project=chromium || rc=1
         exit $rc
     - uses: actions/upload-artifact@v4

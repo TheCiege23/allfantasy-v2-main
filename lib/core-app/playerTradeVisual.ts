@@ -341,12 +341,15 @@ export function tradeRosterPlayerIds(roster: LeagueTradeRoster): string[] {
 
 export type TradePlayerRow = { sleeperId: string | null; name: string; position: string | null; age: number | null }
 
-/** Name, position and age for a set of player ids, keyed by id. */
-export async function readTradePlayerRows(ids: string[]): Promise<Map<string, TradePlayerRow>> {
+/**
+ * Name, position and age for a set of player ids, keyed by id. Pass the league's sport when known:
+ * Sleeper numbers its NFL and NBA pools independently, so an unscoped read can name the wrong player.
+ */
+export async function readTradePlayerRows(ids: string[], sport?: string | null): Promise<Map<string, TradePlayerRow>> {
   if (!ids.length) return new Map()
   const rows = await prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: ids } },
+      where: { ...(sport ? { sport: sport.toUpperCase() } : {}), sleeperId: { in: ids } },
       select: { sleeperId: true, name: true, position: true, age: true },
       distinct: ['sleeperId'],
     })
@@ -708,7 +711,7 @@ export async function getPlayerTradeVisual(
   const theirPd = (holder.playerData ?? {}) as Record<string, unknown>
   const byId = await readTradePlayerRows([
     ...new Set([...tradeRosterPlayerIds(myRoster), ...tradeRosterPlayerIds(holder)]),
-  ])
+  ], league.sport)
 
   const leagueScoring = marketContext.scoring.settings
   const settings = (league.settings ?? {}) as Record<string, unknown>

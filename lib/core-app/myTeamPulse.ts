@@ -548,10 +548,20 @@ async function loadMyTeamPulse(
   }
 
   /* ── 3. One player read for every starter on the board. ────────────────── */
-  const everyStarter = [...new Set(pending.flatMap((p) => p.allIds))]
+  /*
+   * Each league's ids read in that league's own sport — the map below is keyed sport + id already, so
+   * this only stops another sport's namesake rows (Sleeper reuses ids across sports) from being read
+   * at all, and from feeding their names into the injury read.
+   */
+  const idsBySport = new Map<string, Set<string>>()
+  for (const p of pending) {
+    const bucket = idsBySport.get(p.sport) ?? new Set<string>()
+    for (const id of p.allIds) bucket.add(id)
+    idsBySport.set(p.sport, bucket)
+  }
   const players = await timing.read('players', () => prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: everyStarter } },
+      where: { OR: [...idsBySport].map(([sport, ids]) => ({ sport, sleeperId: { in: [...ids] } })) },
       select: { sleeperId: true, name: true, team: true, sport: true, position: true, expiresAt: true },
       orderBy: { fetchedAt: 'desc' },
     }))

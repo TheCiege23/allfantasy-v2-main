@@ -520,7 +520,7 @@ export function DraftRoomShell({
           onRequestExpand={expandTray}
           layoutRef={layoutRef}
           fullOnInputFocus
-          preferredOpenSnap={mobileTab === 'players' ? 'full' : 'half'}
+          preferredOpenSnap={mobileTab === 'players' || mobileTab === 'queue' || mobileTab === 'chat' ? 'full' : 'half'}
           testIdPrefix="draft-mobile"
           ariaLabel={t('draftRoom.shell.aria.draftSections')}
           accessory={mobileDockAccessory}
@@ -604,18 +604,37 @@ export function DraftRoomShell({
               data-testid="draft-mobile-content"
               data-active-tab={mobileTab}
             >
+              {/*
+                ⚠ THE PLAYERS SHEET MUST GIVE THE PANEL A DEFINITE HEIGHT. PlayerPanel pins its search
+                and filters (`sticky`) and scrolls its own list (`draft-player-list-scroll`). Under an
+                auto-height wrapper its `h-full` resolved to auto, so the panel grew to every row: the
+                header scrolled away with the list, and a touch landing on the list's own
+                `overscroll-contain` scroller (which had nothing to scroll) was swallowed instead of
+                chaining up — reported on Android as "can't scroll the draft board". Every wrapper
+                down to the panel is a full-height flex column so the LIST is the scroller.
+              */}
               {mobileTab === 'players' && (
                 <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="draft-mobile-players-sheet">
                   <div
-                    className="h-full min-h-0 min-w-0 overflow-hidden"
+                    className="h-full min-h-0 min-w-0 overflow-hidden flex flex-1 flex-col"
                     data-testid="draft-mobile-players-scroll"
                   >
                     {playerPanel}
                   </div>
                 </div>
               )}
-              {mobileTab === 'queue' && queuePanel}
-              {mobileTab === 'chat' && chatPanel}
+              {/* Same definite-height column as the players sheet, so the queue's own list scrolls. */}
+              {mobileTab === 'queue' && (
+                <div className="flex h-full min-h-0 flex-col [&>section]:min-h-0 [&>section]:flex-1" data-testid="draft-mobile-queue-sheet">
+                  {queuePanel}
+                </div>
+              )}
+              {/* Definite height again: the chat fills the tray, so its composer is always on screen. */}
+              {mobileTab === 'chat' && (
+                <div className="flex h-full min-h-0 flex-col [&>*]:min-h-0 [&>*]:flex-1" data-testid="draft-mobile-chat-sheet">
+                  {chatPanel}
+                </div>
+              )}
               {intelPanel && mobileTab === 'intel' && intelPanel}
               {helperPanel && mobileTab === 'helper' && helperPanel}
               {rosterPanel && mobileTab === 'roster' && rosterPanel}

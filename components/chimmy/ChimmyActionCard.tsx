@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, AlertTriangle, CheckCircle2, Loader2, X } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, AlertTriangle, CheckCircle2, Loader2, Settings2, X } from 'lucide-react'
 import {
   confirmChimmyActionCard,
   type ChimmyActionCard as Card,
@@ -136,6 +136,17 @@ export default function ChimmyActionCard({ card, onDismiss, confirm = (c) => con
         </div>
       ) : null}
 
+      {card.automation ? (
+        <ul className="space-y-2" data-testid="chimmy-action-automation">
+          {card.automation.changes.map((c) => (
+            <li key={c} className="flex items-start gap-2">
+              <Settings2 className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" aria-hidden />
+              <span>{c}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {card.warnings.length > 0 ? (
         <ul className="mt-3 space-y-1" data-testid="chimmy-action-warnings">
           {card.warnings.map((w) => (
@@ -162,7 +173,7 @@ export default function ChimmyActionCard({ card, onDismiss, confirm = (c) => con
               className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {phase.kind === 'sending' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-              {card.kind === 'trade' ? 'Confirm — send offer' : 'Confirm — set lineup'}
+              {card.kind === 'trade' ? 'Confirm — send offer' : card.kind === 'automation' ? 'Confirm — save settings' : 'Confirm — set lineup'}
             </button>
             {expired && phase.kind === 'idle' ? (
               <span className="text-xs text-white/60">This card expired. Ask Chimmy again for a fresh one.</span>

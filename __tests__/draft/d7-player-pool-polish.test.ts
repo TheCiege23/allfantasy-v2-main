@@ -42,28 +42,10 @@ describe('PositionChip — position-aware color badges (Commit 22)', () => {
     expect(tableSrc).toMatch(/function PositionChip/)
   })
 
-  it('QB uses rose color (red-spectrum for quarterback)', () => {
-    expect(tableSrc).toMatch(/QB[\s\S]{0,40}rose/)
-  })
-
-  it('RB uses emerald color (green-spectrum for running back)', () => {
-    expect(tableSrc).toMatch(/RB[\s\S]{0,40}emerald/)
-  })
-
-  it('WR uses cyan color (blue-spectrum for wide receiver)', () => {
-    expect(tableSrc).toMatch(/WR[\s\S]{0,40}cyan/)
-  })
-
-  it('TE uses amber color (yellow-spectrum for tight end)', () => {
-    expect(tableSrc).toMatch(/TE[\s\S]{0,40}amber/)
-  })
-
-  it('K (kicker) uses slate/muted color', () => {
-    expect(tableSrc).toMatch(/'K'[\s\S]{0,60}slate/)
-  })
-
-  it('DEF/DST uses violet color', () => {
-    expect(tableSrc).toMatch(/DEF[\s\S]{0,60}violet/)
+  it('fills with the board position colour (positionTintHex), so pool and board agree', () => {
+    expect(tableSrc).toMatch(/import \{ positionTintHex \} from '@\/lib\/draft-room\/positionTint'/)
+    expect(tableSrc).toMatch(/const tint = positionTintHex\(p\)/)
+    expect(tableSrc).toMatch(/backgroundColor: tint/)
   })
 
   it('<PositionChip> is rendered inside the player column case', () => {

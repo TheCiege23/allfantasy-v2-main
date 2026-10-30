@@ -45,6 +45,11 @@ export type DraftMobileTrayProps = {
   chrome: ReactNode
   /** Floats above the tray's top-right edge (e.g. a quick-action button). */
   accessory?: ReactNode
+  /**
+   * Height the tray opens to from peek. 'half' shares the screen with the board; 'full' suits a
+   * long list that needs its own header (the player pool), where half leaves room for ~2 rows.
+   */
+  openSnap?: Exclude<TraySnap, 'peek'>
   /** Expand to full when a text field inside the content gains focus (chat composer). */
   fullOnInputFocus?: boolean
   /** Comfortable opening height; managers can still drag to any snap. */
@@ -64,15 +69,17 @@ export function DraftMobileTray({
   children,
   chrome,
   accessory,
+  openSnap,
   fullOnInputFocus = false,
-  preferredOpenSnap = 'half',
+  preferredOpenSnap,
   testIdPrefix,
   ariaLabel,
   onSnapChange,
 }: DraftMobileTrayProps) {
+  const desiredOpenSnap = preferredOpenSnap ?? openSnap ?? 'half'
   const handleRef = useRef<HTMLDivElement | null>(null)
   const chromeRef = useRef<HTMLDivElement | null>(null)
-  const [snap, setSnap] = useState<TraySnap>(open ? preferredOpenSnap : 'peek')
+  const [snap, setSnap] = useState<TraySnap>(open ? desiredOpenSnap : 'peek')
   const [fullHeight, setFullHeight] = useState<number | null>(null)
   const [dragHeight, setDragHeight] = useState<number | null>(null)
   const dragRef = useRef<{ startY: number; startHeight: number; lastY: number; lastT: number; velocity: number } | null>(
@@ -80,8 +87,8 @@ export function DraftMobileTray({
   )
 
   useEffect(() => {
-    setSnap((current) => (!open ? 'peek' : current === 'peek' || preferredOpenSnap === 'full' ? preferredOpenSnap : current))
-  }, [open, preferredOpenSnap])
+    setSnap((current) => (!open ? 'peek' : current === 'peek' || desiredOpenSnap === 'full' ? desiredOpenSnap : current))
+  }, [open, desiredOpenSnap])
 
   useEffect(() => {
     onSnapChange?.(snap)

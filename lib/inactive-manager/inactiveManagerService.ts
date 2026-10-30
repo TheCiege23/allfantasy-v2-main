@@ -218,11 +218,14 @@ export async function setAutoHandover(leagueId: string, userId: string, input: u
 export type AutoHandoverRunResult = { leagues: number; handedOver: number; failures: { leagueId: string; error: string }[] }
 
 /** Hourly: in leagues that opted in, hand each team idle for the chosen number of days to AllFantasy. */
-export async function runAutoHandovers(opts?: { now?: Date; limit?: number; deadline?: number }): Promise<AutoHandoverRunResult> {
+export async function runAutoHandovers(opts?: { now?: Date; limit?: number; deadline?: number; leagueIds?: string[] }): Promise<AutoHandoverRunResult> {
   const now = opts?.now ?? new Date()
   const deadline = opts?.deadline ?? Date.now() + 15_000
   const result: AutoHandoverRunResult = { leagues: 0, handedOver: 0, failures: [] }
-  const ids = await prisma.$queryRaw<Array<{ id: string }>>`
+  // `leagueIds` names the leagues to check (a single league, or a test); otherwise every league with a rule.
+  const ids = opts?.leagueIds
+    ? opts.leagueIds.map((id) => ({ id }))
+    : await prisma.$queryRaw<Array<{ id: string }>>`
     SELECT id FROM leagues WHERE settings ? ${AUTO_HANDOVER_KEY}
     ORDER BY id LIMIT ${Math.max(1, Math.min(opts?.limit ?? 200, 1000))}`
   for (const { id: leagueId } of ids) {
@@ -439,25 +442,53 @@ export async function endManagedForNewOwners(leagueId: string, commissionerId: s
 export async function endInactiveManagerModeOnOwnerSave(leagueId: string, rosterId: string, ownerUserId: string): Promise<boolean> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   if (!readManagedLineups(league?.settings)[rosterId]) return false
-  let ended = false
+  let ended: ManagedLineup | null = null
   await updateManaged(leagueId, (current) => {
     if (!current[rosterId]) return null
-    ended = true
+    ended = current[rosterId]!
     const next = { ...current }
     delete next[rosterId]
     return next
   })
   if (ended) {
+    const entry = ended as ManagedLineup
+    const endedAt = new Date()
     await logAction({
       leagueId,
       userId: ownerUserId,
       actionType: ENDED_ACTION,
       entityType: 'roster',
       entityId: rosterId,
-      metadata: { rosterId, reason: 'owner_saved_lineup' },
+      // `since` and `autopilot` let the welcome-back summary (./welcomeBack.ts) read what was done.
+      metadata: { rosterId, reason: 'owner_saved_lineup', since: entry.since, autopilot: Boolean(entry.autopilot) },
     })
+    await sendWelcomeBack(leagueId, rosterId, ownerUserId, entry, endedAt).catch((e) =>
+      console.warn('[inactive-manager] welcome-back notice skipped', { leagueId, rosterId, error: String(e) }),
+    )
   }
-  return ended
+  return Boolean(ended)
+}
+
+/** One notice with what was done while the owner was away; the lineup screen shows the full summary. */
+async function sendWelcomeBack(leagueId: string, rosterId: string, ownerUserId: string, entry: ManagedLineup, endedAt: Date): Promise<void> {
+  const since = new Date(entry.since)
+  if (Number.isNaN(since.getTime())) return
+  const { buildWelcomeBack } = await import('./welcomeBackService')
+  const summary = await buildWelcomeBack({ leagueId, rosterId, since, endedAt, autopilot: Boolean(entry.autopilot) })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true } })
+  await dispatchNotification({
+    userIds: [ownerUserId],
+    category: 'autocoach',
+    type: 'inactive_manager_welcome_back',
+    title: `Welcome back · ${league?.name ?? 'your league'}`,
+    body: summary.en.headline,
+    severity: 'low',
+    leagueId,
+    actionHref: `/league/${leagueId}?tab=team`,
+    actionLabel: 'See what changed',
+    dedupePrefix: `welcome-back:${leagueId}:${rosterId}:${entry.since}`,
+    meta: { leagueId, rosterId, lineupChanges: summary.lineupChanges, claims: summary.claims },
+  })
 }
 
 export type InactiveLineupRunResult = {

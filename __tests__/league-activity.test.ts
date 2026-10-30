@@ -266,6 +266,28 @@ describe('getLeagueActivity', () => {
     expect(asked).not.toContain('4430737')
   })
 
+  /*
+   * 🛑 SLEEPER NUMBERS ITS NFL AND NBA POOLS INDEPENDENTLY, so one Sleeper id can be two players. The
+   * double honours a `sport` filter as Postgres would and ignores a query that sends none — so only an
+   * unscoped read names an NBA league's add with the NFL player who shares his id.
+   */
+  it('🛑 names a Sleeper id from the league’s own sport, never another sport’s namesake', async () => {
+    const rows = [
+      { sleeperId: '2002', sport: 'NFL', name: 'NFL Namesake', position: 'RB', team: 'KC' },
+      { sleeperId: '2002', sport: 'NBA', name: 'NBA Guard', position: 'PG', team: 'BOS' },
+    ]
+    playerFindMany.mockImplementation(async (args: { where: { sport?: string; sleeperId: { in: string[] } } }) =>
+      rows.filter((r) => args.where.sleeperId.in.includes(r.sleeperId) && (args.where.sport == null || r.sport === args.where.sport)),
+    )
+    activityFindMany.mockResolvedValue([
+      { id: 'n1', activityType: 'waiver', occurredAt: T('2026-10-20T10:00:00Z'), rosterId: null, payload: { adds: ['2002'], drops: [] } },
+    ])
+    const nba = await getLeagueActivity({ ...ARGS, platform: 'sleeper', sport: 'nba' })
+    expect(nba!.items[0].adds[0].label).toContain('NBA Guard')
+    const nfl = await getLeagueActivity({ ...ARGS, platform: 'sleeper', sport: 'NFL' })
+    expect(nfl!.items[0].adds[0].label).toContain('NFL Namesake')
+  })
+
   it('reads adds/drops sent as an object, which is how Sleeper sends them', async () => {
     activityFindMany.mockResolvedValue([
       {

@@ -12,12 +12,14 @@ import { currentScheduledLeagueWeek, leagueWeekProgress } from './leagueWeekProg
 import { loadFinishedNflWeeks } from './finishedNflWeeks'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { forecastSidesFor, projectedFinalFor, winProbabilityFor, type Unavailable } from './matchupProjections'
-import { BEST_BALL_REASON, matchupStarted, STATES_UNKNOWN_REASON } from './matchupForecast'
+import { BEST_BALL_REASON, matchupStarted, SCORING_TYPE_REASON, STATES_UNKNOWN_REASON } from './matchupForecast'
+import { weeklyFormat } from './weeklyCapabilities'
 import { loadMatchupSides, matchupLivePoints } from './matchupWinInputs'
 import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { startingSlotTemplate } from './rosterSlots'
 import { identityGapNote } from './identityGap'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
+import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { verifiedHandoff, type PlatformLink } from './platformLinks'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isBestBallSettings } from './lineupMode'
@@ -437,6 +439,8 @@ async function buildMatchupData(
 
   const platform = String(league.platform ?? 'manual').toLowerCase()
   const sport = league.sport ?? null
+  /* Fantrax's real league id, for the "Open in Fantrax" link — `platformLeagueId` is our own snapshot uuid there. */
+  const linkLeagueId = linkableSourceLeagueId(league, await fantraxSourceLeagueIds([league]))
 
   const base = {
     league: {
@@ -447,7 +451,7 @@ async function buildMatchupData(
       logoUrl: asImageUrl(league.logoUrl, platform) ?? asImageUrl(league.avatarUrl, platform),
       sourceLink: resolveSourceLink({
         platform: league.platform,
-        sourceLeagueId: league.platformLeagueId,
+        sourceLeagueId: linkLeagueId,
         leagueName: leagueDisplayName(league.name),
         season: league.season,
         action: 'matchup',
@@ -866,7 +870,17 @@ async function buildMatchupData(
       })()
     : null
 
-  const projectedFinal: MatchupData['projectedFinal'] = bestBall
+  /*
+   * 🛑 A CATEGORY OR ROTO LEAGUE IS NOT WON ON THIS WEEK'S FANTASY POINTS, so neither number below means
+   * anything there. The format is `weeklyFormat`'s, the rule the week board and Season Outlook already
+   * apply; this screen handed those leagues a projected final and a win chance anyway.
+   */
+  const format = weeklyFormat(league)
+  const scoringTypeRefusal = format === 'categories' || format === 'roto' ? { available: false as const, reason: SCORING_TYPE_REASON } : null
+
+  const projectedFinal: MatchupData['projectedFinal'] = scoringTypeRefusal
+    ? scoringTypeRefusal
+    : bestBall
     ? bestBallFinal ?? { available: false, reason: 'both full rosters could not be verified' }
     : forecastReason ? { available: false, reason: forecastReason } : !anyProjected
     ? {
@@ -894,7 +908,9 @@ async function buildMatchupData(
       })()
 
   /* Every refusal — best ball, unknown states after kickoff, unattributed points, unpriced starters — is the shared rule's. */
-  const winProbability: MatchupData['winProbability'] = sideProjections
+  const winProbability: MatchupData['winProbability'] = scoringTypeRefusal
+    ? scoringTypeRefusal
+    : sideProjections
     ? (() => {
         const result = winProbabilityFor(sideProjections, live, { states, bestBall })
         if (result.available) result.data.detail = `${base.yetToPlay.reason} · ${result.data.detail.replace(/starters? still to play/, 'starters with scoring remaining')}`
@@ -911,10 +927,17 @@ async function buildMatchupData(
   const gameStateOf = (entry: { playerId: string; unavailable?: Unavailable | null }): StarterGameState =>
     entry.unavailable ? 'final' : states.get(entry.playerId) ?? 'unknown'
 
+  /*
+   * 🛑 THE SAME REFUSAL REACHES EVERY STARTER'S CELL. Withholding the projected final while each cell
+   * still carried a points projection put the same meaningless claim on screen one row down. The
+   * lineup — who starts where — is still shown; only the points projections are withheld.
+   */
+  const withholdPointsProjections = scoringTypeRefusal != null
   const cellFor = (
-    entry: { playerId: string; projected: number | null; unavailable?: Unavailable | null; afEngine?: number | null } | undefined,
+    raw: { playerId: string; projected: number | null; unavailable?: Unavailable | null; afEngine?: number | null } | undefined,
   ): MatchupPlayerCell | null => {
-    if (!entry) return null
+    if (!raw) return null
+    const entry = withholdPointsProjections ? { ...raw, projected: null, afEngine: null } : raw
     if (entry.playerId === EMPTY_SLOT) {
       return {
         playerId: entry.playerId,
@@ -1039,8 +1062,10 @@ async function buildMatchupData(
          * fully named and wholly unpriced is exactly as unusable as one that is
          * nameless — and says so, rather than going quiet.
          */
-        priced: lineups.data.filter((s) => s.you && !s.you.empty && s.you.projected != null)
-          .length,
+        priced: withholdPointsProjections
+          // Withheld by scoring type, not unpriceable — the "nobody could be priced" note would mislead.
+          ? lineups.data.filter((s) => s.you && !s.you.empty && s.you.name != null).length
+          : lineups.data.filter((s) => s.you && !s.you.empty && s.you.projected != null).length,
       })
     : null
 
@@ -1054,7 +1079,10 @@ async function buildMatchupData(
       }
     : {
         available: false,
-        reason: lineupIds.length
+        reason: withholdPointsProjections
+          // The columns carry no projection in this league, so "each column is a projection" would be false.
+          ? SCORING_TYPE_REASON
+          : lineupIds.length
           ? `no per-player scoring has been ingested for ${latest.seasonYear} week ${latest.week}, so each column below is a projection priced under this league's rules — not a live score`
           : 'we could not match both sides of this matchup to an imported roster',
       }

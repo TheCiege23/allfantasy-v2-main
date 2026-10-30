@@ -19,7 +19,7 @@ import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
  * One board column. Sleeper-style: the board spans the full width with short, wide tiles; past
  * 84px per column (a large league on a narrow screen) it scrolls sideways instead of squashing.
  */
-const BOARD_COLUMN = 'minmax(84px, 1fr)'
+const BOARD_COLUMN = 'minmax(84px, var(--af-board-col-max, 1fr))'
 /** Narrow round-label column: Sleeper shows the snake direction on the tiles themselves. */
 const ROUND_COLUMN = '28px'
 
@@ -179,6 +179,7 @@ function DraftBoardInner({
   const rs = presentationVariant === 'redraft_snake'
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
   const [selectedRound, setSelectedRound] = useState(1)
+  const boardRef = useRef<HTMLElement | null>(null)
   const lastFollowedOverallRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -200,9 +201,9 @@ function DraftBoardInner({
   useEffect(() => {
     if (draftType === 'auction' || currentOverallPick == null) return
     const raf = window.requestAnimationFrame(() => {
-      const el = document.querySelector<HTMLElement>(`[data-testid="draft-board-cell-${currentOverallPick}"]`)
-      el?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      const el = boardRef.current?.querySelector<HTMLElement>(`[data-testid="draft-board-cell-${currentOverallPick}"]`)
+      el?.scrollIntoView?.({
+        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
         block: 'nearest',
         inline: 'nearest',
       })
@@ -419,6 +420,7 @@ function DraftBoardInner({
 
   return (
     <section
+      ref={boardRef}
       className={
         rs
           ? 'relative flex flex-col overflow-hidden rounded-2xl border border-cyan-400/20 bg-[linear-gradient(165deg,rgba(15,23,42,0.92)_0%,rgba(6,13,26,0.98)_45%,rgba(4,9,17,1)_100%)] shadow-[0_24px_72px_rgba(0,0,0,0.55),0_0_0_1px_rgba(34,211,238,0.06),inset_0_1px_0_rgba(255,255,255,0.06)]'
@@ -435,11 +437,12 @@ function DraftBoardInner({
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`text-sm font-bold tracking-tight drop-shadow-sm ${rs ? 'bg-gradient-to-r from-white to-cyan-100/90 bg-clip-text text-transparent' : 'text-white'}`}>
+            {/* Phones: the title, mode chip and legend cost a row of a ~570px board; the round controls stay. */}
+            <span className={`text-sm font-bold tracking-tight drop-shadow-sm max-md:hidden ${rs ? 'bg-gradient-to-r from-white to-cyan-100/90 bg-clip-text text-transparent' : 'text-white'}`}>
               Draft board
             </span>
             <span
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] shadow-sm ${rs ? 'border-white/18 bg-white/[0.08] text-cyan-100/85' : 'border-white/12 bg-white/[0.06] text-white/60'}`}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] shadow-sm max-md:hidden ${rs ? 'border-white/18 bg-white/[0.08] text-cyan-100/85' : 'border-white/12 bg-white/[0.06] text-white/60'}`}
             >
               {boardModeLabel}
             </span>
@@ -453,7 +456,7 @@ function DraftBoardInner({
               with no roster has no such cells, and naming a state that cannot appear is noise.
             */}
             <span
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/45"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/45 max-md:hidden"
               data-testid="draft-board-legend"
             >
               <span className="inline-flex items-center gap-1">
@@ -559,7 +562,7 @@ function DraftBoardInner({
       </div>
 
       <div
-        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
+        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${draftType === 'auction' ? '' : 'max-md:hidden'} ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
         data-testid="draft-board-round-label"
       >
         {draftType === 'auction'
@@ -664,7 +667,14 @@ function DraftBoardInner({
         </div>
       ) : (
         <div className="snap-x snap-mandatory overflow-x-auto overscroll-x-contain overflow-y-visible px-2 py-2 pb-3 [-webkit-overflow-scrolling:touch]">
-          <div className="min-w-max sm:min-w-full" data-testid="draft-board-grid">
+          {/*
+            ⚠ PHONE COLUMNS ARE CAPPED (2026-10-29). Below sm the grid is `min-w-max`, and a `1fr`
+            track there grows to its longest content — one "steve21011gmailcom's Team" made every
+            column ~157px, so a phone showed 2.6 teams. Below md `--af-board-col-max` pins a column
+            to 84px (names truncate; the header cell's `title` keeps the full name). md+ leaves it
+            unset, so BOARD_COLUMN resolves to its plain `minmax(84px, 1fr)`.
+          */}
+          <div className="min-w-max sm:min-w-full max-md:[--af-board-col-max:84px]" data-testid="draft-board-grid">
             <div
               className={`sticky top-0 z-10 grid gap-[2px] border-b pb-0.5 backdrop-blur-md ${
                 rs

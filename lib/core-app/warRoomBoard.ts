@@ -210,9 +210,13 @@ export async function getLiveDraftPicks(
    */
   type PickMeta = { imageUrl: string | null; team: string | null; position: string | null; sleeperId: string | null }
   const leagueOfSession = new Map(sessions.map((s) => [s.id, s.league]))
-  /** Each pick's lookup key: `sleeper:<id>` or `<SPORT>:<id>` for a provider id; null when unreadable. */
+  /** Each pick's lookup key: `sleeper:<SPORT>:<id>` or `<SPORT>:<id>` for a provider id; null when unreadable. */
   const keyOfPick = new Map<string, string>()
-  const sleeperIds = new Set<string>()
+  /*
+   * ⚠ BY SPORT: a Sleeper id is unique only within one sport, so a Sleeper NBA draft's 9228 is
+   * looked up among NBA rows and keyed apart from a Sleeper NFL draft's 9228.
+   */
+  const sleeperIdsBySport = new Map<string, Set<string>>()
   const providerIdsBySport = new Map<string, Set<string>>()
   for (const p of picks) {
     if (!p.playerId) continue
@@ -220,8 +224,10 @@ export async function getLiveDraftPicks(
     const sport = String(league?.sport ?? 'NFL').toUpperCase()
     const split = leagueIdSpaces([p.playerId], sport, league?.platform)
     if (split.sleeperIds.length > 0) {
-      sleeperIds.add(p.playerId)
-      keyOfPick.set(`${p.sessionId}:${p.overall}`, `sleeper:${p.playerId}`)
+      const set = sleeperIdsBySport.get(sport) ?? new Set<string>()
+      set.add(p.playerId)
+      sleeperIdsBySport.set(sport, set)
+      keyOfPick.set(`${p.sessionId}:${p.overall}`, `sleeper:${sport}:${p.playerId}`)
     } else if (split.providerIds.length > 0) {
       const set = providerIdsBySport.get(sport) ?? new Set<string>()
       set.add(p.playerId)
@@ -232,9 +238,14 @@ export async function getLiveDraftPicks(
 
   const metaSelect = { externalId: true, sleeperId: true, source: true, imageUrl: true, team: true, position: true } as const
   const [bySleeperRows, byProviderRows] = await Promise.all([
-    sleeperIds.size > 0
-      ? prisma.sportsPlayer.findMany({ where: sleeperIdWhere([...sleeperIds]), select: metaSelect }).catch(() => [])
-      : Promise.resolve([]),
+    Promise.all(
+      [...sleeperIdsBySport].map(([sport, ids]) =>
+        prisma.sportsPlayer
+          .findMany({ where: sleeperIdWhere([...ids], sport), select: metaSelect })
+          .then((rows) => ({ sport, rows }))
+          .catch(() => ({ sport, rows: [] as Array<{ externalId: string | null; sleeperId: string | null; source: string | null; imageUrl: string | null; team: string | null; position: string | null }> })),
+      ),
+    ),
     Promise.all(
       [...providerIdsBySport].map(([sport, ids]) =>
         prisma.sportsPlayer
@@ -253,7 +264,9 @@ export async function getLiveDraftPicks(
   })
   const byPlayerKey = new Map<string, PickMeta>()
   // Sleeper's own row wins over the provider rows the crosswalk stamped with the same Sleeper id.
-  for (const [sleeperId, row] of indexBySleeperId(bySleeperRows)) byPlayerKey.set(`sleeper:${sleeperId}`, metaOf(row))
+  for (const { sport, rows } of bySleeperRows) {
+    for (const [sleeperId, row] of indexBySleeperId(rows)) byPlayerKey.set(`sleeper:${sport}:${sleeperId}`, metaOf(row))
+  }
   for (const row of byProviderRows) {
     const key = `${row.sport}:${row.externalId}`
     if (!byPlayerKey.has(key)) byPlayerKey.set(key, metaOf(row))
