@@ -19,6 +19,13 @@ const hm = vi.hoisted(() => ({
   resolveCurrentOnTheClock: vi.fn(),
   resetTimer: vi.fn(),
   transaction: vi.fn(),
+  verifyCollege: vi.fn(),
+  c2cConfig: vi.fn(),
+  devyConfig: vi.fn(),
+  rightsFind: vi.fn(),
+  rightsCreate: vi.fn(),
+  rightsDelete: vi.fn(),
+  rightsUpdate: vi.fn(),
 }))
 
 vi.mock('@/lib/league/league-roster-draft-gate', () => ({
@@ -58,6 +65,8 @@ vi.mock('@/lib/live-draft-engine/PickValidation', () => ({
   validateC2CEligibilityAsync: vi.fn().mockResolvedValue({ valid: true }),
   validateDevyEligibilityAsync: vi.fn().mockResolvedValue({ valid: true }),
 }))
+
+vi.mock('@/lib/devy/verifyNcaabDraftPick', () => ({ verifyNcaabCollegeDraftPick: hm.verifyCollege }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -142,6 +151,13 @@ describe('commissionerPickEdit', () => {
     hm.resetTimer.mockResolvedValue(true)
     hm.resolveCurrentOnTheClock.mockReturnValue(null)
     hm.txRosterFindMany.mockResolvedValue([])
+    hm.verifyCollege.mockResolvedValue(true)
+    hm.c2cConfig.mockResolvedValue({ id: 'config' })
+    hm.devyConfig.mockResolvedValue(null)
+    hm.rightsFind.mockResolvedValue(null)
+    hm.rightsCreate.mockResolvedValue({ id: 'right-new' })
+    hm.rightsDelete.mockResolvedValue({ count: 1 })
+    hm.rightsUpdate.mockResolvedValue({ count: 1 })
     hm.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<boolean>) => {
       const tx = {
         draftSession: {
@@ -157,9 +173,41 @@ describe('commissionerPickEdit', () => {
         draftPickAuditLog: { create: hm.txAuditCreate },
         roster: { count: hm.txRosterCount, findMany: hm.txRosterFindMany },
         devyPlayer: { findFirst: vi.fn().mockResolvedValue(null) },
+        c2CLeagueConfig: { findUnique: hm.c2cConfig },
+        devyLeagueConfig: { findUnique: hm.devyConfig },
+        devyRights: { findFirst: hm.rightsFind, create: hm.rightsCreate, deleteMany: hm.rightsDelete, updateMany: hm.rightsUpdate },
       }
       return fn(tx as any)
     })
+  })
+
+  it('assigns a verified college player with the exact ID and a draft-owned right', async () => {
+    const session = { ...pausedSession([]), sportType: 'NBA', league: { id: 'league-1', sport: 'NBA', leagueVariant: 'merged_devy_c2c' } }
+    hm.txFindUnique.mockResolvedValue(session)
+    hm.validateRosterFitForDraftPick.mockResolvedValue({ valid: true })
+    hm.txCreatePick.mockResolvedValue({ id: 'new-pick' })
+    const out = await commissionerPickEdit({ leagueId: 'league-1', actorUserId: 'comm-1', action: 'ASSIGN_PLAYER_TO_PICK', overallPickNumber: 1, playerName: 'College Guard', position: 'G', playerId: 'espn:ncaab:12' })
+    expect(out.ok).toBe(true)
+    expect(hm.txCreatePick).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ playerId: 'espn:ncaab:12', assetType: 'c2c_college', pickMetadata: { draftCollegeRightsId: 'right-new' } }) }))
+    expect(hm.rightsCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ rosterId: 'r1', devyPlayerId: 'espn:ncaab:12', state: 'COLLEGE_ACTIVE' }) }))
+  })
+  it('removes or transfers only the right attached to the edited pick', async () => {
+    const pick = basePick({ playerName: 'College Guard', position: 'G', playerId: 'espn:ncaab:12', assetType: 'c2c_college', pickMetadata: { draftCollegeRightsId: 'right-12' } })
+    const session = { ...pausedSession([pick]), sportType: 'NBA', league: { id: 'league-1', sport: 'NBA', leagueVariant: 'merged_devy_c2c' } }
+    hm.txFindUnique.mockResolvedValue(session)
+    hm.txRosterCount.mockResolvedValue(1)
+    expect((await commissionerPickEdit({ leagueId: 'league-1', actorUserId: 'comm-1', action: 'CHANGE_PICK_OWNER', overallPickNumber: 1, newRosterId: 'r2' })).ok).toBe(true)
+    expect(hm.rightsUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 'right-12', rosterId: 'r1', devyPlayerId: 'espn:ncaab:12' }), data: { rosterId: 'r2' } }))
+    expect((await commissionerPickEdit({ leagueId: 'league-1', actorUserId: 'comm-1', action: 'REMOVE_PLAYER_FROM_PICK', overallPickNumber: 1 })).ok).toBe(true)
+    expect(hm.rightsDelete).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 'right-12', rosterId: 'r1', devyPlayerId: 'espn:ncaab:12' }) }))
+  })
+  it('rejects an unverified college edit before writing a pick', async () => {
+    hm.txFindUnique.mockResolvedValue({ ...pausedSession([]), sportType: 'NBA', league: { id: 'league-1', sport: 'NBA', leagueVariant: 'merged_devy_c2c' } })
+    hm.validateRosterFitForDraftPick.mockResolvedValue({ valid: true })
+    hm.verifyCollege.mockResolvedValue(false)
+    const out = await commissionerPickEdit({ leagueId: 'league-1', actorUserId: 'comm-1', action: 'ASSIGN_PLAYER_TO_PICK', overallPickNumber: 1, playerName: 'College Guard', position: 'G', playerId: 'espn:ncaab:12' })
+    expect(out.ok).toBe(false)
+    expect(hm.txCreatePick).not.toHaveBeenCalled()
   })
 
   it('rejects when draft is not paused', async () => {

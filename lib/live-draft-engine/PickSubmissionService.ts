@@ -44,6 +44,11 @@ import { resolveAdpAtPick } from '@/lib/draft-room/adpAtPick'
 import { resolveStoredPickHeadshot } from '@/lib/draft-room/storedPickHeadshot'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
+import { ESPN_NCAAB_DEVY_ID_PREFIX } from '@/lib/devy/ncaabRosterEvidence'
+import { verifyNcaabCollegeDraftPick } from '@/lib/devy/verifyNcaabDraftPick'
+import { resolveDevySeasonYear } from '@/lib/devy/rightsWriter'
+import { isDevyLeague } from '@/lib/devy/DevyLeagueConfig'
+import { isC2CLeague } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 
 export interface SubmitPickInput {
   leagueId: string
@@ -184,11 +189,11 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     }
   }
 
+  const league = input.source !== 'keeper' ? await prisma.league.findUnique({
+    where: { id: input.leagueId },
+    select: { sport: true, leagueVariant: true },
+  }) : null
   if (input.source !== 'keeper') {
-    const league = await prisma.league.findUnique({
-      where: { id: input.leagueId },
-      select: { sport: true, leagueVariant: true },
-    })
     if (league?.sport === 'NBA' && league.leagueVariant === 'survivor') {
       const roster = await loadNbaSurvivorRosterEligibility(totalPicks)
       if (!roster.ready || !nbaSurvivorPlayerIdMatches(roster, input.playerName, input.playerId)) {
@@ -245,13 +250,36 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       ? { enabled: true, devyRounds: Array.isArray((rawDevyConfig as any).devyRounds) ? (rawDevyConfig as any).devyRounds : [] }
       : null
 
-  if (c2cConfig?.enabled) {
+  // NBA college picks must be identified by provider ID, not an unscoped name lookup.
+  // The source is a transport label (autopick, user, commissioner), never asset authority.
+  const nbaCollegeId = String(input.playerId ?? '').startsWith(ESPN_NCAAB_DEVY_ID_PREFIX)
+  const nba = league?.sport === 'NBA'
+  let verifiedNbaCollege: 'c2c_college' | 'devy_pick' | null = null
+  if (nbaCollegeId) {
+    if (!nba || seasonContext) return { success: false, error: 'This college player is not eligible in this draft.' }
+    const [c2cLeague, devyLeague, verified] = await Promise.all([
+      isC2CLeague(input.leagueId), isDevyLeague(input.leagueId),
+      verifyNcaabCollegeDraftPick(prisma, { playerId: input.playerId, playerName: input.playerName, position: input.position, now: new Date() }),
+    ])
+    if (!verified || (!c2cLeague && !devyLeague)) return { success: false, error: 'This college player is not on a verified current roster. Refresh the draft pool.' }
+    verifiedNbaCollege = c2cLeague ? 'c2c_college' : 'devy_pick'
+  }
+  if (nba && !verifiedNbaCollege && (input.source === 'college' || input.source === 'devy' || input.assetType === 'c2c_college' || input.assetType === 'devy_pick')) {
+    return { success: false, error: 'Select a verified current college player.' }
+  }
+  const nbaCollegeRound = c2cConfig?.collegeRounds.includes(roundForEligibility) ?? devyConfig?.devyRounds.includes(roundForEligibility) ?? false
+  if (nba && (c2cConfig || devyConfig)) {
+    if (nbaCollegeRound && !verifiedNbaCollege) return { success: false, error: 'This round is college-only. Select a verified college player.' }
+    if (!nbaCollegeRound && verifiedNbaCollege) return { success: false, error: 'This round is pro-only. Select a pro player.' }
+  }
+
+  if (!nba && c2cConfig?.enabled) {
     const c2cValidation = await validateC2CEligibilityAsync(
       { currentRound: roundForEligibility, playerName: input.playerName, c2cConfig },
       prisma
     )
     if (!c2cValidation.valid) return { success: false, error: c2cValidation.error }
-  } else if (devyConfig?.enabled) {
+  } else if (!nba && devyConfig?.enabled) {
     const devyValidation = await validateDevyEligibilityAsync(
       {
         currentRound: roundForEligibility,
@@ -269,8 +297,8 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
   const displayName = owner?.displayName ?? current.displayName
   const slotOriginalRosterId = slotOrder.find((s) => s.slot === slot)?.rosterId ?? onClockRosterId
 
-  let assetType: string = input.assetType ?? 'player'
-  if (!input.assetType) {
+  let assetType: string = verifiedNbaCollege ?? input.assetType ?? 'player'
+  if (!input.assetType && !verifiedNbaCollege) {
     if (input.source === 'devy' || input.source === 'promoted_devy') assetType = 'devy_pick'
     else if (input.source === 'college') assetType = 'c2c_college'
     else assetType = 'player'
@@ -403,6 +431,17 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       if (existingAtOverall) {
         await (tx as any).draftPick.delete({ where: { id: existingAtOverall.id } })
       }
+      let draftCollegeRightsId: string | undefined
+      if (verifiedNbaCollege && input.playerId) {
+        const existingRights = await tx.devyRights.findFirst({ where: { leagueId: input.leagueId, devyPlayerId: input.playerId }, select: { id: true } })
+        if (existingRights) throw new Error('College player already has rights in this league')
+        const right = await tx.devyRights.create({ data: {
+          leagueId: input.leagueId, rosterId: effectiveRosterId, devyPlayerId: input.playerId,
+          state: verifiedNbaCollege === 'c2c_college' ? 'COLLEGE_ACTIVE' : 'NCAA_DEVY_ACTIVE',
+          seasonYear: resolveDevySeasonYear(), sourceConfidence: 100,
+        }, select: { id: true } })
+        draftCollegeRightsId = right.id
+      }
       const created = await (tx as any).draftPick.create({
         data: {
           sessionId: session.id,
@@ -469,6 +508,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       }, selectedAt)
       await tx.draftPick.update({where:{id:created.id},data:{pickedAt:selectedAt,pickMetadata:json({
         ...input.pickMetadata,
+        ...(draftCollegeRightsId ? { draftCollegeRightsId } : {}),
         ...(adpAtPick != null ? { adpAtPick } : {}),
         archive:{eventId:archived.eventId,context:archived.context,timing:archived.selected,clockAllowanceSeconds:timerSeconds,
           selectionRosterId:effectiveRosterId,originalRosterId:slotOriginalRosterId,actorUserId:input.madeByUserId??null},
@@ -488,6 +528,9 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
         error: 'Draft state changed; please retry',
         code: DRAFT_PICK_RACE_RETRY,
       }
+    }
+    if (error instanceof Error && error.message === 'College player already has rights in this league') {
+      return { success: false, error: error.message }
     }
     if (error instanceof Error && /Draft state changed/.test(error.message)) {
       recordEngineTelemetrySample(ENGINE.DRAFT_PICK_RACE, {
@@ -657,7 +700,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
   // Runs after the pick transaction commits; a failed write is logged loudly but
   // never voids the committed pick. 'promoted_devy' consumes an existing right
   // rather than creating one, so it is skipped.
-  if ((assetType === 'devy_pick' || assetType === 'c2c_college') && input.source !== 'promoted_devy') {
+  if (!verifiedNbaCollege && (assetType === 'devy_pick' || assetType === 'c2c_college') && input.source !== 'promoted_devy') {
     try {
       const { recordDraftedDevyRights } = await import('@/lib/devy/rightsWriter')
       const rights = await recordDraftedDevyRights({
