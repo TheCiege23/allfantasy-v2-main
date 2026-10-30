@@ -71,7 +71,7 @@ export function DraftRoomAccordion({
       className={cn(
         'rounded-xl border transition-shadow duration-200',
         rs
-          ? 'border-white/12 bg-black/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
+          ? 'border-white/[0.06] bg-[#151b2e]'
           : 'border-white/10 bg-[#0a1228]/60',
         className,
       )}
@@ -82,7 +82,7 @@ export function DraftRoomAccordion({
       <div
         className={cn(
           'flex items-start rounded-t-xl transition-colors',
-          rs ? 'hover:bg-white/[0.04]' : 'hover:bg-white/5',
+          rs ? 'hover:bg-[#1d2236]' : 'hover:bg-white/5',
         )}
       >
         <button
@@ -95,18 +95,18 @@ export function DraftRoomAccordion({
         >
           <ChevronDown
             className={cn(
-              'mt-0.5 h-4 w-4 shrink-0 text-cyan-300/80 transition-transform duration-200',
+              'mt-0.5 h-4 w-4 shrink-0 text-[#8b91a7] transition-transform duration-200',
               open ? 'rotate-0' : '-rotate-90',
             )}
             aria-hidden
           />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              {icon ? <span className="shrink-0 text-cyan-200/90">{icon}</span> : null}
+              {icon ? <span className="shrink-0 text-[#8b91a7]">{icon}</span> : null}
               <span
                 className={cn(
                   'text-[11px] font-bold uppercase tracking-[0.16em]',
-                  rs ? 'text-cyan-100/90' : 'text-white/85',
+                  rs ? 'text-white/85' : 'text-white/85',
                 )}
               >
                 {title}

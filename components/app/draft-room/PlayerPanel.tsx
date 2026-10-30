@@ -41,6 +41,8 @@ import {
   logDraftPoolPositionDiagnosticsIfNeeded,
 } from '@/lib/draft-room/draftPoolDiagnostics'
 import { formatAiAdpUnavailableBanner } from '@/lib/draft-room/adpReadinessCopy'
+import { positionTintHex } from '@/lib/draft-room/positionTint'
+import { SKIN_CONTROL, SKIN_DRAFT_BUTTON, SKIN_FOCUS, SKIN_ON_FILL, SKIN_PANEL, SKIN_PILL_ACTIVE, SKIN_PILL_IDLE } from '@/lib/draft-room/sleeperSkin'
 import { getDraftRoomDisplayHeadshot, getDraftRoomDisplayInjury } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import { NflRedraftPremiumPlayerCardShells } from '@/components/redraft-premium'
 
@@ -332,12 +334,12 @@ function PlayerListCards({
                       onDraftRequest(p)
                     }}
                     data-testid={`draft-player-button-${index}`}
-                    className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border px-3 py-2 text-xs font-semibold transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 active:scale-95 sm:min-w-0 sm:px-2 sm:py-1 ${
+                    className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border px-3 py-2 text-xs font-bold transition duration-150 ${SKIN_FOCUS} active:scale-95 sm:min-w-0 sm:px-2 sm:py-1 ${
                       isPlayerDraftedEntry(p, draftedNames, draftedPlayerIds)
-                        ? 'cursor-not-allowed border-white/10 bg-white/[0.04] text-white/30'
+                        ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/30'
                         : !canDraft
-                          ? 'cursor-not-allowed border-white/10 bg-black/30 text-white/32'
-                          : 'border-cyan-400/45 bg-gradient-to-br from-cyan-500/22 to-violet-600/15 text-cyan-50 shadow-[0_4px_22px_rgba(34,211,238,0.2)] hover:brightness-110 hover:shadow-[0_6px_28px_rgba(34,211,238,0.28)]'
+                          ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/40'
+                          : SKIN_DRAFT_BUTTON
                     }`}
                   >
                     {isPlayerDraftedEntry(p, draftedNames, draftedPlayerIds) ? 'Drafted' : 'Draft'}
@@ -349,7 +351,7 @@ function PlayerListCards({
                   type="button"
                   onClick={() => onAddToQueue(p)}
                   data-testid={`draft-queue-add-${index}`}
-                  className="inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border border-white/16 bg-black/25 text-white/75 transition duration-150 hover:border-cyan-400/25 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 active:scale-95"
+                  className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border transition duration-150 active:scale-95 ${SKIN_FOCUS} ${SKIN_PILL_IDLE}`}
                   aria-label={`Add ${p.name} to queue`}
                 >
                   <Plus className="h-4 w-4" />
@@ -835,34 +837,28 @@ function PlayerPanelInner({
     <section
       className={
         rs
-          ? 'relative flex h-full min-h-0 max-h-full flex-1 flex-col overflow-hidden rounded-xl border border-cyan-500/20 bg-[linear-gradient(168deg,rgba(12,24,44,0.95)_0%,rgba(5,10,20,0.98)_100%)] shadow-[0_20px_64px_rgba(0,0,0,0.5),0_0_0_1px_rgba(34,211,238,0.05),inset_0_1px_0_rgba(255,255,255,0.05)]'
-          : 'relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-gradient-to-b from-[#070f22] via-[#060d1e] to-[#050a14] shadow-[0_16px_48px_rgba(0,0,0,0.4)]'
+          ? `relative flex h-full min-h-0 max-h-full flex-1 flex-col overflow-hidden rounded-xl ${SKIN_PANEL}`
+          : `relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl ${SKIN_PANEL}`
       }
       data-testid="draft-player-panel"
     >
       <div
-        className={`pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r ${rs ? 'via-cyan-400/30' : 'via-violet-400/15'} from-transparent to-transparent`}
-        aria-hidden
-      />
-      <div
-        className={`sticky top-0 z-20 shrink-0 border-b shadow-[0_8px_28px_rgba(0,0,0,0.4)] backdrop-blur-xl ${rs ? 'border-cyan-500/12 bg-[rgba(6,14,28,0.97)]' : 'border-white/[0.08] bg-[#060d1e]/92'}`}
+        className="sticky top-0 z-20 shrink-0 border-b border-white/[0.06] bg-[#0d1424]"
       >
         <div className={`flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] px-2 py-1 ${rs ? 'gap-y-1' : ''}`}>
           <div
-            className={`flex min-h-[30px] flex-1 items-center gap-1.5 rounded-full border px-2.5 py-1 shadow-inner touch-manipulation transition duration-150 focus-within:border-cyan-400/45 focus-within:ring-2 focus-within:ring-cyan-400/20 ${
-              rs
-                ? 'min-w-[150px] border-cyan-400/30 bg-[#0c162d]/95 ring-1 ring-cyan-500/10'
-                : 'border-white/[0.06] bg-[#101a30]/95'
+            className={`flex min-h-[30px] flex-1 items-center gap-1.5 rounded-full border px-2.5 py-1 touch-manipulation transition duration-150 focus-within:ring-2 focus-within:ring-white/25 ${SKIN_CONTROL} ${
+              rs ? 'min-w-[150px]' : ''
             }`}
           >
-            <Search className={`h-4 w-4 shrink-0 ${rs ? 'text-cyan-300/70' : 'text-white/50'}`} />
+            <Search className="h-4 w-4 shrink-0 text-white/45" />
             <input
               ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={rs ? 'Search name, team, school…' : 'Search players...'}
-              className="min-w-0 flex-1 bg-transparent text-[12px] text-white placeholder:text-white/40 focus:outline-none"
+              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-white shadow-none placeholder:text-white/40 focus:outline-none focus:ring-0"
               aria-label="Search players"
               data-testid="draft-player-search-input"
             />
@@ -888,8 +884,8 @@ function PlayerPanelInner({
             ) : null}
           </button>
           {/* D.6.1 — position pills replacing the legacy <select>. Each pill shows the
-              available pool count for that position; the active pill is highlighted with
-              the cyan→violet gradient that matches the rest of the Sleeper-style chrome.
+              available pool count for that position; the active pill fills with that
+              position's board colour, and idle pills carry it in their label.
               The legacy `data-testid="draft-position-filter"` lives on the wrapper so e2e
               selectors that expect to find it still resolve. */}
           <div
@@ -900,6 +896,8 @@ function PlayerPanelInner({
           >
             {positionPillCounts.map((opt) => {
               const isActive = positionFilter === opt.value
+              const isAll = String(opt.value).toUpperCase() === 'ALL'
+              const tint = isAll ? null : positionTintHex(String(opt.value))
               return (
                 <button
                   key={opt.value}
@@ -912,16 +910,21 @@ function PlayerPanelInner({
                     if (leagueId) sendProductAnalyticsBeacon(DRAFT_ROOM.FILTER_POSITION, { leagueId, value: opt.value })
                     setPositionFilter(opt.value)
                   }}
-                  className={`inline-flex h-[22px] shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] font-semibold uppercase tracking-[0.12em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
-                    isActive
-                      ? 'border-cyan-400/55 bg-[#20d6d2]/20 text-cyan-50 shadow-[0_0_10px_rgba(32,214,210,0.24)]'
-                      : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:border-white/20 hover:text-white/90'
+                  className={`inline-flex h-[22px] shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] font-bold uppercase tracking-[0.08em] transition ${SKIN_FOCUS} ${
+                    isActive ? SKIN_PILL_ACTIVE : 'border-transparent bg-[#1d2236] hover:bg-[#2a2f45]'
                   }`}
+                  style={
+                    isActive && tint
+                      ? { backgroundColor: tint, color: SKIN_ON_FILL }
+                      : !isActive && tint
+                        ? { color: tint }
+                        : undefined
+                  }
                 >
                   <span>{opt.label}</span>
                   <span
                     className={`text-[11px] font-medium tabular-nums ${
-                      isActive ? 'text-cyan-100/85' : 'text-white/45'
+                      isActive ? 'opacity-70' : 'text-white/45'
                     }`}
                   >
                     {opt.drafted}/{opt.available}
@@ -942,9 +945,7 @@ function PlayerPanelInner({
               if (leagueId) sendProductAnalyticsBeacon(DRAFT_ROOM.FILTER_TEAM, { leagueId, value: v })
               setTeamFilter(v)
             }}
-            className={`min-h-[30px] rounded-full border px-2 py-1 text-[11px] text-white shadow-sm touch-manipulation transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
-              rs ? 'border-cyan-400/28 bg-[#0c162d]/95' : 'border-white/[0.06] bg-[#101a30]/95'
-            }`}
+            className={`min-h-[30px] rounded-full border px-2 py-1 text-[11px] touch-manipulation transition duration-150 ${SKIN_FOCUS} ${SKIN_CONTROL}`}
             aria-label="Team filter"
             data-testid="draft-team-filter"
           >
@@ -961,7 +962,7 @@ function PlayerPanelInner({
             role="radiogroup"
             aria-label="Player pool view mode"
             data-testid="draft-pool-view-mode"
-            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-white/[0.06] bg-[#101a30]/95 p-0.5"
+            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-transparent bg-[#1d2236] p-0.5"
           >
             <button
               type="button"
@@ -972,8 +973,8 @@ function PlayerPanelInner({
               title="Table view"
               className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition ${
                 viewModeOverride === 'sleeper_table' || (viewModeOverride === null && (poolLayout === 'sleeper_table' || poolLayout === 'auto'))
-                  ? 'bg-[#20d6d2]/20 text-cyan-100 shadow-[0_0_10px_rgba(32,214,210,0.2)]'
-                  : 'text-white/55 hover:bg-white/[0.06] hover:text-white/85'
+                  ? 'bg-white text-[#14172a]'
+                  : 'text-white/55 hover:bg-[#2a2f45] hover:text-white'
               }`}
             >
               <Rows3 className="h-4 w-4" aria-hidden />
@@ -987,8 +988,8 @@ function PlayerPanelInner({
               title="Card view"
               className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition ${
                 viewModeOverride === 'card' || (viewModeOverride === null && poolLayout !== 'sleeper_table' && poolLayout !== 'auto')
-                  ? 'bg-[#20d6d2]/20 text-cyan-100 shadow-[0_0_10px_rgba(32,214,210,0.2)]'
-                  : 'text-white/55 hover:bg-white/[0.06] hover:text-white/85'
+                  ? 'bg-white text-[#14172a]'
+                  : 'text-white/55 hover:bg-[#2a2f45] hover:text-white'
               }`}
             >
               <LayoutGrid className="h-4 w-4" aria-hidden />
@@ -1002,7 +1003,7 @@ function PlayerPanelInner({
                 if (leagueId) sendProductAnalyticsBeacon(DRAFT_ROOM.POOL_FILTER, { leagueId, value: v })
                 setPoolFilter(v)
               }}
-              className="min-h-[30px] rounded-full border border-white/[0.06] bg-[#101a30]/95 px-2 py-1 text-[11px] text-white shadow-sm touch-manipulation transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+              className={`min-h-[30px] rounded-full border px-2 py-1 text-[11px] touch-manipulation transition duration-150 ${SKIN_FOCUS} ${SKIN_CONTROL}`}
               aria-label="Pool filter"
               data-testid="draft-pool-filter"
             >
@@ -1039,7 +1040,7 @@ function PlayerPanelInner({
         )}
         <div className={mobileFiltersOpen ? 'block' : 'hidden md:block'} data-testid="draft-player-more-filter-rows">
         <div
-          className={`flex flex-wrap items-center gap-1 border-b border-white/[0.05] px-2 py-1 sm:px-3 ${rs ? 'bg-[#050c18]/95' : 'bg-black/10'}`}
+          className="flex flex-wrap items-center gap-1 border-b border-white/[0.06] bg-[#0d1424] px-2 py-1 sm:px-3"
         >
           {/* G.1 — Sort buttons (ADP / AI ADP / Proj / Name) removed.
               They duplicated the SleeperPoolTable's clickable column headers, which
@@ -1047,7 +1048,7 @@ function PlayerPanelInner({
               and the "My roster / Pool" view-toggle remain in this row because they
               don't belong on the table header. */}
           {useAiAdp && (
-            <span className="rounded border border-cyan-300/25 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] text-cyan-100" title="Player order uses AI ADP">
+            <span className="rounded bg-[#1d2236] px-1.5 py-0.5 text-[11px] font-semibold text-white/80" title="Player order uses AI ADP">
               AI ADP
             </span>
           )}
@@ -1096,10 +1097,8 @@ function PlayerPanelInner({
                 else setShowAiOverlaysLocal(next)
               }}
               data-testid="draft-toggle-ai-overlays"
-              className={`min-h-[30px] rounded-lg border px-2 py-1 text-[11px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
-                aiOverlaysEnabled
-                  ? 'border-cyan-300/40 bg-cyan-500/14 text-cyan-100'
-                  : 'border-white/10 bg-black/20 text-white/65 hover:bg-white/10'
+              className={`min-h-[30px] rounded-lg border px-2 py-1 text-[11px] font-semibold transition ${SKIN_FOCUS} ${
+                aiOverlaysEnabled ? SKIN_PILL_ACTIVE : SKIN_PILL_IDLE
               }`}
               title="Toggle inline AI recommendation overlays"
             >
@@ -1117,7 +1116,7 @@ function PlayerPanelInner({
           </button>
         </div>
         <div
-          className={`flex flex-wrap items-center justify-between gap-1 border-b px-2 py-1 text-[11px] ${rs ? 'border-cyan-500/10 bg-[#0b1428]/95 text-white/60' : 'border-white/[0.06] bg-[#0b1428]/95 text-white/55'}`}
+          className="flex flex-wrap items-center justify-between gap-1 border-b border-white/[0.06] bg-[#0d1424] px-2 py-1 text-[11px] text-white/60"
         >
           <span className={rs ? 'tabular-nums' : undefined}>
             <span className="font-semibold text-white/85">{filtered.length}</span> shown
@@ -1128,7 +1127,7 @@ function PlayerPanelInner({
               type="button"
               data-testid="draft-filter-watchlist-only"
               onClick={() => setWatchlistOnly((v) => !v)}
-              className={`rounded-full border px-2 py-0.5 text-[11px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${watchlistOnly ? 'border-cyan-300/45 bg-[#20d6d2]/18 text-cyan-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold transition ${SKIN_FOCUS} ${watchlistOnly ? SKIN_PILL_ACTIVE : SKIN_PILL_IDLE}`}
             >
               Watchlist
             </button>
@@ -1136,7 +1135,7 @@ function PlayerPanelInner({
               type="button"
               data-testid="draft-filter-hide-drafted"
               onClick={() => setHideDrafted((v) => !v)}
-              className={`rounded-full border px-2 py-0.5 text-[11px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${hideDrafted ? 'border-cyan-300/45 bg-[#20d6d2]/18 text-cyan-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold transition ${SKIN_FOCUS} ${hideDrafted ? SKIN_PILL_ACTIVE : SKIN_PILL_IDLE}`}
             >
               Hide drafted
             </button>
@@ -1149,7 +1148,7 @@ function PlayerPanelInner({
               data-testid="draft-filter-rookies-only"
               onClick={toggleRookiesOnly}
               aria-pressed={rookiesOnly}
-              className={`rounded-full border px-2 py-0.5 text-[11px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 ${rookiesOnly ? 'border-violet-300/40 bg-violet-500/14 text-violet-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold transition ${SKIN_FOCUS} ${rookiesOnly ? SKIN_PILL_ACTIVE : SKIN_PILL_IDLE}`}
             >
               Rookies only
             </button>
@@ -1161,7 +1160,7 @@ function PlayerPanelInner({
               data-testid="draft-filter-vets-only"
               onClick={toggleVetsOnly}
               aria-pressed={vetsOnly}
-              className={`rounded-full border px-2 py-0.5 text-[11px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${vetsOnly ? 'border-cyan-300/45 bg-[#20d6d2]/18 text-cyan-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold transition ${SKIN_FOCUS} ${vetsOnly ? SKIN_PILL_ACTIVE : SKIN_PILL_IDLE}`}
             >
               Vets only
             </button>
@@ -1170,7 +1169,7 @@ function PlayerPanelInner({
             type="button"
             data-testid="draft-clear-filters"
             onClick={clearAllFilters}
-            className="rounded-full border border-white/[0.06] bg-[#101a30] px-2 py-0.5 text-[11px] text-[#94a3b8] transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+            className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold transition ${SKIN_FOCUS} ${SKIN_PILL_IDLE}`}
           >
             Clear filters
           </button>
@@ -1292,8 +1291,8 @@ function PlayerPanelInner({
         data-testid="draft-player-list-scroll"
         className={`min-h-0 flex-1 overscroll-contain p-2 pb-3 sm:p-2.5 ${
           rs
-            ? `overflow-y-auto bg-[linear-gradient(180deg,rgba(8,18,32,0.55),rgba(4,9,17,0.96))] [scrollbar-gutter:stable] [scrollbar-color:rgba(56,189,248,0.45)_rgba(15,23,42,0.55)] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-950/80 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-cyan-500/40 [&::-webkit-scrollbar-thumb:hover]:bg-cyan-400/55`
-            : 'overflow-auto bg-[#050a14]/40'
+            ? `overflow-y-auto bg-[#0d1424] [scrollbar-gutter:stable] [scrollbar-color:rgba(255,255,255,0.18)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15 [&::-webkit-scrollbar-thumb:hover]:bg-white/25`
+            : 'overflow-auto bg-[#0d1424]'
         }`}
       >
         {loading ? (
