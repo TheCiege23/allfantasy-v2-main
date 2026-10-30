@@ -99,7 +99,7 @@ export function MergedDevyC2CCommissionerSettings({ leagueId }: MergedDevyC2CCom
     return (
       <div className="rounded-xl border border-white/10 bg-white/5 p-4">
         <h3 className="text-sm font-medium text-white">C2C commissioner settings</h3>
-        <p className="mt-1 text-xs text-white/50">Loading…</p>
+        <p className="mt-1 text-xs text-white/50">{loading ? 'Loading…' : 'Unable to load C2C settings. Please try again.'}</p>
       </div>
     )
   }
