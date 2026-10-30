@@ -5463,9 +5463,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               {language === 'es'
                 ? 'No pudimos leer esta liga en este momento. Es un fallo de lectura de nuestra parte: tus otras ligas no se ven afectadas y nada de esta ha cambiado. Recarga o '
                 : 'We could not read this league just now. This is a read failure on our side — your other leagues are unaffected, and nothing about this one has changed. Reload, or '}
-              <a href="/core" style={{ color: 'var(--accent)' }}>
+              <Link href="/core" style={{ color: 'var(--accent)' }}>
                 {language === 'es' ? 'vuelve a todas tus ligas' : 'go back to all leagues'}
-              </a>
+              </Link>
               .
             </p>
           </div>
