@@ -691,7 +691,6 @@ export async function getDashboardLeagueListForUser(
    */
   const genericLeagues = (genericLeaguesRead as Array<{ userId?: unknown; platform?: unknown; platformLeagueId?: unknown }>).filter(
     (lg) =>
-      String(lg.userId ?? '') === userId ||
       !isImportedPlatform(String(lg.platform ?? '')) ||
       !removedKeys.has(tombstoneLookupKey(String(lg.platform ?? ''), String(lg.platformLeagueId ?? ''))),
   ) as any[]
