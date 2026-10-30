@@ -9,6 +9,7 @@ import XPostEmbed from './XPostEmbed'
 import { useHighlightMeasurement } from './useHighlightMeasurement'
 import type { HighlightOutcome, HighlightSurface } from '@/lib/analytics/highlights'
 import './recent-clips.css'
+import { spanishFlag } from '@/lib/core-app/messages/coreLocale'
 
 type ClipRequest =
   | { kind: 'player'; sport: 'NFL'; externalId?: string; sleeperId?: string }
@@ -22,7 +23,8 @@ export default function RecentClips({ request, title, compact = false }: { reque
 
 function RecentClipsFeed({ request, title, compact, onRetry }: { request: ClipRequest; title: string; compact: boolean; onRetry: () => void }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  // XPostEmbed still takes a Spanish flag rather than a language (coreLocale.ts holds the bridge).
+  const es = spanishFlag(language)
   const m = useMessages(recentClipsMessages)
   const [result, setResult] = useState<XClipsResult | null>(null)
   const [error, setError] = useState(false)
@@ -68,10 +70,10 @@ function RecentClipsFeed({ request, title, compact, onRetry }: { request: ClipRe
       </div>
       <h4>{clip.players.map(p => p.name).join(' · ')}</h4>
       <p className="af-x-caption">{clip.text}</p>
-      <p className="af-x-note">@{clip.account} · <time dateTime={clip.publishedAt}>{new Date(clip.publishedAt).toLocaleString(es ? 'es' : 'en', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></p>
+      <p className="af-x-note">@{clip.account} · <time dateTime={clip.publishedAt}>{new Date(clip.publishedAt).toLocaleString(m.timeLocale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></p>
       <XPostEmbed post={clip} es={es} onEvent={onPostEvent} />
     </article>)}</div>
-    {result?.checkedAt ? <p className="af-x-note">{m.feedChecked} <time dateTime={result.checkedAt}>{new Date(result.checkedAt).toLocaleTimeString(es ? 'es' : 'en', { hour: 'numeric', minute: '2-digit' })}</time> · {m.hourlyRefresh}</p> : null}
+    {result?.checkedAt ? <p className="af-x-note">{m.feedChecked} <time dateTime={result.checkedAt}>{new Date(result.checkedAt).toLocaleTimeString(m.timeLocale, { hour: 'numeric', minute: '2-digit' })}</time> · {m.hourlyRefresh}</p> : null}
     <p className="af-x-note">{m.privacyNote} <a href="https://help.x.com/en/x-for-websites-ads-info-and-privacy" target="_blank" rel="noopener noreferrer">{m.xPrivacy}</a></p>
   </section>
 }

@@ -18,8 +18,7 @@ import {
   type PirateBaseFormat,
 } from '@/lib/league/leagueConceptOptions'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { leagueConceptText, SURFACE_LABEL_ES } from '@/lib/core-app/shellCopy'
+import { leagueConceptText } from '@/lib/core-app/shellCopy'
 import { leagueRecommendationText } from '@/lib/core-app/leagueRecommendationText'
 import { useMessages } from '@/components/i18n/useMessages'
 import { leagueContextBarMessages } from '@/lib/core-app/messages/leagueContextBar'
@@ -31,11 +30,8 @@ import '@/components/core-app/af-league-tabs.css'
  */
 function useBarCopy() {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
-  const surfaceLabel = (surface: CoreSurfaceKey) => {
-    const english = CORE_SURFACE_LABELS[surface]
-    return es ? (SURFACE_LABEL_ES[english] ?? coreUiCopy(english, language)) : english
-  }
+  const m = useMessages(leagueContextBarMessages)
+  const surfaceLabel = (surface: CoreSurfaceKey) => m.surfaceLabel(CORE_SURFACE_LABELS[surface])
   const concept = (label: string) => leagueConceptText(label, language)
   return { language, surfaceLabel, concept }
 }

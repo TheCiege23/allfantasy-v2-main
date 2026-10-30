@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import BroadcastModal from '@/components/commish/BroadcastModal'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import { leagueSettingsHomeHref } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { RolloverStepState } from '@/lib/season-rollover/rolloverWizard'
 import type { DynastyStepKey } from '@/lib/season-rollover/dynastyRolloverWizard'
@@ -195,7 +196,7 @@ export function DynastyRolloverWizard({ leagueId, view, reload }: { leagueId: st
     }
   }
 
-  const announcement = view.extras ? (language === 'es' ? view.extras.announcement.es : view.extras.announcement.en) : ''
+  const announcement = view.extras ? view.extras.announcement[coreLang(language)] : ''
 
   return (
     <section id="ch-rollover" className="af-card af-ch-section" aria-labelledby="ch-rollover-h" data-testid="dyn-rollover-wizard">

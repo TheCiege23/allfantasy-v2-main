@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
+import { messagesFor } from '@/lib/i18n/messages'
 import { weeklyBlueprintMessages } from '@/lib/core-app/messages/weeklyBlueprint'
 import { COMMS_OPEN_EVENT, type CommsOpenDetail } from './comms/commsEvents'
 import { weeklyBrief, weeklyActionText, weeklyActionReason, weeklyActionPrompt, type WeeklyBlueprint as Blueprint, type WeeklyAction } from '@/lib/core-app/weeklyBlueprint'
@@ -16,9 +17,14 @@ import { WeeklyScheduleForecasts } from './WeeklyScheduleForecasts'
 import { buildWeeklySwings, sportWeekAdvice } from '@/lib/core-app/weeklySportPlan'
 import { playoffInputChanges } from '@/lib/core-app/weeklyPlayoffMovement'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { spanishFlag } from '@/lib/core-app/messages/coreLocale'
 
+/*
+ * The weekly builders (weeklyBrief, buildWeeklySwings, playoffInputChanges, WeeklyScheduleForecasts …)
+ * still take a Spanish flag rather than a language; `spanishFlag` (coreLocale.ts) is the one bridge.
+ */
 export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: WeeklyPlayoffPath | null }) {
-  const { language } = useOptionalLanguage(); const es = language === 'es'
+  const { language } = useOptionalLanguage(); const es = spanishFlag(language)
   const m = useMessages(weeklyBlueprintMessages)
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'manual'>('idle')
   const brief = weeklyBrief(data, es)
@@ -62,7 +68,7 @@ export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: Weekly
 function LocalGameTime({ iso, language }: { iso: string; language: string }) {
   // Browser timezone only after hydration; server and first client render agree.
   const [text, setText] = useState<string | null>(null)
-  useEffect(() => { setText(new Intl.DateTimeFormat(language === 'es' ? 'es' : 'en', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(iso))) }, [iso, language])
+  useEffect(() => { setText(new Intl.DateTimeFormat(messagesFor(weeklyBlueprintMessages, language).timeLocale, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(iso))) }, [iso, language])
   return <time dateTime={iso}>{text ?? iso}</time>
 }
 function LocalCalculatedTime({ iso, language }: { iso: string; language: string }) {
@@ -70,12 +76,12 @@ function LocalCalculatedTime({ iso, language }: { iso: string; language: string 
   const [text,setText] = useState<string | null>(null)
   useEffect(() => {
     const date = new Date(iso)
-    if (Number.isFinite(date.getTime())) setText(new Intl.DateTimeFormat(language === 'es' ? 'es' : 'en', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(date))
+    if (Number.isFinite(date.getTime())) setText(new Intl.DateTimeFormat(messagesFor(weeklyBlueprintMessages, language).timeLocale, {month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(date))
   },[iso,language])
   return <time dateTime={iso}>{text ?? m.loadingLocalTime}</time>
 }
 export function PlayoffPath({ path }: { path: WeeklyPlayoffPath }) {
-  const { language } = useOptionalLanguage(); const es = language === 'es'
+  const { language } = useOptionalLanguage(); const es = spanishFlag(language)
   const m = useMessages(weeklyBlueprintMessages)
   const league = path.league, you = league?.you
   const valid = you?.modelled && league?.season === path.season && league?.period === path.period && Number.isFinite(you.playoffPct) && you.playoffPct >= 0 && you.playoffPct <= 100

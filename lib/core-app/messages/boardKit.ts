@@ -8,9 +8,16 @@ import { defineMessages } from '@/lib/i18n/messages'
  * relocation, not a rewrite. Counts arrive already formatted (`toLocaleString(getAppIntlLocale())`)
  * beside the raw number that picks the plural, so this file imports nothing at runtime.
  *
- * The no-leagues action labels stay in the component: their Spanish is a lookup keyed by the exported
- * English `NO_LEAGUE_ACTIONS` label, a translator rather than a pair.
+ * `noLeagueAction` is handed an exported `NO_LEAGUE_ACTIONS` label and returns it unchanged in English;
+ * Spanish looks it up by that English label and falls back to it.
  */
+
+const NO_LEAGUE_ACTION_ES: Record<string, string> = {
+  'Connect a league': 'Conectar una liga',
+  'Try a mock draft': 'Probar un draft simulado',
+  'Grade a trade': 'Evaluar un intercambio',
+}
+
 export const boardKitMessages = defineMessages({
   en: {
     footMore: (count: string, n: number, quiet: string): string =>
@@ -20,6 +27,7 @@ export const boardKitMessages = defineMessages({
     footViewAll: (count: string, _n: number): string => `View all ${count}`,
     noLeaguesAria: 'No leagues connected yet',
     noLeaguesLead: 'No leagues connected yet.',
+    noLeagueAction: (label: string): string => label,
   },
   es: {
     footMore: (count, n, quiet) => `${count} ${n === 1 ? 'liga más' : 'ligas más'} ${quiet}`,
@@ -27,5 +35,6 @@ export const boardKitMessages = defineMessages({
     footViewAll: (count, n) => `Ver ${count} ${n === 1 ? 'liga' : 'ligas'}`,
     noLeaguesAria: 'Aún no hay ligas conectadas',
     noLeaguesLead: 'Aún no hay ligas conectadas.',
+    noLeagueAction: (label) => NO_LEAGUE_ACTION_ES[label] ?? label,
   },
 })
