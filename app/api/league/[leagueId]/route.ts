@@ -11,7 +11,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Remove a league from the signed-in user's dashboard (deletes the user's `League` or `SleeperLeague` row).
+ * Remove a league from the signed-in user's dashboard. Imported `League` rows may be
+ * shared through team or manager claims, so they are hidden for this account with a
+ * tombstone rather than deleted. Standalone `SleeperLeague` rows remain account-owned.
  * Does not delete the league on Sleeper or other external platforms.
  *
  * ⚠ ALSO WRITES A TOMBSTONE, and the delete is not complete without it. This is
@@ -76,6 +78,28 @@ export async function DELETE(
       where: { id, creatorId: userId },
       select: { id: true },
     });
+
+    if (league && isImportedPlatform(league.platform)) {
+      if (!league.platformLeagueId) {
+        return NextResponse.json({ error: 'Imported league has no provider ID to remove from this account' }, { status: 409 });
+      }
+      const tombstoned = await recordLeagueTombstone({
+        userId,
+        platform: String(league.platform),
+        platformLeagueId: league.platformLeagueId,
+        leagueName: league.name ?? null,
+      });
+      return NextResponse.json({
+        ok: true,
+        tombstoned,
+        removed: {
+          leagueRows: 0,
+          sleeperLeagueRows: 0,
+          tournamentRows: 0,
+          memberLeagues: tombstoned ? 1 : 0,
+        },
+      });
+    }
 
     if (!league && !sleeperLeague && !tournament) {
       /*
