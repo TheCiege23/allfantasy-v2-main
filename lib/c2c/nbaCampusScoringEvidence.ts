@@ -24,7 +24,9 @@ export function scoreBasketballCampusEvidence(input: {
     const rows = input.stats.filter((row) => row.playerId === player.identityId && row.providerGameId && matchingIds.has(row.providerGameId))
     const rowsByGame = new Map<string, StatRow[]>()
     for (const row of rows) rowsByGame.set(row.providerGameId!, [...(rowsByGame.get(row.providerGameId!) ?? []), row])
-    let missing = false
+    // A stat line on a different scheduled school game may mean the athlete transferred.
+    // Historical team evidence cannot safely attribute it, so withhold finalization.
+    let missing = input.stats.some((row) => row.playerId === player.identityId && row.providerGameId && !matchingIds.has(row.providerGameId))
     let total = 0
     for (const game of games) {
       const gameRows = rowsByGame.get(game.gameId) ?? []
