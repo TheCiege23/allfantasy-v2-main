@@ -824,6 +824,7 @@ export async function getDashboardLeagueListForUser(
   })
 
   const normalizedSleeper = sleeperLeagues
+    .filter((lg: any) => !removedKeys.has(tombstoneLookupKey('sleeper', String(lg.sleeperLeagueId ?? ''))))
     .map((lg: any) => {
       const unifiedLeagueId = unifiedSleeperLeagueIdMap.get(lg.sleeperLeagueId) ?? null
       return {
