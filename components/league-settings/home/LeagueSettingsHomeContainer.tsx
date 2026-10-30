@@ -19,6 +19,8 @@ import { LeagueSettingsHome, type SettingsSubPageRender } from './LeagueSettings
 import { GuillotineFirstChopEditor, patchFirstChopWeek } from './GuillotineFirstChopEditor'
 import { GuillotineRulesEditor } from './GuillotineRulesEditor'
 import { GuillotineChopRulesEditor, patchChopRules } from './GuillotineChopRulesEditor'
+import { PirateRulesEditor } from './PirateRulesEditor'
+import type { PirateRules } from '@/lib/pirate/rules'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { SUB_PAGE_TITLES } from './LeagueSettingsSubPageTitles'
 import { CommissionerCenter } from './CommissionerCenter'
@@ -28,20 +30,6 @@ import { SurvivorTribesPanel } from '@/app/league/[leagueId]/components/settings
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 import { buildSetupDecisions } from '@/lib/league-settings-home/setupDecisions'
 import { SetupDecisionsCard } from './SetupDecisionsCard'
-
-/** The Commissioner center needs room for its two columns; phones keep the list → sub-page flow. */
-function useWideLayout(): boolean {
-  const [wide, setWide] = useState(false)
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const query = window.matchMedia('(min-width: 1024px)')
-    const sync = () => setWide(query.matches)
-    sync()
-    query.addEventListener?.('change', sync)
-    return () => query.removeEventListener?.('change', sync)
-  }, [])
-  return wide
-}
 
 // The editors carry most of the old settings tree; load them only when a row is opened.
 const LeagueSettingsSubPageBody = dynamic(() => import('./LeagueSettingsSubPageBody'), {
@@ -86,6 +74,7 @@ export function LeagueSettingsHomeContainer({
   const [draft, setDraft] = useState<SettingsHomeDraft | null>(null)
   const [hasAfCommissionerSub, setHasAfCommissionerSub] = useState(Boolean(ctx.hasAfCommissionerSub))
   const [guillotineState, setGuillotineState] = useState<SettingsHomeGuillotine | null>(null)
+  const [pirateRules, setPirateRules] = useState<PirateRules | null>(null)
 
   useEffect(() => {
     const ac = new AbortController()
@@ -152,9 +141,10 @@ export function LeagueSettingsHomeContainer({
       rosterSlots,
       draft,
       guillotine: guillotineState,
+      pirateRules,
       inviteUrl: leagueJoinUrl(nativeLeagueInviteCode(effectiveLeague.settings, effectiveLeague.invites)),
     })
-  }, [effectiveLeague, ctx.isCommissioner, rosterSlots, draft, guillotineState])
+  }, [effectiveLeague, ctx.isCommissioner, rosterSlots, draft, guillotineState, pirateRules])
 
   const subCtx = useMemo(() => ({ ...ctx, league: effectiveLeague, hasAfCommissionerSub }), [ctx, effectiveLeague, hasAfCommissionerSub])
 
@@ -222,6 +212,9 @@ export function LeagueSettingsHomeContainer({
           ),
         }
       }
+      if (id === 'pirate-rules') {
+        return { title: SUB_PAGE_TITLES[id], content: <PirateRulesEditor leagueId={leagueId} onSaved={setPirateRules} /> }
+      }
       return {
         title: SUB_PAGE_TITLES[id],
         content: <LeagueSettingsSubPageBody id={id} ctx={subCtx} hasAfCommissionerSub={hasAfCommissionerSub} />,
@@ -230,7 +223,6 @@ export function LeagueSettingsHomeContainer({
     [ctx.isCommissioner, guillotineState, league.sport, leagueId, subCtx, hasAfCommissionerSub],
   )
 
-  const wide = useWideLayout()
   const phase = nativeLeaguePhase(ctx.displayLeague)
   // Before the draft, the commissioner is walked through the five settings that matter most.
   const setupDecisions = useMemo(() => buildSetupDecisions(sections), [sections])
@@ -239,11 +231,12 @@ export function LeagueSettingsHomeContainer({
       ? (open: (id: SettingsSubPageId) => void) => <SetupDecisionsCard leagueId={leagueId} decisions={setupDecisions} onOpen={open} />
       : undefined
 
-  if (wide && ctx.isCommissioner) {
+  if (ctx.isCommissioner) {
     const teams = effectiveLeague.teams ?? []
     const inviteRow = sections.flatMap((section) => section.rows).find((row) => row.id === 'invite')
     return (
       <CommissionerCenter
+        leagueId={leagueId}
         leagueName={effectiveLeague.name}
         sections={sections}
         renderSubPage={renderSubPage}

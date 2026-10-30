@@ -1,0 +1,21 @@
+{
+  "method": "Playwright Chromium with Android/iOS device descriptors against the PirateHome React component",
+  "results": [
+    {
+      "device": "android",
+      "viewport": 412,
+      "content": 412,
+      "protectionTapWorks": true,
+      "claimActionVisible": true,
+      "screenshot": "docs/pirate-validation/mobile-android.png"
+    },
+    {
+      "device": "ios",
+      "viewport": 390,
+      "content": 390,
+      "protectionTapWorks": true,
+      "claimActionVisible": true,
+      "screenshot": "docs/pirate-validation/mobile-ios.png"
+    }
+  ]
+}

@@ -13,7 +13,7 @@ import { ValuesPageLink } from '@/components/values/ValuesPageLink'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
 import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
-import { shouldApplyIncomingView } from '@/lib/league/leagueTabSync'
+import { shouldApplyIncomingView, shouldMirrorActiveView } from '@/lib/league/leagueTabSync'
 import { LeagueLiveStrip } from '@/components/sports/LeagueLiveStrip'
 import { LeagueStoryCard } from '@/components/sports/LeagueStoryCard'
 import { createPortal } from 'react-dom'
@@ -23,6 +23,7 @@ import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
 import {
+  Anchor,
   ArrowLeftRight,
   Ban,
   BarChart3,
@@ -152,6 +153,7 @@ import { GuillotineTab } from './tabs/GuillotineTab'
 import { DynastyHome } from './tabs/DynastyHome'
 import { SurvivorHome } from '@/components/survivor/SurvivorHome'
 import { SurvivorNativeHome } from '@/components/survivor/SurvivorNativeHome'
+import { PirateHome } from '@/components/pirate/PirateHome'
 import { SurvivorLeagueDeepLinkPanel } from '@/components/survivor/SurvivorLeagueDeepLinkPanel'
 import { SurvivorFirstEntryModal } from '@/components/survivor/SurvivorFirstEntryModal'
 import { SurvivorIdolRevealModal } from '@/components/survivor/SurvivorIdolRevealModal'
@@ -468,6 +470,7 @@ export function LeagueShell({
         { id: 'draft_intel', label: 'Live Intel' },
         { id: 'roster', label: 'My Team' },
         { id: 'matchups', label: 'Matchups' },
+        ...(league.leagueType === 'pirate' || league.leagueVariant === 'pirate' ? [{ id: 'pirate', label: 'Pirate Deck' }] : []),
         { id: 'schedule', label: 'Schedule' },
         { id: 'players', label: 'Players' },
         { id: 'waivers', label: 'Waivers' },
@@ -503,6 +506,11 @@ export function LeagueShell({
       const idx = base.findIndex((t) => t.id === 'redraft')
       const g = { id: 'guillotine', label: 'Guilly' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), g, ...base.slice(idx + 1)] : [g, ...base]
+    }
+    if (league.leagueType === 'pirate' || league.leagueVariant === 'pirate') {
+      const idx = base.findIndex((tab) => tab.id === 'redraft')
+      const pirate = { id: 'pirate', label: 'Pirate Deck' }
+      base = idx >= 0 ? [...base.slice(0, idx + 1), pirate, ...base.slice(idx + 1)] : [pirate, ...base]
     }
     if (league.leagueVariant === 'survivor') {
       const idx = base.findIndex((t) => t.id === 'redraft')
@@ -599,6 +607,7 @@ export function LeagueShell({
   const [rosterLegalityIssueCount, setRosterLegalityIssueCount] = useState(0)
   const guillotineLandingApplied = useRef(false)
   const survivorLandingApplied = useRef(false)
+  const pirateLandingApplied = useRef(false)
   const zombieLandingApplied = useRef(false)
   const bigBrotherLandingApplied = useRef(false)
   const predraftLandingApplied = useRef(false)
@@ -610,21 +619,25 @@ export function LeagueShell({
   // echo so it never fights the tab->URL effect (the Draft/League flicker). External deep-links /
   // back-forward carry a different value and are still honored. See lib/league/leagueTabSync.
   const lastSyncedViewRef = useRef<string | null>(null)
+  const pendingIncomingTabRef = useRef<string | null>(null)
 
   useEffect(() => {
     guillotineLandingApplied.current = false
     survivorLandingApplied.current = false
+    pirateLandingApplied.current = false
     zombieLandingApplied.current = false
     bigBrotherLandingApplied.current = false
     predraftLandingApplied.current = false
     userPickedTabRef.current = false
     lastSyncedViewRef.current = null
+    pendingIncomingTabRef.current = null
   }, [league.id])
 
   /** Explicit tab selection (user click). Records the choice so auto-landing
    * defaults below stop firing, then updates the active tab. */
   const handleUserTabChange = useCallback((t: string) => {
     userPickedTabRef.current = true
+    pendingIncomingTabRef.current = null
     setActiveTab(t)
   }, [])
 
@@ -714,6 +727,16 @@ export function LeagueShell({
     survivorLandingApplied.current = true
   }, [league.id, league.leagueVariant, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary])
 
+  /** Pirate leagues open on their protection and claim deck. */
+  useEffect(() => {
+    const deepLink = searchParams?.get('view') ?? searchParams?.get('tab')
+    if (deepLink?.trim() || pirateLandingApplied.current || userPickedTabRef.current) return
+    if (league.leagueType !== 'pirate' && league.leagueVariant !== 'pirate') return
+    if (!tabDefs.some((tab) => tab.id === 'pirate')) return
+    setActiveTab('pirate')
+    pirateLandingApplied.current = true
+  }, [league.id, league.leagueType, league.leagueVariant, tabDefs, searchParams])
+
   /** Zombie leagues default to the Zombie hub (once per visit) when no deep link. */
   useEffect(() => {
     const deepLink = searchParams?.get('view') ?? searchParams?.get('tab')
@@ -802,6 +825,8 @@ export function LeagueShell({
       waivers: 'waivers',
       settings: 'settings',
       guillotine: 'guillotine',
+      pirate: 'pirate',
+      guilly: 'guillotine',
       bestball: 'bestball',
       keeper: 'keeper',
       intelligence: nflRedraftCore ? 'players' : intelligenceFallback,
@@ -861,12 +886,21 @@ export function LeagueShell({
      * holds the waiver experience) is now only the fallback for a tab set without one.
      */
     if (target === 'waivers' && !ids.has('waivers')) target = 'players'
-    if (ids.has(target)) setActiveTab(target)
+    if (ids.has(target)) {
+      userPickedTabRef.current = true
+      pendingIncomingTabRef.current = target
+      setActiveTab(target)
+    }
   }, [searchParams, tabDefs, league.sport, shouldUseMatchupPrimary, nflRedraftCore, nativeWorkspace])
 
   useEffect(() => {
+    if (!searchParams) return
     const ids = new Set(tabDefs.map((t) => t.id))
     if (!ids.has(activeTab)) return
+    // The incoming effect queues state; this effect still sees the previous tab in that commit.
+    // Keep the requested URL intact until the queued tab is actually rendered.
+    if (!shouldMirrorActiveView(activeTab, pendingIncomingTabRef.current)) return
+    pendingIncomingTabRef.current = null
 
     // Redraft Settings is modal-driven. Do not persist it as ?view=settings,
     // because the settings deep-link effect treats that URL as "open modal".
@@ -887,7 +921,7 @@ export function LeagueShell({
     // bounced the user to a different tab. Tab switching is pure client state;
     // the URL mirror is only for shareable deep links and back/forward.
     window.history.replaceState(null, '', `${pathname}?${next.toString()}`)
-  }, [activeTab, nflRedraftCore, pathname, searchParams, tabDefs])
+  }, [activeTab, nflRedraftCore, nativeWorkspace, pathname, searchParams, tabDefs])
 
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -1758,7 +1792,7 @@ export function LeagueShell({
               platform={league.platform}
             />
 
-            {nativeWorkspace && activeTab === 'settings' ? (
+            {nativeWorkspace && (activeTab === 'settings' || activeTab === 'commissioner') ? (
               <LeagueSettingsHomeContainer
                 key={`settings-home-${settingsHomeRequest.nonce}`}
                 initialSubPage={settingsHomeRequest.subPage}
@@ -2391,6 +2425,8 @@ function LeagueTabRouter({
       return (
         <GuillotineTab leagueId={leagueId} sport={sport} leagueName={selectedLeague.name} />
       )
+    case 'pirate':
+      return <PirateHome leagueId={leagueId} isCommissioner={isCommissioner} />
     case 'dynasty':
     case 'dynasty_taxi':
     case 'dynasty_picks':
@@ -2646,6 +2682,7 @@ const LEAGUE_TAB_NAV_ICONS: Record<string, LucideIcon> = {
   schedule: CalendarRange,
   bestball: Sparkles,
   guillotine: Scissors,
+  pirate: Anchor,
   survivor: TreePalm,
   survivor_tribal: Flame,
   survivor_challenges: Zap,

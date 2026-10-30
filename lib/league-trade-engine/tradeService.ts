@@ -44,6 +44,8 @@ import { receiptColumns, receiptColumnsReady } from '@/lib/decision-os/trade/rec
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
+import { assertPirateTradeAllowed } from '@/lib/pirate/tradeGuard'
+import { isPirateLeague } from '@/lib/pirate/rules'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -558,6 +560,11 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   })
   // The code rides on the error so the route can return it (e.g. `future_picks_not_allowed_in_redraft`).
   if (!v.ok) throw new CodedTradeError(v.code, v.message)
+  if (isPirateLeague(league)) await assertPirateTradeAllowed(input.leagueId, input.assets.map((asset) => ({
+    fromRosterId: asset.fromRosterId,
+    assetType: asset.itemType,
+    playerId: asset.itemType === 'player' ? asset.itemReference : null,
+  })))
   // Conditional and protected picks (./pickTerms.ts): checked against the league, stored in the shape
   // the settlement reads. An offer without terms is returned as it came.
   const offerAssets = await checkOfferPickTerms(input.leagueId, input.assets)
@@ -1138,6 +1145,11 @@ export async function finalizeAfLeagueTradeProcessing(input: {
     // ⚠ BEFORE-STATE IS READ HERE AND NOWHERE LATER. `applyTradeAssetsInTransaction` overwrites
     // `playerData` and `faabRemaining` on both rosters, so inside this transaction these rows stop
     // being "before" the moment it runs. After the claim, so only the race winner captures.
+    if (isPirateLeague(league)) await assertPirateTradeAllowed(trade.leagueId, assets.map((asset) => ({
+      fromRosterId: asset.fromRosterId,
+      assetType: asset.itemType,
+      playerId: asset.itemType === 'player' ? asset.itemReference : null,
+    })), tx)
     const beforeState = await captureGenericRosterState(tx, participantRosterIds)
     const salaryEvidence = await applyTradeAssetsInTransaction(tx, {
       leagueId: trade.leagueId,

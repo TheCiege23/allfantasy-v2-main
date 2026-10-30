@@ -24,6 +24,7 @@ export type LeagueFormatId =
   | 'zombie'
   | 'salary_cap'
   | 'big_brother'
+  | 'pirate'
 
 export type LeagueDraftTypeId =
   | 'snake'
@@ -164,6 +165,23 @@ const FORMAT_REGISTRY: Record<LeagueFormatId, LeagueFormatDefinition> = {
     capabilities: {
       deterministicFeatures: ['elimination', 'waiver_reset', 'chop_rules', 'standings'],
       aiOptionalFeatures: ['survival_advice', 'weekly_recap'],
+      weeklyAutomation: true,
+      introVideoEnabled: true,
+      importReviewEnabled: false,
+    },
+  },
+  pirate: {
+    id: 'pirate',
+    label: 'Pirate League',
+    description: 'Win a head-to-head matchup and claim one unprotected player from your opponent.',
+    supportedSports: ['NFL', 'NBA', 'MLB', 'NHL'],
+    defaultRosterMode: 'redraft',
+    draftTypes: [...DRAFT_TYPES_BY_LEAGUE_FORMAT.pirate] as LeagueDraftTypeId[],
+    defaultModifiers: [],
+    supportedModifiers: ['superflex', 'te_premium'],
+    capabilities: {
+      deterministicFeatures: ['weekly_protections', 'matchup_claims', 'automatic_roster_transfer'],
+      aiOptionalFeatures: ['claim_advice', 'weekly_recap'],
       weeklyAutomation: true,
       introVideoEnabled: true,
       importReviewEnabled: false,

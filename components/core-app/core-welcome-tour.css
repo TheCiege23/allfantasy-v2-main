@@ -5,6 +5,9 @@
  * the weekly playoff path or sharing controls on tablets and desktops either.
  */
 .af-welcome {
+  flex: 0 0 auto;
+  min-width: 0;
+  scroll-margin-top: 90px;
   position: relative;
   z-index: 170;
   width: 100%;
@@ -27,7 +30,7 @@
 .af-welcome-progress i { height: 3px; flex: 1; border-radius: 999px; background: var(--line2); }
 .af-welcome-progress i[data-active='true'] { background: var(--accent); }
 /*
- * 🛑 44x44, BECAUSE THIS IS THE ONLY WAY TO DISMISS THE TOUR. Found by the
+ * 44x44 for the close icon as well as the labeled footer action. Found by the
  * authenticated phone gate the day /core/my-team joined it (2026-09-19), at
  * 36x36 — the same "a few px short of a floor the rest of /core already holds"
  * shape as `.af-nav-support`, which was fixed rather than baselined for the same

@@ -30,6 +30,14 @@ export type AccentTone = {
 }
 
 export const ACCENTS: Record<LeagueTypeId, AccentTone> = {
+  pirate: {
+    label: 'Treasure Gold',
+    text: 'text-amber-200',
+    hex: '#F7C865',
+    hexSoft: '#12384B',
+    ring: 'ring-amber-300/60',
+    glow: 'shadow-[0_0_40px_-8px_rgba(247,200,101,0.55)]',
+  },
   redraft: {
     label: 'Electric Blue',
     text: 'text-sky-300',
@@ -207,6 +215,10 @@ export const SPORT_MEDIA: Record<string, MediaAsset> = {
  * Per-league-type hero — prefers `/media/create-league/concept/videos`, then legacy intros.
  */
 export const LEAGUE_TYPE_MEDIA: Record<string, MediaAsset> = {
+  pirate: {
+    video: '/media/league-intros/pirate-claim.mp4',
+    poster: '/images/league-types/pirate-hero.png',
+  },
   redraft: {
     video: '/media/create-league/concept/videos/Redraft.mp4',
     poster: '/media/create-league/concept/thumbnails/Redraft.png',

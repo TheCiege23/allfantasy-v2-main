@@ -7,6 +7,7 @@ const prismaMock = vi.hoisted(() => ({
   playerGameLogCache: { findMany: vi.fn() },
   playerIdentityMap: { findFirst: vi.fn() },
   playerWeeklyScore: { upsert: vi.fn(), findUnique: vi.fn() },
+  pirateClaim: { findFirst: vi.fn() },
   redraftLeagueTransaction: { create: vi.fn() },
   redraftMatchup: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
   redraftRoster: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
@@ -39,6 +40,8 @@ describe('NFL redraft launch blockers', () => {
     prismaMock.redraftSeason.findUnique.mockResolvedValue({ id: 'season-1', leagueId: 'league-1', sport: 'NFL', season: 2026, league: { settings: { scoring_mode: 'points' } } })
     prismaMock.adminAuditLog.create.mockResolvedValue({ id: 'audit-1' })
     prismaMock.league.findFirst.mockResolvedValue({ sport: 'NFL', settings: { sportConfig: { scoringPreset: 'PPR' } } })
+    prismaMock.league.findUnique.mockResolvedValue({ leagueType: 'redraft', leagueVariant: null, sport: 'NFL' })
+    prismaMock.pirateClaim.findFirst.mockResolvedValue(null)
     prismaMock.playerIdentityMap.findFirst.mockResolvedValue(null)
     prismaMock.playerWeeklyScore.upsert.mockResolvedValue({})
     prismaMock.redraftLeagueTransaction.create.mockResolvedValue({})

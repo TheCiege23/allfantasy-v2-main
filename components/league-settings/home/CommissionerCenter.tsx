@@ -6,24 +6,16 @@ import './league-settings-home.css'
 import './commissioner-center.css'
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import { Check, ChevronLeft, Copy } from 'lucide-react'
 import type { SettingsHomeSection, SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import type { SettingsSubPageRender } from './LeagueSettingsHome'
 import { SettingsSaveScope, confirmDiscardIfDirty, useSaveScopeHandleRef } from './SettingsSaveScope'
 
 /**
- * Commissioner center (native league handoff, Commissioner.png), the desktop layout of the League
- * Settings page for a commissioner: a section nav on the left (League / Rules / Season ops), the
- * chosen section's EXISTING editor on the right, then the commissioner tools that already exist and
- * the managers card.
- *
- * ⚠ NOT A SECOND SETTINGS PAGE. Sections, values and editors all come from the caller — the same
- * `buildLeagueSettingsHome` rows and `renderSubPage` editors the phone list opens — so every save still
- * goes through the route each editor already called. Only rows the viewer may edit appear in the nav
- * (a row with a `target`), which is the builder's existing permission rule.
- *
- * The handoff's page-level "Discard / Save changes" pair is not drawn: each editor saves itself today
- * (autosaving tabs, or its own Save button), and a page-level save that did nothing would be a lie.
+ * Responsive commissioner settings: desktop category navigation and a mobile category picker
+ * open the same existing editors. The builder controls which sections are editable; each editor
+ * keeps its authorized save route and joins the shared Save bar where supported.
  */
 
 type NavItem = { id: SettingsSubPageId; label: string }
@@ -32,7 +24,7 @@ const NAV_GROUPS: ReadonlyArray<{ title: string; items: ReadonlyArray<NavItem> }
   {
     title: 'League',
     items: [
-      { id: 'general', label: 'General' },
+      { id: 'general', label: 'League settings' },
       { id: 'format', label: 'League format' },
       { id: 'members', label: 'Managers & invites' },
       { id: 'co-commissioners', label: 'Co-commissioners' },
@@ -42,19 +34,20 @@ const NAV_GROUPS: ReadonlyArray<{ title: string; items: ReadonlyArray<NavItem> }
   {
     title: 'Rules',
     items: [
-      { id: 'scoring', label: 'Scoring' },
-      { id: 'roster', label: 'Roster slots' },
-      { id: 'draft', label: 'Draft' },
+      { id: 'scoring', label: 'Scoring settings' },
+      { id: 'roster', label: 'Roster settings' },
+      { id: 'draft', label: 'Draft settings' },
       { id: 'waivers', label: 'Waivers & free agents' },
       { id: 'trades', label: 'Trades' },
-      { id: 'playoffs', label: 'Playoffs' },
+      { id: 'playoffs', label: 'Playoff settings' },
       { id: 'guillotine-first-chop', label: 'First chop week' },
       { id: 'guillotine-chop-rules', label: 'Chop rules' },
       { id: 'guillotine-rules', label: 'League rules' },
+      { id: 'pirate-rules', label: 'Pirate rules' },
     ],
   },
   {
-    title: 'Season ops',
+    title: 'Commissioner tools',
     items: [
       { id: 'commissioner-tools', label: 'Lineups, locks & schedule' },
       { id: 'settings-lock', label: 'Settings lock' },
@@ -110,6 +103,7 @@ function CopyInvite({ url }: { url: string }) {
 }
 
 export function CommissionerCenter({
+  leagueId,
   leagueName,
   sections,
   renderSubPage,
@@ -120,6 +114,7 @@ export function CommissionerCenter({
   onSubPageClosed,
   header,
 }: {
+  leagueId?: string
   leagueName?: string | null
   sections: SettingsHomeSection[]
   renderSubPage: (id: SettingsSubPageId) => SettingsSubPageRender | null
@@ -135,7 +130,7 @@ export function CommissionerCenter({
 }) {
   const allowed = editableSubPages(sections)
   const groups = NAV_GROUPS.map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) })).filter(group => group.items.length)
-  const fallback: SettingsSubPageId = allowed.has(inSeason ? 'general' : 'draft') ? (inSeason ? 'general' : 'draft') : groups[0]?.items[0]?.id ?? 'general'
+  const fallback: SettingsSubPageId = allowed.has('general') ? 'general' : groups[0]?.items[0]?.id ?? 'general'
   const [open, setOpen] = useState<SettingsSubPageId>(initialSubPage && allowed.has(initialSubPage) ? initialSubPage : fallback)
   const pane = useRef<HTMLDivElement | null>(null)
   const saveScope = useSaveScopeHandleRef()
@@ -156,18 +151,39 @@ export function CommissionerCenter({
             <ChevronLeft size={16} aria-hidden /> Back to league home
           </button>
         ) : null}
-        <h1>Commissioner center</h1>
-        <p>Every rule for {leagueName?.trim() || 'your league'} lives here. Make your changes, then press Save.</p>
+        <h1>Commissioner settings</h1>
+        <p>{leagueName?.trim() || 'Your league'} · Choose a category, edit its rules, then save your changes.</p>
       </header>
 
-      {header?.(select)}
+      <div className="cc-mobile-categories">
+        {allowed.has('pirate-rules') ? (
+          <button type="button" className="cc-primary cc-pirate-shortcut" onClick={() => select('pirate-rules')} aria-current={open === 'pirate-rules' ? 'page' : undefined}>
+            Pirate rules <span>Protections, steals & deadlines</span>
+          </button>
+        ) : null}
+        <label htmlFor="cc-category">Settings category</label>
+        <select id="cc-category" value={open} onChange={event => select(event.target.value as SettingsSubPageId)}>
+          {groups.map(group => <optgroup key={group.title} label={group.title}>
+            {group.items.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+          </optgroup>)}
+        </select>
+      </div>
 
       <div className="cc-grid">
         <nav className="cc-nav" aria-label="Commissioner sections">
+          {allowed.has('pirate-rules') ? (
+            <section className="cc-pirate-nav">
+              <h2>Pirate league</h2>
+              <button type="button" onClick={() => select('pirate-rules')} aria-current={open === 'pirate-rules' ? 'page' : undefined} data-testid="cc-nav-pirate-rules">
+                Pirate rules
+              </button>
+              <p>Protections, steals & deadlines</p>
+            </section>
+          ) : null}
           {groups.map(group => (
             <section key={group.title}>
               <h2>{group.title}</h2>
-              {group.items.map(item => (
+              {group.items.filter(item => item.id !== 'pirate-rules').map(item => (
                 <button
                   key={item.id}
                   type="button"
@@ -199,8 +215,12 @@ export function CommissionerCenter({
         </div>
       </div>
 
-      <section className="cc-card cc-tools" aria-labelledby="cc-tools-title">
-        <p className="cc-label" id="cc-tools-title">Commissioner tools</p>
+      {header ? <details className="cc-setup-guide"><summary>League setup checklist</summary>{header(select)}</details> : null}
+
+      {leagueId ? <Link className="cc-activity-link" href={`/core/commissioner?league=${encodeURIComponent(leagueId)}&workspace=activity`}>Activity, league reports & advanced tools →</Link> : null}
+
+      <details className="cc-card cc-tools">
+        <summary id="cc-tools-title">More commissioner tools</summary>
         <ul>
           {TOOLS.filter(tool => allowed.has(tool.target)).map(tool => {
             const ready = !tool.inSeasonOnly || inSeason
@@ -217,7 +237,7 @@ export function CommissionerCenter({
             )
           })}
         </ul>
-      </section>
+      </details>
 
       <section className="cc-card cc-managers" aria-labelledby="cc-managers-title">
         <p className="cc-label" id="cc-managers-title">Managers</p>

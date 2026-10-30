@@ -48,6 +48,7 @@ type LeagueTypeCard = {
 }
 
 const LEAGUE_TYPES: LeagueTypeCard[] = [
+  { id: 'pirate', title: 'Pirate', subtitle: 'Win matchups and steal unprotected players', icon: '☠' },
   { id: 'redraft', title: 'Redraft', subtitle: 'Fresh draft every season', icon: '◆' },
   { id: 'dynasty', title: 'Dynasty', subtitle: 'Keep your core forever', icon: '♔' },
   { id: 'keeper', title: 'Keeper', subtitle: 'Hold a few, draft the rest', icon: '⬡' },

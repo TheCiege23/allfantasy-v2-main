@@ -55,6 +55,14 @@ const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
     introVideo: '/league-type-guillotine-intro.mp4',
     thumbnailFallback: FALLBACK_THUMBNAIL,
   },
+  pirate: {
+    label: 'Pirate League',
+    thumbnail: '/images/league-types/pirate-hero.png',
+    defaultLeagueImageUrl: '/images/league-types/pirate-hero.png',
+    selectionVideo: '/media/league-intros/pirate-claim.mp4',
+    introVideo: '/media/league-intros/pirate-claim.mp4',
+    thumbnailFallback: FALLBACK_THUMBNAIL,
+  },
   survivor: {
     label: 'Survivor',
     thumbnail: '/league-type-survivor.png',

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { HelpCircle } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
+import { useSettingsSaveScope } from '@/components/league-settings/home/SettingsSaveScope'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
@@ -39,6 +40,7 @@ export function GeneralTab({
   showWaivers?: boolean
 }) {
   const { t } = useLanguage()
+  const manual = useSettingsSaveScope() != null
   const leagueId = ctx.league.id
   const { queuePatch, saving, lastError, savedAt } = useLeagueSettingsSectionAutosave(leagueId, 'general', {
     enabled: canEdit,
@@ -73,13 +75,13 @@ export function GeneralTab({
       <section className={SETTINGS_CARD_CLASS}>
         <div className="mb-4 flex items-center gap-2">
           <h3 className="text-[13px] font-bold uppercase tracking-wide text-cyan-200/90">{t('lsHub.gen.basics')}</h3>
-          <span
+          {!manual ? <span
             className="inline-flex items-center gap-1 text-[11px] text-white/40"
             title={t('lsHub.gen.autosaveHint')}
           >
             <HelpCircle className="h-3 w-3" aria-hidden />
             {t('lsHub.gen.autosave')}
-          </span>
+          </span> : null}
           {saving || savedAt != null ? <AutosaveStatus className="ml-auto" saving={saving} savedAt={savedAt} /> : null}
         </div>
 

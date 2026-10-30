@@ -383,6 +383,7 @@ export async function createCanonicalLeagueInTransaction(
     },
     soccer_pipeline: sport === 'SOCCER' ? soccerPipeline : undefined,
     canonical_creation_source: 'post_api_leagues_v1',
+    ...(formatId === 'pirate' ? { conceptSetup: { pirate: (body.conceptSetup?.pirate ?? {}) as Record<string, unknown> } } : {}),
     constitution_request: {
       requestedAt: new Date().toISOString(),
       notes: '',
@@ -636,7 +637,9 @@ export async function createCanonicalLeagueInTransaction(
           ? 'idp'
           : formatId === 'zombie'
             ? 'zombie'
-            : null,
+            : formatId === 'pirate'
+              ? 'pirate'
+              : null,
       timezone: body.timezone ?? 'America/New_York',
       language: body.language ?? 'en',
       joinCode,

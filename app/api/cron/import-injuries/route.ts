@@ -324,9 +324,13 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
       fetched: result.fetched + espn.fetched,
       failed,
       error: [...result.errors, ...espn.errors, ...apiSports.errors][0] ?? null,
+      completeForLineup: !failed && !noCoverage && !providerErrored && (result.unparseableStatus ?? 0) === 0,
+      completeCoverageForLineup: !failed && !noCoverage && !providerErrored && !result.notModified &&
+        espn.skippedNoPlayer === 0,
     })
 
-    const notifications = !failed && !noCoverage
+    // Authenticated data-only rehearsals must not dispatch manager messages.
+    const notifications = !failed && !noCoverage && url.searchParams.get('notifications') !== '0'
       ? await notifySyncedInjuries(sport).catch(e => {
           console.error('[cron/import-injuries] notification delivery failed', sport, e)
           return { delivered: 0, errors: 1 }
@@ -341,6 +345,7 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
         season: season ?? "current",
         source: providerLabel,
         providerCoverage: noCoverage ? "none" : "partial_or_full",
+        lineupCoverageCertified: !failed && !noCoverage && !providerErrored && !result.notModified && espn.skippedNoPlayer === 0,
         /** Every configured provider answered 200 with zero rows and no error — an out-of-season
          *  feed, not an outage. Surfaced so it is legible rather than an unexplained green. */
         providerReturnedEmpty: cleanEmpty || undefined,
@@ -374,7 +379,7 @@ async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[cron/import-injuries] ${sport} failed:`, message)
-    await recordInjurySyncRun({ sport, written: 0, fetched: 0, failed: true, error: message })
+    await recordInjurySyncRun({ sport, written: 0, fetched: 0, failed: true, error: message, completeForLineup: false })
     return {
       body: { ok: false, sport, error: message.slice(0, 240), durationMs: Date.now() - startedAt },
       failed: true,

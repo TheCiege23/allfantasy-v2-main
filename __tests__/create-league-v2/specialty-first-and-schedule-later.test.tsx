@@ -38,7 +38,7 @@ describe('specialty formats lead the Basics step', () => {
     expect(ids(classic)).toEqual(['redraft', 'dynasty', 'keeper', 'best_ball'])
     const special = ids(specialty)
     expect(special[0]).toBe('survivor')
-    expect(special).toEqual(expect.arrayContaining(['guillotine', 'big_brother', 'zombie']))
+    expect(special).toEqual(expect.arrayContaining(['pirate', 'guillotine', 'big_brother', 'zombie']))
     expect(special).not.toContain('idp')
     expect(special).not.toEqual(expect.arrayContaining(['redraft']))
     // The specialty group comes before the classics in the page.
@@ -50,7 +50,7 @@ describe('specialty formats lead the Basics step', () => {
     render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
     const all = screen.getAllByRole('button').map((b) => b.getAttribute('data-testid') ?? '').filter((id) => id.startsWith('g30-league-type-'))
     expect(new Set(all).size).toBe(all.length)
-    expect(all).toHaveLength(9)
+    expect(all).toHaveLength(10)
   })
 
   it('choosing a specialty tile selects that format', () => {

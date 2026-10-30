@@ -17,6 +17,7 @@ const CONCEPT_TO_FORMAT: Record<string, LeagueFormatId> = {
   zombie: 'zombie',
   salary_cap: 'salary_cap',
   big_brother: 'big_brother',
+  pirate: 'pirate',
   // common aliases / uppercase
   REDRAFT: 'redraft',
   DYNASTY: 'dynasty',
@@ -30,6 +31,7 @@ const CONCEPT_TO_FORMAT: Record<string, LeagueFormatId> = {
   ZOMBIE: 'zombie',
   SALARY_CAP: 'salary_cap',
   BIG_BROTHER: 'big_brother',
+  PIRATE: 'pirate',
   // product aliases → closest supported format (extend FORMAT_REGISTRY when adding first-class formats)
   pirate_vampire: 'dynasty',
   PIRATE_VAMPIRE: 'dynasty',

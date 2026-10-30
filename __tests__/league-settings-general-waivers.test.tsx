@@ -22,6 +22,7 @@ vi.mock('@/hooks/useLeagueSettingsSectionAutosave', () => ({
 }))
 
 import { GeneralTab } from '@/components/league-settings/tabs/GeneralTab'
+import { SettingsSaveScope } from '@/components/league-settings/home/SettingsSaveScope'
 import { clearSavedLeagueOverrides, recordSavedLeagueOverrides } from '@/lib/league-settings/savedLeagueOverrides'
 import { DAILY_WAIVER_SCHEDULE_SETTINGS_KEY, defaultDailyWaiverSchedule } from '@/lib/waivers/dailyWaiverSchedule'
 
@@ -49,6 +50,14 @@ describe('General tab (native league)', () => {
     const text = r.container.textContent ?? ''
     expect(text).not.toMatch(/host platform|host app|Read-only snapshot|synced JSON/i)
     expect(r.getByTestId('league-settings-waivers-section')).toBeTruthy()
+  })
+
+  it('only advertises auto-save outside the manual Save changes page', () => {
+    const legacy = render(<GeneralTab ctx={ctx()} canEdit hasAfCommissionerSub={false} showWaivers={false} />)
+    expect(legacy.getByText('Auto-save')).toBeTruthy()
+    legacy.unmount()
+    const manual = render(<SettingsSaveScope><GeneralTab ctx={ctx()} canEdit hasAfCommissionerSub={false} showWaivers={false} /></SettingsSaveScope>)
+    expect(manual.queryByText('Auto-save')).toBeNull()
   })
 
   it('name / timezone / logo queue patches on the general section; a cleared name is not sent', () => {
