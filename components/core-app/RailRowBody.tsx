@@ -11,6 +11,7 @@ import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { RailMatchupSummary, RailSideProjectionSummary, RailStandingSummary } from './AfCoreShell'
 import type { LiveRailScore } from './useLiveRailScores'
+import { mostHavePlayed } from '@/lib/core-app/liveRailScores'
 import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
 import type { RailRecord } from '@/lib/core-app/railRecordRank'
 
@@ -41,7 +42,17 @@ export function mergeRailMatchup(
   if (!live) return saved
   const sameWeek = saved?.season === live.season && saved?.week === live.week
   const fieldRace = saved?.standing?.elimination === true
-  const standing = fieldRace ? live.fieldStanding : live.standing
+  /*
+   * ⚠ THE LIVE POLL CARRIES POINTS, NEVER PROJECTIONS. Until most of the field has played, a team that has
+   * not kicked off sits at 0, so a points rank puts it at the cut line; the server row ranked that window
+   * on projections (`standingIn`). Keep it until the live field says most have played.
+   */
+  const liveField = live.fieldStanding
+  const keepProjected = fieldRace && sameWeek && saved?.standing?.basis === 'projected' &&
+    !(liveField && mostHavePlayed(liveField.played ?? liveField.outOf, liveField.outOf))
+  const standing = keepProjected
+    ? { ...saved!.standing!, weeksLeft: saved!.standing!.weeksLeft ?? liveField?.weeksLeft ?? null }
+    : fieldRace ? live.fieldStanding : live.standing
   /* A native row is read from the database with its own projection and its own data stamp. */
   if (live.native) {
     return { ...live, freshAt: live.freshAt ?? null, source: 'live_cache' as const }
@@ -169,7 +180,7 @@ function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
     <span className="af-rail-row-rank" data-tone={tone}>
       <span className="af-rail-row-rank-pos">
         {standing.tied ? msg.tiedPrefix : ''}{msg.rank(standing.rank)}
-        <span className="af-rail-row-rank-of">{msg.of}{standing.outOf}</span>
+        <span className="af-rail-row-rank-of">{standing.elimination ? msg.ofAlive(standing.outOf) : `${msg.of}${standing.outOf}`}</span>
       </span>
       <span className="af-rail-row-rank-cut">
         {standing.overCut == null
@@ -183,8 +194,20 @@ function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
       <span className="af-rail-row-rank-space">
         {standing.placesAboveCut === 0 ? msg.cutPosition : msg.placesClear(standing.placesAboveCut)}
       </span>
+      {/*
+        WHO THE CUT FALLS ON (owner's ask, 2026-10-30): the lowest team other than you and their number on
+        the same basis — the team you need to stay above, or the one you need to pass when it is you.
+      */}
+      {standing.elimination && standing.cutTeam && standing.cutTeamValue != null ? (
+        <span className="af-rail-row-rank-low">
+          {standing.overCut == null
+            ? msg.toPass(standing.cutTeam, standing.cutTeamValue.toFixed(1))
+            : msg.chopLine(standing.cutTeam, standing.cutTeamValue.toFixed(1))}
+        </span>
+      ) : null}
       <span className="af-rail-row-rank-basis">
         {standing.basis === 'points' ? msg.onPoints : msg.onProjection}
+        {standing.elimination && standing.weeksLeft != null ? ` · ${msg.weeksLeft(standing.weeksLeft)}` : ''}
       </span>
     </span>
   )

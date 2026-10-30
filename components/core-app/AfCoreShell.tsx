@@ -161,6 +161,13 @@ export type RailStandingSummary = {
   cutLine: number
   /** The bottom of this table goes home, so the copy says "cut" rather than "last". */
   elimination: boolean
+  /** Teams with points on the board (railMatchups.ts `RailStanding`). */
+  played?: number
+  /** The lowest team other than you, and its value on the same basis. */
+  cutTeam?: string | null
+  cutTeamValue?: number | null
+  /** An elimination league's weeks left, this one included. */
+  weeksLeft?: number | null
 }
 
 /**

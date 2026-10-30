@@ -66,7 +66,7 @@ vi.mock('@/lib/prisma', async () => {
   }
 })
 
-import { BUBBLE_SIZE, choppedBefore, getRailMatchups, mostHavePlayed, standingIn } from '@/lib/core-app/railMatchups'
+import { BUBBLE_SIZE, choppedBefore, getRailMatchups, mostHavePlayed, standingIn, weeksLeftFrom } from '@/lib/core-app/railMatchups'
 
 beforeEach(() => {
   db.rows = [...guillotineRows(), ...h2hRows()]
@@ -225,6 +225,23 @@ describe('standingIn: the basis follows how much of the field has played', () =>
     const partial = new Map(proj)
     partial.delete('c')
     expect(standingIn({ field: field({}), yourRosterId: 'a', sides: partial, elimination: true })).toBeNull()
+  })
+
+  it('names the lowest team other than you, on the same basis, and carries the weeks left', () => {
+    const nameOf = (id: string) => `Team ${id.toUpperCase()}`
+    const above = standingIn({ field: field({ d: 40, e: 35 }), yourRosterId: 'a', sides: proj, elimination: true, nameOf, weeksLeft: 11 })
+    expect(above).toMatchObject({ cutTeam: 'Team E', cutTeamValue: 90, weeksLeft: 11, played: 2 })
+    // At the bottom yourself, the named team is the one you need to pass.
+    const bottom = standingIn({ field: field({}), yourRosterId: 'e', sides: proj, elimination: true, nameOf })
+    expect(bottom).toMatchObject({ overCut: null, cutTeam: 'Team D', cutTeamValue: 100 })
+  })
+
+  it('weeks left counts this week: week 8 of an 18-week season is 11', () => {
+    const rows = Array.from({ length: 18 }, (_, i) => ({ week: i + 1 }))
+    expect(weeksLeftFrom(rows, 8)).toBe(11)
+    expect(weeksLeftFrom(rows, 18)).toBe(1)
+    expect(weeksLeftFrom(rows, 19)).toBeNull()
+    expect(weeksLeftFrom([], 8)).toBeNull()
   })
 
   it('before any snap with the field priced, ranks on projection (unchanged)', () => {

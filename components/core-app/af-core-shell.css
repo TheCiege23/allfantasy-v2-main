@@ -1786,6 +1786,17 @@
  * projections; "14th of 18" with no basis presents a projected ordering as a
  * played one.
  */
+/* An elimination league's chop line: the lowest team other than you, on the same basis as the rank. */
+.af-core .af-rail-row-rank-low {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text2);
+}
+
 .af-core .af-rail-row-rank-basis {
   flex-basis: 100%;
   font: 500 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
