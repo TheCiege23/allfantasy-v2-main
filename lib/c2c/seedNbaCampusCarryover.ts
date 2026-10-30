@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client'
+import type { PrismaClient } from '@prisma/client'
 import { dailySportWeekForInstant, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { readRiScheduleWindow, scheduleKeyPrefix } from '@/lib/sports-data/riScheduleCache'
 import { currentNcaabRosterEvidence } from '@/lib/devy/ncaabRosterPool'
@@ -7,7 +7,7 @@ import { rotateForFairness } from '@/lib/cron/runBudget'
 import { isBasketballC2CLeague } from './campusLineup'
 import { buildNbaCampusWeekSnapshot } from './nbaCampusWeekSnapshot'
 import { nbaCampusWeekCacheKey, persistNbaCampusWeekSnapshot } from './storeNbaCampusWeekSnapshot'
-import { canCaptureNbaCampusCarryover } from './nbaCampusCarryover'
+import { canCaptureNbaCampusCarryover, canRecoverNbaCampusCarryover } from './nbaCampusCarryover'
 
 /** Seed an untouched week's campus assignments before any college game can start. */
 export async function seedNbaCampusCarryover(db: PrismaClient, input: { now: Date; deadlineAt: number; maxRosters: number }) {
@@ -23,21 +23,28 @@ export async function seedNbaCampusCarryover(db: PrismaClient, input: { now: Dat
     const [meta, schedule, rosters] = await Promise.all([
       db.sportsDataCache.findUnique({ where: { cacheKey: `${scheduleKeyPrefix('NCAAB', season.season)}meta` } }),
       readRiScheduleWindow(db as never, { sport: 'NCAAB', season: season.season, window }),
-      db.roster.findMany({ where: { leagueId: season.leagueId, redraftRosterId: { not: null } }, select: { id: true, leagueId: true, playerData: true } }),
+      db.roster.findMany({ where: { leagueId: season.leagueId, redraftRosterId: { not: null } }, select: { id: true, leagueId: true, playerData: true, updatedAt: true } }),
     ])
-    if (!meta || meta.expiresAt <= input.now || !canCaptureNbaCampusCarryover({ now: input.now, window, schedule, meta: meta.data })) { held += rosters.length; continue }
+    if (!meta || meta.expiresAt <= input.now) { held += rosters.length; continue }
     for (const roster of rotateForFairness(rosters, 3600000)) {
       if (Date.now() >= input.deadlineAt || considered >= input.maxRosters) break
       const key = nbaCampusWeekCacheKey(roster.leagueId, roster.id, season.season, season.currentWeek)
       if (await db.sportsDataCache.findUnique({ where: { cacheKey: key }, select: { cacheKey: true } })) continue
       considered++
-      const snapshot = buildNbaCampusWeekSnapshot({ playerData: roster.playerData, season: season.season, week: season.currentWeek, now: input.now, evidence: evidence.athletes }).snapshot
-      if (!snapshot) { held++; continue }
+      const currentSnapshot = buildNbaCampusWeekSnapshot({ playerData: roster.playerData, season: season.season, week: season.currentWeek, now: input.now, evidence: evidence.athletes }).snapshot
+      if (!currentSnapshot) { held++; continue }
+      const observedAt = currentSnapshot.players.map(p => new Date(p.observedAt))
+      const early = canCaptureNbaCampusCarryover({ now: input.now, window, schedule, meta: meta.data })
+      const recovered = !early && canRecoverNbaCampusCarryover({ now: input.now, window, schedule, meta: meta.data, rosterUpdatedAt: roster.updatedAt, observedAt })
+      if (!early && !recovered) { held++; continue }
+      const snapshot = recovered ? { ...currentSnapshot, players: currentSnapshot.players.map(p => ({ ...p, selectedAt: window.start.toISOString() })) } : currentSnapshot
       const result = await db.$transaction(async tx => {
-        // Taking the roster row lock and comparing JSON serializes this with a user save.
-        const before = roster.playerData as Prisma.InputJsonValue
-        const locked = await tx.roster.updateMany({ where: { id: roster.id, playerData: { equals: before } }, data: { playerData: before } })
-        if (locked.count !== 1 || !canCaptureNbaCampusCarryover({ now: new Date(), window, schedule, meta: meta.data })) return false
+        // Lock and compare without touching updatedAt; a rejected carryover must not alter the roster.
+        const before = JSON.stringify(roster.playerData)
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM rosters WHERE id = ${roster.id} AND "updatedAt" = ${roster.updatedAt} AND "playerData" = ${before}::jsonb FOR UPDATE`
+        const checkedAt = new Date()
+        const stillSafe = recovered ? canRecoverNbaCampusCarryover({ now: checkedAt, window, schedule, meta: meta.data, rosterUpdatedAt: roster.updatedAt, observedAt }) : canCaptureNbaCampusCarryover({ now: checkedAt, window, schedule, meta: meta.data })
+        if (locked.length !== 1 || !stillSafe) return false
         const existing = await tx.sportsDataCache.findUnique({ where: { cacheKey: key } })
         if (existing) return false
         const assignment = await tx.afRosterLineupAssignment.count({ where: { rosterId: roster.id, season: season.season, week: season.currentWeek } })
