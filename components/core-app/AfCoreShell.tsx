@@ -2214,6 +2214,19 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   (reported 2026-10-30).
                 */}
                 <div className="af-data-menu-display">
+                  {/*
+                    The plan chip is hidden on phones, so a tester granted access saw nothing change
+                    (reported 2026-10-30). The same line, readable here.
+                  */}
+                  {plan ? (
+                    <p className="af-data-menu-plan">
+                      Plan:{' '}
+                      <span className="af-data-menu-plan-name">{plan.name}</span>
+                      {plan.tokensLeft != null
+                        ? ` · ${plan.tokensLeft.toLocaleString(getAppIntlLocale())} ${language === 'es' ? 'tokens restantes' : 'tokens left'}`
+                        : null}
+                    </p>
+                  ) : null}
                   <strong>{language === 'es' ? 'Pantalla' : 'Display'}</strong>
                   <div className="af-data-menu-display-row">
                     <ModeToggle className="af-mode-chip" />
