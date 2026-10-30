@@ -47,8 +47,11 @@ export function mergeRailMatchup(
    * on projections (`standingIn`). Keep it until the live field says most have played.
    */
   const liveField = live.fieldStanding
-  const keepProjected = fieldRace && sameWeek && saved?.standing?.basis === 'projected' &&
-    !(liveField && mostHavePlayed(liveField.played ?? liveField.outOf, liveField.outOf))
+  const keepProjected = fieldRace && sameWeek && (
+    /* A best-ball rank is projected finals all week: a live best-ball score is only a floor (bestBallField.ts). */
+    saved?.standing?.basis === 'best_ball' ||
+    (saved?.standing?.basis === 'projected' && !(liveField && mostHavePlayed(liveField.played ?? liveField.outOf, liveField.outOf)))
+  )
   const standing = keepProjected
     ? { ...saved!.standing!, weeksLeft: saved!.standing!.weeksLeft ?? liveField?.weeksLeft ?? null }
     : fieldRace ? live.fieldStanding : live.standing
@@ -205,7 +208,9 @@ function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
         </span>
       ) : null}
       <span className="af-rail-row-rank-basis">
-        {standing.basis === 'points' ? msg.onPoints : msg.onProjection}
+        {standing.basis === 'best_ball'
+          ? standing.provisional ? msg.onBestBallProvisional : msg.onBestBallFinal
+          : standing.basis === 'points' ? msg.onPoints : msg.onProjection}
         {standing.elimination && standing.weeksLeft != null ? ` · ${msg.weeksLeft(standing.weeksLeft)}` : ''}
       </span>
     </span>
