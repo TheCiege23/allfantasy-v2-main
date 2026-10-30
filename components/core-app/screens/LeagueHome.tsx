@@ -34,6 +34,8 @@ import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineC
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { useMessages } from '@/components/i18n/useMessages'
+import { leagueHomeMessages } from '@/lib/core-app/messages/leagueHome'
 
 /**
  * Jump to another week.
@@ -215,6 +217,7 @@ function PairedBand({
   leagueName: string
 }) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(leagueHomeMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const connectHref = `/core/connect-leagues?league=${encodeURIComponent(leagueId)}`
 
@@ -222,7 +225,7 @@ function PairedBand({
     return (
       <section className="af-card af-lh-paired af-lh-paired--offer">
         <div className="af-lh-paired-body">
-          <h2 className="af-lh-paired-title">{language === 'es' ? `¿${leagueName} forma parte de un equipo más grande?` : `Is ${leagueName} half of a bigger team?`}</h2>
+          <h2 className="af-lh-paired-title">{m.pairedOfferTitle(leagueName)}</h2>
           <p className="af-lh-paired-text">
             {copy('Connect a related league to see both rosters in one shared hub, with each league’s rules, scoring and lineup close at hand.')}
           </p>
@@ -246,11 +249,9 @@ function PairedBand({
     return (
       <section className="af-card af-lh-paired af-lh-paired--offer">
         <div className="af-lh-paired-body">
-          <h2 className="af-lh-paired-title">{language === 'es' ? `${franchiseName} solo tiene una parte` : `${franchiseName} has only one half`}</h2>
+          <h2 className="af-lh-paired-title">{m.pairedHalfTitle(franchiseName)}</h2>
           <p className="af-lh-paired-text">
-            {language === 'es'
-              ? `Esta liga está registrada como la parte ${viewingRole}. Añade la otra para verlas como un solo equipo.`
-              : `This league is filed as the ${viewingRole} side. Add the other half to see them as one team.`}
+            {m.pairedHalfText(viewingRole)}
           </p>
         </div>
         <Link href={connectHref} className="af-btn af-lh-paired-cta">
@@ -284,7 +285,7 @@ function PairedBand({
           smaller than it is, and looks like a fact rather than a gap.
         */}
         {!anyUnavailable ? (
-          <span className="af-lh-paired-role">{language === 'es' ? `${totalPlayers} jugadores entre ambas` : `${totalPlayers} players across both`}</span>
+          <span className="af-lh-paired-role">{m.pairedTotalPlayers(totalPlayers)}</span>
         ) : null}
       </div>
       <div className="af-lh-paired-sides">
@@ -353,9 +354,7 @@ function PairedBand({
               <p className="af-lh-paired-text">_ {sd.unavailableReason}</p>
             ) : (
               <p className="af-lh-paired-text">
-                {language === 'es'
-                  ? `${sd.playerCount} ${sd.playerCount === 1 ? 'jugador' : 'jugadores'} en tu plantilla`
-                  : `${sd.playerCount} ${sd.playerCount === 1 ? 'player' : 'players'} on your roster`}
+                {m.pairedRosterCount(sd.playerCount)}
               </p>
             )}
             {/*
@@ -480,6 +479,7 @@ export function LeagueHome({
   tradeDeadline = null,
 }: LeagueHomeProps) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(leagueHomeMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const { league } = data
   const teamDirectory = data.teamDirectory ?? []
@@ -690,17 +690,13 @@ export function LeagueHome({
             */}
             {data.weekPicker?.isFuture ? (
               <p className="af-lh-weeknote">
-                {language === 'es'
-                  ? `Aún no se ha jugado nada de la semana ${data.weekPicker.selected}.`
-                  : `Nothing in week ${data.weekPicker.selected} has been played.`}
+                {m.futureWeekNotPlayed(data.weekPicker.selected)}
                 {/* With no league-scored totals there are no numbers to vouch for; the board says why. */}
                 {board.unpricedReason ? null : (
                   <>
                     {' '}{copy('Every number is projected from today’s rosters')}
                     {board.projectionBasis && !board.projectionBasis.matchesViewedWeek
-                      ? language === 'es'
-                        ? `, con proyecciones de la semana ${board.projectionBasis.week}; la fuente aún no tiene la semana ${data.weekPicker.selected}`
-                        : `, using week ${board.projectionBasis.week} projections — the feed does not carry week ${data.weekPicker.selected} yet`
+                      ? m.futureWeekBasis(board.projectionBasis.week, data.weekPicker.selected)
                       : ''}
                     .
                   </>
@@ -750,9 +746,7 @@ export function LeagueHome({
                   <span
                     className="af-pb-move af-num"
                     data-dir={r.powerRankChange > 0 ? 'up' : 'down'}
-                    title={language === 'es'
-                      ? `${Math.abs(r.powerRankChange)} ${Math.abs(r.powerRankChange) === 1 ? 'puesto' : 'puestos'} ${r.powerRankChange > 0 ? 'arriba' : 'abajo'} desde la semana pasada`
-                      : `${Math.abs(r.powerRankChange)} place${Math.abs(r.powerRankChange) === 1 ? '' : 's'} ${r.powerRankChange > 0 ? 'up' : 'down'} since last week`}
+                    title={m.powerMoveTitle(Math.abs(r.powerRankChange), r.powerRankChange > 0)}
                   >
                     {r.powerRankChange > 0 ? '▲' : '▼'}
                     {Math.abs(r.powerRankChange)}
@@ -785,8 +779,8 @@ export function LeagueHome({
                     data-dir={r.luckWins > 0 ? 'lucky' : 'unlucky'}
                     title={
                       r.luckWins > 0
-                        ? language === 'es' ? `${r.luckWins.toFixed(1)} victorias más de lo esperado` : `${r.luckWins.toFixed(1)} wins better than they have played`
-                        : language === 'es' ? `${Math.abs(r.luckWins).toFixed(1)} victorias menos de lo esperado` : `${Math.abs(r.luckWins).toFixed(1)} wins worse than they have played`
+                        ? m.luckBetter(r.luckWins.toFixed(1))
+                        : m.luckWorse(Math.abs(r.luckWins).toFixed(1))
                     }
                   >
                     {r.luckWins > 0 ? '+' : ''}
@@ -907,7 +901,7 @@ export function LeagueHome({
                   <p className="af-ch-names">
                     {copy('Inactive:')} {hub.inactiveNames.join(', ')}
                     {hub.inactiveCount > hub.inactiveNames.length
-                      ? language === 'es' ? ` y ${hub.inactiveCount - hub.inactiveNames.length} más` : ` and ${hub.inactiveCount - hub.inactiveNames.length} more`
+                      ? m.inactiveMore(hub.inactiveCount - hub.inactiveNames.length)
                       : ''}
                   </p>
                 ) : (
@@ -1012,9 +1006,7 @@ export function LeagueHome({
                         detail: {
                           tab: 'chimmy',
                           // Seeded, never sent — see the note on COMMS_OPEN_EVENT.
-                          prefill: language === 'es'
-                            ? `Explícame la semana ${data.scoreboard.available ? data.scoreboard.data.week : ''} en ${league.name}: ¿qué enfrentamientos están más ajustados, dónde puede haber sorpresas y qué debo vigilar en mi partido?`
-                            : `Walk me through week ${data.scoreboard.available ? data.scoreboard.data.week : ''} in ${league.name}: which matchups are closest, who is most likely to be upset, and what should I be watching in my own game?`,
+                          prefill: m.askWeekPrefill(data.scoreboard.available ? data.scoreboard.data.week : '', league.name),
                         },
                       }),
                     )
@@ -1029,9 +1021,7 @@ export function LeagueHome({
               </p>
             )}
             <p className="af-lh-readonly-note">
-              {language === 'es'
-                ? `Haz los cambios en ${platformLabel}; AllFantasy solo consulta tu liga.`
-                : `Make changes in ${platformLabel} — AllFantasy only reads your league.`}
+              {m.readOnlyNote(platformLabel)}
             </p>
           </Panel></LeagueSection>
 
@@ -1173,9 +1163,7 @@ export function LeagueHome({
         <section className="af-card af-lh-elsewhere">
           <span className="af-label">{copy('All leagues')}</span>
           <p className="af-lh-elsewhere-text">
-            {language === 'es'
-              ? `${otherLeagueIssueCount} ${otherLeagueIssueCount === 1 ? 'asunto pendiente está' : 'asuntos pendientes están'} fuera de esta liga.`
-              : `${otherLeagueIssueCount} more ${otherLeagueIssueCount === 1 ? 'issue lives' : 'issues live'} outside this league.`}
+            {m.otherLeagueIssues(otherLeagueIssueCount)}
           </p>
           <Link href="/core" className="af-lh-cardlink">
             {copy('Back to home')} →

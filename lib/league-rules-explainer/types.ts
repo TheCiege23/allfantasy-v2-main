@@ -90,6 +90,12 @@ export type RuleSnapshot = {
   waiverProcessHour?: number | null
   /** NBA / NHL only. */
   lineupMode?: 'daily' | 'weekly' | null
+  /**
+   * When a weekly lineup locks, as the lock enforces it (`readLineupLockSettings`): each player at his
+   * team's first game of the week, the whole lineup at the week's first game, or by the commissioner.
+   * Null for daily lineups (their own line says it) and where no lock is enforced (soccer).
+   */
+  lineupLock?: 'per_player' | 'first_game' | 'manual' | null
   teamsPerChop?: number | null
   chopStartWeek?: number | null
   chopEndWeek?: number | null
@@ -172,6 +178,19 @@ export type RuleSnapshot = {
   draftAutostart?: boolean | null
   /** Who drafts for a team without a manager: `ai` (Chimmy), `cpu`; null = nobody (off). */
   draftOrphanPicks?: string | null
+  /*
+   * Devy / C2C leagues: the rounds of the main draft set aside for college players, as the pick check
+   * enforces them (lib/live-draft-engine/PickValidation.ts, from `DraftSession.devyConfig` /
+   * `c2cConfig`). In a listed round only a college player can be picked; in every other round a
+   * college player is refused. `[]` = the rule is on with no listed round, so no college player can be
+   * picked at all. Null = no such rule (off, an auction, no session, or not a devy / C2C league). At
+   * most one of the two is set: the engine checks the C2C rounds instead of the devy rounds when both
+   * are on.
+   */
+  /** A devy league's devy rounds (`devyConfig.devyRounds`). */
+  draftDevyRounds?: number[] | null
+  /** A C2C league's college rounds (`c2cConfig.collegeRounds`). */
+  draftCollegeRounds?: number[] | null
 }
 
 export type DraftStatus = 'scheduled' | 'in_progress' | 'completed'

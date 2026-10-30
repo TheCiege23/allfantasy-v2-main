@@ -78,3 +78,19 @@ describe('Action Queue tasks', () => {
     expect(await readLineupIntegrityTasks('L1')).toEqual([])
   })
 })
+
+describe('player names are read in the league’s sport', () => {
+  it('an NFL audit never names a starter from another sport’s row with the same Sleeper id', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    vi.mocked(prisma.sportsPlayer.findMany).mockImplementationOnce((async ({ where }: { where: Record<string, unknown> }) =>
+      [
+        { sport: 'NBA', sleeperId: 'mahomes', name: 'Hoops Impostor', team: 'KC', position: 'PG' },
+        { sport: 'NFL', sleeperId: 'mahomes', name: 'Patrick Mahomes', team: 'KC', position: 'QB' },
+        { sport: 'NFL', sleeperId: 'hurts', name: 'Jalen Hurts', team: 'PHI', position: 'QB' },
+        { sport: 'NFL', sleeperId: 'hurt', name: 'Hurt Guy', team: 'DAL', position: 'WR' },
+      ].filter((r) => where.sport == null || r.sport === where.sport)) as never)
+    const rep = await readLineupIntegrity('L1', { fullSeason: false })
+    if (!rep?.supported) throw new Error('unsupported')
+    expect(rep.findings.find((f) => f.rosterId === '1')?.playerNames).toEqual({ mahomes: 'Patrick Mahomes' })
+  })
+})

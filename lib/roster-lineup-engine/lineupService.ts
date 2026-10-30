@@ -12,7 +12,8 @@ import { syncAfRosterLineupAssignments } from './lineupAssignmentSync'
 import { syncRedraftSlotTypesForLineup } from './redraftSlotSync'
 import { isDailyLineupScoringEnabled, writeDailyLineupForSave } from '@/lib/redraft/dailyLineups'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
-import { recordAfRosterMoveHistory } from './rosterMoveHistory'
+import { hashPlayerDataSnapshot, recordAfRosterMoveHistory } from './rosterMoveHistory'
+import { lineupLayout, type AutomaticChangeUndo } from '@/lib/lineup-automation/automaticChangeUndo'
 import { upsertAfLineupLockState, resolveFullLineupLockContext } from './lineupLockService'
 import type { LineupValidationContext } from './types'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
@@ -288,7 +289,13 @@ export async function persistRosterLineupWithEngine(
       where: { id: input.rosterId },
       data: { playerData: input.nextPlayerData as Prisma.InputJsonValue },
     })
-    if(input.automationAudit) await tx.automationAuditLog.create({data:{...input.automationAudit, leagueId:input.leagueId,userId:input.actorUserId,entityType:"roster",entityId:input.rosterId,metadata:input.automationAudit.metadata as Prisma.InputJsonValue}})
+    if(input.automationAudit) {
+      // Where every player sat before this automatic save, so the owner or commissioner can undo it
+      // (lib/lineup-automation/automaticChangeUndo.ts). Placement only, never player details. The
+      // fingerprint is of the lineup as the database will return it (JSON drops undefined fields).
+      const undo: AutomaticChangeUndo = { layout: lineupLayout(before), afterHash: hashPlayerDataSnapshot(JSON.parse(JSON.stringify(input.nextPlayerData))), season: input.season, week: input.week }
+      await tx.automationAuditLog.create({data:{...input.automationAudit, leagueId:input.leagueId,userId:input.actorUserId,entityType:"roster",entityId:input.rosterId,metadata:{...input.automationAudit.metadata, undo} as unknown as Prisma.InputJsonValue}})
+    }
     await syncAfRosterLineupAssignments(
       {
         leagueId: input.leagueId,

@@ -14,7 +14,7 @@ import {
 } from '@/lib/league-trade-engine/leagueTradeReviewSetting'
 
 const ALLOWED_KEYS = ['name', 'scoring', 'status', 'avatarUrl', 'rosterSize', 'leagueSize', 'starters', 'sport', 'season'] as const
-const SETTINGS_KEYS = ['description', 'lineupLockRule', 'publicDashboard', 'rankedVisibility', 'orphanSeeking', 'orphanDifficulty', 'leagueChatThreadId', 'tradeReviewType', 'vetoThreshold', 'benchSize', 'rosterPositions'] as const
+const SETTINGS_KEYS = ['description', 'lineupLockRule', 'publicDashboard', 'rankedVisibility', 'orphanSeeking', 'orphanDifficulty', 'leagueChatThreadId', 'tradeReviewType', 'vetoThreshold', 'vetoThresholdMode', 'benchSize', 'rosterPositions'] as const
 
 export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params

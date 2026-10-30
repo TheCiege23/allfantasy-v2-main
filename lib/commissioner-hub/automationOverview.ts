@@ -5,6 +5,7 @@
  *
  * Pure: the reader (`./automationOverviewService.ts`) gathers the facts; this turns them into rows.
  */
+import { tradeReviewAutoApproveOn } from '@/lib/league-trade-engine/tradeReviewAutoApprove'
 import { fillEmptyStartersOn } from '@/lib/lineup-automation/fillEmptyStarters'
 import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { readEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLineups'
@@ -64,8 +65,8 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       group: 'lineups',
       label: 'Fill empty starting spots before lock',
       state: fillOn ? 'on' : 'off',
-      detail: fillOn ? 'Every hour, from the bench' : null,
-      detailEs: fillOn ? 'Cada hora, desde la banca' : null,
+      detail: fillOn ? 'From the bench, after telling the owner first' : null,
+      detailEs: fillOn ? 'Desde la banca, tras avisar primero al dueño' : null,
       href: '#ch-fill-empty-starters',
       plan: 'free',
     },
@@ -167,6 +168,16 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       detailEs: f.commissionerPlan && f.tankingMonitorOn ? (f.tankingPenaltiesOn ? 'Aviso y luego la sanción que elegiste' : 'Solo alertas') : null,
       href: integrityHref,
       plan: 'commissioner',
+    },
+    {
+      key: 'trade_review_auto_approve',
+      group: 'fairness',
+      label: 'Approve unflagged trades after 48 hours with no review',
+      state: tradeReviewAutoApproveOn(f.settings) ? 'on' : 'off',
+      detail: tradeReviewAutoApproveOn(f.settings) ? 'You are told at 24 hours; flagged trades always wait for you' : null,
+      detailEs: tradeReviewAutoApproveOn(f.settings) ? 'Te avisamos a las 24 horas; los intercambios marcados siempre te esperan' : null,
+      href: settingsHref,
+      plan: 'free',
     },
     {
       key: 'hold_flagged_trades',

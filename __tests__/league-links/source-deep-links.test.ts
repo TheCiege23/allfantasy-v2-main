@@ -158,7 +158,9 @@ describe('VERIFIED_SCREENS census', () => {
       espn: ['league', 'lineup', 'waivers', 'trade'],
       yahoo: ['league', 'lineup', 'waivers', 'trade'],
       mfl: [],
-      fantrax: [],
+      // League page only — fantrax.com/fantasy/league/<id>/home, the address-bar URL users copy their
+      // id from (league v2kzedypmm8jp61b, lib/league-import/fantrax/fantraxApi.ts parseFantraxLeagueId).
+      fantrax: ['league'],
       fleaflicker: [],
     })
   })

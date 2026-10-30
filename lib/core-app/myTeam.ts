@@ -36,6 +36,7 @@ import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { displayPosition, inferSlotLabel } from './positionLabels'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, resolveSourceScreenLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
+import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { identityGapNote } from './identityGap'
 import { kickoffClock, LOCK_ZONE } from './lineupLock'
 import { readLineupGameDay, summariseStarterGameDay, type PlayerGameDay, type StarterGameDaySummary } from './myTeamGameDay'
@@ -991,6 +992,8 @@ async function loadMyTeamData(
    */
   const league = await timing.read('league',()=>lc.league())
   if (!league) return null
+  /* Fantrax's real league id, for the "Open in Fantrax" link — `platformLeagueId` is our own snapshot uuid there. */
+  const linkLeagueId = linkableSourceLeagueId(league, await fantraxSourceLeagueIds([league]))
 
   const sport = String(league.sport ?? 'NFL')
   const base = {
@@ -1007,7 +1010,7 @@ async function loadMyTeamData(
       lineupMode: league.bestBallMode || automaticLineup(league.leagueType, league.settings) ? 'automatic' as const : 'manual' as const,
       sourceLink: resolveSourceLink({
         platform: league.platform,
-        sourceLeagueId: league.platformLeagueId,
+        sourceLeagueId: linkLeagueId,
         leagueName: leagueDisplayName(league.name),
         season: league.season,
         /* "Fix Lineup in <league>" — the action this screen is actually about. */
@@ -1109,12 +1112,12 @@ async function loadMyTeamData(
     base.completed = ['complete', 'completed'].includes(liveRoster.leagueStatus.toLowerCase())
   }
   const sourceScreen = resolveSourceScreenLink({
-    platform: league.platform, sourceLeagueId: league.platformLeagueId,
+    platform: league.platform, sourceLeagueId: linkLeagueId,
     leagueName: leagueDisplayName(league.name), season: league.season,
     teamId: myTeamRow.externalId, screen: base.league.bestBall ? 'league' : 'lineup',
   })
   base.league.sourceLink = sourceScreen?.verified ? sourceScreen : resolveSourceLink({
-    platform: league.platform, sourceLeagueId: league.platformLeagueId,
+    platform: league.platform, sourceLeagueId: linkLeagueId,
     leagueName: leagueDisplayName(league.name), season: league.season, action: 'league',
   })
   const roster = isSleeper && !savedRosterOnly

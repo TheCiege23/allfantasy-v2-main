@@ -1,10 +1,20 @@
 /** Scoring capabilities, never inferred from missing opponents or a league name. */
 export type WeeklyFormat = 'head-to-head' | 'elimination' | 'categories' | 'roto' | 'season-points'
 const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
+/**
+ * Every settings key `weeklyFormat` reads, at the top level and inside each nested block, plus Fantrax's
+ * `fantrax_settings.scoringSystem.type`. Exported so a reader that selects settings as SQL subpaths
+ * (the rail, `railMatchups.ts`) asks for exactly these and cannot drift from the rule.
+ */
+export const WEEKLY_FORMAT_SETTINGS_BLOCKS = ['league', 'sleeper', 'sleeperLeague', 'sportConfig'] as const
+export const WEEKLY_FORMAT_SETTINGS_KEYS = ['scoring_mode', 'scoringMode', 'scoring_type', 'scoringType', 'format', 'leagueType'] as const
 export function weeklyFormat(league: { leagueType?: string | null; settings?: unknown }): WeeklyFormat {
   const s = object(league.settings)
-  const blocks = [s, object(s.league), object(s.sleeper), object(s.sleeperLeague), object(s.sportConfig)]
-  const values = [league.leagueType, ...blocks.flatMap(b => [b.scoring_mode, b.scoringMode, b.scoring_type, b.scoringType, b.format, b.leagueType])]
+  const blocks = [s, ...WEEKLY_FORMAT_SETTINGS_BLOCKS.map(b => object(s[b]))]
+  // A Fantrax import states its scoring only as `fantrax_settings.scoringSystem.type`; without it every
+  // Fantrax category/roto league read as head-to-head points and was given win odds.
+  const fantraxType = object(object(s.fantrax_settings).scoringSystem).type
+  const values = [league.leagueType, fantraxType, ...blocks.flatMap(b => WEEKLY_FORMAT_SETTINGS_KEYS.map(k => b[k]))]
     .filter(v => typeof v === 'string').map(v => String(v).toLowerCase().replace(/[ -]/g, '_'))
   if (values.some(v => /guillotine|survivor|elimination/.test(v))) return 'elimination'
   if (values.some(v => /roto|rotisserie/.test(v))) return 'roto'
