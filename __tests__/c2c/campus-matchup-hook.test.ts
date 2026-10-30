@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * matchup scorer the live sync and the week seal both run — and to a bye team's median score.
  */
 
-const { db, campusPointsForMatchup } = vi.hoisted(() => ({
+const { db, campusPointsForMatchup, nbaCampusPointsForMatchup } = vi.hoisted(() => ({
   db: {
     league: { findFirst: vi.fn() },
     redraftMatchup: { findFirst: vi.fn(), update: vi.fn() },
@@ -16,12 +16,15 @@ const { db, campusPointsForMatchup } = vi.hoisted(() => ({
     afRosterLineupAssignment: { findMany: vi.fn() },
   },
   campusPointsForMatchup: vi.fn(),
+  nbaCampusPointsForMatchup: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('@/lib/c2c/campusScoring', async () => ({
   campusPointsForMatchup,
   isFootballC2CLeague: (await vi.importActual<typeof import('@/lib/c2c/campusLineup')>('@/lib/c2c/campusLineup')).isFootballC2CLeague,
 }))
+vi.mock('@/lib/merged-devy-c2c/C2CLeagueConfig', () => ({ getC2CConfig: vi.fn(async () => ({ collegeScoringSystem: 'points', bestBallCollege: false, standingsModel: 'unified' })) }))
+vi.mock('@/lib/c2c/nbaCampusMatchupScoring', () => ({ nbaCampusPointsForMatchup }))
 vi.mock('@/lib/devy/scoringEligibilityEngine', () => ({ leagueUsesDevyEngine: vi.fn(async () => false), calculateOfficialTeamScore: vi.fn() }))
 vi.mock('@/lib/c2c/scoringEngine', () => ({ leagueUsesC2CEngine: vi.fn(async () => false), updateC2CMatchupScores: vi.fn() }))
 vi.mock('@/lib/events', () => ({ getPlatformEvents: () => ({ emit: vi.fn(async () => undefined) }), EVENT: {} }))
@@ -50,6 +53,7 @@ beforeEach(() => {
     homeRoster: {}, awayRoster: {}, homeScore: 0, awayScore: 0, lineupSnapshots: null,
   })
   campusPointsForMatchup.mockResolvedValue(CAMPUS)
+  nbaCampusPointsForMatchup.mockResolvedValue({ home: { points: 15, missingPlayerIds: [], allFinal: true }, away: { points: 0, missingPlayerIds: [], allFinal: true } })
 })
 
 const league = (over: Record<string, unknown> = {}) => ({ sport: 'NFL', settings: {}, platform: 'af', leagueVariant: 'c2c', medianGame: false, ...over })
@@ -64,8 +68,36 @@ describe('campus points in the matchup score', () => {
     expect(data.lineupSnapshots.redraftScoring.campus).toEqual(CAMPUS)
   })
 
+  it('adds NBA campus points and withholds a matchup with incomplete campus evidence', async () => {
+    db.league.findFirst.mockResolvedValue(league({ sport: 'NBA' }))
+    nbaCampusPointsForMatchup.mockResolvedValue({ home: { points: 15, missingPlayerIds: ['college-1'], allFinal: false }, away: { points: 0, missingPlayerIds: [], allFinal: true } })
+    const result = await updateMatchupScores('m1')
+    const data = db.redraftMatchup.update.mock.calls[0]![0].data
+    expect(nbaCampusPointsForMatchup).toHaveBeenCalledOnce()
+    expect(data.homeScore).toBe(Math.round((data.awayScore + 15) * 100) / 100)
+    expect(data.status).toBe('active')
+    expect(result?.missingPlayerIds).toContain('college-1')
+  })
+
+  it('keeps a matchup active while campus games are not final', async () => {
+    db.league.findFirst.mockResolvedValue(league({ sport: 'NBA' }))
+    nbaCampusPointsForMatchup.mockResolvedValue({ home: { points: 15, missingPlayerIds: [], allFinal: false }, away: { points: 0, missingPlayerIds: [], allFinal: true } })
+    await updateMatchupScores('m1')
+    expect(db.redraftMatchup.update.mock.calls[0]![0].data.status).toBe('active')
+  })
+
+  it('withholds an NBA bye when campus evidence is incomplete', async () => {
+    db.league.findFirst.mockResolvedValue(league({ sport: 'NBA', medianGame: true }))
+    db.redraftMatchup.findFirst.mockResolvedValue({ id: 'bye', leagueId: 'L1', seasonId: 's1', week: 3, homeRosterId: 'H', awayRosterId: null, homeRoster: {}, homeScore: 0, awayScore: 0, lineupSnapshots: null })
+    nbaCampusPointsForMatchup.mockResolvedValue({ home: { points: 15, missingPlayerIds: ['college-1'], allFinal: false }, away: { points: 15, missingPlayerIds: ['college-1'], allFinal: false } })
+    await updateMatchupScores('bye')
+    const data = db.redraftMatchup.update.mock.calls[0]![0].data
+    expect(data.status).toBe('active')
+    expect(data.lineupSnapshots.redraftScoring.missingPlayerIds).toContain('college-1')
+  })
+
   it('any other league is never asked', async () => {
-    for (const over of [{ leagueVariant: 'devy_dynasty' }, { platform: 'sleeper' }, { sport: 'NBA' }]) {
+    for (const over of [{ leagueVariant: 'devy_dynasty' }, { platform: 'sleeper' }]) {
       db.league.findFirst.mockResolvedValue(league(over))
       await updateMatchupScores('m1')
     }

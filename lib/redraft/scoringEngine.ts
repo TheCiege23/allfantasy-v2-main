@@ -813,6 +813,21 @@ async function loadCampusPoints(
   return isFootballC2CLeague(league) ? campusPointsForMatchup(prisma as never, args) : null
 }
 
+async function loadBasketballCampusPoints(
+  league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
+  args: { leagueId: string; season: number; week: number; homeRosterId: string; awayRosterId: string },
+) {
+  const { isBasketballC2CLeague } = await import('@/lib/c2c/campusLineup')
+  if (!league || !isNativePlatform(league.platform) || !isBasketballC2CLeague(league)) return null
+  const { getC2CConfig } = await import('@/lib/merged-devy-c2c/C2CLeagueConfig')
+  const config = await getC2CConfig(args.leagueId)
+  if (!config || config.collegeScoringSystem !== 'points' || config.bestBallCollege || config.standingsModel !== 'unified') throw new Error('NBA Campus to Canton scoring requires standard college points, a manual college lineup and unified standings.')
+  const scorer = buildLeagueStatScorer({ sport: 'NCAAB', settings: null })
+  if (!scorer) throw new Error('College basketball scoring rules are unavailable.')
+  const { nbaCampusPointsForMatchup } = await import('@/lib/c2c/nbaCampusMatchupScoring')
+  return nbaCampusPointsForMatchup(prisma, { ...args, now: new Date(), scorer })
+}
+
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
   const m = await prisma.redraftMatchup.findFirst({
     where: { id: matchupId },
@@ -851,6 +866,8 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   if (scoringMode !== 'points' && !categories) throw new Error('Category scoring requires a supported native category preset.')
   const useDevyEngine = await leagueUsesDevyEngine(leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(leagueId)
+  const { isBasketballC2CLeague } = await import('@/lib/c2c/campusLineup')
+  if (scoringLeague && isNativePlatform(scoringLeague.platform) && isBasketballC2CLeague(scoringLeague) && (scoringMode !== 'points' || bestBall || useDevyEngine)) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
 
   // Per-player points are kept only for a points league we host (see `persistNativePlayerPoints`).
   const collectPlayerPoints = scoringMode === 'points' && isNativePlatform(scoringLeague?.platform)
@@ -893,11 +910,15 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     scoringMode === 'points' && !bestBall && !useDevyEngine
       ? await loadCampusPoints(scoringLeague, { season: seasonYear, nflWeek: week, homeRosterId, awayRosterId })
       : null
-  if (campus) {
-    home.points = Math.round((home.points + campus.home.points) * 100) / 100
-    away.points = Math.round((away.points + campus.away.points) * 100) / 100
+  const basketballCampus = scoringMode === 'points' && !bestBall && !useDevyEngine
+    ? await loadBasketballCampusPoints(scoringLeague, { leagueId, season: seasonYear, week, homeRosterId, awayRosterId })
+    : null
+  if (campus || basketballCampus) {
+    const points = campus ?? basketballCampus!
+    home.points = Math.round((home.points + points.home.points) * 100) / 100
+    away.points = Math.round((away.points + points.away.points) * 100) / 100
   }
-  const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds]
+  const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds, ...(basketballCampus?.home.missingPlayerIds ?? []), ...(basketballCampus?.away.missingPlayerIds ?? [])]
   const isComplete =
     missingPlayerIds.length === 0 &&
     home.starterCount > 0 &&
@@ -907,7 +928,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
 
   // Existing, authoritative finalization decision — driven entirely by the existing stat inputs' own
   // per-player finalized flags. Certified game data NEVER supplies fantasy points and NEVER finalizes on its own.
-  const existingFinal = isComplete && home.allFinal && away.allFinal
+  const existingFinal = isComplete && home.allFinal && away.allFinal && (basketballCampus?.home.allFinal ?? true) && (basketballCampus?.away.allFinal ?? true)
 
   // Gated (off by default), STRICTER-ONLY certified finality guard: if the existing engine would finalize but
   // TRUSTWORTHY certified game evidence says not every game is final, withhold finalization (keep 'active') so a
@@ -941,6 +962,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
           isComplete,
           ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
           ...(campus ? { campus } : {}),
+          ...(basketballCampus ? { campus: basketballCampus } : {}),
           home,
           away,
           missingPlayerIds,
@@ -1085,11 +1107,14 @@ async function updateByeRowScore(row: {
   if (!(league.medianGame ?? season.medianGame) && !extraMatchup) return
   const scoringSettings = settingsForScoringWeek(league.settings as Record<string, any> | null, season.season, m.week)
   const scoringMode = scoringSettings?.scoring_mode ?? scoringSettings?.scoringSettings?.scoringMode ?? 'points'
+  const { isBasketballC2CLeague } = await import('@/lib/c2c/campusLineup')
+  if (isNativePlatform(league.platform) && isBasketballC2CLeague(league) && scoringMode !== 'points') throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
   if (scoringMode !== 'points') return
   if (await leagueUsesC2CEngine(m.leagueId)) return
 
   const useDevyEngine = await leagueUsesDevyEngine(m.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(m.leagueId)
+  if (isNativePlatform(league.platform) && isBasketballC2CLeague(league) && (bestBall || useDevyEngine)) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
   const home = await scoreRosterStarters({
     leagueId: m.leagueId,
     rosterId: m.homeRosterId,
@@ -1104,14 +1129,18 @@ async function updateByeRowScore(row: {
   const campus = !bestBall && !useDevyEngine
     ? await loadCampusPoints(league, { season: season.season, nflWeek: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
     : null
-  if (campus) home.points = Math.round((home.points + campus.home.points) * 100) / 100
+  const basketballCampus = !bestBall && !useDevyEngine
+    ? await loadBasketballCampusPoints(league, { leagueId: m.leagueId, season: season.season, week: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
+    : null
+  if (campus || basketballCampus) home.points = Math.round((home.points + (campus ?? basketballCampus!).home.points) * 100) / 100
+  const missingPlayerIds = [...home.missingPlayerIds, ...(basketballCampus?.home.missingPlayerIds ?? [])]
   const isComplete =
-    home.missingPlayerIds.length === 0 && home.starterCount > 0 && home.scoredStarterCount === home.starterCount
+    missingPlayerIds.length === 0 && home.starterCount > 0 && home.scoredStarterCount === home.starterCount
   await prisma.redraftMatchup.update({
     where: { id: m.id },
     data: {
       homeScore: home.points,
-      status: isComplete && home.allFinal ? 'final' : 'active',
+      status: isComplete && home.allFinal && (basketballCampus?.home.allFinal ?? true) ? 'final' : 'active',
       lineupSnapshots: {
         ...(m.lineupSnapshots && typeof m.lineupSnapshots === 'object' && !Array.isArray(m.lineupSnapshots) ? m.lineupSnapshots : {}),
         redraftScoring: {
@@ -1119,8 +1148,9 @@ async function updateByeRowScore(row: {
           isComplete,
           bye: true,
           home,
-          missingPlayerIds: home.missingPlayerIds,
+          missingPlayerIds,
           ...(campus ? { campus: { cfbWeeks: campus.cfbWeeks, home: campus.home } } : {}),
+          ...(basketballCampus ? { campus: { home: basketballCampus.home } } : {}),
         },
       },
     },
@@ -1131,9 +1161,11 @@ export async function recalculateMatchupsForSeasonWeek(
   seasonId: string,
   week: number,
 ): Promise<{ updated: number; incomplete: number; summaries: MatchupScoreUpdateSummary[] }> {
-  const season = await prisma.redraftSeason.findUnique({where:{id:seasonId},include:{league:{select:{settings:true}}}})
+  const season = await prisma.redraftSeason.findUnique({where:{id:seasonId},include:{league:{select:{settings:true,platform:true,sport:true,leagueVariant:true}}}})
   const settings = settingsForScoringWeek(season?.league.settings as Record<string,any> | null, season?.season, week)
   if (settings?.scoring_mode === 'roto' && season) {
+    const { isBasketballC2CLeague } = await import('@/lib/c2c/campusLineup')
+    if (isNativePlatform(season.league.platform) && isBasketballC2CLeague(season.league)) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
     const categories=resolveLeagueCategories(settings, settings.category_preset_id)
     if(!categories) throw new Error('Rotisserie category preset is missing.')
     const rosters=await prisma.roster.findMany({where:{leagueId:season.leagueId,redraftRosterId:{not:null}},select:{id:true,redraftRosterId:true}})
