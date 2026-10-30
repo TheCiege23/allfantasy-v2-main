@@ -37,6 +37,7 @@ import LeagueChatPanel from '@/components/chat/LeagueChatPanel'
 export type LeagueChatSurfaceProps = {
   leagueId: string
   leagueName: string
+  dynastyBackground?: boolean
   /** Source platform. Empty / 'allfantasy' / 'af' means AllFantasy hosts this league. */
   platform: string | null | undefined
   isCommissioner: boolean
@@ -99,6 +100,7 @@ function Card({ title, icon, children }: { title: string; icon?: React.ReactNode
 export default function LeagueChatSurface({
   leagueId,
   leagueName,
+  dynastyBackground = false,
   platform,
   isCommissioner,
   teamCount,
@@ -189,6 +191,7 @@ export default function LeagueChatSurface({
           <LeagueChatPanel
             leagueId={leagueId}
             leagueName={leagueName}
+            dynastyBackground={dynastyBackground}
             isCommissioner={isCommissioner}
             defaultOpen
             channels

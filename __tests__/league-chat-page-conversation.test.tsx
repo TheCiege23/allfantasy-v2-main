@@ -137,6 +137,16 @@ function openActions(id: string) {
   return screen.getByRole('dialog')
 }
 
+describe('dynasty chat atmosphere', () => {
+  it('scopes dynasty artwork to the opted-in league conversation', () => {
+    const { unmount } = render(<LeagueChatPanel leagueId="L1" dynastyBackground />)
+    expect(screen.getByTestId('league-chat-panel').getAttribute('data-dynasty-background')).toBe('true')
+    unmount()
+    render(<LeagueChatPanel leagueId="L1" />)
+    expect(screen.getByTestId('league-chat-panel').hasAttribute('data-dynasty-background')).toBe(false)
+  })
+})
+
 describe('the league page chat shows the conversation', () => {
   it('renders every message’s text — the stub rendered none', async () => {
     await openPanel()

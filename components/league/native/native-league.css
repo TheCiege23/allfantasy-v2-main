@@ -360,3 +360,8 @@
 
 .nl-home-secondary:empty { display: none; }
 .nl-home:has(> .nl-home-secondary:empty) { grid-template-columns: minmax(0, 1fr); }
+
+/* Dynasty legacy artwork, with a themed overlay behind the league header. */
+.af-core.nl-workspace[data-dynasty-background=true]{background-image:linear-gradient(90deg,color-mix(in srgb,var(--bg) 96%,transparent),color-mix(in srgb,var(--bg) 87%,transparent)),url('/artwork/dynasty/dynasty-league-background-v1.png');background-position:center;background-size:cover}
+.nl-workspace[data-dynasty-background=true] .nl-league-heading{--text:#f8f4e9;--text2:#e6dfcf;--faint:#c6bda9;--line2:rgba(255,255,255,.28);--chip:rgba(12,16,22,.6);--chip-line:rgba(255,255,255,.2);--accent:#eacb83;--accent-soft:rgba(210,167,80,.16);--accent-line:rgba(234,203,131,.42);--gold:#f4d89c;color:var(--text);background-color:#10151d;background-image:linear-gradient(90deg,rgba(8,12,19,.94),rgba(8,12,19,.72) 55%,rgba(8,12,19,.52)),url('/artwork/dynasty/dynasty-league-background-v1.png');background-position:center;background-size:cover;border-color:rgba(234,203,131,.25)}
+.nl-workspace[data-dynasty-background=true] .nl-league-heading>.nl-button{background:rgba(8,12,19,.65)}
