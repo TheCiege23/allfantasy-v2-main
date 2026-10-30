@@ -73,7 +73,7 @@ import { badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { RailRowBody, mergeRailMatchup, railTapTarget, type RailAttention } from '@/components/core-app/RailRowBody'
 import { useRailOdds } from '@/components/core-app/useRailOdds'
-import { RailLeagueMenu, saveLeaguePreference, useRailHold } from '@/components/core-app/RailLeagueMenu'
+import { hideLeagueForAccount, RailLeagueMenu, saveLeaguePreference, useRailHold } from '@/components/core-app/RailLeagueMenu'
 import { railRowMessages } from '@/lib/core-app/messages/railRow'
 import {
   currentRailCareerLines,
@@ -1667,7 +1667,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     [favoriteOverride, serverFavoriteKey],
   )
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds])
-  const hiddenLeagueKey = (props.hiddenLeagueIds ?? []).join('.')
+  const serverHiddenKey = (props.hiddenLeagueIds ?? []).join('.')
+  // Leagues hidden from the sheet this visit, gone at once; the next server render carries them.
+  const [hiddenAdded, setHiddenAdded] = useState<string[]>([])
+  useEffect(() => setHiddenAdded([]), [serverHiddenKey])
+  const hiddenLeagueKey = [serverHiddenKey, ...hiddenAdded].filter(Boolean).join('.')
   const railLeagues = useMemo(
     () => withoutHidden(orderedLeagues, hiddenLeagueKey ? hiddenLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
     [orderedLeagues, hiddenLeagueKey, props.selectedLeagueId],
@@ -1763,6 +1767,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     if (!next) return
     setOrderOverride(next)
     saveLeaguePreference('order', next, () => router.refresh())
+  }
+  const hideLeague = (id: string) => {
+    setHiddenAdded((prev) => (prev.includes(id) ? prev : [...prev, id]))
+    hideLeagueForAccount(id, () => router.refresh())
   }
   const railMenuSection = railMenuId ? railSections.find((sec) => sec.rows.some((r) => !r.hub && r.id === railMenuId)) : null
   const railMenuIds = railMenuSection ? railMenuSection.rows.filter((r) => !r.hub).map((r) => r.id) : []
@@ -2206,7 +2214,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       </nav>
 
       {/*
-        Pin and Move for one league — opened by a press-and-hold or a right-click on its row. A sibling
+        Pin, Move and Hide for one league — opened by a press-and-hold or a right-click on its row. A sibling
         of the rail, not inside it, so the rail's own tray rules (close on any link) never touch it.
       */}
       {railMenuLeague ? (
@@ -2217,6 +2225,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           canMoveDown={railMenuIds.indexOf(railMenuLeague.id) < railMenuIds.length - 1}
           onPin={() => pinLeague(railMenuLeague.id)}
           onMove={(direction) => moveLeague(railMenuLeague.id, direction)}
+          onHide={() => hideLeague(railMenuLeague.id)}
           onClose={() => setRailMenuId(null)}
         />
       ) : null}

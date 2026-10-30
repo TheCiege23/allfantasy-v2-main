@@ -26,6 +26,7 @@ import { LeagueShellClient } from './LeagueShellClient'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { getRailMatchups } from '@/lib/core-app/railMatchups'
 import { getRailRecords } from '@/lib/core-app/railRecords'
+import { readUrgencyLeagueIds } from '@/lib/core-app/urgencyBadges'
 import { getLeaguePreferences } from '@/lib/core-app/leaguePreferencesStore'
 import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
@@ -398,7 +399,7 @@ export default async function LeaguePage(
        * DB read only (no query at all for a non-Fantrax league), never throws.
        */
       const sourceLinkLeagueId = linkableSourceLeagueId(league, await fantraxSourceLeagueIds([league]))
-      const [draftSetupSession, railMatchups, railRecords, railPrefs] = await Promise.all([
+      const [draftSetupSession, railMatchups, railRecords, railPrefs, railNeeds] = await Promise.all([
         prisma.draftSession.findFirst({
           where: { leagueId },
           orderBy: CURRENT_DRAFT_SESSION_ORDER,
@@ -422,12 +423,21 @@ export default async function LeaguePage(
          */
         getRailRecords(userId, allLeagues.map((l) => l.id)).catch(() => ({})),
         getLeaguePreferences(userId).catch(() => null),
+        /*
+         * What needs you per league — the /core tab badges' own cached facts (urgencyBadges.ts), read
+         * without recomputing them. Feeds the rail's "Fix lineup" / "Trade offer" flags and its Needs
+         * action chip; stale or unreadable is nothing flagged.
+         */
+        readUrgencyLeagueIds(userId).catch(() => null),
       ])
       const leagueRail = {
         matchups: railMatchups?.byLeague ?? {},
         records: railRecords,
         favoriteIds: railPrefs?.favorites ?? [],
         order: railPrefs?.order ?? [],
+        hiddenIds: railPrefs?.hidden ?? [],
+        lineupLeagueIds: railNeeds?.lineupLeagueIds ?? [],
+        offerLeagueIds: railNeeds?.offerLeagueIds ?? [],
         // /core's crest rule: commissioner logo, else Sleeper avatar, else the league type's own artwork.
         imageUrls: Object.fromEntries(
           allLeagues.map((l) => [
