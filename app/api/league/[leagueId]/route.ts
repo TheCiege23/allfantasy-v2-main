@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordLeagueTombstone } from "@/lib/league-delete/leagueTombstones";
 import { resolveLeagueMembership } from "@/lib/league-access";
-import { isImportedPlatform } from "@/lib/league/isNativeLeague";
+import { isImportedPlatform, isNativePlatform } from "@/lib/league/isNativeLeague";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export const runtime = "nodejs";
  * The tombstone is that distinction — see lib/league-delete/leagueTombstones.ts.
  */
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ leagueId: string }> }
 ) {
   try {
@@ -38,10 +38,34 @@ export async function DELETE(
       return NextResponse.json({ error: "leagueId required" }, { status: 400 });
     }
 
+    if (new URL(req.url).searchParams.get('permanent') === '1') {
+      const target = await prisma.league.findUnique({
+        where: { id }, select: { id: true, userId: true, platform: true, name: true },
+      });
+      if (!target) return NextResponse.json({ error: 'League not found' }, { status: 404 });
+      if (target.userId !== userId) return NextResponse.json({ error: 'Only the league owner can delete the league' }, { status: 403 });
+      if (!isNativePlatform(target.platform)) return NextResponse.json({ error: 'Imported leagues must be removed on their host platform' }, { status: 400 });
+      const body = await req.json().catch(() => null) as { leagueName?: unknown } | null;
+      if (body?.leagueName !== (target.name || id)) return NextResponse.json({ error: 'Enter the exact league name to confirm' }, { status: 400 });
+      const tournamentLink = await prisma.legacyTournamentLeague.findUnique({ where: { leagueId: id }, select: { id: true } });
+      if (tournamentLink) return NextResponse.json({ error: 'Delete tournament feeder leagues through the tournament' }, { status: 409 });
+      await prisma.$transaction(async (tx) => {
+        // Claims have a restrictive foreign key, so remove them within the same transaction.
+        await tx.leagueManagerClaim.deleteMany({ where: { leagueId: id } });
+        const removed = await tx.league.deleteMany({ where: { id, userId, platform: target.platform, name: target.name } });
+        if (removed.count !== 1) throw new Error('League changed during deletion');
+      });
+      return NextResponse.json({ ok: true, deletedLeague: true });
+    }
+
     const league = await prisma.league.findFirst({
       where: { id, userId },
       select: { id: true, platform: true, platformLeagueId: true, name: true },
     });
+
+    if (league && isNativePlatform(league.platform)) {
+      return NextResponse.json({ error: 'Delete native leagues from commissioner settings with name confirmation' }, { status: 409 });
+    }
 
     const sleeperLeague = await prisma.sleeperLeague.findFirst({
       where: { id, userId },

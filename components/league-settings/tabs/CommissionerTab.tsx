@@ -34,6 +34,8 @@ export function CommissionerTab({ ctx }: LeagueSettingsTabProps) {
           leagueId={ctx.league.id}
           currentUserId={ctx.userId}
           leagueOwnerUserId={ctx.league.userId}
+          platform={ctx.league.platform}
+          leagueName={ctx.league.name}
         />
       ) : (
         <div
