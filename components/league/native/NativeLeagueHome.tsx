@@ -85,7 +85,7 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
         <DraftCountdown dateIso={draftDateIso} />
         <div className="nl-actions">
           <Link className="nl-button" href={`/mock-draft?leagueId=${encodeURIComponent(league.id)}&sport=${encodeURIComponent(league.sport)}&teams=${league.teamCount}`}>Mock drafts</Link>
-          <button type="button" className="nl-button" onClick={() => onSelectTab('draft')}>Draft HQ</button>
+          <button type="button" className="nl-button" onClick={() => onSelectTab('draft')}>Enter Draft HQ</button>
           <Link className="nl-button" href={`/league/${encodeURIComponent(league.id)}/draft`}>Draft board</Link>
           {isCommissioner && <button type="button" className="nl-button nl-primary" onClick={() => onOpenSettings('draft')}>{date && Number.isFinite(date.getTime()) ? 'Change draft time' : 'Set draft time'}</button>}
         </div>

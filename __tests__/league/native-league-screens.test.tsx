@@ -136,6 +136,17 @@ describe('NativeMatchupScreen', () => {
   })
 })
 
+describe('NativeMatchupScreen before the draft', () => {
+  it('offers Draft HQ instead of presenting an empty score', () => {
+    const onSelectTab = vi.fn()
+    render(<NativeMatchupScreen league={{ ...league, lifecycleState: 'setup' }} onSelectTab={onSelectTab} />)
+    expect(screen.getByText('Your season starts with the draft')).toBeTruthy()
+    expect(screen.queryByLabelText('Score')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Draft HQ' }))
+    expect(onSelectTab).toHaveBeenCalledWith('draft')
+  })
+})
+
 describe('NativeTradesScreen', () => {
   it('incoming offer shows THE grade and accepts through the existing route', async () => {
     const offer = {

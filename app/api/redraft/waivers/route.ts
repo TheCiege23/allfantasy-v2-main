@@ -40,9 +40,6 @@ export async function GET(req: NextRequest) {
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
   if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(season.leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const phasePolicy = await loadWaiverPhasePolicy(leagueId, null)
-  if (!phasePolicy.claimsAllowed) return NextResponse.json({ error: phasePolicy.reason, code: phasePolicy.code }, { status: 409 })
-
   const claims = await prisma.redraftWaiverClaim.findMany({
     where: { seasonId, rosterId },
     orderBy: { submittedAt: 'desc' },
@@ -91,6 +88,9 @@ export async function POST(req: NextRequest) {
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
   if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const phasePolicy = await loadWaiverPhasePolicy(leagueId, null)
+  if (!phasePolicy.claimsAllowed) return NextResponse.json({ error: phasePolicy.reason, code: phasePolicy.code }, { status: 409 })
 
   // The commissioner's move lock, which the waiver screen's claim path (assertWaiverClaimEligibility) and the
   // NFL runtime already refuse under. This route has no UI caller; without it a claim was queued anyway.

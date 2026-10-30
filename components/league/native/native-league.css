@@ -365,7 +365,7 @@
 .nl-draft-feature{background:linear-gradient(125deg,#143c4b,#151b38 62%,#201c3d);border-color:rgba(78,216,224,.35)}
 .nl-draft-feature h2{font-size:24px}.nl-draft-feature p{color:#d8e8ec}
 .nl-draft-countdown{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:14px;border-radius:14px;background:rgba(2,9,22,.74)}
-.nl-draft-countdown div{text-align:center}.nl-draft-countdown strong{display:block;color:#fff;font:700 24px var(--font-jetbrains-mono,monospace)}.nl-draft-countdown span{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#b9ced3}
+.nl-draft-countdown div{text-align:center}.nl-draft-countdown strong{display:block;color:#fff;font:700 24px var(--font-jetbrains-mono,monospace)}.nl-draft-countdown span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#b9ced3}
 .nl-draft-feature .nl-actions>*{min-height:44px}.nl-draft-feature .nl-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .nl-league-heading[data-format=zombie]{position:relative;isolation:isolate;overflow:hidden;background:#071610;border:1px solid rgba(132,204,22,.4);color:#f6fff5}
 .nl-zombie-art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:-2;pointer-events:none}
