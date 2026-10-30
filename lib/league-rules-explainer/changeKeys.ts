@@ -76,6 +76,9 @@ export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'draftStartAt',
   'draftAutostart',
   'draftOrphanPicks',
+  // Devy / C2C college rounds of the main draft (./loadDraftRules.ts).
+  'draftDevyRounds',
+  'draftCollegeRounds',
 ]
 
 const CHANGEABLE = new Set<string>(CHANGEABLE_RULE_KEYS)

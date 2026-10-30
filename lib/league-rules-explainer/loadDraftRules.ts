@@ -12,7 +12,7 @@ import { resolveRenewDraftOrderMode } from '@/lib/redraft/offseason/renewRedraft
 import { startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { diffRuleSnapshots } from './changeKeys'
-import { draftRulesFromInputs, dynastyRulesFromConfig, resolveRulesFormat, rookieDraftLotteryRule } from './snapshot'
+import { draftRulesFromInputs, dynastyRulesFromConfig, resolveRulesConcept, resolveRulesFormat, rookieDraftLotteryRule } from './snapshot'
 import type { RuleChange, RuleSnapshot } from './types'
 
 /**
@@ -38,7 +38,7 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
       where: { id: leagueId },
       select: {
         platform: true, sport: true, leagueType: true, isDynasty: true, survivorMode: true,
-        guillotineMode: true, leagueVariant: true, settings: true,
+        guillotineMode: true, bestBallMode: true, leagueVariant: true, settings: true,
         dynastyConfig: { select: { rookiePickOrderMethod: true } },
       },
     }),
@@ -47,7 +47,7 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
       orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: {
         status: true, draftType: true, rounds: true, timerSeconds: true, thirdRoundReversal: true,
-        auctionBudgetPerTeam: true, cpuAutoPick: true, draftModeLabel: true,
+        auctionBudgetPerTeam: true, cpuAutoPick: true, draftModeLabel: true, devyConfig: true, c2cConfig: true,
       },
     }),
     prisma.leagueSettings.findUnique({
@@ -113,7 +113,21 @@ export async function loadDraftRules(leagueId: string): Promise<Partial<RuleSnap
     autostart: ls?.autostart === true || startsAtScheduledTimeRegardlessOfAutostart(league),
     orphanEnabled: ui.orphanTeamAiManagerEnabled === true,
     orphanMode: ui.orphanDrafterMode ?? null,
+    // The college rounds the pick check enforces, from the session only: no other store reaches it
+    // (getOrCreateDraftSession creates a session without them; the room's devy / C2C controls and the
+    // draft settings save write them onto the session).
+    collegeRounds: { applies: isDevyOrC2CLeague(league), devy: session?.devyConfig ?? null, c2c: session?.c2cConfig ?? null },
   })
+}
+
+/**
+ * A league whose draft can carry college rounds: the dynasty family (devy, C2C, and a dynasty league
+ * that turned devy rounds on when it was created — createCanonicalLeagueInTransaction), or a league
+ * named devy / C2C in another format (a devy best ball league). Anything else never states them.
+ */
+function isDevyOrC2CLeague(league: Parameters<typeof resolveRulesFormat>[0]): boolean {
+  const concept = resolveRulesConcept(league)
+  return resolveRulesFormat(league) === 'dynasty' || concept === 'devy' || concept === 'c2c'
 }
 
 /**

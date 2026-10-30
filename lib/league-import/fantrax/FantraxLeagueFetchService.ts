@@ -7,7 +7,7 @@ import type {
   FantraxImportTransaction,
 } from '@/lib/league-import/adapters/fantrax/types'
 import { assignFantraxTeamIds } from './fantraxTeamIds'
-import { isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxRosterSlots } from './fantraxProSports'
+import { isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots } from './fantraxProSports'
 
 type LegacyStanding = {
   rank?: unknown
@@ -867,9 +867,16 @@ export async function fetchFantraxLeagueForImport(
    * native equivalent is reported as `rosterSlotGaps`, never coerced.
    */
   const splitSeason = isFantraxSplitSeasonSport(sport)
+  /*
+   * ⚠ AND NFL / NCAAF / MLB NOW TOO. They stored no slots at all, so a Fantrax superflex or IDP
+   * league reached My Team and the add/drop gate with no lineup, and nothing could tell it was IDP.
+   * Same `positionConstraints` read; unlike NBA/NHL it is all-or-nothing (see mapFantraxLineupSlots).
+   */
   const proSlots = splitSeason && (sport === 'NBA' || sport === 'NHL')
     ? mapFantraxRosterSlots(sport, sourceSettings?.rosterInfo)
-    : null
+    : sport === 'NFL' || sport === 'NCAAF' || sport === 'MLB'
+      ? mapFantraxLineupSlots(sport, sourceSettings?.rosterInfo)
+      : null
 
   const previousSeasonRecords = await prisma.fantraxLeague.findMany({
     where: {

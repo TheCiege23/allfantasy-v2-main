@@ -163,7 +163,8 @@ async function readSleeperRows(league: LeagueRow, fullSeason: boolean): Promise<
 
   const ids = [...new Set(rows.map((r) => r.playerId))]
   const [players, teams] = await Promise.all([
-    ids.length ? prisma.sportsPlayer.findMany({ where: { sleeperId: { in: ids } }, select: { sleeperId: true, name: true, team: true, position: true } }) : Promise.resolve([]),
+    // Audits are NFL-only (`unsupported`); a Sleeper id names someone else in another sport.
+    ids.length ? prisma.sportsPlayer.findMany({ where: { sport: 'NFL', sleeperId: { in: ids } }, select: { sleeperId: true, name: true, team: true, position: true } }) : Promise.resolve([]),
     prisma.leagueTeam.findMany({ where: { leagueId: league.id }, select: { externalId: true, teamName: true, ownerName: true } }),
   ])
   const nameById = new Map<string, string>()

@@ -26,6 +26,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'ai-commissioner': () => import('../ai-commissioner/handler'),
   'ai-settings': () => import('../ai-settings/handler'),
   'audit-logs': () => import('../audit-logs/handler'),
+  'automatic-changes': () => import('../automatic-changes/handler'),
   'automation-overview': () => import('../automation-overview/handler'),
   'automation-preset': () => import('../automation-preset/handler'),
   'autocoach-settings': () => import('../autocoach-settings/handler'),
@@ -73,6 +74,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'matchups': () => import('../matchups/handler'),
   'media': () => import('../media/handler'),
   'my-team': () => import('../my-team/handler'),
+  'offseason-calendar': () => import('../offseason-calendar/handler'),
   'orphan-auction': () => import('../orphan-auction/handler'),
   'orphaned-teams': () => import('../orphaned-teams/handler'),
   'partner-profiles': () => import('../partner-profiles/handler'),
@@ -110,7 +112,9 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'taxi-rules': () => import('../taxi-rules/handler'),
   'taxi-steals': () => import('../taxi-steals/handler'),
   'tournament-context': () => import('../tournament-context/handler'),
+  'trade-review-auto-approve': () => import('../trade-review-auto-approve/handler'),
   'trades': () => import('../trades/handler'),
+  'welcome-back': () => import('../welcome-back/handler'),
 }
 
 type Ctx = { params: Promise<{ leagueId: string; section: string }> | { leagueId: string; section: string } }

@@ -77,6 +77,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   const primary = groups[0]?.items ?? []
   const restoredLeague = useRef<string | null>(null)
   const phase = nativeLeaguePhase(league)
+  const draftSlot = (phase === 'Setup' || phase === 'Draft') && primary.some(row => row.id === 'draft')
   /* The full league list is the desktop default, as on /core; collapsing to crests is remembered per tab session. */
   const railCollapse = useMyLeaguesRailCollapse({ storageKey: 'af-league-native-rail-collapsed', defaultCollapsed: false })
   const [wide, setWide] = useState(false)
@@ -173,11 +174,22 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
         <div className="nl-tab-content">{children}</div>
       </div>
     </div>
-    {!shell.embedCenterOnly && <nav className="nl-bottom-nav" aria-label="Mobile league navigation">{['native_home', 'matchups', 'roster', 'waivers', 'league_chat'].map((id, index) => {
+    {/*
+      ⚠ BEFORE THE SEASON THE MATCHUP SLOT IS THE DRAFT. A phone user had no fixed way into the draft
+      room: it was ~7th in the swipe strip as "Draft HQ", one more tap from the room. While the
+      league is in Setup or Draft there is no matchup to show, so that slot becomes Draft.
+      🛑 ONLY A LIVE DRAFT LINKS STRAIGHT TO THE ROOM. /league/{id}/draft creates the session and,
+      pre-draft, `autoMaterializeDraftForLeague` seats AI orphan rosters in every empty slot — one
+      tap from a bottom bar during Setup would do that before managers have joined. Setup opens
+      Draft HQ instead, which says what is missing and carries the explicit "Enter" button.
+    */}
+    {!shell.embedCenterOnly && <nav className="nl-bottom-nav" aria-label="Mobile league navigation">{['native_home', draftSlot ? 'draft' : 'matchups', 'roster', 'waivers', 'league_chat'].map((id, index) => {
       const item = primary.find(row => row.id === id) ?? (index === 3 ? primary.find(row => row.id === 'players') : undefined)
       if (!item) return null
       const Icon = icons[item.icon as keyof typeof icons] ?? Home
-      return <button key={id} type="button" aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => choose(item.id)}><Icon size={22} aria-hidden /><span>{['League', 'Matchup', 'Team', 'Players', 'Chat'][index]}</span></button>
+      const label = id === 'draft' ? 'Draft' : ['League', 'Matchup', 'Team', 'Players', 'Chat'][index]
+      if (id === 'draft' && phase === 'Draft') return <Link key={id} href={`/league/${encodeURIComponent(league.id)}/draft`} data-testid="nl-bottom-nav-draft-room"><Icon size={22} aria-hidden /><span>{label}</span></Link>
+      return <button key={id} type="button" aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => choose(item.id)} data-testid={id === 'draft' ? 'nl-bottom-nav-draft-hq' : undefined}><Icon size={22} aria-hidden /><span>{label}</span></button>
     })}</nav>}
     <dialog ref={switcherRef} className="nl-switcher" onCancel={() => setSwitcherOpen(false)} onClose={() => setSwitcherOpen(false)} aria-label="Switch league">
       <div className="nl-switcher-title"><span className="nl-switcher-brand" aria-hidden>AF</span><h2>Your leagues</h2><button type="button" onClick={() => setSwitcherOpen(false)} aria-label="Close league switcher"><X aria-hidden /></button></div>

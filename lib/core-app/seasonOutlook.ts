@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { historicalScoringSpread } from './historicalScoringSpread'
 import { readWeeklyHistory } from './weekBoard'
+import { headToHeadRecords } from './headToHeadRecords'
 import { weeklyScopeKey, weeklyFormat, canCertifyWeeklyPlayoffStatus } from './weeklyCapabilities'
 import { leagueWeekProgress } from './leagueWeekProgress'
 import { getFirstStatedKickoff } from './seasonPhase'
@@ -605,16 +606,19 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
       reportedGames != null ? { maxGames: reportedGames, weeksDone } : null,
     )
     const medianRecords = medianGame ? medianGameRecords(seasonRows.filter(playedRow)) : null
+    /* Head-to-head from paired scores, never the stored `win` flag — see `headToHeadRecords`. */
+    const h2hRecords = headToHeadRecords(seasonRows.filter(playedRow))
 
     const simTeams: SimTeam[] = []
     for (const [rosterId, list] of byRoster) {
       const played = list.filter(playedRow)
       const med = medianRecords?.get(rosterId) ?? { wins: 0, losses: 0, ties: 0 }
+      const h2h = h2hRecords.get(rosterId) ?? { wins: 0, losses: 0, ties: 0 }
       simTeams.push({
         rosterId,
-        wins: played.filter((x) => x.win === 1).length + med.wins,
-        losses: played.filter((x) => x.pointsFor < x.pointsAgainst).length + med.losses,
-        ties: played.filter((x) => x.pointsFor === x.pointsAgainst).length + med.ties,
+        wins: h2h.wins + med.wins,
+        losses: h2h.losses + med.losses,
+        ties: h2h.ties + med.ties,
         pointsFor: played.reduce((a, x) => a + x.pointsFor, 0),
         profile: fitProfile(scores.get(rosterId) ?? []),
       })

@@ -11,6 +11,8 @@ import { LeagueMark } from '@/components/core-app/LeagueMark'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import LeagueClipSpotlight from '@/components/core-app/highlights/LeagueClipSpotlight'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { dashboard3aMessages } from '@/lib/core-app/messages/dashboard3a'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING. This screen renders at /dashboard
  * OUTSIDE AfCoreShell, which is what imports the token layer for everything
@@ -427,9 +429,6 @@ function deadlineLabel(deadline: Date | null, now: Date): string | null {
 }
 
 /** A scored week's result on a matchup card, in each language. */
-const MATCH_RESULT_EN = { tied: 'you tied', won: 'you won', lost: 'you lost', partial: 'scores so far' } as const
-const MATCH_RESULT_ES = { tied: 'empataste', won: 'ganaste', lost: 'perdiste', partial: 'marcador parcial' } as const
-
 /** The cards built from data props — the markup the streamed slots render too. */
 function cardsFromData(props: Dashboard3AData & Dashboard3AChrome): Dashboard3ASlots {
   const summary = props.data
@@ -459,7 +458,7 @@ function cardsFromData(props: Dashboard3AData & Dashboard3AChrome): Dashboard3AS
 
 export function Dashboard3A(props: Dashboard3AProps) {
   const { planName = null, tokensLeft = null, nowLabel = null, commissionerCount = 0 } = props
-  const es = useOptionalLanguage().language === 'es'
+  const m = useMessages(dashboard3aMessages)
   const slots = props.slots ?? cardsFromData(props)
   const mainOrder = props.order?.main ?? (['routine', 'issues', 'matchups'] as const)
   const sideOrder = props.order?.side ?? (['chimmy', 'career', 'rivals'] as const)
@@ -503,20 +502,16 @@ export function Dashboard3A(props: Dashboard3AProps) {
           <Link
             href="/core/portfolio"
             className="af3a-tile af3a-tile-more"
-            title={
-              es
-                ? `${railOverflow} ${railOverflow === 1 ? 'liga más' : 'ligas más'}: abrir Portafolio`
-                : `${railOverflow} more ${railOverflow === 1 ? 'league' : 'leagues'} — open Portfolio`
-            }
+            title={m.railMoreTitle(railOverflow)}
           >
             +{railOverflow > 99 ? '99' : railOverflow}
           </Link>
         ) : null}
-        <Link href="/import" className="af3a-tile af3a-tile-add" title={es ? 'Importar una liga' : 'Import a league'}>
+        <Link href="/import" className="af3a-tile af3a-tile-add" title={m.importLeagueTitle}>
           +
         </Link>
         <div className="af3a-rail-spacer" />
-        <Link href="/settings" className="af3a-avatar" title={es ? 'Perfil, ajustes y modos' : 'Profile, settings and modes'}>
+        <Link href="/settings" className="af3a-avatar" title={m.profileTitle}>
           <Mark
             src={career?.avatarUrl}
             alt={career?.handle ?? 'Profile'}
@@ -626,7 +621,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
           </div>
         </div>
 
-        <details className="af3a-insights"><summary>{es ? 'Análisis de tus ligas y temporada' : 'Portfolio & season insights'} <span>{es ? 'Exposición, resultados y herramientas' : 'Exposure, results and tools'}</span></summary>
+        <details className="af3a-insights"><summary>{m.insightsSummary} <span>{m.insightsSub}</span></summary>
         {slots.portfolioChart}
 
         {/* ── Bottom three-up ────────────────────────────────────────────── */}
@@ -775,7 +770,7 @@ export function Dash3AMatchups({
   /** The card's freshness line (components/core-app/home/CardFreshness.tsx), rendered at its foot. */
   freshness?: React.ReactNode
 }) {
-  const es = useOptionalLanguage().language === 'es'
+  const msg = useMessages(dashboard3aMessages)
   /*
    * Two real sources, preferred in order. `Dash34League.score` is live and knows
    * the OPPONENT'S NAME, which the design shows and `WeekRow` cannot supply.
@@ -818,13 +813,11 @@ export function Dash3AMatchups({
           platform: r.platform,
           you: r.pointsFor,
           them: r.pointsAgainst,
-          note: (es
-            ? `Semana ${r.week} · ${MATCH_RESULT_ES[result]}`
-            : `Week ${r.week} · ${MATCH_RESULT_EN[result]}`) +
+          note: msg.matchNote(r.week, result) +
             // An odd-team league's extra game, in place of the bye (lib/core-app/weekAll.ts).
             (r.extraMatchupLabel ? ` · ${r.extraMatchupLabel}` : ''),
           completed: r.completed === true,
-          period: `${r.season} · ${es ? 'Semana' : 'Week'} ${r.week}`,
+          period: msg.matchPeriod(r.season, r.week),
         }
       }),
   ]
@@ -833,36 +826,23 @@ export function Dash3AMatchups({
   const matchupPeriod = periods.length === 1 && periods[0]
     ? periods[0]
     : shown.length > 0
-      ? es ? 'Periodos de cada liga' : 'League periods'
-      : es ? 'Marcadores disponibles' : 'Available scores'
+      ? msg.leaguePeriods
+      : msg.availableScores
   /* One "?" for the heading, and only when a card below actually prints a percentage. */
   const anyWinShown = shown.some((m) => !m.completed && winProb?.[m.key] != null)
   return (
             <section className="af3a-sec">
               <header className="af3a-sechead">
-                <h2>{es ? 'Enfrentamientos de tus ligas' : 'League matchups'}</h2>
+                <h2>{msg.leagueMatchups}</h2>
                 {anyWinShown ? <TopicTip topic="matchupWinProbability" /> : null}
                 <span className="af3a-note">{matchupPeriod}</span>
               </header>
 
               {scored.length === 0 ? (
-                es ? (
-                  <div className="af3a-card af3a-empty">
-                    <h3>No hay enfrentamientos puntuados esta semana.</h3>
-                    <p>
-                      El marcador semanal solo se registra en ligas con historial sincronizado. Importa o
-                      vuelve a sincronizar una liga y sus marcadores aparecerán aquí.
-                    </p>
-                  </div>
-                ) : (
                 <div className="af3a-card af3a-empty">
-                  <h3>No scored matchups this week.</h3>
-                  <p>
-                    Weekly scoring is only recorded for leagues with a synced history.
-                    Import or re-sync a league and its scores appear here.
-                  </p>
+                  <h3>{msg.noScoredTitle}</h3>
+                  <p>{msg.noScoredBody}</p>
                 </div>
-                )
               ) : (
                 <div className="af3a-grid2">
                   {shown.map((m) => (
@@ -885,7 +865,7 @@ export function Dash3AMatchups({
                             <>
                               {' · '}
                               <b className="af3a-win">
-                                {Math.round(winProb[m.key] * 100)}% {es ? 'de ganar' : 'win'}
+                                {Math.round(winProb[m.key] * 100)}% {msg.winSuffix}
                               </b>
                             </>
                           ) : null}
@@ -915,78 +895,42 @@ export function Dash3AMatchups({
 export { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 
 export function Dash3AChimmy({ openCount, leagueCount = null }: { openCount: number; leagueCount?: number | null }) {
-  const es = useOptionalLanguage().language === 'es'
-  if (es) {
-    return (
-            <section className="af3a-card af3a-chimmy">
-              <header className="af3a-chimmy-head">
-                <span className="af3a-chimmy-av" aria-hidden="true">◕</span>
-                <div>
-                  <b>PREGUNTAR A CHIMMY</b>
-                  <span>Tu día, en una línea</span>
-                </div>
-              </header>
-              {leagueCount === 0 ? (
-                <h3>
-                  Aún no hay ligas conectadas. <Link href="/import">Conecta una</Link> y te diré qué
-                  necesita tu atención primero.
-                </h3>
-              ) : openCount === 0 ? (
-                <h3>Nada requiere tu atención ahora: estás al día en todas tus ligas.</h3>
-              ) : (
-                <h3>
-                  {openCount === 1
-                    ? 'Hoy hay una cosa que requiere tu atención.'
-                    : `Hoy hay ${openCount} cosas que requieren tu atención; primero, la más urgente.`}
-                </h3>
-              )}
-              <p className="af3a-chimmy-note">
-                Te indico la liga y la pantalla; tú haces el cambio en la plataforma.
-              </p>
-            </section>
-    )
-  }
+  const m = useMessages(dashboard3aMessages)
   return (
             <section className="af3a-card af3a-chimmy">
               <header className="af3a-chimmy-head">
                 <span className="af3a-chimmy-av" aria-hidden="true">◕</span>
                 <div>
-                  <b>ASK CHIMMY</b>
-                  <span>Your day, in one line</span>
+                  <b>{m.chimmyTitle}</b>
+                  <span>{m.chimmySub}</span>
                 </div>
               </header>
               {leagueCount === 0 ? (
                 <h3>
-                  No leagues connected yet. <Link href="/import">Connect one</Link> and I&rsquo;ll tell
-                  you what needs you first.
+                  {m.chimmyNoLeaguesBefore}
+                  <Link href="/import">{m.chimmyConnectOne}</Link>
+                  {m.chimmyNoLeaguesAfter}
                 </h3>
               ) : openCount === 0 ? (
-                <h3>Nothing needs you right now — you&rsquo;re clean across every league.</h3>
+                <h3>{m.chimmyClean}</h3>
               ) : (
-                <h3>
-                  {openCount === 1
-                    ? 'One thing needs you today.'
-                    : `${openCount} things need you today, soonest first.`}
-                </h3>
+                <h3>{m.chimmyOpen(openCount)}</h3>
               )}
-              <p className="af3a-chimmy-note">
-                I&rsquo;ll point you at the league and screen — you make the change on the
-                platform.
-              </p>
+              <p className="af3a-chimmy-note">{m.chimmyNote}</p>
             </section>
   )
 }
 
 export function Dash3ACareer({ career, freshness = null }: { career: CareerData | null; freshness?: React.ReactNode }) {
-  const es = useOptionalLanguage().language === 'es'
+  const m = useMessages(dashboard3aMessages)
   return (
             <section className="af3a-card">
               <header className="af3a-cardhead">
                 {/* "Tu carrera" — the title this card's own "?" (help-topics/home.ts `homeCareer`) opens with. */}
-                <span className="af3a-label">{es ? 'TU CARRERA' : 'YOUR CAREER'}</span>
+                <span className="af3a-label">{m.careerLabel}</span>
                 <TopicTip topic="homeCareer" />
                 <Link className="af3a-cardlink" href="/core/rankings">
-                  {es ? `${coreUiCopy('Rankings', 'es')} →` : 'Rankings →'}
+                  {m.rankingsLink(coreUiCopy('Rankings', 'es'))}
                 </Link>
               </header>
 
@@ -996,26 +940,18 @@ export function Dash3ACareer({ career, freshness = null }: { career: CareerData 
                     <span className="af3a-badge" aria-hidden="true">◈</span>
                     {career.level != null ? (
                       <b className="af3a-mono af3a-lvl">
-                        {es ? 'NIV' : 'LVL'} <i>{career.level}</i>
+                        {m.levelShort} <i>{career.level}</i>
                         {/* The XP level, not a rank — "AF RANK" under it read as "your rank is 14". */}
-                        <em>{es ? 'NIVEL DE CARRERA' : 'CAREER LEVEL'}</em>
+                        <em>{m.careerLevel}</em>
                       </b>
                     ) : null}
                     <b className="af3a-mono af3a-stat">
                       {career.championships}
-                      <em>
-                        {es
-                          ? career.championships === 1 ? 'TÍTULO' : 'TÍTULOS'
-                          : career.championships === 1 ? 'TITLE' : 'TITLES'}
-                      </em>
+                      <em>{m.titlesLabel(career.championships)}</em>
                     </b>
                     <b className="af3a-mono af3a-stat">
                       {career.seasonsPlayed}
-                      <em>
-                        {es
-                          ? career.seasonsPlayed === 1 ? 'TEMPORADA' : 'TEMPORADAS'
-                          : career.seasonsPlayed === 1 ? 'SEASON' : 'SEASONS'}
-                      </em>
+                      <em>{m.seasonsLabel(career.seasonsPlayed)}</em>
                     </b>
                   </div>
 
@@ -1024,7 +960,7 @@ export function Dash3ACareer({ career, freshness = null }: { career: CareerData 
                       <div className="af3a-xp-top">
                         {/* The level NAME ("All-Pro") is the rank's proper name and reads the same in both. */}
                         <span>
-                          {es ? 'XP de rango' : 'Rank XP'}
+                          {m.rankXp}
                           {career.levelName ? ` · ${career.levelName}` : ''}
                         </span>
                         <b className="af3a-mono">{career.xp.total.toLocaleString(getAppIntlLocale())}</b>
@@ -1034,22 +970,14 @@ export function Dash3ACareer({ career, freshness = null }: { career: CareerData 
                       </div>
                       {career.xp.toNext != null && career.nextLevelName ? (
                         <p className="af3a-xp-note">
-                          {career.xp.toNext.toLocaleString(getAppIntlLocale())} XP {es ? 'para' : 'to'} {career.nextLevelName}
+                          {career.xp.toNext.toLocaleString(getAppIntlLocale())} XP {m.xpTo} {career.nextLevelName}
                         </p>
                       ) : null}
                     </div>
                   ) : null}
                 </>
-              ) : es ? (
-                <p className="af3a-reason">
-                  Tu carrera aún no tiene puntuación. Se completa cuando importas una liga con una temporada
-                  terminada.
-                </p>
               ) : (
-                <p className="af3a-reason">
-                  Your career has not been scored yet. It fills in once a league with a
-                  completed season is imported.
-                </p>
+                <p className="af3a-reason">{m.careerUnscored}</p>
               )}
               {freshness}
             </section>
@@ -1079,11 +1007,11 @@ export function Dash3ARivals({
   freshness?: React.ReactNode
 }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(dashboard3aMessages)
   return (
             <section className="af3a-card">
               <header className="af3a-cardhead">
-                <span className="af3a-label">{es ? coreUiCopy('Rivalry Radar', 'es').toUpperCase() : 'RIVALRY RADAR'}</span>
+                <span className="af3a-label">{m.rivalryRadarLabel(coreUiCopy('Rivalry Radar', 'es'))}</span>
                 <TopicTip topic="homeRivalryRadar" />
               </header>
               {rivals?.available ? (
@@ -1098,7 +1026,7 @@ export function Dash3ARivals({
                         <b>{name}</b>
                         <em>
                           {r.meetings} {coreUiCopy(r.meetings === 1 ? 'meeting' : 'meetings', language)}
-                          {r.sharedLeagues > 1 ? ` · ${r.sharedLeagues} ${es ? 'ligas' : 'leagues'}` : ''}
+                          {r.sharedLeagues > 1 ? m.rivalSharedLeagues(r.sharedLeagues) : ''}
                           {last ? ` · ${coreUiCopy('last:', language)} ${last}` : ''}
                         </em>
                       </span>
@@ -1113,9 +1041,7 @@ export function Dash3ARivals({
                 <p className="af3a-reason">
                   {rivals
                     ? sentence(panelReasonText(rivals.reason, language))
-                    : es
-                      ? 'Aún no se han leído tus historiales de enfrentamientos.'
-                      : 'Head-to-head records have not been read yet.'}
+                    : m.rivalsUnread}
                 </p>
               )}
               {freshness}
@@ -1138,12 +1064,12 @@ export function Dash3APortfolioChart({
   freshness?: React.ReactNode
 }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(dashboard3aMessages)
   return (
         <WorkbookBarChart
-          title={es ? 'Cartera de ligas por plataforma' : 'League portfolio by platform'}
+          title={m.portfolioChartTitle}
           subtitle={portfolioSubtitleText(subtitle, language)}
-          valueLabel={es ? 'Ligas' : 'Leagues'}
+          valueLabel={m.portfolioChartValue}
           data={platformCounts}
           footer={freshness}
         />
@@ -1163,13 +1089,13 @@ export function Dash3AExposure({
   freshness?: React.ReactNode
 }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(dashboard3aMessages)
   const note = exposure?.available ? exposureNoteText(exposure.data, language) : null
   return (
           <section className="af3a-card">
             <header className="af3a-cardhead">
               {/* "Cartera y exposición" — the title of this card's own "?" (help-topics/home.ts `homeExposure`). */}
-              <span className="af3a-label">{es ? 'CARTERA Y EXPOSICIÓN' : <>PORTFOLIO &amp; EXPOSURE</>}</span>
+              <span className="af3a-label">{m.exposureLabel}</span>
               <TopicTip topic="homeExposure" />
             </header>
             {exposure?.available ? (
@@ -1191,13 +1117,11 @@ export function Dash3AExposure({
               <p className="af3a-reason">
                 {exposure
                   ? sentence(panelReasonText(exposure.reason, language))
-                  : es
-                    ? 'Aún no se ha leído la exposición de tus plantillas.'
-                    : 'Roster exposure has not been read yet.'}
+                  : m.exposureUnread}
               </p>
             )}
             <Link className="af3a-cardlink" href="/core/portfolio">
-              {es ? `Abrir ${coreUiCopy('Portfolio', 'es')} →` : 'Open Portfolio →'}
+              {m.openPortfolio(coreUiCopy('Portfolio', 'es'))}
             </Link>
             {freshness}
           </section>
@@ -1252,24 +1176,22 @@ export function Dash3ALeagues({
    * shorter number stand as the total.
    */
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(dashboard3aMessages)
   const leagueTotal = totalLeagues ?? leagues.length
   const shownLeagues = leagues.slice(0, 5)
   const leagueTotalLabel =
     leagueTotal > shownLeagues.length
-      ? `${shownLeagues.length} ${es ? 'de' : 'of'} ${leagueTotal}`
-      : `${leagueTotal} ${es ? 'en total' : 'total'}`
+      ? m.leaguesShownOf(shownLeagues.length, leagueTotal)
+      : m.leaguesTotal(leagueTotal)
   return (
           <section className="af3a-card af3a-leagues-card">
             <header className="af3a-cardhead">
-              <span className="af3a-label">{es ? 'MIS LIGAS' : 'MY LEAGUES'}</span>
+              <span className="af3a-label">{m.myLeagues}</span>
               <span className="af3a-note af3a-push">{leagueTotalLabel}</span>
             </header>
             {leagues.length === 0 ? (
               <p className="af3a-reason">
-                {es
-                  ? 'Aún no has importado ligas. Conecta una plataforma y aparecerán aquí.'
-                  : 'No leagues imported yet. Connect a platform and they appear here.'}
+                {m.noLeaguesImported}
               </p>
             ) : (
               <div className="af3a-leagues">
@@ -1281,11 +1203,11 @@ export function Dash3ALeagues({
                     href={leagueEntryHref(l)}
                   >
                     <span className={`af3a-tile ${platformClass(l.platform)}`}>
-                      <Mark src={l.imageUrl} alt={l.name ?? (es ? 'Liga' : 'League')} letter={Array.from(l.name?.trim() || "L")[0]} />
+                      <Mark src={l.imageUrl} alt={l.name ?? m.leagueAlt} letter={Array.from(l.name?.trim() || "L")[0]} />
                     </span>
                     <span className="af3a-league-body">
                       <b>
-                        {l.name ?? (es ? 'Liga sin nombre' : 'Untitled league')}
+                        {l.name ?? m.untitledLeague}
                         {l.isCommissioner ? <CommissionerBadge /> : null}
                       </b>
                       <em>{[l.platform === 'manual' ? 'AllFantasy' : l.platform, l.sport, l.formatLabel ? formatLabelText(l.formatLabel, language) : null].filter(Boolean).join(' · ')}</em>
@@ -1299,7 +1221,7 @@ export function Dash3ALeagues({
             <LeagueClipSpotlight leagueIds={shownLeagues.map(l => l.id)} />
             {leagueTotal > shownLeagues.length ? (
               <Link className="af3a-cardlink" href="/leagues">
-                {es ? <>Ver las {leagueTotal} &rarr;</> : <>Show all {leagueTotal} &rarr;</>}
+                {m.showAllLeagues(leagueTotal)}
               </Link>
             ) : null}
             {freshness}

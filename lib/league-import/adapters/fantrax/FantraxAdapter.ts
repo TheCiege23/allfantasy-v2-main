@@ -175,13 +175,20 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
                   : 'Fixtures come from the league schedule. No week has been played yet, so no scores are on file.',
           }
         })(),
+        /*
+         * ⚠ BOTH NOTES MUST HOLD FOR A LIVE (league-id) IMPORT AS WELL AS A CSV ONE. They said "not
+         * available from uploaded data", but a live import uploads nothing — and it DOES read the draft
+         * board (`getFantraxDraftResults`, importFantraxLeague.ts), which is returned rather than stored
+         * because `FantraxLeague` has no draft column. Fantrax publishes no transactions endpoint, so a
+         * live import reads no transactions; only an uploaded export carries them.
+         */
         draftHistory: {
           state: history.draft_picks.length > 0 ? 'partial' : 'missing',
           count: history.draft_picks.length,
           note:
             history.draft_picks.length > 0
               ? 'Fantrax draft history currently reflects traded draft-pick events when available.'
-              : 'No Fantrax draft pick history was available from uploaded data.',
+              : 'No Fantrax draft picks are on file: a league-id import does not store the draft board yet, and an uploaded export carries only traded-pick events.',
         },
         tradeHistory: {
           /* Same ambiguity as Yahoo and MFL: a required array, so `[]` proves nothing. */
@@ -193,7 +200,7 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
           note:
             history.transactions.length > 0
               ? 'Fantrax transaction history is normalized from claims, drops, trades, and lineup change exports.'
-              : 'No Fantrax transaction history was available from uploaded data.',
+              : 'No Fantrax transaction history is on file: a league-id import reads none (Fantrax publishes no transactions feed), so only an uploaded transaction export supplies it.',
         },
         previousSeasons: {
           state: raw.previousSeasons.length > 0 ? 'partial' : 'missing',
