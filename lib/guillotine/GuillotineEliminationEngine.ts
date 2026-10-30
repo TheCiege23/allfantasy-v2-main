@@ -13,6 +13,7 @@ import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import { resolveTiebreak } from './GuillotineTiebreakResolver'
 import { evaluateWeek, getDraftSlotByRoster } from './GuillotineWeekEvaluator'
 import { releaseChoppedRosters } from './GuillotineRosterReleaseEngine'
+import { IMPORTED_CHOP_REASON, isImportedLeague } from './importedLeagueGuard'
 import { appendEvent } from './GuillotineEventLog'
 import { postChopToLeagueChat } from './guillotineChat'
 import { postAutomaticGuillotineRecap } from './weeklyRecap'
@@ -101,6 +102,10 @@ export async function markRedraftRostersEliminated(
 }
 
 export async function runElimination(input: RunEliminationInput): Promise<GuillotineChopResult | null> {
+  // 🛑 Never on an imported league: the provider chops it (./importedLeagueGuard.ts).
+  if (await isImportedLeague(input.leagueId)) {
+    return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: IMPORTED_CHOP_REASON }
+  }
   const key = `guillotine-elimination:${input.leagueId}:${input.weekOrPeriod}`
   const owner = randomUUID()
   const lock = await acquireAutomationLock(key, { owner, ttlMs: 300_000 })
