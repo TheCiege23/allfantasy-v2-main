@@ -27,8 +27,12 @@ const m = vi.hoisted(() => {
     players: vi.fn(),
     persist: vi.fn(),
     template: vi.fn(async () => ({ slots: [] })),
+    notify: vi.fn(async () => ({})),
+    welcome: vi.fn(),
   }
 })
+vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: m.notify }))
+vi.mock('@/lib/inactive-manager/welcomeBackService', () => ({ buildWelcomeBack: m.welcome }))
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/server/services/permissionService', () => ({ isElevatedCommissioner: m.elevated }))
 vi.mock('@/server/services/auditService', () => ({ logAction: m.log }))
@@ -115,7 +119,23 @@ describe('the owner coming back', () => {
     m.state.settings = { af_managed_lineups: { r1: { since: 'x', byUserId: 'c' }, r2: { since: 'x', byUserId: 'c' } } }
     expect(await endInactiveManagerModeOnOwnerSave('L', 'r1', 'owner')).toBe(true)
     expect(Object.keys(managedMap())).toEqual(['r2'])
-    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: ENDED_ACTION, userId: 'owner', entityId: 'r1', metadata: { rosterId: 'r1', reason: 'owner_saved_lineup' } }))
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: ENDED_ACTION, userId: 'owner', entityId: 'r1', metadata: { rosterId: 'r1', reason: 'owner_saved_lineup', since: 'x', autopilot: false } }))
+  })
+
+  it('sends one welcome-back notice with what was done while they were away', async () => {
+    m.state.settings = { af_managed_lineups: { r1: { since: '2026-10-01T00:00:00.000Z', byUserId: 'c', autopilot: { style: 'balanced', since: '2026-10-01T00:00:00.000Z', byUserId: 'c' } } } }
+    m.welcome.mockResolvedValue({ lineupChanges: 3, claims: 1, en: { headline: 'Welcome back. In the 28 days you were away, Chimmy autopilot set your lineup 3 times and made 1 waiver claim.' } })
+    expect(await endInactiveManagerModeOnOwnerSave('L', 'r1', 'owner')).toBe(true)
+    expect(m.welcome).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L', rosterId: 'r1', since: new Date('2026-10-01T00:00:00.000Z'), autopilot: true }))
+    expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({ userIds: ['owner'], type: 'inactive_manager_welcome_back', body: expect.stringContaining('set your lineup 3 times') }))
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: ENDED_ACTION, metadata: expect.objectContaining({ since: '2026-10-01T00:00:00.000Z', autopilot: true }) }))
+  })
+
+  it("never fails the owner's return when the notice cannot be built", async () => {
+    m.state.settings = { af_managed_lineups: { r1: { since: '2026-10-01T00:00:00.000Z', byUserId: 'c' } } }
+    m.welcome.mockRejectedValue(new Error('db down'))
+    expect(await endInactiveManagerModeOnOwnerSave('L', 'r1', 'owner')).toBe(true)
+    expect(m.notify).not.toHaveBeenCalled()
   })
 
   it('does nothing for a team that is not managed', async () => {

@@ -95,7 +95,7 @@ describe('a dynasty league', () => {
   const en = render(sections, 'en')
 
   it('explains carryover, the taxi squad, taxi stealing and the pick rules', () => {
-    expect(sections.map((s) => s.id)).toEqual(['overview', 'scoring', 'dynasty', 'playoffs', 'trades', 'waivers'])
+    expect(sections.map((s) => s.id)).toEqual(['overview', 'scoring', 'lineups', 'dynasty', 'playoffs', 'trades', 'waivers'])
     has(en, 'Dynasty: your whole roster carries over from season to season, and each offseason adds a rookie draft.')
     has(en, 'The taxi squad holds up to 4 young players without using a roster spot. Taxi players cannot start.')
     has(en, 'Only rookies can go on the taxi squad.')
@@ -133,7 +133,7 @@ describe('a keeper league', () => {
   it('explains how many, what they cost and for how long, and that picks do not trade', () => {
     const sections = explainLeagueRules(ruleSnapshotFromLeague(keeper))
     const en = render(sections, 'en')
-    expect(sections.map((s) => s.id)).toEqual(['overview', 'scoring', 'keeper', 'playoffs', 'trades', 'waivers'])
+    expect(sections.map((s) => s.id)).toEqual(['overview', 'scoring', 'lineups', 'keeper', 'playoffs', 'trades', 'waivers'])
     has(en, 'Each team can keep up to 2 players into next season.')
     has(en, 'A kept player costs an earlier pick each year you keep him.')
     has(en, 'A player can be kept for up to 3 seasons in a row.')

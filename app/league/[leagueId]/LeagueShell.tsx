@@ -281,6 +281,12 @@ export type LeagueShellProps = {
   allLeagues: League[]
   /** /core's rail data (this week's matchup + crest) per league in `allLeagues`. Null draws names only. */
   leagueRail?: LeagueRailData | null
+  /**
+   * The id the header's "Open in <platform>" link is built from, resolved on the server
+   * (`linkableSourceLeagueId`). Differs from `league.platformLeagueId` only for Fantrax, where that is
+   * our snapshot uuid. Omitted (undefined) → `league.platformLeagueId`, as before.
+   */
+  sourceLinkLeagueId?: string | null
   userId: string
   userName: string
   userImage?: string | null
@@ -318,6 +324,7 @@ export function LeagueShell({
   isHeadCommissioner,
   allLeagues,
   leagueRail = null,
+  sourceLinkLeagueId,
   userId,
   userName,
   userImage = null,
@@ -1590,7 +1597,7 @@ export function LeagueShell({
                 leagueId={league.id}
                 leagueName={selectedLeague.name ?? 'League'}
                 platform={league.platform}
-                sourceLeagueId={league.platformLeagueId}
+                sourceLeagueId={sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId}
                 season={league.season}
               />
             ) : null}

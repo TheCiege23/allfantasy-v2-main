@@ -3729,6 +3729,17 @@ ${legacyEnrichmentContext}`
               }
             } catch { /* non-fatal */ }
             try {
+              // "What does AllFantasy do in my league?" / "Why did my lineup change?" — the automations,
+              // from the same views the Commissioner Hub and the lineup screen show (phase 12).
+              const { buildAutomationContextForChimmy } = await import('@/lib/commissioner-hub/automationChimmyContextService')
+              const automationCtx = await buildAutomationContextForChimmy(leagueSnapshot.id, planInput.userId)
+              if (automationCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}\n\n${automationCtx}`
+                  : automationCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
               const dynastyCtx = await buildDynastyContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (dynastyCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
