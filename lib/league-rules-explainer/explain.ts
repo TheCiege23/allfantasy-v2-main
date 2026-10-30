@@ -37,6 +37,7 @@ const TRADE_REVIEWS = new Set(['commissioner', 'league_vote', 'instant', 'none']
 const SCORING_MODES = new Set(['points', 'h2h_category', 'roto'])
 const RECORD_MODES = new Set(['each', 'most'])
 const LINEUP_MODES = new Set(['daily', 'weekly'])
+const LINEUP_LOCKS = new Set(['per_player', 'first_game', 'manual'])
 const ENDGAMES = new Set(['last_team_standing', 'final_four', 'final_three', 'final_two'])
 const ENDGAME_TEAMS: Record<string, number> = { final_four: 4, final_three: 3, final_two: 2 }
 const RELEASES = new Set(['immediate', 'next_waiver_run'])
@@ -619,10 +620,15 @@ export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): R
     line('overview-format', overviewFormat(s)),
     line('overview-median', seasonal && s.medianGame === true ? text('overview.median') : null),
   ])
-  const lineups =
+  const lineups: RuleLine[] =
     !imported && format !== 'best_ball' && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
       ? [{ id: 'lineups-mode', text: text(`lineups.${s.lineupMode}`) }]
       : []
+  // When a weekly lineup locks. Every football league gets this line too, which had none.
+  // Daily lineups carry no lock here: the lock reads as 'daily' and their own line explains it.
+  if (!imported && format !== 'best_ball' && format !== 'specialty' && s.lineupLock && LINEUP_LOCKS.has(s.lineupLock)) {
+    lineups.push({ id: 'lineups-lock', text: text(`lineups.lock.${s.lineupLock}`) })
+  }
   const ownRules = !imported && format !== 'specialty' && format !== 'best_ball'
   const sections: RuleSection[] = [
     { id: 'overview', title: text('section.overview'), lines: overview },
