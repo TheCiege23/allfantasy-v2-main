@@ -34,6 +34,13 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 | `E-06` | Scope of ESPN roster use given `M-02` (current players with no RI row). | **Updated 2026-10-30:** owner confirmed permission to investigate and use ESPN rosters for college eligibility. The earlier photos-only scope is superseded; roster snapshots retain unmatched athletes, but do not themselves create draftable players or enable scoring. |
 | `E-07` | College basketball game and player box scores for fantasy scoring. | **Updated 2026-10-30:** owner confirmed permission to use ESPN box scores. One final-game summary and its daily scoreboard returned HTTP 200; a 403 must still stop the ingest pass. Scoring integration, schedule coverage, rate limits, and historical transfer handling remain to be verified. |
 
+College postseason schedule evidence (2026-10-30): the committed Rolling Insights 2025-26
+`schedule-season.NCAABB.json` contains 394 postseason games, including the NCAA title game
+on April 6; the existing schedule parser and sync preserve those rows. The cached 2026-27
+schedule currently ends March 7. Future tournament brackets have not yet been established by
+that cached range. A week beyond the published range must remain unfinalized until evidence
+covers it; neither an empty scoreboard nor the previous season proves a future slate is complete.
+
 ## Probe protocol
 
 1. Only via `scripts/probe.sh`, only for a new endpoint/sport combination.
