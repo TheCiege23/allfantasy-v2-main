@@ -19,6 +19,7 @@ import 'server-only'
  */
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { isWeightedRookieLottery } from './rookieOrderMethod'
 import { checkDynastyLotteryEligibility } from './dynastyYearGuard'
 import { getDraftOrderModeAndLotteryConfig, setDraftOrderModeAndLotteryConfig } from './lotteryConfigStorage'
 import { runWeightedLottery } from './WeightedDraftLotteryEngine'
@@ -57,7 +58,7 @@ export async function ensureRookieDraftLottery(input: {
     where: { id: input.leagueId },
     select: { dynastyConfig: { select: { rookiePickOrderMethod: true } } },
   })
-  if (league?.dynastyConfig?.rookiePickOrderMethod !== 'weighted_lottery') return null
+  if (!isWeightedRookieLottery(league?.dynastyConfig?.rookiePickOrderMethod)) return null
 
   const eligibility = await checkDynastyLotteryEligibility(input.leagueId, input.season)
   if (!eligibility.eligible) return null

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { normalizeRookieOrderMethod } from '@/lib/draft-lottery/rookieOrderMethod'
 import { LotteryReveal } from '@/components/draft/LotteryReveal'
 import type {
   LotteryEligibilityMode,
@@ -116,7 +117,7 @@ export default function DynastySettingsPanel({
   const effectiveRookiePickOrder = useMemo(() => {
     const p = patch.rookiePickOrderMethod
     if (typeof p === 'string' && p.length > 0) return p
-    return data?.effective?.rookiePickOrderMethod ?? ''
+    return normalizeRookieOrderMethod(data?.effective?.rookiePickOrderMethod ?? '')
   }, [patch.rookiePickOrderMethod, data?.effective?.rookiePickOrderMethod])
 
   useEffect(() => {
@@ -372,7 +373,7 @@ export default function DynastySettingsPanel({
             </div>
           )}
 
-          {(effectiveRookiePickOrder === 'weighted_lottery' || effective?.rookiePickOrderMethod === 'weighted_lottery') && (
+          {(effectiveRookiePickOrder === 'weighted_lottery' || normalizeRookieOrderMethod(effective?.rookiePickOrderMethod ?? '') === 'weighted_lottery') && (
             <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-4 space-y-4">
               <div className="flex items-center gap-2">
                 <span className="text-base">🎱</span>

@@ -1,3 +1,4 @@
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
@@ -310,7 +311,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       }
     }
 
-    const lotteryLeague = dynasty?.rookiePickOrderMethod === 'weighted_lottery'
+    const lotteryLeague = isWeightedRookieLottery(dynasty?.rookiePickOrderMethod)
     // Standings seat the draft only under the automatic order — an AF Commissioner setting, off by
     // default (lib/rookie-order/automaticRookieOrder.ts). A lottery league whose draw could not run (not
     // yet eligible, no standings) still falls back to worst-to-first — never to `buildSlotOrderForLeague`,

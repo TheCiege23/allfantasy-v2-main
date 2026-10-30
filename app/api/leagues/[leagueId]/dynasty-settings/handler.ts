@@ -1,3 +1,4 @@
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 /**
  * GET: Effective dynasty settings + presets (roster, scoring, playoff).
  * PUT: Update dynasty config and optional League.settings (roster_format_type, scoring_format_type, playoff, regular_season_weeks).
@@ -285,7 +286,7 @@ export async function PUT(
         draftOrderMode: 'weighted_lottery',
         lotteryConfig: { enabled: true },
       })
-    } else if (priorDynasty?.rookiePickOrderMethod === 'weighted_lottery' && method !== 'weighted_lottery') {
+    } else if (isWeightedRookieLottery(priorDynasty?.rookiePickOrderMethod) && method !== 'weighted_lottery') {
       await setDraftOrderModeAndLotteryConfig(leagueId, { draftOrderMode: 'randomize' })
     }
   }

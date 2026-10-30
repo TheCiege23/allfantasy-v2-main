@@ -1,3 +1,4 @@
+import { isWeightedRookieLottery, normalizeRookieOrderMethod } from '@/lib/draft-lottery/rookieOrderMethod'
 import { readVetoRule } from '@/lib/league-trade-engine/vetoRule'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 /**
@@ -443,7 +444,7 @@ export function tankingPenaltyRule(settings: unknown): TankingPenaltyRule {
  * `reverse_standings` reads as the commissioner setting it — never as an order the draft does not use.
  */
 export function effectiveRookieDraftOrder(configMethod: string | null | undefined, leagueSettings: unknown): string | null {
-  if (configMethod === 'weighted_lottery') return configMethod
+  if (isWeightedRookieLottery(configMethod)) return 'weighted_lottery'
   const rookie = record(record(leagueSettings).rookie_draft_order)
   if (record(rookie.live).enabled === true) return 'live'
   if (rookie.enabled === true) return rookie.mode === 'reverse_max_pf' ? 'auto_reverse_max_pf' : 'auto_worst_to_first'
@@ -459,7 +460,7 @@ export function dynastyRulesFromConfig(
   c: { rookiePickOrderMethod?: string | null; rookieDraftRounds?: number | null; rookieDraftType?: string | null } | null,
 ): Pick<RuleSnapshot, 'rookieDraftOrder' | 'rookieDraftRounds' | 'rookieDraftType'> {
   return {
-    rookieDraftOrder: c?.rookiePickOrderMethod ?? 'max_pf',
+    rookieDraftOrder: normalizeRookieOrderMethod(c?.rookiePickOrderMethod ?? 'max_pf'),
     rookieDraftRounds: c?.rookieDraftRounds ?? 4,
     rookieDraftType: c?.rookieDraftType ?? 'linear',
   }
