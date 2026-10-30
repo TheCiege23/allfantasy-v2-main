@@ -1919,7 +1919,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <span className="af-rail-toggle-text">
             {leagues.length}{' '}
             {msg.leagueNoun(leagues.length)}
-            {railWeekLabel ? ` · ${language === 'es' ? railWeekLabel.replace(/^Week (\d+)/, 'Semana $1') : railWeekLabel}` : ''}
+            {railWeekLabel ? ` · ${railMsg.weekLabel(railWeekLabel)}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
               <span className="af-rail-live-state">
                 {badgeText('LIVE', language)}

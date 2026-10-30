@@ -35,6 +35,11 @@ export const railRowMessages = defineMessages({
     chopLine: (team: string, value: string) => `Lowest: ${team} · ${value}`,
     toPass: (team: string, value: string) => `To pass: ${team} · ${value}`,
     weeksLeft: (n: number) => (n === 1 ? '1 week left' : `${n} weeks left`),
+    /* The draft time ("Mon 8pm"): the locale, and how the clock reads — English drops the space and lowercases AM/PM. */
+    dateLocale: 'en-US',
+    shortTime: (time: string): string => time.replace(/\s?([AP])M$/i, (_, h: string) => `${h.toLowerCase()}m`),
+    /* The rail header's week ("Week 8"), which arrives in English from the server. */
+    weekLabel: (label: string): string => label,
     onTheBlock: 'on the block',
     bottomOfLeague: 'bottom of the league',
     overTheCut: (margin: string) => `+${margin} over the cut`,
@@ -125,6 +130,9 @@ export const railRowMessages = defineMessages({
     chopLine: (team, value) => `Más bajo: ${team} · ${value}`,
     toPass: (team, value) => `Por superar: ${team} · ${value}`,
     weeksLeft: (n) => (n === 1 ? 'queda 1 semana' : `quedan ${n} semanas`),
+    dateLocale: 'es',
+    shortTime: (time) => time,
+    weekLabel: (label) => label.replace(/^Week (\d+)/, 'Semana $1'),
     onTheBlock: 'en la línea de corte',
     bottomOfLeague: 'último de la liga',
     overTheCut: (margin) => `+${margin} sobre el corte`,

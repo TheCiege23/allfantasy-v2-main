@@ -3,7 +3,6 @@
 import type { ReactNode } from 'react'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { railRowMessages } from '@/lib/core-app/messages/railRow'
 import { platformLabel } from '@/lib/core-app/platformLinks'
@@ -214,12 +213,12 @@ function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
 }
 
 /** "Mon 8pm" in the viewer's own zone. */
-function draftWhen(iso: string, es: boolean): string {
+function draftWhen(iso: string, msg: { dateLocale: string; shortTime: (time: string) => string }): string {
   const at = new Date(iso)
   if (!Number.isFinite(at.getTime())) return ''
-  const day = at.toLocaleDateString(es ? 'es' : 'en-US', { weekday: 'short' })
-  const time = at.toLocaleTimeString(es ? 'es' : 'en-US', { hour: 'numeric', minute: at.getMinutes() ? '2-digit' : undefined })
-  return `${day} ${es ? time : time.replace(/\s?([AP])M$/i, (_, h: string) => `${h.toLowerCase()}m`)}`
+  const day = at.toLocaleDateString(msg.dateLocale, { weekday: 'short' })
+  const time = at.toLocaleTimeString(msg.dateLocale, { hour: 'numeric', minute: at.getMinutes() ? '2-digit' : undefined })
+  return `${day} ${msg.shortTime(time)}`
 }
 
 /**
@@ -230,7 +229,6 @@ function draftWhen(iso: string, es: boolean): string {
  * the shell, and the line is the same shape — a position, the distance to the cut, the space, the basis.
  */
 function RailGuillotine({ line }: { line: RailGuillotineLine }) {
-  const es = useOptionalLanguage().language === 'es'
   const msg = useMessages(railRowMessages)
   const chopWeek = line.firstChopWeek
   let pos: ReactNode
@@ -251,7 +249,7 @@ function RailGuillotine({ line }: { line: RailGuillotineLine }) {
       cut = msg.eliminated
       break
     case 'preseason':
-      pos = line.draftAt ? `${msg.draft} ${draftWhen(line.draftAt, es)}` : msg.seasonNotStarted
+      pos = line.draftAt ? `${msg.draft} ${draftWhen(line.draftAt, msg)}` : msg.seasonNotStarted
       cut = chopWeek != null ? msg.firstChopWeekLower(chopWeek) : 'Guilly'
       break
     case 'before_first_chop':
