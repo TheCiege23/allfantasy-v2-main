@@ -23,6 +23,9 @@ const spanish: Record<string, string> = {
   Moves: 'Movimientos',
   'Player Finder': 'Buscar jugadores',
   Players: 'Jugadores',
+  // The ↻ Updates menu (AfCoreShell). The per-platform lines are patterns, at the end of this file.
+  'Changes save to AllFantasy.': 'Los cambios se guardan en AllFantasy.',
+  'Make lineup changes on your league’s platform.': 'Cambia la alineación en la plataforma de tu liga.',
   'Your week': 'Tu semana',
   'Live scores': 'Marcadores en vivo',
   Live: 'En vivo',
@@ -1566,6 +1569,10 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
     (m) => `Cómo se sugiere una oferta: es nuestra regla, no datos del mercado. El presupuesto FAAB completo equivale más o menos al jugador número ${m[1]}, y la oferta de cada jugador es su parte de eso.`,
   ],
   [/^No suggestion is more than (\d+)% of the budget\.$/, (m) => `Ninguna sugerencia supera el ${m[1]}% del presupuesto.`],
+  // The ↻ Updates menu's handoff to the league's platform (AfCoreShell, lib/core-app/shellLineupHandoff.ts).
+  [/^AllFantasy only reads this league — changes are made in (.+)\.$/, (m) => `AllFantasy solo lee esta liga: los cambios se hacen en ${m[1]}.`],
+  [/^Fix lineup in (.+)$/, (m) => `Arreglar la alineación en ${m[1]}`],
+  [/^Open league in (.+)$/, (m) => `Abrir la liga en ${m[1]}`],
 ]
 
 export function coreUiCopy(english: string, language: string): string {

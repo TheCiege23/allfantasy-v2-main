@@ -2219,15 +2219,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   (or, labelled, the league page) for the open league; with no league open, or none
                   we can build, the sentence stays — never a homepage under a "lineup" label.
                 */}
+                {/* Spanish for all four lines lives in coreUiCopy (exact strings and patterns), not inline. */}
                 {props.nativeLeague ? (
-                  <p>{language === 'es' ? 'Los cambios se guardan en AllFantasy.' : 'Changes save to AllFantasy.'}</p>
+                  <p>{copy('Changes save to AllFantasy.')}</p>
                 ) : props.lineupHandoff ? (
                   <>
-                    <p>
-                      {language === 'es'
-                        ? `AllFantasy solo lee esta liga: los cambios se hacen en ${props.lineupHandoff.platformLabel}.`
-                        : `AllFantasy only reads this league — changes are made in ${props.lineupHandoff.platformLabel}.`}
-                    </p>
+                    <p>{copy(`AllFantasy only reads this league — changes are made in ${props.lineupHandoff.platformLabel}.`)}</p>
                     <a
                       className="af-btn af-data-menu-handoff"
                       href={props.lineupHandoff.href}
@@ -2235,18 +2232,16 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       rel="noopener noreferrer"
                       data-testid="updates-lineup-handoff"
                     >
-                      {props.lineupHandoff.screen === 'Lineup'
-                        ? language === 'es'
-                          ? `Arreglar la alineación en ${props.lineupHandoff.platformLabel}`
-                          : `Fix lineup in ${props.lineupHandoff.platformLabel}`
-                        : language === 'es'
-                          ? `Abrir la liga en ${props.lineupHandoff.platformLabel}`
-                          : `Open league in ${props.lineupHandoff.platformLabel}`}{' '}
+                      {copy(
+                        props.lineupHandoff.screen === 'Lineup'
+                          ? `Fix lineup in ${props.lineupHandoff.platformLabel}`
+                          : `Open league in ${props.lineupHandoff.platformLabel}`,
+                      )}{' '}
                       <span aria-hidden>↗</span>
                     </a>
                   </>
                 ) : (
-                  <p>{language === 'es' ? 'Cambia la alineación en la plataforma de tu liga.' : 'Make lineup changes on your league’s platform.'}</p>
+                  <p>{copy('Make lineup changes on your league’s platform.')}</p>
                 )}
               </div>
             </details>

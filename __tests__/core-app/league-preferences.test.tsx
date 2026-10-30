@@ -35,6 +35,7 @@ import {
 } from '@/lib/core-app/leaguePreferences'
 import { ScopeSwitcher } from '@/components/core-app/ScopeSwitcher'
 import AfCoreShell from '@/components/core-app/AfCoreShell'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import LeagueListPreferencesCard from '@/components/settings/LeagueListPreferencesCard'
 
 const L = (id: string, name: string) => ({ id, name })
@@ -201,6 +202,14 @@ describe('the Updates menu — lineup handoff', () => {
   it('says "Open league" when only the league page is known (an unverified lineup format)', () => {
     render(shell({ lineupHandoff: { href: 'https://www.fantrax.com/fantasy/league/v2kzedypmm8jp61b/home', screen: 'League', platformLabel: 'Fantrax' } }))
     expect(screen.getByTestId('updates-lineup-handoff').textContent).toMatch(/Open league in Fantrax/)
+  })
+
+  it('reads in Spanish from the catalog, platform name kept', () => {
+    expect(coreUiCopy('Fix lineup in Sleeper', 'es')).toBe('Arreglar la alineación en Sleeper')
+    expect(coreUiCopy('Open league in Fantrax', 'es')).toBe('Abrir la liga en Fantrax')
+    expect(coreUiCopy('AllFantasy only reads this league — changes are made in ESPN.', 'es')).toBe('AllFantasy solo lee esta liga: los cambios se hacen en ESPN.')
+    expect(coreUiCopy('Make lineup changes on your league’s platform.', 'es')).toBe('Cambia la alineación en la plataforma de tu liga.')
+    expect(coreUiCopy('Fix lineup in Sleeper', 'en')).toBe('Fix lineup in Sleeper')
   })
 
   it('CONTROL: no handoff keeps the sentence and draws no button', () => {
