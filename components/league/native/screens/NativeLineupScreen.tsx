@@ -40,6 +40,8 @@ import { MyTeamAutomations } from './MyTeamAutomations'
 import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
 import { WelcomeBackCard } from '@/components/league/WelcomeBackCard'
 import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE } from '@/lib/projections/dailySportFormLabels'
+import { buildOfflineLineupSnapshot, readOfflineLineupSnapshot, saveOfflineLineupSnapshot, type OfflineLineupSnapshot } from '@/lib/pwa/offlineLineupSnapshots'
+import { OfflineLineupSnapshotView } from './OfflineLineupSnapshotView'
 
 /**
  * My team / Lineup — handoff §3, `Lineup.png` / `MobileLineup.png`.
@@ -209,7 +211,9 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const [faabBudget, setFaabBudget] = useState<number | null>(null)
   const [now, setNow] = useState(() => new Date())
   const [pickedDay, setPickedDay] = useState<string | null>(null)
-  const copy = useMemo(() => writeAuthorityCopy('lineup', league.platform), [league.platform])
+  /** Set only when the roster fetch failed for lack of a network and a saved copy exists. */
+  const [offlineSnapshot, setOfflineSnapshot] = useState<OfflineLineupSnapshot | null>(null)
+  const copy =useMemo(() => writeAuthorityCopy('lineup', league.platform), [league.platform])
   /** Only the newest load may land: switching days quickly must not let an older day's answer win. */
   const loadSeq = useRef(0)
 
@@ -241,8 +245,14 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         const byId = buildDisplayPlayerMap(null, json.unifiedRoster ?? [])
         setLists({ ...base, starters: seatStartersInSlots(base.starters, slots, (pid) => byId[pid]?.position) })
       } else setLists(null)
+      setOfflineSnapshot(null)
     } catch {
-      if (seq === loadSeq.current) setError('We could not load your roster.')
+      // The fetch itself failed — no network, not a server answer. Fall back to the copy this screen
+      // saved on its last online load, if there is one; only an error when there is nothing to show.
+      const snapshot = await readOfflineLineupSnapshot(league.id)
+      if (seq !== loadSeq.current) return
+      if (snapshot) setOfflineSnapshot(snapshot)
+      else setError('We could not load your roster.')
     } finally {
       if (seq === loadSeq.current) setLoading(false)
     }
@@ -250,6 +260,12 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
 
   useEffect(() => {
     void load()
+  }, [load])
+  // Back online: reload, which replaces the offline copy with the live lineup.
+  useEffect(() => {
+    const onOnline = () => void load()
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
   }, [load])
   useLeagueRealtimeRefresh(league.id, (env) => {
     const t = String(env.eventType ?? '')
@@ -484,6 +500,25 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     ) : null
 
   const optimal = useMemo(() => (lists && editable ? optimalLineupListsRespectingLocks(slots, lists, players, locked) : null), [lists, editable, slots, players, locked])
+
+  // Keep the device's offline copy current. Only the live lineup is saved — a past or future day in a
+  // daily league is a view of another day, not what the reader would want to see with no signal.
+  const teamName = userTeam?.teamName ?? ''
+  useEffect(() => {
+    if (!data || !lists || !slots.length || !teamName || viewingOtherDay) return
+    void saveOfflineLineupSnapshot(
+      buildOfflineLineupSnapshot({
+        leagueId: league.id,
+        leagueName: league.name,
+        sport: String(league.sport ?? ''),
+        teamName,
+        week: data.leagueWeek,
+        slots,
+        lists,
+        players,
+      }),
+    )
+  }, [data, lists, slots, players, teamName, viewingOtherDay, league.id, league.name, league.sport])
 
   if (!userTeam) {
     return (
@@ -724,6 +759,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {loading && !data ? <p className="nls-empty" role="status">Loading your roster…</p> : null}
+      {!data && offlineSnapshot ? <OfflineLineupSnapshotView snapshot={offlineSnapshot} /> : null}
 
       {data ? (
         <div className="nls-cols">
