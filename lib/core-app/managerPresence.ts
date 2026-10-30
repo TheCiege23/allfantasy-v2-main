@@ -152,6 +152,8 @@ export async function getManagerPresence(
     })
     .catch(() => null)
   if (!league) return { available: false, reason: 'league not found' }
+  // Every Sleeper-id read below is in the league's own sport: Sleeper reuses ids across its sports.
+  const sportScope = league.sport ? { sport: league.sport.toUpperCase() } : {}
 
   const platform = String(league.platform ?? 'manual').toLowerCase()
 
@@ -211,7 +213,7 @@ export async function getManagerPresence(
   const knownRows =
     sample.length > 0
       ? await prisma.sportsPlayer
-          .findMany({ where: { sleeperId: { in: sample } }, select: { sleeperId: true } })
+          .findMany({ where: { ...sportScope, sleeperId: { in: sample } }, select: { sleeperId: true } })
           .catch(() => [] as Array<{ sleeperId: string | null }>)
       : []
   const coverage = rosterIdCoverage(sample, new Set(knownRows.map((r) => r.sleeperId).filter((x): x is string => Boolean(x))))
@@ -287,7 +289,7 @@ export async function getManagerPresence(
   let position = opts.position ? normalizePosition(opts.position) || null : null
   if (!position) {
     const row = await prisma.sportsPlayer
-      .findFirst({ where: { sleeperId }, select: { position: true } })
+      .findFirst({ where: { ...sportScope, sleeperId }, select: { position: true } })
       .catch(() => null)
     position = row?.position ? normalizePosition(row.position) || null : null
   }
@@ -327,7 +329,7 @@ export async function getManagerPresence(
   const ids = [...new Set(rosters.flatMap((r) => allIds((r.playerData ?? {}) as Record<string, unknown>)))]
   const posRows = ids.length
     ? await prisma.sportsPlayer
-        .findMany({ where: { sleeperId: { in: ids } }, select: { sleeperId: true, position: true }, distinct: ['sleeperId'] })
+        .findMany({ where: { ...sportScope, sleeperId: { in: ids } }, select: { sleeperId: true, position: true }, distinct: ['sleeperId'] })
         .catch(() => [] as Array<{ sleeperId: string | null; position: string | null }>)
     : []
   const posOf = new Map(posRows.filter((r) => r.sleeperId).map((r) => [r.sleeperId as string, r.position ? normalizePosition(r.position) : null]))

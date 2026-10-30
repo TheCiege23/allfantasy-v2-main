@@ -191,7 +191,8 @@ export function QueuePanel({
           Auto-pick
         </label>
       </div>
-      <div className="grid grid-cols-1 gap-1 border-b border-white/[0.06] p-1 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Phones: search and sort share a row, the position pills scroll on the row below. */}
+      <div className="grid grid-cols-2 gap-1 border-b border-white/[0.06] p-1 sm:grid-cols-2 lg:grid-cols-3">
         <input
           type="search"
           value={searchQuery}
@@ -206,7 +207,7 @@ export function QueuePanel({
           role="radiogroup"
           aria-label="Queue position filter"
           data-testid="draft-queue-position-filter"
-          className="flex flex-wrap items-center gap-1"
+          className="flex flex-wrap items-center gap-1 max-sm:order-last max-sm:col-span-2 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:[scrollbar-width:none]"
         >
           {positionOptions.map((position) => {
             const isActive = positionFilter === position
@@ -516,8 +517,9 @@ export function QueuePanel({
                   dragIndex === displayIndex ? 'opacity-60' : 'hover:bg-white/5'
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className={`shrink-0 touch-none ${canReorderVisually ? 'text-white/40' : 'text-white/20'}`} aria-hidden><GripVertical className="h-4 w-4" /></span>
+                <div className="flex items-center gap-2.5 min-w-0 max-md:gap-2">
+                  {/* HTML5 drag does not fire from touch, so on a phone the grip promised a gesture that does nothing; ↑/↓ reorder there. */}
+                  <span className={`shrink-0 touch-none max-md:hidden ${canReorderVisually ? 'text-white/40' : 'text-white/20'}`} aria-hidden><GripVertical className="h-4 w-4" /></span>
                   <PlayerAvatar
                     headshotUrl={meta.headshotUrl}
                     teamLogoUrl={meta.teamLogoUrl}
@@ -529,7 +531,7 @@ export function QueuePanel({
                   />
                   <div className="min-w-0">
                     <p className="truncate text-[11px] font-semibold tracking-tight text-white">{entry.playerName}</p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px]">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] max-md:flex-nowrap max-md:overflow-hidden">
                       {aiOverlaySignal ? (
                         <span
                           className={`rounded border px-1.5 py-[1px] ${
@@ -548,7 +550,7 @@ export function QueuePanel({
                         {entry.position}
                       </span>
                       {entry.team ? (
-                        <span className="rounded border border-white/15 bg-white/5 px-1.5 py-[1px] text-white/65">{entry.team}</span>
+                        <span className="rounded border border-white/15 bg-white/5 px-1.5 py-[1px] text-white/65 max-md:hidden">{entry.team}</span>
                       ) : null}
                       {adpText ? (
                         <span className="rounded border border-transparent bg-[#1d2236] px-1.5 py-[1px] text-white/85">ADP {adpText}</span>
@@ -630,7 +632,7 @@ export function QueuePanel({
                     ) : null}
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-1.5 max-md:gap-1">
                   <button
                     type="button"
                     onClick={() => {

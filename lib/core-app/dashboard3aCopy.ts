@@ -2,6 +2,7 @@ import { coreUiCopy } from './coreUiCopy'
 import { FOREIGN_IDS_UNREADABLE, FOREIGN_IDS_UNREADABLE_CLAUSE } from './foreignIdSpaceCopy'
 import { weekdayEs } from './kickoffText'
 import { leagueConceptText, scopeLabelText } from './shellCopy'
+import { scoringFormatText } from './scoringFormatText'
 import type { ExposureData, RivalRow } from './dash3aPanels'
 import type { FollowingRow } from './followingCard'
 import type { RoutineStep, RoutineStepKey, RoutineSummaryParts } from './weeklyRoutine'
@@ -239,8 +240,10 @@ export function portfolioSubtitleText(subtitle: string, language: string): strin
 }
 
 /**
- * dash34.ts `formatLabelOf`: "2026 · 12-team · Dynasty · PPR Superflex". Only the team count is a word;
- * the league type goes through `leagueConceptText`, and the season and scoring stay as written.
+ * dash34.ts `formatLabelOf`: "2026 · 12-team · Dynasty · PPR Superflex". The team count is a word; the
+ * league type goes through `leagueConceptText`; the scoring goes through `scoringFormatText`, which
+ * translates only its scoring part ("Half PPR Superflex" → «Medio PPR Superflex» — the owner's ruling,
+ * __tests__/spanish-wording-rulings.test.tsx §9). The season stays as written.
  */
 export function formatLabelText(label: string, language: string): string {
   if (language !== 'es') return label
@@ -249,7 +252,8 @@ export function formatLabelText(label: string, language: string): string {
     .map((part) => {
       const m = part.match(/^(\d+)-team$/)
       if (m) return `${m[1]} equipos`
-      return leagueConceptText(part, 'es')
+      const concept = leagueConceptText(part, 'es')
+      return concept !== part ? concept : scoringFormatText(part, 'es')
     })
     .join(' · ')
 }

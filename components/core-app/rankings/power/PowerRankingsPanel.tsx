@@ -18,6 +18,7 @@ import {
   type SupportedSport,
 } from "@/lib/sport-scope";
 import { useLanguage } from "@/components/i18n/LanguageProviderClient";
+import { scoringFormatText } from "@/lib/core-app/scoringFormatText";
 import { KickerValuationBand, type KickerValuationView } from "./KickerValuationBand";
 import { selectLatestSeasonLeagues } from "./latestSeasonLeagues";
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
@@ -690,7 +691,7 @@ function LeagueGate({
   error: string | null;
   onSelect: (league: UserLeague) => void;
 }) {
-  const { t, tInterpolate } = useLanguage();
+  const { t, tInterpolate, language } = useLanguage();
 
   /*
    * TWO LAYERS, AND THEY DO DIFFERENT JOBS.
@@ -800,7 +801,7 @@ function LeagueGate({
                   <div className="mt-2 text-sm text-white/45">
                     {tInterpolate("powerRankingsPage.leagueTeamsLine", {
                       n: league.teamCount,
-                      scoring: league.scoring,
+                      scoring: scoringFormatText(league.scoring, language),
                       season: league.season,
                     })}
                   </div>
@@ -1454,7 +1455,7 @@ export default function PowerRankingsPanel({
   initialLeagueId?: string | null;
 } = {}) {
   const { data: session, status } = useSession();
-  const { t, tInterpolate } = useLanguage();
+  const { t, tInterpolate, language } = useLanguage();
   const [leagues, setLeagues] = useState<UserLeague[]>([]);
   const [leagueLoading, setLeagueLoading] = useState(false);
   const [leagueError, setLeagueError] = useState<string | null>(null);
@@ -1864,7 +1865,7 @@ export default function PowerRankingsPanel({
               <div className="text-xs font-bold text-white">{selectedLeague.name}</div>
               <div className="text-[11px] text-white/40">
                 {t(`powerRankingsPage.sport.${selectedLeague.sport}`)} ·{" "}
-                {t(`powerRankingsPage.format.${selectedLeague.format}`)} · {selectedLeague.scoring}
+                {t(`powerRankingsPage.format.${selectedLeague.format}`)} · {scoringFormatText(selectedLeague.scoring, language)}
               </div>
             </div>
 

@@ -14,8 +14,15 @@ import { preserveSnapshotNames } from './preserveSnapshotNames'
 
 import { getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
 import { mapFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxDraft'
+import {
+  buildStoredFantraxDraft,
+  deriveFantraxMovesBetweenSnapshots,
+  mergeFantraxSnapshotHistory,
+  readStoredFantraxDraft,
+} from '@/lib/league-import/fantrax/fantraxSnapshotHistory'
 import type { NormalizedDraftPick } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
+import { linkNflFantraxIdentities } from '@/lib/player-identity/linkNflFantraxIdentities'
 import { fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
 import { fantraxImportSeason, isFantraxSplitSeasonSport } from './fantraxProSports'
 import {
@@ -26,6 +33,7 @@ import {
   getFantraxTeamRosters,
   resolveRosters,
   type FantraxFailure,
+  type FantraxPlayerRef,
   type FantraxStandingRow,
   type ResolvedRoster,
 } from './fantraxApi'
@@ -50,11 +58,10 @@ export type FantraxImportOutcome =
       /**
        * What the league's draft board actually contained.
        *
-       * ⚠ RETURNED RATHER THAN STORED, for the same reason `scoringRules` above
-       * is: `FantraxLeague` has no draft column. Adding one is a migration, and a
-       * migration is not this import's call — so the capability lands first and
-       * the persistence decision stays with the repo owner. A caller that wants
-       * the picks has them here; nothing silently half-writes them.
+       * ⚠ ALSO STORED NOW: the made picks are written to the snapshot's existing
+       * `transactions` column under `fantraxDraft` (see `fantraxSnapshotHistory.ts`),
+       * which is what reaches `DraftFact`. This summary is the same board, returned
+       * for callers that report on it.
        *
        * `picks` holds only the slots actually used —
        * `NormalizedDraftPick.source_player_id` is required and an unmade slot has
@@ -131,7 +138,7 @@ export async function importFantraxLeague(args: {
         where: { id: args.refreshSnapshotId },
         select: {
           id: true, appUserId: true, sourceLeagueId: true, season: true, sport: true, roster: true,
-          userTeam: true, standings: true,
+          userTeam: true, standings: true, transactions: true,
         },
       })
     : null
@@ -174,6 +181,7 @@ export async function importFantraxLeague(args: {
    * It fails SOFT, like the sport maps and unlike rosters: a league that has not
    * drafted, or whose draft could not be read, is still worth importing. The
    * coverage note reports which of those happened.
+   * A failed read keeps the board already on file rather than erasing it.
    */
   /*
    * ⚠ NBA AND NHL ARE TWO MORE CANDIDATE MAPS, NOT A SPORT SWITCH. Fantrax's
@@ -320,7 +328,7 @@ export async function importFantraxLeague(args: {
         season,
       },
     },
-    select: { appUserId: true },
+    select: { appUserId: true, sourceLeagueId: true, roster: true, standings: true, transactions: true },
   })
   /*
    * ⚠ THIS REFUSED PEOPLE THEIR OWN LEAGUES, AND THE IDENTITY IS WHY.
@@ -351,6 +359,42 @@ export async function importFantraxLeague(args: {
    * readable draft yields an empty summary rather than a thrown import.
    */
   const draftSummary = mapFantraxDraftResults(draft && draft.ok ? draft.data : null, { season })
+
+  /*
+   * ⚠ THE BOARD AND THE DERIVED MOVES ARE STORED NOW, in the snapshot's existing `transactions`
+   * column beside an uploaded export's groups (see `fantraxSnapshotHistory.ts`). The fetch service
+   * reads them into the payload, and `FantraxHistoricalBackfillService` writes them to `DraftFact`
+   * / `TransactionFact` like every other source. No migration: the column already exists.
+   *
+   * The previous roster is only trusted from a snapshot of THIS Fantrax league — a refresh, or a
+   * re-import of the row this upsert is about to overwrite. A CSV-era row carries no team names on
+   * its roster and derives nothing.
+   */
+  const prior = refreshTarget ?? (existing && existing.sourceLeagueId === args.leagueId ? existing : null)
+  const sportMap = (mapFor[best.sport] ?? null) as Record<string, FantraxPlayerRef | undefined> | null
+  const storedDraft = draft && draft.ok
+    ? buildStoredFantraxDraft(draft.data, Object.fromEntries(resolved.map((r) => [r.teamId, r.teamName])), sportMap)
+    : null
+  const boardOnFile = storedDraft ?? readStoredFantraxDraft((refreshTarget ?? existing)?.transactions)
+  const observedAt = new Date().toISOString()
+  const observedPeriod = schedule.position?.period ?? null
+  const derived = prior
+    ? deriveFantraxMovesBetweenSnapshots({
+        previousRoster: prior.roster,
+        previousStandings: prior.standings,
+        current: resolved,
+        draftedBy: new Map((boardOnFile?.picks ?? []).map((p) => [p.playerId, p.teamId])),
+        period: observedPeriod,
+        observedAt,
+      })
+    : { moves: [], suspectedTrades: [] }
+  const history = mergeFantraxSnapshotHistory((refreshTarget ?? existing)?.transactions, {
+    draft: storedDraft,
+    moves: derived.moves,
+    suspectedTrades: derived.suspectedTrades,
+    period: observedPeriod,
+    observedAt,
+  })
 
   const payload = {
     appUserId: args.appUserId,
@@ -397,6 +441,8 @@ export async function importFantraxLeague(args: {
      * so a null week arrives as "no score on file" instead of a scoreless tie.
      */
     matchups: schedule.rows as unknown as object,
+    /* The export's groups, the stored draft board and the derived moves — see above. */
+    transactions: history as unknown as object,
   }
 
   let row: { id: string }
@@ -422,6 +468,25 @@ export async function importFantraxLeague(args: {
       select: { id: true },
     })
 
+  }
+
+  /*
+   * ⚠ NFL WAS THE ONE FANTRAX SPORT WHOSE IDS NEVER REACHED `PlayerIdentityMap.fantraxId`, so an
+   * NFL Fantrax roster resolved nobody by id. The ids and names are already in hand from the NFL
+   * map read above; link this league's rostered and drafted players (by id first, then exact name +
+   * team + position — `nflFantraxIdentityPlan.ts`). Never fails the import.
+   */
+  if (best.sport === 'nfl' && nfl.ok) {
+    const nflMap = nfl.data as Record<string, FantraxPlayerRef | undefined>
+    const leaguePlayerIds = new Set([
+      ...resolved.flatMap((r) => r.players.map((p) => p.fantraxId)),
+      ...(boardOnFile?.picks ?? []).map((p) => p.playerId),
+    ])
+    const refs = [...leaguePlayerIds].flatMap((id) => {
+      const ref = nflMap[id]
+      return ref ? [{ ...ref, fantraxId: String(ref.fantraxId ?? id) }] : []
+    })
+    await linkNflFantraxIdentities(refs)
   }
 
   return {

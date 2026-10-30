@@ -1,4 +1,8 @@
 import type { HelpTopic } from '../helpTopics'
+import { messagesFor } from '@/lib/i18n/messages'
+import { scoringFormatMessages } from '../messages/scoringFormat'
+
+const scoringEs = messagesFor(scoringFormatMessages, 'es')
 
 /**
  * Terms on Portfolio, Season Outlook, Your Week, Rivalry Radar, Game Plan. See ../helpTopics.ts; cite the code each claim rests on.
@@ -57,7 +61,8 @@ export const OUTLOOK_TOPICS = {
     },
     es: {
       title: 'Formato de puntuación',
-      body: 'Se lee de los puntos por recepción de cada liga: menos de 0,25 es Standard, menos de 0,75 es Half PPR y cualquier valor mayor es PPR. «Rulebook not stored» significa que no tenemos ese ajuste de puntos por recepción para esa liga.',
+      // The bucket names from the one scoring-format table, as the board's bars print them (ruling §9).
+      body: `Se lee de los puntos por recepción de cada liga: menos de 0,25 es ${scoringEs.standard}, menos de 0,75 es ${scoringEs.halfPpr} y cualquier valor mayor es PPR. «Rulebook not stored» significa que no tenemos ese ajuste de puntos por recepción para esa liga.`,
     },
   },
   diversification: {

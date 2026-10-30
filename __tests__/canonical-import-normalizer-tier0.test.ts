@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
+import { hasIdpRosterSlot } from '@/lib/league-import/idpRosterSlots'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 
@@ -143,5 +144,16 @@ describe('IDP detection uses exact roster slot tokens', () => {
     expect(idpOf(['QB', 'RB', 'IDP_FLEX', 'BN'])).toBe(true)
     expect(idpOf(['QB:1', 'LB:2', 'BE:7'])).toBe(true)
     expect(idpOf(['QB:1', 'S:1'])).toBe(true)
+  })
+
+  /*
+   * ESPN's lineup slot 15 is `DP` (`ESPN_SLOT_LABELS`, EspnLeagueFetchService.ts) — the defensive-player
+   * flex at the end of ESPN's defensive block (8 DT … 14 DB, 15 DP). A league whose only IDP slots are
+   * DP flexes imported as not-IDP. `EDR` (slot 24) is NOT added: what it accepts is not established.
+   */
+  it('an ESPN DP (defensive player) slot does too', () => {
+    expect(idpOf(['QB:1', 'RB:2', 'WR:2', 'DP:3', 'BE:7'])).toBe(true)
+    expect(hasIdpRosterSlot(['QB:1', 'DP:2'])).toBe(true)
+    expect(hasIdpRosterSlot(['QB:1', 'D/ST:1', 'SUPER_FLEX:1', 'EDR:1'])).toBe(false)
   })
 })
