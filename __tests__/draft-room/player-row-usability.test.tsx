@@ -28,6 +28,22 @@ describe('readable player rows keep data labels honest', () => {
       draftSport="NBA" adp={null} adpMetricLabel="AI ADP" testId="athlete" />)
     expect(html).not.toContain('athlete-adp')
   })
+  it('does not substitute market ADP when an AI ADP value was omitted', () => {
+    const html = renderToStaticMarkup(<DraftPlayerCard display={display('NBA')} name="Test Athlete" position="C"
+      draftSport="NBA" adpMetricLabel="AI ADP" testId="athlete" />)
+    expect(html).not.toContain('athlete-adp')
+  })
+  it('does not label a fantasy-points primary stat as market ADP', () => {
+    const model = { ...display('NBA'), stats: { primaryStatLabel: 'FPPG', primaryStatValue: 31.7 } }
+    const html = renderToStaticMarkup(<DraftPlayerCard display={model} name="Test Athlete" position="C"
+      draftSport="NBA" testId="athlete" />)
+    expect(html).not.toContain('athlete-adp')
+  })
+  it('keeps an explicitly unavailable market value unavailable', () => {
+    const html = renderToStaticMarkup(<DraftPlayerCard display={display('NBA')} name="Test Athlete" position="C"
+      draftSport="NBA" adp={null} testId="athlete" />)
+    expect(html).not.toContain('athlete-adp')
+  })
   it.each(['NFL', 'NBA', 'NHL', 'MLB'] as const)('omits generic unavailable status and stats in %s', sport => {
     const html = renderToStaticMarkup(<DraftPlayerCard display={{ ...display(sport, 'UNKNOWN'), stats: {} }}
       name="Test Athlete" position="C" draftSport={sport} testId="athlete" />)

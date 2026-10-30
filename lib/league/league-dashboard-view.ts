@@ -3,7 +3,7 @@ import 'server-only'
 import type { League } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { listDivisionsByLeague } from '@/lib/promotion-relegation/DivisionResolver'
-import { getDangerTiers } from '@/lib/guillotine/GuillotineDangerEngine'
+import { getLiveDangerTiers } from '@/lib/guillotine/chopWatchLoad'
 import { getRosterTeamMap } from '@/lib/zombie/rosterTeamMap'
 import type {
   LeagueDashboardView,
@@ -201,7 +201,7 @@ async function loadStandingsPresentation(league: League): Promise<StandingsPrese
 
   if (league.guillotineMode) {
     const w = weekFromSettings(league.settings) ?? 1
-    const dangerRows = await getDangerTiers({ leagueId, weekOrPeriod: Math.max(1, w) }).catch(() => [])
+    const dangerRows = (await getLiveDangerTiers({ leagueId, weekOrPeriod: Math.max(1, w) }).catch(() => ({ rows: [] }))).rows
     if (dangerRows.length > 0) {
       const map = await getRosterTeamMap(leagueId)
       const dangerByTeamId: Record<string, 'chop_zone' | 'danger' | 'safe'> = {}

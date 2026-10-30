@@ -958,12 +958,12 @@ function PlayerPanelInner({
             <button
               type="button"
               role="radio"
-              aria-checked={viewModeOverride === 'sleeper_table' || (viewModeOverride === null && (poolLayout === 'sleeper_table' || (poolLayout === 'auto' && sport === 'NFL')))}
+              aria-checked={viewModeOverride === 'sleeper_table' || (viewModeOverride === null && (poolLayout === 'sleeper_table' || poolLayout === 'auto'))}
               onClick={() => setViewModeOverride('sleeper_table')}
               data-testid="draft-pool-view-table"
               title="Table view"
               className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition ${
-                viewModeOverride === 'sleeper_table' || (viewModeOverride === null && (poolLayout === 'sleeper_table' || (poolLayout === 'auto' && sport === 'NFL')))
+                viewModeOverride === 'sleeper_table' || (viewModeOverride === null && (poolLayout === 'sleeper_table' || poolLayout === 'auto'))
                   ? 'bg-[#20d6d2]/20 text-cyan-100 shadow-[0_0_10px_rgba(32,214,210,0.2)]'
                   : 'text-white/55 hover:bg-white/[0.06] hover:text-white/85'
               }`}
@@ -973,12 +973,12 @@ function PlayerPanelInner({
             <button
               type="button"
               role="radio"
-              aria-checked={viewModeOverride === 'card' || (viewModeOverride === null && poolLayout !== 'sleeper_table' && !(poolLayout === 'auto' && sport === 'NFL'))}
+              aria-checked={viewModeOverride === 'card' || (viewModeOverride === null && poolLayout !== 'sleeper_table' && poolLayout !== 'auto')}
               onClick={() => setViewModeOverride('card')}
               data-testid="draft-pool-view-cards"
               title="Card view"
               className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition ${
-                viewModeOverride === 'card' || (viewModeOverride === null && poolLayout !== 'sleeper_table' && !(poolLayout === 'auto' && sport === 'NFL'))
+                viewModeOverride === 'card' || (viewModeOverride === null && poolLayout !== 'sleeper_table' && poolLayout !== 'auto')
                   ? 'bg-[#20d6d2]/20 text-cyan-100 shadow-[0_0_10px_rgba(32,214,210,0.2)]'
                   : 'text-white/55 hover:bg-white/[0.06] hover:text-white/85'
               }`}
@@ -1427,11 +1427,11 @@ function PlayerPanelInner({
              * The horizontal-scroll container honors small viewports — on mobile,
              * the table scrolls sideways rather than squishing column widths.
              */
+            // Phone browsing keeps readable cards; desktop defaults to the sport's stat table.
             const useTable = !phoneLayout && (
               viewModeOverride === 'sleeper_table' ||
               (viewModeOverride === null &&
-                (poolLayout === 'sleeper_table' ||
-                  (poolLayout === 'auto' && sport === 'NFL'))))
+                (poolLayout === 'sleeper_table' || poolLayout === 'auto')))
 
             if (!useTable) {
               return (

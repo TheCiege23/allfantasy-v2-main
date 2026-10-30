@@ -11,6 +11,7 @@ import { PlayerAvatar } from './PlayerAvatar'
 import { normalizePlayer } from '@/lib/players/normalizePlayer'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
+import { isDisplayableInjuryDesignation } from '@/lib/injuries/injuryStatusDisplay'
 import { DraftPlayerLabelBadge } from './DraftPlayerLabelBadge'
 
 export type DraftPlayerCardProps = {
@@ -200,8 +201,11 @@ function DraftPlayerCardInner({
   const bye = display?.metadata?.byeWeek ?? display?.stats?.byeWeek ?? byeWeek
   const rawInjuryStatus =
     display?.metadata?.injuryStatus ?? unifiedProductView?.unified.injuryStatus ?? unifiedProductView?.injuryStatus ?? null
-  const injuryStatus = rawInjuryStatus && !/^(unknown|none|n\/a|healthy|active|act|available)$/i.test(rawInjuryStatus.trim())
-    ? rawInjuryStatus : null
+  // The pool stores 'UNKNOWN' (and 'ACTIVE' for a healthy player) as the status; neither is an
+  // injury, and badging them put a red UNKNOWN chip on every NBA/NHL player (2026-10-28).
+  const injuryStatus = isDisplayableInjuryDesignation(rawInjuryStatus) ? rawInjuryStatus : null
+  // Bye weeks exist only in football.
+  const showBye = isNfl || String(draftSport).toUpperCase() === 'NCAAF'
   const resolvedSchool = school ?? display?.metadata?.collegeOrPipeline ?? null
   const resolvedClassYearLabel = display?.metadata?.classYearLabel ?? classYearLabel
   const resolvedDraftGrade = display?.metadata?.draftGrade ?? draftGrade
@@ -256,7 +260,9 @@ function DraftPlayerCardInner({
     null
   // The caller chooses market/AI ADP. A display model's market ADP must not
   // override that selection, and an explicit null must remain unavailable.
-  const displayedAdp = adp === undefined ? normalized.adp : adp
+  const modelMarketAdp = display?.stats?.adp ??
+    (display?.stats?.primaryStatLabel === 'ADP' ? display.stats.primaryStatValue : null)
+  const displayedAdp = adp === undefined && adpMetricLabel === 'ADP' ? modelMarketAdp : adp ?? null
   const teamLogoUrl = normalized.teamLogoUrl ?? assets?.teamLogoUrl ?? null
   const rowHeadshotSize = 44
   const rowLogoSize = 16
@@ -366,7 +372,7 @@ function DraftPlayerCardInner({
               )}
             </div>
             <p className="mt-1 text-[11px] text-white/65">
-              {[`${adpMetricLabel} ${formatAdpDisplay(displayedAdp)}`, ...(isNfl ? [`Bye ${formatBye(normalized.byeWeek)}`] : [])].join(' · ')}
+              {[`${adpMetricLabel} ${formatAdpDisplay(displayedAdp)}`, ...(showBye ? [`Bye ${formatBye(normalized.byeWeek)}`] : [])].join(' · ')}
             </p>
             {injuryStatus ? (
               <span className="mt-1 inline-flex max-w-full truncate rounded-md border border-rose-400/35 bg-rose-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-rose-100">
@@ -425,7 +431,7 @@ function DraftPlayerCardInner({
           {displayedAdp != null ? <div>{adpMetricLabel}{' '}
             <span className="font-semibold text-cyan-200" data-testid={testId ? `${testId}-adp` : 'draft-player-adp'}>{formatAdpDisplay(displayedAdp)}</span>
           </div> : null}
-          {isNfl && normalized.byeWeek != null && normalized.byeWeek > 0 ? <div>Bye{' '}
+          {showBye && normalized.byeWeek != null && normalized.byeWeek > 0 ? <div>Bye{' '}
             <span data-testid={testId ? `${testId}-bye` : 'draft-player-bye'}>{formatBye(normalized.byeWeek)}</span>
           </div> : null}
         </div>

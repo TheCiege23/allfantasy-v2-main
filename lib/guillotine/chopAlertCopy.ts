@@ -2,8 +2,9 @@
  * Chop alerts (2026-10-29): the words of the two Guilly alerts a manager gets on their phone, by email
  * and in the bell. Pure, so the tests read exactly what is sent; ./chopAlerts.ts sends them.
  *
- *  - The chop-zone warning, once a week, about a day before the week's last game, to each team the
- *    chop would take (or nearly take) if the week ended now — while there is still time to act.
+ *  - The chop-zone warning, about a day before the week's last game, to each team the chop would take
+ *    (or nearly take) if the week ended now — while there is still time to act — and again, once, to a
+ *    team that slips into the zone later in that day.
  *  - The chop itself, once, to every team that was alive this week: the chopped team is told it is
  *    out, the rest are told who went and when those players reach waivers.
  */
@@ -34,18 +35,20 @@ export function chopZoneWarning(args: {
   week: number
   status: 'chopped' | 'danger'
   margin: number | null
+  /** A later warning: the team was safer at the first one and has slipped since (./chopAlerts.ts). */
+  late?: boolean
 }): ChopAlert {
   if (args.status === 'chopped') {
     return {
-      title: `🪓 You're in the chop zone — ${args.leagueName}`,
-      body: `If week ${args.week} ended now, your team would be chopped. Check your lineup before the last games.`,
+      title: args.late ? `🪓 You've dropped into the chop zone — ${args.leagueName}` : `🪓 You're in the chop zone — ${args.leagueName}`,
+      body: `${args.late ? 'Other scores have passed yours. ' : ''}If week ${args.week} ended now, your team would be chopped. Check your lineup before the last games.`,
       severity: 'high',
     }
   }
   const gap = args.margin != null && args.margin > 0 ? ` Only ${points(args.margin)} above the chop line.` : ''
   return {
-    title: `⚠️ You're in the danger zone — ${args.leagueName}`,
-    body: `Your team is close to the chop in week ${args.week}.${gap} Check your lineup before the last games.`,
+    title: args.late ? `⚠️ You've slipped into the danger zone — ${args.leagueName}` : `⚠️ You're in the danger zone — ${args.leagueName}`,
+    body: `Your team is ${args.late ? 'now ' : ''}close to the chop in week ${args.week}.${gap} Check your lineup before the last games.`,
     severity: 'medium',
   }
 }

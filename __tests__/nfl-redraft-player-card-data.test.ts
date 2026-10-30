@@ -139,9 +139,13 @@ describe('DraftPlayerCard — injury status badge', () => {
 
   it('reads injuryStatus from display.metadata.injuryStatus (primary source)', () => {
     // Primary source locked; later extended with unifiedProductView fallbacks
-    // before the final `null` (enhancement).
+    // before the final `null` (enhancement). The raw value is then filtered so
+    // non-injury designations (UNKNOWN / ACTIVE) never badge.
     expect(src).toMatch(
       /const rawInjuryStatus =\s*display\?\.metadata\?\.injuryStatus \?\?/,
+    )
+    expect(src).toMatch(
+      /const injuryStatus = isDisplayableInjuryDesignation\(rawInjuryStatus\) \? rawInjuryStatus : null/,
     )
   })
 

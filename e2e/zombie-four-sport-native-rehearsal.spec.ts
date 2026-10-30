@@ -523,6 +523,8 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
  if(process.env.UPSTASH_REDIS_REST_URL||process.env.UPSTASH_REDIS_REST_TOKEN)throw new Error('SHARED_REDIS_MUST_BE_DISABLED')
  const {runPresetEngine}=await import('../lib/league-creation/preset-engine/runPresetEngine')
  const {createCanonicalLeagueInTransaction}=await import('../lib/league-creation/canonical/createCanonicalLeagueInTransaction')
+ const {createDefaultLeagueRosterConfig}=await import('../lib/roster-engine')
+ const {isLeagueRosterDraftReady}=await import('../lib/league/league-roster-draft-gate')
  const marker='manual-renewal-ci-'+randomUUID().slice(0,8)
  const password=randomUUID(),passwordHash=await bcrypt.hash(password,6)
  const users=Array.from({length:17},(_,i)=>marker+'-'+i)
@@ -538,6 +540,10 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
    const engine=runPresetEngine({...body,commissionerId:users[0]})
    const made=await prisma.$transaction(tx=>createCanonicalLeagueInTransaction(tx,users[0],body,engine,undefined,{tenantId:'allfantasy',season:2026}),{timeout:120000})
    const id=made.leagueId; originals.push(id)
+   // The public creation flow applies sport defaults after the canonical transaction.
+   // A completed fixture must have that persisted roster setup before renewal is tested.
+   await createDefaultLeagueRosterConfig(id,sport,'zombie')
+   assert.equal(await isLeagueRosterDraftReady(id),true)
    const z=await createZombieLeague({leagueId:id,sport,teamCount:8,season:2026},u.id,level.id)
    await prisma.zombieLeague.update({where:{id:z.id},data:{status:'complete',totalWeeks:1,currentWeek:1,seasonStartWeek:1,isPaid:true,potTotal:200}})
    await prisma.zombiePaidConfig.create({data:{zombieLeagueId:z.id,buyInAmount:25,totalPot:200,totalCollected:200,paidUserIds:[users[1+li*8]],potIsLocked:true}})
@@ -664,6 +670,7 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
    assert.equal(open.length,pool.seats-expected.length)
    assert.equal(await prisma.leagueEntrySlot.count({where:{leagueId:next.leagueId,status:'OPEN'}}),open.length)
    const league=await prisma.league.findUniqueOrThrow({where:{id:next.leagueId}})
+   assert.equal(await isLeagueRosterDraftReady(next.leagueId),true,'approved roster rules must survive renewal')
    const ready=await zombieRenewalDraftReadiness(prisma,next.leagueId,pool.seats,league.settings)
    assert.equal(ready.ready,open.length===0)
    if(open.length){

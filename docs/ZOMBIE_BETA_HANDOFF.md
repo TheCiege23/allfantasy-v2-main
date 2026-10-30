@@ -1,4 +1,20 @@
-# Zombie beta handoff — October 29, 2026
+# Zombie beta handoff — October 29–30, 2026
+
+## Current verification checkpoint
+
+- Isolated Railway staging now serves renewal visual source `29c796f1f2f1c18e2887e7ecbeaee495eac6c386`, deployment `e9024206-0266-4201-9622-aed8ee56bb08`. SHA, database health, login/universe HTTP 200, signed-out renewal HTTP 401, linked CSS and shipped renewal copy all passed. Production is untouched.
+- Actual shipped page assets passed Chromium and WebKit at 320, 390, 844 and 1440 pixel widths, with synthetic browser API responses, service workers disabled for fixture routing and all unhandled API writes blocked. Expansion preview/save/restore and invalidation after edits passed. These checks do not certify an authenticated owner session, a physical iPhone or a live scoring week.
+- Read-only staging audit confirms the owner's saved review: two ten-seat destinations, 16 distinct returning managers, four open seats, zero unassigned managers, and no next-season creation. The original NFL/NBA/NHL/MLB drafts remain unstarted at week zero with one registered manager each.
+- Draft PR integration incorporates main `1df9ffd836c99ea1f7344e29e91c2f88fa8b0c95`. Four draft conflicts preserve readable phone cards, sport-specific desktop stat tables, football-only bye labels, honest ADP null handling and the iOS visual viewport adjustment. Board/Half/Players and the board-size selector use one consistent state, including migration of saved preferences and recovery from a hidden board.
+- A conflicting desktop rule was restricted to the Players preset. Actual merged-shell Chromium and WebKit checks measure player-list height increasing from 360 pixels in Half to 513 pixels in Players at 1440×900; phone portrait and landscape fit without document overflow. The harness uses synthetic player rows and does not certify provider-data completeness.
+- Integrated focused verification: 206 tests passed in 13 files; the final board suite rerun passed 11 tests. Full-project TypeScript on published `e3c50595f` passed locally and in hosted CI (136 existing diagnostics against baseline 143, redraft zero). The integrated local compiler was stopped under severe shared-host memory pressure; its result is incomplete. Hosted CI must verify the newly published integration. Baselines and production guards are unchanged. DB-first, decision-engine and cron-budget guards also passed on the staged integrated tree.
+- The e3c hosted browser workflow passed five other lanes and three Zombie scenarios. Its reviewed-capacity scenario exposed a synthetic fixture that skipped normal sport roster initialization. The fixture now uses the production `createDefaultLeagueRosterConfig` bootstrap, asserts source and renewed roster readiness and retains the exact expansion-seat start rejection. No production guard was bypassed or reordered. Local PostgreSQL four-sport proof passed: NFL consolidated 16 managers into one league; NBA/NHL retained 16 across two ten-seat leagues with four open seats; MLB distributed 16 across three eight-seat leagues with eight open seats. Source/renewed roster readiness, exact expansion-seat start rejection, archive/FAAB preservation, forced rollback and concurrent retry idempotency passed. This is direct-service fixture evidence, not a completed authenticated browser run.
+
+Engineering estimate remains about 96%, separate from release acceptance. Next: verify the integrated candidate's hosted gates, review the live renewal visuals on the owner's iPhone, and prepare a real-manager scoring window once participants are ready. Current licensed NFL ADP access remains owner-deferred. Whisperers remain permanently forbidden from trading.
+
+## Historical checkpoints
+
+The following notes describe earlier candidates and audits. Use the current checkpoint above for live deployment and outstanding acceptance status.
 
 ## Evidence and acceptance
 

@@ -127,10 +127,19 @@ export async function ensureMatchupsCached(
 
     const rows = matchups.map(m => {
       let oppPoints = 0
+      /*
+       * 🛑 NO OPPONENT, NO WIN. A roster alone in its matchup (a bye, or a league with no
+       * head-to-head pairing) used to be compared against a phantom 0, so every one that scored was
+       * stored `win = 1` — fifteen leagues read all twelve teams 1-0 (standingsModel.ts). `win` is 1
+       * only for beating a real opponent; a tie stays 0 for both sides, and readers tell it from a
+       * loss by the equal points (externalMatchupParity.ts writes the same encoding).
+       */
+      let hasOpponent = false
       if (m.matchup_id) {
         const group = matchupMap.get(m.matchup_id) || []
-        const opp = group.find(x => x.roster_id !== m.roster_id)
+        const opp = group.length === 2 ? group.find(x => x.roster_id !== m.roster_id) : undefined
         oppPoints = opp?.points || 0
+        hasOpponent = opp != null
       }
       const pts = m.points || 0
       return {
@@ -143,7 +152,7 @@ export async function ensureMatchupsCached(
         matchupId: m.matchup_id || null,
         pointsFor: pts,
         pointsAgainst: oppPoints,
-        win: pts > oppPoints ? 1 : 0,
+        win: hasOpponent && pts > oppPoints ? 1 : 0,
       }
     })
 

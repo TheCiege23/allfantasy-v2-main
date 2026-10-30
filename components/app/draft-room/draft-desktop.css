@@ -2,7 +2,7 @@
  * A scrollable board retains every round; mobile uses its existing full-height tray.
  */
 @media (min-width: 768px) {
-  .draft-touch-room[data-player-space-priority="true"] [data-testid="draft-premium-board-zone"][data-dock-expanded="true"] {
+  .draft-touch-room[data-player-space-priority="true"] [data-testid="draft-premium-board-zone"][data-dock-expanded="true"][data-dock-size="tall"] {
     height: 28dvh;
     min-height: 120px;
     max-height: 320px;

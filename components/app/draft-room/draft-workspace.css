@@ -15,8 +15,6 @@
 .draft-touch-room [data-testid="draft-queue-intelligence"]>summary{min-height:44px}
 @media(min-width:768px){
  .draft-touch-room .draft-board-toolbar{min-height:44px}
- .draft-touch-room[data-board-size="compact"] [data-testid="draft-premium-board-zone"][data-dock-expanded="true"]{height:clamp(110px,22dvh,240px);min-height:100px;max-height:240px}
- .draft-touch-room[data-board-size="balanced"] [data-testid="draft-premium-board-zone"][data-dock-expanded="true"]{height:36dvh;min-height:120px;max-height:420px}
  .draft-touch-room[data-board-size="hidden"] [data-testid="draft-premium-board-zone"]{display:none}
  .draft-touch-room [data-testid="draft-player-toolbar"] button{min-height:32px}
  .draft-touch-room [data-testid="draft-right-dock"]{max-width:420px}
