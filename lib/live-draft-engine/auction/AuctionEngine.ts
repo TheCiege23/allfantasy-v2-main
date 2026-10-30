@@ -1,3 +1,5 @@
+import { planRookieAuction, type RookieAuctionTrade } from './rookieAuctionPickPolicy'
+import { parseRookieAuctionSettings } from './rookieAuctionSettings'
 import { seasonDraftSessionError } from '@/lib/tournament/seasonDraftBoard'
 import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
 import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
@@ -82,6 +84,9 @@ export function getAuctionStateFromSession(session: {
   const o = raw as Record<string, unknown>
   return {
     nominationOrderIndex: Number(o.nominationOrderIndex ?? 0),
+    ...(Array.isArray(o.nominationOrder) ? { nominationOrder: o.nominationOrder as SlotOrderEntry[] } : {}),
+    ...(Number.isInteger(o.nominationFallbackStart) ? { nominationFallbackStart: Number(o.nominationFallbackStart) } : {}),
+    ...(o.rookieAuction ? { rookieAuction: o.rookieAuction } : {}),
     currentNomination: (o.currentNomination as AuctionNomination) ?? null,
     currentBid: Number(o.currentBid ?? 0),
     currentBidderRosterId: (o.currentBidderRosterId as string) ?? null,
@@ -111,6 +116,18 @@ export function getBudgetsFromSession(session: {
 /** Who is the current nominator (0-based index into slotOrder). */
 export function getCurrentNominatorIndex(auctionState: AuctionState | null): number {
   return auctionState?.nominationOrderIndex ?? 0
+}
+
+/** The persisted first-pass nominations are followed by the regular repeating rotation. */
+export function getAuctionNominationOrder(slotOrder: SlotOrderEntry[], state: AuctionState | null): SlotOrderEntry[] {
+  return state?.nominationOrder?.length ? state.nominationOrder : slotOrder
+}
+
+export function advanceAuctionNominationIndex(state: AuctionState, orderLength: number): number {
+  const next = Math.max(0, Math.floor(state.nominationOrderIndex)) + 1
+  if (next < orderLength) return next
+  const fallback = state.nominationFallbackStart
+  return Number.isInteger(fallback) && fallback! >= 0 && fallback! < orderLength ? fallback! : 0
 }
 
 /** Minimum next bid for current auction. */
@@ -159,9 +176,10 @@ async function _nominatePlayerCore(
   const season = await loadSeasonDraftContext(leagueId)
   if (season && seasonDraftSessionError(season, session)) return { success: false, error: 'The auction session differs from its frozen tournament rules.' }
   if (season && options?.autoMinimumBid && !timerHasExpired(session.timerEndAt, new Date())) return { success: false, error: 'The nomination clock has not expired.' }
-  const nominationIndex = season ? nextSeasonNominator(slotOrder, state?.nominationOrderIndex ?? 0, session.picks, session.rounds, getBudgetsFromSession(session), config.minBid) : normalizeNominationIndex(state?.nominationOrderIndex ?? 0, slotOrder.length)
+  const nominationOrder = getAuctionNominationOrder(slotOrder, state)
+  const nominationIndex = season ? nextSeasonNominator(slotOrder, state?.nominationOrderIndex ?? 0, session.picks, session.rounds, getBudgetsFromSession(session), config.minBid) : normalizeNominationIndex(state?.nominationOrderIndex ?? 0, nominationOrder.length)
   if (nominationIndex === null) return { success: false, error: 'No eligible nominator remains. Review roster and budget readiness.' }
-  const currentNominator = slotOrder[nominationIndex]
+  const currentNominator = nominationOrder[nominationIndex]
   if (!currentNominator || currentNominator.rosterId !== nominatorRosterId) {
     return { success: false, error: 'You are not the current nominator' }
   }
@@ -191,6 +209,7 @@ async function _nominatePlayerCore(
   const minNextBid = openingBid ? openingBid + config.minBidIncrement : config.minBid
 
   const newState: AuctionState = {
+    ...state,
     nominationOrderIndex: nominationIndex,
     currentNomination: {
       playerName,
@@ -409,16 +428,18 @@ async function _resolveAuctionWinCore(
   const sold = Boolean(winnerRosterId && amount > 0)
   const shouldCompleteAfterResolution = picksCount + (sold ? 1 : 0) >= totalPicks
   const nomination = state.currentNomination
-  const nominationIndex = normalizeNominationIndex(state.nominationOrderIndex, slotOrder.length)
+  const nominationOrder = getAuctionNominationOrder(slotOrder, state)
+  const nominationIndex = normalizeNominationIndex(state.nominationOrderIndex, nominationOrder.length)
   const nextBudgets = { ...getBudgetsFromSession(session) }
   if (sold && winnerRosterId) nextBudgets[winnerRosterId] = (nextBudgets[winnerRosterId] ?? 0) - amount
   const futurePicks = sold && winnerRosterId ? [...session.picks, { rosterId: winnerRosterId, playerName: nomination.playerName, position: nomination.position }] : session.picks
-  const nextNominationIndex = season ? nextSeasonNominator(slotOrder, nominationIndex + 1, futurePicks, session.rounds, nextBudgets, config.minBid) : normalizeNominationIndex(nominationIndex + 1, slotOrder.length)
+  const nextNominationIndex = season ? nextSeasonNominator(slotOrder, nominationIndex + 1, futurePicks, session.rounds, nextBudgets, config.minBid) : advanceAuctionNominationIndex({ ...state, nominationOrderIndex: nominationIndex }, nominationOrder.length)
   if (!shouldCompleteAfterResolution && nextNominationIndex === null) return { success: false, error: 'No eligible nominator remains. Review roster and budget readiness.' }
   const nextNominationTimerEndAt = shouldCompleteAfterResolution
     ? null
     : computeTimerEndAt(config.bidTimerSeconds, now)
   const nextAuctionState: AuctionState = {
+    ...state,
     nominationOrderIndex: nextNominationIndex ?? 0,
     currentNomination: null,
     currentBid: 0,
@@ -646,13 +667,31 @@ export async function buildInitialAuctionSessionUpdate(leagueId: string, session
   slotOrder?: unknown
   auctionBudgetPerTeam?: number | null
   timerSeconds?: number | null
+  rounds?: number
+  auctionState?: unknown
 }) {
   const slotOrder = (session.slotOrder as unknown as SlotOrderEntry[]) ?? []
   const config = await getAuctionConfigForLeague(leagueId, session)
   const budgets: AuctionBudgets = {}
   for (const entry of slotOrder) budgets[entry.rosterId] = config.budgetPerTeam
+  const saved = session.auctionState && typeof session.auctionState === 'object' ? (session.auctionState as Record<string, unknown>).rookieAuction : null
+  let nominationOrder: SlotOrderEntry[] | undefined
+  let nominationFallbackStart: number | undefined
+  if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+    const raw = saved as Record<string, unknown>
+    const parsed = parseRookieAuctionSettings(raw)
+    if (!parsed.ok || !Array.isArray(raw.trades)) throw new Error('Rookie auction pick settings are invalid. Recreate the draft after resolving its settings.')
+    const plan = planRookieAuction({ ...parsed.value, slotOrder, rounds: session.rounds ?? 0, trades: raw.trades as RookieAuctionTrade[] })
+    Object.assign(budgets, plan.budgets)
+    if (plan.policy === 'nominations') {
+      nominationFallbackStart = plan.nominationOrder.length
+      nominationOrder = [...plan.nominationOrder, ...slotOrder]
+    }
+  }
   const nominationWindowEndAt = computeTimerEndAt(config.bidTimerSeconds)
   const auctionState: AuctionState = {
+    ...(saved ? { rookieAuction: saved } : {}),
+    ...(nominationOrder ? { nominationOrder, nominationFallbackStart } : {}),
     nominationOrderIndex: 0,
     currentNomination: null,
     currentBid: 0,

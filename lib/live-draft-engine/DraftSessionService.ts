@@ -525,10 +525,11 @@ export async function buildSessionSnapshot(
       budgets: getBudgetsFromSession(session),
       auctionState,
       minBidIncrement: config.minBidIncrement,
-      nominationOrder: slotOrder,
+      nominationOrder: auctionState.nominationOrder?.length ? auctionState.nominationOrder : slotOrder,
     }
+    const nominationOrder = auction.nominationOrder
     const auctionNominator =
-      slotOrder[((Math.max(0, auctionState.nominationOrderIndex) % Math.max(1, slotOrder.length)) + Math.max(1, slotOrder.length)) % Math.max(1, slotOrder.length)]
+      nominationOrder[((Math.max(0, auctionState.nominationOrderIndex) % Math.max(1, nominationOrder.length)) + Math.max(1, nominationOrder.length)) % Math.max(1, nominationOrder.length)]
     if (auctionNominator) {
       const overall = resolveNextOpenPickOverall(progressPicks, totalPicks) ?? picksCount + 1
       const round = Math.ceil(overall / teamCount)

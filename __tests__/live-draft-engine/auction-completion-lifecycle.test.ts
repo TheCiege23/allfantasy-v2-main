@@ -11,7 +11,25 @@ vi.mock('@/lib/draft-archive/events', () => ({ recordArchiveEvent: m.archive, up
 vi.mock('@/server/services/leagueLifecycleService', () => ({ applyPostDraftLifecycleInTransaction: m.lifecycle }))
 vi.mock('@/lib/live-draft-engine/postDraftFinalizeArtifacts', () => ({ runPostDraftFinalizationArtifacts: m.finalize }))
 vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({ getSalaryCapConfig: async () => null }))
-import { resolveAuctionWin } from '@/lib/live-draft-engine/auction/AuctionEngine'
+import { resolveAuctionWin, buildInitialAuctionSessionUpdate, getAuctionStateFromSession, getAuctionNominationOrder, advanceAuctionNominationIndex } from '@/lib/live-draft-engine/auction/AuctionEngine'
+
+describe('rookie auction initialization', () => {
+  const slotOrder = [{ slot: 1, rosterId: 'a', displayName: 'A' }, { slot: 2, rosterId: 'b', displayName: 'B' }]
+  const trade = { round: 1, originalRosterId: 'a', newRosterId: 'b' }
+  it('applies transferred auction budget once when the draft starts', async () => {
+    const initial = await buildInitialAuctionSessionUpdate('league', { slotOrder, rounds: 2, auctionBudgetPerTeam: 20, auctionState: { rookieAuction: { policy: 'budget', budgetPerTeam: 20, valuesByRound: { '1': 6 }, trades: [trade] } } })
+    expect(initial.auctionBudgets).toEqual({ a: 14, b: 26 })
+    expect(initial.auctionState.rookieAuction.trades).toEqual([trade])
+  })
+  it('uses traded nomination turns once, then repeats the normal rotation', async () => {
+    const initial = await buildInitialAuctionSessionUpdate('league', { slotOrder, rounds: 2, auctionBudgetPerTeam: 20, auctionState: { rookieAuction: { policy: 'nominations', budgetPerTeam: 20, valuesByRound: {}, trades: [trade] } } })
+    const state = getAuctionStateFromSession(initial)!
+    const order = getAuctionNominationOrder(slotOrder, state)
+    expect(order.map(entry => entry.rosterId)).toEqual(['b', 'b', 'a', 'b', 'a', 'b'])
+    expect(advanceAuctionNominationIndex({ ...state, nominationOrderIndex: 3 }, order.length)).toBe(4)
+    expect(advanceAuctionNominationIndex({ ...state, nominationOrderIndex: 5 }, order.length)).toBe(4)
+  })
+})
 
 describe('auction completion', () => {
   it('transitions lifecycle in the final sale transaction and syncs season rosters', async () => {

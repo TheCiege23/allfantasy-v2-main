@@ -20,6 +20,7 @@ import type { AuctionNomination, SlotOrderEntry } from '@/lib/live-draft-engine/
 import {
   getAuctionConfigForLeague,
   getAuctionStateFromSession,
+  getAuctionNominationOrder,
   getBudgetsFromSession,
   nominatePlayer,
   placeBid,
@@ -160,8 +161,9 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
   const budgets = getBudgetsFromSession(session)
   const season = await loadSeasonDraftContext(leagueId)
   if (season && await prepareSeasonDraftPool(leagueId)) return { changed: false, actions }
-  const nominationIndex = season ? nextSeasonNominator(slotOrder, state.nominationOrderIndex, session.picks, session.rounds, budgets, config.minBid) : normalizeNominationIndex(state.nominationOrderIndex, slotOrder.length)
-  const currentNominator = nominationIndex === null ? undefined : slotOrder[nominationIndex]
+  const nominationOrder = getAuctionNominationOrder(slotOrder, state)
+  const nominationIndex = season ? nextSeasonNominator(slotOrder, state.nominationOrderIndex, session.picks, session.rounds, budgets, config.minBid) : normalizeNominationIndex(state.nominationOrderIndex, nominationOrder.length)
+  const currentNominator = nominationIndex === null ? undefined : nominationOrder[nominationIndex]
   const orphanRosterIds = uiSettings.orphanTeamAiManagerEnabled
     ? await getOrphanRosterIdsForLeague(leagueId)
     : []
