@@ -31,6 +31,7 @@ import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-ava
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import { isSubscriptionEntitlementBypassUserId } from '@/lib/dev-admin/access'
 import { attachLeagueHubs } from '@/lib/core-app/attachLeagueHubs'
+import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLinks'
 import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNavigation'
 import ConnectedDecisionScopeBar from '@/components/core-app/ConnectedDecisionScopeBar'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
@@ -941,6 +942,9 @@ export default async function AfCorePage({
    */
   const railHubsRead = attachLeagueHubs(userId, rail)
   railHubsRead.catch(() => {})
+  // Each Exile Island under its Survivor league (lib/core-app/survivorExileRail.ts). Same start-early shape.
+  const railExileRead = attachSurvivorExileLinks(rail)
+  railExileRead.catch(() => {})
 
   const tradeLeagueRow = selectedLeagueRow
   const tradeLeagueTypeKey = tradeLeagueRow
@@ -1276,6 +1280,7 @@ export default async function AfCorePage({
     access,
   ] = await shellReads
   await railHubsRead
+  await railExileRead
 
   /*
    * The league-first landing. A redirect, so it must stay in AfCorePage ahead of the shell render

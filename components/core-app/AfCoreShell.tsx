@@ -11,6 +11,7 @@ import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { leagueSportLabel, leagueSportSections } from '@/lib/core-app/leagueSports'
+import { pairExileUnderSurvivor, pairedExileIds } from '@/lib/core-app/survivorExileRail'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
@@ -106,6 +107,8 @@ export type RailLeague = {
   isCommissioner?: boolean
   /** League sport (NFL / NBA / …). The rail splits into one section per sport when there are two or more. */
   sport?: string | null
+  /** This is an Exile Island league; the id is its Survivor league (attachSurvivorExileLinks). */
+  exileOf?: string
 }
 
 /**
@@ -1613,7 +1616,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     () => withoutHidden(leagues, archivedLeagueKey ? archivedLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
     [leagues, archivedLeagueKey, props.selectedLeagueId],
   )
-  const railRows = useMemo(() => groupLeagueHubs(railLeagues), [railLeagues])
+  /*
+   * Each Exile Island sits directly under its Survivor league, joined by a ↕, instead of being one
+   * more league in the list: with two NBA Survivor leagues the rail never said which island was whose.
+   */
+  const railRows = useMemo(() => pairExileUnderSurvivor(groupLeagueHubs(railLeagues)), [railLeagues])
+  const railExileRows = useMemo(() => pairedExileIds(railRows), [railRows])
   /*
    * One section per sport, each headed by its sport, once the account plays two or more. Within a
    * section the rail keeps the account's own order; only the grouping is new.
@@ -1825,7 +1833,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             const leagueHref = !isNativePlatform(l.platform) && props.leagueFirst && m && !m.unpaired
               ? `/core/matchup?league=${encodeURIComponent(l.id)}`
               : leagueEntryHref(l)
-            return (
+            const isExile = railExileRows.has(l.id)
+            const tile = (
               <Link
                 key={l.id}
                 href={leagueHref}
@@ -1858,6 +1867,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                  * already uses `aria-current="page"` for the page itself.
                  */
                 data-active={l.id === props.selectedLeagueId}
+                data-exile={isExile ? 'true' : undefined}
                 data-score-changed={railSwings[l.id] != null ? 'true' : undefined}
                 aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
                 title={msg.railRowTitle(railName, l.platform, careerLine)}
@@ -1898,7 +1908,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   one accessible name either way.
                 */}
                 <RailRowBody
-                  name={railName}
+                  name={isExile ? copy('Exile Island') : railName}
                   platform={String(l.platform)}
                   m={m}
                   live={live}
@@ -1911,6 +1921,20 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 />
               </Link>
             )
+            if (!isExile) return tile
+            const survivorName = (l.exileOf && railLabels.get(l.exileOf)) || null
+            return [
+              <div
+                key={`exile-link-${l.id}`}
+                className="af-rail-exile-link"
+                data-testid="rail-exile-link"
+                title={survivorName ? `${copy('Exile Island for')} ${survivorName}` : copy('Exile Island')}
+                aria-hidden
+              >
+                ↕
+              </div>,
+              tile,
+            ]
           }),
           ])}
           {/*

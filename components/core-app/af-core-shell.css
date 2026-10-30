@@ -1517,6 +1517,27 @@
   text-align: left;
 }
 
+/*
+ * The ↕ between a Survivor league and its Exile Island (AfCoreShell pairs the rows). Centred under
+ * the 42px crest in both rail states: the collapsed rail centres everything, and the open row puts
+ * the crest 8px in, so its centre is 29px from the edge.
+ */
+.af-rail-exile-link {
+  flex: none;
+  width: 100%;
+  margin: -4px 0;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  color: var(--accent);
+}
+
+.af-shell[data-rail-open='true'] .af-rail-exile-link {
+  padding-left: 23px;
+  text-align: left;
+}
+
 .af-shell[data-rail-open='true'] .af-rail-tile {
   display: flex;
   align-items: center;
