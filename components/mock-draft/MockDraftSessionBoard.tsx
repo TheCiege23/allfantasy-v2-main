@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, Save, Share2 } from 'lucide-react'
+import { DraftBoardPreview } from '@/components/app/draft-room/DraftBoardPreview'
 import { DraftPlayerCard } from '@/components/app/draft-room/DraftPlayerCard'
 import { buildDraftPlayerDisplayModel } from '@/lib/draft-sports-models/build-display-model'
 
@@ -380,6 +381,17 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
           {shareUrl && <span className="text-[11px] text-green-200">{shareUrl}</span>}
         </div>
       )}
+
+      <DraftBoardPreview
+        teams={Array.from({ length: draft.settings.numTeams }, (_, index) => {
+          const seat = draft.slotConfig.find((entry) => entry.slot === index + 1)
+          return { id: String(index + 1), slot: index + 1, name: seat?.displayName || ('Team ' + (index + 1)), isCpu: seat?.type === 'cpu' }
+        })}
+        picks={draft.results.map((pick) => ({ ...pick, rosterId: String(pick.slot) }))}
+        teamCount={draft.settings.numTeams} rounds={draft.settings.rounds} sport={draft.settings.sport}
+        draftType={draft.settings.draftType === 'auction' ? 'auction' : draft.settings.draftType === 'linear' ? 'linear' : 'snake'}
+        currentOverall={draft.status === 'in_progress' ? draft.progress?.currentOverall : null}
+      />
 
       <div className="rounded-xl border border-white/10 bg-black/30 p-3">
         <p className="mb-2 text-[11px] font-semibold text-white/90">Recent picks</p>

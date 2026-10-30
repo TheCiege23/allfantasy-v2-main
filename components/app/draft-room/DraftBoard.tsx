@@ -179,6 +179,7 @@ function DraftBoardInner({
   const rs = presentationVariant === 'redraft_snake'
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
   const [selectedRound, setSelectedRound] = useState(1)
+  const boardRef = useRef<HTMLElement | null>(null)
   const lastFollowedOverallRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -200,7 +201,7 @@ function DraftBoardInner({
   useEffect(() => {
     if (draftType === 'auction' || currentOverallPick == null) return
     const raf = window.requestAnimationFrame(() => {
-      const el = document.querySelector<HTMLElement>(`[data-testid="draft-board-cell-${currentOverallPick}"]`)
+      const el = boardRef.current?.querySelector<HTMLElement>(`[data-testid="draft-board-cell-${currentOverallPick}"]`)
       el?.scrollIntoView({
         behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
         block: 'nearest',
@@ -419,6 +420,7 @@ function DraftBoardInner({
 
   return (
     <section
+      ref={boardRef}
       className={
         rs
           ? 'relative flex flex-col overflow-hidden rounded-2xl border border-cyan-400/20 bg-[linear-gradient(165deg,rgba(15,23,42,0.92)_0%,rgba(6,13,26,0.98)_45%,rgba(4,9,17,1)_100%)] shadow-[0_24px_72px_rgba(0,0,0,0.55),0_0_0_1px_rgba(34,211,238,0.06),inset_0_1px_0_rgba(255,255,255,0.06)]'

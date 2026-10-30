@@ -2,8 +2,8 @@
  * Phone Queue tab (2026-10-29). Measured at Pixel 7 size before this change: a 252px header and
  * 88px rows in a half-height tray showed 0.8 of a queued player, and a touch swipe on the list
  * moved nothing. After: the tray opens full, the list scrolls (102px on the same swipe), the
- * header is 204px and rows are 60px — 6.4 rows visible. Every change here is max-sm / max-md,
- * or a base the existing sm:/lg: classes override, so md+ is untouched.
+ * header is 204px and rows are 60px — 6.4 rows visible. Search, sort and position filters
+ * also use this compact layout inside narrow desktop docks.
  */
 import React from 'react'
 import { cleanup, render, screen } from '@testing-library/react'
@@ -42,9 +42,10 @@ describe('QueuePanel on a phone', () => {
         onAutoPickFromQueueChange={() => {}} awayMode={false} onAwayModeChange={() => {}} />,
     )
     const grid = screen.getByTestId('draft-queue-search').parentElement!
-    expect(classes(grid)).toEqual(expect.arrayContaining(['grid-cols-2', 'sm:grid-cols-2', 'lg:grid-cols-3']))
+    expect(classes(grid)).toContain('grid-cols-2')
+    expect(classes(grid)).not.toContain('lg:grid-cols-3')
     expect(classes(screen.getByTestId('draft-queue-position-filter'))).toEqual(
-      expect.arrayContaining(['max-sm:order-last', 'max-sm:col-span-2', 'max-sm:flex-nowrap', 'max-sm:overflow-x-auto']),
+      expect.arrayContaining(['order-last', 'col-span-2', 'flex-nowrap', 'overflow-x-auto']),
     )
   })
 })

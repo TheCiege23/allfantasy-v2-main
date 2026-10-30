@@ -191,15 +191,15 @@ export function QueuePanel({
           Auto-pick
         </label>
       </div>
-      {/* Phones: search and sort share a row, the position pills scroll on the row below. */}
-      <div className="grid grid-cols-2 gap-1 border-b border-white/[0.06] p-1 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Size for the dock's width: search and sort share a row, with positions below. */}
+      <div className="grid grid-cols-2 gap-1 border-b border-white/[0.06] p-1">
         <input
           type="search"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search queued players"
           data-testid="draft-queue-search"
-          className="h-7 rounded-lg border border-transparent bg-[#1d2236] px-2 text-[11px] text-white placeholder:text-white/40 outline-none transition focus:ring-2 focus:ring-white/20"
+          className="h-7 min-w-0 w-full rounded-lg border border-transparent bg-[#1d2236] px-2 text-[11px] text-white placeholder:text-white/40 outline-none transition focus:ring-2 focus:ring-white/20"
         />
         {/* Position filter — chip row matches the player pool's position pills
             so users see consistent affordances across both surfaces. */}
@@ -207,7 +207,7 @@ export function QueuePanel({
           role="radiogroup"
           aria-label="Queue position filter"
           data-testid="draft-queue-position-filter"
-          className="flex flex-wrap items-center gap-1 max-sm:order-last max-sm:col-span-2 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:[scrollbar-width:none]"
+          className="order-last col-span-2 flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:thin]"
         >
           {positionOptions.map((position) => {
             const isActive = positionFilter === position
@@ -220,7 +220,7 @@ export function QueuePanel({
                 onClick={() => setPositionFilter(position)}
                 data-testid={`draft-queue-position-pill-${position.toLowerCase()}`}
                 data-active={isActive ? 'true' : 'false'}
-                className={`inline-flex h-6 items-center rounded-full border px-2 text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+                className={`inline-flex h-6 shrink-0 items-center rounded-full border px-2 text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
                   isActive
                     ? 'border-transparent bg-white text-[#14172a]'
                     : 'border-white/15 bg-black/20 text-white/65 hover:border-white/28 hover:text-white/90'
@@ -235,7 +235,7 @@ export function QueuePanel({
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value as QueueSortMode)}
           data-testid="draft-queue-sort"
-          className="h-7 rounded-lg border border-transparent bg-[#1d2236] px-2 text-[11px] text-white outline-none transition focus:ring-2 focus:ring-white/20"
+          className="h-7 min-w-0 w-full rounded-lg border border-transparent bg-[#1d2236] px-2 text-[11px] text-white outline-none transition focus:ring-2 focus:ring-white/20"
         >
           <option value="queue">Sort: Queue order</option>
           <option value="adp">Sort: ADP</option>
