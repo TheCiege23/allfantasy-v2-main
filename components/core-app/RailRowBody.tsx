@@ -10,6 +10,7 @@ import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { RailMatchupSummary, RailSideProjectionSummary, RailStandingSummary } from './AfCoreShell'
 import type { LiveRailScore } from './useLiveRailScores'
+import type { ExileRailStatus } from '@/lib/core-app/survivorExileStatus'
 import { mostHavePlayed } from '@/lib/core-app/liveRailScores'
 import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
 import type { RailRecord } from '@/lib/core-app/railRecordRank'
@@ -324,6 +325,8 @@ export type RailRowBodyProps = {
   matchupHref?: string | null
   /** Your record and place in this league ("6-3 · 2nd"). Absent or null draws no record. */
   record?: RailRecord | null
+  /** An Exile Island row: drawn in place of "Matchup not available yet" when there is no matchup. */
+  exileStatus?: ExileRailStatus | null
 }
 
 export type RailAttention = 'lineup' | 'offer'
@@ -356,6 +359,7 @@ export function RailRowBody({
   attention,
   matchupHref,
   record,
+  exileStatus,
 }: RailRowBodyProps) {
   const msg = useMessages(railRowMessages)
   const headToHead = Boolean(m && !m.guillotine && !m.unpaired)
@@ -468,7 +472,11 @@ export function RailRowBody({
       ) : (
         <span className="af-rail-row-line">
           <span className="af-rail-row-team">
-            {String(platform).toLowerCase() === 'espn' ? msg.espnUnavailable : msg.matchupNotAvailable}
+            {exileStatus
+              ? <span data-testid="rail-exile-status">{exileStatus.kind === 'island'
+                  ? msg.exileTokens(exileStatus.tokens, exileStatus.tokensToReturn, exileStatus.returnWeek)
+                  : msg.exileOnIsland(exileStatus.onIsland)}</span>
+              : String(platform).toLowerCase() === 'espn' ? msg.espnUnavailable : msg.matchupNotAvailable}
           </span>
         </span>
       )}
