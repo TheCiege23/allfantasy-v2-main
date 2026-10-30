@@ -131,7 +131,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     }
     conceptSetup.rookieDraftRounds = d.rookieDraftRounds
     conceptSetup.rookieDraftType = d.rookieDraftType
-    conceptSetup.rookieDraftOrderMethod = d.rookieDraftOrderMethod
+    conceptSetup.rookieDraftOrderMethod = d.rookieDraftOrderMethod === 'lottery' ? 'weighted_lottery' : d.rookieDraftOrderMethod
     conceptSetup.futurePicksYearsOut = d.futurePickTradeYears
     conceptSetup.regularSeasonWeeks = d.regularSeasonLength
     conceptSetup.playoffTeamCount = d.playoffTeamCount

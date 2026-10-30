@@ -90,6 +90,16 @@ describe('submitCreateLeagueV2 → /api/leagues', () => {
     })
   })
 
+  it('sends the selected startup auction and weighted future rookie order', async () => {
+    await submitCreateLeagueV2(state({ leagueType: 'dynasty', draftType: 'auction', dynasty: { ...DEFAULT_V2_STATE.dynasty, startupDraftType: 'auction', rookieDraftOrderMethod: 'weighted_lottery' } }))
+    expect(lastFetchBody()).toMatchObject({ draftType: 'auction', conceptSetup: { rookieDraftOrderMethod: 'weighted_lottery' } })
+  })
+
+  it('normalizes the older saved lottery choice to weighted lottery', async () => {
+    await submitCreateLeagueV2(state({ leagueType: 'dynasty', dynasty: { ...DEFAULT_V2_STATE.dynasty, rookieDraftOrderMethod: 'lottery' } }))
+    expect(lastFetchBody().conceptSetup).toMatchObject({ rookieDraftOrderMethod: 'weighted_lottery' })
+  })
+
   it('uses concept idp when IDP card is selected', async () => {
     await submitCreateLeagueV2(
       state({

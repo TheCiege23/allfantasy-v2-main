@@ -59,7 +59,7 @@ export async function ensureRookieDraftLottery(input: {
   })
   if (league?.dynastyConfig?.rookiePickOrderMethod !== 'weighted_lottery') return null
 
-  const eligibility = await checkDynastyLotteryEligibility(input.leagueId)
+  const eligibility = await checkDynastyLotteryEligibility(input.leagueId, input.season)
   if (!eligibility.eligible) return null
 
   const stored = await getDraftOrderModeAndLotteryConfig(input.leagueId)
