@@ -6,7 +6,7 @@ import type { UserLeague } from '@/app/dashboard/types'
 
 vi.mock('@/hooks/useLeagueRealtimeRefresh', () => ({ useLeagueRealtimeRefresh: () => undefined }))
 vi.mock('@/hooks/useVisibleRefresh', () => ({ useVisibleRefresh: () => undefined }))
-vi.mock('@/app/league/[leagueId]/tabs/ProposeTradeModal', () => ({ ProposeTradeModal: ({ open }: { open: boolean }) => (open ? <div data-testid="builder">builder</div> : null) }))
+vi.mock('@/app/league/[leagueId]/tabs/ProposeTradeModal', () => ({ ProposeTradeModal: ({ open, counterTradeId }: { open: boolean; counterTradeId?: string | null }) => (open ? <div data-testid="builder">{counterTradeId ?? "new"}</div> : null) }))
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), message: vi.fn() }) }))
 
 import { NativeStandingsScreen } from '@/components/league/native/screens/NativeStandingsScreen'
@@ -161,8 +161,8 @@ describe('NativeTradesScreen', () => {
     expect(screen.getByText('Jahmyr Gibbs')).toBeTruthy()
     expect(screen.getByText('Drake London')).toBeTruthy()
     expect(screen.getByText(/shopping Trey McBride/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Build new offer' }))
-    expect(screen.getByTestId('builder')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Counter' }))
+    expect(screen.getByTestId('builder').textContent).toBe('t1')
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
     await waitFor(() => expect(calls.some((c) => c.url.endsWith('/trades/t1/accept') && c.init?.method === 'POST')).toBe(true))
   })
