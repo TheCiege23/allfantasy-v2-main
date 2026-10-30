@@ -168,6 +168,7 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       return isNum(value) && value >= 0 && Number.isInteger(value) ? text('v.count', { n: value }) : null
     case 'playoffStartWeek':
     case 'tradeDeadlineWeek':
+    case 'feederTradeDeadline':
     case 'chopStartWeek':
     case 'chopEndWeek':
       return isPosInt(value) ? week(value) : null
@@ -175,10 +176,12 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'championshipLength':
       return isPosInt(value) ? plural('v.weeks', value) : null
     case 'tradeReviewHours':
+    case 'feederTradeLockHours':
     case 'waiverHours':
     case 'statCorrectionHours':
       return isNum(value) && value >= 0 ? plural('v.hours', value) : null
     case 'waiverBudget':
+    case 'feederFaabBudget':
     case 'waiverMinBid':
       return isNum(value) && value >= 0 ? money(value) : null
     case 'dangerMarginPoints':
@@ -186,11 +189,14 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'waiverProcessHour':
       return isNum(value) && Number.isInteger(value) && value >= 0 && value <= 23 ? text('v.hourOfDay', { h: value }) : null
     case 'medianGame':
+    case 'feederFaabReset':
     case 'thirdPlaceGame':
     case 'pickTrading':
     case 'pickTerms':
       return typeof value === 'boolean' ? text(value ? 'v.on' : 'v.off') : null
     case 'keeperCount':
+    case 'feederRosterSize':
+    case 'feederBenchSize':
       return isNum(value) && Number.isInteger(value) && value >= 0 ? plural('v.players', value) : null
     case 'keeperMaxYears':
     case 'taxiMaxYears':
@@ -209,6 +215,7 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'tradeDeadlineAt':
       return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? text('v.date', { date: { date: value } }) : null
     case 'waiverType':
+    case 'feederWaiverType':
       return typeof value === 'string' && WAIVER_TYPES.has(value) ? text(`waiverType.${value}`) : null
     case 'tradeReview':
       return typeof value === 'string' && TRADE_REVIEWS.has(value) ? text(`tradeReview.${value}`) : null
@@ -217,6 +224,7 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'categoryRecordMode':
       return typeof value === 'string' && RECORD_MODES.has(value) ? text(`recordMode.${value}`) : null
     case 'scoringPreset':
+    case 'feederScoring':
       return typeof value === 'string' && presetKnown(value) ? text(`preset.${value}`) : null
     case 'lineupMode':
       return typeof value === 'string' && LINEUP_MODES.has(value) ? text(`lineupMode.${value}`) : null
@@ -646,6 +654,18 @@ function overviewImported(s: RuleSnapshot): RuleText | null {
   return PLATFORMS.has(s.importedFrom) ? text('overview.imported', { platform: text(`platform.${s.importedFrom}`) }) : text('overview.importedGeneric')
 }
 
+const FEEDER_KEYS: RuleKey[] = [
+  'feederScoring', 'feederRosterSize', 'feederBenchSize', 'feederWaiverType',
+  'feederFaabBudget', 'feederFaabReset', 'feederTradeDeadline', 'feederTradeLockHours',
+]
+
+function feederLines(s: RuleSnapshot): RuleLine[] {
+  return FEEDER_KEYS.flatMap((key) => {
+    const value = describeValue(key, s[key], s)
+    return value ? [{ id: key, text: text('feeder.entry', { label: text(`label.${key}`), value }) }] : []
+  })
+}
+
 /**
  * The full rules popup: one section per area, empty sections dropped.
  *
@@ -677,6 +697,7 @@ export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): R
   const ownRules = !imported && format !== 'specialty' && format !== 'best_ball'
   const sections: RuleSection[] = [
     { id: 'overview', title: text('section.overview'), lines: overview },
+    ...(s.concept === 'tournament' && !imported ? [{ id: 'feeder' as const, title: text('section.feeder'), lines: feederLines(s) }] : []),
     ...(format === 'guillotine' && !imported ? [{ id: 'guillotine' as const, title: text('section.guillotine'), lines: guillotineLines(s) }] : []),
     { id: 'scoring', title: text('section.scoring'), lines: scoringLines(s) },
     { id: 'roster', title: text('section.roster'), lines: rosterLines(s) },

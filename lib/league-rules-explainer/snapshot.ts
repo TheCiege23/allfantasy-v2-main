@@ -95,6 +95,7 @@ const SPECIALTY_CONCEPTS: Record<string, RulesConcept> = {
   big_brother: 'big_brother',
   zombie: 'zombie',
   tournament: 'tournament',
+  tournament_mode: 'tournament',
   salary_cap: 'salary_cap',
   contract_dynasty: 'salary_cap',
   king_of_the_hill: 'king_of_the_hill',

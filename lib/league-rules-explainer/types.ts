@@ -54,6 +54,15 @@ export type RuleSnapshot = {
    */
   importedFrom?: string | null
   teamCount?: number | null
+  /** Values saved by the tournament feeder settings editor, shown separately from league rules. */
+  feederScoring?: string | null
+  feederRosterSize?: number | null
+  feederBenchSize?: number | null
+  feederWaiverType?: string | null
+  feederFaabBudget?: number | null
+  feederFaabReset?: boolean | null
+  feederTradeDeadline?: number | null
+  feederTradeLockHours?: number | null
   /** `settings.scoring_mode`: points, h2h_category or roto. */
   scoringMode?: string | null
   /** `League.scoring` (e.g. ppr, half_ppr, standard). */
@@ -243,7 +252,7 @@ export type RuleText = { k: string; vars?: Record<string, RuleVar> }
 
 export type RuleLine = { id: string; text: RuleText }
 
-export type RuleSectionId = 'overview' | 'scoring' | 'roster' | 'lineups' | 'playoffs' | 'trades' | 'waivers' | 'guillotine' | 'keeper' | 'dynasty' | 'draft'
+export type RuleSectionId = 'overview' | 'scoring' | 'roster' | 'lineups' | 'playoffs' | 'trades' | 'waivers' | 'guillotine' | 'keeper' | 'dynasty' | 'draft' | 'feeder'
 
 export type RuleSection = { id: RuleSectionId; title: RuleText; lines: RuleLine[] }
 
