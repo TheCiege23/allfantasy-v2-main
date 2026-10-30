@@ -52,7 +52,9 @@ export async function appendPickToRosterDraftSnapshot(
   })
   if (!roster) return
   const data = (roster.playerData as Record<string, unknown>) ?? {}
-  const draftPicks = (data.draftPicks as AssignedPlayer[]) ?? []
+  const draftPicks = Array.isArray(data.draftPicks) ? (data.draftPicks as AssignedPlayer[]) : []
+  // Completion can materialize the final pick before a caller appends its live snapshot.
+  if (draftPicks.some((existing) => playerKey(existing) === playerKey(player))) return
   draftPicks.push(player)
   await prisma.roster.update({
     where: { id: rosterId },

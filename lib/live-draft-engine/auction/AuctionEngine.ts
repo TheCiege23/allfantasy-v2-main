@@ -486,10 +486,22 @@ async function _resolveAuctionWinCore(
     }
     if (shouldCompleteAfterResolution && !season) {
       await recordArchiveEvent(tx, { ...session, status: 'completed' }, 'complete', {}, now)
+      const { applyPostDraftLifecycleInTransaction } = await import('@/server/services/leagueLifecycleService')
+      await applyPostDraftLifecycleInTransaction(tx, leagueId)
     }
   }) } catch (error) {
     if (error instanceof Error && error.message === 'SEASON_AUCTION_STALE') return { success: false, error: 'Auction changed. Reload and retry.' }
     throw error
+  }
+
+  if (!season && shouldCompleteAfterResolution) {
+    // The final sale is committed; the shared finalizer mirrors picks into the season rosters.
+    try {
+      const { runPostDraftFinalizationArtifacts } = await import('@/lib/live-draft-engine/postDraftFinalizeArtifacts')
+      await runPostDraftFinalizationArtifacts(leagueId)
+    } catch (error) {
+      console.error('[auction] post-draft finalization pending', { leagueId, error: String(error) })
+    }
   }
 
   if (season && shouldCompleteAfterResolution) {
@@ -619,26 +631,18 @@ async function tryAssignAuctionContract(
   }
 }
 
-/**
- * Initialize auction state and budgets when starting an auction draft.
- */
-export async function initializeAuctionForSession(leagueId: string): Promise<boolean> {
-  const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
-  if (!session || session.draftType !== 'auction') return false
-
-  const season = await loadSeasonDraftContext(leagueId)
-  if (season && seasonDraftSessionError(season, session)) return false
-  if (season && session.auctionState) return true
+/** Build the initial auction values for the same conditional write that starts the session. */
+export async function buildInitialAuctionSessionUpdate(leagueId: string, session: {
+  slotOrder?: unknown
+  auctionBudgetPerTeam?: number | null
+  timerSeconds?: number | null
+}) {
   const slotOrder = (session.slotOrder as unknown as SlotOrderEntry[]) ?? []
   const config = await getAuctionConfigForLeague(leagueId, session)
-  const budgetPerTeam = config.budgetPerTeam
   const budgets: AuctionBudgets = {}
-  for (const entry of slotOrder) {
-    budgets[entry.rosterId] = budgetPerTeam
-  }
+  for (const entry of slotOrder) budgets[entry.rosterId] = config.budgetPerTeam
   const nominationWindowEndAt = computeTimerEndAt(config.bidTimerSeconds)
-
-  const initialAuctionState: AuctionState = {
+  const auctionState: AuctionState = {
     nominationOrderIndex: 0,
     currentNomination: null,
     currentBid: 0,
@@ -646,22 +650,21 @@ export async function initializeAuctionForSession(leagueId: string): Promise<boo
     bidTimerEndAt: nominationWindowEndAt.toISOString(),
     minNextBid: config.minBid,
   }
+  return { auctionBudgets: budgets as any, auctionState: auctionState as any, timerEndAt: nominationWindowEndAt, pausedRemainingSeconds: null }
+}
 
-  const write = {
-    where: { id: session.id },
-    data: {
-      auctionBudgets: budgets as any,
-      auctionState: initialAuctionState as any,
-      timerEndAt: nominationWindowEndAt,
-      pausedRemainingSeconds: null,
-      version: { increment: 1 },
-      updatedAt: new Date(),
-    },
-  }
+/** Initialize an already-running tournament auction (or an explicit recovery initialization). */
+export async function initializeAuctionForSession(leagueId: string): Promise<boolean> {
+  const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
+  if (!session || session.draftType !== 'auction') return false
+  const season = await loadSeasonDraftContext(leagueId)
+  if (season && seasonDraftSessionError(season, session)) return false
+  if (season && session.auctionState) return true
+  const data = { ...(await buildInitialAuctionSessionUpdate(leagueId, session)), version: { increment: 1 }, updatedAt: new Date() }
   if (season) {
-    const changed = await prisma.draftSession.updateMany({ ...write, where: { id: session.id, version: session.version, status: 'in_progress' } })
+    const changed = await prisma.draftSession.updateMany({ where: { id: session.id, version: session.version, status: 'in_progress' }, data })
     return changed.count === 1
   }
-  await prisma.draftSession.update(write)
+  await prisma.draftSession.update({ where: { id: session.id }, data })
   return true
 }

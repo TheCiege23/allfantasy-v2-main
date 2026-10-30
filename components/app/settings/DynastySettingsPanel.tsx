@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { normalizeRookieOrderMethod } from '@/lib/draft-lottery/rookieOrderMethod'
 import { LotteryReveal } from '@/components/draft/LotteryReveal'
 import type {
   LotteryEligibilityMode,
@@ -83,6 +84,7 @@ export default function DynastySettingsPanel({
   const [saving, setSaving] = useState(false)
   const [patch, setPatch] = useState<Record<string, unknown>>({})
   const [lotteryConfig, setLotteryConfig] = useState<WeightedLotteryConfig | null>(null)
+  const [lotteryDirty, setLotteryDirty] = useState(false)
   const [lotteryPreview, setLotteryPreview] = useState<LotteryEligibleTeam[] | null>(null)
   const [lotteryLoading, setLotteryLoading] = useState(false)
   const [lotteryResult, setLotteryResult] = useState<WeightedLotteryResult | null>(null)
@@ -116,7 +118,7 @@ export default function DynastySettingsPanel({
   const effectiveRookiePickOrder = useMemo(() => {
     const p = patch.rookiePickOrderMethod
     if (typeof p === 'string' && p.length > 0) return p
-    return data?.effective?.rookiePickOrderMethod ?? ''
+    return normalizeRookieOrderMethod(data?.effective?.rookiePickOrderMethod ?? '')
   }, [patch.rookiePickOrderMethod, data?.effective?.rookiePickOrderMethod])
 
   useEffect(() => {
@@ -181,7 +183,7 @@ export default function DynastySettingsPanel({
   }
 
   const save = useCallback(async () => {
-    if (!leagueId || !isCommissioner || Object.keys(patch).length === 0) return
+    if (!leagueId || !isCommissioner || (Object.keys(patch).length === 0 && !lotteryDirty)) return
     setSaving(true)
     try {
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/dynasty-settings`, {
@@ -192,12 +194,18 @@ export default function DynastySettingsPanel({
       if (res.ok) {
         const method = patch.rookiePickOrderMethod ?? data?.effective?.rookiePickOrderMethod
         if (method === 'weighted_lottery' && lotteryConfig) {
-          await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft-lottery/config`, {
+          const configResponse = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft-lottery/config`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ lotteryConfig }),
-          }).catch(() => {})
+          })
+          if (!configResponse.ok) {
+            const configError = await configResponse.json().catch(() => ({}))
+            setError(configError?.error ?? 'Lottery settings could not be saved')
+            return
+          }
         }
+        setLotteryDirty(false)
         setPatch({})
         await load()
       } else {
@@ -209,7 +217,7 @@ export default function DynastySettingsPanel({
     } finally {
       setSaving(false)
     }
-  }, [leagueId, isCommissioner, patch, load, lotteryConfig, data?.effective?.rookiePickOrderMethod])
+  }, [leagueId, isCommissioner, patch, load, lotteryConfig, lotteryDirty, data?.effective?.rookiePickOrderMethod])
 
   if (loading) {
     return (
@@ -372,7 +380,7 @@ export default function DynastySettingsPanel({
             </div>
           )}
 
-          {(effectiveRookiePickOrder === 'weighted_lottery' || effective?.rookiePickOrderMethod === 'weighted_lottery') && (
+          {(effectiveRookiePickOrder === 'weighted_lottery' || normalizeRookieOrderMethod(effective?.rookiePickOrderMethod ?? '') === 'weighted_lottery') && (
             <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-4 space-y-4">
               <div className="flex items-center gap-2">
                 <span className="text-base">🎱</span>
@@ -381,8 +389,7 @@ export default function DynastySettingsPanel({
 
               {data.lotteryEligibility?.isStartupLeague && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-                  ⚠️ Weighted lottery is only available for established dynasty leagues (year 2+). This appears to
-                  be a startup league.
+                  These settings apply to future rookie drafts. The startup draft does not use a weighted lottery.
                 </div>
               )}
 
@@ -402,13 +409,14 @@ export default function DynastySettingsPanel({
                     <select
                       className="rounded border border-white/20 bg-black/40 px-2 py-1 text-white"
                       value={lotteryConfig.lotteryTeamCount ?? 6}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setLotteryDirty(true)
                         setLotteryConfig((c) =>
                           c
                             ? { ...c, lotteryTeamCount: Number(e.target.value) }
                             : { ...DEFAULT_WEIGHTED_LOTTERY_CONFIG, lotteryTeamCount: Number(e.target.value) }
                         )
-                      }
+                      }}
                     >
                       {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
                         <option key={n} value={n}>
@@ -423,13 +431,14 @@ export default function DynastySettingsPanel({
                     <select
                       className="rounded border border-white/20 bg-black/40 px-2 py-1 text-white"
                       value={lotteryConfig.lotteryPickCount ?? 6}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setLotteryDirty(true)
                         setLotteryConfig((c) =>
                           c
                             ? { ...c, lotteryPickCount: Number(e.target.value) }
                             : { ...DEFAULT_WEIGHTED_LOTTERY_CONFIG, lotteryPickCount: Number(e.target.value) }
                         )
-                      }
+                      }}
                     >
                       {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                         <option key={n} value={n}>
@@ -444,13 +453,14 @@ export default function DynastySettingsPanel({
                     <select
                       className="rounded border border-white/20 bg-black/40 px-2 py-1 text-white"
                       value={lotteryConfig.weightingMode ?? 'inverse_standings'}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setLotteryDirty(true)
                         setLotteryConfig((c) =>
                           c
                             ? { ...c, weightingMode: e.target.value as LotteryWeightingMode }
                             : { ...DEFAULT_WEIGHTED_LOTTERY_CONFIG, weightingMode: e.target.value as LotteryWeightingMode }
                         )
-                      }
+                      }}
                     >
                       <option value="inverse_standings">Inverse standings (standard)</option>
                       <option value="inverse_points_for">Inverse points scored</option>
@@ -463,7 +473,8 @@ export default function DynastySettingsPanel({
                     <select
                       className="rounded border border-white/20 bg-black/40 px-2 py-1 text-white"
                       value={lotteryConfig.eligibilityMode ?? 'non_playoff'}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setLotteryDirty(true)
                         setLotteryConfig((c) =>
                           c
                             ? { ...c, eligibilityMode: e.target.value as LotteryEligibilityMode }
@@ -472,7 +483,7 @@ export default function DynastySettingsPanel({
                                 eligibilityMode: e.target.value as LotteryEligibilityMode,
                               }
                         )
-                      }
+                      }}
                     >
                       <option value="non_playoff">Non-playoff teams only</option>
                       <option value="bottom_n">Bottom N teams</option>
@@ -684,7 +695,7 @@ export default function DynastySettingsPanel({
         </div>
       )}
 
-      {isCommissioner && Object.keys(patch).length > 0 && (
+      {isCommissioner && (Object.keys(patch).length > 0 || lotteryDirty) && (
         <div className="flex gap-2">
           <button
             type="button"
@@ -696,7 +707,11 @@ export default function DynastySettingsPanel({
           </button>
           <button
             type="button"
-            onClick={() => setPatch({})}
+            onClick={() => {
+              setPatch({})
+              setLotteryDirty(false)
+              setLotteryConfig({ ...DEFAULT_WEIGHTED_LOTTERY_CONFIG, ...(data.weightedLotterySettings?.lotteryConfig ?? {}) })
+            }}
             className="rounded border border-white/20 px-3 py-1.5 text-xs text-white/80"
           >
             Reset

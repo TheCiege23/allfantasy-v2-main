@@ -71,6 +71,12 @@ describe('lottery off: untouched', () => {
 })
 
 describe('lottery on', () => {
+  it('honors the legacy lottery setting as a weighted lottery', async () => {
+    m.leagueFindUnique.mockResolvedValue({ dynastyConfig: { rookiePickOrderMethod: 'lottery' } })
+    expect((await ensureRookieDraftLottery(input))?.ranNow).toBe(true)
+    expect(m.run).toHaveBeenCalledOnce()
+  })
+
   it('runs once when there is no draw for this draft, stores it and audits it', async () => {
     const out = await ensureRookieDraftLottery(input)
     expect(out).toEqual({ slotOrder: order(['R-d', 'R-b', 'R-a', 'R-c']), ranNow: true, seed: 'L1:rookie-draft:2027' })

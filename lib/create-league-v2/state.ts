@@ -46,7 +46,7 @@ export type SoccerPipeline = 'mls' | 'euro'
 export type LeaguePrivacy = 'public' | 'private'
 
 export type DynastyDraftMode = 'scheduled' | 'offline'
-export type DynastyRookieOrderMethod = 'reverse_standings' | 'max_pf' | 'lottery' | 'commissioner'
+export type DynastyRookieOrderMethod = 'reverse_standings' | 'max_pf' | 'lottery' | 'weighted_lottery' | 'commissioner'
 export type DynastyVisibility = 'public' | 'private'
 export type DynastyMonetization = 'free' | 'paid'
 

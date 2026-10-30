@@ -913,6 +913,7 @@ export async function createCanonicalLeagueInTransaction(
     // NCAAF's bracket window first, then the sport's own season length (dailySportSeasonShape.ts for
     // NBA/NHL/MLB) — never a flat 14, which left a daily sport's playoff start past its season's end.
     const dynastyFallbackRegularSeasonWeeks = ncaafRegularSeasonEndWeek ?? dynastyDefaultRegularSeasonWeeksFor(sport)
+    const rookieOrderMethod = str(ds.rookieDraftOrderMethod, 'max_pf') === 'lottery' ? 'weighted_lottery' : str(ds.rookieDraftOrderMethod, 'max_pf')
     const dynastyFallbackRookieDraftType =
       formatId === 'devy' ? readString(foundationDefaults.devyConfig, 'rookieDraftType', 'linear') : 'linear'
     await tx.dynastyLeagueConfig.upsert({
@@ -920,7 +921,7 @@ export async function createCanonicalLeagueInTransaction(
       create: {
         leagueId: league.id,
         regularSeasonWeeks: num(ds.regularSeasonWeeks, dynastyFallbackRegularSeasonWeeks),
-        rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
+        rookiePickOrderMethod: rookieOrderMethod,
         useMaxPfForNonPlayoff: true,
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
         rookieDraftType: str(ds.rookieDraftType, dynastyFallbackRookieDraftType),
@@ -937,7 +938,7 @@ export async function createCanonicalLeagueInTransaction(
       },
       update: {
         regularSeasonWeeks: num(ds.regularSeasonWeeks, dynastyFallbackRegularSeasonWeeks),
-        rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
+        rookiePickOrderMethod: rookieOrderMethod,
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
         rookieDraftType: str(ds.rookieDraftType, dynastyFallbackRookieDraftType),
         divisionsEnabled: num(ds.divisionCount, 0) > 0,
