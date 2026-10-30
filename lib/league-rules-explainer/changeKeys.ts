@@ -28,6 +28,7 @@ export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'tradeDeadlineWeek',
   'tradeDeadlineAt',
   'tradeReview',
+  'vetoThreshold',
   'tradeReviewHours',
   'waiverType',
   'waiverBudget',

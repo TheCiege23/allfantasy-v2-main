@@ -29,6 +29,12 @@ const plural = (k: string, n: number, vars: Record<string, RuleVar> = {}): RuleT
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const isPosInt = (v: unknown): v is number => isNum(v) && Number.isInteger(v) && v > 0
+const isVetoRule = (v: unknown): v is { mode: 'count' | 'percent'; value: number } => {
+  if (!v || typeof v !== 'object') return false
+  const rule = v as { mode?: unknown; value?: unknown }
+  return (rule.mode === 'count' || rule.mode === 'percent') && isPosInt(rule.value) && (rule.mode !== 'percent' || rule.value <= 100)
+}
+const vetoRuleText = (v: unknown): RuleText | null => isVetoRule(v) ? v.mode === 'percent' ? text('v.vetoPercent', { n: v.value }) : plural('v.vetoVotes', v.value) : null
 
 /* ------------------------------------------------------------------ vocabularies */
 
@@ -217,6 +223,8 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'waiverType':
     case 'feederWaiverType':
       return typeof value === 'string' && WAIVER_TYPES.has(value) ? text(`waiverType.${value}`) : null
+    case 'vetoThreshold':
+      return vetoRuleText(value)
     case 'tradeReview':
       return typeof value === 'string' && TRADE_REVIEWS.has(value) ? text(`tradeReview.${value}`) : null
     case 'scoringMode':
@@ -459,6 +467,7 @@ function tradeLines(s: RuleSnapshot): RuleLine[] {
       deadlineAt ? text('trades.deadlineAt', { date: { date: deadlineAt } }) : isPosInt(s.tradeDeadlineWeek) ? text('trades.deadlineWeek', { week: s.tradeDeadlineWeek }) : text('trades.noDeadline'),
     ),
     line('trades-review', review ? text(`trades.review.${review}`) : null),
+    line('trades-veto-threshold', review === 'league_vote' && isVetoRule(s.vetoThreshold) ? (s.vetoThreshold.mode === 'percent' ? text('trades.vetoPercent', { n: s.vetoThreshold.value }) : plural('trades.vetoVotes', s.vetoThreshold.value)) : null),
     line(
       'trades-review-hours',
       (review === 'commissioner' || review === 'league_vote') && isNum(s.tradeReviewHours) && s.tradeReviewHours > 0 ? plural('trades.reviewHours', s.tradeReviewHours) : null,
@@ -773,6 +782,8 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       return after === 'top_scorer' ? text('guillotine.immunity') : after === 'off' ? text('change.immunity.off') : null
     case 'endgame':
       return after === 'last_team_standing' ? text('guillotine.endgame.last') : typeof after === 'string' && ENDGAME_TEAMS[after] ? text('guillotine.endgame.final', { n: ENDGAME_TEAMS[after]! }) : null
+    case 'vetoThreshold':
+      return isVetoRule(after) ? (after.mode === 'percent' ? text('trades.vetoPercent', { n: after.value }) : plural('trades.vetoVotes', after.value)) : null
     case 'tradeReview':
       return typeof after === 'string' && TRADE_REVIEWS.has(after) ? text(`trades.review.${after}`) : null
     case 'thirdPlaceGame':
