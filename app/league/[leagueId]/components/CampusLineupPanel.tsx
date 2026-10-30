@@ -28,7 +28,7 @@ export function CampusLineupPanel({
   const { language } = useLanguage()
   const lang = campusLang(language)
   const t = (key: Parameters<typeof campusCopy>[1], vars?: Record<string, string | number>) => campusCopy(lang, key, vars)
-  const toggles = useMemo(() => campusToggles(view.seats, view.starterIds, view.players), [view])
+  const toggles = useMemo(() => campusToggles(view.seats, view.starterIds, view.players, view.sport ?? 'football'), [view])
   const byId = useMemo(() => new Map(toggles.map((x) => [x.playerId, x])), [toggles])
   const slots = view.seats.join(', ')
 
@@ -55,9 +55,9 @@ export function CampusLineupPanel({
             <p className="text-xs font-semibold text-primary">
               {t('filled', { n: view.starterIds.length, total: view.seats.length })} · {t('slots', { slots })}
             </p>
-            <p className="text-xs text-muted">
+            {view.sport !== 'basketball' ? <p className="text-xs text-muted">
               {view.cfbWeeks.length ? t('weeks', { weeks: view.cfbWeeks.join(', '), nfl: view.nflWeek }) : t('noWeeks')}
-            </p>
+            </p> : null}
             {!editable ? <p className="text-xs text-muted">{t('locked')}</p> : null}
             {view.players.length === 0 ? (
               <p className="text-xs text-muted">{t('noPlayers')}</p>

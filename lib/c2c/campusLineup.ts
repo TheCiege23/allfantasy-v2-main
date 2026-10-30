@@ -25,6 +25,10 @@ export function isFootballC2CLeague(league: { leagueVariant?: string | null; spo
   return isC2CVariant(league.leagueVariant) && String(league.sport ?? '').toUpperCase() === 'NFL'
 }
 
+export function isBasketballC2CLeague(league: { leagueVariant?: string | null; sport?: string | null }): boolean {
+  return isC2CVariant(league.leagueVariant) && String(league.sport ?? '').toUpperCase() === 'NBA'
+}
+
 const record = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 const idOf = (e: unknown): string => (typeof e === 'string' ? e : String(record(e).id ?? record(e).player_id ?? ''))
 

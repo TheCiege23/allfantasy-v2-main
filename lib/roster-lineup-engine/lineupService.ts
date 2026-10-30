@@ -234,6 +234,8 @@ export async function persistRosterLineupWithEngine(
       redraftRosterId: roster.redraftRosterId ?? null,
       before: roster.playerData,
       after: input.nextPlayerData,
+      season: input.season,
+      week: input.week,
     })
     if (campusIssues.length) return { ok: false, error: campusIssues.map((i) => i.message).join(' '), status: 400 }
   }
@@ -280,6 +282,23 @@ export async function persistRosterLineupWithEngine(
   const redraftRosterId =
     resolveWriteAuthority(league.platform) === 'NATIVE' ? (roster.redraftRosterId ?? null) : null
 
+  let campusSnapshot: import('@/lib/c2c/nbaCampusWeekSnapshot').NbaCampusWeekSnapshot | null = null
+  if (redraftRosterId && sport === 'NBA' && ['c2c', 'merged_devy_c2c'].includes(String(league.leagueVariant ?? '').toLowerCase())) {
+    const { campusStarterIds } = await import('@/lib/c2c/campusLineup')
+    const beforeCampus = campusStarterIds(roster.playerData)
+    const afterCampus = campusStarterIds(input.nextPlayerData)
+    const changed = beforeCampus.join('\n') !== afterCampus.join('\n')
+    if (changed || afterCampus.length > 0) {
+      try {
+        const { prepareNbaCampusWeekSnapshot } = await import('@/lib/c2c/storeNbaCampusWeekSnapshot')
+        campusSnapshot = (await prepareNbaCampusWeekSnapshot(prisma, { leagueId: input.leagueId, rosterId: input.rosterId, season: input.season, week: input.week, playerData: input.nextPlayerData, now: new Date() })).snapshot
+      } catch {
+        campusSnapshot = null
+      }
+      if (!campusSnapshot && changed) return { ok: false, error: 'College roster information is unavailable; try again when it refreshes.', status: 409 }
+    }
+  }
+
   try { await prisma.$transaction(async (tx) => {
     await input.transactionCheck?.(tx)
     if (input.expectedStarters) {
@@ -295,6 +314,10 @@ export async function persistRosterLineupWithEngine(
       // fingerprint is of the lineup as the database will return it (JSON drops undefined fields).
       const undo: AutomaticChangeUndo = { layout: lineupLayout(before), afterHash: hashPlayerDataSnapshot(JSON.parse(JSON.stringify(input.nextPlayerData))), season: input.season, week: input.week }
       await tx.automationAuditLog.create({data:{...input.automationAudit, leagueId:input.leagueId,userId:input.actorUserId,entityType:"roster",entityId:input.rosterId,metadata:{...input.automationAudit.metadata, undo} as unknown as Prisma.InputJsonValue}})
+    }
+    if (campusSnapshot) {
+      const { persistNbaCampusWeekSnapshot } = await import('@/lib/c2c/storeNbaCampusWeekSnapshot')
+      await persistNbaCampusWeekSnapshot(tx, { leagueId: input.leagueId, rosterId: input.rosterId, snapshot: campusSnapshot, now: new Date() })
     }
     await syncAfRosterLineupAssignments(
       {
