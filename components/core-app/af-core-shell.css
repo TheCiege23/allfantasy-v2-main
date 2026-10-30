@@ -3938,3 +3938,27 @@ html[data-mode='light'] .af-core {
   .af-core .af-core-bracket-promo-actions { flex: 1 1 100%; justify-content: flex-start; }
   .af-core .af-core-bracket-promo-button { flex: 1 1 145px; }
 }
+
+/* ── Phone header: theme and language live in the ↻ menu ─────────────────────
+ * The default (not league-first) phone header kept the theme and language chips in the top
+ * row. With the crest, the scope pill, the ↻ menu and the search icon that is ~520px of
+ * controls on a ~370px phone, so the AF Legacy theme's long name ran under the search icon and
+ * the language chip off the edge (reported from a real phone 2026-10-30). Below 720px the two
+ * chips render inside the ↻ panel instead (`.af-data-menu-display`); above it they stay put.
+ * Its own top-level @media, appended — never nested inside an earlier block.
+ */
+.af-core .af-data-menu-display { display: none; }
+@media (max-width: 720px) {
+  .af-core .af-topbar-right > .af-topbar-chip { display: none; }
+  .af-core .af-topbar .af-topbar-right { flex: 0 0 auto; min-width: 0; }
+  .af-core .af-topbar .af-scope { flex: 1 1 auto; min-width: 0; }
+  .af-core .af-topbar .af-scope-btn { max-width: 100%; }
+  .af-core .af-data-menu-display {
+    display: block;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .af-core .af-data-menu-display-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+}
+
