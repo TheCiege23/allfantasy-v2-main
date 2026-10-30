@@ -35,7 +35,8 @@ import {
 } from '@/lib/core-app/leaguePreferences'
 import { ScopeSwitcher } from '@/components/core-app/ScopeSwitcher'
 import AfCoreShell from '@/components/core-app/AfCoreShell'
-import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { coreShellMessages } from '@/lib/core-app/messages/coreShell'
+import { messagesFor } from '@/lib/i18n/messages'
 import LeagueListPreferencesCard from '@/components/settings/LeagueListPreferencesCard'
 
 const L = (id: string, name: string) => ({ id, name })
@@ -204,12 +205,13 @@ describe('the Updates menu — lineup handoff', () => {
     expect(screen.getByTestId('updates-lineup-handoff').textContent).toMatch(/Open league in Fantrax/)
   })
 
-  it('reads in Spanish from the catalog, platform name kept', () => {
-    expect(coreUiCopy('Fix lineup in Sleeper', 'es')).toBe('Arreglar la alineación en Sleeper')
-    expect(coreUiCopy('Open league in Fantrax', 'es')).toBe('Abrir la liga en Fantrax')
-    expect(coreUiCopy('AllFantasy only reads this league — changes are made in ESPN.', 'es')).toBe('AllFantasy solo lee esta liga: los cambios se hacen en ESPN.')
-    expect(coreUiCopy('Make lineup changes on your league’s platform.', 'es')).toBe('Cambia la alineación en la plataforma de tu liga.')
-    expect(coreUiCopy('Fix lineup in Sleeper', 'en')).toBe('Fix lineup in Sleeper')
+  it('reads in Spanish from the shell catalog, platform name kept', () => {
+    const es = messagesFor(coreShellMessages, 'es')
+    expect(es.fixLineupIn('Sleeper')).toBe('Arreglar la alineación en Sleeper')
+    expect(es.openLeagueIn('Fantrax')).toBe('Abrir la liga en Fantrax')
+    expect(es.readOnlyChangesIn('ESPN')).toBe('AllFantasy solo lee esta liga: los cambios se hacen en ESPN.')
+    expect(es.platformLineupChanges).toBe('Cambia la alineación en la plataforma de tu liga.')
+    expect(messagesFor(coreShellMessages, 'en').fixLineupIn('Sleeper')).toBe('Fix lineup in Sleeper')
   })
 
   it('CONTROL: no handoff keeps the sentence and draws no button', () => {

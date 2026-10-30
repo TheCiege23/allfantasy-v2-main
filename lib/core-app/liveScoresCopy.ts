@@ -3,11 +3,15 @@
  *
  * Every function returns its English input (or the exact English sentence the screen printed before)
  * unless `language === 'es'`, so the English screen is byte-identical. Exact-match strings live in
- * `ES`; sentences carrying numbers or names get their own function.
+ * `ES`; sentences carrying numbers or names get their own function, which reads both languages from
+ * the `liveScoresMessages` catalog (lib/core-app/messages/liveScores.ts).
  *
  * Style: informal "tú", Latin-American neutral. Proper nouns, team abbreviations, player names, sport
  * codes and product names (AllFantasy, Chimmy) stay as they are.
  */
+
+import { messagesFor } from '@/lib/i18n/messages'
+import { liveScoresMessages } from '@/lib/core-app/messages/liveScores'
 
 const ES: Record<string, string> = {
   // Header and controls
@@ -138,52 +142,42 @@ export function liveScoresCopy(english: string, language: string | null | undefi
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
 
+/** The number- and name-carrying sentences, in the reader's language (lib/core-app/messages/liveScores.ts). */
+const msg = (language: string | null | undefined) => messagesFor(liveScoresMessages, language)
+
 /** " · updated 12s ago" */
 export function updatedAgo(age: string, language: string | null | undefined): string {
-  return isEs(language) ? ` · actualizado hace ${age}` : ` · updated ${age} ago`
+  return msg(language).updatedAgo(age)
 }
 
 /** Sport tab badge: "3 games in slate" */
 export function slateCountAria(n: number, language: string | null | undefined): string {
-  return isEs(language)
-    ? `${n} ${plural(n, 'partido', 'partidos')} en la jornada`
-    : `${n} ${plural(n, 'game', 'games')} in slate`
+  return msg(language).slateCountAria(n)
 }
 
 /** "Top 25 and teams you follow · 4 other games hidden." */
 export function top25HiddenNote(n: number, language: string | null | undefined): string {
-  return isEs(language)
-    ? `Top 25 y equipos que sigues · ${n} ${plural(n, 'partido más oculto', 'partidos más ocultos')}.`
-    : `Top 25 and teams you follow · ${n} other ${plural(n, 'game', 'games')} hidden.`
+  return msg(language).top25HiddenNote(n)
 }
 
 /** Empty-slate body when the Top 25 filter hid everything. */
 export function top25EmptyBody(n: number, language: string | null | undefined): string {
-  return isEs(language)
-    ? `${n} ${plural(n, 'partido entre equipos sin ranking está oculto', 'partidos entre equipos sin ranking están ocultos')}.`
-    : `${n} ${plural(n, 'game', 'games')} between unranked teams ${plural(n, 'is', 'are')} hidden.`
+  return msg(language).top25EmptyBody(n)
 }
 
 /** "No scoreboard match for “query”." */
 export function noScoreboardMatch(query: string, language: string | null | undefined): string {
-  return isEs(language)
-    ? `Ningún resultado en el marcador para “${query}”.`
-    : `No scoreboard match for “${query}”.`
+  return msg(language).noScoreboardMatch(query)
 }
 
 /** "3 player scores unavailable; totals are partial." */
 export function missingScores(n: number, language: string | null | undefined): string {
-  return isEs(language)
-    ? `${n} ${plural(n, 'puntuación de jugador no disponible', 'puntuaciones de jugadores no disponibles')}; los totales son parciales.`
-    : `${n} player scores unavailable; totals are partial.`
+  return msg(language).missingScores(n)
 }
 
 /** "starters playing now in this league" */
 export function startersPlayingNow(n: number, leagueScoped: boolean, language: string | null | undefined): string {
-  if (isEs(language)) {
-    return `${plural(n, 'titular jugando', 'titulares jugando')} ahora${leagueScoped ? ' en esta liga' : ''}`
-  }
-  return `${plural(n, 'starter', 'starters')} playing now${leagueScoped ? ' in this league' : ''}`
+  return msg(language).startersPlayingNow(n, leagueScoped)
 }
 
 /** Spanish twin of `starterStageDetail` in lib/live/liveImpact. */
@@ -202,7 +196,7 @@ export function starterStageDetailCopy(
 
 /** "None on the field right now · <detail>" */
 export function noneOnField(detail: string, language: string | null | undefined): string {
-  return isEs(language) ? `Ninguno en el campo ahora mismo · ${detail}` : `None on the field right now · ${detail}`
+  return msg(language).noneOnField(detail)
 }
 
 /** Localises `playAgeLabel` output: "just now", "4 min ago", "2 hr ago". */
@@ -226,107 +220,89 @@ export function projectionCopy(label: string, language: string | null | undefine
 
 /** Card tag: "NFL · Week 6" */
 export function weekLabel(sport: string, week: number, language: string | null | undefined): string {
-  return isEs(language) ? `${sport} · Semana ${week}` : `${sport} · Week ${week}`
+  return msg(language).weekLabel(sport, week)
 }
 
 /** Highlight video title. */
 export function highlightTitle(away: string, home: string, language: string | null | undefined): string {
-  return isEs(language) ? `Resumen: ${away} en ${home}` : `${away} at ${home} highlights`
+  return msg(language).highlightTitle(away, home)
 }
 
 /** Field strip aria-label prefix: "KC ball" */
 export function teamBall(abbrev: string, language: string | null | undefined): string {
-  return isEs(language) ? `Balón de ${abbrev}` : `${abbrev} ball`
+  return msg(language).teamBall(abbrev)
 }
-
-const BASE_ES: Record<string, string> = { first: 'primera', second: 'segunda', third: 'tercera' }
 
 /** Diamond aria-label: "Runners on first and second" */
 export function runnersOn(bases: readonly string[], language: string | null | undefined): string {
   if (bases.length === 0) return liveScoresCopy('Bases empty', language)
-  if (isEs(language)) {
-    return `${plural(bases.length, 'Corredor', 'Corredores')} en ${bases.map((b) => BASE_ES[b] ?? b).join(' y ')}`
-  }
-  return `Runner${bases.length > 1 ? 's' : ''} on ${bases.join(' and ')}`
+  return msg(language).runnersOn(bases)
 }
 
 /** Diamond aria-label suffix: ", 2-1 count, 1 out" */
 export function countSuffix(balls: number, strikes: number, outs: number, language: string | null | undefined): string {
-  return isEs(language)
-    ? `, cuenta ${balls}-${strikes}, ${outs} ${plural(outs, 'out', 'outs')}`
-    : `, ${balls}-${strikes} count, ${outs} ${plural(outs, 'out', 'outs')}`
+  return msg(language).countSuffix(balls, strikes, outs)
 }
 
 /** "KC 2 timeouts left" */
 export function timeoutsLeft(abbrev: string, left: number, language: string | null | undefined): string {
-  return isEs(language)
-    ? `${abbrev}: ${left} ${plural(left, 'tiempo muerto restante', 'tiempos muertos restantes')}`
-    : `${abbrev} ${left} timeouts left`
+  return msg(language).timeoutsLeft(abbrev, left)
 }
 
 /** "KC leaders" */
 export function teamLeaders(abbrev: string, language: string | null | undefined): string {
-  return isEs(language) ? `Líderes de ${abbrev}` : `${abbrev} leaders`
+  return msg(language).teamLeaders(abbrev)
 }
 
 /** "Final · 3 games" */
 export function finalCount(n: number, language: string | null | undefined): string {
-  return isEs(language)
-    ? `Final · ${n} ${plural(n, 'partido', 'partidos')}`
-    : `Final · ${n} ${plural(n, 'game', 'games')}`
+  return msg(language).finalCount(n)
 }
 
 /** "2 starters" */
 export function starterCount(n: number, language: string | null | undefined): string {
-  return isEs(language)
-    ? `${n} ${plural(n, 'titular', 'titulares')}`
-    : `${n} ${plural(n, 'starter', 'starters')}`
+  return msg(language).starterCount(n)
 }
 
 /** " · top " before the best starter's name. */
 export function topPrefix(language: string | null | undefined): string {
-  return isEs(language) ? ' · mejor ' : ' · top '
+  return msg(language).topPrefix
 }
 
 /** "Your starters · 3 players · 2 leagues" */
 export function yourStartersHead(players: number, leagues: number, language: string | null | undefined): string {
-  return isEs(language)
-    ? `Tus titulares · ${players} ${plural(players, 'jugador', 'jugadores')} · ${leagues} ${plural(leagues, 'liga', 'ligas')}`
-    : `Your starters · ${players} ${plural(players, 'player', 'players')} · ${leagues} ${plural(leagues, 'league', 'leagues')}`
+  return msg(language).yourStartersHead(players, leagues)
 }
 
 /** "Show all 12 starters" */
 export function showAllStarters(n: number, language: string | null | undefined): string {
-  return isEs(language) ? `Mostrar los ${n} titulares` : `Show all ${n} starters`
+  return msg(language).showAllStarters(n)
 }
 
 /** "2 leagues" */
 export function leagueCount(n: number, language: string | null | undefined): string {
-  return isEs(language) ? `${n} ${plural(n, 'liga', 'ligas')}` : `${n} ${plural(n, 'league', 'leagues')}`
+  return msg(language).leagueCount(n)
 }
 
 /** Starter-row points tooltip before kickoff. */
 export function projectionTitle(leagueName: string | null, language: string | null | undefined): string {
-  if (isEs(language)) {
-    return `Proyección de esta semana${leagueName ? ` en ${leagueName}` : ''}, según la puntuación de cada liga`
-  }
-  return `Projection for this week${leagueName ? ` in ${leagueName}` : ''}, under each league’s own scoring`
+  return msg(language).projectionTitle(leagueName)
 }
 
 /** "Points in <league>" */
 export function pointsIn(leagueName: string, language: string | null | undefined): string {
-  return isEs(language) ? `Puntos en ${leagueName}` : `Points in ${leagueName}`
+  return msg(language).pointsIn(leagueName)
 }
 
 /** "3 lineup decisions closing" */
 export function lineupDecisionsClosing(n: number, language: string | null | undefined): string {
   if (n === 1) return liveScoresCopy('Lineup decision closing', language)
-  return isEs(language) ? `Se cierran ${n} decisiones de alineación` : `${n} lineup decisions closing`
+  return msg(language).lineupDecisionsClosing(n)
 }
 
 /** "kicks off in 12m" */
 export function kicksOffIn(countdown: string, language: string | null | undefined): string {
-  return isEs(language) ? `empieza en ${countdown}` : `kicks off in ${countdown}`
+  return msg(language).kicksOffIn(countdown)
 }
 
 /** "2 benched, 1 starting · 2 leagues" — Spanish twin of the screen's `describeLockExposure`. */
@@ -334,17 +310,15 @@ export function lockExposure(
   alert: { bench: number; starters: number; leagues: { leagueName: string }[] },
   language: string | null | undefined,
 ): string {
-  const es = isEs(language)
+  const m = msg(language)
   const parts: string[] = []
-  if (alert.bench > 0) parts.push(es ? `${alert.bench} en la banca` : `${alert.bench} benched`)
+  if (alert.bench > 0) parts.push(m.lockBenched(alert.bench))
   if (alert.starters > 0) {
-    parts.push(es ? `${alert.starters} ${plural(alert.starters, 'titular', 'titulares')}` : `${alert.starters} starting`)
+    parts.push(m.lockStarting(alert.starters))
   }
   const leagues =
     alert.leagues.length === 1
       ? alert.leagues[0]!.leagueName
-      : es
-        ? `${alert.leagues.length} ligas`
-        : `${alert.leagues.length} leagues`
+      : m.lockLeagues(alert.leagues.length)
   return `${parts.join(', ')} · ${leagues}`
 }

@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { inactiveManagerCommissionerMessages } from '@/lib/core-app/messages/inactiveManagerCommissioner'
 
 type AutopilotStyle = 'dynasty_owner' | 'win_now' | 'rebuild'
 type AutoHandover = { days: 7 | 14 | 21; to: 'lineups' | 'autopilot' } | null
@@ -22,8 +23,7 @@ type Team = {
  * AllFantasy suggests the teams manager health calls inactive; only the commissioner turns it on.
  */
 export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) {
-  const { language } = useOptionalLanguage()
-  const t = (en: string, es: string) => (language === 'es' ? es : en)
+  const m = useMessages(inactiveManagerCommissionerMessages)
   const url = `/api/leagues/${encodeURIComponent(leagueId)}/inactive-managers`
   const [teams, setTeams] = useState<Team[] | null>(null)
   const [native, setNative] = useState(true)
@@ -44,7 +44,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       setAutoHandoverState(body.autoHandover ? { days: body.autoHandover.days, to: body.autoHandover.to } : null)
       setTeams(body.teams)
     } catch {
-      setMessage(t('Commissioner permission or a connection is required.', 'Se requiere permiso del comisionado o conexión.'))
+      setMessage(m.loadFailed)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url])
@@ -64,10 +64,10 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       })
       const body = (await r.json().catch(() => ({}))) as { error?: string }
       if (!r.ok) throw new Error(body.error || '')
-      setMessage(team.managed ? t('Stopped. The manager sets their own lineup again.', 'Detenido. El mánager vuelve a poner su alineación.') : t('On. AllFantasy will set this lineup within the hour.', 'Activado. AllFantasy pondrá esta alineación en menos de una hora.'))
+      setMessage(team.managed ? m.stopped : m.turnedOn)
       await load()
     } catch (e) {
-      setMessage(e instanceof Error && e.message ? e.message : t('Could not save. Refresh and try again.', 'No se pudo guardar. Actualiza e inténtalo de nuevo.'))
+      setMessage(e instanceof Error && e.message ? e.message : m.saveFailed)
     } finally {
       setBusy(null)
     }
@@ -87,15 +87,12 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       if (!r.ok) throw new Error(body.error || '')
       setMessage(
         style
-          ? t(
-              'Chimmy is running this team: the lineup, plus a waiver claim when a starter cannot play. Trade offers to it are refused while it does.',
-              'Chimmy dirige este equipo: la alineación y un reclamo cuando un titular no puede jugar. Se rechazan las ofertas de intercambio mientras tanto.',
-            )
-          : t('Autopilot off. AllFantasy still sets the lineup until you stop it.', 'Piloto automático apagado. AllFantasy sigue poniendo la alineación hasta que lo detengas.'),
+          ? m.autopilotOn
+          : m.autopilotOff,
       )
       await load()
     } catch (e) {
-      setMessage(e instanceof Error && e.message ? e.message : t('Could not save. Refresh and try again.', 'No se pudo guardar. Actualiza e inténtalo de nuevo.'))
+      setMessage(e instanceof Error && e.message ? e.message : m.saveFailed)
     } finally {
       setBusy(null)
     }
@@ -111,11 +108,11 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       setDraftAsMeState(on)
       setMessage(
         on
-          ? t('On. A missed draft pick is made the way that manager usually drafts.', 'Activado. Una selección perdida se hace como suele elegir ese mánager.')
-          : t('Off. A missed draft pick uses the standard autopick.', 'Desactivado. Una selección perdida usa la selección automática estándar.'),
+          ? m.draftAsMeOn
+          : m.draftAsMeOff,
       )
     } catch (e) {
-      setMessage(e instanceof Error && e.message ? e.message : t('Could not save. Refresh and try again.', 'No se pudo guardar. Actualiza e inténtalo de nuevo.'))
+      setMessage(e instanceof Error && e.message ? e.message : m.saveFailed)
     } finally {
       setBusy(null)
     }
@@ -132,14 +129,11 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       setAutoHandoverState(next)
       setMessage(
         next
-          ? t(
-              `On. A team with no activity for ${next.days} days is handed to ${next.to === 'autopilot' ? 'Chimmy autopilot' : 'AllFantasy'}; you and its owner are told, and it ends when the owner saves a lineup.`,
-              `Activado. Un equipo sin actividad durante ${next.days} días pasa a ${next.to === 'autopilot' ? 'el piloto automático de Chimmy' : 'AllFantasy'}; se te avisa a ti y a su dueño, y termina cuando el dueño guarda una alineación.`,
-            )
-          : t('Off. AllFantasy only suggests inactive teams.', 'Desactivado. AllFantasy solo sugiere equipos inactivos.'),
+          ? m.autoHandoverOn(next.days, next.to === 'autopilot')
+          : m.autoHandoverOff,
       )
     } catch (e) {
-      setMessage(e instanceof Error && e.message ? e.message : t('Could not save. Refresh and try again.', 'No se pudo guardar. Actualiza e inténtalo de nuevo.'))
+      setMessage(e instanceof Error && e.message ? e.message : m.saveFailed)
     } finally {
       setBusy(null)
     }
@@ -147,92 +141,86 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
 
   const styleLabel = (style: AutopilotStyle) =>
     style === 'dynasty_owner'
-      ? t('Play like a dynasty owner', 'Jugar como dueño dinastía')
+      ? m.styleDynastyOwner
       : style === 'win_now'
-        ? t('Win now', 'Ganar ya')
-        : t('Rebuild', 'Reconstruir')
+        ? m.styleWinNow
+        : m.styleRebuild
 
   if (!native) return null
-  const name = (team: Team) => team.teamName || team.managerName || t('Team', 'Equipo')
+  const name = (team: Team) => team.teamName || team.managerName || m.team
   const shown = (teams ?? []).filter((team) => team.managed || team.suggested)
   const others = (teams ?? []).filter((team) => !team.managed && !team.suggested)
 
   return (
     <section id="ch-inactive-managers" className="af-tw af-tw-panel" data-testid="inactive-manager-mode">
-      <h2>{t('Inactive manager mode', 'Modo mánager inactivo')}</h2>
+      <h2>{m.title}</h2>
       <p>
-        {t(
-          "Hand an away manager's lineup to AllFantasy: it sets the projected-best lineup every week, from players whose games have not started. It stops by itself the moment the manager saves a lineup, and the league log shows every change. With AF Commissioner, Chimmy can run the whole team on autopilot, playing like a dynasty owner by default.",
-          'Deja la alineación de un mánager ausente a AllFantasy: pone la mejor alineación proyectada cada semana, con jugadores cuyos partidos no han empezado. Se detiene sola cuando el mánager guarda una alineación, y el registro de la liga muestra cada cambio. Con AF Commissioner, Chimmy puede dirigir todo el equipo en piloto automático, jugando como dueño dinastía por defecto.',
-        )}
+        {m.intro}
       </p>
       <p data-testid="draft-as-me-toggle">
         {entitled ? (
           <label>
             <input type="checkbox" checked={draftAsMe} disabled={busy !== null} onChange={(e) => void toggleDraftAsMe(e.target.checked)} />{' '}
-            {t(
-              'Draft as me: when a manager misses a pick, Chimmy drafts the way they usually draft instead of taking the best available player.',
-              'Draft as me: cuando un mánager pierde una selección, Chimmy elige como suele elegir ese mánager en vez de tomar al mejor jugador disponible.',
-            )}
+            {m.draftAsMeToggle}
           </label>
         ) : (
           <a href="/commissioner-upgrade?highlight=draft_as_me">
-            {t('Draft as me: missed picks made the way each manager drafts (AF Commissioner)', 'Draft as me: selecciones perdidas hechas como elige cada mánager (AF Commissioner)')}
+            {m.draftAsMeUpsell}
           </a>
         )}
       </p>
       <p data-testid="auto-handover">
         <label>
-          {t('Hand a team over by itself after', 'Pasar un equipo solo tras')}{' '}
+          {m.autoHandoverAfter}{' '}
           <select
             value={autoHandover ? String(autoHandover.days) : ''}
             disabled={busy !== null}
             data-testid="auto-handover-days"
             onChange={(e) => void saveAutoHandover(e.target.value ? { days: Number(e.target.value) as 7 | 14 | 21, to: autoHandover?.to ?? 'lineups' } : null)}
           >
-            <option value="">{t('Never (you decide each time)', 'Nunca (decides tú cada vez)')}</option>
-            <option value="7">{t('7 days with no activity', '7 días sin actividad')}</option>
-            <option value="14">{t('14 days with no activity', '14 días sin actividad')}</option>
-            <option value="21">{t('21 days with no activity', '21 días sin actividad')}</option>
+            <option value="">{m.autoHandoverNever}</option>
+            <option value="7">{m.idleDays(7)}</option>
+            <option value="14">{m.idleDays(14)}</option>
+            <option value="21">{m.idleDays(21)}</option>
           </select>
         </label>{' '}
         {autoHandover ? (
           <label>
-            {t('to', 'a')}{' '}
+            {m.autoHandoverTo}{' '}
             <select
               value={autoHandover.to}
               disabled={busy !== null}
               data-testid="auto-handover-to"
               onChange={(e) => void saveAutoHandover({ days: autoHandover.days, to: e.target.value as 'lineups' | 'autopilot' })}
             >
-              <option value="lineups">{t('AllFantasy (lineups only)', 'AllFantasy (solo alineaciones)')}</option>
-              {entitled ? <option value="autopilot">{t('Chimmy autopilot', 'Piloto automático de Chimmy')}</option> : null}
+              <option value="lineups">{m.autoHandoverLineupsOnly}</option>
+              {entitled ? <option value="autopilot">{m.chimmyAutopilot}</option> : null}
             </select>
           </label>
         ) : null}
       </p>
-      {teams === null ? <p role="status">{t('Loading teams…', 'Cargando equipos…')}</p> : null}
-      {teams && shown.length === 0 ? <p>{t('No team looks inactive right now.', 'Ningún equipo parece inactivo ahora.')}</p> : null}
+      {teams === null ? <p role="status">{m.loadingTeams}</p> : null}
+      {teams && shown.length === 0 ? <p>{m.noneInactive}</p> : null}
       <ul>
         {shown.map((team) => (
           <li key={team.rosterId} data-testid="inactive-manager-team">
             <strong>{name(team)}</strong>{' '}
             {team.managed
-              ? t(`· AllFantasy sets this lineup since ${new Date(team.managed.since).toLocaleDateString(getAppIntlLocale())}`, `· AllFantasy pone esta alineación desde el ${new Date(team.managed.since).toLocaleDateString(getAppIntlLocale())}`)
-              : t('· Suggested: no activity for a while', '· Sugerido: sin actividad hace tiempo')}{' '}
+              ? m.managedSince(new Date(team.managed.since).toLocaleDateString(getAppIntlLocale()))
+              : m.suggested}{' '}
             <button type="button" className="af-btn" disabled={busy !== null} onClick={() => void toggle(team)}>
-              {busy === team.rosterId ? t('Saving…', 'Guardando…') : team.managed ? t('Stop', 'Detener') : t('Let AllFantasy set lineups', 'Que AllFantasy ponga alineaciones')}
+              {busy === team.rosterId ? m.saving : team.managed ? m.stop : m.letAllFantasySet}
             </button>
             <span className="af-tw-autopilot" data-testid="chimmy-autopilot">
               {entitled ? (
                 <label>
-                  {t('Chimmy autopilot', 'Piloto automático de Chimmy')}{' '}
+                  {m.chimmyAutopilot}{' '}
                   <select
                     value={team.managed?.autopilot?.style ?? ''}
                     disabled={busy !== null}
                     onChange={(e) => void setAutopilot(team, (e.target.value || null) as AutopilotStyle | null)}
                   >
-                    <option value="">{t('Off', 'Apagado')}</option>
+                    <option value="">{m.off}</option>
                     <option value="dynasty_owner">{styleLabel('dynasty_owner')}</option>
                     <option value="win_now">{styleLabel('win_now')}</option>
                     <option value="rebuild">{styleLabel('rebuild')}</option>
@@ -240,7 +228,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
                 </label>
               ) : (
                 <a href="/commissioner-upgrade?highlight=chimmy_autopilot">
-                  {t('Let Chimmy run this team (AF Commissioner)', 'Que Chimmy dirija este equipo (AF Commissioner)')}
+                  {m.autopilotUpsell}
                 </a>
               )}
             </span>
@@ -249,13 +237,13 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       </ul>
       {others.length > 0 ? (
         <details>
-          <summary>{t('Other teams', 'Otros equipos')}</summary>
+          <summary>{m.otherTeams}</summary>
           <ul>
             {others.map((team) => (
               <li key={team.rosterId}>
                 {name(team)}{' '}
                 <button type="button" className="af-btn" disabled={busy !== null} onClick={() => void toggle(team)}>
-                  {t('Let AllFantasy set lineups', 'Que AllFantasy ponga alineaciones')}
+                  {m.letAllFantasySet}
                 </button>
               </li>
             ))}

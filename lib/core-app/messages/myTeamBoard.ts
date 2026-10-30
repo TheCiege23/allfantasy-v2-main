@@ -42,6 +42,8 @@ export const myTeamBoardMessages = defineMessages({
     cutPlace: (rank: number, outOf: number) => `${rank} of ${outOf}`,
     cutLowest: (place: string) => `lowest score: on the cut (${place})`,
     cutOver: (over: string, place: string) => `${over} over the cut (${place})`,
+    /** ScoreStamp's word for where the row stands — English shows the lead code itself. */
+    leadWord: (lead: 'ahead' | 'behind' | 'level'): string => lead,
 
     // weekRecordLine
     weekAhead: (n: number) => `ahead in ${n}`,
@@ -142,6 +144,7 @@ export const myTeamBoardMessages = defineMessages({
     cutPlace: (rank, outOf) => `${rank}.º de ${outOf}`,
     cutLowest: (place) => `puntuación más baja: en el corte (${place})`,
     cutOver: (over, place) => `${over} sobre el corte (${place})`,
+    leadWord: (lead) => ({ ahead: 'ganando', behind: 'perdiendo', level: 'empatado' })[lead],
 
     weekAhead: (n) => `ganando en ${n}`,
     weekBehind: (n) => `perdiendo en ${n}`,

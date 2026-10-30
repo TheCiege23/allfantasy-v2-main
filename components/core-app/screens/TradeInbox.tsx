@@ -11,6 +11,8 @@ import { lineupImpactDirection, lineupImpactLine, type LineupImpactSummary } fro
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { tradeInboxMessages } from '@/lib/core-app/messages/tradeInbox'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 import { ImpactNowReview, type ImpactNowRef } from './ImpactNowReview'
@@ -431,6 +433,7 @@ export function TradeInbox(props: {
   onNeedsYouCount?: (count: number | null) => void
 }) {
   const language = useOptionalLanguage().language
+  const m = useMessages(tradeInboxMessages)
   const copy = useCallback((value: string) => coreUiCopy(value, language), [language])
   const [data, setData] = useState<PanelResponse | null>(null)
   const [state, setState] = useState<'idle' | 'loading' | 'failed'>('idle')
@@ -641,7 +644,7 @@ export function TradeInbox(props: {
                 <p className="af-tc-offer-grade" data-letter={o.leagueGrade.letter}>
                   <strong className="af-num">{o.leagueGrade.letter}</strong>
                   <span>
-                    {copy(o.leagueGrade.label)} · {copy('you get')} {o.leagueGrade.getValue.toLocaleString(getAppIntlLocale())} {language === 'es' ? 'por' : 'for'}{' '}
+                    {copy(o.leagueGrade.label)} · {copy('you get')} {o.leagueGrade.getValue.toLocaleString(getAppIntlLocale())} {m.valueFor}{' '}
                     {o.leagueGrade.giveValue.toLocaleString(getAppIntlLocale())} {copy('in league value')}
                   </span>
                 </p>
@@ -955,7 +958,7 @@ export function TradeInbox(props: {
                         <span title={sideAName}>{sideAName}</span>
                         <strong>{teamGrades.letter}</strong>
                         <TradeReaction letter={teamGrades.letter} completed />
-                        <small>{teamGrades.getValue.toLocaleString(getAppIntlLocale())} {language === 'es' ? 'por' : 'for'} {teamGrades.giveValue.toLocaleString(getAppIntlLocale())}</small>
+                        <small>{teamGrades.getValue.toLocaleString(getAppIntlLocale())} {m.valueFor} {teamGrades.giveValue.toLocaleString(getAppIntlLocale())}</small>
                         {teamGrades.current && teamGrades.current.letter !== teamGrades.letter
                           ? <small>{copy('Today')} {teamGrades.current.letter}</small>
                           : null}
@@ -964,7 +967,7 @@ export function TradeInbox(props: {
                         <span title={sideBName}>{sideBName}</span>
                         <strong>{teamGrades.partnerLetter}</strong>
                         <TradeReaction letter={teamGrades.partnerLetter} completed />
-                        <small>{teamGrades.giveValue.toLocaleString(getAppIntlLocale())} {language === 'es' ? 'por' : 'for'} {teamGrades.getValue.toLocaleString(getAppIntlLocale())}</small>
+                        <small>{teamGrades.giveValue.toLocaleString(getAppIntlLocale())} {m.valueFor} {teamGrades.getValue.toLocaleString(getAppIntlLocale())}</small>
                         {teamGrades.current && teamGrades.current.partnerLetter !== teamGrades.partnerLetter
                           ? <small>{copy('Today')} {teamGrades.current.partnerLetter}</small>
                           : null}

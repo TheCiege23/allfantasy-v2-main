@@ -52,7 +52,10 @@ import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, use
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { ageText, badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '@/lib/core-app/shellCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { messagesFor } from '@/lib/i18n/messages'
+import { coreShellMessages } from '@/lib/core-app/messages/coreShell'
+import { badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '@/lib/core-app/shellCopy'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { RailRowBody, mergeRailMatchup } from '@/components/core-app/RailRowBody'
 import {
@@ -989,8 +992,7 @@ type TopSearchHit = PlayerSearchHit | LeagueSearchHit
 function TopSearch({ leagues }: { leagues: RailLeague[] }) {
   const router = useRouter()
   // The search box sits on every /core screen; its words follow the language switch (2026-10-03).
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(coreShellMessages)
   const [q, setQ] = useState('')
   const [playerHits, setPlayerHits] = useState<PlayerSearchHit[]>([])
   const [open, setOpen] = useState(false)
@@ -1082,8 +1084,8 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
           className="af-search-input"
           name="q"
           type="search"
-          placeholder={es ? 'Busca un jugador o ve a una liga' : 'Find a player or jump to a league'}
-          aria-label={es ? 'Busca cualquier jugador o liga' : 'Search any player or league'}
+          placeholder={m.searchPlaceholder}
+          aria-label={m.searchAria}
           autoComplete="off"
           role="combobox"
           aria-expanded={showList}
@@ -1107,13 +1109,13 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
           className="af-search-ac"
           id={listId}
           role="listbox"
-          aria-label={es ? 'Resultados de jugadores y ligas' : 'Player and league results'}
+          aria-label={m.searchResultsAria}
         >
           {hits.length === 0 ? (
             <li className="af-search-ac-empty" role="presentation">
               {loading
-                ? es ? 'Buscando…' : 'Searching…'
-                : es ? 'Ningún jugador ni liga coincide.' : 'No players or leagues match that.'}
+                ? m.searchSearching
+                : m.searchNoMatch}
             </li>
           ) : (
             hits.map((hit, i) => (
@@ -1135,8 +1137,8 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
                     <span className="af-search-ac-name">{hit.name}</span>
                     <span className="af-search-ac-meta">
                       {hit.kind === 'league'
-                        ? `${es ? 'Liga' : 'League'} · ${hit.platform}`
-                        : [hit.position, hit.team].filter(Boolean).join(' · ') || (es ? 'Jugador' : 'Player')}
+                        ? `${m.searchLeague} · ${hit.platform}`
+                        : [hit.position, hit.team].filter(Boolean).join(' · ') || m.searchPlayer}
                     </span>
                   </span>
                 </button>
@@ -1197,13 +1199,14 @@ function HelpDot({ title, body }: { title: string; body: string }) {
  */
 export function syncChipText(ageLabel: string, language = 'en'): string {
   const never = /^never\b/i.test(ageLabel.trim())
-  if (language === 'es') return never ? 'Nunca sincronizado' : `sincronizado ${ageText(ageLabel, 'es')}`
-  return never ? 'Never synced' : `synced ${ageLabel}`
+  const m = messagesFor(coreShellMessages, language)
+  return never ? m.syncNever : m.synced(ageLabel)
 }
 
 export function AfCoreShell(incoming: AfCoreShellProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const msg = useMessages(coreShellMessages)
   /*
    * The screen streams in after this shell paints, so the few pieces of chrome only a screen
    * can know (week label, tab badges, Chimmy's home signals, the live slate count) arrive by
@@ -1681,7 +1684,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         visually: it is off-screen until focused.
       */}
       <a href="#af-content" className="af-skip">
-        {language === 'es' ? 'Saltar al contenido' : 'Skip to content'}
+        {msg.skipToContent}
       </a>
 
       {/*
@@ -1707,7 +1710,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           The crest, above the leagues, drawn rather than loaded — see
           AfCrest's header for why /af-crest.png cannot sit on a dark rail.
         */}
-        <Link href="/core" className="af-rail-logo" aria-label={language === 'es' ? 'Inicio de AllFantasy' : 'AllFantasy home'}>
+        <Link href="/core" className="af-rail-logo" aria-label={msg.homeAria}>
           <AfCrest size={34} />
         </Link>
 
@@ -1731,13 +1734,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
            * It is the tray's only close control on a phone (with Escape and the scrim-free full-screen
            * tray, there is nothing else to tap), so it is also where focus starts when the tray opens.
            */
-          aria-label={mobileRailOpen ? (language === 'es' ? 'Cerrar ligas' : 'Close leagues') : undefined}
+          aria-label={mobileRailOpen ? msg.closeLeagues : undefined}
           title={
             mobileRailOpen
-              ? language === 'es' ? 'Cerrar ligas' : 'Close leagues'
+              ? msg.closeLeagues
               : railOpen
-                ? language === 'es' ? 'Contraer la barra de ligas' : 'Collapse the league rail'
-                : language === 'es' ? 'Expandir la barra de ligas' : 'Expand the league rail'
+                ? msg.collapseRail
+                : msg.expandRail
           }
         >
           <span className="af-rail-toggle-icon" aria-hidden>
@@ -1745,7 +1748,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           </span>
           <span className="af-rail-toggle-text">
             {leagues.length}{' '}
-            {language === 'es' ? (leagues.length === 1 ? 'liga' : 'ligas') : leagues.length === 1 ? 'league' : 'leagues'}
+            {msg.leagueNoun(leagues.length)}
             {railWeekLabel ? ` · ${language === 'es' ? railWeekLabel.replace(/^Week (\d+)/, 'Semana $1') : railWeekLabel}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
               <span className="af-rail-live-state">
@@ -1768,13 +1771,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             href="/settings?tab=preferences&returnTo=%2Fcore#your-leagues"
             className="af-rail-hidden-count"
             data-testid="rail-hidden-count-link"
-            aria-label={
-              language === 'es'
-                ? `${hiddenRailCount} ${hiddenRailCount === 1 ? 'liga oculta' : 'ligas ocultas'}: mostrarlas en Ajustes`
-                : `${hiddenRailCount} hidden ${hiddenRailCount === 1 ? 'league' : 'leagues'}: show them in Settings`
-            }
+            aria-label={msg.hiddenLeaguesAria(hiddenRailCount)}
           >
-            {language === 'es' ? `${hiddenRailCount} ocultas · Mostrar` : `${hiddenRailCount} hidden · Show`}
+            {msg.hiddenLeaguesShow(hiddenRailCount)}
           </Link>
         ) : null}
 
@@ -1861,16 +1860,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 data-active={l.id === props.selectedLeagueId}
                 data-score-changed={railSwings[l.id] != null ? 'true' : undefined}
                 aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
-                title={
-                  language === 'es'
-                    ? `${railName} · ${l.platform}${careerLine ? ` · tu historial aquí ${careerLine}` : ''}`
-                    : `${railName} · ${l.platform}${careerLine ? ` · your career here ${careerLine}` : ''}`
-                }
-                aria-label={
-                  language === 'es'
-                    ? `${railName} en ${l.platform}${careerLine ? `, tu historial aquí ${careerLine}` : ''}`
-                    : `${railName} on ${l.platform}${careerLine ? `, your career here ${careerLine}` : ''}`
-                }
+                title={msg.railRowTitle(railName, l.platform, careerLine)}
+                aria-label={msg.railRowAria(railName, l.platform, careerLine)}
                 /*
                   ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
                   for it, and it matters: the tray is full-screen, so navigating
@@ -1934,7 +1925,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               className="af-rail-tile af-rail-add af-rail-hidden-link"
               data-all-hidden={railLeagues.length === 0 ? 'true' : undefined}
               data-testid="rail-hidden-leagues-link"
-              title={language === 'es' ? 'Mostrar u ocultar ligas en Ajustes' : 'Show or hide leagues in Settings'}
+              title={msg.showHideLeaguesTitle}
             >
               {/* The count, so the collapsed 42px rail still says how many are tucked away. */}
               <span className="af-rail-foot-icon af-num" aria-hidden>
@@ -1942,11 +1933,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               </span>
               <span className="af-rail-foot-copy">
                 <strong>
-                  {language === 'es'
-                    ? `Mostrar ${hiddenRailCount} ${hiddenRailCount === 1 ? 'liga oculta' : 'ligas ocultas'}`
-                    : `Show ${hiddenRailCount} hidden ${hiddenRailCount === 1 ? 'league' : 'leagues'}`}
+                  {msg.showHiddenLeagues(hiddenRailCount)}
                 </strong>
-                <small>{language === 'es' ? 'Gestionar en Ajustes' : 'Manage in Settings'}</small>
+                <small>{msg.manageInSettings}</small>
               </span>
             </Link>
           ) : null}
@@ -1970,7 +1959,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         <Link
           href="/settings"
           className="af-rail-tile af-rail-profile"
-          title={language === 'es' ? 'Perfil, ajustes y modos' : 'Profile, settings and modes'}
+          title={msg.profileTitle}
         >
           {/*
            * ⚠ THIS WAS A HARDCODED 'G' — every account saw the same letter
@@ -1986,15 +1975,15 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             letter={(Array.from(props.profile?.name?.trim() || '•')[0] ?? '•').toUpperCase()}
           />
           <span className="af-rail-foot-copy">
-            <strong>{props.profile?.name?.trim() || (language === 'es' ? 'Tu cuenta' : 'Your account')}</strong>
-            <small>{language === 'es' ? 'Perfil y ajustes' : 'Profile & settings'}</small>
+            <strong>{props.profile?.name?.trim() || msg.yourAccount}</strong>
+            <small>{msg.profileAndSettings}</small>
           </span>
         </Link>
         </div>
       </nav>
 
       {/* ── Primary nav ─────────────────────────────────────────────── */}
-      <aside className="af-nav" id="af-nav" aria-label={language === 'es' ? 'Secciones' : 'Sections'}>
+      <aside className="af-nav" id="af-nav" aria-label={msg.sectionsAria}>
         {/*
           The section list scrolls; the CTA and support button below it do not.
           Same split as the rail, for the same reason — with a long nav the two
@@ -2057,7 +2046,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <div className="af-import-title">{copy('Import a league')}</div>
           <p className="af-import-body">
             {platformsPhraseText(availableImportPlatformsPhrase(), language)}.{' '}
-            {language === 'es' ? 'Solo lectura, tarda cerca de un minuto.' : 'Read-only, takes about a minute.'}
+            {msg.importReadOnly}
           </p>
           <Link href="/import" className="af-btn af-import-btn">
             {copy('Connect a platform')}
@@ -2098,7 +2087,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             horizontal scroller — a logo inside one scrolls away, which is the
             opposite of what a wordmark is for.
           */}
-          <Link href="/core" className="af-topbar-crest" aria-label={language === 'es' ? 'Inicio de AllFantasy' : 'AllFantasy home'}>
+          <Link href="/core" className="af-topbar-crest" aria-label={msg.homeAria}>
             <AfCrest size={26} />
           </Link>
           {/*
@@ -2114,7 +2103,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               aria-controls="af-rail"
               onClick={toggleRail}
             >
-              <span className="af-lf-switch-name">{selectedLeagueName ?? (language === 'es' ? 'Tus ligas' : 'Your leagues')}</span>
+              <span className="af-lf-switch-name">{selectedLeagueName ?? msg.yourLeagues}</span>
               <span aria-hidden>▾</span>
             </button>
           ) : null}
@@ -2141,11 +2130,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <button
             type="button"
             className="af-lf-search-btn"
-            aria-label={
-              language === 'es'
-                ? lfSearchOpen ? 'Cerrar búsqueda' : 'Buscar jugadores y ligas'
-                : lfSearchOpen ? 'Close search' : 'Search players and leagues'
-            }
+            aria-label={lfSearchOpen ? msg.closeSearch : msg.searchPlayersAndLeagues}
             aria-expanded={lfSearchOpen}
             onClick={(event) => {
               const opening = !lfSearchOpen
@@ -2191,7 +2176,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               <Link
                 className="af-admin-shortcut"
                 href="/admin"
-                aria-label={language === 'es' ? 'Abrir la administración de AllFantasy' : 'Open AllFantasy administration'}
+                aria-label={msg.adminAria}
               >
                 <span aria-hidden>⬢</span>
                 {copy('Admin')}
@@ -2200,9 +2185,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             {weekLabel ? <span className="af-week af-num">{weekLabel}</span> : null}
 
             <details className="af-data-menu">
-              <summary aria-label={language === 'es' ? 'Actualizaciones de liga' : 'League updates and refresh'}>↻ <span>{language === 'es' ? 'Actualizaciones' : 'Updates'}</span></summary>
+              <summary aria-label={msg.updatesAria}>↻ <span>{msg.updates}</span></summary>
               <div className="af-data-menu-panel">
-                <strong>{language === 'es' ? 'Actualizaciones de liga' : 'League updates'}</strong>
+                <strong>{msg.leagueUpdates}</strong>
                 <p>{syncChipText(syncAge.label, language)}</p>
                 <SyncNowButton eligibleCount={syncEligibleCount} />
                 {/*
@@ -2211,12 +2196,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   (or, labelled, the league page) for the open league; with no league open, or none
                   we can build, the sentence stays — never a homepage under a "lineup" label.
                 */}
-                {/* Spanish for all four lines lives in coreUiCopy (exact strings and patterns), not inline. */}
                 {props.nativeLeague ? (
-                  <p>{copy('Changes save to AllFantasy.')}</p>
+                  <p>{msg.nativeChangesSave}</p>
                 ) : props.lineupHandoff ? (
                   <>
-                    <p>{copy(`AllFantasy only reads this league — changes are made in ${props.lineupHandoff.platformLabel}.`)}</p>
+                    <p>{msg.readOnlyChangesIn(props.lineupHandoff.platformLabel)}</p>
                     <a
                       className="af-btn af-data-menu-handoff"
                       href={props.lineupHandoff.href}
@@ -2224,16 +2208,14 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       rel="noopener noreferrer"
                       data-testid="updates-lineup-handoff"
                     >
-                      {copy(
-                        props.lineupHandoff.screen === 'Lineup'
-                          ? `Fix lineup in ${props.lineupHandoff.platformLabel}`
-                          : `Open league in ${props.lineupHandoff.platformLabel}`,
-                      )}{' '}
+                      {props.lineupHandoff.screen === 'Lineup'
+                        ? msg.fixLineupIn(props.lineupHandoff.platformLabel)
+                        : msg.openLeagueIn(props.lineupHandoff.platformLabel)}{' '}
                       <span aria-hidden>↗</span>
                     </a>
                   </>
                 ) : (
-                  <p>{copy('Make lineup changes on your league’s platform.')}</p>
+                  <p>{msg.platformLineupChanges}</p>
                 )}
                 {/*
                   Phone only (af-core-shell.css): the theme and language chips move in here. Beside the
@@ -2282,16 +2264,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 {plan.tokensLeft != null ? (
                   <>
                     <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString(getAppIntlLocale())}</span>
-                    <span className="af-label">{language === 'es' ? 'tokens restantes' : 'tokens left'}</span>
+                    <span className="af-label">{msg.tokensLeft}</span>
                   </>
                 ) : null}
                 <HelpDot
-                  title={language === 'es' ? 'Tokens del plan' : 'Plan tokens'}
-                  body={
-                    language === 'es'
-                      ? 'Tu plan incluye una cantidad mensual de solicitudes a Chimmy: calificaciones, proyecciones y recomendaciones. Se renueva en tu fecha de facturación.'
-                      : 'Your plan includes a monthly allowance of Chimmy requests — grades, projections and recommendations. Resets on your billing date.'
-                  }
+                  title={msg.planTokens}
+                  body={msg.planTokensBody}
                 />
               </span>
             ) : null}
@@ -2311,16 +2289,16 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           {active === 'home' ? (
             <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry">
               <div className="af-core-bracket-promo-copy">
-                <p className="af-core-bracket-promo-kicker">{language === 'es' ? 'LIGAS DE BRACKETS' : 'BRACKET LEAGUES'}</p>
-                <h2 id="af-core-bracket-promo-title">{language === 'es' ? 'Crea un bracket. Invita a tus amigos.' : 'Build a bracket. Bring your friends.'}</h2>
-                <p>{language === 'es' ? 'Elige ganadores, comparte tus picks y compite en la clasificación.' : 'Pick winners, share your bracket, and climb the leaderboard.'}</p>
+                <p className="af-core-bracket-promo-kicker">{msg.bracketKicker}</p>
+                <h2 id="af-core-bracket-promo-title">{msg.bracketTitle}</h2>
+                <p>{msg.bracketBody}</p>
               </div>
               <div className="af-core-bracket-promo-actions">
                 <Link href="/brackets" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
-                  {language === 'es' ? 'Explorar y crear' : 'Explore and create'}
+                  {msg.bracketExplore}
                 </Link>
                 <Link href="/brackets/join" className="af-core-bracket-promo-browse">
-                  {language === 'es' ? 'Unirme a una liga' : 'Join a league'}
+                  {msg.bracketJoin}
                 </Link>
               </div>
             </section>
@@ -2407,7 +2385,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       ) : null}
       {/* ── Phone bottom bar ────────────────────────────────────────── */}
       {props.leagueFirst ? (
-        <nav className="af-tabbar" aria-label={language === 'es' ? 'Principal' : 'Main'}>
+        <nav className="af-tabbar" aria-label={msg.mainNavAria}>
           <Link
             href="/core"
             className="af-tabbar-item"
@@ -2472,7 +2450,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           </button>
         </nav>
       ) : (
-        <nav className="af-tabbar" aria-label={language === 'es' ? 'Principal' : 'Main'}>
+        <nav className="af-tabbar" aria-label={msg.mainNavAria}>
           {mobileItems.map((item, index) => (
             <Fragment key={item.key}>
               <Link
@@ -2529,7 +2507,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             type="button"
             ref={mobileMoreScrimRef}
             className="af-mobile-more-scrim"
-            aria-label={language === 'es' ? 'Cerrar el menú' : 'Close more menu'}
+            aria-label={msg.closeMenu}
             onClick={() => setMobileMoreOpen(false)}
           />
           {/*
@@ -2553,7 +2531,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   {selectedLeagueName ?? (props.scope?.label ? scopeLabelText(props.scope.label, language) : copy('All leagues'))}
                 </strong>
               </span>
-              <button type="button" aria-label={language === 'es' ? 'Cerrar el menú' : 'Close more menu'} onClick={() => setMobileMoreOpen(false)}>
+              <button type="button" aria-label={msg.closeMenu} onClick={() => setMobileMoreOpen(false)}>
                 ×
               </button>
             </header>
