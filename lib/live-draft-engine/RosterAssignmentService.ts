@@ -237,8 +237,12 @@ export function addFollowUpDraftPlayers(
         ? (raw as Record<string, Array<Record<string, unknown>>>)
         : {}
     const listed = new Set(Array.isArray(playerData.players) ? (playerData.players as unknown[]).map(String) : [])
+    for (const entries of Object.values(sections)) {
+      if (Array.isArray(entries)) for (const entry of entries) if (entry?.id) listed.add(String(entry.id))
+    }
     const bench = [...(sections.bench ?? [])]
-    for (const p of added) {
+    // A live snapshot may already contain the pick before completion; it still needs a lineup slot.
+    for (const p of players) {
       const id = String(p.playerId ?? '').trim()
       if (!id || listed.has(id)) continue
       bench.push({ id, name: p.playerName, position: String(p.position || 'UTIL').toUpperCase(), team: p.team ?? null })
