@@ -441,7 +441,7 @@ function DraftPlayerCardInner({
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap max-md:flex-nowrap max-md:overflow-hidden">
           <p
-            className={`truncate font-bold text-white ${rs ? 'text-[13px] tracking-tight' : ''}`}
+            className={`truncate font-bold text-white ${rs ? 'text-sm tracking-tight' : ''}`}
             data-testid={testId ? `${testId}-name` : 'draft-player-name'}
           >
             {displayName}
@@ -505,7 +505,7 @@ function DraftPlayerCardInner({
           )}
         </div>
         <p className="text-[11px] text-white/70">
-          <span className="font-medium text-white/88">{teamAbbr ?? '—'}</span>
+          <span className="font-medium text-white/88">{teamAbbr ?? 'Free agent'}</span>
           {!rs ? ` · ${position}` : ''}
           {resolvedClassYearLabel ? ` · ${resolvedClassYearLabel}` : ''}
           {resolvedProjectedLandingSpot ? ` · ${resolvedProjectedLandingSpot}` : ''}
