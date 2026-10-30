@@ -10,7 +10,7 @@ vi.mock('@/lib/draft-lottery/rookieDraftLottery', () => ({ ensureRookieDraftLott
 vi.mock('@/server/services/auditService', () => ({ logAction: async () => null }))
 import { prisma } from '@/lib/prisma'
 import { createNextLeagueDraft } from '@/lib/live-draft-engine/createNextLeagueDraft'
-import { consumeNativeFuturePicksForDraft } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { consumeNativeFuturePicksForDraft, lockNativeFuturePicks, transferNativeFuturePick } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { planRookieAuction } from '@/lib/live-draft-engine/auction/rookieAuctionPickPolicy'
 
 const pilot = process.env.ROOKIE_AUCTION_PILOT === '1' ? describe : describe.skip
@@ -75,6 +75,46 @@ pilot('rookie auction pick settlement on isolated Postgres', () => {
       expect(created).toMatchObject({ draftType: 'auction', playerPool: 'rookies_only', auctionBudgetPerTeam: 20 })
       expect(created.auctionState).toMatchObject({ rookieAuction: { policy: 'budget', trades: [{ originalRosterId: order[0]!.rosterId, newRosterId: order[1]!.rosterId }] } })
       expect(await prisma.futureDraftPick.findUniqueOrThrow({ where: { id: pick.id } })).toMatchObject({ status: 'used', usedInDraftSessionId: created.id })
+    } finally {
+      await prisma.league.deleteMany({ where: { id } })
+      await prisma.appUser.deleteMany({ where: { id: userId } })
+    }
+  }, 90000)
+
+  it('serializes a pick trade behind auction creation and refuses the stale trade', async () => {
+    const target = new URL(process.env.DATABASE_URL!)
+    expect(target.hostname).toBe('ep-billowing-shadow-ado0fgzv-pooler.c-2.us-east-1.aws.neon.tech')
+    const id = `auction-race-${randomUUID()}`
+    const userId = `${id}-owner`
+    const order = [{ slot: 1, rosterId: `${id}-a`, displayName: 'A' }, { slot: 2, rosterId: `${id}-b`, displayName: 'B' }]
+    try {
+      await prisma.appUser.create({ data: { id: userId, email: `${id}@example.invalid`, username: id } })
+      await prisma.league.create({ data: { id, userId, platform: 'manual', platformLeagueId: id, leagueType: 'dynasty', isDynasty: true, settings: {}, season: 2027 } })
+      await prisma.roster.createMany({ data: order.map(team => ({ id: team.rosterId, leagueId: id, platformUserId: team.rosterId, playerData: {} })) })
+      await prisma.redraftSeason.create({ data: { leagueId: id, sport: 'NFL', season: 2028, status: 'setup', totalWeeks: 14, playoffStartWeek: 15 } })
+      await prisma.dynastyLeagueConfig.create({ data: { leagueId: id, rookieDraftType: 'auction', rookieDraftRounds: 2 } })
+      const pick = await prisma.futureDraftPick.create({ data: { leagueId: id, pickSeason: 2028, round: 1, originalRosterId: order[0]!.rosterId, currentOwnerId: order[0]!.rosterId } })
+      let unlock!: () => void
+      let signalLocked!: () => void
+      const gate = new Promise<void>(resolve => { unlock = resolve })
+      const locked = new Promise<void>(resolve => { signalLocked = resolve })
+      const create = prisma.$transaction(async tx => {
+        await lockNativeFuturePicks(tx, id)
+        await tx.draftSession.create({ data: { leagueId: id, draftType: 'auction', status: 'pre_draft', rounds: 2, teamCount: 2, slotOrder: order } })
+        signalLocked()
+        await gate
+      }, { timeout: 30000 })
+      await locked
+      let tradeSettled = false
+      const trade = prisma.$transaction(tx => transferNativeFuturePick(tx, { leagueId: id, ref: `fdp:2028:1:${order[0]!.rosterId}`, fromRosterId: order[0]!.rosterId, toRosterId: order[1]!.rosterId }), { timeout: 30000 })
+        .then(() => { tradeSettled = true; return 'moved' }, error => { tradeSettled = true; return String(error) })
+      await new Promise(resolve => setTimeout(resolve, 300))
+      const settledBeforeCommit = tradeSettled
+      unlock()
+      await create
+      expect(settledBeforeCommit).toBe(false)
+      expect(await trade).toContain('no longer tradeable')
+      expect(await prisma.futureDraftPick.findUniqueOrThrow({ where: { id: pick.id } })).toMatchObject({ currentOwnerId: order[0]!.rosterId, status: 'active' })
     } finally {
       await prisma.league.deleteMany({ where: { id } })
       await prisma.appUser.deleteMany({ where: { id: userId } })

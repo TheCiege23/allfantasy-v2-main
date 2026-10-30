@@ -41,6 +41,7 @@ import { ensureNextRedraftSeasonShell } from '@/lib/redraft/offseason/ensureNext
 import { carryDynastyRostersForward, isDynastyFamilyLeague } from '@/lib/redraft/offseason/carryDynastyRosters'
 import {
   consumeNativeFuturePicksForDraft,
+  lockNativeFuturePicks,
   isNativeFuturePickLeague,
   resolveRookieDraftRounds,
 } from '@/lib/league-trade-engine/nativeFuturePicks'
@@ -396,6 +397,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
   const fromState = league.lifecycleState
   try {
     const created = await prisma.$transaction(async (tx) => {
+      if (kind === 'rookie' && draftType === 'auction' && isNativeFuturePickLeague(league)) await lockNativeFuturePicks(tx, leagueId)
       const session = await tx.draftSession.create({
         data: {
           leagueId,
