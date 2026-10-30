@@ -407,6 +407,13 @@ export const leagueRulesCopyEn: Record<string, string> = {
   'leagueRules.label.taxiStealing': 'Taxi stealing',
 
   // Rookie draft, tanking penalty and per-sport stats (2026-10-29).
+  'leagueRules.dynasty.auction.weightedOrder': 'A weighted lottery sets the rookie auction nomination order; winning bids award players.',
+  'leagueRules.dynasty.auction.order': 'The rookie draft order sets the auction nomination order; winning bids award players.',
+  'leagueRules.dynasty.auction.draw': 'Lottery pool: {{pool}}. The draw sets the first {{n}} nomination places.',
+  'leagueRules.dynasty.auction.rest.reverse_standings': 'The remaining nomination places follow reverse standings.',
+  'leagueRules.dynasty.auction.rest.reverse_max_pf': 'The remaining nomination places follow reverse max PF for non-playoff teams, then playoff finish.',
+  'leagueRules.dynasty.rounds.auction.one': 'The rookie auction has {{n}} roster slot per team.',
+  'leagueRules.dynasty.rounds.auction.other': 'The rookie auction has {{n}} roster slots per team.',
   'leagueRules.dynasty.order.max_pf': 'The rookie draft goes from the team with the lowest possible points (max PF) to the highest, so losing on purpose does not earn a better pick.',
   'leagueRules.dynasty.order.reverse_standings': 'The rookie draft goes in reverse order of the standings: the last-place team picks first.',
   'leagueRules.dynasty.order.commissioner': 'The commissioner sets the rookie draft order.',
@@ -982,6 +989,13 @@ export const leagueRulesCopyEs: Record<string, string> = {
   'leagueRules.label.taxiStealing': 'Robo de la escuadra taxi',
 
   // Draft de novatos, sanción por tanking y estadísticas por deporte (2026-10-29).
+  'leagueRules.dynasty.auction.weightedOrder': 'Una lotería ponderada fija el orden de nominación de la subasta de novatos; las pujas ganadoras adjudican jugadores.',
+  'leagueRules.dynasty.auction.order': 'El orden del draft de novatos fija el orden de nominación de la subasta; las pujas ganadoras adjudican jugadores.',
+  'leagueRules.dynasty.auction.draw': 'Participantes: {{pool}}. El sorteo fija los primeros {{n}} lugares de nominación.',
+  'leagueRules.dynasty.auction.rest.reverse_standings': 'Los lugares de nominación restantes siguen la clasificación inversa.',
+  'leagueRules.dynasty.auction.rest.reverse_max_pf': 'Los lugares restantes siguen el max PF inverso de los equipos sin playoffs y luego el resultado de playoffs.',
+  'leagueRules.dynasty.rounds.auction.one': 'La subasta de novatos tiene {{n}} puesto por equipo.',
+  'leagueRules.dynasty.rounds.auction.other': 'La subasta de novatos tiene {{n}} puestos por equipo.',
   'leagueRules.dynasty.order.max_pf': 'El draft de novatos va del equipo con menos puntos posibles (max PF) al que más tiene, así que perder a propósito no da una mejor selección.',
   'leagueRules.dynasty.order.reverse_standings': 'El draft de novatos sigue el orden inverso de la clasificación: el último elige primero.',
   'leagueRules.dynasty.order.commissioner': 'El comisionado fija el orden del draft de novatos.',

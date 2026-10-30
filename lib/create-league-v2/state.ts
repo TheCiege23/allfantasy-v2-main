@@ -93,7 +93,7 @@ export interface DynastySetupState {
   taxiAllowNonRookies: boolean
   taxiAllowMoveOutAfterDeadline: boolean
   rookieDraftRounds: number
-  rookieDraftType: 'linear' | 'snake'
+  rookieDraftType: 'linear' | 'snake' | 'auction'
   rookieDraftOrderMethod: DynastyRookieOrderMethod
   futurePickTradeYears: number
   /** Option B slice: trailing startup-draft rounds become devy-only (NFL dynasty only). */

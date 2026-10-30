@@ -736,7 +736,12 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
 
   if (session.draftType === 'auction') {
     const { buildInitialAuctionSessionUpdate } = await import('./auction/AuctionEngine')
-    const auctionStart = await buildInitialAuctionSessionUpdate(leagueId, session)
+    let auctionStart: Awaited<ReturnType<typeof buildInitialAuctionSessionUpdate>>
+    try {
+      auctionStart = await buildInitialAuctionSessionUpdate(leagueId, session)
+    } catch (error) {
+      return { ok: false, reason: 'session_not_ready', error: error instanceof Error ? error.message : 'Auction settings are unavailable.' }
+    }
     try {
       const { isSalaryCapLeague } = await import('@/lib/salary-cap/SalaryCapLeagueConfig')
       const { initializeStartupLedgers } = await import('@/lib/salary-cap/AuctionStartupService')

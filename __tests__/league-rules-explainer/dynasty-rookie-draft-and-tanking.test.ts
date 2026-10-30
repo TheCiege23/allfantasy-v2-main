@@ -63,6 +63,13 @@ describe('the dynasty section names the rookie draft and the tanking penalty', (
     )
   })
 
+  it('explains that an auction uses the weighted result for nominations, not player selection', () => {
+    const lines = dynastySection(dynasty({ rookieDraftType: 'auction' }))
+    expect(lines).toContain('A weighted lottery sets the rookie auction nomination order; winning bids award players.')
+    expect(lines).toContain('The rookie auction has 4 roster slots per team.')
+    expect(dynastySection(dynasty({ rookieDraftType: 'auction' }), 'es')).toContain('La subasta de novatos tiene 4 puestos por equipo.')
+  })
+
   it('in Spanish', () => {
     const lines = dynastySection(dynasty(), 'es')
     expectClean(lines, 'es')

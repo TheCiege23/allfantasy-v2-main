@@ -424,6 +424,33 @@ describe('a saved rookie order wins over standings', () => {
   })
 })
 
+describe('future rookie auctions and traded picks', () => {
+  beforeEach(() => {
+    m.seasonFindMany.mockResolvedValue([{ id: 'season-1', season: 2026, status: 'complete' }])
+    m.ensureShell.mockResolvedValue({ id: 'season-2', season: 2027 })
+    m.redraftRosterFindMany.mockResolvedValue(lastSeason)
+    m.dynastyFindUnique.mockResolvedValue({ rookieDraftRounds: 2, rookieDraftType: 'auction', rookiePickOrderMethod: 'commissioner' })
+    m.pickFindMany.mockResolvedValue([{ id: 'fp-1', status: 'active', round: 1, originalRosterId: 'R-b', currentOwnerId: 'R-a' }])
+  })
+  it('blocks traded picks under the default policy', async () => {
+    m.leagueFindUnique.mockResolvedValue(league({ platform: 'manual' }))
+    expect(await createNextLeagueDraft('L1', 'commish')).toMatchObject({ ok: false, code: 'ROOKIE_AUCTION_PICKS_UNRESOLVED' })
+  })
+  it('stores the budget conversion and pick owners with the auction session', async () => {
+    m.leagueFindUnique.mockResolvedValue(league({ platform: 'manual', settings: { rookie_auction: { policy: 'budget', budgetPerTeam: 100, valuesByRound: { '1': 10 } } } }))
+    const result = await createNextLeagueDraft('L1', 'commish')
+    expect(result).toMatchObject({ ok: true, tradedPicksApplied: 1 })
+    expect(m.draftSessionCreate.mock.calls[0][0].data).toMatchObject({ draftType: 'auction', playerPool: 'rookies_only', auctionBudgetPerTeam: 100 })
+    expect(m.draftSessionUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { auctionState: { rookieAuction: expect.objectContaining({ policy: 'budget', trades: [expect.objectContaining({ round: 1, originalRosterId: 'R-b', newRosterId: 'R-a' })] }) } } }))
+  })
+  it('refuses forfeited picks before consuming any pick records', async () => {
+    m.leagueFindUnique.mockResolvedValue(league({ platform: 'manual' }))
+    m.pickFindMany.mockResolvedValue([{ status: 'forfeited', round: 1, originalRosterId: 'R-b', currentOwnerId: 'R-b' }])
+    expect(await createNextLeagueDraft('L1', 'commish')).toMatchObject({ ok: false, code: 'ROOKIE_AUCTION_PICKS_UNRESOLVED' })
+    expect(m.pickUpdateMany).not.toHaveBeenCalled()
+  })
+})
+
 describe('championAndRunnerUp', () => {
   it('reads the title game, never the third-place game that shares its round', async () => {
     m.playoffRoundFindFirst.mockResolvedValue({

@@ -1,3 +1,4 @@
+import { loadRookieAuctionAvailability } from './rookieAuctionAvailability'
 import { planRookieAuction, type RookieAuctionTrade } from './rookieAuctionPickPolicy'
 import { parseRookieAuctionSettings } from './rookieAuctionSettings'
 import { seasonDraftSessionError } from '@/lib/tournament/seasonDraftBoard'
@@ -187,6 +188,10 @@ async function _nominatePlayerCore(
     return { success: false, error: 'A player is already on the block' }
   }
 
+  if (session.draftModeLabel === 'rookie') {
+    const available = await loadRookieAuctionAvailability(leagueId)
+    if (!available(nomination)) return { success: false, error: 'This player is already on a league roster.' }
+  }
   if (isRookieRestrictedPlayerPool(session.playerPool)) {
     const rookie = await resolveServerRookieStatus({ leagueId, playerId: nomination.playerId, playerName: nomination.playerName })
     if (!isEligibleForPlayerPool(session.playerPool, rookie)) return { success: false, error: 'That player is not eligible for this draft pool.' }
@@ -418,6 +423,11 @@ async function _resolveAuctionWinCore(
       winnerRosterId = null
       amount = 0
     }
+  }
+
+  if (winnerRosterId && session.draftModeLabel === 'rookie') {
+    const available = await loadRookieAuctionAvailability(leagueId)
+    if (!available(state.currentNomination)) return { success: false, error: 'This player is already on a league roster.' }
   }
 
   if (winnerRosterId && isRookieRestrictedPlayerPool(session.playerPool)) {

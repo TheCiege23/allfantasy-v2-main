@@ -1,3 +1,4 @@
+import { loadRookieAuctionAvailability } from './rookieAuctionAvailability'
 import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
 import { loadSeasonDraftContext, loadSeasonDraftPlayers } from '@/lib/tournament/seasonDraftRuntime'
 import { nextSeasonNominator } from '@/lib/tournament/seasonAuctionPolicy'
@@ -234,7 +235,8 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
     } else {
       const candidates = await loadAutoNominationCandidates(leagueId, normalizedSport, draftedNames)
       const resolve = isRookieRestrictedPlayerPool(session.playerPool) ? await loadServerRookieStatusResolver(leagueId) : null
-      first = candidates.find(candidate => isEligibleForPlayerPool(session.playerPool, resolve?.({ playerId: candidate.playerId, playerName: candidate.playerName }) ?? null))
+      const available = session.draftModeLabel === 'rookie' ? await loadRookieAuctionAvailability(leagueId) : () => true
+      first = candidates.find(candidate => available(candidate) && isEligibleForPlayerPool(session.playerPool, resolve?.({ playerId: candidate.playerId, playerName: candidate.playerName }) ?? null))
     }
     if (!first) return { changed: false, actions }
 
