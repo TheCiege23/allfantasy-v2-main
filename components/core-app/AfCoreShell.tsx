@@ -10,7 +10,7 @@ import { CoreLanguageChip } from '@/components/core-app/CoreLanguageChip'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
-import { leagueSportLabel, leagueSportSections } from '@/lib/core-app/leagueSports'
+import { leagueSportIcon, leagueSportLabel, leagueSportSections } from '@/lib/core-app/leagueSports'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
@@ -1798,6 +1798,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
              * The sport heading. Short form ("NFL", "CBB") so it fits the 42px collapsed rail as well
              * as the open one, and not a heading element: the rail is a list of links, and seven
              * <h2>s would crowd the page outline every /core screen shares.
+             *
+             * The open rail adds the sport's ball and its league count, centred between two rules, so
+             * the eye finds where NBA ends and NFL begins (user report, 2026-10-30). The collapsed
+             * rail hides both and keeps the short label alone.
              */
             railSections.length > 1 ? (
               <div
@@ -1806,7 +1810,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 title={leagueSportLabel(section.key)}
                 data-testid="rail-sport-heading"
               >
-                {leagueSportLabel(section.key, { short: true })}
+                {leagueSportIcon(section.key) ? (
+                  <span className="af-rail-sport-icon" aria-hidden>{leagueSportIcon(section.key)}</span>
+                ) : null}
+                <span className="af-rail-sport-label">{leagueSportLabel(section.key, { short: true })}</span>
+                <span className="af-rail-sport-count af-num" aria-hidden>{section.rows.length}</span>
               </div>
             ) : null,
             ...section.rows.map((l) => {

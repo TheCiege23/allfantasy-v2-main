@@ -64,7 +64,7 @@ describe('leagueRailRowView', () => {
 })
 
 describe('LeagueRailRow', () => {
-  it('renders league name, both managers, the score and both projections from the rail data', () => {
+  it('renders league name, both managers with VS between them, the score and one projection each', () => {
     const view = leagueRailRowView(league(), RAIL, NO_LIVE, CLOCK)
     const { container, getByText } = render(<LeagueRailRow view={view} href="/league/s1" active expanded />)
     expect(getByText('Kings of the Court')).toBeTruthy()
@@ -72,10 +72,14 @@ describe('LeagueRailRow', () => {
     expect(getByText('Hoop Dreams')).toBeTruthy()
     const mine = container.querySelector('.af-rail-row-side:not([data-side="them"])')!
     expect(mine.querySelector('.af-rail-row-score')?.textContent).toBe('88.4')
-    expect([...mine.querySelectorAll('.af-rail-row-projected')].map(n => n.textContent)).toEqual(['112.3', '115.0'])
+    // The league-scored provider line only; the AF engine total (115.0) stays on the matchup screen.
+    expect([...mine.querySelectorAll('.af-rail-row-projected')].map(n => n.textContent)).toEqual(['proj112.3'])
+    expect(container.textContent).not.toContain('115.0')
+    expect(container.querySelector('.af-rail-row-vs')?.textContent).toBe('VS')
     expect(container.querySelector('.af-rail-row-side[data-side="them"] .af-rail-row-score')?.textContent).toBe('79.2')
     expect(container.querySelector('.af-platform-chip')?.textContent).toBe('Sleeper')
-    expect(getByText('Wk 6')).toBeTruthy()
+    // Every row is the same week, so the expanded row no longer prints it.
+    expect(container.textContent).not.toContain('Wk 6')
   })
 
   it('marks the current league, and only draws the crest when collapsed', () => {
