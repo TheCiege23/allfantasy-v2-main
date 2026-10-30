@@ -27,7 +27,8 @@ export function scoreEspnCampusEvidence(input: {
       if (lines.length !== 1 || lines[0]!.teamId !== player.espnTeamId) { missing = true; continue }
       const line = lines[0]!
       if (line.didNotPlay) continue
-      if (!line.stats || Object.values(line.stats).some(v => typeof v !== 'number' || !Number.isFinite(v))) { missing = true; continue }
+      const requiredStats = ['pts', 'reb', 'ast', 'to', 'stl', 'blk', 'threes']
+      if (!line.stats || requiredStats.some(key => typeof line.stats?.[key] !== 'number' || !Number.isFinite(line.stats[key]))) { missing = true; continue }
       total += input.scorer(line.stats, player.position)
     }
     return { playerId: player.id, points: Math.round(total * 100) / 100, missing, allFinal: input.windowClosed && !missing && games.every(g => normalizeGameStatus(g.status) === 'final') }

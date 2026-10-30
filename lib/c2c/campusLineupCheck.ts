@@ -10,7 +10,8 @@ import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { currentNcaabRosterEvidence } from '@/lib/devy/ncaabRosterPool'
 import { bridgeNcaabCampusTeams } from '@/lib/redraft/ncaabCampusTeamBridge'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
-import { readRiScheduleWindow } from '@/lib/sports-data/riScheduleCache'
+import { readRiScheduleWindow, scheduleKeyPrefix } from '@/lib/sports-data/riScheduleCache'
+import { nbaCampusScheduleCoversWindow } from './nbaCampusScheduleCoverage'
 import { nbaCampusMoveLock } from './nbaCampusMoveLock'
 import { campusStarterIds, isC2CVariant, isFootballC2CLeague, isBasketballC2CLeague, validateCampusLineup, type CampusLineupIssue } from './campusLineup'
 
@@ -55,10 +56,12 @@ export async function checkCampusSave(
   if (!window) return [{ code: 'campus_ineligible', message: 'College game schedule is unavailable; try again when the schedule is ready.' }]
   try {
     const now = input.now ?? new Date()
-    const [evidence, games] = await Promise.all([
+    const [evidence, games, meta] = await Promise.all([
       currentNcaabRosterEvidence(db, now),
       readRiScheduleWindow(db as never, { sport: 'NCAAB', season: input.season!, window }),
+      db.sportsDataCache.findUnique({ where: { cacheKey: `${scheduleKeyPrefix('NCAAB', input.season!)}meta` } }),
     ])
+    if (!meta || meta.expiresAt <= now || !nbaCampusScheduleCoversWindow(meta.data, window)) return [{ code: 'campus_ineligible', message: 'College game schedule is unavailable; try again when the schedule is ready.' }]
     const athletes = new Map(evidence.athletes.map(a => [a.id, a]))
     const teamIds = changed.map(id => athletes.get(id)?.teamId).filter((id): id is string => Boolean(id))
     const teamBridge = await bridgeNcaabCampusTeams(db, teamIds)

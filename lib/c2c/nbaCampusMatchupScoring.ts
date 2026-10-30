@@ -7,6 +7,7 @@ import { nbaCampusWeekCacheKey } from './storeNbaCampusWeekSnapshot'
 import { nbaCampusGameMappingKey } from './refreshNbaCampusWeek'
 import { ESPN_COLLEGE_BOX_KEY_PREFIX } from '@/lib/espn/ingestNcaabCollegeBoxes'
 import { campusStarterIds } from './campusLineup'
+import { nbaCampusScheduleCoversWindow } from './nbaCampusScheduleCoverage'
 import { scoreEspnCampusEvidence, type EspnCampusPlayer } from './nbaEspnCampusScoring'
 import type { EspnCollegeBoxScore } from '@/lib/espn/espnNcaabBoxScore'
 
@@ -62,10 +63,7 @@ export async function nbaCampusPointsForMatchup(db: Db, input: {
   const window = resolveDailySportWeekWindow('NBA', input.season, input.week)
   const schedule = window ? await readRiScheduleWindow(db as never, { sport: 'NCAAB', season: input.season, window }) : null
   const meta = object(byKey.get(`${scheduleKeyPrefix('NCAAB', input.season)}meta`))
-  const first = typeof meta.firstDay === 'string' ? Date.parse(`${meta.firstDay}T00:00:00Z`) : NaN
-  const last = typeof meta.lastDay === 'string' ? Date.parse(`${meta.lastDay}T00:00:00Z`) : NaN
-  // The source's published span proves a blank pre-season window, or a fully covered window.
-  const scheduleCoversWindow = Boolean(window && Number.isFinite(first) && Number.isFinite(last) && first <= last && window.end.getTime() <= last + 86400000)
+  const scheduleCoversWindow = nbaCampusScheduleCoversWindow(meta, window)
   const mapping = object(byKey.get(nbaCampusGameMappingKey(input.season, input.week)))
   const mappings = mapping.season === input.season && mapping.week === input.week && Array.isArray(mapping.mappings) ? mapping.mappings : []
   const eventForGame = new Map<string, string>()
