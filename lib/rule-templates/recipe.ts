@@ -24,7 +24,7 @@ export type DynastyRecipe = {
   regularSeasonLength?: number
   rookieDraftOrderMethod?: DynastyRookieOrderMethod
   rookieDraftRounds?: number
-  rookieDraftType?: 'linear' | 'snake'
+  rookieDraftType?: 'linear' | 'snake' | 'auction'
   taxiSlotCount?: number
   taxiEligibilityYears?: number
   futurePickTradeYears?: number
@@ -96,7 +96,7 @@ export function recipeFromLeague(src: RecipeSource): TemplateRecipe {
         regularSeasonLength: intIn(d.regularSeasonWeeks, 8, 18),
         rookieDraftOrderMethod: ROOKIE_ORDER.has(d.rookiePickOrderMethod as DynastyRookieOrderMethod) ? (d.rookiePickOrderMethod as DynastyRookieOrderMethod) : undefined,
         rookieDraftRounds: intIn(d.rookieDraftRounds, 1, 10),
-        rookieDraftType: d.rookieDraftType === 'linear' || d.rookieDraftType === 'snake' ? d.rookieDraftType : undefined,
+        rookieDraftType: d.rookieDraftType === 'linear' || d.rookieDraftType === 'snake' || d.rookieDraftType === 'auction' ? d.rookieDraftType : undefined,
         taxiSlotCount: intIn(d.taxiSlots, 0, 10),
         taxiEligibilityYears: intIn(d.taxiEligibilityYears, 1, 3),
         futurePickTradeYears: intIn(d.futurePicksYearsOut, 1, 5),

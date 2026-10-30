@@ -246,6 +246,7 @@ export function DynastyAdvancedSettings({ state, accent, onChange }: Props) {
           >
             <option value="linear">Linear</option>
             <option value="snake">Snake</option>
+            <option value="auction">Auction</option>
           </select>
         </label>
 

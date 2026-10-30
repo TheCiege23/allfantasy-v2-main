@@ -28,6 +28,10 @@ describe('recipeFromLeague', () => {
     expect(stateFromRecipe(recipe).dynasty.rookieDraftOrderMethod).toBe('weighted_lottery')
     expect(describeRecipe(recipe)).toContain('Rookie order: weighted lottery')
   })
+  it('preserves a rookie auction when a dynasty league is used as a template', () => {
+    const recipe = recipeFromLeague({ ...dynastySource, dynastyConfig: { ...dynastySource.dynastyConfig!, rookieDraftType: 'auction' } })
+    expect(stateFromRecipe(recipe).dynasty.rookieDraftType).toBe('auction')
+  })
   it('drops values the wizard could not take rather than forcing them', () => {
     const r = recipeFromLeague({ ...dynastySource, dynastyConfig: { ...dynastySource.dynastyConfig!, rookiePickOrderMethod: 'vibes', taxiSlots: 99 }, waiver: { waiverType: 'standard', faabBudget: null } })
     expect(r.dynasty).not.toHaveProperty('rookieDraftOrderMethod')

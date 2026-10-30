@@ -32,6 +32,23 @@ describe('rookie draft order settings', () => {
     const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/draft-lottery/config'))!
     expect(JSON.parse(String(call[1]?.body)).lotteryConfig.lotteryTeamCount).toBe(4)
   })
+  it('explains all three commissioner options when auction is selected', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({
+      isDynasty: true,
+      effective: { rookiePickOrderMethod: 'commissioner', rookieDraftRounds: 2, rookieDraftType: 'linear' },
+      constants: { rookiePickOrderMethods: [{ value: 'commissioner', label: 'Commissioner' }] },
+    }) })))
+    render(<DynastySettingsPanel leagueId="league-1" isCommissioner />)
+    const type = (await screen.findByText('Linear')).closest('select')!
+    fireEvent.change(type, { target: { value: 'auction' } })
+    const policy = screen.getByLabelText('Traded rookie pick treatment') as HTMLSelectElement
+    expect(policy.value).toBe('block')
+    expect([...policy.options].map(option => option.value)).toEqual(['block', 'budget', 'nominations'])
+    expect(screen.getByText(/Budget: transfer the set round value/)).toBeTruthy()
+    fireEvent.change(policy, { target: { value: 'budget' } })
+    expect(screen.getByLabelText('Round 1 auction value')).toBeTruthy()
+    expect(screen.getByLabelText('Round 2 auction value')).toBeTruthy()
+  })
   it('directs standings and Max PF to automatic order instead of offering ineffective choices', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({
       isDynasty: true,

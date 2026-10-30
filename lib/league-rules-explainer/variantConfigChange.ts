@@ -30,7 +30,7 @@ export function rookieDraftMirrorFields(body: Record<string, unknown>): { rookie
   const out: { rookieDraftRounds?: number; rookieDraftType?: string } = {}
   const rounds = Number(body.rookieDraftRounds)
   if (body.rookieDraftRounds != null && Number.isInteger(rounds) && rounds >= 1 && rounds <= 20) out.rookieDraftRounds = rounds
-  if (body.rookieDraftType === 'snake' || body.rookieDraftType === 'linear') out.rookieDraftType = body.rookieDraftType
+  if (body.rookieDraftType === 'snake' || body.rookieDraftType === 'linear' || body.rookieDraftType === 'auction') out.rookieDraftType = body.rookieDraftType
   return out
 }
 

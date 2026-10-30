@@ -29,6 +29,11 @@ import { futurePickInventory, inventoryPickId, type InventoryPick } from './futu
 
 type Db = Prisma.TransactionClient
 
+/** Serialize pick ownership changes with creation of their rookie auction. */
+export async function lockNativeFuturePicks(tx: Db, leagueId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`native-future-picks:${leagueId}`}, 0))`
+}
+
 /** Seasons ahead a native pick can be traded when the league has not set one — the three-year horizon imported leagues use. */
 export const NATIVE_PICK_YEARS = 3
 /** Bounds on the commissioner's `futurePicksYearsOut`; past five years a pick has no market to speak of. */
@@ -173,6 +178,7 @@ export async function transferNativeFuturePick(
 ): Promise<void> {
   const parsed = parseInventoryPickId(args.ref)
   if (!parsed) throw new Error('Pick not found on roster')
+  await lockNativeFuturePicks(tx, args.leagueId)
   const inventory = await loadNativeFuturePicks(args.leagueId, tx)
   const holder = inventory?.ownerByPickId.get(args.ref)
   if (!holder) throw new Error('Pick is no longer tradeable')
