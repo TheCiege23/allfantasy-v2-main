@@ -686,8 +686,9 @@ export async function getDashboardLeagueListForUser(
   /*
    * A league someone else imported, which this viewer removed from their list (DELETE
    * /api/league/[id] writes only their tombstone for it — the league is shared, so nothing is
-   * deleted). Their own copies need no filter: those rows are gone. Native leagues are never
-   * tombstoned by that route, and the check is imported-only so a stray key cannot hide one.
+   * deleted). Viewer-owned imported rows can also be shared through claims, so their
+   * tombstones hide the row without deleting it. Native leagues are never tombstoned by
+   * that route, and the check is imported-only so a stray key cannot hide one.
    */
   const genericLeagues = (genericLeaguesRead as Array<{ userId?: unknown; platform?: unknown; platformLeagueId?: unknown }>).filter(
     (lg) =>
