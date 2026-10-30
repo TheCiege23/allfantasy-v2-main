@@ -35,6 +35,8 @@ import {
 } from '@/lib/core-app/leaguePreferences'
 import { ScopeSwitcher } from '@/components/core-app/ScopeSwitcher'
 import AfCoreShell from '@/components/core-app/AfCoreShell'
+import { coreShellMessages } from '@/lib/core-app/messages/coreShell'
+import { messagesFor } from '@/lib/i18n/messages'
 import LeagueListPreferencesCard from '@/components/settings/LeagueListPreferencesCard'
 
 const L = (id: string, name: string) => ({ id, name })
@@ -176,6 +178,46 @@ describe('the /core rail', () => {
     expect(screen.queryByTestId('rail-hidden-leagues-link')).toBeNull()
     expect(screen.queryByTestId('rail-hidden-count-link')).toBeNull()
     expect(container.querySelector('#af-rail')?.getAttribute('data-has-hidden')).toBeNull()
+  })
+})
+
+describe('the Updates menu — lineup handoff', () => {
+  const rail = LIST.map((l) => ({ ...l, platform: 'sleeper', mark: 'S' }))
+  const shell = (props: Record<string, unknown> = {}) => (
+    <AfCoreShell active="home" leagues={rail as never} syncAge={{ label: 'just now', stale: false }} syncEligibleCount={0} {...props}>
+      <div>screen</div>
+    </AfCoreShell>
+  )
+
+  it('is a button to the platform lineup screen when one is known', () => {
+    render(shell({ lineupHandoff: { href: 'https://sleeper.com/leagues/1/team', screen: 'Lineup', platformLabel: 'Sleeper' } }))
+    const btn = screen.getByTestId('updates-lineup-handoff')
+    expect(btn.tagName).toBe('A')
+    expect(btn.getAttribute('href')).toBe('https://sleeper.com/leagues/1/team')
+    // External: new tab, and no opener handed to the provider's page.
+    expect(btn.getAttribute('target')).toBe('_blank')
+    expect(btn.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(btn.textContent).toMatch(/Fix lineup in Sleeper/)
+  })
+
+  it('says "Open league" when only the league page is known (an unverified lineup format)', () => {
+    render(shell({ lineupHandoff: { href: 'https://league.example.test/home', screen: 'League', platformLabel: 'Fantrax' } }))
+    expect(screen.getByTestId('updates-lineup-handoff').textContent).toMatch(/Open league in Fantrax/)
+  })
+
+  it('reads in Spanish from the shell catalog, platform name kept', () => {
+    const es = messagesFor(coreShellMessages, 'es')
+    expect(es.fixLineupIn('Sleeper')).toBe('Arreglar la alineación en Sleeper')
+    expect(es.openLeagueIn('Fantrax')).toBe('Abrir la liga en Fantrax')
+    expect(es.readOnlyChangesIn('ESPN')).toBe('AllFantasy solo lee esta liga: los cambios se hacen en ESPN.')
+    expect(es.platformLineupChanges).toBe('Cambia la alineación en la plataforma de tu liga.')
+    expect(messagesFor(coreShellMessages, 'en').fixLineupIn('Sleeper')).toBe('Fix lineup in Sleeper')
+  })
+
+  it('CONTROL: no handoff keeps the sentence and draws no button', () => {
+    const { container } = render(shell())
+    expect(screen.queryByTestId('updates-lineup-handoff')).toBeNull()
+    expect(container.textContent).toMatch(/Make lineup changes on your league/)
   })
 })
 
