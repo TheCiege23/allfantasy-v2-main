@@ -48,7 +48,7 @@ vi.mock('@/lib/prisma', () => {
   return { prisma, default: prisma }
 })
 
-import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { getActivityLeaguesForUser, getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 
 const USER = 'tester'
 const row = (id: string, owner: string, platform: string, platformLeagueId: string | null) => ({
@@ -84,7 +84,7 @@ beforeEach(() => {
         : [],
     'deletedLeagueTombstone.findMany': () => [
       { platform: 'sleeper', platformLeagueId: '1389720315973627904' },
-      // A key that matches the viewer's own copy and a native league: neither is filtered.
+      // The viewer's own imported copy is removed too; a native league is not.
       { platform: 'sleeper', platformLeagueId: '999' },
       { platform: 'allfantasy', platformLeagueId: 'af-1' },
     ],
@@ -100,8 +100,29 @@ describe('dashboard league list — a removed member league', () => {
     expect(db.calls.find((c) => c.key === 'deletedLeagueTombstone.findMany')?.args?.where).toEqual({ userId: USER })
   })
 
-  it('keeps every other league: an untombstoned import, the viewer\'s own copy, a native league', async () => {
-    expect(await ids()).toEqual(['kept', 'mine', 'native'])
+  it('keeps the untombstoned import and native league, but removes the viewer-owned import', async () => {
+    expect(await ids()).toEqual(['kept', 'native'])
+  })
+
+  it('does not resurface a removed import through a linked Sleeper row', async () => {
+    db.answers['sleeperLeague.findMany'] = () => [
+      { id: 'sleeper-copy', name: 'Sleeper copy', sleeperLeagueId: '999', totalTeams: 12, season: 2026, status: 'in_season', rosters: [] },
+      { id: 'other-copy', name: 'Other copy', sleeperLeagueId: '777', totalTeams: 12, season: 2026, status: 'in_season', rosters: [] },
+    ]
+    expect(await ids()).not.toContain('sleeper-copy')
+    expect(await ids()).toContain('other-copy')
+  })
+
+  it('keeps removed imports out of the account activity feed', async () => {
+    db.answers['sleeperLeague.findMany'] = () => [
+      { id: 'sleeper-copy', name: 'Sleeper copy', sleeperLeagueId: '999', totalTeams: 12, season: 2026, status: 'in_season' },
+    ]
+    const activityIds = (await getActivityLeaguesForUser(USER)).map((league) => league.id)
+    expect(activityIds).not.toContain('mine')
+    expect(activityIds).not.toContain('shared')
+    expect(activityIds).not.toContain('sleeper-copy')
+    expect(activityIds).toContain('kept')
+    expect(activityIds).toContain('native')
   })
 
   it('CONTROL: with no tombstones, all four are listed', async () => {

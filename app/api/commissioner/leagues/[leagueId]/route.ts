@@ -67,7 +67,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueI
   }
 
   const updated = await writeLeagueWithTradeReview(leagueId, updates, tradeReview, { id: true, name: true, settings: true, updatedAt: true })
-  if (tradeReview) {
+  if (tradeReview || body?.vetoThreshold !== undefined || body?.vetoThresholdMode !== undefined) {
     await publishTradeReviewChange({ leagueId, actorUserId: userId, settingsBefore, settingsAfter: updates.settings as Record<string, unknown> })
   }
   return NextResponse.json(withClientLeagueSettings(updated))

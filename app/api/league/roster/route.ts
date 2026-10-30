@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -145,8 +146,9 @@ export async function GET(req: NextRequest) {
       // belt-and-suspenders if the dynamic import itself fails.
     }
 
+    const coOwnerRosterId = targetUserId === sessionUserId ? await acceptedCoOwnerRosterId(leagueId, sessionUserId) : null
     const roster = await prisma.roster.findFirst({
-      where: { leagueId, platformUserId: targetUserId },
+      where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: targetUserId },
     })
 
     if (!roster) {

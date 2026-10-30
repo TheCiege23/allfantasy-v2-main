@@ -148,6 +148,7 @@ import ImportV4, { type ImportPreviewState } from '@/components/core-app/screens
 import { getCareerData } from '@/lib/core-app/career'
 import { leagueArtUrl } from '@/lib/core-app/leagueArt'
 import { getRailMatchups } from '@/lib/core-app/railMatchups'
+import { getRailRecords } from '@/lib/core-app/railRecords'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import {
   LEAGUE_FIRST_ALL_VIEW,
@@ -1231,6 +1232,11 @@ export default async function AfCorePage({
      * tier or a zero balance the user does not actually have.
      */
     aiAccessResolver.resolveForUser({ userId, userEmail: session?.user?.email, now }).catch(() => null),
+    /*
+     * Your record and place per league, for the league list's "6-3 · 2nd" line (railRecords.ts). Two
+     * set-based reads, budgeted like the matchups above; a failure is an empty map and no line.
+     */
+    getRailRecords(userId, playedLeagues.map((l) => l.id)).catch(() => ({})),
   ])
   // Awaited below the admin gate. Every read above degrades rather than throws, but should one
   // ever reject while the gate is still being read, this keeps it from surfacing as unhandled;
@@ -1278,6 +1284,7 @@ export default async function AfCorePage({
     chatUnread,
     railMatchups,
     access,
+    railRecords,
   ] = await shellReads
   await railHubsRead
   await railExileRead
@@ -1670,6 +1677,8 @@ export default async function AfCorePage({
          arrives — see PublishShellSignals in CoreScreenBody and shellSignals.tsx. */
       weekLabel={null}
       railMatchups={railMatchups?.byLeague}
+      railRecords={railRecords}
+      railUnread={chatUnread?.byLeague ?? null}
       railWeekLabel={railMatchups?.week != null ? `Week ${railMatchups.week}` : null}
       plan={plan}
       commissionerCount={commissionerCount}

@@ -20,6 +20,7 @@ export const maxDuration = 60
 
 const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'activity': () => import('../activity/handler'),
+  'team-coowners': () => import('../team-coowners/handler'),
   'activity-feed': () => import('../activity-feed/handler'),
   'advisor': () => import('../advisor/handler'),
   'ai-adp': () => import('../ai-adp/handler'),

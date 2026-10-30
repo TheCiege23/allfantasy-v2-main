@@ -43,10 +43,13 @@ img{display:block;max-width:100%}`
 function side(name: string, them = false): string {
   return `<span class="af-rail-row-side"${them ? ' data-side="them"' : ""}>
     <span class="af-rail-row-av">${name[0]}</span>
-    <span class="af-rail-row-team">${name}</span>
-    <span class="af-rail-row-score">0.0</span>
-    <span class="af-rail-row-projected">112.4</span>
-    <span class="af-rail-row-projected" data-kind="af">109.7</span>
+    <span class="af-rail-row-who">
+      <span class="af-rail-row-team">${name}</span>
+      <span class="af-rail-row-pts">
+        <span class="af-rail-row-score">104.2</span>
+        <span class="af-rail-row-projected"><span class="af-rail-row-proj-label">proj</span>112.4</span>
+      </span>
+    </span>
   </span>`
 }
 
@@ -57,10 +60,10 @@ function tile(i: number): string {
       <span class="af-rail-row-headline">
         <span class="af-rail-row-name">NFL Dynasty 2026 League ${i + 1}</span>
       </span>
-      <span class="af-rail-row-meta"><span>sleeper</span><span>Week 5</span></span>
-      <span class="af-rail-row-line">
-        <span class="af-rail-row-labels"><span></span><span>SCORE</span><span>SLPR</span><span>AF</span></span>
+      <span class="af-rail-row-meta"><span class="af-platform af-platform-chip af-rail-row-plat" data-platform="sleeper">Sleeper</span></span>
+      <span class="af-rail-row-line" data-vs="true">
         ${side("allfantasyreview")}
+        <span class="af-rail-row-vs">VS</span>
         ${side("Team 3", true)}
       </span>
     </span>
@@ -82,7 +85,7 @@ function trayMarkup(leagues: number, avatar: "letter" | "image"): string {
     <a href="#" class="af-rail-logo">AF</a>
     <div class="af-rail-divider"></div>
     <button type="button" class="af-rail-toggle"><span class="af-rail-toggle-icon">«</span><span class="af-rail-toggle-text">${leagues} leagues · Week 5</span></button>
-    <div class="af-rail-scroll" id="af-rail-scroll">${Array.from({ length: leagues }, (_, i) => tile(i)).join("")}</div>
+    <div class="af-rail-scroll" id="af-rail-scroll"><div class="af-rail-sport"><span class="af-rail-sport-icon">🏈</span><span class="af-rail-sport-label">NFL</span><span class="af-rail-sport-count">${leagues}</span></div>${Array.from({ length: leagues }, (_, i) => tile(i)).join("")}</div>
     <div class="af-rail-foot">
       <a href="#c" class="af-rail-tile af-rail-add"><span class="af-rail-foot-icon">+</span><span class="af-rail-foot-copy"><strong>Create a league</strong><small>Build a custom league</small></span></a>
       <a href="#i" class="af-rail-tile af-rail-add"><span class="af-rail-foot-icon">↓</span><span class="af-rail-foot-copy"><strong>Import a league</strong><small>Connect a platform</small></span></a>
@@ -173,6 +176,33 @@ test.describe("@mobile league tray layout", () => {
     await page.setContent(trayMarkup(3, "image"))
     expectNoSidewaysPan(await measure(page), "320px")
   })
+
+  /*
+   * The head-to-head card (2026-10-30) puts both managers side by side with VS between them, and
+   * reaches left under the crest. Nothing in it may spill past its own league card — at 320px as
+   * well as on the device. The pan checks above cannot see this: the list scrolls on its own, so a
+   * too-wide card clips inside the tray instead of panning it.
+   */
+  for (const width of [320, 0] as const) {
+    test(`the matchup card stays inside its league card${width ? ` at ${width}px` : ""}`, async ({ page }) => {
+      if (width) await page.setViewportSize({ width, height: 640 })
+      await page.setContent(trayMarkup(3, "image"))
+      const spills = await page.evaluate(() => {
+        const out: string[] = []
+        document.querySelectorAll<HTMLElement>(".af-rail-scroll > .af-rail-tile").forEach((tile, i) => {
+          const t = tile.getBoundingClientRect()
+          tile.querySelectorAll<HTMLElement>(".af-rail-row-line, .af-rail-row-line *").forEach((el) => {
+            const r = el.getBoundingClientRect()
+            if (r.width && (r.left < t.left - 0.5 || r.right > t.right + 0.5)) {
+              out.push(`tile#${i} ${el.className} spans ${Math.round(r.left)}..${Math.round(r.right)} in ${Math.round(t.left)}..${Math.round(t.right)}`)
+            }
+          })
+        })
+        return out
+      })
+      expect(spills, "matchup content drawn outside its league card").toEqual([])
+    })
+  }
 
   test("a long league list scrolls inside the tray", async ({ page }) => {
     await page.setContent(trayMarkup(20, "letter"))

@@ -78,6 +78,23 @@ describe('Survivor and Exile Island on the rail', () => {
     expect(island.getAttribute('aria-label')).toContain('Exile Island: NBA Survivor')
   })
 
+  it('draws no ↕ when a favorite puts the Survivor league and its island in different sections', () => {
+    render(
+      <AfCoreShell
+        active="home"
+        leagues={rail as never}
+        scope={{ value: null, label: 'All leagues', favoriteIds: ['survivor-a'], leagues: rail } as never}
+        syncAge={{ label: 'just now', stale: false }}
+        syncEligibleCount={0}
+      >
+        <div>screen</div>
+      </AfCoreShell>,
+    )
+    expect(railOrder().filter((x) => x === '↕')).toHaveLength(1) // survivor-b's pair only
+    const islandA = Array.from(document.querySelectorAll('a.af-rail-tile[data-platform]')).find((el) => leagueIdOf(el) === 'exile-a')!
+    expect(islandA.getAttribute('data-exile')).toBeNull()
+  })
+
   it('CONTROL: without the link the island is an ordinary row, where it was', () => {
     render(shell(rail.map(({ exileOf: _exileOf, ...league }) => league)))
     expect(railOrder()).toEqual(['exile-a', 'exile-b', 'redraft', 'survivor-a', 'survivor-b'])

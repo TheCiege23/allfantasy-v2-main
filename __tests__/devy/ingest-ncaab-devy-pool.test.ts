@@ -91,6 +91,20 @@ describe('weekly cadence', () => {
   })
 })
 
+describe('provider rows all rejected', () => {
+  it('does not stamp a successful week when every fetched player is rejected', async () => {
+    h.seed.mockResolvedValue(complete({ fetched: 4, seeded: 0, totalInPool: 0, errors: ['missing name', 'missing name', 'missing name', 'missing name'] }))
+    await expect(ingestNcaabDevyPoolIfDue({ deadlineAt: deadlineAt() })).rejects.toThrow(/all processed rows were rejected/)
+    expect(h.upserts.at(-1)?.data).toMatchObject({ at: null, lastError: expect.stringContaining('all processed rows were rejected') })
+  })
+  it('retries an old falsely successful all-rejected marker despite its fresh timestamp', async () => {
+    h.marker = { data: { at: ago(DAY), fetched: 18209, seeded: 0, errors: 18209, resumeFrom: 0 } }
+    h.seed.mockResolvedValue(complete())
+    await ingestNcaabDevyPoolIfDue({ deadlineAt: deadlineAt() })
+    expect(h.seed).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('resumable', () => {
   it('a run stopped by its deadline records where to resume and does NOT stamp the week', async () => {
     const previousAt = ago(9 * DAY)

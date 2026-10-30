@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster } from '@/lib/team-coowners/access'
 /**
  * AF league trade orchestration — create, accept, reject, counter, veto, commissioner, process.
  */
@@ -519,6 +520,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   if (participants.length !== participantRosterIds.length) throw new Error('Every trade participant must belong to this league')
   const proposerOwnsRoster = proposer.platformUserId === input.proposedByUserId
     || (await managedPlatformIds(input.leagueId, input.proposedByUserId)).has(proposer.platformUserId)
+    || await isAcceptedCoOwnerForRoster(input.leagueId, proposer.id, input.proposedByUserId)
   if (!proposerOwnsRoster) {
     throw new Error('Proposer must own the proposing roster')
   }
@@ -851,6 +853,10 @@ export async function acceptAfLeagueTrade(input: {
   if (!acceptingRoster) {
     const acceptingIdentityIds = await managedPlatformIds(input.leagueId, input.userId)
     acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && acceptingIdentityIds.has(r.platformUserId))
+  }
+  if (!acceptingRoster) {
+    const coOwnerRosterId = await acceptedCoOwnerRosterId(input.leagueId, input.userId)
+    acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && r.id === coOwnerRosterId)
   }
   if (!acceptingRoster) throw new Error('Only a participating manager can accept')
 
@@ -1299,7 +1305,10 @@ export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: st
   }
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   const isComm = league?.userId === input.userId
-  if (!isRecv && !isComm) throw new Error('Only the receiving manager or commissioner can reject')
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(input.leagueId, input.userId)
+  const isCoOwnerReceiver = !!coOwnerRosterId && participantIds.includes(coOwnerRosterId) && coOwnerRosterId !== trade.proposerRosterId
+  if (!isRecv && !isCoOwnerReceiver && !isComm) throw new Error('Only the receiving manager or commissioner can reject')
+  isRecv ||= isCoOwnerReceiver
 
   await prisma.afLeagueTrade.update({
     where: { id: trade.id },
@@ -1339,7 +1348,8 @@ export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: st
     where: { id: trade.proposerRosterId, platformUserId: input.userId },
   })
   const elevated = await isElevatedCommissioner(input.leagueId, input.userId)
-  if (!isProp && !elevated) throw new Error('Only proposer or commissioner can cancel')
+  const isCoOwnerProposer = await isAcceptedCoOwnerForRoster(input.leagueId, trade.proposerRosterId, input.userId)
+  if (!isProp && !isCoOwnerProposer && !elevated) throw new Error('Only proposer or commissioner can cancel')
 
   /*
    * 🛑 THE PROPOSER COULD WITHDRAW A TRADE THE OTHER MANAGER HAD ALREADY ACCEPTED. `scheduled` is set only
@@ -1461,9 +1471,9 @@ export async function castAfTradeVetoVote(input: {
   if (trade.status !== 'awaiting_votes') throw new Error('Trade is not in veto window')
 
   const vr = await prisma.roster.findFirst({
-    where: { id: input.voterRosterId, leagueId: input.leagueId, platformUserId: input.userId },
+    where: { id: input.voterRosterId, leagueId: input.leagueId },
   })
-  if (!vr) throw new Error('Invalid voter roster')
+  if (!vr || (vr.platformUserId !== input.userId && !await isAcceptedCoOwnerForRoster(input.leagueId, vr.id, input.userId))) throw new Error('Invalid voter roster')
   const tradeMetadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
     ? trade.metadata as Record<string, unknown>
     : {}

@@ -335,19 +335,23 @@ export default function DynastySettingsPanel({
         <div>
           <h4 className="text-xs font-medium text-white/80">Rookie draft order</h4>
           <p className="mt-1 text-xs text-white/65">
-            Method: <span className="text-white/90">{effective.rookiePickOrderMethod}</span>
-            {effective.useMaxPfForNonPlayoff && ' (non-playoff: reverse Max PF)'} · Rounds: {effective.rookieDraftRounds} · Type: {effective.rookieDraftType}
+            Rounds: {effective.rookieDraftRounds} · Type: {effective.rookieDraftType}
+          </p>
+          <p className="mt-1 text-xs text-white/65">
+            Set automatic order by standings or Max PF in Draft Settings. A weighted lottery takes precedence when enabled.
           </p>
           {isCommissioner && (
             <div className="mt-2 flex flex-wrap gap-2">
               <select
                 className="rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
-                value={effectiveRookiePickOrder || effective.rookiePickOrderMethod}
+                aria-label="Rookie draft order source"
+                value={effectiveRookiePickOrder === 'weighted_lottery' ? 'weighted_lottery' : 'commissioner'}
                 onChange={(e) => setPatch((p) => ({ ...p, rookiePickOrderMethod: e.target.value }))}
               >
-                {constants.rookiePickOrderMethods.map((m) => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
+                {constants.rookiePickOrderMethods.filter((m) => m.value === 'commissioner' || m.value === 'weighted_lottery').map((m) => (
+                  <option key={m.value} value={m.value}>{m.value === 'commissioner' ? 'Use Draft Settings order' : m.label}</option>
                 ))}
+                {effectiveRookiePickOrder === 'weighted_lottery' && !constants.rookiePickOrderMethods.some((m) => m.value === 'weighted_lottery') && <option value="weighted_lottery">Weighted lottery</option>}
               </select>
               <select
                 className="rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
@@ -365,14 +369,6 @@ export default function DynastySettingsPanel({
                 value={effective.rookieDraftRounds}
                 onChange={(e) => setPatch((p) => ({ ...p, rookieDraftRounds: Number(e.target.value) || 4 }))}
               />
-              <label className="flex items-center gap-1 text-xs text-white/80">
-                <input
-                  type="checkbox"
-                  checked={effective.useMaxPfForNonPlayoff}
-                  onChange={(e) => setPatch((p) => ({ ...p, useMaxPfForNonPlayoff: e.target.checked }))}
-                />
-                Max PF for non-playoff
-              </label>
             </div>
           )}
 

@@ -89,6 +89,7 @@ export type RuleSnapshot = {
   /** ISO timestamp of a time-of-day trade deadline (`settings.trade_deadline_at`). */
   tradeDeadlineAt?: string | null
   tradeReview?: string | null
+  vetoThreshold?: { mode: 'count' | 'percent'; value: number } | null
   tradeReviewHours?: number | null
   waiverType?: string | null
   waiverBudget?: number | null
