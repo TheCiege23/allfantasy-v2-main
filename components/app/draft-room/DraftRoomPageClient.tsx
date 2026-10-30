@@ -4038,20 +4038,20 @@ export function DraftRoomPageClient({
         return acc
       }, {})
 
-      return <div className={`space-y-1.5 p-1 ${presentationVariant === 'redraft_snake' ? 'rounded-lg border border-white/[0.06] bg-[linear-gradient(180deg,rgba(13,20,40,0.95),rgba(8,14,28,0.95))] p-1.5' : ''}`}>
+      return <div className={`space-y-1.5 p-1 ${presentationVariant === 'redraft_snake' ? 'rounded-lg bg-[#0d1424] p-1.5' : ''}`}>
         {hasDraftHelperData ? (
           <button
             type="button"
             onClick={() => floatingHelperState.setVisible(true)}
             data-testid="draft-helper-docked-trigger"
-            className="flex w-full items-center justify-between rounded-lg border border-white/[0.08] bg-[linear-gradient(90deg,rgba(13,20,40,0.96),rgba(16,26,48,0.96))] px-2.5 py-1.5 text-left text-xs text-cyan-50 hover:bg-[linear-gradient(90deg,rgba(24,36,64,0.98),rgba(16,26,48,0.98))]"
+            className="flex w-full items-center justify-between rounded-lg border border-white/[0.06] bg-[#151b2e] px-2.5 py-1.5 text-left text-xs text-white hover:bg-[#1d2236]"
           >
             <span>
-              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200/80">Draft intelligence</span>
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8b91a7]">Draft intelligence</span>
               <span className="block text-[11px] text-white/72">Open Copilot, AF Legacy, and AI context</span>
             </span>
             {draftHelperBadgeCount > 0 ? (
-              <span className="rounded-full border border-cyan-300/35 bg-cyan-500/15 px-2 py-0.5 text-[11px] font-semibold text-cyan-100">
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#14172a]">
                 {draftHelperBadgeCount}
               </span>
             ) : null}
