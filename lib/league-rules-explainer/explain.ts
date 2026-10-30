@@ -37,6 +37,7 @@ const TRADE_REVIEWS = new Set(['commissioner', 'league_vote', 'instant', 'none']
 const SCORING_MODES = new Set(['points', 'h2h_category', 'roto'])
 const RECORD_MODES = new Set(['each', 'most'])
 const LINEUP_MODES = new Set(['daily', 'weekly'])
+const LINEUP_LOCKS = new Set(['per_player', 'first_game', 'manual'])
 const ENDGAMES = new Set(['last_team_standing', 'final_four', 'final_three', 'final_two'])
 const ENDGAME_TEAMS: Record<string, number> = { final_four: 4, final_three: 3, final_two: 2 }
 const RELEASES = new Set(['immediate', 'next_waiver_run'])
@@ -151,6 +152,9 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
         return text('v.off')
       case 'draftStartAt':
         return text('v.notScheduled')
+      case 'draftDevyRounds':
+      case 'draftCollegeRounds':
+        return text('v.off')
       default:
         return null
     }
@@ -284,6 +288,12 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
       return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? text('v.date', { date: { date: value } }) : null
     case 'draftOrphanPicks':
       return typeof value === 'string' && ORPHAN_DRAFTERS.has(value) ? text(`v.orphan.${value}`) : null
+    case 'draftDevyRounds':
+    case 'draftCollegeRounds': {
+      const rounds = roundsOf(value)
+      if (!rounds) return null
+      return rounds.length ? plural('v.collegeRounds', rounds.length, { rounds: roundList(rounds) }) : text('v.collegeRounds.none')
+    }
     case 'rookieDraftLottery': {
       const l = lotteryOf(value)
       if (!l) return null
@@ -538,6 +548,41 @@ function lotteryLines(l: RookieDraftLotteryRule | null): Array<RuleLine | null> 
   ]
 }
 
+/** A stored college-round list this module can state: whole rounds, sorted, no repeats — else null. */
+function roundsOf(value: unknown): number[] | null {
+  if (!Array.isArray(value) || !value.every(isPosInt)) return null
+  return [...new Set(value)].sort((a, b) => a - b)
+}
+
+/** [1, 2, 3, 4, 7, 9, 10] -> "1–4, 7, 9 and 10" (a run of three or more reads as a range). */
+function roundList(rounds: number[]): RuleVar {
+  const items: RuleVar[] = []
+  for (let i = 0; i < rounds.length; ) {
+    let j = i
+    while (j + 1 < rounds.length && rounds[j + 1] === rounds[j]! + 1) j++
+    if (j - i >= 2) items.push(text('v.roundRange', { from: rounds[i]!, to: rounds[j]! }))
+    else for (let k = i; k <= j; k++) items.push(rounds[k]!)
+    i = j + 1
+  }
+  return { list: items }
+}
+
+/**
+ * The devy / college rounds of the main draft, as the pick check enforces them (RuleSnapshot
+ * `draftDevyRounds` / `draftCollegeRounds`): which rounds take only college players, that every other
+ * round refuses them, or — with the rule on and no round listed — that no college player can be
+ * picked. A round list that covers the whole draft says so.
+ */
+function collegeRoundsLine(s: RuleSnapshot): RuleText | null {
+  const kind = s.draftCollegeRounds != null ? 'collegeRounds' : s.draftDevyRounds != null ? 'devyRounds' : null
+  if (!kind) return null
+  const rounds = roundsOf(kind === 'collegeRounds' ? s.draftCollegeRounds : s.draftDevyRounds)
+  if (!rounds) return null
+  if (!rounds.length) return text(`draft.${kind}.none`)
+  if (isPosInt(s.draftRounds) && rounds.length === s.draftRounds && rounds[rounds.length - 1] === s.draftRounds) return text(`draft.${kind}.all`)
+  return plural(`draft.${kind}`, rounds.length, { rounds: roundList(rounds) })
+}
+
 /**
  * The main draft. Once it is complete the section stays, titled and opened as complete: its settings
  * no longer change anything this season, so nothing here reads as a rule still to come (no schedule
@@ -556,6 +601,7 @@ function draftLines(s: RuleSnapshot): RuleLine[] {
     line('draft-status', status === 'completed' ? text('draft.completed') : status === 'in_progress' ? text('draft.inProgress') : null),
     line('draft-type', type && isPosInt(s.draftRounds) ? plural(`draft.type.${type}`, s.draftRounds) : null),
     line('draft-3rr', type === 'snake' && s.draftThirdRoundReversal === true ? text('draft.thirdRoundReversal') : null),
+    line('draft-college-rounds', type === 'snake' || type === 'linear' ? collegeRoundsLine(s) : null),
     line(
       'draft-auction',
       type === 'auction' && isPosInt(s.draftAuctionBudget) && isPosInt(s.draftAuctionMinBid)
@@ -619,10 +665,15 @@ export function explainLeagueRules(s: RuleSnapshot, ctx: ExplainContext = {}): R
     line('overview-format', overviewFormat(s)),
     line('overview-median', seasonal && s.medianGame === true ? text('overview.median') : null),
   ])
-  const lineups =
+  const lineups: RuleLine[] =
     !imported && format !== 'best_ball' && s.lineupMode && LINEUP_MODES.has(s.lineupMode)
       ? [{ id: 'lineups-mode', text: text(`lineups.${s.lineupMode}`) }]
       : []
+  // When a weekly lineup locks. Every football league gets this line too, which had none.
+  // Daily lineups carry no lock here: the lock reads as 'daily' and their own line explains it.
+  if (!imported && format !== 'best_ball' && format !== 'specialty' && s.lineupLock && LINEUP_LOCKS.has(s.lineupLock)) {
+    lineups.push({ id: 'lineups-lock', text: text(`lineups.lock.${s.lineupLock}`) })
+  }
   const ownRules = !imported && format !== 'specialty' && format !== 'best_ball'
   const sections: RuleSection[] = [
     { id: 'overview', title: text('section.overview'), lines: overview },
@@ -759,6 +810,13 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       return after === true ? text('change.autostart.on') : after === false ? text('change.autostart.off') : null
     case 'draftOrphanPicks':
       return typeof after === 'string' && ORPHAN_DRAFTERS.has(after) ? text(`draft.orphan.${after}`) : after == null ? text('change.orphan.off') : null
+    case 'draftDevyRounds':
+    case 'draftCollegeRounds': {
+      if (after == null) return text('change.collegeRounds.off')
+      const rounds = roundsOf(after)
+      if (!rounds) return null
+      return rounds.length ? plural('change.collegeRounds.set', rounds.length, { rounds: roundList(rounds) }) : text('change.collegeRounds.none')
+    }
     default:
       return null
   }

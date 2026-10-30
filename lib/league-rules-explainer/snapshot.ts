@@ -23,6 +23,7 @@ import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
 import { readLineupMode } from '@/lib/redraft/lineupModeSwitch'
+import { readLineupLockSettings } from '@/lib/redraft/lineupLock'
 import { readDeadlineAt } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { isWaiverProcessingMode, readDailyWaiverScheduleFromSettings, WAIVER_DAY_KEYS } from '@/lib/waivers/dailyWaiverSchedule'
 import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
@@ -71,6 +72,17 @@ export type RulesLeagueRow = {
   keeperMaxYears?: number | null
   draftPickTrading?: boolean | null
   settings?: unknown
+}
+
+/** Sports whose lineups the app actually locks (lib/redraft/lineupLock.ts: soccer is not wired yet). */
+const LINEUP_LOCK_SPORTS = new Set(['NFL', 'NCAAF', 'NBA', 'NHL', 'MLB', 'NCAAB'])
+
+/** The lock the league is under, read exactly as the lock reads it. */
+function lineupLockRule(settings: unknown, sport: string | null): RuleSnapshot['lineupLock'] {
+  const key = String(sport ?? '').trim().toUpperCase()
+  if (!LINEUP_LOCK_SPORTS.has(key)) return null
+  const mode = readLineupLockSettings(settings, key).mode
+  return mode === 'per_player_kickoff' ? 'per_player' : mode === 'first_game_of_week' ? 'first_game' : mode === 'manual' ? 'manual' : null
 }
 
 /**
@@ -253,6 +265,7 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
     waiverDays: schedule?.enabled ? WAIVER_DAY_KEYS.filter((d) => isWaiverProcessingMode(schedule.days[d])) : null,
     waiverProcessHour: schedule?.enabled ? schedule.processHour : null,
     lineupMode: supportsDailyLineups(sport) ? readLineupMode(row.settings, sport) : null,
+    lineupLock: lineupLockRule(row.settings, sport),
     concept: resolveRulesConcept(row),
   }
 
@@ -412,13 +425,19 @@ export function tankingPenaltyRule(settings: unknown): TankingPenaltyRule {
  * (`settings.rookie_draft_order.live`, AF Commissioner); the automatic order the commissioner switched
  * on (`settings.rookie_draft_order {enabled, mode}`). The popup used to print the dynasty config's
  * method whatever the engine did, so it could say "reverse max PF" over a draft seated worst record
- * first. Only when none of those is on does the config's own method stand.
+ * first.
+ *
+ * ⚠ A STANDINGS METHOD ON ITS OWN SEATS NOTHING. Standings order the rookie draft only under the automatic
+ * order, an AF Commissioner setting that is off by default (lib/rookie-order/automaticRookieOrder.ts). With
+ * none of the above on, the draft takes the league's own order, so a dynasty config's `max_pf` /
+ * `reverse_standings` reads as the commissioner setting it — never as an order the draft does not use.
  */
 export function effectiveRookieDraftOrder(configMethod: string | null | undefined, leagueSettings: unknown): string | null {
   if (configMethod === 'weighted_lottery') return configMethod
   const rookie = record(record(leagueSettings).rookie_draft_order)
   if (record(rookie.live).enabled === true) return 'live'
   if (rookie.enabled === true) return rookie.mode === 'reverse_max_pf' ? 'auto_reverse_max_pf' : 'auto_worst_to_first'
+  if (configMethod === 'max_pf' || configMethod === 'reverse_standings') return 'commissioner'
   return configMethod ?? null
 }
 
@@ -543,6 +562,11 @@ export type DraftRuleInputs = {
   autostart: boolean
   orphanEnabled: boolean
   orphanMode: string | null
+  /**
+   * The current session's `devyConfig` / `c2cConfig`, raw, and whether the league is a devy or C2C
+   * (dynasty-family) league. Omitted, the college-round keys are not stated at all.
+   */
+  collegeRounds?: { applies: boolean; devy: unknown; c2c: unknown }
 }
 
 const MAIN_DRAFT_TYPES = new Set(['snake', 'linear', 'auction'])
@@ -586,5 +610,39 @@ export function draftRulesFromInputs(i: DraftRuleInputs): Partial<RuleSnapshot> 
     draftStartAt: startAt,
     draftAutostart: startAt ? i.autostart === true : null,
     draftOrphanPicks: i.orphanEnabled ? (i.orphanMode === 'ai' ? 'ai' : 'cpu') : null,
+    ...(i.collegeRounds ? collegeRoundRules(i.collegeRounds, type, posInt(i.rounds)) : {}),
   }
+}
+
+/**
+ * The rounds of the main draft set aside for college players, read the way the pick check reads them
+ * (PickSubmissionService → validateC2CEligibilityAsync / validateDevyEligibilityAsync):
+ *
+ *   - the rule is on only when the config's `enabled` is set; then a round in the list takes only a
+ *     college player (a devy-eligible player not yet pro), and every other round refuses one;
+ *   - the C2C config is checked INSTEAD of the devy config when both are on;
+ *   - a round matches by `Array.includes`, so only whole-number entries count, and a round past the
+ *     draft's last round never comes up — both are dropped here, so they never read as a rule;
+ *   - an auction never runs this check (the auction engine does not call it), so it has no such rule.
+ *
+ * `[]` is real: the rule is on with no listed round, so the check refuses every college player.
+ */
+function collegeRoundRules(
+  c: { applies: boolean; devy: unknown; c2c: unknown },
+  type: string | null,
+  maxRounds: number | null,
+): Pick<RuleSnapshot, 'draftDevyRounds' | 'draftCollegeRounds'> {
+  const off = { draftDevyRounds: null, draftCollegeRounds: null }
+  if (!c.applies || (type !== 'snake' && type !== 'linear')) return off
+  const c2c = record(c.c2c)
+  if (c2c.enabled) return { draftDevyRounds: null, draftCollegeRounds: listedRounds(c2c.collegeRounds, maxRounds) }
+  const devy = record(c.devy)
+  if (devy.enabled) return { draftDevyRounds: listedRounds(devy.devyRounds, maxRounds), draftCollegeRounds: null }
+  return off
+}
+
+function listedRounds(raw: unknown, maxRounds: number | null): number[] {
+  if (!Array.isArray(raw)) return []
+  const rounds = raw.filter((r): r is number => typeof r === 'number' && Number.isInteger(r) && r >= 1 && (maxRounds == null || r <= maxRounds))
+  return [...new Set(rounds)].sort((a, b) => a - b)
 }

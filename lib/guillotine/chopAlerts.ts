@@ -102,7 +102,9 @@ export async function sendChopResultAlerts(
   ] as const) {
     if (userIds.length === 0) continue
     const alert = chopResultAlert({ leagueName: name, week: input.week, choppedNames, youWereChopped, rosterReleaseTiming: input.rosterReleaseTiming })
-    await dispatch({ ...common, userIds: [...userIds], type, title: alert.title, body: alert.body, severity: alert.severity, dedupePrefix: `${key}:${type}` })
+    // A survivor goes straight to the released players (the home's chop moment), where the bids are.
+    const link = youWereChopped ? {} : { actionHref: `/league/${input.leagueId}#guillotine-chop`, actionLabel: 'See the players' }
+    await dispatch({ ...common, ...link, userIds: [...userIds], type, title: alert.title, body: alert.body, severity: alert.severity, dedupePrefix: `${key}:${type}` })
   }
   return { chopped: choppedUsers.size, survived: survivors.length }
 }

@@ -7,6 +7,9 @@
  * league rules (`{ rules }`, lib/guillotine/guillotineRules.ts; `GET ?view=rules` reads them). It lives on
  * this existing path rather than its own route file because the app is at the route-count ceiling
  * (too_many_routes — see app/api/leagues/join/route.ts). Rules in lib/guillotine/guillotineFirstChopWeek.ts.
+ *
+ * POST: a chopped manager's "Who's next?" pick (`{ action: 'next_chop_pick', week, rosterId }`,
+ * lib/guillotine/nextChopPick.ts). Any member; the store refuses a manager who is still alive.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,6 +29,7 @@ import { describeSchedule } from '@/lib/guillotine/chopSchedule'
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
 import { loadChopWatch } from '@/lib/guillotine/chopWatchLoad'
+import { loadNextChopPickState, saveNextChopPick } from '@/lib/guillotine/nextChopPickStore'
 import { guillotineAdvancedSnapshot, guillotineRulesSnapshot } from '@/lib/league-rules-explainer/snapshot'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
@@ -116,8 +120,12 @@ export async function GET(
 
   if (!summary) return NextResponse.json({ error: 'Summary not available' }, { status: 500 })
 
+  // "Who's next?" for chopped managers. Never fails the summary.
+  const nextChopPick = await loadNextChopPickState(leagueId, myRosterId).catch(() => null)
+
   return NextResponse.json({
     ...summary,
+    nextChopPick,
     ...(watch ? { dangerTiers: watch.dangerTiers } : {}),
     chopWatch: watch ? { live: true, week: watch.week, chopCount: watch.chopCount, chopLine: watch.chopLine } : null,
     myEscapes,
@@ -137,6 +145,35 @@ export async function GET(
         }
       : null,
   })
+}
+
+const PICK_MESSAGES: Record<'not_chopped' | 'closed' | 'not_alive', { status: number; error: string }> = {
+  not_chopped: { status: 403, error: 'Only a manager whose team has been chopped can pick.' },
+  closed: { status: 409, error: 'That week has started, so picks for it are closed.' },
+  not_alive: { status: 400, error: 'Pick a team that is still alive.' },
+}
+
+export async function POST(
+  req: NextRequest,
+  ctx: { params: Promise<{ leagueId: string }> }
+) {
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { leagueId } = await ctx.params
+  if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+  if (!(await canAccessLeagueDraft(leagueId, userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await isGuillotineLeague(leagueId))) return NextResponse.json({ error: 'Not a Guilly league' }, { status: 404 })
+
+  const body = (await req.json().catch(() => null)) as { action?: unknown; week?: unknown; rosterId?: unknown } | null
+  if (body?.action !== 'next_chop_pick' || typeof body.rosterId !== 'string' || !body.rosterId || !Number.isInteger(body.week)) {
+    return NextResponse.json({ error: 'Send { action: "next_chop_pick", week, rosterId }.' }, { status: 400 })
+  }
+  const viewerRosterId = await findViewerRosterId(leagueId, userId).catch(() => null)
+  const saved = await saveNextChopPick({ leagueId, viewerRosterId, userId, week: body.week as number, pickedRosterId: body.rosterId })
+  if (!saved.ok) return NextResponse.json({ error: PICK_MESSAGES[saved.reason].error, code: saved.reason }, { status: PICK_MESSAGES[saved.reason].status })
+  return NextResponse.json({ ok: true, nextChopPick: await loadNextChopPickState(leagueId, viewerRosterId) })
 }
 
 export async function PATCH(
