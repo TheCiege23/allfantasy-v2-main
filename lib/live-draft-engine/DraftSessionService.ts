@@ -712,7 +712,7 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
     where: { id: session.id, status: 'pre_draft', version: session.version },
     data: {
       ...(ls
-        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
+        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: session.draftModeLabel === 'rookie' ? session.playerPool : ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
         : {}),
       startedAt: startedAtNow,
       version: { increment: 1 },
@@ -734,8 +734,8 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
   })
 
   if (session.draftType === 'auction') {
-    const { initializeAuctionForSession } = await import('./auction/AuctionEngine')
-    await initializeAuctionForSession(leagueId)
+    const { buildInitialAuctionSessionUpdate } = await import('./auction/AuctionEngine')
+    const auctionStart = await buildInitialAuctionSessionUpdate(leagueId, session)
     try {
       const { isSalaryCapLeague } = await import('@/lib/salary-cap/SalaryCapLeagueConfig')
       const { initializeStartupLedgers } = await import('@/lib/salary-cap/AuctionStartupService')
@@ -747,7 +747,7 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
       console.warn('[startDraftSession] Salary cap startup ledger init non-fatal:', e)
     }
     if (!(await startClaimedSession(session, {
-      status: 'in_progress', pausedRemainingSeconds: null, overnightFrozenPickSeconds: null,
+      ...auctionStart, status: 'in_progress', overnightFrozenPickSeconds: null,
       startedAt: startedAtNow, completedAt: null, version: { increment: 1 },
     }, claimedVersion))) return { ok: false, reason: 'session_not_ready' }
     await ensureDraftingLifecycleForActiveSession(leagueId)
