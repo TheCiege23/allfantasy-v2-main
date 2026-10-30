@@ -12,6 +12,7 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { RailMatchupSummary, RailSideProjectionSummary, RailStandingSummary } from './AfCoreShell'
 import type { LiveRailScore } from './useLiveRailScores'
 import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
+import type { RailRecord } from '@/lib/core-app/railRecordRank'
 
 /**
  * The expanded body of one league row in the league rail: name, platform, the
@@ -295,6 +296,8 @@ export type RailRowBodyProps = {
    * tapped element with `railTapTarget` and routes there instead of the league.
    */
   matchupHref?: string | null
+  /** Your record and place in this league ("6-3 · 2nd"). Absent or null draws no record. */
+  record?: RailRecord | null
 }
 
 export type RailAttention = 'lineup' | 'offer'
@@ -326,6 +329,7 @@ export function RailRowBody({
   pWin,
   attention,
   matchupHref,
+  record,
 }: RailRowBodyProps) {
   const msg = useMessages(railRowMessages)
   const headToHead = Boolean(m && !m.guillotine && !m.unpaired)
@@ -359,6 +363,12 @@ export function RailRowBody({
             data-platform={isNativePlatform(platform) ? 'native' : platform.toLowerCase()}
           >
             {platformLabel(isNativePlatform(platform) ? null : platform)}
+          </span>
+        ) : null}
+        {record ? (
+          <span className="af-rail-row-record af-num">
+            {record.wins}-{record.losses}{record.ties ? `-${record.ties}` : ''}
+            {record.rank != null ? ` · ${msg.rank(record.rank)}` : ''}
           </span>
         ) : null}
         {showScoreStatus && (syncPaused || delayed) ? <span className="af-rail-delayed">{syncPaused ? msg.syncPaused : msg.updatesDelayed}</span> : null}
