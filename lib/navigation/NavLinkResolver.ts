@@ -16,6 +16,7 @@ export const PRIMARY_NAV_ITEMS: NavLinkItem[] = [
   { href: "/war-room", label: "AF Legacy" },
   { href: "/discover/leagues", label: "Leagues" },
   { href: "/ai/tools", label: "Intelligence Hub" },
+  { href: "/clubhouse", label: "Clubhouse" },
   { href: "/core/rankings", label: "Rankings" },
   { href: "/profile", label: "Profile" },
   { href: "/messages", label: "Messages" },
@@ -72,6 +73,7 @@ export const PRIMARY_NAV_GROUPS: NavGroup[] = [
       { href: "/core/commissioner", label: "Commissioner Hub" },
       { href: "/manager-hub", label: "Manager Hub" },
       { href: "/ai/tools", label: "Intelligence Hub" },
+      { href: "/clubhouse", label: "Clubhouse" },
     ],
   },
   {

@@ -990,6 +990,7 @@ const LEAGUE_FIRST_PLAY_LINKS: ReadonlyArray<{ href: string; label: string; glyp
   { href: '/mock-draft', label: 'Mock draft', glyph: '◷' },
   { href: '/brackets', label: "Brackets and pick'em", glyph: '⚑' },
   { href: '/leaderboards', label: 'Leaderboards', glyph: '▲' },
+  { href: '/clubhouse', label: 'Clubhouse community', glyph: '☰' },
 ]
 
 type PlayerSearchHit = {
