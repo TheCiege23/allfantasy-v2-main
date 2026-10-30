@@ -37,7 +37,7 @@ export function TeamCoOwnerPanel({ leagueId, rosterId }: { leagueId: string; ros
   }
   return <section className="space-y-2 border-t border-white/10 pt-3 text-sm">
     <h4 className="font-semibold text-white">Team co-owners</h4>
-    <p className="text-white/60">Co-owners can manage this team. They do not receive commissioner access.</p>
+    <p className="text-white/60">Co-owners can manage the team lineup, draft, waivers, and trades. Some specialty game actions remain with the primary owner. Co-owners do not receive commissioner access.</p>
     {invites.map((item) => <div key={item.id} className="flex items-center gap-3 text-white/80">
       <span>{item.user.displayName ?? item.user.username ?? 'Member'} — {item.acceptedAt ? 'Accepted' : 'Invited'}</span>
       <button type="button" disabled={busy} onClick={() => void remove(item.id)} className="text-red-300">Remove</button>
