@@ -13,6 +13,7 @@ import { resolveLeagueFormat } from '@/lib/league/format-engine'
 import { buildKeeperProvenance } from '@/lib/league-contract/keeperProvenance'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { hasIdpRosterSlot } from './idpRosterSlots'
 import type {
   CanonicalImportBundle,
   DerivedImportFlags,
@@ -256,11 +257,7 @@ function inferDerivedFlags(
    * as IDP, and `includes('DE')` every DEF league. ESPN, Yahoo, MFL and Fantrax store `SLOT:COUNT`
    * pairs (`LB:2`), so the count is stripped first — the same rule as ImportedLeagueCommitService.
    */
-  const rosterPositions = Array.isArray(raw.roster_positions)
-    ? (raw.roster_positions as unknown[]).map((p) => String(p).trim().toUpperCase().replace(/:\d+$/, ''))
-    : []
-  const idpPositions = new Set(['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'DB', 'IDP_FLEX', 'IDP'])
-  const hasIdpSlot = rosterPositions.some((p) => idpPositions.has(p))
+  const hasIdpSlot = hasIdpRosterSlot(Array.isArray(raw.roster_positions) ? (raw.roster_positions as unknown[]) : [])
   const hasIdpScoring = normalized.scoring?.rules.some((rule) => rule.stat_key.startsWith('idp_')) ?? false
   const signals = collectConceptSignals(normalized)
 

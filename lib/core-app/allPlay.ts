@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { headToHeadRecords } from './headToHeadRecords'
 import { buildRosterIdMap } from './rosterIdMatch'
 
 /**
@@ -87,7 +88,7 @@ export async function getAllPlayBoard(args: {
   const rows = await prisma.weeklyMatchup
     .findMany({
       where: { leagueId: args.platformLeagueId, seasonYear: args.seasonYear },
-      select: { rosterId: true, week: true, pointsFor: true, pointsAgainst: true, win: true },
+      select: { rosterId: true, week: true, matchupId: true, pointsFor: true },
       orderBy: { week: 'asc' },
     })
     .catch(() => [])
@@ -124,14 +125,22 @@ export async function getAllPlayBoard(args: {
     if (!weekRows.some((r) => r.pointsFor > 0)) continue
     weeksCounted += 1
 
+    /*
+     * 🛑 HEAD-TO-HEAD FROM THE PAIRED SCORES, NEVER FROM THE STORED `win` FLAG (headToHeadRecords.ts):
+     * pre-fix rows store a roster with no opponent as a win, and a tie as `win = 0` for both. A roster
+     * alone in its matchup gets no head-to-head result this week; all-play below still counts it.
+     */
+    const headToHead = headToHeadRecords(weekRows)
     for (const r of weekRows) {
       const a = acc.get(r.rosterId) ?? blank()
       a.pf += r.pointsFor
 
-      // Head-to-head, from the row the platform already decided.
-      if (r.win === 1) a.wins += 1
-      else if (r.win === 0 && r.pointsAgainst !== r.pointsFor) a.losses += 1
-      else a.ties += 1
+      const result = headToHead.get(r.rosterId)
+      if (result) {
+        a.wins += result.wins
+        a.losses += result.losses
+        a.ties += result.ties
+      }
 
       /*
        * All-play: this score against every OTHER score in the same week. The

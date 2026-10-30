@@ -244,7 +244,7 @@ export async function buildTradeFinder(input: TradeFinderInput): Promise<TradeFi
 
   const tradable = rows.rosters.filter((r) => r.platformUserId && !OPEN_ROSTER.test(r.platformUserId))
   const ids = [...new Set(tradable.flatMap(tradeRosterPlayerIds))].slice(0, MAX_LEAGUE_PLAYER_IDS)
-  const byId = await readTradePlayerRows(ids)
+  const byId = await readTradePlayerRows(ids, sport)
   const leagueScoring = marketContext.scoring.settings
   const shape = { leagueSize, rosterSlots: rosterSlotsOf(league.settings) }
 

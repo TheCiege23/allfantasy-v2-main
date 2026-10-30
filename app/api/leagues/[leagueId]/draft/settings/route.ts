@@ -13,6 +13,7 @@ import { assertCommissioner, isCommissioner } from '@/lib/commissioner/permissio
 import { prisma } from '@/lib/prisma'
 import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { getDraftVariantSettings, updateDraftVariantSettings } from '@/lib/draft-defaults/DraftVariantSettingsHub'
+import { sanitizeRoundList } from '@/lib/draft-defaults/draftRoundList'
 import { isDraftTypeAllowedOnSettingsTab } from '@/lib/draft-types/draftTypeRegistry'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { validateLeagueSettings } from '@/lib/league-settings-validation'
@@ -557,6 +558,19 @@ export async function PATCH(
     select: { settings: true },
   })
   const leagueSettings = (league?.settings ?? {}) as Record<string, unknown>
+  // Devy / C2C college rounds are normalised HERE, against the draft's round count, before the
+  // validator runs — so its "at least one round" rule judges the list that will actually be stored,
+  // not the raw body (`[0]` or `["x"]` is non-empty and stores as `[]`). Same normaliser as the draft
+  // room's devy / C2C config PATCHes: lib/draft-defaults/draftRoundList.ts.
+  const draftRoundCount = typeof configPatch.rounds === 'number' ? configPatch.rounds : current.config?.rounds
+  if (sessionVariantPatch.devyConfig && typeof sessionVariantPatch.devyConfig === 'object') {
+    const d = sessionVariantPatch.devyConfig as { enabled?: unknown; devyRounds?: unknown }
+    sessionVariantPatch.devyConfig = { enabled: Boolean(d.enabled), devyRounds: sanitizeRoundList(d.devyRounds, draftRoundCount) }
+  }
+  if (sessionVariantPatch.c2cConfig && typeof sessionVariantPatch.c2cConfig === 'object') {
+    const c = sessionVariantPatch.c2cConfig as { enabled?: unknown; collegeRounds?: unknown }
+    sessionVariantPatch.c2cConfig = { enabled: Boolean(c.enabled), collegeRounds: sanitizeRoundList(c.collegeRounds, draftRoundCount) }
+  }
   const effectiveForValidation: Record<string, unknown> = {
     league_type: leagueSettings.league_type,
     league_variant: leagueSettings.league_variant ?? null,

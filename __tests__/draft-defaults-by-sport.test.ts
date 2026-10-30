@@ -228,4 +228,17 @@ describe('Prompt 17 draft defaults by sport and variant', () => {
     expect(devyConfig?.draft_type).toBe('snake')
     expect(c2cConfig?.draft_type).toBe('auction')
   })
+
+  it('normalizes devy and c2c linear drafts to linear, not the sport default', async () => {
+    for (const draftType of ['devy_linear', 'c2c_linear']) {
+      leagueFindUniqueMock.mockResolvedValueOnce({
+        sport: 'NFL',
+        leagueVariant: 'STANDARD',
+        settings: { draft_type: draftType, requested_draft_type: draftType },
+      })
+      const { getDraftConfigForLeague } = await import('@/lib/draft-defaults/DraftRoomConfigResolver')
+      const config = await getDraftConfigForLeague(`league-${draftType}`)
+      expect(config?.draft_type, draftType).toBe('linear')
+    }
+  })
 })

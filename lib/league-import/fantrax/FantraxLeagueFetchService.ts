@@ -7,6 +7,7 @@ import type {
   FantraxImportTransaction,
 } from '@/lib/league-import/adapters/fantrax/types'
 import { assignFantraxTeamIds } from './fantraxTeamIds'
+import { readStoredFantraxDerived, readStoredFantraxDraft } from './fantraxSnapshotHistory'
 import { isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots } from './fantraxProSports'
 
 type LegacyStanding = {
@@ -833,7 +834,7 @@ export async function fetchFantraxLeagueForImport(
     }
   })
 
-  const draftPicks: FantraxImportDraftPick[] = transactions
+  const exportDraftPicks: FantraxImportDraftPick[] = transactions
     .filter((transaction) => transaction.isDraftPick)
     .map((transaction) => {
       const round = transaction.pickRound ?? null
@@ -858,6 +859,72 @@ export async function fetchFantraxLeagueForImport(
       } satisfies FantraxImportDraftPick
     })
     .filter(Boolean) as FantraxImportDraftPick[]
+
+  /*
+   * ⚠ THE STORED DRAFT BOARD AND THE DERIVED MOVES (see `fantraxSnapshotHistory.ts`). A live import
+   * writes both into this same column, beside the export groups read above. The board is the whole
+   * draft with real Fantrax player ids, so it SUPERSEDES the export's traded-pick events, which
+   * describe the same draft with synthetic ids; a league with no board on file keeps those events.
+   *
+   * Teams are mapped by the name stored with each row, then by Fantrax's own team id through the
+   * standings — the same two keys `buildTeamIdMap` used. An unattributable row is dropped rather
+   * than handed to a guessed team.
+   */
+  const labelByFantraxTeamId = new Map<string, string>()
+  for (const standing of standings) {
+    const id = asString(standing.fantraxTeamId)
+    if (id && !labelByFantraxTeamId.has(id)) labelByFantraxTeamId.set(id, asString(standing.team))
+  }
+  const teamIdFor = (teamName: string | null | undefined, fantraxTeamId: string): string | null =>
+    resolveTeamId(asString(teamName), teamMap) ?? resolveTeamId(labelByFantraxTeamId.get(fantraxTeamId) ?? '', teamMap)
+
+  const storedBoard = readStoredFantraxDraft(leagueRecord.transactions)
+  const boardPicks: FantraxImportDraftPick[] = (storedBoard?.picks ?? []).flatMap((pick) => {
+    const teamId = teamIdFor(pick.teamName, pick.teamId)
+    if (!teamId) return []
+    return [{
+      round: pick.round,
+      pickNumber: pick.pick,
+      teamId,
+      playerId: pick.playerId,
+      playerName: pick.playerName,
+      position: pick.position,
+      team: pick.team,
+    } satisfies FantraxImportDraftPick]
+  })
+  const draftPicks = boardPicks.length > 0 ? boardPicks : exportDraftPicks
+
+  const storedDerived = readStoredFantraxDerived(leagueRecord.transactions)
+  const derivedTransactions: FantraxImportTransaction[] = []
+  for (const move of storedDerived.moves) {
+    const teamId = teamIdFor(move.teamName, move.teamId)
+    if (!teamId) continue
+    derivedTransactions.push({
+      transactionId: `fantrax:${leagueRecord.id}:derived:${move.id}`,
+      /* An add may be a waiver claim or a free-agent pickup; the roster diff cannot tell which. */
+      type: move.adds.length > 0 ? 'free_agent' : 'drop',
+      status: 'inferred',
+      createdAt: toIsoDate(move.observedAt),
+      teamIds: [teamId],
+      adds: Object.fromEntries(move.adds.map((id) => [id, teamId])),
+      drops: Object.fromEntries(move.drops.map((id) => [id, teamId])),
+    })
+  }
+  for (const trade of storedDerived.suspectedTrades) {
+    const a = teamIdFor(trade.teamAName, trade.teamAId)
+    const b = teamIdFor(trade.teamBName, trade.teamBId)
+    if (!a || !b) continue
+    derivedTransactions.push({
+      transactionId: `fantrax:${leagueRecord.id}:derived:${trade.id}`,
+      type: 'trade',
+      /* Never `completed`: a two-way roster exchange LOOKS like a trade; Fantrax never said so. */
+      status: 'suspected',
+      createdAt: toIsoDate(trade.observedAt),
+      teamIds: [a, b],
+      adds: Object.fromEntries([...trade.aSent.map((id) => [id, b]), ...trade.bSent.map((id) => [id, a])]),
+      drops: Object.fromEntries([...trade.aSent.map((id) => [id, a]), ...trade.bSent.map((id) => [id, b])]),
+    })
+  }
 
   /*
    * ⚠ NBA/NHL ONLY: THE LINEUP SLOTS ARE IN `rosterInfo`, AND THEY ARE MAPPED
@@ -936,8 +1003,13 @@ export async function fetchFantraxLeagueForImport(
     },
     teams,
     schedule,
-    transactions,
+    transactions: [...transactions, ...derivedTransactions],
     draftPicks,
+    historySources: {
+      draftBoard: boardPicks.length > 0,
+      exportTransactions: transactions.length,
+      derivedTransactions: derivedTransactions.length,
+    },
     playerMap: rosterPlayerMap,
     previousSeasons: previousSeasonRecords.map((record) => ({
       season: String(record.season),

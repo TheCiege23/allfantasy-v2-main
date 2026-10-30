@@ -69,3 +69,16 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
   (docs/integrity/IMPORTED_LEAGUE_INTEGRITY.md). **Needed:** one capture of a league with a
   completed multi-player trade, via `scripts/probe.sh`, from a league the owner chooses (cookies
   if private), committed with the grouping fix.
+
+## NFL fantasy lineup slots, 2026-10-30 — recorded without probing
+
+- `L-01` UNVERIFIED: ESPN lineup slot `24` (`EDR`, `ESPN_SLOT_LABELS` in
+  `lib/league-import/espn/EspnLeagueFetchService.ts`) — which positions it accepts, and whether it is
+  an IDP slot at all. No NFL fantasy-league fixture is committed, so nothing in the repo shows a
+  league that uses it. It is therefore NOT counted as an IDP signal (`lib/league-import/idpRosterSlots.ts`)
+  and not mapped in `lib/league/importedLineupTemplate.ts`. **Needed:** one capture of an NFL league
+  with an EDR slot (its `rosterSettings.lineupSlotCounts`, as `EspnLeagueFetchService` reads it, plus a roster using it), via `scripts/probe.sh`.
+- `L-02` INFERRED, not captured: slot `15` (`DP`) is the defensive-player flex — it is the last slot of
+  ESPN's defensive block (8 DT · 9 DE · 10 LB · 11 DL · 12 CB · 13 S · 14 DB · 15 DP) and
+  `lib/lineup-actions/sleeperSlotUtils.ts` already treats `DP` as IDP. It now counts as an IDP signal on
+  import. A capture of a league using it would confirm which positions it accepts.

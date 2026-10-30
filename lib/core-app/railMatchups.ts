@@ -1012,7 +1012,8 @@ export async function loadRailProjections(args: {
    */
   const pointsWithheld = new Set<string>()
   for (const l of leagueMeta) {
-    const format = weeklyFormat({ leagueType: l.leagueType, settings: l.formatSettings })
+    // `yahoo_settings` is already selected whole for the scoring bridge; `weeklyFormat` reads its `scoring_type`.
+    const format = weeklyFormat({ leagueType: l.leagueType, settings: { ...(l.formatSettings && typeof l.formatSettings === 'object' ? (l.formatSettings as Record<string, unknown>) : {}), yahoo_settings: l.yahoo_settings } })
     if (format === 'categories' || format === 'roto') pointsWithheld.add(l.id)
     scoringByLeague.set(
       l.id,

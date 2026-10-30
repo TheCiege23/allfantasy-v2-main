@@ -8,17 +8,35 @@ const object = (v: unknown): Record<string, unknown> => v && typeof v === 'objec
  */
 export const WEEKLY_FORMAT_SETTINGS_BLOCKS = ['league', 'sleeper', 'sleeperLeague', 'sportConfig'] as const
 export const WEEKLY_FORMAT_SETTINGS_KEYS = ['scoring_mode', 'scoringMode', 'scoring_type', 'scoringType', 'format', 'leagueType'] as const
+/**
+ * Yahoo's own `scoring_type`, from the raw settings a Yahoo import keeps at `settings.yahoo_settings`
+ * (YahooAdapter) — an object, or Yahoo's array of fragments. Without it every Yahoo category or roto
+ * league read as head-to-head points and was given win odds. Values the repo evidences: 'head'
+ * (head-to-head categories), 'headpoint' (head-to-head points), 'roto'. Any other value is not mapped.
+ */
+function yahooScoringType(yahooSettings: unknown): string | null {
+  const fragments = Array.isArray(yahooSettings) ? yahooSettings : [yahooSettings]
+  for (const f of fragments) {
+    const v = object(f).scoring_type
+    if (typeof v === 'string' && v.trim()) return v
+  }
+  return null
+}
+
 export function weeklyFormat(league: { leagueType?: string | null; settings?: unknown }): WeeklyFormat {
   const s = object(league.settings)
   const blocks = [s, ...WEEKLY_FORMAT_SETTINGS_BLOCKS.map(b => object(s[b]))]
   // A Fantrax import states its scoring only as `fantrax_settings.scoringSystem.type`; without it every
   // Fantrax category/roto league read as head-to-head points and was given win odds.
   const fantraxType = object(object(s.fantrax_settings).scoringSystem).type
-  const values = [league.leagueType, fantraxType, ...blocks.flatMap(b => WEEKLY_FORMAT_SETTINGS_KEYS.map(k => b[k]))]
+  const yahooType = yahooScoringType(s.yahoo_settings)
+  const values = [league.leagueType, fantraxType, yahooType, ...blocks.flatMap(b => WEEKLY_FORMAT_SETTINGS_KEYS.map(k => b[k]))]
     .filter(v => typeof v === 'string').map(v => String(v).toLowerCase().replace(/[ -]/g, '_'))
   if (values.some(v => /guillotine|survivor|elimination/.test(v))) return 'elimination'
   if (values.some(v => /roto|rotisserie/.test(v))) return 'roto'
   if (values.some(v => /categor|h2h_each|h2h_most/.test(v))) return 'categories'
+  // Yahoo's 'head' is head-to-head CATEGORIES ('headpoint' is head-to-head points). Exact, and Yahoo's only.
+  if (String(yahooType ?? '').trim().toLowerCase() === 'head') return 'categories'
   if (values.some(v => /season_points|total_points|points_table/.test(v))) return 'season-points'
   return 'head-to-head'
 }

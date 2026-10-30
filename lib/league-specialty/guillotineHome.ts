@@ -10,11 +10,15 @@
  *   nextChopAt / chopLabel   "Chop locks in" countdown (the sport's chop time, after corrections)
  *   lastChop                 the signature moment: bottom three of the latest chopped week, who
  *                            was chopped, and the released players with their availability
+ *   history                  the season so far, week by week and team by team (survivalHistory.ts)
  */
 import { prisma } from '@/lib/prisma'
 import { resolveRosterDisplayNames } from '@/lib/guillotine/rosterDisplayNames'
 import { getGuillotineSportConfig, getNextChopTime, getNextWaiverTime } from '@/lib/guillotine/sportConfig'
 import { getLiveDangerTiers } from '@/lib/guillotine/chopWatchLoad'
+import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
+import { DEFAULT_DANGER_MARGIN_POINTS } from '@/lib/guillotine/constants'
+import { buildSurvivalHistory, type SurvivalHistory } from '@/lib/guillotine/survivalHistory'
 import { claimedPlayerIds } from '@/lib/guillotine/choppedReleases'
 
 export interface GuillotineHomeChopped {
@@ -57,6 +61,8 @@ export interface GuillotineHomeExtras {
   nextWaiversAt: string | null
   waiverLabel: string | null
   lastChop: GuillotineHomeLastChop | null
+  /** The season so far: each week's chop and every team's path (lib/guillotine/survivalHistory.ts). */
+  history: SurvivalHistory
 }
 
 const NAME_FALLBACK = 'A team'
@@ -135,6 +141,25 @@ export async function buildGuillotineHomeExtras(
     }
   }
 
+  /*
+   * The season so far. ⚠ THIS SEASON ONLY: `GuillotinePeriodScore` is keyed by league, so last year's
+   * weeks are in it too. Every team's name, not only the chopped ones the chips above need.
+   */
+  const season = typeof league?.season === 'number' ? league.season : null
+  const [seasonScores, config] = await Promise.all([
+    prisma.guillotinePeriodScore
+      .findMany({ where: { leagueId, ...(season != null ? { season } : {}) }, select: { rosterId: true, weekOrPeriod: true, periodPoints: true } })
+      .catch(() => [] as Array<{ rosterId: string; weekOrPeriod: number; periodPoints: number }>),
+    getGuillotineConfig(leagueId).catch(() => null),
+  ])
+  const allNames = await resolveRosterDisplayNames(leagueId, [...new Set([...rosters.map((r) => r.id), ...seasonScores.map((r) => r.rosterId)])]).catch(() => new Map<string, string>())
+  const history = buildSurvivalHistory({
+    scores: seasonScores.map((r) => ({ rosterId: r.rosterId, week: r.weekOrPeriod, points: r.periodPoints })),
+    chopped: states.map((s) => ({ rosterId: s.rosterId, week: s.choppedInPeriod ?? null })),
+    names: Object.fromEntries(allNames),
+    closeCallMargin: config?.dangerMarginPoints ?? DEFAULT_DANGER_MARGIN_POINTS,
+  })
+
   const profile = getGuillotineSportConfig(sport)
   const choppedSet = new Set(states.map((s) => s.rosterId))
   return {
@@ -148,5 +173,6 @@ export async function buildGuillotineHomeExtras(
     nextWaiversAt: profile ? getNextWaiverTime(sport, now).toISOString() : null,
     waiverLabel: profile?.waiverLabel ?? null,
     lastChop,
+    history,
   }
 }

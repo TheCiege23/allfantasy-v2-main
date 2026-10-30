@@ -286,7 +286,8 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    */
   const poolMeta = await args.prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: [...activeIds] } },
+      // In the league's own sport: Sleeper numbers its NFL and NBA pools independently.
+      where: { ...(league.sport ? { sport: league.sport.toUpperCase() } : {}), sleeperId: { in: [...activeIds] } },
       select: { sleeperId: true, name: true, team: true, position: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
     })
@@ -698,7 +699,8 @@ async function readNextWeekProjections(
       playerIds: ids,
     }),
     prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: ids } },
+      // The NFL projection lines above, so NFL players — Sleeper reuses ids across its sports.
+      where: { sport: 'NFL', sleeperId: { in: ids } },
       select: { sleeperId: true, source: true, name: true, position: true, team: true },
     }),
   ])
@@ -750,7 +752,8 @@ async function readRosterNeeds(
   if (ids.length === 0) return null
 
   const rows = await prisma.sportsPlayer.findMany({
-    where: { sleeperId: { in: ids } },
+    // Read against the NFL schedule below, so NFL players — Sleeper reuses ids across its sports.
+    where: { sport: 'NFL', sleeperId: { in: ids } },
     select: { sleeperId: true, source: true, name: true, position: true, team: true },
   })
   /* Several rows can carry one Sleeper id; Sleeper's own holds the fantasy-shaped fields. */

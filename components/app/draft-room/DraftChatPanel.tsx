@@ -565,7 +565,8 @@ export function DraftChatPanel({
       className={`flex flex-col overflow-hidden rounded-xl border bg-[#060d1e] ${
         popped
           ? 'af-dc-popped h-[min(70dvh,640px)] min-h-[320px] md:fixed md:bottom-4 md:right-4 md:top-4 md:z-[70] md:h-auto md:min-h-0 md:w-[min(460px,calc(100vw-32px))]'
-          : 'h-[min(70dvh,640px)] min-h-[320px] md:h-full md:min-h-[200px]'
+          : // Phones: fill the tray (it sizes the chat); a fixed 70dvh overflowed a half tray and hid the composer.
+            'h-full min-h-0 md:min-h-[200px]'
       } ${
         rs ? 'border-cyan-500/20 shadow-[0_12px_44px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(34,211,238,0.06)]' : 'border-white/10'
       }`}
@@ -575,8 +576,9 @@ export function DraftChatPanel({
     >
       {/*
         One compact row. The draft room's dock is ~240px tall on a laptop, so every pixel of
-        header is a line of chat the room cannot see — the explainer line below it shows on a
-        phone and when the chat is popped out, and is the title's tooltip otherwise.
+        header is a line of chat the room cannot see — the explainer line below it shows only
+        when the chat is popped out, and is the title's tooltip otherwise (phones included, since
+        2026-10-29: in the phone tray it cost two lines of a 325px half-height sheet).
       */}
       <div
         className={`flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-2.5 py-1.5 ${
@@ -672,7 +674,7 @@ export function DraftChatPanel({
         </div>
       </div>
       <p
-        className={`${popped ? '' : 'md:hidden'} border-b px-3 py-1 text-[11px] leading-snug ${
+        className={`${popped ? '' : 'hidden'} border-b px-3 py-1 text-[11px] leading-snug ${
           rs ? 'border-cyan-500/10 text-cyan-200/55' : 'border-white/8 text-white/50'
         }`}
         data-testid="draft-chat-subtitle"
@@ -824,7 +826,7 @@ export function DraftChatPanel({
               instead of sliding its right end and the send button underneath.
             */}
             <div
-              className={`af-dc-composer border-t p-2.5 sm:p-3 ${rs ? 'border-cyan-500/15 bg-[#050a14]' : 'border-white/8'}`}
+              className={`af-dc-composer border-t p-1.5 sm:p-3 ${rs ? 'border-cyan-500/15 bg-[#050a14]' : 'border-white/8'}`}
               data-fab-corner={popped ? undefined : 'true'}
             >
               <div className="flex min-w-0 items-end gap-1.5 sm:gap-2">
