@@ -246,7 +246,13 @@ async function _nominatePlayerCore(
       return claim
     })
     if (changed.count !== 1) return { success: false, error: 'Auction changed. Reload and retry.' }
-  } else await updateSessionWithArchive(session, write.data, 'auction_nomination', { nomination: newState.currentNomination, nominatorRosterId })
+  } else {
+    try { await updateSessionWithArchive(session, write.data, 'auction_nomination', { nomination: newState.currentNomination, nominatorRosterId }, session.version) }
+    catch (error) {
+      if ((error as { code?: string })?.code === 'P2025') return { success: false, error: 'Auction changed. Reload and retry.' }
+      throw error
+    }
+  }
 
   return { success: true }
 }
@@ -342,7 +348,13 @@ async function _placeBidCore(
       return claim
     })
     if (changed.count !== 1) return { success: false, error: 'Auction changed or bidding expired. Reload and retry.' }
-  } else await updateSessionWithArchive(session, write.data, 'auction_bid', { rosterId, amount })
+  } else {
+    try { await updateSessionWithArchive(session, write.data, 'auction_bid', { rosterId, amount }, session.version) }
+    catch (error) {
+      if ((error as { code?: string })?.code === 'P2025') return { success: false, error: 'Auction changed. Reload and retry.' }
+      throw error
+    }
+  }
 
   return { success: true }
 }
@@ -459,10 +471,11 @@ async function _resolveAuctionWinCore(
   }
 
   try { await prisma.$transaction(async (tx) => {
-    if (season) {
-      const claimed = await tx.draftSession.updateMany({ where: { id: session.id, version: session.version, status: 'in_progress', timerEndAt: { lte: now } }, data: { version: { increment: 1 } } })
-      if (claimed.count !== 1) throw new Error('SEASON_AUCTION_STALE')
-    }
+    const claimed = await tx.draftSession.updateMany({
+      where: { id: session.id, version: session.version, status: 'in_progress', ...(!force ? { timerEndAt: { lte: now } } : {}) },
+      data: { version: { increment: 1 } },
+    })
+    if (claimed.count !== 1) throw new Error('AUCTION_STALE')
     if (sold && winnerRosterId && amount > 0) {
       const budgets = getBudgetsFromSession(session)
       const newBudgets = { ...budgets }
@@ -531,7 +544,7 @@ async function _resolveAuctionWinCore(
       await applyPostDraftLifecycleInTransaction(tx, leagueId)
     }
   }) } catch (error) {
-    if (error instanceof Error && error.message === 'SEASON_AUCTION_STALE') return { success: false, error: 'Auction changed. Reload and retry.' }
+    if (error instanceof Error && error.message === 'AUCTION_STALE') return { success: false, error: 'Auction changed. Reload and retry.' }
     throw error
   }
 

@@ -33,7 +33,7 @@ describe('rookie auction initialization', () => {
 
 describe('auction completion', () => {
   it('transitions lifecycle in the final sale transaction and syncs season rosters', async () => {
-    const tx = { draftPick: { create: m.pick }, draftSession: { update: m.update } }
+    const tx = { draftPick: { create: m.pick }, draftSession: { update: m.update, updateMany: vi.fn(async () => ({ count: 1 })) } }
     m.transaction.mockImplementation(async (run: (tx: unknown) => unknown) => run(tx))
     m.archive.mockResolvedValue({ eventId: 'event', context: {}, selected: {} })
     m.session.mockResolvedValue({ id: 'draft', leagueId: 'league', draftType: 'auction', status: 'in_progress', teamCount: 1, rounds: 1, timerSeconds: 30, timerEndAt: new Date('2026-01-01'), playerPool: 'all', slotOrder: [{ slot: 1, rosterId: 'a', displayName: 'A' }], auctionBudgetPerTeam: 200, auctionBudgets: { a: 200 }, auctionState: { nominationOrderIndex: 0, currentNomination: { playerName: 'Player', position: 'QB', playerId: 'p', team: null }, currentBid: 5, currentBidderRosterId: 'a' }, picks: [] })
@@ -43,4 +43,14 @@ describe('auction completion', () => {
     expect(m.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'completed' }) }))
     expect(m.finalize).toHaveBeenCalledWith('league')
   })
+  it('refuses a stale concurrent resolution without recording another sale', async () => {
+    vi.clearAllMocks()
+    const tx = { draftPick: { create: m.pick }, draftSession: { update: m.update, updateMany: vi.fn(async () => ({ count: 0 })) } }
+    m.transaction.mockImplementation(async (run: (tx: unknown) => unknown) => run(tx))
+    m.session.mockResolvedValue({ id: 'draft', leagueId: 'league', version: 2, draftType: 'auction', status: 'in_progress', teamCount: 1, rounds: 1, timerSeconds: 30, timerEndAt: new Date('2026-01-01'), playerPool: 'all', slotOrder: [{ slot: 1, rosterId: 'a', displayName: 'A' }], auctionBudgetPerTeam: 200, auctionBudgets: { a: 200 }, auctionState: { nominationOrderIndex: 0, currentNomination: { playerName: 'Player', position: 'QB', playerId: 'p', team: null }, currentBid: 5, currentBidderRosterId: 'a' }, picks: [] })
+    expect(await resolveAuctionWin('league', { force: true })).toMatchObject({ success: false, error: 'Auction changed. Reload and retry.' })
+    expect(m.pick).not.toHaveBeenCalled()
+    expect(m.lifecycle).not.toHaveBeenCalled()
+  })
+
 })
