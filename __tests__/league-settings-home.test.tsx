@@ -113,7 +113,17 @@ describe('LeagueSettingsHome — list', () => {
       expect(row.tagName).toBe('DIV')
       expect(row.getAttribute('data-readonly')).toBe('true')
     }
-    expect(screen.queryAllByRole('button').map((b) => b.getAttribute('data-testid'))).toEqual(['lsh-copy-invite'])
+    expect(screen.queryAllByRole('button').map((b) => b.getAttribute('data-testid'))).toEqual(['lsh-row-previous-leagues', 'lsh-copy-invite'])
+    fireEvent.click(screen.getByTestId('lsh-row-previous-leagues'))
+    expect(screen.getByTestId('league-settings-subpage').getAttribute('data-subpage')).toBe('previous-leagues')
+  })
+
+  it('offers team settings and lets the commissioner enable divisions when currently off', () => {
+    renderHome(input())
+    expect(screen.getByTestId('lsh-row-team-settings').tagName).toBe('BUTTON')
+    expect(rowValue('divisions')).toBe('Off')
+    fireEvent.click(screen.getByTestId('lsh-row-divisions'))
+    expect(screen.getByTestId('league-settings-subpage').getAttribute('data-subpage')).toBe('divisions')
   })
 
   it('a locked first chop week is display-only even for the commissioner', () => {

@@ -21,6 +21,8 @@ import { CommissionerControlPanel } from '@/components/league-settings/Commissio
 import { LeagueDuesTrackerPanel } from '@/components/league-settings/LeagueDuesTrackerPanel'
 import { LeagueHistoryPanel } from '@/components/league-settings/LeagueHistoryPanel'
 import { DeleteLeagueFromAfPanel } from '@/app/league/[leagueId]/components/DeleteLeagueFromAfPanel'
+import { TeamSettingsPanel } from '@/app/league/[leagueId]/components/settings/TeamSettingsPanel'
+import { LeaguePreviousSeasonsPanel } from '@/components/league-settings/LeaguePreviousSeasonsPanel'
 
 /**
  * The EXISTING editor for each League Settings row, unchanged: every save still goes through the
@@ -67,6 +69,12 @@ export function LeagueSettingsSubPageBody({
       break
     case 'members':
       body = <MemberSettingsCommissionerPanel leagueId={leagueId} />
+      break
+    case 'team-settings':
+      body = <TeamSettingsPanel leagueId={leagueId} canEdit={ctx.isCommissioner} />
+      break
+    case 'previous-leagues':
+      body = <LeaguePreviousSeasonsPanel leagueId={leagueId} sportLabel={ctx.league.sport ?? undefined} />
       break
     case 'co-commissioners':
       body = <CoOwnerSettingsPanel leagueId={leagueId} />
