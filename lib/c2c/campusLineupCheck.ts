@@ -23,7 +23,8 @@ export async function checkCampusSave(
   const campus = campusStarterIds(input.after)
   // Unchanged campus starters are not re-judged, so a commissioner narrowing the college slots never
   // blocks a manager's pro lineup save; the next campus change has to fit.
-  if (campus.length === 0 || campus.join('\n') === campusStarterIds(input.before).join('\n')) return []
+  if (campus.join('\n') === campusStarterIds(input.before).join('\n')) return []
+  if (campus.length === 0 && !isBasketballC2CLeague(input.league)) return []
   if (!isNativePlatform(input.league.platform) || !input.redraftRosterId || !isC2CVariant(input.league.leagueVariant)) {
     return [{ code: 'campus_not_c2c', message: 'Campus lineups are only for Campus to Canton leagues.' }]
   }

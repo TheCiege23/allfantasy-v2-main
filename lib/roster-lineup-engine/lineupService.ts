@@ -283,12 +283,13 @@ export async function persistRosterLineupWithEngine(
     resolveWriteAuthority(league.platform) === 'NATIVE' ? (roster.redraftRosterId ?? null) : null
 
   let campusSnapshot: import('@/lib/c2c/nbaCampusWeekSnapshot').NbaCampusWeekSnapshot | null = null
-  if (redraftRosterId && sport === 'NBA' && ['c2c', 'merged_devy_c2c'].includes(String(league.leagueVariant ?? '').toLowerCase())) {
+  const nbaCampusRoster = Boolean(redraftRosterId && sport === 'NBA' && ['c2c', 'merged_devy_c2c'].includes(String(league.leagueVariant ?? '').toLowerCase()))
+  if (nbaCampusRoster) {
     const { campusStarterIds } = await import('@/lib/c2c/campusLineup')
     const beforeCampus = campusStarterIds(roster.playerData)
     const afterCampus = campusStarterIds(input.nextPlayerData)
     const changed = beforeCampus.join('\n') !== afterCampus.join('\n')
-    if (changed || afterCampus.length > 0) {
+    {
       try {
         const { prepareNbaCampusWeekSnapshot } = await import('@/lib/c2c/storeNbaCampusWeekSnapshot')
         campusSnapshot = (await prepareNbaCampusWeekSnapshot(prisma, { leagueId: input.leagueId, rosterId: input.rosterId, season: input.season, week: input.week, playerData: input.nextPlayerData, now: new Date() })).snapshot
@@ -301,7 +302,7 @@ export async function persistRosterLineupWithEngine(
 
   try { await prisma.$transaction(async (tx) => {
     await input.transactionCheck?.(tx)
-    if (input.expectedStarters) {
+    if (input.expectedStarters || nbaCampusRoster) {
       const result=await tx.roster.updateMany({ where:{id:input.rosterId,...(input.expectedOwnerUserId?{platformUserId:input.expectedOwnerUserId}:{}),playerData:{equals:before}},data:{playerData:input.nextPlayerData as Prisma.InputJsonValue} })
       if(result.count!==1) throw new Error('STALE_TEAM_LINEUP')
     } else await tx.roster.update({

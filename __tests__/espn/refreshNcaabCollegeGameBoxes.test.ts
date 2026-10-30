@@ -20,6 +20,15 @@ describe('bounded ESPN college game refresh', () => {
     await refreshEspnCollegeGameBoxes(db(), { ...input, games: [{ ...game, status: 'scheduled' }], fetchScoreboard: vi.fn().mockResolvedValue(scoreboard), fetchBox })
     expect(fetchBox).not.toHaveBeenCalled()
   })
+  it('refreshes recent final boxes for corrections without repeatedly fetching fresh boxes', async () => {
+    const d = db(); const fetchBox = vi.fn().mockResolvedValue(box)
+    d.sportsDataCache.findMany.mockResolvedValue([{ cacheKey: 'espn:ncaab:box:100', data: { ...box, observedAt: '2026-11-01T00:00:00Z' } }])
+    await refreshEspnCollegeGameBoxes(d, { ...input, fetchScoreboard: vi.fn().mockResolvedValue(scoreboard), fetchBox })
+    expect(fetchBox).toHaveBeenCalledTimes(1)
+    d.sportsDataCache.findMany.mockResolvedValue([{ cacheKey: 'espn:ncaab:box:100', data: { ...box, observedAt: '2026-11-01T23:00:00Z' } }])
+    await refreshEspnCollegeGameBoxes(d, { ...input, fetchScoreboard: vi.fn().mockResolvedValue(scoreboard), fetchBox })
+    expect(fetchBox).toHaveBeenCalledTimes(1)
+  })
   it('stops on a 403 before reading box scores', async () => {
     const fetchBox = vi.fn(); const fetchScoreboard = vi.fn().mockRejectedValue(new EspnBlockedError('https://example.invalid/a'))
     const result = await refreshEspnCollegeGameBoxes(db(), { ...input, fetchScoreboard, fetchBox })

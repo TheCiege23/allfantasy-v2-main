@@ -37,7 +37,10 @@ export async function refreshEspnCollegeGameBoxes(db: Db, input: {
   const finalIds = games.filter(g => normalizeGameStatus(g.status) === 'final').map(g => mapping.matched.get(g.gameId)).filter((id): id is string => Boolean(id))
   const cached = finalIds.length ? await db.sportsDataCache.findMany({ where: { cacheKey: { in: finalIds.map(id => `${ESPN_COLLEGE_BOX_KEY_PREFIX}${id}`) }, expiresAt: { gt: input.now } }, select: { cacheKey: true, data: true } }) : []
   const complete = new Set(cached.filter(r => { const v = r.data as { complete?: boolean; status?: string; eventId?: string } | null; return v?.complete === true && v.status === 'final' && r.cacheKey === `${ESPN_COLLEGE_BOX_KEY_PREFIX}${v.eventId}` }).map(r => r.cacheKey.slice(ESPN_COLLEGE_BOX_KEY_PREFIX.length)))
-  const pending = finalIds.filter(id => !complete.has(id))
+  // Refresh recent finals periodically to pick up official stat corrections. Missing boxes go first.
+  const updatedAt = new Map(cached.map(r => { const v = r.data as { observedAt?: unknown } | null; return [r.cacheKey.slice(ESPN_COLLEGE_BOX_KEY_PREFIX.length), typeof v?.observedAt === 'string' ? Date.parse(v.observedAt) : NaN] as const }))
+  const recentFinals = new Set(games.filter(g => { const day = Date.parse(`${g.day}T00:00:00Z`); return Number.isFinite(day) && input.now.getTime() - day <= 7 * 86400000 && input.now.getTime() >= day }).map(g => mapping.matched.get(g.gameId)))
+  const pending = [...finalIds.filter(id => !complete.has(id)), ...finalIds.filter(id => complete.has(id) && recentFinals.has(id) && (!Number.isFinite(updatedAt.get(id)) || input.now.getTime() - updatedAt.get(id)! >= 12 * 60 * 60 * 1000))]
   const result = await ingestEspnCollegeBoxes(db, { eventIds: pending, deadlineAt: input.deadlineAt, maxEvents: input.maxEvents, now: input.now, fetchBox: input.fetchBox })
   return { ...mapping, stored: result.stored, remaining: Math.max(0, pending.length - result.stored), blocked: result.blocked, error: result.errors || result.rejected ? 'box unavailable' : null }
 }
