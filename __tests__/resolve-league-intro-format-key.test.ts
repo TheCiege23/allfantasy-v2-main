@@ -64,7 +64,7 @@ describe('league type media (poster / video assets)', () => {
     const m = getLeagueTypeMedia('redraft')
     expect(m.introVideo).toBe('/media/create-league/concept/videos/Redraft.mp4')
     expect(m.thumbnail).toBe('/images/league-types/redraft.png')
-    expect(m.defaultLeagueImageUrl).toBe('/images/league-types/redraft.png')
+    expect(m.defaultLeagueImageUrl).toBe('/af-robot-king.png')
     expect(m.thumbnail).not.toMatch(/guillotine/i)
   })
 
@@ -157,7 +157,7 @@ describe('canonical concept / draft media resolution', () => {
     ).toBe('redraft')
   })
 
-  it('resolveLeagueCardTypeKey: My Leagues fallback art for redraft is redraft.png path', () => {
+  it('resolveLeagueCardTypeKey: My Leagues fallback art for redraft is the robot king', () => {
     const url = getLeagueTypeMedia(
       resolveLeagueCardTypeKey({
         leagueType: 'redraft',
@@ -166,7 +166,7 @@ describe('canonical concept / draft media resolution', () => {
         isDynasty: false,
       }),
     ).defaultLeagueImageUrl
-    expect(url).toBe('/images/league-types/redraft.png')
+    expect(url).toBe('/af-robot-king.png')
     expect(url).not.toMatch(/guillotine/i)
   })
 

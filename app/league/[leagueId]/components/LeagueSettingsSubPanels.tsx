@@ -1813,6 +1813,8 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
               leagueId={ctx.league.id}
               currentUserId={ctx.userId}
               leagueOwnerUserId={ctx.league.userId}
+          platform={ctx.league.platform}
+          leagueName={ctx.league.name}
             />
           </div>
         </div>

@@ -32,6 +32,21 @@ export function leagueSportLabel(key: string | null, opts: { short?: boolean } =
   return SPORT_LABELS[key] ?? key
 }
 
+const SPORT_ICON: Record<string, string> = {
+  NFL: '🏈',
+  NCAAF: '🏈',
+  NBA: '🏀',
+  NCAAB: '🏀',
+  NHL: '🏒',
+  MLB: '⚾',
+  SOCCER: '⚽',
+}
+
+/** The ball beside a sport's heading in the league rail, so NBA and NFL read apart at a glance. Empty for "Other". */
+export function leagueSportIcon(key: string | null): string {
+  return key ? SPORT_ICON[key] ?? '' : ''
+}
+
 export type LeagueSportCount = { key: string | null; count: number }
 
 export type LeagueSportSection<T> = { key: string | null; rows: T[] }

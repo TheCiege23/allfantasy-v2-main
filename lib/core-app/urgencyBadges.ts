@@ -53,6 +53,13 @@ export type UrgencyBadges = {
   trades: number | null
   draftHq: number | null
   sync: number | null
+  /**
+   * WHICH leagues the My team and Trades counts are made of, so the league list can flag each one
+   * (a dot on the crest, "Fix lineup" / "Trade offer" on the card). Same facts, same freshness rule
+   * as the counts: null when the lineup facts are unknown, never an empty list standing in for one.
+   */
+  lineupLeagueIds?: string[] | null
+  offerLeagueIds?: string[]
 }
 
 export function lineupLeagueIds(leagues: LineupLeague[]): string[] {
@@ -170,13 +177,16 @@ export async function getUrgencyBadges(input: {
     }
   }
 
-  const offerCount = Object.entries(cache.offers).filter(
-    ([id, entry]) => played.has(id) && entry.waiting > 0 && isFresh(entry.at, now),
-  ).length
+  const offerLeagueIds = Object.entries(cache.offers)
+    .filter(([id, entry]) => played.has(id) && entry.waiting > 0 && isFresh(entry.at, now))
+    .map(([id]) => id)
+  const offerCount = offerLeagueIds.length
 
   return {
     /* Unknown (no fresh cache and the reload failed) is null — no badge, not a zero. */
     myTeam: lineupIds ? countOrNull(lineupIds.filter((id) => played.has(id)).length) : null,
+    lineupLeagueIds: lineupIds ? lineupIds.filter((id) => played.has(id)) : null,
+    offerLeagueIds,
     trades: countOrNull(offerCount),
     draftHq: countOrNull(draftLeagueIds(leagues, input.liveDraftLeagueIds, now).filter((id) => played.has(id)).length),
     sync: input.pausedSyncLeagueIds === null ? null : countOrNull(staleLeagueIds(
