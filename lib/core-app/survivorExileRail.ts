@@ -29,3 +29,31 @@ export function pairedExileIds(rows: ReadonlyArray<{ id: string; exileOf?: strin
   const present = new Set(rows.map((row) => row.id))
   return new Set(rows.filter((row) => row.exileOf && row.exileOf !== row.id && present.has(row.exileOf)).map((row) => row.id))
 }
+
+/**
+ * The dashboard's league card: up to `limit` leagues, each Survivor league carrying its Exile Island
+ * with it. An island never takes one of the `limit` places, and it is pulled from `pool` (every
+ * league, not only the capped queue) when the queue holds the Survivor league but not the island,
+ * so the pair is never split by the cap.
+ */
+export function leagueCardGroups<T extends { id: string; exileOf?: string }>(
+  leagues: readonly T[],
+  pool: readonly T[],
+  limit: number,
+): Array<{ league: T; islands: T[] }> {
+  const present = new Set(leagues.map((row) => row.id))
+  const groups: Array<{ league: T; islands: T[] }> = []
+  for (const row of pairExileUnderSurvivor(leagues)) {
+    const main = row.exileOf && row.exileOf !== row.id && present.has(row.exileOf) ? row.exileOf : null
+    const owner = main ? groups.find((group) => group.league.id === main) : undefined
+    if (owner) owner.islands.push(row)
+    else if (!main) groups.push({ league: row, islands: [] })
+  }
+  const shown = groups.slice(0, limit)
+  for (const group of shown) {
+    for (const row of pool) {
+      if (row.exileOf === group.league.id && row.id !== group.league.id && !present.has(row.id)) group.islands.push(row)
+    }
+  }
+  return shown
+}

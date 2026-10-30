@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { leagueCardGroups } from '@/lib/core-app/survivorExileRail'
 import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useRouter } from 'next/navigation'
@@ -452,7 +453,7 @@ function cardsFromData(props: Dashboard3AData & Dashboard3AChrome): Dashboard3AS
     exposure: <Dash3AExposure exposure={props.exposure ?? null} />,
     following: <Dash3AFollowing following={props.following ?? null} />,
     receipts: <Dash3AReceipts receipts={props.receipts ?? null} />,
-    leagues: <Dash3ALeagues leagues={summary?.leagues ?? []} totalLeagues={summary?.totalLeagues ?? null} />,
+    leagues: <Dash3ALeagues leagues={summary?.leagues ?? []} allLeagues={summary?.allLeagues} totalLeagues={summary?.totalLeagues ?? null} />,
   }
 }
 
@@ -1159,10 +1160,13 @@ export function Dash3AReceipts({ receipts }: { receipts: DecisionReceiptsData | 
 
 export function Dash3ALeagues({
   leagues,
+  allLeagues,
   totalLeagues,
   freshness = null,
 }: {
   leagues: Dash34League[]
+  /** Every league — where a shown Survivor league's Exile Island is found when the queue lacks it. */
+  allLeagues?: Dash34League[]
   totalLeagues: number | null
   freshness?: React.ReactNode
 }) {
@@ -1178,10 +1182,14 @@ export function Dash3ALeagues({
   const { language } = useOptionalLanguage()
   const m = useMessages(dashboard3aMessages)
   const leagueTotal = totalLeagues ?? leagues.length
-  const shownLeagues = leagues.slice(0, 5)
+  // Each Survivor league carries its Exile Island, joined by ↕; an island never takes one of the five places.
+  const groups = leagueCardGroups(leagues, allLeagues ?? leagues, 5)
+  const shownLeagues = groups.map((group) => group.league)
+  // Islands are on screen too, so they count towards "N of M".
+  const shownCount = groups.reduce((n, group) => n + 1 + group.islands.length, 0)
   const leagueTotalLabel =
-    leagueTotal > shownLeagues.length
-      ? m.leaguesShownOf(shownLeagues.length, leagueTotal)
+    leagueTotal > shownCount
+      ? m.leaguesShownOf(shownCount, leagueTotal)
       : m.leaguesTotal(leagueTotal)
   return (
           <section className="af3a-card af3a-leagues-card">
@@ -1195,9 +1203,12 @@ export function Dash3ALeagues({
               </p>
             ) : (
               <div className="af3a-leagues">
-                {shownLeagues.map((l) => (
+                {groups.map(({ league, islands }) => {
+                  const row = (l: Dash34League, island: boolean) => (
                   <Link
                     key={l.id}
+                    data-exile={island ? 'true' : undefined}
+                    aria-label={island ? l.name : undefined}
                     className="af3a-league"
                     /* Straight to /core — /dashboard only redirects here, a round trip per tap. */
                     href={leagueEntryHref(l)}
@@ -1207,7 +1218,7 @@ export function Dash3ALeagues({
                     </span>
                     <span className="af3a-league-body">
                       <b>
-                        {l.name ?? m.untitledLeague}
+                        {island ? m.exileIsland : (l.name ?? m.untitledLeague)}
                         {l.isCommissioner ? <CommissionerBadge /> : null}
                       </b>
                       <em>{[l.platform === 'manual' ? 'AllFantasy' : l.platform, l.sport, l.formatLabel ? formatLabelText(l.formatLabel, language) : null].filter(Boolean).join(' · ')}</em>
@@ -1215,11 +1226,24 @@ export function Dash3ALeagues({
                     </span>
                     <span className="af3a-league-arrow" aria-hidden>›</span>
                   </Link>
-                ))}
+                  )
+                  if (islands.length === 0) return row(league, false)
+                  return (
+                    <div key={league.id} className="af3a-league-pair" data-testid="league-exile-pair">
+                      {row(league, false)}
+                      {islands.map((island) => (
+                        <Fragment key={island.id}>
+                          <div className="af3a-exile-link" title={m.exileIslandFor(league.name)} aria-hidden>↕</div>
+                          {row(island, true)}
+                        </Fragment>
+                      ))}
+                    </div>
+                  )
+                })}
               </div>
             )}
             <LeagueClipSpotlight leagueIds={shownLeagues.map(l => l.id)} />
-            {leagueTotal > shownLeagues.length ? (
+            {leagueTotal > shownCount ? (
               <Link className="af3a-cardlink" href="/leagues">
                 {m.showAllLeagues(leagueTotal)}
               </Link>
