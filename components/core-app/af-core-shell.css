@@ -3908,7 +3908,8 @@ html[data-mode='light'] .af-core {
  * controls on a ~370px phone, so the AF Legacy theme's long name ran under the search icon and
  * the language chip off the edge (reported from a real phone 2026-10-30). Below 720px the two
  * chips render inside the ↻ panel instead (`.af-data-menu-display`); above it they stay put.
- * Its own top-level @media, appended — never nested inside an earlier block.
+ * The plan line rides along: the topbar's plan chip is hidden on phones, so a tester granted access
+ * had no way to see it. Its own top-level @media, appended — never nested inside an earlier block.
  */
 .af-core .af-data-menu-display { display: none; }
 @media (max-width: 720px) {
@@ -3923,5 +3924,7 @@ html[data-mode='light'] .af-core {
     border-top: 1px solid var(--line);
   }
   .af-core .af-data-menu-display-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .af-core .af-data-menu-panel .af-data-menu-plan { margin: 0 0 10px; color: var(--muted); }
+  .af-core .af-data-menu-plan-name { color: var(--text); font-weight: 700; }
 }
 
