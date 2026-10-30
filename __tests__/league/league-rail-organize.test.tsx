@@ -98,6 +98,15 @@ describe('the /league rail', () => {
     expect(posts()).toEqual([{ field: 'order', leagueIds: ['f2', 'f1', 'f3', 'b1', 'b2', 'b3'] }])
   })
 
+  it('flags what needs you and offers the Needs action chip, from the /core badge facts', () => {
+    const c = draw({ lineupLeagueIds: ['f2'], offerLeagueIds: ['b1'] })
+    expect([...tile(c, 'f2').querySelectorAll('.af-rail-row-flag')].map((f) => f.textContent)).toEqual(['Fix lineup'])
+    expect([...tile(c, 'b1').querySelectorAll('.af-rail-row-flag')].map((f) => f.textContent)).toEqual(['Trade offer'])
+    expect(Array.from(list(c).querySelectorAll('.af-rail-filter')).map((b) => b.getAttribute('data-filter'))).toEqual(['all', 'commissioner', 'needs'])
+    fireEvent.click(list(c).querySelector('.af-rail-filter[data-filter="needs"]')!)
+    expect(order(c)).toEqual(['# NFL', 'f2', '# NBA', 'b1'])
+  })
+
   it('draws your record beside the platform', () => {
     const c = draw({ records: { f2: { wins: 6, losses: 3, ties: 0, rank: 2, teams: 12 } } })
     expect(tile(c, 'f2').querySelector('.af-rail-row-record')?.textContent).toBe('6-3 · 2nd')

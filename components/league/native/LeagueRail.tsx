@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
 import type { RailLeague, RailMatchupSummary } from '@/components/core-app/AfCoreShell'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
-import { RailRowBody, mergeRailMatchup, railTapTarget } from '@/components/core-app/RailRowBody'
+import { RailRowBody, mergeRailMatchup, railTapTarget, type RailAttention } from '@/components/core-app/RailRowBody'
 import { useRailOdds } from '@/components/core-app/useRailOdds'
 import type { useRailHold } from '@/components/core-app/RailLeagueMenu'
 import type { RailRecord } from '@/lib/core-app/railRecordRank'
@@ -33,6 +33,9 @@ export type LeagueRailData = {
   /** The account's favorites, pinned on top, and its saved order (leaguePreferences.ts). */
   favoriteIds?: string[]
   order?: string[]
+  /** What needs you, from the /core tab badges' cached facts (urgencyBadges.ts `readUrgencyLeagueIds`). */
+  lineupLeagueIds?: string[]
+  offerLeagueIds?: string[]
 }
 
 export type LeagueRailRowView = {
@@ -60,6 +63,8 @@ export type LeagueRailRowView = {
   matchupHref?: string | null
   /** Your record and place. Null in a field-race league, or before any game. */
   record?: RailRecord | null
+  /** What needs you here: an empty or ruled-out starter, an offer waiting. */
+  attention?: RailAttention[]
 }
 
 const markOf = (name: string) =>
@@ -103,6 +108,10 @@ export function leagueRailRowView(
     matchupHref: !native && m && !m.unpaired && !m.guillotine ? `/core/matchup?league=${encodeURIComponent(row.id)}` : null,
     /* A field race's line is its place among the survivors; a W-L record says nothing there. */
     record: m?.guillotine || m?.standing?.elimination ? null : rail?.records?.[row.id] ?? null,
+    attention: [
+      ...(rail?.lineupLeagueIds?.includes(row.id) ? ['lineup' as const] : []),
+      ...(rail?.offerLeagueIds?.includes(row.id) ? ['offer' as const] : []),
+    ],
   }
 }
 
@@ -216,6 +225,7 @@ export function LeagueRailRow({
           pWin={view.pWin ?? null}
           matchupHref={view.matchupHref ?? null}
           record={view.record ?? null}
+          attention={view.attention}
           badges={
             <>
               {view.isLive ? <span className="af-rail-live-state">LIVE</span> : null}

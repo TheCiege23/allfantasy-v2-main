@@ -176,7 +176,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
     return row.name.toLowerCase().includes(query.toLowerCase()) && (filter === 'All' || filter === 'On AF' && hosted || filter === 'Synced' && !hosted || filter === 'Live' && nativeLeaguePhase(row) === 'Regular season')
   })
   const leagueTile = (row: UserLeague, expanded = false, onClick?: () => void, view: LeagueRailRowView = railView(row), withMenu = false) => <LeagueRailRow key={row.id} view={view} href={leagueSectionHref(row, activeTab)} active={row.id === league.id} expanded={expanded} isCommissioner={row.isCommissioner} onClick={onClick} unread={unread[row.id] ?? 0} favorite={favoriteSet.has(row.id)} hold={withMenu ? hold : undefined} />
-  const railFacts = new Map<string, RailRowFacts>(orderedLeagues.map(row => [row.id, { live: railView(row).isLive, commissioner: Boolean(row.isCommissioner), needs: false }]))
+  const railFacts = new Map<string, RailRowFacts>(orderedLeagues.map(row => [row.id, { live: railView(row).isLive, commissioner: Boolean(row.isCommissioner), needs: Boolean(railView(row).attention?.length) }]))
   const railCounts = railFilterCounts([...railFacts.values()])
   const showRailFilters = railExpanded && leagues.length >= RAIL_FILTER_MIN_LEAGUES
   const activeRailFilter: RailFilter = showRailFilters && railCounts[railFilter] > 0 ? railFilter : 'all'
