@@ -174,6 +174,28 @@ export async function GET(request: Request) {
    * to AllFantasy. Hourly keeps it current as injuries and projections move; guarded and on its own job
    * identity, for the same reasons as the sweep above.
    */
+  /*
+   * The commissioner's opt-in auto-handover (lib/inactive-manager/autoHandover.ts): a team idle for the
+   * chosen number of days is handed to AllFantasy (or Chimmy autopilot). Before the lineup run, so a team
+   * handed over now gets its lineup set this same hour. Guarded and on its own job identity.
+   */
+  let autoHandovers: unknown = null
+  try {
+    const { runAutoHandovers } = await import('@/lib/inactive-manager/inactiveManagerService')
+    autoHandovers = await withSyncJobRun(
+      { jobName: 'cron-inactive-auto-handover', trigger: 'cron' },
+      () => runAutoHandovers(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.handedOver,
+        errors: r.failures.map((f) => `${f.leagueId}: ${f.error}`),
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] auto handover failed', e)
+    autoHandovers = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   let inactiveLineups: InactiveLineupRunResult | { error: string } | null = null
   try {
     const { runInactiveManagerLineups } = await import('@/lib/inactive-manager/inactiveManagerService')
@@ -449,5 +471,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autoBenchByes, fillEmptyStarters, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, inactiveLineups, autoBenchByes, fillEmptyStarters, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

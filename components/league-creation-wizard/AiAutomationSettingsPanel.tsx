@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { StepHeader } from './StepHelp'
+import { DEFAULT_SELF_RUNNING_PRESET, offersSelfRunningPreset, SELF_RUNNING_OPTIONS } from '@/lib/league-creation-wizard/selfRunningPreset'
 
 export type AutomationDraftPreset = 'alerts_only' | 'standard' | 'full'
 
@@ -194,6 +195,31 @@ export function AiAutomationSettingsPanel({
         }
         helpTitle="How this step works"
       />
+
+      {offersSelfRunningPreset(leagueType) ? (
+        <section className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4" data-testid="self-running-preset">
+          <h4 className="text-sm font-semibold text-cyan-200/90">How much should AllFantasy run?</h4>
+          <p className="text-xs text-white/60">You can change any of this later on the Commissioner Hub, one switch at a time.</p>
+          <div className="space-y-2" role="radiogroup" aria-label="How much should AllFantasy run?">
+            {SELF_RUNNING_OPTIONS.map((o) => (
+              <label key={o.id} className="flex items-start gap-3 text-sm text-white/85">
+                <input
+                  type="radio"
+                  name="self-running-preset"
+                  className={CHECKBOX_CLASS}
+                  checked={(automationSettings.selfRunningPreset ?? DEFAULT_SELF_RUNNING_PRESET) === o.id}
+                  onChange={() => onAutomationChange({ selfRunningPreset: o.id })}
+                  data-testid={`self-running-${o.id}`}
+                />
+                <span>
+                  <strong>{o.label}</strong>
+                  <span className="block text-xs text-white/60">{o.description}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="space-y-4 rounded-2xl border border-white/10 bg-black/20 p-4">
         <h4 className="text-sm font-semibold text-cyan-200/90">Draft assistance (free)</h4>

@@ -23,6 +23,7 @@ import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
 import { readLineupMode } from '@/lib/redraft/lineupModeSwitch'
+import { readLineupLockSettings } from '@/lib/redraft/lineupLock'
 import { readDeadlineAt } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { isWaiverProcessingMode, readDailyWaiverScheduleFromSettings, WAIVER_DAY_KEYS } from '@/lib/waivers/dailyWaiverSchedule'
 import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
@@ -71,6 +72,17 @@ export type RulesLeagueRow = {
   keeperMaxYears?: number | null
   draftPickTrading?: boolean | null
   settings?: unknown
+}
+
+/** Sports whose lineups the app actually locks (lib/redraft/lineupLock.ts: soccer is not wired yet). */
+const LINEUP_LOCK_SPORTS = new Set(['NFL', 'NCAAF', 'NBA', 'NHL', 'MLB', 'NCAAB'])
+
+/** The lock the league is under, read exactly as the lock reads it. */
+function lineupLockRule(settings: unknown, sport: string | null): RuleSnapshot['lineupLock'] {
+  const key = String(sport ?? '').trim().toUpperCase()
+  if (!LINEUP_LOCK_SPORTS.has(key)) return null
+  const mode = readLineupLockSettings(settings, key).mode
+  return mode === 'per_player_kickoff' ? 'per_player' : mode === 'first_game_of_week' ? 'first_game' : mode === 'manual' ? 'manual' : null
 }
 
 /**
@@ -177,6 +189,29 @@ function normalizedWaiverType(raw: unknown): string | null {
   return null
 }
 
+/**
+ * The waiver rules the claims ENGINE runs (`getEffectiveLeagueWaiverSettings`: the `LeagueWaiverSettings`
+ * row, or the sport's defaults). The popup used to read `League.waiverType` / `waiverBudget`, which the
+ * commissioner's Waivers panel never writes — it saves the row directly — so a switch to FAAB or a new
+ * budget there left the popup describing the old rules. A field the engine leaves unset is left out,
+ * so the League column stands.
+ */
+export function waiverRulesFromEffective(e: {
+  normalizedWaiverType?: string | null
+  waiverType?: string | null
+  faabBudget?: number | null
+  faabMinBid?: number | null
+}): Pick<RuleSnapshot, 'waiverType' | 'waiverBudget' | 'waiverMinBid'> {
+  const out: Pick<RuleSnapshot, 'waiverType' | 'waiverBudget' | 'waiverMinBid'> = {
+    waiverType: normalizedWaiverType(e.normalizedWaiverType ?? e.waiverType),
+  }
+  const budget = nonNegNumber(e.faabBudget)
+  if (budget != null) out.waiverBudget = budget
+  const minBid = nonNegNumber(e.faabMinBid)
+  if (minBid != null) out.waiverMinBid = minBid
+  return out
+}
+
 /** The trade review the popup shows. Exported for saves that write it outside the settings patch. */
 export function tradeReviewMode(settings: Record<string, unknown>): string | null {
   const json = record(settings.settingsJson)
@@ -230,6 +265,7 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
     waiverDays: schedule?.enabled ? WAIVER_DAY_KEYS.filter((d) => isWaiverProcessingMode(schedule.days[d])) : null,
     waiverProcessHour: schedule?.enabled ? schedule.processHour : null,
     lineupMode: supportsDailyLineups(sport) ? readLineupMode(row.settings, sport) : null,
+    lineupLock: lineupLockRule(row.settings, sport),
     concept: resolveRulesConcept(row),
   }
 

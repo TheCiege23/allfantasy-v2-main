@@ -390,6 +390,11 @@ export type MatchupRow = {
 
 type History = {
   knownRosterIds: Map<string, Set<string>>
+  /**
+   * Scope → the most games (W + L + T) any team's PLATFORM record shows. Read by the outlook to tell
+   * a median-game league (two games a week) when the league's settings do not say.
+   */
+  reportedGames: Map<string, number>
   nativeRules: Map<string, { season: number; playoffStartWeek: number; medianGame: boolean }>
   periodsByLeague: Map<string, { season: number; week: number }>
   historyIncomplete: boolean
@@ -474,6 +479,9 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
          * platform, hence `league.platform` beside it.
          */
         avatarUrl: true,
+        wins: true,
+        losses: true,
+        ties: true,
         league: { select: { id: true, platformLeagueId: true, platform: true } },
       },
     }),
@@ -591,11 +599,14 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
   }
 
   const knownRosterIds = new Map<string, Set<string>>()
+  const reportedGames = new Map<string, number>()
   for (const t of teams) {
     const scope = scopeForTeam(t)
     if (!scope || !t.externalId) continue
     const ids = knownRosterIds.get(scope) ?? new Set<string>()
     ids.add(t.externalId); knownRosterIds.set(scope, ids)
+    const games = (Number(t.wins) || 0) + (Number(t.losses) || 0) + (Number(t.ties) || 0)
+    if (games > (reportedGames.get(scope) ?? 0)) reportedGames.set(scope, games)
   }
   const myRosters = new Map<string, string>()
   for (const t of mine) {
@@ -668,6 +679,7 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
 
   return {
     knownRosterIds,
+    reportedGames,
     nativeRules: native?.rules ?? new Map(),
     rows: (priorRows.length > 0 ? [...rows, ...priorRows] : rows).map((r) => {
       const progress = progressByLeague.get(r.leagueId)

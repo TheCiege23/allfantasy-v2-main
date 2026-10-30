@@ -21,12 +21,24 @@ function read(rel: string): string {
 describe('D.6.2 — board zone proportions + dock collapse toggle (DraftRoomShell)', () => {
   const src = read('components/app/draft-room/DraftRoomShell.tsx')
 
-  it('expanded board zone caps at 60vh so the board has more vertical room than the player pool', () => {
-    expect(src).toMatch(/max-h-\[min\(60vh,720px\)\]/)
+  it('half size splits the screen: the board caps at 50vh so the pool and chat get the other half', () => {
+    expect(src).toMatch(/half: 'max-h-\[min\(50vh,600px\)\]'/)
   })
 
-  it('collapsed board zone uses flex-1 + max-h-[unset] so it fills the screen when dock hides', () => {
-    expect(src).toMatch(/bottomDockExpanded \? 'max-h-\[min\(60vh,720px\)\]' : 'min-h-0 max-h-\[unset\] flex-1'/)
+  it('players size gives the panel most of the screen and keeps a board strip', () => {
+    expect(src).toMatch(/tall: 'max-h-\[min\(28vh,320px\)\]'/)
+  })
+
+  it('min size hides the panel: the board zone fills the screen with flex-1 + max-h-[unset]', () => {
+    expect(src).toMatch(/min: 'min-h-0 max-h-\[unset\] flex-1'/)
+    expect(src).toMatch(/BOARD_ZONE_BY_DOCK_SIZE\[dockSize\]/)
+  })
+
+  it('every surface can resize the panel, including the redraft room', () => {
+    expect(src).toMatch(/const allowPremiumDockCollapse = true/)
+    expect(src).toMatch(/data-testid="draft-dock-size-half"/)
+    expect(src).toMatch(/data-testid="draft-dock-size-tall"/)
+    expect(src).toMatch(/DOCK_SIZE_PREF_KEY = 'af:draft-premium-dock-size'/)
   })
 
   it('collapse toggle button is rendered with the standard Sleeper-style ▲▼ chevron pair', () => {
