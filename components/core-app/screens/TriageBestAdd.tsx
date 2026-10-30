@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { coreTriageMessages } from '@/lib/core-app/messages/coreTriage'
+import { langFromFlag } from '@/lib/core-app/messages/coreLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 
 /**
@@ -45,7 +46,7 @@ export function bestAddFrom(board: Board | null | undefined): BestAdd | null {
 
 /** The button's words: the add itself, nobody worth adding, or the plain search it started as. */
 export function bestAddCtaText(add: BestAdd | null, leagueName: string, es: boolean): string {
-  const m = messagesFor(coreTriageMessages, es ? 'es' : 'en')
+  const m = messagesFor(coreTriageMessages, langFromFlag(es))
   if (!add) return m.bestAddSearch(leagueName)
   if (add.kind === 'none') {
     return m.bestAddNone(leagueName)

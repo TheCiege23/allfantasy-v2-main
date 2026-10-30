@@ -193,7 +193,6 @@ export function WeekBoard({
   priorityLeagueIds = [],
 }: WeekBoardProps) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
   const msg = useMessages(weekBoardMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const pctByLeague = new Map<string, number>()
@@ -480,19 +479,6 @@ export function WeekBoard({
                     */
                     const badge = settleBadge(e.settle)
                     const settle = e.settle
-                    const spanishBadge = es && settle ? (() => {
-                      switch (settle.verdict) {
-                        case 'safe': return { sub: 'decidido', aria: 'A salvo esta semana: tus titulares y suficientes equipos por debajo ya terminaron' }
-                        case 'chopped': return { sub: 'decidido', aria: 'Todos los equipos terminaron y el tuyo quedó eliminado esta semana' }
-                        case 'no_chop': return { sub: 'sin eliminación esta semana', aria: 'Nadie queda eliminado esta semana' }
-                        case 'open': {
-                          const pending = settle.yourUpcoming + settle.yourLive
-                          if (pending > 0) return { sub: `${pending} por jugar`, aria: `${pending} de tus titulares aún deben terminar` }
-                          if (settle.cutLinePending) return { sub: 'el último equipo sigue jugando', aria: `Tus titulares terminaron; al equipo más bajo le faltan ${settle.cutLinePending} por terminar` }
-                          return null
-                        }
-                      }
-                    })() : null
                     const margin = e.margin ?? 0 // non-null on this branch; closures lose the narrowing
                     return (
                       <span
@@ -501,14 +487,14 @@ export function WeekBoard({
                         data-settled={badge?.sub === 'decided' ? 'true' : undefined}
                         aria-label={
                           msg.elimAria({ onTheBlock: e.onTheBlock, yourScore: e.yourScore, fieldSize: e.fieldSize, margin, cutLine: e.cutLine }) +
-                          (badge ? `. ${spanishBadge?.aria ?? badge.aria}` : '')
+                          (badge && settle ? `. ${msg.settleAria(settle, badge.aria)}` : '')
                         }
                       >
                         <span className="af-num" aria-hidden>
                           {badge?.label ? copy(badge.label) : e.onTheBlock ? copy('OUT') : `+${margin.toFixed(1)}`}
                         </span>
                         <span className="af-bd-val-sub" aria-hidden>
-                          {spanishBadge?.sub ?? copy(badge?.sub ?? (e.onTheBlock ? 'on the block' : 'clear'))}
+                          {badge && settle ? msg.settleSub(settle, copy(badge.sub)) : copy(e.onTheBlock ? 'on the block' : 'clear')}
                         </span>
                       </span>
                     )

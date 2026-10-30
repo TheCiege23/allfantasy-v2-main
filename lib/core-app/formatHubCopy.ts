@@ -1,6 +1,7 @@
 import type { HubFormat } from '@/lib/core-app/formatHubs'
 import { messagesFor } from '@/lib/i18n/messages'
 import { formatHubMessages } from './messages/formatHub'
+import { coreLang } from './messages/coreLocale'
 
 /**
  * Spanish for the multi-league format hubs (FormatHub, HubSwitcher) and the connected-franchise
@@ -12,8 +13,6 @@ import { formatHubMessages } from './messages/formatHub'
  * covered here; that needs the loader to take a language.
  */
 
-const es = (language: string | null | undefined) => language === 'es'
-
 export const HUB_TABS_ES: Record<HubFormat, string> = {
   zombie: 'Zombie',
   tournament: 'Torneo',
@@ -23,8 +22,11 @@ export const HUB_TABS_ES: Record<HubFormat, string> = {
   efl: 'Dinastía EFL',
 }
 
+/** Tab names by language; English (and every language without a table) keeps the name it was given. */
+const HUB_TABS_BY_LANG: Partial<Record<'en' | 'es', Record<HubFormat, string>>> = { es: HUB_TABS_ES }
+
 export function hubTab(format: HubFormat, english: string, language: string | null | undefined): string {
-  return es(language) ? HUB_TABS_ES[format] : english
+  return HUB_TABS_BY_LANG[coreLang(language)]?.[format] ?? english
 }
 
 /** The themed copy per format, keyed by the English `Theme` field names. */
@@ -39,6 +41,11 @@ export type ThemeCopy = {
   broadcastLabel: string
   emptyTitle: string
   foot: string
+}
+
+/** The themed-copy overlay for a language, or null where the English `Theme` stands as written. */
+export function themeCopyFor(language: string | null | undefined): ((platformsPhrase: string) => Record<HubFormat, ThemeCopy>) | null {
+  return THEME_COPY_BY_LANG[coreLang(language)] ?? null
 }
 
 export function themeCopyEs(platformsPhrase: string): Record<HubFormat, ThemeCopy> {
@@ -167,8 +174,10 @@ const UI_ES: Record<string, string> = {
   'Hub home': 'Inicio del centro',
 }
 
+const UI_BY_LANG: Partial<Record<'en' | 'es', Record<string, string>>> = { es: UI_ES }
+
 export function hubCopy(english: string, language: string | null | undefined): string {
-  return es(language) ? (UI_ES[english] ?? english) : english
+  return UI_BY_LANG[coreLang(language)]?.[english] ?? english
 }
 
 /** Sentences with a value in them — the words live in lib/core-app/messages/formatHub.ts. */
@@ -218,3 +227,5 @@ export const hubText = {
     return hub(language).askAllPrefill(franchise, decision)
   },
 }
+
+const THEME_COPY_BY_LANG: Partial<Record<'en' | 'es', (platformsPhrase: string) => Record<HubFormat, ThemeCopy>>> = { es: themeCopyEs }

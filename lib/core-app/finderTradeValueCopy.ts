@@ -12,6 +12,7 @@ import type { PlayerBidInstead } from './playerTradeVisual'
 import type { TrendNudge } from './valueTrend'
 import { messagesFor } from '@/lib/i18n/messages'
 import { finderTradeValueMessages } from './messages/finderTradeValue'
+import { spanishFlag } from './messages/coreLocale'
 
 /**
  * Player Finder's trade-and-value cards in the reader's language (2026-10-05): the trade visual
@@ -47,7 +48,8 @@ import { finderTradeValueMessages } from './messages/finderTradeValue'
  * touched. PURE, client-safe.
  */
 
-const es = (language: string) => language === 'es'
+/** Spanish is the one language these rebuild into; every other language keeps the English. */
+const es = spanishFlag
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
 
 // ── The static words, card by card ──────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import type { WeeklyCalendar } from './weeklyCalendar'
 import { isAtRisk,isRuledOut } from './injuryStatus'
 import { messagesFor } from '@/lib/i18n/messages'
 import { weeklyBlueprintTextMessages } from './messages/weeklyBlueprintText'
+import { langFromFlag } from './messages/coreLocale'
 
 export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review' | 'deadline'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context' | 'weekly-calendar'; season?: number | null; period?: number | null; sport?: string; unavailable?: boolean; deadlineKind?: 'lineup' | 'waivers' | 'trade'; playoffScenarios?: {ifWin:number;ifLose:number}; evidence?: { empty: number; out: number; bye: number | null; questionable: number; players?: string[] } }
 export type WeeklyBlueprint = {
@@ -128,7 +129,7 @@ export function buildWeeklyBlueprint(input: {
       : featured?.opponent.name ? { matchup: { opponent: featured.opponent.name, period: featured.week, leagueName: featured.leagueName, leagueId: featured.leagueId, season: featured.season, ...(featured.live ? { status: featured.live.final ? 'final' as const : 'live' as const } : {}) } } : {}),
     ...(outlook && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 ? { playoff: { probability, leagueName: outlook.leagueName, leagueId: outlook.leagueId, season: outlook.season, period: outlook.period } } : {}) }
 }
-const copy = (es: boolean) => messagesFor(weeklyBlueprintTextMessages, es ? 'es' : 'en')
+const copy = (es: boolean) => messagesFor(weeklyBlueprintTextMessages, langFromFlag(es))
 export function weeklyActionText(action: WeeklyAction, es = false): string {
   const c = copy(es)
   if(action.kind==='deadline')return ({lineup:c.deadlineLineup,waivers:c.deadlineWaivers,trade:c.deadlineTrade})[action.deadlineKind ?? 'lineup']
