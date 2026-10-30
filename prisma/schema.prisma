@@ -3956,6 +3956,7 @@ model AppUser {
   creatorProfile                           CreatorProfile?
   devyImportSessionsCommissioned           DevyImportSession[]                    @relation("DevyImportSessionCommissioner")
   discordGuildLinks                        DiscordGuildLink[]
+  teamCoOwnerships                        TeamCoOwner[]
   draftAutopickSettings                    DraftAutopickSetting[]
   liveDraftAutopickPreferences             LiveDraftAutopickPreference[]
   draftRoomChatMessages                    DraftRoomChatMessage[]
@@ -6558,6 +6559,7 @@ model League {
   leagueSettings                        LeagueSettings?
   storylines                            LeagueStoryline[]
   teams                                 LeagueTeam[]
+  teamCoOwners                          TeamCoOwner[]
   waiverSettings                        LeagueWaiverSettings?
   bbContest                             BestBallContest?                       @relation("LeagueBestBallContest", fields: [bbContestId], references: [id])
   legacyLeague                          LegacyLeague?                          @relation(fields: [legacyLeagueId], references: [id])
@@ -8258,6 +8260,7 @@ model Roster {
   settings             Json?
   dispersalDraftPasses Boolean                    @default(false)
   devyRights           DevyRights[]
+  coOwners             TeamCoOwner[]
   keeperDeclarations   KeeperDeclaration[]
   redraftDraftPicks    RedraftDraftPick[]
   redraftDraftQueue    RedraftDraftQueue[]
@@ -8280,6 +8283,28 @@ model Roster {
   @@index([leagueId, updatedAt])
   @@index([platformUserId])
   @@map("rosters")
+}
+
+/// A league member invited to help manage one canonical roster. Pending invites grant no access.
+model TeamCoOwner {
+  id              String   @id @default(uuid())
+  leagueId        String
+  rosterId        String
+  userId          String
+  invitedByUserId String
+  rosterOwnerKey  String
+  claimedOwnerId  String?
+  acceptedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  league          League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  roster          Roster   @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  user            AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, userId])
+  @@index([rosterId])
+  @@index([userId, acceptedAt])
+  @@map("team_co_owners")
 }
 
 /// Normalized weekly lineup rows (mirrors `Roster.playerData.lineup_sections`) for scoring queries and audits.

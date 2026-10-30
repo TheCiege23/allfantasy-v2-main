@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import 'server-only'
 
 import type { Prisma } from '@prisma/client'
@@ -257,7 +258,7 @@ export async function readPickTermsView(leagueId: string, userId: string): Promi
   if (!isNativeFuturePickLeague(league)) return { ok: true, view: { supported: false } }
   const [commissioner, names, inventory] = await Promise.all([isElevatedCommissioner(leagueId, userId), teamNames(leagueId), loadNativeFuturePicks(leagueId)])
   const member = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } })
-  if (!commissioner && !member) return { ok: false, status: 403 }
+  if (!commissioner && !member && !await acceptedCoOwnerRosterId(leagueId, userId)) return { ok: false, status: 403 }
   const [ownerPlan, viewerPlan] = await Promise.all([
     ownerHasAfCommissionerPlan(league.userId),
     commissioner ? prisma.appUser.findUnique({ where: { id: userId }, select: { id: true, email: true, username: true } }).then(hasAfCommissionerPlan) : Promise.resolve(false),

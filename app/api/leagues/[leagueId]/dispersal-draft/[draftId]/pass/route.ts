@@ -5,6 +5,7 @@ import { isCommissioner } from '@/lib/commissioner/permissions'
 import { requireDispersalDraftForLeague } from '@/lib/league/dispersal-draft-route-helpers'
 import { DispersalDraftEngine } from '@/lib/dispersal-draft/DispersalDraftEngine'
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
       select: { platformUserId: true },
     })
     if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-    if (roster.platformUserId !== userId) {
+    if (roster.platformUserId !== userId && (await acceptedCoOwnerRosterId(leagueId, userId)) !== rosterId) {
       return NextResponse.json({ error: 'You can only pass for your own roster.' }, { status: 403 })
     }
 
