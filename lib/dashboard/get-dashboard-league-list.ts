@@ -56,7 +56,7 @@ const NOT_SLEEPER_IMPORT_SHAPED = {
  * that already skips `hasUnifiedRecord === false` rows.
  */
 export async function getActivityLeaguesForUser(userId: string): Promise<ActivityLeagueEntry[]> {
-  const [nativeLeagues, sleeperLeagues] = await Promise.all([
+  const [nativeLeagues, sleeperLeagues, removedKeys] = await Promise.all([
     (prisma as any).league
       .findMany({
         where: {
@@ -127,6 +127,7 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
         console.error('[Activity Leagues] sleeper leagues query failed', err)
         return [] as Array<Record<string, unknown>>
       }),
+    removedLeagueKeysFor(userId),
   ])
 
   const native: ActivityLeagueEntry[] = (nativeLeagues as Array<Record<string, unknown>>)
@@ -140,6 +141,10 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
         settings: lg.settings,
       }),
     )
+    .filter((lg) =>
+      !isImportedPlatform(lg.platform as string | null) ||
+      !removedKeys.has(tombstoneLookupKey(String(lg.platform ?? ''), String(lg.platformLeagueId ?? ''))),
+    )
     .map((lg) => ({
       id: lg.id as string,
       name: (lg.name as string | null) ?? undefined,
@@ -150,7 +155,9 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
       sport: (lg.sport as string | null) ?? null,
     }))
 
-  const sleeper: ActivityLeagueEntry[] = (sleeperLeagues as Array<Record<string, unknown>>).map((lg) => ({
+  const sleeper: ActivityLeagueEntry[] = (sleeperLeagues as Array<Record<string, unknown>>)
+    .filter((lg) => !removedKeys.has(tombstoneLookupKey('sleeper', String(lg.sleeperLeagueId ?? ''))))
+    .map((lg) => ({
     id: lg.id as string,
     name: (lg.name as string | null) ?? undefined,
     platform: 'sleeper',
