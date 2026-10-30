@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { LeagueDisplayPreferences } from '@/components/league/LeagueDisplayPreferences'
 import { readHiddenLeagueSections } from '@/lib/league/leagueSections'
 import { getServerSession } from 'next-auth'
@@ -284,7 +285,8 @@ export default async function LeaguePage(
         }
 
       const isOwner = league.userId === userId
-        const userTeam = league.teams.find((t) => t.claimedByUserId === userId) ?? null
+        const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
+        const userTeam = league.teams.find((t) => t.claimedByUserId === userId) ?? (coOwnerRosterId ? league.teams.find((t) => t.externalId === coOwnerRosterId) : null) ?? null
 
       if (!isOwner && !userTeam) {
               // Not a member — show explicit join/request state instead of opaque redirect.

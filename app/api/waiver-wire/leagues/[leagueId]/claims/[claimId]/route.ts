@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -29,8 +30,9 @@ export async function PATCH(
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(params.leagueId, userId)
   const roster = await (prisma as any).roster.findFirst({
-    where: { leagueId: params.leagueId, platformUserId: userId },
+    where: coOwnerRosterId ? { leagueId: params.leagueId, id: coOwnerRosterId } : { leagueId: params.leagueId, platformUserId: userId },
   })
   if (!roster) return NextResponse.json({ error: "Roster not found" }, { status: 404 })
 
@@ -62,8 +64,9 @@ export async function DELETE(
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(params.leagueId, userId)
   const roster = await (prisma as any).roster.findFirst({
-    where: { leagueId: params.leagueId, platformUserId: userId },
+    where: coOwnerRosterId ? { leagueId: params.leagueId, id: coOwnerRosterId } : { leagueId: params.leagueId, platformUserId: userId },
   })
   if (!roster) return NextResponse.json({ error: "Roster not found" }, { status: 404 })
 

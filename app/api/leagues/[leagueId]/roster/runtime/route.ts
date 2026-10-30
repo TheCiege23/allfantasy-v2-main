@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 
@@ -25,6 +26,7 @@ export async function GET(
   }
 
   const { leagueId } = await ctx.params
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
   const { searchParams } = new URL(req.url)
   const requestedRosterId = searchParams.get('rosterId')?.trim() || null
 
@@ -41,7 +43,7 @@ export async function GET(
 
   if (!commissioner) {
     const ownRoster = await prisma.roster.findFirst({
-      where: { leagueId, platformUserId: userId },
+      where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },
       select: { id: true },
     })
     if (!ownRoster) {
