@@ -1,5 +1,6 @@
 import 'server-only'
 import { attachLeagueHubs } from './attachLeagueHubs'
+import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLinks'
 import type { LeagueHub } from './leagueHubGroups'
 
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
@@ -213,7 +214,8 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
     season: seasonOf(r),
   }))
 
-  await attachLeagueHubs(userId, leagues)
+  // Exile Island rows learn their Survivor league, so /leagues can draw each island under it.
+  await Promise.all([attachLeagueHubs(userId, leagues), attachSurvivorExileLinks(leagues)])
 
   const platforms = Array.from(new Set(leagues.map((l) => String(l.platform).toLowerCase()))).sort()
 
