@@ -44,6 +44,7 @@ import { receiptColumns, receiptColumnsReady } from '@/lib/decision-os/trade/rec
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
+import { storedVetoRule, vetoVotesNeeded } from './vetoRule'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -610,6 +611,9 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
         participantRosterIds,
         acceptedRosterIds: [],
         multiTeam: participantRosterIds.length > 2,
+        // The league's veto rule when the trade was proposed (./vetoRule.ts): a later settings change
+        // never moves the line on a vote already under way.
+        vetoRule: settings.vetoRule,
       } as Prisma.InputJsonValue,
       items: {
         create: offerAssets.map((a) => {
@@ -1487,7 +1491,9 @@ export async function castAfTradeVetoVote(input: {
   const vetoCount = await prisma.afLeagueTradeVote.count({
     where: { tradeId: trade.id, vote: 'veto' },
   })
-  const needed = Math.ceil((allRosters * (trade.vetoThresholdPercent ?? 50)) / 100)
+  // The rule stored with the trade; a trade proposed before rules were stored keeps its percent (50% default).
+  const rule = storedVetoRule(trade.metadata) ?? { mode: 'percent' as const, value: trade.vetoThresholdPercent ?? 50 }
+  const needed = vetoVotesNeeded(rule, { teamCount: allRosters, tradingTeams: tradingParties.size })
 
   if (input.vote === 'veto' && vetoCount >= needed) {
     await prisma.afLeagueTrade.update({
