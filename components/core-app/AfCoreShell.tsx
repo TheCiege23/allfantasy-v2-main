@@ -2420,7 +2420,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           */}
           {props.scope ? (
             <ScopeSwitcher
-              leagues={props.scope.leagues.map((league) => ({ ...league, imageUrl: leagues.find((row) => row.id === league.id)?.imageUrl }))}
+              leagues={props.scope.leagues.map((league) => {
+                const row = leagues.find((r) => r.id === league.id)
+                return { ...league, imageUrl: row?.imageUrl, exileOf: row?.exileOf }
+              })}
               scopeValue={props.scope.value}
               label={props.scope.label}
               selectedLeagueId={props.selectedLeagueId ?? null}
