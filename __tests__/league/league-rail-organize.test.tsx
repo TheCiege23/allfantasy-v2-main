@@ -107,6 +107,25 @@ describe('the /league rail', () => {
     expect(order(c)).toEqual(['# NFL', 'f2', '# NBA', 'b1'])
   })
 
+  it('Hide takes the league off the list, saves it hidden, and points to Settings', async () => {
+    const c = draw()
+    fireEvent.contextMenu(tile(c, 'b3'))
+    await act(async () => {
+      fireEvent.click(within(c.querySelector<HTMLElement>('.af-rail-menu')!).getByText('Hide from this list'))
+    })
+    expect(order(c)).toEqual(['# NFL', 'f1', 'f2', 'f3', '# NBA', 'b1', 'b2'])
+    expect(posts()).toEqual([{ field: 'hidden', leagueIds: ['b3'] }])
+    const link = list(c).querySelector<HTMLAnchorElement>('a.nl-rail-hidden')!
+    expect(link.textContent).toBe('1 hidden · Settings')
+    expect(link.getAttribute('href')).toBe('/settings?tab=preferences&returnTo=%2Fleague%2Ff1#your-leagues')
+  })
+
+  it('leaves out leagues the account hid, but never the league you are in', () => {
+    const c = draw({ hiddenIds: ['b1', 'f1'] })
+    expect(order(c)).toEqual(['# NFL', 'f1', 'f2', 'f3', '# NBA', 'b2', 'b3'])
+    expect(list(c).querySelector('a.nl-rail-hidden')?.textContent).toBe('1 hidden · Settings')
+  })
+
   it('draws your record beside the platform', () => {
     const c = draw({ records: { f2: { wins: 6, losses: 3, ties: 0, rank: 2, teams: 12 } } })
     expect(tile(c, 'f2').querySelector('.af-rail-row-record')?.textContent).toBe('6-3 · 2nd')

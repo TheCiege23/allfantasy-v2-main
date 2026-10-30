@@ -4461,6 +4461,19 @@ button.af-rail-sport:focus-visible {
   opacity: 0.45;
   cursor: default;
 }
+.af-core .af-rail-menu-item[data-kind='hide'] {
+  padding-block: 8px;
+}
+.af-core .af-rail-menu-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.af-core .af-rail-menu-label small {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+}
 .af-core .af-rail-menu-item[data-kind='done'] {
   justify-content: center;
   border-color: var(--accent);

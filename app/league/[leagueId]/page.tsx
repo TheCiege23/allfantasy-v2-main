@@ -433,6 +433,7 @@ export default async function LeaguePage(
         records: railRecords,
         favoriteIds: railPrefs?.favorites ?? [],
         order: railPrefs?.order ?? [],
+        hiddenIds: railPrefs?.hidden ?? [],
         lineupLeagueIds: railNeeds?.lineupLeagueIds ?? [],
         offerLeagueIds: railNeeds?.offerLeagueIds ?? [],
         // /core's crest rule: commissioner logo, else Sleeper avatar, else the league type's own artwork.

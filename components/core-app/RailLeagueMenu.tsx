@@ -6,7 +6,7 @@ import { useOverlayContainment } from '@/components/core-app/useOverlayContainme
 import { railRowMessages } from '@/lib/core-app/messages/railRow'
 
 /**
- * Pin and Move for one league in a league list — the sheet, and the press-and-hold that opens it.
+ * Pin, Move and Hide for one league in a league list — the sheet, and the press-and-hold that opens it.
  *
  * ⚠ ONE IMPLEMENTATION, TWO LISTS: /core's rail and the /league workspace rail both draw this, so a
  * change to how a hold is read or what the sheet offers lands in both (the same rule RailRowBody
@@ -61,8 +61,8 @@ export function useRailHold(open: (id: string) => void) {
   }
 }
 
-/** Save one of the account's league lists (favorites or order) through the existing preferences route. */
-export function saveLeaguePreference(field: 'favorites' | 'order', leagueIds: string[], onSaved?: () => void): void {
+/** Save one of the account's league lists (favorites, order or hidden) through the existing preferences route. */
+export function saveLeaguePreference(field: 'favorites' | 'order' | 'hidden', leagueIds: string[], onSaved?: () => void): void {
   void fetch('/api/core/league-preferences', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -77,6 +77,24 @@ export function saveLeaguePreference(field: 'favorites' | 'order', leagueIds: st
     })
 }
 
+/**
+ * Hide one league from the account's lists. The hidden list is read back first and the league added
+ * to it, so a list changed in Settings (or by another tab) since this page rendered is extended rather
+ * than overwritten — the pages carry archived leagues in their hidden set too, which must not be saved.
+ */
+export function hideLeagueForAccount(leagueId: string, onSaved?: () => void): void {
+  void fetch('/api/core/league-preferences', { credentials: 'same-origin', cache: 'no-store' })
+    .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+    .then((prefs: { hidden?: unknown }) => {
+      const hidden = Array.isArray(prefs?.hidden) ? prefs.hidden.filter((x): x is string => typeof x === 'string') : []
+      if (hidden.includes(leagueId)) return onSaved?.()
+      saveLeaguePreference('hidden', [...hidden, leagueId], onSaved)
+    })
+    .catch(() => {
+      /* the row comes back on the next render, which is the truthful state */
+    })
+}
+
 export function RailLeagueMenu({
   name,
   pinned,
@@ -84,6 +102,7 @@ export function RailLeagueMenu({
   canMoveDown,
   onPin,
   onMove,
+  onHide,
   onClose,
 }: {
   name: string
@@ -92,6 +111,7 @@ export function RailLeagueMenu({
   canMoveDown: boolean
   onPin: () => void
   onMove: (direction: -1 | 1) => void
+  onHide: () => void
   onClose: () => void
 }) {
   const msg = useMessages(railRowMessages)
@@ -128,6 +148,21 @@ export function RailLeagueMenu({
         <button type="button" className="af-rail-menu-item" disabled={!canMoveDown} onClick={() => onMove(1)}>
           <span aria-hidden>↓</span>
           {msg.moveDown}
+        </button>
+        <button
+          type="button"
+          className="af-rail-menu-item"
+          data-kind="hide"
+          onClick={() => {
+            onHide()
+            onClose()
+          }}
+        >
+          <span aria-hidden>⊘</span>
+          <span className="af-rail-menu-label">
+            {msg.hide}
+            <small>{msg.hideNote}</small>
+          </span>
         </button>
         <button type="button" className="af-rail-menu-item" data-kind="done" onClick={onClose}>
           {msg.menuDone}

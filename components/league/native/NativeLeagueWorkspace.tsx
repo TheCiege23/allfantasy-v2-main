@@ -13,7 +13,7 @@ import { ALL_LEAGUES_DASHBOARD_HREF, leagueDashboardHref } from '@/lib/league/le
 import { buildNativeLeagueNavigation, leagueSectionHref, nativeLeaguePhase, nativeLeagueRecordLinks, type WorkspaceTab } from '@/lib/league/nativeLeagueNavigation'
 import { adjacentLeagueId, unreadBadgeText } from '@/lib/league/leagueRailStatus'
 import { LeagueRailRow, useLeagueRail, type LeagueRailData, type LeagueRailRowView } from './LeagueRail'
-import { RailLeagueMenu, saveLeaguePreference, useRailHold } from '@/components/core-app/RailLeagueMenu'
+import { hideLeagueForAccount, RailLeagueMenu, saveLeaguePreference, useRailHold } from '@/components/core-app/RailLeagueMenu'
 import { useMessages } from '@/components/i18n/useMessages'
 import { railRowMessages } from '@/lib/core-app/messages/railRow'
 import { applyLeagueOrder } from '@/lib/core-app/leaguePreferences'
@@ -113,7 +113,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
 
   /*
    * The league list the way /core's rail arranges it (user call, 2026-10-30): favorites pinned on top,
-   * the rest by sport with headings that fold, filter chips, and Pin and Move from a press-and-hold or
+   * the rest by sport with headings that fold, filter chips, and Pin, Move and Hide from a press-and-hold or
    * right-click. Same helpers, same saved lists, same sheet — see railArrange.ts and RailLeagueMenu.tsx.
    * Changes show at once; the saved lists come back with the next page load.
    */
@@ -124,7 +124,15 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   const favoriteKey = favoriteIds.join('|')
   const favoriteSet = useMemo(() => new Set(favoriteKey ? favoriteKey.split('|') : []), [favoriteKey])
   const savedOrder = orderOverride ?? rail?.order ?? []
-  const orderedLeagues = useMemo(() => applyLeagueOrder(leagues, savedOrder), [leagues, savedOrder])
+  // Hidden leagues leave the list (hidden here this visit, or saved); the league you are in always stays.
+  const [hiddenAdded, setHiddenAdded] = useState<string[]>([])
+  const hiddenKey = [...(rail?.hiddenIds ?? []), ...hiddenAdded].join('|')
+  const shownLeagues = useMemo(() => {
+    const hidden = new Set(hiddenKey ? hiddenKey.split('|') : [])
+    return hidden.size ? leagues.filter(row => row.id === league.id || !hidden.has(row.id)) : leagues
+  }, [leagues, hiddenKey, league.id])
+  const hiddenCount = leagues.length - shownLeagues.length
+  const orderedLeagues = useMemo(() => applyLeagueOrder(shownLeagues, savedOrder), [shownLeagues, savedOrder])
   const sections = useMemo(() => railSections(orderedLeagues, favoriteSet), [orderedLeagues, favoriteSet])
   const [railFilter, setRailFilter] = useState<RailFilter>('all')
   const [foldedSports, setFoldedSports] = useState<string[]>([])
@@ -193,6 +201,10 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
     setOrderOverride(next)
     saveLeaguePreference('order', next)
   }
+  const hideLeague = (id: string) => {
+    setHiddenAdded(prev => (prev.includes(id) ? prev : [...prev, id]))
+    hideLeagueForAccount(id)
+  }
   const menuLeague = menuLeagueId ? orderedLeagues.find(l => l.id === menuLeagueId) ?? null : null
   /* The open list: chips, then each section under a heading that folds. The 42px list: crests only, in the same order. */
   const railList = railExpanded ? <>
@@ -216,6 +228,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
       ]
     })}
     {leagues.length > 1 ? <p className="af-rail-hint">{railMsg.holdHint}</p> : null}
+    {hiddenCount > 0 ? <Link className="af-rail-hint nl-rail-hidden" href={`/settings?tab=preferences&returnTo=${encodeURIComponent(`/league/${league.id}`)}#your-leagues`} aria-label={railMsg.hiddenCountAria(hiddenCount)}>{railMsg.hiddenCount(hiddenCount)}</Link> : null}
   </> : sections.flatMap(section => section.rows).map(row => leagueTile(row, false))
   const chatBadge = unreadBadgeText(activeTab === 'league_chat' ? 0 : unread[league.id])
   const navGroup = (title: string, items: typeof primary) => <section key={title} className="nl-nav-group"><h2>{title}</h2>{items.map(item => {
@@ -243,7 +256,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
         <div className="nl-rail-leagues" id="nl-rail-leagues">{railList}</div>
         <Link className="nl-add" href="/create-league" aria-label="Create a league"><Plus aria-hidden /><span className="nl-rail-toggle-text">Create a league</span></Link>
       </aside>
-      {menuLeague ? <RailLeagueMenu name={menuLeague.name} pinned={favoriteSet.has(menuLeague.id)} canMoveUp={menuIds.indexOf(menuLeague.id) > 0} canMoveDown={menuIds.indexOf(menuLeague.id) < menuIds.length - 1} onPin={() => pinLeague(menuLeague.id)} onMove={direction => moveLeague(menuLeague.id, direction)} onClose={() => setMenuLeagueId(null)} /> : null}
+      {menuLeague ? <RailLeagueMenu name={menuLeague.name} pinned={favoriteSet.has(menuLeague.id)} canMoveUp={menuIds.indexOf(menuLeague.id) > 0} canMoveDown={menuIds.indexOf(menuLeague.id) < menuIds.length - 1} onPin={() => pinLeague(menuLeague.id)} onMove={direction => moveLeague(menuLeague.id, direction)} onHide={() => hideLeague(menuLeague.id)} onClose={() => setMenuLeagueId(null)} /> : null}
       <aside className={`nl-sidebar ${menuOpen ? 'nl-menu-open' : ''}`} aria-label="League navigation">
         <Link className="nl-back" href={ALL_LEAGUES_DASHBOARD_HREF}><ChevronLeft size={16} aria-hidden /> All leagues</Link>
         <div className="nl-nav-league"><span className="nl-initial">{initials(league.name)}</span><div><strong>{league.name}</strong><span className="nl-eyebrow">{phase}</span></div></div>

@@ -33,6 +33,8 @@ export type LeagueRailData = {
   /** The account's favorites, pinned on top, and its saved order (leaguePreferences.ts). */
   favoriteIds?: string[]
   order?: string[]
+  /** Leagues the account hid from its lists; the rail leaves them out (the open league always stays). */
+  hiddenIds?: string[]
   /** What needs you, from the /core tab badges' cached facts (urgencyBadges.ts `readUrgencyLeagueIds`). */
   lineupLeagueIds?: string[]
   offerLeagueIds?: string[]
