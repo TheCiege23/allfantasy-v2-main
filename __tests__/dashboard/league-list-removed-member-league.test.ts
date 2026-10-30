@@ -84,7 +84,7 @@ beforeEach(() => {
         : [],
     'deletedLeagueTombstone.findMany': () => [
       { platform: 'sleeper', platformLeagueId: '1389720315973627904' },
-      // A key that matches the viewer's own copy and a native league: neither is filtered.
+      // The viewer's own imported copy is removed too; a native league is not.
       { platform: 'sleeper', platformLeagueId: '999' },
       { platform: 'allfantasy', platformLeagueId: 'af-1' },
     ],
@@ -100,7 +100,7 @@ describe('dashboard league list — a removed member league', () => {
     expect(db.calls.find((c) => c.key === 'deletedLeagueTombstone.findMany')?.args?.where).toEqual({ userId: USER })
   })
 
-  it('keeps every other league: an untombstoned import, the viewer\'s own copy, a native league', async () => {
+  it('keeps the untombstoned import and native league, but removes the viewer-owned import', async () => {
     expect(await ids()).toEqual(['kept', 'native'])
   })
 
