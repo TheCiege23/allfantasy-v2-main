@@ -152,6 +152,8 @@ import { CanonicalRedraftScheduleTab } from './tabs/redraft/CanonicalRedraftSche
 import { KeeperSelectionTab } from './tabs/KeeperSelectionTab'
 import { BestBallTab } from './tabs/BestBallTab'
 import { GuillotineTab } from './tabs/GuillotineTab'
+import { ImportedGuillyTab } from './tabs/ImportedGuillyTab'
+import { guillyTabKind } from '@/lib/guillotine/importedGuillyView'
 import { DynastyHome } from './tabs/DynastyHome'
 import { SurvivorHome } from '@/components/survivor/SurvivorHome'
 import { SurvivorNativeHome } from '@/components/survivor/SurvivorNativeHome'
@@ -462,6 +464,9 @@ export function LeagueShell({
   const hasActiveRedraftSeason = redraftSeason != null
 
   const nativeWorkspace = isNativePlatform(league.platform)
+  // An imported Guilly league (lib/guillotine/importedGuillyView.ts): its tab reads the provider's scores, not
+  // our chop engine. Most imports carry only `leagueType: 'guillotine'`, which the native gate below never read.
+  const guillyTab = guillyTabKind(league, nativeWorkspace)
   const [nativeChimmyOpen, setNativeChimmyOpen] = useState(false)
   const tabDefs = useMemo(() => {
     if (nflRedraftCore) {
@@ -509,7 +514,7 @@ export function LeagueShell({
       const bb = { id: 'bestball', label: 'Best Ball' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), bb, ...base.slice(idx + 1)] : [bb, ...base]
     }
-    if (league.guillotineMode || league.leagueVariant === 'guillotine') {
+    if (guillyTab) {
       const idx = base.findIndex((t) => t.id === 'redraft')
       const g = { id: 'guillotine', label: 'Guilly' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), g, ...base.slice(idx + 1)] : [g, ...base]
@@ -601,6 +606,7 @@ export function LeagueShell({
     league.bestBallMode,
     league.guillotineMode,
     league.leagueVariant,
+    guillyTab,
     isCommissioner,
     shouldUseMatchupPrimary,
     t,
@@ -2399,6 +2405,8 @@ function LeagueTabRouter({
     case 'bestball':
       return <BestBallTab leagueId={leagueId} sport={sport} />
     case 'guillotine':
+      // An imported league is chopped by its provider: its tab reads the provider's scores, not our engine.
+      if (guillyTabKind(selectedLeague, isNativePlatform(selectedLeague.platform)) === 'imported') return <ImportedGuillyTab leagueId={leagueId} />
       return (
         <GuillotineTab leagueId={leagueId} sport={sport} leagueName={selectedLeague.name} />
       )
