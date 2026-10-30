@@ -203,6 +203,13 @@ export type MatchupPulse = {
    * idle board notices kickoff without polling for it.
    */
   nextKickoffAt?: string | null
+  /**
+   * Your win probability in EVERY league that has one, by league id — the league list draws it as a
+   * bar under each matchup. `leading` and `trailing` stop at five, so they cannot answer for the
+   * whole list. A finished game's certain 1 or 0 is left out: it is a result, not odds. Optional so
+   * a cached pulse from before this field still reads.
+   */
+  oddsByLeague?: Record<string, number>
   /** Why the rest are absent. Stated on the screen, never silently dropped. */
   notRanked: {
     /**
@@ -1200,6 +1207,11 @@ export async function getMatchupPulse(
     closest,
     liveNow,
     nextKickoffAt: (nextKickoff as Date | null)?.toISOString() ?? null,
+    oddsByLeague: Object.fromEntries(
+      ranked
+        .filter((r): r is PulseRow & { pWin: number } => r.pWin != null && !r.final && r.pWin > 0 && r.pWin < 1)
+        .map((r) => [r.leagueId, r.pWin]),
+    ),
     notRanked: { ...notRanked, unidentifiedRoster, notStarted },
   }
 }

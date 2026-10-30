@@ -83,6 +83,7 @@ function RailSide({
   score,
   projection,
   them,
+  leading,
 }: {
   name: string
   avatarUrl: string | null
@@ -90,6 +91,8 @@ function RailSide({
   score: number | null
   projection: RailSideProjectionSummary | null
   them?: boolean
+  /** Ahead on the scoreboard right now — the score is drawn in the winning colour. */
+  leading?: boolean
 }) {
   const msg = useMessages(railRowMessages)
   // The first letter or digit, so "(F) SF TEXANS" reads F rather than "(".
@@ -111,6 +114,7 @@ function RailSide({
       className="af-rail-row-side"
       data-side={them ? 'them' : undefined}
       data-partial={partial ? 'true' : undefined}
+      data-leading={leading ? 'true' : undefined}
       title={projection
         ? msg.sideTitle(
             PROJECTION_PROVIDER_LABEL,
@@ -279,6 +283,31 @@ export type RailRowBodyProps = {
   careerLine?: string | null
   /** Extra headline badges (platform chip, live dot) for shells that want them. */
   badges?: ReactNode
+  /** Scores are moving right now (a fresh live poll on a played week). Draws the LIVE pill. */
+  isLive?: boolean
+  /** Your win probability this week, strictly between 0 and 1 — the odds bar. Absent draws none. */
+  pWin?: number | null
+  /** What needs you in this league (urgencyBadges.ts): an empty or ruled-out starter, an offer waiting. */
+  attention?: ReadonlyArray<RailAttention>
+  /**
+   * Where a tap on the head-to-head goes — the league's Matchup screen. The row stays ONE link (a
+   * link inside a link is invalid HTML and two tab stops per league); the shell reads this off the
+   * tapped element with `railTapTarget` and routes there instead of the league.
+   */
+  matchupHref?: string | null
+}
+
+export type RailAttention = 'lineup' | 'offer'
+
+/**
+ * The href a tap on a league row should open: the Matchup screen when the tap landed on the
+ * head-to-head, else null (open the league). A modified click (new tab, new window) is left to the
+ * browser, which opens the row's own link.
+ */
+export function railTapTarget(event: { target: EventTarget | null; metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; button?: number }): string | null {
+  if (event.metaKey || event.ctrlKey || event.shiftKey || (event.button ?? 0) !== 0) return null
+  const el = event.target instanceof Element ? event.target.closest('[data-matchup-href]') : null
+  return el?.getAttribute('data-matchup-href') || null
 }
 
 export function RailRowBody({
@@ -293,14 +322,23 @@ export function RailRowBody({
   swing,
   careerLine,
   badges,
+  isLive,
+  pWin,
+  attention,
+  matchupHref,
 }: RailRowBodyProps) {
   const msg = useMessages(railRowMessages)
+  const headToHead = Boolean(m && !m.guillotine && !m.unpaired)
+  /* Only a played week has a leader; a level score has none. */
+  const lead = headToHead && m?.scored ? Math.sign((m.yourScore ?? 0) - (m.opponentScore ?? 0)) : 0
+  const odds = headToHead && pWin != null && pWin > 0 && pWin < 1 ? Math.round(pWin * 100) : null
   return (
     <span className="af-rail-row">
       <span className="af-rail-row-headline">
         <span className="af-rail-row-name">{name}</span>
         {isCommissioner ? <CommissionerBadge /> : null}
         {badges}
+        {!badges && isLive ? <span className="af-rail-live-state">{msg.live}</span> : null}
         {swing != null ? (
           <span className="af-rail-swing">
             {swing > 0 ? '+' : ''}{swing.toFixed(1)} swing
@@ -325,13 +363,24 @@ export function RailRowBody({
         ) : null}
         {showScoreStatus && (syncPaused || delayed) ? <span className="af-rail-delayed">{syncPaused ? msg.syncPaused : msg.updatesDelayed}</span> : null}
         {!delayed && m?.source === 'history_fallback' ? <span>{msg.lastResult}</span> : null}
+        {attention?.includes('lineup') ? (
+          <span className="af-rail-row-flag" data-tone="bad">{msg.fixLineup}</span>
+        ) : null}
+        {attention?.includes('offer') ? (
+          <span className="af-rail-row-flag" data-tone="warn">{msg.tradeOffer}</span>
+        ) : null}
       </span>
       {/* An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts). */}
       {m?.extraMatchup ? (
         <span className="af-rail-row-career" data-testid="rail-extra-matchup">{m.extraMatchup.line}</span>
       ) : null}
       {m ? (
-        <span className="af-rail-row-line" data-vs={!m.guillotine && !m.unpaired ? 'true' : undefined}>
+        <span
+          className="af-rail-row-line"
+          data-vs={headToHead ? 'true' : undefined}
+          data-matchup-href={headToHead && matchupHref ? matchupHref : undefined}
+          title={headToHead && matchupHref ? msg.openMatchup : undefined}
+        >
           <RailSide
             name={m.yourTeam ?? msg.yourTeam}
             avatarUrl={m.yourAvatarUrl}
@@ -341,6 +390,7 @@ export function RailRowBody({
             */
             score={m.guillotine ? (m.guillotine.state === 'eliminated' ? null : m.guillotine.points) : m.scored ? m.yourScore : null}
             projection={m.yourProjection ?? null}
+            leading={lead > 0}
           />
 
           {/*
@@ -361,7 +411,21 @@ export function RailRowBody({
                 avatarUrl={m.opponentAvatarUrl}
                 score={m.scored ? m.opponentScore : null}
                 projection={m.opponentProjection ?? null}
+                leading={lead < 0}
               />
+              {/*
+                Your chance this week, from the same model the Matchup screen prints (rail-odds route).
+                A finished game has no odds, only a result, so it draws no bar.
+              */}
+              {odds != null ? (
+                <span className="af-rail-row-odds" role="img" aria-label={msg.winOdds(odds)}>
+                  <span className="af-rail-row-odds-pct">{odds}%</span>
+                  <span className="af-rail-row-odds-bar" aria-hidden>
+                    <span className="af-rail-row-odds-fill" style={{ width: `${odds}%` }} />
+                  </span>
+                  <span className="af-rail-row-odds-pct" data-side="them">{100 - odds}%</span>
+                </span>
+              ) : null}
             </>
           )}
         </span>

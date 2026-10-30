@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
 import type { RailLeague, RailMatchupSummary } from '@/components/core-app/AfCoreShell'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
-import { RailRowBody, mergeRailMatchup } from '@/components/core-app/RailRowBody'
+import { RailRowBody, mergeRailMatchup, railTapTarget } from '@/components/core-app/RailRowBody'
+import { useRailOdds } from '@/components/core-app/useRailOdds'
 import { useLiveRailScores, type LiveRailScore } from '@/components/core-app/useLiveRailScores'
 import { coreRefreshIntervalMs } from '@/lib/core-app/coreRefreshPolicy'
 import { importedPlatformLabel, isNativePlatform } from '@/lib/dashboard/platform-label'
@@ -46,6 +47,10 @@ export type LeagueRailRowView = {
   weekLabel: string
   /** Handoff §2: ring colour, the mono line under the crest, and the switcher group. */
   status: LeagueRailStatus
+  /** Your win chance this week, from the Matchup board (useRailOdds.ts). */
+  pWin?: number | null
+  /** An imported league's Matchup screen, for a tap on the head-to-head. Null for a native league. */
+  matchupHref?: string | null
 }
 
 const markOf = (name: string) =>
@@ -86,6 +91,7 @@ export function leagueRailRowView(
     freshMinutes,
     weekLabel,
     status: leagueRailStatus({ m, phase, weekLabel }),
+    matchupHref: !native && m && !m.unpaired && !m.guillotine ? `/core/matchup?league=${encodeURIComponent(row.id)}` : null,
   }
 }
 
@@ -120,7 +126,8 @@ export function useLeagueRail(leagues: UserLeague[], rail: LeagueRailData | null
     [rail],
   )
   const liveState = useLiveRailScores(railLeagues, enabled, coreRefreshIntervalMs(gameDay, 0), nativeIds)
-  return (row: UserLeague) => leagueRailRowView(row, rail, liveState, clock)
+  const odds = useRailOdds(enabled)
+  return (row: UserLeague) => ({ ...leagueRailRowView(row, rail, liveState, clock), pWin: odds[row.id] ?? null })
 }
 
 export function LeagueRailRow({
@@ -155,7 +162,17 @@ export function LeagueRailRow({
       data-ring={status.tone ?? undefined}
       aria-label={`${view.name} on ${view.platformLabel}, ${status.line}${badge ? `, ${badge} unread` : ''}${view.isLive ? ', live' : ''}`}
       title={`${view.name} · ${status.line} · ${status.mini}`}
-      onClick={onClick}
+      onClick={(event) => {
+        /*
+         * A tap on the head-to-head opens the Matchup screen; anywhere else, the league. One link
+         * either way (see `railTapTarget`). The Matchup screen is /core's, so this is a full
+         * navigation out of the workspace.
+         */
+        const target = expanded ? railTapTarget(event) : null
+        if (target) event.preventDefault()
+        onClick?.()
+        if (target) window.location.assign(target)
+      }}
     >
       <span className="nl-rail-crest">
         <span className="af-rail-tile-art af-platform nl-rail-art" data-platform={view.platform} data-ring={status.tone ?? undefined}>
@@ -176,6 +193,8 @@ export function LeagueRailRow({
           delayed={view.delayed}
           freshMinutes={view.freshMinutes}
           showScoreStatus={false}
+          pWin={view.pWin ?? null}
+          matchupHref={view.matchupHref ?? null}
           badges={
             <>
               {view.isLive ? <span className="af-rail-live-state">LIVE</span> : null}

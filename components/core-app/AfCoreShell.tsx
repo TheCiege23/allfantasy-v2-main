@@ -57,7 +57,9 @@ import { messagesFor } from '@/lib/i18n/messages'
 import { coreShellMessages } from '@/lib/core-app/messages/coreShell'
 import { badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '@/lib/core-app/shellCopy'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
-import { RailRowBody, mergeRailMatchup } from '@/components/core-app/RailRowBody'
+import { RailRowBody, mergeRailMatchup, railTapTarget, type RailAttention } from '@/components/core-app/RailRowBody'
+import { useRailOdds } from '@/components/core-app/useRailOdds'
+import { railRowMessages } from '@/lib/core-app/messages/railRow'
 import {
   currentRailCareerLines,
   RAIL_CAREER_EVENT,
@@ -360,6 +362,9 @@ export type AfCoreShellProps = {
     trades?: number | null
     draftHq?: number | null
     sync?: number | null
+    /** The leagues behind `myTeam` and `trades` — the rail flags each one. */
+    lineupLeagueIds?: string[] | null
+    offerLeagueIds?: string[]
   } | null
   /** Keeps league-scoped nav links pointed at the league in context. */
   selectedLeagueId?: string | null
@@ -1207,6 +1212,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const msg = useMessages(coreShellMessages)
+  const railMsg = useMessages(railRowMessages)
   /*
    * The screen streams in after this shell paints, so the few pieces of chrome only a screen
    * can know (week label, tab badges, Chimmy's home signals, the live slate count) arrive by
@@ -1496,6 +1502,23 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     coreRefreshIntervalMs(Boolean(props.gameDayActive), props.liveGameCount ?? 0),
     nativeRailIds,
   )
+  /* Your win chance per league, for the odds bar — the Matchup board's own numbers (useRailOdds.ts). */
+  const railOdds = useRailOdds(railOpen)
+  /*
+   * What needs you, per league — the same facts as the My team and Trades tab badges (urgencyBadges.ts),
+   * so a league's dot and the tab's count can never disagree.
+   */
+  const lineupLeagueKey = (props.urgencyBadges?.lineupLeagueIds ?? []).join('|')
+  const offerLeagueKey = (props.urgencyBadges?.offerLeagueIds ?? []).join('|')
+  const railAttention = useMemo(() => {
+    const byLeague = new Map<string, RailAttention[]>()
+    const add = (key: string, kind: RailAttention) => {
+      for (const id of key ? key.split('|') : []) byLeague.set(id, [...(byLeague.get(id) ?? []), kind])
+    }
+    add(lineupLeagueKey, 'lineup')
+    add(offerLeagueKey, 'offer')
+    return byLeague
+  }, [lineupLeagueKey, offerLeagueKey])
   /* The heading names the NFL provider week; a native row runs on its own league's calendar. */
   const liveWeek = Object.values(liveRail.scores).find((s) => !s.native)?.week
   const railWeekLabel = liveWeek ? `Week ${liveWeek}` : props.railWeekLabel
@@ -1828,11 +1851,21 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             // Keyed on the league's own name, not the rail's disambiguated label: that is Career's identity.
             const careerRaw = railCareer?.[railLeagueKey(l.name)] ?? null
             const careerLine = careerRaw ? careerLineText(careerRaw, language) : null
-            /* League-first opens a league on its matchup when it has a head-to-head this week —
-               the same rule the /core landing uses (resolveLeagueFirstLanding). */
-            const leagueHref = !isNativePlatform(l.platform) && props.leagueFirst && m && !m.unpaired
+            /*
+             * TWO DESTINATIONS, ONE LINK (user call, 2026-10-30): a tap on the head-to-head opens
+             * the league's Matchup screen, a tap anywhere else opens the league. Before this the
+             * whole row went to the matchup in league-first mode, which left no way to reach the
+             * league itself from the list. The row stays a single link — see `railTapTarget`.
+             * A native league's matchup lives inside its own workspace, so it keeps one destination.
+             */
+            const leagueHref = leagueEntryHref(l)
+            const matchupHref = !isNativePlatform(l.platform) && m && !m.unpaired && !m.guillotine
               ? `/core/matchup?league=${encodeURIComponent(l.id)}`
-              : leagueEntryHref(l)
+              : null
+            /* Scores are moving: a live poll row that is not delayed, on a week that has been played. */
+            const isLive = Boolean(live && !delayed && m?.scored)
+            const attention = railAttention.get(l.id)
+            const alertTone = attention?.includes('lineup') ? 'bad' : attention ? 'warn' : l.hasAlert ? (l.alertTone ?? 'warn') : null
             return (
               <Link
                 key={l.id}
@@ -1869,7 +1902,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 data-score-changed={railSwings[l.id] != null ? 'true' : undefined}
                 aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
                 title={msg.railRowTitle(railName, l.platform, careerLine)}
-                aria-label={msg.railRowAria(railName, l.platform, careerLine)}
+                aria-label={`${msg.railRowAria(railName, l.platform, careerLine)}${attention ? railMsg.attentionAria(attention.includes('lineup'), attention.includes('offer')) : ''}`}
                 /*
                   ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
                   for it, and it matters: the tray is full-screen, so navigating
@@ -1881,6 +1914,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 onClick={(event) => {
                   // Before anything navigates: the next screen may rebuild this rail from the top.
                   saveRailScroll(railScrollRef.current, railLayout)
+                  const target = railTapTarget(event) ?? leagueHref
                   if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720) {
                     /* On iOS, closing the full-screen tray can remove the tapped
                        anchor before Next's delegated navigation finishes. Own
@@ -1888,14 +1922,17 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                        closes the tray and opens the selected league. */
                     event.preventDefault()
                     setRailChoice('closed')
-                    router.push(leagueHref)
+                    router.push(target)
+                  } else if (target !== leagueHref) {
+                    event.preventDefault()
+                    router.push(target)
                   }
                 }}
               >
                 <span className="af-rail-tile-art">
                   <RailMark src={l.imageUrl} letter={l.mark} />
-                  {l.hasAlert ? (
-                    <span className="af-rail-dot" data-tone={l.alertTone ?? 'warn'} />
+                  {alertTone ? (
+                    <span className="af-rail-dot" data-tone={alertTone} />
                   ) : null}
                 </span>
 
@@ -1916,6 +1953,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   showScoreStatus={railOpen}
                   swing={railSwings[l.id]}
                   careerLine={careerLine}
+                  isLive={isLive}
+                  pWin={railOdds[l.id] ?? null}
+                  attention={attention}
+                  matchupHref={matchupHref}
                 />
               </Link>
             )
