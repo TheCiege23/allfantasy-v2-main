@@ -22,6 +22,12 @@ describe('recipeFromLeague', () => {
     expect(r.dynasty).toEqual({ regularSeasonLength: 14, rookieDraftOrderMethod: 'max_pf', rookieDraftRounds: 4, rookieDraftType: 'linear', taxiSlotCount: 5, taxiEligibilityYears: 2, futurePickTradeYears: 3, waiverType: 'faab', faabBudget: 250 })
     expect(Object.keys(r).sort()).toEqual(['draftType', 'dynasty', 'keeper', 'leagueType', 'leagueVariant', 'medianGame', 'scoringPresetId', 'sport', 'teamCount', 'v'])
   })
+  it('preserves and labels a weighted rookie lottery in a league template', () => {
+    const recipe = recipeFromLeague({ ...dynastySource, dynastyConfig: { ...dynastySource.dynastyConfig!, rookiePickOrderMethod: 'weighted_lottery' } })
+    expect(recipe.dynasty?.rookieDraftOrderMethod).toBe('weighted_lottery')
+    expect(stateFromRecipe(recipe).dynasty.rookieDraftOrderMethod).toBe('weighted_lottery')
+    expect(describeRecipe(recipe)).toContain('Rookie order: weighted lottery')
+  })
   it('drops values the wizard could not take rather than forcing them', () => {
     const r = recipeFromLeague({ ...dynastySource, dynastyConfig: { ...dynastySource.dynastyConfig!, rookiePickOrderMethod: 'vibes', taxiSlots: 99 }, waiver: { waiverType: 'standard', faabBudget: null } })
     expect(r.dynasty).not.toHaveProperty('rookieDraftOrderMethod')
