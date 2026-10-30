@@ -4488,3 +4488,69 @@ button.af-rail-sport:focus-visible {
   padding: 6px 8px 8px;
   background: var(--rail);
 }
+
+/* ── The /league workspace rail, arranged like /core's (2026-10-30) ─────────────────────────────
+ * Same headings, chips and star as the /core rail above; the open state there is `data-expanded`.
+ */
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 12px 0 2px;
+  padding: 0 4px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport::before,
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport::after {
+  content: '';
+  flex: 1 1 0;
+  min-width: 12px;
+  height: 1px;
+  background: var(--line2, var(--line));
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport-icon {
+  display: inline;
+  font-size: 15px;
+  letter-spacing: 0;
+  line-height: 1;
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport-count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font: 700 11px/18px var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0;
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport-chevron {
+  display: inline;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+.nl-workspace .nl-rail-leagues > .af-rail-filters {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 2px 0 8px;
+  background: var(--rail);
+}
+.nl-workspace .nl-rail-tile[data-favorite='true'] .af-rail-row-name::after {
+  content: ' ★';
+  color: #f6c445;
+  font-size: 11px;
+}
+.nl-workspace .nl-rail-leagues .nl-rail-tile {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
