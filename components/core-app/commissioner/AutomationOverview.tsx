@@ -6,6 +6,8 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { AutomationOverviewView } from '@/lib/commissioner-hub/automationOverviewService'
 import type { AutomationGroup, AutomationRow } from '@/lib/commissioner-hub/automationOverview'
 import type { AutomationPreset, PresetPlan } from '@/lib/commissioner-hub/automationPreset'
+import { automationToggleRequest, isToggleableAutomation } from '@/lib/commissioner-hub/automationToggles'
+import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
 
 /**
  * "What runs itself" (lib/commissioner-hub/automationOverview.ts) on the Commissioner Hub: every
@@ -29,6 +31,7 @@ const LABELS_ES: Record<string, string> = {
   rookie_draft_starts: 'El draft de novatos empieza solo',
   live_rookie_order: 'Orden del draft de novatos siempre al día',
   tanking: 'Monitor anti-tanking',
+  trade_review_auto_approve: 'Aprobar intercambios sin alertas tras 48 horas sin revisión',
   hold_flagged_trades: 'Retener cambios sospechosos para revisión',
   taxi_rules: 'Reglas del taxi squad aplicadas',
 }
@@ -69,6 +72,25 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
       setPreview(body)
     } catch (e) {
       setMessage(e instanceof Error && e.message ? e.message : t('Could not load. Refresh and try again.', 'No se pudo cargar. Actualiza e inténtalo de nuevo.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** A free automation switched right here, through its own endpoint. */
+  const flip = async (r: AutomationRow) => {
+    if (!isToggleableAutomation(r.key)) return
+    setBusy(true)
+    setMessage('')
+    try {
+      const req = automationToggleRequest(leagueId, r.key, r.state !== 'on')
+      const res = await fetch(req.url, { method: req.method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req.body) })
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(body.error || '')
+      setMessage(t('Saved.', 'Guardado.'))
+      await load()
+    } catch (e) {
+      setMessage(e instanceof Error && e.message ? e.message : t('Could not save. Refresh and try again.', 'No se pudo guardar. Actualiza e inténtalo de nuevo.'))
     } finally {
       setBusy(false)
     }
@@ -127,7 +149,7 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
                   <p>{t('Saving will:', 'Al guardar:')}</p>
                   <ul>
                     {preview.changes.map((c) => (
-                      <li key={c.label}>{es ? c.labelEs : c.label}</li>
+                      <li key={c.label}>{t(c.label, c.labelEs)}</li>
                     ))}
                   </ul>
                 </>
@@ -135,7 +157,7 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
               {preview.needsPlan.length > 0 ? (
                 <p>
                   {t('Needs AF Commissioner, so not included: ', 'Requiere AF Commissioner, así que no se incluye: ')}
-                  {(es ? preview.needsPlanEs : preview.needsPlan).join(', ')}.
+                  {t(preview.needsPlan.join(', '), preview.needsPlanEs.join(', '))}.
                 </p>
               ) : null}
               {preview.changes.length > 0 ? (
@@ -157,8 +179,18 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
                 <ul>
                   {inGroup.map((r) => (
                     <li key={r.key} data-testid={`automation-${r.key}`} data-state={r.state}>
-                      <strong>{es ? LABELS_ES[r.key] ?? r.label : r.label}</strong> · {stateText(r)}
-                      {(es ? r.detailEs : r.detail) ? ` · ${es ? r.detailEs : r.detail}` : ''}{' '}
+                      {isToggleableAutomation(r.key) ? (
+                        <input
+                          type="checkbox"
+                          checked={r.state === 'on'}
+                          disabled={busy}
+                          onChange={() => void flip(r)}
+                          aria-label={t(r.label, LABELS_ES[r.key] ?? r.label)}
+                          data-testid={`automation-toggle-${r.key}`}
+                        />
+                      ) : null}{' '}
+                      <strong>{t(r.label, LABELS_ES[r.key] ?? r.label)}</strong> · {stateText(r)}
+                      {t(r.detail ?? '', r.detailEs ?? '') ? ` · ${t(r.detail ?? '', r.detailEs ?? '')}` : ''}{' '}
                       {r.href.startsWith('#') ? <a href={r.href}>{t('Change', 'Cambiar')}</a> : <Link href={r.href}>{t('Change', 'Cambiar')}</Link>}
                     </li>
                   ))}
@@ -168,6 +200,7 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
           })}
         </>
       )}
+      <AutomaticChangesLog leagueId={leagueId} />
       <p role="status">{message}</p>
     </section>
   )
