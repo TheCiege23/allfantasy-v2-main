@@ -15,6 +15,7 @@ import { clearLeagueTombstone, tombstoneKeyFor } from '@/lib/league-delete/leagu
 import { persistProviderTransactionFacts, type ProviderTransactionFactInput } from '@/lib/league-import/persistProviderTransactionFacts'
 import type { ImportWarningRecord } from '@/lib/league-import/types'
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings'
+import { hasIdpRosterSlot } from './idpRosterSlots'
 import type {
   CanonicalImportBundle,
   ImportProvider,
@@ -311,16 +312,10 @@ function resolveImportedLeagueVariant(normalized: NormalizedImportResult): strin
       normalized.scoring?.scoring_format ??
       ''
   ).toUpperCase()
-  const rosterPositions = Array.isArray(leagueData.roster_positions)
-    ? (leagueData.roster_positions as unknown[])
-        /* ESPN and Fantrax store `SLOT:COUNT` pairs; `DL:2` is a DL slot. */
-        .map((p) => String(p).toUpperCase().replace(/:\d+$/, ''))
-    : []
+  /* ESPN and Fantrax store `SLOT:COUNT` pairs; `DL:2` is a DL slot. One slot list for every import path. */
   const hasIdpSignal =
     scoringFormat.includes('IDP') ||
-    rosterPositions.some((p) =>
-      ['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'DB', 'IDP_FLEX'].includes(p)
-    )
+    hasIdpRosterSlot(Array.isArray(leagueData.roster_positions) ? (leagueData.roster_positions as unknown[]) : [])
 
   if (!hasIdpSignal) return null
   return normalized.league.isDynasty ? 'DYNASTY_IDP' : 'IDP'

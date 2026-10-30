@@ -167,3 +167,44 @@ Out of season (MLB in October) the board may be stale or empty; that is reported
 
 **Needed:** a trimmed `getAdp?sport=MLB` and `?sport=NHL` capture (a few rows each, including a
 pitcher and a goalie), committed under `contracts/fantrax/fixtures/`.
+
+## F-12 — `getPlayerIds?sport=NFL` shape and team spelling (recorded 2026-10-30, no probe)
+
+`importFantraxLeague` now links an NFL league's rostered and drafted Fantrax ids to
+`PlayerIdentityMap.fantraxId` (`lib/player-identity/nflFantraxIdentityPlan.ts`, called through
+`linkNflFantraxIdentities.ts`). The NFL map is ASSUMED to have the captured MLB/CFB/NBA/NHL shape —
+id-keyed `{ fantraxId, name: "Last, First", team, position }` — and there is **no NFL capture**: the
+committed `nfl-public-2026.json` is a pre-draft league whose `playerInfo` carries only
+`eligiblePos`/`status`, no name or team.
+
+Unknown: whether `team` is an abbreviation (`KC`), a full name or something else, what a free agent
+reads (`(N/A)` on NBA/NHL), how team defences are named, and whether `position` is one code or a
+list. Workaround: the planner requires a team that `lib/team-abbrev.ts` recognises (abbreviation,
+alias or full name) and a compatible position group, skips any row whose name has no comma or whose
+position is `DST`/`DEF`, and refuses rather than guesses — a different spelling costs links, never
+wrong ones.
+
+**Needed:** a trimmed `getPlayerIds?sport=NFL` slice (a QB, a two-position player, a free agent, a
+team defence, an IDP player) committed under `tests/fixtures/fantrax/`.
+
+## F-13 — Transaction history is INFERRED from refresh-to-refresh roster diffs (recorded 2026-10-30)
+
+Fantrax publishes no transactions endpoint. A live import now stores, in the snapshot's existing
+`FantraxLeague.transactions` JSON (`fantraxDerived`, see
+`lib/league-import/fantrax/fantraxSnapshotHistory.ts`), the difference between the roster the
+previous import stored and the rosters just fetched. These rows reach `TransactionFact` with
+`status: inferred` (adds/drops) or `suspected` (two-way exchanges) — never `completed`.
+
+Known limits, by construction: history starts at the first refresh after this change; a move made
+and reversed between two refreshes is invisible; an add cannot be told apart as a waiver claim or a
+free-agent pickup; the period stamped is the one current at the refresh, not the one the move
+happened in. `getTeamRosters&period=N` (per-period rosters, which `deriveFantraxTransactions` was
+written for) is still NOT called — it would cost one request per played period on every refresh,
+and no per-period capture exists to confirm that a past period returns that period's roster rather
+than today's.
+
+**Needed before replacing the inference:** a `getTeamRosters&period=N` capture for two consecutive
+past periods of one public in-season league, showing a known add/drop between them.
+
+The stored draft board (`fantraxDraft`) is the captured `getDraftResults` shape (made picks only);
+prior seasons' boards are still not imported (F-09).

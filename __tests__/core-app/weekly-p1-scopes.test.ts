@@ -19,6 +19,18 @@ describe('weekly format capabilities', () => {
      roto spellings are not captured (contracts/fantrax/GAPS.md F-07), so the match is on the word. */
   it.each([['ROTISSERIE','roto'], ['HEAD_TO_HEAD_CATEGORIES','categories'], ['HEAD_TO_HEAD_POINTS_BASED','head-to-head']])('reads a Fantrax %s league from its stored scoring system', (type, expected) =>
     expect(weeklyFormat({ settings: { scoring: type, fantrax_settings: { scoringSystem: { type } } } })).toBe(expected))
+  /* A Yahoo import stores Yahoo's own `scoring_type` only inside the raw `yahoo_settings` block
+     (YahooAdapter → settings.yahoo_settings), as an object or as Yahoo's array of fragments. The values
+     the repo evidences: 'head' is head-to-head CATEGORIES, 'headpoint' head-to-head points
+     (decision-os categoryLeagueReason and its test), 'roto' rotisserie. */
+  it.each([
+    [{ scoring_type: 'head' }, 'categories'],
+    [{ scoring_type: 'headpoint' }, 'head-to-head'],
+    [{ scoring_type: 'roto' }, 'roto'],
+    [[{ draft_type: 'live' }, { scoring_type: 'head' }], 'categories'],
+    [[{ draft_type: 'live' }, { scoring_type: 'roto' }], 'roto'],
+  ])('reads a Yahoo league from its stored scoring_type %j', (yahoo_settings, expected) =>
+    expect(weeklyFormat({ settings: { yahoo_settings } })).toBe(expected))
   it('requires stated survival rules, regardless of a league name or missing pairs', () => { expect(weeklyFormat({ leagueType: 'redraft' })).toBe('head-to-head'); expect(weeklyFormat({ leagueType: 'guillotine' })).toBe('elimination') })
   it('qualifies external IDs by provider and native IDs by league', () => {
     expect(weeklyScopeKey({ id:'A', platform:'espn', platformLeagueId:'123' })).not.toBe(weeklyScopeKey({ id:'B', platform:'yahoo', platformLeagueId:'123' }))
