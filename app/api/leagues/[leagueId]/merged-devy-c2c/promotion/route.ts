@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { canAccessLeagueDraft, canSubmitPickForRoster } from '@/lib/live-draft-engine/auth'
 import { prisma } from '@/lib/prisma'
 import { isC2CLeague, getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import {
@@ -113,6 +113,10 @@ export async function POST(
   const right = await prisma.devyRights.findUnique({ where: { id: rightsId } })
   if (!right || right.leagueId !== leagueId) {
     return NextResponse.json({ error: 'Rights not found' }, { status: 404 })
+  }
+
+  if (!(await canSubmitPickForRoster(leagueId, userId, right.rosterId))) {
+    return NextResponse.json({ error: 'Only the rights holder or commissioner can promote' }, { status: 403 })
   }
 
   const eligibility = await checkC2CPromotionEligibility({
