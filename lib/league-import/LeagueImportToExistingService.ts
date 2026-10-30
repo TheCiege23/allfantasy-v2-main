@@ -68,7 +68,7 @@ function resolveImportedLeagueVariant(normalized: NormalizedImportResult): strin
     normalized.league.scoring ?? normalized.scoring?.scoring_format ?? ''
   ).toUpperCase()
   const rosterPositions = Array.isArray(leagueData.roster_positions)
-    ? (leagueData.roster_positions as unknown[]).map((p) => String(p).toUpperCase())
+    ? (leagueData.roster_positions as unknown[]).map((p) => String(p).toUpperCase().replace(/:\d+$/, ''))
     : []
   const hasIdpSignal =
     scoringFormat.includes('IDP') ||

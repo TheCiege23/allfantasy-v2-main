@@ -11,29 +11,45 @@ import { prisma } from '@/lib/prisma'
 import { resolveSourceLink, type SourceActionType, type SourceLink } from './sourceLinkResolver'
 
 /**
- * Fantrax's own league id for each Fantrax `League.platformLeagueId` given, keyed by that column.
- *
- * ⚠ FOR A FANTRAX LEAGUE THE COLUMN IS A LOCAL UUID (`FantraxLeague.id`), NOT FANTRAX'S ID — and it
- * has to stay that way: the collectors and redraft presentation look the snapshot up by it. Fantrax's
- * id is `FantraxLeague.sourceLeagueId`, which imports only began recording later, so an older league
- * maps to nothing until it re-imports and the link stays on the homepage. One query for the batch;
- * a failed read is an empty map, never a thrown error on a render path.
+ * Fantrax only: `League.platformLeagueId` is AllFantasy's own `FantraxLeague.id` (a uuid), and
+ * Fantrax's real league id lives on that snapshot row as `sourceLeagueId`. Maps each snapshot id to
+ * the real one so the resolver can build the league page; a CSV-era row has none and maps to null,
+ * which the resolver turns into the homepage. DB read only, and never throws — a failed read means
+ * the homepage, exactly as before.
  */
-export async function fantraxSourceLeagueIds(platformLeagueIds: Array<string | null | undefined>): Promise<Map<string, string>> {
-  const ids = Array.from(new Set(platformLeagueIds.map((x) => (x ?? '').trim()).filter(Boolean)))
-  const out = new Map<string, string>()
+export async function fantraxSourceLeagueIds(
+  rows: Array<{ platform: string | null | undefined; platformLeagueId: string | null | undefined }>,
+): Promise<Map<string, string | null>> {
+  const ids = Array.from(
+    new Set(
+      rows
+        .filter((r) => String(r.platform ?? '').trim().toLowerCase() === 'fantrax')
+        .map((r) => String(r.platformLeagueId ?? '').trim())
+        .filter(Boolean),
+    ),
+  )
+  const out = new Map<string, string | null>()
   if (!ids.length) return out
-  const rows = await prisma.fantraxLeague
-    .findMany({ where: { id: { in: ids } }, select: { id: true, sourceLeagueId: true } })
-    .catch(() => [] as Array<{ id: string; sourceLeagueId: string | null }>)
-  for (const r of rows) if (r.sourceLeagueId) out.set(r.id, r.sourceLeagueId)
+  try {
+    const snapshots = await prisma.fantraxLeague.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, sourceLeagueId: true },
+    })
+    for (const s of snapshots) out.set(s.id, s.sourceLeagueId ?? null)
+  } catch {
+    /* Unreadable → no mapping → the homepage, which is what every Fantrax link was before. */
+  }
   return out
 }
 
-/** The id a source link should be built from: Fantrax's own for a Fantrax league, else the column. */
-function linkLeagueId(platform: string | null, platformLeagueId: string | null, fantraxIds: Map<string, string>): string | null {
-  if ((platform ?? '').toLowerCase() === 'fantrax' && platformLeagueId) return fantraxIds.get(platformLeagueId) ?? null
-  return platformLeagueId
+/** The id the resolver should build from: Fantrax's own league id for a Fantrax row, else as stored. */
+export function linkableSourceLeagueId(
+  league: { platform: string | null | undefined; platformLeagueId: string | null | undefined },
+  fantraxIds: Map<string, string | null>,
+): string | null {
+  const stored = league.platformLeagueId ?? null
+  if (String(league.platform ?? '').trim().toLowerCase() !== 'fantrax' || !stored) return stored
+  return fantraxIds.has(stored) ? fantraxIds.get(stored) ?? null : stored
 }
 
 export async function resolveSourceLinkForLeague(
@@ -47,11 +63,10 @@ export async function resolveSourceLinkForLeague(
     select: { platform: true, platformLeagueId: true, name: true, season: true },
   })
   if (!league) return null
-  const fantraxIds =
-    league.platform?.toLowerCase() === 'fantrax' ? await fantraxSourceLeagueIds([league.platformLeagueId]) : new Map<string, string>()
+  const fantraxIds = await fantraxSourceLeagueIds([league])
   return resolveSourceLink({
     platform: league.platform,
-    sourceLeagueId: linkLeagueId(league.platform, league.platformLeagueId, fantraxIds),
+    sourceLeagueId: linkableSourceLeagueId(league, fantraxIds),
     leagueName: league.name,
     season: league.season,
     action,
@@ -70,13 +85,11 @@ export async function resolveSourceLinksForLeagueIds(
     where: { id: { in: ids } },
     select: { id: true, platform: true, platformLeagueId: true, name: true, season: true },
   })
-  const fantraxIds = await fantraxSourceLeagueIds(
-    leagues.filter((l) => l.platform?.toLowerCase() === 'fantrax').map((l) => l.platformLeagueId),
-  )
+  const fantraxIds = await fantraxSourceLeagueIds(leagues)
   for (const l of leagues) {
     const link = resolveSourceLink({
       platform: l.platform,
-      sourceLeagueId: linkLeagueId(l.platform, l.platformLeagueId, fantraxIds),
+      sourceLeagueId: linkableSourceLeagueId(l, fantraxIds),
       leagueName: l.name,
       season: l.season,
       action,

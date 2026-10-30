@@ -483,7 +483,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     slug: 'league-transfer',
     title: 'League Transfer – Move Your League to AllFantasy | AllFantasy',
     description:
-      'Move your full league from Sleeper, Yahoo, MFL, ESPN, Fleaflicker, or Fantrax to AllFantasy with manager names, settings, rosters, draft history, playoffs, and trades copied over.',
+      'Move your league from Sleeper, Yahoo, MFL, ESPN, Fleaflicker, or Fantrax to AllFantasy with manager names, settings and rosters copied over, plus draft history, playoffs and trades where the platform provides them.',
     headline: 'League Transfer',
     benefitSummary:
       'Commissioners can move a league into AllFantasy with an exact transfer flow for league settings, managers, rosters, and historical context.',

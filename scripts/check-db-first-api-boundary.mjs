@@ -888,25 +888,6 @@ function isImageAsset(hostname, pathname) {
   return IMAGE_CDN_PATHS.some((r) => r.host.test(hostname) && r.path.test(pathname));
 }
 
-/**
- * A provider WEB PAGE a user is sent to, not a feed the server reads — same host-plus-path shape as
- * IMAGE_CDN_PATHS, for the same reason: one hostname serves both.
- *
- * Fantrax was the case the note on its DATA_API_HOST_PATTERNS entry called unexpressible and then
- * declined to solve, because "nothing in lib/, app/ or server/ constructs a Fantrax league URL" — a
- * helper would have had zero consumers. As of 2026-10-29 one does: lib/league-links/sourceLinkResolver.ts
- * builds the "Open in Fantrax" league page and the (candidate) lineup screen, both under
- * `/fantasy/league/`. The FXEA feed is `/fxea/…` and stays reported; this path cannot match it.
- * Keep entries to paths that only ever render HTML for a signed-in person.
- */
-const PROVIDER_WEB_PAGE_PATHS = [
-  { host: /^(www\.)?fantrax\.com$/i, path: /^\/fantasy\/league\// },
-];
-
-function isProviderWebPage(hostname, pathname) {
-  return PROVIDER_WEB_PAGE_PATHS.some((r) => r.host.test(hostname) && r.path.test(pathname));
-}
-
 function isAllowedCaller(filePath) {
   const normalized = toPosixPath(filePath);
   return ALLOWED_PATH_PATTERNS.some((pattern) => pattern.test(normalized));
@@ -1047,11 +1028,6 @@ function collectViolations(rootDir, filesToScan, changedLines = null) {
         // An image on a vendor that shares one hostname between its CDN and its
         // feed. See IMAGE_CDN_PATHS for why this is a path test and not a host one.
         if (isImageAsset(hostname, pathname)) {
-          continue;
-        }
-
-        // A page we send a user to (an "Open in <platform>" link). See PROVIDER_WEB_PAGE_PATHS.
-        if (isProviderWebPage(hostname, pathname)) {
           continue;
         }
 

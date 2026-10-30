@@ -595,6 +595,8 @@ const spanish: Record<string, string> = {
   'Claims are made on your platform. AllFantasy only reads your league.': 'Los reclamos se hacen en tu plataforma. AllFantasy solo lee tu liga.',
   'Claims for this league are made here, on AllFantasy.': 'Los reclamos de esta liga se hacen aquí, en AllFantasy.',
   'no waiver settings were ingested for this league': 'No se importaron los ajustes de reclamos de esta liga.',
+  'Fantrax does not send its waiver settings to AllFantasy, so this league’s waiver rules are unknown — check them on Fantrax.':
+    'Fantrax no envía sus ajustes de reclamos a AllFantasy, así que las reglas de reclamos de esta liga son desconocidas. Revísalas en Fantrax.',
   'this league’s waiver type was not read': 'No se pudo leer el tipo de reclamo de esta liga.',
   'this league has waivers turned off — free agents are claimed instantly': 'Esta liga tiene los reclamos desactivados; los agentes libres se adquieren al instante.',
   'Sleeper’s processing schedule was not imported — check the league’s waiver settings on Sleeper.': 'No se importó el calendario de reclamos de Sleeper. Revisa los ajustes de la liga allí.',

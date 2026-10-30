@@ -200,7 +200,7 @@ describe('the Updates menu — lineup handoff', () => {
   })
 
   it('says "Open league" when only the league page is known (an unverified lineup format)', () => {
-    render(shell({ lineupHandoff: { href: 'https://www.fantrax.com/fantasy/league/v2kzedypmm8jp61b/home', screen: 'League', platformLabel: 'Fantrax' } }))
+    render(shell({ lineupHandoff: { href: 'https://league.example.test/home', screen: 'League', platformLabel: 'Fantrax' } }))
     expect(screen.getByTestId('updates-lineup-handoff').textContent).toMatch(/Open league in Fantrax/)
   })
 

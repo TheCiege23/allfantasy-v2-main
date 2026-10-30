@@ -1,7 +1,7 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { normalizeSourcePlatform } from '@/lib/league-links/sourceLinkResolver'
-import { fantraxSourceLeagueIds } from '@/lib/league-links/resolveSourceLinkForLeague'
+import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { handoffFor, type PlatformLink } from './platformLinks'
 
 type ShellLeague = {
@@ -31,12 +31,13 @@ export async function shellLineupHandoff(userId: string, league: ShellLeague): P
     prisma.leagueTeam
       .findFirst({ where: { leagueId: league.id, claimedByUserId: userId }, select: { externalId: true } })
       .catch(() => null),
-    platform === 'fantrax' ? fantraxSourceLeagueIds([league.platformLeagueId]) : Promise.resolve(new Map<string, string>()),
+    // The same mapping the League-row loaders use (resolveSourceLinkForLeague.ts); empty for non-Fantrax.
+    fantraxSourceLeagueIds([{ platform: league.platform, platformLeagueId: league.platformLeagueId }]),
   ])
-  const platformLeagueId =
-    platform === 'fantrax'
-      ? (league.platformLeagueId ? fantraxIds.get(league.platformLeagueId) ?? null : null)
-      : (league.platformLeagueId ?? null)
+  const platformLeagueId = linkableSourceLeagueId(
+    { platform: league.platform, platformLeagueId: league.platformLeagueId },
+    fantraxIds,
+  )
   return handoffFor(
     {
       id: league.id,

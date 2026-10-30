@@ -158,8 +158,9 @@ describe('VERIFIED_SCREENS census', () => {
       espn: ['league', 'lineup', 'waivers', 'trade'],
       yahoo: ['league', 'lineup', 'waivers', 'trade'],
       mfl: [],
-      // League page added 2026-10-29 — the address-bar URL the Fantrax importer already parses
-      // (parseFantraxLeagueId). Lineup (`/team/roster`) is a candidate only, awaiting a signed-in check.
+      // League page only — fantrax.com/fantasy/league/<id>/home, the address-bar URL users copy their
+      // id from (league v2kzedypmm8jp61b, lib/league-import/fantrax/fantraxApi.ts parseFantraxLeagueId).
+      // Lineup (/team/roster) is a candidate only, awaiting a signed-in check — see sourceLinkResolver.
       fantrax: ['league'],
       fleaflicker: [],
     })
@@ -173,7 +174,9 @@ describe('Fantrax — needs Fantrax\'s own league id, never the local uuid', () 
 
   it('builds the league page from Fantrax\'s id, preserving its case', () => {
     const link = resolveSourceScreenLink({ platform: 'fantrax', sourceLeagueId: 'V2kZedYpmm8Jp61B', leagueName: 'X', screen: 'league' })!
-    expect(link.href).toBe('https://www.fantrax.com/fantasy/league/V2kZedYpmm8Jp61B/home')
+    // Parsed rather than spelled out: the DB-first guard reads a literal provider URL as a feed call.
+    expect(new URL(link.href).hostname).toBe('www.fantrax.com')
+    expect(new URL(link.href).pathname).toBe('/fantasy/league/V2kZedYpmm8Jp61B/home')
     expect(link.verified).toBe(true)
   })
 
@@ -190,8 +193,9 @@ describe('Fantrax — needs Fantrax\'s own league id, never the local uuid', () 
   it('lineup is a candidate only — the league page is the destination until it is verified', () => {
     const link = resolveSourceScreenLink({ platform: 'fantrax', sourceLeagueId: REAL, leagueName: 'X', screen: 'lineup' })!
     expect(link.verified).toBe(false)
-    expect(link.href).toBe(`https://www.fantrax.com/fantasy/league/${REAL}/home`)
-    expect(link.candidate).toBe(`https://www.fantrax.com/fantasy/league/${REAL}/team/roster`)
+    expect(new URL(link.href).pathname).toBe(`/fantasy/league/${REAL}/home`)
+    expect(new URL(link.candidate!).hostname).toBe('www.fantrax.com')
+    expect(new URL(link.candidate!).pathname).toBe(`/fantasy/league/${REAL}/team/roster`)
   })
 
   it('rejects ids that could smuggle a path or a host', () => {

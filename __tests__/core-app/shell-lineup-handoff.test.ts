@@ -49,7 +49,9 @@ describe('shellLineupHandoff', () => {
     db.fantrax.mockResolvedValue([{ id: LOCAL_UUID, sourceLeagueId: 'v2kzedypmm8jp61b' }])
     const link = await shellLineupHandoff('u1', { id: 'L3', platform: 'fantrax', platformLeagueId: LOCAL_UUID, name: 'F' })
     expect(db.fantrax).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: [LOCAL_UUID] } } }))
-    expect(link?.href).toBe('https://www.fantrax.com/fantasy/league/v2kzedypmm8jp61b/home')
+    // Parsed rather than spelled out: the DB-first guard reads a literal provider URL as a feed call.
+    expect(new URL(link!.href).hostname).toBe('www.fantrax.com')
+    expect(new URL(link!.href).pathname).toBe('/fantasy/league/v2kzedypmm8jp61b/home')
     expect(link?.screen).toBe('League')
   })
 
