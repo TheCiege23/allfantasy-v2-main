@@ -227,7 +227,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
           ['Matchups', `${hub}/matchups`],
           ['Items', `${hub}/items`],
           ['Rules', `${hub}/rules`],
-          ['Chat', `/league/${leagueId}?tab=Chat`],
+          ['Chat', `/league/${encodeURIComponent(leagueId)}?view=league_chat`],
         ].map(([label, href]) => (
           <Link
             key={label}

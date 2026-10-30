@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
+import { isRevivedSurvivor } from '@/lib/zombie/weeklyUpdateSurvivors'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -123,7 +124,7 @@ New this week: ${newList.length ? newList.join('; ') : 'None'}`
     const nm = uid ? await nameForUser( uid) : t.rosterId
     survLines.push(`🧍 ${nm} — Record: ${t.wins}-${t.losses} — PF: ${(t.pointsFor ?? 0).toFixed(1)}`)
   }
-  const revived = z.teams.filter((t) => t.status.toLowerCase().includes('revived'))
+  const revived = z.teams.filter(isRevivedSurvivor)
   const revivedNames: string[] = []
   for (const r of revived) {
     const uid = await rosterUserId(r.rosterId)

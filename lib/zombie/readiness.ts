@@ -36,3 +36,10 @@ export function settlementReadiness(rows: Array<{week:number;status:string;requi
   const pending=rows.filter(r=>r.status!=='complete'||r.requiresStatCorrection).length
   return {missing:missing.length,pending}
 }
+
+/** Whisperers are assigned when the drafted season activates, not during setup. */
+export function whispererReadiness(selected: number, required: number, draftComplete: boolean): Pick<ReadinessCheck, 'status' | 'detail'> {
+  if (selected >= required) return { status: 'ready', detail: `${selected} of ${required} Whisperer seats selected.` }
+  if (!draftComplete) return { status: 'waiting', detail: `${selected} of ${required} selected. Whisperers are assigned when the drafted season activates.` }
+  return { status: 'attention', detail: `${selected} of ${required} selected. Check season activation and Whisperer settings.` }
+}

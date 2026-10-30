@@ -5,7 +5,7 @@ import { validateRedraftLineup } from '@/lib/redraft/lineupValidation'
 import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
 import { dailySlotFor, dayKey, daysDecidedBySave, isDailyLineupScoringEnabled, loadDailyLineups } from '@/lib/redraft/dailyLineups'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
-import { registeredSeatReadiness, savedPoolCoverage, settlementReadiness, type ReadinessCheck, type ZombieLeagueReadiness, type ZombieReadinessReport } from './readiness'
+import { registeredSeatReadiness, savedPoolCoverage, settlementReadiness, whispererReadiness, type ReadinessCheck, type ZombieLeagueReadiness, type ZombieReadinessReport } from './readiness'
 
 export class ZombieReadinessError extends Error {}
 export async function getZombieReadiness(scope: { leagueId?: string; universeId?: string }, actor: string, now = new Date()): Promise<ZombieReadinessReport> {
@@ -30,7 +30,7 @@ export async function getZombieReadiness(scope: { leagueId?: string; universeId?
   return {checkedAt:now.toISOString(),scope:scope.universeId?'universe':'league',leagues}
 }
 async function leagueReadiness(leagueId: string, now: Date): Promise<ZombieLeagueReadiness> {
-  const z=await prisma.zombieLeague.findUnique({where:{leagueId},include:{league:{include:{rosters:true}}}})
+  const z=await prisma.zombieLeague.findUnique({where:{leagueId},include:{league:{include:{rosters:true}},whispererRecord:{select:{id:true}},coWhisperers:{select:{id:true}}}})
   if(!z) throw new ZombieReadinessError('NOT_FOUND')
   const {league}=z, base='/league/'+encodeURIComponent(leagueId)
   const [users,draft,native,resolutions]=await Promise.all([
@@ -44,6 +44,7 @@ async function leagueReadiness(leagueId: string, now: Date): Promise<ZombieLeagu
     detail:seats.registered+' / '+z.teamCount+' registered; '+seats.missing+' seats to fill.'+(seats.duplicate?' Duplicate ownership needs review.':''),href:base},
     {id:'draft',label:'Draft',status:draft?.status==='completed'?'ready':draft?.status==='pre_draft'?'waiting':draft?'attention':'unknown',
       detail:draft?.status==='completed'?'Draft completed.':draft?.status==='pre_draft'?'Draft remains unstarted.':draft?'Draft status: '+draft.status+'.':'No draft found.',href:base+'/draft'}]
+  checks.push({id:'whisperers',label:'Whisperer selection',...whispererReadiness((z.whispererRecord ? 1 : 0) + z.coWhisperers.length, z.whispererCount, draft?.status === 'completed'),href:base+'/zombie-commissioner'})
   if(draft?.status!=='completed') checks.push({id:'lineups',label:'Lineups',status:'waiting',detail:'Checked after the draft finishes.',href:base})
   else if(!native) checks.push({id:'lineups',label:'Lineups',status:'unknown',detail:'Native season is not initialized.',href:base})
   else {

@@ -109,7 +109,7 @@ export default function ZombieChatHubPage() {
       ) : null}
 
       <Link
-        href={`/league/${leagueId}`}
+        href={`/league/${encodeURIComponent(leagueId)}?view=league_chat`}
         className="flex min-h-[56px] items-center justify-center rounded-xl bg-sky-600/35 text-[14px] font-bold text-white hover:bg-sky-600/45"
         data-testid="zombie-open-league-chat"
       >

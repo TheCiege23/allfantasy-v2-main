@@ -22,6 +22,7 @@ import { DynastyWarRoomPanel } from './dynasty/DynastyWarRoomPanel'
 import { KeeperWarRoomPanel } from './keeper/KeeperWarRoomPanel'
 import { BestBallWarRoomPanel } from './best-ball/BestBallWarRoomPanel'
 import { GuillotineWarRoomPanel } from './guillotine/GuillotineWarRoomPanel'
+import { ZombieWarRoomShortcuts } from '@/components/zombie/ZombieWarRoomShortcuts'
 import { FeatureGate } from '@/components/subscription/FeatureGate'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
@@ -91,6 +92,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
   // `format` is the canonical UserLeague discriminator ('redraft' for non-dynasty,
   // non-variant leagues; specialty variants carry their own format). Fall back to
   // `leagueType` when present. Dynasty/specialty formats keep the strategy/meta view.
+  const isZombieLeague = [league.leagueVariant, league.leagueType].some(value => String(value ?? '').toLowerCase() === 'zombie')
   const isGuillotineLeague =
     Boolean(league.guillotineMode) || String(league.leagueVariant ?? '').toLowerCase() === 'guillotine'
   const isBestBallLeague = !isGuillotineLeague && Boolean(league.bestBallMode)
@@ -262,6 +264,8 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
           Plans & pricing
         </Link>
       </header>
+
+      {isZombieLeague && <ZombieWarRoomShortcuts leagueId={league.id} />}
 
       <AFWarRoomPlanSpotlight className="border-white/[0.06]" />
 

@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {registeredSeatReadiness,savedPoolCoverage,settlementReadiness} from '@/lib/zombie/readiness'
+import {registeredSeatReadiness,savedPoolCoverage,settlementReadiness,whispererReadiness} from '@/lib/zombie/readiness'
 describe('Zombie readiness evidence',()=>{
  it('does not count placeholder or duplicate ownership as filled seats',()=>{
   expect(registeredSeatReadiness(['real','open','real'],['real'],3)).toEqual({registered:1,missing:2,duplicate:1,ready:false})
@@ -24,5 +24,16 @@ describe('settlement readiness',()=>{
  it('honors a midseason start and flagged stat corrections',()=>{
   expect(settlementReadiness([{week:6,status:'complete',requiresStatCorrection:true}],6,6)).toEqual({missing:0,pending:1})
   expect(settlementReadiness([],6,5)).toEqual({missing:0,pending:0})
+ })
+})
+
+
+describe('Whisperer readiness', () => {
+ it('waits for the draft before expecting activation to select Whisperers', () => {
+  expect(whispererReadiness(0, 2, false).status).toBe('waiting')
+ })
+ it('flags an incomplete selection after the draft and accepts a complete selection', () => {
+  expect(whispererReadiness(1, 2, true).status).toBe('attention')
+  expect(whispererReadiness(2, 2, true).status).toBe('ready')
  })
 })
