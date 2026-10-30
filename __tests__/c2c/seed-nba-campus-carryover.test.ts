@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedNbaCampusCarryover } from '@/lib/c2c/seedNbaCampusCarryover'
+import { currentNcaabRosterEvidence } from '@/lib/devy/ncaabRosterPool'
+import { readRiScheduleWindow } from '@/lib/sports-data/riScheduleCache'
 const now = new Date('2026-10-30T12:00:00Z')
 vi.mock('@/lib/devy/ncaabRosterPool', () => ({ currentNcaabRosterEvidence: vi.fn(async () => ({ athletes: [{ id: 'espn:ncaab:12', espnId: '12', teamId: '10', name: 'A', school: 'School', position: 'G', jersey: null, observedAt: now }], ambiguous: [] })) }))
 vi.mock('@/lib/sports-data/riScheduleCache', async load => ({ ...(await load<typeof import('@/lib/sports-data/riScheduleCache')>()), readRiScheduleWindow: vi.fn(async () => [{ gameId: '1', day: '2026-11-01', startTime: '2026-11-01T18:00:00Z', status: 'scheduled', homeTeamId: '1', awayTeamId: '2' }]) }))
@@ -18,6 +20,14 @@ describe('NBA campus carryover transaction', () => {
     expect(await seedNbaCampusCarryover(db, { now, deadlineAt: Date.now() + 10000, maxRosters: 5 })).toMatchObject({ considered: 1, seeded: 1 })
     expect(tx.afRosterLineupAssignment.createMany).toHaveBeenCalledOnce()
     expect(tx.sportsDataCache.upsert).toHaveBeenCalledOnce()
+  })
+  it('recovers a missed snapshot from roster and school evidence recorded before the week', async () => {
+    const { db, tx } = makeDb()
+    vi.mocked(readRiScheduleWindow).mockResolvedValueOnce([{ gameId: '1', day: '2026-10-29', startTime: '2026-10-29T18:00:00Z', status: 'completed', seasonType: 'regular', eventName: null, replacedBy: null, homeTeamId: '1', awayTeamId: '2' }])
+    vi.mocked(currentNcaabRosterEvidence).mockResolvedValueOnce({ athletes: [{ id: 'espn:ncaab:12', espnId: '12', teamId: '10', name: 'A', school: 'School', position: 'G', jersey: null, observedAt: new Date('2026-10-26T00:00:00Z') }], ambiguous: [] })
+    expect(await seedNbaCampusCarryover(db, { now, deadlineAt: Date.now() + 10000, maxRosters: 5 })).toMatchObject({ seeded: 1 })
+    const data = tx.sportsDataCache.upsert.mock.calls[0][0].create.data
+    expect(data.players[0].selectedAt).toBe('2026-10-27T00:00:00.000Z')
   })
   it('does not write a stale roster or overwrite existing weekly assignments', async () => {
     const { db, tx } = makeDb()
