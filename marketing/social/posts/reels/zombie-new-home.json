@@ -1,0 +1,93 @@
+{
+  "name": "zombie-new-home",
+  "accent": "#38E08F",
+  "seconds": 15,
+  "art": "league-type-zombie.png",
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "emoji": "🧟",
+      "text": "A new [Zombie]\nhome",
+      "size": "h1",
+      "pop": true,
+      "top": 0
+    },
+    {
+      "in": 2.6,
+      "out": 4.8,
+      "emoji": "🦠",
+      "text": "The [infection]\ngrid",
+      "size": "h1",
+      "pop": true,
+      "top": 0
+    },
+    {
+      "in": 3.0,
+      "out": 4.8,
+      "text": "Who's human, who's turned, all in one view.",
+      "size": "p",
+      "top": 560
+    },
+    {
+      "in": 5.0,
+      "out": 7.2,
+      "emoji": "🎒",
+      "text": "Matchup +\n[supplies]",
+      "size": "h1",
+      "pop": true,
+      "top": 0
+    },
+    {
+      "in": 5.4,
+      "out": 7.2,
+      "text": "Plus your Outbreak Points.",
+      "size": "p",
+      "top": 560
+    },
+    {
+      "in": 7.4,
+      "out": 9.6,
+      "emoji": "⏱️",
+      "text": "Rules in\n[30 seconds]",
+      "size": "h1",
+      "pop": true,
+      "top": 0
+    },
+    {
+      "in": 7.8,
+      "out": 9.6,
+      "text": "Plus the week's board.",
+      "size": "p",
+      "top": 560
+    },
+    {
+      "in": 9.8,
+      "out": 12.0,
+      "emoji": "📨",
+      "text": "Invites\nexplain [it]",
+      "size": "h1",
+      "pop": true,
+      "top": 0
+    },
+    {
+      "in": 10.2,
+      "out": 12.0,
+      "text": "New players see how Zombie works before they join.",
+      "size": "p",
+      "top": 560
+    }
+  ],
+  "end": {
+    "in": 12.2,
+    "line": "Start a\n[Zombie] league",
+    "top": 60
+  },
+  "caption": {
+    "instagram": "🧟 Zombie leagues just got a brand-new home on AllFantasy.\n\nOpen your league and see the whole outbreak at once:\n• The infection grid: who's human, who's turned\n• Your matchup and supplies\n• Your Outbreak Points\n• Rules in 30 seconds\n\nInvite links now show new players how Zombie works before they join.\n\nStart a Zombie league free, link in bio.\n\n#fantasyfootball #zombieleague #fantasyfootballleague #commissioner #allfantasy",
+    "tiktok": "Zombie leagues got a new home 🧟 Infection grid, matchup, supplies and Outbreak Points on one screen. Link in bio. #fantasyfootball #zombieleague #fantasyfootballtok #allfantasy",
+    "youtube": "Zombie fantasy leagues just got a new home on AllFantasy: infection grid, matchup, supplies and Outbreak Points on one screen. #fantasyfootball #shorts",
+    "facebook": "🧟 Zombie leagues just got a brand-new home on AllFantasy: the infection grid, your matchup, supplies, Outbreak Points and the rules in 30 seconds, all on one screen. https://allfantasy.ai"
+  },
+  "stage": "top:700px"
+}

@@ -1,0 +1,54 @@
+{
+  "name": "campaign-gameday-texts-3",
+  "slot": "Thu 10/22 · reel",
+  "accent": "#38E08F",
+  "seconds": 11,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "text": "Do this\n[before tonight.]",
+      "size": "h1",
+      "pop": true,
+      "top": 160,
+      "emoji": "⏱️"
+    },
+    {
+      "in": 2.6,
+      "out": 4.2,
+      "text": "Settings →\n[Notifications]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "⚙️"
+    },
+    {
+      "in": 4.2,
+      "out": 5.8,
+      "text": "Add your\n[phone]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "📱"
+    },
+    {
+      "in": 5.8,
+      "out": 7.6,
+      "text": "Turn on\n[texts]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "✅"
+    }
+  ],
+  "end": {
+    "in": 7.8,
+    "line": "Sunday,\n[covered.]"
+  },
+  "caption": {
+    "instagram": "Set it before tonight's game ⏱️\n\nTurn on AllFantasy's game-day texts:\n1️⃣ Settings → Notifications\n2️⃣ Add your phone and verify it\n3️⃣ Turn on texts\n\nIf a starter gets ruled out near kickoff, you'll hear about it, with the fix. Reply STOP anytime. Link in bio.\n\n#fantasyfootball #thursdaynightfootball #fantasyfootballcommunity #allfantasy",
+    "tiktok": "60 seconds now saves your Sunday ⏱️ Settings → Notifications → add your phone. Link in bio.\n\n#fantasyfootball #fantasyfootballtok #allfantasy",
+    "youtube": "60 seconds now saves your Sunday ⏱️ Settings → Notifications → texts on allfantasy.ai #fantasyfootball #shorts",
+    "facebook": "Before tonight's game: turn on AllFantasy's game-day texts. Go to Settings → Notifications, add and verify your phone, and turn texts on. Reply STOP anytime. https://allfantasy.ai"
+  }
+}

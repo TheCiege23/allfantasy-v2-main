@@ -1,0 +1,65 @@
+{
+  "name": "cfb-saturday-poll",
+  "accent": "#FFC94D",
+  "seconds": 14,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.2,
+      "emoji": "🏟️",
+      "text": "College\nfootball\n[Saturday]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 2.4,
+      "out": 10.6,
+      "text": "Which game are\nyou [watching?]",
+      "size": "h2",
+      "top": 0
+    },
+    {
+      "in": 3.0,
+      "out": 10.6,
+      "text": "🏈 [A]  OSU at Indiana",
+      "size": "h2",
+      "pop": true,
+      "top": 280
+    },
+    {
+      "in": 4.4,
+      "out": 10.6,
+      "text": "🐯 [B]  UGA-Auburn",
+      "size": "h2",
+      "pop": true,
+      "top": 460
+    },
+    {
+      "in": 5.800000000000001,
+      "out": 10.6,
+      "text": "🐘 [C]  Bama at Vols",
+      "size": "h2",
+      "pop": true,
+      "top": 640
+    },
+    {
+      "in": 7.200000000000001,
+      "out": 10.6,
+      "text": "☘️ [D]  ND at BYU",
+      "size": "h2",
+      "pop": true,
+      "top": 820
+    }
+  ],
+  "end": {
+    "in": 10.8,
+    "line": "Comment\n[A, B, C or D] 👇"
+  },
+  "caption": {
+    "instagram": "College football Saturday 🏈 Which game are you locked into?\n\nA Ohio State at Indiana\nB Georgia vs. Auburn\nC Alabama at Tennessee\nD Notre Dame at BYU\n\nPlay devy? Draft college players before they go pro on AllFantasy, link in bio.\n\n#collegefootball #CFB #devyfantasy #gameday #allfantasy",
+    "tiktok": "College football Saturday 🏈 A, B, C or D? Which game are you watching? 👇 #collegefootball #CFB #gameday #allfantasy",
+    "youtube": "Which college football game are you watching? Ohio State at Indiana, Georgia vs. Auburn, Alabama at Tennessee or Notre Dame at BYU? #CFB #collegefootball #shorts",
+    "facebook": "College football Saturday 🏈 Which game are you watching?\n\nA Ohio State at Indiana\nB Georgia vs. Auburn\nC Alabama at Tennessee\nD Notre Dame at BYU\n\nhttps://allfantasy.ai"
+  }
+}

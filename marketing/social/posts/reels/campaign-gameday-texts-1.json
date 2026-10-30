@@ -1,0 +1,61 @@
+{
+  "name": "campaign-gameday-texts-1",
+  "slot": "Tue 10/20 · reel",
+  "accent": "#3BC4FF",
+  "seconds": 12,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "text": "How the\n[final call] works",
+      "size": "h1",
+      "pop": true,
+      "top": 160
+    },
+    {
+      "in": 2.6,
+      "out": 4.4,
+      "text": "Starter\n[ruled out]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "1️⃣"
+    },
+    {
+      "in": 4.4,
+      "out": 6.2,
+      "text": "We check your bench,\n[flex included]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "2️⃣"
+    },
+    {
+      "in": 6.2,
+      "out": 8.4,
+      "text": "You get\n[one text]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "3️⃣"
+    },
+    {
+      "in": 8.4,
+      "out": 9.8,
+      "text": "With the\n[fix link.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200
+    }
+  ],
+  "end": {
+    "in": 10.0,
+    "line": "One text.\n[When it matters.]"
+  },
+  "caption": {
+    "instagram": "How the game-day final call works 📲\n\n1️⃣ A starter gets ruled out close to kickoff, and he's still in your lineup\n2️⃣ AllFantasy checks your bench for the best swap, flex spots included\n3️⃣ You get one text: who's out, who to start, and a link to fix it\n\nOne text per player. Only when it matters. Turn it on in Settings → Notifications. Link in bio.\n\n#fantasyfootball #fantasyfootballadvice #startsit #nflsunday #allfantasy",
+    "tiktok": "Starter ruled out right before kickoff? We text you the fix 📲 Link in bio.\n\n#fantasyfootball #fantasyfootballtok #startsit #allfantasy",
+    "youtube": "How the final call works 📲 Ruled out → bench check → one text with the fix allfantasy.ai #fantasyfootball #shorts",
+    "facebook": "Here's how AllFantasy's game-day final call works: if a starter is ruled out close to kickoff and he's still in your lineup, we check your bench (flex spots included) and send one text with who's out, who to start and a link to fix it. Turn it on in Settings → Notifications. https://allfantasy.ai"
+  }
+}

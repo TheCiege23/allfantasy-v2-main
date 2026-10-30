@@ -1,0 +1,22 @@
+{
+  "name": "2026-10-26-trade-deadline",
+  "accent": "#4DD4FF",
+  "seconds": 13,
+  "beats": [
+    { "in": 0.2, "out": 2.6, "emoji": "⏳", "text": "Deadline\n[is ticking.]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 0.6, "out": 2.6, "text": "Got a trade to make?", "size": "p", "top": 1000 },
+    { "in": 2.8, "out": 5.4, "emoji": "⏱️", "text": "See the\n[countdown.]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 3.0, "out": 5.4, "text": "On the Trade Center and your league home.", "size": "p", "top": 1000 },
+    { "in": 5.6, "out": 8.2, "emoji": "📭", "text": "Offers\n[expire.]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 5.8, "out": 8.2, "text": "Pending trades close at the deadline.", "size": "p", "top": 1000 },
+    { "in": 8.4, "out": 10.2, "emoji": "🔔", "text": "Both sides\n[get told.]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 8.6, "out": 10.2, "text": "Nobody is left waiting on an answer.", "size": "p", "top": 1000 }
+  ],
+  "end": { "in": 10.4, "line": "Make your move\n[in time]" },
+  "caption": {
+    "instagram": "The trade deadline is ticking ⏳\n\nAllFantasy now counts it down on the Trade Center and your league home. Pending offers expire at the deadline, and both managers get told.\n\n#fantasyfootball #tradedeadline #fantasyfootballtrades #allfantasy",
+    "tiktok": "Trade deadline countdown ⏳ Make your move in time. #fantasyfootball #tradedeadline #fantasyfootballtok #allfantasy",
+    "youtube": "AllFantasy's trade deadline countdown: see the clock, and pending offers expire at the deadline. #fantasyfootball #shorts",
+    "facebook": "New in AllFantasy: a trade deadline countdown. Pending offers expire at the deadline and both managers are notified. https://allfantasy.ai"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "date": "carousel-2026-10-20-commish-toolkit",
+  "carousel": true,
+  "name": "Commish Toolkit",
+  "slot": "Tue Oct 20 · 12 PM",
+  "caption": {
+    "instagram": "Commissioners, this is your toolkit 🏆\n\n⏱️ Draft pace your way: Live, Middy or Slow (timers from 30 sec to 8 hours)\n📅 Waivers set day by day\n✏️ Fix league settings anytime, even mid-draft\n📱 Built for your phone\n\nTag the commish in your league 👇\n\nFree to create, import and run. Link in bio.\n\n#fantasyfootball #fantasycommissioner #fantasyfootballleague #commish #allfantasy",
+    "tiktok": "Commish toolkit 🏆 Draft timers 30 sec to 8 hrs, waivers by day, fix settings mid-draft. Tag your commissioner 👇\n\n#fantasyfootball #commissioner #fantasyfootballtok #allfantasy",
+    "facebook": "Commissioners, here's your toolkit 🏆\n\n⏱️ Draft pace your way: Live, Middy or Slow, with timers from 30 seconds to 8 hours\n📅 A waiver rule for each day of the week\n✏️ Fix league settings anytime, even mid-draft\n📱 Built for your phone\n\nCreating, importing and running leagues is free: https://allfantasy.ai",
+    "x": "Commish toolkit on AllFantasy 🏆\n\n⏱️ Draft timers: 30 sec to 8 hrs\n📅 Waivers set day by day\n✏️ Fix settings anytime, even mid-draft\n📱 Built for your phone\n\nFree to run. allfantasy.ai"
+  },
+  "posts": [
+    {
+      "kind": "hero",
+      "eyebrow": "For commissioners",
+      "title": "Running a league?\n[Here’s your toolkit.]",
+      "titleSize": "xl",
+      "accent": "purple"
+    },
+    {
+      "kind": "list",
+      "title": "Pick [any] draft pace.",
+      "bullets": [
+        [
+          "Live",
+          "Under 3 minutes a pick"
+        ],
+        [
+          "Middy",
+          "3 to 30 minutes a pick"
+        ],
+        [
+          "Slow",
+          "30+ minutes a pick, with an overnight pause"
+        ]
+      ],
+      "lead": "Pick timers run from 30 seconds to 8 hours.",
+      "accent": "purple"
+    },
+    {
+      "kind": "hero",
+      "big": "🗓️",
+      "title": "Waivers, [day by day.]",
+      "lead": "FAAB, rolling, reverse, free agents or locked. Set a different rule for each day of the week.",
+      "accent": "purple"
+    },
+    {
+      "kind": "hero",
+      "big": "✏️",
+      "title": "Fix it [anytime.]",
+      "lead": "Rename the league, change the logo or the timezone mid-draft, in the offseason or at renewal. Size and league type lock once the draft starts.",
+      "accent": "purple"
+    },
+    {
+      "kind": "hero",
+      "big": "📱",
+      "title": "Built for [your phone.]",
+      "lead": "League settings were rebuilt for mobile. No more sideways scrolling.",
+      "accent": "purple"
+    },
+    {
+      "kind": "hero",
+      "big": "🏆",
+      "title": "Start your league [free.]",
+      "lead": "Creating, importing and running leagues on AllFantasy is free.",
+      "cta": "START FREE · LINK IN BIO →",
+      "accent": "purple"
+    }
+  ]
+}
