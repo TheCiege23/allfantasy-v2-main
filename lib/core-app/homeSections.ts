@@ -92,6 +92,21 @@ export const HOME_SECTION_GROUPS: readonly HomeSectionGroup[] = ['top', 'week', 
 /** The stored key inside `notificationPreferences`. */
 export const HIDDEN_HOME_SECTIONS_KEY = 'hiddenHomeSections'
 
+/** Display choices are separate from explicit topic mutes. Defaults must never mute alerts. */
+export const HOME_LAYOUT_HIDDEN_KEY = 'homeLayoutHiddenSections'
+export const DEFAULT_HIDDEN_HOME_SECTIONS: readonly HomeSectionId[] = [
+  'since-last-visit', 'live-games', 'drafts', 'lock-brief', 'schedule', 'routine', 'matchups', 'insights',
+]
+
+/** An explicit empty list means show everything; existing personalized layouts take precedence. */
+export function resolveHiddenHomeSections(saved: unknown): Set<HomeSectionId> {
+  const prefs = saved && typeof saved === 'object' ? saved as Record<string, unknown> : {}
+  for (const key of [HOME_LAYOUT_HIDDEN_KEY, HIDDEN_HOME_SECTIONS_KEY]) {
+    if (Array.isArray(prefs[key])) return readHiddenHomeSections({ [HIDDEN_HOME_SECTIONS_KEY]: prefs[key] })
+  }
+  return new Set(DEFAULT_HIDDEN_HOME_SECTIONS)
+}
+
 const KNOWN = new Set<string>(HOME_SECTIONS.map((s) => s.id))
 
 /**

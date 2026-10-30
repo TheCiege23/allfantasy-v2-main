@@ -44,6 +44,27 @@ export const NBA_TEAM_IDS: Record<string, number> = {
 }
 
 /** MLB Static / team-logos numeric ids */
+/** Exact NBA nicknames only: a full Cup team name must never become a guessed CDN path. */
+const NBA_CUP_NICKNAMES: Record<string, string> = {
+  HAWKS: "ATL", CELTICS: "BOS", NETS: "BKN", HORNETS: "CHA", BULLS: "CHI",
+  CAVALIERS: "CLE", MAVERICKS: "DAL", NUGGETS: "DEN", PISTONS: "DET",
+  WARRIORS: "GSW", ROCKETS: "HOU", PACERS: "IND", CLIPPERS: "LAC", LAKERS: "LAL",
+  GRIZZLIES: "MEM", HEAT: "MIA", BUCKS: "MIL", TIMBERWOLVES: "MIN",
+  PELICANS: "NOP", KNICKS: "NYK", THUNDER: "OKC", MAGIC: "ORL",
+  "76ERS": "PHI", SIXERS: "PHI", SUNS: "PHX", "TRAIL BLAZERS": "POR",
+  KINGS: "SAC", SPURS: "SAS", RAPTORS: "TOR", JAZZ: "UTA", WIZARDS: "WAS",
+}
+
+/** A Cup label resolves to a club code only when its nickname is unambiguous. */
+export function nbaCupLogoCode(teamName: string): string | null {
+  const key = String(teamName ?? "").trim().toUpperCase().replace(/[^A-Z0-9 ]/g, "").replace(/\s+/g, " ")
+  if (NBA_TEAM_IDS[key]) return key
+  for (const [nickname, code] of Object.entries(NBA_CUP_NICKNAMES)) {
+    if (key === nickname || key.endsWith(` ${nickname}`)) return code
+  }
+  return null
+}
+
 export const MLB_TEAM_IDS: Record<string, number> = {
   ARI: 109,
   ATL: 144,
@@ -159,11 +180,14 @@ export function getTeamLogoUrl(teamAbbr: string, sport: string): string | null {
  */
 export function getTeamLogoCandidates(teamAbbr: string, sport: string): string[] {
   if (isNoTeam(teamAbbr)) return []
-  const sportType = toSportType(sport)
+  const cup = sport.trim().toUpperCase() === "NBA_CUP"
+  const logoKey = cup ? nbaCupLogoCode(teamAbbr) : teamAbbr
+  if (!logoKey) return []
+  const sportType = cup ? "NBA" : toSportType(sport)
   if (!sportType || isGuessless(sportType)) return []
-  const primary = getTeamLogoUrl(teamAbbr, sport)
+  const primary = getTeamLogoUrl(logoKey, sportType)
   const s = sportType
-  const lower = teamAbbr.toLowerCase()
+  const lower = logoKey.toLowerCase()
   const extra: string[] = []
 
   const espnSeg = SPORT_TO_ESPN_TEAMLOGO[s]
@@ -177,7 +201,7 @@ export function getTeamLogoCandidates(teamAbbr: string, sport: string): string[]
     extra.push(`https://sleepercdn.com/images/team_logos/nfl/${lower}.jpg`)
   }
   if (s === 'NBA') {
-    const id = NBA_TEAM_IDS[teamAbbr.toUpperCase()]
+    const id = NBA_TEAM_IDS[logoKey.toUpperCase()]
     if (id) {
       extra.push(`https://a.espncdn.com/i/teamlogos/nba/500/${lower}.png`)
     }

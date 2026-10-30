@@ -12,6 +12,9 @@ import { resolveWriteAuthority } from "@/lib/league/write-authority"
 import { readTradeAlertsEnabled, TRADE_ALERTS_KEY } from "@/lib/integrity/tradeAlerts"
 import { HOLD_FLAGGED_TRADES_KEY, parseHoldFlaggedTradesMode, readHoldFlaggedTradesMode } from "@/lib/integrity/holdFlaggedTrades"
 import { parseTankingPenaltyPolicyPatch, readTankingPenaltyPolicy, TANKING_PENALTIES_KEY } from "@/lib/integrity/tankingPenalties"
+import { tankingPenaltyRule } from "@/lib/league-rules-explainer/snapshot"
+import { diffRuleSnapshots } from "@/lib/league-rules-explainer/changeKeys"
+import { publishRuleChangesEvent } from "@/lib/league-rules-explainer/publishRuleChanges"
 
 export const dynamic = "force-dynamic"
 
@@ -117,7 +120,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   let penaltyPatch: ReturnType<typeof parseTankingPenaltyPolicyPatch> = null
   if (body.tankingPenalties !== undefined) {
     penaltyPatch = parseTankingPenaltyPolicyPatch(body.tankingPenalties)
-    if (!penaltyPatch) return NextResponse.json({ error: "tankingPenalties: enabled (true/false), pickAtStrike and pickRound (1-10)" }, { status: 400 })
+    if (!penaltyPatch) return NextResponse.json({ error: "tankingPenalties: enabled (true/false), penalty (forfeit_pick, lottery_odds, faab), pickAtStrike and pickRound (1-10), lotteryOddsCutPct (25, 50, 75, 100), faabPercent (10, 25, 50, 100)" }, { status: 400 })
   }
   if (typeof body.tradeAlertsEnabled === "boolean") settingsPatch[TRADE_ALERTS_KEY] = body.tradeAlertsEnabled
   // "Hold flagged trades": `off` / `severe` (the default) / `all`; the older on/off switch still works.
@@ -166,11 +169,13 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   })
 
   let leagueSettings: unknown
+  let settingsBefore: unknown = null
   if (Object.keys(settingsPatch).length > 0 || penaltyPatch) {
     leagueSettings = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
       const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
       const current = (row?.settings as Record<string, unknown> | null) ?? {}
+      settingsBefore = current
       const next = {
         ...current,
         ...settingsPatch,
@@ -184,6 +189,16 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   }
 
   const platform = (await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }))?.platform ?? null
+
+  // A tanking-penalty edit is a rule members read in a dynasty league's rules popup: say what changed.
+  if (penaltyPatch && settingsBefore && resolveWriteAuthority(platform) === "NATIVE") {
+    await publishRuleChangesEvent({
+      leagueId,
+      actorUserId: userId,
+      section: "integrity",
+      changes: diffRuleSnapshots({ tankingPenalty: tankingPenaltyRule(settingsBefore) }, { tankingPenalty: tankingPenaltyRule(leagueSettings) }),
+    })
+  }
 
   return NextResponse.json({
     settings: {

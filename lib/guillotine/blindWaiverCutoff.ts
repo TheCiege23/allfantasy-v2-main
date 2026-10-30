@@ -11,8 +11,12 @@
 import { prisma } from '@/lib/prisma'
 import { getChopHoldStart, getWaiverBlindWindowStart } from './sportConfig'
 
-/** NBA and NFL (owner's decision, 2026-10-17). Other sports settle every run until their schedules are checked. */
-export const BLIND_WAIVER_GUILLOTINE_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NFL'])
+/**
+ * NBA and NFL (owner's decision, 2026-10-17); MLB and NHL added 2026-10-27, once their Guilly schedules
+ * were re-timed to their real week windows (lib/guillotine/sportConfig.ts) so the window covers the
+ * chop. Other sports settle every run until their schedules are checked.
+ */
+export const BLIND_WAIVER_GUILLOTINE_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NFL', 'MLB', 'NHL'])
 
 export type BlindWaiverLeague = { sport: string | null; guillotineMode: boolean | null; leagueVariant: string | null }
 

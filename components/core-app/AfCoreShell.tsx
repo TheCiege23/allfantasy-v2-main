@@ -1,8 +1,12 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
+import { navLabel } from '@/lib/core-app/navLabels'
+import { CoreLanguageChip } from '@/components/core-app/CoreLanguageChip'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
@@ -33,6 +37,7 @@ import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
 import { saveRailScroll, useRailScrollMemory, type RailLayout } from './useRailScrollMemory'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
+import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
@@ -57,6 +62,7 @@ import {
 } from '@/lib/core-app/railCareerChannel'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The chrome every AF Core screen sits inside: league rail, primary nav, top bar.
@@ -542,13 +548,13 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     flag === false ? [] : [item]
 
   return [
-    { key: 'home', label: 'Home', glyph: '▣', href: inLeague('/core') },
+    { key: 'home', label: navLabel('home'), glyph: '▣', href: inLeague('/core') },
     { key: 'brackets', label: 'Brackets', glyph: '⚑', href: '/brackets' },
     // My team is league-scoped in the handoff, so the link carries the selected
     // league rather than dropping the user on a screen that has to ask which one.
     {
       key: 'my-team',
-      label: 'My team',
+      label: navLabel('my-team'),
       glyph: '◈',
       href: props.selectedLeagueId
         ? `/core/my-team?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -570,7 +576,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Reads a scored week — hidden until this league has one. */
     ...ifScored({
       key: 'matchup',
-      label: 'Matchup',
+      label: navLabel('matchup'),
       glyph: '⚔',
       href: props.selectedLeagueId
         ? `/core/matchup?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -578,7 +584,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     }),
     ...ifImported(props.importCapabilities?.trades, {
       key: 'trades',
-      label: 'Trades',
+      label: navLabel('trades'),
       glyph: '⇄',
       href: props.selectedLeagueId
         ? `/core/trades?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -588,7 +594,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     }),
     {
       key: 'waivers',
-      label: 'Waivers',
+      label: navLabel('waivers'),
       glyph: '◷',
       href: props.selectedLeagueId
         ? `/core/waivers?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -596,7 +602,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     },
     {
       key: 'players',
-      label: 'Player Finder',
+      label: navLabel('players'),
       glyph: '●',
       // 38a scopes this to the league in context — "in THIS league" rather than
       // "across every platform" — so the link carries the league the way the
@@ -617,7 +623,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Reads a scored week — hidden until this league has one. */
     ...ifScored({
       key: 'week',
-      label: 'Your week',
+      label: navLabel('week'),
       glyph: '◱',
       href: props.selectedLeagueId
         ? `/core/week?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -631,7 +637,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
      */
     {
       key: 'live',
-      label: 'Live scores',
+      label: navLabel('live'),
       glyph: '◉',
       href: props.selectedLeagueId
         ? `/core/live?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -642,7 +648,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     },
     {
       key: 'war-room',
-      label: 'War Room',
+      label: navLabel('war-room'),
       glyph: '◆',
       href: props.selectedLeagueId
         ? `/core/war-room?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -650,7 +656,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     },
     {
       key: 'draft-hq',
-      label: 'Draft HQ',
+      label: navLabel('draft-hq'),
       glyph: '▤',
       href: props.selectedLeagueId
         ? `/core/draft-hq?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -744,7 +750,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Ranks by points scored, so it needs a scored week. */
     ...ifScored({
       key: 'standings',
-      label: 'Standings',
+      label: navLabel('standings'),
       glyph: '≡',
       href: props.selectedLeagueId
         ? `/core/standings?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -753,7 +759,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Projects from played weeks — nothing to project from yet. */
     ...ifScored({
       key: 'season-outlook',
-      label: 'Season Outlook',
+      label: navLabel('season-outlook'),
       glyph: '◎',
       href: props.selectedLeagueId
         ? `/core/season-outlook?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -918,7 +924,15 @@ function navSections(props: AfCoreShellProps): NavSection[] {
  * `home` is included even when a league is selected: on a phone the league
  * switcher is off-screen, so the way back to the league list has to be here.
  */
-const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'trades', 'week', 'live']
+const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'matchup', 'trades', 'live']
+
+/**
+ * Stand-ins, in order, for bar slots whose item is hidden. Matchup (and Your week)
+ * only exist once the selected league has a scored week (`ifScored`), and Trades
+ * only where the platform publishes trades, so without these the bar shrank to
+ * four. Player Finder is unconditional, so the bar stays at five in every state.
+ */
+const MOBILE_BAR_FALLBACK_KEYS: CoreNavKey[] = ['week', 'players']
 
 /** The league-first Play sheet: starting or joining something, as opposed to a league you are in. */
 const LEAGUE_FIRST_PLAY_LINKS: ReadonlyArray<{ href: string; label: string; glyph: string }> = [
@@ -1015,7 +1029,7 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
   function go(hit: TopSearchHit) {
     setOpen(false)
     setQ('')
-    router.push(hit.kind === 'league' ? `/core?league=${encodeURIComponent(hit.id)}` : `/players/${hit.slug}`)
+    router.push(hit.kind === 'league' ? leagueEntryHref(leagues.find(row => row.id === hit.id) ?? { id: hit.id, platform: 'unknown' }) : `/players/${hit.slug}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -1187,8 +1201,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const sections = useMemo(() => navSections(props), [props])
   const mobileItems = useMemo(() => {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
-    return MOBILE_BAR_KEYS.flatMap((k) => {
+    const fallbacks = MOBILE_BAR_FALLBACK_KEYS.flatMap((k) => {
       const item = byKey.get(k)
+      return item ? [item] : []
+    })
+    return MOBILE_BAR_KEYS.flatMap((k) => {
+      const item = byKey.get(k) ?? fallbacks.shift()
       return item ? [item] : []
     })
   }, [props])
@@ -1281,7 +1299,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     if (!speculationGate.tryAcquire()) return
     railWarmedRef.current.add(leagueId)
     /* FULL by default — `router.prefetch` is the only path that warms the data. */
-    router.prefetch(`/core?league=${encodeURIComponent(leagueId)}`)
+    const league = props.leagues.find(row => row.id === leagueId)
+    if (league) router.prefetch(leagueEntryHref(league))
   }
   /*
    * A warm needs the pointer (or focus) to REST on a crest for `RAIL_WARM_DWELL_MS`; leaving
@@ -1678,6 +1697,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         ref={railRef}
         className="af-rail"
         id="af-rail"
+        data-has-hidden={hiddenRailCount > 0 ? 'true' : undefined}
         aria-label={copy('Leagues')}
         onClick={(event) => {
           if (mobileRailOpen && (event.target as HTMLElement).closest('a[href]')) {
@@ -1727,8 +1747,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <span className="af-rail-toggle-text">
             {leagues.length}{' '}
             {language === 'es' ? (leagues.length === 1 ? 'liga' : 'ligas') : leagues.length === 1 ? 'league' : 'leagues'}
-            {/* The rail draws fewer rows than the count when some are hidden; say so. */}
-            {hiddenRailCount > 0 ? (language === 'es' ? ` · ${hiddenRailCount} ocultas` : ` · ${hiddenRailCount} hidden`) : ''}
             {railWeekLabel ? ` · ${language === 'es' ? railWeekLabel.replace(/^Week (\d+)/, 'Semana $1') : railWeekLabel}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
               <span className="af-rail-live-state">
@@ -1738,6 +1756,28 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             ) : null}
           </span>
         </button>
+
+        {/*
+          The rail draws fewer rows than the count when some are hidden; say so — and make it
+          tappable. It used to be " · 2 hidden" inside the toggle above, where tapping it only
+          closed the tray. A link cannot live inside a button, so it is a sibling: on a phone it
+          takes the line under the header, in the expanded desktop rail it sits under the toggle,
+          and in the 42px collapsed rail it is not drawn (the list's last row carries the count).
+        */}
+        {hiddenRailCount > 0 ? (
+          <Link
+            href="/settings?tab=preferences&returnTo=%2Fcore#your-leagues"
+            className="af-rail-hidden-count"
+            data-testid="rail-hidden-count-link"
+            aria-label={
+              language === 'es'
+                ? `${hiddenRailCount} ${hiddenRailCount === 1 ? 'liga oculta' : 'ligas ocultas'}: mostrarlas en Ajustes`
+                : `${hiddenRailCount} hidden ${hiddenRailCount === 1 ? 'league' : 'leagues'}: show them in Settings`
+            }
+          >
+            {language === 'es' ? `${hiddenRailCount} ocultas · Mostrar` : `${hiddenRailCount} hidden · Show`}
+          </Link>
+        ) : null}
 
         {/*
           ⚠ EVERY LEAGUE, NOT THE FIRST EIGHT.
@@ -1784,9 +1824,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             const careerLine = careerRaw ? careerLineText(careerRaw, language) : null
             /* League-first opens a league on its matchup when it has a head-to-head this week —
                the same rule the /core landing uses (resolveLeagueFirstLanding). */
-            const leagueHref = props.leagueFirst && m && !m.unpaired
+            const leagueHref = !isNativePlatform(l.platform) && props.leagueFirst && m && !m.unpaired
               ? `/core/matchup?league=${encodeURIComponent(l.id)}`
-              : `/core?league=${encodeURIComponent(l.id)}`
+              : leagueEntryHref(l)
             return (
               <Link
                 key={l.id}
@@ -1883,6 +1923,34 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             )
           }),
           ])}
+          {/*
+            ⚠ THE WAY BACK TO A HIDDEN LEAGUE. The header counts hidden leagues, but that count sits
+            inside the expand/collapse button and cannot be a link of its own. Without this row an
+            account that hid every league opened the tray to "2 leagues · 2 hidden" and nothing else —
+            no rows and no pointer to Settings, where unhiding lives. Reported by a user 2026-10-29.
+          */}
+          {hiddenRailCount > 0 ? (
+            <Link
+              href="/settings?tab=preferences&returnTo=%2Fcore#your-leagues"
+              className="af-rail-tile af-rail-add af-rail-hidden-link"
+              data-all-hidden={railLeagues.length === 0 ? 'true' : undefined}
+              data-testid="rail-hidden-leagues-link"
+              title={language === 'es' ? 'Mostrar u ocultar ligas en Ajustes' : 'Show or hide leagues in Settings'}
+            >
+              {/* The count, so the collapsed 42px rail still says how many are tucked away. */}
+              <span className="af-rail-foot-icon af-num" aria-hidden>
+                {hiddenRailCount}
+              </span>
+              <span className="af-rail-foot-copy">
+                <strong>
+                  {language === 'es'
+                    ? `Mostrar ${hiddenRailCount} ${hiddenRailCount === 1 ? 'liga oculta' : 'ligas ocultas'}`
+                    : `Show ${hiddenRailCount} hidden ${hiddenRailCount === 1 ? 'league' : 'leagues'}`}
+                </strong>
+                <small>{language === 'es' ? 'Gestionar en Ajustes' : 'Manage in Settings'}</small>
+              </span>
+            </Link>
+          ) : null}
         </div>
 
         {/*
@@ -1960,7 +2028,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     aria-current={item.key === active ? 'page' : undefined}
                   >
                     <span className="af-nav-glyph" aria-hidden>
-                      {item.glyph}
+                      <CoreNavIcon navKey={item.key} size={16} />
                     </span>
                     <span className="af-nav-label">{copy(item.label)}</span>
                     {item.badge ? (
@@ -2015,7 +2083,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
       {/* ── Main column ─────────────────────────────────────────────── */}
       <div className="af-main">
-        <header className="af-topbar" data-lf-search-open={props.leagueFirst && lfSearchOpen ? 'true' : undefined}>
+        <header className="af-topbar" data-lf-search-open={lfSearchOpen ? 'true' : undefined}>
           {/*
             ⚠ THE CREST, PHONE ONLY — `display: none` above 720px.
 
@@ -2067,21 +2135,31 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               archivedIds={props.archivedLeagueIds}
             />
           ) : null}
-          {props.leagueFirst ? (
-            <button
-              type="button"
-              className="af-lf-search-btn"
-              aria-label={
-                language === 'es'
-                  ? lfSearchOpen ? 'Cerrar búsqueda' : 'Buscar jugadores y ligas'
-                  : lfSearchOpen ? 'Close search' : 'Search players and leagues'
+          {/*
+            The search icon. Phone only in both modes (hidden above 720px by af-core-shell.css): the
+            phone header folds the full-width search behind it so the topbar stays one row.
+          */}
+          <button
+            type="button"
+            className="af-lf-search-btn"
+            aria-label={
+              language === 'es'
+                ? lfSearchOpen ? 'Cerrar búsqueda' : 'Buscar jugadores y ligas'
+                : lfSearchOpen ? 'Close search' : 'Search players and leagues'
+            }
+            aria-expanded={lfSearchOpen}
+            onClick={(event) => {
+              const opening = !lfSearchOpen
+              setLfSearchOpen(opening)
+              // Put the cursor in the field it just revealed, so one tap is enough to start typing.
+              if (opening) {
+                const header = event.currentTarget.closest('.af-topbar')
+                requestAnimationFrame(() => header?.querySelector<HTMLInputElement>('.af-search-input')?.focus())
               }
-              aria-expanded={lfSearchOpen}
-              onClick={() => setLfSearchOpen((open) => !open)}
-            >
-              <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
-            </button>
-          ) : null}
+            }}
+          >
+            <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
+          </button>
           {/*
             League-first: the inbox — trade offers, waiver results, mentions, lineup alerts — one tap
             from every screen. The phone header hides `.af-topbar-right` and the nav, so without this
@@ -2134,6 +2212,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
             {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
             <ModeToggle className="af-mode-chip" />
+            {/* Language beside it, so switching never means leaving /core for /settings. */}
+            <CoreLanguageChip className="af-mode-chip" />
 
             {/*
               The COMPACT form, and only where the visible panel is not already
@@ -2147,7 +2227,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 <span className="af-plan-name af-label">{plan.name}</span>
                 {plan.tokensLeft != null ? (
                   <>
-                    <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString()}</span>
+                    <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString(getAppIntlLocale())}</span>
                     <span className="af-label">{language === 'es' ? 'tokens restantes' : 'tokens left'}</span>
                   </>
                 ) : null}
@@ -2199,11 +2279,17 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             It LINKS to /core/notifications rather than asking for permission itself; there
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
-          <CoreWelcomeTour leagueCount={leagues.length} />
-          {active === 'home' ? <GameDayAlertsBanner /> : null}
-          {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
-          {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
-          {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
+          {/*
+            The optional prompts queue for ONE slot on home (HomePromptSlot) instead of stacking
+            up to four deep above the content. Off home the slot is disabled; the tour shows on home only.
+          */}
+          <HomePromptSlot enabled={active === 'home'}>
+            {active === 'home' ? <GameDayAlertsBanner /> : null}
+            {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
+            {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
+            {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
+            {active === 'home' ? <CoreWelcomeTour leagueCount={leagues.length} /> : null}
+          </HomePromptSlot>
           {/*
             The VISIBLE button, on the /core home screen: a real action row
             above the dashboard rather than a chip in the chrome. This is the
@@ -2275,7 +2361,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             data-active={active !== 'live' && !mobileMoreOpen}
             aria-current={active !== 'live' && !mobileMoreOpen ? 'page' : undefined}
           >
-            <span className="af-tabbar-glyph" aria-hidden>▣</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="home" size={20} /></span>
             <span className="af-tabbar-label">{copy('Leagues')}</span>
           </Link>
           <Link
@@ -2288,7 +2374,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             aria-label={props.liveGameCount && props.liveGameCount > 0 ? `Live, ${props.liveGameCount} ${props.liveGameCount === 1 ? 'game' : 'games'} in progress` : undefined}
           >
             <span className="af-tabbar-glyph" aria-hidden>
-              ●
+              <CoreNavIcon navKey="live" size={20} />
               {props.liveGameCount && props.liveGameCount > 0 ? <span className="af-tabbar-dot" data-tone="live" /> : null}
             </span>
             <span className="af-tabbar-label">{copy('Live')}</span>
@@ -2298,7 +2384,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             className="af-tabbar-item af-tabbar-chimmy"
             onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: { tab: 'chimmy' } }))}
           >
-            <span className="af-tabbar-glyph" aria-hidden>✦</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="chimmy" size={20} /></span>
             <span className="af-tabbar-label">Chimmy</span>
           </button>
           <button
@@ -2312,7 +2398,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               setMobileMoreOpen((open) => !(open && mobileSheet === 'play'))
             }}
           >
-            <span className="af-tabbar-glyph" aria-hidden>⊕</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="play" size={20} /></span>
             <span className="af-tabbar-label">{copy('Play')}</span>
           </button>
           <button
@@ -2327,7 +2413,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               setMobileMoreOpen((open) => !(open && mobileSheet === 'me'))
             }}
           >
-            <span className="af-tabbar-glyph" aria-hidden>◉</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="me" size={20} /></span>
             <span className="af-tabbar-label">{copy('Me')}</span>
           </button>
         </nav>
@@ -2343,7 +2429,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               aria-current={item.key === active ? 'page' : undefined}
             >
               <span className="af-tabbar-glyph" aria-hidden>
-                {item.glyph}
+                <CoreNavIcon navKey={item.key} size={20} />
                 {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
               </span>
               <span className="af-tabbar-label">{copy(item.label)}</span>
@@ -2359,7 +2445,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             onClick={() => setMobileMoreOpen((open) => !open)}
           >
             <span className="af-tabbar-glyph" aria-hidden>
-              ⋯
+              <CoreNavIcon navKey="more" size={20} />
             </span>
             <span className="af-tabbar-label">{copy('More')}</span>
           </button>

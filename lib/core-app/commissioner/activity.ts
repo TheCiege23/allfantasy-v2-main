@@ -24,6 +24,8 @@
  */
 
 import type { SectionState } from '@/lib/core-app/leagueHome'
+import { commissionerToolsMessages } from '@/lib/core-app/messages/commissionerTools'
+import { messagesFor } from '@/lib/i18n/messages'
 
 export type MemberStatus = 'active' | 'at_risk' | 'inactive' | 'unknown'
 
@@ -74,9 +76,8 @@ export type NativeActivityInput = {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`
-}
+/** The reader's sentences, from the catalog (lib/core-app/messages/commissionerTools.ts); default English. */
+const copy = (language: string | undefined) => messagesFor(commissionerToolsMessages, language)
 
 const ORDER: Record<MemberStatus, number> = { inactive: 0, at_risk: 1, unknown: 2, active: 3 }
 
@@ -101,15 +102,12 @@ export function resolveMemberActivity(
   /** The reader's language for the reasons, details and basis written here; default English. */
   language = 'en',
 ): LeagueMemberActivity {
-  const es = language === 'es'
-  const daysEs = (n: number) => plural(n, 'día', 'días')
+  const m = copy(language)
   if (input.kind === 'imported') {
     if (!input.lastActivityAt || input.eventCount === 0) {
       return {
         available: false,
-        reason: es
-          ? 'Aún no se ha importado ningún movimiento de esta liga, así que nadie puede considerarse activo ni inactivo.'
-          : 'No moves have been imported for this league yet, so nobody can be called active or inactive.',
+        reason: m.activityNoMoves,
       }
     }
     const ageDays = Math.floor((now.getTime() - input.lastActivityAt.getTime()) / DAY_MS)
@@ -120,46 +118,36 @@ export function resolveMemberActivity(
        */
       return {
         available: false,
-        reason: es
-          ? `El movimiento importado más reciente tiene ${daysEs(ageDays)}, así que todos los mánagers parecerían inactivos. Vuelve a sincronizar la liga para ver quién está realmente activo.`
-          : `The newest imported move is ${plural(ageDays, 'day')} old, so every manager would look idle. Re-sync the league to check who is really active.`,
+        reason: m.activityFeedStale(ageDays),
       }
     }
     if (input.managers.length === 0) {
       return {
         available: false,
-        reason: es
-          ? 'Los movimientos de esta liga no se pudieron asociar a sus mánagers, así que aquí no se juzga la actividad.'
-          : 'This league’s moves couldn’t be matched to its managers, so activity isn’t judged here.',
+        reason: m.activityUnmatched,
       }
     }
-    const listed = new Set(input.managers.map((m) => m.managerName))
+    const listed = new Set(input.managers.map((mgr) => mgr.managerName))
     const silent = (input.teams ?? [])
       .filter((name) => !listed.has(name))
       .map((managerName) => ({ managerName, currentCount: 0, priorCount: 0, lastActionAt: null }))
     return finish(
-      [...input.managers, ...silent].map((m) => ({
-        name: m.managerName,
-        status: m.currentCount > 0 ? 'active' : 'inactive',
-        lastActionAt: m.lastActionAt?.toISOString() ?? null,
-        detail: m.lastActionAt
-          ? es
-            ? `último movimiento hace ${daysEs(Math.max(0, Math.floor((now.getTime() - m.lastActionAt.getTime()) / DAY_MS)))}`
-            : `last move ${plural(Math.max(0, Math.floor((now.getTime() - m.lastActionAt.getTime()) / DAY_MS)), 'day')} ago`
-          : es
-            ? 'ningún movimiento válido registrado'
-            : 'no qualifying move on file',
+      [...input.managers, ...silent].map((mgr) => ({
+        name: mgr.managerName,
+        status: mgr.currentCount > 0 ? 'active' : 'inactive',
+        lastActionAt: mgr.lastActionAt?.toISOString() ?? null,
+        detail: mgr.lastActionAt
+          ? m.activityLastMoveAgo(Math.max(0, Math.floor((now.getTime() - mgr.lastActionAt.getTime()) / DAY_MS)))
+          : m.activityNoQualifyingMove,
       })),
-      es
-        ? `los intercambios, reclamos y cambios de plantilla de los últimos ${windowDays} días`
-        : `trades, waiver claims and roster moves in the last ${windowDays} days`,
+      m.activityBasisMoves(windowDays),
     )
   }
 
   if (!input.rows) {
     return {
       available: false,
-      reason: es ? 'No se pudo leer la actividad de los mánagers en este momento.' : 'Manager activity couldn’t be read just now.',
+      reason: m.activityManagersUnreadable,
     }
   }
   /*
@@ -170,7 +158,7 @@ export function resolveMemberActivity(
   if (matched.length === 0) {
     return {
       available: false,
-      reason: es ? 'Aún no se ha configurado ninguna plantilla en esta liga.' : 'No rosters have been set up for this league yet.',
+      reason: m.activityNoRosters,
     }
   }
   return finish(
@@ -180,24 +168,17 @@ export function resolveMemberActivity(
         name: (r.teamName || r.managerName) as string,
         status: r.status,
         lastActionAt: r.lastActionAt,
-        detail: es
-          ? days == null
-            ? 'sin actividad registrada'
+        detail:
+          days == null
+            ? m.activityNoneOnFile
             : days <= 0
-              ? 'activo hoy'
+              ? m.activityToday
               : days === 1
-                ? 'último movimiento ayer'
-                : `último movimiento hace ${daysEs(days)}`
-          : days == null
-            ? 'no activity on file'
-            : days <= 0
-              ? 'active today'
-              : days === 1
-                ? 'last move yesterday'
-                : `last move ${plural(days, 'day')} ago`,
+                ? m.activityYesterday
+                : m.activityLastMoveAgo(days),
       }
     }),
-    es ? 'el último cambio de alineación o de plantilla' : 'the last lineup or roster change',
+    m.activityBasisRoster,
   )
 }
 
@@ -230,7 +211,7 @@ export function memberActivityFromReads(
   if (!reads.managers || !reads.window) {
     return {
       available: false,
-      reason: language === 'es' ? 'No se pudo leer la actividad de la liga en este momento.' : 'League activity couldn’t be read just now.',
+      reason: copy(language).activityLeagueUnreadable,
     }
   }
   return resolveMemberActivity(
@@ -268,9 +249,7 @@ export function staleActivityReason(input: {
   const ageMs = input.now.getTime() - input.lastSyncedAt.getTime()
   if (ageMs <= ACTIVITY_STALE_AFTER_MS) return null
   const days = Math.floor(ageMs / DAY_MS)
-  return input.language === 'es'
-    ? `AllFantasy leyó esta liga por última vez hace ${days} días, así que todos los mánagers parecerían inactivos. Vuelve a sincronizarla para ver quién está realmente activo.`
-    : `AllFantasy last read this league ${days} days ago, so every manager would look idle. Re-sync it to see who is really active.`
+  return copy(input.language).activityStaleSync(days)
 }
 
 // ── Team identity helpers ────────────────────────────────────────────────────
@@ -287,7 +266,7 @@ export type TeamIdentityRow = {
 
 /** The last-resort name, exported so a list of names can count these instead of repeating them. */
 export function unnamedTeamLabel(language = 'en'): string {
-  return language === 'es' ? 'Equipo sin nombre' : 'Unnamed team'
+  return copy(language).activityUnnamedTeam
 }
 
 /**
@@ -302,7 +281,7 @@ export function unnamedTeamLabel(language = 'en'): string {
  */
 export function teamDisplayName(t: TeamIdentityRow, language = 'en'): string {
   const slot = t.externalId?.trim()
-  const bySlot = slot && /^\d{1,3}$/.test(slot) ? (language === 'es' ? `Equipo ${slot}` : `Team ${slot}`) : null
+  const bySlot = slot && /^\d{1,3}$/.test(slot) ? copy(language).activityTeamSlot(slot) : null
   return realTeamName(t) ?? bySlot ?? unnamedTeamLabel(language)
 }
 

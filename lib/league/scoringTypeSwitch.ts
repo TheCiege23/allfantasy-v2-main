@@ -19,6 +19,9 @@ import {
   type ScoringTypeInput,
   type ScoringTypeSnapshot,
 } from '@/lib/category-scoring/leagueScoringType'
+import { ruleSnapshotFromLeague } from '@/lib/league-rules-explainer/snapshot'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 
 export type ScoringTypeSwitchResult =
   | {
@@ -114,6 +117,19 @@ export async function switchLeagueScoringType(args: {
       : null,
   )
   await prisma.league.update({ where: { id: args.leagueId }, data: { settings: settings as object } })
+
+  // The league home's "What changed" card (lib/league-rules-explainer), read with the popup's own
+  // reader on the settings before and after. Best-effort: it never fails the switch.
+  const rulesOf = (raw: unknown) => {
+    const r = ruleSnapshotFromLeague({ sport: league.sport, settings: raw })
+    return { scoringMode: r.scoringMode, categoryRecordMode: r.categoryRecordMode }
+  }
+  await publishRuleChangesEvent({
+    leagueId: args.leagueId,
+    actorUserId: args.userId,
+    section: 'scoring',
+    changes: diffRuleSnapshots(rulesOf(league.settings), rulesOf(settings)),
+  })
 
   // The week the switch starts on is re-scored now when it is already under way, then standings are
   // rebuilt. Best-effort and in the background: the setting is saved, and the next scoring run

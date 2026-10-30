@@ -27,6 +27,10 @@
 .af-tw-links > a,.af-tw-inventory > li > a { min-height:48px; display:inline-flex; align-items:center; }
 .af-tw-compare { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
 .af-tw-compare > div { border:1px solid var(--line); border-radius:12px; padding:14px; }
+.af-tw-health-row,.af-tw-player-heading { display:flex; align-items:center; gap:10px; min-width:0; }
+.af-tw-health-row > div,.af-tw-player-heading h3 { min-width:0; }
+.af-tw-player-heading { margin-bottom:8px; }
+.af-tw-player-heading h3 { margin:0; }
 .af-tw [data-tone=bad] strong { color:var(--bad); }
 .af-tw [data-tone=warn] strong { color:var(--warn); }
 .af-tw-note { font-size:13px; color:var(--muted); }

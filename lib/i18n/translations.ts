@@ -1,7 +1,43 @@
 import { translationsEsParity } from "./translations-es-parity"
+import { leagueRulesCopyEn, leagueRulesCopyEs } from "./league-rules-copy"
 
 export const translations: Record<string, Record<string, string>> = {
   en: {
+    "settings.nav.leagues": "League pages",
+    "settings.hub.desc.leagues": "Choose which cards appear on your league home pages.",
+    "settings.leagues.displayTitle": "Your league pages",
+    "settings.leagues.intro": "Keep the cards you use. These choices apply to your AF league homes and imported league dashboards on every device. Each page shows only the cards available for that league.",
+    "settings.leagues.footnote": "These switches change only your view. League navigation, draft entry, rules, permissions and notifications stay available. Other managers keep their own layout.",
+    "settings.home.defaultAlertsUnchanged": "Hidden by the default layout. Your notification settings are unchanged: {{list}}",
+    "settings.leagues.section.week.title": "Your week",
+    "settings.leagues.section.week.desc": "Your weekly overview and next actions.",
+    "settings.leagues.section.team.title": "Your team",
+    "settings.leagues.section.team.desc": "Your team summary on AF League Home.",
+    "settings.leagues.section.matchups.title": "League scores",
+    "settings.leagues.section.matchups.desc": "The league scoreboard on imported dashboards.",
+    "settings.leagues.section.standings.title": "Standings",
+    "settings.leagues.section.standings.desc": "The standings preview on your league home.",
+    "settings.leagues.section.activity.title": "League activity",
+    "settings.leagues.section.activity.desc": "Recent moves, announcements and league buzz.",
+    "settings.leagues.section.chat.title": "Chat & Chimmy",
+    "settings.leagues.section.chat.desc": "Chat shortcuts and the Ask Chimmy card.",
+    "settings.leagues.section.insights.title": "League insights",
+    "settings.leagues.section.insights.desc": "Power rankings, rivalry radar and predictions.",
+    "settings.leagues.section.timeline.title": "Season timeline",
+    "settings.leagues.section.timeline.desc": "The season progress card on imported dashboards.",
+    "settings.leagues.section.draft.title": "Draft tools",
+    "settings.leagues.section.draft.desc": "Draft previews and practice shortcuts. Draft entry stays available.",
+    "settings.leagues.section.commissioner.title": "Commissioner overview",
+    "settings.leagues.section.commissioner.desc": "Setup checklists and league health summaries.",
+    "settings.leagues.section.managers.title": "Teams & invitations",
+    "settings.leagues.section.managers.desc": "Team directories and the open-seat tracker.",
+    "settings.leagues.section.format.title": "League format overview",
+    "settings.leagues.section.format.desc": "Specialty format cards, season summaries and autopilot previews.",
+    "settings.leagues.section.pairing.title": "Connected franchise",
+    "settings.leagues.section.pairing.desc": "The linked-league preview on imported dashboards.",
+
+    // League rules popup + "What changed" card (lib/league-rules-explainer/). Copy in ./league-rules-copy.ts.
+    ...leagueRulesCopyEn,
     // Conditional and protected picks (lib/league-trade-engine/pickTerms.ts): Trade Center, Trades page, Trade settings.
     "pickTerms.title": "Pick terms (optional)",
     "pickTerms.intro": "Give a future pick in this deal protection or a condition. Terms are settled on the final draft order when that rookie draft is created, and travel with the pick if it is traded again.",
@@ -3566,6 +3602,12 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.leagues.moveDown": "Move down",
     "settings.leagues.hiddenBadge": "Hidden",
     "settings.leagues.resetOrder": "Reset order",
+    "settings.leagues.remove": "Remove from AllFantasy",
+    "settings.leagues.removeConfirmBody": "This removes it from your leagues here only. The league on its platform and other members' copies stay as they are, and you can import it again any time.",
+    "settings.leagues.removeConfirm": "Remove",
+    "settings.leagues.removeCancel": "Cancel",
+    "settings.leagues.removeError": "Couldn't remove that league. Try again.",
+    "settings.leagues.removeNotOwned": "Another member imported this league, so it can't be removed from here. Hide it instead.",
     "settings.autocoach.title": "AutoCoach",
     "settings.autocoach.subtitle": "Before kickoff, AutoCoach benches a starter who has been ruled out and puts in your best healthy bench player at that spot.",
     "settings.autocoach.locked": "AutoCoach is part of AF Pro.",
@@ -4428,6 +4470,8 @@ export const translations: Record<string, Record<string, string>> = {
     "draft.reverseMaxPF": "Reverse Max PF",
     "draft.autoSetOrder": "Auto-Set Draft Order",
     "draft.autoSetOrderDesc": "System automatically calculates order each season",
+    "lsEd.dr.rookieAutoPlan": "Setting the rookie draft order automatically is part of the league owner’s AF Commissioner plan. You can still preview either order here.",
+    "lsEd.dr.rookieAutoUpgrade": "Upgrade to AF Commissioner",
     "draft.saveRookieSettings": "Save Rookie Draft Settings",
     "draft.nonPlayoff": "Non-Playoff",
     "draft.playoffTeams": "Playoff Teams",
@@ -5861,6 +5905,7 @@ export const translations: Record<string, Record<string, string>> = {
   },
   es: {
     ...translationsEsParity,
+    ...leagueRulesCopyEs,
 
     // Qué partidos cuentan: NBA/NHL/MLB (lib/redraft/gamesCount.ts).
     "gamesCount.title": "Qué partidos cuentan",

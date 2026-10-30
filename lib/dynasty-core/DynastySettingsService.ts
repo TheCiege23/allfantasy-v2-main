@@ -151,6 +151,7 @@ export async function getEffectiveDynastySettings(
     rookieDraftAutoOpen: rookieAutoOpen.autoOpen,
     rookieDraftAutoOpenSource: rookieAutoOpen.source,
     rookieDraftCustomOpenDate: rookieCalendar.customOpenDate,
+    rookieDraftAutoStartDays: rookieCalendar.autoStartDays,
     rookieDraftWindowLabel: describeRookieDraftWindow(league.sport as string | null),
   }
 }

@@ -82,6 +82,13 @@ function member(ctx: Ctx, userId: unknown): Line {
   return name ? { en: name, es: name } : { en: 'a manager', es: 'un mánager' }
 }
 
+/** How Chimmy plays a team on autopilot (lib/inactive-manager/inactiveManagerMode.ts AUTOPILOT_STYLES). */
+const AUTOPILOT_STYLE_LABEL: Record<string, Line> = {
+  dynasty_owner: { en: 'like a dynasty owner, protecting young players and picks', es: 'como dueño dinastía, protegiendo jóvenes y selecciones' },
+  win_now: { en: 'to win now', es: 'para ganar ya' },
+  rebuild: { en: 'to rebuild', es: 'para reconstruir' },
+}
+
 const SECTION_LABELS: Record<string, Line> = {
   general: { en: 'general', es: 'generales' },
   scoring: { en: 'scoring', es: 'puntuación' },
@@ -309,6 +316,40 @@ export const LOG_ACTIONS: Record<string, Action> = {
       return { en: `${t.en}'s manager is back and set their own lineup, so AllFantasy stopped`, es: `El mánager de ${t.es} volvió y puso su alineación, así que AllFantasy se detuvo` }
     },
   },
+  // Chimmy autopilot (AF Commissioner, lib/inactive-manager): Chimmy runs a team a manager left, and
+  // the league should see each move it makes in Chimmy's name.
+  'chimmy_autopilot.on': {
+    category: 'rosters',
+    members: true,
+    line: (ctx) => {
+      const t = team(ctx, ctx.row.entityId)
+      const style = AUTOPILOT_STYLE_LABEL[str(obj(ctx.row.metadata).style) ?? ''] ?? AUTOPILOT_STYLE_LABEL.dynasty_owner!
+      return { en: `Chimmy now runs ${t.en} ${style.en}`, es: `Chimmy ahora dirige a ${t.es} ${style.es}` }
+    },
+  },
+  'chimmy_autopilot.off': {
+    category: 'rosters',
+    members: true,
+    line: (ctx) => {
+      const t = team(ctx, ctx.row.entityId)
+      return { en: `Chimmy stopped running ${t.en}`, es: `Chimmy dejó de dirigir a ${t.es}` }
+    },
+  },
+  'chimmy_autopilot.claim': {
+    category: 'rosters',
+    members: true,
+    line: (ctx) => {
+      const t = team(ctx, ctx.row.entityId)
+      const m = obj(ctx.row.metadata)
+      const add = str(m.addPlayerName) ?? str(m.addPlayerId) ?? 'a player'
+      const drop = str(m.dropPlayerName) ?? str(m.dropPlayerId)
+      const slot = str(m.slot)
+      return {
+        en: `Chimmy put in a waiver claim for ${add} for ${t.en}${slot ? ` (${slot})` : ''}${drop ? `, dropping ${drop}` : ''}`,
+        es: `Chimmy pidió a ${add} en reclamos para ${t.es}${slot ? ` (${slot})` : ''}${drop ? `, soltando a ${drop}` : ''}`,
+      }
+    },
+  },
   'native_autosubs.policy_changed': {
     category: 'rosters',
     members: true,
@@ -426,7 +467,8 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
       (row.actionType === 'commissioner_roster_override' ||
         row.actionType === 'commissioner_edit_faab' ||
         row.actionType === 'commissioner_edit_waiver_priority' ||
-        row.actionType.startsWith('inactive_manager_mode.')) &&
+        row.actionType.startsWith('inactive_manager_mode.') ||
+        row.actionType.startsWith('chimmy_autopilot.')) &&
       str(row.entityId)
     ) {
       ids.add(str(row.entityId)!)

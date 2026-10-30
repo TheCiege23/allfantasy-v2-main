@@ -14,6 +14,9 @@ import {
 import '@/components/core-app/af-matchup-pulse.css'
 import '@/components/core-app/af-core-boards.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { messagesFor } from '@/lib/i18n/messages'
+import { matchupPulseBoardMessages } from '@/lib/core-app/messages/matchupPulseBoard'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { InfoTip } from '@/components/core-app/InfoTip'
 
@@ -105,9 +108,10 @@ function Face({ row }: { row: PulseRow }) {
  * the same on every surface (`rosterLabel`), never a manager we made up.
  */
 function metaOf(row: PulseRow, language: string): string {
-  const parts: string[] = [`${language === 'es' ? 'contra' : 'vs'} ${row.opponentLabel}`]
+  const m = messagesFor(matchupPulseBoardMessages, language)
+  const parts: string[] = [m.vs(row.opponentLabel)]
   if (row.startersLeft != null) {
-    parts.push(language === 'es' ? `${row.startersLeft} por jugar` : `${row.startersLeft} left to play`)
+    parts.push(m.leftToPlay(row.startersLeft))
   }
   /*
    * Where a LIVE row is heading. The number on the right is the score right now; this says where
@@ -116,7 +120,7 @@ function metaOf(row: PulseRow, language: string): string {
    */
   if (row.basis === 'scored' && !row.final && row.projectedMargin != null) {
     const pm = `${row.projectedMargin > 0 ? '+' : row.projectedMargin < 0 ? '−' : ''}${Math.abs(row.projectedMargin).toFixed(1)}`
-    parts.push(language === 'es' ? `final proy. ${pm}` : `proj final ${pm}`)
+    parts.push(m.projFinal(pm))
   }
   /*
    * No coverage clause: the loader refuses to RANK a projected row unless both
@@ -237,14 +241,12 @@ function WinRing({ p }: { p: number }) {
  * closest-games blocks — each sentence only when its thing is on screen.
  */
 function StandTip({
-  es,
   byOdds,
   done,
   expected,
   closest,
   anyProjected,
 }: {
-  es: boolean
   byOdds: boolean
   done: boolean
   expected: boolean
@@ -252,21 +254,12 @@ function StandTip({
   /** Some row on screen is a projection (`pulse.basis` is 'projected' or 'mixed'). */
   anyProjected: boolean
 }) {
-  const t = es ? 'Cómo leer este tablero' : 'How to read this board'
+  const m = useMessages(matchupPulseBoardMessages)
+  const t = m.howToRead
   return (
     <InfoTip label={t} title={t}>
       <span className="af-info-para">
-        {done
-          ? es
-            ? 'Todos los partidos terminaron: Ganados y Perdidos son resultados, los cinco primeros de cada lado.'
-            : 'Every game is final: Won and Lost are results, five shown on each side.'
-          : byOdds
-            ? es
-              ? 'Favorito y En desventaja ordenan tus ligas por probabilidad de ganar, cinco de cada lado. Por eso una liga que ganas por 30 puede estar en En desventaja si el modelo espera que se dé vuelta.'
-              : 'Favoured and Underdog sort your leagues by chance to win, five on each side — so a league you lead by 30 can sit under Underdog if the model expects it to turn.'
-            : es
-              ? 'Ganando y Perdiendo ordenan tus ligas por margen, cinco de cada lado.'
-              : 'Leading and Trailing sort your leagues by margin, five on each side.'}
+        {done ? m.tipDone : byOdds ? m.tipByOdds : m.tipByMargin}
       </span>
       <span className="af-info-para">
         {/*
@@ -274,29 +267,21 @@ function StandTip({
           projections (`matchup-pulse-board.test.tsx` pins exactly that) — a sentence about a tag that
           is nowhere on screen invites the reader to doubt numbers that are real scores.
         */}
-        {es
-          ? `El número de cada fila es tu margen, con su propio signo: + en verde si vas arriba, − en rojo si vas abajo. Son puntos anotados${anyProjected ? ', o una proyección donde dice PROY.' : '.'} La barra bajo la fila muestra qué tan grande es ese margen frente a los demás.`
-          : `Each row’s number is your margin, with its own sign: + in green when you are ahead, − in red when behind. It is points scored${anyProjected ? ', or a projection where tagged PROJ.' : '.'} The bar under a row shows how big that margin is next to the others.`}
+        {m.tipMargin(anyProjected)}
       </span>
       {byOdds && !done ? (
         <span className="af-info-para">
-          {es
-            ? 'El anillo es tu probabilidad de ganar. No aparece en un partido terminado ni cuando el modelo no puede calcular ambas alineaciones. «final proy.» en una fila en vivo es dónde el modelo espera que termine.'
-            : 'The ring is your chance to win — absent on a finished game, or when the model can’t price both lineups. “proj final” on a live row is where the model expects it to end.'}
+          {m.tipRing}
         </span>
       ) : null}
       {expected ? (
         <span className="af-info-para">
-          {es
-            ? 'El récord esperado es la suma de tus probabilidades: 23.4–17.6 significa que esperarías ganar unos 23 de esos enfrentamientos.'
-            : 'Expected record is your chances added up: 23.4–17.6 means you would expect to win about 23 of those matchups.'}
+          {m.tipExpected}
         </span>
       ) : null}
       {closest ? (
         <span className="af-info-para">
-          {es
-            ? 'Partidos más reñidos: los casi empates que no están ya entre los cinco de cada lado.'
-            : 'Closest games: the near coin-flips not already in the five on each side.'}
+          {m.tipClosest}
         </span>
       ) : null}
     </InfoTip>
@@ -319,19 +304,16 @@ function gapNote(pulse: MatchupPulse, language: string): string | null {
   const { noSchedule, noOpponent, unpriceable, uncomparable, unidentifiedRoster } = pulse.notRanked
   const notStarted = pulse.notRanked.notStarted ?? 0
   const elimination = pulse.notRanked.elimination ?? 0
+  const m = messagesFor(matchupPulseBoardMessages, language)
   const parts: string[] = []
   /* The league's own state, not ours: there is no schedule until it drafts. */
-  if (notStarted > 0) parts.push(`${notStarted} ${notStarted === 1 ? 'has' : 'have'} not started yet`)
+  if (notStarted > 0) parts.push(m.gapNotStarted(notStarted))
   /* Not a gap at all — the format plays the whole field, so there is no one opponent to rank against. */
-  if (elimination > 0) {
-    parts.push(`${elimination} ${elimination === 1 ? 'is a Guilly league' : 'are Guilly leagues'}, scored against the whole field`)
-  }
-  if (noSchedule > 0) parts.push(`${noSchedule} carry no schedule`)
-  if (noOpponent > 0) parts.push(`${noOpponent} have no game this week`)
-  if (unpriceable > 0) parts.push(`${unpriceable} could not be scored or priced`)
-  if (uncomparable > 0) {
-    parts.push(`${uncomparable} have lineups we cannot compare like for like`)
-  }
+  if (elimination > 0) parts.push(m.gapElimination(elimination))
+  if (noSchedule > 0) parts.push(m.gapNoSchedule(noSchedule))
+  if (noOpponent > 0) parts.push(m.gapNoOpponent(noOpponent))
+  if (unpriceable > 0) parts.push(m.gapUnpriceable(unpriceable))
+  if (uncomparable > 0) parts.push(m.gapUncomparable(uncomparable))
   /*
    * 🛑 THE ONE THAT IS OUR FAULT, AND IT IS SAID DIFFERENTLY FOR THAT REASON.
    * The others describe the league's state; this one describes a roster id this
@@ -339,24 +321,9 @@ function gapNote(pulse: MatchupPulse, language: string): string | null {
    * numeric roster_id. Wording it like the rest would blame the league for our
    * gap. See `notRanked.unidentifiedRoster`.
    */
-  if (unidentifiedRoster > 0) {
-    parts.push(
-      `${unidentifiedRoster} carry a roster id we cannot match to a schedule — our gap, not theirs`,
-    )
-  }
+  if (unidentifiedRoster > 0) parts.push(m.gapUnidentified(unidentifiedRoster))
   if (parts.length === 0) return null
-  if (language === 'es') {
-    const reasons: string[] = []
-    if (notStarted > 0) reasons.push(`${notStarted} aún sin comenzar`)
-    if (elimination > 0) reasons.push(`${elimination} de eliminación (Guilly), contra toda la liga`)
-    if (noSchedule > 0) reasons.push(`${noSchedule} sin calendario`)
-    if (noOpponent > 0) reasons.push(`${noOpponent} sin partido esta semana`)
-    if (unpriceable > 0) reasons.push(`${unpriceable} sin puntuación o proyección`)
-    if (uncomparable > 0) reasons.push(`${uncomparable} con alineaciones no comparables`)
-    if (unidentifiedRoster > 0) reasons.push(`${unidentifiedRoster} con identificadores que no podemos vincular al calendario; es una limitación nuestra`)
-    return `Sin clasificar: ${reasons.join(', ')}.`
-  }
-  return `Not ranked: ${parts.join(', ')}.`
+  return m.notRanked(parts.join(', '))
 }
 
 /**
@@ -398,6 +365,7 @@ export function MatchupPulseBoard({
 }: MatchupPulseBoardProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const m = useMessages(matchupPulseBoardMessages)
   const note = basisNote(pulse, language)
   /*
    * 🛑 A FINISHED WEEK IS A RESULT, NOT A STANDING. On the Tuesday after week 3 (App Review account,
@@ -460,7 +428,6 @@ export function MatchupPulseBoard({
           {pulse.ranked > 0 ? (
             <span className="af-bd-sec-info">
               <StandTip
-                es={language === 'es'}
                 byOdds={byOdds}
                 done={done}
                 expected={!done && pulse.expectedWins != null && (pulse.withOdds ?? 0) > 0}
@@ -522,13 +489,7 @@ export function MatchupPulseBoard({
                 expected record "across 38 matchups" read as two boards that disagreed; the five
                 rows ranked by margin alone were the difference (production, 2026-10-02).
               */}
-              {pulse.withOdds < decided
-                ? language === 'es'
-                  ? `· en ${pulse.withOdds} de ${decided} enfrentamientos con probabilidades`
-                  : `· across ${pulse.withOdds} of ${decided} matchups with odds`
-                : language === 'es'
-                  ? `· de ${pulse.withOdds} enfrentamientos con probabilidades`
-                  : `· across ${pulse.withOdds} matchups with odds`}
+              {pulse.withOdds < decided ? m.oddsOf(pulse.withOdds, decided) : m.oddsAll(pulse.withOdds)}
             </span>
           </p>
         ) : null}
@@ -585,11 +546,7 @@ export function MatchupPulseBoard({
           */
           <p className="af-mp-quiet">
             {pulse.considered > 0
-              ? language === 'es'
-                ? pulse.considered === 1
-                  ? 'Tu equipo asignado no tiene un enfrentamiento clasificable esta semana; abajo se explica por qué.'
-                  : `Ninguno de tus ${pulse.considered} equipos asignados tiene un enfrentamiento clasificable esta semana; abajo se explica por qué.`
-                : `None of your ${pulse.considered} claimed ${pulse.considered === 1 ? 'team' : 'teams'} has a head-to-head we can rank this week — the line below says why.`
+              ? m.noneRankable(pulse.considered)
               : copy('No claimed team yet, so there is no head-to-head to stand in.')}
           </p>
         )}
@@ -630,7 +587,7 @@ export function MatchupPulseBoard({
           <SectionHead
             id="af-mp-needs"
             label={copy('Needs you first')}
-            count={language === 'es' ? `${routable.length} en ${new Set(routable.map((i) => i.leagueId)).size} ligas` : `${routable.length} across ${new Set(routable.map((i) => i.leagueId)).size} leagues`}
+            count={m.needsCount(routable.length, new Set(routable.map((i) => i.leagueId)).size)}
           />
           <ul className="af-bd-rows">
             {routable.map((i) => (
@@ -661,11 +618,7 @@ export function MatchupPulseBoard({
         href={allHref}
         /* Most of the rest ARE scored — they sit between the top and bottom five. This said "have no
            game this week or could not be scored", which was false for ~43 of 55 on the measured account. */
-        quiet={language === 'es'
-          ? hidden === 1
-            ? 'está entre los cinco mostrados a cada lado, no juega esta semana o no se pudo puntuar.'
-            : 'están entre los cinco mostrados a cada lado, no juegan esta semana o no se pudieron puntuar.'
-          : 'sit between the five shown on each side, have no game this week, or could not be scored.'}
+        quiet={m.quietRest(hidden)}
         language={language}
       />
     </div>

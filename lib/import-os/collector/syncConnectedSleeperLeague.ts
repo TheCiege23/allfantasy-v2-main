@@ -350,10 +350,10 @@ export async function syncConnectedLeague(
    * — write `WeeklyMatchup` rows keyed on a non-Sleeper league id that the readers would then
    * join against, producing scores for the wrong league.
    *
-   * ESPN, Yahoo and Fantrax get their `WeeklyMatchup` rows from the parity collectors
-   * (`externalMatchupParity`, `fantraxMatchupParity`) which speak their own APIs. MFL and
-   * Fleaflicker have no weekly-matchup writer yet — a known gap, recorded rather than papered
-   * over by pointing a Sleeper fetcher at them.
+   * ESPN, Yahoo, Fantrax, MFL and Fleaflicker get their `WeeklyMatchup` rows from the parity
+   * collectors (`externalMatchupParity`, `fantraxMatchupParity`, `mflMatchupParity`,
+   * `fleaflickerMatchupParity`), which speak their own APIs. Those are team-level scores; no
+   * non-Sleeper platform writes per-player weekly lineups on a schedule.
    */
   /* Nor after a run the provider ended by saying the league is gone: both calls would 404 too. */
   if (

@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   playoff: vi.fn(),
   standings: vi.fn(),
   pirateCapture: vi.fn(),
+  chopZone: vi.fn(),
 }))
 
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
@@ -49,7 +50,7 @@ vi.mock('@/lib/redraft/playerWeeklyScoreService', () => ({
 vi.mock('@/lib/redraft/scoringEngine', () => ({ recalculateMatchupsForSeasonWeek: vi.fn(async () => ({ updated: 0 })) }))
 vi.mock('@/lib/redraft/standingsEngine', () => ({ updateStandings: m.standings }))
 vi.mock('@/lib/season-week', () => ({
-  resolveSeasonWeekForRedraftSeason: vi.fn(async () => ({ ok: true, phase: 'regular', fantasyWeek: 4 })),
+  resolveSeasonWeekForRedraftSeason: vi.fn(async () => ({ ok: true, phase: 'regular', fantasyWeek: 4, sportWeekComplete: true })),
 }))
 vi.mock('@/lib/redraft/weekFinalizer', () => ({
   finalizeCompletedWeeksForSeason: vi.fn(async () => ({ results: [], finalized: 0, refusals: {} })),
@@ -63,6 +64,7 @@ vi.mock('@/lib/pirate/service', () => ({
 }))
 vi.mock('@/lib/pirate/lineupEvidence', () => ({ capturePirateLineupEvidence: m.pirateCapture }))
 vi.mock('@/lib/guillotine/nativeGuillotineWeek', () => ({ runNativeGuillotineWeek: m.guillotine }))
+vi.mock('@/lib/guillotine/chopAlerts', () => ({ sendChopZoneWarningsForSeason: m.chopZone }))
 vi.mock('@/lib/zombie/zombieAutomation', () => ({ runZombieHousekeeping: m.housekeeping }))
 vi.mock('@/lib/playoff-runtime/playoffRoundScoring', () => ({ scoreActivePlayoffRound: m.playoff }))
 
@@ -90,9 +92,10 @@ describe('score-sync — native guillotine', () => {
     const body = (await res.json()) as { result: { redraft: Record<string, unknown> }; summary: { status: string } }
 
     expect(m.guillotine.mock.calls.map((c) => c[0])).toEqual([
-      { seasonId: 's-broken', currentFantasyWeek: 4 },
-      { seasonId: 's-guillotine', currentFantasyWeek: 4 },
-      { seasonId: 's-plain', currentFantasyWeek: 4 },
+      // The week's games being final is what lets a season's last week be chopped.
+      { seasonId: 's-broken', currentFantasyWeek: 4, currentWeekComplete: true },
+      { seasonId: 's-guillotine', currentFantasyWeek: 4, currentWeekComplete: true },
+      { seasonId: 's-plain', currentFantasyWeek: 4, currentWeekComplete: true },
     ])
     expect(body.result.redraft).toMatchObject({
       guillotineChops: 1,
@@ -101,6 +104,30 @@ describe('score-sync — native guillotine', () => {
     })
     // A failed chop pass is a degraded run, never a clean one.
     expect(body.summary.status).toBe('partial')
+    expect(m.chopZone).not.toHaveBeenCalled()
+  })
+
+  it('checks the chop-zone warning only for a league playing the week it will chop next', async () => {
+    m.guillotine.mockImplementation(async ({ seasonId }: { seasonId: string }) => {
+      if (seasonId === 's-broken') return { seasonId, outcome: 'waiting', week: 4, reason: 'week_in_progress' }
+      if (seasonId === 's-guillotine') return { seasonId, outcome: 'waiting', week: 3, reason: 'stat_correction_window' }
+      // Before the first chop the next chop week is ahead of the calendar: no warning yet.
+      return { seasonId, outcome: 'waiting', week: 10, reason: 'week_in_progress' }
+    })
+    m.chopZone.mockResolvedValue({ outcome: 'sent', warned: 2 })
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = (await res.json()) as { result: { redraft: Record<string, unknown> } }
+    expect(m.chopZone.mock.calls.map((c) => c[0])).toEqual([{ seasonId: 's-broken', week: 4 }])
+    expect(body.result.redraft).toMatchObject({ guillotineOutcomes: { waiting: 3, chop_zone_warning: 1 } })
+  })
+
+  it('a warning that throws is counted and costs nothing else', async () => {
+    m.guillotine.mockResolvedValue({ outcome: 'waiting', week: 4, reason: 'week_in_progress' })
+    m.chopZone.mockRejectedValue(new Error('db blip'))
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = (await res.json()) as { result: { redraft: Record<string, unknown> } }
+    expect(m.chopZone).toHaveBeenCalledTimes(3)
+    expect(body.result.redraft).toMatchObject({ guillotineFailed: 0, guillotineOutcomes: { waiting: 3, chop_zone_warning_failed: 3 } })
   })
 })
 

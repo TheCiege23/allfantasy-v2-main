@@ -38,6 +38,9 @@
  * post; the job only reads rows and writes the messages it returns.
  */
 
+import { commissionerToolsMessages } from '@/lib/core-app/messages/commissionerTools'
+import { messagesFor } from '@/lib/i18n/messages'
+
 export type RecipeKey = 'lineupReminder' | 'weeklyRecap' | 'inactivityWarning' | 'votingDeadline' | 'playoffAnnouncement'
 
 export const RECIPE_KEYS: RecipeKey[] = [
@@ -60,97 +63,105 @@ export type RecipeDefinition = {
   unavailableReason: (league: { platform: string; sport: string }) => string | null
 }
 
+/** English, read straight from the catalog: the recipes job posts these words into league chat. */
+const EN = commissionerToolsMessages.en
+
 const nflOnly = (league: { sport: string }) =>
-  league.sport.toUpperCase() === 'NFL' ? null : 'Game-day timing is only known for NFL leagues today.'
+  league.sport.toUpperCase() === 'NFL' ? null : EN.recipesUnavailableNflOnly
 
 export const RECIPES: RecipeDefinition[] = [
   {
     key: 'lineupReminder',
-    label: 'Lineup reminders',
-    description: 'On each NFL game day, a morning post naming teams with an empty starting slot.',
-    cadence: 'Game days, early morning ET',
+    label: EN.recipesLineupReminderLabel,
+    description: EN.recipesLineupReminderDescription,
+    cadence: EN.recipesLineupReminderCadence,
     unavailableReason: (league) => {
       const p = league.platform.toLowerCase()
       if (p === 'mfl' || p === 'fantrax') {
-        return `${p === 'mfl' ? 'MFL' : 'Fantrax'} imports can’t tell an empty lineup from an unreported one.`
+        return p === 'mfl' ? EN.recipesUnavailableMflLineups : EN.recipesUnavailableFantraxLineups
       }
       return nflOnly(league)
     },
   },
   {
     key: 'weeklyRecap',
-    label: 'Weekly recap',
-    description: 'Results, the top of the table and the week’s awards, counted from real matchups.',
-    cadence: 'Tuesdays',
+    label: EN.recipesWeeklyRecapLabel,
+    description: EN.recipesWeeklyRecapDescription,
+    cadence: EN.recipesWeeklyRecapCadence,
     unavailableReason: (league) => {
       const platform = league.platform.toLowerCase()
       return platform === 'sleeper' || ['manual', 'allfantasy', 'af', 'native'].includes(platform)
         ? null
-        : 'Weekly recaps require a Sleeper week feed or finalized AllFantasy matchups.'
+        : EN.recipesUnavailableWeeklyRecap
     },
   },
   {
     key: 'inactivityWarning',
-    label: 'Inactivity warnings',
-    description: 'A friendly weekly check-in naming managers with no trade, waiver claim or roster move in 14 days.',
-    cadence: 'Once a week at most',
+    label: EN.recipesInactivityWarningLabel,
+    description: EN.recipesInactivityWarningDescription,
+    cadence: EN.recipesInactivityWarningCadence,
     unavailableReason: () => null,
   },
   {
     key: 'votingDeadline',
-    label: 'Voting deadlines',
-    description: 'A reminder when a league-chat poll closes within the next day.',
-    cadence: 'The day before a poll closes',
+    label: EN.recipesVotingDeadlineLabel,
+    description: EN.recipesVotingDeadlineDescription,
+    cadence: EN.recipesVotingDeadlineCadence,
     unavailableReason: () => null,
   },
   {
     key: 'playoffAnnouncement',
-    label: 'Playoff announcement',
-    description: 'When playoffs begin, a post with the seeds as the standings have them.',
-    cadence: 'Once a season',
+    label: EN.recipesPlayoffAnnouncementLabel,
+    description: EN.recipesPlayoffAnnouncementDescription,
+    cadence: EN.recipesPlayoffAnnouncementCadence,
     unavailableReason: (league) => nflOnly(league),
   },
 ]
 
+/** The catalog keys whose value is a plain string. */
+type ToolsKey = { [K in keyof typeof EN]: (typeof EN)[K] extends string ? K : never }[keyof typeof EN]
+
 /**
- * The catalog's words in Spanish (2026-10-05), for the hub's Automations section. `RECIPES` itself stays
- * English: the recipes job reads it, and the posts it writes into league CHAT are league content, not
- * this reader's UI — they are deliberately left as written. Only the catalog the hub shows is worded.
+ * The catalog's words in the reader's language (2026-10-05), for the hub's Automations section. `RECIPES`
+ * itself stays English: the recipes job reads it, and the posts it writes into league CHAT are league
+ * content, not this reader's UI — they are deliberately left as written. Only the catalog the hub shows
+ * is worded.
  */
-const RECIPE_COPY_ES: Record<RecipeKey, { label: string; description: string; cadence: string }> = {
+const RECIPE_COPY_KEYS: Record<RecipeKey, { label: ToolsKey; description: ToolsKey; cadence: ToolsKey }> = {
   lineupReminder: {
-    label: 'Recordatorios de alineación',
-    description: 'Cada día de partido de la NFL, una publicación por la mañana que nombra a los equipos con un puesto titular vacío.',
-    cadence: 'Días de partido, temprano por la mañana (ET)',
+    label: 'recipesLineupReminderLabel',
+    description: 'recipesLineupReminderDescription',
+    cadence: 'recipesLineupReminderCadence',
   },
   weeklyRecap: {
-    label: 'Resumen semanal',
-    description: 'Resultados, lo más alto de la tabla y los premios de la semana, calculados con los enfrentamientos reales.',
-    cadence: 'Los martes',
+    label: 'recipesWeeklyRecapLabel',
+    description: 'recipesWeeklyRecapDescription',
+    cadence: 'recipesWeeklyRecapCadence',
   },
   inactivityWarning: {
-    label: 'Avisos de inactividad',
-    description: 'Un aviso semanal amistoso que nombra a los mánagers sin intercambios, reclamos ni cambios de plantilla en 14 días.',
-    cadence: 'Como mucho una vez por semana',
+    label: 'recipesInactivityWarningLabel',
+    description: 'recipesInactivityWarningDescription',
+    cadence: 'recipesInactivityWarningCadence',
   },
   votingDeadline: {
-    label: 'Fechas límite de votación',
-    description: 'Un recordatorio cuando una encuesta del chat de la liga cierra en el próximo día.',
-    cadence: 'El día antes de que cierre una encuesta',
+    label: 'recipesVotingDeadlineLabel',
+    description: 'recipesVotingDeadlineDescription',
+    cadence: 'recipesVotingDeadlineCadence',
   },
   playoffAnnouncement: {
-    label: 'Anuncio de playoffs',
-    description: 'Cuando empiezan los playoffs, una publicación con los cabezas de serie según la clasificación.',
-    cadence: 'Una vez por temporada',
+    label: 'recipesPlayoffAnnouncementLabel',
+    description: 'recipesPlayoffAnnouncementDescription',
+    cadence: 'recipesPlayoffAnnouncementCadence',
   },
 }
 
-const UNAVAILABLE_ES: Record<string, string> = {
-  'Game-day timing is only known for NFL leagues today.': 'Por ahora solo se conoce el horario de los días de partido en las ligas de la NFL.',
-  'MFL imports can’t tell an empty lineup from an unreported one.': 'Las importaciones de MFL no distinguen una alineación vacía de una no reportada.',
-  'Fantrax imports can’t tell an empty lineup from an unreported one.': 'Las importaciones de Fantrax no distinguen una alineación vacía de una no reportada.',
-  'Weekly recaps require a Sleeper week feed or finalized AllFantasy matchups.': 'Los resúmenes semanales necesitan los datos semanales de Sleeper o enfrentamientos finalizados de AllFantasy.',
-}
+/** The unavailable reasons `RECIPES` can return, so each is worded by key. */
+const UNAVAILABLE_KEYS = [
+  'recipesUnavailableNflOnly',
+  'recipesUnavailableMflLineups',
+  'recipesUnavailableFantraxLineups',
+  'recipesUnavailableWeeklyRecap',
+] as const
 
 /** One recipe as the hub's catalog shows it, in the reader's language (default English). */
 export function recipeCatalogEntry(
@@ -159,15 +170,16 @@ export function recipeCatalogEntry(
   language = 'en',
 ): { key: RecipeKey; label: string; description: string; cadence: string; unavailable: string | null } {
   const unavailable = recipe.unavailableReason(league)
-  const es = language === 'es'
-  const copy = es ? RECIPE_COPY_ES[recipe.key] : recipe
+  const m = messagesFor(commissionerToolsMessages, language)
+  const copy = RECIPE_COPY_KEYS[recipe.key]
+  const reasonKey = UNAVAILABLE_KEYS.find((k) => EN[k] === unavailable)
   return {
     key: recipe.key,
-    label: copy.label,
-    description: copy.description,
-    cadence: copy.cadence,
-    // A reason with no Spanish stays whole English rather than vanishing.
-    unavailable: unavailable == null ? null : es ? (UNAVAILABLE_ES[unavailable] ?? unavailable) : unavailable,
+    label: m[copy.label],
+    description: m[copy.description],
+    cadence: m[copy.cadence],
+    // A reason with no translation stays whole English rather than vanishing.
+    unavailable: unavailable == null ? null : reasonKey ? m[reasonKey] : unavailable,
   }
 }
 

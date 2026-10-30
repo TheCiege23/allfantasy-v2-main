@@ -78,7 +78,7 @@ export default async function GlobalAppShell({
           which is `md:inline-flex` = desktop/tablet only) so phone users — most live-event traffic —
           can reach support from every product surface. The /login, /signup and /auth/* bypass above
           returns early, so it never renders on the auth pages. */}
-      <SupportCrestWidget />
+      <SupportCrestWidget defaultEmail={session?.user?.email} />
     </div>
   )
 }

@@ -30,7 +30,9 @@ import {
   isDailyLineupScoringEnabled,
   loadDailyLineups,
   loadPlayerDailyStats,
+  type PlayerDailyStats,
 } from './dailyLineups'
+import { gamesCountActive } from './gamesCount'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { applyGamesLimits, readGamesLimits, slotSeats, type GamesLimitsSummary, type LimitLedgerEntry } from './gamesLimits'
 import { capSlotKey, loadDailyGamesPlayed, loadPriorSeasonLedger, positionTokens } from './gamesLimitsScoring'
@@ -430,29 +432,51 @@ async function loadRosterGamesCount(
  * names him yet — his slot in the weekly lineup. Days before he joined the roster never count.
  * Completeness is still read from the weekly row the sync writes beside the daily ones: no weekly row
  * means the sync has not covered him (missing), and the finalizer's seal is on the weekly row.
+ *
+ * `inject` (the admin stat re-ingest PREVIEW, lib/admin/statReingest.ts): score the same way, but with
+ * the week's per-day lines supplied in memory instead of read from `player_daily_scores` — which still
+ * holds the OLD stats until the sync rewrites it. Every read then goes through `inject.db`, and nothing
+ * here writes. Omitted (every production caller), the function behaves exactly as before. A player with
+ * injected lines but no weekly row yet is scored, not missing: the sync that would write those lines
+ * writes his weekly row in the same pass. Games-count and games-limits leagues are refused under
+ * injection — both read further stored per-game state the preview cannot rebuild.
  */
-async function scoreRosterStartersDaily(args: {
-  leagueId: string
-  rosterId: string
-  week: number
-  seasonYear: number
-  includeBench?: boolean
-  collectPlayerPoints?: boolean
-}): Promise<RosterScoreSummary | null> {
-  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { sport: true, settings: true } })
+export async function scoreRosterStartersDaily(
+  args: {
+    leagueId: string
+    rosterId: string
+    week: number
+    seasonYear: number
+    includeBench?: boolean
+    collectPlayerPoints?: boolean
+  },
+  inject?: DailyScoringInjection,
+): Promise<RosterScoreSummary | null> {
+  const db = inject?.db ?? prisma
+  const league = await db.league.findFirst({ where: { id: args.leagueId }, select: { sport: true, settings: true } })
   const sport = String(league?.sport ?? '').toUpperCase()
   if (!league || !isDailyLineupScoringEnabled(league.settings, sport)) return null
   const window = resolveDailySportWeekWindow(sport, args.seasonYear, args.week)
   if (!window) return null
 
   // Dropped this week too: the days he was here still count (`daysOnRoster`).
-  const players = await prisma.redraftRosterPlayer.findMany({ where: { rosterId: args.rosterId, ...droppedInWindow(window) } })
-  const weekLineups = await loadWeekLineups(prisma, { redraftRosterIds: [args.rosterId], season: args.seasonYear, week: args.week })
-  const dailyLineups = await loadDailyLineups(prisma, { redraftRosterIds: [args.rosterId], window })
+  const players = await db.redraftRosterPlayer.findMany({ where: { rosterId: args.rosterId, ...droppedInWindow(window) } })
+  const weekLineups = await loadWeekLineups(db, { redraftRosterIds: [args.rosterId], season: args.seasonYear, week: args.week })
+  const dailyLineups = await loadDailyLineups(db, { redraftRosterIds: [args.rosterId], window })
   // A drop or add day belongs to whoever held him at his game's lock (`daysOnRoster`).
-  const lockStarts = await loadDailyLockStarts(prisma, { sport, season: args.seasonYear, week: args.week })
+  const lockStarts = await loadDailyLockStarts(db, { sport, season: args.seasonYear, week: args.week })
   const days = daysInWindow(window)
   const playerIds = players.map((p: (typeof players)[number]) => p.playerId)
+  if (inject && (gamesCountActive(league.settings, sport) || readGamesLimits(league.settings, sport))) {
+    throw new Error('Daily scoring with injected stats does not model games-count or games-limits rules.')
+  }
+  // Under injection the league's scorer is resolved once from the row read above — what
+  // `calculateScoreFromSportConfig` resolves per line — so no read reaches the shared client.
+  const injectedScorer = inject ? buildLeagueStatScorer(league) : null
+  const scoreLine = (playerId: string, stats: Record<string, number>, position: string | null) =>
+    inject
+      ? Promise.resolve(injectedScorer ? injectedScorer(stats, position) : 0)
+      : calculateScoreFromSportConfig(args.leagueId, playerId, args.week, stats, position)
   // "Which games count" applies across the days he STARTED: only those days' games are eligible.
   const gamesCount = await loadGamesCountScoring({
     leagueId: args.leagueId,
@@ -467,7 +491,7 @@ async function scoreRosterStartersDaily(args: {
   for (const playerSport of new Set(players.map((p: (typeof players)[number]) => p.sport))) {
     dailyStatsBySport.set(
       playerSport,
-      await loadPlayerDailyStats(prisma, { playerIds, sport: playerSport, season: args.seasonYear, window }),
+      inject ? inject.dailyStats : await loadPlayerDailyStats(db, { playerIds, sport: playerSport, season: args.seasonYear, window }),
     )
   }
   // Games limits (off by default): every started day with a stat line is recorded here, then the
@@ -514,19 +538,20 @@ async function scoreRosterStartersDaily(args: {
       const line = byDay?.get(dayKey(day))
       if (!line) return { points: 0, stats: null }
       return {
-        points: await calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, line.stats, p.position),
+        points: await scoreLine(p.playerId, line.stats, p.position),
         stats: line.stats,
       }
     }
 
     if (startedDays.length > 0) {
       starterCount += 1
-      const weekly = await prisma.playerWeeklyScore.findUnique({
+      const stored = await db.playerWeeklyScore.findUnique({
         where: {
           playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport },
         },
         select: { isFinalized: true },
       })
+      const weekly = stored ?? (inject && byDay?.size ? { isFinalized: false } : null)
       if (!weekly) {
         missingPlayerIds.push(p.playerId)
         allFinal = false
@@ -616,6 +641,14 @@ async function scoreRosterStartersDaily(args: {
         }
       : {}),
   }
+}
+
+/** What the re-ingest preview hands `scoreRosterStartersDaily` in place of stored daily rows. */
+export type DailyScoringInjection = {
+  /** Read-only client for the scorer's reads (default: the shared one). */
+  db?: typeof prisma
+  /** Each player's per-day lines, in place of `player_daily_scores` (one map for every sport on the roster). */
+  dailyStats: PlayerDailyStats
 }
 
 /**
@@ -765,6 +798,21 @@ export async function scoreRosterForWeek(args: {
   return scoreRosterStarters({ ...args, useDevyEngine, bestBall })
 }
 
+/**
+ * C2C (Campus to Canton): each team's campus starters score on top of its pro lineup — one total
+ * (lib/c2c/campusScoring.ts). Native football C2C leagues only; null when no one starts a college
+ * player, so a league without a campus lineup scores exactly as before. Imported lazily: the campus
+ * scorer uses this module's stat scorer.
+ */
+async function loadCampusPoints(
+  league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
+  args: { season: number; nflWeek: number; homeRosterId: string; awayRosterId: string },
+) {
+  if (!league || !isNativePlatform(league.platform)) return null
+  const { campusPointsForMatchup, isFootballC2CLeague } = await import('@/lib/c2c/campusScoring')
+  return isFootballC2CLeague(league) ? campusPointsForMatchup(prisma as never, args) : null
+}
+
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
   const m = await prisma.redraftMatchup.findFirst({
     where: { id: matchupId },
@@ -794,7 +842,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   if (!season) return null
   const seasonYear = season.season
 
-  const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true, platform: true } })
+  const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true, platform: true, sport: true, leagueVariant: true } })
   // The scoring type in force for THIS week: a mid-season switch never re-scores a week played before it.
   const scoringSettings = settingsForScoringWeek(scoringLeague?.settings as Record<string, any> | null, seasonYear, week)
   const scoringMode = scoringSettings?.scoring_mode ?? scoringSettings?.scoringSettings?.scoringMode ?? 'points'
@@ -841,6 +889,14 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     home.points = adjustedScore(home.points, adjustments, matchupId, homeRosterId)
     away.points = adjustedScore(away.points, adjustments, matchupId, awayRosterId)
   }
+  const campus =
+    scoringMode === 'points' && !bestBall && !useDevyEngine
+      ? await loadCampusPoints(scoringLeague, { season: seasonYear, nflWeek: week, homeRosterId, awayRosterId })
+      : null
+  if (campus) {
+    home.points = Math.round((home.points + campus.home.points) * 100) / 100
+    away.points = Math.round((away.points + campus.away.points) * 100) / 100
+  }
   const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds]
   const isComplete =
     missingPlayerIds.length === 0 &&
@@ -884,6 +940,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
           scoredAt: new Date().toISOString(),
           isComplete,
           ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
+          ...(campus ? { campus } : {}),
           home,
           away,
           missingPlayerIds,
@@ -1011,7 +1068,7 @@ async function updateByeRowScore(row: {
 }): Promise<void> {
   let m = row
   const [league, season] = await Promise.all([
-    prisma.league.findFirst({ where: { id: m.leagueId }, select: { settings: true, medianGame: true } }),
+    prisma.league.findFirst({ where: { id: m.leagueId }, select: { settings: true, medianGame: true, platform: true, sport: true, leagueVariant: true } }),
     prisma.redraftSeason.findFirst({ where: { id: m.seasonId }, select: { season: true, medianGame: true } }),
   ])
   if (!league || !season) return
@@ -1043,6 +1100,11 @@ async function updateByeRowScore(row: {
   })
   const adjustments = readScoreAdjustments(scoringSettings)
   if (adjustments.length) home.points = adjustedScore(home.points, adjustments, m.id, m.homeRosterId)
+  // A C2C bye team's campus starters count toward its median / extra-game score too.
+  const campus = !bestBall && !useDevyEngine
+    ? await loadCampusPoints(league, { season: season.season, nflWeek: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
+    : null
+  if (campus) home.points = Math.round((home.points + campus.home.points) * 100) / 100
   const isComplete =
     home.missingPlayerIds.length === 0 && home.starterCount > 0 && home.scoredStarterCount === home.starterCount
   await prisma.redraftMatchup.update({
@@ -1058,6 +1120,7 @@ async function updateByeRowScore(row: {
           bye: true,
           home,
           missingPlayerIds: home.missingPlayerIds,
+          ...(campus ? { campus: { cfbWeeks: campus.cfbWeeks, home: campus.home } } : {}),
         },
       },
     },

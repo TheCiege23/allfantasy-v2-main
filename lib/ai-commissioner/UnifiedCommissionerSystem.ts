@@ -538,6 +538,25 @@ export async function getUnifiedCommissionerAssessment(input: {
   }
 }
 
+/**
+ * League rules go through the commissioner settings save (lib/league/execute-league-settings-patch.ts),
+ * not a bare update, so an AI action gets everything a hand edit gets: the settings lock, the lifecycle
+ * gate, the playoff-fit check and bye plan, the derived JSON copies, the audit, and the league home's
+ * "What changed" card. A refusal is returned as the action's message and nothing is written.
+ */
+async function saveThroughSettingsPatch(
+  userId: string,
+  leagueId: string,
+  patch: Record<string, unknown>,
+  section: 'trades' | 'playoffs',
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const { executeLeagueSettingsPatch } = await import('@/lib/league/execute-league-settings-patch')
+  const res = await executeLeagueSettingsPatch(userId, { leagueId, ...patch }, { section })
+  if (res.ok) return { ok: true }
+  const data = (await res.json().catch(() => ({}))) as { error?: unknown }
+  return { ok: false, message: typeof data.error === 'string' && data.error ? data.error : 'The setting could not be saved.' }
+}
+
 export async function applyUnifiedCommissionerAction(input: {
   leagueId: string
   userId: string
@@ -606,23 +625,21 @@ export async function applyUnifiedCommissionerAction(input: {
   } else if (input.actionKey === 'tighten_trade_review_window') {
     const requested = Number(input.payload?.tradeReviewHours ?? 24)
     const tradeReviewHours = Number.isFinite(requested) ? Math.max(12, Math.min(72, requested)) : 24
-    await prisma.league.update({
-      where: { id: input.leagueId },
-      data: { tradeReviewHours },
-    })
+    const saved = await saveThroughSettingsPatch(input.userId, input.leagueId, { tradeReviewHours }, 'trades')
+    if (!saved.ok) return { ok: false, applied: false, message: saved.message }
     message = `Trade review window set to ${tradeReviewHours}h.`
   } else if (input.actionKey === 'set_playoff_defaults') {
     const teamsRaw = Number(input.payload?.playoffTeams ?? league.playoffTeams ?? 4)
     const weeksRaw = Number(input.payload?.playoffWeeksPerRound ?? 1)
     const teams = Number.isFinite(teamsRaw) ? Math.max(2, Math.min(16, teamsRaw)) : 4
     const weeks = Number.isFinite(weeksRaw) ? Math.max(1, Math.min(2, weeksRaw)) : 1
-    await prisma.league.update({
-      where: { id: input.leagueId },
-      data: {
-        playoffTeams: teams,
-        playoffWeeksPerRound: weeks,
-      },
-    })
+    const saved = await saveThroughSettingsPatch(
+      input.userId,
+      input.leagueId,
+      { playoffTeams: teams, playoffWeeksPerRound: weeks },
+      'playoffs',
+    )
+    if (!saved.ok) return { ok: false, applied: false, message: saved.message }
     message = `Playoff defaults applied (${teams} teams, ${weeks} week/round).`
   } else if (input.actionKey === 'promote_commissioner_notifications') {
     await ensureAICommissionerConfig({ leagueId: input.leagueId })

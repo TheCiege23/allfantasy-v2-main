@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { db, shuffle, advance, alert } = vi.hoisted(() => ({
   db: {
     survivorCommissionerAction: { findFirst: vi.fn(), create: vi.fn() },
-    survivorAuditEntry: { create: vi.fn() },
+    survivorAuditEntry: { create: vi.fn(), findFirst: vi.fn() },
     league: { findUnique: vi.fn() },
     survivorGameState: { findUnique: vi.fn() },
     survivorTribe: { findMany: vi.fn() },
@@ -26,7 +26,7 @@ vi.mock('@/lib/survivor/SurvivorTribeShuffleEngine', () => ({ runShuffle: shuffl
 vi.mock('@/lib/survivor/gameStateMachine', () => ({ advancePhase: advance }))
 vi.mock('@/lib/survivor/survivorCommissionerAlerts', () => ({ notifySurvivorCommissionerOnce: alert }))
 
-import { autoApplyPendingTribeRedraw, getPendingTribeRedraw, rebalanceTribesBeforeCouncil, respondToTribeRedraw } from '@/lib/survivor/survivorTribeRedrawDecision'
+import { autoApplyPendingTribeRedraw, getPendingTribeRedraw, rebalanceTribesBeforeCouncil, redrawTribesForSitOutBalance, respondToTribeRedraw, SIT_OUT_BALANCE_REDRAW_ACTION } from '@/lib/survivor/survivorTribeRedrawDecision'
 
 const recommendation = { id: 'recommendation', week: 4, newState: { minTribeSize: 2, maxTribeSize: 5, tribeSizes: [{ tribeId: 'a', tribeName: 'Alpha', activeCount: 2 }, { tribeId: 'b', tribeName: 'Beta', activeCount: 5 }] } }
 
@@ -177,5 +177,53 @@ describe('rebalanceTribesBeforeCouncil (never freeze, never a two-manager tie)',
     db.survivorGameState.findUnique.mockResolvedValue({ phase: 'pre_merge', mergeTriggeredAt: null, activeCouncilId: 'open' })
     expect(await rebalanceTribesBeforeCouncil('league', 9)).toEqual({ action: 'none' })
     expect(shuffle).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * No fair NBA sit-out rotation exists (nobody may sit two weeks running): the season used to wait
+ * for the commissioner forever. Measured in the full-season rehearsal, NBA 20, week 7.
+ */
+describe('redrawTribesForSitOutBalance (an NBA sit-out block never freezes the season)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    db.survivorGameState.findUnique.mockResolvedValue({ phase: 'pre_merge', mergeTriggeredAt: null, activeCouncilId: null })
+    db.survivorCommissionerAction.findFirst.mockResolvedValue(null)
+    db.survivorAuditEntry.findFirst.mockResolvedValue(null)
+    shuffle.mockResolvedValue({ ok: true })
+    alert.mockResolvedValue({ sent: true })
+  })
+
+  it('redraws as Chimmy, records it for the week and tells the commissioner once', async () => {
+    expect(await redrawTribesForSitOutBalance('league', 7)).toEqual({ redrawn: true })
+    expect(shuffle).toHaveBeenCalledWith('league', { actorUserId: 'survivor-ai-host' })
+    expect(db.survivorAuditEntry.create).toHaveBeenCalledWith({ data: expect.objectContaining({ week: 7, action: SIT_OUT_BALANCE_REDRAW_ACTION, isVisibleToPublic: true }) })
+    expect(alert).toHaveBeenCalledWith('league', 'tribes_rebalanced', expect.objectContaining({ dedupeKey: '7:sit_out_redraw' }))
+  })
+
+  it('redraws at most once a week, so a block that a redraw cannot fix is left for the commissioner', async () => {
+    db.survivorAuditEntry.findFirst.mockResolvedValue({ id: 'earlier-redraw' })
+    expect(await redrawTribesForSitOutBalance('league', 7)).toEqual({ redrawn: false, reason: 'already_redrawn_this_week' })
+    expect(shuffle).not.toHaveBeenCalled()
+  })
+
+  it('answers a pending recommendation with its redraw instead of a second shuffle', async () => {
+    db.survivorCommissionerAction.findFirst.mockImplementation(async ({ where }) =>
+      where.actionType === 'sit_out_shuffle_recommendation' ? { ...recommendation, week: 6 } : null)
+    expect(await redrawTribesForSitOutBalance('league', 7)).toEqual({ redrawn: true })
+    expect(shuffle).toHaveBeenCalledWith('league', { db, actorUserId: 'survivor-ai-host', recommendationId: 'recommendation' })
+  })
+
+  it('does nothing after the merge or while a council is open, and reports a redraw that cannot run', async () => {
+    db.survivorGameState.findUnique.mockResolvedValue({ phase: 'merge', mergeTriggeredAt: new Date(), activeCouncilId: null })
+    expect(await redrawTribesForSitOutBalance('league', 7)).toEqual({ redrawn: false, reason: 'not_pre_merge' })
+    db.survivorGameState.findUnique.mockResolvedValue({ phase: 'pre_merge', mergeTriggeredAt: null, activeCouncilId: 'open' })
+    expect(await redrawTribesForSitOutBalance('league', 7)).toEqual({ redrawn: false, reason: 'not_pre_merge' })
+    expect(shuffle).not.toHaveBeenCalled()
+    db.survivorGameState.findUnique.mockResolvedValue({ phase: 'pre_merge', mergeTriggeredAt: null, activeCouncilId: null })
+    shuffle.mockResolvedValue({ ok: false, error: 'Current tribe assignments do not match the active cast.' })
+    expect(await redrawTribesForSitOutBalance('league', 7)).toEqual({ redrawn: false, reason: 'Current tribe assignments do not match the active cast.' })
+    expect(db.survivorAuditEntry.create).not.toHaveBeenCalled()
+    expect(alert).not.toHaveBeenCalled()
   })
 })

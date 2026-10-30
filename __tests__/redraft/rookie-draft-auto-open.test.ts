@@ -16,12 +16,14 @@ const m = vi.hoisted(() => ({
   draftState: vi.fn(),
   hasPlan: vi.fn(),
   dispatch: vi.fn(),
+  settingsUpsert: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     redraftSeason: { findMany: m.seasonFindMany, findFirst: m.seasonFindFirst },
     league: { findUnique: m.leagueFindUnique, update: m.leagueUpdate },
+    leagueSettings: { upsert: m.settingsUpsert },
   },
 }))
 vi.mock('@/lib/live-draft-engine/createNextLeagueDraft', () => ({ createNextLeagueDraft: m.createNext }))
@@ -307,5 +309,33 @@ describe('AF Commissioner opens the rookie draft by default', () => {
       expect((await run('2026-11-02T12:00:00Z'))[0].detail).toBe('AUTO_OPEN_OFF')
       expect(m.dispatch).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('"start it N days after it opens" (phase 6, 2026-10-29)', () => {
+  it('sets the draft to start by itself and tells members when', async () => {
+    m.seasonFindMany.mockResolvedValue([
+      shell('NFL', 2027, '2027-01-12T05:00:00Z', { [ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]: { autoOpen: true, autoStartDays: 7 } }),
+    ])
+    expect(await run('2027-05-01T12:00:00Z')).toEqual([expect.objectContaining({ action: 'opened' })])
+    const startsAt = new Date('2027-05-09T00:00:00.000Z')
+    expect(m.settingsUpsert).toHaveBeenCalledWith({
+      where: { leagueId: 'L-NFL' },
+      create: { leagueId: 'L-NFL', draftDateUtc: startsAt, autostart: true },
+      update: { draftDateUtc: startsAt, autostart: true },
+    })
+    expect(m.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('It starts by itself on Saturday, May 8 at 8:00 PM ET'),
+        meta: expect.objectContaining({ startsAt: startsAt.toISOString() }),
+      }),
+    )
+  })
+
+  it('without it, sets no date and says the commissioner will start it', async () => {
+    m.seasonFindMany.mockResolvedValue([shell('NFL', 2027, '2027-01-12T05:00:00Z')])
+    await run('2027-05-01T12:00:00Z')
+    expect(m.settingsUpsert).not.toHaveBeenCalled()
+    expect(m.publish).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('Your commissioner will start it') }))
   })
 })

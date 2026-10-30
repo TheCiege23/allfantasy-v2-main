@@ -32,6 +32,8 @@
  */
 
 import type { TaskCard } from './tasks'
+import { commissionerToolsMessages } from '@/lib/core-app/messages/commissionerTools'
+import { messagesFor } from '@/lib/i18n/messages'
 
 export type LeagueReviewSignals = {
   /** Open AI commissioner integrity alerts. */
@@ -53,10 +55,6 @@ export const NO_REVIEW_SIGNALS: LeagueReviewSignals = {
   draftDateMissing: false,
 }
 
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`
-}
-
 function leaguePage(leagueId: string, view: string): string {
   return `/league/${encodeURIComponent(leagueId)}?view=${encodeURIComponent(view)}`
 }
@@ -66,7 +64,7 @@ function leaguePage(leagueId: string, view: string): string {
  * reader's language (default English) — see `health.ts` for why at the source, not at render.
  */
 export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, language = 'en'): TaskCard[] {
-  const es = language === 'es'
+  const m = messagesFor(commissionerToolsMessages, language)
   const id = encodeURIComponent(leagueId)
   const cards: TaskCard[] = []
 
@@ -75,14 +73,10 @@ export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, lang
       id: 'review:integrity',
       severity: 'warn',
       source: 'review',
-      title: es
-        ? plural(s.integrityAlerts, 'alerta de integridad abierta', 'alertas de integridad abiertas')
-        : `${plural(s.integrityAlerts, 'open integrity alert')}`,
-      detail: es
-        ? 'Detectadas a partir de los valores de los intercambios y las alineaciones. Necesitan que una persona las revise antes de decidir nada.'
-        : 'Flagged from trade values and lineup cards. They need a person to look before anything is decided.',
+      title: m.signalsIntegrityTitle(s.integrityAlerts),
+      detail: m.signalsIntegrityDetail,
       due: null,
-      action: { label: es ? 'Revisar alertas' : 'Review alerts', href: `/league/${id}/commissioner/integrity`, external: false },
+      action: { label: m.signalsIntegrityAction, href: `/league/${id}/commissioner/integrity`, external: false },
     })
   }
 
@@ -91,14 +85,10 @@ export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, lang
       id: 'review:trades',
       severity: 'warn',
       source: 'review',
-      title: es
-        ? `${plural(s.tradesAwaitingReview, 'intercambio espera', 'intercambios esperan')} tu revisión`
-        : `${plural(s.tradesAwaitingReview, 'trade')} awaiting your review`,
-      detail: es
-        ? 'Ambos mánagers aceptaron. El intercambio no se hace efectivo hasta que un comisionado lo apruebe o lo vete.'
-        : 'Both managers agreed. The trade does not go through until a commissioner approves or vetoes it.',
+      title: m.signalsTradesTitle(s.tradesAwaitingReview),
+      detail: m.signalsTradesDetail,
       due: null,
-      action: { label: es ? 'Revisar intercambios' : 'Review trades', href: leaguePage(leagueId, 'trades'), external: false },
+      action: { label: m.signalsTradesAction, href: leaguePage(leagueId, 'trades'), external: false },
     })
   }
 
@@ -107,14 +97,10 @@ export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, lang
       id: 'review:waivers',
       severity: 'warn',
       source: 'review',
-      title: es
-        ? `${plural(s.overdueWaiverClaims, 'reclamo lleva', 'reclamos llevan')} más de una semana esperando`
-        : `${plural(s.overdueWaiverClaims, 'waiver claim')} waiting over a week`,
-      detail: es
-        ? 'Estos reclamos ya deberían haberse resuelto en un procesamiento de reclamos. Procésalos para resolverlos.'
-        : 'These claims should have been decided by a waiver run by now. Run waivers to process them.',
+      title: m.signalsWaiversTitle(s.overdueWaiverClaims),
+      detail: m.signalsWaiversDetail,
       due: null,
-      action: { label: es ? 'Abrir agentes libres' : 'Open waivers', href: `/core/commissioner?league=${id}#ch-waivers`, external: false },
+      action: { label: m.signalsWaiversAction, href: `/core/commissioner?league=${id}#ch-waivers`, external: false },
     })
   }
 
@@ -123,12 +109,10 @@ export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, lang
       id: 'review:draft-date',
       severity: 'info',
       source: 'review',
-      title: es ? 'No hay fecha de draft' : 'No draft date set',
-      detail: es
-        ? 'Los mánagers no pueden organizarse para un draft sin fecha. Añádela en la configuración del draft.'
-        : 'Managers can’t plan around a draft that isn’t scheduled. Add the date in draft settings.',
+      title: m.signalsDraftTitle,
+      detail: m.signalsDraftDetail,
       due: null,
-      action: { label: es ? 'Poner la fecha' : 'Set the date', href: `/league/${id}/settings`, external: false },
+      action: { label: m.signalsDraftAction, href: `/league/${id}/settings`, external: false },
     })
   }
 

@@ -69,6 +69,8 @@ export type DraftTopBarProps = {
   isReconnecting?: boolean
   /** Orphan roster on clock: show CPU/AI Manager badge and allow Run pick */
   isOrphanOnClock?: boolean
+  /** The team on the clock is a Chimmy AI manager slot, which picks on its own after a short delay. */
+  chimmyManagerOnClock?: boolean
   /** When orphan on clock: 'cpu' | 'ai' - label shows "CPU Manager" or "AI Manager" */
   orphanDrafterMode?: 'cpu' | 'ai'
   /** Selected setting mode; used to show fallback state when requested AI runs in CPU fallback. */
@@ -222,6 +224,7 @@ export function DraftTopBar({
   commissionerPauseControlsEnabled = true,
   isReconnecting = false,
   isOrphanOnClock = false,
+  chimmyManagerOnClock = false,
   orphanDrafterMode = 'cpu',
   orphanDrafterRequestedMode = orphanDrafterMode,
   orphanFallbackActive = false,
@@ -819,7 +822,9 @@ export function DraftTopBar({
                   isCurrentUserOnClock ? 'text-amber-100' : 'text-violet-200/75'
                 }`}
               >
-                {isOrphanOnClock
+                {isOrphanOnClock && chimmyManagerOnClock
+                  ? 'Chimmy is picking…'
+                  : isOrphanOnClock
                   ? orphanModeLabel
                   : isCurrentUserOnClock
                     ? "You're on the clock"

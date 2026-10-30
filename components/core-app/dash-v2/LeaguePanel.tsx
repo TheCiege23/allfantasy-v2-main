@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { useMemo, useState } from 'react'
 import type { Dash34League } from '@/components/core-app/screens/Dashboard34'
 import { PanelUserMenu } from '@/components/core-app/dash-v2/PanelUserMenu'
@@ -242,7 +243,7 @@ export function LeaguePanel({
                        * ?league= on the same route, which is also where the
                        * season timeline, Draft HQ and Commissioner Hub live.
                        */
-                      href={`/core?league=${encodeURIComponent(league.id)}`}
+                      href={leagueEntryHref(league)}
                       className="af-d2-row"
                     >
                       <span className="af-d2-tile" data-platform={league.platform} aria-hidden>

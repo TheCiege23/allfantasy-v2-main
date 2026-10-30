@@ -621,12 +621,17 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
         })
         void loadAvailablePlayers()
       } catch (err: any) {
-        setSaveError(err?.message || "Unable to save lineup.")
+        const message = err?.message || "Unable to save lineup."
+        setSaveError(message)
+        // A refused save (a taxi rule, a full section, a lock) left the board showing a move that did
+        // not happen: read the saved roster back so the board matches it. A good read clears the error,
+        // so it is put back — the manager still needs to know why the move did not stick.
+        void loadRoster().then(() => setSaveError(message))
       } finally {
         setSaving(false)
       }
     },
-    [options.leagueId, existingPlayerData, rosterId, loadAvailablePlayers, canEditLineup],
+    [options.leagueId, existingPlayerData, rosterId, loadAvailablePlayers, loadRoster, canEditLineup],
   )
 
   const addPlayerFromPool = useCallback(

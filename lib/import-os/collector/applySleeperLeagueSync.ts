@@ -169,9 +169,11 @@ async function applyLeagueState(
    * rebuild the bundle degrades to the previous merge rather than dropping the sync.
    */
   let mergedSettings: Record<string, unknown>
+  let refreshedScoringPresetId: string | undefined
   try {
     const bundle = buildCanonicalImportBundle(normalized)
     mergedSettings = republishCanonicalSettingsForRefresh(existingSettings, freshSettings, bundle)
+    refreshedScoringPresetId = bundle.scoringPresetId
   } catch (e) {
     mergedSettings = { ...existingSettings, ...freshSettings }
     out.notes.push(
@@ -192,6 +194,7 @@ async function applyLeagueState(
     name: normalized.league.name,
     avatarUrl: normalized.league_branding?.avatar_url ?? undefined,
     scoring: normalized.league.scoring ?? undefined,
+    scoringPresetId: refreshedScoringPresetId,
     status: normalized.league.status ?? undefined,
     leagueSize: typeof normalized.league.leagueSize === 'number' ? normalized.league.leagueSize : undefined,
     isDynasty: normalized.league.isDynasty,

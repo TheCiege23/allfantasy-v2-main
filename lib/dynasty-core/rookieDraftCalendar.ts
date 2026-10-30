@@ -81,6 +81,37 @@ export type RookieDraftCalendarSettings = {
   autoOpen: boolean
   /** `YYYY-MM-DD`, or null for the sport default. */
   customOpenDate: string | null
+  /** Days after an automatic open that the draft starts by itself, or null: the commissioner presses Start. */
+  autoStartDays: RookieDraftAutoStartDays | null
+}
+
+/** "Start it N days after it opens" (phase 6, 2026-10-29): the choices a commissioner is offered. */
+export const ROOKIE_DRAFT_AUTO_START_DAYS = [3, 7, 14] as const
+export type RookieDraftAutoStartDays = (typeof ROOKIE_DRAFT_AUTO_START_DAYS)[number]
+
+export function normalizeAutoStartDays(value: unknown): RookieDraftAutoStartDays | null {
+  return (ROOKIE_DRAFT_AUTO_START_DAYS as readonly unknown[]).includes(value) ? (value as RookieDraftAutoStartDays) : null
+}
+
+/**
+ * When an automatically opened rookie draft starts by itself: `days` after the day it opened, at
+ * 00:00 UTC of the following day — 8 pm Eastern / 5 pm Pacific in summer, an evening across the US.
+ */
+export function rookieDraftAutoStartAt(openedAt: Date, days: RookieDraftAutoStartDays): Date {
+  return new Date(Date.UTC(openedAt.getUTCFullYear(), openedAt.getUTCMonth(), openedAt.getUTCDate() + days + 1, 0))
+}
+
+/** "Tuesday, May 12 at 8:00 PM ET" — the start time as members read it in the announcement. */
+export function describeRookieDraftStart(at: Date): string {
+  const text = at.toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+  return `${text.replace(/, (\d{1,2}:\d{2})/, ' at $1')} ET`
 }
 
 export type RookieDraftWindow = {
@@ -166,6 +197,7 @@ export function readRookieDraftCalendarSettings(settings: unknown): RookieDraftC
   return {
     autoOpen: readExplicitAutoOpen(settings) ?? ROOKIE_DRAFT_AUTO_OPEN_DEFAULT,
     customOpenDate: normalizeCustomOpenDate(o.customOpenDate),
+    autoStartDays: normalizeAutoStartDays(o.autoStartDays),
   }
 }
 

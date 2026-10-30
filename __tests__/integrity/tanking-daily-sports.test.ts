@@ -16,6 +16,7 @@ const h = vi.hoisted(() => ({
   daily: [] as Array<{ rosterId: string; playerId: string; scoringDay: Date; slotType: string }>,
   weekly: [] as Array<{ rosterId: string; section: string; playerId: string; season: number; week: number }>,
   byTeamDay: new Map<string, Map<string, Date>>(),
+  dailyScores: [] as Array<{ playerId: string; sport: string; season: number; scoringDay: Date; stats: Record<string, number>; isFinalized: boolean }>,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -60,6 +61,11 @@ vi.mock('@/lib/prisma', () => ({
       ),
     },
     redraftDailyLineup: { findMany: vi.fn(async () => h.daily) },
+    playerDailyScore: {
+      findMany: vi.fn(async ({ where }: { where: { playerId: { in: string[] }; sport: string; season: number } }) =>
+        h.dailyScores.filter((d) => where.playerId.in.includes(d.playerId) && d.sport === where.sport && d.season === where.season),
+      ),
+    },
     league: { findFirst: vi.fn(async () => ({ playoffStartWeek: 23, sport: h.sport, platform: 'native', settings: {} })) },
     sportsPlayer: { findMany: vi.fn(async () => [{ id: 'pg-idle', sleeperId: null, source: 'rolling_insights', name: 'Idle Guard' }, { id: 'pg-bench', sleeperId: null, source: 'rolling_insights', name: 'Bench Guard' }]) },
     integrityFlag: {
@@ -87,12 +93,14 @@ const plays = (team: string | null, day: string | null) => {
   if (team === 'IDLE') return false
   return null
 }
-const judge = (mode: 'daily' | 'weekly', players: DailySportPlayer[]) =>
+/** By default every bench player whose team plays had a stat line; a test names the ones who did not. */
+const judge = (mode: 'daily' | 'weekly', players: DailySportPlayer[], didNotPlay: ReadonlySet<string> = new Set()) =>
   findIdleStarts({
     mode,
     days: DAYS,
     players,
     teamPlays: plays,
+    played: (playerId) => !didNotPlay.has(playerId),
     isStarterSlot: (s) => !['BN', 'IR'].includes(s),
     slotAccepts: (slot, pos) => slot === pos || slot === 'UTIL' || (slot === 'G' && ['PG', 'SG'].includes(pos)),
   })
@@ -117,6 +125,29 @@ describe('the rule (daily lineups)', () => {
   it('a team the schedule cannot place is never idle, and an unknown slot makes no claim', () => {
     expect(judge('daily', [player('x', 'PG', 'UNK', { '2026-11-03': 'PG' }), player('b', 'PG', 'NYK', { '2026-11-03': 'BN' })])).toEqual([])
     expect(judge('daily', [player('x', 'PG', 'BOS', { '2026-11-03': null }), player('b', 'PG', 'NYK', { '2026-11-03': 'BN' })])).toEqual([])
+  })
+
+  /*
+   * 🛑 FALSE FLAGS (2026-10-29). A flag can cost a manager a warning or a lost pick, so the evidence
+   * has to be a swap the manager could actually have made.
+   */
+  it('🛑 a bench player whose team played but who did not (listed Out, never got in) is no alternative', () => {
+    const lineup = [player('pg-idle', 'PG', 'BOS', { '2026-11-03': 'PG' }), player('pg-bench', 'PG', 'NYK', { '2026-11-03': 'BN' })]
+    expect(judge('daily', lineup)).toHaveLength(1)
+    expect(judge('daily', lineup, new Set(['pg-bench']))).toEqual([])
+  })
+
+  it('🛑 one bench player fixes one slot a day: two idle starters and one bench guard are one missed swap', () => {
+    const idleA = player('a', 'PG', 'BOS', { '2026-11-03': 'PG' })
+    const idleB = player('b', 'SG', 'BOS', { '2026-11-03': 'G' })
+    const bench1 = player('bench1', 'PG', 'NYK', { '2026-11-03': 'BN' })
+    expect(judge('daily', [idleA, idleB, bench1])).toEqual([{ day: '2026-11-03', playerId: 'a', slot: 'PG', benchPlayerId: 'bench1' }])
+    // A second bench guard who played makes it two.
+    const bench2 = player('bench2', 'SG', 'NYK', { '2026-11-03': 'BN' })
+    expect(judge('daily', [idleA, idleB, bench1, bench2]).map((i) => [i.playerId, i.benchPlayerId])).toEqual([['a', 'bench1'], ['b', 'bench2']])
+    // The same bench player is free again the next day.
+    const twoDays = [player('a', 'PG', 'BOS', { '2026-11-03': 'PG', '2026-11-05': 'PG' }), player('bench1', 'PG', 'NYK', { '2026-11-03': 'BN', '2026-11-05': 'BN' })]
+    expect(judge('daily', twoDays)).toHaveLength(2)
   })
 
   it('a day he was not on the team does not count, and a multi-position player fills either', () => {
@@ -199,9 +230,11 @@ describe('the loader, on real dates and the lock\'s own team keys', () => {
     ])
     const added = new Date('2026-10-01T12:00:00Z')
     h.rows = [
-      { rosterId: 'r1', playerId: 'pg-idle', slotType: 'PG', position: 'PG', team: 'Boston Celtics', addedAt: added, droppedAt: null },
-      { rosterId: 'r1', playerId: 'pg-bench', slotType: 'BN', position: 'PG', team: 'New York Knicks', addedAt: added, droppedAt: null },
+      { rosterId: 'r1', playerId: 'pg-idle', sport: 'NBA', slotType: 'PG', position: 'PG', team: 'Boston Celtics', addedAt: added, droppedAt: null },
+      { rosterId: 'r1', playerId: 'pg-bench', sport: 'NBA', slotType: 'BN', position: 'PG', team: 'New York Knicks', addedAt: added, droppedAt: null },
     ]
+    // The bench guard's stat line for the 3rd: he played.
+    h.dailyScores = [{ playerId: 'pg-bench', sport: 'NBA', season: 2026, scoringDay: new Date('2026-11-03T00:00:00Z'), stats: { pts: 14 }, isFinalized: false }]
     h.weekly = []
     h.daily = [
       { rosterId: 'r1', playerId: 'pg-idle', scoringDay: new Date('2026-11-03T00:00:00Z'), slotType: 'PG' },
@@ -217,6 +250,15 @@ describe('the loader, on real dates and the lock\'s own team keys', () => {
     expect(out?.mode).toBe('daily')
     // The saved rows carry forward all week; after the 4th Boston and New York are both off, so no bench option played.
     expect(out?.byRoster.get('r1')).toEqual([{ day: '2026-11-03', playerId: 'pg-idle', slot: 'PG', benchPlayerId: 'pg-bench' }])
+  })
+
+  it('🛑 the bench guard\'s team played but he has no stat line that day: no idle start', async () => {
+    h.dailyScores = []
+    const out = await loadDailySportIdleStarts(prisma as never, {
+      sport: 'NBA', season: 2026, week: 3, redraftRosterIds: ['r1'],
+      leagueSettings: { sportConfig: { lineupLockType: 'daily', dailyLineupsEnabled: true } },
+    })
+    expect(out?.byRoster.get('r1')).toBeUndefined()
   })
 
   it('no claim without the week\'s schedule, or for another sport', async () => {

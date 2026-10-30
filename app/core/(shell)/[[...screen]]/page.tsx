@@ -1,4 +1,4 @@
-import LeagueSchedule from '@/components/core-app/screens/LeagueSchedule'
+import { readHiddenLeagueSections, type LeagueSectionId } from '@/lib/league/leagueSections'
 import { loadTradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import LeagueMoves from '@/components/core-app/screens/LeagueMoves'
 import { Suspense } from 'react'
@@ -6,6 +6,9 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { canonicalCoreScreen } from '@/lib/core-app/leagueNavigation'
 import { cookies, headers } from 'next/headers'
+import { LANG_COOKIE_KEY, resolveLanguage } from '@/lib/i18n/constants'
+import { ScreenUnavailable } from '@/components/core-app/ScreenUnavailable'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
@@ -29,10 +32,10 @@ import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import { isSubscriptionEntitlementBypassUserId } from '@/lib/dev-admin/access'
 import { attachLeagueHubs } from '@/lib/core-app/attachLeagueHubs'
 import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNavigation'
-import ConnectedFranchiseWarRoom from '@/components/core-app/screens/ConnectedFranchiseWarRoom'
 import ConnectedDecisionScopeBar from '@/components/core-app/ConnectedDecisionScopeBar'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
+import { navLabel } from '@/lib/core-app/navLabels'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { resolveLeagueValueSurfaces } from '@/lib/values/valueSurfaceEligibility'
@@ -44,6 +47,11 @@ import {
 import {
   DevyCore, DevyLeagueTab, LeagueHome, PlayerFinder, MyTeam,
   Matchup, Trades, Waivers, DraftHq, DraftBoard,
+  LeagueSchedule, ConnectedFranchiseWarRoom, TradeCenter, FormatHub, DraftArchive, Scout,
+  GamePlan, WarRoomWeek, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
+  Portfolio, Tools, Career, YourWeek, RivalryRadar, YourWeekLeague, SeasonOutlook,
+  SeasonOutlookLeague, LiveScores, LiveGameView, Standings, NotificationsCenter,
+  CareerShare,
 } from '@/components/core-app/screens/LazyScreens'
 import { getDevyCoreData, leagueDevyNav, looksLikeDevyFormat, NO_DEVY_NAV } from '@/lib/core-app/devy'
 import { loadDevyLeagueTab } from '@/lib/core-app/devyLeagueTab'
@@ -67,6 +75,7 @@ import {
   LEAGUE_DATA_COVERAGE_ANCHOR,
 } from '@/components/core-app/LeagueDataCoverage'
 import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core-app/leagueDataCoverage'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
@@ -106,13 +115,11 @@ import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import MatchupPulseBoard from '@/components/core-app/MatchupPulseBoard'
 import { MatchupPickerBlurb, MatchupPickerNotice } from '@/components/core-app/MatchupPickerCopy'
 import { getMatchupPulse } from '@/lib/core-app/matchupPulse'
-import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { getTradesData } from '@/lib/core-app/trades'
 import { getTradesBoard, pointBoardAtReachableLeagues } from '@/lib/core-app/tradesBoard'
 import { readTradesBoardSummary } from '@/lib/core-app/tradesBoardSummary'
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
 import { resolveCurrentWeek } from '@/lib/core-app/currentWeek'
-import FormatHub from '@/components/core-app/screens/FormatHub'
 import { getFormatHub, parseHubFormat } from '@/lib/core-app/formatHubs'
 import { getWaiversData } from '@/lib/core-app/waivers'
 import { loadWaiverEdgeForScreen } from '@/lib/competitive-edge/waiverEdgeLoader'
@@ -126,28 +133,17 @@ import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
 import { getLiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 import { getDraftHqData } from '@/lib/core-app/draftHq'
 import { getDraftArchiveScreen } from '@/lib/draft-archive/screen'
-import { DraftArchive } from '@/components/core-app/screens/DraftArchive'
 import { loadDraftEdgeForScreen } from '@/lib/competitive-edge/draftEdgeLoader'
 import { getDraftBoardData } from '@/lib/core-app/draftBoard'
-import Scout from '@/components/core-app/screens/Scout'
 import { getLeagueEliminations, getScoutData } from '@/lib/core-app/scout'
-import GamePlan from '@/components/core-app/screens/GamePlan'
-import WarRoomWeek from '@/components/core-app/screens/WarRoomWeek'
 import LandingV4 from '@/components/core-app/screens/LandingV4'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
-import Partners from '@/components/core-app/screens/Partners'
-import { BusinessRetention } from '@/components/core-app/screens/BusinessRetention'
-import { DiscordBridge } from '@/components/core-app/screens/DiscordBridge'
 import { loadDiscordBridgeScreen } from '@/lib/core-app/discordBridgeScreen'
 import { DiscordBridgeNotice } from '@/components/core-app/screens/DiscordBridgeNotice'
-import { BracketChallenge } from '@/components/core-app/screens/BracketChallenge'
 import { getBracketChallenge } from '@/lib/core-app/bracketChallenge'
 import { resolveSport } from '@/lib/brackets/sportShell'
 import AuthV4 from '@/components/core-app/screens/AuthV4'
 import ImportV4, { type ImportPreviewState } from '@/components/core-app/screens/ImportV4'
-import { Portfolio } from '@/components/core-app/screens/Portfolio'
-import { Tools } from '@/components/core-app/screens/Tools'
-import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
 import { leagueArtUrl } from '@/lib/core-app/leagueArt'
 import { getRailMatchups } from '@/lib/core-app/railMatchups'
@@ -194,13 +190,9 @@ import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
 import { getWeekAll, scoredMatchupLeagueIds } from '@/lib/core-app/weekAll'
 import { buildWeeklyRoutine, getRoutineFacts } from '@/lib/core-app/weeklyRoutine'
-import YourWeek from '@/components/core-app/screens/YourWeek'
 import { WeekHistoryNotice } from '@/components/core-app/WeekHistoryNotice'
 import WeekBoard from '@/components/core-app/boards/WeekBoard'
-import RivalryRadar from '@/components/core-app/screens/RivalryRadar'
 import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
-import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
-import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import { buildWeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
 import { getWeeklyScheduleForecasts } from '@/lib/core-app/weeklyScheduleForecastLoader'
@@ -210,10 +202,7 @@ import { WeeklyBlueprint } from '@/components/core-app/WeeklyBlueprint'
 import { toStandingsOdds } from '@/lib/core-app/standingsOdds'
 import { getLineupEfficiency } from '@/lib/core-app/lineupEfficiency'
 import { buildDraftOrderPreview, readDraftOrderRule } from '@/lib/core-app/standingsDraftOrder'
-import SeasonOutlookLeague from '@/components/core-app/screens/SeasonOutlookLeague'
 import { slimOutlookForBoard } from '@/lib/core-app/outlookCopy'
-import LiveScores from '@/components/core-app/screens/LiveScores'
-import { LiveGameView } from '@/components/core-app/screens/LiveGameView'
 /*
  * Model Admin's two panels, reused verbatim from the page this replaced. They
  * are client components that fetch their own data, so moving them onto the core
@@ -236,7 +225,6 @@ import { homeLaunchOfferFor } from '@/components/launch/homeLaunchOffer'
 import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
 import CommissionerOverview from '@/components/core-app/screens/CommissionerOverview'
 import { getCommissionerOverview } from '@/lib/core-app/commissionerOverview'
-import Standings from '@/components/core-app/screens/Standings'
 import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
 import { parseStandingsView } from '@/lib/core-app/standingsView'
 import PickALeague from '@/components/core-app/PickALeague'
@@ -259,9 +247,7 @@ import { recordBudgetSince } from '@/lib/sports-os/budgetTelemetry'
 import { classifyDevice } from '@/lib/observability/requestContext'
 import LeagueSync from '@/components/core-app/screens/LeagueSync'
 import { getLeagueSync } from '@/lib/core-app/leagueSync'
-import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
 import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
-import CareerShare from '@/components/core-app/screens/CareerShare'
 import { buildToolsHub } from '@/lib/core-app/toolsHub'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import { planAllowanceMeta, readChimmyAnswerAllowance } from '@/lib/chimmy/planAllowance'
@@ -299,7 +285,7 @@ import {
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { leagueDataFreshness } from '@/lib/core-app/cardFreshness'
 import { CARD_USE_COOKIE, orderHomeCards, parseCardUsage, timeSensitiveCards } from '@/lib/core-app/homeCardOrder'
-import { readHiddenHomeSections, type HomeSectionId } from '@/lib/core-app/homeSections'
+import { resolveHiddenHomeSections, type HomeSectionId } from '@/lib/core-app/homeSections'
 
 export const dynamic = 'force-dynamic'
 
@@ -837,6 +823,11 @@ export default async function AfCorePage({
     redirect(`/core${segment ? `/${segment}` : ''}${query ? `?${query}` : ''}`)
   }
 
+  // Canonical entry for AF-hosted leagues, after the membership check and before dashboard reads.
+  if (activeKey === 'home' && selectedLeagueRow && !isImportedPlatform(selectedLeagueRow.platform?.trim())) {
+    redirect(leagueEntryHref(selectedLeagueRow))
+  }
+
   // This demand signal moves the league into the five-minute active import
   // lane. The helper ignores prefetches and swallows write failures.
   if (selectedLeagueRow) void touchLeagueViewed(selectedLeagueRow.id)
@@ -1338,7 +1329,8 @@ export default async function AfCorePage({
    * The home sections this viewer switched off in Settings → Home page (lib/core-app/homeSections.ts).
    * Same row as the SMS nudge above, so it costs no query. A failed read hides nothing.
    */
-  const hiddenHomeSections = readHiddenHomeSections(shellUser?.profile?.notificationPreferences)
+  const hiddenHomeSections = resolveHiddenHomeSections(shellUser?.profile?.notificationPreferences)
+  const hiddenLeagueSections = readHiddenLeagueSections(shellUser?.profile?.notificationPreferences)
 
   /*
    * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never
@@ -1612,6 +1604,7 @@ export default async function AfCorePage({
           ? { byLeague: railMatchups.byLeague, projectionWeek: railMatchups.projectionWeek }
           : null,
         hiddenHomeSections,
+        hiddenLeagueSections,
       }}
     />
   )
@@ -1939,6 +1932,7 @@ type CoreScreenContext = {
   weekLineups: WeekLineups | null
   /** Home sections switched off in Settings → Home page — lib/core-app/homeSections.ts. */
   hiddenHomeSections: ReadonlySet<HomeSectionId>
+  hiddenLeagueSections: LeagueSectionId[]
 }
 
 /**
@@ -1991,7 +1985,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     homeScope,
     favoriteIds,
     hiddenHomeSections,
+    hiddenLeagueSections,
   } = ctx
+  /*
+   * The reader's language for server-rendered copy on this screen. Read from the `af_lang` cookie,
+   * as app/layout.tsx does for <html lang> — no session or profile read, so every screen can afford
+   * it. The client switcher writes the cookie and refreshes the route.
+   */
+  const language = resolveLanguage((await cookies()).get(LANG_COOKIE_KEY)?.value)
 
   /*
    * The /core depth paywall (lib/core-app/coreDepthAccess.ts) — one plan read per render, and only
@@ -4440,30 +4441,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         bracket ? (
           <BracketChallenge data={bracket} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Bracket Challenge
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              The team list for this sport could not be read just now. Nothing is lost — reload, or
-              pick another sport.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Bracket Challenge"
+            body="The team list for this sport could not be read just now. Nothing is lost — reload, or pick another sport."
+          />
         )
       ) : segment === 'hubs' ? (
         /* Segment-matched and above every activeKey branch — see the model-admin note below. */
         formatHub ? (
           <FormatHub data={formatHub} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Format hubs
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read your leagues just now. This is a read failure on our side, not a sign
-              that you have none.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Format hubs"
+            body="We could not read your leagues just now. This is a read failure on our side, not a sign that you have none."
+          />
         )
       ) : segment === 'discord' && discordScreen ? (
         discordScreen.state === 'ready' ? (
@@ -4475,6 +4468,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         <>
         {chimmyMovesCard}
         {segment === 'schedule' ? <LeagueSchedule data={leagueHome} /> : segment === 'moves' ? <LeagueMoves data={leagueHome} /> :         <LeagueHome
+          hiddenSections={hiddenLeagueSections}
           data={leagueHome}
           identityInShell={leagueHeaderShown}
           tradeDeadline={homeTradeDeadline}
@@ -4580,7 +4574,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           /* The read failed for a league the user HAS selected — say so, and keep
              them on this screen. Falling through to the picker below would tell
              them to choose a league they already chose. */
-          <ScreenLoadError screen="My team" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('my-team')} retryHref={retryHref} language={language} />
         ) : /*
            * 2026-09-07 handoff. The ranked board IS the screen now; the picker
            * lives behind `?all=1`, which the board's own footer links to.
@@ -4610,7 +4604,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             <Matchup data={matchup} />
           </>
         ) : matchupLoadFailed ? (
-          <ScreenLoadError screen="Matchup" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('matchup')} retryHref={retryHref} language={language} />
         ) : showAllLeagues || !matchupPulse ? (
           /*
            * A failed pulse read is not "no games" — fall back to the picker, and SAY it failed.
@@ -4675,7 +4669,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             />
           </>
         ) : tradesLoadFailed ? (
-          <ScreenLoadError screen="Trade Center" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('trades')} retryHref={retryHref} language={language} />
         ) : (
           <TradeCenter
             viewerId={userId}
@@ -4688,7 +4682,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         waivers ? (
           <Waivers data={waivers} edge={waiverEdge} edgeAccess={waiverEdgeAccess} />
         ) : waiversLoadFailed ? (
-          <ScreenLoadError screen="Waivers" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('waivers')} retryHref={retryHref} language={language} />
         ) : !showAllLeagues && waiversBoard ? (
           <WaiversBoard
             data={waiversBoard}
@@ -4794,7 +4788,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : selectedLeagueId && draftArchiveSlot ? (
           draftArchiveSlot
         ) : draftHqLoadFailed ? (
-          <ScreenLoadError screen="Draft HQ" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('draft-hq')} retryHref={retryHref} language={language} />
         ) : showAllLeagues || !homeDrafts ? (
           <>{draftArchiveSlot}<PickALeague
             tabKey="draft-hq"
@@ -4923,11 +4917,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                * while Scout's own read fails, and that half should still be shown rather than
                * replaced by an error for the other half.
                */
-              <ScreenLoadError screen="Scout" retryHref={retryHref} />
+              <ScreenLoadError screen="Scout" retryHref={retryHref} language={language} />
             ) : null}
           </>
         ) : scoutLoadFailed ? (
-          <ScreenLoadError screen="War Room" retryHref={retryHref} />
+          <ScreenLoadError screen={navLabel('war-room')} retryHref={retryHref} language={language} />
         ) : (
           <PickALeague
             tabKey="war-room"
@@ -5049,7 +5043,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             rivalries ? (
               <RivalryRadar data={rivalries} weekHref="/core/week" />
             ) : (
-              <ScreenLoadError screen="Rivalry Radar" retryHref={retryHref} />
+              <ScreenLoadError screen="Rivalry Radar" retryHref={retryHref} language={language} />
             )
           ) : weekBoard ? (
             /*
@@ -5079,7 +5073,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               />
             )
           ) : (
-            <ScreenLoadError screen="Your Week" retryHref={retryHref} />
+            <ScreenLoadError screen={navLabel('week')} retryHref={retryHref} language={language} />
           )}
         </>
       ) : activeKey === 'commissioner' ? (
@@ -5102,15 +5096,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
            * had simply not picked one yet.
            */
         selectedLeagueId ? (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Commissioner
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read this league just now. This is a read failure on our side, not a
-              sign that you do not run it.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Commissioner"
+            body="We could not read this league just now. This is a read failure on our side, not a sign that you do not run it."
+          />
         ) : commissionerOverview ? (
           <CommissionerOverview data={commissionerOverview} />
         ) : (
@@ -5157,15 +5147,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */
           selectedLeagueId ? (
-            <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-              <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-                Standings
-              </h1>
-              <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-                We could not read this league&apos;s weekly results just now. This is a read failure
-                on our side, not a season with no games in it.
-              </p>
-            </div>
+            <ScreenUnavailable
+              language={language}
+              title="Standings"
+              body="We could not read this league's weekly results just now. This is a read failure on our side, not a season with no games in it."
+            />
           ) : showAllLeagues || !outlook ? (
             /*
              * A failed simulation is not "no standings" — fall back to the
@@ -5211,15 +5197,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             }}
           />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Live Scores
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read the slate just now. This is a read failure on our side, not a day
-              with no games on — your players may well be playing.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Live Scores"
+            body="We could not read the slate just now. This is a read failure on our side, not a day with no games on — your players may well be playing."
+          />
         )
       ) : activeKey === 'season-outlook' ? (
         outlook ? (
@@ -5242,29 +5224,21 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             <SeasonOutlook data={slimOutlookForBoard(outlook)} freshness={outlookFreshness} />
           )
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Season Outlook
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not run the simulations just now. This is a read failure on our side, not a
-              season with nothing left to decide.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Season Outlook"
+            body="We could not run the simulations just now. This is a read failure on our side, not a season with nothing left to decide."
+          />
         )
       ) : activeKey === 'notifications' ? (
         notifications ? (
           <NotificationsCenter data={notifications} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Notifications
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read your notifications just now. This is a read failure on our side, not
-              an empty inbox.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Notifications"
+            body="We could not read your notifications just now. This is a read failure on our side, not an empty inbox."
+          />
         )
       ) : activeKey === 'share' ? (
         shareCareer ? (
@@ -5304,15 +5278,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             reward={{ tokensPerShare: 1, oncePerDay: true }}
           />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Career Share
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read your career just now, and this card is built from it. This is a read
-              failure on our side, not a career with nothing in it.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Career Share"
+            body="We could not read your career just now, and this card is built from it. This is a read failure on our side, not a career with nothing in it."
+          />
         )
       ) : activeKey === 'tools' ? (
         <Tools
@@ -5359,15 +5329,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             <Rankings data={rankings} leagueId={selectedLeagueId} />
           )
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Rankings
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read the rankings just now. This is a read failure on our side, not a sign
-              that nobody is ranked.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Rankings"
+            body="We could not read the rankings just now. This is a read failure on our side, not a sign that nobody is ranked."
+          />
         )
       ) : activeKey === 'career' ? (
         /*
@@ -5387,15 +5353,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             nowIso={now.toISOString()}
           />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Career
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read your career history just now. This is a read failure on our side, not a
-              sign that you have none.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Career"
+            body="We could not read your career history just now. This is a read failure on our side, not a sign that you have none."
+          />
         )
       ) : activeKey === 'portfolio' ? (
         portfolio ? (
@@ -5412,15 +5374,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             initialView={portfolioView}
           />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Portfolio
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not load your leagues just now. This is a read failure on our side, not a
-              sign that you have none.
-            </p>
-          </div>
+          <ScreenUnavailable
+            language={language}
+            title="Portfolio"
+            body="We could not load your leagues just now. This is a read failure on our side, not a sign that you have none."
+          />
         )
       ) : activeKey === 'home' ? (
         /*
@@ -5488,13 +5446,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              {rail.find((l) => l.id === selectedLeagueId)?.name ?? 'This league'}
+              {rail.find((l) => l.id === selectedLeagueId)?.name ?? coreUiCopy('This league', language)}
             </h1>
             <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read this league just now. This is a read failure on our side — your other
-              leagues are unaffected, and nothing about this one has changed. Reload, or{' '}
+              {language === 'es'
+                ? 'No pudimos leer esta liga en este momento. Es un fallo de lectura de nuestra parte: tus otras ligas no se ven afectadas y nada de esta ha cambiado. Recarga o '
+                : 'We could not read this league just now. This is a read failure on our side — your other leagues are unaffected, and nothing about this one has changed. Reload, or '}
               <a href="/core" style={{ color: 'var(--accent)' }}>
-                go back to all leagues
+                {language === 'es' ? 'vuelve a todas tus ligas' : 'go back to all leagues'}
               </a>
               .
             </p>

@@ -13,6 +13,7 @@ import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The Sleeper transaction id a row stands for — the id a trade email or push links to.
@@ -79,7 +80,7 @@ function OfferCard({ offer }: { offer: PendingOffer }) {
         <span className="af-tr-offer-partner">{offer.partnerName}</span>
         {offer.proposedAt ? (
           <time className="af-tr-offer-when" dateTime={offer.proposedAt}>
-            {new Date(offer.proposedAt).toLocaleDateString()}
+            {new Date(offer.proposedAt).toLocaleDateString(getAppIntlLocale())}
           </time>
         ) : null}
       </header>
@@ -94,8 +95,8 @@ function OfferCard({ offer }: { offer: PendingOffer }) {
             <span className="af-tr-offer-grade af-num">{offer.evaluation.letter}</span>
             <span className="af-tr-offer-eval-copy">
               <strong>
-                {copy(offer.evaluation.label)} · {copy('you get')} {offer.evaluation.getValue.toLocaleString()} {copy('for')}{' '}
-                {offer.evaluation.giveValue.toLocaleString()}
+                {copy(offer.evaluation.label)} · {copy('you get')} {offer.evaluation.getValue.toLocaleString(getAppIntlLocale())} {copy('for')}{' '}
+                {offer.evaluation.giveValue.toLocaleString(getAppIntlLocale())}
               </strong>
               <span>{copy(offer.evaluation.recommendation)}</span>
               <small>{copy('Graded on league value')} · {copy(offer.evaluation.basis)}</small>
@@ -285,7 +286,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                       team={p.team}
                     />
                     {p.team ? <TeamLogo teamAbbr={p.team} sport="NFL" logoUrl={p.teamLogoUrl} size={20} /> : null}
-                    {values[j] != null ? <em className="af-tr-asset-value af-num">{Math.round(values[j]!).toLocaleString()}</em> : null}
+                    {values[j] != null ? <em className="af-tr-asset-value af-num">{Math.round(values[j]!).toLocaleString(getAppIntlLocale())}</em> : null}
                   </span>
                 ))}
                 {side.picks?.map((pick, j) => {
@@ -295,7 +296,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                     <span key={`${pick}-${j}`}>
                       {side.received.length > 0 || j > 0 ? ', ' : ''}{pick}
                       {drafted ? <span className="af-tr-pick-drafted"> ({copy('drafted')} {drafted})</span> : null}
-                      {value != null ? <em className="af-tr-asset-value af-num">{Math.round(value).toLocaleString()}</em> : null}
+                      {value != null ? <em className="af-tr-asset-value af-num">{Math.round(value).toLocaleString(getAppIntlLocale())}</em> : null}
                     </span>
                   )
                 })}
@@ -305,8 +306,8 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                   <span className="af-tr-leaguegrade-letter af-num">{letter}</span>
                   <span className="af-tr-leaguegrade-line">
                     {language === 'es'
-                      ? `Calificación de la liga · recibió ${(i === 0 ? graded.getValue : graded.giveValue).toLocaleString()} por ${(i === 0 ? graded.giveValue : graded.getValue).toLocaleString()} en valor de liga ${copy(gradeMoment(graded))}`
-                      : `League grade · got ${(i === 0 ? graded.getValue : graded.giveValue).toLocaleString()} for ${(i === 0 ? graded.giveValue : graded.getValue).toLocaleString()} in league value ${gradeMoment(graded)}`}
+                      ? `Calificación de la liga · recibió ${(i === 0 ? graded.getValue : graded.giveValue).toLocaleString(getAppIntlLocale())} por ${(i === 0 ? graded.giveValue : graded.getValue).toLocaleString(getAppIntlLocale())} en valor de liga ${copy(gradeMoment(graded))}`
+                      : `League grade · got ${(i === 0 ? graded.getValue : graded.giveValue).toLocaleString(getAppIntlLocale())} for ${(i === 0 ? graded.giveValue : graded.getValue).toLocaleString(getAppIntlLocale())} in league value ${gradeMoment(graded)}`}
                   </span>
                 </div>
               ) : null}

@@ -3343,7 +3343,7 @@ model LeaguePlayerWeeklyScore {
   /// (contracts/rolling-insights/ENDPOINTS.yaml, `stat_corrections`), so a score is still
   /// moving well after the whistle. Only a reconcile pass past that window may set this.
   isFinalized Boolean  @default(false)
-  /// Which platform reported it — 'sleeper' today; espn/yahoo would each add their own.
+  /// Which platform reported it: 'sleeper' (scheduled), or 'fantrax' (manual browser-download import only).
   source      String   @db.VarChar(16)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -4621,10 +4621,12 @@ model PlayoffBracketChallenge {
 }
 
 model PlayoffBracketEntry {
-  id          String                  @id @default(cuid())
-  challengeId String                  @map("challenge_id")
-  userId      String                  @map("user_id")
-  name        String
+  id                    String                  @id @default(cuid())
+  challengeId           String                  @map("challenge_id")
+  userId                String                  @map("user_id")
+  name                  String
+  finalizedAt           DateTime?               @map("finalized_at")
+  tiebreakerTotalScore  Int?                    @map("tiebreaker_total_score")
   createdAt   DateTime                @default(now()) @map("created_at")
   updatedAt   DateTime                @updatedAt @map("updated_at")
   challenge   PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -4634,6 +4636,7 @@ model PlayoffBracketEntry {
   @@index([challengeId])
   @@index([userId])
   @@index([challengeId, userId])
+  @@index([challengeId, finalizedAt])
   @@map("playoff_bracket_entries")
 }
 
@@ -16097,6 +16100,8 @@ model GuillotineElimination {
   eliminatedAt         DateTime         @default(now())
   season               GuillotineSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
 
+  /// One elimination per team per week: a re-run of a week cannot record it twice (lib/guillotine/guillotineChopAudit.ts).
+  @@unique([seasonId, scoringPeriod, eliminatedRosterId])
   @@index([seasonId, scoringPeriod])
   @@index([leagueId])
   @@map("guillotine_eliminations")
@@ -19738,6 +19743,42 @@ model RookieEligibilityRecord {
   @@unique([sport, season, playerKey, source])
   @@index([sport, season, isRookie])
   @@map("rookie_eligibility_records")
+}
+
+/// Private Play receipt store. Tokens are AES-GCM encrypted; identity is package-scoped SHA-256.
+/// Ownership survives account deletion to prevent reassigning a previously fulfilled purchase.
+model GooglePlayPurchase {
+  checkoutIntentId String? @unique
+  tokenHash       String @id @db.VarChar(64)
+  tokenCiphertext String
+  ownerId         String?
+  productId       String @db.VarChar(64)
+  sku             String @db.VarChar(64)
+  purchaseType    String @db.VarChar(32)
+  state           String @db.VarChar(64)
+  orderId         String? @db.VarChar(256)
+  revokedAt       DateTime?
+  finalizedAt     DateTime?
+  lastCheckedAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([lastCheckedAt])
+  @@map("google_play_purchases")
+}
+
+/// Checkout authorization retained for delayed payments and interrupted verification.
+model GooglePlayCheckoutIntent {
+  id        String @id @default(uuid())
+  userId    String
+  sku       String @db.VarChar(64)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("google_play_checkout_intents")
 }
 
 /// Dispersal draft (lib/dispersal-draft): an orphaned or dissolved team's assets drafted by the rest of

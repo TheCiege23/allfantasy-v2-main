@@ -369,6 +369,32 @@ html[data-mode='af'] .af-core {
  * will fix it.
  */
 
+/*
+ * ── `--af-*` aliases ──────────────────────────────────────────────────
+ *
+ * 🛑 THESE NAMES WERE USED AND NEVER DEFINED. Waivers, the commissioner weekly
+ * plan, dashboard triage, trade evidence, standings and others read
+ * `var(--af-text, #eef0fa)` and friends, so every use fell back to its DARK
+ * literal — near-white text on a white card in light mode. Aliasing them to the
+ * real tokens makes all three themes apply with no change to those files.
+ * `var()` resolves on `.af-core` itself, where the theme blocks above have
+ * already set `--text` and the rest, so each alias follows the active theme.
+ * Prefer the real token names in new CSS.
+ */
+.af-core {
+  --af-bg: var(--bg);
+  --af-surface: var(--surface);
+  --af-text: var(--text);
+  --af-ink: var(--text);
+  --af-text-dim: var(--muted);
+  --af-muted: var(--muted);
+  --af-faint: var(--faint);
+  --af-line: var(--line);
+  --af-border: var(--line2);
+  --af-accent: var(--accent);
+  --af-good: var(--good);
+}
+
 /* ── Type ────────────────────────────────────────────────────────────── */
 
 .af-core {

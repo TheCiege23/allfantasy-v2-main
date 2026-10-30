@@ -32,8 +32,11 @@ vi.mock('@/lib/survivor/survivorVerifiedSlateChallenges', () => ({ ensureVerifie
 const weeklyCall = vi.hoisted(() => ({ ensure: vi.fn(async () => undefined), settle: vi.fn(async () => undefined) }))
 vi.mock('@/lib/survivor/survivorWeeklyCall', () => ({ ensureWeeklyCall: weeklyCall.ensure, settleWeeklyCall: weeklyCall.settle }))
 vi.mock('@/lib/survivor/weeklyRecapGenerator', () => ({ generateAndPostWeeklyRecap: vi.fn() }))
-const redraw = vi.hoisted(() => ({ autoApply: vi.fn(), guard: vi.fn() }))
-vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply, rebalanceTribesBeforeCouncil: redraw.guard }))
+const redraw = vi.hoisted(() => ({ autoApply: vi.fn(), guard: vi.fn(), sitOut: vi.fn() }))
+vi.mock('@/lib/survivor/survivorTribeRedrawDecision', () => ({ autoApplyPendingTribeRedraw: redraw.autoApply, rebalanceTribesBeforeCouncil: redraw.guard, redrawTribesForSitOutBalance: redraw.sitOut }))
+// The real settle answers 'not_nba' for these leagues (no survivorPhase), so that is the default.
+const sitOut = vi.hoisted(() => ({ settle: vi.fn() }))
+vi.mock('@/lib/survivor/SurvivorSitOutEngine', () => ({ settleNbaTribeSitOutDeadline: sitOut.settle }))
 const surprise = vi.hoisted(() => ({ ensure: vi.fn(), dissolve: vi.fn() }))
 vi.mock('@/lib/survivor/survivorSurpriseTribes', () => ({ ensureSurpriseTribeWeek: surprise.ensure, dissolveSurpriseTribes: surprise.dissolve }))
 const reported = vi.hoisted(() => vi.fn())
@@ -62,6 +65,30 @@ beforeEach(() => {
   vi.clearAllMocks()
   state.resolved = false
   state.active = 20
+  sitOut.settle.mockReset().mockResolvedValue('not_nba')
+})
+
+describe('NBA sit-out block', () => {
+  it('redraws the tribes and settles again instead of waiting for the commissioner', async () => {
+    const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+    const plan = await setup('NBA', 7, { now: start })
+    state.game.currentWeek = plan.startWeek + 1
+    sitOut.settle.mockResolvedValueOnce('blocked').mockResolvedValueOnce('locked')
+    redraw.sitOut.mockResolvedValue({ redrawn: true })
+    expect(await runPlannedSurvivorLeague('league-1', later)).not.toBe('awaiting_tribe_rebalance')
+    expect(redraw.sitOut).toHaveBeenCalledWith('league-1', plan.startWeek + 1)
+    expect(sitOut.settle).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits for the commissioner only when no redraw can run', async () => {
+    const { runPlannedSurvivorLeague } = await import('@/lib/survivor/survivorPlannedSeasonRunner')
+    const plan = await setup('NBA', 7, { now: start })
+    state.game.currentWeek = plan.startWeek + 1
+    sitOut.settle.mockResolvedValue('blocked')
+    redraw.sitOut.mockResolvedValue({ redrawn: false, reason: 'already_redrawn_this_week' })
+    expect(await runPlannedSurvivorLeague('league-1', later)).toBe('awaiting_tribe_rebalance')
+    expect(sitOut.settle).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe.each(['NBA', 'NHL', 'NFL'] as const)('%s Survivor planned season tick', sport => {

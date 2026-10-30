@@ -87,6 +87,9 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  { name: 'oauth', why: 'Google OIDC issuer used to authenticate signed Pub/Sub purchase notifications', test: /^accounts\.google\.com$/i },
+  { name: 'platform-infra', why: 'Google Play purchase verification, fulfillment and catalog management, not fantasy data', test: /^androidpublisher\.googleapis\.com$/i },
+  { name: 'payment-platform', why: 'Digital Goods payment method identifier and Google subscription-management link', test: /^play\.google\.com$/i },
   // Reviewed college/NFL biographies in verifiedNcaafReserves.ts are attribution
   // links returned with season-readiness evidence, never live provider reads.
   // The NEVER_FETCHED assertion below must continue to fail if a caller fetches them.

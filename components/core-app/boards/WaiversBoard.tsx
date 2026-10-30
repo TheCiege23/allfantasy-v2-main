@@ -19,6 +19,7 @@ import {
   NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * `/core/waivers` with no league held — the best add on every wire at once.
@@ -461,7 +462,7 @@ function ExcludedNote({ withheld }: { withheld: WaiversBoardData['withheld'] }) 
 function SportSection({ section }: { section: WaiverSportSection }) {
   const label = waiverSportLabel(section.sport)
   const id = `af-wv-${section.sport.toLowerCase()}`
-  const leagues = `${section.considered.toLocaleString()} ${section.considered === 1 ? 'league' : 'leagues'}`
+  const leagues = `${section.considered.toLocaleString(getAppIntlLocale())} ${section.considered === 1 ? 'league' : 'leagues'}`
   return (
     <section className="af-bd-sec" aria-labelledby={id} data-testid={`waivers-sport-${section.sport}`}>
       <SectionHead
@@ -599,7 +600,7 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
             ? ` A claim made now is for week ${data.at.week}, so these are Sleeper's week ${data.at.week} projections — published ahead, and they move as injuries and depth charts settle.`
             : ''}
           {data.marketLeagues > 0
-            ? ` Rostered and started rates are measured across ${data.marketLeagues.toLocaleString()} leagues on AllFantasy.`
+            ? ` Rostered and started rates are measured across ${data.marketLeagues.toLocaleString(getAppIntlLocale())} leagues on AllFantasy.`
             : ' Rostered and started rates are withheld — too few leagues to measure them over.'}
         </p>
       ) : null}

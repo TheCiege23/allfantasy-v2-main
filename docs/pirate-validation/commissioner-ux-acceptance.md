@@ -31,3 +31,11 @@ The main UI commit `6b5c89cba8f426de1e9e09e01232ccc3bcf3fd5b` became healthy on 
 3. On a first-visit browser profile, finish or dismiss the alert prompt. Confirm the welcome guide body and Close guide action are readable. Do not reset the owner's notification permission just to reproduce first-visit onboarding.
 
 The remaining real-game acceptance gates are unchanged: immutable before/after lock observations, a real late status change where available, final weekly result/claim creation and a real 24-hour settlement. Keep unknown evidence review-only. Production requires reviewed green CI and separate release sign-off.
+
+## Creation entry and real lock follow-up — October 29 evening
+
+The owner confirmed the missing Pirate screenshot came from `https://www.allfantasy.ai/create-league`, the production site. Its public creation catalog does not yet contain the unmerged Pirate release. The isolated staging catalog does include Pirate for NFL, NBA, MLB and NHL. A normal authenticated staging browser check visibly selected Pirate in all four sports at Pixel 7 Android Chromium (412 px) and desktop Chromium (1365 px), with no page errors or horizontal overflow. The Android check also submitted the actual NFL wizard with Schedule later, verified the persisted Pirate type/variant, and opened the new league. No human league was edited; the created QA league and synthetic account were removed. Use `https://pirate-web-staging.up.railway.app/create-league` for owner acceptance until the reviewed production release.
+
+The NBA pilot's genuine 00:00 UTC October 30 lock produced four immutable before snapshots at 23:55:55 UTC and four after snapshots at 00:00:57 UTC. All eight had certified saved daily lineups, fresh injury evidence, no schedule warnings and no duplicate roster/event/phase keys. Weekly finalization, real late-scratch handling and actual 24-hour claim settlement remain separate gates.
+
+Integration with current main preserves its one-prompt home queue, accessible welcome region and progress bar, sport eligibility updates and Guillotine chop warning hook while keeping Pirate capture and the deferred guide behavior.

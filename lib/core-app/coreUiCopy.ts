@@ -19,6 +19,8 @@ const spanish: Record<string, string> = {
   Team: 'Equipo',
   Trades: 'Intercambios',
   Waivers: 'Agentes libres',
+  // The league tab strip's 'Moves' had no entry, so Spanish readers saw it in English.
+  Moves: 'Movimientos',
   'Player Finder': 'Buscar jugadores',
   Players: 'Jugadores',
   'Your week': 'Tu semana',
@@ -211,6 +213,7 @@ const spanish: Record<string, string> = {
   off: 'de descanso',
   'Your league scores differently from the standard projection:': 'La puntuación de tu liga difiere de la proyección estándar:',
   'Your league uses standard PPR scoring, so both numbers should agree. Where they do not, it is because we could not score a player under your rules.': 'Tu liga usa puntuación PPR estándar; ambos números deberían coincidir. Si difieren, no pudimos valorar a un jugador con tus reglas.',
+  'This league’s scoring rules are saved. Projection totals appear when a compatible player stat feed is available.': 'Las reglas de puntuación de esta liga están guardadas. Los totales proyectados aparecerán cuando haya datos estadísticos compatibles de los jugadores.',
   'We do not hold this league’s scoring settings, so there is no league-specific projection to show — only the standard one.': 'No tenemos las reglas de puntuación de esta liga; solo podemos mostrar la proyección estándar.',
   'Ask Chimmy why they differ': 'Preguntar a Chimmy por la diferencia',
   Starters: 'Titulares',
@@ -246,6 +249,7 @@ const spanish: Record<string, string> = {
   'Go to the draft room': 'Ir a la sala del draft',
   'Open the board': 'Abrir el tablero',
   'Open Draft HQ': 'Abrir el centro del draft',
+  'Open draft room': 'Abrir la sala del draft',
   'Prepare for draft →': 'Preparar el draft →',
   'Read-only': 'Solo lectura',
   'Back to home': 'Volver al inicio',
@@ -627,6 +631,9 @@ const spanish: Record<string, string> = {
   completed: 'Completado',
   Rounds: 'Rondas',
   'Your slot': 'Tu posición',
+  'Join live draft': 'Unirse al draft en vivo',
+  'Enter draft room': 'Entrar a la sala del draft',
+  'Open draft board': 'Abrir el tablero del draft',
   'Your picks': 'Tus selecciones',
   overall: 'general',
   From: 'De',
@@ -782,8 +789,8 @@ const spanish: Record<string, string> = {
   'no completed draft has been graded for this league yet': 'Aún no se ha calificado ningún draft completado de esta liga.',
   'no draft has been set up, and no team in this league is claimed by you': 'No hay un draft configurado ni un equipo de esta liga asignado a ti.',
   'no draft has been set up, and no imported draft picks are on file for your team': 'No hay un draft configurado ni selecciones importadas para tu equipo.',
-  'reverse order of max points for': 'el orden inverso de los puntos máximos a favor',
-  'an order the commissioner sets': 'el orden establecido por el comisionado',
+  'reverse order of max points for outside the playoffs, then the playoff teams in reverse order of finish':
+    'el orden inverso de los puntos máximos a favor fuera de los playoffs, y después los equipos de playoffs en el orden inverso de la clasificación final',
   'no earlier week': 'sin semana anterior',
   'no change': 'sin cambios',
   up: 'subió',
@@ -1288,6 +1295,36 @@ const spanish: Record<string, string> = {
   'Not saved — check your connection and try again.': 'No se guardó. Revisa tu conexión e inténtalo de nuevo.',
   'Try again': 'Reintentar',
   'Nothing picked yet — picks save as you make them.': 'Aún no has elegido nada. Tus selecciones se guardan al hacerlas.',
+  // Server-rendered "could not read" panels on /core (ScreenUnavailable): titles and bodies.
+  Scout: 'Exploración',
+  'Your Week': 'Tu semana',
+  "Bracket Challenge": "Desafío de brackets",
+  "Format hubs": "Centros de formatos",
+  "Live Scores": "Marcadores en vivo",
+  "Career Share": "Compartir trayectoria",
+  "Career": "Trayectoria",
+  "The team list for this sport could not be read just now. Nothing is lost — reload, or pick another sport.":
+    "No pudimos leer la lista de equipos de este deporte en este momento. No se perdió nada: recarga o elige otro deporte.",
+  "We could not read your leagues just now. This is a read failure on our side, not a sign that you have none.":
+    "No pudimos leer tus ligas en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguna.",
+  "We could not read this league just now. This is a read failure on our side, not a sign that you do not run it.":
+    "No pudimos leer esta liga en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no seas su comisionado.",
+  "We could not read this league's weekly results just now. This is a read failure on our side, not a season with no games in it.":
+    "No pudimos leer los resultados semanales de esta liga en este momento. Es un fallo de lectura de nuestra parte, no una temporada sin partidos.",
+  "We could not read the slate just now. This is a read failure on our side, not a day with no games on — your players may well be playing.":
+    "No pudimos leer la jornada en este momento. Es un fallo de lectura de nuestra parte, no un día sin partidos: puede que tus jugadores sí estén jugando.",
+  "We could not run the simulations just now. This is a read failure on our side, not a season with nothing left to decide.":
+    "No pudimos ejecutar las simulaciones en este momento. Es un fallo de lectura de nuestra parte, no una temporada sin nada por decidir.",
+  "We could not read your notifications just now. This is a read failure on our side, not an empty inbox.":
+    "No pudimos leer tus notificaciones en este momento. Es un fallo de lectura de nuestra parte, no una bandeja vacía.",
+  "We could not read your career just now, and this card is built from it. This is a read failure on our side, not a career with nothing in it.":
+    "No pudimos leer tu trayectoria en este momento, y esta tarjeta se construye a partir de ella. Es un fallo de lectura de nuestra parte, no una trayectoria vacía.",
+  "We could not read the rankings just now. This is a read failure on our side, not a sign that nobody is ranked.":
+    "No pudimos leer las clasificaciones en este momento. Es un fallo de lectura de nuestra parte, no una señal de que nadie esté clasificado.",
+  "We could not read your career history just now. This is a read failure on our side, not a sign that you have none.":
+    "No pudimos leer tu historial en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguno.",
+  "We could not load your leagues just now. This is a read failure on our side, not a sign that you have none.":
+    "No pudimos cargar tus ligas en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguna.",
 }
 
 /** "3 min ago" / "2h 5m ago" / "4d ago" / "just now" (RefreshLineups `asOfLabel`) → Spanish. */

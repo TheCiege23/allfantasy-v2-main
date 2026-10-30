@@ -204,7 +204,7 @@ async function loadWaitlist(): Promise<AdminWaitlistSummary> {
   }
   try {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000)
-    const [total, confirmed, last30Days, first, last, sources, utms, recent] = await Promise.all([
+    const [total, confirmed, last30Days, first, last, sources, utms, recent, allDates] = await Promise.all([
       prisma.earlyAccessSignup.count(),
       prisma.earlyAccessSignup.count({ where: { confirmedAt: { not: null } } }),
       prisma.earlyAccessSignup.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
@@ -220,16 +220,12 @@ async function loadWaitlist(): Promise<AdminWaitlistSummary> {
           source: true, utmSource: true, utmCampaign: true,
         },
       }),
+      prisma.earlyAccessSignup.findMany({ select: { createdAt: true } }),
     ])
 
-    /*
-     * Months come from the same rows the table renders rather than a second
-     * query — 146 dates is nothing, and it keeps the histogram and the list
-     * provably consistent.
-     */
-    const all = await prisma.earlyAccessSignup.findMany({ select: { createdAt: true } })
+    // History uses all signup dates while the people table stays capped at 50.
     const monthCounts = new Map<string, number>()
-    for (const r of all) {
+    for (const r of allDates) {
       const key = r.createdAt.toISOString().slice(0, 7)
       monthCounts.set(key, (monthCounts.get(key) ?? 0) + 1)
     }
@@ -406,6 +402,24 @@ async function countAdminUsers(): Promise<number> {
       })),
     },
   })
+}
+
+async function countActiveSubscriberUsers(): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(DISTINCT "userId") AS count
+    FROM "user_subscriptions"
+    WHERE "status" IN ('active', 'trialing', 'past_due')
+  `
+  return Number(rows[0]?.count ?? 0)
+}
+
+async function countUniqueSessions(since: Date): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(DISTINCT "sessionId") AS count
+    FROM "AnalyticsEvent"
+    WHERE "createdAt" >= ${since} AND "sessionId" IS NOT NULL
+  `
+  return Number(rows[0]?.count ?? 0)
 }
 
 async function getUserSearchRows(query: string): Promise<AdminUserSearchRow[]> {
@@ -609,8 +623,21 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   const sevenHoursAgo = hoursAgo(7)
   const sevenDaysAgo = daysAgo(7)
   const thirtyDaysAgo = daysAgo(30)
-  // Started before the DB queries so the Google round-trips overlap them. Never rejects.
-  const playInstallsPromise = getPlayInstallStats()
+  // Start independent reports before the main query batch. A cold external API
+  // must never add its full timeout to the database work on the critical path.
+  const waitlistPromise = loadWaitlist()
+  const leaguesByPlatformPromise = loadLeaguesByPlatform()
+  const aiProvidersPromise = Promise.race([
+    probeAiProviders().catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 2_000)),
+  ])
+  const playInstallsPromise = Promise.race([
+    getPlayInstallStats(),
+    new Promise<PlayInstallStatsResult>((resolve) => setTimeout(() => resolve({
+      status: "error",
+      reason: "Play Console is still loading. Refresh later to see downloads.",
+    }), 2_000)),
+  ])
 
   const [
     totalAccounts,
@@ -698,10 +725,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     prisma.appUser.count({ where: { createdAt: { gte: today } } }),
     prisma.appUser.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
     prisma.appUser.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
-    prisma.userSubscription.groupBy({
-      by: ["userId"],
-      where: { status: { in: ACTIVE_SUBSCRIPTION_STATUSES } },
-    }),
+    countActiveSubscriberUsers(),
     countAdminUsers(),
     prisma.userSubscription.findMany({
       select: {
@@ -791,14 +815,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     getProviderTeamReconciliationSummaries().catch(() => ({ summaries: [], totalProblems: 0, generatedAt: new Date().toISOString() })),
     prisma.analyticsEvent.count({ where: { createdAt: { gte: today } } }),
     prisma.analyticsEvent.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
-    prisma.analyticsEvent.groupBy({
-      by: ["sessionId"],
-      where: { createdAt: { gte: today }, sessionId: { not: null } },
-    }),
-    prisma.analyticsEvent.groupBy({
-      by: ["sessionId"],
-      where: { createdAt: { gte: sevenDaysAgo }, sessionId: { not: null } },
-    }),
+    countUniqueSessions(today),
+    countUniqueSessions(sevenDaysAgo),
     prisma.visitorLocation.count({ where: { lastSeen: { gte: today } } }).catch(() => 0),
     prisma.visitorLocation.count({ where: { lastSeen: { gte: sevenDaysAgo } } }).catch(() => 0),
     prisma.analyticsEvent.count({
@@ -897,15 +915,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       .catch(() => null),
   ])
 
-  /*
-   * Fetched separately rather than as a 77th entry in the Promise.all above.
-   * That array is positional — the destructure and the array must stay in
-   * lockstep — and adding to it is exactly where an off-by-one silently assigns
-   * the wrong table to the wrong field. One extra round trip is cheaper than
-   * that class of bug.
-   */
-  const waitlist = await loadWaitlist()
-  const leaguesByPlatform = await loadLeaguesByPlatform()
+  // Keep these outside the positional query array, but await them together.
+  const [waitlist, leaguesByPlatform] = await Promise.all([waitlistPromise, leaguesByPlatformPromise])
 
   // Login counts are only meaningful once IdentitySignal has captured at least one
   // login. Before that, a "0" would be indistinguishable from the old silent-zero
@@ -924,7 +935,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     },
     { annual: 0, monthly: 0, unknown: 0 }
   )
-  const activeSubscriptionUserCount = activeSubscriptionUsers.length
+  const activeSubscriptionUserCount = activeSubscriptionUsers
   const completedRevenueCents = bracketPaymentRevenue._sum.amountCents ?? null
   const inviteAccepts = worldCupInviteUseSummary._sum.useCount ?? 0
   const inviteAcceptancePct =
@@ -935,14 +946,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   const sportImportMatrix = getSportImportMatrix(sportDataReliability)
   const aiToolAvailability = getDashboardAiToolAvailability(sportDataReliability)
   const chimmySportReadiness = getChimmySportReadiness(sportDataReliability)
-  /*
-   * Live 1-token probe per AI provider, cached 10 min in-process. Bounded so a hung provider
-   * cannot hold the admin page; a miss shows as "not measured", never as healthy.
-   */
-  const aiProviders = await Promise.race([
-    probeAiProviders().catch(() => null),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000)),
-  ])
+  // If the live probe is slow, the audit says "not measured" rather than healthy.
+  const aiProviders = await aiProvidersPromise
   const sportsOperatingSystem = buildSportsOperatingSystemAudit({
     importMatrix: sportImportMatrix,
     aiToolAvailability,
@@ -1099,12 +1104,12 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
        * the field is not being written; if no events landed at all, zero is the
        * honest answer.
        */
-      analyticsEventsToday > 0 && uniqueSessionsToday.length === 0
+      analyticsEventsToday > 0 && uniqueSessionsToday === 0
         ? notTracked("Unique sessions today", "Analytics events exist today but none carry a sessionId")
-        : metric("Unique sessions today", uniqueSessionsToday.length, "Distinct sessionId on analytics events"),
-      analyticsEvents7Days > 0 && uniqueSessions7Days.length === 0
+        : metric("Unique sessions today", uniqueSessionsToday, "Distinct sessionId on analytics events"),
+      analyticsEvents7Days > 0 && uniqueSessions7Days === 0
         ? notTracked("Unique sessions 7 days", "Analytics events exist this week but none carry a sessionId")
-        : metric("Unique sessions 7 days", uniqueSessions7Days.length),
+        : metric("Unique sessions 7 days", uniqueSessions7Days),
       analyticsEventsToday > 0 && visitorLocationsToday === 0
         ? notTracked("Approx unique IPs today", "Traffic today wrote no VisitorLocation rows — the writer may be down")
         : metric("Approx unique IPs today", visitorLocationsToday, "Uses aggregate VisitorLocation rows only"),

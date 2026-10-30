@@ -516,7 +516,9 @@ async function resolvePlayers(
   ]
 
   const rows = await prisma.sportsPlayer.findMany({
-    where: { sleeperId: { in: lookupIds } },
+    // ⚠ SCOPED TO THE LEAGUE'S SPORT. Sleeper numbers each sport's pool independently, so an NBA
+    // roster id can equal an NFL player's; the unscoped join put that NFL player in the lineup.
+    where: { sport: sport.toUpperCase(), sleeperId: { in: lookupIds } },
     // `sport` is required by `composePlayerIdentities` — it gates the NFL-only
     // club fold, and omitting it would silently leave every club unfolded.
     select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
@@ -1358,7 +1360,7 @@ async function loadMyTeamData(
        */
       if (benchProj == null || bench.onBye || bench.ruledOut) continue
       if (bench.kickoff && bench.kickoff.getTime() <= adviceAt) continue
-      if (!isEligibleForSlot(slot.slotLabel, bench.position)) continue
+      if (!isEligibleForSlot(slot.slotLabel, bench.position, sport)) continue
       if (benchProj <= starterProj) continue
       benchCandidates.push({
         slotIndex,

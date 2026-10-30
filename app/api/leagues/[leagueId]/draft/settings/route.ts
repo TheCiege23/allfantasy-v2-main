@@ -33,6 +33,7 @@ import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/dr
 import { classifySeconds } from '@/lib/draft/timer-presets'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
 import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 
 export const dynamic = 'force-dynamic'
 
@@ -162,6 +163,24 @@ export async function GET(
 
     let orphanStatus: { orphanRosterIds: string[]; recentActions: Array<{ action: string; createdAt: string; reason: string | null }> } | null = null
     let commissionerAiDraft: ReturnType<typeof buildApiResponse> | null = null
+    /*
+     * Which teams Chimmy manages, for every member's room — not only the commissioner's. Each open
+     * room asks for a Chimmy-managed team's pick when it comes on the clock
+     * (`/draft/chimmy-manager-pick`), so it needs to know which teams those are. Roster ids only:
+     * the styles and trade rules stay commissioner-only, below.
+     */
+    const chimmyManagedRosterIds = await prisma.draftSession
+      .findFirst({
+        where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        select: { commissionerAiManagers: true },
+      })
+      .then((row) =>
+        parseCommissionerAiManagers(row?.commissionerAiManagers)
+          .assignments.filter((a) => a.active)
+          .map((a) => a.rosterId),
+      )
+      .catch(() => [] as string[])
     if (commissioner) {
       const [orphanRosterIds, recentLogs, dsAi] = await Promise.all([
         getOrphanRosterIdsForLeague(leagueId),
@@ -197,6 +216,7 @@ export async function GET(
       sessionVariant: variant.sessionVariant ?? null,
       sessionPreDraft: variant.sessionPreDraft ?? false,
       orphanStatus,
+      chimmyManagedRosterIds,
       orphanAiProviderAvailable: providerStatus.anyAi,
       orphanDrafterEffectiveMode:
         variant.draftUISettings.orphanDrafterMode === 'ai' && !providerStatus.anyAi
@@ -559,6 +579,14 @@ export async function PATCH(
     )
   }
 
+  // The draft rules as members read them, before the writes — for the "What changed" card. Loaded
+  // lazily and best-effort (lib/league-rules-explainer/loadDraftRules.ts): it never fails the save.
+  const draftRules = await import('@/lib/league-rules-explainer/loadDraftRules').catch(() => null)
+  const draftRulesBefore = draftRules ? await draftRules.loadDraftRulesSafe(leagueId) : null
+  // The rookie lottery's own settings, only when this save writes them (the same keys the lottery
+  // config PUT diffs). Not suppressed by a completed draft: they govern the NEXT draw.
+  const lotteryRulesBefore = draftRules && orderModePatch?.lotteryConfig ? await draftRules.loadRookieLotteryRulesSafe(leagueId) : null
+
   try {
     if (hasOrderMode && orderModePatch) {
       await setDraftOrderModeAndLotteryConfig(leagueId, {
@@ -624,6 +652,18 @@ export async function PATCH(
         console.warn('[draft/settings PATCH] rounds override flag', e instanceof Error ? e.message : 'unknown error'),
       )
     }
+    // Published silently (no push / email): the league home's "What changed" card is how members hear.
+    await publishRuleChangesEvent({
+      leagueId,
+      actorUserId: userId,
+      section: 'draft',
+      changes: draftRules
+        ? [
+            ...draftRules.draftRuleChanges(draftRulesBefore, await draftRules.loadDraftRulesSafe(leagueId)),
+            ...(lotteryRulesBefore ? draftRules.rookieLotteryRuleChanges(lotteryRulesBefore, await draftRules.loadRookieLotteryRulesSafe(leagueId)) : []),
+          ]
+        : [],
+    })
     if (orphanManagerSettingTouched) {
       const orphanModeChanged = current.draftUISettings.orphanDrafterMode !== updated.draftUISettings.orphanDrafterMode
       const orphanEnabledChanged =

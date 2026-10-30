@@ -252,7 +252,8 @@ export async function loadSideProjections(args: {
     const sport = String(league?.sport ?? 'NFL')
     try {
       const playerRows = await prisma.sportsPlayer.findMany({
-        where: { sleeperId: { in: lookupIds } },
+        // Scoped to the league's sport: Sleeper's NFL and NBA pools reuse the same ids.
+        where: { sport: sport.toUpperCase(), sleeperId: { in: lookupIds } },
         select: { sleeperId: true, name: true, team: true, sport: true, position: true, source: true, fetchedAt: true },
       })
       const identities = composePlayerIdentities(playerRows)
@@ -362,7 +363,7 @@ export async function loadSideProjections(args: {
 
   const positions = bestBall && lookupIds.length > 0
     ? composePlayerIdentities(await prisma.sportsPlayer.findMany({
-        where: { sleeperId: { in: lookupIds } },
+        where: { sport: String(league?.sport ?? 'NFL').toUpperCase(), sleeperId: { in: lookupIds } },
         select: { sleeperId: true, name: true, team: true, sport: true, position: true, source: true, fetchedAt: true },
       }))
     : new Map()

@@ -5,6 +5,8 @@ import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { tOr } from "@/lib/i18n/tInterpolate"
 import {
   HIDDEN_HOME_SECTIONS_KEY,
+  HOME_LAYOUT_HIDDEN_KEY,
+  resolveHiddenHomeSections,
   HOME_SECTIONS,
   HOME_SECTION_GROUPS,
   readHiddenHomeSections,
@@ -50,7 +52,7 @@ export function HomeSectionsSettingsSection({
 }) {
   const { t, tInterpolate } = useLanguage()
   const [hidden, setHidden] = useState<Set<HomeSectionId>>(() =>
-    readHiddenHomeSections(profile?.notificationPreferences),
+    resolveHiddenHomeSections(profile?.notificationPreferences),
   )
   const [saveState, setSaveState] = useState<SaveState>("idle")
   /** The list as of the latest click — two taps inside one render must both count. */
@@ -61,13 +63,17 @@ export function HomeSectionsSettingsSection({
   }
   /** What the server last confirmed — where a failed write returns the switches to. */
   const confirmed = useRef<Set<HomeSectionId>>(new Set(hidden))
+  const muted = useRef(readHiddenHomeSections(profile?.notificationPreferences))
+  const confirmedMuted = useRef(new Set(muted.current))
   const queue = useRef<Promise<void>>(Promise.resolve())
   const pending = useRef(0)
 
   // Follows a profile refetch, but never over a click still being saved.
   useEffect(() => {
     if (pending.current > 0) return
-    const next = readHiddenHomeSections(profile?.notificationPreferences)
+    const next = resolveHiddenHomeSections(profile?.notificationPreferences)
+    muted.current = readHiddenHomeSections(profile?.notificationPreferences)
+    confirmedMuted.current = new Set(muted.current)
     confirmed.current = new Set(next)
     latest.current = next
     setHidden(next)
@@ -80,7 +86,7 @@ export function HomeSectionsSettingsSection({
   }, [saveState])
 
   const save = useCallback(
-    (list: HomeSectionId[]) => {
+    (list: HomeSectionId[], muteList: HomeSectionId[]) => {
       pending.current += 1
       setSaveState("saving")
       queue.current = queue.current.then(async () => {
@@ -89,7 +95,7 @@ export function HomeSectionsSettingsSection({
           const res = await fetch("/api/user/profile", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ notificationPreferences: { [HIDDEN_HOME_SECTIONS_KEY]: list } }),
+            body: JSON.stringify({ notificationPreferences: { [HOME_LAYOUT_HIDDEN_KEY]: list, [HIDDEN_HOME_SECTIONS_KEY]: muteList } }),
           })
           ok = res.ok
         } catch {
@@ -98,6 +104,7 @@ export function HomeSectionsSettingsSection({
         pending.current -= 1
         if (ok) {
           confirmed.current = new Set(list)
+          confirmedMuted.current = new Set(muteList)
           if (pending.current === 0) {
             setSaveState("saved")
             // Other tabs (the Notifications notes) read the same profile.
@@ -105,6 +112,7 @@ export function HomeSectionsSettingsSection({
           }
         } else {
           if (pending.current === 0) {
+            muted.current = new Set(confirmedMuted.current)
             latest.current = new Set(confirmed.current)
             setHidden(new Set(confirmed.current))
           }
@@ -118,13 +126,16 @@ export function HomeSectionsSettingsSection({
   const setVisible = (id: HomeSectionId, visible: boolean) => {
     const list = toggleHomeSection(latest.current, id, visible)
     apply(new Set(list))
-    save(list)
+    const muteList = toggleHomeSection(muted.current, id, visible)
+    muted.current = new Set(muteList)
+    save(list, muteList)
   }
 
   const showAll = () => {
     if (latest.current.size === 0) return
     apply(new Set())
-    save([])
+    muted.current = new Set()
+    save([], [])
   }
 
   const shownCount = HOME_SECTIONS.length - hidden.size
@@ -148,7 +159,7 @@ export function HomeSectionsSettingsSection({
             type="button"
             onClick={showAll}
             disabled={hidden.size === 0}
-            className="min-h-[36px] rounded-lg border px-3 text-xs font-semibold disabled:opacity-40"
+            className="min-h-[44px] rounded-lg border px-3 text-xs font-semibold disabled:opacity-40"
             style={{ borderColor: "var(--border)", color: "var(--text)" }}
           >
             {t("settings.home.showAll")}
@@ -209,7 +220,7 @@ export function HomeSectionsSettingsSection({
                       </span>
                       {section.categories.length > 0 ? (
                         <span className="mt-1.5 block text-xs leading-relaxed" style={{ color: "var(--muted2)" }}>
-                          {tInterpolate(visible ? "settings.home.alsoMutes" : "settings.home.alsoMuted", {
+                          {tInterpolate(muted.current.has(section.id) ? "settings.home.alsoMuted" : visible ? "settings.home.alsoMutes" : "settings.home.defaultAlertsUnchanged", {
                             list: section.categories.map(categoryLabel).join(" · "),
                           })}
                         </span>
@@ -218,7 +229,7 @@ export function HomeSectionsSettingsSection({
                           {t("settings.home.visualOnly")}
                         </span>
                       )}
-                      {warnKey ? (
+                      {warnKey && (visible || muted.current.has(section.id)) ? (
                         <span
                           className="mt-1 block text-xs font-semibold"
                           style={{ color: "var(--ns-warn, #fbbf24)" }}

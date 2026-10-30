@@ -120,3 +120,10 @@ describe('Overview commissioner card', () => {
     expect(el.querySelector('a[href^="/core/commissioner"]')).toBeNull()
   })
 })
+
+
+it('hides selected imported-dashboard cards and keeps Customize page available', () => {
+  const { queryByText, getByRole } = render(<LeagueHome data={page(off)} otherLeagueIssueCount={0} hiddenSections={['commissioner', 'chat', 'standings', 'timeline', 'matchups', 'insights', 'activity', 'draft']} />)
+  for (const title of ['Commissioner Hub', 'Ask Chimmy', 'Standings', 'League buzz', 'Power board', 'Draft HQ']) expect(queryByText(title)).toBeNull()
+  expect(getByRole('link', { name: 'Customize page' }).getAttribute('href')).toBe('/settings?tab=leagues&returnTo=%2Fcore%3Fleague%3Dlg-1')
+})

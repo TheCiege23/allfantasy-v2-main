@@ -525,5 +525,12 @@ export function extractScoringSettings(
   const scoring = s.scoring_settings ?? s.scoringSettings
   if (!scoring || typeof scoring !== 'object') return null
   const rec = scoring as Record<string, unknown>
+  // Imported Fantrax leagues store the actual stat weights under `rules` alongside
+  // provider metadata. Passing the wrapper through makes a saved NBA rulebook look
+  // like missing scoring to every projection and matchup reader.
+  if (rec.rules && typeof rec.rules === 'object' && !Array.isArray(rec.rules)) {
+    const rules = rec.rules as Record<string, unknown>
+    return Object.values(rules).some((value) => readNumber(value) != null) ? rules : null
+  }
   return Object.keys(rec).length > 0 ? rec : null
 }

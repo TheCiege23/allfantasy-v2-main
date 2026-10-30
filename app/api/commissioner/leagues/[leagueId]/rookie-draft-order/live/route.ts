@@ -14,6 +14,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
+import { publishRookieDraftOrderChange } from '@/lib/league-rules-explainer/rookieOrderChange'
 import {
   isLeagueEntitledToLiveRookieOrder,
   parseRookieOrderConfig,
@@ -109,6 +110,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   if (changes.length > 0) {
     await notifyCommissionerChange(a.leagueId, a.userId, 'Rookie Draft Settings', changes).catch(() => {})
   }
+
+  // The popup's rookie order follows this setting; members get a "What changed" card when it moves.
+  await publishRookieDraftOrderChange({ leagueId: a.leagueId, actorUserId: a.userId, settingsBefore: league.settings })
 
   return NextResponse.json({ ok: true, settings: saved })
 }

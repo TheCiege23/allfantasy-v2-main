@@ -139,12 +139,43 @@ describe('the /core rail', () => {
   it('drops hidden rows and says how many are hidden', () => {
     const { container } = render(shell({ hiddenLeagueIds: ['b', 'c'] }))
     expect(rowNames(container)).toEqual(['Alpha', 'Delta'])
-    expect(container.textContent).toMatch(/4 leagues · 2 hidden/)
+    expect(container.querySelector('.af-rail-toggle')?.textContent).toMatch(/4 leagues/)
+    expect(screen.getByTestId('rail-hidden-count-link').textContent).toBe('2 hidden · Show')
+  })
+
+  it('the header count is a link of its own, not text inside the collapse button', () => {
+    const { container } = render(shell({ hiddenLeagueIds: ['b', 'c'] }))
+    const count = screen.getByTestId('rail-hidden-count-link')
+    expect(count.tagName).toBe('A')
+    expect(count.getAttribute('href')).toBe('/settings?tab=preferences&returnTo=%2Fcore#your-leagues')
+    // Tapping it must not be a tap on the toggle — the bug was that it only closed the tray.
+    expect(count.closest('button')).toBeNull()
+    expect(container.querySelector('.af-rail-toggle')?.textContent).not.toMatch(/hidden/)
+    expect(container.querySelector('#af-rail')?.getAttribute('data-has-hidden')).toBe('true')
+  })
+
+  it('links the hidden count to Settings, where unhiding lives', () => {
+    render(shell({ hiddenLeagueIds: ['b', 'c'] }))
+    const link = screen.getByTestId('rail-hidden-leagues-link')
+    expect(link.getAttribute('href')).toBe('/settings?tab=preferences&returnTo=%2Fcore#your-leagues')
+    expect(link.textContent).toMatch(/Show 2 hidden leagues/)
+    expect(link.getAttribute('data-all-hidden')).toBeNull()
+  })
+
+  it('every league hidden: the tray is not a dead end', () => {
+    const { container } = render(shell({ hiddenLeagueIds: ['a', 'b', 'c', 'd'] }))
+    expect(rowNames(container)).toEqual([])
+    const link = screen.getByTestId('rail-hidden-leagues-link')
+    expect(link.textContent).toMatch(/Show 4 hidden leagues/)
+    expect(link.getAttribute('data-all-hidden')).toBe('true')
   })
 
   it('CONTROL: no hidden ids, every row', () => {
     const { container } = render(shell())
     expect(rowNames(container)).toEqual(['Alpha', 'Bravo', 'Charlie', 'Delta'])
+    expect(screen.queryByTestId('rail-hidden-leagues-link')).toBeNull()
+    expect(screen.queryByTestId('rail-hidden-count-link')).toBeNull()
+    expect(container.querySelector('#af-rail')?.getAttribute('data-has-hidden')).toBeNull()
   })
 })
 
@@ -194,6 +225,85 @@ describe('Settings › Your leagues', () => {
     fireEvent.click(await screen.findByTestId('league-fav-a'))
     expect(await screen.findByRole('alert')).toBeTruthy()
     expect(screen.getByTestId('league-fav-a').getAttribute('aria-pressed')).toBe('false')
+  })
+})
+
+describe('Settings › Your leagues › Remove', () => {
+  let deletes: string[]
+  /** Alpha and Charlie are the viewer's own imports; Bravo and Delta reached them through a claimed team. */
+  const stub = (deleteResponse: (id: string) => Response) => {
+    deletes = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'DELETE') {
+          const id = decodeURIComponent(url.split('/').pop() ?? '')
+          deletes.push(id)
+          return deleteResponse(id)
+        }
+        if (init?.method === 'POST') return new Response(JSON.stringify({ ok: true }))
+        if (url.startsWith('/api/league/list'))
+          return new Response(
+            JSON.stringify({
+              leagues: LIST.map((l) => ({ ...l, platform: 'sleeper', hasUnifiedRecord: true, viewerOwnsRow: l.id === 'a' || l.id === 'c' })),
+            }),
+          )
+        return new Response(JSON.stringify({ favorites: null, hidden: ['a'], order: [] }))
+      }),
+    )
+  }
+  const removed = (n: number) => () =>
+    new Response(JSON.stringify({ ok: true, removed: { leagueRows: n, sleeperLeagueRows: 0, tournamentRows: 0 } }))
+
+  it('offers Remove only on leagues the viewer imported', async () => {
+    stub(removed(1))
+    render(<LeagueListPreferencesCard />)
+    await screen.findByTestId('league-list-row-a')
+    expect(screen.queryByTestId('league-remove-a')).not.toBeNull()
+    expect(screen.queryByTestId('league-remove-c')).not.toBeNull()
+    expect(screen.queryByTestId('league-remove-b')).toBeNull()
+    expect(screen.queryByTestId('league-remove-d')).toBeNull()
+  })
+
+  it('asks first, then deletes and drops the row — including a hidden one', async () => {
+    stub(removed(1))
+    render(<LeagueListPreferencesCard />)
+    fireEvent.click(await screen.findByTestId('league-remove-a'))
+    // Nothing is deleted until the confirm.
+    expect(deletes).toEqual([])
+    expect(screen.getByTestId('league-remove-confirm-a').textContent).toMatch(/other members' copies stay as they are/)
+    fireEvent.click(screen.getByTestId('league-remove-go-a'))
+    await waitFor(() => expect(screen.queryByTestId('league-list-row-a')).toBeNull())
+    expect(deletes).toEqual(['a'])
+    expect(screen.queryByTestId('league-list-row-c')).not.toBeNull()
+  })
+
+  it('Cancel deletes nothing', async () => {
+    stub(removed(1))
+    render(<LeagueListPreferencesCard />)
+    fireEvent.click(await screen.findByTestId('league-remove-c'))
+    fireEvent.click(screen.getByText('Cancel'))
+    expect(screen.queryByTestId('league-remove-confirm-c')).toBeNull()
+    expect(deletes).toEqual([])
+    expect(screen.queryByTestId('league-list-row-c')).not.toBeNull()
+  })
+
+  it('a 200 that removed nothing is a failure, not a silent success', async () => {
+    stub(removed(0))
+    render(<LeagueListPreferencesCard />)
+    fireEvent.click(await screen.findByTestId('league-remove-c'))
+    fireEvent.click(screen.getByTestId('league-remove-go-c'))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Another member imported this league/)
+    expect(screen.queryByTestId('league-list-row-c')).not.toBeNull()
+  })
+
+  it('a failed request keeps the row and says so', async () => {
+    stub(() => new Response('{}', { status: 500 }))
+    render(<LeagueListPreferencesCard />)
+    fireEvent.click(await screen.findByTestId('league-remove-c'))
+    fireEvent.click(screen.getByTestId('league-remove-go-c'))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Couldn't remove that league/)
+    expect(screen.queryByTestId('league-list-row-c')).not.toBeNull()
   })
 })
 

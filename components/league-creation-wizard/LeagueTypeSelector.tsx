@@ -25,7 +25,7 @@ const LEAGUE_TYPE_TOOLTIPS: Partial<Record<LeagueTypeId, string>> = {
   c2c: 'Campus to Canton: college + pro assets in one league with live college scoring; supports football and basketball ecosystems.',
   guillotine: 'Lowest scorer each week is eliminated. Roster released to waivers. Last team standing wins.',
   pirate: 'Win a weekly matchup and claim one unprotected player. Set your protection locks before games begin.',
-  survivor: 'NBA, NFL and NHL Survivor: tribes, private votes, idols, Exile, merge and jury, hosted automatically all season.',
+  survivor: 'NBA, NFL, NHL and MLB Survivor: tribes, private votes, idols, Exile, merge and jury, hosted automatically all season.',
   zombie: 'Infection mechanics, whisperer role, serums & weapons. Eliminated teams can spread the virus.',
   salary_cap: 'Salary cap and contracts.',
 }
