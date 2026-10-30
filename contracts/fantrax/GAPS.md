@@ -209,7 +209,25 @@ past periods of one public in-season league, showing a known add/drop between th
 The stored draft board (`fantraxDraft`) is the captured `getDraftResults` shape (made picks only);
 prior seasons' boards are still not imported (F-09).
 
-## F-14 — Team logos / manager pictures (recorded 2026-10-30, no probe)
+## F-14 — Team logos / manager pictures — **ANSWERED 2026-10-30: the `fxea` API has no picture field**
+
+Captured with the owner's consent from one of their own leagues by the new
+`contracts/fantrax/scripts/probe.sh` → `fixtures/cfb-league-2026.json`. The script prints every key
+path of the RAW `getLeagueInfo`, `getTeamRosters` and `getStandings` responses before redacting, and
+lists any key that looks like a picture (`logo|image|img|avatar|icon|photo|pic|url`). **There is
+none.** A team is `{ id, name }` in `teamInfo`, `{ id, name, shortName, seed }` in a matchup,
+`{ teamName, rosterItems }` in a roster and `{ teamId, teamName, rank, points, … }` in standings.
+
+So `logoUrl: null` in `FantraxLeagueFetchService` is correct, not a bug: there is nothing to map.
+Fantrax teams keep the lettered badge. ⚠ One league proves only that these three endpoints send no
+picture field for teams without one; a league whose teams DO have uploaded logos could still add a
+key. The probe answers that in one run (`probe.sh <leagueId> <label>`) if such a league turns up.
+The remaining `fxea` endpoints (`getLeagues` needs a user secret id; `getMatchupScores`) are
+uncaptured.
+
+The original note follows.
+
+### (original) Team logos / manager pictures (recorded 2026-10-30, no probe)
 
 Every Fantrax team renders a letter instead of a picture in the league list. Measured on production
 2026-10-30: **0 of 209** Fantrax `LeagueTeam` rows carry an `avatarUrl` (ESPN 106 of 106, Sleeper
