@@ -96,6 +96,7 @@ export type CreateNextDraftResult =
         | 'NO_SEASON'
         | 'SEASON_IN_PROGRESS'
         | 'NEEDS_DATABASE_UPDATE'
+        | 'ROOKIE_LOTTERY_UNAVAILABLE'
       message: string
     }
 
@@ -289,6 +290,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
      * league chose the lottery and nobody pressed "Run" — one run now, stored and audited
      * (`rookieDraftLottery.ts`). A league that has not chosen it is not touched.
      */
+    const lotteryLeague = isWeightedRookieLottery(dynasty?.rookiePickOrderMethod)
     const lottery = (
       await ensureRookieDraftLottery({
         leagueId,
@@ -296,10 +298,13 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
         previousDraftEndedAt: previous.completedAt ?? previous.updatedAt ?? null,
         actorUserId,
       }).catch((error) => {
-        console.warn('[next-draft] rookie lottery unavailable; using standings', { leagueId, error: String(error) })
+        console.warn('[next-draft] rookie lottery unavailable', { leagueId, error: String(error) })
         return null
       })
     )?.slotOrder ?? null
+    if (lotteryLeague && !seatsEveryRoster(lottery, draftRosters)) {
+      return { ok: false, code: 'ROOKIE_LOTTERY_UNAVAILABLE', message: 'The weighted rookie lottery could not seat every team. Check the lottery settings and standings, then retry.' }
+    }
     if (seatsEveryRoster(lottery, draftRosters)) {
       slotOrder = lottery
       orderSource = 'lottery'
@@ -311,11 +316,8 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       }
     }
 
-    const lotteryLeague = isWeightedRookieLottery(dynasty?.rookiePickOrderMethod)
     // Standings seat the draft only under the automatic order — an AF Commissioner setting, off by
-    // default (lib/rookie-order/automaticRookieOrder.ts). A lottery league whose draw could not run (not
-    // yet eligible, no standings) still falls back to worst-to-first — never to `buildSlotOrderForLeague`,
-    // which would seat a stale stored draw.
+    // default. A configured weighted lottery must have produced a complete draw above.
     const method = lotteryLeague
       ? 'weighted_lottery'
       : slotOrder
