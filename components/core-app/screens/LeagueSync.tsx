@@ -218,6 +218,8 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </ul>
       </section>
 
+      {data.guilly ? <GuillyCheck guilly={data.guilly} platform={league.platform} /> : null}
+
       <p className="af-sy-foot">
         AllFantasy is read-only on {league.platform === 'manual' ? 'your platform' : league.platform}
         . We never change a lineup, accept a trade or post a message — every change is still made
@@ -238,6 +240,57 @@ const PLATFORM_NAMES: Record<string, string> = {
 
 function platformName(platform: string): string {
   return PLATFORM_NAMES[platform] ?? (platform === 'manual' ? 'your platform' : platform)
+}
+
+/**
+ * An imported Guilly league's chops, as we read them from its scores, and every place that reading is in
+ * doubt (lib/guillotine/importedGuillyHealth.ts). The provider decides its chops; this says how far our
+ * picture of them can be trusted.
+ */
+function GuillyCheck({ guilly, platform }: { guilly: NonNullable<Extract<LeagueSyncResult, { available: true }>['guilly']>; platform: string }) {
+  const name = (id: string) => guilly.teamNames[id] ?? `Team ${id}`
+  const names = (ids: string[] | undefined) => (ids ?? []).map(name).join(', ')
+  return (
+    <section className="af-sy-panel" data-testid="league-sync-guilly">
+      <header className="af-sy-panel-head">
+        <h2 className="af-label">Guilly chops</h2>
+        <span className="af-sy-panel-note" data-testid="league-sync-guilly-status">
+          {guilly.status === 'ok' ? 'Looks right' : 'Needs a look'}
+          {guilly.teamsAlive != null ? ` · ${guilly.teamsAlive} alive` : ''}
+        </span>
+      </header>
+      <ul className="af-sy-rows">
+        <li className="af-sy-row" data-kind="by-design">
+          <span className="af-sy-row-mark" aria-hidden>×</span>
+          <span className="af-sy-row-text">
+            <span className="af-sy-row-label">Chops come from {platformName(platform)}</span>
+            <span className="af-sy-row-note">AllFantasy never chops this league; we read who went from its weekly scores.</span>
+          </span>
+          <span className="af-sy-row-state">{guilly.chops.length === 0 ? 'none yet' : `${guilly.chops.reduce((n, c) => n + c.rosterIds.length, 0)} read`}</span>
+        </li>
+        {guilly.chops.map((c) => (
+          <li key={`chop-${c.week}`} className="af-sy-row" data-kind="fresh" data-testid={`league-sync-guilly-chop-${c.week}`}>
+            <span className="af-sy-row-mark" aria-hidden>●</span>
+            <span className="af-sy-row-text">
+              <span className="af-sy-row-label">Week {c.week}</span>
+              <span className="af-sy-row-note">{names(c.rosterIds)}</span>
+            </span>
+            <span className="af-sy-row-state">chopped</span>
+          </li>
+        ))}
+        {guilly.findings.map((f, i) => (
+          <li key={`${f.code}-${i}`} className="af-sy-row" data-kind={f.severity === 'attention' ? 'stale' : 'never'} data-testid={`league-sync-guilly-${f.code}`}>
+            <span className="af-sy-row-mark" aria-hidden>{f.severity === 'attention' ? '!' : 'i'}</span>
+            <span className="af-sy-row-text">
+              <span className="af-sy-row-label">{f.text}</span>
+              {f.rosterIds?.length ? <span className="af-sy-row-note">{names(f.rosterIds)}</span> : null}
+            </span>
+            <span className="af-sy-row-state">{f.severity === 'attention' ? 'check' : 'note'}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
 }
 
 function DataRow({ row }: { row: SyncDataRow }) {
