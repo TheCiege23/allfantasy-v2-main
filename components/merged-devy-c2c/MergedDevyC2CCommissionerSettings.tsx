@@ -149,7 +149,7 @@ export function MergedDevyC2CCommissionerSettings({ leagueId }: MergedDevyC2CCom
       </div>
 
       <fieldset className="rounded-lg border border-white/10 p-3" disabled={saving}>
-        <legend className="px-1 text-sm text-white/80">College active lineup slots</legend>
+        <legend className="px-1 text-sm text-white/80">College best-ball lineup slots</legend>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {(config.sport === 'NFL' || config.sport === 'NCAAF' ? ['QB', 'RB', 'WR', 'TE', 'FLEX'] : ['G', 'F', 'C', 'FLEX']).map((slot) => (
             <label key={slot} className="block text-sm text-white/70">
