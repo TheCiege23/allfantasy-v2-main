@@ -51,3 +51,13 @@ export function canChangeGuillotineBestBall(league: { status?: string | null; li
   const stage = resolveLeagueStage(league)
   return stage !== null && BEFORE_DRAFT_STAGES.has(stage)
 }
+
+/**
+ * The lineup saves refuse a starter/bench shuffle in a best ball Guilly league (lib/roster-lineup-engine/
+ * lineupService.ts, app/api/redraft/roster/route.ts PATCH): the score is the best lineup whatever the
+ * slots say, so a manager who moves a player would be told it saved and then see it change nothing.
+ * Moves onto or off injured reserve and taxi still save — those decide who is eligible at all.
+ */
+export const BEST_BALL_LINEUP_MESSAGE =
+  'This is a best ball league: your best lineup is set automatically each week. You can still move players on or off IR and taxi.'
+export const BEST_BALL_LINEUP_CODE = 'best_ball_lineup'

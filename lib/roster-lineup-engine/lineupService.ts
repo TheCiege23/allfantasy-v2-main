@@ -23,6 +23,7 @@ import { resolveLineupStarterSlots } from '@/lib/league/lineupStarterSlots'
 import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { checkTaxiSave, logTaxiPromotions, type TaxiSaveCheck } from '@/lib/taxi/taxiRulesService'
 import { checkCampusSave } from '@/lib/c2c/campusLineupCheck'
+import { BEST_BALL_LINEUP_MESSAGE, isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
 
 /**
  * Locked starters keep their exact slot; a locked bench/IR player stays in that section.
@@ -144,6 +145,18 @@ export async function persistRosterLineupWithEngine(
 
   if ((input.source === 'user_save' || input.source === 'system') && await isCommissionerRosterLocked(input.leagueId, input.rosterId)) {
     return { ok: false, error: 'This roster is locked by the commissioner.', status: 403 }
+  }
+
+  // A best ball Guilly league sets its own lineup (lib/guillotine/guillotineBestBall.ts): a starter/bench
+  // shuffle would save and change nothing. IR and taxi moves (a player active on only one side) still save,
+  // as does a commissioner correcting a roster.
+  if (input.source !== 'commissioner_override' && isBestBallGuillotine(league)) {
+    const active = (data: unknown) => new Set([...lineupPlayerIds(data, 'starters'), ...lineupPlayerIds(data, 'bench')])
+    const after = active(input.nextPlayerData)
+    const stayedActive = [...active(roster.playerData)].filter((id) => after.has(id))
+    if (movedLockedLineupPlayer(roster.playerData, input.nextPlayerData, stayedActive)) {
+      return { ok: false, error: BEST_BALL_LINEUP_MESSAGE, status: 409 }
+    }
   }
 
   const sport = String(league.sport ?? 'NFL')
