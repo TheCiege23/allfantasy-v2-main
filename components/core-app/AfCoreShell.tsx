@@ -12,6 +12,7 @@ import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { leagueSportIcon, leagueSportLabel } from '@/lib/core-app/leagueSports'
 import { pairExileUnderSurvivor, pairedExileIds } from '@/lib/core-app/survivorExileRail'
+import type { ExileRailStatus } from '@/lib/core-app/survivorExileStatus'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
@@ -130,6 +131,8 @@ export type RailLeague = {
   sport?: string | null
   /** This is an Exile Island league; the id is its Survivor league (attachSurvivorExileLinks). */
   exileOf?: string
+  /** On an Exile Island row: the line it shows in place of a matchup (survivorExileStatus.ts). */
+  exileStatus?: ExileRailStatus
 }
 
 /**
@@ -2169,6 +2172,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   name={isExile ? copy('Exile Island') : railName}
                   platform={String(l.platform)}
                   m={m}
+                  exileStatus={l.exileStatus ?? null}
                   live={live}
                   isCommissioner={l.isCommissioner}
                   syncPaused={l.syncPaused}

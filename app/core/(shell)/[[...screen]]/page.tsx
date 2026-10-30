@@ -944,7 +944,7 @@ export default async function AfCorePage({
   const railHubsRead = attachLeagueHubs(userId, rail)
   railHubsRead.catch(() => {})
   // Each Exile Island under its Survivor league (lib/core-app/survivorExileRail.ts). Same start-early shape.
-  const railExileRead = attachSurvivorExileLinks(rail)
+  const railExileRead = attachSurvivorExileLinks(rail, userId)
   railExileRead.catch(() => {})
 
   const tradeLeagueRow = selectedLeagueRow

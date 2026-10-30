@@ -108,6 +108,12 @@ export const railRowMessages = defineMessages({
     reorder: 'Reorder leagues',
     reorderHint: 'Drag ⠿ to put your leagues in order.',
     hide: 'Hide from this list',
+    /* An Exile Island row, in place of a matchup. */
+    exileTokens: (tokens: number, need: number | null, week: number | null): string =>
+      need != null && week != null
+        ? `${tokens} of ${need} tokens · return after week ${week}`
+        : `${tokens} ${tokens === 1 ? 'token' : 'tokens'}`,
+    exileOnIsland: (count: number): string => (count === 0 ? 'Nobody on the island yet' : `${count} on the island`),
     hideNote: 'Bring it back any time in Settings.',
     hiddenCount: (n: number) => `${n} hidden · Settings`,
     hiddenCountAria: (n: number) => `${n} hidden ${n === 1 ? 'league' : 'leagues'} — manage in Settings`,
@@ -191,6 +197,11 @@ export const railRowMessages = defineMessages({
     reorder: 'Reordenar ligas',
     reorderHint: 'Arrastra ⠿ para ordenar tus ligas.',
     hide: 'Ocultar de esta lista',
+    exileTokens: (tokens, need, week) =>
+      need != null && week != null
+        ? `${tokens} de ${need} fichas · regreso tras la semana ${week}`
+        : `${tokens} ${tokens === 1 ? 'ficha' : 'fichas'}`,
+    exileOnIsland: (count) => (count === 0 ? 'Nadie en la isla todavía' : `${count} en la isla`),
     hideNote: 'Puedes volver a mostrarla en Ajustes.',
     hiddenCount: (n) => `${n} ${n === 1 ? 'oculta' : 'ocultas'} · Ajustes`,
     hiddenCountAria: (n) => `${n} ${n === 1 ? 'liga oculta' : 'ligas ocultas'}; gestiónalas en Ajustes`,

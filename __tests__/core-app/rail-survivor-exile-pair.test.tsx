@@ -95,6 +95,17 @@ describe('Survivor and Exile Island on the rail', () => {
     expect(islandA.getAttribute('data-exile')).toBeNull()
   })
 
+  it('an island row says your tokens and the way back, not "Matchup not available yet"', () => {
+    const withStatus = rail.map((l) =>
+      l.id === 'exile-a' ? { ...l, exileStatus: { kind: 'island', tokens: 3, tokensToReturn: 4, returnWeek: 10 } }
+      : l.id === 'exile-b' ? { ...l, exileStatus: { kind: 'watching', onIsland: 2 } } : l)
+    render(shell(withStatus))
+    const lines = Array.from(document.querySelectorAll('[data-testid="rail-exile-status"]')).map((el) => el.textContent)
+    expect(lines).toEqual(['3 of 4 tokens · return after week 10', '2 on the island'])
+    const islandA = Array.from(document.querySelectorAll('a.af-rail-tile[data-exile="true"]')).find((el) => leagueIdOf(el) === 'exile-a')!
+    expect(islandA.textContent).not.toContain('Matchup not available yet')
+  })
+
   it('CONTROL: without the link the island is an ordinary row, where it was', () => {
     render(shell(rail.map(({ exileOf: _exileOf, ...league }) => league)))
     expect(railOrder()).toEqual(['exile-a', 'exile-b', 'redraft', 'survivor-a', 'survivor-b'])
