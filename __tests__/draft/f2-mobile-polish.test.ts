@@ -75,7 +75,10 @@ describe('F.2 — DraftRoomShell mobile structure', () => {
     // because their internal content is naturally column-shaped (lists,
     // tables of stats, message rows). Wrapping them would just add a
     // pointless inner scrollbar.
-    expect(src).toMatch(/\{mobileTab === 'queue' && queuePanel\}/)
+    // Queue gained a definite-HEIGHT column (2026-10-29) so its own list scrolls — still no x-scroll.
+    const queueWrap = src.match(/mobileTab === 'queue' && \(\s*<div className="([^"]+)" data-testid="draft-mobile-queue-sheet"/)
+    expect(queueWrap?.[1]).toMatch(/\bh-full\b/)
+    expect(queueWrap?.[1]).not.toMatch(/overflow-x/)
     expect(src).toMatch(/\{mobileTab === 'chat' && chatPanel\}/)
     expect(src).toMatch(/rosterPanel && mobileTab === 'roster' && rosterPanel/)
   })

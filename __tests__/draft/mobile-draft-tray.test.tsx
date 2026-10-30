@@ -40,9 +40,9 @@ describe('mobile draft tray', () => {
   it('starts collapsed on the board tab and opens to half when a tab is chosen', () => {
     render(<Room />)
     expect(tray().getAttribute('data-snap')).toBe('peek')
-    fireEvent.click(screen.getByTestId('draft-mobile-tab-queue'))
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-chat'))
     expect(tray().getAttribute('data-snap')).toBe('half')
-    expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('queue')
+    expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('chat')
   })
 
   it('opens the Players tab at full height — half leaves room for only ~2 player cards', () => {
@@ -50,6 +50,17 @@ describe('mobile draft tray', () => {
     fireEvent.click(screen.getByTestId('draft-mobile-tab-players'))
     expect(tray().getAttribute('data-snap')).toBe('full')
     expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('players')
+  })
+
+  it('opens the Queue tab at full height too — half showed less than one queued row', () => {
+    render(<Room />)
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-queue'))
+    expect(tray().getAttribute('data-snap')).toBe('full')
+    // The queue panel's own list must be the scroller, as with players.
+    const sheet = screen.getByTestId('draft-mobile-queue-sheet')
+    expect(sheet.className).toMatch(/\bh-full\b/)
+    expect(sheet.className).toMatch(/\[&>section\]:flex-1/)
+    expect(sheet.textContent).toBe('Queue list')
   })
 
   it('gives the player panel a definite-height column, so its own list is the scroller', () => {
@@ -64,7 +75,7 @@ describe('mobile draft tray', () => {
   })
 
   it('the Board tab collapses the tray', () => {
-    render(<Room initial="queue" />)
+    render(<Room initial="chat" />)
     expect(tray().getAttribute('data-snap')).toBe('half')
     fireEvent.click(screen.getByTestId('draft-mobile-tab-board'))
     expect(tray().getAttribute('data-snap')).toBe('peek')
@@ -72,17 +83,17 @@ describe('mobile draft tray', () => {
 
   it('collapsing from the handle reports "board", and reopening restores the previous tab', () => {
     const onChange = vi.fn()
-    render(<Room initial="queue" onChange={onChange} />)
+    render(<Room initial="roster" onChange={onChange} />)
     fireEvent.keyDown(handle(), { key: 'ArrowDown' })
     expect(tray().getAttribute('data-snap')).toBe('peek')
     expect(onChange).toHaveBeenLastCalledWith('board')
     fireEvent.keyDown(handle(), { key: 'ArrowUp' })
     expect(tray().getAttribute('data-snap')).toBe('half')
-    expect(onChange).toHaveBeenLastCalledWith('queue')
+    expect(onChange).toHaveBeenLastCalledWith('roster')
   })
 
   it('the handle is keyboard-operable and announces its state', () => {
-    render(<Room initial="queue" />)
+    render(<Room initial="roster" />)
     expect(handle().getAttribute('aria-expanded')).toBe('true')
     fireEvent.keyDown(handle(), { key: 'Enter' })
     expect(tray().getAttribute('data-snap')).toBe('full')

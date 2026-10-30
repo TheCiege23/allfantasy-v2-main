@@ -393,7 +393,7 @@ export function DraftRoomShell({
           onRequestExpand={expandTray}
           layoutRef={layoutRef}
           fullOnInputFocus={mobileTab === 'chat'}
-          openSnap={mobileTab === 'players' ? 'full' : 'half'}
+          openSnap={mobileTab === 'players' || mobileTab === 'queue' ? 'full' : 'half'}
           testIdPrefix="draft-mobile"
           ariaLabel={t('draftRoom.shell.aria.draftSections')}
           accessory={mobileDockAccessory}
@@ -497,7 +497,12 @@ export function DraftRoomShell({
                   </div>
                 </div>
               )}
-              {mobileTab === 'queue' && queuePanel}
+              {/* Same definite-height column as the players sheet, so the queue's own list scrolls. */}
+              {mobileTab === 'queue' && (
+                <div className="flex h-full min-h-0 flex-col [&>section]:min-h-0 [&>section]:flex-1" data-testid="draft-mobile-queue-sheet">
+                  {queuePanel}
+                </div>
+              )}
               {mobileTab === 'chat' && chatPanel}
               {intelPanel && mobileTab === 'intel' && intelPanel}
               {helperPanel && mobileTab === 'helper' && helperPanel}
