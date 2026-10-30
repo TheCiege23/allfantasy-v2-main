@@ -74,6 +74,12 @@ vi.mock('@/lib/keeper/eligibilityEngine', () => ({
   computeKeeperEligibility: vi.fn(),
 }))
 
+const mockApplyMissedDeadlineRule = vi.hoisted(() => vi.fn(async () => ({ rule: 'auto_no_keepers', applied: [], skippedReason: null })))
+vi.mock('@/lib/keeper/missedDeadlineService', () => ({
+  applyMissedDeadlineRule: mockApplyMissedDeadlineRule,
+  KEEPER_SUBMITTED_NONE: 'keeper_submitted_none',
+}))
+
 import { ensureNextRedraftSeasonShell } from '@/lib/redraft/offseason/ensureNextRedraftSeasonShell'
 import { lockKeeperSelections } from '@/lib/keeper/selectionEngine'
 
@@ -244,5 +250,30 @@ describe('lockKeeperSelections — carryover wiring', () => {
       where: { id: 'sess-1' },
       data: expect.objectContaining({ status: 'locked' }),
     })
+  })
+})
+
+describe('lockKeeperSelections — missed-deadline rule', () => {
+  it('applies the rule once, for the incoming season, before pending keepers are locked', async () => {
+    mockKeeperSelectionSessionFindFirst.mockResolvedValueOnce({ id: 'sess-1', leagueId: 'league-1', seasonId: 'season-2', status: 'open' })
+    mockRedraftSeasonFindFirst.mockResolvedValueOnce({ id: 'season-1' })
+    await lockKeeperSelections('league-1', 'sess-1')
+    expect(mockApplyMissedDeadlineRule).toHaveBeenCalledTimes(1)
+    expect(mockApplyMissedDeadlineRule).toHaveBeenCalledWith('league-1', 'season-2')
+    expect(mockApplyMissedDeadlineRule.mock.invocationCallOrder[0]).toBeLessThan(mockKeeperRecordUpdateMany.mock.invocationCallOrder[0])
+  })
+
+  it('never picks again on a repeat lock, and a failure never stops the lock', async () => {
+    mockKeeperSelectionSessionFindFirst.mockResolvedValueOnce({ id: 'sess-1', leagueId: 'league-1', seasonId: 'season-2', status: 'locked' })
+    await lockKeeperSelections('league-1', 'sess-1')
+    expect(mockApplyMissedDeadlineRule).not.toHaveBeenCalled()
+
+    mockKeeperSelectionSessionFindFirst.mockResolvedValueOnce({ id: 'sess-1', leagueId: 'league-1', seasonId: 'season-2', status: 'open' })
+    mockRedraftSeasonFindFirst.mockResolvedValueOnce({ id: 'season-1' })
+    mockApplyMissedDeadlineRule.mockRejectedValueOnce(new Error('chart down'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(lockKeeperSelections('league-1', 'sess-1')).resolves.toBeUndefined()
+    expect(mockKeeperRecordUpdateMany).toHaveBeenCalled()
+    err.mockRestore()
   })
 })
