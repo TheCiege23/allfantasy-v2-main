@@ -127,3 +127,21 @@ describe('canonicalImportNormalizer — backward compatibility', () => {
     expect(typeof bundle.settingsSnapshot.playoffSettings?.playoffTeams).toBe('number')
   })
 })
+
+describe('IDP detection uses exact roster slot tokens', () => {
+  const idpOf = (roster_positions: string[]) =>
+    buildCanonicalImportBundle(baseNormalized({ roster_positions } as Partial<NormalizedImportResult['league']>)).derivedFlags.idp
+
+  it('a SUPER_FLEX, DEF or D/ST slot does not make a league IDP', () => {
+    expect(idpOf(['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF', 'BN', 'IR'])).toBe(false)
+    expect(idpOf(['QB:1', 'RB:2', 'WR:2', 'SUPER_FLEX:1', 'D/ST:1', 'BE:7', 'IR:1'])).toBe(false)
+    expect(idpOf(['QB', 'RB', 'WR', 'DST', 'RES', 'TAXI'])).toBe(false)
+  })
+
+  it('a real IDP slot does, flat or as a SLOT:COUNT pair', () => {
+    expect(idpOf(['QB', 'RB', 'WR', 'DL', 'BN'])).toBe(true)
+    expect(idpOf(['QB', 'RB', 'IDP_FLEX', 'BN'])).toBe(true)
+    expect(idpOf(['QB:1', 'LB:2', 'BE:7'])).toBe(true)
+    expect(idpOf(['QB:1', 'S:1'])).toBe(true)
+  })
+})

@@ -45,17 +45,32 @@ function barPaths(props: Record<string, unknown>): string[] {
 
 describe('phone bottom bar', () => {
   it('pins Matchup alongside Trades', () => {
-    expect(barPaths({ selectedLeagueId: 'L1' })).toEqual(['/core', '/core/my-team', '/core/matchup', '/core/trades', '/core/live'])
+    expect(barPaths({ selectedLeagueId: 'L1' })).toEqual(['/core', '/core/my-team', '/core/matchup', '/core/trades'])
   })
 
-  it('fills Matchup\'s slot with Player Finder before the league has a scored week, keeping five', () => {
+  it('puts Leagues second, opening the league tray in place rather than navigating away', () => {
+    const { container } = render(
+      <AfCoreShell active="home" leagues={[]} syncAge={{ label: 'just now', stale: false }} syncEligibleCount={0} selectedLeagueId="L1">
+        <div>screen</div>
+      </AfCoreShell>,
+    )
+    const items = [...container.querySelectorAll('.af-tabbar > .af-tabbar-item')]
+    expect(items.map((el) => el.textContent)).toEqual(['Home', 'Leagues', 'My team', 'Matchup', 'Trades', 'More'])
+    const leagues = container.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!
+    expect(leagues.tagName).toBe('BUTTON')
+    expect(leagues.getAttribute('aria-controls')).toBe('af-rail')
+    expect(leagues.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(leagues)
+    expect(leagues.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('fills Matchup\'s slot with Player Finder before the league has a scored week, keeping the bar full', () => {
     // Your week is hidden too until a week is scored, so the unconditional stand-in takes it.
     expect(barPaths({ selectedLeagueId: 'L1', leagueHasScoredWeek: false })).toEqual([
       '/core',
       '/core/my-team',
       '/core/players',
       '/core/trades',
-      '/core/live',
     ])
   })
 })
@@ -67,7 +82,6 @@ describe('phone bottom bar, platform without trades', () => {
       '/core/my-team',
       '/core/matchup',
       '/core/week',
-      '/core/live',
     ])
   })
 })

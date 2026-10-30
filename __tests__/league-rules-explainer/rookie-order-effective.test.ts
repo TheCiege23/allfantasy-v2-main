@@ -35,9 +35,11 @@ describe('effectiveRookieDraftOrder — the engine’s precedence', () => {
     expect(effectiveRookieDraftOrder('max_pf', AUTO_WORST)).toBe('auto_worst_to_first')
     expect(effectiveRookieDraftOrder('reverse_standings', AUTO_PF)).toBe('auto_reverse_max_pf')
   })
-  it('a switched-off automatic order leaves the config’s own method', () => {
-    expect(effectiveRookieDraftOrder('max_pf', { rookie_draft_order: { mode: 'reverse_max_pf', enabled: false } })).toBe('max_pf')
-    expect(effectiveRookieDraftOrder('reverse_standings', {})).toBe('reverse_standings')
+  it('a switched-off automatic order: a standings method alone seats nothing, so it reads as set by the commissioner', () => {
+    // The automatic order is an AF Commissioner setting, off by default (lib/rookie-order/automaticRookieOrder.ts).
+    expect(effectiveRookieDraftOrder('max_pf', { rookie_draft_order: { mode: 'reverse_max_pf', enabled: false } })).toBe('commissioner')
+    expect(effectiveRookieDraftOrder('reverse_standings', {})).toBe('commissioner')
+    expect(effectiveRookieDraftOrder('commissioner', {})).toBe('commissioner')
     expect(effectiveRookieDraftOrder(null, null)).toBeNull()
   })
 })
@@ -68,7 +70,8 @@ describe('the popup says the order the engine uses', () => {
     expect(dynastyLines(AUTO_PF, 'en').join('\n')).toContain('lowest max PF first')
     expect(dynastyLines(LIVE, 'en').join('\n')).toContain('the live rookie order')
     // the config's method still reads when nothing overrides it
-    expect(dynastyLines({}, 'en').join('\n')).toContain('lowest possible points (max PF)')
+    // with nothing on, the draft takes the league's own order: the commissioner sets it
+    expect(dynastyLines({}, 'en').join('\n')).toContain('The commissioner sets the rookie draft order.')
   })
   it('in Spanish, with no raw keys and no «waiver»', () => {
     for (const s of [AUTO_WORST, AUTO_PF, LIVE]) {
@@ -100,7 +103,7 @@ describe('publishRookieDraftOrderChange', () => {
       leagueId: 'L1',
       actorUserId: 'u1',
       section: 'rookie-draft-order',
-      changes: [{ key: 'rookieDraftOrder', before: 'max_pf', after: 'auto_worst_to_first' }],
+      changes: [{ key: 'rookieDraftOrder', before: 'commissioner', after: 'auto_worst_to_first' }],
     })
   })
   it('publishes nothing when the effective order is unchanged', async () => {

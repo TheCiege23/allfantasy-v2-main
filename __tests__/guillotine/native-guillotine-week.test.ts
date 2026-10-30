@@ -32,6 +32,7 @@ const m = vi.hoisted(() => ({
   acquire: vi.fn(),
   release: vi.fn(),
   finish: vi.fn(),
+  recordReleases: vi.fn(),
 }))
 vi.mock('@/lib/guillotine/finishGuillotineSeason', async (orig) => ({
   ...(await orig<typeof import('@/lib/guillotine/finishGuillotineSeason')>()),
@@ -57,6 +58,7 @@ vi.mock('@/lib/redraft/weekFinalizer', () => ({
 }))
 vi.mock('@/lib/redraft/scoringEngine', () => ({ scoreRosterForWeek: m.scoreRosterForWeek }))
 vi.mock('@/lib/automation/locks', () => ({ acquireAutomationLock: m.acquire, releaseAutomationLock: m.release }))
+vi.mock('@/lib/guillotine/choppedReleases', () => ({ recordChoppedReleases: m.recordReleases }))
 
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
 import { isPastCorrectionCutoff } from '@/lib/guillotine/GuillotineWeekEvaluator'
@@ -118,6 +120,7 @@ function arrange(overrides: { lastChopWeek?: number | null; active?: typeof SEAS
   m.finish.mockResolvedValue({ championRosterId: 'rr-a', archived: true })
   m.release.mockResolvedValue(undefined)
   m.savePeriodScores.mockResolvedValue(undefined)
+  m.recordReleases.mockResolvedValue(16)
   m.runElimination.mockResolvedValue({
     leagueId: 'L1', weekOrPeriod: 3, choppedRosterIds: ['R-b'], tiebreakStepUsed: null, reason: 'lowest score',
     eliminationFlagged: { marked: ['rr-b'], unresolved: [] },
@@ -157,6 +160,25 @@ describe('runNativeGuillotineWeek', () => {
     // The week pointer follows the calendar (the hourly roll skips guillotine).
     expect(db.redraftSeason.update).toHaveBeenCalledWith({ where: { id: 's1' }, data: { currentWeek: 4 } })
     expect(m.release).toHaveBeenCalled()
+  })
+
+  /*
+   * 🛑 THE RELEASED-PLAYER LIST HAD NO WRITER (lib/guillotine/choppedReleases.ts): the home's chop moment
+   * and the war room read GuillotineWaiverRelease, and nothing ever wrote it.
+   */
+  it('lists the chopped team’s players for the league while the roster still holds them, then drops them', async () => {
+    arrange()
+    await run()
+    expect(m.recordReleases).toHaveBeenCalledWith({ leagueId: 'L1', guillotineSeasonId: 'g1', week: 3, redraftRosterIds: ['rr-b'], availableAt: NOW })
+    // Listed BEFORE the drop: the list is read from the players not yet dropped.
+    expect(m.recordReleases.mock.invocationCallOrder[0]).toBeLessThan(db.redraftRosterPlayer.updateMany.mock.invocationCallOrder[0])
+  })
+
+  it('a list that fails to write never stops the chop or the drop', async () => {
+    arrange()
+    m.recordReleases.mockRejectedValueOnce(new Error('db blip'))
+    expect(await run()).toMatchObject({ outcome: 'chopped', week: 3 })
+    expect(db.redraftRosterPlayer.updateMany).toHaveBeenCalledWith({ where: { rosterId: { in: ['rr-b'] }, droppedAt: null }, data: { droppedAt: NOW } })
   })
 
   it('hands the tiebreak bench points and last week\'s points, which the native path never filled', async () => {

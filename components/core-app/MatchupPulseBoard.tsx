@@ -304,12 +304,15 @@ function gapNote(pulse: MatchupPulse, language: string): string | null {
   const { noSchedule, noOpponent, unpriceable, uncomparable, unidentifiedRoster } = pulse.notRanked
   const notStarted = pulse.notRanked.notStarted ?? 0
   const elimination = pulse.notRanked.elimination ?? 0
+  const scoringType = pulse.notRanked.scoringType ?? 0
   const m = messagesFor(matchupPulseBoardMessages, language)
   const parts: string[] = []
   /* The league's own state, not ours: there is no schedule until it drafts. */
   if (notStarted > 0) parts.push(m.gapNotStarted(notStarted))
   /* Not a gap at all — the format plays the whole field, so there is no one opponent to rank against. */
   if (elimination > 0) parts.push(m.gapElimination(elimination))
+  /* Also the format, not a gap: a categories or roto league is not won on a points margin. */
+  if (scoringType > 0) parts.push(m.gapScoringType(scoringType))
   if (noSchedule > 0) parts.push(m.gapNoSchedule(noSchedule))
   if (noOpponent > 0) parts.push(m.gapNoOpponent(noOpponent))
   if (unpriceable > 0) parts.push(m.gapUnpriceable(unpriceable))
