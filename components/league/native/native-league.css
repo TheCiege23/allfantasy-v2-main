@@ -172,7 +172,7 @@
   .nl-workspace .af-setup-checklist{padding:16px}
   .nl-home-secondary{display:flex}
   .nl-bottom-nav{display:flex;justify-content:space-around;min-height:72px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--surface2);flex:none}
-  .nl-bottom-nav button{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;min-height:48px;min-width:52px;color:var(--faint);font-size:11px}
+  .nl-bottom-nav :is(button,a){display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;min-height:48px;min-width:52px;color:var(--faint);font-size:11px;text-decoration:none}
   .nl-bottom-nav [aria-current=page]{color:var(--accent)}
   .nl-sidebar.nl-menu-open{display:block;position:fixed;top:64px;bottom:72px;left:0;width:min(300px,calc(100vw - 40px));background:var(--bg);z-index:60;border-right:1px solid var(--line2)}
   .nl-nav-group button{min-height:44px}

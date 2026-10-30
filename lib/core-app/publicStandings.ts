@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { leagueDisplayName } from './leagueHome'
 import { isScored, resolveCurrentWeekFrom } from './currentWeek'
 import { leagueHasMedianGame, medianGameRecords } from './medianGame'
+import { headToHeadRecords } from './headToHeadRecords'
 import { readPlayoffFormat } from './outlookFormat'
 
 /**
@@ -150,25 +151,11 @@ export async function getPublicLeagueStandings(
    * league with no head-to-head pairing as every team 1-0. A matchup that is not exactly two rows has
    * no result.
    */
-  const pairs = new Map<string, typeof seasonRows>()
-  for (const r of seasonRows) {
-    if (r.matchupId == null) continue
-    const key = `${r.week}|${r.matchupId}`
-    const pair = pairs.get(key)
-    if (pair) pair.push(r)
-    else pairs.set(key, [r])
-  }
-  for (const pair of pairs.values()) {
-    if (pair.length !== 2) continue
-    const [a, b] = pair
-    if (a.pointsFor === b.pointsFor) {
-      totalOf(a.rosterId).ties += 1
-      totalOf(b.rosterId).ties += 1
-      continue
-    }
-    const [win, loss] = a.pointsFor > b.pointsFor ? [a, b] : [b, a]
-    totalOf(win.rosterId).wins += 1
-    totalOf(loss.rosterId).losses += 1
+  for (const [rosterId, rec] of headToHeadRecords(seasonRows)) {
+    const acc = totalOf(rosterId)
+    acc.wins += rec.wins
+    acc.losses += rec.losses
+    acc.ties += rec.ties
   }
 
   /* Sleeper's median game is in the platform's record, so it is in this one (see medianGame.ts). */
