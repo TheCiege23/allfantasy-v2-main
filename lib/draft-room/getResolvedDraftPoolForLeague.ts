@@ -1627,7 +1627,7 @@ export async function getResolvedDraftPoolForLeague(
 
   if (eligiblePositions?.size) {
     rawListFiltered = rawListFiltered.filter((r: RawRow) =>
-      draftPoolRowMatchesEligiblePositions(r.position ?? r.pos ?? '', eligiblePositions),
+      draftPoolRowMatchesEligiblePositions(r.position ?? r.pos ?? '', eligiblePositions, sport),
     )
   }
 

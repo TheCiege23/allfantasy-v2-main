@@ -797,7 +797,7 @@ export class DraftWorker {
       }))
     let available = mapAvailable()
     if (draftEligiblePositions?.size) {
-      const filtered = available.filter((p) => draftPoolRowMatchesEligiblePositions(p.position, draftEligiblePositions))
+      const filtered = available.filter((p) => draftPoolRowMatchesEligiblePositions(p.position, draftEligiblePositions, context.sport))
       if (filtered.length > 0) available = filtered
     }
 
