@@ -77,6 +77,25 @@ export async function DELETE(
       select: { id: true },
     });
 
+    if (league && isImportedPlatform(league.platform) && league.platformLeagueId) {
+      const tombstoned = await recordLeagueTombstone({
+        userId,
+        platform: String(league.platform),
+        platformLeagueId: league.platformLeagueId,
+        leagueName: league.name ?? null,
+      });
+      return NextResponse.json({
+        ok: true,
+        tombstoned,
+        removed: {
+          leagueRows: 0,
+          sleeperLeagueRows: 0,
+          tournamentRows: 0,
+          memberLeagues: tombstoned ? 1 : 0,
+        },
+      });
+    }
+
     if (!league && !sleeperLeague && !tournament) {
       /*
        * A league someone ELSE imported, reached through a claimed team or roster. There is no
