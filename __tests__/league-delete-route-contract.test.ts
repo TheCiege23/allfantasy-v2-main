@@ -167,7 +167,7 @@ describe('DELETE /api/league/[leagueId] contract', () => {
     expect(sleeperLeagueDeleteManyMock).not.toHaveBeenCalled()
   })
 
-  it('deletes linked league and sleeper rows so removed league cannot reappear', async () => {
+  it('tombstones a viewer-owned imported league without deleting a shared row', async () => {
     leagueFindFirstMock.mockResolvedValueOnce({
       id: 'lg-1',
       platform: 'sleeper',
