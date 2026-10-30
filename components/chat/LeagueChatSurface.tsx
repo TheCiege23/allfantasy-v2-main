@@ -186,8 +186,8 @@ export default function LeagueChatSurface({
         could not read. `2xl` is the first width at which the centre column is
         genuinely wide enough for a 320px rail beside it.
       */}
-      <div className="grid min-h-0 flex-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-h-0">
+      <div className="grid min-h-0 min-w-0 flex-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-h-0 min-w-0">
           <LeagueChatPanel
             leagueId={leagueId}
             leagueName={leagueName}
