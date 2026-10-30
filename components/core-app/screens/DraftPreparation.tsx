@@ -5,6 +5,8 @@ import { draftPlanningPreference } from "@/lib/core-app/draftPlanningPreferenceM
 import Link from "next/link";
 import { InfoTip } from "../InfoTip";
 import { useMessages } from "@/components/i18n/useMessages";
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient";
+import { scoringFormatText } from "@/lib/core-app/scoringFormatText";
 import { draftScreensMessages } from "@/lib/core-app/messages/draftScreens";
 import type { DraftPreparationData } from "@/lib/core-app/draftPreparation";
 import "@/components/core-app/af-draft-preparation.css";
@@ -29,6 +31,7 @@ export function DraftPreparation({
 }) {
   const m = useMessages(draftScreensMessages),
     t = m.prepLabel;
+  const { language } = useOptionalLanguage();
   const [search, setSearch] = useState(""),
     [position, setPosition] = useState(""),
     [spread, setSpread] = useState("adp"),
@@ -152,7 +155,7 @@ export function DraftPreparation({
         <p className="af-prep-context">
           {data.context.sport} · {data.context.season} ·{" "}
           {data.context.leagueType} · {data.context.purpose} ·{" "}
-          {data.context.playerPool} · {data.context.scoring} ·{" "}
+          {data.context.playerPool} · {scoringFormatText(data.context.scoring, language)} ·{" "}
           {data.context.teamCount} {m.prepTeams} ·{" "}
           {data.context.draftType}
         </p>

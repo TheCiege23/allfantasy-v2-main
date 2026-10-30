@@ -2,6 +2,7 @@ import 'server-only'
 import { leagueCalendar, type LeagueCalendarEvent } from './leagueCalendar'
 
 import { prisma } from '@/lib/prisma'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import {
   resolveImportCoverageSummary,
   type ImportCoverageSummary,
@@ -974,7 +975,7 @@ export async function getLeagueHomeData(
       variant: league.leagueVariant,
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
-      canRemoveImported: league.userId === userId,
+      canRemoveImported: league.userId === userId || isImportedPlatform(league.platform),
       format: league.leagueType ?? null,
       sport: String(league.sport ?? 'NFL'),
       season: league.season ?? null,

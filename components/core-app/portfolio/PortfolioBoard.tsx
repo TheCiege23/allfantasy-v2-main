@@ -39,6 +39,8 @@ import {
 import type { ImpactSlot, PlayerLeagueImpact } from '@/lib/core-app/playerLeagueImpact'
 import { impactText, SLOT_LABEL } from '@/components/core-app/screens/ExposureImpact'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { scoringFormatText } from '@/lib/core-app/scoringFormatText'
 import {
   BarList,
   ChartScroll,
@@ -157,10 +159,15 @@ const DIMENSIONS: Array<{ key: DistributionDimension; label: string; filter?: ke
   { key: 'stage', label: 'Season stage', filter: 'stages' },
 ]
 
-function bucketLabel(dimension: DistributionDimension, key: string): string {
+/**
+ * A bar's label. Only the scoring buckets follow the reader's language — the scoring-format ruling
+ * (__tests__/spanish-wording-rulings.test.tsx §9), which the "ppr" help tip beside them names in
+ * Spanish; the board's other words are not translated yet.
+ */
+export function bucketLabel(dimension: DistributionDimension, key: string, language: string): string {
   if (dimension === 'platform') return PLATFORM_LABEL[key] ?? key
   if (dimension === 'family') return FAMILY_LABEL[key] ?? key
-  if (dimension === 'scoring') return SCORING_LABEL[key] ?? key
+  if (dimension === 'scoring') return scoringFormatText(SCORING_LABEL[key] ?? key, language)
   if (dimension === 'status') return STATUS_LABEL[key] ?? key
   if (dimension === 'stage') return STAGE_LABEL[key] ?? key
   return key
@@ -309,6 +316,7 @@ export function PortfolioBoard({
   const [exposureLimit, setExposureLimit] = useState(40)
   const [multiOnly, setMultiOnly] = useState(true)
   const builtLabel = useRelativeTime(builtAt)
+  const { language } = useOptionalLanguage()
 
   /* URL sync — replaceState, never a navigation. Other params on the URL are kept as they are. */
   useEffect(() => {
@@ -624,7 +632,7 @@ export function PortfolioBoard({
                     <BarList
                       ariaLabel={`Leagues by ${d.label.toLowerCase()}`}
                       max={indexes.length}
-                      items={buckets.slice(0, 6).map((b) => ({ key: b.key, label: bucketLabel(d.key, b.key), value: b.count }))}
+                      items={buckets.slice(0, 6).map((b) => ({ key: b.key, label: bucketLabel(d.key, b.key, language), value: b.count }))}
                       selected={dist?.dimension === d.key ? dist.key : null}
                       onSelect={(key) =>
                         setDist((cur) => (cur?.dimension === d.key && cur.key === key ? null : { dimension: d.key, key }))
@@ -642,7 +650,7 @@ export function PortfolioBoard({
               <div className="af-pfb-drill" aria-live="polite">
                 <div className="af-pfb-drill-head">
                   <strong>
-                    {bucketLabel(dist.dimension, dist.key)} · {plural(distSelected.count, 'league')}
+                    {bucketLabel(dist.dimension, dist.key, language)} · {plural(distSelected.count, 'league')}
                   </strong>
                   {distFilterKey && dist.key !== 'unknown' && dist.dimension !== 'scoring' ? (
                     <button

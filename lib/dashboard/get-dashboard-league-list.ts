@@ -9,6 +9,8 @@ import { resolveLeagueListSeasonYear } from '@/lib/leagues/resolveLeagueListSeas
 import type { ActivityLeagueEntry } from '@/lib/activity/types'
 import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import { isTournamentCoCommissioner, TOURNAMENT_CO_COMMISSIONERS_KEY } from '@/lib/league/tournamentCoCommissioners'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
+import { tombstoneLookupKey } from '@/lib/league-delete/leagueTombstones'
 
 const VARIANT_NOT_IN = Array.from(EXCLUDED_VARIANTS)
 
@@ -414,6 +416,22 @@ export function collapseLeagueSeasons<T extends Record<string, unknown>>(
 }
 
 /**
+ * Lookup keys of every league this viewer removed. A failed read hides nothing: the list is the
+ * /core membership gate, and a removal that briefly reappears beats a list that fails.
+ */
+async function removedLeagueKeysFor(userId: string): Promise<Set<string>> {
+  try {
+    const rows = await prisma.deletedLeagueTombstone.findMany({
+      where: { userId },
+      select: { platform: true, platformLeagueId: true },
+    })
+    return new Set(rows.map((r) => tombstoneLookupKey(r.platform, r.platformLeagueId)))
+  } catch (err) {
+    console.error('[League List] tombstone read failed', err)
+    return new Set()
+  }
+}
+/**
  * Each league's `settings`, minus the importer's `identity_mappings` table — and minus the retired
  * manager-label keys (`psychologyCache`), which this list must never hand a client
  * (`lib/league/clientLeagueSettings.ts`).
@@ -491,7 +509,7 @@ export async function getDashboardLeagueListForUser(
       .catch(() => null),
   ])
 
-  const [genericLeagues, sleeperLeagues, tournaments, legacyBoardItems] = await Promise.all([
+  const [genericLeaguesRead, sleeperLeagues, tournaments, legacyBoardItems, removedKeys] = await Promise.all([
     (prisma as any).league
       .findMany({
         where: {
@@ -662,7 +680,21 @@ export async function getDashboardLeagueListForUser(
         return []
       }),
     appUser?.legacyUserId ? getLegacyLeagueBoardItems(appUser.legacyUserId) : Promise.resolve([]),
+    removedLeagueKeysFor(userId),
   ])
+
+  /*
+   * A league someone else imported, which this viewer removed from their list (DELETE
+   * /api/league/[id] writes only their tombstone for it — the league is shared, so nothing is
+   * deleted). Their own copies need no filter: those rows are gone. Native leagues are never
+   * tombstoned by that route, and the check is imported-only so a stray key cannot hide one.
+   */
+  const genericLeagues = (genericLeaguesRead as Array<{ userId?: unknown; platform?: unknown; platformLeagueId?: unknown }>).filter(
+    (lg) =>
+      String(lg.userId ?? '') === userId ||
+      !isImportedPlatform(String(lg.platform ?? '')) ||
+      !removedKeys.has(tombstoneLookupKey(String(lg.platform ?? ''), String(lg.platformLeagueId ?? ''))),
+  ) as any[]
 
   const genericLeagueIds = (genericLeagues as { id: string }[]).map((lg) => lg.id).filter(Boolean)
   const [redraftSeasonMaxRows, leagueHistoryMaxRows, settingsById] =
@@ -770,11 +802,17 @@ export async function getDashboardLeagueListForUser(
       isCommissioner,
       /*
        * Whether this `League` row is the viewer's own copy — the only kind `DELETE /api/league/[id]`
-       * removes (it matches on `userId`). A league reached through a claimed team or a redraft
-       * membership belongs to whoever imported it; deleting it "succeeds" with zero rows removed.
-       * The owner id itself is stripped above and stays stripped; only this boolean leaves.
+       * deletes (it matches on `userId`). The owner id itself is stripped above and stays stripped;
+       * only these booleans leave.
        */
       viewerOwnsRow: String(leagueRowOwnerId ?? '') === userId,
+      /*
+       * Whether that route can take this league off the viewer's list: their own copy, or an
+       * imported league someone else imported (tombstoned for them alone, filtered above). A
+       * native league they only joined is not a list preference.
+       */
+      viewerCanRemove:
+        String(leagueRowOwnerId ?? '') === userId || isImportedPlatform(String(lgCore.platform ?? '')),
       userRole,
       isPaid,
       entryFee: entryFee ?? null,

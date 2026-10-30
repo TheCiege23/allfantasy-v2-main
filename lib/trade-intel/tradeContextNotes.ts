@@ -286,7 +286,8 @@ export async function buildTradeContextNotes(args: {
 
   const players = await prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: rosterIds } },
+      // In this league's sport: Sleeper numbers its NFL and NBA pools independently.
+      where: { ...(league.sport ? { sport: league.sport.toUpperCase() } : {}), sleeperId: { in: rosterIds } },
       select: { sleeperId: true, position: true, team: true, name: true },
     })
     .catch(() => [])
@@ -1391,7 +1392,8 @@ async function buildLeverageNotes(args: {
 
   const players = await prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: ids } },
+      // In this league's sport: Sleeper numbers its NFL and NBA pools independently.
+      where: { sport: sport.toUpperCase(), sleeperId: { in: ids } },
       select: { sleeperId: true, name: true, position: true, team: true },
     })
     .catch(() => [])

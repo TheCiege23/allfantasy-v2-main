@@ -65,6 +65,14 @@ describe('rail projections — points only for head-to-head points leagues', () 
     expect(result.byLeague.get('H')?.sides.get('team')?.projected).toBe(15)
   })
 
+  /* A Yahoo league's scoring type lives only in the raw `yahoo_settings` the rail already selects. */
+  it('🛑 a Yahoo head-to-head categories league is not priced in points; a Yahoo points league is', async () => {
+    const yahoo = (scoring_type: string, id: string) => ({ ...meta(id, {}), yahoo_settings: { scoring_type } })
+    const result = await load([yahoo('head', 'C'), yahoo('headpoint', 'H')])
+    expect(result.byLeague.get('C')?.sides.get('team') ?? null).toBeNull()
+    expect(result.byLeague.get('H')?.sides.get('team')?.projected).toBe(15)
+  })
+
   it('reads the format from a settings subpath, never the whole settings column', async () => {
     await load([meta('H', {})])
     const sql = String(h.raw.mock.calls[0][0])

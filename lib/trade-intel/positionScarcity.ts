@@ -89,7 +89,8 @@ export async function getPositionScarcity(args: {
 
   const players = await prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: projectedIds }, position: { in: [...wanted] } },
+      // In this league's sport: Sleeper numbers its NFL and NBA pools independently.
+      where: { sport: sport.toUpperCase(), sleeperId: { in: projectedIds }, position: { in: [...wanted] } },
       select: { sleeperId: true, name: true, position: true, team: true },
     })
     .catch(() => [])

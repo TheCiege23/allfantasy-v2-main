@@ -4,6 +4,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordLeagueTombstone } from "@/lib/league-delete/leagueTombstones";
+import { resolveLeagueMembership } from "@/lib/league-access";
+import { isImportedPlatform } from "@/lib/league/isNativeLeague";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -52,6 +54,40 @@ export async function DELETE(
     });
 
     if (!league && !sleeperLeague && !tournament) {
+      /*
+       * A league someone ELSE imported, reached through a claimed team or roster. There is no
+       * row of ours to delete, and the league is shared, so nothing is deleted or unclaimed:
+       * the viewer's tombstone alone takes it off their list (getDashboardLeagueListForUser
+       * drops a non-owned imported league it matches). Production 2026-10-30: a tester's two
+       * Sleeper leagues belonged to a DELETED account, so this route answered "0 removed"
+       * forever and the leagues could only be hidden. Native leagues are not offered here:
+       * leaving an AllFantasy league is a commissioner matter, not a list preference.
+       */
+      const memberLeague = await prisma.league.findUnique({
+        where: { id },
+        select: { platform: true, platformLeagueId: true, name: true },
+      });
+      if (memberLeague && isImportedPlatform(memberLeague.platform) && memberLeague.platformLeagueId) {
+        const membership = await resolveLeagueMembership(id, userId);
+        if (membership.ok) {
+          const tombstoned = await recordLeagueTombstone({
+            userId,
+            platform: String(memberLeague.platform),
+            platformLeagueId: memberLeague.platformLeagueId,
+            leagueName: memberLeague.name ?? null,
+          });
+          return NextResponse.json({
+            ok: true,
+            tombstoned,
+            removed: {
+              leagueRows: 0,
+              sleeperLeagueRows: 0,
+              tournamentRows: 0,
+              memberLeagues: tombstoned ? 1 : 0,
+            },
+          });
+        }
+      }
       return NextResponse.json({
         ok: true,
         removed: {

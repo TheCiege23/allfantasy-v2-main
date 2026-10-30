@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { leagueDisplayName, type SectionState } from './leagueHome'
@@ -76,7 +77,10 @@ export type LeagueSyncData = {
    * a day, and a manual sync re-asks now. Null for every other state.
    */
   providerGone: { checkedAt: Date; detail: string | null } | null
-  /** The viewer imported this row, so `DELETE /api/league/[id]` can remove it for them. */
+  /**
+   * `DELETE /api/league/[id]` can take it off the viewer's list: their own copy is deleted, and
+   * an imported league someone else imported is tombstoned for them alone.
+   */
   canRemove: boolean
   /** AF's own last successful collection. Never presented as data freshness. */
   lastReadAt: Date | null
@@ -387,7 +391,7 @@ export async function getLeagueSync(
     consecutiveFailures,
     lastError: syncState?.lastError ?? null,
     providerGone,
-    canRemove: league.userId === userId,
+    canRemove: league.userId === userId || isImportedPlatform(league.platform),
     rows,
     coarse,
     orphanedRun,

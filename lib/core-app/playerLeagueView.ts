@@ -172,7 +172,8 @@ export async function getPlayerLeagueView(
     sample.length > 0
       ? await prisma.sportsPlayer
           .findMany({
-            where: { sleeperId: { in: sample } },
+            // In the league's own sport: Sleeper numbers its NFL and NBA pools independently.
+            where: { ...(league.sport ? { sport: league.sport.toUpperCase() } : {}), sleeperId: { in: sample } },
             select: { sleeperId: true },
             distinct: ['sleeperId'],
           })

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { ProgressiveDraftPlayerList } from './ProgressiveDraftPlayerList'
-import { Search, User, Plus, GitCompare, LayoutGrid, Rows3, X } from 'lucide-react'
+import { Search, User, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { applyDraftFilters, DRAFT_ROOM_I18N_KEYS, getPickConfirmationLabel, getPositionFilterOptionsForSport } from '@/lib/draft-room'
@@ -428,6 +428,14 @@ function PlayerPanelInner({
    *  empty intersection. */
   const [vetsOnly, setVetsOnly] = useState(false)
   const [hideDrafted, setHideDrafted] = useState(true)
+  /*
+   * ⚠ ON A PHONE THE FILTER HEADER WAS A THIRD OF THE SCREEN. Search, position pills, team + view
+   * mode, the AI ADP row and the toggle chips stacked to ~330px at Pixel 7 size (the room's touch
+   * CSS lifts every control to 44px), leaving ~250px of list. Below md only search and positions
+   * show; the rest sits behind "Filters". At md+ the wrappers are `display: contents`/block, so
+   * the desktop header is unchanged.
+   */
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [watchlistKeys, setWatchlistKeys] = useState<Set<string>>(new Set())
   const isDevyRound = Boolean(devyConfig?.enabled && !c2cConfig?.enabled && currentRound != null && devyConfig.devyRounds?.includes(currentRound))
   const isCollegeRound = Boolean(c2cConfig?.enabled && currentRound != null && c2cConfig.collegeRounds?.includes(currentRound))
@@ -503,6 +511,11 @@ function PlayerPanelInner({
     () => getDraftRoomRookieDataState(players, rookieFilterContext),
     [players, rookieFilterContext],
   )
+
+  /** Filters hidden behind the phone's "Filters" button that differ from their defaults. */
+  const collapsedFilterCount =
+    Number(teamFilter !== 'All') + Number(poolFilter !== 'All') + Number(watchlistOnly) +
+    Number(rookiesOnly) + Number(vetsOnly) + Number(!hideDrafted)
 
   const hasSecondaryPoolFilters = useMemo(
     () =>
@@ -854,6 +867,26 @@ function PlayerPanelInner({
               data-testid="draft-player-search-input"
             />
           </div>
+          <button
+            type="button"
+            onClick={() => setMobileFiltersOpen((open) => !open)}
+            aria-expanded={mobileFiltersOpen}
+            aria-controls="draft-player-more-filters"
+            data-testid="draft-mobile-filters-toggle"
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 md:hidden ${
+              mobileFiltersOpen || collapsedFilterCount > 0
+                ? 'border-cyan-300/45 bg-[#20d6d2]/18 text-cyan-100'
+                : 'border-white/[0.08] bg-[#101a30]/95 text-white/75'
+            }`}
+          >
+            <SlidersHorizontal className="h-4 w-4" aria-hidden />
+            <span>Filters</span>
+            {collapsedFilterCount > 0 ? (
+              <span className="rounded-full bg-cyan-400/25 px-1.5 text-[11px] tabular-nums" data-testid="draft-mobile-filters-count">
+                {collapsedFilterCount}
+              </span>
+            ) : null}
+          </button>
           {/* D.6.1 — position pills replacing the legacy <select>. Each pill shows the
               available pool count for that position; the active pill is highlighted with
               the cyan→violet gradient that matches the rest of the Sleeper-style chrome.
@@ -863,7 +896,7 @@ function PlayerPanelInner({
             role="radiogroup"
             aria-label="Position filter"
             data-testid="draft-position-filter"
-            className="flex h-7 min-w-0 flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex h-7 min-w-0 basis-full flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] md:basis-auto [&::-webkit-scrollbar]:hidden"
           >
             {positionPillCounts.map((opt) => {
               const isActive = positionFilter === opt.value
@@ -897,6 +930,11 @@ function PlayerPanelInner({
               )
             })}
           </div>
+          <div
+            id="draft-player-more-filters"
+            data-testid="draft-player-more-filters"
+            className={mobileFiltersOpen ? 'flex basis-full flex-wrap items-center gap-1.5 md:contents' : 'hidden md:contents'}
+          >
           <select
             value={teamFilter}
             onChange={(e) => {
@@ -982,6 +1020,7 @@ function PlayerPanelInner({
               )}
             </select>
           )}
+          </div>
         </div>
         {isCollegeRound && (
           <div className="border-b border-violet-400/20 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100">
@@ -998,6 +1037,7 @@ function PlayerPanelInner({
             Devy round — select a college/devy-eligible player.
           </div>
         )}
+        <div className={mobileFiltersOpen ? 'block' : 'hidden md:block'} data-testid="draft-player-more-filter-rows">
         <div
           className={`flex flex-wrap items-center gap-1 border-b border-white/[0.05] px-2 py-1 sm:px-3 ${rs ? 'bg-[#050c18]/95' : 'bg-black/10'}`}
         >
@@ -1134,6 +1174,7 @@ function PlayerPanelInner({
           >
             Clear filters
           </button>
+        </div>
         </div>
       </div>
       {compareAnchor && (

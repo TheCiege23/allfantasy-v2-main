@@ -11,6 +11,7 @@ import { getDraftUISettingsForLeague, updateDraftUISettings } from './DraftUISet
 import type { DraftUISettings } from './DraftUISettingsResolver'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
+import { sanitizeRoundList } from './draftRoundList'
 
 /** Keeper rules (from session when present). */
 export interface KeeperVariantSettings {
@@ -78,18 +79,6 @@ const DEFAULT_AUCTION_BUDGET = 200
 const DEFAULT_AUCTION_MIN_BID = 1
 const DEFAULT_AUCTION_MIN_INCREMENT = 1
 
-function sanitizeRoundList(input: unknown): number[] {
-  if (!Array.isArray(input)) return []
-  return Array.from(
-    new Set(
-      input
-        .map((value) => Number(value))
-        .filter((value) => Number.isFinite(value))
-        .map((value) => Math.max(1, Math.min(50, Math.round(value))))
-    )
-  ).sort((a, b) => a - b)
-}
-
 function sanitizeKeeperPositionCaps(input: unknown): Record<string, number> | undefined {
   if (!input || typeof input !== 'object') return undefined
   const result: Record<string, number> = {}
@@ -119,6 +108,7 @@ export async function getDraftVariantSettings(leagueId: string): Promise<DraftVa
       select: {
         status: true,
         draftType: true,
+        rounds: true,
         keeperConfig: true,
         devyConfig: true,
         c2cConfig: true,
@@ -160,11 +150,11 @@ export async function getDraftVariantSettings(leagueId: string): Promise<DraftVa
       },
       devyConfig: {
         enabled: Boolean(rawDevy?.enabled),
-        devyRounds: sanitizeRoundList(rawDevy?.devyRounds),
+        devyRounds: sanitizeRoundList(rawDevy?.devyRounds, session.rounds),
       },
       c2cConfig: {
         enabled: Boolean(rawC2c?.enabled),
-        collegeRounds: sanitizeRoundList(rawC2c?.collegeRounds),
+        collegeRounds: sanitizeRoundList(rawC2c?.collegeRounds, session.rounds),
       },
       auctionBudgetPerTeam: session.draftType === 'auction' ? (session.auctionBudgetPerTeam ?? DEFAULT_AUCTION_BUDGET) : null,
       auctionMinBid: session.draftType === 'auction' ? DEFAULT_AUCTION_MIN_BID : null,
@@ -283,7 +273,7 @@ export async function updateSessionVariant(
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true, keeperConfig: true, devyConfig: true, c2cConfig: true, auctionBudgetPerTeam: true, draftType: true },
+    select: { id: true, status: true, rounds: true, keeperConfig: true, devyConfig: true, c2cConfig: true, auctionBudgetPerTeam: true, draftType: true },
   })
   if (!session || session.status !== 'pre_draft') return
 
@@ -304,12 +294,12 @@ export async function updateSessionVariant(
   }
   if (patch.devyConfig !== undefined) {
     updatePayload.devyConfig = patch.devyConfig && patch.devyConfig.enabled
-      ? { enabled: true, devyRounds: sanitizeRoundList(patch.devyConfig.devyRounds) }
+      ? { enabled: true, devyRounds: sanitizeRoundList(patch.devyConfig.devyRounds, session.rounds) }
       : { enabled: false, devyRounds: [] }
   }
   if (patch.c2cConfig !== undefined) {
     updatePayload.c2cConfig = patch.c2cConfig && patch.c2cConfig.enabled
-      ? { enabled: true, collegeRounds: sanitizeRoundList(patch.c2cConfig.collegeRounds) }
+      ? { enabled: true, collegeRounds: sanitizeRoundList(patch.c2cConfig.collegeRounds, session.rounds) }
       : { enabled: false, collegeRounds: [] }
   }
   if (patch.auctionBudgetPerTeam !== undefined && session.draftType === 'auction') {
