@@ -208,3 +208,18 @@ past periods of one public in-season league, showing a known add/drop between th
 
 The stored draft board (`fantraxDraft`) is the captured `getDraftResults` shape (made picks only);
 prior seasons' boards are still not imported (F-09).
+
+## F-14 — Team logos / manager pictures (recorded 2026-10-30, no probe)
+
+Every Fantrax team renders a letter instead of a picture in the league list. Measured on production
+2026-10-30: **0 of 209** Fantrax `LeagueTeam` rows carry an `avatarUrl` (ESPN 106 of 106, Sleeper
+6,551 of 7,003). The cause is ours, not the data: `FantraxLeagueFetchService` builds every team with
+`logoUrl: null`, and `FantraxRosterMapper` passes that through as `avatar_url`.
+
+Unknown: whether any `fxea` endpoint (`getLeagueInfo`, `getTeamRosters`, `getStandings`) returns a
+team logo URL at all. No committed capture shows one, and per CLAUDE.md this is not probed to find
+out.
+
+**Needed:** a `getLeagueInfo` or `getTeamRosters` capture from a league whose teams have custom
+logos, committed under `contracts/fantrax/fixtures/`. If a logo field exists, map it in
+`FantraxLeagueFetchService` (one line) and the list shows it on the next scheduled refresh.
