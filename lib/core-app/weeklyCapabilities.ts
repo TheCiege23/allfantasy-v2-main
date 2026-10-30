@@ -4,7 +4,10 @@ const object = (v: unknown): Record<string, unknown> => v && typeof v === 'objec
 export function weeklyFormat(league: { leagueType?: string | null; settings?: unknown }): WeeklyFormat {
   const s = object(league.settings)
   const blocks = [s, object(s.league), object(s.sleeper), object(s.sleeperLeague), object(s.sportConfig)]
-  const values = [league.leagueType, ...blocks.flatMap(b => [b.scoring_mode, b.scoringMode, b.scoring_type, b.scoringType, b.format, b.leagueType])]
+  // A Fantrax import states its scoring only as `fantrax_settings.scoringSystem.type`; without it every
+  // Fantrax category/roto league read as head-to-head points and was given win odds.
+  const fantraxType = object(object(s.fantrax_settings).scoringSystem).type
+  const values = [league.leagueType, fantraxType, ...blocks.flatMap(b => [b.scoring_mode, b.scoringMode, b.scoring_type, b.scoringType, b.format, b.leagueType])]
     .filter(v => typeof v === 'string').map(v => String(v).toLowerCase().replace(/[ -]/g, '_'))
   if (values.some(v => /guillotine|survivor|elimination/.test(v))) return 'elimination'
   if (values.some(v => /roto|rotisserie/.test(v))) return 'roto'

@@ -169,3 +169,34 @@ describe('Waivers run — a Sleeper league', () => {
     expect(data?.processTime).toMatchObject({ available: true, data: { dayLabel: 'Every day', observedRuns: 9 } })
   })
 })
+
+/*
+ * Fantrax's import carries NO waiver settings (FantraxLeagueMapper writes `waiver_type: undefined`,
+ * `faab_budget: null`), so its LeagueWaiverSettings row holds nothing but AllFantasy's sport
+ * bootstrap defaults. Printing those as the league's rules — "FAAB · $100, runs Wednesday" — is a
+ * fabricated fact about somebody else's league.
+ */
+describe('A Fantrax league — no waiver settings were imported', () => {
+  const bootstrapDefaults = {
+    waiverType: 'faab', faabBudget: 100, processingDayOfWeek: 3, processingTimeUtc: '10:00',
+    tiebreakRule: 'faab_highest', claimLimitPerPeriod: null, waiverEngineConfig: null,
+  }
+
+  it('reports every rule as unknown instead of presenting the bootstrap defaults', async () => {
+    LEAGUE.platform = 'fantrax'
+    prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue(bootstrapDefaults)
+    const data = await getWaiversData('L1', 'me')
+    for (const key of ['waiverType', 'processTime', 'tiebreak', 'claimLimits'] as const) {
+      expect(data?.[key]).toMatchObject({ available: false, reason: expect.stringContaining('Fantrax') })
+    }
+  })
+
+  it('the cross-league board does not print a run time for it either', async () => {
+    const { runsAtLabel, importedWaiverSettings } = await import('@/lib/core-app/waiverRowMeta')
+    expect(runsAtLabel(bootstrapDefaults, 'fantrax')).toBeNull()
+    expect(importedWaiverSettings(bootstrapDefaults, 'fantrax')).toBeNull()
+    /* Unchanged for a platform whose importer does carry the rules. */
+    expect(runsAtLabel(bootstrapDefaults, 'espn')).toBe('Wednesday 10:00 UTC')
+    expect(importedWaiverSettings(bootstrapDefaults, 'espn')).toBe(bootstrapDefaults)
+  })
+})
