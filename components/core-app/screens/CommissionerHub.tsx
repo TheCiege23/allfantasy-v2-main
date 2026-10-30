@@ -43,6 +43,7 @@ import { AutomationOverview } from '@/components/core-app/commissioner/Automatio
 import { OffseasonCalendar } from '@/components/core-app/commissioner/OffseasonCalendar'
 import { IrAutoMove } from '@/components/core-app/commissioner/IrAutoMove'
 import { OrphanAuction } from '@/components/core-app/commissioner/OrphanAuction'
+import { FindLeagueListingCard } from '@/components/core-app/commissioner/FindLeagueListingCard'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { StorylineStudio } from '@/components/core-app/commissioner/StorylineStudio'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
@@ -260,6 +261,8 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
       {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
       {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
+      {/* Open seats → Find a League. Native only: an imported league's seats are filled on its own platform. */}
+      {league.native && data.role === 'commissioner' ? <FindLeagueListingCard leagueId={league.id} /> : null}
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />

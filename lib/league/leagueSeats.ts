@@ -38,6 +38,32 @@ export async function countSeatsHeldByPeople(db: Db, leagueId: string): Promise<
   return rosters.filter((r) => personIds.has(r.platformUserId)).length
 }
 
+/**
+ * The same count for many leagues in two queries, for lists (league discovery) where one
+ * query per league would be one query per card. Same rule as above — a seat counts when its
+ * roster's owner id is an `AppUser` — and the tests pin both against the same fixture.
+ * A league with no people-held seats maps to 0.
+ */
+export async function countSeatsHeldByPeopleByLeague(
+  db: Db,
+  leagueIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>(leagueIds.map((id) => [id, 0]))
+  if (leagueIds.length === 0) return out
+  const rosters = await db.roster.findMany({
+    where: { leagueId: { in: leagueIds } },
+    select: { leagueId: true, platformUserId: true },
+  })
+  const ids = [...new Set(rosters.map((r) => r.platformUserId).filter(Boolean))]
+  if (ids.length === 0) return out
+  const people = await db.appUser.findMany({ where: { id: { in: ids } }, select: { id: true } })
+  const personIds = new Set(people.map((p) => p.id))
+  for (const r of rosters) {
+    if (personIds.has(r.platformUserId)) out.set(r.leagueId, (out.get(r.leagueId) ?? 0) + 1)
+  }
+  return out
+}
+
 export type AssignLeagueSeatResult =
   | { ok: true; rosterId: string; teamNumber: number | null; alreadyHeld: boolean }
   | {

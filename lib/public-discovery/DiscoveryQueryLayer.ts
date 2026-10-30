@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma"
-import type { LeagueSport } from "@prisma/client"
+import type { LeagueSport, Prisma } from "@prisma/client"
 import { extractLeagueCareerTier } from "@/lib/ranking/tier-visibility"
 import { isSupportedSport, normalizeToSupportedSport } from "@/lib/sport-scope"
 import { CURRENT_DRAFT_SESSION_ORDER } from "@/lib/draft-room/currentDraftSession"
+import { countSeatsHeldByPeopleByLeague } from "@/lib/league/leagueSeats"
 import { matchesSearchText } from "./findLeagueFilters"
 import type { DiscoveryCard, DiscoveryLeagueStyle } from "./types"
 
@@ -190,9 +191,24 @@ export async function queryPublicFantasyLeagueCards(options: {
     : null
   if (candidateLeagueIds != null && candidateLeagueIds.length === 0) return []
 
-  const where = {
+  /*
+   * ⚠ THE PUBLIC TEST HAS TO RUN IN THE DATABASE, NOT ONLY AFTER `take`.
+   *
+   * This used to read the most recently updated leagues of any kind and keep the public ones in
+   * memory. Imported leagues are re-synced constantly, so they own every one of those slots —
+   * measured 2026-10-30: all 300 most recently updated leagues were imports, and the one public
+   * native league on the platform was never read, so Find a League listed nothing at all.
+   *
+   * The JSON test here is the coarse half of isFantasyLeagueDiscoverable (public, or a public
+   * dashboard); the invite-code half still runs on each row below.
+   */
+  const where: Prisma.LeagueWhereInput = {
     ...(sport ? { sport } : {}),
     ...(candidateLeagueIds ? { id: { in: candidateLeagueIds } } : {}),
+    OR: [
+      { settings: { path: [LEAGUE_VISIBILITY_KEY], equals: "public" } },
+      { settings: { path: [LEAGUE_PUBLIC_DASHBOARD_KEY], equals: true } },
+    ],
   }
 
   const leagues = await prisma.league.findMany({
@@ -232,15 +248,18 @@ export async function queryPublicFantasyLeagueCards(options: {
           avatarUrl: true,
         },
       },
-      _count: {
-        select: {
-          rosters: true,
-        },
-      },
     },
     orderBy: [{ updatedAt: "desc" }],
     take: Math.min(options.take ?? DEFAULT_DISCOVERY_TAKE, DEFAULT_DISCOVERY_TAKE),
   })
+
+  // Seats held by real people, not rosters: a native league is created with one roster per
+  // seat, so a roster count reads every native league as full and hides its Join button.
+  // Same rule the join route and invite previews use (lib/league/leagueSeats).
+  const heldSeats = await countSeatsHeldByPeopleByLeague(
+    prisma as unknown as Prisma.TransactionClient,
+    leagues.map((l) => l.id)
+  )
 
   return leagues
     .map((league): DiscoveryCard | null => {
@@ -266,7 +285,7 @@ export async function queryPublicFantasyLeagueCards(options: {
       }
 
       const maxMembers = Math.max(2, Number(league.leagueSize ?? 12) || 12)
-      const memberCount = Number(league._count?.rosters ?? 0)
+      const memberCount = heldSeats.get(league.id) ?? 0
       const leagueStyle = resolveFantasyLeagueStyle({
         leagueVariant: league.leagueVariant,
         isDynasty: league.isDynasty,
