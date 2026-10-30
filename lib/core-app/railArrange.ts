@@ -83,3 +83,29 @@ export function moveInOrder(
 export function toggleFavorite(favorites: readonly string[], id: string): string[] {
   return favorites.includes(id) ? favorites.filter((f) => f !== id) : [...favorites, id]
 }
+
+/**
+ * The account's whole league order after dragging `id` to `toIndex` WITHIN ITS SECTION, where `toIndex`
+ * counts the section's other rows (0 = first). The section's leagues are re-sequenced in the slots
+ * they already held in `fullOrder`, so every league outside the section — another sport, a hidden one —
+ * keeps its saved place. Null when nothing would change. `moveInOrder` is the one-step case.
+ */
+export function reorderWithinSection(
+  fullOrder: readonly string[],
+  sectionIds: readonly string[],
+  id: string,
+  toIndex: number,
+): string[] | null {
+  if (!sectionIds.includes(id)) return null
+  const seq = sectionIds.filter((x) => x !== id)
+  seq.splice(Math.max(0, Math.min(seq.length, Math.trunc(toIndex))), 0, id)
+  if (seq.every((x, i) => x === sectionIds[i])) return null
+  const slots = sectionIds.map((x) => fullOrder.indexOf(x))
+  if (slots.some((pos) => pos < 0)) return null
+  slots.sort((a, b) => a - b)
+  const next = [...fullOrder]
+  slots.forEach((pos, i) => {
+    next[pos] = seq[i]
+  })
+  return next
+}

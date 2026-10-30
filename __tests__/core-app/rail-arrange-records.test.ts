@@ -5,6 +5,7 @@ import {
   passesRailFilter,
   railFilterCounts,
   railSections,
+  reorderWithinSection,
   toggleFavorite,
 } from '@/lib/core-app/railArrange'
 import { railRecordsFrom, type RailRecordTeam } from '@/lib/core-app/railRecordRank'
@@ -109,5 +110,34 @@ describe('railRecordsFrom — your record and place', () => {
       team('M', 'other', 3, 1),
     ])
     expect(out).toEqual({})
+  })
+})
+
+describe('reorderWithinSection — drag a league anywhere in the section the reader sees', () => {
+  // NFL a, c, e among NBA x, y and a hidden league; the NFL leagues hold slots 0, 2 and 5.
+  const full = ['a', 'x', 'c', 'y', 'hidden', 'e']
+  const nfl = ['a', 'c', 'e']
+
+  it('moves it to the new index and leaves every other league in its place', () => {
+    expect(reorderWithinSection(full, nfl, 'e', 0)).toEqual(['e', 'x', 'a', 'y', 'hidden', 'c'])
+    expect(reorderWithinSection(full, nfl, 'a', 2)).toEqual(['c', 'x', 'e', 'y', 'hidden', 'a'])
+    expect(reorderWithinSection(full, nfl, 'a', 1)).toEqual(['c', 'x', 'a', 'y', 'hidden', 'e'])
+  })
+
+  it('one place is the same as Move', () => {
+    expect(reorderWithinSection(full, nfl, 'c', 0)).toEqual(moveInOrder(full, nfl, 'c', -1))
+    expect(reorderWithinSection(full, nfl, 'c', 2)).toEqual(moveInOrder(full, nfl, 'c', 1))
+  })
+
+  it('fills the section slots top to bottom even when the visible order disagrees with the saved one', () => {
+    // On screen: e, a, c (say, a stale saved order). Drag c to the top: the reader's order wins.
+    expect(reorderWithinSection(full, ['e', 'a', 'c'], 'c', 0)).toEqual(['c', 'x', 'e', 'y', 'hidden', 'a'])
+  })
+
+  it('null when nothing changes or the league is not in the section; out-of-range indexes clamp', () => {
+    expect(reorderWithinSection(full, nfl, 'c', 1)).toBeNull()
+    expect(reorderWithinSection(full, nfl, 'x', 0)).toBeNull()
+    expect(reorderWithinSection(full, nfl, 'a', 99)).toEqual(reorderWithinSection(full, nfl, 'a', 2))
+    expect(reorderWithinSection(full, nfl, 'e', -5)).toEqual(reorderWithinSection(full, nfl, 'e', 0))
   })
 })
