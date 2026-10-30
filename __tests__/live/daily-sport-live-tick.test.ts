@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * The daily sports were scored from `player_game_stats`, and that table was only written by the
  * 07:00 UTC `import-player-game-stats?multiSport=1` sweep — so a matchup moved once a day while NFL
  * moved during games. `runDailySportLiveTick` is the in-game writer, folded into the existing
- * `live-score-tick` fast-tier cron behind a NBA-enabled flag.
+ * `live-score-tick` fast-tier cron with a configurable sport flag.
  *
  * The provider transport (`riFetchRows`) is NOT mocked: the 304 rule and the two-account iteration
  * are its behaviour, and the point of these tests is that the tick actually goes through them.
@@ -75,6 +75,7 @@ import {
   __resetDailyLiveIdentityCache,
   liveGameEasternDates,
   resolveDailyLiveSports,
+  rotateDailyLiveSports,
   runDailySportLiveTick,
 } from '@/lib/live/dailySportLiveTick'
 
@@ -185,10 +186,10 @@ afterEach(() => {
   delete process.env.DAILY_SPORT_LIVE_SCORING
 })
 
-describe('resolveDailyLiveSports — NBA defaults on; explicit off is respected', () => {
-  it('is off when unset, empty, or explicitly off', () => {
-    expect(resolveDailyLiveSports({})).toEqual(['NBA'])
-    expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: '' })).toEqual(['NBA'])
+describe('resolveDailyLiveSports — all supported sports default on; explicit off is respected', () => {
+  it('enables all sports when unset or empty and respects explicit off', () => {
+    expect(resolveDailyLiveSports({})).toEqual(['NBA', 'NHL', 'MLB'])
+    expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: '' })).toEqual(['NBA', 'NHL', 'MLB'])
     expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: '0' })).toEqual([])
     expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: 'false' })).toEqual([])
   })
@@ -202,6 +203,10 @@ describe('resolveDailyLiveSports — NBA defaults on; explicit off is respected'
 })
 
 describe('game window — read from the schedule in the DB', () => {
+  it('rotates the first sport over consecutive cadence windows', () => {
+    const sports = ['NBA', 'NHL', 'MLB'] as const
+    expect([0, 1, 2].map((tick) => rotateDailyLiveSports(sports, tick * 180_000, 180_000)[0])).toEqual(['NBA', 'NHL', 'MLB'])
+  })
   it('no polling outside a game window: no provider call, no write, no rescore', async () => {
     h.games = [{ sport: 'NBA', startTime: new Date('2026-10-21T23:00:00Z'), status: 'scheduled' }] // tonight, not yet
     const fetchImpl = fetchBy(() => json(fixtureBody))
@@ -229,6 +234,26 @@ describe('game window — read from the schedule in the DB', () => {
     expect(out.sports.NBA?.linesWritten).toBe(h.upsert.mock.calls.length)
     // Every row the scorer reads is keyed on the identity map id, never the raw provider id.
     for (const [arg] of h.upsert.mock.calls as any[]) expect(arg.where.playerId_sportType_gameId.playerId).toMatch(/^pim-/)
+  })
+
+  it.each(['NHL', 'MLB'] as const)('writes and rescores a %s live-box fixture', async (sport) => {
+    const fixture = JSON.parse(readFileSync(path.join(process.cwd(), 'contracts', 'rolling-insights', 'fixtures', `live.${sport}.json`), 'utf8'))
+    const ids = new Set<string>()
+    for (const game of fixture.data[sport]) {
+      for (const side of ['home_team', 'away_team']) {
+        for (const group of Object.values(game.player_box?.[side] ?? {})) {
+          for (const id of Object.keys(group as object)) ids.add(id)
+        }
+      }
+    }
+    h.identities = [...ids].map((id) => ({ id: `pim-${id}`, rollingInsightsId: id }))
+    h.games = [{ sport, startTime: TIPOFF, status: 'scheduled' }]
+    h.seasons = [{ id: `season-${sport.toLowerCase()}`, sport, status: 'in_season' }]
+    const out = await runDailySportLiveTick({ sports: [sport], now: NOW, fetchImpl: fetchBy(() => json(fixture)), clock })
+    expect(out.sports[sport]?.status).toBe('written')
+    expect(out.sports[sport]?.linesWritten).toBeGreaterThan(0)
+    expect(h.sync).toHaveBeenCalledWith(expect.objectContaining({ seasonId: `season-${sport.toLowerCase()}` }))
+    expect(h.recalc).toHaveBeenCalled()
   })
 
   it('respects the cadence between invocations (state is in the DB, so it holds across replicas)', async () => {
