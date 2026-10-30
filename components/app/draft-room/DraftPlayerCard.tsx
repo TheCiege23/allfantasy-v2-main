@@ -416,6 +416,13 @@ function DraftPlayerCardInner({
             }`
       } ${isDevy ? 'border-l-[3px] border-l-violet-500/70' : ''}`}
     >
+      {/*
+        ⚠ BELOW md THE CARD IS ONE ROW (2026-10-29). The right column stacked an ADP/Bye box over
+        three actions the touch CSS lifts to 44px, and the team appeared as a badge AND a line, so a
+        phone showed ~2.5 players. On a phone: the team moves into the meta line beside ADP and Bye,
+        the ADP box and the team badge are hidden, and the name row does not wrap — so the row is as
+        tall as its 44px actions. Tap targets are unchanged; md+ renders exactly as before.
+      */}
       <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
       <div className={`relative shrink-0 ${rs ? 'h-9 w-9' : 'h-8 w-8'}`}>
         <HeadshotOrFallback
@@ -430,7 +437,7 @@ function DraftPlayerCardInner({
       </div>
 
       <div className="min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap max-md:flex-nowrap max-md:overflow-hidden">
           <p
             className={`truncate font-bold text-white ${rs ? 'text-[13px] tracking-tight' : ''}`}
             data-testid={testId ? `${testId}-name` : 'draft-player-name'}
@@ -447,7 +454,7 @@ function DraftPlayerCardInner({
               {position}
             </span>
           ) : null}
-          <span className="shrink-0 rounded-md border border-white/16 bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/88">
+          <span className="shrink-0 rounded-md border border-white/16 bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/88 max-md:hidden">
             {teamAbbr ?? 'FA'}
           </span>
           <DraftPlayerLabelBadge player={labelInput} className="shrink-0" />
@@ -500,6 +507,18 @@ function DraftPlayerCardInner({
           {!rs ? ` · ${position}` : ''}
           {resolvedClassYearLabel ? ` · ${resolvedClassYearLabel}` : ''}
           {resolvedProjectedLandingSpot ? ` · ${resolvedProjectedLandingSpot}` : ''}
+          {/* Phone only: the ADP/Bye box is hidden there, so its two numbers ride this line. */}
+          <span className="md:hidden" data-testid={testId ? `${testId}-adp-inline` : 'draft-player-adp-inline'}>
+            {/* Same value and Bye rule as the md+ box: adpCellValue, and Bye only where the sport has one. */}
+            {` · ${adpMetricLabel} `}
+            <span className="text-cyan-300">{formatAdpDisplay(adpCellValue)}</span>
+            {showBye ? (
+              <>
+                {' · Bye '}
+                <span className="text-cyan-300">{formatBye(normalized.byeWeek)}</span>
+              </>
+            ) : null}
+          </span>
         </p>
         {injuryStatus ? (
           <span
@@ -513,7 +532,11 @@ function DraftPlayerCardInner({
         ) : null}
         <p
           data-testid={testId ? `${testId}-stats-summary` : 'draft-player-stats-summary'}
-          className={`truncate ${rs ? 'mt-1 text-[11px] text-emerald-100/80' : 'text-[11px] text-cyan-100/55'}`}
+          className={`truncate ${rs ? 'mt-1 text-[11px] text-emerald-100/80 max-md:mt-0' : 'text-[11px] text-cyan-100/55'} ${
+            // statSummaryFromDisplay falls back to "ADP n" / "No stats available"; on a phone the
+            // meta line above already carries ADP, so only a line with real stats earns the height.
+            /^ADP\b/.test(displayStatLine) || displayStatLine === 'No stats available' ? 'max-md:hidden' : ''
+          }`}
           title={displayStatLine}
         >
           {displayStatLine}
@@ -536,7 +559,7 @@ function DraftPlayerCardInner({
         onKeyDown={(event) => event.stopPropagation()}
       >
         <div
-          className={`text-right text-[11px] tabular-nums font-semibold ${rs ? 'rounded-lg border border-white/10 bg-black/25 px-1.5 py-1 text-cyan-50' : 'text-cyan-100'}`}
+          className={`text-right text-[11px] tabular-nums font-semibold max-md:hidden ${rs ? 'rounded-lg border border-white/10 bg-black/25 px-1.5 py-1 text-cyan-50' : 'text-cyan-100'}`}
         >
           <div>
             <span className={rs ? 'text-[11px] font-medium text-white/45' : ''}>{adpMetricLabel}</span>{' '}

@@ -101,7 +101,8 @@ describe('QueuePanel — compact header (Commit 23)', () => {
 
 describe('QueuePanel — compact filter bar (Commit 23)', () => {
   it('filter bar uses gap-1 (reduced from gap-1.5)', () => {
-    expect(queueSrc).toMatch(/grid-cols-1 gap-1 border-b/)
+    // Base is grid-cols-2 since 2026-10-29 (search + sort share a row on phones); the gap is what this pins.
+    expect(queueSrc).toMatch(/grid-cols-2 gap-1 border-b/)
   })
 
   it('filter bar uses p-1 (reduced from p-1.5)', () => {
