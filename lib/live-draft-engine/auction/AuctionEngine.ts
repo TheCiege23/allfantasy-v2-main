@@ -692,12 +692,16 @@ export async function buildInitialAuctionSessionUpdate(leagueId: string, session
   timerSeconds?: number | null
   rounds?: number
   auctionState?: unknown
+  draftModeLabel?: string | null
 }) {
   const slotOrder = (session.slotOrder as unknown as SlotOrderEntry[]) ?? []
   const config = await getAuctionConfigForLeague(leagueId, session)
   const budgets: AuctionBudgets = {}
   for (const entry of slotOrder) budgets[entry.rosterId] = config.budgetPerTeam
   const saved = session.auctionState && typeof session.auctionState === 'object' ? (session.auctionState as Record<string, unknown>).rookieAuction : null
+  if (session.draftModeLabel === 'rookie' && (!saved || typeof saved !== 'object' || Array.isArray(saved))) {
+    throw new Error('The rookie auction pick plan is missing. Recreate the draft after resolving its settings.')
+  }
   let nominationOrder: SlotOrderEntry[] | undefined
   let nominationFallbackStart: number | undefined
   if (saved && typeof saved === 'object' && !Array.isArray(saved)) {

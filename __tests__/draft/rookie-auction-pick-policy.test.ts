@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { rookieAuctionStructureChangeError } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { planRookieAuction } from '@/lib/live-draft-engine/auction/rookieAuctionPickPolicy'
 
 const slotOrder = [{ slot: 1, rosterId: 'a', displayName: 'A' }, { slot: 2, rosterId: 'b', displayName: 'B' }, { slot: 3, rosterId: 'c', displayName: 'C' }]
@@ -25,5 +26,20 @@ describe('rookie auction traded pick conversion', () => {
     expect(() => planRookieAuction({ ...base, policy: 'nominations', trades: [...base.trades, ...base.trades] })).toThrow(/matched/)
     expect(() => planRookieAuction({ ...base, policy: 'budget', trades: [{ ...base.trades[0], newRosterId: 'missing' }] })).toThrow(/matched/)
     expect(() => planRookieAuction({ ...base, policy: 'budget', trades: [{ ...base.trades[0], round: 3 }] })).toThrow(/matched/)
+  })
+})
+
+
+describe('created rookie auction structure', () => {
+  const auction = { draftModeLabel: 'rookie', draftType: 'auction', rounds: 2, auctionBudgetPerTeam: 20 }
+  it('refuses changes that would discard or change converted rights', () => {
+    expect(rookieAuctionStructureChangeError(auction, { draftType: 'linear' })).toMatch(/cannot be changed/)
+    expect(rookieAuctionStructureChangeError(auction, { rounds: 3 })).toMatch(/cannot be changed/)
+    expect(rookieAuctionStructureChangeError(auction, { auctionBudgetPerTeam: 30 })).toMatch(/cannot be changed/)
+    expect(rookieAuctionStructureChangeError({ ...auction, draftType: 'linear' }, { draftType: 'auction' })).toMatch(/cannot be changed/)
+  })
+  it('allows unchanged values and ordinary startup draft edits', () => {
+    expect(rookieAuctionStructureChangeError(auction, { draftType: 'auction', rounds: 2, auctionBudgetPerTeam: 20 })).toBeNull()
+    expect(rookieAuctionStructureChangeError({ ...auction, draftModeLabel: 'startup' }, { rounds: 3 })).toBeNull()
   })
 })

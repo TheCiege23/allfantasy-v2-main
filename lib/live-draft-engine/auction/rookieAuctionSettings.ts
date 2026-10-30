@@ -23,3 +23,20 @@ export function readRookieAuctionSettings(settings: unknown): RookieAuctionSetti
   const parsed = parseRookieAuctionSettings(raw)
   return parsed.ok ? parsed.value : { ...DEFAULT_ROOKIE_AUCTION_SETTINGS, valuesByRound: {} }
 }
+
+/** Once a rookie draft exists, changing into or out of auction would bypass pick conversion. */
+export function rookieAuctionStructureChangeError(
+  session: { draftModeLabel?: string | null; draftType: string; rounds: number; auctionBudgetPerTeam: number | null } | null,
+  patch: { draftType?: unknown; rounds?: unknown; auctionBudgetPerTeam?: unknown },
+): string | null {
+  if (session?.draftModeLabel !== 'rookie') return null
+  const nextType = typeof patch.draftType === 'string' ? patch.draftType : session.draftType
+  const touchesAuction = session.draftType === 'auction' || nextType === 'auction'
+  if (!touchesAuction) return null
+  if ((patch.draftType !== undefined && nextType !== session.draftType) ||
+      (patch.rounds !== undefined && Number(patch.rounds) !== session.rounds) ||
+      (patch.auctionBudgetPerTeam !== undefined && Number(patch.auctionBudgetPerTeam) !== session.auctionBudgetPerTeam)) {
+    return 'This rookie draft already has pick rights assigned. Its auction type, rounds, and budget cannot be changed after creation.'
+  }
+  return null
+}

@@ -1,3 +1,4 @@
+import { rookieAuctionStructureChangeError } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * GET: Full draft variant settings (config + UI + session variant + orphan status for commissioner).
@@ -519,8 +520,10 @@ export async function PATCH(
   const draftSessionRow = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true },
+    select: { id: true, status: true, draftModeLabel: true, draftType: true, rounds: true, auctionBudgetPerTeam: true },
   })
+  const rookieAuctionProblem = rookieAuctionStructureChangeError(draftSessionRow, { draftType: configPatch.draft_type, rounds: configPatch.rounds, auctionBudgetPerTeam: sessionVariantPatch.auctionBudgetPerTeam })
+  if (rookieAuctionProblem) return NextResponse.json({ error: rookieAuctionProblem, code: 'ROOKIE_AUCTION_STRUCTURE_LOCKED' }, { status: 409 })
   const isActiveDraft =
     draftSessionRow &&
     draftSessionRow.status === 'in_progress'
@@ -727,7 +730,7 @@ export async function PATCH(
     })
   } catch (e) {
     const code = (e as Error & { code?: string })?.code
-    if (code === 'THIRD_ROUND_REVERSAL_LOCKED') {
+    if (code === 'THIRD_ROUND_REVERSAL_LOCKED' || code === 'ROOKIE_AUCTION_STRUCTURE_LOCKED') {
       return NextResponse.json(
         { error: (e as Error).message, code },
         { status: 409 },

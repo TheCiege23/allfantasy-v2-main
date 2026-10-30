@@ -1317,6 +1317,9 @@ export async function resetDraftSession(
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return false
   if (session.status === COMPLETED_DRAFT_SESSION_STATUS && !options?.allowCompleted) return false
+  const auctionState = session.auctionState && typeof session.auctionState === 'object' && !Array.isArray(session.auctionState)
+    ? session.auctionState as Record<string, unknown> : null
+  const rookieAuction = session.draftModeLabel === 'rookie' && session.draftType === 'auction' ? auctionState?.rookieAuction : null
   const outcome = await prisma.$transaction(async (tx) => {
     const archivedPicks = await tx.draftPick.findMany({where:{sessionId:session.id},orderBy:{overall:'asc'}})
     await recordArchiveEvent(tx, session, 'reset_draft', {priorSession:session, archivedPicks})
@@ -1334,7 +1337,7 @@ export async function resetDraftSession(
         timerEndAt: null,
         pausedRemainingSeconds: null,
         auctionBudgets: Prisma.JsonNull,
-        auctionState: Prisma.JsonNull,
+        auctionState: rookieAuction ? ({ rookieAuction } as Prisma.InputJsonValue) : Prisma.JsonNull,
         version: { increment: 1 },
         updatedAt: new Date(),
       },

@@ -16,6 +16,9 @@ import { resolveAuctionWin, buildInitialAuctionSessionUpdate, getAuctionStateFro
 describe('rookie auction initialization', () => {
   const slotOrder = [{ slot: 1, rosterId: 'a', displayName: 'A' }, { slot: 2, rosterId: 'b', displayName: 'B' }]
   const trade = { round: 1, originalRosterId: 'a', newRosterId: 'b' }
+  it('refuses to start a rookie auction when its frozen pick plan is missing', async () => {
+    await expect(buildInitialAuctionSessionUpdate('league', { slotOrder, rounds: 2, draftModeLabel: 'rookie', auctionState: null })).rejects.toThrow('pick plan is missing')
+  })
   it('applies transferred auction budget once when the draft starts', async () => {
     const initial = await buildInitialAuctionSessionUpdate('league', { slotOrder, rounds: 2, auctionBudgetPerTeam: 20, auctionState: { rookieAuction: { policy: 'budget', budgetPerTeam: 20, valuesByRound: { '1': 6 }, trades: [trade] } } })
     expect(initial.auctionBudgets).toEqual({ a: 14, b: 26 })
