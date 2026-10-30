@@ -13,30 +13,27 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { resolveLeagueStage } from '@/lib/league-stage/leagueStage'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { assessImportedGuilly, importedGuillyFormat, type ImportedGuillyHealth } from './importedGuillyHealth'
+import { buildImportedGuillyView, type ImportedGuillyViewData } from './importedGuillyView'
 
 export type ImportedGuillyHealthView = ImportedGuillyHealth & {
   /** Provider roster id → team name, for the card. */
   teamNames: Record<string, string>
 }
 
-export async function loadImportedGuillyHealth(
-  league: {
-    id: string
-    platform: string | null
-    platformLeagueId: string | null
-    season: number | null
-    leagueType: string | null
-    guillotineMode: boolean | null
-    settings: unknown
-    status: string | null
-    lifecycleState: string | null
-  },
-  lastReadAt: Date | null,
-  now: Date = new Date(),
-): Promise<ImportedGuillyHealthView | null> {
-  if (isNativePlatform(league.platform)) return null
-  if (!importedGuillyFormat(league)) return null
+type ImportedGuillyLeague = {
+  id: string
+  platform: string | null
+  platformLeagueId: string | null
+  season: number | null
+  leagueType: string | null
+  guillotineMode: boolean | null
+  settings: unknown
+  status: string | null
+  lifecycleState: string | null
+}
 
+/** The rows both the check and the tab read, so the two can never disagree about a chop. */
+async function readImportedGuillyData(league: ImportedGuillyLeague) {
   const [rows, teams, rosters] = await Promise.all([
     league.platformLeagueId && league.season != null
       ? prisma.weeklyMatchup.findMany({
@@ -47,27 +44,62 @@ export async function loadImportedGuillyHealth(
     prisma.leagueTeam.findMany({ where: { leagueId: league.id }, select: { externalId: true, teamName: true, platformUserId: true } }),
     prisma.roster.findMany({ where: { leagueId: league.id }, select: { platformUserId: true, playerData: true } }),
   ])
-
   const playersByOwner = new Map(rosters.map((r) => [r.platformUserId, getRosterPlayerIds(r.playerData).length]))
-  const teamRosters = teams
-    .filter((t) => t.platformUserId && playersByOwner.has(t.platformUserId))
-    .map((t) => ({ rosterId: String(t.externalId), players: playersByOwner.get(t.platformUserId!)! }))
+  return {
+    rows: rows.map((r) => ({ week: r.week, rosterId: String(r.rosterId), pointsFor: r.pointsFor, matchupId: r.matchupId })),
+    teams: teams.map((t) => ({ rosterId: String(t.externalId), name: t.teamName })),
+    rosterSizes: teams
+      .filter((t) => t.platformUserId && playersByOwner.has(t.platformUserId))
+      .map((t) => ({ rosterId: String(t.externalId), players: playersByOwner.get(t.platformUserId!)! })),
+  }
+}
+
+function assess(league: ImportedGuillyLeague, data: Awaited<ReturnType<typeof readImportedGuillyData>>, lastReadAt: Date | null, now: Date): ImportedGuillyHealthView | null {
   // The week being (or last) played: the latest week with any score. Chopped teams post zeros every week,
   // so "the first unplayed week" would stop at the first chop.
-  const scoredWeeks = rows.filter((r) => r.pointsFor > 0).map((r) => r.week)
-  const currentWeek = scoredWeeks.length ? Math.max(...scoredWeeks) : null
-
+  const scoredWeeks = data.rows.filter((r) => r.pointsFor > 0).map((r) => r.week)
   const health = assessImportedGuilly({
     leagueType: league.leagueType,
     guillotineMode: league.guillotineMode,
     settings: league.settings,
-    rows: rows.map((r) => ({ week: r.week, rosterId: String(r.rosterId), pointsFor: r.pointsFor, matchupId: r.matchupId })),
-    rosters: teamRosters,
-    currentWeek,
+    rows: data.rows,
+    rosters: data.rosterSizes,
+    currentWeek: scoredWeeks.length ? Math.max(...scoredWeeks) : null,
     lastReadAt,
     inSeason: resolveLeagueStage(league) === 'in_season',
     now,
   })
+  return health ? { ...health, teamNames: Object.fromEntries(data.teams.map((t) => [t.rosterId, t.name])) } : null
+}
+
+export async function loadImportedGuillyHealth(league: ImportedGuillyLeague, lastReadAt: Date | null, now: Date = new Date()): Promise<ImportedGuillyHealthView | null> {
+  if (isNativePlatform(league.platform)) return null
+  if (!importedGuillyFormat(league)) return null
+  return assess(league, await readImportedGuillyData(league), lastReadAt, now)
+}
+
+export type ImportedGuillyTabData = {
+  platform: string
+  view: ImportedGuillyViewData
+  /** The reliability check's verdict, so the tab can point at the Sync screen when it is in doubt. */
+  check: { status: ImportedGuillyHealthView['status']; attention: number; format: ImportedGuillyHealthView['format'] }
+  lastReadAt: Date | null
+}
+
+/** The imported Guilly tab (app/league/[leagueId]/tabs/ImportedGuillyTab.tsx). Null: not an imported Guilly league. */
+export async function loadImportedGuillyTab(leagueId: string, now: Date = new Date()): Promise<ImportedGuillyTabData | null> {
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { id: true, platform: true, platformLeagueId: true, season: true, leagueType: true, guillotineMode: true, settings: true, status: true, lifecycleState: true, lastSyncedAt: true },
+  })
+  if (!league || isNativePlatform(league.platform) || !importedGuillyFormat(league)) return null
+  const data = await readImportedGuillyData(league)
+  const health = assess(league, data, league.lastSyncedAt, now)
   if (!health) return null
-  return { ...health, teamNames: Object.fromEntries(teams.map((t) => [String(t.externalId), t.teamName])) }
+  return {
+    platform: String(league.platform ?? '').toLowerCase(),
+    view: buildImportedGuillyView({ rows: data.rows, teams: data.teams }),
+    check: { status: health.status, attention: health.findings.filter((f) => f.severity === 'attention').length, format: health.format },
+    lastReadAt: league.lastSyncedAt,
+  }
 }
