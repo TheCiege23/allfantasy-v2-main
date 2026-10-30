@@ -10,7 +10,7 @@ import { CoreLanguageChip } from '@/components/core-app/CoreLanguageChip'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
-import { leagueSportIcon, leagueSportLabel, leagueSportSections } from '@/lib/core-app/leagueSports'
+import { leagueSportIcon, leagueSportLabel } from '@/lib/core-app/leagueSports'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
@@ -41,7 +41,21 @@ import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
-import { withoutHidden } from '@/lib/core-app/leaguePreferences'
+import { applyLeagueOrder, withoutHidden } from '@/lib/core-app/leaguePreferences'
+import {
+  FAVORITES_SECTION,
+  RAIL_FILTERS,
+  RAIL_FILTER_MIN_LEAGUES,
+  moveInOrder,
+  passesRailFilter,
+  railFilterCounts,
+  railSections as arrangeRailSections,
+  toggleFavorite,
+  type RailFilter,
+  type RailRowFacts,
+} from '@/lib/core-app/railArrange'
+import type { RailRecord } from '@/lib/core-app/railRecordRank'
+import { unreadBadgeText } from '@/lib/league/leagueRailStatus'
 import type { PlatformLink } from '@/lib/core-app/platformLinks'
 import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
 import { RAIL_WARM_DWELL_MS, railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
@@ -86,6 +100,9 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
  */
 
 export type PlatformId = 'sleeper' | 'espn' | 'yahoo'
+
+/** Sport sections folded in the league list on this device (AfCoreShell `foldedSports`). */
+const RAIL_FOLDED_KEY = 'af-rail-folded-sports'
 
 export type RailLeague = {
   hub?: LeagueHub
@@ -368,6 +385,10 @@ export type AfCoreShellProps = {
   } | null
   /** Keeps league-scoped nav links pointed at the league in context. */
   selectedLeagueId?: string | null
+  /** Your record and place per league — the "6-3 · 2nd" line on the list (lib/core-app/railRecords.ts). */
+  railRecords?: Record<string, RailRecord> | null
+  /** Unread league-chat messages per league — the chat bubble's own count (getChatBadge `byLeague`). */
+  railUnread?: Record<string, number> | null
   /**
    * What the scope switcher shows and offers — see components/core-app/ScopeSwitcher.tsx. Always
    * rendered when present, so every screen states which leagues it is about. `label` is the
@@ -1625,10 +1646,30 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * Computed ONCE over exactly the rows the rail draws by name — a hub card draws its own
    * members — and the header reads the same label, so the two never disagree.
    */
+  /*
+   * Pin and move (user call, 2026-10-30), shown at once and saved behind: a moved or pinned league
+   * jumps the moment it is chosen, the account's lists are written in the background, and the next
+   * server render — which already arranges by them — replaces these overrides.
+   */
+  const serverOrderKey = leagues.map((l) => l.id).join('|')
+  const [orderOverride, setOrderOverride] = useState<string[] | null>(null)
+  useEffect(() => setOrderOverride(null), [serverOrderKey])
+  const orderedLeagues = useMemo(
+    () => (orderOverride ? applyLeagueOrder(leagues, orderOverride) : leagues),
+    [leagues, orderOverride],
+  )
+  const serverFavoriteKey = (props.scope?.favoriteIds ?? []).join('|')
+  const [favoriteOverride, setFavoriteOverride] = useState<string[] | null>(null)
+  useEffect(() => setFavoriteOverride(null), [serverFavoriteKey])
+  const favoriteIds = useMemo(
+    () => favoriteOverride ?? (serverFavoriteKey ? serverFavoriteKey.split('|') : []),
+    [favoriteOverride, serverFavoriteKey],
+  )
+  const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds])
   const hiddenLeagueKey = (props.hiddenLeagueIds ?? []).join('.')
   const railLeagues = useMemo(
-    () => withoutHidden(leagues, hiddenLeagueKey ? hiddenLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
-    [leagues, hiddenLeagueKey, props.selectedLeagueId],
+    () => withoutHidden(orderedLeagues, hiddenLeagueKey ? hiddenLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
+    [orderedLeagues, hiddenLeagueKey, props.selectedLeagueId],
   )
   const hiddenRailCount = leagues.length - railLeagues.length
   const archivedLeagueKey = (props.archivedLeagueIds ?? []).join('.')
@@ -1641,8 +1682,112 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * One section per sport, each headed by its sport, once the account plays two or more. Within a
    * section the rail keeps the account's own order; only the grouping is new.
    */
-  const railSections = useMemo(() => leagueSportSections(railRows), [railRows])
+  const railSections = useMemo(() => arrangeRailSections(railRows, favoriteSet), [railRows, favoriteSet])
   const railLabels = useMemo(() => distinctLeagueLabels(railRows.filter((l) => !l.hub)), [railRows])
+
+  /* One league's live state and what needs you in it — read by the filter chips and by the row itself. */
+  const railRowState = (l: RailLeague) => {
+    const saved = props.railMatchups?.[l.id]
+    const live = l.syncPaused ? undefined : liveRail.scores[l.id]
+    // The live poll overlaid on the server snapshot — shared with the /league rail (RailRowBody.tsx).
+    const m = mergeRailMatchup(saved, live)
+    const delayed = liveRail.delayed.includes(l.id) || Boolean(live && (railClock ?? Date.now()) - Date.parse(live.updatedAt) > 90_000)
+    /* Scores are moving: a live poll row that is not delayed, on a week that has been played. */
+    const isLive = Boolean(live && !delayed && m?.scored)
+    const attention = railAttention.get(l.id)
+    return { m, live, delayed, isLive, attention }
+  }
+
+  /*
+   * Filter chips (All / Live / Commissioner / Needs action), from six leagues up — below that there is
+   * nothing to narrow. A chip with nothing in it is not drawn, and a filter that empties (the games
+   * end) falls back to All rather than leaving a blank list.
+   */
+  const [railFilter, setRailFilter] = useState<RailFilter>('all')
+  const railFacts = new Map<string, RailRowFacts>()
+  for (const row of railRows) {
+    if (row.hub) continue
+    const st = railRowState(row)
+    railFacts.set(row.id, { live: st.isLive, commissioner: Boolean(row.isCommissioner), needs: Boolean(st.attention?.length) })
+  }
+  const railCounts = railFilterCounts([...railFacts.values()])
+  const showRailFilters = railOpen && railRows.length >= RAIL_FILTER_MIN_LEAGUES
+  const activeRailFilter: RailFilter = showRailFilters && railCounts[railFilter] > 0 ? railFilter : 'all'
+
+  /*
+   * Folded sport sections, remembered on this device — a per-viewer convenience, so browser storage,
+   * read after mount (the server cannot know it) and never trusted to exist.
+   */
+  const [foldedSports, setFoldedSports] = useState<string[]>([])
+  useEffect(() => {
+    try {
+      const raw = JSON.parse(window.localStorage.getItem(RAIL_FOLDED_KEY) ?? '[]')
+      if (Array.isArray(raw)) setFoldedSports(raw.filter((k): k is string => typeof k === 'string').slice(0, 20))
+    } catch {
+      /* private mode or a corrupt value: nothing folded */
+    }
+  }, [])
+  const toggleSportFold = (key: string) => {
+    setFoldedSports((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+      try {
+        window.localStorage.setItem(RAIL_FOLDED_KEY, JSON.stringify(next))
+      } catch {
+        /* the fold still applies for this visit */
+      }
+      return next
+    })
+  }
+
+  /*
+   * Pin and move, from a press-and-hold (touch) or a right-click / context-menu key (desktop). The row
+   * stays one link, so the actions live in a sheet beside it rather than as buttons inside it.
+   */
+  const [railMenuId, setRailMenuId] = useState<string | null>(null)
+  const railMenuRef = useRef<HTMLDivElement>(null)
+  const railMenuScrimRef = useRef<HTMLButtonElement>(null)
+  const railHold = useRef<{ timer: number | null; fired: boolean; x: number; y: number }>({ timer: null, fired: false, x: 0, y: 0 })
+  useOverlayContainment({
+    active: railMenuId != null,
+    containerRef: railMenuRef,
+    onClose: () => setRailMenuId(null),
+    keepClickableRefs: [railMenuScrimRef],
+  })
+  const saveLeaguePreference = (field: 'favorites' | 'order', leagueIds: string[]) => {
+    void fetch('/api/core/league-preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ field, leagueIds }),
+    })
+      .then((res) => {
+        if (res.ok) router.refresh()
+      })
+      .catch(() => {
+        /* the on-screen change stays until the next render shows what was saved */
+      })
+  }
+  const pinLeague = (id: string) => {
+    const next = toggleFavorite(favoriteIds, id)
+    setFavoriteOverride(next)
+    saveLeaguePreference('favorites', next)
+  }
+  const moveLeague = (id: string, direction: -1 | 1) => {
+    const section = railSections.find((sec) => sec.rows.some((r) => !r.hub && r.id === id))
+    if (!section) return
+    const next = moveInOrder(
+      orderedLeagues.map((l) => l.id),
+      section.rows.filter((r) => !r.hub).map((r) => r.id),
+      id,
+      direction,
+    )
+    if (!next) return
+    setOrderOverride(next)
+    saveLeaguePreference('order', next)
+  }
+  const railMenuSection = railMenuId ? railSections.find((sec) => sec.rows.some((r) => !r.hub && r.id === railMenuId)) : null
+  const railMenuIds = railMenuSection ? railMenuSection.rows.filter((r) => !r.hub).map((r) => r.id) : []
+  const railMenuLeague = railMenuId ? railLeagues.find((l) => l.id === railMenuId) ?? null : null
   const selectedLeague = leagues.find((league) => league.id === props.selectedLeagueId)
   const selectedLeagueName = selectedLeague ? (railLabels.get(selectedLeague.id) ?? selectedLeague.name) : null
 
@@ -1816,7 +1961,37 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           second screen.
         */}
         <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef}>
-          {railSections.map((section) => [
+          {/*
+            The filter chips are the list's first child, held at its top while it scrolls. Inside the
+            scroller rather than beside it: the phone tray is a grid with fixed rows (header, list, foot),
+            and a new sibling would be placed after the foot.
+          */}
+          {showRailFilters ? (
+            <div className="af-rail-filters" role="group" aria-label={railMsg.filterGroupAria}>
+              {RAIL_FILTERS.filter((f) => f === 'all' || railCounts[f] > 0).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  className="af-rail-filter"
+                  aria-pressed={activeRailFilter === f}
+                  data-filter={f}
+                  onClick={() => setRailFilter(f)}
+                >
+                  {railMsg.filterLabel(f)}
+                  <span className="af-rail-filter-count af-num">{railCounts[f]}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {railSections.map((section) => {
+            const sectionKey = section.key ?? 'other'
+            const favorites = section.key === FAVORITES_SECTION
+            /* A filter shows every match, folded or not; folding is for browsing the whole list. */
+            const folded = activeRailFilter === 'all' && foldedSports.includes(sectionKey)
+            const rows = section.rows.filter((r) => passesRailFilter(activeRailFilter, r.hub ? null : railFacts.get(r.id) ?? null))
+            if (rows.length === 0) return null
+            const headed = railSections.length > 1 || favorites
+            return [
             /*
              * The sport heading. Short form ("NFL", "CBB") so it fits the 42px collapsed rail as well
              * as the open one, and not a heading element: the rail is a list of links, and seven
@@ -1826,27 +2001,38 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
              * the eye finds where NBA ends and NFL begins (user report, 2026-10-30). The collapsed
              * rail hides both and keeps the short label alone.
              */
-            railSections.length > 1 ? (
-              <div
-                key={`sport-${section.key ?? 'other'}`}
+            headed ? (
+              /*
+               * A button: tapping a sport folds its leagues away and tapping again brings them back
+               * (user call, 2026-10-30), remembered on this device.
+               */
+              <button
+                type="button"
+                key={`sport-${sectionKey}`}
                 className="af-rail-sport"
-                title={leagueSportLabel(section.key)}
+                title={favorites ? railMsg.favoritesHeading : leagueSportLabel(section.key)}
+                aria-expanded={!folded}
+                aria-label={railMsg.sectionToggleAria(favorites ? railMsg.favoritesHeading : leagueSportLabel(section.key), rows.length, folded)}
                 data-testid="rail-sport-heading"
+                data-section={sectionKey}
+                onClick={() => toggleSportFold(sectionKey)}
               >
-                {leagueSportIcon(section.key) ? (
+                {favorites ? (
+                  <span className="af-rail-sport-icon" aria-hidden>★</span>
+                ) : leagueSportIcon(section.key) ? (
                   <span className="af-rail-sport-icon" aria-hidden>{leagueSportIcon(section.key)}</span>
                 ) : null}
-                <span className="af-rail-sport-label">{leagueSportLabel(section.key, { short: true })}</span>
-                <span className="af-rail-sport-count af-num" aria-hidden>{section.rows.length}</span>
-              </div>
+                <span className="af-rail-sport-label">{favorites ? railMsg.favoritesShort : leagueSportLabel(section.key, { short: true })}</span>
+                <span className="af-rail-sport-count af-num" aria-hidden>{rows.length}</span>
+                <span className="af-rail-sport-chevron" aria-hidden>{folded ? '▸' : '▾'}</span>
+              </button>
             ) : null,
-            ...section.rows.map((l) => {
+            ...(folded ? [] : rows).map((l) => {
             if (l.hub) return <ConnectedLeagueRailGroup key={l.hub.id} hub={l.hub} selectedLeagueId={props.selectedLeagueId} expanded={railOpen} onNavigate={(href, event) => { saveRailScroll(railScrollRef.current, railLayout); if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720 && !event.metaKey && !event.ctrlKey) { event.preventDefault(); setRailChoice('closed'); router.push(href) } }} />
-            const saved = props.railMatchups?.[l.id]
-            const live = l.syncPaused ? undefined : liveRail.scores[l.id]
-            // The live poll overlaid on the server snapshot — shared with the /league rail (RailRowBody.tsx).
-            const m = mergeRailMatchup(saved, live)
-            const delayed = liveRail.delayed.includes(l.id) || Boolean(live && (railClock ?? Date.now()) - Date.parse(live.updatedAt) > 90_000)
+            const { m, live, delayed, isLive, attention } = railRowState(l)
+            const unread = unreadBadgeText(props.railUnread?.[l.id])
+            /* A field race's line is its place among the survivors; a W-L record says nothing there. */
+            const record = m?.guillotine || m?.standing?.elimination ? null : props.railRecords?.[l.id] ?? null
             const railName = railLabels.get(l.id) ?? l.name
             // Keyed on the league's own name, not the rail's disambiguated label: that is Career's identity.
             const careerRaw = railCareer?.[railLeagueKey(l.name)] ?? null
@@ -1862,9 +2048,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             const matchupHref = !isNativePlatform(l.platform) && m && !m.unpaired && !m.guillotine
               ? `/core/matchup?league=${encodeURIComponent(l.id)}`
               : null
-            /* Scores are moving: a live poll row that is not delayed, on a week that has been played. */
-            const isLive = Boolean(live && !delayed && m?.scored)
-            const attention = railAttention.get(l.id)
             const alertTone = attention?.includes('lineup') ? 'bad' : attention ? 'warn' : l.hasAlert ? (l.alertTone ?? 'warn') : null
             return (
               <Link
@@ -1902,7 +2085,48 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 data-score-changed={railSwings[l.id] != null ? 'true' : undefined}
                 aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
                 title={msg.railRowTitle(railName, l.platform, careerLine)}
-                aria-label={`${msg.railRowAria(railName, l.platform, careerLine)}${attention ? railMsg.attentionAria(attention.includes('lineup'), attention.includes('offer')) : ''}`}
+                aria-label={`${msg.railRowAria(railName, l.platform, careerLine)}${attention ? railMsg.attentionAria(attention.includes('lineup'), attention.includes('offer')) : ''}${unread ? railMsg.unreadAria(unread) : ''}`}
+                data-favorite={favoriteSet.has(l.id) ? 'true' : undefined}
+                /*
+                 * Press and hold (touch) or right-click / the context-menu key (desktop) opens Pin and
+                 * Move for this league. A hold that fired swallows the click that follows it, so lifting
+                 * the finger does not also open the league.
+                 */
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  setRailMenuId(l.id)
+                }}
+                onTouchStart={(event) => {
+                  const t = event.touches[0]
+                  const hold = railHold.current
+                  if (hold.timer) window.clearTimeout(hold.timer)
+                  hold.fired = false
+                  hold.x = t?.clientX ?? 0
+                  hold.y = t?.clientY ?? 0
+                  hold.timer = window.setTimeout(() => {
+                    hold.timer = null
+                    hold.fired = true
+                    setRailMenuId(l.id)
+                  }, 550)
+                }}
+                onTouchMove={(event) => {
+                  const t = event.touches[0]
+                  const hold = railHold.current
+                  if (hold.timer && t && Math.hypot(t.clientX - hold.x, t.clientY - hold.y) > 10) {
+                    window.clearTimeout(hold.timer)
+                    hold.timer = null
+                  }
+                }}
+                onTouchEnd={() => {
+                  const hold = railHold.current
+                  if (hold.timer) window.clearTimeout(hold.timer)
+                  hold.timer = null
+                }}
+                onTouchCancel={() => {
+                  const hold = railHold.current
+                  if (hold.timer) window.clearTimeout(hold.timer)
+                  hold.timer = null
+                }}
                 /*
                   ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
                   for it, and it matters: the tray is full-screen, so navigating
@@ -1912,6 +2136,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   preference the user set, not a transient overlay.
                 */
                 onClick={(event) => {
+                  if (railHold.current.fired) {
+                    railHold.current.fired = false
+                    event.preventDefault()
+                    event.stopPropagation()
+                    return
+                  }
                   // Before anything navigates: the next screen may rebuild this rail from the top.
                   saveRailScroll(railScrollRef.current, railLayout)
                   const target = railTapTarget(event) ?? leagueHref
@@ -1934,6 +2164,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   {alertTone ? (
                     <span className="af-rail-dot" data-tone={alertTone} />
                   ) : null}
+                  {unread ? <span className="af-rail-unread" aria-hidden>{unread}</span> : null}
                 </span>
 
                 {/*
@@ -1957,11 +2188,14 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   pWin={railOdds[l.id] ?? null}
                   attention={attention}
                   matchupHref={matchupHref}
+                  record={record}
                 />
               </Link>
             )
           }),
-          ])}
+          ]
+          })}
+          {railOpen && railRows.length > 1 ? <p className="af-rail-hint">{railMsg.holdHint}</p> : null}
           {/*
             ⚠ THE WAY BACK TO A HIDDEN LEAGUE. The header counts hidden leagues, but that count sits
             inside the expand/collapse button and cannot be a link of its own. Without this row an
@@ -2030,6 +2264,64 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         </Link>
         </div>
       </nav>
+
+      {/*
+        Pin and Move for one league — opened by a press-and-hold or a right-click on its row. A sibling
+        of the rail, not inside it, so the rail's own tray rules (close on any link) never touch it.
+      */}
+      {railMenuLeague ? (
+        <>
+          <button
+            ref={railMenuScrimRef}
+            type="button"
+            className="af-rail-menu-scrim"
+            aria-label={railMsg.menuClose}
+            tabIndex={-1}
+            onClick={() => setRailMenuId(null)}
+          />
+          <div
+            ref={railMenuRef}
+            className="af-rail-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label={railMsg.menuTitle(railLabels.get(railMenuLeague.id) ?? railMenuLeague.name)}
+          >
+            <p className="af-rail-menu-title">{railLabels.get(railMenuLeague.id) ?? railMenuLeague.name}</p>
+            <button
+              type="button"
+              className="af-rail-menu-item"
+              onClick={() => {
+                pinLeague(railMenuLeague.id)
+                setRailMenuId(null)
+              }}
+            >
+              <span aria-hidden>{favoriteSet.has(railMenuLeague.id) ? '☆' : '★'}</span>
+              {favoriteSet.has(railMenuLeague.id) ? railMsg.unpin : railMsg.pin}
+            </button>
+            <button
+              type="button"
+              className="af-rail-menu-item"
+              disabled={railMenuIds.indexOf(railMenuLeague.id) <= 0}
+              onClick={() => moveLeague(railMenuLeague.id, -1)}
+            >
+              <span aria-hidden>↑</span>
+              {railMsg.moveUp}
+            </button>
+            <button
+              type="button"
+              className="af-rail-menu-item"
+              disabled={railMenuIds.indexOf(railMenuLeague.id) >= railMenuIds.length - 1}
+              onClick={() => moveLeague(railMenuLeague.id, 1)}
+            >
+              <span aria-hidden>↓</span>
+              {railMsg.moveDown}
+            </button>
+            <button type="button" className="af-rail-menu-item" data-kind="done" onClick={() => setRailMenuId(null)}>
+              {railMsg.menuDone}
+            </button>
+          </div>
+        </>
+      ) : null}
 
       {/* ── Primary nav ─────────────────────────────────────────────── */}
       <aside className="af-nav" id="af-nav" aria-label={msg.sectionsAria}>

@@ -75,6 +75,26 @@ export const railRowMessages = defineMessages({
     /* Appended to a flagged league row's accessible name, which the visible flags sit inside. */
     attentionAria: (lineup: boolean, offer: boolean) =>
       `${lineup ? ', lineup needs fixing' : ''}${offer ? ', trade offer waiting' : ''}`,
+    /* Appended to a row's accessible name when its league chat has unread messages. */
+    unreadAria: (count: string) => `, ${count} unread chat ${count === '1' ? 'message' : 'messages'}`,
+    /* The favorites section at the top of the list (pinned leagues). */
+    favoritesHeading: 'Favorites',
+    favoritesShort: 'Favorites',
+    sectionToggleAria: (name: string, count: number, folded: boolean) =>
+      `${name}, ${count} ${count === 1 ? 'league' : 'leagues'} — ${folded ? 'show' : 'hide'}`,
+    /* Filter chips above the list. */
+    filterGroupAria: 'Filter leagues',
+    filterLabel: (f: 'all' | 'live' | 'commissioner' | 'needs'): string =>
+      f === 'all' ? 'All' : f === 'live' ? 'Live' : f === 'commissioner' ? 'Commissioner' : 'Needs action',
+    holdHint: 'Press and hold a league (or right-click it) to pin it or move it.',
+    /* The Pin and Move sheet. */
+    menuTitle: (name: string) => `Options for ${name}`,
+    menuClose: 'Close',
+    pin: 'Pin to top',
+    unpin: 'Unpin',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    menuDone: 'Done',
     yourTeam: 'Your team',
     opponentNotNamed: 'opponent not named',
     espnUnavailable: 'Matchup unavailable from ESPN',
@@ -128,6 +148,22 @@ export const railRowMessages = defineMessages({
     winOdds: (pct) => `${pct}% de probabilidad de ganar`,
     attentionAria: (lineup, offer) =>
       `${lineup ? ', hay que corregir la alineación' : ''}${offer ? ', oferta de intercambio pendiente' : ''}`,
+    unreadAria: (count) => `, ${count} ${count === '1' ? 'mensaje' : 'mensajes'} de chat sin leer`,
+    favoritesHeading: 'Favoritas',
+    favoritesShort: 'Favoritas',
+    sectionToggleAria: (name, count, folded) =>
+      `${name}, ${count} ${count === 1 ? 'liga' : 'ligas'} — ${folded ? 'mostrar' : 'ocultar'}`,
+    filterGroupAria: 'Filtrar ligas',
+    filterLabel: (f) =>
+      f === 'all' ? 'Todas' : f === 'live' ? 'En vivo' : f === 'commissioner' ? 'Comisionado' : 'Requieren acción',
+    holdHint: 'Mantén pulsada una liga (o haz clic derecho) para fijarla o moverla.',
+    menuTitle: (name) => `Opciones de ${name}`,
+    menuClose: 'Cerrar',
+    pin: 'Fijar arriba',
+    unpin: 'Quitar de arriba',
+    moveUp: 'Subir',
+    moveDown: 'Bajar',
+    menuDone: 'Listo',
     yourTeam: 'Tu equipo',
     opponentNotNamed: 'rival sin nombre',
     espnUnavailable: 'ESPN no devolvió un calendario de enfrentamientos para esta liga',
