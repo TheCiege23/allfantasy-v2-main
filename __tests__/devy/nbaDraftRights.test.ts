@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDraftCollegeRight, removeDraftCollegeRight, transferDraftCollegeRight } from '@/lib/devy/nbaDraftRights'
 const pick = { playerId: 'espn:ncaab:12', rosterId: 'a', assetType: 'c2c_college', pickMetadata: { draftCollegeRightsId: 'right-12' } }
-const mockDb = () => ({ devyRights: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: 'new-right' }), deleteMany: vi.fn().mockResolvedValue({ count: 1 }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } }) as any
+const mockDb = () => ({ $queryRaw: vi.fn().mockResolvedValue([]), devyRights: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: 'new-right' }), deleteMany: vi.fn().mockResolvedValue({ count: 1 }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } }) as any
 
 describe('college draft ownership correction', () => {
   it('creates rights only when the player is unowned', async () => {

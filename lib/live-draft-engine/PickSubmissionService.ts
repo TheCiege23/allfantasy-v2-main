@@ -46,7 +46,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 import { ESPN_NCAAB_DEVY_ID_PREFIX } from '@/lib/devy/ncaabRosterEvidence'
 import { verifyNcaabCollegeDraftPick } from '@/lib/devy/verifyNcaabDraftPick'
-import { resolveDevySeasonYear } from '@/lib/devy/rightsWriter'
+import { createDraftCollegeRight } from '@/lib/devy/nbaDraftRights'
 import { isDevyLeague } from '@/lib/devy/DevyLeagueConfig'
 import { isC2CLeague } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 
@@ -433,14 +433,9 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       }
       let draftCollegeRightsId: string | undefined
       if (verifiedNbaCollege && input.playerId) {
-        const existingRights = await tx.devyRights.findFirst({ where: { leagueId: input.leagueId, devyPlayerId: input.playerId }, select: { id: true } })
-        if (existingRights) throw new Error('College player already has rights in this league')
-        const right = await tx.devyRights.create({ data: {
-          leagueId: input.leagueId, rosterId: effectiveRosterId, devyPlayerId: input.playerId,
-          state: verifiedNbaCollege === 'c2c_college' ? 'COLLEGE_ACTIVE' : 'NCAA_DEVY_ACTIVE',
-          seasonYear: resolveDevySeasonYear(), sourceConfidence: 100,
-        }, select: { id: true } })
-        draftCollegeRightsId = right.id
+        draftCollegeRightsId = await createDraftCollegeRight(tx, {
+          leagueId: input.leagueId, rosterId: effectiveRosterId, playerId: input.playerId, assetType: verifiedNbaCollege,
+        })
       }
       const created = await (tx as any).draftPick.create({
         data: {
@@ -529,7 +524,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
         code: DRAFT_PICK_RACE_RETRY,
       }
     }
-    if (error instanceof Error && error.message === 'College player already has rights in this league') {
+    if (error instanceof Error && error.message === 'College player already has rights in this league.') {
       return { success: false, error: error.message }
     }
     if (error instanceof Error && /Draft state changed/.test(error.message)) {

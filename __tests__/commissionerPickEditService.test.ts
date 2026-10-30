@@ -160,6 +160,7 @@ describe('commissionerPickEdit', () => {
     hm.rightsUpdate.mockResolvedValue({ count: 1 })
     hm.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<boolean>) => {
       const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         draftSession: {
           findUnique: hm.txFindUnique,
           findFirst: hm.txFindUnique,
