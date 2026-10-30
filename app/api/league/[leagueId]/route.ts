@@ -11,7 +11,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Remove a league from the signed-in user's dashboard (deletes the user's `League` or `SleeperLeague` row).
+ * Remove a league from the signed-in user's dashboard. Imported `League` rows may be
+ * shared through team or manager claims, so they are hidden for this account with a
+ * tombstone rather than deleted. Standalone `SleeperLeague` rows remain account-owned.
  * Does not delete the league on Sleeper or other external platforms.
  *
  * ⚠ ALSO WRITES A TOMBSTONE, and the delete is not complete without it. This is
