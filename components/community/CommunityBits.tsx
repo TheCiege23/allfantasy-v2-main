@@ -64,7 +64,7 @@ export function AuthorBadges({ badges }: { badges: AuthorBadge[] }) {
         <span
           key={b}
           title={BADGE_COPY[b].title}
-          className={`rounded-full border px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide ${BADGE_COPY[b].className}`}
+          className={`rounded-full border px-1.5 py-px text-[11px] font-semibold uppercase tracking-wide ${BADGE_COPY[b].className}`}
         >
           {BADGE_COPY[b].label}
         </span>
@@ -146,7 +146,7 @@ export function TagPills({ tags }: { tags: string[] }) {
       {tags.map((t) => (
         <span
           key={t}
-          className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide"
+          className="rounded px-1.5 py-0.5 text-[11px] font-bold tracking-wide"
           style={{ background: 'var(--panel2)', color: 'var(--muted)' }}
         >
           {t}
