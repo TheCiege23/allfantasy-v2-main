@@ -8,7 +8,7 @@ import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { messagesFor } from '@/lib/i18n/messages'
-import { isSpanishLanguage, languageOfSpanishFlag } from '@/lib/i18n/spanishFlag'
+import { langFromFlag, spanishFlag } from '@/lib/core-app/messages/coreLocale'
 import { dashTriageMessages, type DashTriageMessages } from '@/lib/core-app/messages/dashTriage'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { slotText } from '@/lib/core-app/playerMovesCopy'
@@ -66,7 +66,7 @@ export function coverText(l: Pick<TriageViewLeague, 'bench' | 'cover'>, es: bool
 
 /** The catalog for the exported helpers, which take `es` rather than reading the provider. */
 function msgs(es: boolean): DashTriageMessages {
-  return messagesFor(dashTriageMessages, languageOfSpanishFlag(es))
+  return messagesFor(dashTriageMessages, langFromFlag(es))
 }
 
 /** One best ball position worth a glance (lib/core-app/bestBallDepth.ts, built in dash34). */
@@ -251,7 +251,7 @@ export function Dash3ATriageView({
   proUpsell?: string | null
 }) {
   const { language } = useOptionalLanguage()
-  const es = isSpanishLanguage(language)
+  const es = spanishFlag(language)
   const m = useMessages(dashTriageMessages)
   const hasStarters = rows.length > 0
   /*

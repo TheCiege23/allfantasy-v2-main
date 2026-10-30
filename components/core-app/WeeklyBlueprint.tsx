@@ -17,15 +17,12 @@ import { WeeklyScheduleForecasts } from './WeeklyScheduleForecasts'
 import { buildWeeklySwings, sportWeekAdvice } from '@/lib/core-app/weeklySportPlan'
 import { playoffInputChanges } from '@/lib/core-app/weeklyPlayoffMovement'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { spanishFlag } from '@/lib/core-app/messages/coreLocale'
 
-/**
+/*
  * The weekly builders (weeklyBrief, buildWeeklySwings, playoffInputChanges, WeeklyScheduleForecasts …)
- * still take a Spanish flag rather than a language, and turn it back into a code for their own
- * catalogs. Bridged once here instead of widening every builder's signature.
+ * still take a Spanish flag rather than a language; `spanishFlag` (coreLocale.ts) is the one bridge.
  */
-const SPANISH = 'es'
-const spanishFlag = (language: string): boolean => language === SPANISH
-
 export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: WeeklyPlayoffPath | null }) {
   const { language } = useOptionalLanguage(); const es = spanishFlag(language)
   const m = useMessages(weeklyBlueprintMessages)

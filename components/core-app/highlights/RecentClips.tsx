@@ -9,9 +9,7 @@ import XPostEmbed from './XPostEmbed'
 import { useHighlightMeasurement } from './useHighlightMeasurement'
 import type { HighlightOutcome, HighlightSurface } from '@/lib/analytics/highlights'
 import './recent-clips.css'
-
-/** XPostEmbed still takes a Spanish flag rather than a language; bridged here, for its one caller. */
-const SPANISH = 'es'
+import { spanishFlag } from '@/lib/core-app/messages/coreLocale'
 
 type ClipRequest =
   | { kind: 'player'; sport: 'NFL'; externalId?: string; sleeperId?: string }
@@ -25,7 +23,8 @@ export default function RecentClips({ request, title, compact = false }: { reque
 
 function RecentClipsFeed({ request, title, compact, onRetry }: { request: ClipRequest; title: string; compact: boolean; onRetry: () => void }) {
   const { language } = useOptionalLanguage()
-  const es = language === SPANISH
+  // XPostEmbed still takes a Spanish flag rather than a language (coreLocale.ts holds the bridge).
+  const es = spanishFlag(language)
   const m = useMessages(recentClipsMessages)
   const [result, setResult] = useState<XClipsResult | null>(null)
   const [error, setError] = useState(false)
