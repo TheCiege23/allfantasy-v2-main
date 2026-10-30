@@ -90,10 +90,11 @@ function rowKey(p: PlayerEntry): string {
 /** D.7 — scannable position badge, filled in the board's position colour (Sleeper palette). */
 function PositionChip({ pos }: { pos: string | null }) {
   const p = (pos ?? '').trim().slice(0, 4).toUpperCase() || '—'
+  const tint = positionTintHex(p)
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center rounded px-1 py-px text-[11px] font-bold uppercase leading-none"
-      style={p === '—' ? undefined : { backgroundColor: positionTintHex(p), color: SKIN_ON_FILL }}
+      style={tint ? { backgroundColor: tint, color: SKIN_ON_FILL } : undefined}
       title={pos ?? undefined}
     >
       {p}
