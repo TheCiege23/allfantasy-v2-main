@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { isBigBrotherLeague } from '@/lib/big-brother/BigBrotherLeagueConfig'
 import { getCurrentCycleForLeague } from '@/lib/big-brother/BigBrotherPhaseStateMachine'
 import { getFinalNomineeRosterIds } from '@/lib/big-brother/BigBrotherNominationEngine'
@@ -35,10 +36,12 @@ export async function GET(
   const config = await getBigBrotherConfig(leagueId)
   if (!config) return NextResponse.json({ error: 'Not a Big Brother league' }, { status: 404 })
 
-  const roster = await prisma.roster.findFirst({
+  const ownedRoster = await prisma.roster.findFirst({
     where: { leagueId, platformUserId: userId },
     select: { id: true },
   })
+  const coOwnerRosterId = ownedRoster ? null : await acceptedCoOwnerRosterId(leagueId, userId)
+  const roster = ownedRoster ?? (coOwnerRosterId ? { id: coOwnerRosterId } : null)
   if (!roster) return NextResponse.json({ ballot: null, error: 'Not a league member' })
 
   const eligible = await getEligibleVoterRosterIds(leagueId, current.id, config.hohVotesOnlyInTie, config.evictionTieBreakMode === 'hoh_vote')

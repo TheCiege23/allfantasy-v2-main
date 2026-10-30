@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { isBigBrotherLeague } from '@/lib/big-brother/BigBrotherLeagueConfig'
 import { submitEvictionVote } from '@/lib/big-brother/BigBrotherVoteEngine'
 
@@ -32,10 +33,12 @@ export async function POST(
     return NextResponse.json({ error: 'cycleId and targetRosterId required' }, { status: 400 })
   }
 
-  const roster = await prisma.roster.findFirst({
+  const ownedRoster = await prisma.roster.findFirst({
     where: { leagueId, platformUserId: userId },
     select: { id: true },
   })
+  const coOwnerRosterId = ownedRoster ? null : await acceptedCoOwnerRosterId(leagueId, userId)
+  const roster = ownedRoster ?? (coOwnerRosterId ? { id: coOwnerRosterId } : null)
   if (!roster) return NextResponse.json({ error: 'Not a league member' }, { status: 403 })
 
   const result = await submitEvictionVote(cycleId, roster.id, targetRosterId)
