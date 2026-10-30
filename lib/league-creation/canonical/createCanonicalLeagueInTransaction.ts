@@ -174,7 +174,8 @@ export async function createCanonicalLeagueInTransaction(
   appUserId: string,
   body: ValidatedCreateLeagueBody,
   engine: PresetEngineOutput,
-  log?: (event: string, payload: Record<string, unknown>) => void
+  log?: (event: string, payload: Record<string, unknown>) => void,
+  serverContext?: { tenantId: string; season: number },
 ): Promise<CanonicalCreateTransactionResult> {
   const sport = body.sport as LeagueSport
   const soccerPipeline = (body.soccerPipeline ?? null) as SoccerPipeline | null
@@ -470,7 +471,7 @@ export async function createCanonicalLeagueInTransaction(
   const joinCode = await uniqueJoinCode(tx)
   const platformLeagueId = `manual-${randomUUID()}`
   /** Calendar season year for list badges / filters (must not rely on Prisma's static default). */
-  const seasonYear = resolveLeagueCreationSeason(sport)
+  const seasonYear = serverContext?.season ?? resolveLeagueCreationSeason(sport)
 
   if (formatId === 'survivor') {
     const setup = body.conceptSetup ?? {}
@@ -615,6 +616,7 @@ export async function createCanonicalLeagueInTransaction(
 
   const league = await tx.league.create({
     data: {
+      ...(serverContext ? { tenantId: serverContext.tenantId } : {}),
       userId: appUserId,
       isCommissioner: true,
       name: body.leagueName.trim(),
@@ -624,6 +626,7 @@ export async function createCanonicalLeagueInTransaction(
       leagueSize: managerCount,
       sport,
       leagueType: formatId,
+      ...(formatId === 'zombie' ? { waiverType: 'fcfs', waiverHours: 0 } : {}),
       /*
        * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`, AND EVERY ZOMBIE SURFACE KEYS ON THE
        * VARIANT — the Zombie tab and its landing (`LeagueShell`), the trades tab, Chimmy's zombie context,

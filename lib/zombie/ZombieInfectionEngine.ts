@@ -199,6 +199,19 @@ export async function computeInfections(input: InfectionInput): Promise<ZombieIn
     select: { team: { select: { rosterId: true } } },
   })
   const serumProtectedRosterIds = new Set(pendingSerum.map((i) => i.team.rosterId))
+  const armedWeapons = await prisma.zombieTeamItem.findMany({
+    where: {
+      itemType: { in: ['weapon_knife', 'weapon_bow', 'weapon_axe', 'weapon_gun'] },
+      usedEffect: 'infection_shield',
+      team: { leagueId },
+      OR: [
+        { activationState: 'pending_activation', activatesAtWeek: week, isUsed: false },
+        { isUsed: true, usedAtWeek: week },
+      ],
+    },
+    select: { team: { select: { rosterId: true } } },
+  })
+  const weaponProtectedRosterIds = new Set(armedWeapons.map((i) => i.team.rosterId))
 
   for (const m of matchups) {
     const { winnerRosterId, loserRosterId } = m
@@ -212,6 +225,7 @@ export async function computeInfections(input: InfectionInput): Promise<ZombieIn
     const infectByWhisperer = config.infectionLossToWhisperer && winnerStatus === 'Whisperer'
     const infectByZombie = config.infectionLossToZombie && winnerStatus === 'Zombie'
     if (!infectByWhisperer && !infectByZombie) continue
+    if (weaponProtectedRosterIds.has(loserRosterId)) continue
 
     infected.push({
       survivorRosterId: loserRosterId,

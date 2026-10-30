@@ -14,14 +14,31 @@ export async function GET(req: Request) {
   const universeId = searchParams?.get('universeId')
   if (!universeId) return NextResponse.json({ error: 'universeId required' }, { status: 400 })
 
+  // This endpoint includes unredacted role records; only the universe commissioner may read it.
+  const owner = await prisma.zombieUniverse.findUnique({
+    where: { id: universeId },
+    select: { commissionedByUserId: true, createdByUserId: true },
+  })
+  if (!owner) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if ((owner.commissionedByUserId ?? owner.createdByUserId) !== session.user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const seasonRows = await prisma.zombieLeague.groupBy({ by: ['season'], where: { universeId }, orderBy: { season: 'desc' } })
+  const latest = await prisma.zombieLeague.aggregate({ where: { universeId }, _max: { season: true } })
+  const rawSeason = searchParams.get('season')
+  if (rawSeason != null && !/^\d{4}$/.test(rawSeason)) return NextResponse.json({ error: 'Invalid season' }, { status: 400 })
+  const season = rawSeason ? Number(rawSeason) : latest._max.season ?? new Date().getFullYear()
   const u = await prisma.zombieUniverse.findUnique({
     where: { id: universeId },
     include: {
       levels: { orderBy: { rankOrder: 'asc' } },
       leagues: {
+        where: { season },
         include: {
           teams: true,
           whispererRecord: true,
+          coWhisperers: true,
           level: true,
         },
       },
@@ -33,7 +50,7 @@ export async function GET(req: Request) {
   let zombieCount = 0
   let whispererCount = 0
   for (const z of u.leagues) {
-    if (z.whispererRecord) whispererCount += 1
+    whispererCount += z.teams.filter((team) => team.status === 'Whisperer').length
     for (const t of z.teams) {
       const s = (t.status ?? '').toLowerCase()
       if (s.includes('zombie')) zombieCount += 1
@@ -54,13 +71,14 @@ export async function GET(req: Request) {
   })
 
   const stats = await prisma.zombieUniverseStat.findMany({
-    where: { universeId, season: new Date().getFullYear() },
+    where: { universeId, season },
     orderBy: { currentSeasonPPW: 'desc' },
     take: 30,
   })
 
   return NextResponse.json({
-    universe: u,
+    universe: { ...u, season },
+    seasons: seasonRows.map(r => r.season),
     counts: { survivorCount, zombieCount, whispererCount, leagueCount: u.leagues.length },
     animations,
     announcements,
@@ -68,3 +86,50 @@ export async function GET(req: Request) {
   })
 }
 
+
+/** Universe-wide movement rules are owned by the universe commissioner. */
+export async function PATCH(req: Request) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+  const universeId = typeof body.universeId === 'string' ? body.universeId : null
+  if (!universeId) return NextResponse.json({ error: 'universeId required' }, { status: 400 })
+
+  const universe = await prisma.zombieUniverse.findUnique({
+    where: { id: universeId },
+    select: {
+      commissionedByUserId: true,
+      createdByUserId: true,
+      leagues: { select: { status: true, season: true } },
+    },
+  })
+  if (!universe) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if ((universe.commissionedByUserId ?? universe.createdByUserId) !== session.user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  const currentSeason = Math.max(...universe.leagues.map(l => l.season))
+  if (universe.leagues.some((league) => league.season === currentSeason && !['setup', 'registering'].includes(league.status))) {
+    return NextResponse.json({ error: 'Promotion and relegation rules lock when a league starts.' }, { status: 409 })
+  }
+
+  const data: { promotionCount?: number; relegationCount?: number } = {}
+  for (const key of ['promotionCount', 'relegationCount'] as const) {
+    const value = body[key]
+    if (value === undefined) continue
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 5) {
+      return NextResponse.json({ error: `${key} must be an integer between 0 and 5.` }, { status: 400 })
+    }
+    data[key] = value
+  }
+  if (!Object.keys(data).length) return NextResponse.json({ error: 'No supported settings supplied.' }, { status: 400 })
+
+  const updated = await prisma.zombieUniverse.update({ where: { id: universeId }, data })
+  return NextResponse.json({
+    universe: {
+      id: updated.id,
+      promotionCount: updated.promotionCount,
+      relegationCount: updated.relegationCount,
+    },
+  })
+}

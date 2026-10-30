@@ -214,6 +214,7 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
       applyPayload({ ...data, sport: rosterSport }, slotDefs)
       setSuccess(true)
       setDraftNote(describeDraftRoundsSync(data.draftRounds, t))
+      window.dispatchEvent(new CustomEvent('af:league-settings-saved', { detail: { leagueId } }))
       emitLeagueDraftRoomRevalidate(leagueId)
     } catch { setError(t('lsEd.requestFailed')) }
     finally { setSaving(false) }
@@ -251,6 +252,7 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
       if (!data.config?.templateKey) setSelectedTemplateKey(defaultTemplateKey ?? 'custom')
       setSuccess(true)
       setDraftNote(describeDraftRoundsSync(data.draftRounds, t))
+      window.dispatchEvent(new CustomEvent('af:league-settings-saved', { detail: { leagueId } }))
       emitLeagueDraftRoomRevalidate(leagueId)
     } catch {
       setError(t('lsEd.ro.resetRequestFailed'))

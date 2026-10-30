@@ -45,6 +45,7 @@ import {
   PROSPECT_STASH_UNAVAILABLE_CODE,
   PROSPECT_STASH_UNAVAILABLE_MESSAGE,
   sportSupportsProspectStash,
+  leagueSupportsTaxiDevy,
 } from '@/lib/league-creation/prospectStashPolicy'
 
 /** Maps execution modes (offline/auto/team) to a core draft id for format-engine checks. */
@@ -226,6 +227,18 @@ export function validateCreatePayload(
     if ('error' in fee) {
       return { ok: false, error: fee.error, status: 400,
         errors: [{ path: 'conceptSetup.survivorEntryFeeAmountCents', message: fee.error }] }
+    }
+  }
+  if (!leagueSupportsTaxiDevy({ leagueType: formatId })) {
+    const setup = data.conceptSetup ?? {}
+    const taxi = Number(setup.taxiSlots ?? setup.taxiSize ?? 0)
+    const devy = Number(setup.devySlots ?? setup.devySize ?? 0)
+    const path = Number.isFinite(taxi) && taxi > 0 ? 'conceptSetup.taxiSlots'
+      : Number.isFinite(devy) && devy > 0 ? 'conceptSetup.devySlots'
+      : setup.devyRoundsEnabled === true ? 'conceptSetup.devyRoundsEnabled' : null
+    if (path) {
+      const message = 'Taxi and devy slots are available only in Dynasty, Devy, Salary Cap, and C2C leagues.'
+      return { ok: false, status: 400, error: message, errors: [{ path, message, code: 'TAXI_DEVY_NOT_AVAILABLE' }] }
     }
   }
   // NHL / MLB have no prospect pool: refuse a taxi squad or devy rounds on any concept that carries them.

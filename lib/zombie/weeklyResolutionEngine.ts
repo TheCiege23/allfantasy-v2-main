@@ -2,10 +2,10 @@ import type { ZombieWeeklyResolution } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { resolveWeeklyInfections } from '@/lib/zombie/infectionEngine'
-import { finalizePendingSerumsForWeek } from '@/lib/zombie/serumEngine'
+import { autoReviveEligibleZombies, awardNativeSerumsForWeek, finalizePendingSerumsForWeek } from '@/lib/zombie/serumEngine'
 import { detectAndProcessBashings } from '@/lib/zombie/bashingEngine'
 import { detectAndProcessMaulings } from '@/lib/zombie/maulingEngine'
-import { checkAndAwardWeapons } from '@/lib/zombie/weaponEngine'
+import { checkAndAwardWeapons, finalizePendingWeaponsForWeek } from '@/lib/zombie/weaponEngine'
 import { tryPostWeeklyUpdateAfterResolution } from '@/lib/zombie/weeklyUpdateEngine'
 import { syncUniverseStats } from '@/lib/zombie/universeStatEngine'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
@@ -15,6 +15,9 @@ import { getLeagueMode } from '@/lib/zombie/zombieLeagueMode'
 import { applyZombieHordeSitOutToScoring } from '@/lib/zombie/ZombieHordeSitOutEngine'
 import { settleWeeklyWinnings } from '@/lib/zombie/weeklyWinningsEngine'
 import { syncZombieTeamNames } from '@/lib/zombie/zombieTeamNames'
+import { reconcileScoreOnlyCorrection } from '@/lib/zombie/statCorrectionReconciler'
+import { captureZombieSettlementSnapshot } from '@/lib/zombie/weeklySettlementSnapshot'
+import { reconcileOutcomeChangingCorrection } from '@/lib/zombie/outcomeCorrectionReconciler'
 
 export type WeeklyResolutionOptions = {
   /** Re-run infections + recap even if this week already resolved (stat corrections / commissioner). */
@@ -43,13 +46,68 @@ export async function runWeeklyResolution(
   })
   if (!z) throw new Error('Zombie league not found')
 
-  if (!opts?.force) {
-    const existing = await prisma.zombieWeeklyResolution.findUnique({
-      where: { zombieLeagueId_week: { zombieLeagueId, week } },
+  const existing = await prisma.zombieWeeklyResolution.findUnique({
+    where: { zombieLeagueId_week: { zombieLeagueId, week } },
+  })
+  if (existing?.status === 'complete' && existing.resolvedAt) {
+    if (!opts?.force) return { resolution: existing }
+    // A completed week has already moved roles, items and winnings. Running the ordinary
+    // settlement again would duplicate those effects. Until reversal is transactional, place
+    // a changed score in the commissioner exception queue instead of silently replaying it.
+    const season = await prisma.redraftSeason.findFirst({
+      where: { leagueId: z.leagueId, season: z.season }, select: { id: true },
     })
-    if (existing?.status === 'complete' && existing.resolvedAt) {
+    const current = season ? await prisma.redraftMatchup.findMany({
+      where: { seasonId: season.id, week }, select: {
+        homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true,
+      },
+    }) : []
+    const previous: unknown[] = Array.isArray(existing.matchupResults) ? existing.matchupResults : []
+    const same = current.length === previous.length && current.every((matchup) =>
+      previous.some((raw) => {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false
+        const old = raw as Record<string, unknown>
+        return old.homeUserId === matchup.homeRosterId &&
+          old.awayUserId === matchup.awayRosterId &&
+          old.homeScore === matchup.homeScore && old.awayScore === matchup.awayScore
+      }))
+    if (same) {
+      if (existing.requiresStatCorrection) {
+        const cleared = await prisma.zombieWeeklyResolution.update({
+          where: { zombieLeagueId_week: { zombieLeagueId, week } },
+          data: { requiresStatCorrection: false },
+        })
+        return { resolution: cleared }
+      }
       return { resolution: existing }
     }
+    if (opts.reason === 'stat_correction' && season && z.league.userId) {
+      const reconciled = await reconcileScoreOnlyCorrection({
+        zombieLeagueId, leagueId: z.leagueId, seasonId: season.id, season: z.season,
+        sport: z.sport, week, ownerUserId: z.league.userId, previous: existing,
+      }).catch(() => null)
+      if (reconciled) return { resolution: reconciled }
+      const replayed = await reconcileOutcomeChangingCorrection({
+        zombieLeagueId, leagueId: z.leagueId, seasonId: season.id, season: z.season,
+        week, ownerUserId: z.league.userId, experienceMode: z.experienceMode,
+        previous: existing,
+      }).catch(() => null)
+      if (replayed) {
+        if (z.universeId) await syncUniverseStats(z.universeId, week, z.season).catch(() => null)
+        return { resolution: replayed }
+      }
+    }
+    const marked = await prisma.zombieWeeklyResolution.updateMany({
+      where: { zombieLeagueId, week, status: 'complete', requiresStatCorrection: false },
+      data: { requiresStatCorrection: true },
+    })
+    if (marked.count > 0) {
+      await notifyCommissioner(z.leagueId, 'commissioner_override_required',
+        `Week ${week} score correction needs reconciliation`,
+        'A finalized matchup changed. Review roles, items, and winnings before this week is replayed.',
+        { urgency: 'critical', requiresAction: true, week }).catch(() => {})
+    }
+    return { resolution: { ...existing, requiresStatCorrection: true }, skipped: true, reason: 'stat_correction_reconciliation_required' }
   }
 
   /*
@@ -64,6 +122,17 @@ export async function runWeeklyResolution(
     return { resolution: null, skipped: true, reason: 'matchups_incomplete' }
   }
 
+  // A completed week can only be replayed from the state before its first side effect.
+  // Capture once. A retry of an already-resolving week must never replace the original snapshot.
+  const settlementSnapshot = (!existing || (existing.status === 'pending' && !existing.settlementSnapshot))
+    ? await captureZombieSettlementSnapshot(z.leagueId, zombieLeagueId, z.sport)
+    : null
+  if (existing?.status === 'pending' && settlementSnapshot) {
+    await prisma.zombieWeeklyResolution.updateMany({
+      where: { id: existing.id, status: 'pending' },
+      data: { settlementSnapshot: toPrismaJsonInput(settlementSnapshot) },
+    })
+  }
   await prisma.zombieWeeklyResolution.upsert({
     where: { zombieLeagueId_week: { zombieLeagueId, week } },
     create: {
@@ -73,6 +142,7 @@ export async function runWeeklyResolution(
       matchupResults: [],
       newZombies: [],
       infectionCount: 0,
+      ...(settlementSnapshot ? { settlementSnapshot: toPrismaJsonInput(settlementSnapshot) } : {}),
     },
     update: { status: 'resolving' },
   })
@@ -103,9 +173,12 @@ export async function runWeeklyResolution(
   const infection = await resolveWeeklyInfections(zombieLeagueId, week)
 
   await finalizePendingSerumsForWeek(z.leagueId, week, z.season)
+  await finalizePendingWeaponsForWeek(z.leagueId, week, z.season)
   await detectAndProcessBashings(z.leagueId, week, zombieLeagueId)
   await detectAndProcessMaulings(z.leagueId, week, zombieLeagueId)
   await checkAndAwardWeapons(z.leagueId, week, zombieLeagueId)
+  await awardNativeSerumsForWeek(z.leagueId, week, z.season)
+  await autoReviveEligibleZombies(z.leagueId, week)
   // Bank the week and move what infections, maulings and bashings take. Before this existed nothing
   // wrote the winnings the sum below reads. See lib/zombie/weeklyWinningsEngine.ts.
   await settleWeeklyWinnings({
@@ -173,6 +246,7 @@ export async function runWeeklyResolution(
   const hordeSize = zombieCount
 
   const whisperer = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId } })
+  const coWhisperers = await prisma.zombieCoWhisperer.findMany({ where: { zombieLeagueId } })
   if (whisperer && hordeSize > (whisperer.hordeSizeAtPeak ?? 0)) {
     await prisma.whispererRecord.update({
       where: { id: whisperer.id },
@@ -186,16 +260,35 @@ export async function runWeeklyResolution(
 
   const matchupsJson: unknown[] = []
   if (season) {
+    const [seasonRosters, ownerRosters] = await Promise.all([
+      prisma.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true, ownerId: true } }),
+      prisma.roster.findMany({ where: { leagueId: z.leagueId }, select: { id: true, platformUserId: true } }),
+    ])
+    const ownerBySeasonRoster = new Map(seasonRosters.map((roster) => [roster.id, roster.ownerId]))
+    const nativeRosterByOwner = new Map(ownerRosters.map((roster) => [roster.platformUserId, roster.id]))
+    const teamByNativeRoster = new Map(teams.map((team) => [team.rosterId, team]))
+    const teamFor = (seasonRosterId: string) => teamByNativeRoster.get(nativeRosterByOwner.get(ownerBySeasonRoster.get(seasonRosterId) ?? '') ?? '')
     const mm = await prisma.redraftMatchup.findMany({
       where: { seasonId: season.id, week },
     })
     for (const m of mm) {
+      const homeWon = Boolean(m.awayRosterId) && m.homeScore > m.awayScore
+      const awayWon = Boolean(m.awayRosterId) && m.awayScore > m.homeScore
+      const winnerId = homeWon ? m.homeRosterId : awayWon ? m.awayRosterId : null
+      const loserId = homeWon ? m.awayRosterId : awayWon ? m.homeRosterId : null
+      const winner = winnerId ? teamFor(winnerId) : null
+      const loser = loserId ? teamFor(loserId) : null
       matchupsJson.push({
         homeUserId: m.homeRosterId,
         awayUserId: m.awayRosterId,
         homeScore: m.homeScore,
         awayScore: m.awayScore,
-        outcome: (m.homeScore ?? 0) >= (m.awayScore ?? 0) ? 'home' : 'away',
+        outcome: homeWon ? 'home' : awayWon ? 'away' : 'tie',
+        winnerStatus: winner?.status ?? null,
+        winnerName: winner?.fantasyTeamName || winner?.displayName || null,
+        loserName: loser?.fantasyTeamName || loser?.displayName || null,
+        winnerScore: homeWon ? m.homeScore : awayWon ? m.awayScore : null,
+        loserScore: homeWon ? m.awayScore : awayWon ? m.homeScore : null,
       })
     }
   }
@@ -289,7 +382,7 @@ export async function runWeeklyResolution(
     hordeSize,
     survivorCount,
     winningsSum,
-    whisperer?.ambushesRemaining ?? 0,
+    (whisperer?.ambushesRemaining ?? 0) + coWhisperers.reduce((sum, record) => sum + record.ambushesRemaining, 0),
     sitOutScoring,
   ), {
     week,

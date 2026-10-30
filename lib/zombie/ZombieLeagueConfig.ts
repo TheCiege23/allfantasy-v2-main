@@ -33,6 +33,12 @@ export async function isZombieLeague(leagueId: string): Promise<boolean> {
     select: { id: true },
   })
   if (config) return true
+  // Native Zombie creation can attach the ZombieLeague row before a separate config is upserted.
+  const nativeLeague = await prisma.zombieLeague.findUnique({
+    where: { leagueId },
+    select: { id: true },
+  })
+  if (nativeLeague) return true
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: { leagueVariant: true },
@@ -59,6 +65,7 @@ export async function getZombieLeagueConfig(leagueId: string): Promise<ZombieLea
       infectionLossToWhisperer: row.infectionLossToWhisperer,
       infectionLossToZombie: row.infectionLossToZombie,
       serumReviveCount: row.serumReviveCount,
+      autoSerumRevive: row.autoSerumRevive,
       serumAwardHighScore: row.serumAwardHighScore,
       serumAwardOnBashMaul: row.serumAwardOnBashMaul,
       serumUseBeforeLastStarter: row.serumUseBeforeLastStarter,
@@ -74,7 +81,7 @@ export async function getZombieLeagueConfig(leagueId: string): Promise<ZombieLea
     }
   }
 
-  if (league.leagueVariant !== ZOMBIE_VARIANT) return null
+  if (league.leagueVariant !== ZOMBIE_VARIANT && !(await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { id: true } }))) return null
 
   return {
     leagueId: league.id,
@@ -84,6 +91,7 @@ export async function getZombieLeagueConfig(leagueId: string): Promise<ZombieLea
     infectionLossToWhisperer: true,
     infectionLossToZombie: true,
     serumReviveCount: 2,
+    autoSerumRevive: false,
     serumAwardHighScore: true,
     serumAwardOnBashMaul: true,
     serumUseBeforeLastStarter: true,
@@ -107,6 +115,7 @@ export async function upsertZombieLeagueConfig(
     infectionLossToWhisperer: boolean
     infectionLossToZombie: boolean
     serumReviveCount: number
+    autoSerumRevive: boolean
     serumAwardHighScore: boolean
     serumAwardOnBashMaul: boolean
     serumUseBeforeLastStarter: boolean
@@ -130,6 +139,7 @@ export async function upsertZombieLeagueConfig(
       infectionLossToWhisperer: input.infectionLossToWhisperer ?? true,
       infectionLossToZombie: input.infectionLossToZombie ?? true,
       serumReviveCount: input.serumReviveCount ?? 2,
+      autoSerumRevive: input.autoSerumRevive ?? false,
       serumAwardHighScore: input.serumAwardHighScore ?? true,
       serumAwardOnBashMaul: input.serumAwardOnBashMaul ?? true,
       serumUseBeforeLastStarter: input.serumUseBeforeLastStarter ?? true,
@@ -149,6 +159,7 @@ export async function upsertZombieLeagueConfig(
       ...(input.infectionLossToWhisperer !== undefined && { infectionLossToWhisperer: input.infectionLossToWhisperer }),
       ...(input.infectionLossToZombie !== undefined && { infectionLossToZombie: input.infectionLossToZombie }),
       ...(input.serumReviveCount !== undefined && { serumReviveCount: input.serumReviveCount }),
+      ...(input.autoSerumRevive !== undefined && { autoSerumRevive: input.autoSerumRevive }),
       ...(input.serumAwardHighScore !== undefined && { serumAwardHighScore: input.serumAwardHighScore }),
       ...(input.serumAwardOnBashMaul !== undefined && { serumAwardOnBashMaul: input.serumAwardOnBashMaul }),
       ...(input.serumUseBeforeLastStarter !== undefined && { serumUseBeforeLastStarter: input.serumUseBeforeLastStarter }),

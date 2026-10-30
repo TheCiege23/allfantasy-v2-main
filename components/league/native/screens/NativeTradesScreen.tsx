@@ -8,6 +8,7 @@ import { openChimmyWithPrompt } from '@/lib/dashboard/open-chimmy-with-prompt'
 import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
 import { Card, ScreenHead } from './NativeScreenParts'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 
 /**
  * Trades — handoff §3, `Trades.png` / `MobileTrades.png`.
@@ -61,6 +62,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
   const [busy, setBusy] = useState<string | null>(null)
   const [actionErr, setActionErr] = useState<string | null>(null)
   const [builderOpen, setBuilderOpen] = useState(false)
+  const [counterTradeId, setCounterTradeId] = useState<string | null>(null)
 
   const load = useCallback(
     async (background = false) => {
@@ -145,9 +147,16 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
     <div className="nls" data-testid="native-trades-screen">
       <ScreenHead eyebrow={`${league.name} · Trades`} title="Trade center">
         <span className="nls-chip">{deadline}</span>
-        <button type="button" className="nls-btn" data-variant="primary" onClick={() => setBuilderOpen(true)}>Propose a trade</button>
+        <button type="button" className="nls-btn" data-variant="primary" onClick={() => { setCounterTradeId(null); setBuilderOpen(true) }}>Propose a trade</button>
       </ScreenHead>
 
+      {panel ? <section className="nls-trade-overview" aria-label="Trade activity overview">
+        <div><span>Incoming</span><strong>{offers.length}</strong></div>
+        <div><span>Sent</span><strong>{outgoing.length}</strong></div>
+        <div><span>On the block</span><strong>{block.length}</strong></div>
+        <div><span>Recent trades</span><strong>{recent.length}</strong></div>
+      </section> : null}
+      {String(league.leagueVariant ?? league.leagueType ?? '').toLowerCase() === 'zombie' ? <p className="nls-zombie-trade-note">Whisperers cannot trade players. Zombie trading follows your league rules.</p> : null}
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {actionErr ? <p className="nls-error" role="alert">{actionErr}</p> : null}
       {loading && !panel ? <p className="nls-empty" role="status">Loading trades…</p> : null}
@@ -187,7 +196,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
               ) : (
                 <>
                   <button type="button" className="nls-btn" data-variant="primary" disabled={busy === t.id} onClick={() => void act(t.id, 'accept')}>Accept</button>
-                  <button type="button" className="nls-btn" disabled={busy === t.id} onClick={() => setBuilderOpen(true)}>Counter</button>
+                  <button type="button" className="nls-btn" disabled={busy === t.id} onClick={() => { setCounterTradeId(isNativePlatform(league.platform) ? t.id : null); setBuilderOpen(true) }}>{isNativePlatform(league.platform) ? 'Counter' : 'Build new offer'}</button>
                   <button type="button" className="nls-btn" disabled={busy === t.id} onClick={() => void act(t.id, 'reject')}>Decline</button>
                   <button type="button" className="nls-btn" onClick={() => askChimmy(t)}>Ask Chimmy</button>
                 </>
@@ -203,7 +212,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
             <Card label="Build a trade">
               <p>Pick a partner, choose what you give and what you get, and AF grades the deal for both sides before you send it.</p>
               <div className="nls-actions nls-actions-top">
-                <button type="button" className="nls-btn" data-variant="primary" onClick={() => setBuilderOpen(true)}>Open trade builder</button>
+                <button type="button" className="nls-btn" data-variant="primary" onClick={() => { setCounterTradeId(null); setBuilderOpen(true) }}>Open trade builder</button>
               </div>
             </Card>
             <Card label="Your open offers">
@@ -252,7 +261,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
         </div>
       ) : null}
 
-      <ProposeTradeModal open={builderOpen} onClose={() => setBuilderOpen(false)} leagueId={league.id} teams={teams} platform={league.platform} sport={league.sport} onSubmitted={() => { setBuilderOpen(false); void load() }} />
+      <ProposeTradeModal open={builderOpen} counterTradeId={counterTradeId} onClose={() => setBuilderOpen(false)} leagueId={league.id} teams={teams} platform={league.platform} sport={league.sport} onSubmitted={() => { setBuilderOpen(false); void load() }} />
     </div>
   )
 }

@@ -368,7 +368,11 @@ export function Page1Setup({ state, accent, onChange }: Page1SetupProps) {
           <PillRow
             options={teamCountOptions}
             value={state.teamCount}
-            onChange={(teamCount) => onChange({ teamCount })}
+            onChange={(teamCount) => {
+              const validTribes = getSurvivorTribeOptions(teamCount)
+              onChange({ teamCount, ...(effectiveType === 'survivor' && !validTribes.includes(state.survivorTribeCount)
+                ? { survivorTribeCount: validTribes[0] ?? 2 } : {}) })
+            }}
             accent={accent}
             ariaLabel="Number of teams"
           />

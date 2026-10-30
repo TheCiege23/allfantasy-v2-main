@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import { useEffect, useRef, useState } from 'react'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
-import { Award, Axe, BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight } from 'lucide-react'
+import { Award, Axe, BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight, CalendarDays, Skull, Radio, BookOpen } from 'lucide-react'
 import AppShell, { type AppShellProps } from '@/app/components/AppShell'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -15,6 +15,7 @@ import { adjacentLeagueId, unreadBadgeText } from '@/lib/league/leagueRailStatus
 import { LeagueRailRow, useLeagueRail, type LeagueRailData, type LeagueRailRowView } from './LeagueRail'
 import '@/components/core-app/af-core-shell.css'
 import './native-league.css'
+import './zombie-workspace.css'
 
 type Props = AppShellProps & {
   native: boolean
@@ -32,9 +33,30 @@ type Props = AppShellProps & {
   /** Native guillotine leagues: the header becomes the guillotine banner (see useGuillotineAtmosphere). */
   guillotineBanner?: { line: string; mood: string } | null
 }
-const icons = { career: Star, rankings: Award, home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, guillotine: Axe, war: Swords, scores: Zap, insight: Bot, more: CircleHelp }
+const icons = { career: Star, rankings: Award, home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, guillotine: Axe, war: Swords, scores: Zap, insight: Bot, more: CircleHelp, zombie: Skull, schedule: CalendarDays, intel: Radio, legacy: BookOpen }
 const memoryKey = (id: string) => `af:league-section:${id}`
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase() || 'AF'
+
+const zombieScenes: Record<string, { label: string; detail: string }> = {
+  native_home: { label: 'Outbreak headquarters', detail: 'Your league, your team, and the next move.' },
+  draft: { label: 'Draft headquarters', detail: 'Assemble your team before the outbreak begins.' },
+  league_chat: { label: 'Survivor radio', detail: 'Talk strategy, follow updates, and reach @Chimmy.' },
+  settings: { label: 'Commissioner command', detail: 'Set the rules and prepare your league.' },
+  commissioner: { label: 'Commissioner command', detail: 'Manage your league and its outbreak.' },
+  war_room: { label: 'Strategy bunker', detail: 'Plan your draft and prepare for the weeks ahead.' },
+  decide: { label: 'Survival intelligence', detail: 'Review the decisions and deadlines that need your attention.' },
+  zombie: { label: 'The outbreak', detail: 'Follow the survivors, zombies, and Whisperers.' },
+  roster: { label: 'Your squad', detail: 'Prepare your lineup for the next matchup.' },
+  matchups: { label: 'The battlefield', detail: 'See the week’s matchups and scores.' },
+  waivers: { label: 'Supply search', detail: 'Find players and manage roster moves.' },
+  trades: { label: 'The exchange', detail: 'Review offers and build a deal.' },
+  standings: { label: 'Survival rankings', detail: 'Follow the league standings and playoff race.' },
+  scores: { label: 'Live signals', detail: 'Keep track of the latest scores.' },
+  schedule: { label: 'Outbreak calendar', detail: 'See the road ahead.' },
+  players: { label: 'Player scouting', detail: 'Find the players who fit your team.' },
+  draft_intel: { label: 'Field intelligence', detail: 'Keep up with the latest league information.' },
+  legacy: { label: 'The archive', detail: 'Explore your league’s history and strategy.' },
+}
 
 /**
  * Unread league-chat counts per league, from the chat bubble's own route (`/api/chat/unread` →
@@ -60,6 +82,24 @@ const SWITCHER_GROUP_ORDER = ['needs', 'live', 'other'] as const
 export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab, isCommissioner, onSelectTab, onOpenSettings, rail, guillotineBanner = null, children, ...shell }: Props) {
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [savedScoring, setSavedScoring] = useState<string | null>(null)
+  useEffect(() => {
+    setSavedScoring(null)
+    let active = true
+    let changed = false
+    if (native && String(league.sport).toUpperCase() === 'NFL') {
+      fetch(`/api/commissioner/leagues/${encodeURIComponent(league.id)}/nfl-scoring`, { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (active && !changed && typeof data?.config?.presetLabel === 'string') setSavedScoring(data.config.presetLabel) })
+        .catch(() => {})
+    }
+    const onSaved = (event: Event) => {
+      const detail = (event as CustomEvent<{ leagueId?: string; scoringLabel?: string }>).detail
+      if (detail?.leagueId === league.id && detail.scoringLabel) { changed = true; setSavedScoring(detail.scoringLabel) }
+    }
+    window.addEventListener('af:league-settings-saved', onSaved)
+    return () => { active = false; window.removeEventListener('af:league-settings-saved', onSaved) }
+  }, [league.id, league.sport, native])
   useEffect(() => {
     const desktop = window.matchMedia('(min-width: 768px)')
     const closeOnDesktop = () => { if (desktop.matches) setMenuOpen(false) }
@@ -129,8 +169,9 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   })
   const leagueTile = (row: UserLeague, expanded = false, onClick?: () => void, view: LeagueRailRowView = railView(row)) => <LeagueRailRow key={row.id} view={view} href={leagueSectionHref(row, activeTab)} active={row.id === league.id} expanded={expanded} isCommissioner={row.isCommissioner} onClick={onClick} unread={unread[row.id] ?? 0} />
   const chatBadge = unreadBadgeText(activeTab === 'league_chat' ? 0 : unread[league.id])
+  const zombieBanner = String(league.leagueVariant ?? '').toLowerCase() === 'zombie' || String(league.leagueType ?? '').toLowerCase() === 'zombie'
   const navGroup = (title: string, items: typeof primary) => <section key={title} className="nl-nav-group"><h2>{title}</h2>{items.map(item => {
-    const Icon = icons[item.icon as keyof typeof icons] ?? CircleHelp
+    const Icon = (zombieBanner && item.id === 'zombie' ? Skull : zombieBanner && item.id === 'schedule' ? CalendarDays : zombieBanner && item.id === 'players' ? Users : zombieBanner && item.id === 'commissioner' ? Settings : zombieBanner && item.id === 'legacy' ? BookOpen : zombieBanner && item.id === 'draft_intel' ? Radio : icons[item.icon as keyof typeof icons]) ?? CircleHelp
     const count = item.id === 'league_chat' ? chatBadge : null
     return <button key={item.id} type="button" onClick={() => choose(item.id)} aria-current={activeTab === item.id ? 'page' : undefined}><Icon size={16} aria-hidden /><span>{item.label}</span>{count ? <span className="nl-nav-count" aria-label={`${count} unread`}>{count}</span> : null}</button>
   })}</section>
@@ -147,7 +188,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   const liveWeek = switcherRows.find(item => item.view.status.group === 'live')?.view.weekLabel
   const groupTitle = { needs: 'Needs you', live: liveWeek ? `Live now · ${liveWeek}` : 'Live now', other: 'Your other leagues' } as const
 
-  return <div className={`af-core nl-workspace ${shell.embedCenterOnly ? 'nl-embedded' : ''}`} data-testid="native-league-workspace" data-rail-collapsed={railCollapse.collapsed ? 'true' : undefined} data-format={guillotineBanner ? 'guillotine' : undefined} data-guillotine-mood={guillotineBanner?.mood}>
+  return <div className={`af-core nl-workspace ${shell.embedCenterOnly ? 'nl-embedded' : ''}`} data-testid="native-league-workspace" data-rail-collapsed={railCollapse.collapsed ? 'true' : undefined} data-format={guillotineBanner ? 'guillotine' : zombieBanner ? 'zombie' : undefined} data-view={activeTab} data-guillotine-mood={guillotineBanner?.mood}>
     {!shell.embedCenterOnly && <>
       <aside className="nl-rail" aria-label="Your leagues" data-expanded={railExpanded ? 'true' : undefined}>
         <div className="nl-rail-head"><Link className="nl-brand" href={ALL_LEAGUES_DASHBOARD_HREF} aria-label="AllFantasy dashboard">AF</Link><button type="button" className="af-rail-toggle nl-rail-toggle" aria-expanded={railExpanded} aria-controls="nl-rail-leagues" onClick={railCollapse.toggle} title={railCollapse.collapsed ? 'Expand the league rail' : 'Collapse the league rail'}><span className="af-rail-toggle-icon" aria-hidden>{railCollapse.collapsed ? '»' : '«'}</span><span className="nl-rail-toggle-text">{leagues.length} {leagues.length === 1 ? 'league' : 'leagues'}</span></button></div>
@@ -168,10 +209,17 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
     <div className="nl-main">
       {!shell.embedCenterOnly && <header className="nl-topbar"><button type="button" className="nl-viewing" onClick={openSwitcher}><span>Viewing</span><strong>{league.name}</strong><ChevronDown size={14} aria-hidden /></button><button type="button" className="nl-search" onClick={openSwitcher}><Search size={16} aria-hidden /><span>Jump to a league</span><kbd>⌘K</kbd></button><span className="nl-chip nl-accent">Hosted on AF · Beta</span><span className="nl-sport-week">{league.sport}{league.currentWeek ? ` · Wk ${league.currentWeek}` : ` · ${league.season ?? ''}`}</span></header>}
       <div className="nl-content">
-        <header className="nl-league-heading" data-format={guillotineBanner ? 'guillotine' : undefined} data-testid={guillotineBanner ? 'guillotine-league-banner' : undefined}>{guillotineBanner && <img className="nl-guillotine-art" src="/artwork/tournaments/specialty/guillotine/assets/banner.svg" alt="" aria-hidden />}<span className="nl-heading-avatar"><LeagueMark src={currentView.imageUrl ?? league.logoUrl} letter={initials(league.name)} className="nl-heading-image" /></span><div className="nl-heading-name"><div className="nl-badges"><span className="nl-chip nl-accent">Native on AllFantasy</span>{guillotineBanner && <span className="nl-chip nl-guillotine-chip">Guilly</span>}{isCommissioner && <span className="nl-chip nl-gold">Commissioner</span>}</div><h1>{league.name}</h1>{guillotineBanner?.line && <p className="nl-guillotine-line" data-testid="guillotine-banner-line">{guillotineBanner.line}</p>}<p>{league.sport} · {league.season} · {league.teamCount} teams · {league.scoring || league.format}</p></div><button type="button" className="nl-button" aria-label="League settings" onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>League settings</span></button><ol className="nl-phase" aria-label="League progress">{(survivor ? ['Setup', 'Draft', 'Island', 'Finale', 'Complete'] : ['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason']).map(label => <li key={label} aria-current={(survivor ? ({ 'Regular season': 'Island', Playoffs: 'Finale', Offseason: 'Complete' } as Record<string, string>)[phase] ?? phase : phase) === label ? 'step' : undefined}>{label}</li>)}</ol></header>
+        <header className="nl-league-heading" data-format={guillotineBanner ? 'guillotine' : zombieBanner ? 'zombie' : undefined} data-testid={guillotineBanner ? 'guillotine-league-banner' : zombieBanner ? 'zombie-league-banner' : undefined}>{zombieBanner && <img className="nl-zombie-art" src="/zombie/universe-outbreak.webp" alt="" aria-hidden />}{guillotineBanner && <img className="nl-guillotine-art" src="/artwork/tournaments/specialty/guillotine/assets/banner.svg" alt="" aria-hidden />}<span className="nl-heading-avatar"><LeagueMark src={currentView.imageUrl ?? league.logoUrl} letter={initials(league.name)} className="nl-heading-image" /></span><div className="nl-heading-name"><div className="nl-badges"><span className="nl-chip nl-accent">Native on AllFantasy</span>{guillotineBanner && <span className="nl-chip nl-guillotine-chip">Guilly</span>}{zombieBanner && <span className="nl-chip nl-zombie-chip">Zombie league</span>}{isCommissioner && <span className="nl-chip nl-gold">Commissioner</span>}</div><h1>{league.name}</h1>{guillotineBanner?.line && <p className="nl-guillotine-line" data-testid="guillotine-banner-line">{guillotineBanner.line}</p>}<p>{league.sport} · {league.season} · {league.teamCount} teams · {savedScoring || league.scoring || league.format}</p></div><button type="button" className="nl-button" aria-label="League settings" onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>League settings</span></button><ol className="nl-phase" aria-label="League progress">{(survivor ? ['Setup', 'Draft', 'Island', 'Finale', 'Complete'] : ['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason']).map(label => <li key={label} aria-current={(survivor ? ({ 'Regular season': 'Island', Playoffs: 'Finale', Offseason: 'Complete' } as Record<string, string>)[phase] ?? phase : phase) === label ? 'step' : undefined}>{label}</li>)}</ol></header>
         <label className="nl-section-picker"><span>Section</span><select aria-label="League section" value={activeTab} onChange={event => choose(event.target.value)}>{!groups.some(group => group.items.some(item => item.id === activeTab)) && <option value={activeTab}>Current section</option>}{groups.map(group => <optgroup key={group.title} label={group.title}>{group.items.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>
         <nav className="nl-mobile-tabs" aria-label="League sections">{primary.map(item => <button key={item.id} type="button" aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => choose(item.id)}>{item.label}</button>)}</nav>
-        <div className="nl-tab-content">{children}</div>
+        <div className="nl-tab-content" data-view={activeTab}>
+          {zombieBanner && <div className="nl-zombie-scene" aria-label="Zombie league section" data-testid="zombie-section-scene">
+            <span className="nl-zombie-scene-kicker">Zombie league · {league.sport}</span>
+            <strong>{zombieScenes[activeTab]?.label ?? tabs.find(tab => tab.id === activeTab)?.label ?? 'Outbreak headquarters'}</strong>
+            <span className="nl-zombie-scene-detail">{zombieScenes[activeTab]?.detail ?? 'Your league’s outbreak continues here.'}</span>
+          </div>}
+          {children}
+        </div>
       </div>
     </div>
     {/*

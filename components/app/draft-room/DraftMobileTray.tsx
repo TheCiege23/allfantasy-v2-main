@@ -52,6 +52,8 @@ export type DraftMobileTrayProps = {
   openSnap?: Exclude<TraySnap, 'peek'>
   /** Expand to full when a text field inside the content gains focus (chat composer). */
   fullOnInputFocus?: boolean
+  /** Comfortable opening height; managers can still drag to any snap. */
+  preferredOpenSnap?: 'half' | 'full'
   /** Prefix for test ids: `${prefix}-tray`, `${prefix}-tray-handle`, `${prefix}-tray-content`. */
   testIdPrefix: string
   ariaLabel: string
@@ -67,14 +69,17 @@ export function DraftMobileTray({
   children,
   chrome,
   accessory,
-  openSnap = 'half',
+  openSnap,
   fullOnInputFocus = false,
+  preferredOpenSnap,
   testIdPrefix,
   ariaLabel,
   onSnapChange,
 }: DraftMobileTrayProps) {
+  const desiredOpenSnap = preferredOpenSnap ?? openSnap ?? 'half'
+  const handleRef = useRef<HTMLDivElement | null>(null)
   const chromeRef = useRef<HTMLDivElement | null>(null)
-  const [snap, setSnap] = useState<TraySnap>(open ? openSnap : 'peek')
+  const [snap, setSnap] = useState<TraySnap>(open ? desiredOpenSnap : 'peek')
   const [fullHeight, setFullHeight] = useState<number | null>(null)
   const [dragHeight, setDragHeight] = useState<number | null>(null)
   const dragRef = useRef<{ startY: number; startHeight: number; lastY: number; lastT: number; velocity: number } | null>(
@@ -82,8 +87,8 @@ export function DraftMobileTray({
   )
 
   useEffect(() => {
-    setSnap((current) => (!open ? 'peek' : current === 'peek' ? openSnap : current))
-  }, [open, openSnap])
+    setSnap((current) => (!open ? 'peek' : current === 'peek' || desiredOpenSnap === 'full' ? desiredOpenSnap : current))
+  }, [open, desiredOpenSnap])
 
   useEffect(() => {
     onSnapChange?.(snap)
@@ -95,7 +100,8 @@ export function DraftMobileTray({
     const measure = () => {
       const chrome = chromeRef.current?.offsetHeight ?? 0
       // Leave a sliver of board above a full tray so the sheet still reads as a sheet.
-      const full = layout.clientHeight - chrome - 8
+      const handle = handleRef.current?.offsetHeight ?? 32
+      const full = layout.clientHeight - chrome - handle - 8
       /*
        * ⚠ ZERO MEANS "NOT LAID OUT", NOT "NO ROOM". Mobile layouts are hidden at desktop widths, so
        * on a wide window — or a phone rotating through a breakpoint — this measures 0. Storing that
@@ -107,6 +113,8 @@ export function DraftMobileTray({
     if (typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(measure)
     observer.observe(layout)
+    if (chromeRef.current) observer.observe(chromeRef.current)
+    if (handleRef.current) observer.observe(handleRef.current)
     return () => observer.disconnect()
   }, [layoutRef])
 
@@ -173,6 +181,7 @@ export function DraftMobileTray({
         </div>
       ) : null}
       <div
+        ref={handleRef}
         role="button"
         tabIndex={0}
         aria-label={snap === 'full' ? 'Collapse draft tray' : 'Expand draft tray'}
@@ -182,7 +191,7 @@ export function DraftMobileTray({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerEnd}
-        onPointerCancel={onPointerEnd}
+        onPointerCancel={() => { dragRef.current = null; setDragHeight(null) }}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()

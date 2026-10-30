@@ -1,3 +1,4 @@
+import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
 import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
 import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
@@ -655,7 +656,7 @@ export async function buildSessionSnapshot(
 
 export type StartDraftSessionResult =
   | { ok: true }
-  | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' | 'SURVIVOR_CAST_INCOMPLETE'; error?: string }
+  | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' | 'SURVIVOR_CAST_INCOMPLETE' | 'ZOMBIE_RENEWAL_SEATS_INCOMPLETE'; error?: string }
 
 export async function startDraftSession(leagueId: string): Promise<StartDraftSessionResult> {
   const started = await startDraftSessionCore(leagueId)
@@ -689,6 +690,9 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
 
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session || session.status !== 'pre_draft') return { ok: false, reason: 'session_not_ready' }
+
+  const renewalSeats=await zombieRenewalDraftReadiness(prisma,leagueId,session.teamCount,seasonSettings)
+  if(!renewalSeats.ready) return {ok:false,reason:'ZOMBIE_RENEWAL_SEATS_INCOMPLETE',error:renewalSeats.error}
 
   const { getSurvivorDraftStartReadiness } = await import('@/lib/survivor/survivorDraftStartReadiness')
   const cast = await getSurvivorDraftStartReadiness(leagueId, session)

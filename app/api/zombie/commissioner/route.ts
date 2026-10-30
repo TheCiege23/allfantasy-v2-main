@@ -40,16 +40,29 @@ export async function POST(req: Request) {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  if (action === 'pause_league') {
-    await prisma.zombieLeague.update({ where: { id: z.id }, data: { status: 'paused' } })
+  if (action === 'pause_league' || action === 'resume_league') {
+    const pausing = action === 'pause_league'
+    const changed = await prisma.zombieLeague.updateMany({
+      where: {
+        id: z.id,
+        status: pausing ? 'active' : 'paused',
+        ...(!pausing ? { currentWeek: { gt: 0 } } : {}),
+      },
+      data: { status: pausing ? 'paused' : 'active' },
+    })
+    if (changed.count !== 1) {
+      return NextResponse.json({
+        error: pausing ? 'Only an active league can be paused.' : 'Only a started, paused league can be resumed.',
+      }, { status: 409 })
+    }
     await logAuditEntry(z.id, {
       category: 'commissioner_override',
-      action: 'LEAGUE_PAUSED',
+      action: pausing ? 'LEAGUE_PAUSED' : 'LEAGUE_RESUMED',
       description: reason,
       actorUserId: session.user.id,
       actorRole: 'commissioner',
     })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, status: pausing ? 'paused' : 'active' })
   }
 
   if (action === 'generate_rules_doc') {

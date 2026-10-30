@@ -1,36 +1,65 @@
 import { prisma } from '@/lib/prisma'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
 import { appendZombieAudit } from '@/lib/zombie/ZombieAuditLog'
-import { applyAmbush } from '@/lib/zombie/whispererEngine'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
+import { trustedZombieWeekStart } from '@/lib/zombie/zombieWeekGameStart'
 
-function parseAmbush(raw: string): { type: string; targetUserId?: string } | null {
-  const lower = raw.toLowerCase()
-  if (!lower.includes('@chimmy') || !lower.includes('ambush')) return null
-  if (lower.includes('horde') && lower.includes('boost')) return { type: 'horde_boost' }
-  if (lower.includes('swap')) return { type: 'swap_matchup' }
-  if (lower.includes('steal')) return { type: 'steal_winnings' }
-  if (lower.includes('intel')) return { type: 'intel_gather' }
-  if (lower.includes('drop')) return { type: 'force_item_drop' }
-  return { type: 'steal_winnings' }
-}
-
+/** Current serum timing remains independent; serum registration has its own weekly rules. */
 export async function validateAmbushTiming(
   leagueId: string,
   week: number,
   sport: string,
 ): Promise<{ valid: boolean; reason?: string }> {
   const rules = await getZombieRulesForSport(sport)
-  // Deterministic placeholder: integrate live kickoff feed per sport using `rules.lineupLockDesc`.
   void leagueId
   void week
   return { valid: true, reason: rules.lineupLockDesc ?? undefined }
 }
 
-/**
- * Full @Chimmy ambush workflow — creates audit rows, commissioner ping, executes core ambush ledger.
- */
+/** A remap or weapon may occur only while the native week is unscored and all games are scheduled. */
+export async function validatePreScoringWindow(
+  leagueId: string,
+  week: number,
+  seasonYear: number,
+): Promise<{ valid: boolean; reason?: string }> {
+  const z = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { status: true, currentWeek: true, id: true, sport: true } })
+  if (!z || !['active', 'in_progress'].includes(z.status) || z.currentWeek !== week) {
+    return { valid: false, reason: 'This is not the active league week.' }
+  }
+  const season = await prisma.redraftSeason.findFirst({ where: { leagueId, season: seasonYear }, select: { id: true } })
+  if (!season) return { valid: false, reason: 'Native season is unavailable.' }
+  const matchups = await prisma.redraftMatchup.findMany({
+    where: { seasonId: season.id, week, awayRosterId: { not: null } },
+    select: { status: true, homeScore: true, awayScore: true },
+  })
+  if (!matchups.length || matchups.some((m) => m.status !== 'scheduled' || m.homeScore !== 0 || m.awayScore !== 0)) {
+    return { valid: false, reason: 'Week scoring has started or the schedule is not ready.' }
+  }
+  const firstLock = await trustedZombieWeekStart(z.sport, seasonYear, week)
+  if (!firstLock) {
+    return { valid: false, reason: 'Provider game times for this scoring week are unavailable.' }
+  }
+  if (Date.now() >= firstLock.getTime()) {
+    return { valid: false, reason: 'The first game of this scoring week has locked.' }
+  }
+  const resolution = await prisma.zombieWeeklyResolution.findUnique({
+    where: { zombieLeagueId_week: { zombieLeagueId: z.id, week } },
+    select: { status: true },
+  })
+  if (resolution && resolution.status !== 'pending') {
+    return { valid: false, reason: 'The week is resolving or complete.' }
+  }
+  return { valid: true }
+}
+
+function targetLabel(raw: string): string | null {
+  const match = raw.match(/@chimmy\s+ambush\s+swap\s+(.+)$/i)
+  return match?.[1]?.trim().replace(/^@/, '') || null
+}
+
+/** Swap the Whisperer's opponent with one named Survivor before week scoring starts. */
 export async function processAmbushFromChimmy(
   leagueId: string,
   whispererUserId: string,
@@ -39,157 +68,135 @@ export async function processAmbushFromChimmy(
 ) {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
-
-  const rec = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId: z.id } })
+  const label = targetLabel(rawMessage)
   const log = await prisma.zombieChimmyAction.create({
-    data: {
-      leagueId,
-      userId: whispererUserId,
-      week,
-      actionType: 'ambush_invoke',
-      rawMessage,
-      isValid: false,
-    },
+    data: { leagueId, userId: whispererUserId, week, actionType: 'ambush_invoke', rawMessage, isValid: false },
   })
-
-  if (!rec || rec.userId !== whispererUserId) {
-    await prisma.zombieChimmyAction.update({
-      where: { id: log.id },
-      data: {
-        isValid: false,
-        validationError: 'not_whisperer',
-        privateResponse: '⚠️ Only the Whisperer may invoke an ambush.',
-      },
-    })
-    return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
-  }
-
-  if ((rec.ambushesRemaining ?? 0) <= 0) {
-    await prisma.zombieChimmyAction.update({
-      where: { id: log.id },
-      data: {
-        validationError: 'no_ambushes',
-        privateResponse: '⚠️ No ambushes remaining this season.',
-      },
-    })
-    return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
-  }
-
-  const parsed = parseAmbush(rawMessage)
-  if (!parsed) {
-    await prisma.zombieChimmyAction.update({
-      where: { id: log.id },
-      data: {
-        validationError: 'parse_failed',
-        privateResponse: '⚠️ Try: @Chimmy ambush steal, @Chimmy ambush horde boost, etc.',
-      },
-    })
-    return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
-  }
-
-  const timing = await validateAmbushTiming(leagueId, week, z.sport)
-  if (!timing.valid) {
-    await prisma.zombieChimmyAction.update({
-      where: { id: log.id },
-      data: {
-        validationError: timing.reason ?? 'timing',
-        privateResponse: `⚠️ That ambush cannot be used right now. ${timing.reason ?? ''}`,
-      },
-    })
-    return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
-  }
-
-  const dup = await prisma.zombieAmbushAction.findFirst({
-    where: { zombieLeagueId: z.id, week, whispererUserId, status: { in: ['pending', 'validated', 'executed'] } },
-  })
-  if (dup) {
-    await prisma.zombieChimmyAction.update({
-      where: { id: log.id },
-      data: {
-        validationError: 'duplicate_week',
-        privateResponse: '⚠️ An ambush is already recorded for this week.',
-      },
-    })
-    return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
-  }
-
-  const action = await prisma.zombieAmbushAction.create({
-    data: {
-      zombieLeagueId: z.id,
-      week,
-      whispererUserId,
-      ambushType: parsed.type,
-      targetUserId: parsed.targetUserId ?? null,
-      status: 'validated',
-      validationResult: 'ok',
-      submittedViaChimmy: true,
-    },
-  })
-
-  await prisma.zombieChimmyAction.update({
+  const reject = (message: string, code: string) => prisma.zombieChimmyAction.update({
     where: { id: log.id },
-    data: {
-      isValid: true,
-      parsedAction: parsed as object,
-      publicResponse: '🔴 The Whisperer has activated. The horde shifts.',
-      privateResponse: `Ambush (${parsed.type}) registered for week ${week}.`,
-      effect: { ambushActionId: action.id },
-    },
+    data: { isValid: false, validationError: code, privateResponse: message },
   })
-
-  await notifyCommissioner(leagueId, 'ambush_used', `Whisperer ambush (week ${week})`, `${parsed.type}`, {
-    urgency: 'high',
-    week,
-    relatedUserId: whispererUserId,
-    relatedEventId: action.id,
-    relatedEventType: 'ZombieAmbushAction',
+  if (z.experienceMode === 'simple') return reject('Ambushes are available in Enhanced Zombie only.', 'simple_mode')
+  if (!label) return reject('Use @Chimmy ambush swap <exact Survivor team name>. Other ambush effects are not active.', 'unsupported_ambush')
+  const primary = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId: z.id } })
+  const isPrimary = primary?.userId === whispererUserId
+  const rec = isPrimary ? primary : await prisma.zombieCoWhisperer.findUnique({
+    where: { zombieLeagueId_userId: { zombieLeagueId: z.id, userId: whispererUserId } },
   })
+  if (!rec) return reject('Only the Whisperer may invoke an ambush.', 'not_whisperer')
+  if (rec.ambushesRemaining < 1) return reject('No ambushes remaining.', 'no_ambushes')
+  const config = await getZombieLeagueConfig(leagueId)
+  if (!config?.ambushRemapMatchup) return reject('Matchup remaps are disabled in this league.', 'ambush_disabled')
+  const timing = await validatePreScoringWindow(leagueId, week, z.season)
+  if (!timing.valid) return reject(timing.reason ?? 'The remap window is closed.', 'timing')
 
-  if (parsed.targetUserId) {
-    await applyAmbush(z.id, whispererUserId, parsed.targetUserId, week, parsed.type)
-  } else {
-    const r = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId: z.id } })
-    if (r) {
-      const left = Math.max(0, (r.ambushesRemaining ?? 0) - 1)
-      await prisma.whispererRecord.update({
-        where: { id: r.id },
+  const teams = await prisma.zombieLeagueTeam.findMany({
+    where: { leagueId },
+    select: { rosterId: true, status: true, fantasyTeamName: true, displayName: true },
+  })
+  const rosters = await prisma.roster.findMany({
+    where: { leagueId }, select: { id: true, platformUserId: true },
+  })
+  const lookup = label.toLowerCase()
+  const candidates = teams.filter((team) => {
+    const owner = rosters.find((r) => r.id === team.rosterId)
+    return [team.fantasyTeamName, team.displayName, owner?.platformUserId].some((value) => value?.toLowerCase() === lookup)
+  })
+  if (candidates.length !== 1 || candidates[0].status !== 'Survivor') {
+    return reject('Choose one exact Survivor team name in this league.', 'invalid_target')
+  }
+  const whispererRoster = rosters.find((r) => r.platformUserId === whispererUserId)
+  if (!whispererRoster) return reject('Whisperer roster not found.', 'no_roster')
+  const season = await prisma.redraftSeason.findFirst({ where: { leagueId, season: z.season }, select: { id: true } })
+  if (!season) return reject('Native season not found.', 'no_season')
+  const seasonRosters = await prisma.redraftRoster.findMany({
+    where: { seasonId: season.id }, select: { id: true, ownerId: true },
+  })
+  const whispererSeason = seasonRosters.find((r) => r.ownerId === whispererUserId)
+  const targetUserId = rosters.find((r) => r.id === candidates[0].rosterId)?.platformUserId
+  const targetSeason = seasonRosters.find((r) => r.ownerId === targetUserId)
+  if (!whispererSeason || !targetSeason) return reject('Both teams need active season rosters.', 'no_season_roster')
+  const matchups = await prisma.redraftMatchup.findMany({
+    where: { seasonId: season.id, week, awayRosterId: { not: null } },
+  })
+  const whispererMatchup = matchups.find((m) => m.homeRosterId === whispererSeason.id || m.awayRosterId === whispererSeason.id)
+  const targetMatchup = matchups.find((m) => m.homeRosterId === targetSeason.id || m.awayRosterId === targetSeason.id)
+  if (!whispererMatchup || !targetMatchup || whispererMatchup.id === targetMatchup.id) {
+    return reject('Choose a Survivor from another matchup.', 'same_matchup')
+  }
+  const oldOpponentId = whispererMatchup.homeRosterId === whispererSeason.id
+    ? whispererMatchup.awayRosterId! : whispererMatchup.homeRosterId
+  const whispererField = whispererMatchup.homeRosterId === whispererSeason.id ? 'awayRosterId' : 'homeRosterId'
+  const targetField = targetMatchup.homeRosterId === targetSeason.id ? 'homeRosterId' : 'awayRosterId'
+  const used = await prisma.zombieAmbushAction.count({
+    where: { zombieLeagueId: z.id, week, whispererUserId, status: 'executed' },
+  })
+  if (used >= config.ambushCountPerWeek) return reject('Weekly ambush limit reached.', 'weekly_limit')
+
+  try {
+    const action = await prisma.$transaction(async (tx) => {
+      const firstGame = await trustedZombieWeekStart(z.sport, z.season, week, tx)
+      if (!firstGame || firstGame.getTime() <= Date.now()) {
+        throw new Error('The scoring period has locked.')
+      }
+      const usedInTransaction = await tx.zombieAmbushAction.count({
+        where: { zombieLeagueId: z.id, week, whispererUserId, status: 'executed' },
+      })
+      if (usedInTransaction >= config.ambushCountPerWeek) throw new Error('Weekly ambush limit reached')
+      const debit = isPrimary
+        ? await tx.whispererRecord.updateMany({
+            where: { id: rec.id, ambushesRemaining: { gte: 1 } },
+            data: { ambushesRemaining: { decrement: 1 }, ambushesUsed: { increment: 1 } },
+          })
+        : await tx.zombieCoWhisperer.updateMany({
+            where: { id: rec.id, ambushesRemaining: { gte: 1 } },
+            data: { ambushesRemaining: { decrement: 1 }, ambushesUsed: { increment: 1 } },
+          })
+      if (debit.count !== 1) throw new Error('Ambush balance changed')
+      const first = await tx.redraftMatchup.updateMany({
+        where: { id: whispererMatchup.id, status: 'scheduled', homeScore: 0, awayScore: 0 },
+        data: whispererField === 'awayRosterId'
+          ? { awayRosterId: targetSeason.id }
+          : { homeRosterId: targetSeason.id },
+      })
+      const second = await tx.redraftMatchup.updateMany({
+        where: { id: targetMatchup.id, status: 'scheduled', homeScore: 0, awayScore: 0 },
+        data: targetField === 'awayRosterId'
+          ? { awayRosterId: oldOpponentId }
+          : { homeRosterId: oldOpponentId },
+      })
+      if (first.count !== 1 || second.count !== 1) throw new Error('Matchup changed before ambush')
+      const action = await tx.zombieAmbushAction.create({
         data: {
-          ambushesRemaining: left,
-          ambushesUsed: (r.ambushesUsed ?? 0) + 1,
+          zombieLeagueId: z.id, week, whispererUserId, ambushType: 'swap_matchup',
+          targetUserId, targetMatchupId: targetMatchup.id, status: 'executed',
+          validationResult: 'ok', submittedViaChimmy: true, executedAt: new Date(),
         },
       })
-    }
+      await tx.zombieChimmyAction.update({
+        where: { id: log.id },
+        data: {
+          isValid: true,
+          publicResponse: '🔴 The Whisperer changed two matchups before scoring.',
+          privateResponse: `Ambush complete. You now face ${label} in Week ${week}.`,
+          effect: { ambushActionId: action.id, fromMatchupId: whispererMatchup.id, targetMatchupId: targetMatchup.id },
+        },
+      })
+      return action
+    }, { isolationLevel: 'Serializable' })
+    await notifyCommissioner(leagueId, 'ambush_used', `Whisperer remap (Week ${week})`, `Two scheduled matchups were swapped.`, {
+      urgency: 'high', week, relatedUserId: whispererUserId,
+      relatedEventId: action.id, relatedEventType: 'ZombieAmbushAction',
+    }).catch(() => {})
+    await appendZombieAudit({
+      leagueId, zombieLeagueId: z.id, universeId: z.universeId, eventType: 'ambush_use',
+      metadata: { week, actionId: action.id, targetUserId, fromMatchupId: whispererMatchup.id, targetMatchupId: targetMatchup.id },
+    }).catch(() => {})
+    await queueAnimation(leagueId, week, 'ambush_triggered', whispererUserId, {
+      ambushType: 'swap_matchup', ambushActionId: action.id,
+    }).catch(() => {})
+    return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
+  } catch (error) {
+    return reject(error instanceof Error ? error.message : 'Ambush failed.', 'ambush_failed')
   }
-
-  await prisma.zombieAmbushAction.update({
-    where: { id: action.id },
-    data: { status: 'executed', executedAt: new Date(), commissionerNotifiedAt: new Date() },
-  })
-
-  await prisma.zombieAnnouncement.create({
-    data: {
-      zombieLeagueId: z.id,
-      universeId: z.universeId,
-      type: 'horde_update',
-      title: 'The island shifts',
-      content:
-        '⚠️ Something has changed this week. Check your matchup. The infection spreads.',
-      week,
-    },
-  })
-
-  await appendZombieAudit({
-    leagueId,
-    zombieLeagueId: z.id,
-    universeId: z.universeId,
-    eventType: 'ambush_use',
-    metadata: { week, ambushType: parsed.type, actionId: action.id },
-  })
-
-  await queueAnimation(leagueId, week, 'ambush_triggered', whispererUserId, {
-    ambushType: parsed.type,
-    ambushActionId: action.id,
-  }).catch(() => {})
-
-  return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
 }

@@ -162,7 +162,7 @@ export async function refreshSleeperPlayerRows(args: {
    */
   const existing = await prisma.sportsPlayer
     .findMany({
-      where: { sport, source: SOURCE, sleeperId: { not: null } },
+      where: { sport, source: SOURCE, sleeperId: { not: null }, fetchedAt: { lt: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
       orderBy: { fetchedAt: 'asc' },
       select: { id: true, sleeperId: true },
       take: limit,
@@ -232,7 +232,9 @@ export async function refreshSleeperPlayerRows(args: {
       .catch(() => [])
     const haveIds = new Set(known.map((k) => k.sleeperId).filter(Boolean) as string[])
 
-    const missing = [...byId.entries()].filter(([id]) => !haveIds.has(id)).slice(0, createBudget)
+    const missing = [...byId.entries()].filter(([id]) => !haveIds.has(id))
+      .sort(([, a], [, b]) => Number(Boolean(b.team)) - Number(Boolean(a.team)))
+      .slice(0, createBudget)
     for (const [id, p] of missing) {
       if (isExhausted()) break
       const ok = await prisma.sportsPlayer

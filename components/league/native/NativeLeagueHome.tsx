@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { LeagueSection, CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import { ArrowRight, MessageSquare, PlayCircle, Shield } from 'lucide-react'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
@@ -18,6 +19,15 @@ import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSett
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 import { isLeagueEligibleForDispersalDraft } from '@/lib/league/dispersal-draft-eligibility'
 import { sortTeamsForManagerListing, type LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
+
+function DraftCountdown({ dateIso }: { dateIso: string | null }) {
+  const [now, setNow] = useState<number | null>(null)
+  useEffect(() => { setNow(Date.now()); const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer) }, [])
+  const date = dateIso ? new Date(dateIso).getTime() : NaN
+  const seconds = now != null && Number.isFinite(date) ? Math.max(0, Math.floor((date - now) / 1000)) : null
+  const parts = seconds == null ? ['—', '—', '—', '—'] : [Math.floor(seconds / 86400), Math.floor(seconds / 3600) % 24, Math.floor(seconds / 60) % 60, seconds % 60].map(n => String(n).padStart(2, '0'))
+  return <div className="nl-draft-countdown" aria-label={seconds == null ? 'Draft time not set' : 'Time until draft'}>{parts.map((value, i) => <div key={i}><strong>{value}</strong><span>{['Days', 'Hours', 'Minutes', 'Seconds'][i]}</span></div>)}</div>
+}
 
 export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, draftDateIso, snapshot, settingsOpen, onOpenSettings, onSelectTab, inviteCode = '' }: {
   league: UserLeague
@@ -68,12 +78,25 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
       {/* League rules: the button, the first-time popup and the "What changed" card. League home only. */}
       <LeagueRulesHomeHost leagueId={league.id} blocked={settingsOpen} />
       <LeagueSection id="week">{inSeason &&<LeagueYourWeekStrip leagueId={league.id} week={typeof league.currentWeek === 'number' ? league.currentWeek : null} onSelectTab={onSelectTab} />}</LeagueSection>
-      <section className="nl-card nl-next"><div className="nl-card-label"><span>Next up</span><span>{predraft ? 'Draft HQ' : survivor ? 'Survivor' : phase}</span></div>
-        <h2>{predraft ? `Draft · ${draftLabel}` : survivor ? 'Your island this week' : phase === 'Offseason' ? 'Your season archive' : `Week ${league.currentWeek ?? '—'}`}</h2>
-        <p>{predraft ? `${league.teamCount}-team ${league.format}. Review your settings and queue before the draft.` : survivor ? 'Check the challenge, immunity, Elimination Council, and your private powers.' : phase === 'Offseason' ? 'Review final standings and prepare for the next season.' : 'Set your lineup and follow the latest matchup scores.'}</p>
+      {predraft ? <section className="nl-card nl-draft-feature" data-testid="native-draft-feature">
+        <div className="nl-card-label"><span>Draft board</span><span>AF Draft HQ</span></div>
+        <h2>{date && Number.isFinite(date.getTime()) ? 'Your draft is scheduled' : 'Your draft is not scheduled yet'}</h2>
+        <p>{date && Number.isFinite(date.getTime()) ? draftLabel : 'Get ready, set your rankings, and gather your league.'}</p>
+        <DraftCountdown dateIso={draftDateIso} />
+        <div className="nl-actions">
+          <Link className="nl-button" href={`/mock-draft?leagueId=${encodeURIComponent(league.id)}&sport=${encodeURIComponent(league.sport)}&teams=${league.teamCount}`}>Mock drafts</Link>
+          <button type="button" className="nl-button" onClick={() => onSelectTab('draft')}>Enter Draft HQ</button>
+          <Link className="nl-button" href={`/league/${encodeURIComponent(league.id)}/draft`}>Draft board</Link>
+          {isCommissioner && <button type="button" className="nl-button nl-primary" onClick={() => onOpenSettings('draft')}>{date && Number.isFinite(date.getTime()) ? 'Change draft time' : 'Set draft time'}</button>}
+        </div>
+        <LeagueSection id="draft"><div className="nl-quick-grid"><Link href={`/league/${encodeURIComponent(league.id)}/draft`}><h3>Queue & rankings</h3><p>Prepare your picks before the draft.</p></Link>{supplementalTile}</div></LeagueSection>
+      </section> :       <section className="nl-card nl-next"><div className="nl-card-label"><span>Next up</span><span>{predraft ? 'Draft HQ' : survivor ? 'Survivor' : phase}</span></div>
+        <h2>{survivor ? 'Your island this week' : phase === 'Offseason' ? 'Your season archive' : `Week ${league.currentWeek ?? '—'}`}</h2>
+        <p>{survivor ? 'Check the challenge, immunity, Elimination Council, and your private powers.' : phase === 'Offseason' ? 'Review final standings and prepare for the next season.' : 'Set your lineup and follow the latest matchup scores.'}</p>
         <div className="nl-actions">{predraft ? <><button type="button" className="nl-button nl-primary" onClick={() => onSelectTab('draft')}>Enter Draft HQ <ArrowRight size={16} aria-hidden /></button><Link className="nl-button" href={`/league/${encodeURIComponent(league.id)}/draft`}>Draft board</Link></> : <button type="button" className="nl-button nl-primary" onClick={() => onSelectTab(survivor ? 'survivor' : phase === 'Offseason' ? 'standings' : 'matchups')}>{survivor ? 'Open Survivor' : phase === 'Offseason' ? 'Final standings' : 'Open matchup'}<ArrowRight size={16} aria-hidden /></button>}</div>
         <LeagueSection id="draft">{predraft && <div className="nl-quick-grid"><Link href={`/mock-draft?leagueId=${encodeURIComponent(league.id)}&sport=${encodeURIComponent(league.sport)}&teams=${league.teamCount}`}><h3>Mock draft</h3><p>Practice with this league’s exact settings.</p></Link><Link href={`/league/${encodeURIComponent(league.id)}/draft`}><h3>Queue & rankings</h3><p>Rank players and build your queue before the draft.</p></Link>{supplementalTile}</div>}</LeagueSection>
       </section>
+}
       <LeagueSection id="format">{stakesFormat && <LeagueStakesCard leagueId={league.id} format={stakesFormat} onSelectTab={onSelectTab} />}</LeagueSection>
       <LeagueSection id="format">{stakesFormat === 'guillotine' && <GuillotineAutopilotCard leagueId={league.id} sport={String(league.sport)} isCommissioner={isCommissioner} onOpenSettings={onOpenSettings} onSelectTab={onSelectTab} />}</LeagueSection>
       <LeagueSection id="managers">{showSeats && <LeagueSeatTracker teams={teams} teamCount={league.teamCount} userTeamId={userTeamId} leagueName={league.name} inviteCode={inviteCode} canInvite={isCommissioner} onOpenInviteSettings={() => onOpenSettings('invite')} />}</LeagueSection>

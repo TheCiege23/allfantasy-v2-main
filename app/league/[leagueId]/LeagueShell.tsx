@@ -2157,6 +2157,7 @@ function LeagueTabRouter({
   const tab = tabDefs.find((t) => t.id === activeTab)
   const tabLabel = tab?.label ?? activeTab
   const sport = selectedLeague.sport
+  const isZombieLeague = [selectedLeague.leagueVariant, selectedLeague.leagueType].some(value => String(value ?? '').toLowerCase() === 'zombie')
 
   const renderPredraftDraftSetup = () => {
     const teamCount = selectedLeague.teamCount ?? teamSlots.length
@@ -2236,11 +2237,10 @@ function LeagueTabRouter({
             <div className="space-y-1">
               <p className="af-league-eyebrow text-[11px] font-bold uppercase tracking-widest text-[#ff3d81]/60">Draft setup</p>
               <h2 className="text-[26px] font-black leading-tight tracking-tight text-white sm:text-[30px]">
-                Draft setup is ready
+                {isZombieLeague ? 'Prepare for draft day' : 'Draft setup is ready'}
               </h2>
               <p className="max-w-2xl text-[13px] leading-relaxed text-white/55">
-                The league has a draft shell. Open the room to review the board, set order, invite managers, or start
-                when the commissioner is ready.
+                {isZombieLeague ? 'Build your team for the outbreak. Review the board, invite your managers, and set your draft when the league is ready.' : 'The league has a draft shell. Open the room to review the board, set order, invite managers, or start when the commissioner is ready.'}
               </p>
             </div>
             <div className="af-league-draft-fill rounded-2xl border border-[#ff3d81]/30 bg-gradient-to-br from-[#ff3d81]/[0.12] via-[#ff3d81]/[0.06] to-transparent px-4 py-3 text-right shadow-[0_0_20px_rgba(255,61,129,0.08)]">
@@ -2305,6 +2305,10 @@ function LeagueTabRouter({
               Go to {isCommissioner ? 'Commissioner Hub' : 'League'} tab
             </Link>
           </div>
+          {isZombieLeague && <div className="nl-zombie-draft-links">
+            {tabDefs.some(tab => tab.id === 'zombie') && <button type="button" onClick={() => onSelectTab('zombie')}>Explore Zombie rules <span aria-hidden>→</span></button>}
+            {tabDefs.some(tab => tab.id === 'league_chat') && <button type="button" onClick={() => onSelectTab('league_chat')}>Talk with your league <span aria-hidden>→</span></button>}
+          </div>}
         </section>
       </div>
     )

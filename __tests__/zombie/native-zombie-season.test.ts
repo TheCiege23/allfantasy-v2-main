@@ -28,7 +28,8 @@ vi.mock('@/lib/prisma', () => {
         },
       },
     )
-  return { prisma: new Proxy({}, { get: (_t, prop: string) => model(prop) }) }
+  const db = new Proxy({}, { get: (_t, prop: string) => prop === '$transaction' ? async (callback: (tx: unknown) => Promise<unknown>) => callback(db) : model(prop) })
+  return { prisma: db }
 })
 
 const m = vi.hoisted(() => ({
@@ -44,10 +45,17 @@ vi.mock('@/lib/zombie/ZombieLeagueConfig', () => ({ getZombieLeagueConfig: m.get
 
 // Weekly resolution's collaborators — this suite pins only where the week pointer lands.
 vi.mock('@/lib/zombie/infectionEngine', () => ({ resolveWeeklyInfections: vi.fn(async () => ({ infectionsCreated: 0 })) }))
-vi.mock('@/lib/zombie/serumEngine', () => ({ finalizePendingSerumsForWeek: vi.fn(async () => undefined) }))
+vi.mock('@/lib/zombie/serumEngine', () => ({
+  finalizePendingSerumsForWeek: vi.fn(async () => undefined),
+  autoReviveEligibleZombies: vi.fn(async () => undefined),
+  awardNativeSerumsForWeek: vi.fn(async () => undefined),
+}))
 vi.mock('@/lib/zombie/bashingEngine', () => ({ detectAndProcessBashings: vi.fn(async () => []) }))
 vi.mock('@/lib/zombie/maulingEngine', () => ({ detectAndProcessMaulings: vi.fn(async () => []) }))
-vi.mock('@/lib/zombie/weaponEngine', () => ({ checkAndAwardWeapons: vi.fn(async () => undefined) }))
+vi.mock('@/lib/zombie/weaponEngine', () => ({
+  checkAndAwardWeapons: vi.fn(async () => undefined),
+  finalizePendingWeaponsForWeek: vi.fn(async () => undefined),
+}))
 vi.mock('@/lib/zombie/weeklyUpdateEngine', () => ({ tryPostWeeklyUpdateAfterResolution: vi.fn(async () => undefined) }))
 vi.mock('@/lib/zombie/universeStatEngine', () => ({ syncUniverseStats: vi.fn(async () => undefined) }))
 vi.mock('@/lib/zombie/commissionerNotificationService', () => ({ notifyCommissioner: vi.fn(async () => undefined), notifyZombiePlayer: vi.fn(async () => undefined) }))
@@ -63,7 +71,7 @@ import { ensureZombieSeasonActivated } from '@/lib/zombie/activateNativeZombieLe
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { getNativeMatchupOutcomes } from '@/lib/zombie/ZombieInfectionEngine'
 import { checkAllMatchupsComplete } from '@/lib/zombie/matchupCompletion'
-import { selectWhisperer } from '@/lib/zombie/whispererEngine'
+import { selectSecondWhisperer, selectWhisperer } from '@/lib/zombie/whispererEngine'
 
 const argsOf = (key: string) => calls.filter((c) => c.key === key).map((c) => c.args as Record<string, any>)
 
@@ -88,7 +96,7 @@ describe('ensureZombieSeasonActivated', () => {
     expect(r).toEqual({ ok: true, activated: true, whispererPicked: true, zombieLeagueId: 'z1' })
     expect(m.ensureLeagueTeamRows).toHaveBeenCalledWith('L1', 'z1')
     expect(withWhisperer).toHaveBeenCalledWith('z1', 'random')
-    expect(argsOf('zombieLeague.updateMany')[0]).toEqual({
+    expect(argsOf('zombieLeague.updateMany')[0]).toMatchObject({
       where: { id: 'z1', status: { in: ['setup', 'registering'] } },
       data: { status: 'active', season: 2026, totalWeeks: 17, currentWeek: 1 },
     })
@@ -103,7 +111,7 @@ describe('ensureZombieSeasonActivated', () => {
 
     await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
 
-    expect(argsOf('zombieLeague.updateMany')[0].data).toEqual({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 1 })
+    expect(argsOf('zombieLeague.updateMany')[0].data).toMatchObject({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 1 })
     expect(argsOf('redraftMatchup.findFirst')[0]).toMatchObject({ where: { seasonId: 's1', awayRosterId: { not: null } } })
     spy.mockRestore()
   })
@@ -119,7 +127,7 @@ describe('ensureZombieSeasonActivated', () => {
 
     await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
 
-    expect(argsOf('zombieLeague.updateMany')[0].data).toEqual({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 6 })
+    expect(argsOf('zombieLeague.updateMany')[0].data).toMatchObject({ status: 'active', season: 2026, totalWeeks: 19, currentWeek: 6 })
     spy.mockRestore()
   })
 
@@ -167,6 +175,20 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
     overrides.set('redraftMatchup.findFirst', async () => ({ week: lastScheduledWeek }))
   }
   const leagueUpdate = () => argsOf('zombieLeague.update').at(-1)!
+
+  for (const sport of ['NFL', 'NBA', 'NHL', 'MLB']) {
+    it(`resolves a final native ${sport} week and advances independently`, async () => {
+      arrange(3)
+      overrides.set('zombieLeague.findUnique', async () => ({
+        id: 'z1', leagueId: 'L1', sport, season: 2026, currentWeek: 3,
+        totalWeeks: sport === 'NFL' ? 17 : 23, universeId: null, league: {},
+      }))
+      const result = await runWeeklyResolution('z1', 3)
+      expect(result.resolution).toBeTruthy()
+      expect(argsOf('zombieWeeklyResolution.update').at(-1)?.data.status).toBe('complete')
+      expect(leagueUpdate().data.currentWeek).toBe(4)
+    })
+  }
 
   it('points the league at the week after the one it resolved', async () => {
     arrange(3)
@@ -316,6 +338,33 @@ describe('checkAllMatchupsComplete — odd-sized leagues', () => {
       { awayRosterId: null, status: 'scheduled' },
     ])
     expect(await checkAllMatchupsComplete('L1', 3, 2026)).toBe(true)
+  })
+})
+
+describe('two independent Whisperers', () => {
+  it('chooses a distinct managed Survivor for the second NBA seat', async () => {
+    overrides.set('zombieLeague.findUniqueOrThrow', async () => ({
+      id: 'z1', leagueId: 'L1', sport: 'NBA', whispererCount: 2,
+      experienceMode: 'enhanced', whispererAmbushCount: 3, whispererIsPublic: false,
+    }))
+    overrides.set('whispererRecord.findUnique', async () => ({ userId: 'primary' }))
+    overrides.set('zombieLeagueTeam.findMany', async () => [
+      { rosterId: 'R-primary', status: 'Whisperer' },
+      { rosterId: 'R-second', status: 'Survivor', isVeteran: false },
+      { rosterId: 'R-open', status: 'Survivor', isVeteran: false },
+    ])
+    overrides.set('roster.findMany', async () => [
+      { id: 'R-primary', platformUserId: 'primary' },
+      { id: 'R-second', platformUserId: 'second' },
+      { id: 'R-open', platformUserId: 'open-slot-L1-3' },
+    ])
+    overrides.set('zombieCoWhisperer.create', async () => ({ id: 'co-1' }))
+    const chosen = await selectSecondWhisperer('z1', 'random')
+    expect(chosen).toEqual({ whispererRecordId: 'co-1', rosterId: 'R-second' })
+    expect(argsOf('zombieCoWhisperer.create')[0].data).toMatchObject({
+      zombieLeagueId: 'z1', userId: 'second', ambushesRemaining: 3,
+    })
+    expect(argsOf('zombieLeagueTeam.update')[0].data).toMatchObject({ status: 'Whisperer', isWhisperer: true })
   })
 })
 

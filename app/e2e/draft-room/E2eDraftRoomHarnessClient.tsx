@@ -20,7 +20,7 @@ function E2EDraftRoomHarnessInner() {
   }, [leagueId])
 
   return (
-    <div className="min-h-screen bg-[#040915] p-4" data-testid="e2e-draft-room-harness">
+    <div className={entered ? 'h-[100dvh] overflow-hidden bg-[#040915]' : 'min-h-screen bg-[#040915] p-4'} data-testid="e2e-draft-room-harness">
       {!entered ? (
         <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
           <p className="text-sm text-white/70">E2E draft room harness</p>

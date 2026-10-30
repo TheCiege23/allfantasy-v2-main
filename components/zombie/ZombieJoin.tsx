@@ -125,7 +125,7 @@ export function ZombieJoinHero({
             : ''}
         </p>
         <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-white/85">
-          One Whisperer hides among you. Every loss can turn you. Survive the season — or lead the horde.
+          Whisperers lead the outbreak. A loss can turn you. Survive the season — or lead the horde.
         </p>
         {children ? <div className="mt-6 max-w-md">{children}</div> : null}
       </div>
@@ -136,7 +136,7 @@ export function ZombieJoinHero({
 /** The four-step how-it-works, with the engine's numbers. */
 export function ZombieHowItWorks({ zombie: z }: { zombie: ZombieJoinPreview }) {
   const steps: [string, string, string][] = [
-    ['char-survivor', 'Start as a Survivor', `Everyone does — except one ${z.whispererSecret ? 'secret ' : ''}Whisperer.`],
+    ['char-survivor', 'Start as a Survivor', `Managers start as Survivors or ${z.whispererSecret ? 'secret ' : ''}Whisperers.`],
     [
       'turn',
       'Lose and you might turn',

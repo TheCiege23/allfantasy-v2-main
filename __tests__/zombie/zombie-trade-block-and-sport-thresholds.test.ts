@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 /**
  * Two zombie rules that existed in config and were never in force.
  *
- * 1. 🛑 `zombieTradeBlocked` — "Zombies cannot trade". It lived in the zombie spec's `rosterGuard`, which
+ * 1. 🛑 `zombieTradeBlocked` — "Zombies cannot trade"; Whisperers never trade. It lived in the zombie spec's `rosterGuard`, which
  *    no trade path consults and which is looked up by `leagueVariant` (null on every native zombie
  *    league). It is now enforced in `assertRosterTransactionsAllowed`, the gate trade create, accept and
  *    processing all pass through.
@@ -43,22 +43,50 @@ beforeEach(() => {
 describe('zombie trade block', () => {
   it('refuses a trade when either side is a Zombie', async () => {
     db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Survivor' }, { status: 'Zombie' }])
-    const r = await assertRosterTransactionsAllowed({ leagueId: 'L1', league, rosterIds: ['a', 'b'], userId: 'u', kind: 'trade' })
-    expect(r).toEqual({ ok: false, error: 'Zombies cannot trade in this league.', code: 'ZOMBIE_TRADE_BLOCKED' })
+    const result = await assertRosterTransactionsAllowed({
+      leagueId: 'L1', league, rosterIds: ['a', 'b'], userId: 'u', kind: 'trade',
+    })
+    expect(result).toEqual({
+      ok: false,
+      error: 'Zombies cannot trade in this league.',
+      code: 'ZOMBIE_TRADE_BLOCKED',
+    })
     expect(db.zombieLeagueTeam.findMany).toHaveBeenCalledWith({
       where: { leagueId: 'L1', rosterId: { in: ['a', 'b'] } },
       select: { status: true },
     })
   })
 
-  it('[control] lets two Survivors trade', async () => {
+  it('blocks a Whisperer before any infection', async () => {
     db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Survivor' }, { status: 'Whisperer' }])
+    const result = await assertRosterTransactionsAllowed({
+      leagueId: 'L1', league, rosterIds: ['a', 'b'], userId: 'u', kind: 'trade',
+    })
+    expect(result).toEqual({
+      ok: false,
+      error: 'Whisperers cannot trade in this league.',
+      code: 'ZOMBIE_TRADE_BLOCKED',
+    })
+    expect(db.zombieLeagueConfig.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('blocks Whisperers even when the commissioner allows Zombie trades', async () => {
+    db.zombieLeagueConfig.findUnique.mockResolvedValue({ zombieTradeBlocked: false })
+    db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Whisperer' }])
+    const result = await assertRosterTransactionsAllowed({
+      leagueId: 'L1', league, rosterIds: ['a'], userId: 'u', kind: 'trade',
+    })
+    expect(result).toMatchObject({ ok: false, code: 'ZOMBIE_TRADE_BLOCKED' })
+  })
+
+  it('lets two Humans trade', async () => {
+    db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Survivor' }, { status: 'Survivor' }])
     await expect(
       assertRosterTransactionsAllowed({ leagueId: 'L1', league, rosterIds: ['a', 'b'], userId: 'u', kind: 'trade' }),
     ).resolves.toEqual({ ok: true })
   })
 
-  it('[control] lets a Zombie trade when the commissioner turned the block off', async () => {
+  it('lets a Zombie trade only when the commissioner turns the Zombie block off', async () => {
     db.zombieLeagueConfig.findUnique.mockResolvedValue({ zombieTradeBlocked: false })
     db.zombieLeagueTeam.findMany.mockResolvedValue([{ status: 'Zombie' }])
     await expect(
@@ -71,21 +99,17 @@ describe('zombie trade block', () => {
     await expect(
       assertRosterTransactionsAllowed({ leagueId: 'L1', league, rosterIds: ['a'], userId: 'u', kind: 'waiver_claim' }),
     ).resolves.toEqual({ ok: true })
-    expect(db.zombieLeagueConfig.findUnique).not.toHaveBeenCalled()
-  })
-
-  it('costs a non-zombie league one config lookup and nothing more', async () => {
-    db.zombieLeagueConfig.findUnique.mockResolvedValue(null)
-    await expect(
-      assertRosterTransactionsAllowed({ leagueId: 'L1', league, rosterIds: ['a', 'b'], userId: 'u', kind: 'trade' }),
-    ).resolves.toEqual({ ok: true })
     expect(db.zombieLeagueTeam.findMany).not.toHaveBeenCalled()
   })
 
-  /*
-   * The old home of the rule. A roster guard gates LINEUPS and waivers too, so once a league carries
-   * `leagueVariant: 'zombie'` it would have locked every Zombie out of its own lineup.
-   */
+  it('does not load a config when no Zombie team is involved', async () => {
+    db.zombieLeagueTeam.findMany.mockResolvedValue([])
+    await expect(
+      assertRosterTransactionsAllowed({ leagueId: 'L1', league, rosterIds: ['a', 'b'], userId: 'u', kind: 'trade' }),
+    ).resolves.toEqual({ ok: true })
+    expect(db.zombieLeagueConfig.findUnique).not.toHaveBeenCalled()
+  })
+
   it('the zombie spec carries no roster guard, so Zombies are never locked out of lineups', () => {
     const spec = getSpecialtySpecByVariant('zombie')
     expect(spec?.id).toBe('zombie')

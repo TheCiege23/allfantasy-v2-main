@@ -15,10 +15,10 @@
  * simply add a comparable body for nothing. Only genuinely scarce players move
  * the needle, and FAAB does not exist to be valued.
  *
- * ⚠ THE COUNTERPARTY POOL SHRINKS AND NEVER GROWS. Zombie teams cannot trade.
- * Every infection permanently removes a trading partner, and being infected
- * removes YOUR ability to trade for the rest of the season. The right time to
- * make a deal is always earlier than it feels.
+ * ⚠ TRADE ELIGIBILITY DEPENDS ON ROLE AND LEAGUE SETTINGS. Whisperers never
+ * trade. Commissioners may block Zombie trades, while a serum revival can
+ * return a Zombie to Survivor status. Count the eligible partners now rather
+ * than assuming every infection permanently removes one.
  *
  * ⚠ SERUMS AND WEAPONS ARE ASSETS WITH PUBLISHED POINT VALUES, and they price
  * exactly rather than approximately — see below.
@@ -141,44 +141,42 @@ export function serumValue(args: {
     oddsOfUse,
     basis:
       zombieCount === 0
-        ? 'A serum is +10 against a Zombie, and there are none yet. It is worth nothing this week and more every week the Horde grows.'
+        ? 'A serum is +10 against a Zombie, and there are none yet. It is worth nothing this week; its value depends on how many Zombies remain when you use it.'
         : `${zombieCount} of ${teamCount} teams are infected, so a serum is roughly ${Math.round(
             oddsOfUse * 100,
           )}% likely to find a Zombie opponent — about ${
             Math.round(expectedPoints * 10) / 10
-          } expected points, rising every week the Horde grows.`,
+          } expected points at the current Horde size.`,
   }
 }
 
 /**
- * How many managers you can still legally trade with, and what that is worth
- * knowing.
- *
- * ⚠ THIS ONLY EVER GOES DOWN. Zombies cannot trade, infection is permanent
- * within a season, and the moment you are infected you cannot trade either. So
- * the option to make a deal is a wasting asset held by both sides at once, and
- * "we can always do this later" is false in a way it is not in any other format.
+ * How many managers a Survivor can trade with under the current league settings.
+ * Whisperers never trade. Zombie trades depend on the commissioner setting, and
+ * serum revival can return a Zombie to the Survivor pool.
  */
 export function tradeWindow(args: {
   survivors: number
-  /** Whether the Whisperer is still uninfected — they can trade. */
-  whispererActive: boolean
+  zombies?: number
   teamCount: number
+  zombieTradeBlocked?: boolean
 }): { partners: number; basis: string } | null {
-  const { survivors, teamCount } = args
-  if (teamCount < 2 || survivors < 0 || survivors > teamCount) return null
+  const { survivors, zombies = 0, teamCount, zombieTradeBlocked = true } = args
+  if (teamCount < 2 || survivors < 0 || zombies < 0 || survivors + zombies > teamCount) return null
 
-  /* Everyone who can legally trade, minus yourself. */
-  const partners = Math.max(0, survivors + (args.whispererActive ? 1 : 0) - 1)
+  /* The viewer is a Survivor, so exclude their own team. */
+  const partners = Math.max(0, survivors - 1 + (zombieTradeBlocked ? 0 : zombies))
+  const roleRule = zombieTradeBlocked
+    ? 'Whisperers never trade, and Zombie trading is blocked in this league.'
+    : 'Whisperers never trade; this league allows Zombie trading.'
 
   return {
     partners,
-    basis:
-      partners === 0
-        ? 'There is nobody left in this league who can legally trade. Zombies cannot make deals, and the Horde has everyone.'
-        : `${partners} team${
-            partners === 1 ? '' : 's'
-          } in this league can still legally trade — Zombies cannot. That number only ever falls, and it reaches zero for you the week you are infected, so a deal you are considering for "later" may not have a later.`,
+    basis: partners === 0
+      ? `There is nobody eligible to trade with a Survivor right now. ${roleRule}`
+      : `${partners} manager${partners === 1 ? '' : 's'} can trade with a Survivor right now. ${roleRule} ${zombieTradeBlocked
+          ? 'Infections can close the window, and serum revivals can reopen it.'
+          : 'Check roles and settings again before waiting on a deal.'}`,
   }
 }
 

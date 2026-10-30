@@ -190,6 +190,10 @@ jobs:
         with:
           node-version: lts/*
 
+      - name: Staging data runner contracts
+        if: matrix.shard == 1
+        run: node --test scripts/zombie-staging-cron.test.mjs
+
       - name: Install dependencies
         run: npm ci
 

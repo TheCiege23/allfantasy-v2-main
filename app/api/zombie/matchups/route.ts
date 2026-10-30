@@ -65,7 +65,19 @@ export async function GET(req: Request) {
     }),
     resolveWhispererViewer(leagueId, userId),
   ])
-  if (!results) return NextResponse.json({ matchups: [], week })
+  if (!results) return NextResponse.json({
+    matchups: [],
+    week,
+    rules: {
+      bashingThreshold: rules.bashingThreshold,
+      maulingThreshold: rules.maulingThreshold,
+      bashShare: BASH_TRANSFER_SHARE,
+      maulShare: MAUL_TRANSFER_SHARE,
+    },
+    resolution: resolution
+      ? { status: resolution.status, resolvedAt: resolution.resolvedAt, infectionCount: resolution.infectionCount }
+      : null,
+  })
 
   const raw = zombieTeams.map((t) => ({ rosterId: t.rosterId, status: t.status }))
   const shown = viewer.canSee ? raw : redactStatusEntries(raw, viewer.identity)

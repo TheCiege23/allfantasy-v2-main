@@ -1,6 +1,9 @@
+import type { ZombieChimmyAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
-import { validateAmbushTiming } from '@/lib/zombie/ambushEngine'
+import { validatePreScoringWindow } from '@/lib/zombie/ambushEngine'
+import { getNativeMatchupOutcomes } from '@/lib/zombie/ZombieInfectionEngine'
+import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { notifyCommissioner, notifyZombiePlayer } from '@/lib/zombie/commissionerNotificationService'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
 import { appendZombieAudit } from '@/lib/zombie/ZombieAuditLog'
@@ -11,6 +14,7 @@ async function ensureTeamItem(
   zombieLeagueId: string,
   itemType: string,
   label: string,
+  week: number,
 ) {
   const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
   if (!roster) return
@@ -27,6 +31,7 @@ async function ensureTeamItem(
       userId,
       itemType,
       itemLabel: label,
+      acquiredAtWeek: week,
     },
   })
   await notifyZombiePlayer(userId, 'weapon_earned', 'You earned a weapon', {
@@ -38,7 +43,7 @@ async function ensureTeamItem(
 
 export async function checkAndAwardWeapons(leagueId: string, week: number, zombieLeagueId: string): Promise<void> {
   const z = await prisma.zombieLeague.findUnique({ where: { id: zombieLeagueId } })
-  if (!z) return
+  if (!z || z.experienceMode === 'simple') return
   const rules = await getZombieRulesForSport(z.sport)
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId, season: z.season },
@@ -63,13 +68,13 @@ export async function checkAndAwardWeapons(leagueId: string, week: number, zombi
       })
       if (!rr) continue
       if (side.score >= rules.weaponShieldThreshold) {
-        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_knife', '🔪 Knife')
+        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_knife', '🔪 Knife', week)
       }
       if (side.score >= rules.weaponAmbushThreshold) {
-        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_bow', '🏹 Bow')
+        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_bow', '🏹 Bow', week)
       }
       if (side.won && Math.abs(hs - as) >= rules.weaponAxeMargin) {
-        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_axe', '🪓 Axe')
+        await ensureTeamItem(leagueId, rr.ownerId, zombieLeagueId, 'weapon_axe', '🪓 Axe', week)
       }
     }
   }
@@ -83,10 +88,10 @@ export async function checkAndAwardWeapons(leagueId: string, week: number, zombi
     const uid = roster?.platformUserId
     if (!uid) continue
     if (t.zombieAttacksSurvived >= 3) {
-      await ensureTeamItem(leagueId, uid, zombieLeagueId, 'weapon_gun', '🔫 Gun')
+      await ensureTeamItem(leagueId, uid, zombieLeagueId, 'weapon_gun', '🔫 Gun', week)
     }
     if (t.survivorWinStreak >= 5) {
-      await ensureTeamItem(leagueId, uid, zombieLeagueId, 'weapon_bomb', '💣 Bomb')
+      await ensureTeamItem(leagueId, uid, zombieLeagueId, 'weapon_bomb', '💣 Bomb', week)
     }
   }
 }
@@ -96,10 +101,11 @@ export async function processWeaponAction(
   userId: string,
   rawMessage: string,
   week: number,
-): Promise<{ id: string }> {
+): Promise<ZombieChimmyAction> {
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) throw new Error('Zombie league not found')
-  const timing = await validateAmbushTiming(leagueId, week, z.sport)
+  if (z.experienceMode === 'simple') throw new Error('Weapons are available in Enhanced Zombie only')
+  const timing = await validatePreScoringWindow(leagueId, week, z.season)
   const lower = rawMessage.toLowerCase()
 
   let weapon = 'weapon_axe'
@@ -132,7 +138,7 @@ export async function processWeaponAction(
     where: { leagueId_rosterId: { leagueId, rosterId: roster.id } },
     include: { items: true },
   })
-  const item = team?.items.find((i) => i.itemType === weapon && !i.isUsed)
+  const item = team?.items.find((i) => i.itemType === weapon && !i.isUsed && !i.isExpired && i.activationState === 'ready')
   if (!item) {
     await prisma.zombieChimmyAction.update({
       where: { id: log.id },
@@ -145,41 +151,86 @@ export async function processWeaponAction(
   }
 
   const st = team?.status.toLowerCase() ?? ''
-  if (st.includes('zombie') && (weapon === 'weapon_axe' || weapon === 'weapon_gun')) {
+  if (!st.includes('survivor')) {
     await prisma.zombieChimmyAction.update({
       where: { id: log.id },
-      data: { isValid: false, privateResponse: '⚠️ Zombies cannot activate that weapon.' },
+      data: { isValid: false, privateResponse: '⚠️ Only Survivors can arm a defensive weapon.' },
     })
     return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
   }
 
-  await prisma.zombieTeamItem.update({
-    where: { id: item.id },
-    data: { isUsed: true, usedAtWeek: week, usedEffect: 'active_weapon' },
-  })
-
-  await prisma.zombieChimmyAction.update({
-    where: { id: log.id },
-    data: {
-      isValid: true,
-      publicResponse: '⚔️ A weapon has been deployed. Brace yourselves.',
-      privateResponse: `Your weapon is active for week ${week}.`,
-    },
-  })
+  try {
+    await prisma.$transaction(async (tx) => {
+      const alreadyArmed = await tx.zombieTeamItem.count({
+        where: { teamStatusId: team!.id, activationState: 'pending_activation', activatesAtWeek: week },
+      })
+      if (alreadyArmed > 0) throw new Error('A serum or weapon is already armed for this week.')
+      const armed = await tx.zombieTeamItem.updateMany({
+        where: { id: item.id, isUsed: false, isExpired: false, activationState: 'ready' },
+        data: { activationState: 'pending_activation', activatesAtWeek: week, usedEffect: 'infection_shield' },
+      })
+      if (armed.count !== 1) throw new Error('That weapon is no longer available.')
+      await tx.zombieChimmyAction.update({
+        where: { id: log.id },
+        data: {
+          isValid: true,
+          publicResponse: '⚔️ A Survivor armed a weapon against the Horde.',
+          privateResponse: `Your ${weapon.replace('weapon_', '')} protects you from one Zombie or Whisperer infection in Week ${week}. It is spent only if it stops an infection.`,
+          effect: { itemId: item.id, protection: 'horde_infection' },
+        },
+      })
+    }, { isolationLevel: 'Serializable' })
+  } catch (error) {
+    return prisma.zombieChimmyAction.update({
+      where: { id: log.id },
+      data: {
+        isValid: false, validationError: 'weapon_arm_failed',
+        privateResponse: error instanceof Error ? error.message : 'Weapon could not be armed.',
+      },
+    })
+  }
 
   await notifyCommissioner(leagueId, 'weapon_used', 'Weapon activated', `${weapon} (week ${week})`, {
-    week,
-    relatedUserId: userId,
-  })
+    week, relatedUserId: userId,
+  }).catch(() => {})
   await appendZombieAudit({
-    leagueId,
-    zombieLeagueId: z.id,
-    eventType: 'weapon_use',
+    leagueId, zombieLeagueId: z.id, eventType: 'weapon_use',
     metadata: { userId, weapon, week },
-  })
-  await queueAnimation(leagueId, week, 'weapon_acquired', userId, { weapon })
+  }).catch(() => {})
+  await queueAnimation(leagueId, week, 'weapon_acquired', userId, { weapon }).catch(() => {})
 
   return prisma.zombieChimmyAction.findUniqueOrThrow({ where: { id: log.id } })
+}
+
+/** Spend a shield only when it actually stopped an infection; otherwise return it to inventory. */
+export async function finalizePendingWeaponsForWeek(leagueId: string, week: number, season: number): Promise<void> {
+  const matchups = await getNativeMatchupOutcomes(leagueId, week, season)
+  if (!matchups) return
+  const config = await getZombieLeagueConfig(leagueId)
+  const pending = await prisma.zombieTeamItem.findMany({
+    where: { team: { leagueId }, activationState: 'pending_activation', activatesAtWeek: week, usedEffect: 'infection_shield' },
+    include: { team: true },
+  })
+  for (const item of pending) {
+    const matchup = matchups.find((m) => m.loserRosterId === item.team.rosterId)
+    const winner = matchup ? await prisma.zombieLeagueTeam.findUnique({
+      where: { leagueId_rosterId: { leagueId, rosterId: matchup.winnerRosterId } },
+      select: { status: true },
+    }) : null
+    const protectedInfection = Boolean(matchup && item.team.status === 'Survivor' && (
+      (winner?.status === 'Zombie' && config?.infectionLossToZombie) ||
+      (winner?.status === 'Whisperer' && config?.infectionLossToWhisperer)
+    ))
+    await prisma.zombieTeamItem.update({
+      where: { id: item.id },
+      data: protectedInfection
+        ? { isUsed: true, usedAtWeek: week, activationState: 'ready' }
+        : { activationState: 'ready', activatesAtWeek: null, usedEffect: null },
+    })
+    if (protectedInfection) {
+      await queueAnimation(leagueId, week, 'weapon_acquired', item.userId, { shieldedInfection: true, weapon: item.itemType }).catch(() => {})
+    }
+  }
 }
 
 export async function processBombAction(

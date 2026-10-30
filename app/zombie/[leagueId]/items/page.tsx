@@ -7,17 +7,7 @@ import clsx from 'clsx'
 import { useZombieDmCommand } from '@/app/zombie/components/chimmy/useZombieDmCommand'
 import { ZombieStatusChip, zombieChipStatus } from '@/components/zombie/ZombieStatusChip'
 
-/*
- * The Armory (design handoff ZombieArmory), read-only for this season.
- *
- * What is live: serums. A serum registered before kickoff ("protect myself") really does keep you human
- * if you lose to the horde that week (infectionEngine skips a pending serum), and enough serums really do
- * revive a Zombie (serumEngine.processRevive). Those two actions stay.
- *
- * What is not: weapons, the bomb, ambushes and powers are awarded and tracked, but nothing applies them to
- * a score or a matchup. The old page offered "Use via @Chimmy" and "Detonate", which spent the item for
- * nothing; those are gone, and Chimmy now refuses them without spending anything.
- */
+/* The Armory shows the live serum and defensive weapon commands. Bomb effects remain inactive. */
 
 type ItemRow = {
   id: string
@@ -45,6 +35,7 @@ type InvPayload = {
   history: Array<{ id: string; actionType: string; week: number; createdAt: string; isValid: boolean }>
   resolution: { status: string } | null
   isCommissionerView: boolean
+  experienceMode: string | null
 }
 
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 1 })
@@ -81,6 +72,7 @@ export default function ZombieArmoryPage() {
   }, [load])
 
   const held = useMemo(() => (data?.items ?? []).filter((i) => !i.isUsed && !i.isExpired), [data])
+  const armedShield = held.find((i) => i.activationState === 'pending_activation') ?? null
   const serums = held.filter(isSerum)
   const registered = serums.find((s) => s.activationState === 'pending_activation') ?? null
   const readySerums = serums.filter((s) => s.activationState !== 'pending_activation')
@@ -104,8 +96,8 @@ export default function ZombieArmoryPage() {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-lime-300">The Armory</h1>
           <p className="text-[13px] text-white/60">
-            {serums.length} serum{serums.length === 1 ? '' : 's'} · {held.length - serums.length} weapon
-            {held.length - serums.length === 1 ? '' : 's'}
+            {serums.length} serum{serums.length === 1 ? '' : 's'}
+            {data.experienceMode === 'simple' ? ' · Simple Zombie' : ` · ${held.length - serums.length} weapon${held.length - serums.length === 1 ? '' : 's'}`}
             {data.isCommissionerView ? ' · commissioner view of another manager' : ''}
           </p>
         </div>
@@ -164,7 +156,7 @@ export default function ZombieArmoryPage() {
                   Register one before kickoff: if you lose to a Zombie or the Whisperer that week, you stay human and the
                   serum is spent. If you win, you keep it.
                 </p>
-                {canAct && readySerums.length ? (
+                {canAct && readySerums.length && !armedShield ? (
                   <button
                     type="button"
                     onClick={() => void run('@Chimmy use serum protect myself')}
@@ -186,11 +178,15 @@ export default function ZombieArmoryPage() {
         ) : null}
       </section>
 
-      {/* Weapons — tracked */}
+      {data.experienceMode === 'simple' ? (
+        <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-[13px] text-white/65" data-testid="armory-simple-note">
+          Simple Zombie keeps the armory focused on serums. Weapons are available in Enhanced Zombie.
+        </p>
+      ) : (
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="armory-weapons">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-lg font-bold text-white">Weapons</h2>
-          <p className="text-[12px] text-white/50">Earned automatically. Tracked this season — they don&apos;t change scores yet.</p>
+          <p className="text-[12px] text-white/50">Earned automatically. In Enhanced Zombie, arm one before kickoff to block an eligible infection. Bomb effects are inactive.</p>
         </div>
         <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {weaponCatalog(data.rules).map((w) => {
@@ -206,11 +202,28 @@ export default function ZombieArmoryPage() {
                   {w.label} <span className="font-mono text-amber-300">×{count}</span>
                 </p>
                 <p className="mt-0.5 text-[11px] leading-snug text-white/55">{w.earn}</p>
+                {w.type !== 'weapon_bomb' && isHuman && data.experienceMode !== 'simple' && canAct && !armedShield &&
+                  held.some((item) => item.itemType === w.type && item.activationState === 'ready') ? (
+                  <button
+                    type="button"
+                    onClick={() => void run(`@Chimmy use ${w.label.toLowerCase()}`)}
+                    disabled={isSending}
+                    className="mt-3 min-h-[44px] w-full rounded-lg border border-amber-300/50 bg-amber-300/15 px-2 text-[12px] font-semibold text-amber-100 disabled:opacity-50"
+                  >
+                    Arm {w.label}
+                  </button>
+                ) : null}
               </li>
             )
           })}
         </ul>
+        {armedShield && !isSerum(armedShield) ? (
+          <p className="mt-3 text-[13px] text-amber-100" role="status">
+            {armedShield.itemLabel} armed for week {armedShield.activatesAtWeek ?? '—'}. It is spent only if it blocks an infection.
+          </p>
+        ) : null}
       </section>
+      )}
 
       {/* Ledger */}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
@@ -256,7 +269,7 @@ export default function ZombieArmoryPage() {
       </section>
 
       <p className="text-center text-[12px] text-white/45">
-        Serum actions go through @Chimmy.{' '}
+        {data.experienceMode === 'simple' ? 'Serum actions go through @Chimmy.' : 'Serum and defensive weapon actions go through @Chimmy.'}{' '}
         <Link href={`/zombie/${leagueId}/rules`} className="text-lime-300 underline">
           Full rules
         </Link>

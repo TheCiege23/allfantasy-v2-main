@@ -1,11 +1,16 @@
 'use client'
 
+import { canDisplayAiAdp } from '@/lib/draft-room/adpPresentation'
+
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { ProgressiveDraftPlayerList } from './ProgressiveDraftPlayerList'
 import { Search, User, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { applyDraftFilters, DRAFT_ROOM_I18N_KEYS, getPickConfirmationLabel, getPositionFilterOptionsForSport } from '@/lib/draft-room'
+import type { DraftStatPlayerSource } from '@/lib/draft-room/draftSportStatColumns'
+import { DRAFT_PHONE_LAYOUT_QUERY } from '@/lib/draft-room/phoneDraftLayout'
+import { compactDraftPlayerStats } from '@/lib/draft-room/compactDraftPlayerStats'
 import { DraftPlayerCard } from './DraftPlayerCard'
 import { SleeperPoolTable } from './SleeperPoolTable'
 import {
@@ -285,6 +290,7 @@ function PlayerListCards({
               graduatedToNFL={p.graduatedToNFL}
               poolType={p.poolType}
               isRookie={p.isRookie ?? false}
+              compactStats={compactDraftPlayerStats(p as unknown as DraftStatPlayerSource, draftSport, p.position)}
               nflDraftProjectionSplits={p.nflDraftProjectionSplits ?? null}
               testId={`draft-player-card-${index}`}
               onSelect={() => onPlayerSelect(p)}
@@ -404,10 +410,22 @@ function PlayerPanelInner({
   poolError = false,
   rookieFilterState,
 }: PlayerPanelProps) {
+  const effectiveUseAiAdp = canDisplayAiAdp(useAiAdp, aiAdpUnavailable, players)
+  const marketAdpUnavailable = !loading && players.length > 0 && !players.some(p => typeof p.adp === 'number' && Number.isFinite(p.adp) && p.adp > 0)
   const rs = presentationVariant === 'redraft_snake'
   const draftedIdsForRows = draftedPlayerIds?.size ? draftedPlayerIds : undefined
   const { t } = useLanguage()
   const compareUi = usePlayerComparisonUIOptional()
+  const [phoneLayout, setPhoneLayout] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const filterRegionId = React.useId()
+  useEffect(() => {
+    const query = window.matchMedia(DRAFT_PHONE_LAYOUT_QUERY)
+    const update = () => setPhoneLayout(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
   const [compareAnchor, setCompareAnchor] = useState<PlayerEntry | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   /** User-facing view-mode override; null defers to the auto rule below. */
@@ -418,6 +436,10 @@ function PlayerPanelInner({
   const [sortBy, setSortBy] = useState<SortKey>('adp')
   /** D.3 — sort direction. Toolbar buttons + table headers both flip this when re-clicked. */
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  useEffect(() => {
+    setSortBy(previous => effectiveUseAiAdp ? 'aiAdp' : previous === 'aiAdp' ? 'adp' : previous)
+    setSortDirection('asc')
+  }, [effectiveUseAiAdp])
   const [showRosterView, setShowRosterView] = useState(false)
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerEntry | null>(null)
   const [pendingNomination, setPendingNomination] = useState<PlayerEntry | null>(null)
@@ -437,7 +459,6 @@ function PlayerPanelInner({
    * show; the rest sits behind "Filters". At md+ the wrappers are `display: contents`/block, so
    * the desktop header is unchanged.
    */
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [watchlistKeys, setWatchlistKeys] = useState<Set<string>>(new Set())
   const isDevyRound = Boolean(devyConfig?.enabled && !c2cConfig?.enabled && currentRound != null && devyConfig.devyRounds?.includes(currentRound))
   const isCollegeRound = Boolean(c2cConfig?.enabled && currentRound != null && c2cConfig.collegeRounds?.includes(currentRound))
@@ -841,11 +862,13 @@ function PlayerPanelInner({
           : `relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl ${SKIN_PANEL}`
       }
       data-testid="draft-player-panel"
+      data-phone-layout={phoneLayout ? 'true' : 'false'}
+      data-filters-expanded={filtersOpen}
     >
       <div
         className="sticky top-0 z-20 shrink-0 border-b border-white/[0.06] bg-[#0d1424]"
       >
-        <div className={`flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] px-2 py-1 ${rs ? 'gap-y-1' : ''}`}>
+        <div data-testid="draft-player-toolbar" className={`flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] px-2 py-1 ${rs ? 'gap-y-1' : ''}`}>
           <div
             className={`flex min-h-[30px] flex-1 items-center gap-1.5 rounded-full border px-2.5 py-1 touch-manipulation transition duration-150 focus-within:ring-2 focus-within:ring-white/25 ${SKIN_CONTROL} ${
               rs ? 'min-w-[150px]' : ''
@@ -857,31 +880,19 @@ function PlayerPanelInner({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={rs ? 'Search name, team, school…' : 'Search players...'}
-              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-white shadow-none placeholder:text-white/40 focus:outline-none focus:ring-0"
+              placeholder="Search players, teams…"
+              className="min-w-0 flex-1 bg-transparent text-base md:text-sm text-white placeholder:text-white/40 focus:outline-none"
               aria-label="Search players"
               data-testid="draft-player-search-input"
             />
           </div>
-          <button
-            type="button"
-            onClick={() => setMobileFiltersOpen((open) => !open)}
-            aria-expanded={mobileFiltersOpen}
-            aria-controls="draft-player-more-filters"
-            data-testid="draft-mobile-filters-toggle"
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 md:hidden ${
-              mobileFiltersOpen || collapsedFilterCount > 0
-                ? 'border-cyan-300/45 bg-[#20d6d2]/18 text-cyan-100'
-                : 'border-white/[0.08] bg-[#101a30]/95 text-white/75'
-            }`}
-          >
-            <SlidersHorizontal className="h-4 w-4" aria-hidden />
-            <span>Filters</span>
-            {collapsedFilterCount > 0 ? (
-              <span className="rounded-full bg-cyan-400/25 px-1.5 text-[11px] tabular-nums" data-testid="draft-mobile-filters-count">
-                {collapsedFilterCount}
-              </span>
-            ) : null}
+          <button type="button" className="draft-filter-toggle rounded-lg border border-white/15 px-3 text-sm text-cyan-100 md:hidden"
+            data-testid="draft-mobile-filters-toggle" aria-expanded={filtersOpen} aria-controls={`draft-player-more-filters ${filterRegionId}`}
+            aria-label={`Filters, ${filtered.length} players`}
+            onClick={() => setFiltersOpen(open => !open)}>
+            <SlidersHorizontal className="h-4 w-4 inline-block mr-1" aria-hidden />
+            <span data-testid="draft-player-filter-toggle">{filtersOpen ? 'Done' : 'Filters'}</span>
+            {collapsedFilterCount > 0 ? <span data-testid="draft-mobile-filters-count">{collapsedFilterCount}</span> : null}
           </button>
           {/* D.6.1 — position pills replacing the legacy <select>. Each pill shows the
               available pool count for that position; the active pill fills with that
@@ -936,7 +947,7 @@ function PlayerPanelInner({
           <div
             id="draft-player-more-filters"
             data-testid="draft-player-more-filters"
-            className={mobileFiltersOpen ? 'flex basis-full flex-wrap items-center gap-1.5 md:contents' : 'hidden md:contents'}
+            className={filtersOpen ? 'flex basis-full flex-wrap items-center gap-1.5 md:contents' : 'hidden md:contents'}
           >
           <select
             value={teamFilter}
@@ -1038,7 +1049,8 @@ function PlayerPanelInner({
             Devy round — select a college/devy-eligible player.
           </div>
         )}
-        <div className={mobileFiltersOpen ? 'block' : 'hidden md:block'} data-testid="draft-player-more-filter-rows">
+
+        <div data-testid="draft-player-more-filter-rows" data-expanded={filtersOpen} id={filterRegionId} className={filtersOpen ? 'block' : 'hidden md:block'}><div data-testid="draft-extra-player-filters">
         <div
           className="flex flex-wrap items-center gap-1 border-b border-white/[0.06] bg-[#0d1424] px-2 py-1 sm:px-3"
         >
@@ -1047,8 +1059,8 @@ function PlayerPanelInner({
               are the canonical sort UI. The "Use AI ADP" toggle, AI-ADP warnings,
               and the "My roster / Pool" view-toggle remain in this row because they
               don't belong on the table header. */}
-          {useAiAdp && (
-            <span className="rounded bg-[#1d2236] px-1.5 py-0.5 text-[11px] font-semibold text-white/80" title="Player order uses AI ADP">
+          {effectiveUseAiAdp && (
+            <span className="rounded border border-cyan-300/25 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] text-cyan-100" title="AllFantasy ADP enabled">
               AI ADP
             </span>
           )}
@@ -1069,7 +1081,12 @@ function PlayerPanelInner({
               Use AI ADP
             </label>
           )}
-          {aiAdpUnavailable && (
+          {marketAdpUnavailable && (
+            <span className="text-[11px] text-amber-300/90" data-testid="draft-market-adp-unavailable" role="status">
+              Market ADP unavailable. Unranked players appear by name.
+            </span>
+          )}
+          {aiAdpUnavailable && !marketAdpUnavailable && (
             <span
               className="text-[11px] text-amber-400/90"
               data-testid="draft-ai-adp-unavailable-banner"
@@ -1174,7 +1191,7 @@ function PlayerPanelInner({
             Clear filters
           </button>
         </div>
-        </div>
+        </div></div>
       </div>
       {compareAnchor && (
         <div
@@ -1215,7 +1232,7 @@ function PlayerPanelInner({
             position: selectedPlayer.position ?? null,
             team: selectedPlayer.team ?? null,
             byeWeek: selectedPlayer.byeWeek ?? null,
-            adp: useAiAdp ? (selectedPlayer.aiAdp ?? null) : (selectedPlayer.adp ?? null),
+            adp: effectiveUseAiAdp ? (selectedPlayer.aiAdp ?? null) : (selectedPlayer.adp ?? null),
             headshotUrl:
               getDraftRoomDisplayHeadshot(selectedPlayer) ??
               selectedNormalized?.imageUrl ??
@@ -1262,7 +1279,7 @@ function PlayerPanelInner({
             rs && getAssistantRoomContext ? getAssistantRoomContext(selectedPlayer) : null
           }
           presentationVariant={rs ? 'redraft_snake' : 'default'}
-          adpDisplayLabel={useAiAdp ? 'AI ADP' : 'ADP'}
+          adpDisplayLabel={effectiveUseAiAdp ? 'AI ADP' : 'ADP'}
           draftUnavailableReason={
             selectedPlayer && isPlayerDraftedEntry(selectedPlayer, draftedNames, draftedIdsForRows)
               ? 'already_drafted'
@@ -1429,13 +1446,11 @@ function PlayerPanelInner({
              * The horizontal-scroll container honors small viewports — on mobile,
              * the table scrolls sideways rather than squishing column widths.
              */
-            // Every sport defaults to the Sleeper-style stat table now. Its columns come from
-            // draftSportStatColumns (PTS/REB/AST for NBA, G/A/SOG for NHL…) and it shows BYE only
-            // for football. It used to be NFL-only, so other sports got bulky cards (2026-10-28).
-            const useTable =
+            // Phone browsing keeps readable cards; desktop defaults to the sport's stat table.
+            const useTable = !phoneLayout && (
               viewModeOverride === 'sleeper_table' ||
               (viewModeOverride === null &&
-                (poolLayout === 'sleeper_table' || poolLayout === 'auto'))
+                (poolLayout === 'sleeper_table' || poolLayout === 'auto')))
 
             if (!useTable) {
               return (
@@ -1448,7 +1463,7 @@ function PlayerPanelInner({
                   isPlayerQueued={isPlayerQueued}
                   canDraft={canDraft}
                   canNominate={canNominate}
-                  useAiAdp={useAiAdp}
+                  useAiAdp={effectiveUseAiAdp}
                   draftSport={sport}
                   onDraftRequest={onMakePick}
                   onAddToQueue={onAddToQueue}
@@ -1474,7 +1489,7 @@ function PlayerPanelInner({
                   }
                   canDraft={canDraft}
                   canNominate={canNominate}
-                  useAiAdp={useAiAdp}
+                  useAiAdp={effectiveUseAiAdp}
                   draftSport={sport}
                   statColumnOptions={sleeperStatOpts}
                   onDraftRequest={onMakePick}

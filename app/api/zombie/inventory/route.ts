@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,11 @@ export async function GET(req: Request) {
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const [resolvedRules, leagueConfig] = await Promise.all([
+    getZombieRulesForSport(z.sport),
+    getZombieLeagueConfig(leagueId),
+  ])
+  const rules = { ...resolvedRules, reviveThreshold: leagueConfig?.serumReviveCount ?? resolvedRules.reviveThreshold }
 
   let targetUserId = session.user.id
   if (userIdParam && userIdParam !== session.user.id) {
@@ -39,10 +45,11 @@ export async function GET(req: Request) {
   if (!roster) {
     return NextResponse.json({
       items: [],
-      rules: await getZombieRulesForSport(z.sport),
+      rules,
       history: [],
       resolution: null,
       isCommissionerView: targetUserId !== session.user.id,
+      experienceMode: z.experienceMode,
       pendingBashingDecision: null,
     })
   }
@@ -80,6 +87,12 @@ export async function GET(req: Request) {
     where: { zombieLeagueId: z.id },
     select: { userId: true, ambushesRemaining: true },
   })
+
+  const coWhisperer = await prisma.zombieCoWhisperer.findUnique({
+    where: { zombieLeagueId_userId: { zombieLeagueId: z.id, userId: targetUserId } },
+    select: { userId: true, ambushesRemaining: true },
+  })
+  const ownWhisperer = whisperer?.userId === targetUserId ? whisperer : coWhisperer
 
   const viewer = await resolveWhispererViewer(leagueId, session.user.id)
 
@@ -132,15 +145,16 @@ export async function GET(req: Request) {
   return NextResponse.json({
     items: team?.items ?? [],
     teamStatus: team?.status ?? 'Survivor',
-    rules: await getZombieRulesForSport(z.sport),
+    rules,
     history,
     resolution,
     // Only a viewer allowed to know the Whisperer learns who it is.
-    whispererUserId: viewer.canSee ? (whisperer?.userId ?? null) : null,
-    isWhisperer: whisperer?.userId === targetUserId,
-    ambushesRemaining: whisperer?.userId === targetUserId ? whisperer.ambushesRemaining : null,
+    whispererUserId: viewer.canSee ? (ownWhisperer?.userId ?? whisperer?.userId ?? null) : null,
+    isWhisperer: Boolean(ownWhisperer),
+    ambushesRemaining: ownWhisperer?.ambushesRemaining ?? null,
     isCommissionerView: targetUserId !== session.user.id,
     isPaid: z.isPaid,
+    experienceMode: z.experienceMode,
     week,
     pendingBashingDecision,
   })

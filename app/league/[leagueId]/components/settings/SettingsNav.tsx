@@ -45,6 +45,9 @@ export type SettingsNavTabId =
   | 'zombie_paid'
   | 'zombie_universe'
   | 'zombie_updates'
+  | 'zombie_automation'
+  | 'zombie_overrides'
+  | 'zombie_audit'
   | 'zombie_animations'
   | 'zombie_advanced'
   | 'zombie_ai'
@@ -103,6 +106,9 @@ const ZOMBIE_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'zombie_paid', label: '💰 Paid / Free' },
   { id: 'zombie_universe', label: '🌍 Universe' },
   { id: 'zombie_updates', label: '📋 Weekly Updates' },
+  { id: 'zombie_automation', label: '⚙️ Automation' },
+  { id: 'zombie_overrides', label: '🔧 Overrides' },
+  { id: 'zombie_audit', label: '📜 Audit Log' },
   { id: 'zombie_animations', label: '🎬 Animations' },
   { id: 'zombie_advanced', label: '⚙️ Advanced Rules' },
   { id: 'zombie_ai', label: '🤖 League Guide' },
@@ -206,9 +212,9 @@ export function SettingsNav({
 }) {
   const hint = statusLabel(saveStatus, savedLabel)
   const items = [
+    ...(showZombieTabs ? ZOMBIE_NAV : []),
     ...BASE_NAV,
     ...(showSurvivorTabs ? SURVIVOR_NAV : []),
-    ...(showZombieTabs ? ZOMBIE_NAV : []),
     ...(showIdpTabs ? IDP_NAV : []),
     ...(showDevyTabs ? DEVY_NAV : []),
     ...(showC2cTabs ? C2C_NAV : []),
@@ -229,7 +235,7 @@ export function SettingsNav({
           type="button"
           onClick={() => onSelect(t.id)}
           className={clsx(
-            'rounded-xl px-3 py-2.5 text-left text-[13px] transition-colors',
+            'min-h-11 rounded-xl px-3 py-2.5 text-left text-[13px] transition-colors',
             activeTab === t.id
               ? 'bg-white/[0.08] font-medium text-teal-300/95'
               : 'text-white/65 hover:bg-white/[0.05] hover:text-white/90',

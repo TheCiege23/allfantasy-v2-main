@@ -138,8 +138,8 @@ jobs:
         # lanes queued up to 64 minutes behind it. mobile-smoke stays on PRs as the phone
         # lane; an auth-only mobile regression now surfaces on the nightly run.
         include: ${{ github.event_name == 'pull_request'
-          && fromJSON('[{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45}]')
-          || fromJSON('[{"label":"core 1/3","lane":"core-shard-1","shard":"1/3","job-timeout":180},{"label":"core 2/3","lane":"core-shard-2","shard":"2/3","job-timeout":180},{"label":"core 3/3","lane":"core-shard-3","shard":"3/3","job-timeout":180},{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45},{"label":"mobile-auth","lane":"mobile-auth","job-timeout":60}]') }}
+          && fromJSON('[{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45},{"label":"zombie-rehearsal","lane":"zombie-rehearsal","job-timeout":60}]')
+          || fromJSON('[{"label":"core 1/3","lane":"core-shard-1","shard":"1/3","job-timeout":180},{"label":"core 2/3","lane":"core-shard-2","shard":"2/3","job-timeout":180},{"label":"core 3/3","lane":"core-shard-3","shard":"3/3","job-timeout":180},{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45},{"label":"zombie-rehearsal","lane":"zombie-rehearsal","job-timeout":60},{"label":"mobile-auth","lane":"mobile-auth","job-timeout":60}]') }}
     services:
       postgres:
         image: postgres:16
@@ -179,7 +179,7 @@ jobs:
       if: startsWith(matrix.lane, 'core-shard-')
       run: npx playwright install --with-deps
     - name: Install Playwright Chromium
-      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || matrix.lane == 'retention-engagement'
+      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || matrix.lane == 'retention-engagement' || matrix.lane == 'zombie-rehearsal'
       run: npx playwright install --with-deps chromium
     - name: Install Playwright Chromium + WebKit
       if: startsWith(matrix.lane, 'mobile-')
@@ -198,7 +198,7 @@ jobs:
     # both `/` and `/pricing` import `getMonetizationCatalog`, so two of the
     # three public routes reach Postgres. `/login` alone would not need it.
     - name: Prepare DB schema
-      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || startsWith(matrix.lane, 'mobile-') || startsWith(matrix.lane, 'core-shard-')
+      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || startsWith(matrix.lane, 'mobile-') || startsWith(matrix.lane, 'core-shard-') || matrix.lane == 'zombie-rehearsal'
       env:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
@@ -208,7 +208,7 @@ jobs:
     # league creation dies on `leagues_tenantId_fkey`. That is what has been
     # failing the three core shards while the other lanes pass.
     - name: Seed the default tenant
-      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || startsWith(matrix.lane, 'mobile-') || startsWith(matrix.lane, 'core-shard-')
+      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || startsWith(matrix.lane, 'mobile-') || startsWith(matrix.lane, 'core-shard-') || matrix.lane == 'zombie-rehearsal'
       env:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
@@ -310,6 +310,19 @@ jobs:
         # GET with 405, which still compiles it). If you add a referral spec, add its routes.
         E2E_WARM_ROUTES: /,/referral,/api/auth/csrf,/api/auth/session,/api/auth/register,/api/referral/link,/api/referral/stats,/api/referral/rewards,/api/referral/track-click
       run: npx playwright test e2e/referral-growth-suite.spec.ts --project=chromium
+    # Native Zombie release rehearsal uses only the disposable job Postgres.
+    # Its scores are synthetic and cannot calibrate provider combat thresholds.
+    - name: Run four-sport Zombie rehearsal
+      if: matrix.lane == 'zombie-rehearsal'
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        NEXTAUTH_SECRET: ci-nextauth-secret
+        NEXTAUTH_URL: http://localhost:3000
+        NODE_OPTIONS: --max-old-space-size=8192 --conditions=react-server
+        AF_ZOMBIE_REHEARSAL: '1'
+        E2E_WARM_ROUTES: /api/auth/csrf,/api/auth/session,/api/leagues,/api/zombie/weekly-payout,/api/auth/confirm-age,/zombie/universe/e2e-renewal-warmup
+      run: npx playwright test e2e/zombie-four-sport-native-rehearsal.spec.ts e2e/zombie-provider-week-rehearsal.spec.ts --project=chromium
     # The phone gate. Two device projects over the public routes only — no login,
     # no fixture league, nothing that makes the core shards slow and flaky.
     #
@@ -317,6 +330,19 @@ jobs:
     # these two projects in playwright.config.ts and ignored by the desktop ones,
     # so naming the projects runs exactly the mobile specs and naming a path
     # would not. Do not "helpfully" add a path here.
+    - name: Verify four-sport phone draft usability
+      if: matrix.lane == 'mobile-smoke'
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        NEXTAUTH_SECRET: ci-nextauth-secret
+        NEXTAUTH_URL: http://localhost:3000
+        NODE_OPTIONS: --max-old-space-size=8192
+        PLAYWRIGHT_SERVER_NODE_OPTIONS: --max-old-space-size=8192
+        E2E_WARM_ROUTES: /,/e2e/draft-room
+        PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/phone-draft-usability
+      run: >-
+        npx playwright test --project="Mobile Chrome" --project="Mobile Safari" --grep "usability: phone players" --reporter=line,html
     - name: Run Playwright tests (mobile smoke)
       if: matrix.lane == 'mobile-smoke'
       env:
@@ -328,7 +354,47 @@ jobs:
         NODE_OPTIONS: --max-old-space-size=8192
         # The server uses a separate override so react-server conditions stay out.
         PLAYWRIGHT_SERVER_NODE_OPTIONS: --max-old-space-size=8192
-      run: npm run test:e2e:mobile
+        # Audited phone routes only: keep unrelated admin/core bundles out of this server.
+        E2E_WARM_ROUTES: /,/login,/pricing,/e2e/draft-room,/dev/league-mobile-preview,/dev/tournament-invite-readiness,/zombie/e2e-zombie-phone-league,/zombie/e2e-zombie-phone-league/items
+      # A long-lived dev server restarted under memory pressure on 2026-10-29.
+      # Give each route family a fresh server, as the draft regression lane does.
+      # Every mobile spec stays assigned once; both devices and @db exclusion stay intact.
+      run: |
+        mapfile -t all_specs < <(git ls-files -- e2e/mobile | grep -E '\.spec\.ts$' | sort)
+        draft_specs=()
+        layout_specs=()
+        general_specs=()
+        for spec in "${all_specs[@]}"; do
+          case "$spec" in
+            e2e/mobile/draft-room-usability.spec.ts|e2e/mobile/league-draft-polish.spec.ts|e2e/mobile/league-layout-settings.spec.ts|e2e/mobile/zombie-commissioner-accessibility.spec.ts)
+              draft_specs+=("$spec") ;;
+            e2e/mobile/iphone-safe-area-layout.spec.ts|e2e/mobile/support-keyboard-layout.spec.ts|e2e/mobile/league-tray-layout.spec.ts|e2e/mobile/desktop-layout.spec.ts|e2e/mobile/tablet-layout.spec.ts)
+              layout_specs+=("$spec") ;;
+            *)
+              general_specs+=("$spec") ;;
+          esac
+        done
+        if (( ${#all_specs[@]} == 0 || ${#draft_specs[@]} + ${#layout_specs[@]} + ${#general_specs[@]} != ${#all_specs[@]} )); then
+          echo "::error::Mobile spec partition is empty or incomplete."
+          exit 1
+        fi
+        rc=0
+        if (( ${#draft_specs[@]} )); then
+          E2E_WARM_ROUTES=/,/e2e/draft-room,/dev/league-mobile-preview,/zombie/e2e-zombie-phone-league,/zombie/e2e-zombie-phone-league/items \
+          PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/mobile-draft \
+            npx playwright test "${draft_specs[@]}" --project="Mobile Chrome" --project="Mobile Safari" --grep-invert "@db" --reporter=line,html || rc=1
+        fi
+        if (( ${#layout_specs[@]} )); then
+          E2E_WARM_ROUTES=/,/login,/dev/league-mobile-preview \
+          PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/mobile-layout \
+            npx playwright test "${layout_specs[@]}" --project="Mobile Chrome" --project="Mobile Safari" --grep-invert "@db" --reporter=line,html || rc=1
+        fi
+        if (( ${#general_specs[@]} )); then
+          E2E_WARM_ROUTES=/,/login,/pricing,/dev/tournament-invite-readiness \
+          PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/mobile-general \
+            npx playwright test "${general_specs[@]}" --project="Mobile Chrome" --project="Mobile Safari" --grep-invert "@db" --reporter=line,html || rc=1
+        fi
+        exit $rc
     # ⚠ THE AUTHENTICATED PHONE LANE. Separate from mobile-smoke on purpose: it
     # seeds leagues and users and signs in, which is exactly what phone-smoke.spec.ts
     # refuses to do ("an authenticated phone journey ... belongs in its own lane").
@@ -369,7 +435,7 @@ jobs:
 
   draft-room-regression:
     name: Draft Room Regression
-    timeout-minutes: 30
+    timeout-minutes: 35
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -422,6 +488,16 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
       run: node scripts/seed-e2e-tenant.mjs
+    - name: Verify four-sport draft usability
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        NEXTAUTH_SECRET: ci-nextauth-secret
+        NEXTAUTH_URL: http://localhost:3000
+        NODE_OPTIONS: --max-old-space-size=8192
+        E2E_WARM_ROUTES: /,/e2e/draft-room
+        PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/player-space
+      run: npx playwright test e2e/draft-room-visual.spec.ts --grep "usable player list|usability:" --project=chromium
     - name: Run draft-room regression
       env:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci

@@ -8099,6 +8099,7 @@ model LeagueChatMessage {
   discordMessageId  String?  @db.VarChar(64)
   sourceDiscord     Boolean  @default(false)
   globalBroadcastId String?  @db.VarChar(64)
+  zombieWeeklyAnnouncementId String? @unique @db.VarChar(64)
   /// @chimmy private thread â€” only `visibleToUserId` should see the row when true.
   isPrivate         Boolean  @default(false)
   mentionedUserIds  String[] @default([])
@@ -10207,6 +10208,8 @@ model ZombieLeague {
   potTotal                 Float                    @default(0)
   season                   Int                      @default(2026)
   seasonStartWeek          Int?
+  experienceMode           String                   @default("enhanced") @db.VarChar(16)
+  rulesSnapshot            Json?
   slug                     String                   @default("") @db.VarChar(160)
   sport                    String                   @default("NFL") @db.VarChar(12)
   status                   String                   @default("setup")
@@ -10216,6 +10219,7 @@ model ZombieLeague {
   ultimateSurvivorPot      Boolean                  @default(false)
   weeklyPayoutEnabled      Boolean                  @default(false)
   whispererAmbushCount     Int                      @default(3)
+  whispererCount           Int                      @default(1)
   whispererIsPublic        Boolean                  @default(true)
   whispererSelectionMode   String                   @default("random")
   /// 0=Sun â€¦ 6=Sat (UTC). Null = no scheduled weekly post.
@@ -10246,8 +10250,10 @@ model ZombieLeague {
   resources                ZombieResourceLedger[]
   rulesDocuments           ZombieRulesDocument[]
   weeklyResolutions        ZombieWeeklyResolution[]
+  externalWeeklyPayouts    ZombieExternalWeeklyPayout[]
   winnings                 ZombieWeeklyWinnings[]
   whispererRecord          WhispererRecord?
+  coWhisperers             ZombieCoWhisperer[]
 
   @@index([universeId])
   @@index([levelId])
@@ -10281,6 +10287,27 @@ model WhispererRecord {
   @@index([zombieLeagueId])
   @@index([userId])
   @@map("zombie_whisperer_records")
+}
+
+/// Optional second Whisperer seat for NBA, NHL, and MLB. Primary record remains intact.
+model ZombieCoWhisperer {
+  id                  String       @id @default(cuid())
+  zombieLeagueId      String       @unique
+  userId              String
+  displayName         String
+  selectionMode       String
+  selectedAt          DateTime     @default(now())
+  isPubliclyRevealed  Boolean      @default(true)
+  ambushesGranted     Int          @default(3)
+  ambushesUsed        Int          @default(0)
+  ambushesRemaining   Int          @default(3)
+  wasDefeated         Boolean      @default(false)
+  defeatedAtWeek      Int?
+  createdAt           DateTime     @default(now())
+  league              ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+
+  @@unique([zombieLeagueId, userId])
+  @@map("zombie_co_whisperers")
 }
 
 model ZombieInfectionEvent {
@@ -10328,6 +10355,7 @@ model ZombieWeeklyResolution {
   weaponAwards           Json?
   resolvedAt             DateTime?
   requiresStatCorrection Boolean      @default(false)
+  settlementSnapshot     Json?
   createdAt              DateTime     @default(now())
   league                 ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
 
@@ -10432,6 +10460,7 @@ model ZombieAnnouncement {
   createdAt      DateTime     @default(now())
   /// When set, post only after this time (cron queue).
   scheduledFor   DateTime?
+  idempotencyKey String?      @unique @db.VarChar(128)
   league         ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
 
   @@index([zombieLeagueId, type])
@@ -10453,6 +10482,26 @@ model ZombieNameRecord {
 
   @@index([universeId])
   @@map("zombie_name_records")
+}
+
+/// Commissioner-recorded amount won on an external fantasy payout platform. No money moves here.
+model ZombieExternalWeeklyPayout {
+  id             String        @id @default(cuid())
+  zombieLeagueId String
+  week           Int
+  winnerRosterId String        @db.VarChar(64)
+  amountCents    Int
+  providerName   String        @db.VarChar(80)
+  status         String        @default("recorded") @db.VarChar(24)
+  reference      String?       @db.VarChar(160)
+  recordedById   String        @db.VarChar(64)
+  recordedAt     DateTime      @default(now())
+  confirmedAt    DateTime?
+  league         ZombieLeague @relation(fields: [zombieLeagueId], references: [id], onDelete: Cascade)
+
+  @@unique([zombieLeagueId, week])
+  @@index([winnerRosterId])
+  @@map("zombie_external_weekly_payouts")
 }
 
 model ZombiePaidConfig {
@@ -10746,6 +10795,7 @@ model ZombieLeagueConfig {
   infectionLossToWhisperer  Boolean  @default(true)
   infectionLossToZombie     Boolean  @default(true)
   serumReviveCount          Int      @default(2)
+  autoSerumRevive           Boolean  @default(false)
   serumAwardHighScore       Boolean  @default(true)
   serumAwardOnBashMaul      Boolean  @default(true)
   serumUseBeforeLastStarter Boolean  @default(true)
@@ -11818,6 +11868,8 @@ model ZombieTeamItem {
   activatesAtWeek Int?
   /// ready | pending_activation â€” serum registers before kickoff, resolves at score finalization.
   activationState String           @default("ready")
+  acquiredAtWeek  Int?
+  awardKey        String?          @unique @db.VarChar(160)
   team            ZombieLeagueTeam @relation(fields: [teamStatusId], references: [id], onDelete: Cascade)
 
   @@index([teamStatusId])

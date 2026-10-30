@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { calculateOfficialTeamScore, leagueUsesDevyEngine } from '@/lib/devy/scoringEligibilityEngine'
 import { leagueUsesC2CEngine, updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
+import { isFootballC2CLeague } from '@/lib/c2c/campusLineup'
 import type { ScoringCategory } from '@/lib/sportConfig/types'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
@@ -808,9 +809,10 @@ async function loadCampusPoints(
   league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
   args: { season: number; nflWeek: number; homeRosterId: string; awayRosterId: string },
 ) {
-  if (!league || !isNativePlatform(league.platform)) return null
-  const { campusPointsForMatchup, isFootballC2CLeague } = await import('@/lib/c2c/campusScoring')
-  return isFootballC2CLeague(league) ? campusPointsForMatchup(prisma as never, args) : null
+  // Keep unrelated native formats out of the campus scorer and its circular import.
+  if (!league || !isNativePlatform(league.platform) || !isFootballC2CLeague(league)) return null
+  const { campusPointsForMatchup } = await import('@/lib/c2c/campusScoring')
+  return campusPointsForMatchup(prisma as never, args)
 }
 
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
