@@ -131,7 +131,9 @@ describe('DraftBoardCell — tile height (56px readability redesign, supersedes 
   })
 
   it('board columns are at least 104px and round labels match the tile height', () => {
-    expect(boardSrc).toMatch(/minmax\(104px, 1fr\)/)
+    // The template reads custom properties now (phones cap columns at 84px); assert the code's
+    // md+ fallbacks, not the prose — a comment in DraftBoard quotes the old literal.
+    expect(boardSrc).toMatch(/var\(--af-board-rd, 40px\) repeat\(\$\{teamCount\}, minmax\(var\(--af-board-col-min, 104px\), var\(--af-board-col-max, 1fr\)\)\)/)
     expect(boardSrc).not.toMatch(/minmax\(88px, 1fr\)/)
     expect(boardSrc).toMatch(/min-h-\[56px\][^`"]*sm:min-h-\[60px\]/)
   })

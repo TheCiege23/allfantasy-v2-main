@@ -409,6 +409,8 @@ function DraftBoardInner({
     })
   }, [draftType, currentOverallPick, teamCount, thirdRoundReversal])
 
+  const boardColumns = `var(--af-board-rd, 40px) repeat(${teamCount}, minmax(var(--af-board-col-min, 104px), var(--af-board-col-max, 1fr)))`
+
   return (
     <section
       className={
@@ -427,11 +429,12 @@ function DraftBoardInner({
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`text-sm font-bold tracking-tight drop-shadow-sm ${rs ? 'bg-gradient-to-r from-white to-cyan-100/90 bg-clip-text text-transparent' : 'text-white'}`}>
+            {/* Phones: the title, mode chip and legend cost a row of a ~570px board; the round controls stay. */}
+            <span className={`text-sm font-bold tracking-tight drop-shadow-sm max-md:hidden ${rs ? 'bg-gradient-to-r from-white to-cyan-100/90 bg-clip-text text-transparent' : 'text-white'}`}>
               Draft board
             </span>
             <span
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] shadow-sm ${rs ? 'border-white/18 bg-white/[0.08] text-cyan-100/85' : 'border-white/12 bg-white/[0.06] text-white/60'}`}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] shadow-sm max-md:hidden ${rs ? 'border-white/18 bg-white/[0.08] text-cyan-100/85' : 'border-white/12 bg-white/[0.06] text-white/60'}`}
             >
               {boardModeLabel}
             </span>
@@ -445,7 +448,7 @@ function DraftBoardInner({
               with no roster has no such cells, and naming a state that cannot appear is noise.
             */}
             <span
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/45"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/45 max-md:hidden"
               data-testid="draft-board-legend"
             >
               <span className="inline-flex items-center gap-1">
@@ -551,7 +554,7 @@ function DraftBoardInner({
       </div>
 
       <div
-        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
+        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${draftType === 'auction' ? '' : 'max-md:hidden'} ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
         data-testid="draft-board-round-label"
       >
         {draftType === 'auction'
@@ -656,14 +659,24 @@ function DraftBoardInner({
         </div>
       ) : (
         <div className="snap-x snap-mandatory overflow-x-auto overscroll-x-contain overflow-y-visible px-2 py-2 pb-3 [-webkit-overflow-scrolling:touch]">
-          <div className="min-w-max" data-testid="draft-board-grid">
+          {/*
+            ⚠ PHONE COLUMNS ARE CAPPED (2026-10-29). Under `min-w-max` a `1fr` track grows to its
+            longest content, so one "steve21011gmailcom's Team" made every column ~183px and a
+            phone showed 2.3 teams. Below md the custom properties pin a column to 84px (names
+            truncate; the header cell's `title` still carries the full name). md+ leaves them
+            unset, so `boardColumns` resolves to exactly the old `40px repeat(n, minmax(104px, 1fr))`.
+          */}
+          <div
+            className="min-w-max max-md:[--af-board-rd:30px] max-md:[--af-board-col-min:84px] max-md:[--af-board-col-max:84px]"
+            data-testid="draft-board-grid"
+          >
             <div
               className={`sticky top-0 z-10 grid gap-0 border-b pb-0.5 backdrop-blur-md sm:gap-0.5 ${
                 rs
                   ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
                   : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
               }`}
-              style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(104px, 1fr))` }}
+              style={{ gridTemplateColumns: boardColumns }}
               data-testid="draft-board-team-header"
             >
               <div
@@ -739,7 +752,7 @@ function DraftBoardInner({
                 <section key={round} data-testid={`draft-board-round-${round}`}>
                     <div
                       className="grid gap-[3px]"
-                      style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(104px, 1fr))` }}
+                      style={{ gridTemplateColumns: boardColumns }}
                     >
                     {(() => {
                       const reversed = isSnakeRoundReversed(round, draftType, thirdRoundReversal)

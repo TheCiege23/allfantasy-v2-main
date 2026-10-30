@@ -426,7 +426,12 @@ function DraftBoardCellInner({
         </div>
       ) : (
         <div className="mt-auto flex min-h-0 min-w-0 items-center gap-1.5 overflow-hidden">
-          <div className="relative shrink-0">
+          {/*
+            Phones: the board column is 84px (DraftBoard caps it), so the headshot left the name
+            three letters wide ("Nik…"). Below md the headshot hides and the cell shows the last
+            name, as Sleeper does; the full name stays in the title. md+ is unchanged.
+          */}
+          <div className="relative shrink-0 max-md:hidden">
             <TinyHeadshot
               name={pick.playerName}
               src={headshotSrc}
@@ -444,10 +449,17 @@ function DraftBoardCellInner({
           </div>
           <div className="min-w-0 flex-1">
             <span
-              className="block truncate text-[12px] font-semibold leading-[15px] tracking-tight text-white"
+              className="block truncate text-[12px] font-semibold leading-[15px] tracking-tight text-white max-md:hidden"
               title={pick.playerName ?? undefined}
             >
               {pick.playerName}
+            </span>
+            <span
+              className="block truncate text-[12px] font-semibold leading-[15px] tracking-tight text-white md:hidden"
+              title={pick.playerName ?? undefined}
+              data-testid={`draft-board-cell-${pick.overall}-short-name`}
+            >
+              {boardShortName(pick.playerName)}
             </span>
             <p className="flex min-w-0 items-center gap-1 text-[11px] leading-[14px] text-white/65">
               <span className="truncate">
@@ -470,6 +482,12 @@ function DraftBoardCellInner({
       )}
     </div>
   )
+}
+
+/** "Nikola Jokic" -> "Jokic", "Gary Payton II" -> "Payton II"; a one-word name is kept whole. */
+export function boardShortName(name: string | null | undefined): string {
+  const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean)
+  return parts.length > 1 ? parts.slice(1).join(' ') : parts[0] ?? ''
 }
 
 export const DraftBoardCell = React.memo(DraftBoardCellInner)
