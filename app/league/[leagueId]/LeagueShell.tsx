@@ -1,5 +1,7 @@
 'use client'
 
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
 import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
@@ -2549,6 +2551,7 @@ function LeagueTabRouter({
           <LeagueChatSurface
             leagueId={leagueId}
             leagueName={selectedLeague.name ?? 'League'}
+            dynastyBackground={usesDynastyBackground(selectedLeague)}
             platform={selectedLeague.platform}
             isCommissioner={isCommissioner}
             teamCount={selectedLeague.teamCount ?? null}

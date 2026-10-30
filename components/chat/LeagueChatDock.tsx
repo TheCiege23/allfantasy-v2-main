@@ -8,6 +8,7 @@ type Props = {
   leagueId: string
   leagueName?: string
   isCommissioner?: boolean
+  dynastyBackground?: boolean
 }
 
 /**
@@ -18,6 +19,7 @@ export default function LeagueChatDock({
   leagueId,
   leagueName,
   isCommissioner,
+  dynastyBackground = false,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState(leagueName ?? "League")
@@ -53,6 +55,7 @@ export default function LeagueChatDock({
           <LeagueChatPanel
             leagueId={leagueId}
             leagueName={name}
+            dynastyBackground={dynastyBackground}
             isCommissioner={isCommissioner}
             onClose={() => setOpen(false)}
             className="max-h-[85vh] md:max-h-[calc(100vh-8rem)]"
