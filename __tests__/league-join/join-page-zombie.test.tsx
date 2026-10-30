@@ -66,7 +66,7 @@ describe('/join?code= for a Zombie league', () => {
     expect(screen.getByText('Guap invited you')).toBeTruthy()
     expect(screen.getByText(/lose by 211\+ and 50% goes, by 128\+ and 25%/)).toBeTruthy()
     expect(screen.getByText(/Collect 3 serums/)).toBeTruthy()
-    expect(screen.getByText(/except one secret Whisperer/)).toBeTruthy()
+    expect(screen.getByText(/secret Whisperers/)).toBeTruthy()
     const back = encodeURIComponent('/join?code=ZMB123&go=1')
     expect(screen.getByText('Create account and join').closest('a')!.getAttribute('href')).toBe(`/signup?callbackUrl=${back}`)
   })
