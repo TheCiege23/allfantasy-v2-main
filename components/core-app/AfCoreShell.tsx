@@ -2215,11 +2215,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       Plan:{' '}
                       <span className="af-data-menu-plan-name">{plan.name}</span>
                       {plan.tokensLeft != null
-                        ? ` · ${plan.tokensLeft.toLocaleString(getAppIntlLocale())} ${language === 'es' ? 'tokens restantes' : 'tokens left'}`
+                        ? ` · ${plan.tokensLeft.toLocaleString(getAppIntlLocale())} ${copy('tokens left')}`
                         : null}
                     </p>
                   ) : null}
-                  <strong>{language === 'es' ? 'Pantalla' : 'Display'}</strong>
+                  <strong>{copy('Display')}</strong>
                   <div className="af-data-menu-display-row">
                     <ModeToggle className="af-mode-chip" />
                     <CoreLanguageChip className="af-mode-chip" />
