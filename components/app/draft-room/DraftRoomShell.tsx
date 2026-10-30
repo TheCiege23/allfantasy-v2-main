@@ -9,6 +9,21 @@ import { DraftMobileTray } from './DraftMobileTray'
 import './draft-mobile.css'
 
 const BOTTOM_DOCK_PREF_KEY = 'af:draft-premium-bottom-dock-expanded'
+const DOCK_SIZE_PREF_KEY = 'af:draft-premium-dock-size'
+
+/**
+ * How much of the desktop screen the player pool / queue / chat panel gets.
+ * - `min`: panel hidden, the board fills the screen.
+ * - `half`: board and panel split the screen (default).
+ * - `tall`: the panel takes most of the screen, the board keeps a strip at the top.
+ */
+export type DraftDockSize = 'min' | 'half' | 'tall'
+
+const BOARD_ZONE_BY_DOCK_SIZE: Record<DraftDockSize, string> = {
+  min: 'min-h-0 max-h-[unset] flex-1',
+  half: 'max-h-[min(50vh,600px)]',
+  tall: 'max-h-[min(28vh,320px)]',
+}
 
 export type MobileDraftTab = 'board' | 'players' | 'queue' | 'intel' | 'helper' | 'roster' | 'keepers' | 'chat'
 
@@ -90,7 +105,8 @@ export function DraftRoomShell({
   bottomBar,
 }: DraftRoomShellProps) {
   const { t } = useLanguage()
-  const [bottomDockExpanded, setBottomDockExpanded] = useState(true)
+  const [dockSize, setDockSize] = useState<DraftDockSize>('half')
+  const bottomDockExpanded = dockSize !== 'min'
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
   useEffect(() => { setMobileToolsOpen(false) }, [mobileTab])
   useEffect(() => {
@@ -103,7 +119,9 @@ export function DraftRoomShell({
     setMobileToolsOpen(false)
     onMobileTabChange(tab)
   }
-  const allowPremiumDockCollapse = surfaceVariant !== 'redraft_snake'
+  // Every surface can resize the panel. The redraft room used to be locked open, which left
+  // a user with no way to see more of the pool or chat (reported 2026-10-28).
+  const allowPremiumDockCollapse = true
 
   /*
    * Mobile tray — a Sleeper-style bottom sheet over an always-visible board. The sheet mechanics
@@ -125,28 +143,33 @@ export function DraftRoomShell({
   const expandTray = useCallback(() => onMobileTabChange(lastTrayTabRef.current), [onMobileTabChange])
 
   useEffect(() => {
-    if (!allowPremiumDockCollapse) {
-      setBottomDockExpanded(true)
-      return
-    }
     try {
-      const v = window.localStorage.getItem(BOTTOM_DOCK_PREF_KEY)
-      if (v === '0') setBottomDockExpanded(false)
+      const saved = window.localStorage.getItem(DOCK_SIZE_PREF_KEY)
+      if (saved === 'min' || saved === 'half' || saved === 'tall') {
+        setDockSize(saved)
+        return
+      }
+      // Older two-state preference: '0' meant collapsed.
+      if (window.localStorage.getItem(BOTTOM_DOCK_PREF_KEY) === '0') setDockSize('min')
     } catch {
       /* ignore */
     }
-  }, [allowPremiumDockCollapse])
+  }, [])
 
-  const persistBottomDock = useCallback((expanded: boolean) => {
-    const nextExpanded = allowPremiumDockCollapse ? expanded : true
-    setBottomDockExpanded(nextExpanded)
-    if (!allowPremiumDockCollapse) return
+  const persistDockSize = useCallback((next: DraftDockSize) => {
+    setDockSize(next)
     try {
-      window.localStorage.setItem(BOTTOM_DOCK_PREF_KEY, nextExpanded ? '1' : '0')
+      window.localStorage.setItem(DOCK_SIZE_PREF_KEY, next)
+      window.localStorage.setItem(BOTTOM_DOCK_PREF_KEY, next === 'min' ? '0' : '1')
     } catch {
       /* ignore */
     }
-  }, [allowPremiumDockCollapse])
+  }, [])
+
+  const persistBottomDock = useCallback(
+    (expanded: boolean) => persistDockSize(expanded ? 'half' : 'min'),
+    [persistDockSize],
+  )
 
   const visibleTabs = MOBILE_TABS.filter(
     (tab) =>
@@ -214,33 +237,73 @@ export function DraftRoomShell({
                * The board now yields space down to a floor instead of starving it.
                */
               'min-h-[160px] overflow-auto overscroll-contain [overflow-anchor:none] border-b',
-              bottomDockExpanded ? 'max-h-[min(60vh,720px)]' : 'min-h-0 max-h-[unset] flex-1',
+              BOARD_ZONE_BY_DOCK_SIZE[dockSize],
               surfaceVariant === 'redraft_snake'
                 ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(10,22,44,0.98),rgba(6,12,22,0.99))] shadow-[inset_0_-1px_0_rgba(34,211,238,0.06)]'
                 : 'border-white/[0.06] bg-[#0d1428]',
             )}
             data-testid="draft-premium-board-zone"
             data-dock-expanded={bottomDockExpanded ? 'true' : 'false'}
+            data-dock-size={dockSize}
           >
             {draftBoard}
           </div>
           {/* D.6.2 — collapse arrow toggle between the board and the dock.
               Two stacked chevrons that flip direction based on state. Click → toggle. */}
           {allowPremiumDockCollapse ? (
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => persistBottomDock(!bottomDockExpanded)}
-                data-testid="draft-dock-collapse-toggle"
-                data-expanded={bottomDockExpanded ? 'true' : 'false'}
-                aria-expanded={bottomDockExpanded}
-                aria-label={bottomDockExpanded ? 'Collapse bottom dock' : 'Expand bottom dock'}
-                title={bottomDockExpanded ? 'Collapse bottom dock' : 'Expand bottom dock'}
-                className="absolute left-1/2 top-0 z-20 inline-flex h-8 w-12 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/15 bg-[#0a1228] text-white/85 shadow-[0_8px_22px_rgba(0,0,0,0.45)] transition hover:border-cyan-400/35 hover:text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+            <div className="flex shrink-0 items-center justify-center border-b border-white/[0.06] bg-[#081022] py-1">
+              {/* Panel size: hide it, split the screen, or give it most of the screen. It sits on its
+                  own divider bar; floating across the edge, the panel below clipped it. */}
+              <div
+                role="group"
+                aria-label="Player panel size"
+                className="inline-flex items-center gap-0.5 rounded-full border border-white/15 bg-[#0a1228] p-0.5 shadow-[0_6px_16px_rgba(0,0,0,0.4)]"
+                data-testid="draft-dock-size-control"
               >
-                <ChevronUp className={cn('h-3 w-3', bottomDockExpanded ? 'opacity-90' : 'opacity-30')} />
-                <ChevronDown className={cn('h-3 w-3 -mt-0.5', bottomDockExpanded ? 'opacity-30' : 'opacity-90')} />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => persistBottomDock(!bottomDockExpanded)}
+                  data-testid="draft-dock-collapse-toggle"
+                  data-expanded={bottomDockExpanded ? 'true' : 'false'}
+                  aria-expanded={bottomDockExpanded}
+                  aria-label={bottomDockExpanded ? 'Collapse bottom dock' : 'Expand bottom dock'}
+                  title={bottomDockExpanded ? 'Hide the player panel' : 'Show the player panel'}
+                  className={cn(
+                    'inline-flex h-7 items-center justify-center gap-1 rounded-full px-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
+                    dockSize === 'min' ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
+                  )}
+                >
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                  Board
+                </button>
+                <button
+                  type="button"
+                  onClick={() => persistDockSize('half')}
+                  data-testid="draft-dock-size-half"
+                  aria-pressed={dockSize === 'half'}
+                  title="Split the screen between the board and the player panel"
+                  className={cn(
+                    'inline-flex h-7 items-center justify-center rounded-full px-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
+                    dockSize === 'half' ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
+                  )}
+                >
+                  Half
+                </button>
+                <button
+                  type="button"
+                  onClick={() => persistDockSize('tall')}
+                  data-testid="draft-dock-size-tall"
+                  aria-pressed={dockSize === 'tall'}
+                  title="Give the player pool and chat most of the screen"
+                  className={cn(
+                    'inline-flex h-7 items-center justify-center gap-1 rounded-full px-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
+                    dockSize === 'tall' ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
+                  )}
+                >
+                  <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+                  Players
+                </button>
+              </div>
             </div>
           ) : null}
           <div

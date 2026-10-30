@@ -162,8 +162,9 @@ describe('D.2 — PlayerPanel poolLayout integration', () => {
     expect(src).toMatch(/poolLayout\?: 'auto' \| 'card' \| 'sleeper_table'/)
   })
 
-  it('defaults to the table for NFL when poolLayout is auto', () => {
-    expect(src).toMatch(/poolLayout === 'auto' && sport === 'NFL'/)
+  it('defaults to the table for every sport when poolLayout is auto (NFL-only until 2026-10-28)', () => {
+    expect(src).toMatch(/poolLayout === 'sleeper_table' \|\| poolLayout === 'auto'\)\)/)
+    expect(src).not.toMatch(/poolLayout === 'auto' && sport === 'NFL'/)
   })
 
   it('always uses the table when poolLayout === sleeper_table (explicit opt-in)', () => {

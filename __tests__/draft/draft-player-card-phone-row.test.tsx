@@ -28,13 +28,20 @@ describe('DraftPlayerCard row on a phone', () => {
     card()
     const inline = screen.getByTestId('c0-adp-inline')
     expect(classes(inline)).toContain('md:hidden')
-    expect(inline.textContent).toBe(' · ADP 3 · Bye 7')
-    // The desktop box is still rendered (desktop + e2e read `-adp`/`-bye`), hidden only below md.
+    // NBA has no bye week, so — like the md+ box (`showBye`) — the phone line carries ADP only.
+    expect(inline.textContent).toBe(' · ADP 3')
+    expect(screen.queryByTestId('c0-bye')).toBeNull()
+    // The desktop box is still rendered (desktop + e2e read `-adp`), hidden only below md.
     const box = screen.getByTestId('c0-adp').closest('div')!.parentElement!
     expect(classes(box)).toContain('max-md:hidden')
-    expect(screen.getByTestId('c0-bye').textContent).toBe('7')
     const teamBadge = [...screen.getByTestId('c0-name').parentElement!.children].find((el) => el.textContent === 'OKC')
     expect(classes(teamBadge ?? null)).toContain('max-md:hidden')
+  })
+
+  it('carries Bye on the phone line where the sport has one, matching the md+ box', () => {
+    card({ draftSport: 'NFL' })
+    expect(screen.getByTestId('c0-adp-inline').textContent).toBe(' · ADP 3 · Bye 7')
+    expect(screen.getByTestId('c0-bye').textContent).toBe('7')
   })
 
   it('hides the ADP fallback stat line on a phone, but keeps a line with real stats', () => {
