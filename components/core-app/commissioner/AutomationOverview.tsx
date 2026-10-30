@@ -3,21 +3,21 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { useMessages } from '@/components/i18n/useMessages'
-import { automationOverviewMessages } from '@/lib/core-app/messages/automationOverview'
 import type { AutomationOverviewView } from '@/lib/commissioner-hub/automationOverviewService'
 import type { AutomationGroup, AutomationRow } from '@/lib/commissioner-hub/automationOverview'
 import type { AutomationPreset, PresetPlan } from '@/lib/commissioner-hub/automationPreset'
+import { automationToggleRequest, isToggleableAutomation } from '@/lib/commissioner-hub/automationToggles'
+import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
 
 /**
  * "What runs itself" (lib/commissioner-hub/automationOverview.ts) on the Commissioner Hub: every
  * automation in the league, whether it is on, and a link to its switch. Read-only; each switch stays
  * on its own card or settings page.
  */
-const GROUPS: Array<[AutomationGroup, 'groupLineups' | 'groupDrafts' | 'groupFairness']> = [
-  ['lineups', 'groupLineups'],
-  ['drafts', 'groupDrafts'],
-  ['fairness', 'groupFairness'],
+const GROUPS: Array<[AutomationGroup, string, string]> = [
+  ['lineups', 'Lineups', 'Alineaciones'],
+  ['drafts', 'Drafts', 'Drafts'],
+  ['fairness', 'Fairness', 'Juego limpio'],
 ]
 
 const LABELS_ES: Record<string, string> = {
@@ -31,6 +31,7 @@ const LABELS_ES: Record<string, string> = {
   rookie_draft_starts: 'El draft de novatos empieza solo',
   live_rookie_order: 'Orden del draft de novatos siempre al día',
   tanking: 'Monitor anti-tanking',
+  trade_review_auto_approve: 'Aprobar intercambios sin alertas tras 48 horas sin revisión',
   hold_flagged_trades: 'Retener cambios sospechosos para revisión',
   taxi_rules: 'Reglas del taxi squad aplicadas',
 }
@@ -38,7 +39,7 @@ const LABELS_ES: Record<string, string> = {
 export function AutomationOverview({ leagueId }: { leagueId: string }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
-  const m = useMessages(automationOverviewMessages)
+  const t = (en: string, esText: string) => (es ? esText : en)
   const [view, setView] = useState<AutomationOverviewView | null>(null)
   const [failed, setFailed] = useState(false)
   const [preview, setPreview] = useState<PresetPlan | null>(null)
@@ -70,7 +71,26 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
       if (!r.ok) throw new Error(body.error || '')
       setPreview(body)
     } catch (e) {
-      setMessage(e instanceof Error && e.message ? e.message : m.loadFailed)
+      setMessage(e instanceof Error && e.message ? e.message : t('Could not load. Refresh and try again.', 'No se pudo cargar. Actualiza e inténtalo de nuevo.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** A free automation switched right here, through its own endpoint. */
+  const flip = async (r: AutomationRow) => {
+    if (!isToggleableAutomation(r.key)) return
+    setBusy(true)
+    setMessage('')
+    try {
+      const req = automationToggleRequest(leagueId, r.key, r.state !== 'on')
+      const res = await fetch(req.url, { method: req.method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req.body) })
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(body.error || '')
+      setMessage(t('Saved.', 'Guardado.'))
+      await load()
+    } catch (e) {
+      setMessage(e instanceof Error && e.message ? e.message : t('Could not save. Refresh and try again.', 'No se pudo guardar. Actualiza e inténtalo de nuevo.'))
     } finally {
       setBusy(false)
     }
@@ -83,11 +103,11 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
       const r = await fetch(presetUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preset: preview.preset }) })
       const body = (await r.json().catch(() => ({}))) as PresetPlan & { error?: string }
       if (!r.ok) throw new Error(body.error || '')
-      setMessage(m.saved(body.changes.length))
+      setMessage(t(`Saved: ${body.changes.length} change${body.changes.length === 1 ? '' : 's'}. Every switch still works on its own.`, `Guardado: ${body.changes.length} cambio${body.changes.length === 1 ? '' : 's'}. Cada interruptor sigue funcionando por separado.`))
       setPreview(null)
       await load()
     } catch (e) {
-      setMessage(e instanceof Error && e.message ? e.message : m.saveFailed)
+      setMessage(e instanceof Error && e.message ? e.message : t('Could not save. Refresh and try again.', 'No se pudo guardar. Actualiza e inténtalo de nuevo.'))
     } finally {
       setBusy(false)
     }
@@ -97,68 +117,81 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
   const rows = view?.supported ? view.rows : []
   const on = rows.filter((r) => r.state === 'on').length
   const stateText = (r: AutomationRow) =>
-    r.state === 'on' ? m.stateOn : r.state === 'needs_plan' ? m.stateNeedsPlan : m.stateOff
+    r.state === 'on' ? t('On', 'Activo') : r.state === 'needs_plan' ? t('AF Commissioner', 'AF Commissioner') : t('Off', 'Apagado')
 
   return (
     <section id="ch-automation-overview" className="af-tw af-tw-panel" data-testid="automation-overview">
-      <h2>{m.title}</h2>
+      <h2>{t('What runs itself', 'Lo que funciona solo')}</h2>
       {view === null ? (
-        <p role="status">{m.loading}</p>
+        <p role="status">{t('Loading…', 'Cargando…')}</p>
       ) : (
         <>
           <p>
-            {m.summary(on, rows.length)}
+            {t(
+              `${on} of ${rows.length} automations are on. Each switch is on its own card or settings page; follow the link to change it.`,
+              `${on} de ${rows.length} automatizaciones están activas. Cada interruptor está en su propia tarjeta o página de ajustes; sigue el enlace para cambiarlo.`,
+            )}
           </p>
           <p data-testid="automation-presets">
             <button type="button" className="af-btn" disabled={busy} onClick={() => void ask('recommended')} data-testid="preset-recommended">
-              {m.presetRecommended}
+              {t('Turn on the recommended setup', 'Activar la configuración recomendada')}
             </button>{' '}
             <button type="button" className="af-btn" disabled={busy} onClick={() => void ask('run_it')} data-testid="preset-run-it">
-              {m.presetRunIt}
+              {t('Run it for me', 'Que lo lleve AllFantasy')}
             </button>
           </p>
           {preview ? (
             <div data-testid="preset-preview">
               {preview.changes.length === 0 ? (
-                <p>{m.presetAllOn}</p>
+                <p>{t('Everything in this setup is already on.', 'Todo lo de esta configuración ya está activo.')}</p>
               ) : (
                 <>
-                  <p>{m.presetSavingWill}</p>
+                  <p>{t('Saving will:', 'Al guardar:')}</p>
                   <ul>
                     {preview.changes.map((c) => (
-                      <li key={c.label}>{es ? c.labelEs : c.label}</li>
+                      <li key={c.label}>{t(c.label, c.labelEs)}</li>
                     ))}
                   </ul>
                 </>
               )}
               {preview.needsPlan.length > 0 ? (
                 <p>
-                  {m.presetNeedsPlan}
-                  {(es ? preview.needsPlanEs : preview.needsPlan).join(', ')}.
+                  {t('Needs AF Commissioner, so not included: ', 'Requiere AF Commissioner, así que no se incluye: ')}
+                  {t(preview.needsPlan.join(', '), preview.needsPlanEs.join(', '))}.
                 </p>
               ) : null}
               {preview.changes.length > 0 ? (
                 <button type="button" className="af-btn" disabled={busy} onClick={() => void confirm()} data-testid="preset-confirm">
-                  {busy ? m.saving : m.save}
+                  {busy ? t('Saving…', 'Guardando…') : t('Save', 'Guardar')}
                 </button>
               ) : null}{' '}
               <button type="button" className="af-btn" disabled={busy} onClick={() => setPreview(null)}>
-                {m.cancel}
+                {t('Cancel', 'Cancelar')}
               </button>
             </div>
           ) : null}
-          {GROUPS.map(([group, heading]) => {
+          {GROUPS.map(([group, en, esText]) => {
             const inGroup = rows.filter((r) => r.group === group)
             if (inGroup.length === 0) return null
             return (
               <div key={group}>
-                <h3>{m[heading]}</h3>
+                <h3>{t(en, esText)}</h3>
                 <ul>
                   {inGroup.map((r) => (
                     <li key={r.key} data-testid={`automation-${r.key}`} data-state={r.state}>
-                      <strong>{es ? LABELS_ES[r.key] ?? r.label : r.label}</strong> · {stateText(r)}
-                      {(es ? r.detailEs : r.detail) ? ` · ${es ? r.detailEs : r.detail}` : ''}{' '}
-                      {r.href.startsWith('#') ? <a href={r.href}>{m.change}</a> : <Link href={r.href}>{m.change}</Link>}
+                      {isToggleableAutomation(r.key) ? (
+                        <input
+                          type="checkbox"
+                          checked={r.state === 'on'}
+                          disabled={busy}
+                          onChange={() => void flip(r)}
+                          aria-label={t(r.label, LABELS_ES[r.key] ?? r.label)}
+                          data-testid={`automation-toggle-${r.key}`}
+                        />
+                      ) : null}{' '}
+                      <strong>{t(r.label, LABELS_ES[r.key] ?? r.label)}</strong> · {stateText(r)}
+                      {t(r.detail ?? '', r.detailEs ?? '') ? ` · ${t(r.detail ?? '', r.detailEs ?? '')}` : ''}{' '}
+                      {r.href.startsWith('#') ? <a href={r.href}>{t('Change', 'Cambiar')}</a> : <Link href={r.href}>{t('Change', 'Cambiar')}</Link>}
                     </li>
                   ))}
                 </ul>
@@ -167,6 +200,7 @@ export function AutomationOverview({ leagueId }: { leagueId: string }) {
           })}
         </>
       )}
+      <AutomaticChangesLog leagueId={leagueId} />
       <p role="status">{message}</p>
     </section>
   )

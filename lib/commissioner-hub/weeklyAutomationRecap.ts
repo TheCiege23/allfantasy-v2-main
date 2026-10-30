@@ -116,11 +116,29 @@ export function previousRecapWeek(now: Date): { start: Date; end: Date; key: str
   return { start, end, key: start.toISOString().slice(0, 10) }
 }
 
-export function recapMessage(leagueName: string, lines: readonly string[], lang: RecapLanguage = 'en'): { title: string; body: string } {
+/**
+ * Teams that look inactive and that nothing is covering (phase 11, 2026-10-29): only when the league has
+ * no auto-handover rule, since with one AllFantasy takes them over by itself. Up to three names, then a
+ * count. Null when there are none.
+ */
+export function quietTeamsSentence(names: readonly string[], lang: RecapLanguage = 'en'): string | null {
+  if (names.length === 0) return null
+  const es = lang === 'es'
+  const shown = names.slice(0, 3)
+  const more = names.length - shown.length
+  const list = `${shown.join(', ')}${more > 0 ? (es ? ` y ${more} más` : ` and ${more} more`) : ''}`
+  return es
+    ? `${names.length === 1 ? 'Un equipo parece inactivo' : `${names.length} equipos parecen inactivos`}: ${list}. Puedes ${names.length === 1 ? 'pasárselo' : 'pasárselos'} a AllFantasy desde el Centro del comisionado.`
+    : `${names.length === 1 ? 'One team looks inactive' : `${names.length} teams look inactive`}: ${list}. You can hand ${names.length === 1 ? 'it' : 'them'} to AllFantasy from the Commissioner Hub.`
+}
+
+export function recapMessage(leagueName: string, lines: readonly string[], lang: RecapLanguage = 'en', quiet: string | null = null): { title: string; body: string } {
   const es = lang === 'es'
   const and = es ? 'y' : 'and'
   const joined = lines.length === 1 ? lines[0] : `${lines.slice(0, -1).join('; ')}; ${and} ${lines[lines.length - 1]}`
+  const did = lines.length === 0 ? '' : es ? `Esta semana AllFantasy ${joined}. Cada acción está en el registro de la liga.` : `This week AllFantasy ${joined}. Every action is in the league log.`
+  const body = [did, quiet].filter(Boolean).join(' ')
   return es
-    ? { title: `Lo que hizo AllFantasy esta semana · ${leagueName}`, body: `Esta semana AllFantasy ${joined}. Cada acción está en el registro de la liga.` }
-    : { title: `What AllFantasy did this week · ${leagueName}`, body: `This week AllFantasy ${joined}. Every action is in the league log.` }
+    ? { title: `Lo que hizo AllFantasy esta semana · ${leagueName}`, body }
+    : { title: `What AllFantasy did this week · ${leagueName}`, body }
 }

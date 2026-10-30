@@ -3,7 +3,7 @@
   "components/core-app/boards/BoardKit.tsx": 2,
   "components/core-app/boards/WeekBoard.tsx": 1,
   "components/core-app/ChimmyMovesCard.tsx": 1,
-  "components/core-app/commissioner/AutomationOverview.tsx": 6,
+  "components/core-app/commissioner/AutomationOverview.tsx": 2,
   "components/core-app/commissioner/DeadlineAutopilot.tsx": 1,
   "components/core-app/commissioner/DynastyRolloverWizard.tsx": 1,
   "components/core-app/commissioner/OrphanAuction.tsx": 1,

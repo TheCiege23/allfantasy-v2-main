@@ -90,6 +90,17 @@ function isSpec(value: unknown): value is ChimmyActionSpec {
       })
     )
   }
+  if (s.kind === 'automation') {
+    const c = s.change as Record<string, unknown> | null
+    if (!c || typeof c !== 'object' || !Array.isArray(s.expectedKeys) || !s.expectedKeys.every((k) => typeof k === 'string')) return false
+    if (c.type === 'preset') return c.preset === 'recommended' || c.preset === 'run_it' || c.preset === 'hands_on'
+    if (c.type === 'handover') {
+      if (c.rule === null) return true
+      const r = c.rule as Record<string, unknown> | undefined
+      return Boolean(r) && (r!.days === 7 || r!.days === 14 || r!.days === 21) && (r!.to === 'lineups' || r!.to === 'autopilot')
+    }
+    return false
+  }
   return false
 }
 
