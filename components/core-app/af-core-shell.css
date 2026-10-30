@@ -4265,3 +4265,207 @@ html[data-mode='light'] .af-core {
     box-shadow: inset 0 0 0 1px var(--accent-line, var(--line));
   }
 }
+
+/* ── League list: favorites, filters, folding, unread, record, Pin and Move (2026-10-30) ──────────
+ * Its own block at end of file, top level, per this stylesheet's convention.
+ */
+
+/* The sport heading is a button now (it folds its section): no button chrome, the same look. */
+button.af-rail-sport {
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+}
+button.af-rail-sport:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-rail-sport-chevron {
+  display: none;
+}
+.af-core.af-shell[data-rail-open='true'] .af-rail-sport-chevron {
+  display: inline;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+@media (min-width: 1281px) {
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-sport-chevron {
+    display: inline;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0;
+  }
+}
+
+/* Filter chips: one scrollable row, never wrapping the tray wider than the screen. */
+.af-core .af-rail-filters {
+  display: flex;
+  gap: 6px;
+  flex: none;
+  padding: 2px 8px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.af-core .af-rail-filters::-webkit-scrollbar {
+  display: none;
+}
+.af-core .af-rail-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--text2);
+  font: 700 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.af-core .af-rail-filter[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+  color: var(--accent);
+}
+.af-core .af-rail-filter-count {
+  color: var(--muted);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+}
+@media (pointer: coarse) {
+  .af-core .af-rail-filter {
+    min-height: 40px;
+  }
+}
+
+/* Unread league chat: a count on the crest's lower corner (the alert dot owns the upper one). */
+.af-core .af-rail-unread {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 1;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  font: 800 11px/18px var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--rail);
+}
+
+/* Your record and place, beside the platform. */
+.af-core .af-rail-row-record {
+  align-self: center;
+  color: var(--text2);
+  font: 700 11px/1.5 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  white-space: nowrap;
+}
+
+/* A favorite's row carries a small star after its name. */
+.af-core .af-rail-tile[data-favorite='true'] .af-rail-row-name::after {
+  content: ' ★';
+  color: #f6c445;
+  font-size: 11px;
+}
+
+.af-core .af-rail-hint {
+  margin: 6px 8px 2px;
+  color: var(--faint);
+  font: 500 11px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  text-align: center;
+}
+
+/*
+ * A press-and-hold on a league opens Pin and Move — so the phone's own long-press link preview and
+ * text selection must not get there first.
+ */
+.af-core .af-rail-scroll .af-rail-tile {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The Pin and Move sheet: a bottom sheet on a phone, a centred card above it. */
+.af-core .af-rail-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  border: 0;
+  background: rgba(2, 6, 23, 0.55);
+}
+.af-core .af-rail-menu {
+  position: fixed;
+  z-index: 81;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(340px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid var(--line2, var(--line));
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.af-core .af-rail-menu-title {
+  margin: 0 0 4px;
+  color: var(--text);
+  font: 800 14px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-rail-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--chip);
+  color: var(--text);
+  font: 700 14px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  text-align: left;
+  cursor: pointer;
+}
+.af-core .af-rail-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.af-core .af-rail-menu-item[data-kind='done'] {
+  justify-content: center;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink, #04121a);
+}
+@media (max-width: 720px) {
+  .af-core .af-rail-menu {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    transform: none;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    border-radius: 20px 20px 0 0;
+  }
+}
+
+/* The filter chips ride at the top of the scrolling list (they are its first child). */
+.af-core .af-rail-scroll > .af-rail-filters {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0 -8px;
+  padding: 6px 8px 8px;
+  background: var(--rail);
+}
