@@ -523,7 +523,7 @@ test('four-sport reviewed capacity plans preserve archives and require renewed c
  if(process.env.UPSTASH_REDIS_REST_URL||process.env.UPSTASH_REDIS_REST_TOKEN)throw new Error('SHARED_REDIS_MUST_BE_DISABLED')
  const {runPresetEngine}=await import('../lib/league-creation/preset-engine/runPresetEngine')
  const {createCanonicalLeagueInTransaction}=await import('../lib/league-creation/canonical/createCanonicalLeagueInTransaction')
- const {createDefaultLeagueRosterConfig}=await import('../lib/roster-engine')
+ const {createDefaultLeagueRosterConfig}=require('../lib/roster-engine') as typeof import('../lib/roster-engine')
  const {isLeagueRosterDraftReady}=await import('../lib/league/league-roster-draft-gate')
  const marker='manual-renewal-ci-'+randomUUID().slice(0,8)
  const password=randomUUID(),passwordHash=await bcrypt.hash(password,6)

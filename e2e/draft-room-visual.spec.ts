@@ -85,7 +85,7 @@ test('renders NBA player pool with AI ADP enabled', async ({ page }) => {
   await playerPanel.getByTestId('draft-player-search-input').fill('Hoops Floor General')
   await expect(playerPanel.getByText('AI ADP').first()).toBeVisible()
   await expect(playerPanel.getByText('Hoops Floor General').first()).toBeVisible()
-  await expect(playerPanel.getByTestId('draft-player-card-0-adp')).toContainText('5.2')
+  await expect(playerPanel.getByTestId('sleeper-pool-row-0-ai-adp')).toContainText('5.2')
 
   // Visual regression: player panel element at 1440×1100 against committed baseline.
   skipWithoutBaseline('draft-room-nba-player-pool')
@@ -100,14 +100,14 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 1589, height: 740
     await openDraftRoomHarness(page)
     const desktop = page.getByTestId('draft-desktop-layout')
     const list = desktop.getByTestId('draft-player-list-scroll')
-    await expect(desktop.getByTestId('draft-player-card-0')).toBeVisible()
+    await expect(desktop.getByTestId('sleeper-pool-row-0')).toBeVisible()
     const visibleArea = await list.boundingBox()
     expect(visibleArea).not.toBeNull()
     expect(visibleArea!.height).toBeGreaterThanOrEqual(240)
     expect(visibleArea!.y + visibleArea!.height).toBeLessThanOrEqual(viewport.height)
-    // Visibility alone accepts clipped rows; require two complete cards without scrolling.
+    // Visibility alone accepts clipped rows; require two complete rows without scrolling.
     for (const index of [0, 1]) {
-      const card = await desktop.getByTestId('draft-player-card-' + index).boundingBox()
+      const card = await desktop.getByTestId('sleeper-pool-row-' + index).boundingBox()
       expect(card).not.toBeNull()
       expect(card!.y).toBeGreaterThanOrEqual(visibleArea!.y)
       expect(card!.y + card!.height).toBeLessThanOrEqual(visibleArea!.y + visibleArea!.height)
