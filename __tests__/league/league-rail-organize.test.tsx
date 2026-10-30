@@ -4,7 +4,7 @@
  * The same helpers and the same sheet as /core (railArrange.ts, RailLeagueMenu.tsx).
  */
 import React from 'react'
-import { act, fireEvent, render, within } from '@testing-library/react'
+import { act, createEvent, fireEvent, render, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
 import type { LeagueRailData } from '@/components/league/native/LeagueRail'
@@ -124,6 +124,60 @@ describe('the /league rail', () => {
     const c = draw({ hiddenIds: ['b1', 'f1'] })
     expect(order(c)).toEqual(['# NFL', 'f1', 'f2', 'f3', '# NBA', 'b2', 'b3'])
     expect(list(c).querySelector('a.nl-rail-hidden')?.textContent).toBe('1 hidden · Settings')
+  })
+
+  /** Lay the rows out 50px apart, in DOM order, so the drag can read where it is. */
+  const layOut = (c: HTMLElement) =>
+    Array.from(list(c).querySelectorAll<HTMLElement>('[data-rail-id]')).forEach((el, i) => {
+      el.getBoundingClientRect = () => ({ top: i * 50, height: 40, bottom: i * 50 + 40, left: 0, right: 200, width: 200, x: 0, y: i * 50, toJSON: () => ({}) })
+    })
+  const dragFrom = (el: HTMLElement, fromY: number, toY: number, pointerType = 'mouse') => {
+    fireEvent.pointerDown(el, { button: 0, pointerType, clientX: 10, clientY: fromY })
+    fireEvent.pointerMove(window, { pointerType, clientX: 10, clientY: (fromY + toY) / 2 })
+    fireEvent.pointerMove(window, { pointerType, clientX: 10, clientY: toY })
+  }
+
+  it('a mouse drags a league within its sport, marks where it lands, saves the order and does not open it', async () => {
+    const c = draw()
+    layOut(c)
+    dragFrom(tile(c, 'f3'), 120, 10)
+    expect(tile(c, 'f3').getAttribute('data-dragging')).toBe('true')
+    expect(tile(c, 'f1').getAttribute('data-drop')).toBe('before')
+    await act(async () => {
+      fireEvent.pointerUp(window, { pointerType: 'mouse', clientX: 10, clientY: 10 })
+    })
+    expect(order(c)).toEqual(['# NFL', 'f3', 'f1', 'f2', '# NBA', 'b1', 'b2', 'b3'])
+    expect(posts()).toEqual([{ field: 'order', leagueIds: ['f3', 'f1', 'f2', 'b1', 'b2', 'b3'] }])
+    const click = createEvent.click(tile(c, 'f3'))
+    fireEvent(tile(c, 'f3'), click)
+    expect(click.defaultPrevented).toBe(true)
+    expect(tile(c, 'f3').getAttribute('data-dragging')).toBeNull()
+  })
+
+  it('a finger scrolls the list until Reorder is chosen, then drags by the handle', async () => {
+    const c = draw()
+    layOut(c)
+    dragFrom(tile(c, 'b1'), 220, 330, 'touch')
+    fireEvent.pointerUp(window, { pointerType: 'touch', clientX: 10, clientY: 330 })
+    expect(posts()).toEqual([])
+
+    fireEvent.contextMenu(tile(c, 'b1'))
+    fireEvent.click(within(c.querySelector<HTMLElement>('.af-rail-menu')!).getByText('Reorder leagues'))
+    expect(list(c).getAttribute('data-reorder')).toBe('true')
+    expect(list(c).querySelector('.af-rail-reorder-bar')?.textContent).toContain('Drag ⠿ to put your leagues in order.')
+    expect(tile(c, 'b1').querySelector('.af-rail-drag-handle')).not.toBeNull()
+    layOut(c)
+    dragFrom(tile(c, 'b1'), 220, 330, 'touch')
+    await act(async () => {
+      fireEvent.pointerUp(window, { pointerType: 'touch', clientX: 10, clientY: 330 })
+    })
+    expect(order(c)).toEqual(['# NFL', 'f1', 'f2', 'f3', '# NBA', 'b2', 'b3', 'b1'])
+    // While reordering a tap never opens a league; Done ends it.
+    const click = createEvent.click(tile(c, 'b2'))
+    fireEvent(tile(c, 'b2'), click)
+    expect(click.defaultPrevented).toBe(true)
+    fireEvent.click(within(list(c)).getByText('Done'))
+    expect(list(c).getAttribute('data-reorder')).toBeNull()
   })
 
   it('draws your record beside the platform', () => {

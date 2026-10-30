@@ -1786,6 +1786,17 @@
  * projections; "14th of 18" with no basis presents a projected ordering as a
  * played one.
  */
+/* An elimination league's chop line: the lowest team other than you, on the same basis as the rank. */
+.af-core .af-rail-row-rank-low {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text2);
+}
+
 .af-core .af-rail-row-rank-basis {
   flex-basis: 100%;
   font: 500 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
@@ -4399,6 +4410,59 @@ button.af-rail-sport:focus-visible {
   color: var(--faint);
   font: 500 11px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   text-align: center;
+}
+
+/*
+ * Drag to reorder (useRailDrag). The dragged row fades, and a line in the accent colour marks where
+ * it will land — above the row it would go before, or below the last row. In reorder mode a finger
+ * drags instead of scrolling the list, so the rows take the touch themselves.
+ */
+.af-core [data-rail-id][data-dragging='true'] {
+  opacity: 0.45;
+}
+.af-core [data-rail-id][data-drop='before'] {
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+.af-core [data-rail-id][data-drop='after'] {
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+.af-core [data-reorder='true'] [data-rail-id] {
+  touch-action: none;
+  cursor: grab;
+}
+.af-core .af-rail-drag-handle {
+  flex: none;
+  align-self: center;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+}
+.af-core .af-rail-reorder-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 6px 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--chip);
+  color: var(--text);
+  font: 600 12px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-core .af-rail-reorder-done {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink, #04121a);
+  font: 800 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
 }
 
 /*

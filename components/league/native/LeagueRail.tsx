@@ -7,7 +7,7 @@ import type { RailLeague, RailMatchupSummary } from '@/components/core-app/AfCor
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import { RailRowBody, mergeRailMatchup, railTapTarget, type RailAttention } from '@/components/core-app/RailRowBody'
 import { useRailOdds } from '@/components/core-app/useRailOdds'
-import type { useRailHold } from '@/components/core-app/RailLeagueMenu'
+import type { useRailDrag, useRailHold } from '@/components/core-app/RailLeagueMenu'
 import type { RailRecord } from '@/lib/core-app/railRecordRank'
 import { useLiveRailScores, type LiveRailScore } from '@/components/core-app/useLiveRailScores'
 import { coreRefreshIntervalMs } from '@/lib/core-app/coreRefreshPolicy'
@@ -162,6 +162,8 @@ export function LeagueRailRow({
   unread = 0,
   favorite,
   hold,
+  drag,
+  section,
 }: {
   view: LeagueRailRowView
   href: string
@@ -176,6 +178,9 @@ export function LeagueRailRow({
   favorite?: boolean
   /** Press-and-hold / right-click for Pin and Move (RailLeagueMenu.tsx). Absent: no menu. */
   hold?: ReturnType<typeof useRailHold>
+  /** Drag to reorder within `section` (RailLeagueMenu.tsx `useRailDrag`). Absent: not draggable. */
+  drag?: ReturnType<typeof useRailDrag>
+  section?: string
 }) {
   const badge = unreadBadgeText(unread)
   const { status } = view
@@ -192,7 +197,9 @@ export function LeagueRailRow({
       title={`${view.name} · ${status.line} · ${status.mini}`}
       data-favorite={favorite ? 'true' : undefined}
       {...(hold ? hold.handlers(view.id) : {})}
+      {...(drag && section ? drag.rowProps(view.id, section) : {})}
       onClick={(event) => {
+        if (drag?.swallowClick(event)) return
         if (hold?.swallowClick(event)) return
         /*
          * A tap on the head-to-head opens the Matchup screen; anywhere else, the league. One link
@@ -205,6 +212,7 @@ export function LeagueRailRow({
         if (target) window.location.assign(target)
       }}
     >
+      {drag?.reorderMode && section ? <span className="af-rail-drag-handle" aria-hidden>⠿</span> : null}
       <span className="nl-rail-crest">
         <span className="af-rail-tile-art af-platform nl-rail-art" data-platform={view.platform} data-ring={status.tone ?? undefined}>
           <LeagueMark src={view.imageUrl} letter={view.mark} />
