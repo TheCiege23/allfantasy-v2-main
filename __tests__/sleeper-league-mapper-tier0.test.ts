@@ -53,6 +53,7 @@ const AUDIT_LEAGUE_PAYLOAD: SleeperImportPayload = {
       reserve_allow_doubtful: 0,
       type: 2, // dynasty
       num_teams: 12,
+      league_average_match: 1,
     } as unknown as SleeperImportPayload['league']['settings'],
   },
 }
@@ -74,6 +75,10 @@ describe('SleeperLeagueMapper — Tier 0 field extraction', () => {
 
   it('preserves waiver_bid_min (Sleeper 1)', () => {
     expect(result?.waiver_bid_min).toBe(1)
+  })
+
+  it('preserves the median-game flag league_average_match (Sleeper 1)', () => {
+    expect(result?.league_average_match).toBe(1)
   })
 
   it('preserves playoff_start_week (Sleeper 15)', () => {

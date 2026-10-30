@@ -24,6 +24,7 @@ describe('the message', () => {
     const lines = recapLines(countRecapActions([{ action: 'fill_empty_starters.applied', n: 1 }, { action: 'chimmy_autopilot.claim', n: 5 }], 0))
     expect(lines).toEqual(['made 5 waiver claims for teams on Chimmy autopilot', 'filled 1 empty starting spot'])
     expect(recapLines(countRecapActions([], 0))).toEqual([])
+    expect(recapLines(countRecapActions([{ action: 'inactive_manager_mode.auto_handover', n: 2 }], 0))).toEqual(['took over 2 teams with no activity, as you set up'])
     expect(recapMessage('Dyn', lines)).toEqual({
       title: 'What AllFantasy did this week · Dyn',
       body: 'This week AllFantasy made 5 waiver claims for teams on Chimmy autopilot; and filled 1 empty starting spot. Every action is in the league log.',
