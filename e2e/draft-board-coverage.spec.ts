@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test'
+import { answerCspReportsInBrowser } from './helpers/csp-report-sink'
 
 const sports = ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER']
 
-test('shared live and mock boards fit all sports and narrow docks', async ({ page }) => {
+test('@draft-room shared live and mock boards fit all sports and narrow docks', async ({ page, context }) => {
   test.setTimeout(240_000)
-  await page.route('**/api/security/**', route => route.fulfill({ status: 204 }))
+  await answerCspReportsInBrowser(context)
   await page.goto('/e2e/draft-board-coverage')
   await expect(page.getByTestId('coverage-NFL')).toBeVisible()
   for (const width of [390, 1024, 1580]) {
