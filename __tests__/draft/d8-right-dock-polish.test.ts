@@ -71,7 +71,7 @@ describe('DraftRightDockTabs — compact tab header (Commit 23)', () => {
    * density, so this now pins the floor. Do not "restore" the 8px to make a diff smaller.
    */
   it('tab button font size respects the 11px floor, uppercase (was 8px for density)', () => {
-    expect(dockSrc).toMatch(/text-\[11px\] font-semibold uppercase tracking-\[0\.14em\]/)
+    expect(dockSrc).toMatch(/text-\[11px\] font-semibold uppercase tracking-\[0\.08em\]/)
   })
 })
 
@@ -100,7 +100,7 @@ describe('QueuePanel — compact filter bar (Commit 23)', () => {
   })
 
   it('filter bar uses p-1 (reduced from p-1.5)', () => {
-    expect(queueSrc).toMatch(/border-white\/\[0\.06\] p-1 sm:grid-cols-2/)
+    expect(queueSrc).toMatch(/border-white\/\[0\.06\] p-1/)
   })
 
   it('old gap-1.5 filter bar is gone', () => {

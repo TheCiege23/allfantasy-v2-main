@@ -159,10 +159,9 @@ export function DraftRightDockTabs({
         role="tablist"
         aria-label="Draft right dock tabs"
         data-testid={`${testIdBase}-tablist`}
-        /* Column count follows the tabs actually rendered — it was hardcoded 3-or-4 and would
-           have squeezed or stranded a column as soon as a fifth tab existed. */
-        style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
-        className="grid shrink-0 border-b border-white/[0.06] bg-[#0d1424]"
+        /* Labels keep their width inside a narrow dock; the tab row scrolls independently. */
+        style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(max-content, 1fr))` }}
+        className="grid min-w-0 shrink-0 overflow-x-auto overscroll-x-contain border-b border-white/[0.06] bg-[#0d1424] [scrollbar-width:thin]"
       >
         {tabs.map((tab) => {
           const isActive = effectiveTab === tab.id
@@ -176,7 +175,19 @@ export function DraftRightDockTabs({
               id={`${testIdBase}-tab-${tab.id}`}
               data-testid={`${testIdBase}-tab-${tab.id}`}
               onClick={() => onSelect(tab.id)}
-              className={`relative flex items-center justify-center gap-1 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] transition ${
+              tabIndex={isActive ? 0 : -1}
+              onFocus={(event) => event.currentTarget.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })}
+              onKeyDown={(event) => {
+                const index = tabs.findIndex((entry) => entry.id === tab.id)
+                const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+                  : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
+                    : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
+                if (next < 0) return
+                event.preventDefault()
+                onSelect(tabs[next]!.id)
+                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+              }}
+              className={`relative flex min-h-[36px] items-center justify-center gap-1 whitespace-nowrap px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition ${
                 isActive
                   ? 'text-white'
                   : 'text-[#8b91a7] hover:bg-[#1d2236] hover:text-white'

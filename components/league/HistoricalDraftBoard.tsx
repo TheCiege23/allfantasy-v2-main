@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { DraftBoardCell } from '@/components/app/draft-room/DraftBoardCell'
 
 type Pick = {
   draftId: string
@@ -91,14 +92,14 @@ export function HistoricalDraftBoard({ leagueId, season }: HistoricalDraftBoardP
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.03] p-2">
-      <table className="min-w-full text-[11px]">
+    <div className="overflow-x-auto rounded-xl border border-white/[0.06] bg-[#0d1424] p-1">
+      <table className="min-w-full border-separate border-spacing-[2px] text-[11px]">
         <thead>
           <tr className="text-white/40">
             <th className="px-2 py-1 text-left font-medium">Rd</th>
             {columns.map((c) => (
-              <th key={c} className="px-2 py-1 text-left font-medium">
-                T{c}
+              <th key={c} className="min-w-[84px] px-2 py-1 text-left font-medium">
+                Pick {c}
               </th>
             ))}
           </tr>
@@ -110,15 +111,13 @@ export function HistoricalDraftBoard({ leagueId, season }: HistoricalDraftBoardP
               {columns.map((c) => {
                 const p = grid.get(`${r}:${c}`)
                 return (
-                  <td key={c} className="px-2 py-1 text-white/75">
-                    {p ? (
-                      <div className="flex flex-col">
-                        <span className="text-white/80">#{p.pickNumber}</span>
-                        <span className="truncate text-[11px] text-white/45">{p.playerId}</span>
-                      </div>
-                    ) : (
-                      <span className="text-white/20">—</span>
-                    )}
+                  <td key={c} className="min-w-[84px] p-0 align-top">
+                    <DraftBoardCell isEmpty={!p} pick={{
+                      overall: (r - 1) * columns.length + Number(c), round: r, slot: Number(c),
+                      pickLabel: `${r}.${c}`, playerName: p?.playerId ?? null,
+                      position: null, team: null, playerId: null, byeWeek: null,
+                      displayName: p?.managerId ?? null, ownerRosterId: p?.managerId ?? null,
+                    }} />
                   </td>
                 )
               })}
