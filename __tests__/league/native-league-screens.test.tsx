@@ -150,7 +150,7 @@ describe('NativeTradesScreen', () => {
     expect(screen.getByText('Jahmyr Gibbs')).toBeTruthy()
     expect(screen.getByText('Drake London')).toBeTruthy()
     expect(screen.getByText(/shopping Trey McBride/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Counter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Build new offer' }))
     expect(screen.getByTestId('builder')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
     await waitFor(() => expect(calls.some((c) => c.url.endsWith('/trades/t1/accept') && c.init?.method === 'POST')).toBe(true))

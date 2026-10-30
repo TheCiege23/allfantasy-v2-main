@@ -791,6 +791,9 @@ export function getWaiverDefaults(sportType: SportType, _formatType?: string | n
   const base = WAIVER_DEFAULTS[sportType] ?? WAIVER_DEFAULTS.NFL
   const normalizedVariant = normalizeWaiverVariant(_formatType)
   const variantOverrides = WAIVER_VARIANT_OVERRIDES[sportType]?.[normalizedVariant] ?? {}
+  if (String(_formatType ?? '').trim().toLowerCase() === 'zombie') {
+    return { ...base, ...variantOverrides, sport_type: sportType, waiver_type: 'fcfs', processing_days: null, FAAB_budget_default: null, faab_enabled: false, continuous_waivers_behavior: false, free_agent_unlock_behavior: 'instant' }
+  }
   return {
     ...base,
     ...variantOverrides,

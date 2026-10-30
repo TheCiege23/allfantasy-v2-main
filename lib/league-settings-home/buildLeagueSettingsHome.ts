@@ -222,6 +222,7 @@ export function formatWaivers(league: Pick<SettingsHomeLeague, 'waiverType' | 'w
     const budget = Number(league.waiverBudget ?? 100)
     return `FAAB · $${budget.toLocaleString('en-US')}`
   }
+  if (type === 'fcfs') return 'Free agency · first come, first served'
   if (type === 'reverse_standings') return 'Reverse standings'
   return titleCase(type)
 }

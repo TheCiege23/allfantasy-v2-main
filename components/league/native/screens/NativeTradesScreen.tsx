@@ -148,6 +148,13 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
         <button type="button" className="nls-btn" data-variant="primary" onClick={() => setBuilderOpen(true)}>Propose a trade</button>
       </ScreenHead>
 
+      {panel ? <section className="nls-trade-overview" aria-label="Trade activity overview">
+        <div><span>Incoming</span><strong>{offers.length}</strong></div>
+        <div><span>Sent</span><strong>{outgoing.length}</strong></div>
+        <div><span>On the block</span><strong>{block.length}</strong></div>
+        <div><span>Recent trades</span><strong>{recent.length}</strong></div>
+      </section> : null}
+      {String(league.leagueVariant ?? league.leagueType ?? '').toLowerCase() === 'zombie' ? <p className="nls-zombie-trade-note">Whisperers cannot trade players. Zombie trading follows your league rules.</p> : null}
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {actionErr ? <p className="nls-error" role="alert">{actionErr}</p> : null}
       {loading && !panel ? <p className="nls-empty" role="status">Loading trades…</p> : null}
@@ -187,7 +194,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
               ) : (
                 <>
                   <button type="button" className="nls-btn" data-variant="primary" disabled={busy === t.id} onClick={() => void act(t.id, 'accept')}>Accept</button>
-                  <button type="button" className="nls-btn" disabled={busy === t.id} onClick={() => setBuilderOpen(true)}>Counter</button>
+                  <button type="button" className="nls-btn" disabled={busy === t.id} onClick={() => setBuilderOpen(true)}>Build new offer</button>
                   <button type="button" className="nls-btn" disabled={busy === t.id} onClick={() => void act(t.id, 'reject')}>Decline</button>
                   <button type="button" className="nls-btn" onClick={() => askChimmy(t)}>Ask Chimmy</button>
                 </>

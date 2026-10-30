@@ -626,6 +626,7 @@ export async function createCanonicalLeagueInTransaction(
       leagueSize: managerCount,
       sport,
       leagueType: formatId,
+      ...(formatId === 'zombie' ? { waiverType: 'fcfs', waiverHours: 0 } : {}),
       /*
        * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`, AND EVERY ZOMBIE SURFACE KEYS ON THE
        * VARIANT — the Zombie tab and its landing (`LeagueShell`), the trades tab, Chimmy's zombie context,

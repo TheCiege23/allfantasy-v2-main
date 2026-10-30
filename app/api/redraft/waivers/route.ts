@@ -1,3 +1,4 @@
+import { loadWaiverPhasePolicy } from '@/lib/waiver-wire/season-phase-gate'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -37,6 +38,9 @@ export async function GET(req: NextRequest) {
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
   if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const phasePolicy = await loadWaiverPhasePolicy(leagueId, null)
+  if (!phasePolicy.claimsAllowed) return NextResponse.json({ error: phasePolicy.reason, code: phasePolicy.code }, { status: 409 })
 
   const claims = await prisma.redraftWaiverClaim.findMany({
     where: { seasonId, rosterId },
