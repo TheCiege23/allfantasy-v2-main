@@ -94,7 +94,7 @@ export function PlayoffPath({ path }: { path: WeeklyPlayoffPath }) {
       {league!.whatDecidesIt ? <p>{coreUiCopy(league!.whatDecidesIt,language)}</p> : null}
       {delta != null ? <p>{m.movementNote}</p> : null}
       {swing?.week === path.period && swing.helpIfLose?.length ? <p>{m.helpIfLose}{swing.helpIfLose.join(', ')}. {m.conditionalEvidence}</p> : null}
-      <details><summary>{es ? 'Cómo se calcula' : 'How this is calculated'}</summary><p>{es ? 'Simulación del calendario restante con el historial de puntuación. No es una garantía.' : 'Remaining-schedule simulation using scoring history. This is not a guarantee.'}</p><p>{league!.assumptions.iterations.toLocaleString(getAppIntlLocale())} {es ? 'simulaciones' : 'simulations'} · {es ? 'Último cálculo' : 'Last calculated'}: <LocalCalculatedTime iso={league!.assumptions.computedAt} language={language}/></p><ul>{league!.assumptions.missing.map(m => <li key={m}>{coreUiCopy(m, language)}</li>)}</ul></details>
+      <details><summary>{m.howCalculated}</summary><p>{m.howCalculatedBody}</p><p>{league!.assumptions.iterations.toLocaleString(getAppIntlLocale())} {m.simulations} · {m.lastCalculated}: <LocalCalculatedTime iso={league!.assumptions.computedAt} language={language}/></p><ul>{league!.assumptions.missing.map(m => <li key={m}>{coreUiCopy(m, language)}</li>)}</ul></details>
     </> : <p>{m.modelUnavailable}</p>}
     {path.historyUnavailable ? <p role="status">{m.historyUnavailable}</p> : null}
     <Link href={`/core/season-outlook?league=${encodeURIComponent(path.leagueId ?? league?.leagueId ?? '')}`}>{m.viewFullScenarios} →</Link>

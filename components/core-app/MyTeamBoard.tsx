@@ -316,9 +316,7 @@ const pts = (n: number) => n.toFixed(1)
 
 /** " · ahead 88.4–71.2", or the distance to the cut in an elimination week. */
 function ScoreStamp({ score }: { score: RowScore | null }) {
-  const { language } = useOptionalLanguage()
   const m = useMessages(myTeamBoardMessages)
-  const es = language === 'es'
   if (!score) return null
   if (score.kind === 'cut') {
     const place = m.cutPlace(score.rank, score.outOf)
@@ -331,9 +329,7 @@ function ScoreStamp({ score }: { score: RowScore | null }) {
       </span>
     )
   }
-  const word = es
-    ? { ahead: 'ganando', behind: 'perdiendo', level: 'empatado' }[score.lead]
-    : score.lead
+  const word = m.leadWord(score.lead)
   return (
     <span className="af-bd-score" data-lead={score.lead}>
       {' · '}

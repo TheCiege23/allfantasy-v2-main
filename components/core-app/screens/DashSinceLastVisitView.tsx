@@ -49,9 +49,8 @@ export type SinceLastVisitViewProps = {
 
 type SinceLastVisitMessages = typeof dashSinceLastVisitMessages.en
 
-function spanText(s: BriefSpan, es: boolean): string {
-  if (!es) return `${s.n}${s.unit}`
-  return `${s.n} ${s.unit === 'm' ? 'min' : s.unit}`
+function spanText(s: BriefSpan, m: SinceLastVisitMessages): string {
+  return m.span(s.n, s.unit)
 }
 
 function statusText(status: string | null, language: string, m: SinceLastVisitMessages): string {
@@ -91,8 +90,8 @@ export function DashSinceLastVisitView(props: SinceLastVisitViewProps) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
   const m = useMessages(dashSinceLastVisitMessages)
-  const whenText = when.kind === 'week' ? m.lastWeek : m.since(spanText(when.span, es))
-  const reachText = tradeReach ? m.reaches(spanText(tradeReach, es)) : null
+  const whenText = when.kind === 'week' ? m.lastWeek : m.since(spanText(when.span, m))
+  const reachText = tradeReach ? m.reaches(spanText(tradeReach, m)) : null
   const one = trades.count === 1 && !trades.atLeast
 
   return (

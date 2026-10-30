@@ -3,6 +3,8 @@ import type { ReactNode } from 'react'
 
 import '@/components/core-app/af-core-boards.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { messagesFor } from '@/lib/i18n/messages'
+import { boardKitMessages } from '@/lib/core-app/messages/boardKit'
 
 /**
  * The shared parts of every cross-league board in the 2026-09-07 core-pages
@@ -132,7 +134,7 @@ export function FooterSummary({
   total,
   href,
   quiet,
-  emptyText = 'Every league you hold is on this board.',
+  emptyText = boardKitMessages.en.footAllShown,
   language = 'en',
 }: {
   hidden: number
@@ -143,19 +145,18 @@ export function FooterSummary({
   emptyText?: string
   language?: string
 }) {
+  const m = messagesFor(boardKitMessages, language)
   return (
     <div className="af-bd-foot">
       <p className="af-bd-foot-text">
         {hidden > 0
-          ? language === 'es'
-            ? `${hidden.toLocaleString(getAppIntlLocale())} ${hidden === 1 ? 'liga más' : 'ligas más'} ${quiet}`
-            : `${hidden.toLocaleString(getAppIntlLocale())} more ${hidden === 1 ? 'league' : 'leagues'} ${quiet}`
-          : language === 'es' && emptyText === 'Every league you hold is on this board.'
-            ? 'Todas tus ligas aparecen en esta lista.'
+          ? m.footMore(hidden.toLocaleString(getAppIntlLocale()), hidden, quiet)
+          : emptyText === boardKitMessages.en.footAllShown
+            ? m.footAllShown
             : emptyText}
       </p>
       <Link className="af-bd-foot-cta" href={href}>
-        {language === 'es' ? `Ver ${total.toLocaleString(getAppIntlLocale())} ${total === 1 ? 'liga' : 'ligas'}` : `View all ${total.toLocaleString(getAppIntlLocale())}`} &rarr;
+        {m.footViewAll(total.toLocaleString(getAppIntlLocale()), total)} &rarr;
       </Link>
     </div>
   )
@@ -193,10 +194,11 @@ export const NO_LEAGUE_ACTIONS = [
 
 export function NoLeaguesYet({ what, language = 'en' }: { what: string; language?: string }) {
   const es = language === 'es'
+  const m = messagesFor(boardKitMessages, language)
   return (
-    <section className="af-bd-noleagues" data-testid="board-no-leagues" aria-label={es ? 'Aún no hay ligas conectadas' : 'No leagues connected yet'}>
+    <section className="af-bd-noleagues" data-testid="board-no-leagues" aria-label={m.noLeaguesAria}>
       <p className="af-bd-noleagues-lead">
-        <strong>{es ? 'Aún no hay ligas conectadas.' : 'No leagues connected yet.'}</strong> {what}
+        <strong>{m.noLeaguesLead}</strong> {what}
       </p>
       <div className="af-bd-noleagues-actions">
         {NO_LEAGUE_ACTIONS.map((a) => (

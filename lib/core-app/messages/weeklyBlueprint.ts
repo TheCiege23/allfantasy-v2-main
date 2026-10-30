@@ -66,6 +66,10 @@ export const weeklyBlueprintMessages = defineMessages({
     modelUnavailable: 'Playoff modeling is unavailable for this format or data. Review your league standings and rules.',
     historyUnavailable: 'Probability history is unavailable; the current calculation remains visible.',
     viewFullScenarios: 'View full scenarios',
+    howCalculated: 'How this is calculated',
+    howCalculatedBody: 'Remaining-schedule simulation using scoring history. This is not a guarantee.',
+    simulations: 'simulations',
+    lastCalculated: 'Last calculated',
   },
   es: {
     askPrefill: 'Explica los riesgos y las opciones de esta semana. Verifica las reglas y los plazos; no supongas datos que falten.',
@@ -127,5 +131,9 @@ export const weeklyBlueprintMessages = defineMessages({
     modelUnavailable: 'El modelo de playoffs no está disponible para este formato o estos datos. Revisa la clasificación y las reglas de tu liga.',
     historyUnavailable: 'El historial de probabilidades no está disponible; el cálculo actual sigue visible.',
     viewFullScenarios: 'Ver los escenarios completos',
+    howCalculated: 'Cómo se calcula',
+    howCalculatedBody: 'Simulación del calendario restante con el historial de puntuación. No es una garantía.',
+    simulations: 'simulaciones',
+    lastCalculated: 'Último cálculo',
   },
 })

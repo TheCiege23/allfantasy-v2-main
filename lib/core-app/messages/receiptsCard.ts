@@ -70,6 +70,12 @@ export const receiptsCardMessages = defineMessages({
       `${n} add call${n === 1 ? '' : 's'} couldn’t be checked yet — your league’s transactions haven’t synced past that week.`,
     afSwapTips: 'AF swap tips',
     sleeperOnly: 'Receipts cover your Sleeper leagues for now.',
+    // The "AllFantasy saved me" share card (components/core-app/screens/AfSavedShare.tsx).
+    savedShare: 'Share',
+    savedHeadline: (margin: string) => `AllFantasy saved me +${margin} pts`,
+    savedDetail: (recommended: string, recommendedPts: string, instead: string, insteadPts: string) =>
+      `${recommended} ${recommendedPts} vs ${instead} ${insteadPts}`,
+    savedFooter: (leagueName: string, week: number) => `${leagueName} · week ${week} · allfantasy.ai`,
   },
   es: {
     callResult: (who, call) => (call === 'same' ? 'más o menos igual' : call === 'right' ? `${who} acertó` : `${who} falló`),
@@ -125,5 +131,9 @@ export const receiptsCardMessages = defineMessages({
       `${n === 1 ? '1 consejo de incorporación aún no se pudo revisar' : `${n} consejos de incorporación aún no se pudieron revisar`}: las transacciones de tu liga no se han sincronizado más allá de esa semana.`,
     afSwapTips: 'Consejos de cambio de AF',
     sleeperOnly: 'Por ahora, estos resultados cubren tus ligas de Sleeper.',
+    savedShare: 'Compartir',
+    savedHeadline: (margin) => `AllFantasy me salvó +${margin} pts`,
+    savedDetail: (recommended, recommendedPts, instead, insteadPts) => `${recommended} ${recommendedPts} vs ${instead} ${insteadPts}`,
+    savedFooter: (leagueName, week) => `${leagueName} · semana ${week} · allfantasy.ai`,
   },
 })

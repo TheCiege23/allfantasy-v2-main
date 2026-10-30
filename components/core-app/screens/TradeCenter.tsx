@@ -73,6 +73,8 @@ import type { ProposalCardInput } from '@/lib/share/proposalCard'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { tradeCenterMessages } from '@/lib/core-app/messages/tradeCenter'
 import { PickTradeDeadlineChip, TradeDeadlineCountdownChip } from '@/components/core-app/TradeDeadlineCountdown'
 import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
 import type { PickTradeDeadlineView } from '@/lib/trade-deadline/pickTradeDeadline'
@@ -599,6 +601,7 @@ export function TradeCenter(props: {
   startWithOfferEntry?: boolean
 }) {
   const language = useOptionalLanguage().language
+  const tcm = useMessages(tradeCenterMessages)
   const depthAccess = props.depthAccess ?? null
   const depthLocked = depthAccess?.unlocked === false
   const [result, setResult] = useState<AnalyzeResult | null>(null)
@@ -2186,7 +2189,7 @@ export function TradeCenter(props: {
       <section className="af-tc-review" data-mstep="review" aria-label={copy('Trade summary')}>
         {([
           { side: 'give' as const, title: copy('You send'), lines: give },
-          { side: 'get' as const, title: `${copy('You get')}${partnerRoster ? ` · ${language === 'es' ? 'de' : 'from'} ${theirLabel}` : ''}`, lines: get },
+          { side: 'get' as const, title: `${copy('You get')}${partnerRoster ? ` · ${tcm.fromPartner} ${theirLabel}` : ''}`, lines: get },
         ]).map((s) => (
           <div key={s.side} className="af-tc-review-side">
             <div className="af-tc-review-head">

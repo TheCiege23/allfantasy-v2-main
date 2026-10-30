@@ -1,8 +1,9 @@
 import { defineMessages } from '@/lib/i18n/messages'
 
 /**
- * Standings (components/core-app/screens/Standings.tsx) and its board
- * (components/core-app/standings/StandingsBoardView.tsx).
+ * Standings (components/core-app/screens/Standings.tsx), its board
+ * (components/core-app/standings/StandingsBoardView.tsx) and the board's points charts
+ * (components/core-app/standings/StandingsPointsChart.tsx, `standingsChartsMessages`).
  * Every string is the one the component wrote before the move, byte for byte, in both languages — a
  * relocation, not a rewrite. Imports nothing at runtime.
  *
@@ -221,5 +222,31 @@ export const standingsBoardMessages = defineMessages({
       ` (${runs} simulaciones), que ordena por victorias y luego por puntos a favor. «Dentro» y «Fuera» solo aparecen cuando la propia aritmética de esta tabla lo ha decidido.`,
     luckNote: (medianGames) =>
       `Las victorias esperadas miden, cada semana, a qué parte de la liga superó un equipo. La suerte es la diferencia entre las victorias reales y las esperadas${medianGames ? '; no incluye partidos contra la mediana' : ''}.`,
+  },
+})
+
+/**
+ * The points picture (components/core-app/standings/StandingsPointsChart.tsx) — the chart descriptions
+ * it read out per language. Same rule as above: a relocation, byte for byte. Points, expected wins and
+ * all-play records arrive already formatted by the component.
+ */
+export const standingsChartsMessages = defineMessages({
+  en: {
+    /** `rows` is every team's `pointAria`, already joined with '; '. */
+    scatterAria: (count: number, rows: string) => `Points for against points against for ${count} teams. ${rows}.`,
+    pointAria: (name: string, pointsFor: string, pointsAgainst: string) =>
+      `${name}: ${pointsFor} for, ${pointsAgainst} against`,
+    winsAria: (name: string, actual: number, expected: string, allPlay: string) =>
+      `${name}: ${actual} wins, ${expected} expected, all-play ${allPlay}`,
+    winsTitle: (name: string, actual: number, expected: string, allPlay: string) =>
+      `${name}: ${actual} wins vs ${expected} expected (all-play ${allPlay})`,
+  },
+  es: {
+    scatterAria: (count, rows) => `Puntos a favor y en contra de ${count} equipos. ${rows}.`,
+    pointAria: (name, pointsFor, pointsAgainst) => `${name}: ${pointsFor} a favor, ${pointsAgainst} en contra`,
+    winsAria: (name, actual, expected, allPlay) =>
+      `${name}: ${actual} victorias, ${expected} esperadas, contra todos ${allPlay}`,
+    winsTitle: (name, actual, expected, allPlay) =>
+      `${name}: ${actual} victorias frente a ${expected} esperadas (contra todos ${allPlay})`,
   },
 })

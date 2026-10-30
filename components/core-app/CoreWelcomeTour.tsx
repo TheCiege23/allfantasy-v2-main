@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useEffect, useState } from 'react'
 import { useHomePromptTurn } from '@/components/core-app/HomePromptSlot'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { coreWelcomeTourMessages } from '@/lib/core-app/messages/coreWelcomeTour'
 import '@/components/core-app/core-welcome-tour.css'
 
 const STORAGE_KEY = 'af-core-welcome-v1'
@@ -28,8 +29,7 @@ type Step = {
 }
 
 export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
-  const { language } = useOptionalLanguage()
-  const spanish = language === 'es'
+  const m = useMessages(coreWelcomeTourMessages)
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(0)
 
@@ -43,59 +43,32 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
     }
   }, [])
 
-  const steps: Step[] = spanish ? [
+  const steps: Step[] = [
     {
-      kicker: '1 · Conecta',
-      title: leagueCount > 0 ? `${leagueCount} ${leagueCount === 1 ? 'liga lista' : 'ligas listas'}` : 'Reúne tus ligas',
+      kicker: m.connectKicker,
+      title: leagueCount > 0 ? m.connectTitleReady(leagueCount) : m.connectTitleEmpty,
       body: leagueCount > 0
-        ? 'Usa el selector de ligas de arriba para cambiar entre ellas. AllFantasy muestra tus datos sin modificar tu plataforma original.'
-        : `Importa desde ${availableImportPlatformsPhrase()}. AllFantasy lee tu liga sin modificar la plataforma original.`,
-      action: leagueCount > 0 ? undefined : { label: 'Importar una liga', href: '/import' },
+        ? m.connectBodyReady
+        : m.connectBodyEmpty(availableImportPlatformsPhrase()),
+      action: leagueCount > 0 ? undefined : { label: m.connectAction, href: '/import' },
     },
     {
-      kicker: '2 · Elige',
-      title: 'Una liga o todas',
-      body: 'Elige una liga para mantenerla seleccionada al cambiar de sección, o «Todas las ligas» para verlas juntas.',
+      kicker: m.chooseKicker,
+      title: m.chooseTitle,
+      body: m.chooseBody,
     },
     {
-      kicker: '3 · Consulta',
-      title: 'Pregúntale a Chimmy',
-      body: 'Dentro de una liga, Chimmy usa sus reglas, plantilla, calendario y movimientos. Desde Inicio compara tus ligas.',
+      kicker: m.askKicker,
+      title: m.askTitle,
+      body: m.askBody,
     },
     {
-      kicker: '4 · Juega',
-      title: 'Organiza tu semana aquí',
-      body: 'Sincroniza cambios, revisa tu alineación y agentes libres, analiza intercambios y usa las herramientas del comisionado.',
+      kicker: m.playKicker,
+      title: m.playTitle,
+      body: m.playBody,
       action: leagueCount > 0
-        ? { label: 'Revisar mis alineaciones', href: '/core/my-team' }
-        : { label: 'Importar una liga', href: '/import' },
-    },
-  ] : [
-    {
-      kicker: '1 · Connect',
-      title: leagueCount > 0 ? `${leagueCount} ${leagueCount === 1 ? 'league ready' : 'leagues ready'}` : 'Bring your leagues together',
-      body: leagueCount > 0
-        ? 'Use the league switcher at the top to move between them. AllFantasy shows your data without changing the original platform.'
-        : `Import from ${availableImportPlatformsPhrase()}. AllFantasy reads the league and leaves the original platform unchanged.`,
-      action: leagueCount > 0 ? undefined : { label: 'Import a league', href: '/import' },
-    },
-    {
-      kicker: '2 · Choose',
-      title: 'One league or all leagues',
-      body: 'Choose a league and it stays selected as you move between tabs, or pick “All leagues” to see them together.',
-    },
-    {
-      kicker: '3 · Ask',
-      title: 'Ask Chimmy about your league',
-      body: 'Inside a league, Chimmy uses its rules, roster, schedule and moves. From Home, compare priorities across all your leagues.',
-    },
-    {
-      kicker: '4 · Play',
-      title: 'Run the week from one place',
-      body: 'Sync changes, check your lineup and waivers, review trades, and use commissioner tools when you run the league.',
-      action: leagueCount > 0
-        ? { label: 'Check my lineups', href: '/core/my-team' }
-        : { label: 'Import a league', href: '/import' },
+        ? { label: m.playActionReady, href: '/core/my-team' }
+        : { label: m.connectAction, href: '/import' },
     },
   ]
 
@@ -117,21 +90,21 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
         aria-valuemin={1}
         aria-valuemax={steps.length}
         aria-valuenow={step + 1}
-        aria-label={spanish ? `Paso ${step + 1} de ${steps.length}` : `Step ${step + 1} of ${steps.length}`}
+        aria-label={m.progress(step + 1, steps.length)}
       >
         {steps.map((_, index) => <i key={index} data-active={index <= step} />)}
       </div>
-      <button type="button" className="af-welcome-close" aria-label={spanish ? 'Cerrar guía de bienvenida' : 'Dismiss welcome guide'} onClick={finish}>×</button>
+      <button type="button" className="af-welcome-close" aria-label={m.dismiss} onClick={finish}>×</button>
       <span className="af-welcome-kicker">{current.kicker}</span>
       <h2 id="af-welcome-title">{current.title}</h2>
       <p>{current.body}</p>
       <div className="af-welcome-actions">
         {current.action ? <Link href={current.action.href} onClick={finish}>{current.action.label}</Link> : null}
-        {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)}>{spanish ? 'Atrás' : 'Back'}</button> : null}
+        {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)}>{m.back}</button> : null}
         {step < steps.length - 1 ? (
-          <button type="button" className="af-welcome-next" onClick={() => setStep((value) => value + 1)}>{spanish ? 'Siguiente' : 'Next'}</button>
+          <button type="button" className="af-welcome-next" onClick={() => setStep((value) => value + 1)}>{m.next}</button>
         ) : (
-          <button type="button" className="af-welcome-next" onClick={finish}>{spanish ? 'Empezar' : 'Get started'}</button>
+          <button type="button" className="af-welcome-next" onClick={finish}>{m.start}</button>
         )}
       </div>
     </section>
