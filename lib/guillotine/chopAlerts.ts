@@ -10,11 +10,12 @@ import 'server-only'
  *
  * ⚠ AT MOST ONCE, TWICE OVER. score-sync runs every five minutes on two worker replicas. Each alert
  * carries a dedupe key, so the bell row is written once per person and the durable transport sends
- * each channel once; the warning is also claimed with a lock and a league event BEFORE anything is
- * sent, so the costly part (scoring every team) runs once a week, not on every tick of its window.
+ * each channel once; the warning is also throttled by a lock and recorded as a league event BEFORE
+ * anything is sent, so the costly part (scoring every team) runs once per half hour of its one-day
+ * window, not on every tick, and no level is sent to a team twice.
  */
 import { prisma } from '@/lib/prisma'
-import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/locks'
+import { acquireAutomationLock } from '@/lib/automation/locks'
 import { resolveRecipients } from '@/lib/notifications/resolveAppUserIds'
 import { readWeekSlate, DATE_WINDOWED_SPORTS } from '@/lib/redraft/weekFinalizer'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
@@ -101,7 +102,9 @@ export async function sendChopResultAlerts(
   ] as const) {
     if (userIds.length === 0) continue
     const alert = chopResultAlert({ leagueName: name, week: input.week, choppedNames, youWereChopped, rosterReleaseTiming: input.rosterReleaseTiming })
-    await dispatch({ ...common, userIds: [...userIds], type, title: alert.title, body: alert.body, severity: alert.severity, dedupePrefix: `${key}:${type}` })
+    // A survivor goes straight to the released players (the home's chop moment), where the bids are.
+    const link = youWereChopped ? {} : { actionHref: `/league/${input.leagueId}#guillotine-chop`, actionLabel: 'See the players' }
+    await dispatch({ ...common, ...link, userIds: [...userIds], type, title: alert.title, body: alert.body, severity: alert.severity, dedupePrefix: `${key}:${type}` })
   }
   return { chopped: choppedUsers.size, survived: survivors.length }
 }
@@ -110,8 +113,8 @@ export async function sendChopResultAlerts(
 
 export type ChopZoneWarningOutcome =
   | 'sent'
-  | 'already_sent'
-  | 'locked'
+  | 'no_change'
+  | 'throttled'
   | 'schedule_unknown'
   | 'too_early'
   | 'too_late'
@@ -144,9 +147,55 @@ async function defaultLastGameStart(args: { sport: string; season: number; week:
 
 const WARNING_EVENT = 'chop_zone_warning' as const
 
+/** Inside the window the standings are looked at again this often — the late-drop warning (2026-10-29). */
+export const CHOP_ZONE_RECHECK_MS = 30 * 60 * 1000
+
+type WarnLevel = 'danger' | 'chopped'
+const LEVEL_RANK: Record<WarnLevel, number> = { danger: 1, chopped: 2 }
+
 /**
- * Warn the teams the chop would take — and the ones just above it — about a day before the week's last
- * game, once a week. "If the week ended now": the standings can still move, which is the point.
+ * What this week's warnings already told each team, from the league events they left: rosterId → the
+ * most serious level sent, and when the week's last game starts (stored by the first pass, so later
+ * ticks need no schedule read). A legacy event (rosterIds, no levels) counts as the most serious.
+ */
+async function warnedSoFar(leagueId: string, key: string): Promise<{ any: boolean; levels: Map<string, WarnLevel>; lastStartAt: Date | null }> {
+  const rows = await prisma.guillotineEventLog.findMany({
+    where: { leagueId, eventType: WARNING_EVENT, metadata: { path: ['key'], equals: key } },
+    select: { metadata: true },
+  })
+  const levels = new Map<string, WarnLevel>()
+  let lastStartAt: Date | null = null
+  const raise = (rosterId: string, level: WarnLevel) => {
+    const prior = levels.get(rosterId)
+    if (!prior || LEVEL_RANK[level] > LEVEL_RANK[prior]) levels.set(rosterId, level)
+  }
+  for (const row of rows) {
+    const m = (row.metadata ?? {}) as { warned?: Record<string, unknown>; rosterIds?: unknown; lastStartAt?: unknown }
+    if (m.warned && typeof m.warned === 'object') {
+      for (const [rosterId, level] of Object.entries(m.warned)) if (level === 'danger' || level === 'chopped') raise(rosterId, level)
+    } else if (Array.isArray(m.rosterIds)) {
+      for (const rosterId of m.rosterIds) if (typeof rosterId === 'string') raise(rosterId, 'chopped')
+    }
+    if (typeof m.lastStartAt === 'string' && !Number.isNaN(Date.parse(m.lastStartAt))) lastStartAt = new Date(m.lastStartAt)
+  }
+  return { any: rows.length > 0, levels, lastStartAt }
+}
+
+/**
+ * Warn the teams the chop would take — and the ones just above it — inside the last day before the
+ * week's final game. "If the week ended now": the standings can still move, which is the point.
+ *
+ * 🛑 A WARNING SENT ONCE WENT STALE. The first version looked once and stopped, so a team that was
+ * safe at that moment and slipped into the chop zone afterwards heard nothing until it was chopped.
+ * The standings are now looked at again every CHOP_ZONE_RECHECK_MS inside the window, and a team is
+ * warned again only when its level gets WORSE (none → danger → chop zone). So a team hears at most two
+ * warnings a week; one already warned it is in the chop zone hears nothing more, and a team that
+ * climbs out is not pinged.
+ *
+ * ⚠ THE THROTTLE IS A LOCK NOBODY RELEASES. Each look takes a lock held for CHOP_ZONE_RECHECK_MS and
+ * never released, so two worker replicas and five-minute ticks look once per half hour between them.
+ * Each send is recorded (a league event naming the levels) BEFORE it goes out, so a crash mid-loop
+ * cannot send the same level twice.
  *
  * Called by score-sync for a guillotine league whose next chop week is the week being played.
  */
@@ -155,67 +204,79 @@ export async function sendChopZoneWarnings(
   deps: ChopZoneWarningDeps = {},
 ): Promise<{ outcome: ChopZoneWarningOutcome; warned?: number }> {
   const now = deps.now?.() ?? new Date()
-  const marker = { leagueId: input.leagueId, eventType: WARNING_EVENT, metadata: { path: ['key'], equals: `${input.season}:w${input.week}` } }
-  // Cheapest check first: every tick inside the window after the first one stops here.
-  if (await prisma.guillotineEventLog.findFirst({ where: marker, select: { id: true } })) return { outcome: 'already_sent' }
+  const key = `${input.season}:w${input.week}`
+  const before = await warnedSoFar(input.leagueId, key)
 
-  const lastStart = await (deps.lastGameStart ?? defaultLastGameStart)({ sport: input.sport, season: input.season, week: input.week, now })
+  // After the first pass the week's last game start is on the event: no schedule read per tick.
+  const lastStart = before.lastStartAt ?? (await (deps.lastGameStart ?? defaultLastGameStart)({ sport: input.sport, season: input.season, week: input.week, now }))
   if (!lastStart) return { outcome: 'schedule_unknown' }
   if (now.getTime() < lastStart.getTime() - CHOP_ZONE_WARNING_LEAD_MS) return { outcome: 'too_early' }
   // Once the last game has started there is nothing left to change; the chop alert follows.
   if (now.getTime() >= lastStart.getTime()) return { outcome: 'too_late' }
 
-  const lockKey = `guillotine-chop-zone-warning:${input.leagueId}:${input.season}:${input.week}`
-  const owner = `chop-zone-warning:${input.seasonId}:${now.getTime()}`
-  const lock = await acquireAutomationLock(lockKey, { ttlMs: 5 * 60 * 1000, owner })
-  if (!lock.ok) return { outcome: 'locked' }
-  try {
-    if (await prisma.guillotineEventLog.findFirst({ where: marker, select: { id: true } })) return { outcome: 'already_sent' }
-    const preview = await (deps.loadPreview ?? loadChopPreview)(input.leagueId)
-    if ('error' in preview || preview.outcome !== 'chop') return { outcome: 'no_chop_this_week' }
-    // The preview chooses its own week; warn only about the week being played.
-    if (preview.week !== input.week) return { outcome: 'week_mismatch' }
-    // The real chop would refuse to run; a warning about it would be about a chop that is not coming.
-    if (preview.blockers.length > 0) return { outcome: 'blocked' }
-    // Nobody has scored: the feed is behind, and "you're last" would be a coin flip.
-    if (!preview.rows.some((row) => row.points > 0)) return { outcome: 'no_scores' }
+  const lock = await acquireAutomationLock(`guillotine-chop-zone-check:${input.leagueId}:${key}`, {
+    ttlMs: CHOP_ZONE_RECHECK_MS,
+    owner: `chop-zone-warning:${input.seasonId}:${now.getTime()}`,
+  })
+  if (!lock.ok) return { outcome: 'throttled' }
 
-    const targets = preview.rows.filter((row) => row.status === 'chopped' || row.status === 'danger')
-    const owners = await usersByRoster(input.leagueId, targets.map((row) => row.rosterId))
-    const name = await leagueName(input.leagueId)
-    // Claimed before sending: a second replica (or a crash mid-loop) must not send the week again.
-    await appendEvent(input.leagueId, WARNING_EVENT, { key: `${input.season}:w${input.week}`, week: input.week, season: input.season, rosterIds: targets.map((row) => row.rosterId) })
+  const preview = await (deps.loadPreview ?? loadChopPreview)(input.leagueId)
+  if ('error' in preview || preview.outcome !== 'chop') return { outcome: 'no_chop_this_week' }
+  // The preview chooses its own week; warn only about the week being played.
+  if (preview.week !== input.week) return { outcome: 'week_mismatch' }
+  // The real chop would refuse to run; a warning about it would be about a chop that is not coming.
+  if (preview.blockers.length > 0) return { outcome: 'blocked' }
+  // Nobody has scored: the feed is behind, and "you're last" would be a coin flip.
+  if (!preview.rows.some((row) => row.points > 0)) return { outcome: 'no_scores' }
 
-    const dispatch = deps.dispatch ?? defaultDispatch
-    let warned = 0
-    for (const row of targets) {
-      const userId = owners.get(row.rosterId)
-      if (!userId) continue
-      const status = row.status === 'chopped' ? 'chopped' : 'danger'
-      const alert = chopZoneWarning({ leagueName: name, week: input.week, status, margin: row.margin })
-      try {
-        await dispatch({
-          userIds: [userId],
-          category: 'matchup_results',
-          type: status === 'chopped' ? 'guillotine_chop_zone' : 'guillotine_danger_zone',
-          title: alert.title,
-          body: alert.body,
-          severity: alert.severity,
-          actionHref: `/league/${input.leagueId}`,
-          actionLabel: 'Set lineup',
-          leagueId: input.leagueId,
-          meta: { guillotineWeek: input.week, points: row.points, margin: row.margin },
-          dedupePrefix: `guillotine-chop-zone:${input.leagueId}:${input.season}:w${input.week}`,
-        })
-        warned += 1
-      } catch (error) {
-        console.warn('[guillotine] chop-zone warning not sent', { leagueId: input.leagueId, week: input.week, error: error instanceof Error ? error.message : String(error) })
-      }
+  // Re-read under the lock: a replica that looked a moment ago may have just sent.
+  const sent = (await warnedSoFar(input.leagueId, key)).levels
+  const targets = preview.rows.flatMap((row) => {
+    if (row.status !== 'chopped' && row.status !== 'danger') return []
+    const level: WarnLevel = row.status
+    const prior = sent.get(row.rosterId)
+    return prior && LEVEL_RANK[prior] >= LEVEL_RANK[level] ? [] : [{ row, level, late: before.any }]
+  })
+  if (targets.length === 0) return { outcome: 'no_change' }
+
+  const owners = await usersByRoster(input.leagueId, targets.map((t) => t.row.rosterId))
+  const name = await leagueName(input.leagueId)
+  // Recorded before sending: a second replica (or a crash mid-loop) must not send these levels again.
+  await appendEvent(input.leagueId, WARNING_EVENT, {
+    key,
+    week: input.week,
+    season: input.season,
+    lastStartAt: lastStart.toISOString(),
+    warned: Object.fromEntries(targets.map((t) => [t.row.rosterId, t.level])),
+  })
+
+  const dispatch = deps.dispatch ?? defaultDispatch
+  let warned = 0
+  for (const { row, level, late } of targets) {
+    const userId = owners.get(row.rosterId)
+    if (!userId) continue
+    const alert = chopZoneWarning({ leagueName: name, week: input.week, status: level, margin: row.margin, late })
+    try {
+      await dispatch({
+        userIds: [userId],
+        category: 'matchup_results',
+        type: level === 'chopped' ? 'guillotine_chop_zone' : 'guillotine_danger_zone',
+        title: alert.title,
+        body: alert.body,
+        severity: alert.severity,
+        actionHref: `/league/${input.leagueId}`,
+        actionLabel: 'Set lineup',
+        leagueId: input.leagueId,
+        meta: { guillotineWeek: input.week, points: row.points, margin: row.margin, late },
+        // Per level: a danger warning and a later chop-zone one are two alerts, not one deduped away.
+        dedupePrefix: `guillotine-chop-zone:${input.leagueId}:${input.season}:w${input.week}:${level}`,
+      })
+      warned += 1
+    } catch (error) {
+      console.warn('[guillotine] chop-zone warning not sent', { leagueId: input.leagueId, week: input.week, error: error instanceof Error ? error.message : String(error) })
     }
-    return { outcome: 'sent', warned }
-  } finally {
-    await releaseAutomationLock(lockKey, owner).catch(() => undefined)
   }
+  return { outcome: 'sent', warned }
 }
 
 /** score-sync's entry: the season row names the league, sport and year. */

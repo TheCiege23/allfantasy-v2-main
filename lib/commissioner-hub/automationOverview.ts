@@ -11,6 +11,7 @@ import { readEliminatedLineupRule } from '@/lib/eliminated-lineups/eliminatedLin
 import { readIrAutoMoveEnabled } from '@/lib/ir-activation/irAutoMove'
 import { readRookieDraftCalendarSettings } from '@/lib/dynasty-core/rookieDraftCalendar'
 import { readTaxiRulesEnforced } from '@/lib/taxi/taxiMoveRules'
+import { readAutoHandover } from '@/lib/inactive-manager/autoHandover'
 
 export type AutomationGroup = 'lineups' | 'drafts' | 'fairness'
 export type AutomationState = 'on' | 'off' | 'needs_plan'
@@ -22,6 +23,8 @@ export type AutomationRow = {
   state: AutomationState
   /** What it is doing right now, in a few words; null when off. */
   detail: string | null
+  /** The same in Spanish. */
+  detailEs: string | null
   /** Where its switch is: a Commissioner Hub card (`#…`) or a league page. */
   href: string
   plan: 'free' | 'commissioner'
@@ -62,6 +65,7 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       label: 'Fill empty starting spots before lock',
       state: fillOn ? 'on' : 'off',
       detail: fillOn ? 'Every hour, from the bench' : null,
+      detailEs: fillOn ? 'Cada hora, desde la banca' : null,
       href: '#ch-fill-empty-starters',
       plan: 'free',
     },
@@ -71,15 +75,30 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       label: 'Teams AllFantasy or Chimmy runs',
       state: managed.length > 0 ? 'on' : 'off',
       detail: managed.length > 0 ? `${managed.length} team${managed.length === 1 ? '' : 's'}${autopilot ? `, ${autopilot} on Chimmy autopilot` : ''}` : null,
+      detailEs: managed.length > 0 ? `${managed.length} equipo${managed.length === 1 ? '' : 's'}${autopilot ? `, ${autopilot} con piloto automático de Chimmy` : ''}` : null,
       href: '#ch-inactive-managers',
       plan: 'free',
     },
+    (() => {
+      const rule = readAutoHandover(f.settings)
+      return {
+        key: 'auto_handover',
+        group: 'lineups' as const,
+        label: 'Hand over a team with no activity',
+        state: rule ? ('on' as const) : ('off' as const),
+        detail: rule ? `After ${rule.days} days, to ${rule.to === 'autopilot' && f.commissionerPlan ? 'Chimmy autopilot' : 'AllFantasy'}` : null,
+        detailEs: rule ? `Tras ${rule.days} días, a ${rule.to === 'autopilot' && f.commissionerPlan ? 'piloto automático de Chimmy' : 'AllFantasy'}` : null,
+        href: '#ch-inactive-managers',
+        plan: 'free' as const,
+      }
+    })(),
     {
       key: 'eliminated_lineups',
       group: 'lineups',
       label: 'Lineup minimums for eliminated teams',
       state: paid(Boolean(eliminated)),
       detail: eliminated ? (eliminated.autoFill ? 'Short spots filled from the bench' : 'Managers warned') : null,
+      detailEs: eliminated ? (eliminated.autoFill ? 'Puestos faltantes llenados desde la banca' : 'Se avisa a los mánagers') : null,
       href: '#ch-eliminated-lineups',
       plan: 'commissioner',
     },
@@ -89,6 +108,7 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       label: 'Move healthy players off IR',
       state: paid(readIrAutoMoveEnabled(f.settings)),
       detail: readIrAutoMoveEnabled(f.settings) ? 'To the bench, when activated' : null,
+      detailEs: readIrAutoMoveEnabled(f.settings) ? 'A la banca, al ser activados' : null,
       href: '#ch-ir-auto-move',
       plan: 'commissioner',
     },
@@ -98,6 +118,7 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       label: 'Missed picks made the way the manager drafts',
       state: paid(draftAsMeOn),
       detail: f.commissionerPlan && draftAsMeOn ? 'Every live draft' : null,
+      detailEs: f.commissionerPlan && draftAsMeOn ? 'Cada draft en vivo' : null,
       href: '#ch-inactive-managers',
       plan: 'commissioner',
     },
@@ -110,6 +131,7 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
         label: 'Rookie draft opens itself',
         state: f.rookieDraftAutoOpen ? 'on' : 'off',
         detail: f.rookieDraftAutoOpen ? (calendar.customOpenDate ? `On ${calendar.customOpenDate}` : "On the sport's calendar") : null,
+        detailEs: f.rookieDraftAutoOpen ? (calendar.customOpenDate ? `El ${calendar.customOpenDate}` : 'Según el calendario del deporte') : null,
         href: settingsHref,
         plan: 'free',
       },
@@ -119,6 +141,7 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
         label: 'Rookie draft starts itself',
         state: calendar.autoStartDays != null ? 'on' : 'off',
         detail: calendar.autoStartDays != null ? `${calendar.autoStartDays} days after it opens` : null,
+        detailEs: calendar.autoStartDays != null ? `${calendar.autoStartDays} días después de abrirse` : null,
         href: settingsHref,
         plan: 'free',
       },
@@ -128,6 +151,7 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
         label: 'Rookie draft order kept up to date',
         state: paid(f.liveRookieOrderOn),
         detail: f.commissionerPlan && f.liveRookieOrderOn ? 'Locks in as the playoffs finish' : null,
+        detailEs: f.commissionerPlan && f.liveRookieOrderOn ? 'Se fija al terminar los playoffs' : null,
         href: settingsHref,
         plan: 'commissioner',
       },
@@ -140,6 +164,7 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       label: 'Anti-tanking monitor',
       state: paid(f.tankingMonitorOn),
       detail: f.commissionerPlan && f.tankingMonitorOn ? (f.tankingPenaltiesOn ? 'Warning, then the penalty you chose' : 'Flags only') : null,
+      detailEs: f.commissionerPlan && f.tankingMonitorOn ? (f.tankingPenaltiesOn ? 'Aviso y luego la sanción que elegiste' : 'Solo alertas') : null,
       href: integrityHref,
       plan: 'commissioner',
     },
@@ -149,6 +174,7 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       label: 'Hold suspicious trades for review',
       state: paid(f.holdFlaggedTradesMode !== 'off'),
       detail: f.commissionerPlan && f.holdFlaggedTradesMode !== 'off' ? (f.holdFlaggedTradesMode === 'all' ? 'Every flagged trade' : 'Serious flags only') : null,
+      detailEs: f.commissionerPlan && f.holdFlaggedTradesMode !== 'off' ? (f.holdFlaggedTradesMode === 'all' ? 'Todo cambio marcado' : 'Solo alertas graves') : null,
       href: integrityHref,
       plan: 'commissioner',
     },
@@ -161,6 +187,7 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       label: 'Taxi squad rules enforced',
       state: paid(taxiOn),
       detail: f.commissionerPlan && taxiOn ? 'On every save, with deadline warnings' : null,
+      detailEs: f.commissionerPlan && taxiOn ? 'En cada guardado, con avisos de plazo' : null,
       href: settingsHref,
       plan: 'commissioner',
     })

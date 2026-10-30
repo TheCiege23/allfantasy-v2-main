@@ -60,12 +60,14 @@ export async function runWeeklyAutomationRecaps(opts?: { now?: Date; limit?: num
         ],
         autoPicks,
       )
-      const lines = recapLines(counts)
+      const profile = await prisma.userProfile.findUnique({ where: { userId: league.userId }, select: { preferredLanguage: true } }).catch(() => null)
+      const lang = profile?.preferredLanguage?.toLowerCase().startsWith('es') ? 'es' : 'en'
+      const lines = recapLines(counts, lang)
       if (lines.length === 0) {
         result.nothing += 1
         continue
       }
-      const msg = recapMessage(league.name ?? 'your league', lines)
+      const msg = recapMessage(league.name ?? (lang === 'es' ? 'tu liga' : 'your league'), lines, lang)
       await dispatchNotification({
         userIds: [league.userId],
         category: 'commissioner_alerts',
@@ -75,7 +77,7 @@ export async function runWeeklyAutomationRecaps(opts?: { now?: Date; limit?: num
         severity: 'low',
         leagueId,
         actionHref: `/league/${encodeURIComponent(leagueId)}/log`,
-        actionLabel: 'Open league log',
+        actionLabel: lang === 'es' ? 'Abrir registro de la liga' : 'Open league log',
         dedupePrefix: sourceKey,
         meta: { leagueId, week: key, counts },
       })

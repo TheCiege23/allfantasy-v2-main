@@ -1,13 +1,14 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { getEffectiveLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
 import { getRosterEngineRegistry } from '@/lib/roster-engine'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { HEADLINE_STATS } from './explain'
 import { readDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
-import { effectiveDynastyRules, normalizeRosterSlots, rookieDraftLotteryRule, ruleSnapshotFromLeague, taxiRulesFromEffective, type RulesLeagueRow } from './snapshot'
+import { effectiveDynastyRules, waiverRulesFromEffective, normalizeRosterSlots, rookieDraftLotteryRule, ruleSnapshotFromLeague, taxiRulesFromEffective, type RulesLeagueRow } from './snapshot'
 import { parseSettingsChangeEvents } from './view'
 import { loadDraftRulesSafe } from './loadDraftRules'
 import type { RuleSnapshot, SettingsChangeEvent } from './types'
@@ -21,7 +22,7 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
   const snapshot = ruleSnapshotFromLeague(row)
   const sport = snapshot.sport
 
-  const [slots, scoring, guillotine, taxi, rookieDraft, draft] = await Promise.all([
+  const [slots, scoring, guillotine, taxi, rookieDraft, draft, waivers] = await Promise.all([
     (async () => {
       const registry = getRosterEngineRegistry()
       if (!registry.isSupported(sport as never)) return null
@@ -46,7 +47,11 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
       : Promise.resolve(null),
     // The main draft: its session and settings stores (./loadDraftRules.ts). An import drafts on its platform.
     snapshot.importedFrom ? Promise.resolve(null) : loadDraftRulesSafe(leagueId),
+    // The waiver rules the claims engine runs (the commissioner's Waivers panel writes them, not the
+    // League columns). An import's waivers run on its platform.
+    snapshot.importedFrom ? Promise.resolve(null) : getEffectiveLeagueWaiverSettings(leagueId).catch(() => null),
   ])
+  if (waivers) Object.assign(snapshot, waiverRulesFromEffective(waivers))
   if (rookieDraft) Object.assign(snapshot, rookieDraft)
   if (draft) Object.assign(snapshot, draft)
 
