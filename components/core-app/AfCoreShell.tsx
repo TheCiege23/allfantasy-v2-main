@@ -156,7 +156,9 @@ export type RailStandingSummary = {
   outOf: number
   /** Points over the lowest team in the league. Null when you ARE the lowest. */
   overCut: number | null
-  basis: 'points' | 'projected'
+  basis: 'points' | 'projected' | 'best_ball'
+  /** `best_ball` only: a game that can still change a total is not final. */
+  provisional?: boolean
   placesAboveCut: number
   cutLine: number
   /** The bottom of this table goes home, so the copy says "cut" rather than "last". */
