@@ -102,7 +102,6 @@ export type CreateNextDraftResult =
         | 'NEEDS_DATABASE_UPDATE'
         | 'ROOKIE_LOTTERY_UNAVAILABLE'
         | 'ROOKIE_AUCTION_PICKS_UNRESOLVED'
-        | 'ROOKIE_LOTTERY_UNAVAILABLE'
       message: string
     }
 
