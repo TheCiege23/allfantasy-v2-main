@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { weekdayEs } from '@/lib/core-app/kickoffText'
+import { dashboard34LiveMessages } from '@/lib/core-app/messages/dashboard34Live'
+import { messagesFor } from '@/lib/i18n/messages'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
@@ -143,32 +144,32 @@ function formatAgo(ms: number): string {
  * the language provider starts at English on both passes, so hydration agrees.
  */
 export function Dash34When({ iso, language }: { iso: string; language?: string }) {
-  const es = language === 'es'
-  const utc = utcDayLabel(iso, es)
+  const m = messagesFor(dashboard34LiveMessages, language)
+  const utc = utcDayLabel(iso, m.utcWeekday)
   const [label, setLabel] = useState(utc)
 
   useEffect(() => {
     const d = new Date(iso)
     if (Number.isNaN(d.getTime())) return
     setLabel(
-      d.toLocaleString(es ? 'es' : undefined, {
+      d.toLocaleString(m.whenLocale || undefined, {
         weekday: 'short',
         hour: 'numeric',
         minute: '2-digit',
       }),
     )
-  }, [iso, es])
+  }, [iso, m])
 
   return <>{label}</>
 }
 
 const UTC_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-function utcDayLabel(iso: string, es = false): string {
+function utcDayLabel(iso: string, weekday: (day: string) => string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
   const day = UTC_DAYS[d.getUTCDay()]!
-  return `${es ? weekdayEs(day) : day} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
+  return `${weekday(day)} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
 }
 
 /**

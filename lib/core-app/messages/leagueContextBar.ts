@@ -1,3 +1,5 @@
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { SURFACE_LABEL_ES } from '@/lib/core-app/shellCopy'
 import { defineMessages } from '@/lib/i18n/messages'
 import { LEAGUE_TYPE_DECIDES_GRADES } from '@/lib/league/leagueTypeGrading'
 
@@ -7,6 +9,9 @@ import { LEAGUE_TYPE_DECIDES_GRADES } from '@/lib/league/leagueTypeGrading'
  * rewrite. Interpolated values (league-type label, surface label, sync age) arrive already in the
  * reader's language: the component passes them through `leagueConceptText` / `ageText` /
  * `surfaceLabel`, each of which returns English unchanged.
+ *
+ * `surfaceLabel` is handed a surface's English label (`CORE_SURFACE_LABELS`) and returns it unchanged
+ * in English; Spanish takes shellCopy's surface table, then `coreUiCopy`.
  */
 export const leagueContextBarMessages = defineMessages({
   en: {
@@ -34,6 +39,7 @@ export const leagueContextBarMessages = defineMessages({
     loadSaveError: 'Could not load or save',
     pickPirateBase: 'Pick dynasty or redraft to save',
     notConfirmed: `Not confirmed — ${LEAGUE_TYPE_DECIDES_GRADES.charAt(0).toLowerCase()}${LEAGUE_TYPE_DECIDES_GRADES.slice(1)}`,
+    surfaceLabel: (english: string): string => english,
   },
   es: {
     checking: 'comprobando',
@@ -60,5 +66,6 @@ export const leagueContextBarMessages = defineMessages({
     loadSaveError: 'No se pudo cargar ni guardar',
     pickPirateBase: 'Elige dynasty o redraft para guardar',
     notConfirmed: 'Sin confirmar: tu tipo de liga decide cómo se califica cada intercambio de esta liga.',
+    surfaceLabel: (english) => SURFACE_LABEL_ES[english] ?? coreUiCopy(english, 'es'),
   },
 })
