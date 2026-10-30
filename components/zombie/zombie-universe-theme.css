@@ -1,0 +1,59 @@
+/* Zombie universe: keep the image decorative and the controls readable over it. */
+.zombie-universe-page {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  background-image: radial-gradient(ellipse at 80% 0%, rgba(29, 93, 67, .15), transparent 32rem), linear-gradient(#050a0b, #070b13 42rem);
+}
+.zombie-universe-hero {
+  max-width: 80rem;
+  margin-left: auto;
+  margin-right: auto;
+  background: #06100e;
+  border-color: rgba(110, 231, 183, .22);
+}
+.zombie-league-outbreak-hero { background: #06100e; border-color: rgba(110, 231, 183, .22); }
+.zombie-universe-art {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(3, 10, 9, .97) 0%, rgba(3, 10, 9, .78) 48%, rgba(3, 10, 9, .32) 100%), linear-gradient(0deg, #050b0a 0%, transparent 70%), url('/zombie/universe-outbreak.webp') center 54% / cover no-repeat;
+}
+.zombie-universe-hero::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(52, 211, 153, .75), transparent);
+}
+.zombie-season-marker {
+  padding: .25rem .75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 191, 36, .28);
+  background: rgba(27, 20, 10, .78);
+  color: #fde68a;
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.zombie-universe-title h1 { text-wrap: balance; overflow-wrap: anywhere; text-shadow: 0 2px 18px rgba(0,0,0,.8); }
+.zombie-universe-stats { position: relative; }
+.zombie-universe-stat {
+  min-width: 0;
+  background-color: rgba(3, 14, 13, .78);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 8px 24px rgba(0,0,0,.2);
+}
+.zombie-universe-stat p:first-child { color: #d3dfd9; letter-spacing: .12em; }
+.zombie-universe-stat p:last-child { font-size: 1.75rem; line-height: 1; }
+.zombie-renewal-shell { position: relative; background: linear-gradient(145deg,#08221a 0%,#08141a 45%,#080e1a 100%); }
+.zombie-renewal-header { position: relative; background: linear-gradient(105deg,rgba(29,110,76,.2),rgba(4,11,19,.2)); }
+.zombie-renewal-progress li[aria-current="step"] { box-shadow: inset 0 0 0 1px rgba(110,231,183,.12), 0 0 20px rgba(16,185,129,.08); }
+@media (max-width: 639px) {
+  .zombie-universe-page { padding-left: .875rem; padding-right: .875rem; }
+  .zombie-league-outbreak-hero { background: #06100e; border-color: rgba(110, 231, 183, .22); }
+.zombie-universe-art { background-position: center, center, 63% center; }
+  .zombie-universe-stat p:first-child { letter-spacing: .07em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zombie-universe-hero .zombie-hero-fog, .zombie-universe-hero .zombie-drift-particles, .zombie-universe-hero .zombie-toxic-ring, .zombie-league-outbreak-hero .zombie-hero-fog, .zombie-league-outbreak-hero .zombie-drift-particles, .zombie-league-outbreak-hero .zombie-toxic-ring { animation: none; }
+}

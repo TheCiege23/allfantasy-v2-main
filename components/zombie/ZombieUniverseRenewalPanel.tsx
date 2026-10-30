@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import './zombie-universe-theme.css'
 import { Archive, ArrowDownRight, ArrowRight, ArrowUpRight, Biohazard, Check, CheckCircle2, ClipboardCheck, Flag, ShieldCheck, Wallet } from 'lucide-react'
 import { RenewalCapacity, RenewalSummary, renewalControl } from './ZombieRenewalVisuals'
 import { ZombieUniverseAllocationEditor } from './ZombieUniverseAllocationEditor'
@@ -29,14 +30,14 @@ export function ZombieUniverseRenewalPanel({ universeId, leagueId, season }: { u
     } catch(e) {setError(e instanceof Error?e.message:'Request failed.')}
     finally {setBusy(false)}
   }
-  return <section className="min-w-0 overflow-hidden rounded-3xl border border-emerald-400/25 bg-gradient-to-br from-emerald-950/60 via-slate-950 to-slate-950 text-sm text-slate-200 shadow-[0_0_32px_rgba(16,185,129,0.07)]" aria-label="Zombie season renewal" aria-busy={busy}>
-    <div className="border-b border-emerald-300/15 bg-emerald-300/[0.04] p-4 sm:p-6">
+  return <section className="zombie-renewal-shell min-w-0 overflow-hidden rounded-3xl border border-emerald-400/25 bg-gradient-to-br from-emerald-950/60 via-slate-950 to-slate-950 text-sm text-slate-200 shadow-[0_0_32px_rgba(16,185,129,0.07)]" aria-label="Zombie season renewal" aria-busy={busy}>
+    <div className="zombie-renewal-header border-b border-emerald-300/15 bg-emerald-300/[0.04] p-4 sm:p-6">
       <div className="flex min-w-0 items-start gap-3 sm:gap-4">
         <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-300/25 bg-emerald-300/10 text-emerald-200"><Biohazard className="h-6 w-6" /></span>
         <div className="min-w-0"><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">Zombie command · Season renewal</p><h2 className="mt-1 text-xl font-bold tracking-tight text-white sm:text-2xl">Prepare season {season+1}</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300">Your next outbreak starts here. Review the returning field, shape the leagues, and approve a fresh season.</p></div>
       </div>
       <div className="mt-5 flex flex-wrap items-center gap-2 text-xs"><span className="rounded-full border border-white/15 bg-slate-950/60 px-3 py-1.5 text-slate-300">{season} · Archived after completion</span><ArrowRight aria-hidden="true" className="h-4 w-4 text-emerald-200" /><span className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-1.5 font-semibold text-emerald-100">{season+1} · Fresh season</span></div>
-      <ol aria-label="Renewal progress" className="mt-5 grid grid-cols-3 gap-2">
+      <ol aria-label="Renewal progress" className="zombie-renewal-progress mt-5 grid grid-cols-3 gap-2">
         {['Plan','Review','Create'].map((label,i)=>{const step=result?2:preview?1:0;return <li key={label} aria-current={step===i?'step':undefined} className={'flex min-w-0 flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-medium '+(step===i?'border-emerald-300/35 bg-emerald-300/10 text-emerald-100':'border-white/10 text-slate-400')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-current text-[11px]">{step>i?<Check className="h-3 w-3" />:i+1}</span>{label}</li>})}
       </ol>
     </div>

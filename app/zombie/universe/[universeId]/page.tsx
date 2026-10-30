@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { ZombieUniverseRenewalPanel } from '@/components/zombie/ZombieUniverseRenewalPanel'
+import '@/components/zombie/zombie-universe-theme.css'
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import {
@@ -187,10 +188,11 @@ export default function ZombieUniverseHubPage() {
   const counts = data.counts
 
   return (
-    <div className="min-h-screen bg-[var(--zombie-bg)] px-4 py-6 text-[var(--zombie-text-mid)]">
-      <section className="zombie-hero-shell relative mb-8 border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+    <div className="zombie-universe-page min-h-screen bg-[var(--zombie-bg)] px-4 py-6 text-[var(--zombie-text-mid)]">
+      <section className="zombie-hero-shell zombie-universe-hero relative mb-8 border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+        <div className="zombie-universe-art" aria-hidden="true" />
         <div className="zombie-hero-fog" aria-hidden />
-        <div className={clsx('pointer-events-none absolute inset-0', preset.overlayClass)} aria-hidden />
+        <div className={clsx('pointer-events-none absolute inset-0 opacity-20', preset.overlayClass)} aria-hidden />
         <div className="zombie-drift-particles opacity-[0.28]" aria-hidden />
 
         <div className="relative z-[1] p-5 sm:p-6">
@@ -202,14 +204,15 @@ export default function ZombieUniverseHubPage() {
             <span className="rounded-full border border-white/12 bg-white/[0.05] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
               {preset.sport} · {preset.label}
             </span>
+            <span className="zombie-season-marker">Season {u.season}</span>
           </div>
 
-          <div className="mt-5 flex flex-wrap items-start gap-4">
+          <div className="zombie-universe-title mt-5 flex flex-wrap items-start gap-4">
             <div className="zombie-toxic-ring flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[var(--zombie-toxic)]/40 bg-black/45 sm:h-16 sm:w-16">
               <Globe className="h-8 w-8 text-[var(--zombie-toxic)] sm:h-9 sm:w-9" aria-hidden />
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className="text-2xl font-black tracking-tight text-white sm:text-3xl">{u.name}</h1>
+              <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">{u.name}</h1>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/70">{preset.tagline}</p>
             </div>
           </div>
@@ -236,29 +239,29 @@ export default function ZombieUniverseHubPage() {
             </div>
           ) : null}
 
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-2xl border border-emerald-500/22 bg-emerald-500/[0.07] px-3 py-3">
+          <div className="zombie-universe-stats mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="zombie-universe-stat rounded-2xl border border-emerald-500/22 bg-emerald-500/[0.07] px-3 py-3">
               <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
                 <Shield className="h-3.5 w-3.5 text-emerald-300" aria-hidden />
                 Survivors
               </p>
               <p className="mt-2 text-2xl font-black tabular-nums text-white">{counts.survivorCount}</p>
             </div>
-            <div className="rounded-2xl border border-lime-500/25 bg-lime-500/[0.06] px-3 py-3">
+            <div className="zombie-universe-stat rounded-2xl border border-lime-500/25 bg-lime-500/[0.06] px-3 py-3">
               <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
                 <Skull className="h-3.5 w-3.5 text-lime-300" aria-hidden />
                 Zombies
               </p>
               <p className="mt-2 text-2xl font-black tabular-nums text-white">{counts.zombieCount}</p>
             </div>
-            <div className="rounded-2xl border border-fuchsia-500/25 bg-fuchsia-950/25 px-3 py-3">
+            <div className="zombie-universe-stat rounded-2xl border border-fuchsia-500/25 bg-fuchsia-950/25 px-3 py-3">
               <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
                 <Sparkles className="h-3.5 w-3.5 text-fuchsia-300" aria-hidden />
                 Whisperers
               </p>
               <p className="mt-2 text-2xl font-black tabular-nums text-white">{counts.whispererCount}</p>
             </div>
-            <div className="rounded-2xl border border-amber-500/28 bg-amber-500/[0.08] px-3 py-3">
+            <div className="zombie-universe-stat rounded-2xl border border-amber-500/28 bg-amber-500/[0.08] px-3 py-3">
               <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
                 <Biohazard className="h-3.5 w-3.5 text-amber-200" aria-hidden />
                 Leagues
