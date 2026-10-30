@@ -25,6 +25,10 @@ export function isFootballC2CLeague(league: { leagueVariant?: string | null; spo
   return isC2CVariant(league.leagueVariant) && String(league.sport ?? '').toUpperCase() === 'NFL'
 }
 
+export function isBasketballC2CLeague(league: { leagueVariant?: string | null; sport?: string | null }): boolean {
+  return isC2CVariant(league.leagueVariant) && String(league.sport ?? '').toUpperCase() === 'NBA'
+}
+
 const record = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 const idOf = (e: unknown): string => (typeof e === 'string' ? e : String(record(e).id ?? record(e).player_id ?? ''))
 
@@ -78,8 +82,16 @@ export function campusSeats(slots: C2CLineupSlots | null | undefined): string[] 
   return out
 }
 
-function canFill(seat: string, position: string | null | undefined): boolean {
-  const pos = String(position ?? '').toUpperCase()
+function canFill(seat: string, position: string | null | undefined, sport: 'football' | 'basketball'): boolean {
+  const pos = String(position ?? '').trim().toUpperCase()
+  if (sport === 'basketball') {
+    const positions: Record<string, readonly string[]> = {
+      G: ['G', 'PG', 'SG'], F: ['F', 'SF', 'PF'], C: ['C'],
+      PG: ['PG'], SG: ['SG'], SF: ['SF'], PF: ['PF'],
+      FLEX: ['G', 'PG', 'SG', 'F', 'SF', 'PF', 'C'], UTIL: ['G', 'PG', 'SG', 'F', 'SF', 'PF', 'C'],
+    }
+    return (positions[seat] ?? [seat]).includes(pos)
+  }
   return (FOOTBALL_SLOT_POSITIONS[seat] ?? [seat]).includes(pos)
 }
 
@@ -87,12 +99,12 @@ function canFill(seat: string, position: string | null | undefined): boolean {
  * Can these players all be seated in the campus slots at once? A bipartite matching (a few players,
  * a few seats), so a WR in FLEX never blocks a later RB that only FLEX could take.
  */
-export function seatCampusPlayers(seats: readonly string[], positions: ReadonlyArray<string | null | undefined>): boolean {
+export function seatCampusPlayers(seats: readonly string[], positions: ReadonlyArray<string | null | undefined>, sport: 'football' | 'basketball' = 'football'): boolean {
   if (positions.length > seats.length) return false
   const seatOf: number[] = new Array(seats.length).fill(-1)
   const tryPlace = (p: number, seen: boolean[]): boolean => {
     for (let s = 0; s < seats.length; s++) {
-      if (seen[s] || !canFill(seats[s], positions[p])) continue
+      if (seen[s] || !canFill(seats[s], positions[p], sport)) continue
       seen[s] = true
       if (seatOf[s] === -1 || tryPlace(seatOf[s], seen)) {
         seatOf[s] = p
@@ -120,11 +132,12 @@ export function validateCampusLineup(input: {
   slots: C2CLineupSlots | null | undefined
   positionOf: (playerId: string) => string | null | undefined
   football: boolean
+  basketball?: boolean
   nameOf?: (playerId: string) => string
 }): CampusLineupIssue[] {
   const campus = campusStarterIds(input.after)
   if (campus.length === 0) return []
-  if (!input.football) {
+  if (!input.football && !input.basketball) {
     return [{ code: 'campus_not_football', message: 'Campus lineups are scored for college football only right now.' }]
   }
   const name = (id: string) => input.nameOf?.(id) || id
@@ -138,7 +151,7 @@ export function validateCampusLineup(input: {
   if (campus.length > seats.length) {
     return [{ code: 'campus_too_many', message: `Your league starts ${seats.length} college players; this lineup has ${campus.length}.` }]
   }
-  if (!seatCampusPlayers(seats, campus.map(input.positionOf))) {
+  if (!seatCampusPlayers(seats, campus.map(input.positionOf), input.basketball ? 'basketball' : 'football')) {
     return [{ code: 'campus_ineligible', message: `These college players do not fit your campus slots (${seats.join(', ')}).` }]
   }
   return []
@@ -154,6 +167,7 @@ export function campusToggles(
   seats: readonly string[],
   starterIds: readonly string[],
   players: ReadonlyArray<{ id: string; position: string | null | undefined }>,
+  sport: 'football' | 'basketball' = 'football',
 ): CampusToggle[] {
   const positionOf = new Map(players.map((p) => [p.id, p.position]))
   const on = new Set(starterIds)
@@ -161,6 +175,6 @@ export function campusToggles(
   return players.map((p) => ({
     playerId: p.id,
     onCampus: on.has(p.id),
-    canStart: on.has(p.id) || seatCampusPlayers(seats, [...current, p.position]),
+    canStart: on.has(p.id) || seatCampusPlayers(seats, [...current, p.position], sport),
   }))
 }

@@ -1314,6 +1314,9 @@ export async function resetDraftSession(
   const outcome = await prisma.$transaction(async (tx) => {
     const archivedPicks = await tx.draftPick.findMany({where:{sessionId:session.id},orderBy:{overall:'asc'}})
     await recordArchiveEvent(tx, session, 'reset_draft', {priorSession:session, archivedPicks})
+    // Remove only rights this draft created; a changed or transferred right aborts the reset.
+    const { removeDraftCollegeRight } = await import('@/lib/devy/nbaDraftRights')
+    for (const pick of archivedPicks) await removeDraftCollegeRight(tx, leagueId, pick)
     await tx.draftPick.deleteMany({ where: { sessionId: session.id } })
     await tx.draftSession.update({
       where: { id: session.id },

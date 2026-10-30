@@ -8,12 +8,13 @@
 import type { PrismaClient } from '@prisma/client'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
-import { campusSeats, campusStarterIds, collegePlayerIds, isFootballC2CLeague } from './campusLineup'
+import { campusSeats, campusStarterIds, collegePlayerIds, isFootballC2CLeague, isBasketballC2CLeague } from './campusLineup'
 import { loadCfbWeeksForNflWeek } from './campusWeeks'
 
 export type CampusLineupPlayer = { id: string; name: string; position: string; team: string | null }
 
 export type CampusLineupView = {
+  sport?: 'football' | 'basketball'
   seats: string[]
   starterIds: string[]
   players: CampusLineupPlayer[]
@@ -30,7 +31,8 @@ export async function loadCampusLineupView(
     redraftRosterId: string | null
   },
 ): Promise<CampusLineupView | null> {
-  if (!input.redraftRosterId || !isNativePlatform(input.league.platform) || !isFootballC2CLeague(input.league)) return null
+  const basketball = isBasketballC2CLeague(input.league)
+  if (!input.redraftRosterId || !isNativePlatform(input.league.platform) || (!isFootballC2CLeague(input.league) && !basketball)) return null
   const [config, rows, redraft] = await Promise.all([
     getC2CConfig(input.league.id),
     db.redraftRosterPlayer.findMany({
@@ -49,8 +51,9 @@ export async function loadCampusLineupView(
   const onTeam = new Set(players.map((p) => p.id))
   const season = redraft?.season?.season ?? null
   const nflWeek = Math.max(1, redraft?.season?.currentWeek ?? 1)
-  const cfbWeeks = season ? await loadCfbWeeksForNflWeek(db, { season, nflWeek }) : []
+  const cfbWeeks = season && !basketball ? await loadCfbWeeksForNflWeek(db, { season, nflWeek }) : []
   return {
+    ...(basketball ? { sport: 'basketball' as const } : {}),
     seats: campusSeats(config?.collegeActiveLineupSlots),
     starterIds: campusStarterIds(input.playerData).filter((id) => onTeam.has(id)),
     players,

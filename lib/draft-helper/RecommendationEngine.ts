@@ -690,7 +690,7 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
   const scored: DraftPlayerRankingRow[] = pool.map((p) => {
     const pos = normalizeSlot(p.position, normalizedSport)
     let needScore = needs[pos] ?? 20
-    if (draftEligibleAsSet && !draftPoolRowMatchesEligiblePositions(p.position, draftEligibleAsSet)) {
+    if (draftEligibleAsSet && !draftPoolRowMatchesEligiblePositions(p.position, draftEligibleAsSet, normalizedSport)) {
       needScore = 8
     }
     const key = playerKey(p)

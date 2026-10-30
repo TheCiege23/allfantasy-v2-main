@@ -32,6 +32,14 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 | `E-04` | Rate limits. ESPN documents none. A full roster sweep is 362 requests. | UNVERIFIED — spread the sweep across cron ticks; do not burst |
 | `E-05` | Image rights for hotlinking ESPN headshots. Precedent exists (college football devy headshots already use this CDN), but TheSportsDB's contract restricts headshots to CC-licensed images. | **RESOLVED 2026-10-01 — owner decision:** use them for NCAAB on the same basis as college football. |
 | `E-06` | Scope of ESPN roster use given `M-02` (current players with no RI row). | **Updated 2026-10-30:** owner confirmed permission to investigate and use ESPN rosters for college eligibility. The earlier photos-only scope is superseded; roster snapshots retain unmatched athletes, but do not themselves create draftable players or enable scoring. |
+| `E-07` | College basketball game and player box scores for fantasy scoring. | **Updated 2026-10-30:** owner confirmed permission to use ESPN box scores. One final-game summary and its daily scoreboard returned HTTP 200; a 403 must still stop the ingest pass. Scoring integration, schedule coverage, rate limits, and historical transfer handling remain to be verified. |
+
+College postseason schedule evidence (2026-10-30): the committed Rolling Insights 2025-26
+`schedule-season.NCAABB.json` contains 394 postseason games, including the NCAA title game
+on April 6; the existing schedule parser and sync preserve those rows. The cached 2026-27
+schedule currently ends March 7. Future tournament brackets have not yet been established by
+that cached range. A week beyond the published range must remain unfinalized until evidence
+covers it; neither an empty scoreboard nor the previous season proves a future slate is complete.
 
 ## Probe protocol
 

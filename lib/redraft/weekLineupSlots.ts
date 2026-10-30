@@ -84,6 +84,7 @@ export function weekSlotType(
     case 'taxi':
       return 'taxi'
     case 'devy':
+    case 'campus':
       return 'devy'
     default:
       return row.slotType

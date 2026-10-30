@@ -886,7 +886,7 @@ export async function createCanonicalLeagueInTransaction(
         separateStartupCollegeDraft: setup.startupFormat === 'separate',
         collegeRosterSize: readNumber(setup, 'collegeRosterSize', readNumber(foundationDefaults.rosterSettings, 'collegeRosterSlots', 20)),
         collegeSports: [sport] as Prisma.InputJsonValue,
-        collegeScoringSystem: readString(setup, 'collegeScoringSystem', 'ppr'),
+        collegeScoringSystem: readString(setup, 'collegeScoringSystem', sport === 'NBA' || sport === 'NCAAB' ? 'points' : 'ppr'),
         mixProPlayers: setup.mixProPlayers !== false,
         taxiSize: readNumber(setup, 'taxiSize', readNumber(foundationDefaults.rosterSettings, 'taxiSlots', 6)),
         startupDraftType: coreDraft,

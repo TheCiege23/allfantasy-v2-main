@@ -325,7 +325,7 @@ export async function runLegacyWizardSpecialtyBootstrapsAfterLeagueCreate(
         collegeSports: Array.isArray(s?.c2c_college_sports)
           ? (s?.c2c_college_sports as string[]).filter(Boolean)
           : undefined,
-        collegeScoringSystem: (s?.c2c_scoring_system as string) ?? 'ppr',
+        collegeScoringSystem: (s?.c2c_scoring_system as string) ?? (sport === 'NBA' || sport === 'NCAAB' ? 'points' : 'ppr'),
         mixProPlayers: s?.c2c_mix_pro_players !== false,
         bestBallPro: s?.c2c_best_ball_pro !== false,
         bestBallCollege: Boolean(s?.c2c_best_ball_college),

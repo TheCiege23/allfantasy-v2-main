@@ -19,6 +19,7 @@ export interface AssignedPlayer {
   team?: string | null
   playerId?: string | null
   byeWeek?: number | null
+  assetType?: string | null
 }
 
 export function hasExistingLineup(playerData: unknown): boolean {
@@ -122,6 +123,7 @@ export async function finalizeRosterAssignments(
       team: p.team,
       playerId: p.playerId,
       byeWeek: p.byeWeek,
+      assetType: p.assetType,
     })
     byRoster.set(p.rosterId, list)
   }
@@ -168,6 +170,8 @@ export async function finalizeRosterAssignments(
       continue
     }
 
+    const collegePlayers = players.filter(isNbaCollegePick)
+    const proPlayers = players.filter((p) => !isNbaCollegePick(p))
     // Always refresh the flat draftPicks audit trail.
     let nextPlayerData: Record<string, unknown> = { ...data, draftPicks: players }
 
@@ -178,7 +182,7 @@ export async function finalizeRosterAssignments(
     const lineupFromAnotherDraft = builtBy ? builtBy !== session.id : hasEarlierDraft
     if (rosterTemplate && (!hasExistingLineup(data) || lineupFromAnotherDraft)) {
       const sections = buildLineupSectionsFromPicks(
-        players.map((p) => ({
+        proPlayers.map((p) => ({
           playerId: p.playerId ?? null,
           playerName: p.playerName,
           position: p.position,
@@ -193,6 +197,7 @@ export async function finalizeRosterAssignments(
       }
     }
 
+    nextPlayerData = mergeNbaCollegeDraftPlayers(nextPlayerData, collegePlayers)
     await prisma.roster.update({
       where: { id: rosterId },
       data: { playerData: toPrismaJsonInput(nextPlayerData) },
@@ -205,6 +210,34 @@ export async function finalizeRosterAssignments(
 
 /** Drafts that add to rosters a league already has, rather than building them. */
 const FOLLOW_UP_DRAFT_LABELS = new Set(['rookie', 'supplemental', 'dispersal'])
+
+function isNbaCollegePick(player: AssignedPlayer): boolean {
+  return /^espn:ncaab:\d+$/.test(String(player.playerId ?? '')) && (player.assetType === 'c2c_college' || player.assetType === 'devy_pick')
+}
+
+/** Keep drafted college assets in the devy section, never in pro starter or bench slots. */
+export function mergeNbaCollegeDraftPlayers(data: Record<string, unknown>, players: AssignedPlayer[]): Record<string, unknown> {
+  const college = players.filter(isNbaCollegePick)
+  if (!college.length) return data
+  const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  const sections = { ...record(data.lineup_sections) }
+  const idOf = (item: unknown) => typeof item === 'string' ? item : String(record(item).id ?? record(item).player_id ?? '')
+  const ids = new Set(college.map((p) => String(p.playerId)))
+  for (const section of ['starters', 'bench', 'ir', 'taxi']) {
+    if (Array.isArray(sections[section])) sections[section] = (sections[section] as unknown[]).filter((item) => !ids.has(idOf(item)))
+  }
+  const devy = Array.isArray(sections.devy) ? [...sections.devy] : []
+  const existing = new Set(devy.map(idOf))
+  for (const p of college) if (!existing.has(String(p.playerId))) {
+    devy.push({ id: p.playerId, name: p.playerName, position: p.position, team: p.team ?? null })
+    existing.add(String(p.playerId))
+  }
+  sections.devy = devy
+  const allPlayers = Array.isArray(data.players) ? data.players.map(String) : []
+  const oldDevy = Array.isArray(data.devy) ? data.devy.map(String) : []
+  const starters = Array.isArray(data.starters) ? data.starters.filter((item) => !ids.has(idOf(item))) : data.starters
+  return { ...data, lineup_sections: sections, players: [...new Set([...allPlayers, ...ids])], devy: [...new Set([...oldDevy, ...ids])], ...(starters === undefined ? {} : { starters }) }
+}
 
 function playerKey(p: { playerId?: string | null; playerName?: string | null; position?: string | null }): string {
   const id = String(p.playerId ?? '').trim()
@@ -236,13 +269,13 @@ export function addFollowUpDraftPlayers(
         : {}
     const listed = new Set(Array.isArray(playerData.players) ? (playerData.players as unknown[]).map(String) : [])
     const bench = [...(sections.bench ?? [])]
-    for (const p of added) {
+    for (const p of added.filter((p) => !isNbaCollegePick(p))) {
       const id = String(p.playerId ?? '').trim()
       if (!id || listed.has(id)) continue
       bench.push({ id, name: p.playerName, position: String(p.position || 'UTIL').toUpperCase(), team: p.team ?? null })
       listed.add(id)
     }
-    return {
+    return mergeNbaCollegeDraftPlayers({
       ...buildPlayerDataFromSections(next, {
         starters: sections.starters ?? [],
         bench,
@@ -251,12 +284,12 @@ export function addFollowUpDraftPlayers(
         devy: sections.devy ?? [],
       }),
       draftPicks,
-    }
+    }, added)
   }
 
   if (rosterTemplate) {
     const sections = buildLineupSectionsFromPicks(
-      draftPicks.map((p) => ({
+      draftPicks.filter((p) => !isNbaCollegePick(p)).map((p) => ({
         playerId: p.playerId ?? null,
         playerName: p.playerName,
         position: p.position,
@@ -264,7 +297,7 @@ export function addFollowUpDraftPlayers(
       })),
       rosterTemplate,
     )
-    return { ...buildPlayerDataFromSections(next, sections), draftPicks }
+    return mergeNbaCollegeDraftPlayers({ ...buildPlayerDataFromSections(next, sections), draftPicks }, added)
   }
-  return next
+  return mergeNbaCollegeDraftPlayers(next, added)
 }

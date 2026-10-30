@@ -292,7 +292,7 @@ export async function loadAutopickDraftContextForOnClock(
     fallbackPoolRaw.filter((entry) => {
       if (!entry.playerName || !entry.position) return false
       if (draftedNames.has(normalizeName(entry.playerName))) return false
-      if (draftEligiblePositions && !draftPoolRowMatchesEligiblePositions(entry.position, draftEligiblePositions)) {
+      if (draftEligiblePositions && !draftPoolRowMatchesEligiblePositions(entry.position, draftEligiblePositions, sport)) {
         return false
       }
       return true
