@@ -1,3 +1,4 @@
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
@@ -9,8 +10,10 @@ import { SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutat
  * the league simply stopped at the end of its first season.
  *
  *   dynasty / devy / C2C  → a ROOKIE draft: `rookies_only` pool, `DynastyLeagueConfig` rounds and
- *                           type, ordered worst-to-first from last season (champion last,
- *                           runner-up second to last). Whole rosters carry over first.
+ *                           type. Ordered by the lottery or the live rookie order when on; worst-to-
+ *                           first from last season (champion last, runner-up second to last) only
+ *                           under the automatic order, an AF Commissioner setting that is off by
+ *                           default; otherwise the league's own order. Whole rosters carry over first.
  *   keeper / everything   → a full draft with last draft's settings, and every LOCKED keeper
  *                           placed on the board in the round it costs.
  *
@@ -41,6 +44,7 @@ import {
 import { logAction } from '@/server/services/auditService'
 import { CHAMPIONSHIP_ROUND_WHERE } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { resolveLiveRookieDraftSlots } from '@/lib/rookie-order/liveRookieOrderService'
+import { automaticRookieOrderMethod } from '@/lib/rookie-order/automaticRookieOrder'
 import { ensureRookieDraftLottery } from '@/lib/draft-lottery/rookieDraftLottery'
 
 export type NextDraftKind = 'rookie' | 'standard'
@@ -92,6 +96,7 @@ export type CreateNextDraftResult =
         | 'NO_SEASON'
         | 'SEASON_IN_PROGRESS'
         | 'NEEDS_DATABASE_UPDATE'
+        | 'ROOKIE_LOTTERY_UNAVAILABLE'
       message: string
     }
 
@@ -205,6 +210,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       lifecycleState: true,
       lifecycleMetadata: true,
       settings: true,
+      userId: true,
     },
   })
   if (!league) return { ok: false, code: 'LEAGUE_NOT_FOUND', message: 'League not found.' }
@@ -284,6 +290,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
      * league chose the lottery and nobody pressed "Run" — one run now, stored and audited
      * (`rookieDraftLottery.ts`). A league that has not chosen it is not touched.
      */
+    const lotteryLeague = isWeightedRookieLottery(dynasty?.rookiePickOrderMethod)
     const lottery = (
       await ensureRookieDraftLottery({
         leagueId,
@@ -291,10 +298,13 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
         previousDraftEndedAt: previous.completedAt ?? previous.updatedAt ?? null,
         actorUserId,
       }).catch((error) => {
-        console.warn('[next-draft] rookie lottery unavailable; using standings', { leagueId, error: String(error) })
+        console.warn('[next-draft] rookie lottery unavailable', { leagueId, error: String(error) })
         return null
       })
     )?.slotOrder ?? null
+    if (lotteryLeague && !seatsEveryRoster(lottery, draftRosters)) {
+      return { ok: false, code: 'ROOKIE_LOTTERY_UNAVAILABLE', message: 'The weighted rookie lottery could not seat every team. Check the lottery settings and standings, then retry.' }
+    }
     if (seatsEveryRoster(lottery, draftRosters)) {
       slotOrder = lottery
       orderSource = 'lottery'
@@ -306,10 +316,14 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       }
     }
 
-    const method = dynasty?.rookiePickOrderMethod ?? 'max_pf'
-    // A lottery league whose draw could not run (not yet eligible, no standings) falls back to
-    // worst-to-first — never to `buildSlotOrderForLeague`, which would seat a stale stored draw.
-    if (!slotOrder && outgoingId && (method === 'max_pf' || method === 'reverse_standings' || method === 'weighted_lottery')) {
+    // Standings seat the draft only under the automatic order — an AF Commissioner setting, off by
+    // default. A configured weighted lottery must have produced a complete draw above.
+    const method = lotteryLeague
+      ? 'weighted_lottery'
+      : slotOrder
+        ? null
+        : await automaticRookieOrderMethod({ userId: league.userId ?? null, settings: league.settings })
+    if (!slotOrder && outgoingId && method) {
       const standings = await prisma.redraftRoster.findMany({
         where: { leagueId, seasonId: outgoingId },
         select: { id: true, ownerId: true, ownerName: true, teamName: true, wins: true, losses: true, ties: true, pointsFor: true },

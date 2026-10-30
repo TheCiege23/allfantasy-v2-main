@@ -25,6 +25,7 @@ const m = vi.hoisted(() => ({
   draftSessionUpdate: vi.fn(),
   liveRookieSlots: vi.fn(),
   lotterySlots: vi.fn(),
+  entitled: vi.fn(async () => true),
 }))
 
 vi.mock('@/lib/prisma', () => {
@@ -54,7 +55,10 @@ vi.mock('@/lib/redraft/offseason/carryDynastyRosters', async (importOriginal) =>
   carryDynastyRostersForward: m.carry,
 }))
 vi.mock('@/server/services/auditService', () => ({ logAction: m.logAction }))
-vi.mock('@/lib/rookie-order/liveRookieOrderService', () => ({ resolveLiveRookieDraftSlots: m.liveRookieSlots }))
+vi.mock('@/lib/rookie-order/liveRookieOrderService', () => ({
+  resolveLiveRookieDraftSlots: m.liveRookieSlots,
+  isLeagueEntitledToLiveRookieOrder: m.entitled,
+}))
 vi.mock('@/lib/draft-lottery/rookieDraftLottery', () => ({
   ensureRookieDraftLottery: async (input: unknown) => {
     const slotOrder = await m.lotterySlots(input)
@@ -115,9 +119,15 @@ function league(overrides: Record<string, unknown> = {}) {
     leagueSize: 4,
     lifecycleState: 'offseason',
     lifecycleMetadata: {},
+    userId: 'commish',
     ...overrides,
   }
 }
+
+/** The automatic rookie order (an AF Commissioner setting, off by default) switched on. */
+const AUTO_ON = (mode: 'worst_to_first' | 'reverse_max_pf' = 'worst_to_first') => ({
+  settings: { rookie_draft_order: { enabled: true, mode } },
+})
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -209,8 +219,8 @@ describe('createNextLeagueDraft', () => {
     expect(m.draftSessionCreate).not.toHaveBeenCalled()
   })
 
-  it('dynasty: carries rosters into next season and creates a worst-to-first rookie draft', async () => {
-    m.leagueFindUnique.mockResolvedValue(league())
+  it('dynasty: carries rosters into next season and creates a worst-to-first rookie draft (automatic order on)', async () => {
+    m.leagueFindUnique.mockResolvedValue(league(AUTO_ON()))
     m.seasonFindMany.mockResolvedValue([{ id: 'season-1', season: 2026, status: 'complete' }])
     m.ensureShell.mockResolvedValue({ id: 'season-2', season: 2027 })
     m.redraftRosterFindMany.mockResolvedValue(lastSeason)
@@ -329,8 +339,8 @@ describe('createNextLeagueDraft', () => {
  */
 describe('a saved rookie order wins over standings', () => {
   const seat = (ids: string[]) => ids.map((rosterId, i) => ({ slot: i + 1, rosterId, displayName: `T${i + 1}` }))
-  const rookieLeague = () => {
-    m.leagueFindUnique.mockResolvedValue(league())
+  const rookieLeague = (overrides: Record<string, unknown> = AUTO_ON('reverse_max_pf')) => {
+    m.leagueFindUnique.mockResolvedValue(league(overrides))
     m.seasonFindMany.mockResolvedValue([{ id: 'season-1', season: 2026, status: 'complete' }])
     m.ensureShell.mockResolvedValue({ id: 'season-2', season: 2027 })
     m.redraftRosterFindMany.mockResolvedValue(lastSeason)
@@ -370,22 +380,47 @@ describe('a saved rookie order wins over standings', () => {
     expect(m.lotterySlots).toHaveBeenCalledWith({ leagueId: 'L1', season: 2027, previousDraftEndedAt: completedAt, actorUserId: 'commish' })
   })
 
-  it('a lottery league whose draw cannot run falls back to worst-to-first, never to a stale stored draw', async () => {
+  it('a weighted lottery league refuses to create a draft when its draw cannot seat every team', async () => {
     rookieLeague()
     m.dynastyFindUnique.mockResolvedValue({ rookieDraftRounds: 4, rookieDraftType: 'linear', rookiePickOrderMethod: 'weighted_lottery' })
     const r = await createNextLeagueDraft('L1', 'commish')
-    expect(r).toMatchObject({ ok: true, orderSource: 'standings' })
+    expect(r).toMatchObject({ ok: false, code: 'ROOKIE_LOTTERY_UNAVAILABLE' })
     expect(m.buildSlotOrder).not.toHaveBeenCalled()
-    expect(seated()[0]).toBe('R-b')
-    expect(seated().at(-1)).toBe('R-a')
+    expect(m.draftSessionCreate).not.toHaveBeenCalled()
   })
 
-  it('[control] with neither, max_pf is still worst-to-first from standings', async () => {
+  it('also refuses a stale draw that includes a departed team', async () => {
+    rookieLeague()
+    m.dynastyFindUnique.mockResolvedValue({ rookieDraftRounds: 4, rookieDraftType: 'linear', rookiePickOrderMethod: 'lottery' })
+    m.lotterySlots.mockResolvedValue(seat(['R-a', 'R-b', 'R-c', 'R-gone']))
+    expect(await createNextLeagueDraft('L1', 'commish')).toMatchObject({ ok: false, code: 'ROOKIE_LOTTERY_UNAVAILABLE' })
+    expect(m.draftSessionCreate).not.toHaveBeenCalled()
+  })
+
+  it('[control] with neither, the automatic order seats worst-to-first from standings', async () => {
     rookieLeague()
     const r = await createNextLeagueDraft('L1', 'commish')
     expect(r).toMatchObject({ ok: true, orderSource: 'standings' })
     expect(seated()[0]).toBe('R-b') // 2-11, the worst team, picks first
     expect(seated().at(-1)).toBe('R-a') // the champion picks last
+  })
+
+  it('🛑 the automatic order is OFF by default: a max_pf league takes its own order, not standings', async () => {
+    rookieLeague({})
+    m.buildSlotOrder.mockResolvedValue([{ slot: 1, rosterId: 'R-a', displayName: 'A' }, { slot: 2, rosterId: 'R-b', displayName: 'B' }, { slot: 3, rosterId: 'R-c', displayName: 'C' }, { slot: 4, rosterId: 'R-d', displayName: 'D' }])
+    const r = await createNextLeagueDraft('L1', 'commish')
+    expect(r).toMatchObject({ ok: true, orderSource: 'default' })
+    expect(m.buildSlotOrder).toHaveBeenCalledWith('L1')
+    expect(seated()).toEqual(['R-a', 'R-b', 'R-c', 'R-d'])
+  })
+
+  it('🛑 on, but the commissioner no longer holds AF Commissioner: the league’s own order', async () => {
+    rookieLeague()
+    m.entitled.mockResolvedValueOnce(false)
+    m.buildSlotOrder.mockResolvedValue([{ slot: 1, rosterId: 'R-a', displayName: 'A' }, { slot: 2, rosterId: 'R-b', displayName: 'B' }, { slot: 3, rosterId: 'R-c', displayName: 'C' }, { slot: 4, rosterId: 'R-d', displayName: 'D' }])
+    const r = await createNextLeagueDraft('L1', 'commish')
+    expect(r).toMatchObject({ ok: true, orderSource: 'default' })
+    expect(m.entitled).toHaveBeenCalledWith('commish')
   })
 })
 
