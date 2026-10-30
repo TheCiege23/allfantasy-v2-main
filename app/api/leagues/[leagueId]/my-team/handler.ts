@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth-guard'
@@ -51,8 +52,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
     )
   }
 
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
   const team = await prisma.leagueTeam.findFirst({
-    where: { leagueId, claimedByUserId: userId },
+    where: coOwnerRosterId ? { leagueId, externalId: coOwnerRosterId } : { leagueId, claimedByUserId: userId },
     select: { id: true },
   })
   if (!team) return NextResponse.json({ error: 'You do not have a team in this league.' }, { status: 404 })
@@ -119,12 +121,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
     select: { id: true },
   })
 
+  const coOwnedRoster = coOwnerRosterId && currentSeason ? await prisma.roster.findFirst({ where: { id: coOwnerRosterId, leagueId }, select: { redraftRosterId: true } }) : null
+  if (coOwnerRosterId && currentSeason && !coOwnedRoster?.redraftRosterId) return NextResponse.json({ error: 'This team is not linked to the current season roster.' }, { status: 409 })
+
   await prisma.$transaction([
     prisma.leagueTeam.update({ where: { id: team.id }, data }),
     ...(currentSeason
       ? [
           prisma.redraftRoster.updateMany({
-            where: { leagueId, seasonId: currentSeason.id, ownerId: userId },
+            where: coOwnedRoster?.redraftRosterId
+              ? { leagueId, seasonId: currentSeason.id, id: coOwnedRoster.redraftRosterId }
+              : { leagueId, seasonId: currentSeason.id, ownerId: userId },
             data,
           }),
         ]

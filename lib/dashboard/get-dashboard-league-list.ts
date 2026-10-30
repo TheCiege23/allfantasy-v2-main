@@ -3,6 +3,7 @@
  * immediately without waiting for a client-side fetch.
  */
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId, coOwnerTableMissing } from '@/lib/team-coowners/access'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
 import { isRealLeague, EXCLUDED_VARIANTS } from '@/lib/leagues/leagueListFilter'
 import { resolveLeagueListSeasonYear } from '@/lib/leagues/resolveLeagueListSeasonYear'
@@ -13,6 +14,12 @@ import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { tombstoneLookupKey } from '@/lib/league-delete/leagueTombstones'
 
 const VARIANT_NOT_IN = Array.from(EXCLUDED_VARIANTS)
+
+async function validCoOwnedLeagues(userId: string): Promise<string[]> {
+  const invitations = await prisma.teamCoOwner?.findMany({ where: { userId, acceptedAt: { not: null } }, select: { leagueId: true } }).catch((error: unknown) => { if (coOwnerTableMissing(error)) return []; throw error }) ?? []
+  const verified = await Promise.all(invitations.map(async ({ leagueId }) => await acceptedCoOwnerRosterId(leagueId, userId) ? leagueId : null))
+  return verified.filter((id): id is string => id !== null)
+}
 
 /**
  * `NOT (sleeper import-shaped)` sub-clause shared by the full dashboard list and the lean activity
@@ -56,6 +63,7 @@ const NOT_SLEEPER_IMPORT_SHAPED = {
  * that already skips `hasUnifiedRecord === false` rows.
  */
 export async function getActivityLeaguesForUser(userId: string): Promise<ActivityLeagueEntry[]> {
+  const coOwnedLeagueIds = await validCoOwnedLeagues(userId)
   const [nativeLeagues, sleeperLeagues] = await Promise.all([
     (prisma as any).league
       .findMany({
@@ -89,6 +97,7 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
                 { rosters: { some: { platformUserId: userId } } },
+                { id: { in: coOwnedLeagueIds } },
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
@@ -509,6 +518,7 @@ export async function getDashboardLeagueListForUser(
       .catch(() => null),
   ])
 
+  const coOwnedLeagueIds = await validCoOwnedLeagues(userId)
   const [genericLeaguesRead, sleeperLeagues, tournaments, legacyBoardItems, removedKeys] = await Promise.all([
     (prisma as any).league
       .findMany({
@@ -542,6 +552,7 @@ export async function getDashboardLeagueListForUser(
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
                 { rosters: { some: { platformUserId: userId } } },
+                { id: { in: coOwnedLeagueIds } },
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },

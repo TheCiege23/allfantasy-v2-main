@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   userId: 'user-1' as string | null,
   league: { platform: 'allfantasy' } as { platform: string } | null,
   team: { id: 'team-1' } as { id: string } | null,
+  coOwnerRosterId: null as string | null,
   season: { id: 'season-9' } as { id: string } | null,
   leagueTeamUpdate: vi.fn((args: unknown) => ({ op: 'leagueTeam.update', args })),
   redraftRosterUpdateMany: vi.fn((args: unknown) => ({ op: 'redraftRoster.updateMany', args })),
@@ -28,6 +29,8 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(async (ops: unknown[]) => ops),
   persist: vi.fn(async () => ({ url: 'https://blob.example/avatars/x.png' })),
 }))
+
+vi.mock('@/lib/team-coowners/access', () => ({ acceptedCoOwnerRosterId: vi.fn(async () => mocks.coOwnerRosterId) }))
 
 vi.mock('@/lib/auth-guard', () => ({
   requireAuth: async () =>
@@ -38,6 +41,7 @@ vi.mock('@/lib/auth-guard', () => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: vi.fn(async () => mocks.league) },
+    roster: { findFirst: vi.fn(async () => ({ redraftRosterId: 'redraft-1' })) },
     leagueTeam: {
       findFirst: mocks.teamFindFirst,
       update: mocks.leagueTeamUpdate,
@@ -68,6 +72,7 @@ beforeEach(() => {
   mocks.userId = 'user-1'
   mocks.league = { platform: 'allfantasy' }
   mocks.team = { id: 'team-1' }
+  mocks.coOwnerRosterId = null
   mocks.season = { id: 'season-9' }
   mocks.teamFindFirst.mockReset().mockImplementation(async () => mocks.team)
   mocks.leagueTeamUpdate.mockClear()
@@ -119,6 +124,14 @@ describe('POST /api/leagues/[leagueId]/my-team', () => {
   it('treats an UNKNOWN platform as imported (allowlist, not denylist)', async () => {
     mocks.league = { platform: 'some-future-host' }
     expect((await POST(json({ teamName: 'Gridiron Gang' }), ctx)).status).toBe(409)
+  })
+
+  it('updates the explicitly linked season roster for a co-owner', async () => {
+    mocks.coOwnerRosterId = 'roster-1'
+    const response = await POST(json({ teamName: 'Shared Team' }), ctx)
+    expect(response.status).toBe(200)
+    expect(mocks.teamFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'league-1', externalId: 'roster-1' } }))
+    expect(mocks.redraftRosterUpdateMany).toHaveBeenCalledWith({ where: { leagueId: 'league-1', seasonId: 'season-9', id: 'redraft-1' }, data: { teamName: 'Shared Team' } })
   })
 
   it('404s when the caller holds no team in the league', async () => {

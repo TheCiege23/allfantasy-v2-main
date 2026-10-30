@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -29,7 +30,7 @@ import {
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { getTeamLogo } from '@/lib/players/getTeamLogo'
-import { resolveRedraftRosterLookup } from '@/lib/redraft/redraftRosterIdentity'
+import { resolveRedraftRosterLookup, resolveRedraftRosterLookupReadOnly } from '@/lib/redraft/redraftRosterIdentity'
 import { checkTaxiSave, logTaxiPromotions } from '@/lib/taxi/taxiRulesService'
 import { recordRedraftRosterMoveHistory } from '@/lib/redraft/rosterMoveHistory'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
@@ -240,12 +241,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: parsedWeek.error }, { status: 400 })
   }
 
-  const lookup = await resolveRedraftRosterLookup({
-    userId,
-    requestedRosterId: rosterId,
-    seasonId,
-    leagueId,
-  })
+  const lookupLeagueId = leagueId ?? (seasonId ? (await prisma.redraftSeason.findUnique({ where: { id: seasonId }, select: { leagueId: true } }))?.leagueId : null)
+  const coOwnerRosterId = !rosterId && lookupLeagueId ? await acceptedCoOwnerRosterId(lookupLeagueId, userId) : null
+  const coOwnerRoster = coOwnerRosterId && lookupLeagueId ? await prisma.roster.findFirst({ where: { id: coOwnerRosterId, leagueId: lookupLeagueId }, select: { redraftRosterId: true } }) : null
+  const lookup = coOwnerRoster?.redraftRosterId
+    ? await resolveRedraftRosterLookupReadOnly({ userId, requestedRosterId: coOwnerRoster.redraftRosterId, seasonId, leagueId: lookupLeagueId })
+    : await resolveRedraftRosterLookup({ userId, requestedRosterId: rosterId, seasonId, leagueId })
   if (!lookup.season || !lookup.roster) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const gate = await assertLeagueMember(lookup.season.leagueId, userId)
@@ -644,7 +645,8 @@ export async function PATCH(req: NextRequest) {
     seasonId: targetLookup.season.id,
     leagueId: targetLookup.season.leagueId,
   })
-  if (!viewerLookup.roster || viewerLookup.roster.id !== targetLookup.roster.id) {
+  if ((!viewerLookup.roster || viewerLookup.roster.id !== targetLookup.roster.id) &&
+      !await isAcceptedCoOwnerForRedraftRoster(targetLookup.season.leagueId, targetLookup.roster.id, userId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

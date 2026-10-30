@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
   const searchParams = req.nextUrl.searchParams
   const querySport = searchParams.get("sport")?.toUpperCase() ?? undefined
   const position = searchParams.get("position") ?? undefined
@@ -34,7 +36,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       select: { id: true, sport: true, userId: true, isDynasty: true, leagueVariant: true, waiverHours: true, season: true, settings: true },
     }),
     (prisma as any).roster.findFirst({
-      where: { leagueId, platformUserId: userId },
+      where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },
       select: { id: true },
     }),
   ])
