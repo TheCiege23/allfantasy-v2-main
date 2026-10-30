@@ -47,7 +47,7 @@ vi.mock('@/lib/prisma', () => ({
       update: mocks.leagueTeamUpdate,
     },
     redraftSeason: { findFirst: vi.fn(async () => mocks.season) },
-    redraftRoster: { updateMany: mocks.redraftRosterUpdateMany },
+    redraftRoster: { updateMany: mocks.redraftRosterUpdateMany, findFirst: vi.fn(async () => ({ id: 'redraft-1' })) },
     $transaction: mocks.transaction,
   },
 }))

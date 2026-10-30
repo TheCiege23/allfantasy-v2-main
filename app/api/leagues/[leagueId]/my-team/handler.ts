@@ -122,7 +122,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   })
 
   const coOwnedRoster = coOwnerRosterId && currentSeason ? await prisma.roster.findFirst({ where: { id: coOwnerRosterId, leagueId }, select: { redraftRosterId: true } }) : null
-  if (coOwnerRosterId && currentSeason && !coOwnedRoster?.redraftRosterId) return NextResponse.json({ error: 'This team is not linked to the current season roster.' }, { status: 409 })
+  if (coOwnerRosterId && currentSeason) {
+    const linked = coOwnedRoster?.redraftRosterId && await prisma.redraftRoster.findFirst({ where: { id: coOwnedRoster.redraftRosterId, leagueId, seasonId: currentSeason.id }, select: { id: true } })
+    if (!linked) return NextResponse.json({ error: 'This team is not linked to the current season roster.' }, { status: 409 })
+  }
 
   await prisma.$transaction([
     prisma.leagueTeam.update({ where: { id: team.id }, data }),
