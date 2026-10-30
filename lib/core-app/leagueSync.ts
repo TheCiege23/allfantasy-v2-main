@@ -9,6 +9,7 @@ import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { getPausedSyncKeys } from './syncPreferences'
 import { isLeagueGoneState, LEAGUE_GONE_ERROR_PREFIX } from '@/lib/import-os/collector/leagueGone'
 import { loadImportedGuillyHealth, type ImportedGuillyHealthView } from '@/lib/guillotine/importedGuillyHealthLoad'
+import { isCommissioner } from '@/lib/commissioner/permissions'
 
 /**
  * League Sync — is THIS league fresh, and what exactly did we read (38a·10).
@@ -113,6 +114,12 @@ export type LeagueSyncData = {
    * (lib/guillotine/importedGuillyHealth.ts). Null for every other league.
    */
   guilly?: ImportedGuillyHealthView | null
+  /**
+   * The viewer may confirm the league is Guilly from the card — the commissioner, and only while that is
+   * still a guess (`guilly.format === 'detected'`). The confirm itself is the commissioner-only
+   * `PATCH /api/leagues/[leagueId]/league-type`; this only decides whether the card offers it.
+   */
+  guillyCanConfirm?: boolean
 }
 
 export type LeagueSyncResult =
@@ -375,6 +382,7 @@ export async function getLeagueSync(
 
   // Best-effort: a failure here must not take the rest of the Sync screen down with it.
   const guilly = await loadImportedGuillyHealth(league, lastReadAt, now).catch(() => null)
+  const guillyCanConfirm = guilly?.format === 'detected' ? await isCommissioner(leagueId, userId).catch(() => false) : false
 
   return {
     available: true,
@@ -405,5 +413,6 @@ export async function getLeagueSync(
     coarse,
     orphanedRun,
     guilly,
+    guillyCanConfirm,
   }
 }

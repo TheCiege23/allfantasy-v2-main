@@ -2,6 +2,7 @@ import Link from 'next/link'
 import SyncNowButton from '../SyncNowButton'
 import SyncPauseButton from '../SyncPauseButton'
 import RemoveLeagueButton from '../RemoveLeagueButton'
+import ConfirmGuillyButton from '../ConfirmGuillyButton'
 import type { LeagueSyncResult, SyncDataRow } from '@/lib/core-app/leagueSync'
 import '@/components/core-app/af-league-sync.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
@@ -218,7 +219,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </ul>
       </section>
 
-      {data.guilly ? <GuillyCheck guilly={data.guilly} platform={league.platform} /> : null}
+      {data.guilly ? <GuillyCheck guilly={data.guilly} platform={league.platform} leagueId={league.id} canConfirm={data.guillyCanConfirm === true} /> : null}
 
       <p className="af-sy-foot">
         AllFantasy is read-only on {league.platform === 'manual' ? 'your platform' : league.platform}
@@ -247,7 +248,13 @@ function platformName(platform: string): string {
  * doubt (lib/guillotine/importedGuillyHealth.ts). The provider decides its chops; this says how far our
  * picture of them can be trusted.
  */
-function GuillyCheck({ guilly, platform }: { guilly: NonNullable<Extract<LeagueSyncResult, { available: true }>['guilly']>; platform: string }) {
+function GuillyCheck({ guilly, platform, leagueId, canConfirm }: {
+  guilly: NonNullable<Extract<LeagueSyncResult, { available: true }>['guilly']>
+  platform: string
+  leagueId: string
+  /** The viewer is the commissioner and the format is still a guess (lib/core-app/leagueSync.ts). */
+  canConfirm: boolean
+}) {
   const name = (id: string) => guilly.teamNames[id] ?? `Team ${id}`
   const names = (ids: string[] | undefined) => (ids ?? []).map(name).join(', ')
   return (
@@ -284,6 +291,13 @@ function GuillyCheck({ guilly, platform }: { guilly: NonNullable<Extract<LeagueS
             <span className="af-sy-row-text">
               <span className="af-sy-row-label">{f.text}</span>
               {f.rosterIds?.length ? <span className="af-sy-row-note">{names(f.rosterIds)}</span> : null}
+              {f.code === 'unconfirmed_format' ? (
+                canConfirm ? (
+                  <ConfirmGuillyButton leagueId={leagueId} />
+                ) : (
+                  <span className="af-sy-row-note" data-testid="league-sync-guilly-ask-commissioner">Only the commissioner can confirm the league type.</span>
+                )
+              ) : null}
             </span>
             <span className="af-sy-row-state">{f.severity === 'attention' ? 'check' : 'note'}</span>
           </li>
