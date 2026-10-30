@@ -33,6 +33,9 @@ import { boardFilterHref } from '@/lib/core-app/myTeamBoardFilter'
 import type { LineupReminderStatus } from '@/lib/core-app/lineupReminderStatus'
 import { InfoTip } from '@/components/core-app/InfoTip'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { useMessages } from '@/components/i18n/useMessages'
+import { messagesFor } from '@/lib/i18n/messages'
+import { myTeamBoardMessages } from '@/lib/core-app/messages/myTeamBoard'
 
 const REMINDER_SETTINGS_HREF = `/settings?tab=notifications&returnTo=${encodeURIComponent('/core/my-team')}`
 
@@ -45,37 +48,28 @@ const REMINDER_SETTINGS_HREF = `/settings?tab=notifications&returnTo=${encodeURI
  * are `tagsOf` above, and "synced" is `SyncStamp`. Each of those was a hover `title` or nothing.
  * The score sentence only appears when a row can carry a score.
  */
-function BoardReadingTip({ es, scores }: { es: boolean; scores: boolean }) {
+function BoardReadingTip({ scores }: { scores: boolean }) {
+  const m = useMessages(myTeamBoardMessages)
   return (
     <InfoTip
-      label={es ? 'Cómo leer esta lista' : 'How to read this list'}
-      title={es ? 'Cómo leer esta lista' : 'How to read this list'}
+      label={m.readingTipTitle}
+      title={m.readingTipTitle}
     >
       <span className="af-info-para">
-        {es
-          ? 'Primero las alineaciones con problemas que aún puedes arreglar —una posición vacía, un titular descartado o en descanso—, las que más pierden primero, y luego por el inicio más cercano. T4 significa empatado en el 4.º lugar.'
-          : 'Lineups with problems you can still fix come first — an empty slot, a starter ruled out or on bye — the most first, then the soonest kickoff. T4 means tied for 4th.'}
+        {m.readingTipOrder}
       </span>
       <span className="af-info-para">
-        {es
-          ? 'Los números en rojo son puntos que perderás si no actúas. Un número «en duda» en ámbar es un riesgo, no una pérdida: probablemente juega, así que nunca sube una liga en la lista. «Sin identificar» es un titular que no pudimos buscar: una carencia nuestra, no tuya. SET significa que lo revisamos y no falta nada.'
-          : 'Red counts are points you will lose unless you act. An amber “questionable” count is a risk, not a loss: he probably plays, so it never moves a league up. “Unidentified” is a starter we could not look up — our gap, not yours. SET means we checked and nothing is missing.'}
+        {m.readingTipCounts}
       </span>
       <span className="af-info-para">
-        {es
-          ? 'El reloj cuenta hasta el inicio del próximo titular con un problema —si no hay, del próximo titular—, en hora del Este. Cada jugador se bloquea en su propio partido: confirma los cierres y cambios automáticos en tu plataforma.'
-          : 'The clock counts to the kickoff of the next starter with a problem — otherwise the next starter — in Eastern time. Each player locks at his own kickoff; confirm locks and AutoSubs on your platform.'}
+        {m.readingTipClock}
       </span>
       <span className="af-info-para">
-        {es
-          ? '«Sincronizada hace 3 h»: cada fila lee tu plantilla guardada en la última sincronización. Al abrir una liga se revisa su alineación en vivo.'
-          : '“synced 3h ago”: each row reads your roster as stored at the last sync. Opening a league checks its live lineup.'}
+        {m.readingTipSynced}
       </span>
       {scores ? (
         <span className="af-info-para">
-          {es
-            ? '«Ganando 88.4–71.2» es el marcador de esta semana; en una liga de eliminación es tu distancia al corte.'
-            : '“ahead 88.4–71.2” is this week’s score so far; in an elimination league it is your distance from the cut.'}
+          {m.readingTipScore}
         </span>
       ) : null}
     </InfoTip>
@@ -86,25 +80,18 @@ function BoardReadingTip({ es, scores }: { es: boolean; scores: boolean }) {
  * Whether Chimmy's pre-lock check will reach you — see `lineupReminderStatus.ts`. Said once, under
  * the rows: it is how this board's warnings reach a manager who is not looking at it.
  */
-function ReminderLine({ status, es }: { status: LineupReminderStatus; es: boolean }) {
-  const when = es
-    ? `una vez por semana, entre ${status.opensHoursBefore} y ${status.closesHoursBefore} horas antes del bloque principal de la NFL`
-    : `once a week, ${status.closesHoursBefore}–${status.opensHoursBefore} hours before the main NFL slate`
+function ReminderLine({ status }: { status: LineupReminderStatus }) {
+  const m = useMessages(myTeamBoardMessages)
+  const when = m.reminderWhen(status.opensHoursBefore, status.closesHoursBefore)
   return (
     <p className="af-bd-note af-bd-note--plain af-bd-note--reminder" data-state={status.state}>
       {status.state === 'on'
-        ? es
-          ? `Recordatorio de alineación activado: ${when}, Chimmy revisa cada alineación y te escribe solo si alguna necesita arreglo. `
-          : `Lineup reminder is on: ${when}, Chimmy checks every lineup and messages you only if one needs fixing. `
+        ? m.reminderOn(when)
         : status.state === 'muted'
-          ? es
-            ? 'Las alertas de alineación de Chimmy están silenciadas, así que nadie revisará estas alineaciones antes del inicio. '
-            : 'Chimmy’s lineup alerts are muted, so nothing will check these lineups for you before kickoff. '
-          : es
-            ? `Recordatorio de alineación desactivado. Actívalo y Chimmy revisará cada alineación ${when}, y te escribirá solo si alguna necesita arreglo. `
-            : `Lineup reminder is off. Turn it on and Chimmy checks every lineup ${when}, messaging you only if one needs fixing. `}
+          ? m.reminderMuted
+          : m.reminderOff(when)}
       <Link href={REMINDER_SETTINGS_HREF}>
-        {status.state === 'on' ? (es ? 'Gestionar' : 'Manage') : es ? 'Activarlo' : 'Turn it on'}
+        {status.state === 'on' ? m.reminderManage : m.reminderTurnOn}
       </Link>
     </p>
   )
@@ -214,6 +201,7 @@ function tagsOf(row: MyTeamRow, language = 'en'): Array<{ key: string; tag: stri
 
 function Lock({ row, now }: { row: MyTeamRow; now: number }) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(myTeamBoardMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   if (row.bestBall) return <span className="af-bd-stat">{copy('Automatic')}</span>
   /*
@@ -248,9 +236,7 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
    * redraw a date that changes once a day.
    */
   if (label.distant) {
-    const why = language === 'es'
-      ? `El próximo partido registrado para estos titulares es ${kickoff}, demasiado lejano para ser el cierre de alineación; probablemente aún falta el calendario de esta semana.`
-      : `The next kickoff we hold for these starters is ${kickoff}, further out than a lineup lock should be — this week’s schedule has probably not been ingested yet.`
+    const why = m.lockDistantWhy(kickoff)
     return (
       <span className="af-bd-stat" title={why} aria-label={why}>
         {kickoffText(label.text, language)}
@@ -262,9 +248,7 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
     <span
       className="af-bd-stat"
       data-sev={label.locked ? 'bad' : label.urgent ? 'bad' : 'warn'}
-      title={language === 'es'
-        ? `Próximo inicio de un titular: ${kickoff}. Confirma los cierres individuales y cambios automáticos en tu plataforma.`
-        : `Next starter kickoff ${kickoff}. Individual locks and AutoSubs must be checked on your platform.`}
+      title={m.lockNextKickoffTitle(kickoff)}
     >
       {label.locked ? copy('Check player locks') : <MyTeamLockClock atMs={atMs} initial={label.text} elapsedLabel={copy('Check player locks')} />}
     </span>
@@ -306,10 +290,9 @@ export const STALE_SYNC_MS = 24 * 3600_000
  * seconds between server and client render; the words only change at a minute boundary.
  */
 function SyncStamp({ row, now }: { row: MyTeamRow; now: number }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(myTeamBoardMessages)
   if (row.syncFailed) {
-    return <span className="af-bd-sync" data-stale="true"> · {es ? 'la última sincronización falló' : 'last sync failed'}</span>
+    return <span className="af-bd-sync" data-stale="true"> · {m.syncFailed}</span>
   }
   if (!row.syncedAt) return null
   const at = Date.parse(row.syncedAt)
@@ -324,7 +307,7 @@ function SyncStamp({ row, now }: { row: MyTeamRow; now: number }) {
         `relativeAge` writes for a long-unsynced league («hace 2mo»). "sincronizada" agrees with
         liga — each row is one.
       */}
-      {es ? `sincronizada ${ageText(age, 'es')}` : `synced ${age}`}
+      {m.syncedAgo(age, ageText(age, 'es'))}
     </span>
   )
 }
@@ -334,16 +317,17 @@ const pts = (n: number) => n.toFixed(1)
 /** " · ahead 88.4–71.2", or the distance to the cut in an elimination week. */
 function ScoreStamp({ score }: { score: RowScore | null }) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(myTeamBoardMessages)
   const es = language === 'es'
   if (!score) return null
   if (score.kind === 'cut') {
-    const place = es ? `${score.rank}.º de ${score.outOf}` : `${score.rank} of ${score.outOf}`
+    const place = m.cutPlace(score.rank, score.outOf)
     return (
       <span className="af-bd-score" data-lead={score.overCut == null ? 'behind' : 'ahead'}>
         {' · '}
         {score.overCut == null
-          ? es ? `puntuación más baja: en el corte (${place})` : `lowest score: on the cut (${place})`
-          : es ? `${pts(score.overCut)} sobre el corte (${place})` : `${pts(score.overCut)} over the cut (${place})`}
+          ? m.cutLowest(place)
+          : m.cutOver(pts(score.overCut), place)}
       </span>
     )
   }
@@ -359,19 +343,16 @@ function ScoreStamp({ score }: { score: RowScore | null }) {
 }
 
 /** "This week so far: ahead in 3, behind in 2 · on the cut in 1 · no points yet in 4." */
-function weekRecordLine(s: WeekScoreSummary, es: boolean): string {
-  const h2h = es
-    ? [s.ahead && `ganando en ${s.ahead}`, s.behind && `perdiendo en ${s.behind}`, s.level && `empatado en ${s.level}`]
-    : [s.ahead && `ahead in ${s.ahead}`, s.behind && `behind in ${s.behind}`, s.level && `level in ${s.level}`]
-  const cut = es
-    ? [s.aboveCut && `sobre el corte en ${s.aboveCut}`, s.onCut && `en el corte en ${s.onCut}`]
-    : [s.aboveCut && `above the cut in ${s.aboveCut}`, s.onCut && `on the cut in ${s.onCut}`]
+function weekRecordLine(s: WeekScoreSummary, language: string): string {
+  const m = messagesFor(myTeamBoardMessages, language)
+  const h2h = [s.ahead && m.weekAhead(s.ahead), s.behind && m.weekBehind(s.behind), s.level && m.weekLevel(s.level)]
+  const cut = [s.aboveCut && m.weekAboveCut(s.aboveCut), s.onCut && m.weekOnCut(s.onCut)]
   const parts = [
     h2h.filter(Boolean).join(', '),
     cut.filter(Boolean).join(', '),
-    s.noPointsYet ? (es ? `sin puntos aún en ${s.noPointsYet}` : `no points yet in ${s.noPointsYet}`) : '',
+    s.noPointsYet ? m.weekNoPointsYet(s.noPointsYet) : '',
   ].filter(Boolean)
-  return `${es ? 'Esta semana hasta ahora' : 'This week so far'}: ${parts.join(' · ')}.`
+  return `${m.weekSoFar}: ${parts.join(' · ')}.`
 }
 
 function Row({
@@ -389,6 +370,7 @@ function Row({
   score?: RowScore | null
 }) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(myTeamBoardMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const tags = tagsOf(row, language)
   /*
@@ -477,14 +459,14 @@ function Row({
             href={fix.href}
             {...(fix.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
           >
-            {language === 'es' ? fix.label.replace(/^Open in /, 'Abrir en ') : fix.label} {fix.external ? '↗' : '→'}
+            {m.fixLabel(fix.label)} {fix.external ? '↗' : '→'}
           </a>
         ) : (
           <span className="af-bd-cta" />
         )}
       </div>
       <div className="af-mt-board-actions">
-        <span>{row.bestBall ? copy('Provider selects the scoring lineup · review roster depth') : <>{row.started ? language === 'es' ? `${row.started} ${copy(row.started === 1 ? 'starter' : 'starters')} con partido iniciado · ` : `${row.started} ${row.started === 1 ? 'starter' : 'starters'} past kickoff · ` : ''}{nextDeadline ? `${copy('Next player deadline')} ${nextDeadline}` : copy(row.lockAt ? 'Next player deadline' : 'Check individual locks')}{row.unknownKickoffs ? language === 'es' ? ` · ${row.unknownKickoffs} sin hora de inicio` : ` · ${row.unknownKickoffs} without a kickoff` : ''}</>}<ScoreStamp score={score} /><SyncStamp row={row} now={now} /></span>
+        <span>{row.bestBall ? copy('Provider selects the scoring lineup · review roster depth') : <>{row.started ? m.startedPastKickoff(row.started, copy(row.started === 1 ? 'starter' : 'starters')) : ''}{nextDeadline ? `${copy('Next player deadline')} ${nextDeadline}` : copy(row.lockAt ? 'Next player deadline' : 'Check individual locks')}{row.unknownKickoffs ? m.withoutKickoff(row.unknownKickoffs) : ''}</>}<ScoreStamp score={score} /><SyncStamp row={row} now={now} /></span>
         <LineupIntelligenceActions leagueId={row.leagueId} leagueName={row.leagueName} bestBall={row.bestBall} />
       </div>
     </li>
@@ -508,18 +490,17 @@ function Row({
 const XL_LEAGUES_SHOWN = 3
 
 function CrossLeagueStrip({ flags }: { flags: CrossLeagueFlag[] }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(myTeamBoardMessages)
   return (
-    <div className="af-bd-xl" role="region" aria-label={es ? 'Jugadores en varias alineaciones' : 'Players in more than one lineup'}>
-      <span className="af-bd-xl-label">{es ? 'Afecta a más de una alineación' : 'Hurting more than one lineup'}</span>
+    <div className="af-bd-xl" role="region" aria-label={m.crossLeagueAria}>
+      <span className="af-bd-xl-label">{m.crossLeagueLabel}</span>
       <ul className="af-bd-xl-list">
         {flags.map((f) => (
           <li key={f.id} data-status={f.status}>
             <RowTag tag={f.status === 'out' ? 'OUT' : 'Q'} sev={f.status === 'out' ? 'bad' : 'warn'} />
             <span className="af-bd-xl-name">{f.name}</span>
             <span className="af-bd-xl-count">
-              {es ? `en ${f.leagues.length} alineaciones:` : `in ${f.leagues.length} lineups:`}
+              {m.crossLeagueCount(f.leagues.length)}
             </span>
             <span className="af-bd-xl-leagues">
               {f.leagues.slice(0, XL_LEAGUES_SHOWN).map((l, i) => (
@@ -531,7 +512,7 @@ function CrossLeagueStrip({ flags }: { flags: CrossLeagueFlag[] }) {
               {f.leagues.length > XL_LEAGUES_SHOWN ? (
                 <details className="af-bd-xl-more">
                   <summary>
-                    {es ? `+${f.leagues.length - XL_LEAGUES_SHOWN} más` : `+${f.leagues.length - XL_LEAGUES_SHOWN} more`}
+                    {m.crossLeagueMore(f.leagues.length - XL_LEAGUES_SHOWN)}
                   </summary>
                   {f.leagues.slice(XL_LEAGUES_SHOWN).map((l, i) => (
                     <span key={l.leagueId}>
@@ -551,6 +532,7 @@ function CrossLeagueStrip({ flags }: { flags: CrossLeagueFlag[] }) {
 
 export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/core/my-team', lineupReminder = null }: MyTeamBoardProps) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(myTeamBoardMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const nowMs = now ?? Date.now()
   /*
@@ -634,7 +616,6 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
   /* The footer accounts for leagues past the top ten; a chip's hidden rows have their own line. */
   const hidden = Math.max(0, activeTotal - rows.length - filteredOut)
   const hiddenNeeds = Math.max(0, pulse.needsTotal - Math.min(pulse.needs.length, BOARD_ROWS))
-  const es = language === 'es'
 
   return (
     <div className="af-bd">
@@ -663,9 +644,9 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
                     <strong>{row.leagueName}</strong>
                     {/* The same counts the row's tags carry, in the reader's language (live Spanish check, 2026-10-03). */}
                     <span>{[
-                      row.empty ? (es ? `${row.empty} ${row.empty === 1 ? 'vacía' : 'vacías'}` : `${row.empty} empty`) : null,
-                      row.out ? (es ? `${row.out} ${row.out === 1 ? 'descartado' : 'descartados'}` : `${row.out} out`) : null,
-                      row.bye ? (es ? `${row.bye} en descanso` : `${row.bye} on bye`) : null,
+                      row.empty ? m.queueEmpty(row.empty) : null,
+                      row.out ? m.queueOut(row.out) : null,
+                      row.bye ? m.queueBye(row.bye) : null,
                     ].filter(Boolean).join(' · ') || copy('Lineup risk')} · <Lock row={row} now={nowMs} /></span>
                     <span aria-hidden>{copy('Review')} →</span>
                   </Link>
@@ -702,23 +683,21 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
             rows.length === 0
               ? copy('Needs you first')
               : unordered
-                ? language === 'es' ? `${rows.length} visibles · cierran a la vez, sin orden particular` : `${rows.length} shown · all lock together, so in no particular order`
+                ? m.labelUnordered(rows.length)
                 : needsView.length > 0
-                  ? language === 'es' ? `Primeros ${rows.length} · por urgencia` : `Top ${rows.length} · ranked by urgency`
+                  ? m.labelUrgency(rows.length)
                   : questionableFirst
-                    ? language === 'es' ? `Primeros ${rows.length} · dudosos primero, luego por hora de cierre` : `Top ${rows.length} · questionable starters first, then lock time`
-                    : language === 'es' ? `Primeros ${rows.length} · sin problemas, ordenados por hora de cierre` : `Top ${rows.length} · nothing is broken, so ranked by lock time`
+                    ? m.labelQuestionableFirst(rows.length)
+                    : m.labelLockTime(rows.length)
           }
-          count={language === 'es'
-            ? `${pulse.checked.toLocaleString(getAppIntlLocale())} de ${activeTotal.toLocaleString(getAppIntlLocale())} equipos ${pulse.paused ? 'activos ' : ''}revisados`
-            : `${pulse.checked.toLocaleString(getAppIntlLocale())} of ${activeTotal.toLocaleString(getAppIntlLocale())} ${pulse.paused ? 'active ' : ''}teams read`}
+          count={m.teamsRead(pulse.checked.toLocaleString(getAppIntlLocale()), activeTotal.toLocaleString(getAppIntlLocale()), !!pulse.paused)}
           /* Only over rows: on an empty list there is nothing to read. */
-          info={rows.length > 0 ? <BoardReadingTip es={es} scores={weekRecord != null} /> : undefined}
+          info={rows.length > 0 ? <BoardReadingTip scores={weekRecord != null} /> : undefined}
         />
         {filterOptions.length > 0 ? (
-          <div className="af-bd-filters" role="group" aria-label={es ? 'Filtrar alineaciones' : 'Filter lineups'}>
+          <div className="af-bd-filters" role="group" aria-label={m.filterAria}>
             <Link className="af-bd-chip" href={baseHref} aria-current={activeFilter == null ? 'true' : undefined} scroll={false}>
-              {es ? 'Todas' : 'All'} <span className="af-bd-chip-n">{readableTotal}</span>
+              {m.filterAll} <span className="af-bd-chip-n">{readableTotal}</span>
             </Link>
             {filterOptions.map((o, i) => (
               <Link
@@ -737,14 +716,12 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
         ) : null}
         {activeFilter && filteredOut > 0 ? (
           <p className="af-bd-note af-bd-note--plain af-bd-note--filter">
-            {es
-              ? `${filteredOut} ${filteredOut === 1 ? 'alineación más está oculta' : 'alineaciones más están ocultas'} por este filtro. `
-              : `${filteredOut} other ${filteredOut === 1 ? 'lineup is' : 'lineups are'} hidden by this filter. `}
-            <Link href={baseHref} scroll={false}>{es ? 'Mostrar todas' : 'Show all'}</Link>
+            {m.filterHidden(filteredOut)}
+            <Link href={baseHref} scroll={false}>{m.filterShowAll}</Link>
           </p>
         ) : null}
         {weekRecord ? (
-          <p className="af-bd-note af-bd-note--plain af-bd-note--record">{weekRecordLine(weekRecord, language === 'es')}</p>
+          <p className="af-bd-note af-bd-note--plain af-bd-note--record">{weekRecordLine(weekRecord, language)}</p>
         ) : null}
         {pulse.crossLeague && pulse.crossLeague.length > 0 ? <CrossLeagueStrip flags={pulse.crossLeague} /> : null}
         {rows.length > 0 ? (
@@ -760,13 +737,7 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
               <p className="af-bd-note af-bd-note--plain">
                 {pulse.automatic
                   ? copy('No manual lineup problems found in the available data. Best Ball scoring lineups are selected automatically; review those leagues for roster injuries and depth.')
-                  : language === 'es'
-                    ? `Las ${pulse.checked.toLocaleString(getAppIntlLocale())} alineaciones que pudimos leer están listas: sin posiciones vacías ni jugadores descartados${pulse.byeChecked ? ', y nadie descansa' : ''}. ${questionableFirst ? 'Primero las que tienen titulares dudosos, luego las que cierran antes.' : 'Estas son las que cierran primero.'}`
-                    : <>Every one of the {pulse.checked.toLocaleString(getAppIntlLocale())} lineups we could read is set —
-                      no empty slots, nobody ruled out
-                      {pulse.byeChecked ? ', nobody on a bye' : ''}. {questionableFirst
-                        ? 'Lineups with questionable starters come first, then the ones locking soonest.'
-                        : 'These are the ones locking soonest.'}</>}
+                  : m.allSetLead(pulse.checked.toLocaleString(getAppIntlLocale()), !!pulse.byeChecked, questionableFirst)}
               </p>
             ) : null}
             <ul className="af-bd-rows">
@@ -793,9 +764,7 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
             nothing to set. It still makes no claim that any lineup is fine.
           */
           <p className="af-bd-note af-bd-note--plain">
-            {language === 'es'
-              ? 'No hay alineaciones que ajustar ahora: cada equipo está antes del draft, terminado o en pausa. Las líneas de abajo dicen cuáles.'
-              : 'No lineups to set right now — every team is pre-draft, finished or paused. The lines below say which.'}
+            {m.nothingToSet}
           </p>
         ) : pulse.checked === 0 ? (
           /*
@@ -812,17 +781,11 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
           </p>
         ) : (
           <p className="af-bd-note">
-            {language === 'es'
-              ? `Las ${pulse.checked.toLocaleString(getAppIntlLocale())} alineaciones que pudimos leer están listas: sin posiciones vacías ni jugadores descartados${pulse.byeChecked ? ', y nadie descansa' : ''}.`
-              : <>Every one of the {pulse.checked.toLocaleString(getAppIntlLocale())} lineups we could read is set — no
-                empty slots, nobody ruled out
-                {pulse.byeChecked ? ', nobody on a bye' : ''}.</>}
+            {m.allSet(pulse.checked.toLocaleString(getAppIntlLocale()), !!pulse.byeChecked)}
           </p>
         )}
       </section>
-      {pulse.paused ? <p className="af-bd-note">{language === 'es'
-        ? `${pulse.paused} ${pulse.paused === 1 ? 'liga está pausada' : 'ligas están pausadas'} en esta cuenta y no se incluyen en las prioridades de alineación. `
-        : `${pulse.paused} ${pulse.paused === 1 ? 'league is' : 'leagues are'} paused on this account and excluded from lineup urgency. `}<Link href={allHref}>{copy('View all leagues')}</Link> {copy('to review them.')}</p> : null}
+      {pulse.paused ? <p className="af-bd-note">{m.pausedLeagues(pulse.paused)}<Link href={allHref}>{copy('View all leagues')}</Link> {copy('to review them.')}</p> : null}
 
       {/*
         ⚠ THE UNREADABLE COUNT IS ITS OWN LINE, NOT FOLDED INTO THE FOOTER. A
@@ -832,30 +795,27 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
       */}
       {(pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0 ? (
         <p className="af-bd-note">
-          {(pulse.automatic ?? 0) > 0 ? language === 'es' ? `${pulse.automatic} equipos Best Ball usan alineaciones automáticas. ` : `${pulse.automatic} Best Ball teams use automatic lineups. ` : null}
-          {(pulse.notChecked.inactive ?? 0) > 0 ? language === 'es' ? `${pulse.notChecked.inactive} equipos previos al draft, finalizados o inactivos quedan fuera de las tareas manuales de alineación.` : `${pulse.notChecked.inactive} pre-draft, completed, or inactive teams are excluded from manual lineup tasks.` : null}
+          {(pulse.automatic ?? 0) > 0 ? m.automaticTeams(pulse.automatic ?? 0) : null}
+          {(pulse.notChecked.inactive ?? 0) > 0 ? m.inactiveTeams(pulse.notChecked.inactive ?? 0) : null}
         </p>
       ) : null}
       {unreadable > 0 ? (
         <p className="af-bd-note">
           <strong>
-            {language === 'es'
-              ? `${unreadable} de tus ${activeTotal.toLocaleString(getAppIntlLocale())} equipos asignados${pulse.paused ? ' activos' : ''} no se pudieron revisar.`
-              : <>{unreadable} of your {activeTotal.toLocaleString(getAppIntlLocale())} {pulse.paused ? 'active ' : ''}claimed{' '}
-                  {activeTotal === 1 ? 'team' : 'teams'} could not be checked.</>}
+            {m.unreadableHead(unreadable, activeTotal.toLocaleString(getAppIntlLocale()), !!pulse.paused, activeTotal)}
           </strong>{' '}
           {/* Singular counts read as broken copy on a screen full of real numbers. */}
           {pulse.notChecked.noRoster > 0
-            ? language === 'es' ? `${pulse.notChecked.noRoster} sin plantilla importada` : `${pulse.notChecked.noRoster} ${pulse.notChecked.noRoster === 1 ? 'has' : 'have'} no roster imported`
+            ? m.noRoster(pulse.notChecked.noRoster)
             : ''}
-          {pulse.notChecked.noRoster > 0 && pulse.notChecked.noLineup > 0 ? language === 'es' ? ' y ' : ' and ' : ''}
+          {pulse.notChecked.noRoster > 0 && pulse.notChecked.noLineup > 0 ? m.and : ''}
           {pulse.notChecked.noLineup > 0
-            ? language === 'es' ? `${pulse.notChecked.noLineup} con plantilla pero sin alineación titular registrada` : `${pulse.notChecked.noLineup} ${pulse.notChecked.noLineup === 1 ? 'has' : 'have'} a roster but no starting lineup on file`
+            ? m.noLineup(pulse.notChecked.noLineup)
             : ''}
           {/* A foreign-id league's lineup is unread, not absent — its own words, never "no lineup". */}
-          {idsUnreadable > 0 && (pulse.notChecked.noRoster > 0 || pulse.notChecked.noLineup > 0) ? language === 'es' ? ' y ' : ' and ' : ''}
+          {idsUnreadable > 0 && (pulse.notChecked.noRoster > 0 || pulse.notChecked.noLineup > 0) ? m.and : ''}
           {idsUnreadable > 0
-            ? language === 'es' ? `${idsUnreadable} con plantilla registrada cuyos identificadores no podemos vincular al calendario` : `${idsUnreadable} ${idsUnreadable === 1 ? 'has' : 'have'} a roster on file, but ${idsUnreadable === 1 ? '' : 'for each league, '}${FOREIGN_IDS_UNREADABLE_CLAUSE}`
+            ? m.idsUnreadable(idsUnreadable, FOREIGN_IDS_UNREADABLE_CLAUSE)
             : ''}
           . {copy('This is a gap in available data, not a verdict on those lineups.')} {' '}
           {/* A re-sync cannot make a foreign league's ids matchable, so it is offered only for the gaps it can close. */}
@@ -876,9 +836,7 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
         if (stale.length === 0) return null
         return (
           <p className="af-bd-note af-bd-note--plain af-bd-note--stale" suppressHydrationWarning>
-            {language === 'es'
-              ? `${stale.length} ${stale.length === 1 ? 'liga mostrada no se sincroniza' : 'ligas mostradas no se sincronizan'} desde hace más de un día o falló su última sincronización, así que sus filas pueden describir una alineación anterior. `
-              : `${stale.length} of the leagues shown ${stale.length === 1 ? 'was' : 'were'} last synced over a day ago or failed to sync, so ${stale.length === 1 ? 'its row' : 'their rows'} may describe an older lineup. `}
+            {m.staleRows(stale.length)}
             <Link href="/core/sync">{copy('re-sync imported leagues')}</Link>.
           </p>
         )
@@ -896,7 +854,7 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
       ) : null}
 
       {/* The check reads NFL lineups only (`loadRegularSeasonGames`); under an NBA chip it would describe nothing on screen. */}
-      {lineupReminder && rows.some((r) => (r.sport ?? 'NFL') === 'NFL') ? <ReminderLine status={lineupReminder} es={es} /> : null}
+      {lineupReminder && rows.some((r) => (r.sport ?? 'NFL') === 'NFL') ? <ReminderLine status={lineupReminder} /> : null}
 
       <FooterSummary
         hidden={hidden}
@@ -904,27 +862,19 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
         href={allHref}
         emptyText={pulse.paused ? copy('Every active league is on this board.') : undefined}
         quiet={
-          language === 'es'
-            ? hiddenNeeds > 0
-              ? `${hidden === 1 ? 'incluye' : 'incluyen'} ${hiddenNeeds} equipos más que necesitan revisar su alineación; abre la lista completa.`
-              : unreadable > 0
-                ? `no se muestran: ${Math.max(0, hidden - unreadable)} ${Math.max(0, hidden - unreadable) === 1 ? 'lista' : 'listas'} y ${unreadable} sin poder leer (arriba se explica por qué).`
-                : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
-                  ? hidden === 1 ? 'no tiene tareas manuales de alineación pendientes.' : 'no tienen tareas manuales de alineación pendientes.'
-                  : hidden === 1 ? 'está lista; no requiere atención.' : 'están listas; no requieren atención.'
-            : hiddenNeeds > 0
-              ? `include ${hiddenNeeds} more teams needing lineup review — open the full league list.`
-              : unreadable > 0
-                /*
-                 * ⚠ SAY THE SPLIT, NOT "EITHER/OR". "45 more leagues are either set or could not be read
-                 * — the line above says which" made the reader do the subtraction (live, 2026-10-02: it
-                 * meant 44 set and 1 unreadable). Every unreadable league is hidden — it never becomes a
-                 * row — so the rest of the hidden ones are the set ones.
-                 */
-                ? `are not shown: ${Math.max(0, hidden - unreadable)} set, ${unreadable} could not be read (the line above says why).`
-                : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
-                  ? 'have no remaining manual lineup task.'
-                  : 'are set — nothing needs you there.'
+          hiddenNeeds > 0
+            ? m.footerHiddenNeeds(hidden, hiddenNeeds)
+            : unreadable > 0
+              /*
+               * ⚠ SAY THE SPLIT, NOT "EITHER/OR". "45 more leagues are either set or could not be read
+               * — the line above says which" made the reader do the subtraction (live, 2026-10-02: it
+               * meant 44 set and 1 unreadable). Every unreadable league is hidden — it never becomes a
+               * row — so the rest of the hidden ones are the set ones.
+               */
+              ? m.footerUnreadable(Math.max(0, hidden - unreadable), unreadable)
+              : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
+                ? m.footerNoManual(hidden)
+                : m.footerSet(hidden)
         }
         language={language}
       />

@@ -183,6 +183,7 @@ describe('tool specs', () => {
        */
       'propose_lineup_change',
       'propose_trade',
+      'propose_automation_change',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
   })

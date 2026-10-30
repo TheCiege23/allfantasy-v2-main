@@ -24,6 +24,7 @@ import { resolveBracketPoolRedirectUrl } from '@/lib/league/bracketPoolGuard'
 import { LeagueShellClient } from './LeagueShellClient'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { getRailMatchups } from '@/lib/core-app/railMatchups'
+import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 
@@ -386,6 +387,13 @@ export default async function LeaguePage(
           }),
         ]),
       )
+      /*
+       * The id the header's "Open in <platform>" link is built from. For Fantrax, `platformLeagueId` is
+       * our own snapshot uuid, so the link fell back to the Fantrax homepage; this is Fantrax's real
+       * league id (null for a CSV-era row: the homepage, as before). Every other platform: unchanged.
+       * DB read only (no query at all for a non-Fantrax league), never throws.
+       */
+      const sourceLinkLeagueId = linkableSourceLeagueId(league, await fantraxSourceLeagueIds([league]))
       const [draftSetupSession, railMatchups] = await Promise.all([
         prisma.draftSession.findFirst({
           where: { leagueId },
@@ -428,6 +436,7 @@ export default async function LeaguePage(
             isHeadCommissioner={isHeadCommissioner}
             allLeagues={allLeagues}
             leagueRail={leagueRail}
+            sourceLinkLeagueId={sourceLinkLeagueId}
             userId={userId}
             userName={session.user.name ?? session.user.email ?? 'Manager'}
             userImage={userImage}
