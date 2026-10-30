@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 /**
  * GET: Devy Dynasty league summary for Overview/DevyHome. PROMPT 2/6.
  */
@@ -72,13 +73,14 @@ export async function GET(
 }
 
 async function buildDevyHomeBlock(leagueId: string, userId: string) {
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
   const [league, roster, events] = await Promise.all([
     prisma.league.findUnique({
       where: { id: leagueId },
       select: { name: true, season: true, leagueSize: true, rosterSize: true },
     }),
     prisma.roster.findFirst({
-      where: { leagueId, platformUserId: userId },
+      where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },
       select: { id: true, playerData: true },
     }),
     prisma.devyLifecycleEvent.findMany({

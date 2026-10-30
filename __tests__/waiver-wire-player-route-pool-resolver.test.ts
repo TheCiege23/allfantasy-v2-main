@@ -1,3 +1,5 @@
+vi.mock('@/lib/team-coowners/access', () => ({ acceptedCoOwnerRosterId: vi.fn(async () => null) }))
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const getServerSessionMock = vi.fn()

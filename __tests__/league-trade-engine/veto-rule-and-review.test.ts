@@ -11,7 +11,9 @@ const h = vi.hoisted(() => ({
   rosterFindFirst: vi.fn(),
   rosterCount: vi.fn(),
   voteCount: vi.fn(),
+  coOwner: vi.fn(async () => false),
 }))
+vi.mock('@/lib/team-coowners/access', () => ({ isAcceptedCoOwnerForRoster: h.coOwner, acceptedCoOwnerRosterId: vi.fn(async () => null) }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     afLeagueTrade: { findFirst: h.tradeFindFirst, update: h.tradeUpdate },
@@ -111,10 +113,19 @@ describe('a veto vote counts against the rule stored with the trade', () => {
   })
   beforeEach(() => {
     vi.clearAllMocks()
-    h.rosterFindFirst.mockResolvedValue({ id: 'v1' })
+    h.rosterFindFirst.mockResolvedValue({ id: 'v1', platformUserId: 'u' })
     h.rosterCount.mockResolvedValue(12)
   })
   const vote = () => castAfTradeVetoVote({ tradeId: 't1', leagueId: 'L', userId: 'u', voterRosterId: 'v1', vote: 'veto' })
+
+  it('lets an accepted co-owner cast the one vote belonging to their roster', async () => {
+    h.rosterFindFirst.mockResolvedValue({ id: 'v1', platformUserId: 'owner' })
+    h.coOwner.mockResolvedValueOnce(true)
+    h.tradeFindFirst.mockResolvedValue(trade({ vetoRule: { mode: 'count', value: 4 } }))
+    h.voteCount.mockResolvedValue(1)
+    await vote()
+    expect(h.coOwner).toHaveBeenCalledWith('L', 'v1', 'u')
+  })
 
   it('4 votes kill a trade under a 4-vote rule', async () => {
     h.tradeFindFirst.mockResolvedValue(trade({ vetoRule: { mode: 'count', value: 4 } }))

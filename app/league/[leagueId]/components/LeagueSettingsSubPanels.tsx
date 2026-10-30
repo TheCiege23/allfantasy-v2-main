@@ -1,5 +1,7 @@
 'use client'
 
+import { TeamCoOwnerPanel } from './settings/TeamCoOwnerPanel'
+
 import {
   ArrowLeft,
   CalendarDays,
@@ -1063,6 +1065,8 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
             : t('lsPanel.team.importedHint').replace('{{platform}}', importedPlatformLabel(ctx.league.platform) ?? t('lsPanel.team.itsPlatform'))}
         </p>
       </div>
+
+      {native && ctx.userTeam.claimedByUserId === ctx.userId && ctx.userTeam.externalId && <TeamCoOwnerPanel leagueId={ctx.league.id} rosterId={ctx.userTeam.externalId} />}
 
       {error ? (
         <p role="alert" className="text-[12px] text-[#fda4af]">

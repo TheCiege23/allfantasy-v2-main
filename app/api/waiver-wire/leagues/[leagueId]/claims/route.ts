@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -54,6 +55,8 @@ function waiverClaimError(message: string, status: number) {
 async function resolveClaimRoster(leagueId: string, userId: string) {
   const direct = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
   if (direct) return direct
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
+  if (coOwnerRosterId) return prisma.roster.findFirst({ where: { id: coOwnerRosterId, leagueId } })
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
   if (league?.leagueVariant !== 'survivor_guillotine') return null
   const team = await prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })

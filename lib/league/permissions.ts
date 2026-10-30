@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { prisma } from '@/lib/prisma'
 import { isTournamentCoCommissioner } from '@/lib/league/tournamentCoCommissioners'
@@ -53,7 +54,7 @@ export async function getLeagueRole(leagueId: string, userId: string): Promise<L
     where: { leagueId, platformUserId: userId },
     select: { id: true },
   })
-  if (roster) return 'member'
+  if (roster || await acceptedCoOwnerRosterId(leagueId, userId)) return 'member'
 
   return null
 }

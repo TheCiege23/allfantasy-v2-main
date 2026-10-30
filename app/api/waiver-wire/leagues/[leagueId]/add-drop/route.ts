@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -55,6 +56,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
 
   const leagueId = params.leagueId
   let roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } })
+  if (!roster) {
+    const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
+    if (coOwnerRosterId) roster = await prisma.roster.findFirst({ where: { leagueId, id: coOwnerRosterId }, select: { id: true } })
+  }
   if (!roster) {
     const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
     if (league?.leagueVariant === 'survivor_guillotine') {
