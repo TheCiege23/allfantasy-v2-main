@@ -14,10 +14,11 @@ describe('ESPN college box ingestion', () => {
   })
   it('stops the entire pass on an ESPN 403', async () => {
     const upsert = vi.fn()
-    const fetchBox = vi.fn(async () => { throw new EspnBlockedError('https://site.web.api.espn.com/a') })
+    const fetchBox = vi.fn(async () => { throw new EspnBlockedError('https://example.invalid/a') })
     const result = await ingestEspnCollegeBoxes({ sportsDataCache: { upsert } } as any, { eventIds: ['1', '2'], deadlineAt: Date.now() + 10000, maxEvents: 2, now, fetchBox })
     expect(result).toMatchObject({ attempted: 1, blocked: true, remaining: 1 })
     expect(fetchBox).toHaveBeenCalledTimes(1)
     expect(upsert).not.toHaveBeenCalled()
   })
 })
+
