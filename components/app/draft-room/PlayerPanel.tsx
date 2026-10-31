@@ -207,6 +207,8 @@ export type PlayerPanelProps = {
    * only proven non-rookies were removed. The panel explains either with a banner.
    */
   rookieFilterState?: RookieFilterState
+  /** Dynasty leagues: the pool table shows the Rookie / Prospect chip. Redraft pools are unchanged. */
+  isDynasty?: boolean
 }
 
 /** D.3 — re-exposed from SleeperPoolSort. Kept as `SortKey` for legacy call sites. */
@@ -411,6 +413,7 @@ function PlayerPanelInner({
   draftSeasonYear,
   poolError = false,
   rookieFilterState,
+  isDynasty = false,
 }: PlayerPanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const draftedIdsForRows = draftedPlayerIds?.size ? draftedPlayerIds : undefined
@@ -1496,6 +1499,7 @@ function PlayerPanelInner({
                   sortState={{ key: sortBy, direction: sortDirection }}
                   onSortChange={handleColumnHeaderSort}
                   leftAtPick={leftAtPick}
+                  showExperienceLabel={isDynasty}
                 />
               </div>
             )
