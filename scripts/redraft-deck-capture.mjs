@@ -5,7 +5,7 @@
  *
  *   node scripts/redraft-deck-capture.mjs --base-url http://localhost:3000 --out <dir>
  *     [--tabs commissioner] [--sports nfl,nba] [--modes light,dark] [--state season|empty]
- *     [--phase before|after] [--expect-deck] [--chromium <path>]
+ *     [--phase before|after] [--expect-deck] [--skip-existing] [--chromium <path>]
  *
  * Renders /e2e/redraft-league/deck/<tab> (DB-free: fixture fetches, no prisma call) against a `next dev`
  * you started yourself. Mode is set through the real `af_mode` cookie that app/layout.tsx reads.
@@ -62,6 +62,8 @@ const tabs = list(arg('tabs'), Object.keys(TABS))
 const state = arg('state', 'season')
 const expectDeck = flag('expect-deck')
 const phase = arg('phase', '')
+// Resume after a crash: frames already on disk are kept (the box is memory-constrained).
+const skipExisting = flag('skip-existing')
 for (const s of sports) if (!SPORTS[s]) { console.error(`unknown sport ${s}`); process.exit(2) }
 for (const t of tabs) if (!TABS[t]) { console.error(`unknown tab ${t}`); process.exit(2) }
 
@@ -107,6 +109,7 @@ try {
         const q = new URLSearchParams({ sport: SPORTS[sport], state, view: tab })
         const url = `${baseUrl}/e2e/redraft-league/deck/${tab}?${q}`
         for (const [label, viewport] of Object.entries(WIDTHS)) {
+          if (skipExisting && fs.existsSync(path.join(out, tab, phase, `${sport}-${mode}-${viewport.width}.png`))) continue
           try {
             page = await shoot(context, page, url, tab, viewport)
           } catch (err) {
