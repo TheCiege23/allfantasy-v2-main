@@ -223,7 +223,7 @@ html[data-mode='light'] .af-core[data-league-theme='survivor'] {
 .af-core .sv-issue[data-tone='action'] > i { background: #e0563b; }
 .af-core .sv-issue strong { display: block; color: var(--text); }
 .af-core .sv-issue small { display: block; color: var(--muted); font-size: 13px; }
-.af-core .sv-issue-tag { font: 600 10.5px/1.4 Inter, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.af-core .sv-issue-tag { font: 600 11px/1.4 Inter, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
 .af-core .sv-issue[data-tone='action'] .sv-issue-tag { color: #f08a72; }
 .af-core .sv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
