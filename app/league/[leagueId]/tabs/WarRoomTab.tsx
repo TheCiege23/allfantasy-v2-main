@@ -27,6 +27,8 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
 import './redraft-tailwind-tabs.css'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import '@/components/dynasty/dynasty-details.css'
 
 export type WarRoomTabProps = {
   league: UserLeague
@@ -111,6 +113,8 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       String(league.leagueType ?? '').toLowerCase() === 'redraft')
   const identity = resolveRedraftIdentity(league)
   const [metaFrame, setMetaFrame] = useState<'24h' | '7d' | '30d'>('7d')
+  // Dynasty only: the header's violet becomes the Dynasty Era gold.
+  const dynastyEra = usesDynastyBackground(league)
   const liveDraftCompanion = league.status === 'drafting'
   const leagueDraftCompanion = useLeagueWarRoomCompanion({
     leagueId: league.id,
@@ -247,8 +251,8 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl border rdt-accent-line rdt-accent-soft">
-              <Telescope className="h-4 w-4 rdt-accent" strokeWidth={2} />
+            <span className={dynastyEra ? 'dyd-accent-box flex h-9 w-9 items-center justify-center rounded-xl' : 'flex h-9 w-9 items-center justify-center rounded-xl border rdt-accent-line rdt-accent-soft'}>
+              <Telescope className={dynastyEra ? 'dyd-accent-icon h-4 w-4' : 'h-4 w-4 rdt-accent'} strokeWidth={2} />
             </span>
             <div>
               <p className={`rdt-eyebrow ${identity ? 'rdt-eyebrow-accent' : ''}`}>
@@ -266,7 +270,11 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         </div>
         <Link
           href="/war-room"
-          className="rdt-season-chip shrink-0 transition hover:brightness-110"
+          className={
+            dynastyEra
+              ? 'dyd-accent-box shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition'
+              : 'rdt-season-chip shrink-0 transition hover:brightness-110'
+          }
         >
           Plans & pricing
         </Link>

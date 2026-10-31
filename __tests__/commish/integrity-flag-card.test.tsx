@@ -250,3 +250,99 @@ describe('IntegrityFlagCard — a flag raised by the trade review (2026-09-27 on
     expect(screen.getByText(/Confidence 71%/)).toBeTruthy()
   })
 })
+
+describe('IntegrityFlagCard — who and how serious', () => {
+  const MANAGERS = [
+    { rosterId: 'r1', managerName: 'Alex Rivera', teamName: '@lex' },
+    { rosterId: 'r2', managerName: 'Pat Vance', teamName: '@pav' },
+  ]
+
+  it('names both managers of a collusion trade, not just the assets', () => {
+    render(
+      <IntegrityFlagCard
+        flag={flag({ evidenceJson: COLLUSION_EVIDENCE, affectedManagers: MANAGERS })}
+        onMessage={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('integrity-flag-managers').textContent).toBe(
+      'Trade between Alex Rivera (@lex) and Pat Vance (@pav)',
+    )
+    expect(screen.getByText('Alex Rivera (@lex) received')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Message Alex Rivera & Pat Vance' })).toBeTruthy()
+  })
+
+  it('matches managers to sides by roster id, not by list order', () => {
+    render(
+      <IntegrityFlagCard flag={flag({ evidenceJson: COLLUSION_EVIDENCE, affectedManagers: [...MANAGERS].reverse() })} />,
+    )
+    expect(screen.getByTestId('integrity-flag-managers').textContent).toBe(
+      'Trade between Alex Rivera (@lex) and Pat Vance (@pav)',
+    )
+  })
+
+  it('uses the manager name the scan stored when no lookup is attached', () => {
+    const ev = {
+      ...COLLUSION_EVIDENCE,
+      team1: { ...COLLUSION_EVIDENCE.team1, managerName: 'Alex Rivera' },
+      team2: { ...COLLUSION_EVIDENCE.team2, managerName: 'Pat Vance' },
+    }
+    render(<IntegrityFlagCard flag={flag({ evidenceJson: ev })} />)
+    expect(screen.getByTestId('integrity-flag-managers').textContent).toBe(
+      'Trade between Alex Rivera (@lex) and Pat Vance (@pav)',
+    )
+  })
+
+  it('lets the commissioner click a level, and reports which one', () => {
+    const calls: string[] = []
+    render(
+      <IntegrityFlagCard
+        flag={flag({ evidenceJson: COLLUSION_EVIDENCE })}
+        onSetSeverity={(_f, level) => calls.push(level)}
+      />,
+    )
+    const low = screen.getByRole('button', { name: 'Low' }) as HTMLButtonElement
+    expect(low.disabled).toBe(false)
+    low.click()
+    // The current level is a no-op rather than a duplicate write.
+    ;(screen.getByRole('button', { name: 'High' }) as HTMLButtonElement).click()
+    expect(calls).toEqual(['low'])
+  })
+
+  it('shows no level picker when the viewer cannot review', () => {
+    render(<IntegrityFlagCard flag={flag({ evidenceJson: COLLUSION_EVIDENCE })} />)
+    expect(screen.queryByRole('group', { name: 'Flag level' })).toBeNull()
+  })
+})
+
+describe('IntegrityFlagCard — opened from an alert', () => {
+  it('carries the id the alert link scrolls to, and is outlined when highlighted', () => {
+    const { container } = render(<IntegrityFlagCard flag={flag({ evidenceJson: COLLUSION_EVIDENCE })} highlighted />)
+    const card = container.querySelector('#integrity-flag-flag-1')
+    expect(card?.getAttribute('data-highlight')).toBe('true')
+  })
+})
+
+describe('IntegrityFlagCard — compact on a phone', () => {
+  it('starts collapsed, and the toggle opens and closes it', () => {
+    const { container } = render(<IntegrityFlagCard flag={flag({ evidenceJson: COLLUSION_EVIDENCE })} />)
+    const card = container.querySelector('article')!
+    const toggle = screen.getByRole('button', { name: 'Show details' })
+    expect(card.getAttribute('data-expanded')).toBe('false')
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    toggle.click()
+    return Promise.resolve().then(() => {
+      expect(card.getAttribute('data-expanded')).toBe('true')
+      expect(screen.getByRole('button', { name: 'Hide details' }).getAttribute('aria-expanded')).toBe('true')
+    })
+  })
+
+  it('opens the flag an alert linked to', () => {
+    const { container } = render(<IntegrityFlagCard flag={flag({ evidenceJson: COLLUSION_EVIDENCE })} highlighted />)
+    expect(container.querySelector('article')!.getAttribute('data-expanded')).toBe('true')
+  })
+
+  it('shows the value gap on the compact row', () => {
+    render(<IntegrityFlagCard flag={flag({ evidenceJson: COLLUSION_EVIDENCE })} />)
+    expect(screen.getByText('63% value gap')).toBeTruthy()
+  })
+})
