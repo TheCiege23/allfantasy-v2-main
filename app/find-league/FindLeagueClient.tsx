@@ -1,12 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Loader2, Inbox, Search, ShieldAlert, SlidersHorizontal } from "lucide-react"
 import { FindLeagueCard } from "@/components/discovery/FindLeagueCard"
-import { DiscoveryRail, DiscoveryRailSkeleton } from "@/components/find-league/DiscoveryRail"
+import { DiscoveryRailSkeleton } from "@/components/find-league/DiscoveryRail"
 import { getDiscoverySports } from "@/lib/public-discovery/discovery-sports"
-import type { DiscoveryRail as DiscoveryRailDTO } from "@/lib/matchmaking"
+import type { FindLeagueRail } from "@/lib/public-discovery/findLeagueRails"
 import type {
   DiscoveryCard,
   DiscoverySort,
@@ -30,92 +30,45 @@ import {
 } from "@/lib/public-discovery/findLeagueFilters"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 
-type RecsStatus = 'ok' | 'no-snapshot' | 'anonymous' | 'empty' | 'error'
+type RecsStatus = 'ok' | 'anonymous' | 'empty' | 'error'
 
+/**
+ * "Picked for you" rows: at your level, step up, drafting this week, filling fast.
+ * Built server-side from the same discovery list as the grid (lib/public-discovery/findLeagueRails.ts).
+ */
 function SmartDiscoverySection({ sport }: { sport: string }) {
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState<RecsStatus | null>(null)
-  const [rails, setRails] = useState<DiscoveryRailDTO[]>([])
-  const telemetryFiredRef = useRef(false)
+  const [rails, setRails] = useState<FindLeagueRail[]>([])
 
   useEffect(() => {
-    let cancelled = false
-    telemetryFiredRef.current = false
+    const controller = new AbortController()
     setLoading(true)
-    setRails([])
-    setStatus(null)
 
     const params = new URLSearchParams()
     if (sport) params.set("sport", sport)
-    params.set("limit", "5")
 
-    fetch(`/api/find-league/recommendations?${params.toString()}`)
+    fetch(`/api/find-league/recommendations?${params.toString()}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((d) => {
-        if (cancelled) return
         setStatus(d.status ?? "error")
         setRails(Array.isArray(d.rails) ? d.rails : [])
         setLoading(false)
       })
       .catch(() => {
-        if (cancelled) return
+        if (controller.signal.aborted) return
         setStatus("error")
         setRails([])
         setLoading(false)
       })
 
-    return () => { cancelled = true }
+    return () => controller.abort()
   }, [sport])
-
-  useEffect(() => {
-    if (loading || telemetryFiredRef.current || rails.length === 0) return
-    telemetryFiredRef.current = true
-    for (const rail of rails) {
-      fetch("/api/find-league/telemetry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "recommendation_viewed", railKind: rail.kind }),
-      }).catch(() => {})
-    }
-  }, [loading, rails])
 
   if (loading) {
     return (
       <div className="space-y-8">
         <DiscoveryRailSkeleton />
-        <DiscoveryRailSkeleton />
-      </div>
-    )
-  }
-
-  if (status === "anonymous") {
-    return (
-      <div
-        className="rounded-xl border border-dashed p-5 text-center"
-        style={{ borderColor: "var(--border)" }}
-      >
-        <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
-          Sign in to see personalized league recommendations
-        </p>
-        <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
-          Matchmaking uses your fantasy resume to surface leagues where you&apos;ll thrive.
-        </p>
-      </div>
-    )
-  }
-
-  if (status === "no-snapshot") {
-    return (
-      <div
-        className="rounded-xl border border-dashed p-5 text-center"
-        style={{ borderColor: "var(--border)" }}
-      >
-        <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
-          Complete your fantasy resume to get personalized picks
-        </p>
-        <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
-          Personalized recommendations need a profile snapshot to score league fit.
-        </p>
       </div>
     )
   }
@@ -123,14 +76,29 @@ function SmartDiscoverySection({ sport }: { sport: string }) {
   if (rails.length === 0) return null
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" data-testid="find-league-rails">
       {rails.map((rail) => (
-        <DiscoveryRail
-          key={rail.kind}
-          rail={rail}
-          buildHref={(id) => `/league/${id}`}
-        />
+        <section key={rail.kind} aria-label={rail.title} data-testid={`find-league-rail-${rail.kind}`}>
+          <h2 className="text-base font-bold" style={{ color: "var(--text)" }}>
+            {rail.title}
+          </h2>
+          <p className="mb-3 text-xs" style={{ color: "var(--muted)" }}>
+            {rail.description}
+          </p>
+          <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+            {rail.leagues.map((league) => (
+              <div key={`${league.source}-${league.id}`} className="w-[85%] max-w-sm shrink-0 snap-start sm:w-80">
+                <FindLeagueCard league={league} />
+              </div>
+            ))}
+          </div>
+        </section>
       ))}
+      {status === "anonymous" ? (
+        <p className="text-xs" style={{ color: "var(--muted)" }} data-testid="find-league-rails-signin">
+          Sign in to see leagues at your level and ones that would stretch you.
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -220,27 +188,47 @@ const VISIBILITY_OPTIONS: { value: VisibilityFilter; label: string }[] = [
   { value: "all", label: "Public & private" },
 ]
 
+/** Filters the page opens with, read from the URL once (?sport=, ?style=, ?q=). */
+function initialFiltersFrom(searchParams: { get(name: string): string | null } | null) {
+  const q = searchParams?.get("q") ?? ""
+  const parsed = q.trim() ? parseLeagueSearch(q) : null
+  const styleParam = (searchParams?.get("style") as LeagueStyleFilter | null) ?? null
+  const readAs = parsed ? describeParsedSearch(parsed) : []
+  return {
+    query: q,
+    appliedQuery: parsed ? parsed.text : "",
+    sport: parsed?.sport ?? searchParams?.get("sport") ?? "",
+    leagueType: (parsed?.style ?? (styleParam && styleParam !== "all" ? styleParam : "all")) as LeagueStyleFilter,
+    draftType: parsed?.draftType ?? ("all" as DraftTypeFilter),
+    entryFee: parsed?.entryFee ?? ("all" as EntryFeeFilter),
+    draftWhen: parsed?.draftWhen ?? ("any" as DraftWhenFilter),
+    tzRegion: parsed?.tzRegion ?? ("any" as TimeZoneRegionFilter),
+    teamCount: parsed?.teamCount ? String(parsed.teamCount) : "",
+    searchReadAs:
+      parsed && (readAs.length > 1 || (readAs.length === 1 && !parsed.text)) ? readAs : [],
+  }
+}
+
 export function FindLeagueClient() {
   const searchParams = useSearchParams()
-  const hasInitializedFiltersRef = useRef(false)
+  const [initial] = useState(() => initialFiltersFrom(searchParams))
   const { timezone: profileTimeZone } = useUserTimezone()
-  const [query, setQuery] = useState("")
-  const [appliedQuery, setAppliedQuery] = useState("")
-  const [sport, setSport] = useState("")
-  const [leagueType, setLeagueType] = useState<LeagueStyleFilter>("all")
-  const [draftType, setDraftType] = useState<DraftTypeFilter>("all")
-  const [teamCountMin, setTeamCountMin] = useState("")
-  const [teamCountMax, setTeamCountMax] = useState("")
+  const [query, setQuery] = useState(initial.query)
+  const [appliedQuery, setAppliedQuery] = useState(initial.appliedQuery)
+  const [sport, setSport] = useState(initial.sport)
+  const [leagueType, setLeagueType] = useState<LeagueStyleFilter>(initial.leagueType)
+  const [draftType, setDraftType] = useState<DraftTypeFilter>(initial.draftType)
+  const [teamCountMin, setTeamCountMin] = useState(initial.teamCount)
+  const [teamCountMax, setTeamCountMax] = useState(initial.teamCount)
   const [draftStatus, setDraftStatus] = useState<DraftStatusFilter>("all")
-  const [entryFee, setEntryFee] = useState<EntryFeeFilter>("all")
+  const [entryFee, setEntryFee] = useState<EntryFeeFilter>(initial.entryFee)
   const [aiEnabled, setAiEnabled] = useState(false)
-  const [draftWhen, setDraftWhen] = useState<DraftWhenFilter>("any")
-  const [tzRegion, setTzRegion] = useState<TimeZoneRegionFilter>("any")
+  const [draftWhen, setDraftWhen] = useState<DraftWhenFilter>(initial.draftWhen)
+  const [tzRegion, setTzRegion] = useState<TimeZoneRegionFilter>(initial.tzRegion)
   const [rankBand, setRankBand] = useState<RankBandFilter>("all")
-  const [searchReadAs, setSearchReadAs] = useState<string[]>([])
+  const [searchReadAs, setSearchReadAs] = useState<string[]>(initial.searchReadAs)
   const [visibility, setVisibility] = useState<VisibilityFilter>("public")
   const [sort, setSort] = useState<DiscoverySort>("ranking_match")
-  const [page, setPage] = useState(1)
   const [leagues, setLeagues] = useState<DiscoveryCard[]>([])
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
@@ -263,104 +251,74 @@ export function FindLeagueClient() {
     tzRegion !== 'any',
   ].filter(Boolean).length
 
-  const buildParams = useCallback(
-    (p: number) => {
-      const params = new URLSearchParams()
-      if (appliedQuery.trim()) params.set("q", appliedQuery.trim())
-      if (sport) params.set("sport", sport)
-      if (leagueType !== "all") params.set("style", leagueType)
-      if (draftType !== "all") params.set("draftType", draftType)
-      if (draftStatus !== "all") params.set("draftStatus", draftStatus)
-      params.set("sort", sort)
-      params.set("entryFee", entryFee)
-      params.set("visibility", visibility)
-      const tMin = teamCountMin.trim() ? parseInt(teamCountMin, 10) : undefined
-      const tMax = teamCountMax.trim() ? parseInt(teamCountMax, 10) : undefined
-      if (tMin != null && !Number.isNaN(tMin)) params.set("teamCountMin", String(tMin))
-      if (tMax != null && !Number.isNaN(tMax)) params.set("teamCountMax", String(tMax))
-      if (aiEnabled) params.set("aiEnabled", "true")
-      if (draftWhen !== "any") params.set("draftWhen", draftWhen)
-      if (tzRegion !== "any") params.set("tzRegion", tzRegion)
-      if (rankBand !== "all") params.set("rankBand", rankBand)
-      // Same zone the cards print draft times in (FindLeagueCard), so a filter and the
-      // time it is filtering on can never disagree.
+  /**
+   * Every filter, as the query string the server sees — without the page. One string, so one
+   * effect can fetch exactly once per change. This used to be three effects over a callback
+   * whose identity moved with every filter, and every search and every filter change fetched
+   * twice (measured on allfantasy.ai, 2026-10-30).
+   */
+  const filterKey = (() => {
+    const params = new URLSearchParams()
+    if (appliedQuery.trim()) params.set("q", appliedQuery.trim())
+    if (sport) params.set("sport", sport)
+    if (leagueType !== "all") params.set("style", leagueType)
+    if (draftType !== "all") params.set("draftType", draftType)
+    if (draftStatus !== "all") params.set("draftStatus", draftStatus)
+    params.set("sort", sort)
+    params.set("entryFee", entryFee)
+    params.set("visibility", visibility)
+    const tMin = teamCountMin.trim() ? parseInt(teamCountMin, 10) : undefined
+    const tMax = teamCountMax.trim() ? parseInt(teamCountMax, 10) : undefined
+    if (tMin != null && !Number.isNaN(tMin)) params.set("teamCountMin", String(tMin))
+    if (tMax != null && !Number.isNaN(tMax)) params.set("teamCountMax", String(tMax))
+    if (aiEnabled) params.set("aiEnabled", "true")
+    if (draftWhen !== "any") params.set("draftWhen", draftWhen)
+    if (tzRegion !== "any") params.set("tzRegion", tzRegion)
+    if (rankBand !== "all") params.set("rankBand", rankBand)
+    // Same zone the cards print draft times in (FindLeagueCard), so a filter and the time it is
+    // filtering on can never disagree. Only the weeknight/weekend windows read it, so it is sent
+    // only for those — otherwise the profile zone arriving after mount would refetch for nothing.
+    if (draftWhen === "weeknight" || draftWhen === "weekend") {
       const tz = resolveViewerTimeZone(profileTimeZone)
       if (tz) params.set("viewerTz", tz)
-      params.set("page", String(p))
-      params.set("limit", "12")
-      return params
-    },
-    [
-      appliedQuery,
-      sport,
-      leagueType,
-      draftType,
-      draftStatus,
-      sort,
-      entryFee,
-      visibility,
-      teamCountMin,
-      teamCountMax,
-      aiEnabled,
-      draftWhen,
-      tzRegion,
-      rankBand,
-      profileTimeZone,
-    ]
-  )
-
-  const fetchLeagues = useCallback(
-    (p: number) => {
-      setLoading(true)
-      const params = buildParams(p)
-      fetch(`/api/discover/leagues?${params.toString()}`)
-        .then((r) => r.json())
-        .then((d) => {
-          setLeagues(d.leagues ?? [])
-          setTotal(d.total ?? 0)
-          setTotalPages(d.totalPages ?? 1)
-          setViewerTier(typeof d.viewerTier === "number" ? d.viewerTier : null)
-          setViewerTierName(typeof d.viewerTierName === "string" ? d.viewerTierName : null)
-          setHiddenByTierPolicy(typeof d.hiddenByTierPolicy === "number" ? d.hiddenByTierPolicy : 0)
-        })
-        .catch(() => {
-          setLeagues([])
-          setTotal(0)
-          setTotalPages(0)
-          setViewerTier(null)
-          setViewerTierName(null)
-          setHiddenByTierPolicy(0)
-        })
-        .finally(() => setLoading(false))
-    },
-    [buildParams]
-  )
-
-  useEffect(() => {
-    fetchLeagues(page)
-  }, [page, fetchLeagues])
-
-  useEffect(() => {
-    const s = searchParams?.get("sport") ?? ""
-    const styleParam = (searchParams?.get("style") as LeagueStyleFilter) ?? "all"
-    const q = searchParams?.get("q") ?? ""
-    if (s) setSport(s)
-    if (styleParam !== "all") setLeagueType(styleParam)
-    if (q.trim()) {
-      setQuery(q)
-      applyParsedSearch(parseLeagueSearch(q))
     }
-    hasInitializedFiltersRef.current = true
-  }, [searchParams])
+    return params.toString()
+  })()
+
+  // The page belongs to the filters it was chosen under: change a filter and it reads as page 1
+  // without a second render-and-fetch to reset it.
+  const [pageState, setPageState] = useState({ key: filterKey, page: 1 })
+  const page = pageState.key === filterKey ? pageState.page : 1
+  const setPage = (next: number | ((p: number) => number)) =>
+    setPageState({ key: filterKey, page: typeof next === "function" ? next(page) : next })
 
   useEffect(() => {
-    if (!hasInitializedFiltersRef.current) return
-    if (page !== 1) {
-      setPage(1)
-      return
-    }
-    fetchLeagues(1)
-  }, [sport, leagueType, draftType, draftStatus, teamCountMin, teamCountMax, entryFee, aiEnabled, visibility, sort, draftWhen, tzRegion, rankBand, fetchLeagues])
+    const controller = new AbortController()
+    setLoading(true)
+    fetch(`/api/discover/leagues?${filterKey}&page=${page}&limit=12`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((d) => {
+        setLeagues(d.leagues ?? [])
+        setTotal(d.total ?? 0)
+        setTotalPages(d.totalPages ?? 1)
+        setViewerTier(typeof d.viewerTier === "number" ? d.viewerTier : null)
+        setViewerTierName(typeof d.viewerTierName === "string" ? d.viewerTierName : null)
+        setHiddenByTierPolicy(typeof d.hiddenByTierPolicy === "number" ? d.hiddenByTierPolicy : 0)
+        setLoading(false)
+      })
+      .catch(() => {
+        // A newer request replaced this one; its answer is the one to show.
+        if (controller.signal.aborted) return
+        setLeagues([])
+        setTotal(0)
+        setTotalPages(0)
+        setViewerTier(null)
+        setViewerTierName(null)
+        setHiddenByTierPolicy(0)
+        setLoading(false)
+      })
+    return () => controller.abort()
+  }, [filterKey, page])
 
   /**
    * The search box takes plain English: "12 team dynasty snake, free, weeknights".
@@ -386,7 +344,6 @@ export function FindLeagueClient() {
 
   const handleSearch = () => {
     applyParsedSearch(parseLeagueSearch(query))
-    setPage(1)
   }
 
   // Bands exist only for a viewer with an established Class against rated leagues, so

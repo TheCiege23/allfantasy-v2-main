@@ -25,7 +25,14 @@ type FinderState = {
   seatsHeld: number
 }
 
-export function FindLeagueListingCard({ leagueId }: { leagueId: string }) {
+export function FindLeagueListingCard({
+  leagueId,
+  variant = 'hub',
+}: {
+  leagueId: string
+  /** 'welcome' is the "your league is ready" sheet right after creation: same control, sheet styling. */
+  variant?: 'hub' | 'welcome'
+}) {
   const { t } = useOptionalLanguage()
   const url = `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/league-finder`
   const [state, setState] = useState<FinderState | null>(null)
@@ -83,9 +90,18 @@ export function FindLeagueListingCard({ leagueId }: { leagueId: string }) {
       ? t('1 open seat')
       : `${state.openSeats} ${t('open seats')}`
 
+  const welcome = variant === 'welcome'
+  const Heading = welcome ? 'h3' : 'h2'
+
   return (
-    <section id="ch-find-league" className="af-tw af-tw-panel" data-testid="find-league-listing-card">
-      <h2>{state.listed ? t('Listed in Find a League') : t('Fill your open seats')}</h2>
+    <section
+      id={welcome ? undefined : 'ch-find-league'}
+      className={welcome ? 'space-y-2 text-sm' : 'af-tw af-tw-panel'}
+      data-testid="find-league-listing-card"
+    >
+      <Heading className={welcome ? 'text-base font-black' : undefined}>
+        {state.listed ? t('Listed in Find a League') : t('Fill your open seats')}
+      </Heading>
       <p>
         <strong data-testid="find-league-listing-seats">{seats}</strong>
         {state.leagueSize > 0 ? ` · ${state.seatsHeld}/${state.leagueSize} ${t('managers')}` : null}
@@ -103,7 +119,11 @@ export function FindLeagueListingCard({ leagueId }: { leagueId: string }) {
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="af-btn"
+          className={
+            welcome
+              ? 'min-h-12 touch-manipulation rounded-xl border border-[color:var(--border-subtle)] px-4 font-bold disabled:opacity-50'
+              : 'af-btn'
+          }
           onClick={() => void toggle()}
           disabled={busy || (!state.listed && !state.inviteReady)}
           data-testid="find-league-listing-toggle"

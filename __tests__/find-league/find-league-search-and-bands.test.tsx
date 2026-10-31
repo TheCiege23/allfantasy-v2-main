@@ -128,6 +128,25 @@ describe("FindLeagueClient search", () => {
     expect((screen.getByTestId("find-league-draft-when") as HTMLSelectElement).value).toBe("weeknight")
   })
 
+  it("fetches once on arrival and once per change, never twice", async () => {
+    render(<FindLeagueClient />)
+    await waitFor(() => expect(discoverUrls.length).toBeGreaterThan(0))
+    // Let any second, duplicate fetch land before counting.
+    await new Promise((r) => setTimeout(r, 50))
+    expect(discoverUrls).toHaveLength(1)
+
+    fireEvent.change(screen.getByTestId("find-league-search-input"), { target: { value: "dynasty" } })
+    fireEvent.click(screen.getByTestId("find-league-search-submit"))
+    await waitFor(() => expect(lastParams().get("style")).toBe("dynasty"))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(discoverUrls).toHaveLength(2)
+
+    fireEvent.change(screen.getByTestId("find-league-draft-when"), { target: { value: "upcoming" } })
+    await waitFor(() => expect(lastParams().get("draftWhen")).toBe("upcoming"))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(discoverUrls).toHaveLength(3)
+  })
+
   it("offers rank band chips once results carry bands, and filters by one", async () => {
     render(<FindLeagueClient />)
     const bands = await screen.findByTestId("find-league-rank-bands")
