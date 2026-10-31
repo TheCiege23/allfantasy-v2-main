@@ -71,6 +71,8 @@ import { DevyDraftsPanel } from '@/app/devy/components/settings/DevyDraftsPanel'
 import { DevyImportPanel } from '@/app/devy/components/settings/DevyImportPanel'
 import { DevyAIPanel } from '@/app/devy/components/settings/DevyAIPanel'
 import { C2CFormatPanel } from '@/app/c2c/components/settings/C2CFormatPanel'
+import { DevySettingsPanel } from '@/components/devy/DevySettingsPanel'
+import { MergedDevyC2CCommissionerSettings } from '@/components/merged-devy-c2c/MergedDevyC2CCommissionerSettings'
 import { C2CRostersPanel } from '@/app/c2c/components/settings/C2CRostersPanel'
 import { C2CScoringPanel } from '@/app/c2c/components/settings/C2CScoringPanel'
 import { C2CTaxiPanel } from '@/app/c2c/components/settings/C2CTaxiPanel'
@@ -140,6 +142,8 @@ export function CommissionerSettingsModal({
   const [devyConfig, setDevyConfig] = useState<Record<string, unknown> | null>(null)
   const [c2cMode, setC2cMode] = useState(false)
   const [c2cConfig, setC2cConfig] = useState<C2CConfigClient | null>(null)
+  const [nativeDevy, setNativeDevy] = useState(false)
+  const [nativeC2c, setNativeC2c] = useState(false)
 
   const { confirm: confirmMidSeason, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const { status, save, debouncedSave, savedLabel } = useAutosave(leagueId, { confirmMidSeason })
@@ -230,6 +234,22 @@ export function CommissionerSettingsModal({
         setDevyConfig(null)
       })
   }, [isOpen, leagueId])
+
+  // A Devy / C2C league that plays on AllFantasy: its config rows answer these GETs (404 otherwise).
+  useEffect(() => {
+    if (!isOpen) return
+    const id = encodeURIComponent(leagueId)
+    fetch(`/api/leagues/${id}/devy/config`, { credentials: 'include' })
+      .then((r) => setNativeDevy(r.ok))
+      .catch(() => setNativeDevy(false))
+    fetch(`/api/leagues/${id}/merged-devy-c2c/config`, { credentials: 'include' })
+      .then((r) => setNativeC2c(r.ok))
+      .catch(() => setNativeC2c(false))
+  }, [isOpen, leagueId])
+
+  useEffect(() => {
+    if ((activeTab === 'native_devy' && !nativeDevy) || (activeTab === 'native_c2c' && !nativeC2c)) setActiveTab('league')
+  }, [nativeDevy, nativeC2c, activeTab])
 
   useEffect(() => {
     if (!isOpen) {
@@ -348,6 +368,8 @@ export function CommissionerSettingsModal({
           showIdpTabs={idpLeague}
           showDevyTabs={devyMode}
           showC2cTabs={c2cMode}
+          showNativeDevyTab={nativeDevy}
+          showNativeC2cTab={nativeC2c}
         />
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/[0.06] bg-[#0c111c] md:border-l md:border-t-0">
@@ -601,6 +623,18 @@ export function CommissionerSettingsModal({
             <DevyImportPanel />
           ) : activeTab === 'devy_ai' ? (
             <DevyAIPanel leagueId={leagueId} hasAfSub={hasSub} isCommissioner={canEdit} />
+          ) : activeTab === 'native_devy' ? (
+            <div className="px-6 py-6" data-testid="native-devy-settings">
+              <DevySettingsPanel leagueId={leagueId} isCommissioner={canEdit} />
+            </div>
+          ) : activeTab === 'native_c2c' ? (
+            <div className="px-6 py-6" data-testid="native-c2c-settings">
+              {canEdit ? (
+                <MergedDevyC2CCommissionerSettings leagueId={leagueId} />
+              ) : (
+                <p className="text-[13px] text-white/55">Only the commissioner can change the C2C settings.</p>
+              )}
+            </div>
           ) : activeTab === 'c2c_format' ? (
             <C2CFormatPanel config={c2cConfig} canEdit={canEdit} />
           ) : activeTab === 'c2c_rosters' ? (
