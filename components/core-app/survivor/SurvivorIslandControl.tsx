@@ -1,11 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useMessages } from '@/components/i18n/useMessages'
 import { survivorIslandControlMessages } from '@/lib/core-app/messages/survivorIslandControl'
 import { islandHealth, islandTodo, type HealthDetail, type IslandControlFacts, type TorchState } from '@/lib/core-app/survivorIslandControl'
 import { SurvivorRulebook } from './SurvivorRulebook'
+import { SurvivorRulesEditor, SurvivorScenePicker, useIslandSettings } from './SurvivorIslandSettings'
 
 /**
  * Island control: the top of a Survivor league's Commissioner screen. League health as a row of
@@ -13,10 +14,18 @@ import { SurvivorRulebook } from './SurvivorRulebook'
  * Survivor commissioner dashboard, which refuses anyone who does not run the league, so this panel
  * simply renders nothing for them, and nothing while it loads or if the read fails. The full
  * commissioner hub below it is unchanged.
+ *
+ * Below the rulebook: an inline editor for the rulebook's safe fields and the banner scene picker,
+ * both saved through the Survivor settings screen's own endpoint (see SurvivorIslandSettings), so
+ * they appear only for someone with settings rights. A save re-reads the dashboard, so the rulebook
+ * shows the new rules.
  */
 export function SurvivorIslandControl({ leagueId }: { leagueId: string }) {
   const m = useMessages(survivorIslandControlMessages)
   const [facts, setFacts] = useState<IslandControlFacts | null>(null)
+  const [reads, setReads] = useState(0)
+  const reload = useCallback(() => setReads((n) => n + 1), [])
+  const settings = useIslandSettings(leagueId, reload)
 
   useEffect(() => {
     let live = true
@@ -25,7 +34,7 @@ export function SurvivorIslandControl({ leagueId }: { leagueId: string }) {
       .then((d) => { if (live && d && d.ok !== false) setFacts(d) })
       .catch(() => {})
     return () => { live = false }
-  }, [leagueId])
+  }, [leagueId, reads])
 
   if (!facts) return null
   const torches = islandHealth(facts)
@@ -81,6 +90,8 @@ export function SurvivorIslandControl({ leagueId }: { leagueId: string }) {
         {actions > 0 ? <span className="sv-sr">{m.open(actions)}</span> : null}
       </section>
       <SurvivorRulebook config={facts.config} editHref={`/survivor/${encodeURIComponent(leagueId)}/settings`} />
+      {settings.state ? <SurvivorRulesEditor state={settings.state} save={settings.save} settingsHref={`/survivor/${encodeURIComponent(leagueId)}/settings`} /> : null}
+      {settings.state ? <SurvivorScenePicker state={settings.state} save={settings.save} /> : null}
     </div>
   )
 }

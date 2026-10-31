@@ -44,6 +44,27 @@ export interface SurvivorSettingsForm {
   publicMomentPages: boolean
   /** The public watch page for fans of the show (off by default). */
   spectatorPageEnabled: boolean
+  /**
+   * The island banner's scene: one of SURVIVOR_ISLAND_SCENES, or 'auto' to follow the season.
+   * Optional on purpose: a form posted without it (an older screen) changes nothing, rather than
+   * resetting a commissioner's pick to 'auto'. Stored as league.settings.survivorIslandScene.
+   */
+  islandScene?: SurvivorIslandScenePreference
+}
+
+/** The banner art in public/survivor/scenes/<scene>.svg, in the order the picker shows them. */
+export const SURVIVOR_ISLAND_SCENES = ['beach', 'tribal', 'merge', 'finale', 'exile', 'jungle', 'volcano', 'lagoon'] as const
+export type SurvivorIslandScene = (typeof SURVIVOR_ISLAND_SCENES)[number]
+export type SurvivorIslandScenePreference = SurvivorIslandScene | 'auto'
+
+export function isSurvivorIslandScenePreference(value: unknown): value is SurvivorIslandScenePreference {
+  return value === 'auto' || (typeof value === 'string' && (SURVIVOR_ISLAND_SCENES as readonly string[]).includes(value))
+}
+
+/** The saved scene from a league's settings JSON; anything missing or unknown follows the season. */
+export function readSurvivorIslandScene(settings: unknown): SurvivorIslandScenePreference {
+  const raw = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>).survivorIslandScene : null
+  return isSurvivorIslandScenePreference(raw) ? raw : 'auto'
 }
 
 export type SurvivorSettingsKey = keyof SurvivorSettingsForm
@@ -51,7 +72,7 @@ export type SurvivorSettingsKey = keyof SurvivorSettingsForm
 /** Everything else locks when the draft starts. */
 export const SURVIVOR_SETTINGS_EDITABLE_ALL_SEASON: readonly SurvivorSettingsKey[] = [
   'voteDay', 'voteTime', 'exileBossMode', 'exileBossFixedScore', 'exileBossTopN', 'shareCardsEnabled', 'publicMomentPages',
-  'spectatorPageEnabled',
+  'spectatorPageEnabled', 'islandScene',
 ]
 
 export const SURVIVOR_VOTE_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
@@ -129,6 +150,7 @@ export function validateSettingsForm(form: SurvivorSettingsForm, ctx: SurvivorSe
   if (form.mergeTrigger === 'week' && (!Number.isInteger(form.mergeWeek) || form.mergeWeek <= ctx.firstWeek)) errors.push('The merge must come after the first week.')
   if (form.mergeTrigger === 'active_player_count' && (!Number.isInteger(form.mergeActivePlayerCount) || form.mergeActivePlayerCount <= form.finalistCount || form.mergeActivePlayerCount >= ctx.managers)) errors.push(`Merge with between ${form.finalistCount + 1} and ${ctx.managers - 1} managers left.`)
   if (merge >= finale) errors.push('The merge must come before the finale.')
+  if (form.islandScene !== undefined && !isSurvivorIslandScenePreference(form.islandScene)) errors.push('Pick one of the island scenes, or follow the season.')
   if (form.swapEnabled) {
     if (!Number.isInteger(form.swapWeek) || form.swapWeek <= ctx.firstWeek) errors.push('The swap must come after the first Tribal Council.')
     else if (form.swapWeek >= merge) errors.push('The swap must come before the merge.')
@@ -204,6 +226,8 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
   if (!tie || !(SURVIVOR_TIE_RULES as readonly string[]).includes(tie)) return null
   if (boss !== 'median' && boss !== 'fixed' && boss !== 'topN' && boss !== 'chimmy_roster') return null
   if (trigger !== 'week' && trigger !== 'active_player_count') return null
+  // Optional (see SurvivorSettingsForm.islandScene); present but unknown is a bad form, not 'auto'.
+  if (r.islandScene !== undefined && !isSurvivorIslandScenePreference(r.islandScene)) return null
   const finalist = num('finalistCount')
   if (finalist !== 2 && finalist !== 3) return null
   const fixedRaw = r.exileBossFixedScore
@@ -232,6 +256,7 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
     publicMomentPages: bools[5]!,
     // Added later than the others, so a form without it reads as off rather than invalid.
     spectatorPageEnabled: bool('spectatorPageEnabled') ?? false,
+    ...(r.islandScene !== undefined && { islandScene: r.islandScene as SurvivorIslandScenePreference }),
   }
   const numeric: SurvivorSettingsKey[] = ['tribeCount', 'idolCount', 'exileReturnTokens', 'exileBossTopN', 'swapWeek', 'mergeWeek', 'mergeActivePlayerCount']
   if (numeric.some(k => Number.isNaN(form[k] as number)) || Number.isNaN(fixed as number)) return null

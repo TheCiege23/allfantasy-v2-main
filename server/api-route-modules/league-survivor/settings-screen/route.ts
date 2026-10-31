@@ -11,7 +11,10 @@
  *  - the finalist count locks with a saved full-season plan, tribe count/formation with tribe
  *    assignment or a locked tribe plan;
  *  - the idol draw stays where IdolSetup put it: the idol count is saved through
- *    saveSurvivorIdolConfig, keeping its mode, picks and hide flag; the drawn types are never read.
+ *    saveSurvivorIdolConfig, keeping its mode, picks and hide flag; the drawn types are never read;
+ *  - the island banner scene (settings.survivorIslandScene) is optional in the form, editable all
+ *    season, and must be one of SURVIVOR_ISLAND_SCENES or 'auto' (400 otherwise). Island control on
+ *    the /core Commissioner screen saves it, and its inline rule edits, through this same POST.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -32,8 +35,10 @@ import { upsertSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
 import { getSurvivorIdolSetupView, isSurvivorDraftStarted, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
 import {
   changedSettingsKeys,
+  isSurvivorIslandScenePreference,
   lockedChanges,
   parseSettingsForm,
+  readSurvivorIslandScene,
   validateSettingsForm,
   type SurvivorSettingsContext,
   type SurvivorSettingsForm,
@@ -115,6 +120,7 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
       shareCardsEnabled: foundation.shareCardsEnabled,
       publicMomentPages: foundation.publicMomentPages,
       spectatorPageEnabled: foundation.spectatorPageEnabled,
+      islandScene: readSurvivorIslandScene(settings),
     },
     context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek },
     locks: { draftStarted, finalistLocked: Boolean(plan) || draftStarted, tribesLocked: assigned > 0 || Boolean(readStoredTribePlan(settings)?.lockedAt) },
@@ -137,6 +143,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const { leagueId, userId, access } = auth
   const viewer = { canSeeDraw: access.decisions.canSeeHiddenIdolAssignments }
   const body = rec(await req.json().catch(() => null))
+  const sceneRaw = rec(body.form).islandScene
+  if (sceneRaw !== undefined && !isSurvivorIslandScenePreference(sceneRaw)) {
+    return NextResponse.json({ error: 'Unknown island scene.' }, { status: 400 })
+  }
   const next = parseSettingsForm(body.form)
   if (!next) return NextResponse.json({ error: 'Send the whole settings form.' }, { status: 400 })
 
@@ -193,6 +203,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (has('exileBossMode')) latePatch.exileBossMode = next.exileBossMode
     if (has('exileBossFixedScore') || (has('exileBossMode') && next.exileBossMode === 'fixed')) latePatch.exileBossFixedScore = next.exileBossFixedScore
     if (has('exileBossTopN')) latePatch.exileBossTopN = next.exileBossTopN
+    // The island banner's scene (lib/core-app/survivorIsland.ts islandView reads it from the summary).
+    if (has('islandScene') && next.islandScene) latePatch.survivorIslandScene = next.islandScene
 
     const nextFoundation = normalizeSurvivorFoundationSettings({ ...current, ...foundationPatch })
     const columns: Rec = Object.keys(foundationPatch).length ? buildSurvivorLeagueColumnPatch(nextFoundation) : {}
