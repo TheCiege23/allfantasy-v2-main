@@ -262,6 +262,7 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
         items: [
           { id: 'item-1', itemType: 'player', fromRosterId: 'roster-proposer', toRosterId: 'roster-receiver', itemReference: 'p1', metadata: { playerName: 'Player One', position: 'RB', team: 'BUF' } },
           { id: 'item-2', itemType: 'player', fromRosterId: 'roster-receiver', toRosterId: 'roster-proposer', itemReference: 'p2', metadata: { playerName: 'Player Two', position: 'WR', team: 'MIA' } },
+          { id: 'item-3', itemType: 'future_pick', fromRosterId: 'roster-receiver', toRosterId: 'roster-proposer', itemReference: 'fdp:2027:1:roster-third', metadata: { label: '2027 1st' } },
         ],
       },
     ])
@@ -294,6 +295,9 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
     })
     expect((trade.received as Array<{ teamLogoUrl: string | null }>)[0].teamLogoUrl).toBeTruthy()
     expect((trade.sent as Array<{ label: string }>)[0].label).toBe('Player Two')
+    // A pick carries its year, round and original team from its own id, for the dynasty pick chip.
+    expect((trade.sent as Array<{ pick?: unknown }>)[1].pick).toEqual({ season: 2027, round: 1, originalRosterId: 'roster-third', fromRosterId: 'roster-receiver' })
+    expect((trade.sent as Array<{ pick?: unknown }>)[0].pick).toBeUndefined()
 
     // Trade OS: the row points at the receipt for exactly the letter it shows, linked to its trade.
     expect(trade.receiptId).toBe('rcpt_row')

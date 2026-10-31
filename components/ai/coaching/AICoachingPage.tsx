@@ -19,6 +19,8 @@ import { FranchisePlanCard } from '@/components/ai/coaching/FranchisePlanCard'
 import { FutureCapitalPanel } from '@/components/ai/coaching/FutureCapitalPanel'
 import { RosterHealthPanel } from '@/components/ai/coaching/RosterHealthPanel'
 import { WindowToWinCard } from '@/components/ai/coaching/WindowToWinCard'
+import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
+import '@/app/league/[leagueId]/tabs/redraft-tailwind-tabs.css'
 
 const TIMELINES = [2, 3, 4, 5] as const
 const LENSES: { id: StrategyLens; label: string }[] = [
@@ -28,9 +30,9 @@ const LENSES: { id: StrategyLens; label: string }[] = [
 ]
 
 function modeHeroClass(mode: string): string {
-  if (mode === 'contend') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100'
-  if (mode === 'rebuild') return 'border-rose-500/40 bg-rose-500/10 text-rose-100'
-  return 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+  if (mode === 'contend') return 'rdt-good-line rdt-good-soft rdt-good'
+  if (mode === 'rebuild') return 'rdt-bad-line rdt-bad-soft rdt-bad'
+  return 'rdt-warn-line rdt-warn-soft rdt-warn'
 }
 
 function modeLabel(mode: string): string {
@@ -42,16 +44,16 @@ function modeLabel(mode: string): string {
 function CoachingSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
-      <div className="h-40 rounded-2xl bg-white/[0.06]" />
+      <div className="h-40 rounded-2xl rdt-skel" />
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="h-64 rounded-2xl bg-white/[0.06]" />
-        <div className="h-64 rounded-2xl bg-white/[0.06]" />
+        <div className="h-64 rounded-2xl rdt-skel" />
+        <div className="h-64 rounded-2xl rdt-skel" />
       </div>
-      <div className="h-48 rounded-2xl bg-white/[0.06]" />
+      <div className="h-48 rounded-2xl rdt-skel" />
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="h-52 rounded-2xl bg-white/[0.06]" />
-        <div className="h-52 rounded-2xl bg-white/[0.06]" />
-        <div className="h-52 rounded-2xl bg-white/[0.06]" />
+        <div className="h-52 rounded-2xl rdt-skel" />
+        <div className="h-52 rounded-2xl rdt-skel" />
+        <div className="h-52 rounded-2xl rdt-skel" />
       </div>
     </div>
   )
@@ -76,6 +78,7 @@ export function AICoachingPage({
   })
 
   const resolvedSport = normalizeToSupportedSport(sport ?? league.sport) ?? 'NFL'
+  const identity = resolveRedraftIdentity(league)
 
   const chimmyBase = useMemo(
     () => ({
@@ -122,18 +125,18 @@ export function AICoachingPage({
   const teamInitials = (userTeam?.teamName ?? 'TM').slice(0, 2).toUpperCase()
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="rdt space-y-6 pb-12" data-redraft={identity ? 'true' : undefined}>
       {/* Hero */}
       <section
-        className="relative overflow-hidden rounded-2xl border border-white/[0.09] bg-gradient-to-br from-[#0a1228] via-[#070d18] to-[#050814] p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_24px_80px_rgba(0,0,0,0.45)] md:p-7"
+        className="rdt-card relative overflow-hidden p-5 shadow-[inset_0_3px_0_var(--rdt-accent)] md:p-7"
         data-testid="ai-coaching-hero"
       >
-        <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-amber-500/10 blur-3xl" aria-hidden />
-        <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-cyan-500/10 blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full rdt-accent-soft blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full rdt-accent-soft blur-3xl" aria-hidden />
 
         <div className="relative grid gap-6 lg:grid-cols-[1.15fr_minmax(0,0.85fr)] lg:items-start">
           <div className="flex flex-wrap items-start gap-4">
-            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#0d1526] shadow-inner">
+            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl border rdt-line2 rdt-surface shadow-inner">
               {userTeam?.avatarUrl ? (
                 <Image
                   src={userTeam.avatarUrl}
@@ -144,19 +147,24 @@ export function AICoachingPage({
                   unoptimized
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-lg font-bold text-cyan-200/90">{teamInitials}</div>
+                <div className="flex h-full w-full items-center justify-center text-lg font-bold rdt-accent">{teamInitials}</div>
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight text-white md:text-2xl">{userTeam?.teamName ?? 'Your team'}</h1>
-                <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/55">
+              <p className={`rdt-eyebrow ${identity ? 'rdt-eyebrow-accent' : ''}`}>
+                {identity
+                  ? `Chimmy coaching · Redraft · ${identity.sportLabel}${typeof league.currentWeek === 'number' ? ` · Week ${league.currentWeek}` : ''}`
+                  : 'Chimmy coaching'}
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-bold tracking-tight rdt-text md:text-2xl">{userTeam?.teamName ?? 'Your team'}</h1>
+                <span className="rounded-full border rdt-line2 rdt-well px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide rdt-muted">
                   {resolvedSport}
                 </span>
                 {plan?.formatBadges?.map((b) => (
                   <span
                     key={b}
-                    className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90"
+                    className="rounded-full border rdt-accent-line rdt-accent-soft px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide rdt-accent"
                   >
                     {b}
                   </span>
@@ -167,25 +175,25 @@ export function AICoachingPage({
                   </span>
                 ) : null}
               </div>
-              <p className="mt-1 text-sm text-white/50">{league.name}</p>
+              <p className="mt-1 text-sm rdt-faint">{league.name}</p>
               {loading && !plan ? (
-                <p className="mt-3 text-sm text-cyan-200/60">Building your franchise dashboard…</p>
+                <p className="mt-3 text-sm rdt-accent">Building your franchise dashboard…</p>
               ) : plan ? (
                 <>
-                  <p className="mt-3 max-w-prose text-[14px] leading-relaxed text-white/80">{plan.summary}</p>
+                  <p className="mt-3 max-w-prose text-[14px] leading-relaxed rdt-text2">{plan.summary}</p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-100">
+                    <span className="inline-flex items-center gap-1 rounded-full border rdt-accent-line rdt-accent-soft px-2.5 py-1 text-[11px] font-semibold rdt-accent">
                       <Sparkles className="h-3.5 w-3.5" aria-hidden />
                       {plan.confidence}% model confidence
                     </span>
                     {usedFallback ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-100">
+                      <span className="inline-flex items-center gap-1 rounded-full border rdt-warn-line rdt-warn-soft px-2.5 py-1 text-[11px] rdt-warn">
                         <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
                         Heuristic fallback
                       </span>
                     ) : null}
                     {aiModel ? (
-                      <span className="text-[11px] text-white/35">Model: {aiModel}</span>
+                      <span className="text-[11px] rdt-faint">Model: {aiModel}</span>
                     ) : null}
                   </div>
                 </>
@@ -193,23 +201,19 @@ export function AICoachingPage({
             </div>
           </div>
 
-          <div className="rounded-xl border border-white/[0.07] bg-black/30 p-4 backdrop-blur-sm">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/35">Controls</p>
+          <div className="rounded-xl border rdt-line rdt-well p-4 backdrop-blur-sm">
+            <p className="rdt-eyebrow">Controls</p>
             <div className="mt-3 space-y-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase text-white/40">Timeline</p>
+                <p className="rdt-eyebrow">Timeline</p>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {TIMELINES.map((y) => (
                     <button
                       key={y}
                       type="button"
                       onClick={() => setTimelineYears(y)}
-                      className={cn(
-                        'rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition',
-                        timelineYears === y
-                          ? 'border-amber-400/50 bg-amber-500/15 text-amber-100'
-                          : 'border-white/10 bg-white/[0.03] text-white/55 hover:border-white/20',
-                      )}
+                      aria-pressed={timelineYears === y}
+                      className="rdt-btn rounded-lg px-2.5 py-1.5 text-[11px] font-semibold"
                     >
                       {y} yr{y > 1 ? 's' : ''}
                     </button>
@@ -217,11 +221,11 @@ export function AICoachingPage({
                 </div>
               </div>
               <div>
-                <p className="text-[11px] font-semibold uppercase text-white/40">Strategy lens</p>
+                <p className="rdt-eyebrow">Strategy lens</p>
                 <select
                   value={strategyLens}
                   onChange={(e) => setStrategyLens(e.target.value as StrategyLens)}
-                  className="mt-1.5 w-full rounded-lg border border-white/10 bg-[#0a1220] px-2 py-2 text-[12px] text-white"
+                  className="rdt-input mt-1.5 w-full rounded-lg px-2 py-2 text-[12px]"
                 >
                   {LENSES.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -234,7 +238,7 @@ export function AICoachingPage({
                 type="button"
                 onClick={() => void refetch()}
                 disabled={loading}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-cyan-500/35 bg-cyan-500/10 py-2 text-[12px] font-semibold text-cyan-100 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                className="rdt-fill inline-flex w-full items-center justify-center gap-2 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-50"
               >
                 <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} aria-hidden />
                 {loading ? 'Refreshing…' : 'Refresh plan'}
@@ -246,7 +250,7 @@ export function AICoachingPage({
 
       {/* Mobile sticky quick controls */}
       {plan ? (
-        <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.07] bg-[#060a14]/95 p-2 backdrop-blur-md lg:hidden">
+        <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-2 rounded-xl border rdt-line2 rdt-sticky p-2 backdrop-blur-md lg:hidden">
           <span className={cn('rounded-full border px-2 py-1 text-[11px] font-bold uppercase', modeHeroClass(plan.mode))}>
             {modeLabel(plan.mode)}
           </span>
@@ -256,10 +260,8 @@ export function AICoachingPage({
                 key={y}
                 type="button"
                 onClick={() => setTimelineYears(y)}
-                className={cn(
-                  'rounded-md border px-2 py-1 text-[11px] font-semibold',
-                  timelineYears === y ? 'border-amber-400/50 bg-amber-500/15 text-amber-100' : 'border-white/10 text-white/50',
-                )}
+                aria-pressed={timelineYears === y}
+                className="rdt-btn rounded-md px-2 py-1 text-[11px] font-semibold"
               >
                 {y}y
               </button>
@@ -269,12 +271,12 @@ export function AICoachingPage({
       ) : null}
 
       {error ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-[13px] text-rose-100/90">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border rdt-bad-line rdt-bad-soft px-4 py-3 text-[13px] rdt-bad">
           <span>{error}</span>
           <button
             type="button"
             onClick={() => void refetch()}
-            className="rounded-lg border border-rose-300/40 bg-rose-500/20 px-3 py-1.5 text-[12px] font-semibold text-white"
+            className="rounded-lg border rdt-bad-line rdt-bad-soft px-3 py-1.5 text-[12px] font-semibold rdt-text"
           >
             Retry
           </button>
@@ -284,7 +286,7 @@ export function AICoachingPage({
       {loading && !plan ? <CoachingSkeleton /> : null}
 
       {!loading && plan?.dataSparse ? (
-        <div className="flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[13px] text-amber-100/90">
+        <div className="flex items-start gap-2 rounded-xl border rdt-warn-line rdt-warn-soft px-4 py-3 text-[13px] rdt-warn">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <span>
             Not enough league history yet — using roster and league settings only. Refresh after more games sync for richer signals.
@@ -336,9 +338,9 @@ export function AICoachingPage({
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <section className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.05] p-5">
-              <h2 className="text-sm font-bold text-emerald-100">Roster strengths</h2>
-              <ul className="mt-3 space-y-2 text-[12px] text-emerald-100/80">
+            <section className="rounded-2xl border rdt-good-line rdt-good-soft p-5">
+              <h2 className="text-sm font-bold rdt-good">Roster strengths</h2>
+              <ul className="mt-3 space-y-2 text-[12px] rdt-text2">
                 {plan.rosterStrengths.length ? (
                   plan.rosterStrengths.map((s, i) => (
                     <li key={i} className="leading-snug">
@@ -346,13 +348,13 @@ export function AICoachingPage({
                     </li>
                   ))
                 ) : (
-                  <li className="text-white/45">No strengths listed — check back after data sync.</li>
+                  <li className="rdt-faint">No strengths listed — check back after data sync.</li>
                 )}
               </ul>
             </section>
-            <section className="rounded-2xl border border-rose-500/15 bg-rose-500/[0.05] p-5">
-              <h2 className="text-sm font-bold text-rose-100">Roster weaknesses</h2>
-              <ul className="mt-3 space-y-2 text-[12px] text-rose-100/80">
+            <section className="rounded-2xl border rdt-bad-line rdt-bad-soft p-5">
+              <h2 className="text-sm font-bold rdt-bad">Roster weaknesses</h2>
+              <ul className="mt-3 space-y-2 text-[12px] rdt-text2">
                 {plan.rosterWeaknesses.length ? (
                   plan.rosterWeaknesses.map((s, i) => (
                     <li key={i} className="leading-snug">
@@ -360,7 +362,7 @@ export function AICoachingPage({
                     </li>
                   ))
                 ) : (
-                  <li className="text-white/45">No critical gaps flagged.</li>
+                  <li className="rdt-faint">No critical gaps flagged.</li>
                 )}
               </ul>
             </section>
@@ -377,17 +379,17 @@ export function AICoachingPage({
           ) : null}
 
           {/* Chimmy handoff */}
-          <section className="rounded-2xl border border-violet-500/25 bg-gradient-to-br from-violet-500/[0.08] to-[#070d18] p-5 md:p-6">
+          <section className="rounded-2xl border rdt-accent-line rdt-accent-soft p-5 md:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="text-sm font-bold text-white">Ask Chimmy about this plan</h2>
-                <p className="mt-1 max-w-prose text-[12px] text-white/55">
+                <h2 className="text-sm font-bold rdt-text">Ask Chimmy about this plan</h2>
+                <p className="mt-1 max-w-prose text-[12px] rdt-muted">
                   Opens your existing chat with Chimmy with this league, team, and coaching context preloaded — same Chimmy, richer prompt.
                 </p>
               </div>
               <Link
                 href={chimmyHref}
-                className="inline-flex items-center gap-2 rounded-lg bg-cyan-500/90 px-4 py-2 text-[12px] font-bold text-black transition hover:bg-cyan-400"
+                className="inline-flex items-center gap-2 rounded-lg rdt-fill px-4 py-2 text-[12px] font-bold rdt-accent-ink transition"
               >
                 Ask Chimmy
                 <ArrowRight className="h-4 w-4" aria-hidden />
@@ -402,7 +404,7 @@ export function AICoachingPage({
                 <Link
                   key={q}
                   href={getChimmyChatHrefWithPrompt(q, chimmyBase)}
-                  className="inline-flex items-center rounded-full border border-white/10 bg-black/30 px-3 py-1.5 text-[11px] text-white/75 transition hover:border-cyan-500/30 hover:text-white"
+                  className="rdt-btn inline-flex items-center rounded-full px-3 py-1.5 text-[11px]"
                 >
                   {q}
                 </Link>
@@ -410,12 +412,12 @@ export function AICoachingPage({
             </div>
           </section>
 
-          <div className="flex flex-wrap gap-3 text-[11px] text-white/40">
-            <Link className="text-cyan-400/90 hover:underline" href={`/trade-evaluator?leagueId=${encodeURIComponent(league.id)}`}>
+          <div className="flex flex-wrap gap-3 text-[11px] rdt-faint">
+            <Link className="rdt-link" href={`/trade-evaluator?leagueId=${encodeURIComponent(league.id)}`}>
               Trade evaluator
             </Link>
             <span aria-hidden>·</span>
-            <Link className="text-cyan-400/90 hover:underline" href={`/league/${league.id}?view=draft`}>
+            <Link className="rdt-link" href={`/league/${league.id}?view=draft`}>
               League draft
             </Link>
           </div>

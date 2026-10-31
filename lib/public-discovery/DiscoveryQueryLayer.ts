@@ -13,15 +13,15 @@ import {
   readExternalListing,
 } from "./externalListing"
 import { readLeagueVibes } from "./vibes"
+import { leaguesWhoseOwnerCommissions } from "./ownerCommissionerTeams"
+import { LEAGUE_PUBLIC_DASHBOARD_KEY, LEAGUE_VISIBILITY_KEY, leagueAudience } from "@/lib/league-privacy/leagueAudience"
 import type { DiscoveryCard, DiscoveryLeagueStyle } from "./types"
 
 const DEFAULT_BASE_URL =
   typeof process !== "undefined" ? process.env.NEXTAUTH_URL ?? "https://allfantasy.ai" : "https://allfantasy.ai"
 
-const LEAGUE_VISIBILITY_KEY = "league_privacy_visibility"
 const LEAGUE_ALLOW_INVITE_LINK_KEY = "league_allow_invite_link"
 const LEAGUE_INVITE_CODE_KEY = "inviteCode"
-const LEAGUE_PUBLIC_DASHBOARD_KEY = "publicDashboard"
 const LEAGUE_DESCRIPTION_KEY = "description"
 const DEFAULT_DISCOVERY_TAKE = 300
 /** `League.platform` values for a league made here (lib/public-discovery/externalListing.ts). */
@@ -158,15 +158,13 @@ function resolveAiFeatures(raw: Record<string, unknown>): string[] {
  * One predicate for "public", not two that drift.
  */
 export function isFantasyLeagueDiscoverable(settings: Record<string, unknown>): boolean {
-  const visibility = String(settings[LEAGUE_VISIBILITY_KEY] ?? "").trim().toLowerCase()
-  const hasPublicDashboard = settings[LEAGUE_PUBLIC_DASHBOARD_KEY] === true
   const inviteCode = String(settings[LEAGUE_INVITE_CODE_KEY] ?? "").trim()
   const allowInviteLink =
     typeof settings[LEAGUE_ALLOW_INVITE_LINK_KEY] === "boolean"
       ? Boolean(settings[LEAGUE_ALLOW_INVITE_LINK_KEY])
       : true
 
-  return Boolean(inviteCode) && allowInviteLink && (visibility === "public" || hasPublicDashboard)
+  return Boolean(inviteCode) && allowInviteLink && leagueAudience(settings) === "public"
 }
 
 function buildFillPct(memberCount: number, maxMembers: number): number {
@@ -270,6 +268,9 @@ export async function queryPublicFantasyLeagueCards(options: {
     leagues.map((l) => l.id)
   )
   const leaguesRun = await countLeaguesRunByCommissioner(leagues.map((l) => l.userId))
+  const ownerCommissioned = await leaguesWhoseOwnerCommissions(
+    leagues.filter((l) => !isNativePlatform(l.platform)).map((l) => ({ id: l.id, userId: l.userId }))
+  )
 
   return leagues
     .map((league): DiscoveryCard | null => {
@@ -278,7 +279,9 @@ export async function queryPublicFantasyLeagueCards(options: {
       // A native league is joined here with its code; an imported one is listed by its verified
       // commissioner and joined by request, because its seats live on the other platform.
       const external = native ? null : readExternalListing(settings)
-      const verification = native ? null : listingVerification(league)
+      const verification = native
+        ? null
+        : listingVerification({ ...league, ownerCommissionsTeam: ownerCommissioned.has(league.id) })
       if (native ? !isFantasyLeagueDiscoverable(settings) : !external?.listed || !verification) return null
 
       const inviteCode = String(settings[LEAGUE_INVITE_CODE_KEY] ?? "").trim()
