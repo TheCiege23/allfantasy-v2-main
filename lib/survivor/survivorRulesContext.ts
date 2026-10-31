@@ -4,6 +4,7 @@ import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import type { SurvivorRulesContext } from './survivorRulesAnswers'
 import { survivorIdolConfigFallback } from './survivorIdolConfigService'
 import { readSurvivorHouseRules, readSurvivorWeeklyPrizes } from './survivorWeeklyPrizes'
+import { readSurvivorGovernanceSettings } from './survivorGovernanceSettings'
 
 /** The settings, plan and live cast count the rules answers are built from. Null for an unknown league. */
 export async function loadSurvivorRulesContext(leagueId: string): Promise<SurvivorRulesContext | null> {
@@ -24,6 +25,7 @@ export async function loadSurvivorRulesContext(leagueId: string): Promise<Surviv
     activeCount,
     prizes: readSurvivorWeeklyPrizes(raw),
     houseRules: readSurvivorHouseRules(raw) || null,
+    governance: readSurvivorGovernanceSettings(raw),
     language: row.language ?? null,
   }
 }

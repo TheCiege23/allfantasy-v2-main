@@ -6,7 +6,8 @@ const mocks = vi.hoisted(() => ({
   resolveManagerCommandCenterSnapshot: vi.fn(),
   leagueSettingsCount: vi.fn(),
   loadCareerDecisionInput: vi.fn(),
-  loadSurvivorDecisionSignals: vi.fn(async () => []),
+  loadSurvivorDecisionSignals: vi.fn(async () => [] as unknown[]),
+  loadSurvivorAttentionSignals: vi.fn(async () => [] as unknown[]),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: mocks.getServerSession }))
@@ -28,6 +29,10 @@ vi.mock('@/lib/core-app/careerDecisionInput', () => ({
 // Survivor reward signals: started beside the snapshot, handed over as a promise like career.
 vi.mock('@/lib/survivor/survivorDecisionSignals', () => ({
   loadSurvivorDecisionSignals: mocks.loadSurvivorDecisionSignals,
+}))
+// Survivor governance signals: the SAME format-signal argument as the reward signals, not a sixth one.
+vi.mock('@/lib/survivor/survivorDecisionSignalInput', () => ({
+  loadSurvivorAttentionSignals: mocks.loadSurvivorAttentionSignals,
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { leagueSettings: { count: mocks.leagueSettingsCount } },
@@ -149,5 +154,33 @@ describe('GET /api/decision-os/manager-command-center', () => {
     expect(body.totalLeagues).toBe(0)
     expect(body.draftsApproachingCount).toBe(0)
     expect(mocks.resolveManagerCommandCenterSnapshot).toHaveBeenCalledWith('user-1', [], expect.any(Date), expect.any(Promise), expect.any(Promise))
+  })
+
+  it('folds every Survivor signal source into the ONE format-signal argument, and a failing source hides no other', async () => {
+    mocks.getServerSession.mockResolvedValueOnce({ user: { id: 'user-1' } })
+    mocks.getDashboardLeagueListForUser.mockResolvedValueOnce({ leagues: [{ id: 'league-1' }], sleeperUserId: null })
+    mocks.resolveManagerCommandCenterSnapshot.mockResolvedValueOnce(emptySnapshot({ totalLeagues: 1 }))
+    mocks.leagueSettingsCount.mockResolvedValueOnce(0)
+    const reward = { id: 'survivor_reward:league-1:r1', leagueId: 'league-1' }
+    const governance = { id: 'survivor_trade_window:league-1:3', leagueId: 'league-1' }
+    mocks.loadSurvivorDecisionSignals.mockResolvedValueOnce([reward])
+    mocks.loadSurvivorAttentionSignals.mockResolvedValueOnce([governance, reward])
+
+    const { GET } = await import('@/app/api/decision-os/manager-command-center/route')
+    await GET()
+
+    const call = mocks.resolveManagerCommandCenterSnapshot.mock.calls.at(-1)!
+    expect(call).toHaveLength(5)
+    // A duplicate id across sources is admitted once.
+    await expect(call[4]).resolves.toEqual([reward, governance])
+
+    mocks.getServerSession.mockResolvedValueOnce({ user: { id: 'user-1' } })
+    mocks.getDashboardLeagueListForUser.mockResolvedValueOnce({ leagues: [{ id: 'league-1' }], sleeperUserId: null })
+    mocks.resolveManagerCommandCenterSnapshot.mockResolvedValueOnce(emptySnapshot({ totalLeagues: 1 }))
+    mocks.leagueSettingsCount.mockResolvedValueOnce(0)
+    mocks.loadSurvivorDecisionSignals.mockRejectedValueOnce(new Error('ledger down'))
+    mocks.loadSurvivorAttentionSignals.mockResolvedValueOnce([governance])
+    await GET()
+    await expect(mocks.resolveManagerCommandCenterSnapshot.mock.calls.at(-1)![4]).resolves.toEqual([governance])
   })
 })

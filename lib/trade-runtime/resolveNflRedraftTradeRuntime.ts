@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
+import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
 import type { Prisma } from '@prisma/client'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
@@ -547,10 +548,30 @@ async function assertRedraftDeadlineOpen(leagueId: string, commissionerOverride:
   if (deadline.passed) throw new Error(tradeDeadlinePassedMessage(deadline))
 }
 
+/**
+ * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts), bound at proposal and at execution
+ * like the deadline. A commissioner override forces past them, exactly as it forces past the deadline.
+ */
+async function assertSurvivorTradeRulesOpen(
+  leagueId: string,
+  trade: { proposerRosterId: string; receiverRosterId: string; assets: ReadonlyArray<{ assetType: string; playerId?: string | null; playerName?: string | null; fromRosterId: string; toRosterId: string }> },
+  commissionerOverride: boolean | undefined,
+): Promise<void> {
+  if (commissionerOverride) return
+  const check = await checkSurvivorTradeRules({
+    leagueId,
+    rosterIds: [trade.proposerRosterId, trade.receiverRosterId, ...trade.assets.flatMap((a) => [a.fromRosterId, a.toRosterId])],
+    rosterIdSpace: 'redraft',
+    players: trade.assets.filter((a) => a.assetType === 'player' && a.playerId).map((a) => ({ playerId: String(a.playerId), playerName: a.playerName ?? null, fromRosterId: a.fromRosterId })),
+  })
+  if (!check.ok) throw new Error(check.message)
+}
+
 export async function createNflRedraftTradeProposal(input: CreateNflRedraftTradeProposalInput) {
   const resolved = await resolveNflRedraftTradeRuntime({ seasonId: input.seasonId, leagueId: input.leagueId })
   if (!resolved.ok) throw new Error(resolved.reason)
   await assertRedraftDeadlineOpen(resolved.state.leagueId, input.commissionerOverride)
+  await assertSurvivorTradeRulesOpen(resolved.state.leagueId, input, input.commissionerOverride)
   const validation = validateNflRedraftTradeProposal({
     state: resolved.state,
     proposerRosterId: input.proposerRosterId,
@@ -655,6 +676,7 @@ async function applyExecutedTrade(input: {
 
   const proposal = input.state.proposals.find((row) => row.proposalId === input.proposalId)
   if (!proposal) throw new Error('proposal_not_found')
+  await assertSurvivorTradeRulesOpen(input.state.leagueId, proposal, input.commissionerOverride)
   const now = new Date()
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const claimed = await tx.redraftTradeProposal.updateMany({

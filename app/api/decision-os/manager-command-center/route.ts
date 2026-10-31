@@ -23,6 +23,8 @@ import { CertifiedIntelligenceIntegrationService } from '@/lib/sports-evidence/i
 import { resolveManagerCommandCenterSnapshot } from '@/lib/decision-os/managerCommandCenter'
 import { loadCareerDecisionInput } from '@/lib/core-app/careerDecisionInput'
 import { loadSurvivorDecisionSignals } from '@/lib/survivor/survivorDecisionSignals'
+import { loadSurvivorAttentionSignals } from '@/lib/survivor/survivorDecisionSignalInput'
+import { combineSurvivorSignalSources } from '@/lib/survivor/survivorSignalSources'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,9 +87,14 @@ export async function GET() {
   // line. Read once here from the same rows; null (never a throw) when the career read fails.
   // Started, not awaited: the snapshot awaits it only after its own per-league reads.
   const career = loadCareerDecisionInput({ userId, leagueRows, now })
-  // Survivor leagues: the manager's own reward state (a choice to make, a free trade held, a prize
-  // won). Started, not awaited, like career; [] (never a throw) when the read fails.
-  const survivor = loadSurvivorDecisionSignals({ userId, leagueIds, now })
+  // Survivor leagues: ONE format-signal argument carries every Survivor signal source — the
+  // manager's own reward state (a choice to make, a free trade held, a prize won) and the governance
+  // signals (trade window closing, the viewer's strikes, a swap this week). Each source is
+  // started, not awaited, and reduces to [] on failure, so one source failing never hides another.
+  const survivor = combineSurvivorSignalSources([
+    loadSurvivorDecisionSignals({ userId, leagueIds, now }),
+    loadSurvivorAttentionSignals(userId, leagueIds, now),
+  ])
 
   const [snapshot, draftsApproachingCount] = await Promise.all([
     resolveManagerCommandCenterSnapshot(userId, leagueIds, now, career, survivor),

@@ -46,6 +46,29 @@ import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
 import { storedVetoRule, vetoVotesNeeded } from './vetoRule'
+import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
+
+/**
+ * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts) at proposal and at acceptance. One league
+ * read and out for every non-Survivor league; a commissioner's processing of a reviewed trade is the
+ * override, as it is for the deadline.
+ */
+async function assertSurvivorTradeRulesForAfTrade(
+  leagueId: string,
+  rosterIds: string[],
+  items: ReadonlyArray<{ itemType: string; itemReference?: string | null; fromRosterId: string; metadata?: unknown }>,
+): Promise<void> {
+  const check = await checkSurvivorTradeRules({
+    leagueId,
+    rosterIds,
+    rosterIdSpace: 'league',
+    players: items.filter((i) => i.itemType === 'player' && i.itemReference).map((i) => {
+      const meta = i.metadata && typeof i.metadata === 'object' ? (i.metadata as Record<string, unknown>) : {}
+      return { playerId: String(i.itemReference), playerName: typeof meta.playerName === 'string' ? meta.playerName : null, fromRosterId: i.fromRosterId }
+    }),
+  })
+  if (!check.ok) throw new CodedTradeError(check.code, check.message)
+}
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -533,6 +556,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     kind: 'trade',
   })
   if (!rosterTxGate.ok) throw new Error(rosterTxGate.error)
+  await assertSurvivorTradeRulesForAfTrade(input.leagueId, participantRosterIds, input.assets)
 
   const settings = resolveLeagueTradeSettings(league)
   /*
@@ -906,6 +930,7 @@ export async function acceptAfLeagueTrade(input: {
     kind: 'trade',
   })
   if (!rosterTxGateAccept.ok) throw new Error(rosterTxGateAccept.error)
+  await assertSurvivorTradeRulesForAfTrade(input.leagueId, participantRosterIds, trade.items)
 
   const life = await assertLifecycleActionAllowed(input.leagueId, 'trade_act', input.userId, {
     isElevatedCommissioner: await isElevatedCommissioner(input.leagueId, input.userId),

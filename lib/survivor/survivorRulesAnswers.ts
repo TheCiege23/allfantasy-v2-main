@@ -7,10 +7,13 @@
 import type { SurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import type { SurvivorFoundationSettings } from './survivorSettings'
 import { weeklyPrizesActive, type SurvivorWeeklyPrizeSettings } from './survivorWeeklyPrizes'
+import { SURVIVOR_GOVERNANCE_DEFAULTS, type SurvivorGovernanceSettings } from './survivorGovernanceSettings'
+import { dayTimeLabel, governanceLang } from './survivorGovernanceCopy'
 
 export type SurvivorRulesTopic =
   | 'voting' | 'ties' | 'idols' | 'merge' | 'exile' | 'jury' | 'immunity' | 'challenges' | 'schedule' | 'overview'
   | 'prizes' | 'house_rules'
+  | 'trades' | 'strikes' | 'alliances' | 'swaps'
 
 export type SurvivorRulesContext = {
   sport: string
@@ -22,14 +25,21 @@ export type SurvivorRulesContext = {
   prizes?: SurvivorWeeklyPrizeSettings | null
   /** The commissioner's free-text house rules. Quoted as written, never paraphrased. */
   houseRules?: string | null
-  /** League.language: the prize and house-rules answers follow it (English / Spanish). */
+  /** Trade rules, strikes, alliances and extra swaps (survivorGovernanceSettings.ts). Absent: defaults, and the rulebook leaves those sections out. */
+  governance?: SurvivorGovernanceSettings | null
+  /** League.language: the prize, house-rules and governance answers follow it (English / Spanish). */
   language?: string | null
 }
 
 // Survivor words only: a league chat full of fantasy questions ("when does he play?", "who won the
 // game?") must not be pulled away from general Chimmy.
 const TOPIC_PATTERNS: Array<[SurvivorRulesTopic, RegExp]> = [
-  ['house_rules', /\b(house rules?|conduct|screenshots?|reglas de la casa)\b/],
+  // Governance first: "can I trade a player who played before tribal?" is a trade question, not a vote one.
+  ['trades', /\b(trade (?:rules?|window|freeze|lock)|cross[- ]tribe|trades? (?:between|across|with(?: an?)? other) tribes?|trade (?:with|outside) (?:my|another|the other) tribe|tribe trades?|reglas? de cambios?|cambios? entre tribus)\b/],
+  ['strikes', /\b(conduct|strike (?:policy|rule|limit)s?|conduct strikes?|my strikes?|how many strikes|faltas?|conducta)\b/],
+  ['alliances', /\b(alliances?|side chats?|alianzas?)\b/],
+  ['swaps', /\b(swaps?|swapping|tribe shuffle|redraw|original tribes|new tribes|cambio de tribus)\b/],
+  ['house_rules', /\b(house rules?|screenshots?|reglas de la casa)\b/],
   // "Steal" alone stays with idols (a vote-steal idol); only the reward words are prizes.
   ['prizes', /\b(prizes?|premios?|tie[- ]?break(?:ers?)?|free trades?|steal blockers?|blockers?)\b/],
   ['ties', /\b(tie|tied|ties|rocks|deadlock(?:ed)?)\b/],
@@ -57,7 +67,7 @@ export function survivorRulesTopic(message: string): SurvivorRulesTopic | null {
   return null
 }
 
-const PERSONAL_ASK = /\b(my idols?|(?:use|play) my idol|am i safe|my survivor status)\b/
+const PERSONAL_ASK = /\b(my idols?|(?:use|play) my idol|am i safe|my survivor status|my strikes?|my alliances?|cu[aá]ntas faltas)\b/
 
 /**
  * Whether a private @Chimmy message in a Survivor league's chat belongs to the Survivor host rather
@@ -143,6 +153,91 @@ function houseRulesAnswer(ctx: SurvivorRulesContext): string {
   return [es ? '**Reglas de la casa (del comisionado)**' : "**House rules (from the commissioner)**", ...lines].join('\n')
 }
 
+function governanceAnswer(topic: 'trades' | 'strikes' | 'alliances' | 'swaps', ctx: SurvivorRulesContext): string {
+  const g = ctx.governance ?? SURVIVOR_GOVERNANCE_DEFAULTS
+  const es = governanceLang(ctx.language) === 'es'
+  const tribal = dayTimeLabel(ctx.language, ctx.settings.tribalCouncilDay, ctx.settings.tribalCouncilTime)
+  const close = dayTimeLabel(ctx.language, g.crossTribeCloseDay, g.crossTribeCloseTime)
+  const freeze = dayTimeLabel(ctx.language, g.weeklyTradeFreezeDay, g.weeklyTradeFreezeTime)
+  const lines = (title: string, items: Array<string | false>) => [`**${title}**`, ...items.filter((x): x is string => Boolean(x)).map((x) => `• ${x}`)].join('\n')
+  if (topic === 'trades') {
+    if (!g.tradeRulesEnabled) {
+      return es
+        ? lines('Cambios', ['Esta liga usa las reglas normales de cambios: no hay reglas especiales de Survivor.'])
+        : lines('Trades', ['This league uses its normal trade rules: there are no extra Survivor trade rules.'])
+    }
+    return es
+      ? lines('Cambios', [
+        g.crossTribeTrades === 'banned' ? 'Antes de la fusión no se permiten cambios entre tribus.'
+          : g.crossTribeTrades === 'window' ? `Los cambios entre tribus abren después del Consejo Tribal (${tribal} ET) y cierran ${close} ET cada semana.`
+            : 'Los cambios entre tribus se permiten en cualquier momento.',
+        g.withinTribeUnplayedOnly && 'Dentro de tu tribu puedes cambiar en cualquier momento a jugadores que todavía no han jugado esta semana.',
+        g.playedLockUntilTribal && 'Un jugador que ya jugó esta semana no se puede cambiar hasta después del Consejo Tribal.',
+        g.weeklyTradeFreezeEnabled && `Los cambios se congelan ${freeze} ET y vuelven después del Consejo Tribal.`,
+        'Después de la fusión todos son una tribu, así que solo aplican las reglas de jugadores que ya jugaron y la congelación.',
+      ])
+      : lines('Trades', [
+        g.crossTribeTrades === 'banned' ? 'Trades between tribes are not allowed before the merge.'
+          : g.crossTribeTrades === 'window' ? `Trades between tribes open after Tribal Council (${tribal} ET) and close ${close} ET each week.`
+            : 'Trades between tribes are allowed at any time.',
+        g.withinTribeUnplayedOnly && 'Within your tribe, you can trade players who have not played yet this week at any time.',
+        g.playedLockUntilTribal && 'A player who has already played this week cannot be traded until after Tribal Council.',
+        g.weeklyTradeFreezeEnabled && `Trades freeze ${freeze} ET and reopen after Tribal Council.`,
+        'After the merge everyone is one tribe, so only the played-player rule and the freeze still apply.',
+      ])
+  }
+  if (topic === 'strikes') {
+    return es
+      ? lines('Conducta', [
+        'Engañar dentro del juego está permitido; el abuso o el acoso no.',
+        `El comisionado puede dar una falta de conducta con un motivo. Chimmy te avisa en privado y solo tú y el comisionado ven tus faltas.`,
+        g.strikeAutoRemove ? `Con ${g.strikeLimit} ${g.strikeLimit === 1 ? 'falta' : 'faltas'} quedas fuera de la temporada.` : `Con ${g.strikeLimit} ${g.strikeLimit === 1 ? 'falta' : 'faltas'} el comisionado decide si quedas fuera de la temporada.`,
+        'Pregúntame "¿cuántas faltas tengo?" para ver las tuyas.',
+      ])
+      : lines('Conduct', [
+        'Deceiving people inside the game is allowed; abuse or harassment is not.',
+        'The commissioner can issue a conduct strike with a reason. Chimmy tells you privately, and only you and the commissioner see your strikes.',
+        g.strikeAutoRemove ? `Reaching ${g.strikeLimit} ${g.strikeLimit === 1 ? 'strike' : 'strikes'} removes you from the season.` : `At ${g.strikeLimit} ${g.strikeLimit === 1 ? 'strike' : 'strikes'} the commissioner decides whether you are removed from the season.`,
+        'Ask me "how many strikes do I have?" to see yours.',
+      ])
+  }
+  if (topic === 'alliances') {
+    if (!g.alliancesEnabled) {
+      return es ? lines('Alianzas', ['Los chats de alianza están desactivados en esta liga.']) : lines('Alliances', ['Alliance chats are turned off in this league.'])
+    }
+    return es
+      ? lines('Alianzas', [
+        `Mientras sigas en el juego puedes formar un chat privado de alianza con hasta ${g.allianceMaxSize} náufragos (tú incluido).`,
+        g.allianceSameTribeOnly && 'Antes de la fusión, solo con náufragos de tu tribu.',
+        g.allianceHostCanRead ? 'El anfitrión puede leer las alianzas, pero no escribe en ellas.' : 'Solo los miembros leen el chat.',
+        'Si te eliminan o te mandan al Exilio, ya no puedes escribir en tus alianzas.',
+        'Chimmy nunca se une a una alianza.',
+      ])
+      : lines('Alliances', [
+        `While you are still in the game you can open a private alliance chat with up to ${g.allianceMaxSize} castaways, you included.`,
+        g.allianceSameTribeOnly && 'Before the merge, only with castaways in your own tribe.',
+        g.allianceHostCanRead ? 'The host can read alliances but never posts in them.' : 'Only the members can read the chat.',
+        'Once you are voted out or sent to Exile, you can no longer post in your alliances.',
+        'Chimmy never joins an alliance.',
+      ])
+  }
+  const swapWeeks = g.swapSchedule.map((w) => w.week)
+  const extra = swapWeeks.length
+    ? (es ? `Hay cambios de tribu programados después de la${swapWeeks.length > 1 ? 's semanas' : ' semana'} ${swapWeeks.join(', ')}.` : `Tribe swaps are scheduled after week${swapWeeks.length > 1 ? 's' : ''} ${swapWeeks.join(', ')}.`)
+    : (es ? 'No hay cambios de tribu extra programados.' : 'No extra tribe swaps are scheduled.')
+  return es
+    ? lines('Cambios de tribu', [
+      extra,
+      'Un cambio puede repartir el elenco en más o menos tribus, devolver a todos a su tribu original, o seguir un patrón del comisionado.',
+      'Las nuevas tribus quedan en secreto hasta el próximo cierre de alineaciones. Los ídolos viajan contigo y tu chat de tribu cambia solo.',
+    ])
+    : lines('Tribe swaps', [
+      extra,
+      'A swap can redraw the cast into more or fewer tribes, send everyone back to their original tribe, or follow the commissioner\'s own pattern.',
+      'The new tribes stay sealed until the next lineup lock. Idols travel with you, and your tribe chat switches over on its own.',
+    ])
+}
+
 export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRulesContext): string {
   const s = ctx.settings
   const period = periodWord(ctx.sport)
@@ -151,6 +246,11 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
       return prizesAnswer(ctx)
     case 'house_rules':
       return houseRulesAnswer(ctx)
+    case 'trades':
+    case 'strikes':
+    case 'alliances':
+    case 'swaps':
+      return governanceAnswer(topic, ctx)
     case 'voting':
       return [
         '**Voting**',
@@ -216,7 +316,7 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
         `• ${mergeLine(ctx)}`,
         s.exileIslandEnabled && s.eliminationOutcome === 'exile_island' ? `• Voted out? You go to Exile Island and can earn your way back in week ${s.exileReturnWeek}.` : '',
         s.juryEnabled ? '• After the merge, voted-out managers form the jury that picks the winner.' : '',
-        '• Ask me about voting, ties, idols, immunity, the merge, Exile, the jury or the schedule.',
+        ctx.governance ? '• Ask me about voting, ties, idols, immunity, the merge, Exile, the jury, the schedule, trades, alliances, swaps or conduct.' : '• Ask me about voting, ties, idols, immunity, the merge, Exile, the jury or the schedule.',
       ].filter(Boolean).join('\n')
   }
 }
@@ -236,14 +336,27 @@ export function survivorRulesSection(topic: SurvivorRulesTopic, ctx: SurvivorRul
   }
 }
 
+/** The governance sections a league's rulebook carries: conduct always, the rest when switched on. */
+export function governanceRulebookTopics(governance: SurvivorGovernanceSettings | null | undefined): SurvivorRulesTopic[] {
+  if (!governance) return []
+  return [
+    ...(governance.tradeRulesEnabled ? ['trades' as const] : []),
+    ...(governance.alliancesEnabled ? ['alliances' as const] : []),
+    ...(governance.swapSchedule.length ? ['swaps' as const] : []),
+    'strikes' as const,
+  ]
+}
+
 /**
  * The whole rulebook for a league, from its current settings. Recomputed on every read. The prizes
- * section appears only when the commissioner set weekly prizes or a tie-break position, and the
- * house rules (pinned last) only when written, so a league with neither reads exactly as before.
+ * section appears only when the commissioner set weekly prizes or a tie-break position, the
+ * governance sections when switched on, and the house rules (pinned last) only when written, so a
+ * league with none of them reads exactly as before.
  */
 export function buildSurvivorRulebook(ctx: SurvivorRulesContext): SurvivorRulesSection[] {
   const topics: SurvivorRulesTopic[] = [...SURVIVOR_RULEBOOK_TOPICS]
   if (ctx.prizes && (weeklyPrizesActive(ctx.prizes) || ctx.prizes.tribeTieBreakPosition !== 'none')) topics.splice(topics.indexOf('challenges') + 1, 0, 'prizes')
+  topics.push(...governanceRulebookTopics(ctx.governance))
   if (ctx.houseRules?.trim()) topics.push('house_rules')
   return topics.map(topic => survivorRulesSection(topic, ctx))
 }

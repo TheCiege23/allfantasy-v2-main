@@ -57,6 +57,12 @@ export type AttentionSignalType =
   /** Survivor leagues (`survivorPrizeSignals.ts`): the manager's OWN reward state from the Survivor
    * reward ledger — a choice to make, a free trade held, a prize pending or just won. */
   | 'survivor_reward'
+  /** Survivor governance (`survivorSignals.ts`): the cross-tribe trade window or weekly freeze closing
+   * soon, the castaway's own conduct strikes, and a tribe swap this week — read off persisted league
+   * settings and audit rows, never inferred. */
+  | 'survivor_trade_window'
+  | 'survivor_conduct_strike'
+  | 'survivor_tribe_swap'
 
 export type AttentionSignalSource =
   | 'league_health_engine'
@@ -67,7 +73,8 @@ export type AttentionSignalSource =
   | 'user_os'
   /** Live-career plan, phase 4: the Career Wire's sync read and the Career screen's stakes. */
   | 'career'
-  /** The Survivor reward ledger (`lib/survivor/survivorRewardEngine.ts`), read for one manager. */
+  /** Survivor leagues: the reward ledger (`lib/survivor/survivorRewardEngine.ts`), governance settings,
+   * conduct-strike audit rows and sealed swaps (`survivorSignals.ts`). */
   | 'survivor'
 
 export interface DecisionOsAttentionSignal {
