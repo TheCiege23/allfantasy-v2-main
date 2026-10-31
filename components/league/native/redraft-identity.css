@@ -7,9 +7,15 @@
  * same attribute mechanism as Dynasty (`data-dynasty-background`) and Guillotine
  * (`data-format=guillotine`) in native-league.css.
  *
+ * The /core shell (AfCoreShell, root `.af-core.af-shell`) stamps the same two attributes for a native
+ * redraft `?league=` (lib/core-app/coreShellRedraftIdentity.ts), so the token blocks match either root
+ * through `:is(.nl-workspace,.af-shell)`. `:is()` takes its most specific argument — both are one
+ * class — so every specificity figure below is unchanged. /core-only chrome lives in
+ * components/core-app/af-core-redraft.css, not here.
+ *
  * ⚠ SPECIFICITY IS THE MODE SWITCH, SO READ IT BEFORE REORDERING ANYTHING. /core's palettes are
  * `.af-core` (0,1,0, dark) and `html[data-mode=light|af|legacy] .af-core` (0,2,1). Every block here
- * is at least `.af-core.nl-workspace[data-format=redraft][data-sport=x]` (0,4,0), so it beats all of
+ * is at least `.af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=x]` (0,4,0), so it beats all of
  * them regardless of load order. The bare sport block is the DARK palette and therefore also the
  * AF/legacy palette (both are dark grounds; __tests__/league-media/redraftIdentityContrast.test.ts
  * measures every accent on the AF grounds too). Only light mode gets its own block, at (0,5,1).
@@ -30,26 +36,26 @@
  * ⚠ ONE TOP-LEVEL @media BLOCK, AT THE END, NOT NESTED IN ANYTHING. CLAUDE.md records a 560px block
  * inserted inside a 780px one carrying four rules out of their band with braces still balanced. */
 
-.af-core.nl-workspace[data-format=redraft][data-sport=nfl]{--rd-accent:#3ddc84;--rd-accent-text:#3ddc84;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(61,220,132,.16);--rd-accent-line:rgba(61,220,132,.4);--rd-glow:rgba(61,220,132,.08);--rd-art:url('/artwork/redraft/nfl/background-dark.svg')}
-.af-core.nl-workspace[data-format=redraft][data-sport=nba]{--rd-accent:#ff9a3c;--rd-accent-text:#ff9a3c;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,154,60,.16);--rd-accent-line:rgba(255,154,60,.4);--rd-glow:rgba(255,154,60,.08);--rd-art:url('/artwork/redraft/nba/background-dark.svg')}
-.af-core.nl-workspace[data-format=redraft][data-sport=nhl]{--rd-accent:#7cc7ff;--rd-accent-text:#7cc7ff;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(124,199,255,.16);--rd-accent-line:rgba(124,199,255,.4);--rd-glow:rgba(124,199,255,.08);--rd-art:url('/artwork/redraft/nhl/background-dark.svg')}
-.af-core.nl-workspace[data-format=redraft][data-sport=mlb]{--rd-accent:#ff5a5f;--rd-accent-text:#ff5a5f;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,90,95,.16);--rd-accent-line:rgba(255,90,95,.4);--rd-glow:rgba(255,90,95,.08);--rd-art:url('/artwork/redraft/mlb/background-dark.svg')}
-.af-core.nl-workspace[data-format=redraft][data-sport=ncaaf]{--rd-accent:#ffcf4a;--rd-accent-text:#ffcf4a;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,207,74,.16);--rd-accent-line:rgba(255,207,74,.4);--rd-glow:rgba(255,207,74,.08);--rd-art:url('/artwork/redraft/ncaaf/background-dark.svg')}
-.af-core.nl-workspace[data-format=redraft][data-sport=ncaab]{--rd-accent:#ff7ac6;--rd-accent-text:#ff7ac6;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,122,198,.16);--rd-accent-line:rgba(255,122,198,.4);--rd-glow:rgba(255,122,198,.08);--rd-art:url('/artwork/redraft/ncaab/background-dark.svg')}
-.af-core.nl-workspace[data-format=redraft][data-sport=soccer]{--rd-accent:#b5e655;--rd-accent-text:#b5e655;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(181,230,85,.16);--rd-accent-line:rgba(181,230,85,.4);--rd-glow:rgba(181,230,85,.08);--rd-art:url('/artwork/redraft/soccer/background-dark.svg')}
+.af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=nfl]{--rd-accent:#3ddc84;--rd-accent-text:#3ddc84;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(61,220,132,.16);--rd-accent-line:rgba(61,220,132,.4);--rd-glow:rgba(61,220,132,.08);--rd-art:url('/artwork/redraft/nfl/background-dark.svg')}
+.af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=nba]{--rd-accent:#ff9a3c;--rd-accent-text:#ff9a3c;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,154,60,.16);--rd-accent-line:rgba(255,154,60,.4);--rd-glow:rgba(255,154,60,.08);--rd-art:url('/artwork/redraft/nba/background-dark.svg')}
+.af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=nhl]{--rd-accent:#7cc7ff;--rd-accent-text:#7cc7ff;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(124,199,255,.16);--rd-accent-line:rgba(124,199,255,.4);--rd-glow:rgba(124,199,255,.08);--rd-art:url('/artwork/redraft/nhl/background-dark.svg')}
+.af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=mlb]{--rd-accent:#ff5a5f;--rd-accent-text:#ff5a5f;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,90,95,.16);--rd-accent-line:rgba(255,90,95,.4);--rd-glow:rgba(255,90,95,.08);--rd-art:url('/artwork/redraft/mlb/background-dark.svg')}
+.af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=ncaaf]{--rd-accent:#ffcf4a;--rd-accent-text:#ffcf4a;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,207,74,.16);--rd-accent-line:rgba(255,207,74,.4);--rd-glow:rgba(255,207,74,.08);--rd-art:url('/artwork/redraft/ncaaf/background-dark.svg')}
+.af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=ncaab]{--rd-accent:#ff7ac6;--rd-accent-text:#ff7ac6;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,122,198,.16);--rd-accent-line:rgba(255,122,198,.4);--rd-glow:rgba(255,122,198,.08);--rd-art:url('/artwork/redraft/ncaab/background-dark.svg')}
+.af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=soccer]{--rd-accent:#b5e655;--rd-accent-text:#b5e655;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(181,230,85,.16);--rd-accent-line:rgba(181,230,85,.4);--rd-glow:rgba(181,230,85,.08);--rd-art:url('/artwork/redraft/soccer/background-dark.svg')}
 
-html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=nfl]{--rd-accent:#136a3a;--rd-accent-text:#136a3a;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(19,106,58,.1);--rd-accent-line:rgba(19,106,58,.32);--rd-glow:rgba(19,106,58,.06);--rd-art:url('/artwork/redraft/nfl/background-light.svg')}
-html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=nba]{--rd-accent:#934700;--rd-accent-text:#934700;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(147,71,0,.1);--rd-accent-line:rgba(147,71,0,.32);--rd-glow:rgba(147,71,0,.06);--rd-art:url('/artwork/redraft/nba/background-light.svg')}
-html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=nhl]{--rd-accent:#005ea5;--rd-accent-text:#005ea5;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(0,94,165,.1);--rd-accent-line:rgba(0,94,165,.32);--rd-glow:rgba(0,94,165,.06);--rd-art:url('/artwork/redraft/nhl/background-light.svg')}
-html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=mlb]{--rd-accent:#b70006;--rd-accent-text:#b70006;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(183,0,6,.1);--rd-accent-line:rgba(183,0,6,.32);--rd-glow:rgba(183,0,6,.06);--rd-art:url('/artwork/redraft/mlb/background-light.svg')}
-html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=ncaaf]{--rd-accent:#775700;--rd-accent-text:#775700;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(119,87,0,.1);--rd-accent-line:rgba(119,87,0,.32);--rd-glow:rgba(119,87,0,.06);--rd-art:url('/artwork/redraft/ncaaf/background-light.svg')}
-html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=ncaab]{--rd-accent:#b00064;--rd-accent-text:#b00064;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(176,0,100,.1);--rd-accent-line:rgba(176,0,100,.32);--rd-glow:rgba(176,0,100,.06);--rd-art:url('/artwork/redraft/ncaab/background-light.svg')}
-html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=soccer]{--rd-accent:#48650f;--rd-accent-text:#48650f;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(72,101,15,.1);--rd-accent-line:rgba(72,101,15,.32);--rd-glow:rgba(72,101,15,.06);--rd-art:url('/artwork/redraft/soccer/background-light.svg')}
+html[data-mode='light'] .af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=nfl]{--rd-accent:#136a3a;--rd-accent-text:#136a3a;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(19,106,58,.1);--rd-accent-line:rgba(19,106,58,.32);--rd-glow:rgba(19,106,58,.06);--rd-art:url('/artwork/redraft/nfl/background-light.svg')}
+html[data-mode='light'] .af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=nba]{--rd-accent:#934700;--rd-accent-text:#934700;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(147,71,0,.1);--rd-accent-line:rgba(147,71,0,.32);--rd-glow:rgba(147,71,0,.06);--rd-art:url('/artwork/redraft/nba/background-light.svg')}
+html[data-mode='light'] .af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=nhl]{--rd-accent:#005ea5;--rd-accent-text:#005ea5;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(0,94,165,.1);--rd-accent-line:rgba(0,94,165,.32);--rd-glow:rgba(0,94,165,.06);--rd-art:url('/artwork/redraft/nhl/background-light.svg')}
+html[data-mode='light'] .af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=mlb]{--rd-accent:#b70006;--rd-accent-text:#b70006;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(183,0,6,.1);--rd-accent-line:rgba(183,0,6,.32);--rd-glow:rgba(183,0,6,.06);--rd-art:url('/artwork/redraft/mlb/background-light.svg')}
+html[data-mode='light'] .af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=ncaaf]{--rd-accent:#775700;--rd-accent-text:#775700;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(119,87,0,.1);--rd-accent-line:rgba(119,87,0,.32);--rd-glow:rgba(119,87,0,.06);--rd-art:url('/artwork/redraft/ncaaf/background-light.svg')}
+html[data-mode='light'] .af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=ncaab]{--rd-accent:#b00064;--rd-accent-text:#b00064;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(176,0,100,.1);--rd-accent-line:rgba(176,0,100,.32);--rd-glow:rgba(176,0,100,.06);--rd-art:url('/artwork/redraft/ncaab/background-light.svg')}
+html[data-mode='light'] .af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport=soccer]{--rd-accent:#48650f;--rd-accent-text:#48650f;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(72,101,15,.1);--rd-accent-line:rgba(72,101,15,.32);--rd-glow:rgba(72,101,15,.06);--rd-art:url('/artwork/redraft/soccer/background-light.svg')}
 
 /* /core's own accent names follow the sport, so every existing accent use on the page (nav active
  * state, bottom-nav, rail tile, primary buttons, focus rings, links) picks it up with no per-tab
  * edit. --rd-surface-elev is a card ground lifted 5% toward the accent. */
-.af-core.nl-workspace[data-format=redraft][data-sport]{
+.af-core:is(.nl-workspace,.af-shell)[data-format=redraft][data-sport]{
   --accent:var(--rd-accent-text);--accent-ink:var(--rd-accent-ink);--accent-soft:var(--rd-accent-soft);--accent-line:var(--rd-accent-line);
   --rd-surface-elev:color-mix(in srgb,var(--rd-accent) 5%,var(--surface));
   --rd-track:var(--line2);
