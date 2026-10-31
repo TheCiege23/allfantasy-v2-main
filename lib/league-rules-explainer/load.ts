@@ -36,7 +36,7 @@ export async function loadRuleSnapshot(leagueId: string, row: RulesLeagueRow): P
     // The rookie draft's order, rounds and type, also on the dynasty config.
     snapshot.format === 'dynasty' && !snapshot.importedFrom
       ? prisma.dynastyLeagueConfig
-          .findUnique({ where: { leagueId }, select: { rookiePickOrderMethod: true, rookieDraftRounds: true, rookieDraftType: true } })
+          .findUnique({ where: { leagueId }, select: { rookiePickOrderMethod: true, rookieDraftRounds: true, rookieDraftType: true, futurePicksYearsOut: true } })
           .then((c) => {
             // The order the draft engine seats from (the live or automatic order when one is on).
             const rules = effectiveDynastyRules(c, row.settings)

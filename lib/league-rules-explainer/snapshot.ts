@@ -39,6 +39,7 @@ import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import { readPickTradeDeadline } from '@/lib/trade-deadline/pickTradeDeadline'
 import { readPickTermsEnabled } from '@/lib/league-trade-engine/pickTerms'
+import { resolveNativePickYears } from '@/lib/league-trade-engine/nativePickYears'
 import { readTaxiStealingRule } from '@/lib/taxi/taxiStealing'
 import { readTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
 import { supportsDailyLineups } from '@/lib/redraft/lineupModeSwitch'
@@ -459,12 +460,19 @@ export function effectiveRookieDraftOrder(configMethod: string | null | undefine
  * defaults the dynasty settings page shows. Shared by the popup and the dynasty settings save.
  */
 export function dynastyRulesFromConfig(
-  c: { rookiePickOrderMethod?: string | null; rookieDraftRounds?: number | null; rookieDraftType?: string | null } | null,
-): Pick<RuleSnapshot, 'rookieDraftOrder' | 'rookieDraftRounds' | 'rookieDraftType'> {
+  c: {
+    rookiePickOrderMethod?: string | null
+    rookieDraftRounds?: number | null
+    rookieDraftType?: string | null
+    futurePicksYearsOut?: number | null
+  } | null,
+): Pick<RuleSnapshot, 'rookieDraftOrder' | 'rookieDraftRounds' | 'rookieDraftType' | 'pickTradeYears'> {
   return {
     rookieDraftOrder: normalizeRookieOrderMethod(c?.rookiePickOrderMethod ?? 'max_pf'),
     rookieDraftRounds: c?.rookieDraftRounds ?? 4,
     rookieDraftType: c?.rookieDraftType ?? 'linear',
+    // The horizon the trade engine offers native picks over (resolveNativePickYears clamps it to 1-5).
+    pickTradeYears: resolveNativePickYears(c?.futurePicksYearsOut),
   }
 }
 

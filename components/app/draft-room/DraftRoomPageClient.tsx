@@ -39,6 +39,7 @@ import { useDraftHelperFloatingState } from '@/hooks/useDraftHelperFloatingState
 import { DraftTeamPanel } from '@/components/app/draft-room/DraftTeamPanel'
 import { WarRoomPopup } from '@/components/app/draft-room/WarRoomPopup'
 import { DraftRightDockTabs, type DraftRightDockTab } from '@/components/app/draft-room/DraftRightDockTabs'
+import { DraftCenterDockTabBar, type CenterDockTab } from '@/components/app/draft-room/DraftCenterDockTabBar'
 import { CHIMMY_PICK_DELAY_MS } from '@/lib/commissioner-ai-draft-manager/chimmyPickTiming'
 import { DraftPickActivityStrip } from '@/components/app/draft-room/DraftPickActivityStrip'
 import {
@@ -272,7 +273,6 @@ export function DraftRoomPageClient({
   initialSnapshot,
   initialPoolReadiness = null,
 }: DraftRoomPageClientProps) {
-  type CenterDockTab = 'queue' | 'intel' | 'chat' | 'ai' | 'commish'
   const { data: authSession } = useSession()
   const viewerAppUserId = (authSession?.user as { id?: string } | undefined)?.id ?? null
   const [session, setSession] = useState<DraftSessionSnapshot | null>(initialSnapshot ?? null)
@@ -4867,92 +4867,13 @@ export function DraftRoomPageClient({
 
             <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden xl:hidden">
               <div className="flex h-full min-h-0 w-full flex-col" data-testid="draft-bottom-dock-tabs">
-                <div
-                  className={`grid ${
-                    (isCommissioner ? 1 : 0) + (session.draftType !== 'auction' ? 1 : 0) === 2
-                      ? 'grid-cols-5'
-                      : (isCommissioner ? 1 : 0) + (session.draftType !== 'auction' ? 1 : 0) === 1
-                        ? 'grid-cols-4'
-                        : 'grid-cols-3'
-                  } gap-1 border-b px-2 py-1.5 ${
-                    presentationVariant === 'redraft_snake'
-                      ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.95),rgba(5,12,24,0.98))] shadow-[inset_0_1px_0_rgba(34,211,238,0.08)]'
-                      : 'border-white/8 bg-[#0a1228]'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setCenterDockTab('queue')}
-                    data-testid="draft-bottom-tab-queue"
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      centerDockTab === 'queue'
-                        ? presentationVariant === 'redraft_snake'
-                          ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
-                          : 'bg-white/12 text-cyan-100'
-                        : 'text-white/55 hover:bg-white/5'
-                    }`}
-                  >
-                    Queue
-                  </button>
-                  {session.draftType !== 'auction' ? (
-                    <button
-                      type="button"
-                      onClick={() => setCenterDockTab('intel')}
-                      data-testid="draft-bottom-tab-intel"
-                      className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                        centerDockTab === 'intel'
-                          ? presentationVariant === 'redraft_snake'
-                            ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
-                            : 'bg-white/12 text-cyan-100'
-                          : 'text-white/55 hover:bg-white/5'
-                      }`}
-                    >
-                      Intel
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => setCenterDockTab('chat')}
-                    data-testid="draft-bottom-tab-chat"
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      centerDockTab === 'chat'
-                        ? presentationVariant === 'redraft_snake'
-                          ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
-                          : 'bg-white/12 text-cyan-100'
-                        : 'text-white/55 hover:bg-white/5'
-                    }`}
-                  >
-                    Chat
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCenterDockTab('ai')}
-                    data-testid="draft-bottom-tab-ai"
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      centerDockTab === 'ai'
-                        ? presentationVariant === 'redraft_snake'
-                          ? 'bg-gradient-to-r from-violet-500/30 to-fuchsia-500/15 text-violet-50 shadow-[0_0_22px_rgba(167,139,250,0.2)]'
-                          : 'bg-white/12 text-cyan-100'
-                        : 'text-white/55 hover:bg-white/5'
-                    }`}
-                  >
-                    AF Legacy
-                  </button>
-                  {isCommissioner ? (
-                    <button
-                      type="button"
-                      onClick={() => setCenterDockTab('commish')}
-                      data-testid="draft-bottom-tab-commish"
-                      className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                        centerDockTab === 'commish'
-                          ? 'bg-white/12 text-amber-100'
-                          : 'text-white/55 hover:bg-white/5'
-                      }`}
-                    >
-                      Commish Edit
-                    </button>
-                  ) : null}
-                </div>
+                <DraftCenterDockTabBar
+                  active={centerDockTab}
+                  onSelect={setCenterDockTab}
+                  showIntel={session.draftType !== 'auction'}
+                  showCommish={isCommissioner}
+                  redraftSnake={presentationVariant === 'redraft_snake'}
+                />
 
                 <div className="min-h-0 flex-1 overflow-hidden">
                   {centerDockTab === 'queue' ? (
