@@ -33,6 +33,15 @@ vi.mock('@/lib/survivor/exileRosterService', () => ({
     return h.waivers
   }),
   exileWeekWindow: vi.fn(async () => ({ start: new Date('2026-10-13T04:00:00Z'), end: new Date('2026-10-20T04:00:00Z') })),
+  exileTeamKey: (_sport: string, team: string) => team.trim().toUpperCase(),
+  exileFirstGames: vi.fn(async () => {
+    const firsts = new Map<string, Date>()
+    for (const g of h.games) for (const t of [g.homeTeam, g.awayTeam]) {
+      const seen = firsts.get(t)
+      if (!seen || g.startTime < seen) firsts.set(t, g.startTime)
+    }
+    return firsts
+  }),
   mutateExileRoster: vi.fn(async (p: { userId: string; playerId: string; slot?: string; week: number }) => {
     h.claims.push({ userId: p.userId, playerId: p.playerId, slot: p.slot, week: p.week })
     return { ok: true }

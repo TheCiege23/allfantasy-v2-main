@@ -4,7 +4,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
-import { exileWeekWindow, getExileWaivers, mutateExileRoster } from './exileRosterService'
+import { exileFirstGames, exileTeamKey, exileWeekWindow, getExileWaivers, mutateExileRoster } from './exileRosterService'
 import { chimmyExilePlan, type ExileCandidate } from './chimmyExileStrategy'
 import { postChimmyCastawayLine } from './chimmyCastawayChat'
 
@@ -81,28 +81,20 @@ export async function runChimmyExileTurn(leagueId: string, now = new Date()): Pr
     const window = await exileWeekWindow(prisma as unknown as Prisma.TransactionClient, league.sport, league.season, waivers.week)
     if (!window) { turn.skipped[castaway.userId] = 'no_calendar'; continue }
 
-    // A team can be reserved only until its first game of the period starts.
-    const games = await prisma.gameSchedule.findMany({
-      where: { sportType: league.sport, startTime: { gte: window.start, lt: window.end } },
-      select: { homeTeam: true, awayTeam: true, startTime: true },
-    })
-    const firstGame = new Map<string, Date>()
-    for (const g of games) {
-      for (const team of [g.homeTeam, g.awayTeam]) {
-        const code = team?.trim().toUpperCase()
-        if (!code || !g.startTime) continue
-        const seen = firstGame.get(code)
-        if (!seen || g.startTime < seen) firstGame.set(code, g.startTime)
-      }
-    }
+    // A team can be reserved only until its first game of the period starts. The same games, and the
+    // same team key, the Exile claim itself checks — so a daily sport's full team names match.
+    const firstGame = await exileFirstGames(prisma as unknown as Prisma.TransactionClient, league.sport, league.season, waivers.week, window.start, window.end)
+    const openKeys = new Set([...firstGame].filter(([, start]) => start > now).map(([key]) => key))
     const taken = waivers.takenTeamIds.map((t) => t.toUpperCase())
-    const openTeams = [...firstGame].filter(([team, start]) => start > now && !taken.includes(team)).map(([team]) => team)
-    if (openTeams.length === 0) { turn.skipped[castaway.userId] = 'no_open_team'; continue }
+    if (openKeys.size === 0) { turn.skipped[castaway.userId] = 'no_open_team'; continue }
 
-    const players = await prisma.player.findMany({
-      where: { sport: { equals: league.sport, mode: 'insensitive' }, active: true, team: { in: openTeams, mode: 'insensitive' } },
+    const players = (await prisma.player.findMany({
+      where: { sport: { equals: league.sport, mode: 'insensitive' }, active: true, team: { not: null } },
       select: { id: true, name: true, position: true, team: true, providerIds: true },
-    })
+    })).filter((p) => p.team && openKeys.has(exileTeamKey(league.sport, p.team)))
+    // Exile reserves a team under the player row's own spelling (upper-cased), so that is the name the plan uses.
+    const openTeams = [...new Set(players.map((p) => p.team!.trim().toUpperCase()))].filter((t) => !taken.includes(t))
+    if (openTeams.length === 0) { turn.skipped[castaway.userId] = 'no_open_team'; continue }
     const ownerOf = new Map<string, string>()
     for (const p of players) for (const alias of playerScoreAliases(p)) if (!ownerOf.has(alias)) ownerOf.set(alias, p.id)
     const scores = await prisma.playerWeeklyScore.findMany({
