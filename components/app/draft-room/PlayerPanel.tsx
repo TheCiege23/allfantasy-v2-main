@@ -2,9 +2,9 @@
 
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { ProgressiveDraftPlayerList } from './ProgressiveDraftPlayerList'
-import { Search, User, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
+import { Check, Search, User, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
-import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useLanguage, useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { applyDraftFilters, DRAFT_ROOM_I18N_KEYS, getPickConfirmationLabel, getPositionFilterOptionsForSport } from '@/lib/draft-room'
 import { DraftPlayerCard } from './DraftPlayerCard'
 import { SleeperPoolTable } from './SleeperPoolTable'
@@ -252,6 +252,7 @@ function PlayerListCards({
   const rowKey = (p: PlayerEntry) =>
     `${p.name.trim().toLowerCase()}|${p.position.trim().toLowerCase()}|${String(p.team ?? '').trim().toLowerCase()}`
   const selectedKey = selectedPlayer ? rowKey(selectedPlayer) : null
+  const { t } = useOptionalLanguage()
 
   return (
     <ProgressiveDraftPlayerList
@@ -259,6 +260,7 @@ function PlayerListCards({
       itemKey={p => p.id ?? rowKey(p)}
       renderItem={(p, index) => {
         const sel = selectedKey != null && rowKey(p) === selectedKey
+        const queued = Boolean(isPlayerQueued?.(p))
         return (
           <div
             key={p.id ?? rowKey(p)}
@@ -275,7 +277,7 @@ function PlayerListCards({
               draftSport={draftSport}
               presentationVariant={presentationVariant}
               isSelected={sel}
-              isQueued={Boolean(isPlayerQueued?.(p))}
+              isQueued={queued}
               aiWarRoomBadge={aiRowBadges?.[`${p.name.trim().toLowerCase()}|${p.position.trim().toLowerCase()}`] ?? null}
               isDrafted={isPlayerDraftedEntry(p, draftedNames, draftedPlayerIds)}
               variant="row"
@@ -353,10 +355,13 @@ function PlayerListCards({
                   type="button"
                   onClick={() => onAddToQueue(p)}
                   data-testid={`draft-queue-add-${index}`}
-                  className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border transition duration-150 active:scale-95 ${SKIN_FOCUS} ${SKIN_PILL_IDLE}`}
-                  aria-label={`Add ${p.name} to queue`}
+                  data-queued={queued ? 'true' : 'false'}
+                  aria-pressed={queued}
+                  className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border transition duration-150 active:scale-95 ${SKIN_FOCUS} ${queued ? SKIN_PILL_ACTIVE : SKIN_PILL_IDLE}`}
+                  aria-label={t(queued ? 'draftRoom.queue.inQueue' : 'draftRoom.queue.addPlayer').replace('{{name}}', p.name)}
                 >
-                  <Plus className="h-4 w-4" />
+                  {/* This button used to look identical before and after a tap. */}
+                  {queued ? <Check className="h-4 w-4" strokeWidth={3} aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
                 </button>
               }
             />

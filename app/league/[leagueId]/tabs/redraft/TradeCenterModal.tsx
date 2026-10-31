@@ -17,6 +17,7 @@ import {
 } from '@/lib/redraft/client'
 import { MAX_REDRAFT_TRADE_TEAMS, uninvolvedTradeParticipants } from '@/lib/redraft/tradeParticipants'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { SelectionCheck } from '@/components/ui/selection-check'
 
 type Step = 'partner' | 'assets' | 'review'
 
@@ -104,7 +105,8 @@ function PlayerCard({
           : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-white/25',
       ].join(' ')}
     >
-      <span className="min-w-0">
+      <SelectionCheck selected={selected} size="sm" testId={`trade-asset-check-${player.playerId || player.id}`} />
+      <span className="min-w-0 flex-1">
         <span className="block truncate font-semibold">{player.playerName}</span>
         <span className="text-[11px] text-white/50">
           {player.position}
@@ -633,13 +635,14 @@ export function TradeCenterModal({
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-[12px] font-bold text-white">
                     {initials(rosterLabel(r, r.id))}
                   </span>
-                  <span className="min-w-0">
+                  <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-semibold text-white">{rosterLabel(r, r.id)}</span>
                     <span className="block truncate text-[11px] text-white/50">
                       {r.ownerName ?? t('tradeCenter.modal.partner.managerFallback')} · {r.wins}-{r.losses}
                       {r.ties ? `-${r.ties}` : ''}
                     </span>
                   </span>
+                  <SelectionCheck selected={sel} className="text-white" testId={`trade-partner-check-${r.id}`} />
                 </button>
               )
             })}
