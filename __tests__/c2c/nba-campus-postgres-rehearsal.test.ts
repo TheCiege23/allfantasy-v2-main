@@ -2,9 +2,14 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 
+const harness = vi.hoisted(() => ({ campusDb: null as any, now: null as Date | null }))
 const game = { gameId: 'ri-pilot', day: '2026-11-01', startTime: '2026-11-01T18:00:00Z', status: 'completed', seasonType: 'regular', eventName: null, replacedBy: null, homeTeamId: '1', awayTeamId: '2' }
 vi.mock('@/lib/sports-data/riScheduleCache', async (load) => ({ ...(await load<typeof import('@/lib/sports-data/riScheduleCache')>()), readRiScheduleWindow: async () => [game] }))
 vi.mock('@/lib/redraft/ncaabCampusTeamBridge', () => ({ bridgeNcaabCampusTeams: async () => ({ resolved: new Map([['10', '1']]), unresolved: [] }) }))
+vi.mock('@/lib/c2c/nbaCampusMatchupScoring', async (load) => {
+  const actual = await load<typeof import('@/lib/c2c/nbaCampusMatchupScoring')>()
+  return { ...actual, nbaCampusPointsForMatchup: (db: any, input: any) => actual.nbaCampusPointsForMatchup(harness.campusDb ?? db, { ...input, now: harness.now ?? input.now }) }
+})
 
 import { prisma } from '@/lib/prisma'
 import { buildNbaCampusWeekSnapshot } from '@/lib/c2c/nbaCampusWeekSnapshot'
@@ -13,6 +18,7 @@ import { nbaCampusGameMappingKey } from '@/lib/c2c/refreshNbaCampusWeek'
 import { nbaCampusPointsForMatchup } from '@/lib/c2c/nbaCampusMatchupScoring'
 import { refreshEspnCollegeGameBoxes } from '@/lib/espn/refreshNcaabCollegeGameBoxes'
 import { mergeNbaCollegeDraftPlayers } from '@/lib/live-draft-engine/RosterAssignmentService'
+import { buildLeagueStatScorer, scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 
 const pilot = process.env.NBA_CAMPUS_POSTGRES_PILOT === '1' ? describe : describe.skip
 pilot('NBA campus snapshot and correction on isolated Postgres', () => {
@@ -21,7 +27,7 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
     expect(target.hostname).toBe('ep-billowing-shadow-ado0fgzv-pooler.c-2.us-east-1.aws.neon.tech')
     expect(target.pathname).toBe('/neondb')
     const id = `campus-pilot-${randomUUID()}`
-    const ownerId = `${id}-owner`, homeId = `${id}-home`, awayId = `${id}-away`
+    const ownerId = `${id}-owner`, homeId = `${id}-home`, awayId = `${id}-away`, proId = `${id}-pro`
     const homeRoster = `${id}-home-roster`, awayRoster = `${id}-away-roster`
     const espnId = String(BigInt(`0x${randomUUID().replaceAll('-', '').slice(0, 12)}`))
     const playerId = `espn:ncaab:${espnId}`, eventId = String(BigInt(`0x${randomUUID().replaceAll('-', '').slice(0, 12)}`))
@@ -62,9 +68,12 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
     try {
       await prisma.appUser.create({ data: { id: ownerId, email: `${id}@example.invalid`, username: id } })
       await prisma.league.create({ data: { id, userId: ownerId, platform: 'manual', platformLeagueId: id, leagueType: 'dynasty', leagueVariant: 'c2c', sport: 'NBA', isDynasty: true, settings: {} } })
+      await prisma.c2CLeagueConfig.create({ data: { leagueId: id, collegeScoringSystem: 'points', bestBallPro: false, bestBallCollege: false, standingsModel: 'unified' } })
       const season = await prisma.redraftSeason.create({ data: { leagueId: id, sport: 'NBA', season: 2026, status: 'active', totalWeeks: 18, playoffStartWeek: 19 } })
       await prisma.redraftRoster.createMany({ data: [{ id: homeId, leagueId: id, seasonId: season.id, ownerId: homeId, ownerName: 'Home' }, { id: awayId, leagueId: id, seasonId: season.id, ownerId: awayId, ownerName: 'Away' }] })
       await prisma.roster.createMany({ data: [{ id: homeRoster, leagueId: id, platformUserId: homeId, redraftRosterId: homeId, playerData }, { id: awayRoster, leagueId: id, platformUserId: awayId, redraftRosterId: awayId, playerData: {} }] })
+      await prisma.redraftRosterPlayer.create({ data: { rosterId: homeId, playerId: proId, playerName: 'Synthetic Pro Player', position: 'PG', sport: 'NBA', slotType: 'PG', addedAt: new Date('2026-10-20T00:00:00Z') } })
+      await prisma.playerWeeklyScore.create({ data: { playerId: proId, sport: 'NBA', week: 2, season: 2026, stats: { pts: 10 }, isFinalized: true } })
       await prisma.$transaction(async tx => {
         await tx.afRosterLineupAssignment.create({ data: { leagueId: id, rosterId: homeRoster, season: 2026, week: 2, section: 'campus', playerId } })
         await persistNbaCampusWeekSnapshot(tx, { leagueId: id, rosterId: homeRoster, snapshot: built.snapshot!, now: savedAt })
@@ -77,6 +86,22 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
       const correctedAt = new Date(now.getTime() + 13 * 60 * 60 * 1000)
       expect(await refresh(22, correctedAt)).toMatchObject({ stored: 1, unresolved: [] })
       expect((await nbaCampusPointsForMatchup(db as never, { ...input, now: correctedAt }))?.home).toEqual({ points: 27, missingPlayerIds: [], allFinal: true })
+      harness.campusDb = db
+      harness.now = correctedAt
+      const playoffScore = await scoreRosterForWeek({ leagueId: id, rosterId: homeId, seasonYear: 2026, week: 2 })
+      const proScorer = buildLeagueStatScorer({ sport: 'NBA', settings: {} })!
+      const collegeScorer = buildLeagueStatScorer({ sport: 'NCAAB', settings: null })!
+      const expected = proScorer({ pts: 10 }, 'PG') + collegeScorer({ pts: 22, reb: 5, ast: 0, to: 0, stl: 0, blk: 0, threes: 0 }, 'G')
+      expect(playoffScore.points).toBe(Math.round(expected * 100) / 100)
+      expect(playoffScore.allFinal).toBe(true)
+      expect(playoffScore.missingPlayerIds).toEqual([])
+      await prisma.sportsDataCache.deleteMany({ where: { cacheKey: localBoxKey } })
+      const pendingPlayoff = await scoreRosterForWeek({ leagueId: id, rosterId: homeId, seasonYear: 2026, week: 2 })
+      expect(pendingPlayoff.allFinal).toBe(false)
+      expect(pendingPlayoff.missingPlayerIds).toContain(playerId)
+      expect(await refresh(22, correctedAt)).toMatchObject({ stored: 1 })
+      harness.campusDb = null
+      harness.now = null
       await persistNbaCampusWeekSnapshot(prisma, { leagueId: id, rosterId: homeRoster, snapshot: { ...built.snapshot!, players: built.snapshot!.players.map(player => ({ ...player, selectedAt: '2026-11-01T19:00:00.000Z' })) }, now: savedAt })
       expect((await nbaCampusPointsForMatchup(db as never, input))?.home).toMatchObject({ missingPlayerIds: [playerId], allFinal: false })
 
@@ -88,6 +113,9 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
       })
       expect((await nbaCampusPointsForMatchup(db as never, { ...input, week: 21, now: new Date('2027-03-18T12:00:00Z') }))?.home).toMatchObject({ missingPlayerIds: [playerId], allFinal: false })
     } finally {
+      harness.campusDb = null
+      harness.now = null
+      await prisma.playerWeeklyScore.deleteMany({ where: { playerId: proId, sport: 'NBA', season: 2026, week: 2 } })
       await prisma.sportsDataCache.deleteMany({ where: { cacheKey: { in: [localMappingKey, localBoxKey, ...[2, 21].flatMap(week => [nbaCampusWeekCacheKey(id, homeRoster, 2026, week), nbaCampusWeekCacheKey(id, awayRoster, 2026, week)])] } } })
       await prisma.league.deleteMany({ where: { id } })
       await prisma.appUser.deleteMany({ where: { id: ownerId } })
