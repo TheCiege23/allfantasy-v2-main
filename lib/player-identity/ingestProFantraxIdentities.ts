@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { getFantraxPlayerIds } from '@/lib/league-import/fantrax/fantraxApi'
 import { planProFantraxIdentityLinks, type ProFantraxSport } from './proFantraxIdentityPlan'
 import { compactNhlFantraxUniverse, NHL_FANTRAX_UNIVERSE_CACHE_KEY } from './nhlFantraxProspects'
+import { MLB_FANTRAX_UNIVERSE_CACHE_KEY } from './mlbFantraxProspects'
 
 /**
  * Scheduled ingestion only. One provider read, one registry read and a guarded batch update.
@@ -19,12 +20,16 @@ import { compactNhlFantraxUniverse, NHL_FANTRAX_UNIVERSE_CACHE_KEY } from './nhl
  * stored, compacted, under `NHL_FANTRAX_UNIVERSE_CACHE_KEY`. Same single provider read; no new
  * endpoint. A fresh cadence marker does not skip the run while that row is missing, so the first
  * tick after this ships fills it instead of waiting out the week.
+ *
+ * MLB KEEPS ITS UNIVERSE THE SAME WAY (2026-10-31), under `MLB_FANTRAX_UNIVERSE_CACHE_KEY`, for the
+ * MLB rookie-draft prospects (`mlbFantraxProspects.ts`): minor leaguers and unsigned players. Same
+ * read, same compaction (sport-neutral), same cadence bypass. NBA stores none.
  */
 export async function ingestProFantraxIdentities(sport: ProFantraxSport, dryRun = false) {
   const markerKey = `fantrax:${sport.toLowerCase()}-identities:last-run`
   const marker = await prisma.sportsDataCache.findUnique({ where: { cacheKey: markerKey } })
   const last = marker?.data && typeof marker.data === 'object' && !Array.isArray(marker.data) ? (marker.data as Record<string, unknown>).at : null
-  const universeKey = sport === 'NHL' ? NHL_FANTRAX_UNIVERSE_CACHE_KEY : null
+  const universeKey = sport === 'NHL' ? NHL_FANTRAX_UNIVERSE_CACHE_KEY : sport === 'MLB' ? MLB_FANTRAX_UNIVERSE_CACHE_KEY : null
   if (!dryRun && typeof last === 'string' && Date.now() - Date.parse(last) < 7 * 86400000) {
     const universe = universeKey ? await prisma.sportsDataCache.findUnique({ where: { cacheKey: universeKey }, select: { cacheKey: true } }) : true
     if (universe) return { skipped: 'weekly cadence', updated: 0 }

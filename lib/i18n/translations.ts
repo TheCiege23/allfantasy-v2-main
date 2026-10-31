@@ -2972,6 +2972,8 @@ export const translations: Record<string, Record<string, string>> = {
   "waiverWire.prospects.sortNote":
     "Prospects have no projection or ADP, so they are listed after NHL players. Sort by name, position or team to mix them in.",
   "waiverWire.prospects.searchHint": "Showing {{listed}} of {{total}} prospects. Search by name to find the rest.",
+  "draftRoom.pool.prospectTooltipMlb":
+    "MLB prospect listed by Fantrax who is on no MLB roster in our data: a minor leaguer or an unsigned player. The team shown is the MLB club that holds him. No age, level or draft year is available.",
   "draftRoom.playerPanel.rookieFilterFallbackTitle": "Rookie filter unavailable for this sport",
   "draftRoom.playerPanel.rookieFilterFallbackBody":
     "Rookie data isn't available for this sport yet, so this rookies-only draft shows the full player pool. Picks aren't checked for rookie status — confirm a player is a rookie before drafting.",
