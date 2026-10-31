@@ -52,6 +52,8 @@ import {
   type QueuedLineupEdit,
 } from '@/lib/pwa/offlineLineupQueue'
 import { OfflineLineupSnapshotView } from './OfflineLineupSnapshotView'
+import { dailyOffDayIds, isOnBye } from '@/lib/league-media/redraftScreens'
+import { RedraftBadge, RedraftScreen, useRedraftScreen } from './RedraftScreenParts'
 
 /**
  * My team / Lineup — handoff §3, `Lineup.png` / `MobileLineup.png`.
@@ -343,6 +345,10 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   }, [league.id])
 
   const players: DisplayPlayerMap = useMemo(() => buildDisplayPlayerMap(null, data?.unifiedRoster ?? []), [data])
+  // Redraft (lib/league-media/redraftIdentity.ts): sport position chips and the bye / off-day badge.
+  const rd = useRedraftScreen(league)
+  // Daily leagues: players whose team has no game on the day shown — only when the day's schedule was read.
+  const offDay = useMemo(() => (rd && data?.dailyLineups ? dailyOffDayIds(data.unifiedRoster as Array<{ id: string; periodOpponent?: string | null }> | undefined) : new Set<string>()), [rd, data])
   const slots = useMemo(() => data?.starterSlots ?? [], [data])
   const daily = data?.dailyLineups ?? null
   const weekLock = useMemo(
@@ -630,6 +636,13 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
             ? `Daily lineup: each player locks when his game starts today. Changes apply today${lastDay ? ` through ${dayLabel(lastDay)}` : ''}. ${TAP_HELP}`
             : `${data.lineupLockHelp ?? 'Each game locks at kickoff.'} ${TAP_HELP}`
 
+  /** Redraft only: a real bye (weekly) or a day with no game (daily). Nothing when the data does not say. */
+  const dayBadge = (id: string) => {
+    if (!rd || !id) return null
+    if (daily) return offDay.has(id) && (!viewDay || viewDay.status !== 'past') ? <RedraftBadge tone="off" testId={`lineup-off-day-${id}`}>Off day</RedraftBadge> : null
+    return isOnBye(players[id], data?.leagueWeek) ? <RedraftBadge tone="off" testId={`lineup-bye-${id}`}>Bye</RedraftBadge> : null
+  }
+
   const renderPastDay = (d: DailyLineupDay) => {
     const ids = Object.keys(d.slots)
     const starters = ids.filter((id) => slotCategory(d.slots[id]) === 'starter')
@@ -670,6 +683,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
           (move.kind === 'bench' && kind === 'bench' && move.playerId === id)),
     )
     const pill = kind === 'starter' ? slot?.label ?? '—' : kind === 'ir' ? 'IR' : kind === 'taxi' ? 'TX' : 'BN'
+    // Redraft: a bench / IR / taxi row shows the player's own position chip (the section already says where he is).
+    const rdPill = rd && kind !== 'starter' && p?.position ? p.position : null
     const tap: LineupTap = kind === 'starter' ? { kind: 'slot', slotIndex: slotIndex ?? 0 } : { kind: 'player', playerId: id }
     const isPicked = Boolean(picked && sameTap(picked, tap))
     const tapTarget = tapState(tap)
@@ -677,7 +692,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     const cells = (
       <>
         {editable ? <span className="nls-drag-cell">{id && !isLocked ? <DragHandle id={id} name={p?.name ?? 'player'} /> : null}</span> : null}
-        <PosPill label={pill} tone={kind === 'starter' ? slot?.label : pill} />
+        <PosPill label={rdPill ?? pill} tone={rdPill ?? (kind === 'starter' ? slot?.label : pill)} />
         <PlayerCell
           tappable={editable}
           picked={isPicked}
@@ -687,9 +702,10 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         >
           <strong>
             {p?.name ?? (id ? 'Unknown player' : 'Empty')}
-            {kind !== 'starter' && p?.position ? <span className="nls-player-pos"> {p.position}</span> : null}
+            {kind !== 'starter' && p?.position && !rdPill ? <span className="nls-player-pos"> {p.position}</span> : null}
             <RankTag p={p} />
             <InjuryFlag status={p?.injuryStatus} />
+            {dayBadge(id)}
           </strong>
           <small>{isPicked ? 'Selected · tap where he goes' : gameLine(p) || (id ? '—' : 'Open slot')}</small>
         </PlayerCell>
@@ -827,7 +843,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const allRoster = data ? [...(lists?.starters ?? []), ...(lists?.bench ?? []), ...(lists?.ir ?? []), ...(lists?.taxi ?? []), ...(lists?.devy ?? [])].filter(Boolean) : []
 
   return (
-    <div className="nls" data-testid="native-lineup-screen">
+    <RedraftScreen identity={rd}>
+    <div className="nls" data-testid="native-lineup-screen" data-rd-screen={rd ? 'lineup' : undefined}>
       <ScreenHead eyebrow={`${league.name} · My team`} title={userTeam.teamName} sub={`${record}${place ? ` · ${place} place` : ''} · PF ${fmt1(userTeam.pointsFor)}`}>
         <button type="button" className="nls-btn" onClick={() => onSelectTab('trades')}>Propose trade</button>
         <button type="button" className="nls-btn" onClick={() => onSelectTab('waivers')}>Add / drop</button>
@@ -950,7 +967,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                       <li key={id}>
                         <div className="nls-lrow" data-cols="3">
                           <PosPill label={p?.position ?? '—'} />
-                          <div className="nls-player"><strong>{p?.name ?? 'Unknown player'}<RankTag p={p} /><InjuryFlag status={p?.injuryStatus} /></strong><small>{gameLine(p) || '—'}</small></div>
+                          <div className="nls-player"><strong>{p?.name ?? 'Unknown player'}<RankTag p={p} /><InjuryFlag status={p?.injuryStatus} />{dayBadge(id)}</strong><small>{gameLine(p) || '—'}</small></div>
                           <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
                         </div>
                       </li>
@@ -982,5 +999,6 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         </div>
       ) : null}
     </div>
+    </RedraftScreen>
   )
 }

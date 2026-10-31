@@ -1,12 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { allPlayShare, fmt1, initialsOf, oddsTone, ordinal, powerOrder, readPlayoffFormat, streakTone } from '@/lib/league/native/nativeScreenModels'
 import { Card, ScreenHead, Segmented } from './NativeScreenParts'
 import { SideContestsCard } from './SideContestsCard'
 import { PayoutsCard } from './PayoutsCard'
 import { groupStandingsByDivision } from '@/lib/league/divisions/leagueDivisions'
+import { fetchRedraftPlayoffRuntime, type RedraftPlayoffRuntimeClient } from '@/lib/redraft/client'
+import { PLAYOFF_RACE_LABEL, bracketColumns, playoffRaceStatus } from '@/lib/league-media/redraftScreens'
+import { RedraftBracket, RedraftScreen, useRedraftScreen } from './RedraftScreenParts'
 
 /**
  * Standings & playoffs — handoff §3, `Standings.png` / `MobileStandings.png`.
@@ -46,6 +49,24 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   const [error, setError] = useState<string | null>(null)
   const season = Number(league.season) || new Date().getFullYear()
   const week = typeof league.currentWeek === 'number' ? league.currentWeek : null
+  // Redraft (lib/league-media/redraftIdentity.ts): the playoff runtime's bracket and its clinched /
+  // eliminated split — read only, and only claimed once the bracket is generated (playoffRaceStatus).
+  const rd = useRedraftScreen(league)
+  const [runtime, setRuntime] = useState<RedraftPlayoffRuntimeClient | null>(null)
+  useEffect(() => {
+    if (!rd) return
+    let cancelled = false
+    fetchRedraftPlayoffRuntime({ leagueId: league.id })
+      .then((r) => {
+        if (!cancelled) setRuntime(r)
+      })
+      .catch(() => {
+        if (!cancelled) setRuntime(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [rd, league.id])
 
   useEffect(() => {
     const ac = new AbortController()
@@ -104,11 +125,22 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
         ? 'Division winners are guaranteed a playoff spot; seeds follow record.'
         : null
 
+  const race = (rosterId: string) => (rd ? playoffRaceStatus(runtime, rosterId) : null)
+  const bracket = useMemo(() => {
+    if (!rd || !runtime?.bracket?.generated || !runtime.bracket.rounds?.length) return []
+    const names = new Map([...(data?.standings ?? []).map((r) => [r.rosterId, r.teamName] as const), ...(runtime.seeds ?? []).map((sd) => [sd.rosterId, sd.displayName] as const)])
+    return bracketColumns(runtime.bracket.rounds, (id) => names.get(id) ?? null, data?.viewerRosterId ?? null)
+  }, [rd, runtime, data])
+
   const teamCell = (r: Row, i: number) => (
     <div className="nls-team">
       <span className="nls-avatar" aria-hidden>{initialsOf(r.teamName)}</span>
       <strong>{r.teamName}</strong>
       {byes > 0 && i < byes ? <span className="nls-chip" data-tone="good">BYE</span> : null}
+      {(() => {
+        const st = race(r.rosterId)
+        return st ? <span className="nls-chip nls-rd-race" data-tone={st === 'eliminated' ? undefined : st === 'champion' ? 'accent' : 'good'} data-testid={`native-standings-race-${r.rosterId}`}>{PLAYOFF_RACE_LABEL[st]}</span> : null
+      })()}
       {r.rosterId === data?.viewerRosterId ? <span className="nls-sr">(your team)</span> : null}
     </div>
   )
@@ -182,7 +214,8 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   }
 
   return (
-    <div className="nls" data-testid="native-standings-screen">
+    <RedraftScreen identity={rd}>
+    <div className="nls" data-testid="native-standings-screen" data-rd-screen={rd ? 'standings' : undefined}>
       <ScreenHead eyebrow={`${league.name} · ${scored ? `After week ${scored}` : `${season} season`}`} title="Standings & playoffs">
         <Segmented label="Standings view" value={view} onChange={setView} options={[{ id: 'standings', label: 'Standings' }, { id: 'playoffs', label: 'Playoff picture' }, { id: 'power', label: 'Power rankings' }]} />
       </ScreenHead>
@@ -212,20 +245,28 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
                   </thead>
                   <tbody>
                     {rows.map((r, i) => (
-                      <tr key={r.rosterId} data-viewer={r.rosterId === data.viewerRosterId || undefined} data-cut={cut != null && i === cut && i > 0 ? true : undefined}>
-                        <td data-align="left" className="nls-mono nls-muted">{r.rank ?? i + 1}</td>
-                        <td data-align="left">{teamCell(r, i)}</td>
-                        <td>{record(r)}</td>
-                        <td>{fmt1(r.pointsFor)}</td>
-                        <td data-hide="phone" className="nls-muted">{fmt1(r.pointsAgainst)}</td>
-                        <td data-hide="phone" data-pts={streakTone(r.streak)}>{r.streak ?? '—'}</td>
-                        <td data-align="left">{oddsCell(r)}</td>
-                      </tr>
+                      <Fragment key={r.rosterId}>
+                        {/* Redraft: the playoff line is labelled, not only drawn. */}
+                        {rd && cut != null && i === cut && i > 0 ? (
+                          <tr className="nls-rd-cutrow" data-testid="native-standings-playoff-line" aria-hidden>
+                            <td colSpan={7}><span>Playoff line · top {cut}</span></td>
+                          </tr>
+                        ) : null}
+                        <tr data-viewer={r.rosterId === data.viewerRosterId || undefined} data-cut={cut != null && i === cut && i > 0 ? true : undefined} data-rd-out={race(r.rosterId) === 'eliminated' || undefined}>
+                          <td data-align="left" className="nls-mono nls-muted">{r.rank ?? i + 1}</td>
+                          <td data-align="left">{teamCell(r, i)}</td>
+                          <td>{record(r)}</td>
+                          <td>{fmt1(r.pointsFor)}</td>
+                          <td data-hide="phone" className="nls-muted">{fmt1(r.pointsAgainst)}</td>
+                          <td data-hide="phone" data-pts={streakTone(r.streak)}>{r.streak ?? '—'}</td>
+                          <td data-align="left">{oddsCell(r)}</td>
+                        </tr>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
                 <p className="nls-table-note">
-                  {cut ? `Cyan line = playoff cut (top ${cut}). ` : ''}Order and tiebreaks follow your league&apos;s settings.
+                  {cut ? (rd ? `The labelled line is the playoff cut (top ${cut}). ` : `Cyan line = playoff cut (top ${cut}). `) : ''}Order and tiebreaks follow your league&apos;s settings.
                   {!anyOdds ? ' Playoff odds appear after AF runs this week’s forecast.' : ''}
                 </p>
                 {divisionTables.length ? (
@@ -264,6 +305,11 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
                     {divisionRuleNote ? <p className="nls-table-note">{divisionRuleNote}</p> : null}
                   </div>
                 ) : null}
+              </>
+            ) : view === 'playoffs' && bracket.length ? (
+              <>
+                <RedraftBracket columns={bracket} />
+                <p className="nls-table-note">Bracket as generated for this league; scores update as each round is played.</p>
               </>
             ) : view === 'playoffs' ? (
               <>
@@ -359,5 +405,6 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
         </div>
       ) : null}
     </div>
+    </RedraftScreen>
   )
 }
