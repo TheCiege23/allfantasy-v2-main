@@ -60,7 +60,8 @@ const AF = { ...DARK, ...coreBlock(/html\[data-mode='af'\] \.af-core \{([^}]*)\}
 const RD = stripComments(read('components/league/native/redraft-identity.css'))
 function sportBlock(sport: string, light: boolean): Record<string, string> {
   const prefix = light ? String.raw`html\[data-mode='light'\] ` : String.raw`(?:^|\n)`
-  const re = new RegExp(`${prefix}\\.af-core\\.nl-workspace\\[data-format=redraft\\]\\[data-sport=${sport}\\]\\{([^}]*)\\}`)
+  // Both roots — the /league workspace and the /core shell — read the same block (`:is(...)`).
+  const re = new RegExp(`${prefix}\\.af-core:is\\(\\.nl-workspace,\\.af-shell\\)\\[data-format=redraft\\]\\[data-sport=${sport}\\]\\{([^}]*)\\}`)
   const m = RD.match(re)
   if (!m) throw new Error(`redraft-identity.css has no ${light ? 'light' : 'dark'} block for ${sport}`)
   return tokens(m[1])
