@@ -170,6 +170,12 @@ interface ApiTradeResponse {
     idpCeilingCaveat?: IdpCeilingCaveat | null
   }
   valuationReport?: {
+    lineupImpact?: {
+      status: 'verified' | 'unavailable'
+      sender?: { before: number; after: number; delta: number }
+      receiver?: { before: number; after: number; delta: number }
+      reason?: string
+    }
     teamA?: {
       netValue?: number
       totalGiven?: number
@@ -304,6 +310,7 @@ function clampScore(value: unknown, fallback = 50) {
 
 type LinkedLeague = {
   id: string
+  sport?: string | null
   sleeperLeagueId?: string | null
   platformLeagueId?: string | null
   unifiedLeagueId?: string | null
@@ -417,7 +424,7 @@ function verdictFromPayload(payload: ApiTradeResponse, fairnessScore: number, va
 }
 
 function providerList(payload: ApiTradeResponse) {
-  if (payload.model === 'nba_points_production_v1') return ['AF NBA stats']
+  if (payload.model === 'nba_points_production_v1' || payload.model === 'nba_verified_lineup_v1') return ['AF NBA stats']
   const providers = payload.aiProviders
   if (!providers) return ["AI"]
 
@@ -473,10 +480,18 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
   )
   const valueDelta = Number(payload.valuationReport?.teamA?.netValue ?? 0)
   const percentDiff = pickPercentDiff(payload, asOfDate)
-  const senderGrade =
+  const lineupImpact = payload.valuationReport?.lineupImpact
+  const lineupScale = Math.max(
+    Number(payload.valuationReport?.teamA?.totalGiven ?? 0),
+    Number(payload.valuationReport?.teamA?.totalReceived ?? 0), 1
+  )
+  const senderGrade = lineupImpact?.status === 'verified' && lineupImpact.sender
+    ? gradeFromPercentDiff(lineupImpact.sender.delta / lineupScale * 100) :
     (asOfDate ? payload.dualModeGrades?.atTheTime?.grade : payload.dualModeGrades?.withHindsight?.grade) ??
     gradeFromPercentDiff(percentDiff)
-  const receiverGrade = gradeFromPercentDiff(-percentDiff)
+  const receiverGrade = lineupImpact?.status === 'verified' && lineupImpact.receiver
+    ? gradeFromPercentDiff(lineupImpact.receiver.delta / lineupScale * 100)
+    : gradeFromPercentDiff(-percentDiff)
   const analysisBullets = [
     ...(payload.acceptProbability?.acceptBullets ?? []),
     ...(payload.evaluation?.explanation?.leagueContextNotes ?? []),
@@ -838,6 +853,9 @@ function TradeHubInner() {
   const [scoring, setScoring] = useState<ScoringFormat>("PPR")
   const [asOfDate, setAsOfDate] = useState("")
   const [linkedLeagueId, setLinkedLeagueId] = useState("")
+  const [linkedTeams, setLinkedTeams] = useState<Array<{ id: string; name: string; externalId: string }>>([])
+  const [senderTeamId, setSenderTeamId] = useState("")
+  const [receiverTeamId, setReceiverTeamId] = useState("")
   const [phase, setPhase] = useState<PhaseKey>("plan")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<TradeResult | null>(null)
@@ -852,7 +870,8 @@ function TradeHubInner() {
     () => receiver.players.some((player) => player.name.trim()) || receiver.picks.length > 0 || receiver.faab > 0,
     [receiver]
   )
-  const canEvaluate = senderHasAssets && receiverHasAssets && !loading
+  const nbaTeamsReady = sport !== 'NBA' || (senderTeamId !== '' && receiverTeamId !== '' && senderTeamId !== receiverTeamId)
+  const canEvaluate = senderHasAssets && receiverHasAssets && nbaTeamsReady && !loading
 
   const miniCompare = useMemo(() => {
     const a = sender.players.find((player) => player.name.trim())?.name.trim() ?? ""
@@ -885,6 +904,7 @@ function TradeHubInner() {
         // gate — a legacy/Sleeper-space id would 403 the whole evaluation.
         if (league.hasUnifiedRecord) {
           setLinkedLeagueId(String(league.unifiedLeagueId ?? league.id))
+          if (league.sport) setSport(normalizeToSupportedSport(league.sport))
         }
         setFormat(formatFromLinkedLeague(league))
         const leagueScoring = scoringFromLinkedLeague(league)
@@ -898,6 +918,18 @@ function TradeHubInner() {
     }
   }, [linkedLeagueIdParam])
 
+  useEffect(() => {
+    if (!linkedLeagueId || sport !== 'NBA') return
+    let cancelled = false
+    fetch(`/api/trade-evaluator/league-teams?leagueId=${encodeURIComponent(linkedLeagueId)}`)
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((data: { teams?: Array<{ id: string; name: string; externalId: string }> } | null) => {
+        if (!cancelled) setLinkedTeams(data?.teams ?? [])
+      })
+      .catch(() => { if (!cancelled) setLinkedTeams([]) })
+    return () => { cancelled = true }
+  }, [linkedLeagueId, sport])
+
   const resetTrade = useCallback(() => {
     setSender(emptySide("Sender Team"))
     setReceiver(emptySide("Receiver Team"))
@@ -906,6 +938,8 @@ function TradeHubInner() {
     setSport(DEFAULT_SPORT)
     setScoring("PPR")
     setAsOfDate("")
+    setSenderTeamId("")
+    setReceiverTeamId("")
     setPhase("plan")
     setResult(null)
     setError(null)
@@ -914,9 +948,11 @@ function TradeHubInner() {
   const swapSides = useCallback(() => {
     setSender(receiver)
     setReceiver(sender)
+    setSenderTeamId(receiverTeamId)
+    setReceiverTeamId(senderTeamId)
     setResult(null)
     setError(null)
-  }, [receiver, sender])
+  }, [receiver, receiverTeamId, sender, senderTeamId])
 
   const evaluate = useCallback(async () => {
     if (!canEvaluate) return
@@ -942,6 +978,7 @@ function TradeHubInner() {
           confirmTokenSpend: true,
           ...(linkedLeagueId ? { leagueId: linkedLeagueId } : {}),
           sender: {
+            ...(sport === 'NBA' ? { team_id: senderTeamId } : {}),
             manager_name: sender.teamName.trim() || "Sender Team",
             is_af_pro: sender.isProMember,
             record_or_rank: sender.record.trim() || undefined,
@@ -961,6 +998,7 @@ function TradeHubInner() {
             gives_faab: sender.faab,
           },
           receiver: {
+            ...(sport === 'NBA' ? { team_id: receiverTeamId } : {}),
             manager_name: receiver.teamName.trim() || "Receiver Team",
             is_af_pro: receiver.isProMember,
             record_or_rank: receiver.record.trim() || undefined,
@@ -1011,7 +1049,7 @@ function TradeHubInner() {
       timers.forEach((timer) => window.clearTimeout(timer))
       setLoading(false)
     }
-  }, [asOfDate, canEvaluate, format, linkedLeagueId, qbFormat, receiver, scoring, sender, sport])
+  }, [asOfDate, canEvaluate, format, linkedLeagueId, qbFormat, receiver, receiverTeamId, scoring, sender, senderTeamId, sport])
 
   return (
     <div className="min-h-screen bg-[#07071a] text-white">
@@ -1082,6 +1120,35 @@ function TradeHubInner() {
           <AssetPanel label="Sender · Giving" accent="#06b6d4" side={sender} onChange={setSender} onClear={() => setSender(emptySide("Sender Team"))} />
           <AssetPanel label="Receiver · Giving" accent="#a78bfa" side={receiver} onChange={setReceiver} onClear={() => setReceiver(emptySide("Receiver Team"))} />
         </div>
+
+        {sport === 'NBA' && linkedLeagueId ? (
+          <div className="mt-4 grid gap-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4 sm:grid-cols-2">
+            {([
+              { label: 'Sender roster', value: senderTeamId, set: setSenderTeamId, other: receiverTeamId },
+              { label: 'Receiver roster', value: receiverTeamId, set: setReceiverTeamId, other: senderTeamId },
+            ] as const).map((picker) => (
+              <label key={picker.label} className="block text-xs font-semibold text-white/70">
+                {picker.label}
+                <select
+                  value={picker.value}
+                  onChange={(event) => {
+                    picker.set(event.target.value)
+                    const team = linkedTeams.find((row) => row.id === event.target.value)
+                    if (team && picker.label === 'Sender roster') setSender((current) => ({ ...current, teamName: team.name }))
+                    if (team && picker.label === 'Receiver roster') setReceiver((current) => ({ ...current, teamName: team.name }))
+                  }}
+                  className="mt-2 min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 text-sm text-white"
+                >
+                  <option value="">Select a stored team</option>
+                  {linkedTeams.filter((team) => team.id !== picker.other).map((team) => (
+                    <option key={team.id} value={team.id}>{team.name} ({team.externalId})</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <p className="text-xs text-white/45 sm:col-span-2">Select each team separately, including when one Fantrax account owns both.</p>
+          </div>
+        ) : null}
 
         {miniCompare.ready ? (
           <div
@@ -1169,16 +1236,13 @@ function TradeHubInner() {
                 className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:min-h-0 sm:text-sm"
               >
                 {/*
-                  ⚠ NON-NFL SPORTS ARE OFFERED BUT NOT PICKABLE. The valuation
-                  pipeline behind this page prices only NFL assets — every other
-                  sport resolved each player to 0 and let the narration paper
-                  over it. Disabled-with-Soon is honest; a grade built on zeros
-                  is not. Re-enable per sport when its value source exists.
+                  NBA points leagues use stored scoring and roster data. Other
+                  sports stay disabled until their measured value sources exist.
                 */}
                 {SUPPORTED_SPORTS.map((supportedSport) => (
-                  <option key={supportedSport} value={supportedSport} disabled={supportedSport !== 'NFL'}>
+                  <option key={supportedSport} value={supportedSport} disabled={supportedSport !== 'NFL' && !(supportedSport === 'NBA' && linkedLeagueId)}>
                     {SPORT_LABELS[supportedSport]}
-                    {supportedSport !== 'NFL' ? ' (Soon)' : ''}
+                    {supportedSport !== 'NFL' && !(supportedSport === 'NBA' && linkedLeagueId) ? ' (Soon)' : ''}
                   </option>
                 ))}
               </select>
@@ -1227,6 +1291,9 @@ function TradeHubInner() {
           </button>
           {!senderHasAssets || !receiverHasAssets ? (
             <p className="text-xs text-white/35">Add at least one player, pick, or FAAB on both sides to enable analysis.</p>
+          ) : null}
+          {sport === 'NBA' && !nbaTeamsReady ? (
+            <p className="text-xs text-white/45">Select two different stored NBA teams to evaluate the trade.</p>
           ) : null}
         </div>
 
@@ -1297,19 +1364,19 @@ function TradeHubInner() {
                     <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                       <div className={`text-2xl font-black ${result.valueDelta >= 0 ? "text-emerald-300" : "text-red-300"}`}>
                         {result.valueDelta > 0 ? "+" : ""}
-                        {result.rawPayload.model === 'nba_points_production_v1' ? result.valueDelta.toFixed(2) : Math.round(result.valueDelta)}
+                        {result.rawPayload.model?.startsWith('nba_') ? result.valueDelta.toFixed(2) : Math.round(result.valueDelta)}
                       </div>
-                      <div className="mt-1 text-[10px] text-white/35">{result.rawPayload.model === 'nba_points_production_v1' ? 'Fantasy PPG Delta' : 'Value Delta'}</div>
+                      <div className="mt-1 text-[10px] text-white/35">{result.rawPayload.model === 'nba_verified_lineup_v1' ? 'Starter PPG Delta' : result.rawPayload.model === 'nba_points_production_v1' ? 'Fantasy PPG Delta' : 'Value Delta'}</div>
                     </div>
                     <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                       <div className="text-2xl font-black text-white">{result.confidencePct}%</div>
-                      <div className="mt-1 text-[10px] text-white/35">{result.rawPayload.model === 'nba_points_production_v1' ? 'Data Coverage' : 'Confidence'}</div>
+                      <div className="mt-1 text-[10px] text-white/35">{result.rawPayload.model?.startsWith('nba_') ? 'Data Coverage' : 'Confidence'}</div>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">{result.rawPayload.model === 'nba_points_production_v1' ? 'Production Grades' : 'Grades'}</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">{result.rawPayload.model === 'nba_verified_lineup_v1' ? 'Starter Impact Grades' : result.rawPayload.model === 'nba_points_production_v1' ? 'Production Grades' : 'Grades'}</div>
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-center">
                       <div className="text-3xl font-black text-cyan-200">{result.senderGrade}</div>
@@ -1338,7 +1405,7 @@ function TradeHubInner() {
                 <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-6">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-300">
-                      {result.rawPayload.model === 'nba_points_production_v1' ? 'Stat Analysis' : 'AI Analysis'}
+                      {result.rawPayload.model?.startsWith('nba_') ? 'Stat Analysis' : 'AI Analysis'}
                     </span>
                     {result.fairnessMethod ? (
                       <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-white/45">

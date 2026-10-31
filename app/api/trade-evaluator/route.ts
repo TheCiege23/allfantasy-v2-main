@@ -58,6 +58,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { resolveTradeEvaluatorInternalLeagueId } from '@/lib/trades/resolveTradeEvaluatorInternalLeagueId'
 import { loadTradeLeagueContext, type TradeLeagueContext } from '@/lib/trades/loadTradeLeagueContext'
 import { loadNbaPointsTradeEvaluation, type NbaPointsTradeEvaluation, type NbaTradeAsset } from '@/lib/trades/nbaPointsTradeEvaluation'
+import { loadNbaLineupImpact, type NbaLineupImpact } from '@/lib/trades/nbaLineupImpact'
 import { resolveTradePlayerAssets } from '@/lib/trades/tradePlayerIdentityResolver'
 import {
   buildNormalizedTradeContext,
@@ -538,6 +539,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       : undefined
 
     let nbaEvaluation: NbaPointsTradeEvaluation | null = null
+    let nbaLineupImpact: NbaLineupImpact | null = null
     let nbaAssets: { senderGives: NbaTradeAsset[]; receiverGives: NbaTradeAsset[] } | null = null
     if (evaluatedSport === 'NBA') {
       if (!tradeLeagueContext || tradeLeagueContext.scoringMode !== 'points' || !Object.keys(tradeLeagueContext.scoringRules).length) {
@@ -605,6 +607,13 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
           players: nbaEvaluation.players,
         }, { status: 422 })
       }
+      nbaLineupImpact = await loadNbaLineupImpact({
+        league: tradeLeagueContext,
+        senderTeamId: data.sender.team_id,
+        receiverTeamId: data.receiver.team_id,
+        senderGives: nbaEvaluation.senderGives,
+        receiverGives: nbaEvaluation.receiverGives,
+      })
     }
 
     const gate = await requireFeatureEntitlement({
@@ -629,11 +638,14 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
     if (nbaEvaluation?.ok && tradeLeagueContext) {
       const given = nbaEvaluation.senderTotal
       const received = nbaEvaluation.receiverTotal
-      const delta = Math.round((received - given) * 100) / 100
-      const fairnessScore = Math.max(0, Math.round(100 - 100 * Math.abs(delta) / Math.max(given, received, 1)))
-      const edge = Math.abs(delta) / Math.max(given, received, 1)
+      const verifiedLineup = nbaLineupImpact?.status === 'verified' ? nbaLineupImpact : null
+      const senderNet = verifiedLineup?.sender.delta ?? Math.round((received - given) * 100) / 100
+      const receiverNet = verifiedLineup?.receiver.delta ?? -senderNet
+      const advantage = verifiedLineup ? senderNet - receiverNet : senderNet
+      const fairnessScore = Math.max(0, Math.round(100 - 100 * Math.abs(advantage) / Math.max(given, received, 1)))
+      const edge = Math.abs(advantage) / Math.max(given, received, 1)
       const verdict = edge <= 0.1 ? 'Fair' : 'Slight Win'
-      const lean = delta >= 0 ? 'You' : 'Them'
+      const lean = advantage >= 0 ? 'You' : 'Them'
       const pricedPlayers = [...nbaEvaluation.senderGives, ...nbaEvaluation.receiverGives]
       const coverageScore = Math.round(100 * pricedPlayers.reduce((sum, player) =>
         sum + (player.currentPointsPerGame !== null ? 1 : 0)
@@ -647,16 +659,20 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         ...(senderStoredTeam ? [`${senderStoredTeam.name}: ${senderStoredTeam.record.wins}-${senderStoredTeam.record.losses}-${senderStoredTeam.record.ties}`] : []),
         ...(receiverStoredTeam ? [`${receiverStoredTeam.name}: ${receiverStoredTeam.record.wins}-${receiverStoredTeam.record.losses}-${receiverStoredTeam.record.ties}`] : []),
       ]
-      const summary = `NBA points production: ${data.sender.manager_name} sends ${given.toFixed(2)} and receives ${received.toFixed(2)} scored fantasy points per game. Historical production does not establish roster fit or playoff odds.`
+      const summary = verifiedLineup
+        ? `Verified NBA starter impact: ${senderStoredTeam?.name ?? data.sender.manager_name} changes by ${senderNet.toFixed(2)} and ${receiverStoredTeam?.name ?? data.receiver.manager_name} changes by ${receiverNet.toFixed(2)} scored fantasy points per game after this trade. This is an optimized lineup estimate, not a playoff forecast.`
+        : `NBA points production: ${data.sender.manager_name} sends ${given.toFixed(2)} and receives ${received.toFixed(2)} scored fantasy points per game. Roster impact is unavailable: ${nbaLineupImpact?.status === 'unavailable' ? nbaLineupImpact.reason : 'No verified roster data.'}`
       return NextResponse.json({
         success: true,
-        model: 'nba_points_production_v1',
+        model: verifiedLineup ? 'nba_verified_lineup_v1' : 'nba_points_production_v1',
         schemaValid: false,
         evaluation: {
-          verdict: { overall: edge <= 0.1 ? 'FAIR' : delta > 0 ? 'UNFAIR_TEAM_A' : 'UNFAIR_TEAM_B' },
+          verdict: { overall: edge <= 0.1 ? 'FAIR' : advantage > 0 ? 'UNFAIR_TEAM_A' : 'UNFAIR_TEAM_B' },
           explanation: { summary, leagueContextNotes: [...participantNotes, ...nbaEvaluation.coverage] },
           confidence: { score: coverageScore, rating: coverageScore >= 80 ? 'HIGH' : 'MEDIUM', drivers: nbaEvaluation.coverage },
-          riskFlags: ['Production comparison only; roster fit, age, future picks, and playoff probability are not yet modeled. Coverage is not a prediction accuracy score.'],
+          riskFlags: [verifiedLineup
+            ? 'Lineup impact assumes all roster players are available and an optimal lineup; age, future picks, and playoff probability are not yet modeled. Coverage is not a prediction accuracy score.'
+            : 'Production comparison only; roster fit, age, future picks, and playoff probability are not yet modeled. Coverage is not a prediction accuracy score.'],
         },
         leagueSettings: {
           source: tradeLeagueContext.platform, sport: 'nba', format: tradeLeagueContext.format,
@@ -672,10 +688,11 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
           unit: 'league_scored_fantasy_points_per_game',
           senderGives: nbaEvaluation.senderGives,
           receiverGives: nbaEvaluation.receiverGives,
-          teamA: { totalGiven: given, totalReceived: received, netValue: delta, fairnessScore },
-          teamB: { totalGiven: received, totalReceived: given, netValue: -delta, fairnessScore },
+          lineupImpact: nbaLineupImpact,
+          teamA: { totalGiven: given, totalReceived: received, netValue: senderNet, fairnessScore },
+          teamB: { totalGiven: received, totalReceived: given, netValue: receiverNet, fairnessScore },
         },
-        tradeInsights: { fairnessScore, fairnessMethod: 'historical_nba_points_per_game' },
+        tradeInsights: { fairnessScore, fairnessMethod: verifiedLineup ? 'verified_nba_starter_delta' : 'historical_nba_points_per_game' },
         acceptProbability: { verdict, lean, probability: null, acceptBullets: nbaEvaluation.coverage },
         serverConfidence: { score: coverageScore },
         rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
