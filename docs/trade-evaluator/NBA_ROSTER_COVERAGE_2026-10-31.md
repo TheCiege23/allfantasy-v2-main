@@ -29,13 +29,17 @@ The read-only [league readiness audit](../../scripts/audits/fantrax-nba-league-r
 | Stored snapshot for this source league | 0 | 1 |
 | Imported league row through legacy snapshot ID | 0 | 1 |
 | NBA identity rows in database | 1,856 | 1,868 |
-| Roster IDs with a unique NBA identity | 0/140 | 133/140 |
-| Matched IDs with a complete latest season stat row for all six rules | 0 | 133 |
-| Regular-season NBA stat rows with games played | 0 | 2,740 |
+| Roster IDs with a unique NBA identity | 132/140 | 133/140 |
+| Matched IDs with a complete latest season stat row for all six rules | 132 | 133 |
+| Regular-season NBA stat rows with games played | 1,053 | 2,740 |
 
-The production import uses its legacy snapshot ID as `platformLeagueId`, so a lookup by the Fantrax source ID alone misses it. Seven roster IDs have no unique NBA identity. Even after normalizing Fantrax's `last, first` names, none of those seven has a unique name-and-position registry match. Staging has 49 unique name-and-position candidates, but none also agrees on team; those are leads for review, not verified links. The audit made no database changes.
+The production import uses its legacy snapshot ID as `platformLeagueId`, so a lookup by the Fantrax source ID alone misses it. Seven production roster IDs have no unique NBA identity. The staging source sync below linked 132 IDs and left eight without a unique name match. Both audits made no database changes; the separate staging sync wrote the identities and stats shown in the staging column.
 
-A staging refresh cannot yet prove a real grade: the account owner must connect Fantrax in the staging app, and staging needs source-backed NBA identity links and season stats. The league URL proves the league exists, but does not prove which team the app user owns. Keep the Fantrax Secret ID inside the app. After those prerequisites are present, import the owner's selected team, rerun the audit, and grade a real trade with all selected players resolved.
+The [staging-only source sync](../../scripts/sync-fantrax-nba-trade-data.cjs) read the public Fantrax roster and Rolling Insights 2025 and 2026 NBA season feeds. It linked a Fantrax ID only when its normalized name uniquely matched an NBA identity whose stored Rolling Insights ID also carried that name in the provider feed. It wrote 1,053 complete season rows with games played; eight roster IDs were left unresolved. A second dry run found zero new links, showing the identity step is repeatable. It did not create a league or claim a team.
+
+The [read-only smoke](../../scripts/audits/smoke-fantrax-nba-trade-grade.ts) passed through the actual NBA evaluator with one linked player from each of two public league teams and all six live scoring weights. It returned 2026 season values of 24.35 and 22.63 points per game, with no coverage warnings. This proves the data and scoring path for those players, not a user-authorized league trade request. The evaluator now also accepts Fantrax's `Last, First` display names when its exact player ID matches the identity map.
+
+The public league ID is enough to discover the 10 teams and let a signed-in AllFantasy user select a team they control for import. A Fantrax Secret ID is optional for automatic ownership verification and should remain inside the app. The next end-to-end check is a staging import through that selection flow, followed by a trade-evaluator request involving linked players on two teams. Trades involving any of the eight unresolved players must continue to return an explicit coverage error.
 
 Commands:
 
@@ -44,4 +48,6 @@ node scripts/audits/nba-trade-coverage.cjs .env.staging
 node scripts/audits/nba-trade-coverage.cjs .env --production-readonly
 node scripts/audits/fantrax-nba-league-readiness.cjs .env.staging 51isdapqmt6atvdz
 node scripts/audits/fantrax-nba-league-readiness.cjs .env 51isdapqmt6atvdz --production-readonly
+node scripts/sync-fantrax-nba-trade-data.cjs 51isdapqmt6atvdz
+node --env-file=.env.staging --require ./scripts/_audit-preload.cjs --import tsx scripts/audits/smoke-fantrax-nba-trade-grade.ts 51isdapqmt6atvdz
 ```

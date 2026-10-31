@@ -142,4 +142,14 @@ describe('NBA points trade evaluation', () => {
       where: expect.objectContaining({ playerId: { in: ['identity-a', 'ri-a', 'fantrax-a'] } }),
     }))
   })
+
+  it('resolves a Fantrax last-first roster name using its exact player ID', async () => {
+    identities.mockResolvedValue([{ id: 'identity-a', canonicalName: 'LeBron James', sleeperId: null,
+      rollingInsightsId: 'ri-a', espnId: null, fantraxId: 'fantrax-a' }])
+    seasons.mockResolvedValue(history('identity-a', 200, 100).seasons
+      .map((row) => ({ ...row, fetchedAt: new Date('2026-04-01') })))
+    const result = await readNbaPlayerHistory({ name: 'James, LeBron', playerId: 'fantrax-a' })
+    expect(result.playerId).toBe('identity-a')
+    expect(result.seasons).toHaveLength(2)
+  })
 })

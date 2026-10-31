@@ -68,7 +68,12 @@ function record(value: unknown): Record<string, unknown> {
 }
 
 function nameKey(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '')
+  // Fantrax's public directory uses "Last, First" while identity rows use
+  // "First Last". Keep the provider id check below as the primary constraint.
+  const parts = name.split(',')
+  const ordered = parts.length === 2 ? `${parts[1]} ${parts[0]}` : name
+  return ordered.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
 /** Resolve within the sport before reading DB snapshots; an ambiguous name is never priced. */
