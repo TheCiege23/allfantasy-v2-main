@@ -5,6 +5,12 @@ name: Survivor season rehearsal
 # a role that exists only on that branch, so this job cannot reach production. The run's log is
 # posted to the branch's pull request, because job logs and artifacts are not readable from every
 # place this is driven from.
+#
+# `walkthrough: true` adds a second job: it builds the app, starts it against the SAME isolated
+# branch (and nothing else — no provider key, no delivery credential, every outbound HTTP request
+# from the server sent to a dead proxy, every non-app request from the browser aborted), signs in as
+# a rehearsal castaway and as the rehearsal commissioner, and screenshots every Survivor screen at
+# 1440x900 and 390x844. Screenshots go up as an artifact; a summary is posted to the PR.
 
 on:
   workflow_dispatch:
@@ -24,6 +30,13 @@ on:
       real_scores:
         description: 'Keep real PlayerWeeklyScore rows already on the branch and seed only the gaps (true/false)'
         default: 'false'
+      walkthrough:
+        description: 'After the season, start the app on the rehearsal DB and screenshot every Survivor screen'
+        type: boolean
+        default: false
+      walkthrough_week:
+        description: 'With walkthrough: stop the season at this week (its first council voted, unrevealed) instead of running it to the finale. Blank = full season.'
+        default: ''
   push:
     branches: [claude/survivor-season-harness]
     paths: ['scripts/survivor-season-rehearsal/**', '.github/workflows/survivor-season-rehearsal.yml']
@@ -53,16 +66,7 @@ jobs:
       - name: Require the isolated connection
         env:
           URL: ${{ secrets.SURVIVOR_REHEARSAL_DATABASE_URL }}
-        # Reasons go out as ::error:: annotations, which are readable where the job log is not. The
-        # value itself is never printed; only which rule it broke.
-        run: |
-          if [ -z "$URL" ]; then echo "::error::SURVIVOR_REHEARSAL_DATABASE_URL is empty or not a repository Actions secret."; exit 1; fi
-          case "$URL" in postgres://*|postgresql://*) ;; *) echo "::error::The secret does not start with postgresql:// (check for quotes or a psql command around it)."; exit 1;; esac
-          case "$URL" in *ep-curly-block-ad0dlt9o*) echo "::error::Refusing the production endpoint."; exit 1;; esac
-          case "$URL" in *ep-old-queen-ade7otjh*) ;; *) echo "::error::The secret is not the staging-survivor-season branch (endpoint ep-old-queen-ade7otjh)."; exit 1;; esac
-          DB=$(printf '%s' "$URL" | sed -E 's#^[^/]*//[^/]*/([^?]*).*#\1#')
-          if [ "$DB" != "neondb" ]; then echo "::error::The secret names database '$DB'; it must be 'neondb' (the branch's current schema). Change the path after the host to /neondb."; exit 1; fi
-          echo "::notice::Isolated connection accepted (staging-survivor-season branch, database neondb)."
+        run: bash scripts/survivor-season-rehearsal/require-isolated-db.sh
       - run: npm ci
       - name: Run the season
         env:
@@ -74,14 +78,26 @@ jobs:
           START: ${{ inputs.start || '2026-09-08T16:00:00Z' }}
           CHIMMY: ${{ inputs.chimmy || '2' }}
           REAL_SCORES: ${{ inputs.real_scores || 'false' }}
+          # Only a walkthrough may stop the season early; a plain rehearsal always runs to the finale.
+          STOP_WEEK: ${{ inputs.walkthrough && inputs.walkthrough_week || '0' }}
         run: |
           export NEXTAUTH_SECRET="$(openssl rand -hex 32)"
           export DIRECT_URL="${DATABASE_URL/-pooler./.}"
           set +e
           npx tsx --conditions=react-server scripts/survivor-season-rehearsal/run.ts \
-            --sport="$SPORT" --cast="$CAST" --start="$START" --chimmy="$CHIMMY" --real-scores="$REAL_SCORES" --log=rehearsal.log > rehearsal.out 2>&1
+            --sport="$SPORT" --cast="$CAST" --start="$START" --chimmy="$CHIMMY" --real-scores="$REAL_SCORES" \
+            --stop-week="$STOP_WEEK" --log=rehearsal.log > rehearsal.out 2>&1
           echo "RC=$?" >> rehearsal.log
           exit 0
+      # The walkthrough job needs to know which league this run made: {marker, leagueId, userIds}, no secret.
+      - name: Hand the league to the walkthrough
+        if: always() && inputs.walkthrough
+        uses: actions/upload-artifact@v4
+        with:
+          name: survivor-rehearsal-league
+          path: rehearsal.log.league
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Post the log to the pull request
         if: always()
         env:
@@ -106,3 +122,114 @@ jobs:
           } > comment.md
           if [ -n "$PR" ]; then gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md; fi
           cat comment.md >> "$GITHUB_STEP_SUMMARY"
+
+  walkthrough:
+    needs: rehearsal
+    if: inputs.walkthrough
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      # The app under test runs on loopback only. NEXTAUTH_SECRET is generated below, per run.
+      BASE_URL: http://127.0.0.1:3000
+      NEXTAUTH_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+      SURVIVOR_REHEARSAL_ENDPOINT: ep-old-queen-ade7otjh
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Require the isolated connection
+        env:
+          URL: ${{ secrets.SURVIVOR_REHEARSAL_DATABASE_URL }}
+        run: bash scripts/survivor-season-rehearsal/require-isolated-db.sh
+      - uses: actions/download-artifact@v4
+        with:
+          name: survivor-rehearsal-league
+      - name: Require a league from the season job
+        run: |
+          if [ ! -s rehearsal.log.league ]; then echo "::error::The season job made no league (rehearsal.log.league is missing); nothing to walk through."; exit 1; fi
+          node -e "const f=JSON.parse(require('fs').readFileSync('rehearsal.log.league','utf8'));console.log('::notice::Walkthrough of league '+f.leagueId+' ('+f.userIds.length+' test managers)')"
+      # A random signing key for this run's sessions only. It never leaves the runner and is
+      # masked in the log; a cookie signed with it is worthless anywhere but the app started here.
+      - name: Per-run session secret
+        run: |
+          S="$(openssl rand -hex 32)"
+          echo "::add-mask::$S"
+          echo "NEXTAUTH_SECRET=$S" >> "$GITHUB_ENV"
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      # `next build` + `next start` rather than `next dev`: dev compiles each of ~30 routes on first
+      # visit (minutes each in this repo), which makes screenshot timing a property of the compiler.
+      - name: Build the app
+        env:
+          DATABASE_URL: ${{ secrets.SURVIVOR_REHEARSAL_DATABASE_URL }}
+        run: |
+          export DIRECT_URL="${DATABASE_URL/-pooler./.}"
+          set +e
+          npm run build > next-build.log 2>&1; rc=$?
+          sed -E 's#postgres(ql)?://[^ ]+#[redacted]#g' next-build.log | tail -n 80
+          exit $rc
+      - name: Start the app on the rehearsal database
+        env:
+          DATABASE_URL: ${{ secrets.SURVIVOR_REHEARSAL_DATABASE_URL }}
+          # Every outbound HTTP(S) request the SERVER makes goes to a closed local port, so no sports
+          # provider, AI vendor, email or analytics service is reached. Postgres is raw TCP, not HTTP,
+          # and loopback is exempt so the app can call itself.
+          NODE_USE_ENV_PROXY: '1'
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          NO_PROXY: 127.0.0.1,localhost
+        run: |
+          export DIRECT_URL="${DATABASE_URL/-pooler./.}"
+          nohup node node_modules/next/dist/bin/next start -p 3000 -H 127.0.0.1 > next-start.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -fsS -o /dev/null "$BASE_URL/api/auth/csrf"; then echo "::notice::App is up after ~$((i * 2))s"; exit 0; fi
+            sleep 2
+          done
+          echo "::error::The app did not start in 180s."
+          sed -E 's#postgres(ql)?://[^ ]+#[redacted]#g' next-start.log | tail -n 80
+          exit 1
+      - name: Screenshot every Survivor screen
+        env:
+          DATABASE_URL: ${{ secrets.SURVIVOR_REHEARSAL_DATABASE_URL }}
+        run: |
+          set +e
+          npx tsx scripts/survivor-season-rehearsal/walkthrough.ts \
+            --league-file=rehearsal.log.league --base-url="$BASE_URL" --out=walkthrough > walkthrough.out 2>&1; rc=$?
+          sed -E 's#postgres(ql)?://[^ ]+#[redacted]#g' walkthrough.out | tail -n 200
+          exit $rc
+      - name: Redact the server log
+        if: always()
+        run: |
+          touch next-start.log next-build.log walkthrough.out
+          mkdir -p walkthrough
+          for f in next-start.log next-build.log walkthrough.out; do sed -E 's#postgres(ql)?://[^ ]+#[redacted]#g' "$f" > "walkthrough/$f"; done
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: survivor-walkthrough-${{ inputs.sport || 'NFL' }}-${{ github.run_id }}
+          path: walkthrough/
+          retention-days: 14
+      - name: Post the walkthrough summary to the pull request
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -z "$PR" ]; then PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head claude/survivor-season-harness --state open --json number --jq '.[0].number'); fi
+          {
+            echo "### Survivor walkthrough · ${{ inputs.sport || 'NFL' }} ${{ inputs.cast || '16' }} · run ${{ github.run_id }}${{ inputs.walkthrough_week && format(' · stopped at week {0}', inputs.walkthrough_week) || ' · full season' }}"
+            echo
+            if [ -s walkthrough/summary.md ]; then sed -E 's#postgres(ql)?://[^ ]+#[redacted]#g' walkthrough/summary.md | head -c 50000; else echo "No screenshots were taken; see the job log."; fi
+            echo
+            echo "Screenshots: artifact \`survivor-walkthrough-${{ inputs.sport || 'NFL' }}-${{ github.run_id }}\` on ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } > walkthrough-comment.md
+          if [ -n "$PR" ]; then gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file walkthrough-comment.md; fi
+          cat walkthrough-comment.md >> "$GITHUB_STEP_SUMMARY"

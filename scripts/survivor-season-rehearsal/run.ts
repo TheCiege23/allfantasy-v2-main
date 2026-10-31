@@ -13,13 +13,7 @@ import { setRehearsalNow, advanceRehearsalClock, rehearsalNow } from './fakeCloc
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { appendFileSync, writeFileSync } from 'node:fs'
-
-const PRODUCTION_ENDPOINT = 'ep-curly-block-ad0dlt9o'
-const DELIVERY_ENV = [
-  'RESEND_API_KEY', 'VAPID_PRIVATE_KEY', 'APNS_PRIVATE_KEY', 'TWILIO_AUTH_TOKEN', 'TWILIO_API_SECRET',
-  'PUSHER_SECRET', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'REDIS_URL', 'DISCORD_BOT_TOKEN',
-  'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'XAI_API_KEY', 'GROK_API_KEY', 'DEEPSEEK_API_KEY',
-]
+import { assertIsolatedRehearsalDatabase } from './guard'
 
 const arg = (name: string, fallback: string) => process.argv.find(a => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback
 const SPORT = arg('sport', 'NFL').toUpperCase()
@@ -45,15 +39,13 @@ function log(line: string) {
   appendFileSync(LOG, out + '\n')
 }
 
+// Stop mid-season for a walkthrough: once the clock reaches this week, stop after its first council's
+// ballots are in (still unrevealed), or as soon as the week after it starts. 0 runs the whole season.
+const STOP_WEEK = Number(arg('stop-week', '0')) || 0
+let stoppedEarly = false
+
 function guard() {
-  const url = process.env.DATABASE_URL ?? ''
-  const host = url.match(/@([^/:?]+)/)?.[1] ?? ''
-  const endpoint = host.split('.')[0].replace(/-pooler$/, '')
-  assert.ok(endpoint, 'DATABASE_URL must be set explicitly')
-  assert.notEqual(endpoint, PRODUCTION_ENDPOINT, 'Refusing the production endpoint')
-  assert.equal(endpoint, process.env.SURVIVOR_REHEARSAL_ENDPOINT, 'DATABASE_URL must point at SURVIVOR_REHEARSAL_ENDPOINT')
-  const present = DELIVERY_ENV.filter(k => process.env[k])
-  assert.deepEqual(present, [], `Unset delivery credentials first: ${present.join(', ')}`)
+  assertIsolatedRehearsalDatabase()
 }
 
 type ExileTeamForm = { team: string; expected: number; filled: number; readings: number; real: number }
@@ -191,6 +183,7 @@ async function main() {
   for (let step = 0; step < MAX_STEPS; step++) {
     const game = await prisma.survivorGameState.findUnique({ where: { leagueId } })
     const week = game?.currentWeek ?? 0
+    if (STOP_WEEK > 0 && week > STOP_WEEK) { stoppedEarly = true; log(`stop-week ${STOP_WEEK}: stopping at the start of week ${week}`); break }
     // Chimmy's Exile claim happens inside the runner's tick: read the field it chooses from first.
     const exileBefore = CHIMMY > 0 ? await chimmyExileFields(rehearsalNow()) : null
     const outcome = await runPlannedSurvivorLeague(leagueId, rehearsalNow())
@@ -218,6 +211,7 @@ async function main() {
     if (outcome === 'awaiting_verified_scores' && repeats === 3) await explainUnfinalizedWeek(week)
     if (outcome === 'voting_open') {
       await castVotes()
+      if (STOP_WEEK > 0 && week >= STOP_WEEK) { stoppedEarly = true; log(`stop-week ${STOP_WEEK}: stopping with week ${week}'s ballots in, unrevealed`); break }
       advanceRehearsalClock(6 * 3_600_000)
       continue
     }
@@ -565,6 +559,8 @@ async function main() {
     const exileTeams = exileEntries.map(e => { const l = e.submittedLineup as { team?: string | null; players?: unknown[] } | null; return `w${e.week}:${l?.team ?? '-'}(${l?.players?.length ?? 0})` })
     log(`Chimmy on Exile: ${exileTeams.length ? exileTeams.join(' ') : 'no Exile weeks'}`)
     log(`Chimmy season: ${cast}/${expected} ballots cast across ${chimmyBallotsExpected.size} councils; idols held ${idols.length}, played ${played.length} (${played.map(i => i.powerType).join(', ') || 'none'}); finished ${cast_.map(c => `${c.displayName}=${c.playerState}`).join(', ')}`)
+    // A season stopped for a walkthrough can end before Chimmy's first council, or mid-council.
+    if (stoppedEarly) { log(`Chimmy assertions skipped (stopped at week ${STOP_WEEK}); ${missing.length} ballots outstanding`); return }
     assert.ok(chimmyBallotsExpected.size > 0, 'Chimmy never sat at a council')
     assert.deepEqual(missing, [], 'Chimmy left a ballot unsent')
   }
