@@ -202,6 +202,8 @@ async function offlineLineupsPage() {
     const keys = await cache.keys();
     const snapshots = [];
     for (const key of keys) {
+      // Same cache also holds the lineup editor's data and queued offline edits; only snapshots render here.
+      if (!new URL(key.url).pathname.startsWith('/__offline/lineups/')) continue;
       try {
         const res = await cache.match(key);
         const s = res ? await res.json() : null;

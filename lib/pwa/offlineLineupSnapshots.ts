@@ -8,9 +8,11 @@ import type { DisplayPlayerMap } from '@/lib/player-data/adapters/redraftDisplay
  * 🛑 WHY A SNAPSHOT AND NOT A CACHED PAGE OR A CACHED API RESPONSE. `public/sw.js` deliberately never
  * stores signed-in HTML: on an iPhone home-screen launch a cached page can replay a VPN block or a
  * login redirect after the cause is gone (`__tests__/pwa-vpn-recovery.test.ts`). And
- * `/api/league/roster` is a large payload shaped for the editor. So the screen writes this small,
- * flat record itself after every successful online load, and two readers use it: the lineup screen
- * when its fetch fails, and the service worker's offline fallback page on a cold launch.
+ * `/api/league/roster` is a large payload shaped for the editor — the screen keeps that too
+ * (lib/pwa/offlineLineupQueue.ts), so the editor opens offline, but the worker's page has to render
+ * with plain string handling. So the screen also writes this small, flat record after every
+ * successful online load, and two readers use it: the service worker's offline fallback page on a
+ * cold launch, and the lineup screen when its fetch fails and the editor's copy is missing.
  *
  * ⚠ THE CACHE NAME IS LOAD-BEARING TWICE. The `AllFantasy-pages-` prefix is what
  * `lib/pwa/signOutAndPurge.ts` deletes on sign-out, so a shared device does not show the previous
