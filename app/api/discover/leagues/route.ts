@@ -19,6 +19,7 @@ import type {
 import { resolveUserCareerTier } from "@/lib/ranking/tier-visibility"
 import { publicReputationForLeagues } from "@/lib/commish-reputation/reputationService"
 import { paidLeagueGeoMessage, paidLeagueGeoVerdict } from "@/lib/geo/paidLeagueGeo"
+import type { LeagueVibeFilter } from "@/lib/public-discovery/vibes"
 
 export const dynamic = "force-dynamic"
 
@@ -66,6 +67,7 @@ export async function GET(req: NextRequest) {
     const draftWhen = (sp?.get("draftWhen") as DraftWhenFilter) ?? "any"
     const tzRegion = (sp?.get("tzRegion") as TimeZoneRegionFilter) ?? "any"
     const rankBand = (sp?.get("rankBand") as RankBandFilter) ?? "all"
+    const vibe = (sp?.get("vibe") as LeagueVibeFilter) ?? "all"
     const viewerTimeZone = sp?.get("viewerTz")?.slice(0, 64) ?? null
     const page = Math.max(1, parseInt(sp?.get("page") ?? "1", 10))
     const limit = Math.min(24, Math.max(6, parseInt(sp?.get("limit") ?? "12", 10)))
@@ -99,6 +101,7 @@ export async function GET(req: NextRequest) {
         draftWhen,
         tzRegion,
         rankBand,
+        vibe,
         viewerTimeZone,
         page,
         limit,

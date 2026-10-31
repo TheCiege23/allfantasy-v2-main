@@ -3,6 +3,7 @@
  * Safe public data only; supports NFL, NHL, NBA, MLB, NCAAB, NCAAF, SOCCER.
  */
 
+import type { LeagueVibe, LeagueVibeFilter } from "./vibes"
 import type { PublicReputation } from "@/lib/commish-reputation/reputation"
 
 export type DiscoverySource = "fantasy" | "bracket" | "creator"
@@ -108,6 +109,12 @@ export interface DiscoveryCard {
   listingNote?: string | null
   /** Entry fee in dollars, when the league states one. AllFantasy never collects it. */
   entryFee?: number | null
+  /** Up to three vibe tags the commissioner picked (lib/public-discovery/vibes.ts). */
+  vibes?: LeagueVibe[]
+  /** The commissioner card: their username, how many AllFantasy leagues they run, since when. */
+  commissionerUsername?: string | null
+  commissionerLeaguesRun?: number | null
+  commissionerSinceYear?: number | null
 }
 
 export interface DiscoverLeaguesInput {
@@ -128,6 +135,7 @@ export interface DiscoverLeaguesInput {
   draftWhen?: DraftWhenFilter
   tzRegion?: TimeZoneRegionFilter
   rankBand?: RankBandFilter
+  vibe?: LeagueVibeFilter
   /** The viewer's IANA zone, so draft windows are judged on their clock. */
   viewerTimeZone?: string | null
 }

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { LeagueVibePicker } from './LeagueVibePicker'
 
 /**
  * "List this league in Find a League", on the Commissioner Hub of a native league.
@@ -136,6 +137,7 @@ export function FindLeagueListingCard({
           </Link>
         ) : null}
       </div>
+      {state.listed && !welcome ? <LeagueVibePicker leagueId={leagueId} /> : null}
       <p role="status">{message}</p>
     </section>
   )

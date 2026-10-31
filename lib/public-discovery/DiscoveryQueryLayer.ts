@@ -12,6 +12,7 @@ import {
   listingVerification,
   readExternalListing,
 } from "./externalListing"
+import { readLeagueVibes } from "./vibes"
 import type { DiscoveryCard, DiscoveryLeagueStyle } from "./types"
 
 const DEFAULT_BASE_URL =
@@ -23,6 +24,8 @@ const LEAGUE_INVITE_CODE_KEY = "inviteCode"
 const LEAGUE_PUBLIC_DASHBOARD_KEY = "publicDashboard"
 const LEAGUE_DESCRIPTION_KEY = "description"
 const DEFAULT_DISCOVERY_TAKE = 300
+/** `League.platform` values for a league made here (lib/public-discovery/externalListing.ts). */
+const NATIVE_PLATFORM_VALUES = ["manual", "allfantasy", "af", "native"] as const
 
 function resolveBaseUrl(baseUrl?: string): string {
   return (baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "")
@@ -251,6 +254,7 @@ export async function queryPublicFantasyLeagueCards(options: {
           username: true,
           displayName: true,
           avatarUrl: true,
+          createdAt: true,
         },
       },
     },
@@ -265,6 +269,7 @@ export async function queryPublicFantasyLeagueCards(options: {
     prisma as unknown as Prisma.TransactionClient,
     leagues.map((l) => l.id)
   )
+  const leaguesRun = await countLeaguesRunByCommissioner(leagues.map((l) => l.userId))
 
   return leagues
     .map((league): DiscoveryCard | null => {
@@ -360,9 +365,34 @@ export async function queryPublicFantasyLeagueCards(options: {
         commissionerName: league.user?.displayName ?? league.user?.username ?? "Commissioner",
         aiFeatures: resolveAiFeatures(settings),
         leagueTier,
+        vibes: readLeagueVibes(settings),
+        commissionerUsername: league.user?.username ?? null,
+        commissionerLeaguesRun: leaguesRun.get(league.userId) ?? null,
+        commissionerSinceYear: league.user?.createdAt ? league.user.createdAt.getUTCFullYear() : null,
       }
     })
     .filter((card): card is DiscoveryCard => card != null)
+}
+
+/**
+ * For the commissioner card: how many leagues each commissioner runs ON AllFantasy, this season
+ * or any. Native only — an imported league is run on its own platform, and counting it would let
+ * "imported 40 leagues I play in" read as "runs 40 leagues". One grouped query for the page.
+ * A failed read drops the line from the card, never the listing.
+ */
+async function countLeaguesRunByCommissioner(userIds: string[]): Promise<Map<string, number>> {
+  const ids = [...new Set(userIds.filter(Boolean))]
+  if (ids.length === 0) return new Map()
+  try {
+    const rows = await prisma.league.groupBy({
+      by: ["userId"],
+      where: { userId: { in: ids }, platform: { in: [...NATIVE_PLATFORM_VALUES] } },
+      _count: { _all: true },
+    })
+    return new Map(rows.map((r) => [r.userId, r._count._all]))
+  } catch {
+    return new Map()
+  }
 }
 
 export async function queryPublicBracketLeagueCards(options: {
