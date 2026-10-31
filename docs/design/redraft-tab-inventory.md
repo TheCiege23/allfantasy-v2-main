@@ -11,7 +11,7 @@ Re-check before building: these files move daily.
 | surface | route | chrome | identity? |
 |---|---|---|---|
 | **A. League workspace** | `/league/[id]?view=<tab>` | `NativeLeagueWorkspace` (left rail, `.nl-sidebar`, `.nl-bottom-nav`) | ✅ `data-format=redraft` + `data-sport` |
-| **B. /core shell** | `/core/<screen>?league=<id>` | `AfCoreShell` (the light af-core sidebar) | ❌ default look — no attributes stamped |
+| **B. /core shell** | `/core/<screen>?league=<id>` | `AfCoreShell` (the light af-core sidebar) | ✅ since CORE-1 — same two attributes on `.af-core.af-shell` (`lib/core-app/coreShellRedraftIdentity.ts`) |
 
 The sidebar the owner screenshots — *Home, Brackets, My team, Defense Hub, Matchup, War Room, Waivers,
 Trades, Player Finder, Draft HQ, Your week, Live scores, Standings, Season Outlook* — is **surface B**
@@ -63,7 +63,7 @@ Router: `app/core/(shell)/[[...screen]]/page.tsx`; screens lazy-load from
 
 | nav label | route | top component | CSS |
 |---|---|---|---|
-| Home (league overview) | `/core?league=` | `screens/LeagueHome.tsx` | `af-league-home.css`, `charts/workbook-chart.css` |
+| Home (league overview) | `/core?league=` | `screens/LeagueHome.tsx` — ⚠ **imported leagues only**: for a native league the page redirects to `/league/[id]` before any home read (`leagueEntryHref`, "Canonical entry for AF-hosted leagues", #2892), so a native redraft league's /core "Home" IS surface A's League home | `af-league-home.css`, `charts/workbook-chart.css` |
 | Brackets | `/brackets` (not league-scoped) | `screens/BracketChallenge.tsx` | `af-bracket.css` |
 | My team | `/core/my-team` | `screens/MyTeam.tsx` | `af-my-team.css`, `af-team-workspace.css`, `highlights/recent-clips.css`, **`af-player-card.css`** |
 | Defense Hub | `/core/defense-hub` | `DefenseHubClient.tsx` | `af-core.css` (IDP only) |
@@ -115,7 +115,7 @@ Surface B (needs the AfCoreShell decision first):
 
 | batch | screens | owns |
 |---|---|---|
-| **B1** | Home | `LeagueHome.tsx`, `af-league-home.css` |
+| **B1** | Home | `LeagueHome.tsx`, `af-league-home.css` — ⚠ unreachable for native redraft today (the /core home redirects native leagues to `/league/[id]`; see the row above). Either lift that redirect for native redraft (a navigation decision) or fold B1 into **A1** |
 | **B2** | My team + Your week | `MyTeam.tsx`, `YourWeekLeague.tsx`, `af-my-team.css`, `af-team-workspace.css`, `af-week-*.css` |
 | **B3** | Matchup + Live scores | `Matchup.tsx`, `LiveScores.tsx`, `af-matchup*.css`, `af-live.css` |
 | **B4** | Trades + War Room | `Trades.tsx`, `ConnectedFranchiseWarRoom.tsx`, `af-trades.css`, `af-connected-war-room.css` |
