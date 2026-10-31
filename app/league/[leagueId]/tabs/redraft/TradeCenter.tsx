@@ -28,21 +28,42 @@ import {
   tradePartiesPendingAcceptance,
   tradePartiesToAccept,
 } from '@/lib/redraft/tradeParticipants'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+
+type Translate = (key: string) => string
+type TranslateVars = (key: string, vars?: Record<string, string | number | undefined>) => string
 
 function rosterName(row: RedraftRosterRow | undefined, fallbackId: string): string {
   return row?.teamName ?? row?.ownerName ?? fallbackId.slice(0, 6)
 }
 
-function formatProposalAsset(asset: RedraftTradeProposal['assets'][number]): string {
-  if (asset.assetType === 'player') return asset.playerName ?? 'Player'
+function formatProposalAsset(
+  asset: RedraftTradeProposal['assets'][number],
+  t: Translate,
+  tInterpolate: TranslateVars,
+): string {
+  if (asset.assetType === 'player') return asset.playerName ?? t('tradeCenter.asset.player')
   if (asset.assetType === 'draft_pick') {
     const season = asset.pickSeason ? `${asset.pickSeason} ` : ''
-    const round = asset.pickRound ? `R${asset.pickRound}` : 'Pick'
+    const round = asset.pickRound
+      ? tInterpolate('tradeCenter.asset.pickRound', { round: asset.pickRound })
+      : t('tradeCenter.asset.pick')
     return `${season}${round}`.trim()
   }
+  // FAAB is the same word in every language this app ships.
   if (asset.assetType === 'faab') return 'FAAB'
-  return 'Future consideration'
+  return t('tradeCenter.asset.future')
 }
+
+/** A server enum shown as-is when there is no copy for it, so a new value still reads as something. */
+function labelFor(t: Translate, prefix: string, value: string): string {
+  const key = `${prefix}.${value}`
+  const out = t(key)
+  return out === key ? value : out
+}
+
+/** The one fixed reason the proposals route withholds a multi-team grade; translated when it is that one. */
+const MULTI_TEAM_GRADE_WITHHELD_EN = 'Grades are shown for two-team trades.'
 
 const STATUS_TONE: Record<string, string> = {
   pending: 'border-amber-400/30 text-amber-200',
@@ -73,6 +94,9 @@ export function TradeCenter({
   myRosterId?: string | null
   isCommissioner?: boolean
 }) {
+  const { t, tInterpolate, language } = useOptionalLanguage()
+  const plural = (key: string, count: number) => tInterpolate(`${key}.${count === 1 ? 'one' : 'many'}`, { count })
+  const asset = (a: RedraftTradeProposal['assets'][number]) => formatProposalAsset(a, t, tInterpolate)
   const [proposals, setProposals] = useState<RedraftTradeProposal[]>([])
   const [loading, setLoading] = useState(false)
   const [reversingId, setReversingId] = useState<string | null>(null)
@@ -106,10 +130,11 @@ export function TradeCenter({
       setProposals(rows)
       setRuntime(runtimeState)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load trade proposals')
+      setError(e instanceof Error ? e.message : t('tradeCenter.error.load'))
     } finally {
       setLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `t` only changes with the language
   }, [leagueId, seasonId, currentWeek])
 
   useEffect(() => {
@@ -145,7 +170,7 @@ export function TradeCenter({
       await submitTradeVote({ proposalId, action, ...(commissionerAction ? { reviewId: reviewIdFor(proposalId) } : {}) })
       await refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : `Failed to ${action}`)
+      setError(e instanceof Error ? e.message : t(`tradeCenter.error.action.${action}`))
     } finally {
       setBusyProposalId(null)
     }
@@ -158,7 +183,7 @@ export function TradeCenter({
       await vetoRedraftTradeProposal({ proposalId, reviewId: reviewIdFor(proposalId) })
       await refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to veto proposal')
+      setError(e instanceof Error ? e.message : t('tradeCenter.error.veto'))
     } finally {
       setBusyProposalId(null)
     }
@@ -170,10 +195,8 @@ export function TradeCenter({
     <div className="space-y-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4" data-testid="redraft-trade-center">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[13px] font-semibold text-white">Trade Center</p>
-          <p className="text-[11px] text-white/50">
-            Propose player + FAAB trades, then track offers through league review.
-          </p>
+          <p className="text-[13px] font-semibold text-white">{t('tradeCenter.title')}</p>
+          <p className="text-[11px] text-white/50">{t('tradeCenter.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -182,7 +205,7 @@ export function TradeCenter({
             disabled={loading || !seasonId}
             className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] text-white/80 disabled:opacity-50"
           >
-            {loading ? 'Refreshing…' : 'Refresh'}
+            {loading ? t('tradeCenter.refreshing') : t('tradeCenter.refresh')}
           </button>
           <button
             type="button"
@@ -191,7 +214,7 @@ export function TradeCenter({
             disabled={!canPropose}
             className="rounded-lg bg-[#ff3d81]/85 px-3 py-1.5 text-[12px] font-semibold text-black disabled:opacity-50"
           >
-            Propose Trade
+            {t('tradeCenter.propose')}
           </button>
         </div>
       </div>
@@ -199,16 +222,24 @@ export function TradeCenter({
       {settings ? (
         <div className="flex flex-wrap gap-2 text-[11px] text-white/55" data-testid="trade-settings-summary">
           <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5">
-            Review: {settings.commissionerTradeReviewType}
+            {tInterpolate('tradeCenter.settings.review', {
+              type: labelFor(t, 'tradeCenter.reviewType', settings.commissionerTradeReviewType),
+            })}
           </span>
           <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5">
-            Offer window: {settings.tradeReviewHours}h
+            {tInterpolate('tradeCenter.settings.offerWindow', { hours: settings.tradeReviewHours })}
           </span>
           <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5">
-            Deadline: {settings.tradeDeadlineWeek ? `Week ${settings.tradeDeadlineWeek}` : 'none'}
+            {tInterpolate('tradeCenter.settings.deadline', {
+              deadline: settings.tradeDeadlineWeek
+                ? tInterpolate('tradeCenter.settings.deadlineWeek', { week: settings.tradeDeadlineWeek })
+                : t('tradeCenter.settings.deadlineNone'),
+            })}
           </span>
           <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5">
-            Pick trading: {settings.draftPickTrading ? 'on (not in redraft proposals)' : 'off'}
+            {tInterpolate('tradeCenter.settings.pickTrading', {
+              state: settings.draftPickTrading ? t('tradeCenter.settings.pickTradingOn') : t('tradeCenter.settings.pickTradingOff'),
+            })}
           </span>
         </div>
       ) : null}
@@ -219,23 +250,23 @@ export function TradeCenter({
           data-testid="redraft-trade-runtime-summary"
         >
           <div>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Runtime</p>
-            <p className="mt-1 font-semibold text-white">{runtime.coverage.pendingTrades} pending</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">{t('tradeCenter.runtime.title')}</p>
+            <p className="mt-1 font-semibold text-white">{plural('tradeCenter.runtime.pending', runtime.coverage.pendingTrades)}</p>
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">History</p>
-            <p className="mt-1 font-semibold text-white">{runtime.coverage.transactionCount} records</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">{t('tradeCenter.runtime.history')}</p>
+            <p className="mt-1 font-semibold text-white">{plural('tradeCenter.runtime.records', runtime.coverage.transactionCount)}</p>
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Vote State</p>
-            <p className="mt-1 font-semibold text-white">{runtime.coverage.voteCount} votes</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">{t('tradeCenter.runtime.voteState')}</p>
+            <p className="mt-1 font-semibold text-white">{plural('tradeCenter.runtime.votes', runtime.coverage.voteCount)}</p>
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Pick Trading</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">{t('tradeCenter.runtime.pickTrading')}</p>
             <p className="mt-1 font-semibold text-white">
               {runtime.settings.pickExecutionStatus === 'unavailable'
-                ? 'Not in proposals'
-                : runtime.settings.pickExecutionStatus}
+                ? t('tradeCenter.runtime.notInProposals')
+                : labelFor(t, 'tradeCenter.pickStatus', runtime.settings.pickExecutionStatus)}
             </p>
           </div>
         </div>
@@ -248,7 +279,7 @@ export function TradeCenter({
 
       <div className="space-y-2">
         {proposals.length === 0 ? (
-          <p className="text-[11px] text-white/45">No trade offers yet. Use “Propose Trade” to start one.</p>
+          <p className="text-[11px] text-white/45">{t('tradeCenter.empty')}</p>
         ) : (
           proposals.map((p) => {
             const proposerAssets = p.assets.filter((a) => a.fromRosterId === p.proposerRosterId)
@@ -257,7 +288,10 @@ export function TradeCenter({
             // Multi-team trades: every team, each team's gives and gets, and who has accepted so far.
             const multiTeam = isMultiTeamTrade(p)
             const teamIds = tradeParticipantRosterIds(p)
-            const teamName = (id: string, i: number) => rosterNameById.get(id) ?? `Team ${String.fromCharCode(65 + i)}`
+            const teamName = (id: string, i: number) =>
+              rosterNameById.get(id) ?? tInterpolate('tradeCenter.teamFallback', { letter: String.fromCharCode(65 + i) })
+            const proposerName = rosterNameById.get(p.proposerRosterId) ?? tInterpolate('tradeCenter.teamFallback', { letter: 'A' })
+            const receiverName = rosterNameById.get(p.receiverRosterId) ?? tInterpolate('tradeCenter.teamFallback', { letter: 'B' })
             const partiesToAccept = tradePartiesToAccept(p)
             const stillPending = tradePartiesPendingAcceptance(p)
             const acceptedCount = partiesToAccept.length - stillPending.length
@@ -268,13 +302,15 @@ export function TradeCenter({
                     {multiTeam ? (
                       <>
                         {teamIds.map((id, i) => teamName(id, i)).join(' · ')}
-                        <span className="ml-1.5 text-[11px] font-normal text-white/50">{teamIds.length}-team trade</span>
+                        <span className="ml-1.5 text-[11px] font-normal text-white/50">
+                          {tInterpolate('tradeCenter.list.teamCount', { count: teamIds.length })}
+                        </span>
                       </>
                     ) : (
                       <>
-                        {rosterNameById.get(p.proposerRosterId) ?? 'Team A'}
+                        {proposerName}
                         {' ⇄ '}
-                        {rosterNameById.get(p.receiverRosterId) ?? 'Team B'}
+                        {receiverName}
                       </>
                     )}
                   </p>
@@ -283,7 +319,9 @@ export function TradeCenter({
                     {p.tradeGrade?.grade ? (
                       <span
                         className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[11px] font-bold text-[#ffd7e5]"
-                        title={`Grade for ${rosterNameById.get(p.proposerRosterId) ?? 'the proposer'} on this league's values`}
+                        title={tInterpolate('tradeCenter.list.gradeTitle', {
+                          name: rosterNameById.get(p.proposerRosterId) ?? t('tradeCenter.list.theProposer'),
+                        })}
                         data-testid="trade-proposal-grade"
                       >
                         {p.tradeGrade.grade}
@@ -291,10 +329,10 @@ export function TradeCenter({
                     ) : null}
                     {multiTeam && p.status === 'pending' && !p.acceptedAt ? (
                       <span className="rounded border border-white/15 px-2 py-0.5 text-[11px] text-white/70" data-testid="trade-proposal-accept-count">
-                        accepted {acceptedCount} of {partiesToAccept.length}
+                        {tInterpolate('tradeCenter.list.acceptedCount', { accepted: acceptedCount, total: partiesToAccept.length })}
                       </span>
                     ) : null}
-                    <span className={`rounded border px-2 py-0.5 text-[11px] uppercase ${tone}`}>{p.status}</span>
+                    <span className={`rounded border px-2 py-0.5 text-[11px] uppercase ${tone}`}>{labelFor(t, 'tradeCenter.status', p.status)}</span>
                   </div>
                 </div>
                 {multiTeam ? (
@@ -307,16 +345,16 @@ export function TradeCenter({
                         <div key={id} className="rounded border border-white/10 bg-white/[0.03] p-2">
                           <p className="font-semibold text-white/70">
                             {teamName(id, i)}
-                            {id === p.proposerRosterId ? <span className="ml-1 font-normal text-white/40">(proposed)</span> : null}
-                            {accepted ? <span className="ml-1 font-normal text-emerald-300/80">✓ accepted</span> : null}
+                            {id === p.proposerRosterId ? <span className="ml-1 font-normal text-white/40">{t('tradeCenter.list.proposed')}</span> : null}
+                            {accepted ? <span className="ml-1 font-normal text-emerald-300/80">{t('tradeCenter.list.acceptedMark')}</span> : null}
                           </p>
                           <p className="mt-1 text-white/55">
-                            <span className="text-white/40">Gets:</span>{' '}
-                            {gets.length ? gets.map(formatProposalAsset).join(', ') : '—'}
+                            <span className="text-white/40">{t('tradeCenter.list.getsLabel')}</span>{' '}
+                            {gets.length ? gets.map(asset).join(', ') : '—'}
                           </p>
                           <p className="text-white/55">
-                            <span className="text-white/40">Gives:</span>{' '}
-                            {gives.length ? gives.map(formatProposalAsset).join(', ') : '—'}
+                            <span className="text-white/40">{t('tradeCenter.list.givesLabel')}</span>{' '}
+                            {gives.length ? gives.map(asset).join(', ') : '—'}
                           </p>
                         </div>
                       )
@@ -326,30 +364,36 @@ export function TradeCenter({
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   <div className="rounded border border-white/10 bg-white/[0.03] p-2">
                     {/* Each team over what it GETS — the proposer's grade above is for this column. */}
-                    <p className="font-semibold text-white/70">{rosterNameById.get(p.proposerRosterId) ?? 'Team A'} gets</p>
+                    <p className="font-semibold text-white/70">{tInterpolate('tradeCenter.list.teamGets', { name: proposerName })}</p>
                     <p className="mt-1 text-white/55">
-                      {receiverAssets.length ? receiverAssets.map(formatProposalAsset).join(', ') : '—'}
+                      {receiverAssets.length ? receiverAssets.map(asset).join(', ') : '—'}
                     </p>
                   </div>
                   <div className="rounded border border-white/10 bg-white/[0.03] p-2">
-                    <p className="font-semibold text-white/70">{rosterNameById.get(p.receiverRosterId) ?? 'Team B'} gets</p>
+                    <p className="font-semibold text-white/70">{tInterpolate('tradeCenter.list.teamGets', { name: receiverName })}</p>
                     <p className="mt-1 text-white/55">
-                      {proposerAssets.length ? proposerAssets.map(formatProposalAsset).join(', ') : '—'}
+                      {proposerAssets.length ? proposerAssets.map(asset).join(', ') : '—'}
                     </p>
                   </div>
                 </div>
                 )}
                 {multiTeam && p.tradeGrade?.gradeWithheld ? (
-                  <p className="mt-2 text-white/45" data-testid="trade-proposal-grade-note">{p.tradeGrade.gradeWithheld}</p>
+                  <p className="mt-2 text-white/45" data-testid="trade-proposal-grade-note">
+                    {p.tradeGrade.gradeWithheld === MULTI_TEAM_GRADE_WITHHELD_EN
+                      ? t('tradeCenter.list.multiTeamGradeWithheld')
+                      : p.tradeGrade.gradeWithheld}
+                  </p>
                 ) : null}
                 {p.reason ? <p className="mt-2 text-white/55">“{p.reason}”</p> : null}
                 {p.status === 'pending' ? (
                   <p className="mt-2 rounded border border-cyan-300/20 bg-cyan-400/[0.06] px-2 py-1.5 text-cyan-50/85" data-testid="trade-review-explainer">
                     {multiTeam && !p.acceptedAt
-                      ? `Every team has to accept before it goes through. Waiting on ${stillPending
-                          .map((id) => teamName(id, teamIds.indexOf(id)))
-                          .join(', ')}.`
-                      : explainTradeReview({ ...p, acceptedAt: p.acceptedAt ?? null, votes: p.votes }, Date.now()).en}
+                      ? tInterpolate('tradeCenter.list.waitingOn', {
+                          teams: stillPending.map((id) => teamName(id, teamIds.indexOf(id))).join(', '),
+                        })
+                      : explainTradeReview({ ...p, acceptedAt: p.acceptedAt ?? null, votes: p.votes }, Date.now())[
+                          language === 'es' ? 'es' : 'en'
+                        ]}
                   </p>
                 ) : null}
                 {p.status === 'pending' ? (
@@ -362,7 +406,7 @@ export function TradeCenter({
                         disabled={busyProposalId === p.id}
                         onClick={() => void onAction(p.id, action)}
                       >
-                        {action.replace('_', ' ')}
+                        {t(`tradeCenter.action.${action}`)}
                       </button>
                     ))}
                     {isCommissioner || settingsCommissioner ? (
@@ -372,7 +416,7 @@ export function TradeCenter({
                         disabled={busyProposalId === p.id}
                         onClick={() => void onVeto(p.id)}
                       >
-                        commissioner veto
+                        {t('tradeCenter.action.commissionerVeto')}
                       </button>
                     ) : null}
                   </div>
@@ -390,7 +434,7 @@ export function TradeCenter({
                       onClick={() => setReversingId(p.id)}
                       data-testid="trade-proposal-reverse"
                     >
-                      Reverse trade
+                      {t('tradeCenter.action.reverse')}
                     </button>
                   </div>
                 ) : null}
@@ -399,7 +443,7 @@ export function TradeCenter({
                     title={
                       multiTeam
                         ? teamIds.map((id, i) => teamName(id, i)).join(' · ')
-                        : `${rosterNameById.get(p.proposerRosterId) ?? 'Team A'} ⇄ ${rosterNameById.get(p.receiverRosterId) ?? 'Team B'}`
+                        : `${proposerName} ⇄ ${receiverName}`
                     }
                     preflight={() => previewNativeTradeReversal(p.id)}
                     reverse={(reason) => requestNativeTradeReversal(p.id, reason)}
