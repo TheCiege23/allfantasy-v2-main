@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getScoringEligibility } from '@/lib/devy/scoringEligibilityEngine'
 import { collectPlayers } from '@/lib/devy/identityMatchingEngine'
+import { mergeablePlayer } from '@/lib/devy/importMergeRules'
 
 export type MergeResult = {
   ok: boolean
@@ -24,12 +25,6 @@ export type ImportAuditSummary = {
   missingSchoolLogos: string[]
   dataConfidenceScore: 'high' | 'medium' | 'low'
   notes: string[]
-}
-
-function mergeablePlayer(confirmed: boolean, matchConfidence: string, requiresReview: boolean): boolean {
-  if (confirmed) return true
-  if (matchConfidence === 'exact' && !requiresReview) return true
-  return false
 }
 
 export async function executeMerge(sessionId: string, commissionerId: string): Promise<MergeResult> {
