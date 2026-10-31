@@ -17,7 +17,7 @@ import { nbaCampusWeekCacheKey, persistNbaCampusWeekSnapshot } from '@/lib/c2c/s
 import { nbaCampusGameMappingKey } from '@/lib/c2c/refreshNbaCampusWeek'
 import { nbaCampusPointsForMatchup } from '@/lib/c2c/nbaCampusMatchupScoring'
 import { refreshEspnCollegeGameBoxes } from '@/lib/espn/refreshNcaabCollegeGameBoxes'
-import { mergeNbaCollegeDraftPlayers } from '@/lib/live-draft-engine/RosterAssignmentService'
+import { finalizeRosterAssignments, mergeNbaCollegeDraftPlayers } from '@/lib/live-draft-engine/RosterAssignmentService'
 import { buildLeagueStatScorer, scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 
 const pilot = process.env.NBA_CAMPUS_POSTGRES_PILOT === '1' ? describe : describe.skip
@@ -71,7 +71,15 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
       await prisma.c2CLeagueConfig.create({ data: { leagueId: id, collegeScoringSystem: 'points', bestBallPro: false, bestBallCollege: false, standingsModel: 'unified' } })
       const season = await prisma.redraftSeason.create({ data: { leagueId: id, sport: 'NBA', season: 2026, status: 'active', totalWeeks: 18, playoffStartWeek: 19 } })
       await prisma.redraftRoster.createMany({ data: [{ id: homeId, leagueId: id, seasonId: season.id, ownerId: homeId, ownerName: 'Home' }, { id: awayId, leagueId: id, seasonId: season.id, ownerId: awayId, ownerName: 'Away' }] })
-      await prisma.roster.createMany({ data: [{ id: homeRoster, leagueId: id, platformUserId: homeId, redraftRosterId: homeId, playerData }, { id: awayRoster, leagueId: id, platformUserId: awayId, redraftRosterId: awayId, playerData: {} }] })
+      await prisma.roster.createMany({ data: [{ id: homeRoster, leagueId: id, platformUserId: homeId, redraftRosterId: homeId, playerData: {} }, { id: awayRoster, leagueId: id, platformUserId: awayId, redraftRosterId: awayId, playerData: {} }] })
+      const draft = await prisma.draftSession.create({ data: { leagueId: id, status: 'completed', draftModeLabel: 'startup', draftType: 'snake', rounds: 1, teamCount: 2, slotOrder: [{ slot: 1, rosterId: homeRoster, displayName: 'Home' }, { slot: 2, rosterId: awayRoster, displayName: 'Away' }] } })
+      await prisma.draftPick.create({ data: { sessionId: draft.id, overall: 1, round: 1, slot: 1, rosterId: homeRoster, playerId, playerName: 'Synthetic College Player', position: 'G', team: 'School', assetType: 'c2c_college' } })
+      expect(await finalizeRosterAssignments(id, draft.id)).toMatchObject({ teamsSynced: 1, playersSynced: 1 })
+      const assigned = (await prisma.roster.findUniqueOrThrow({ where: { id: homeRoster } })).playerData as Record<string, unknown>
+      expect(assigned.lineup_sections).toMatchObject({ devy: [expect.objectContaining({ id: playerId })] })
+      const lineup = { ...assigned, lineup_sections: { ...(assigned.lineup_sections as Record<string, unknown>), campus: [playerId] } }
+      expect(buildNbaCampusWeekSnapshot({ playerData: lineup, season: 2026, week: 2, now: savedAt, evidence })).toEqual(built)
+      await prisma.roster.update({ where: { id: homeRoster }, data: { playerData: lineup } })
       await prisma.redraftRosterPlayer.create({ data: { rosterId: homeId, playerId: proId, playerName: 'Synthetic Pro Player', position: 'PG', sport: 'NBA', slotType: 'PG', addedAt: new Date('2026-10-20T00:00:00Z') } })
       await prisma.playerWeeklyScore.create({ data: { playerId: proId, sport: 'NBA', week: 2, season: 2026, stats: { pts: 10 }, isFinalized: true } })
       await prisma.$transaction(async tx => {
