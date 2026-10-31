@@ -2,7 +2,8 @@ import 'server-only'
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+import { isChimmyRunning } from '@/lib/inactive-manager/inactiveManagerMode'
+import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { exileFirstGames, exileTeamKey, exileWeekWindow, getExileWaivers, mutateExileRoster } from './exileRosterService'
 import { chimmyExilePlan, type ExileCandidate } from './chimmyExileStrategy'
@@ -57,9 +58,9 @@ export async function runChimmyExileTurn(leagueId: string, now = new Date()): Pr
     select: { userId: true, redraftRosterId: true },
   })
   if (exiled.length === 0) return turn
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true, settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true, settings: true, userId: true } })
   if (!league) return turn
-  const managed = readManagedLineups(league.settings)
+  const managed = await readPlayableChimmyLineups(league)
   const chimmy = exiled.filter((p) => isChimmyRunning(managed, p.redraftRosterId ?? p.userId.slice(SEAT_PREFIX.length), p.userId))
   if (chimmy.length === 0) return turn
   const scorer = buildLeagueStatScorer(league)

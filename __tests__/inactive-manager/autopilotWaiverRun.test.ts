@@ -115,10 +115,20 @@ describe('runAutopilotWaivers', () => {
     expect(m.createClaim).not.toHaveBeenCalled()
   })
 
-  it('stands down when the league owner no longer holds AF Commissioner', async () => {
+  it('without AF Commissioner, runs only the free Chimmy team: the one handed over first', async () => {
     m.state.ownerHasPlan = false
-    expect(await runAutopilotWaivers()).toMatchObject({ claims: 0, skipped: { not_entitled: 1 } })
-    expect(m.createClaim).not.toHaveBeenCalled()
+    m.state.settings = { af_managed_lineups: {
+      r1: { since: 's', byUserId: 'commish', autopilot: { ...ap, since: '2026-10-02T00:00:00Z' } },
+      r3: { since: 's', byUserId: 'commish', autopilot: { ...ap, since: '2026-10-01T00:00:00Z' } },
+    } }
+    const r = await runAutopilotWaivers()
+    expect(r).toMatchObject({ teams: 1, claims: 1, skipped: { not_entitled: 1 } })
+    expect(m.createClaim).toHaveBeenCalledTimes(1)
+    expect(m.createClaim).toHaveBeenCalledWith('L', 'r3', expect.anything())
+    // With the plan, both run.
+    vi.clearAllMocks()
+    m.state.ownerHasPlan = true
+    expect(await runAutopilotWaivers()).toMatchObject({ teams: 2, claims: 2 })
   })
 
   it('respects the league phase gate the claims route applies', async () => {
