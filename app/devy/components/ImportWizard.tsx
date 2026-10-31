@@ -13,6 +13,7 @@ import {
   CONFIDENCE_ORDER,
   countByConfidence,
   isPlayerMergeable,
+  localizeConflictDescription,
   localizeMergeMessage,
   stepForStatus,
   type ImportSessionRow,
@@ -1127,7 +1128,9 @@ function StepConflicts({ sessionId, merged, onDone, tr }: { sessionId: string; m
                 {tr(`devyImport.conflictType.${key}`)}
               </span>
               <p className="mt-2 text-[12px] text-white/75">{tr(`devyImport.conflictHint.${key}`)}</p>
-              <p className="mt-1 text-[11px] text-white/40">{c.description}</p>
+              <p className="mt-1 text-[11px] text-white/40" data-testid={`import-conflict-desc-${c.id}`}>
+                {localizeConflictDescription(c.conflictType, c.description, tr)}
+              </p>
               {!merged ? (
                 <>
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row" role="radiogroup">
@@ -1358,6 +1361,7 @@ function StepPreMerge({
 type AuditSession = { id: string; status: string; mergedAt: string | null; summary?: unknown }
 
 function StepAudit({ leagueId, sessionId, tr }: { leagueId: string; sessionId: string; tr: Tr }) {
+  const { language, t } = useOptionalLanguage()
   const [audit, setAudit] = useState<ImportAuditSummary | null>(null)
   const [session, setSession] = useState<AuditSession | null>(null)
   const [loading, setLoading] = useState(true)
@@ -1387,7 +1391,7 @@ function StepAudit({ leagueId, sessionId, tr }: { leagueId: string; sessionId: s
 
   function download() {
     if (!audit || !session) return
-    const text = formatImportAuditPlainText(audit, session)
+    const text = formatImportAuditPlainText(audit, session, { language, t })
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -1504,7 +1508,6 @@ function StepAudit({ leagueId, sessionId, tr }: { leagueId: string; sessionId: s
           {tr('devyImport.audit.viewLeague')}
         </a>
       </div>
-      <p className="text-[11px] text-white/40">{tr('devyImport.audit.downloadNote')}</p>
       {summaryErr ? <ErrorBox message={summaryErr} tr={tr} /> : null}
       {summaryText ? (
         <div className="whitespace-pre-wrap rounded-xl border border-violet-500/25 bg-violet-500/5 p-3 text-[12px] text-white/80" data-testid="import-chimmy-summary-text">
