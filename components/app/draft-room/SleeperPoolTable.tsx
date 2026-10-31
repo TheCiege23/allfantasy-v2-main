@@ -285,7 +285,7 @@ function SleeperRow(props: SleeperRowProps) {
                 {isProspect ? (
                   <span
                     className="flex-shrink-0 rounded border border-sky-300/35 bg-sky-500/12 px-1 py-px text-[11px] font-semibold uppercase tracking-[0.06em] text-sky-100"
-                    title={t('draftRoom.pool.prospectTooltip')}
+                    title={t(String(draftSport).toUpperCase() === 'MLB' ? 'draftRoom.pool.prospectTooltipMlb' : 'draftRoom.pool.prospectTooltip')}
                     data-testid={`${testIdBase}-prospect-badge`}
                   >
                     {t('draftRoom.pool.prospectBadge')}

@@ -579,6 +579,8 @@ export const translationsEsParity: Record<string, string> = {
   "waiverWire.prospects.sortNote":
     "Los prospectos no tienen proyección ni ADP, así que aparecen después de los jugadores de la NHL. Ordena por nombre, posición o equipo para mezclarlos.",
   "waiverWire.prospects.searchHint": "Se muestran {{listed}} de {{total}} prospectos. Busca por nombre para encontrar el resto.",
+  "draftRoom.pool.prospectTooltipMlb":
+    "Prospecto de la MLB listado por Fantrax que no figura en ningún plantel de la MLB en nuestros datos: un jugador de ligas menores o sin contrato. El equipo indicado es el club de la MLB que tiene sus derechos. No hay edad, nivel ni año de draft disponibles.",
   "draftRoom.playerPanel.rookieFilterFallbackTitle": "Filtro de rookies no disponible para este deporte",
   "draftRoom.playerPanel.rookieFilterFallbackBody":
     "Los datos de rookies aún no están disponibles para este deporte, así que este draft de solo rookies muestra todo el pool de jugadores. Los picks no se verifican por condición de rookie: confirma que un jugador es rookie antes de draftearlo.",
