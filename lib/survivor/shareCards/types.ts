@@ -3,7 +3,7 @@
  * Safe to import from client components: no prisma, no node built-ins.
  */
 
-export const SHARE_MOMENT_TYPES = ['immunity', 'out', 'idol', 'exile', 'champ'] as const
+export const SHARE_MOMENT_TYPES = ['immunity', 'out', 'idol', 'exile', 'champ', 'recap'] as const
 export type ShareMomentType = (typeof SHARE_MOMENT_TYPES)[number]
 
 export const SHARE_CARD_FORMATS = ['post', 'story', 'link'] as const
@@ -62,6 +62,13 @@ export interface ShareMomentPayload {
   tokens?: number | null
   exileWeeks?: number | null
   rejoinWeek?: number | null
+  /**
+   * recap: the league's week after Tribal Council, for every member to share. It names no manager —
+   * only the tribe that attended (public) and counts — so it cannot share someone's exit for them.
+   */
+  remaining?: number | null
+  onExile?: number | null
+  merged?: boolean
 }
 
 export interface ShareMomentRecord {
