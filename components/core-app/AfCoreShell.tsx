@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import type { RedraftSportTheme } from '@/lib/league-media/redraftIdentity'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
 import { navLabel } from '@/lib/core-app/navLabels'
@@ -87,6 +88,8 @@ import {
 } from '@/lib/core-app/railCareerChannel'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
+import '@/components/league/native/redraft-identity.css'
+import '@/components/core-app/af-core-redraft.css'
 import '@/components/core-app/af-survivor-theme.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
@@ -327,6 +330,13 @@ type NavSection = { id: string; heading: string | null; items: NavItem[] }
 
 export type AfCoreShellProps = {
   nativeLeague?: boolean
+  /**
+   * The redraft identity's sport theme for a native redraft `?league=` (lib/core-app/coreShellRedraftIdentity.ts).
+   * Stamped on the root as `data-format="redraft"` + `data-sport`, which is all
+   * components/league/native/redraft-identity.css needs to re-point /core's accent tokens. Null or absent
+   * — every other league type and every no-league page — keeps the default look.
+   */
+  redraftSport?: RedraftSportTheme | null
   /**
    * Where the open imported league's lineup is changed (lib/core-app/shellLineupHandoff.ts): the
    * platform's verified lineup screen, else its league page, else null. The Updates menu turns its
@@ -1861,6 +1871,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   return (
     <div
       className="af-core af-shell"
+      data-format={props.redraftSport ? 'redraft' : undefined}
+      data-sport={props.redraftSport ?? undefined}
       data-league-theme={props.leagueTheme ?? undefined}
       data-league-first={props.leagueFirst ? 'true' : undefined}
       data-nav-pending={navPending ? 'true' : undefined}

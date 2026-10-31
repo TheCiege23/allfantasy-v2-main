@@ -16,13 +16,13 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!userId) return NextResponse.json({ error: 'Unauthorized', code: 'unauthorized' }, { status: 401 })
 
   const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   const gate = await assertLeagueMember(leagueId, userId)
-  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden', code: 'forbidden' }, { status: gate.status })
 
   const ctx = await resolveCallerContext(leagueId, userId)
   // Privacy: a caller sees ONLY their own interests (private + public). No other manager's interests.
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!userId) return NextResponse.json({ error: 'Unauthorized', code: 'unauthorized' }, { status: 401 })
 
   const body = (await req.json().catch(() => ({}))) as {
     leagueId?: string
@@ -52,10 +52,10 @@ export async function POST(req: NextRequest) {
   }
 
   const gate = await assertLeagueMember(leagueId, userId)
-  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden', code: 'forbidden' }, { status: gate.status })
 
   const ctx = await resolveCallerContext(leagueId, userId)
-  if (!ctx.rosterId || !ctx.seasonId) return NextResponse.json({ error: 'You do not have a roster in this league' }, { status: 403 })
+  if (!ctx.rosterId || !ctx.seasonId) return NextResponse.json({ error: 'You do not have a roster in this league', code: 'no_roster' }, { status: 403 })
 
   const interest = await upsertInterest({
     leagueId,

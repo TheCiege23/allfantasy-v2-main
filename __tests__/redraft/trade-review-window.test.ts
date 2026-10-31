@@ -68,6 +68,8 @@ describe('what a manager is told', () => {
     const e = explainTradeReview(p({ acceptedAt: '2026-10-23T11:00:00Z', expiresAt: '2026-10-25T11:00:00Z' }), NOW, fmt)
     expect(e.phase).toBe('review_ended')
     expect(e.en).toBe('The review window has ended with no veto. The trade is going through within the hour.')
+    // «intercambio», never «traspaso» (the Trade Center's Spanish term).
+    expect(e.es).toBe('La ventana de revisión terminó sin veto. El intercambio se procesa en menos de una hora.')
   })
 
   it('says nothing about a trade that is already settled', () => {

@@ -85,6 +85,8 @@ export type LotteryOdds = {
   playoffTeamCount: number
   /** How the picks after the drawn ones are ordered, in words. */
   fallbackOrder: string
+  /** The same, as the stored setting (`reverse_standings`, `reverse_max_pf`, `manual`), for a screen that words it itself. */
+  fallbackMode: string
   alreadyRunAt: string | null
   teams: Array<{
     rosterId: string
@@ -301,6 +303,7 @@ async function loadLottery(
       pickCount: lotteryConfig.lotteryPickCount,
       playoffTeamCount: preview.playoffTeamCount,
       fallbackOrder: FALLBACK_ORDER_TEXT[lotteryConfig.fallbackOrder] ?? 'the league’s fallback order',
+      fallbackMode: String(lotteryConfig.fallbackOrder ?? ''),
       alreadyRunAt: lotteryLastRunAt,
       teams: preview.eligible.map((t) => ({
         rosterId: t.rosterId,
@@ -937,6 +940,20 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
       }
     }),
   }
+}
+
+/**
+ * The lottery section alone, for a screen that shows the odds without the rest of Draft HQ (the
+ * dynasty standings). The same `loadLottery`, so the two can never disagree.
+ */
+export async function getDraftLotteryOdds(leagueId: string, userId: string): Promise<SectionState<LotteryOdds> | null> {
+  const lc = leagueContextFor(leagueId, userId)
+  const league = await lc.league()
+  if (!league) return null
+  return loadLottery(lc, league).catch(() => ({
+    available: false as const,
+    reason: 'the lottery odds could not be worked out for this league right now',
+  }))
 }
 
 export async function getDraftHqData(

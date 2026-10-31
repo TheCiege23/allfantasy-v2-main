@@ -18,6 +18,8 @@ import { loadDailyLineupView, type DailyLineupView } from '@/lib/redraft/dailyLi
 import { loadCampusLineupView, type CampusLineupView } from '@/lib/c2c/campusLineupView'
 import { isDailyFormSport } from '@/lib/projections/dailySportForm'
 import { applyDailySportOutlook, isDayKey, loadDailySportOutlook } from '@/lib/projections/dailySportOutlook'
+import { loadTaxiTenureView, type TaxiTenureView } from '@/lib/taxi/taxiMaxYears'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -340,9 +342,25 @@ export async function GET(req: NextRequest) {
         })
     }
 
+    // Dynasty taxi tenure for the lineup screen's taxi badges (lib/taxi/taxiMaxYears.ts). Native
+    // dynasty-family leagues with a taxi squad only; a load failure leaves the badges off.
+    let taxiTenure: TaxiTenureView | null = null
+    if (
+      resolveWriteAuthority(league.platform) === 'NATIVE' &&
+      isDynastyFamilyLeague(league) &&
+      (slotLimits?.taxi ?? 0) > 0 &&
+      unifiedRoster.length > 0
+    ) {
+      taxiTenure = await loadTaxiTenureView(prisma, leagueId, league.settings, unifiedRoster.map((r) => r.id)).catch((e: unknown) => {
+        console.warn('[league/roster] taxi tenure failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+        return null
+      })
+    }
+
     return NextResponse.json({
       source: 'db' as const,
       rosterId: roster.id,
+      taxiTenure,
       // Sent back with a save (`expectedLineupVersion`); see lib/roster/lineupVersion.ts.
       lineupVersion: lineupVersionOf(roster.playerData),
       dailyLineups,
