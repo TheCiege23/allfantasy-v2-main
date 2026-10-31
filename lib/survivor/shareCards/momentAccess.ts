@@ -5,8 +5,8 @@
  *  - The `out` card is opt-in for the eliminated manager. Nobody else is ever offered it.
  *  - Immunity, idol and exile cards are offered to their subject only.
  *  - The champion card is offered to the champion and to the whole league as a recap.
- *  - The week recap is offered to the whole league. It names no manager, so sharing it can never
- *    share someone's exit for them (the `out` card stays theirs alone).
+ *  - The week recap is offered to the whole league and posted in league chat. It names the manager
+ *    voted out (product call, 2026-10-31); their own `out` card stays theirs alone to share.
  *  - Nothing is public until it is final AND someone allowed to share it has published it.
  *  - A league with `shareCardsEnabled = false` serves nothing, to anyone.
  */
