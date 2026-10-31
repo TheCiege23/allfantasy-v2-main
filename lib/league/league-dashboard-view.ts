@@ -5,6 +5,10 @@ import { prisma } from '@/lib/prisma'
 import { listDivisionsByLeague } from '@/lib/promotion-relegation/DivisionResolver'
 import { getLiveDangerTiers } from '@/lib/guillotine/chopWatchLoad'
 import { getRosterTeamMap } from '@/lib/zombie/rosterTeamMap'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { importedGuillyFormat } from '@/lib/guillotine/importedGuillyHealth'
+import { loadImportedGuillyTab } from '@/lib/guillotine/importedGuillyHealthLoad'
+import { importedGuillyTiers } from '@/lib/guillotine/importedGuillyView'
 import type {
   LeagueDashboardView,
   LeagueSettingsRow,
@@ -197,6 +201,26 @@ async function loadStandingsPresentation(league: League): Promise<StandingsPrese
       }))
       return { mode: 'survivor', tribes: presentationTribes }
     }
+  }
+
+  /*
+   * An IMPORTED Guilly league: its provider chops it and none of the native tables (chop rows, period
+   * scores) exist, so the tiers come from the provider's weekly scores — the same read as the league's
+   * imported Guilly tab. Checked before `guillotineMode`, which some older imports still carry and which
+   * would otherwise ask the native engine and get nothing.
+   */
+  if (!isNativePlatform(league.platform) && importedGuillyFormat(league)) {
+    const tab = await loadImportedGuillyTab(leagueId).catch(() => null)
+    const byRoster = tab ? importedGuillyTiers(tab.view) : {}
+    const teams = Object.keys(byRoster).length
+      ? await prisma.leagueTeam.findMany({ where: { leagueId }, select: { id: true, externalId: true } }).catch(() => [])
+      : []
+    const dangerByTeamId: Record<string, 'chop_zone' | 'danger' | 'safe' | 'chopped'> = {}
+    for (const t of teams) {
+      const tier = byRoster[String(t.externalId)]
+      if (tier) dangerByTeamId[t.id] = tier
+    }
+    return { mode: 'guillotine', dangerByTeamId }
   }
 
   if (league.guillotineMode) {

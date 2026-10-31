@@ -39,7 +39,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-import { buildImportedGuillyView, guillyTabKind } from '@/lib/guillotine/importedGuillyView'
+import { buildImportedGuillyView, guillyTabKind, importedGuillyTiers } from '@/lib/guillotine/importedGuillyView'
 import { GET } from '@/app/api/leagues/[leagueId]/guillotine/imported/route'
 import { ImportedGuillyTab } from '@/app/league/[leagueId]/tabs/ImportedGuillyTab'
 import { NextRequest } from 'next/server'
@@ -58,8 +58,8 @@ describe('the view (lib/guillotine/importedGuillyView.ts)', () => {
     const v = buildImportedGuillyView({ rows: ROWS, teams: TEAMS })
     expect(v.week).toBe(3)
     expect(v.standings).toEqual([
-      { rosterId: '1', name: 'Axes', points: 50, onChopLine: false },
-      { rosterId: '2', name: 'Blades', points: 40, onChopLine: true },
+      { rosterId: '1', name: 'Axes', points: 50, onChopLine: false, tier: 'danger' },
+      { rosterId: '2', name: 'Blades', points: 40, onChopLine: true, tier: 'chop_zone' },
     ])
     expect(v.chopped).toEqual([{ rosterId: '3', name: 'Cleavers', week: 2 }, { rosterId: '4', name: 'Daggers', week: 1 }])
     expect(v.teamsAlive).toBe(2)
@@ -70,10 +70,25 @@ describe('the view (lib/guillotine/importedGuillyView.ts)', () => {
     expect(v.standings.filter((s) => s.onChopLine).map((s) => s.name)).toEqual(['Blades', 'Cleavers'])
   })
 
+  it('danger is within 10 points of the chop line, by the native default; further is safe', () => {
+    const v = buildImportedGuillyView({ rows: [row(1, '1', 80.01), row(1, '2', 80), row(1, '3', 70), row(1, '4', 95)], teams: TEAMS })
+    expect(Object.fromEntries(v.standings.map((s) => [s.name, s.tier]))).toEqual({ Daggers: 'safe', Axes: 'safe', Blades: 'danger', Cleavers: 'chop_zone' })
+    // A league could carry its own margin.
+    const wide = buildImportedGuillyView({ rows: [row(1, '1', 80.01), row(1, '2', 80), row(1, '3', 70), row(1, '4', 95)], teams: TEAMS, dangerMarginPoints: 25 })
+    expect(wide.standings.find((s) => s.name === 'Daggers')!.tier).toBe('danger')
+  })
+
+  it('the dashboard tiers: this week’s for the teams alive, chopped for the teams out', () => {
+    expect(importedGuillyTiers(buildImportedGuillyView({ rows: ROWS, teams: TEAMS }))).toEqual({ '1': 'danger', '2': 'chop_zone', '3': 'chopped', '4': 'chopped' })
+    // Before any score, nobody alive has a tier — only the chopped are known, and here none are.
+    expect(importedGuillyTiers(buildImportedGuillyView({ rows: [], teams: TEAMS }))).toEqual({})
+  })
+
   it('before any score there is no week and no chop line', () => {
     const v = buildImportedGuillyView({ rows: [], teams: TEAMS })
     expect(v).toMatchObject({ week: null, teamsAlive: 4, scoredThisWeek: 0, chopped: [] })
     expect(v.standings.some((s) => s.onChopLine)).toBe(false)
+    expect(v.standings.every((s) => s.tier === null)).toBe(true)
   })
 })
 
@@ -151,6 +166,10 @@ describe('the tab', () => {
     expect(screen.getByTestId('imported-guilly-team-1').textContent).not.toContain('on the chop line')
     expect(screen.getByTestId('imported-guilly-chopped').textContent).toContain('Daggers')
     expect(screen.queryByTestId('imported-guilly-doubt')).toBeNull()
+    // Axes is 10 points clear of the line: in danger, and the tab says what that means.
+    expect(screen.getByTestId('imported-guilly-team-1').textContent).toContain('in danger')
+    expect(screen.getByTestId('imported-guilly-team-2').textContent).not.toContain('in danger')
+    expect(screen.getByTestId('imported-guilly-danger-note').textContent).toBe('In danger: within 10 points of the chop line on Sleeper’s scores so far.'.replace('’', "'"))
     vi.unstubAllGlobals()
   })
 
