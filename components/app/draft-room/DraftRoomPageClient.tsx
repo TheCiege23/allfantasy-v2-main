@@ -4726,7 +4726,7 @@ export function DraftRoomPageClient({
         </div>
       </div>
     ) : null}
-    {leagueId && !isMirroredFromSleeper ? <DraftDayShow leagueId={leagueId} sessionStatus={session?.status} /> : null}
+    {leagueId && !isMirroredFromSleeper ? <DraftDayShow leagueId={leagueId} sessionStatus={session?.status} viewerRosterId={currentUserRosterId} /> : null}
     {presentationVariant === 'redraft_snake' && !isDynasty ? (
       <DraftRoundOneAnnouncementOverlay
         presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}

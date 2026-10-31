@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { progress, type DraftShow, type ShowEntry } from '@/lib/draft-day/draftShow'
+import { progress, viewerShowEntry, type DraftShow, type ShowEntry } from '@/lib/draft-day/draftShow'
 import type { DraftDayView } from '@/lib/draft-day/draftDayService'
 
 /**
@@ -16,7 +16,7 @@ const PRE_DRAFT = new Set(['pre_draft', 'configuring', 'configured'])
 
 type Copy = (en: string, es: string) => string
 
-export function DraftDayShow({ leagueId, sessionStatus }: { leagueId: string; sessionStatus: string | null | undefined }) {
+export function DraftDayShow({ leagueId, sessionStatus, viewerRosterId }: { leagueId: string; sessionStatus: string | null | undefined; viewerRosterId?: string | null }) {
   const { language } = useOptionalLanguage()
   const t: Copy = (en, es) => (language === 'es' ? es : en)
   const [show, setShow] = useState<DraftShow | null>(null)
@@ -60,6 +60,7 @@ export function DraftDayShow({ leagueId, sessionStatus }: { leagueId: string; se
   if (p.over) return null
   const up = show.entries.slice(0, p.revealed)
   const latest = up[up.length - 1] ?? null
+  const viewer = viewerShowEntry(show, p.revealed, viewerRosterId)
   const title = show.kind === 'lottery' ? t('Draft lottery', 'Lotería del draft') : t('Draft order reveal', 'Revelación del orden del draft')
 
   return (
@@ -86,13 +87,25 @@ export function DraftDayShow({ leagueId, sessionStatus }: { leagueId: string; se
                 <MoveLine t={t} entry={latest} kind={show.kind} />
               </div>
             )}
+            {viewer && (
+              <div className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-center" aria-live="polite" data-testid="draft-day-your-team">
+                {viewer.state === 'waiting' ? (
+                  <p className="text-sm font-semibold text-amber-100">{t('Your team is waiting to be revealed', 'Tu equipo aún espera su revelación')}</p>
+                ) : (
+                  <>
+                    <p className="text-sm font-bold text-amber-100">{t(`Your team · Pick ${viewer.entry.slot}`, `Tu equipo · Selección ${viewer.entry.slot}`)}</p>
+                    <MoveLine t={t} entry={viewer.entry} kind={show.kind} />
+                  </>
+                )}
+              </div>
+            )}
             <ol className="mt-4 space-y-1 text-sm">
               {[...show.entries].sort((a, b) => a.slot - b.slot).map((e) => {
                 const isUp = up.some((u) => u.slot === e.slot)
                 return (
-                  <li key={e.slot} className="flex items-center justify-between rounded-lg bg-white/[0.04] px-3 py-1.5">
+                  <li key={e.slot} className={`flex items-center justify-between rounded-lg px-3 py-1.5 ${isUp && e.rosterId === viewerRosterId ? 'bg-amber-300/15 ring-1 ring-amber-300/30' : 'bg-white/[0.04]'}`}>
                     <span className="tabular-nums text-white/50">{e.slot}</span>
-                    <span className={isUp ? 'font-semibold' : 'text-white/30'}>{isUp ? e.displayName : '• • •'}</span>
+                    <span className={isUp ? 'font-semibold' : 'text-white/30'}>{isUp ? e.displayName : '• • •'}{isUp && e.rosterId === viewerRosterId ? ` (${t('you', 'tú')})` : ''}</span>
                     <span className="w-14 text-right text-xs text-white/40">{show.kind === 'lottery' && e.oddsPct != null && isUp ? `${Math.round(e.oddsPct)}%` : ''}</span>
                   </li>
                 )
