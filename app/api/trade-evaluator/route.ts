@@ -57,6 +57,7 @@ import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { resolveTradeEvaluatorInternalLeagueId } from '@/lib/trades/resolveTradeEvaluatorInternalLeagueId'
 import { loadTradeLeagueContext, type TradeLeagueContext } from '@/lib/trades/loadTradeLeagueContext'
+import { loadNbaPointsTradeEvaluation, type NbaPointsTradeEvaluation, type NbaTradeAsset } from '@/lib/trades/nbaPointsTradeEvaluation'
 import { resolveTradePlayerAssets } from '@/lib/trades/tradePlayerIdentityResolver'
 import {
   buildNormalizedTradeContext,
@@ -502,10 +503,9 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       )
     }
 
-    // The pricing path below uses an NFL FantasyCalc board and NFL lineup math.
-    // A stored NBA/NHL/MLB/college/soccer league must never receive that grade.
+    // The legacy pricing path uses an NFL FantasyCalc board and NFL lineup math.
     const evaluatedSport = normalizeToSupportedSport(String(tradeLeagueContext?.sport ?? data.league?.sport ?? 'NFL'))
-    if (evaluatedSport !== 'NFL') {
+    if (evaluatedSport !== 'NFL' && evaluatedSport !== 'NBA') {
       return NextResponse.json({
         error: 'SPORT_VALUATION_UNAVAILABLE',
         message: `Trade grading for ${evaluatedSport} is not available in this evaluator yet.`,
@@ -525,7 +525,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       }
     }
     const storedReceptionPoints = tradeLeagueContext?.scoringRules.rec ?? 0
-    if (tradeLeagueContext && storedReceptionPoints !== 0 && storedReceptionPoints !== 0.5 && storedReceptionPoints !== 1) {
+    if (evaluatedSport === 'NFL' && tradeLeagueContext && storedReceptionPoints !== 0 && storedReceptionPoints !== 0.5 && storedReceptionPoints !== 1) {
       return NextResponse.json({
         error: 'SCORING_MODEL_UNAVAILABLE',
         message: `This evaluator cannot price ${storedReceptionPoints}-point receptions yet.`,
@@ -536,6 +536,39 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         ? storedReceptionPoints
         : undefined
       : undefined
+
+    let nbaEvaluation: NbaPointsTradeEvaluation | null = null
+    let nbaAssets: { senderGives: NbaTradeAsset[]; receiverGives: NbaTradeAsset[] } | null = null
+    if (evaluatedSport === 'NBA') {
+      if (!tradeLeagueContext || tradeLeagueContext.scoringMode !== 'points' || !Object.keys(tradeLeagueContext.scoringRules).length) {
+        return NextResponse.json({
+          error: 'SCORING_MODEL_UNAVAILABLE',
+          message: 'NBA trade grading currently requires a linked points league with saved numeric scoring rules.',
+        }, { status: 422 })
+      }
+      if (data.sender.gives_picks.length || data.receiver.gives_picks.length || data.sender.gives_faab || data.receiver.gives_faab) {
+        return NextResponse.json({
+          error: 'ASSET_VALUATION_UNAVAILABLE',
+          message: 'NBA pick and FAAB valuation is not available in this evaluator yet.',
+        }, { status: 422 })
+      }
+      const toAsset = (player: (typeof data.sender.gives_players)[number]): NbaTradeAsset =>
+        typeof player === 'string' ? { name: player } : {
+          name: player.name,
+          playerId: player.playerId ?? player.sportsPlayerId ?? player.sports_player_id
+            ?? player.player_id ?? player.internalPlayerId ?? player.externalSourceId
+            ?? player.external_source_id ?? player.providerPlayerId ?? player.provider_player_id
+            ?? player.sleeperPlayerId ?? player.sleeper_id,
+        }
+      if (!data.sender.gives_players.length || !data.receiver.gives_players.length ||
+          data.sender.gives_players.length + data.receiver.gives_players.length > 20) {
+        return NextResponse.json({ error: 'INVALID_TRADE_ASSETS', message: 'Include 1–20 players, with at least one from each team.' }, { status: 422 })
+      }
+      nbaAssets = {
+        senderGives: data.sender.gives_players.map(toAsset),
+        receiverGives: data.receiver.gives_players.map(toAsset),
+      }
+    }
 
     const sId = (data.sender.team_id || data.sender.manager_name || '').trim().toLowerCase()
     const rId = (data.receiver.team_id || data.receiver.manager_name || '').trim().toLowerCase()
@@ -563,11 +596,22 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       )
     }
 
+    if (nbaAssets && tradeLeagueContext) {
+      nbaEvaluation = await loadNbaPointsTradeEvaluation({ league: tradeLeagueContext, ...nbaAssets })
+      if (!nbaEvaluation.ok) {
+        return NextResponse.json({
+          error: nbaEvaluation.code,
+          message: 'NBA player identity or scored season data is unavailable for this trade.',
+          players: nbaEvaluation.players,
+        }, { status: 422 })
+      }
+    }
+
     const gate = await requireFeatureEntitlement({
       userId,
       userEmail: session?.user?.email,
       featureId: 'trade_analyzer',
-      allowTokenFallback: true,
+      allowTokenFallback: evaluatedSport !== 'NBA',
       confirmTokenSpend: Boolean(data.confirmTokenSpend),
       tokenRuleCode: 'ai_trade_analyzer_full_review',
       tokenSourceType: 'trade_evaluator',
@@ -575,12 +619,74 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       tokenDescription: 'Trade evaluator full review',
       tokenMetadata: {
         leagueId: data.league_id ?? null,
-        sport: data.league?.sport ?? null,
-        format: data.league?.format ?? null,
+        sport: evaluatedSport,
+        format: tradeLeagueContext?.format ?? data.league?.format ?? null,
       },
     })
     if (!gate.ok) return gate.response
     if (gate.tokenSpend) tokenFallbackLedgerId = gate.tokenSpend.id
+
+    if (nbaEvaluation?.ok && tradeLeagueContext) {
+      const given = nbaEvaluation.senderTotal
+      const received = nbaEvaluation.receiverTotal
+      const delta = Math.round((received - given) * 100) / 100
+      const fairnessScore = Math.max(0, Math.round(100 - 100 * Math.abs(delta) / Math.max(given, received, 1)))
+      const edge = Math.abs(delta) / Math.max(given, received, 1)
+      const verdict = edge <= 0.1 ? 'Fair' : 'Slight Win'
+      const lean = delta >= 0 ? 'You' : 'Them'
+      const pricedPlayers = [...nbaEvaluation.senderGives, ...nbaEvaluation.receiverGives]
+      const coverageScore = Math.round(100 * pricedPlayers.reduce((sum, player) =>
+        sum + (player.currentPointsPerGame !== null ? 1 : 0)
+          + (player.previousPointsPerGame !== null ? 0.5 : 0)
+          + (player.recentFivePointsPerGame !== null ? 0.25 : 0), 0) / (pricedPlayers.length * 1.75))
+      const storedTeam = (id: string | undefined) => id
+        ? tradeLeagueContext.teams.find((team) => team.id === id || team.externalId === id) : undefined
+      const senderStoredTeam = storedTeam(data.sender.team_id)
+      const receiverStoredTeam = storedTeam(data.receiver.team_id)
+      const participantNotes = [
+        ...(senderStoredTeam ? [`${senderStoredTeam.name}: ${senderStoredTeam.record.wins}-${senderStoredTeam.record.losses}-${senderStoredTeam.record.ties}`] : []),
+        ...(receiverStoredTeam ? [`${receiverStoredTeam.name}: ${receiverStoredTeam.record.wins}-${receiverStoredTeam.record.losses}-${receiverStoredTeam.record.ties}`] : []),
+      ]
+      const summary = `NBA points production: ${data.sender.manager_name} sends ${given.toFixed(2)} and receives ${received.toFixed(2)} scored fantasy points per game. Historical production does not establish roster fit or playoff odds.`
+      return NextResponse.json({
+        success: true,
+        model: 'nba_points_production_v1',
+        schemaValid: false,
+        evaluation: {
+          verdict: { overall: edge <= 0.1 ? 'FAIR' : delta > 0 ? 'UNFAIR_TEAM_A' : 'UNFAIR_TEAM_B' },
+          explanation: { summary, leagueContextNotes: [...participantNotes, ...nbaEvaluation.coverage] },
+          confidence: { score: coverageScore, rating: coverageScore >= 80 ? 'HIGH' : 'MEDIUM', drivers: nbaEvaluation.coverage },
+          riskFlags: ['Production comparison only; roster fit, age, future picks, and playoff probability are not yet modeled. Coverage is not a prediction accuracy score.'],
+        },
+        leagueSettings: {
+          source: tradeLeagueContext.platform, sport: 'nba', format: tradeLeagueContext.format,
+          scoringMode: tradeLeagueContext.scoringMode, scoringRules: tradeLeagueContext.scoringRules,
+          teamCount: tradeLeagueContext.teamCount, starterSlots: tradeLeagueContext.starterSlots,
+          viewerTeamIds: tradeLeagueContext.viewerTeamIds,
+          participantRecords: {
+            sender: senderStoredTeam ? { record: senderStoredTeam.record, rank: senderStoredTeam.rank } : null,
+            receiver: receiverStoredTeam ? { record: receiverStoredTeam.record, rank: receiverStoredTeam.rank } : null,
+          },
+        },
+        valuationReport: {
+          unit: 'league_scored_fantasy_points_per_game',
+          senderGives: nbaEvaluation.senderGives,
+          receiverGives: nbaEvaluation.receiverGives,
+          teamA: { totalGiven: given, totalReceived: received, netValue: delta, fairnessScore },
+          teamB: { totalGiven: received, totalReceived: given, netValue: -delta, fairnessScore },
+        },
+        tradeInsights: { fairnessScore, fairnessMethod: 'historical_nba_points_per_game' },
+        acceptProbability: { verdict, lean, probability: null, acceptBullets: nbaEvaluation.coverage },
+        serverConfidence: { score: coverageScore },
+        rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
+        tokenSpend: gate.tokenSpend ? {
+          ruleCode: gate.tokenPreview?.ruleCode ?? 'ai_trade_analyzer_full_review',
+          tokenCost: gate.tokenPreview?.tokenCost ?? null,
+          balanceAfter: gate.tokenSpend.balanceAfter,
+          ledgerId: gate.tokenSpend.id,
+        } : null,
+      })
+    }
 
     /*
      * What the CALLER said, which is not yet an answer. `isSF` is resolved after the league is

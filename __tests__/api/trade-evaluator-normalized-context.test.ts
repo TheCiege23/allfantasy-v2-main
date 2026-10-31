@@ -13,6 +13,7 @@ const buildCacheKeyMock = vi.fn()
 
 const resolveTradeEvaluatorInternalLeagueIdMock = vi.fn()
 const loadTradeLeagueContextMock = vi.fn()
+const loadNbaPointsTradeEvaluationMock = vi.fn()
 const resolveTradePlayerAssetsMock = vi.fn()
 const buildNormalizedTradeContextMock = vi.fn()
 const buildNormalizedTradeEvidencePromptMock = vi.fn()
@@ -57,6 +58,10 @@ vi.mock('@/lib/trades/resolveTradeEvaluatorInternalLeagueId', () => ({
 
 vi.mock('@/lib/trades/loadTradeLeagueContext', () => ({
   loadTradeLeagueContext: (...a: unknown[]) => loadTradeLeagueContextMock(...a),
+}))
+
+vi.mock('@/lib/trades/nbaPointsTradeEvaluation', () => ({
+  loadNbaPointsTradeEvaluation: (...a: unknown[]) => loadNbaPointsTradeEvaluationMock(...a),
 }))
 
 vi.mock('@/lib/trades/tradePlayerIdentityResolver', () => ({
@@ -310,7 +315,72 @@ describe('POST /api/trade-evaluator normalized provider context', () => {
     }) as any)
 
     expect(res.status).toBe(422)
-    await expect(res.json()).resolves.toMatchObject({ error: 'SPORT_VALUATION_UNAVAILABLE', sport: 'NBA' })
+    await expect(res.json()).resolves.toMatchObject({ error: 'SCORING_MODEL_UNAVAILABLE' })
+    expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
+  })
+
+  it('returns a league-scored NBA points comparison without the NFL board or token fallback', async () => {
+    loadTradeLeagueContextMock.mockResolvedValueOnce({
+      leagueId: 'af-league-1', platformLeagueId: 'fantrax-1', name: 'NBA points league',
+      platform: 'fantrax', sport: 'NBA', season: 2026, format: 'dynasty', dynasty: true,
+      teamCount: 20, scoringMode: 'points', categoryPresetId: null,
+      scoringRules: { points_scored: 1, rebound: 1.2 }, scoringRuleDetails: [],
+      starterSlots: { PG: 1, SG: 1, UTIL: 2 }, benchSlots: 5, irSlots: 2,
+      taxiSlots: 0, waiverBudget: 100, teams: [
+        { id: 'team-a', externalId: 'fantrax-a', name: 'Team A', record: { wins: 8, losses: 2, ties: 0 }, rank: 2 },
+        { id: 'team-b', externalId: 'fantrax-b', name: 'Team B', record: { wins: 4, losses: 6, ties: 0 }, rank: 13 },
+      ], viewerTeamIds: ['team-a', 'team-b'], missing: [],
+    })
+    loadNbaPointsTradeEvaluationMock.mockResolvedValueOnce({
+      ok: true,
+      senderGives: [{ name: 'Player One', pointsPerGame: 30, currentPointsPerGame: 30, previousPointsPerGame: 28, recentFivePointsPerGame: 30 }],
+      receiverGives: [{ name: 'Player Two', pointsPerGame: 35, currentPointsPerGame: 35, previousPointsPerGame: 33, recentFivePointsPerGame: 35 }],
+      senderTotal: 30, receiverTotal: 35, coverage: [],
+    })
+    const { POST } = await import('@/app/api/trade-evaluator/route')
+    const { getLeagueInfo, getLeagueRosters } = await import('@/lib/sleeper-client')
+    const res = await POST(createMockNextRequest('http://localhost/api/trade-evaluator', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...baseBody(), league_id: 'fantrax-1',
+        sender: { ...baseBody().sender, team_id: 'fantrax-a' },
+        receiver: { ...baseBody().receiver, team_id: 'fantrax-b' },
+        league: { sport: 'NFL', format: 'redraft' } }),
+    }) as any)
+
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({
+      model: 'nba_points_production_v1',
+      valuationReport: { unit: 'league_scored_fantasy_points_per_game', teamA: { totalGiven: 30, totalReceived: 35, netValue: 5 } },
+      leagueSettings: { source: 'fantrax', sport: 'nba', teamCount: 20, viewerTeamIds: ['team-a', 'team-b'],
+        participantRecords: { sender: { rank: 2 }, receiver: { rank: 13 } } },
+    })
+    expect(requireFeatureEntitlementMock).toHaveBeenCalledWith(expect.objectContaining({
+      allowTokenFallback: false, tokenMetadata: expect.objectContaining({ sport: 'NBA', format: 'dynasty' }),
+    }))
+    expect(getLeagueInfo).not.toHaveBeenCalled()
+    expect(getLeagueRosters).not.toHaveBeenCalled()
+  })
+
+  it('does not spend a token when NBA player evidence is missing', async () => {
+    loadTradeLeagueContextMock.mockResolvedValueOnce({
+      leagueId: 'af-league-1', platformLeagueId: 'espn-1', name: 'NBA league',
+      platform: 'espn', sport: 'NBA', season: 2026, format: 'redraft', dynasty: false,
+      teamCount: 12, scoringMode: 'points', categoryPresetId: null,
+      scoringRules: { points_scored: 1 }, scoringRuleDetails: [], starterSlots: { PG: 1 },
+      benchSlots: 5, irSlots: 1, taxiSlots: 0, waiverBudget: null,
+      teams: [], viewerTeamIds: [], missing: [],
+    })
+    loadNbaPointsTradeEvaluationMock.mockResolvedValueOnce({
+      ok: false, code: 'PLAYER_STATS_UNAVAILABLE', players: ['Player Two'],
+    })
+    const { POST } = await import('@/app/api/trade-evaluator/route')
+    const res = await POST(createMockNextRequest('http://localhost/api/trade-evaluator', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(baseBody()),
+    }) as any)
+
+    expect(res.status).toBe(422)
+    await expect(res.json()).resolves.toMatchObject({ error: 'PLAYER_STATS_UNAVAILABLE', players: ['Player Two'] })
     expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
   })
 

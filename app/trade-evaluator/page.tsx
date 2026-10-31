@@ -125,6 +125,7 @@ interface ApiDriver {
 }
 
 interface ApiTradeResponse {
+  model?: string
   evaluation?: {
     verdict?: {
       overall?: string
@@ -416,6 +417,7 @@ function verdictFromPayload(payload: ApiTradeResponse, fairnessScore: number, va
 }
 
 function providerList(payload: ApiTradeResponse) {
+  if (payload.model === 'nba_points_production_v1') return ['AF NBA stats']
   const providers = payload.aiProviders
   if (!providers) return ["AI"]
 
@@ -1290,24 +1292,24 @@ function TradeHubInner() {
                   <div className="mt-4 grid grid-cols-3 gap-3">
                     <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                       <div className="text-2xl font-black text-white">{result.fairnessScore}</div>
-                      <div className="mt-1 text-[10px] text-white/35">Fairness</div>
+                      <div className="mt-1 text-[10px] text-white/35">{result.rawPayload.model === 'nba_points_production_v1' ? 'Production Balance' : 'Fairness'}</div>
                     </div>
                     <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                       <div className={`text-2xl font-black ${result.valueDelta >= 0 ? "text-emerald-300" : "text-red-300"}`}>
                         {result.valueDelta > 0 ? "+" : ""}
-                        {Math.round(result.valueDelta)}
+                        {result.rawPayload.model === 'nba_points_production_v1' ? result.valueDelta.toFixed(2) : Math.round(result.valueDelta)}
                       </div>
-                      <div className="mt-1 text-[10px] text-white/35">Value Delta</div>
+                      <div className="mt-1 text-[10px] text-white/35">{result.rawPayload.model === 'nba_points_production_v1' ? 'Fantasy PPG Delta' : 'Value Delta'}</div>
                     </div>
                     <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                       <div className="text-2xl font-black text-white">{result.confidencePct}%</div>
-                      <div className="mt-1 text-[10px] text-white/35">Confidence</div>
+                      <div className="mt-1 text-[10px] text-white/35">{result.rawPayload.model === 'nba_points_production_v1' ? 'Data Coverage' : 'Confidence'}</div>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Grades</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">{result.rawPayload.model === 'nba_points_production_v1' ? 'Production Grades' : 'Grades'}</div>
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-center">
                       <div className="text-3xl font-black text-cyan-200">{result.senderGrade}</div>
@@ -1336,7 +1338,7 @@ function TradeHubInner() {
                 <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-6">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-300">
-                      AI Analysis
+                      {result.rawPayload.model === 'nba_points_production_v1' ? 'Stat Analysis' : 'AI Analysis'}
                     </span>
                     {result.fairnessMethod ? (
                       <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-white/45">
