@@ -70,6 +70,8 @@ const spanish: Record<string, string> = {
   Manage: 'Administrar',
   'Create a league': 'Crear una liga',
   'Exile Island': 'Isla del Exilio',
+  PUBLIC: 'PÚBLICA',
+  PRIVATE: 'PRIVADA',
   'Exile Island for': 'Isla del Exilio de',
   'Find a league': 'Buscar una liga',
   'Import a league': 'Importar una liga',

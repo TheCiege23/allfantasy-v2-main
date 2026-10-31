@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const db = vi.hoisted(() => ({
   league: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   roster: { findMany: vi.fn() },
+  leagueTeam: { findMany: vi.fn() },
   appUser: { findMany: vi.fn(), findUnique: vi.fn() },
   findLeagueSpotRequest: {
     findUnique: vi.fn(),
@@ -79,6 +80,7 @@ beforeEach(() => {
   session.value = { user: { id: "player" } }
   geo.blocked = false
   db.roster.findMany.mockResolvedValue([])
+  db.leagueTeam.findMany.mockResolvedValue([])
   db.appUser.findMany.mockResolvedValue([])
 })
 
@@ -134,6 +136,30 @@ describe("discovery shows verified external listings, and only those", () => {
 
   it("drops an import whose lister the platform did not show to be commissioner", async () => {
     db.league.findMany.mockResolvedValue([importedLeague({ isCommissioner: false })])
+    expect(await queryPublicFantasyLeagueCards({ sport: null, query: null })).toEqual([])
+  })
+
+  it("trusts the commissioner TEAM the owner holds — how Sleeper records it", async () => {
+    // The Sleeper import never sets League.isCommissioner (0 of 531 in production on
+    // 2026-10-31); the commissioner flag is on the owner's claimed team.
+    db.league.findMany.mockResolvedValue([importedLeague({ isCommissioner: false })])
+    db.leagueTeam.findMany.mockResolvedValue([
+      { leagueId: "L", claimedByUserId: "commish", isCommissioner: true, role: "member" },
+    ])
+    const [card] = await queryPublicFantasyLeagueCards({ sport: null, query: null })
+    expect(card?.listingVerification).toBe("provider")
+    const where = db.leagueTeam.findMany.mock.calls[0][0].where
+    expect(where).toMatchObject({ leagueId: { in: ["L"] }, isCommissioner: true, role: { not: "viewer" } })
+  })
+
+  it("does not trust a commissioner team someone ELSE holds, or a viewer's", async () => {
+    db.league.findMany.mockResolvedValue([importedLeague({ isCommissioner: false })])
+    // A stub that ignores the where clause: the re-check must still fail closed.
+    db.leagueTeam.findMany.mockResolvedValue([
+      { leagueId: "L", claimedByUserId: "someone-else", isCommissioner: true, role: "member" },
+      { leagueId: "L", claimedByUserId: "commish", isCommissioner: true, role: "viewer" },
+      { leagueId: "L", claimedByUserId: "commish", isCommissioner: false, role: "member" },
+    ])
     expect(await queryPublicFantasyLeagueCards({ sport: null, query: null })).toEqual([])
   })
 
@@ -214,6 +240,16 @@ describe("the commissioner's listing", () => {
     const res = await saveListing(req({ listed: true, openSpots: 2 }), ctx)
     expect(res.status).toBe(403)
     expect(db.league.update).not.toHaveBeenCalled()
+  })
+
+  it("lists for a Sleeper commissioner whose flag is on their team, not the league row", async () => {
+    db.league.findUnique.mockResolvedValue(importedLeague({ isCommissioner: false, settings: {} }))
+    db.leagueTeam.findMany.mockResolvedValue([
+      { leagueId: "L", claimedByUserId: "commish", isCommissioner: true, role: "member" },
+    ])
+    const res = await saveListing(req({ listed: true, openSpots: 2 }), ctx)
+    expect(res.status).toBe(200)
+    expect(db.league.update).toHaveBeenCalled()
   })
 
   it("is somebody else's copy: not found", async () => {

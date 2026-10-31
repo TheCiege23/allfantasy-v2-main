@@ -8,6 +8,7 @@ import type { HubChart } from '@/lib/core-app/commissioner/charts'
 import type { HubLink } from '@/lib/core-app/commissioner/areas'
 import { CalendarExportButton } from './CalendarExportButton'
 import { MemberActivityList } from './MemberActivityList'
+import { DynastyHealthPanel } from './DynastyHealthPanel'
 import { hubCopy } from '@/lib/core-app/commissionerHubCopy'
 
 /**
@@ -146,7 +147,7 @@ export function TaskCards({ data, language = 'en' }: { data: CommissionerHubData
       id="ch-tasks"
       title={t('Needs you now')}
       note={cards.length > 0 ? t('Most urgent first') : t('Nothing outstanding')}
-      className="af-ch-tasks-section"
+      className={data.dynasty ? 'af-ch-tasks-section af-ch-dyn' : 'af-ch-tasks-section'}
     >
       {cards.length > 0 ? (
         <>
@@ -239,7 +240,13 @@ export function HealthPanel({ data, language = 'en' }: { data: CommissionerHubDa
   const { score, flags } = data.health
   const measured = flags.filter((f) => f.measured).length
   return (
-    <HubSection id="ch-health" title={t('League health')} note={t(`${measured} of ${flags.length} checks measured`)}>
+    <HubSection
+      id="ch-health"
+      title={t('League health')}
+      note={t(`${measured} of ${flags.length} checks measured`)}
+      // Dynasty Era dress, dynasty leagues only: every other league renders exactly as before.
+      className={data.dynasty ? 'af-ch-dyn' : undefined}
+    >
       <div className="af-ch-health-score" data-available={score.available}>
         {score.available ? (
           <>
@@ -263,6 +270,7 @@ export function HealthPanel({ data, language = 'en' }: { data: CommissionerHubDa
           <FlagRow key={f.key} flag={f} language={language} />
         ))}
       </ul>
+      {data.dynasty ? <DynastyHealthPanel dynasty={data.dynasty} /> : null}
     </HubSection>
   )
 }
