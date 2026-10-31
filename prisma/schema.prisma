@@ -3988,6 +3988,7 @@ model AppUser {
   communityReactions                       CommunityReaction[]                    @relation("CommunityReactionUser")
   communityReports                         CommunityReport[]                      @relation("CommunityReportReporter")
   communityIdeaVotes                       CommunityIdeaVote[]                    @relation("CommunityIdeaVoter")
+  findLeagueSpotRequests                   FindLeagueSpotRequest[]                @relation("FindLeagueSpotRequester")
   platformNotifications                    PlatformNotification[]
   platformUserReportsAgainst               PlatformUserReport[]                   @relation("PlatformUserReportReported")
   platformUserReportsCreated               PlatformUserReport[]                   @relation("PlatformUserReportReporter")
@@ -6542,6 +6543,7 @@ model League {
   dispersalDrafts                       DispersalDraft[]
   dynastyConfig                         DynastyLeagueConfig?
   findLeagueListings                    FindLeagueListing[]
+  findLeagueSpotRequests                FindLeagueSpotRequest[]
   guillotineAiInsights                  GuillotineAIInsight[]
   guillotineConfig                      GuillotineLeagueConfig?
   guillotineSeasons                     GuillotineSeason[]
@@ -8233,6 +8235,32 @@ model FindLeagueListing {
   @@index([creatorRankLevel])
   @@index([minRankLevel, maxRankLevel])
   @@map("find_league_listings")
+}
+
+/// A player asking for a spot in a league that plays on another platform (Sleeper, ESPN, …) and
+/// was listed in Find a League by its verified commissioner. The seats live on the other
+/// platform, so there is no join here: the commissioner accepts and sends their own invite.
+/// See lib/public-discovery/externalListing.ts. One row per player per league; asking again
+/// after a decline reopens the same row.
+model FindLeagueSpotRequest {
+  id              String    @id @default(cuid())
+  leagueId        String
+  requesterUserId String
+  message         String?   @db.VarChar(500)
+  /// pending | accepted | declined | withdrawn
+  status          String    @default("pending") @db.VarChar(16)
+  /// The commissioner's reply: their platform invite link, or why not.
+  responseNote    String?   @db.VarChar(500)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  respondedAt     DateTime?
+  league          League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  requester       AppUser   @relation("FindLeagueSpotRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, requesterUserId])
+  @@index([leagueId, status])
+  @@index([requesterUserId, createdAt])
+  @@map("find_league_spot_requests")
 }
 
 model Roster {

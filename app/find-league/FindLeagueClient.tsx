@@ -235,6 +235,7 @@ export function FindLeagueClient() {
   const [viewerTier, setViewerTier] = useState<number | null>(null)
   const [viewerTierName, setViewerTierName] = useState<string | null>(null)
   const [hiddenByTierPolicy, setHiddenByTierPolicy] = useState(0)
+  const [paidHiddenMessage, setPaidHiddenMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
 
@@ -304,6 +305,7 @@ export function FindLeagueClient() {
         setViewerTier(typeof d.viewerTier === "number" ? d.viewerTier : null)
         setViewerTierName(typeof d.viewerTierName === "string" ? d.viewerTierName : null)
         setHiddenByTierPolicy(typeof d.hiddenByTierPolicy === "number" ? d.hiddenByTierPolicy : 0)
+        setPaidHiddenMessage(typeof d.paidLeaguesHidden?.message === "string" ? d.paidLeaguesHidden.message : null)
         setLoading(false)
       })
       .catch(() => {
@@ -395,6 +397,15 @@ export function FindLeagueClient() {
           ) : null}
         </div>
       </section>
+      {paidHiddenMessage ? (
+        <p
+          className="rounded-xl border px-4 py-3 text-sm"
+          style={{ borderColor: "rgba(234, 179, 8, 0.35)", background: "rgba(234, 179, 8, 0.08)", color: "var(--text)" }}
+          data-testid="find-league-paid-hidden"
+        >
+          {paidHiddenMessage}
+        </p>
+      ) : null}
       <SmartDiscoverySection sport={sport} />
       {/* Search — mobile first */}
       <div className="flex flex-col gap-3">

@@ -6,6 +6,7 @@ import { getServedOrigin } from "@/lib/http/served-origin"
 import { discoverPublicLeagues } from "@/lib/public-discovery"
 import { buildFindLeagueRails } from "@/lib/public-discovery/findLeagueRails"
 import { resolveUserCareerTier } from "@/lib/ranking/tier-visibility"
+import { paidLeagueGeoVerdict } from "@/lib/geo/paidLeagueGeo"
 
 export const dynamic = "force-dynamic"
 
@@ -25,23 +26,20 @@ export async function GET(req: NextRequest) {
     const viewerTier = await resolveUserCareerTier(prisma as never, viewerUserId, 1)
     const sport = req.nextUrl.searchParams.get("sport") || null
 
+    // Same rule as /api/discover/leagues: no paid league for a viewer in a restricted state.
+    const paidGeo = await paidLeagueGeoVerdict(req, viewerUserId)
     const result = await discoverPublicLeagues(
-      { sport, sort: "ranking_match", visibility: "public", page: 1, limit: 24 },
+      { sport, sort: "ranking_match", visibility: "public", page: 1, limit: 24, entryFee: paidGeo.blocked ? "free" : "all" },
       getServedOrigin(req),
       { viewerTier, viewerUserId }
     )
     const rails = buildFindLeagueRails(result.leagues)
     const status = rails.length === 0 ? "empty" : viewerUserId ? "ok" : "anonymous"
 
-    // Personal when signed in (rank bands are this viewer's), so never shared-cached.
+    // Personal either way (rank bands, and paid leagues by state), so never shared-cached.
     return NextResponse.json(
       { status, rails },
-      {
-        headers: {
-          "Cache-Control": viewerUserId ? "private, max-age=30" : "public, s-maxage=60, stale-while-revalidate=120",
-          Vary: "Cookie",
-        },
-      }
+      { headers: { "Cache-Control": "private, max-age=30", Vary: "Cookie" } }
     )
   } catch (err: unknown) {
     console.error("[find-league/recommendations]", err)

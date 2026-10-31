@@ -98,6 +98,16 @@ export interface DiscoveryCard {
   rankingTierDelta?: number
   /** Step up / your level / chill against the signed-in viewer's rank; absent for anonymous viewers. */
   rankBand?: RankBand | null
+  /** "invite": join here with the code. "request": the league plays elsewhere; ask the commissioner. */
+  joinMode?: "invite" | "request"
+  /** For a league that plays on another platform: which one (sleeper, espn, …). */
+  externalPlatform?: string | null
+  /** How the lister was shown to be the commissioner (lib/public-discovery/externalListing.ts). */
+  listingVerification?: "provider" | "attestation" | null
+  /** The commissioner's note on an external listing. */
+  listingNote?: string | null
+  /** Entry fee in dollars, when the league states one. AllFantasy never collects it. */
+  entryFee?: number | null
 }
 
 export interface DiscoverLeaguesInput {
@@ -132,4 +142,6 @@ export interface DiscoverLeaguesResult {
   viewerTier?: number
   viewerTierName?: string
   hiddenByTierPolicy?: number
+  /** Set when paid leagues were withheld because of where the viewer is (lib/geo/paidLeagueGeo.ts). */
+  paidLeaguesHidden?: { message: string } | null
 }
