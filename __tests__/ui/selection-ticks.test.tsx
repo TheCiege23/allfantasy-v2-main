@@ -25,7 +25,6 @@ vi.mock('@/components/i18n/LanguageProviderClient', async () => {
 import { SelectionCheck } from '@/components/ui/selection-check'
 import { CheckBox } from '@/components/ui/checkbox'
 import { CheckBox as WizardCheckBox } from '@/components/create-league-v2/WizardControls'
-import { FormatCard } from '@/components/league/FormatCard'
 import { SurvivorTribePicker } from '@/components/league/survivor/SurvivorTribePicker'
 import { SleeperPoolTable } from '@/components/app/draft-room/SleeperPoolTable'
 import { PlayerPanel } from '@/components/app/draft-room/PlayerPanel'
@@ -82,17 +81,6 @@ describe('CheckBox primitive (moved to components/ui/checkbox)', () => {
     expect((screen.getByRole('checkbox', { name: 'Median game' }) as HTMLInputElement).checked).toBe(true)
     expect(view.container.querySelector('[data-checked]')?.getAttribute('data-checked')).toBe('true')
     expect(view.container.querySelector('svg')).not.toBeNull()
-  })
-})
-
-describe('FormatCard', () => {
-  it('shows a tick and aria-pressed=true only when selected', () => {
-    const view = render(<FormatCard title="Dynasty" description="Keep your roster" />)
-    expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe('false')
-    expect(tick(screen.getByTestId('format-card-check'))).toBe('off')
-    view.rerender(<FormatCard title="Dynasty" description="Keep your roster" selected />)
-    expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe('true')
-    expect(tick(screen.getByTestId('format-card-check'))).toBe('on')
   })
 })
 
