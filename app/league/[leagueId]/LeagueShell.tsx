@@ -16,6 +16,7 @@ import { ValuesPageLink } from '@/components/values/ValuesPageLink'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
 import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
+import { readChosenPlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { shouldApplyIncomingView } from '@/lib/league/leagueTabSync'
 import { LeagueLiveStrip } from '@/components/sports/LeagueLiveStrip'
 import { LeagueStoryCard } from '@/components/sports/LeagueStoryCard'
@@ -462,6 +463,19 @@ export function LeagueShell({
   }, [nflRedraftCore, league.id])
   const redraftCurrentWeek = redraftSeason?.currentWeek ?? null
   const hasActiveRedraftSeason = redraftSeason != null
+  // The redraft header's season track (NativeLeagueWorkspace → RedraftSeasonTrack). Only the league's
+  // own numbers: the RedraftSeason row when one is loaded, else the commissioner's chosen playoff week
+  // (never the sport default) and the trade-deadline column. A missing value drops its marker.
+  const redraftSeasonFacts = useMemo(
+    () => ({
+      totalWeeks: redraftSeason?.totalWeeks ?? null,
+      playoffStartWeek: redraftSeason?.playoffStartWeek ?? readChosenPlayoffStartWeek(league),
+      tradeDeadlineWeek: league.tradeDeadlineWeek ?? null,
+      // A RedraftSeason row is only created once the draft finalizes (see the note above).
+      ...(redraftSeason ? { draftComplete: true } : {}),
+    }),
+    [redraftSeason, league],
+  )
 
   const nativeWorkspace = isNativePlatform(league.platform)
   // An imported Guilly league (lib/guillotine/importedGuillyView.ts): its tab reads the provider's scores, not
@@ -1532,6 +1546,7 @@ export function LeagueShell({
           onOpenChimmy={() => { setNativeChimmyOpen(true); setMobileLeftOpen(true) }}
           rail={leagueRail}
           guillotineBanner={guillotineAtmosphere ? { line: guillotineAtmosphere.line, mood: guillotineAtmosphere.mood } : null}
+          seasonFacts={redraftSeasonFacts}
           layoutMode="balanced-three-panel"
           embedCenterOnly={embedMode}
           immersive={specialtyImmersive}
