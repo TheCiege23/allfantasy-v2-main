@@ -86,9 +86,16 @@ describe('handing teams to Chimmy', () => {
     expect(await applyChimmyAutopilot('L', 'commish', 'r1', undefined)).toMatchObject({ ok: true })
   })
 
-  it('still needs the league owner\'s AF Commissioner plan', async () => {
+  it('runs one team free without the league owner\'s AF Commissioner plan; more need the plan', async () => {
     m.state.ownerHasPlan = false
-    expect(await applyChimmyAutopilot('L', 'commish', 'r1', undefined)).toMatchObject({ ok: false, status: 402 })
+    expect(await applyChimmyAutopilot('L', 'commish', 'r1', undefined)).toMatchObject({ ok: true })
+    const second = await applyChimmyAutopilot('L', 'commish', 'r2', undefined)
+    expect(second).toMatchObject({ ok: false, status: 402 })
+    expect((second as { error: string }).error).toBe('Chimmy runs 1 team for free. The AF Commissioner plan lets it run up to 4.')
+    expect(autopilotRosterIds(managed())).toEqual(['r1'])
+    // Freeing the free team lets another take its place.
+    expect((await applyChimmyAutopilot('L', 'commish', 'r1', null)).ok).toBe(true)
+    expect((await applyChimmyAutopilot('L', 'commish', 'r2', undefined)).ok).toBe(true)
   })
 })
 
@@ -146,5 +153,17 @@ describe('the draft room says what happened to the season', () => {
     ])).toBe('Saved. Chimmy will run 1 of them all season. 1 team could not be handed to Chimmy for the season: Chimmy can run up to 4 teams in a league. Take Chimmy off a team first.')
     expect(draftAiSaveMessage([{ rosterId: 'a', ok: false, error: 'Chimmy autopilot is part of the AF Commissioner plan.' }]))
       .toBe('Saved. Chimmy will draft these teams. 1 team could not be handed to Chimmy for the season: Chimmy autopilot is part of the AF Commissioner plan.')
+  })
+})
+
+describe('the free Chimmy team', () => {
+  it('is the team handed to Chimmy first, and only teams Chimmy runs count', async () => {
+    const { freeChimmyRosterIds, CHIMMY_FREE_TEAMS } = await import('@/lib/inactive-manager/inactiveManagerMode')
+    const on = (since: string) => ({ since: 's', byUserId: 'c', autopilot: { style: 'win_now' as const, since, byUserId: 'c' } })
+    expect(CHIMMY_FREE_TEAMS).toBe(1)
+    expect(freeChimmyRosterIds({ b: on('2026-10-02'), a: on('2026-10-03'), c: { since: 's', byUserId: 'c' } })).toEqual(['b'])
+    // Ties break by roster id, so the choice is stable.
+    expect(freeChimmyRosterIds({ z: on('2026-10-01'), y: on('2026-10-01') })).toEqual(['y'])
+    expect(freeChimmyRosterIds({})).toEqual([])
   })
 })

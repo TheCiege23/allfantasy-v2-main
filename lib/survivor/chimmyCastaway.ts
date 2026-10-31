@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+import { isChimmyRunning } from '@/lib/inactive-manager/inactiveManagerMode'
+import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
 import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { loadCouncilContext } from './survivorCouncilService'
 import { submitVote } from './survivorVoteService'
@@ -37,8 +38,9 @@ export async function runChimmyCouncilTurn(leagueId: string, councilId: string):
   const turn: ChimmyCouncilTurn = { voted: [], idolsPlayed: [], skipped: {} }
   const ctx = await loadCouncilContext(leagueId, councilId)
   if (!ctx || ctx.council.status !== 'voting_open' || ctx.council.isRevealed) return turn
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-  const managed = readManagedLineups(league?.settings)
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, userId: true } })
+  if (!league) return turn
+  const managed = await readPlayableChimmyLineups(league)
   const chimmyVoters = ctx.eligibility.voterUserIds.filter((userId) => {
     const rosterId = ctx.userToRoster[userId]
     return Boolean(rosterId) && isSeatPlaceholderUserId(userId) && isChimmyRunning(managed, rosterId!, userId)
