@@ -39,6 +39,12 @@ transport:
 
 # ============================================================================
 support_matrix:
+  NBA:
+    sport_path: basketball/nba
+    scoreboard:
+      status: probed
+      captured: 2026-10-31
+      fixtures: [fixtures/scoreboard.NBA.20261106.json, fixtures/scoreboard.NBA.20251209.json, fixtures/scoreboard.NBA.20251213.json, fixtures/scoreboard.NBA.20251216.json]
   NCAAB:
     sport_path: basketball/mens-college-basketball
     teams: { status: probed, fixture: fixtures/teams.NCAAB.json }
@@ -51,6 +57,20 @@ support_matrix:
 
 # ============================================================================
 endpoints:
+
+  nba_scoreboard:
+    method: GET
+    path: /basketball/nba/scoreboard
+    query_params: { dates: "YYYYMMDD (one day)", limit: 1000 }
+    envelope: "{ events: [{ id, date, season: {year}, status: {type}, competitions: [{notes, venue, competitors}] }] }"
+    fields:
+      cup_identity: "competitions[0].notes[].type=event with headline: NBA Cup - Group Play, NBA Cup - Quarterfinals, NBA Cup - Semifinals, or NBA Cup Championship"
+      season: "events[].season.year is the END year: 2026 Cup -> 2027"
+      teams: "competitors[].homeAway, team.displayName, team.id; no verified tournament seeds"
+      start: "events[].date, ISO timestamp; postpone/cancel/TBD status must not open picks"
+      location: "venue.fullName, venue.address.city and state"
+      final: "status.type.name=STATUS_FINAL and completed=true; competitors[].score is a string"
+    limitations: "No tournament seed field captured. Do not invent seed numbers. Dates range 20261030-20261212 returned HTTP 400; use individual days. No rate limit or completeness guarantee documented."
 
   teams:
     method: GET

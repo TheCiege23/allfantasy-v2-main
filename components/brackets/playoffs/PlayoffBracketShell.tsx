@@ -67,7 +67,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const tournamentLimit = view.viewerTournamentBracketLimit ?? null
   const tournamentUsed = view.viewerTournamentBracketUsed ?? null
   const tournamentQuotaReached = tournamentLimit != null && tournamentUsed != null && tournamentUsed >= tournamentLimit
-  const tournamentLocked = singleGameSport && !safeChallenge.isTestMode && view.challenge.firstGameStartsAt != null && Date.now() >= Date.parse(view.challenge.firstGameStartsAt)
+  const rollingCup = safeChallenge.sport === "nba_cup" && !safeChallenge.isTestMode
+  const tournamentLocked = singleGameSport && !rollingCup && !safeChallenge.isTestMode && view.challenge.firstGameStartsAt != null && Date.now() >= Date.parse(view.challenge.firstGameStartsAt)
   const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant && !tournamentLocked && !tournamentQuotaReached
   const primaryEntry = useMemo(() => {
     if (myEntries.length === 0) return null
@@ -251,7 +252,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
             {participants.length} participant{participants.length !== 1 ? "s" : ""}
           </span>
           <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-900">{totalSeries} {singleGameSport ? "games" : "series"}</span>
-          {singleGameSport && <span className="rounded-full bg-violet-100 px-3 py-1 text-violet-900">Finalized picks lock at the first game</span>}
+          {singleGameSport && <span className="rounded-full bg-violet-100 px-3 py-1 text-violet-900">{rollingCup ? "Join anytime · Each game locks at tipoff" : "Finalized picks lock at the first game"}</span>}
           {safeChallenge.isTestMode ? <span className="rounded-full bg-sky-100 px-3 py-1 text-sky-900">Test mode</span> : null}
         </div>
         {hasTemplateSeries ? (
@@ -259,7 +260,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
               <span data-testid="playoff-template-warning">{singleGameSport
-                ? "Official teams and game times must be published by an admin before picks open."
+                ? rollingCup ? "NBA Cup teams and game times update automatically. Pick remaining group games now; knockout matchups open as qualifiers are confirmed. Games already started earn no late points." : "Official teams and game times must be published by an admin before picks open."
                 : "Template teams shown until playoff series sync runs. Teams/Schedule sync does not import winners. Results sync scores finalized picks."}</span>
             </div>
           </div>
@@ -550,7 +551,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
               ) : (
                 <>
                   <h2 className="mt-2 text-xl font-black">Finish your picks to join the board</h2>
-                  <p className="mt-2 text-sm text-slate-300">Finalize before the first game to see your rank and nearby competitors.</p>
+                  <p className="mt-2 text-sm text-slate-300">{rollingCup ? "Finalize your upcoming game picks to join the race. Missed games earn zero points." : "Finalize before the first game to see your rank and nearby competitors."}</p>
                 </>
               )}
             </div>

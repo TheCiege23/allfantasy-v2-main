@@ -82,3 +82,12 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
   ESPN's defensive block (8 DT · 9 DE · 10 LB · 11 DL · 12 CB · 13 S · 14 DB · 15 DP) and
   `lib/lineup-actions/sleeperSlotUtils.ts` already treats `DP` as IDP. It now counts as an IDP signal on
   import. A capture of a league using it would confirm which positions it accepts.
+# NBA Cup scoreboard verification — 2026-10-31
+
+Resolved: the four `scoreboard.NBA.*.json` fixtures capture Group Play (9 games),
+quarterfinals (2), semifinals (2), and championship (1). The final's label is
+`NBA Cup Championship`, without the hyphen used by the other stages. Results,
+real teams, dates and venue fields are verified; tournament seeds are not.
+The six-week date-range request returned HTTP 400. Runtime uses individual days.
+The alternate NBA CDN `scheduleLeagueV2.json` returned HTTP 403 through its probe;
+no spoofed headers or bypass retry was attempted. It is not a runtime source.
