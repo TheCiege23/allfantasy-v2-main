@@ -5,6 +5,7 @@
  *
  *   node scripts/redraft-core-myteam-capture.mjs --base-url http://localhost:3000 --out <dir> --state after
  *     [--state before] [--screens my-team,week,defense-hub] [--modes light,dark] [--sports nfl,nba] [--chromium <path>]
+ *     [--resume]   skip frames already on disk (each was verified when it was written)
  *
  * Writes <out>/<screen>/<state>/<sport>-<mode>-<width>.png plus <out>/<screen>/<state>/report.json.
  * Renders /e2e/redraft-core/myteam/<screen> (DB-free: the real AfCoreShell and the real screen with
@@ -57,6 +58,7 @@ if (host === 'allfantasy.ai' || host.endsWith('.allfantasy.ai')) {
   process.exit(2)
 }
 const modes = list(arg('modes'), ['light', 'dark'])
+const resume = process.argv.includes('--resume')
 const sportFilter = list(arg('sports'), Object.keys(SPORTS))
 const screens = list(arg('screens'), SCREENS)
 for (const s of sportFilter) if (!SPORTS[s]) { console.error(`unknown sport ${s}`); process.exit(2) }
@@ -187,6 +189,10 @@ try {
         const q = new URLSearchParams({ sport: SPORTS[f.sport], leagueType: f.leagueType })
         if (state === 'before') q.set('identity', 'off')
         for (const viewport of WIDTHS) {
+          const file = `${f.control ? 'control-dynasty-' : ''}${f.sport}-${mode}-${viewport.width}.png`
+          // --resume: a frame already on disk was verified when it was written, so a long run on a
+          // contended box can be restarted without re-shooting everything.
+          if (resume && fs.existsSync(path.join(dir, file))) { shots++; continue }
           let read = null
           for (let attempt = 1; attempt <= 4 && !read; attempt++) {
             try {
@@ -207,21 +213,28 @@ try {
           if (read && read.htmlMode !== (HTML_MODE[mode] ?? mode)) read.modeProblem = `html data-mode is ${read.htmlMode}`
           const problems = problemsFor(read, { stamped: state === 'after' && !f.control, screen, sport: f.sport })
           if (read?.modeProblem) problems.push(read.modeProblem)
-          const file = `${f.control ? 'control-dynasty-' : ''}${f.sport}-${mode}-${viewport.width}.png`
           report.push({ file, screen, state, mode, ...f, width: viewport.width, ...read, problems })
           if (problems.length) {
             failures++
             console.error(`✗ ${screen}/${state}/${file}: ${problems.join('; ')}`)
             continue
           }
-          await page.screenshot({ path: path.join(dir, file), fullPage: true })
+          try {
+            await page.screenshot({ path: path.join(dir, file), fullPage: true, timeout: 120_000 })
+          } catch (e) {
+            failures++
+            console.error(`✗ ${screen}/${state}/${file}: screenshot failed — ${String(e).split('\n')[0]}`)
+            await fresh().catch(() => {})
+            continue
+          }
           shots++
           console.log(`✓ ${screen}/${state}/${file}  accent=${read.accent}  min=${read.minFont}px  ${JSON.stringify(read.effect)}`)
         }
       }
       await context.close().catch(() => {})
     }
-    fs.writeFileSync(path.join(dir, 'report.json'), JSON.stringify(report, null, 2))
+    // A resumed run writes its own report beside the first: skipped frames keep the readings written with them.
+    fs.writeFileSync(path.join(dir, resume ? `report-${Date.now()}.json` : 'report.json'), JSON.stringify(report, null, 2))
   }
 } finally {
   await browser.close()
