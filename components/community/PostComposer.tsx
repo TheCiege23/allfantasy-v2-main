@@ -12,7 +12,9 @@ import { MAX_TAGS, POST_BODY_MAX, POST_TITLE_MAX } from '@/lib/community/validat
  */
 export function PostComposer({ initialChannel }: { initialChannel: string }) {
   const router = useRouter()
-  const startChannel = getChannel(initialChannel) ?? COMMUNITY_CHANNELS[1]!
+  const composable = COMMUNITY_CHANNELS.filter((c) => !c.systemOnly)
+  const requested = getChannel(initialChannel)
+  const startChannel = requested && !requested.systemOnly ? requested : composable[1]!
   const [channel, setChannel] = useState(startChannel.slug)
   const [title, setTitle] = useState(startChannel.starter?.title ?? '')
   const [body, setBody] = useState(startChannel.starter?.body ?? '')
@@ -72,7 +74,7 @@ export function PostComposer({ initialChannel }: { initialChannel: string }) {
           Channel
         </span>
         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Channel">
-          {COMMUNITY_CHANNELS.map((c) => (
+          {composable.map((c) => (
             <button
               key={c.slug}
               type="button"

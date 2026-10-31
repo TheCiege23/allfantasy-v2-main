@@ -1,6 +1,10 @@
-/** POST /api/community/posts/:postId/replies — reply to a Clubhouse thread. */
+/**
+ * GET  /api/community/posts/:postId/replies?after=ISO — replies since `after`, for the
+ *      polling game-day chat. Public, like the thread page it mirrors.
+ * POST /api/community/posts/:postId/replies — reply to a Clubhouse thread.
+ */
 import { NextResponse } from 'next/server'
-import { createReply } from '@/lib/community/service'
+import { createReply, listRepliesSince } from '@/lib/community/service'
 import {
   communityRateLimitResponse,
   parseOr400,
@@ -11,6 +15,15 @@ import {
 import { replySchema } from '@/lib/community/validation'
 
 export const dynamic = 'force-dynamic'
+
+export async function GET(req: Request, ctx: { params: Promise<{ postId: string }> }) {
+  const { postId } = await ctx.params
+  const after = new URL(req.url).searchParams.get('after')
+  return withCommunityViewer(async (viewer) => {
+    const messages = await listRepliesSince(viewer, postId, after)
+    return NextResponse.json({ ok: true, messages }, { headers: { 'Cache-Control': 'no-store' } })
+  })
+}
 
 export async function POST(req: Request, ctx: { params: Promise<{ postId: string }> }) {
   const { postId } = await ctx.params

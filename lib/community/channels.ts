@@ -21,6 +21,8 @@ export type CommunityChannel = {
   starter?: { title: string; body: string }
   /** Sport tags are offered on posts in this channel. */
   sportTags?: boolean
+  /** Threads here are written by the Clubhouse itself; members reply but cannot start one. */
+  systemOnly?: boolean
 }
 
 export const COMMUNITY_CHANNELS: readonly CommunityChannel[] = [
@@ -58,6 +60,13 @@ export const COMMUNITY_CHANNELS: readonly CommunityChannel[] = [
     emoji: '📰',
     blurb: 'Injuries, breakouts, trades, hot takes. Tag the sport so people can find it.',
     sportTags: true,
+  },
+  {
+    slug: 'game-day',
+    label: 'Game Day',
+    emoji: '🏟️',
+    blurb: "Live chat while the games are on. Today's room opens with the day's slate.",
+    systemOnly: true,
   },
   {
     slug: 'other-apps',
@@ -99,3 +108,9 @@ export function clubhousePostHref(postId: string, replyId?: string): string {
 export function clubhouseChannelHref(slug: string): string {
   return `/clubhouse/${encodeURIComponent(slug)}`
 }
+
+export function clubhouseMemberHref(username: string): string {
+  return `/clubhouse/u/${encodeURIComponent(username)}`
+}
+
+export const GAME_DAY_CHANNEL = 'game-day'

@@ -19896,6 +19896,9 @@ model CommunityPost {
   ideaDetails     Json?
   /// Denormalised count of CommunityIdeaVote rows, so the board can sort by it.
   upvoteCount     Int              @default(0)
+  /// Set only on threads the Clubhouse writes itself ("prompt:2026-11-02", "news:2026-11-02",
+  /// "gameday:2026-11-02"). Unique, so a cron that fires twice converges on one row.
+  systemKey       String?          @unique @db.VarChar(64)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   author          AppUser          @relation("CommunityPostAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
