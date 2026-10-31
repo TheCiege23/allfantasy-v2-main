@@ -49,6 +49,19 @@ export async function buildSurvivorContextForChimmy(
   const votedOutStr = ctx.votedOutHistory
     .map((e) => `Week ${e.week}: ${ctx.rosterDisplayNames[e.rosterId] ?? e.rosterId}`)
     .join('; ') || 'None'
+  // Finale rules and this manager's own finale to-do (counts only; never another juror's question or a ballot).
+  const qa = await import('../survivorJuryQaService').then(({ getJuryQaView }) => getJuryQaView(leagueId, userId)).catch(() => null)
+  const finaleRules = await import('../survivorFinaleSettings').then(async ({ readSurvivorFinaleSettings }) => {
+    const { prisma } = await import('@/lib/prisma')
+    const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    return readSurvivorFinaleSettings(row?.settings)
+  }).catch(() => null)
+  const finaleRulesStr = finaleRules
+    ? `Finale rules: jury questions ${finaleRules.juryQuestionsEnabled ? 'on (one per juror per finalist)' : 'off'}; closing speeches ${finaleRules.closingSpeechesEnabled ? 'on (one per finalist, editable until the speech window closes)' : 'off'}; sealed immunity ${finaleRules.sealedImmunity ? 'on (individual immunity hidden until every vote is in — never say who holds it)' : 'off'}; ballots due ${finaleRules.votesDueHoursBeforeCeremony > 0 ? `${finaleRules.votesDueHoursBeforeCeremony}h before the Torch Ceremony` : 'at the Torch Ceremony'}; end-of-season ballot reveal ${finaleRules.endOfSeasonBallotReveal ? 'on (only after the champion is crowned)' : 'off'}; reunion chat ${finaleRules.reunionChatEnabled ? 'on' : 'off'}.`
+    : ''
+  const qaStr = qa
+    ? `Finale windows: questions ${qa.windows.questionState}${qa.windows.questionsDeadline ? ` until ${qa.windows.questionsDeadline}` : ''}, answers ${qa.windows.answerState}${qa.windows.answersDeadline ? ` until ${qa.windows.answersDeadline}` : ''}, closing speeches ${qa.windows.speechState}${qa.windows.speechesDeadline ? ` until ${qa.windows.speechesDeadline}` : ''}${qa.windows.votingHeldForSpeeches ? ', jury voting opens when speeches close' : ''}. User's finale to-do: ${qa.viewer.todo.questionsToAsk.length} question(s) to ask, ${qa.viewer.todo.questionsToAnswer.length} to answer, ${qa.viewer.todo.answersToRead.length} answer(s) to mark seen, closing speech ${qa.viewer.todo.speechMissing ? 'not posted' : 'n/a or posted'}.`
+    : ''
   const councilStr = ctx.council
     ? `Council week ${ctx.council.week}, phase ${ctx.council.phase}, deadline ${ctx.council.voteDeadlineAt.toISOString()}, closed: ${!!ctx.council.closedAt}`
     : 'No council this week'
@@ -61,6 +74,8 @@ Jury: ${ctx.jury.map((j) => ctx.rosterDisplayNames[j.rosterId] ?? j.rosterId).jo
 ${councilStr}.
 Exile return: ${ctx.config.exileReturnEnabled}, tokens needed: ${ctx.config.exileReturnTokens}.
 Finale: ${ctx.finale ? `open ${ctx.finale.open}, finalists ${ctx.finale.finalists.map((rosterId) => ctx.rosterDisplayNames[rosterId] ?? rosterId).join(', ') || 'None'}, jury votes ${ctx.finale.juryVotesSubmitted}/${ctx.finale.juryVotesRequired}, winner ${ctx.finale.winnerRosterId ? (ctx.rosterDisplayNames[ctx.finale.winnerRosterId] ?? ctx.finale.winnerRosterId) : 'TBD'}` : 'Not in finale yet'}.
+${finaleRulesStr}
+${qaStr}
 User's roster: ${ctx.myRosterId ? ctx.rosterDisplayNames[ctx.myRosterId] ?? ctx.myRosterId : 'N/A'}. User's idols: ${ctx.myIdols.map((i) => i.powerType).join(', ') || 'None'}.
 User's active effects: ${ctx.myActiveEffects.map((effect) => `${effect.rewardType}${effect.appliedMode === 'queued' ? ' (queued)' : effect.appliedMode === 'record_only' ? ' (tracked)' : ''}`).join(', ') || 'None'}.
 User's Survivor rewards (their own only): ${(ctx.myRewards ?? []).map((r) => `${r.text}${r.open && r.status === 'awaiting_choice' ? ' [waiting for the manager to choose a target; the commissioner can also set it in the Hub]' : ''}`).join('; ') || 'None'}.

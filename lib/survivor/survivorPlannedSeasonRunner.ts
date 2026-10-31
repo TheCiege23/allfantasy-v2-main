@@ -212,6 +212,14 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
       // Nobody has to click "open voting": the jury votes until the ceremony, and the engine
       // crowns the winner itself once every juror has voted or that deadline passes.
       if (!finale.votingDeadline) await ensureJuryVotingOpen(leagueId, nextTorchCeremonyDeadline(now, league.settings))
+      // Jurors and finalists Chimmy runs ask, answer, give a closing speech and vote. Idempotent,
+      // best-effort: a failure never holds up the finale.
+      {
+        const { runChimmyFinaleTurn } = await import('./chimmyJuryTurn')
+        await runChimmyFinaleTurn(leagueId, now).catch(error => {
+          console.warn('[survivor] Chimmy finale turn failed', error instanceof Error ? error.message : error)
+        })
+      }
       finale = await settleFinaleIfDue(leagueId, week)
     }
     if (finale.closed && finale.winnerRosterId) {

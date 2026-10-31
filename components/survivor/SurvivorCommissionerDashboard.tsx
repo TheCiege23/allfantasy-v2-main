@@ -32,6 +32,7 @@ import {
 import { TournamentSubscriptionTokensPanel } from '@/components/tournament/TournamentSubscriptionTokensPanel'
 import { SurvivorPremiumCommandCenterPanel } from '@/components/survivor/SurvivorPremiumCommandCenterPanel'
 import { SurvivorCouncilControl } from '@/components/survivor/SurvivorCouncilControl'
+import { SurvivorFinaleControls } from '@/components/survivor/SurvivorFinaleControls'
 import { SurvivorSeasonFixPanel } from '@/components/survivor/SurvivorSeasonFixPanel'
 import { SurvivorCommissionerTodoCard } from '@/components/survivor/SurvivorCommissionerTodoCard'
 import type { SurvivorCommissionerTodo } from '@/lib/survivor/survivorCommissionerTodo'
@@ -635,9 +636,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
 
           {tab === 'jury' && (
             <WarRoomPanel title="Jury" subtitle="Jury phase and finale votes — see Jury hub.">
-              <Link href={`${base}/jury`} className="text-emerald-300 hover:text-emerald-200">
-                Jury chamber →
-              </Link>
+              <SurvivorFinaleControls leagueId={leagueId} />
             </WarRoomPanel>
           )}
 

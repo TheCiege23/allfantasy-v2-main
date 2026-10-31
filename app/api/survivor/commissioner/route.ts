@@ -22,6 +22,15 @@ import {
   reverseSurvivorReward,
   type SurvivorRewardSpec,
 } from '@/lib/survivor/SurvivorEffectEngine'
+import {
+  finaleSettingsLockedDuringCouncil,
+  readSurvivorFinaleSettings,
+  readSurvivorFinaleWindows,
+  SURVIVOR_FINALE_SETTINGS_KEY_WINDOWS,
+  validateFinaleWindowsPatch,
+  validateSurvivorFinaleSettingsPatch,
+} from '@/lib/survivor/survivorFinaleSettings'
+import { ensureJuryVotingOpen, openJuryVoting } from '@/lib/survivor/juryEngine'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,6 +79,22 @@ export async function GET(req: NextRequest) {
   if (type === 'rewards') {
     // Every Survivor reward in the league, with its state — the Hub's ledger and undo list.
     return NextResponse.json({ rewards: await listSurvivorRewards(leagueId) })
+  }
+
+  if (type === 'finale') {
+    // The jury, finale and reunion rules plus this season's windows, for the Hub and league settings.
+    const [league, session, openCouncil] = await Promise.all([
+      prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
+      prisma.jurySession.findUnique({ where: { leagueId }, select: { votingDeadline: true, status: true } }),
+      prisma.survivorTribalCouncil.findFirst({ where: { leagueId, status: { in: ['scheduled', 'voting_open'] }, isRevealed: false }, select: { id: true } }),
+    ])
+    return NextResponse.json({
+      settings: readSurvivorFinaleSettings(league?.settings),
+      windows: readSurvivorFinaleWindows(league?.settings),
+      juryVoteDeadline: session?.votingDeadline?.toISOString() ?? null,
+      jurySessionStatus: session?.status ?? null,
+      councilOpen: Boolean(openCouncil),
+    })
   }
 
   if (type === 'state') {
@@ -145,6 +170,66 @@ export async function POST(req: NextRequest) {
     await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...current, ...parsed.patch } as object } })
     await log('late_season_settings', 'Updated late-season Survivor settings', { newState: parsed.patch })
     return NextResponse.json({ ok: true, settings: readSurvivorLateSeasonSettings({ ...current, ...parsed.patch }) })
+  }
+
+  // Jury, finale and reunion rules (lib/survivor/survivorFinaleSettings.ts). Sealed immunity and the
+  // ballot due time decide what an open ballot shows and whether it counts, so they wait for the
+  // open council to finish.
+  if (action === 'finale_settings') {
+    const parsed = validateSurvivorFinaleSettingsPatch(body.settings)
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error, code: 'invalid' }, { status: 400 })
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const current = (league?.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? league.settings : {}) as Record<string, unknown>
+    const locked = finaleSettingsLockedDuringCouncil(parsed.patch, readSurvivorFinaleSettings(current))
+    if (locked.length && await prisma.survivorTribalCouncil.findFirst({ where: { leagueId, status: { in: ['scheduled', 'voting_open'] }, isRevealed: false }, select: { id: true } })) {
+      return NextResponse.json({ error: 'Sealed immunity and the vote due time change after the open Tribal Council finishes.', code: 'council_open', locked }, { status: 409 })
+    }
+    await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...current, ...parsed.patch } as object } })
+    await log('finale_settings', 'Updated jury, finale and reunion rules', { newState: parsed.patch })
+    return NextResponse.json({ ok: true, settings: readSurvivorFinaleSettings({ ...current, ...parsed.patch }) })
+  }
+
+  // This season's finale windows: jury questions, finalist answers, closing speeches, and the jury
+  // vote deadline (the open_voting API, now with a screen).
+  if (action === 'finale_windows') {
+    const raw = (body.windows && typeof body.windows === 'object' && !Array.isArray(body.windows) ? body.windows : {}) as Record<string, unknown>
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    const current = (league?.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? league.settings : {}) as Record<string, unknown>
+    const now = new Date()
+    const { juryVoteDeadline: rawVoteDeadline, ...windowInput } = raw
+    let voteDeadline: Date | null = null
+    if (rawVoteDeadline != null && rawVoteDeadline !== '') {
+      voteDeadline = typeof rawVoteDeadline === 'string' ? new Date(rawVoteDeadline) : new Date(NaN)
+      if (Number.isNaN(voteDeadline.getTime())) return NextResponse.json({ error: 'juryVoteDeadline must be a date and time.', code: 'invalid' }, { status: 400 })
+      if (voteDeadline.getTime() <= now.getTime()) return NextResponse.json({ error: 'juryVoteDeadline must be in the future.', code: 'invalid' }, { status: 400 })
+    }
+    const hasWindows = Object.keys(windowInput).length > 0
+    if (!hasWindows && !voteDeadline) return NextResponse.json({ error: 'No finale windows in the request.', code: 'invalid' }, { status: 400 })
+    let windows = readSurvivorFinaleWindows(current)
+    if (hasWindows) {
+      const parsed = validateFinaleWindowsPatch(windowInput, windows, now)
+      if (!parsed.ok) return NextResponse.json({ error: parsed.error, code: 'invalid' }, { status: 400 })
+      windows = parsed.windows
+    }
+    if (voteDeadline && windows.speechesDeadline && voteDeadline.getTime() <= new Date(windows.speechesDeadline).getTime()) {
+      return NextResponse.json({ error: 'The jury vote must close after the closing speeches.', code: 'invalid' }, { status: 400 })
+    }
+    if (hasWindows) {
+      await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...current, [SURVIVOR_FINALE_SETTINGS_KEY_WINDOWS]: windows } as object } })
+      await prisma.jurySession.upsert({
+        where: { leagueId },
+        create: { leagueId, questionsDeadline: windows.questionsDeadline ? new Date(windows.questionsDeadline) : null },
+        update: { questionsDeadline: windows.questionsDeadline ? new Date(windows.questionsDeadline) : null },
+      })
+    }
+    if (voteDeadline) {
+      const session = await prisma.jurySession.findUnique({ where: { leagueId }, select: { status: true } })
+      if (session?.status === 'complete' || session?.status === 'winner_revealed') return NextResponse.json({ error: 'The jury has already crowned a champion.', code: 'complete' }, { status: 409 })
+      if (session) await openJuryVoting(leagueId, voteDeadline)
+      else await ensureJuryVotingOpen(leagueId, voteDeadline)
+    }
+    await log('finale_windows', 'Set the finale windows', { newState: { ...windows, juryVoteDeadline: voteDeadline?.toISOString() ?? null } })
+    return NextResponse.json({ ok: true, windows, juryVoteDeadline: voteDeadline?.toISOString() ?? null })
   }
 
   if (action === 'force_phase') {

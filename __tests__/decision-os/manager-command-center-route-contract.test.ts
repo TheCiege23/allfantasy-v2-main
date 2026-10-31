@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   resolveManagerCommandCenterSnapshot: vi.fn(),
   leagueSettingsCount: vi.fn(),
   loadCareerDecisionInput: vi.fn(),
-  loadSurvivorDecisionSignals: vi.fn(async () => []),
+  loadSurvivorFormatSignals: vi.fn(async () => []),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: mocks.getServerSession }))
@@ -25,9 +25,10 @@ vi.mock('@/lib/decision-os/managerCommandCenter', async () => {
 vi.mock('@/lib/core-app/careerDecisionInput', () => ({
   loadCareerDecisionInput: mocks.loadCareerDecisionInput,
 }))
-// Survivor reward signals: started beside the snapshot, handed over as a promise like career.
-vi.mock('@/lib/survivor/survivorDecisionSignals', () => ({
-  loadSurvivorDecisionSignals: mocks.loadSurvivorDecisionSignals,
+// Survivor format signals (rewards + finale/Tribal + challenges): ONE loader, started beside the
+// snapshot and handed over as a single promise like career.
+vi.mock('@/lib/survivor/survivorFormatSignals', () => ({
+  loadSurvivorFormatSignals: mocks.loadSurvivorFormatSignals,
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { leagueSettings: { count: mocks.leagueSettingsCount } },
@@ -88,6 +89,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
       ['league-1', 'league-2', 'league-3'],
       expect.any(Date),
       expect.any(Promise),
+      // ONE Survivor format-signals promise (rewards + finale/Tribal + challenges), like the career read.
       expect.any(Promise),
     )
     // The career read gets the SAME rows the league ids came from — no second list read.

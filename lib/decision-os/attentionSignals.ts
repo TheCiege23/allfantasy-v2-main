@@ -57,6 +57,12 @@ export type AttentionSignalType =
   /** Survivor leagues (`survivorPrizeSignals.ts`): the manager's OWN reward state from the Survivor
    * reward ledger — a choice to make, a free trade held, a prize pending or just won. */
   | 'survivor_reward'
+  /** Survivor finale (`survivorFinaleSignals.ts`): a jury question window closing, an answer or a
+   * closing speech owed, or a Tribal ballot due — read off the league's own Survivor state. */
+  | 'survivor_jury_question_window'
+  | 'survivor_finalist_answer_due'
+  | 'survivor_closing_speech'
+  | 'survivor_votes_due'
 
 export type AttentionSignalSource =
   | 'league_health_engine'
@@ -67,7 +73,8 @@ export type AttentionSignalSource =
   | 'user_os'
   /** Live-career plan, phase 4: the Career Wire's sync read and the Career screen's stakes. */
   | 'career'
-  /** The Survivor reward ledger (`lib/survivor/survivorRewardEngine.ts`), read for one manager. */
+  /** The Survivor format's own persisted state, read for one manager: the reward ledger
+   * (`lib/survivor/survivorRewardEngine.ts`), jury Q&A, closing speeches, council ballots, challenges. */
   | 'survivor'
 
 export interface DecisionOsAttentionSignal {

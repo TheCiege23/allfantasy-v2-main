@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { logSurvivorAuditEntry } from '@/lib/survivor/auditEntry'
+import { loadReunionOpen } from '@/lib/survivor/survivorReunion'
 
 export async function canSendToChannel(
   leagueId: string,
@@ -70,7 +71,8 @@ export async function canSendToChannel(
       return { allowed: false, reason: 'finale_access_revoked' }
     }
   } else if (type === 'league') {
-    if (state === 'eliminated') {
+    // The reunion: after the finale the Island Chat reopens to everyone (commissioner toggle).
+    if (state === 'eliminated' && !(await loadReunionOpen(leagueId))) {
       await logDeny(leagueId, userId, 'eliminated_read_only')
       return { allowed: false, reason: 'eliminated_read_only' }
     }
