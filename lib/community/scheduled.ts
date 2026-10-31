@@ -348,3 +348,44 @@ export function summarizeSchedule(o: ScheduleOutcome) {
     metadata: { ...o },
   }
 }
+
+// ─── game-day summary (read-only) ────────────────────────────────────────────
+
+const FINAL_STATUS = /final|post|complete|closed|ended|ft\b/i
+const LIVE_STATUS = /live|in ?progress|in_progress|halftime|half|quarter|period|inning|\bq[1-4]\b|\bot\b/i
+
+export type SlatePhase = 'final' | 'live' | 'upcoming'
+
+export function slatePhase(g: SlateGame, now: number): SlatePhase {
+  const s = g.status ?? ''
+  if (FINAL_STATUS.test(s)) return 'final'
+  if (LIVE_STATUS.test(s)) return 'live'
+  if (g.startTime && Date.parse(g.startTime) <= now && (g.homeScore !== null || g.awayScore !== null)) return 'live'
+  return 'upcoming'
+}
+
+export type GameDaySummary = { roomId: string | null; messages: number; games: number; live: number; preview: SlateGame[] }
+
+/**
+ * What the Clubhouse home shows about today's Game Day. Unlike `todayGameDayPostId` this
+ * never creates the room: a home-page view is not a visit to the room.
+ */
+export async function getGameDaySummary(now = new Date()): Promise<GameDaySummary> {
+  const [room, games] = await Promise.all([
+    prisma.communityPost.findUnique({
+      where: { systemKey: systemKeys.gameDay(easternDate(now)) },
+      select: { id: true, replyCount: true, removedAt: true },
+    }),
+    getGameDaySlate(now).catch(() => [] as SlateGame[]),
+  ])
+  const t = now.getTime()
+  const live = games.filter((g) => slatePhase(g, t) === 'live')
+  const upcoming = games.filter((g) => slatePhase(g, t) === 'upcoming')
+  return {
+    roomId: room && !room.removedAt ? room.id : null,
+    messages: room && !room.removedAt ? room.replyCount : 0,
+    games: games.length,
+    live: live.length,
+    preview: [...live, ...upcoming].slice(0, 3),
+  }
+}

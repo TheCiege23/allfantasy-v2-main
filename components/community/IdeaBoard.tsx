@@ -33,26 +33,20 @@ export function IdeaBoard({
     { value: 'open', label: 'Open' },
     ...IDEA_STATUSES.map((s) => ({ value: s, label: `${IDEA_STATUS_COPY[s].emoji} ${IDEA_STATUS_COPY[s].label}` })),
   ]
-  const chip = (active: boolean) => ({
-    borderColor: active ? 'var(--accent)' : 'var(--border)',
-    background: active ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
-    color: 'var(--text)',
-  })
 
   return (
     <section aria-labelledby="ideas-heading">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 id="ideas-heading" className="text-lg font-bold" style={{ color: 'var(--text)' }}>
+        <h2 id="ideas-heading" className="ch-h2">
           💡 League ideas
         </h2>
-        <div className="flex gap-1 text-sm" role="group" aria-label="Sort ideas">
+        <div className="ch-seg" role="group" aria-label="Sort ideas">
           {(['top', 'new'] as const).map((s) => (
             <Link
               key={s}
               href={ideaBoardHref({ sort: s, status: filter })}
               aria-current={sort === s ? 'page' : undefined}
-              className="rounded-md border px-2.5 py-1"
-              style={chip(sort === s)}
+              className="ch-seg-item"
             >
               {s === 'top' ? 'Top' : 'Newest'}
             </Link>
@@ -66,10 +60,9 @@ export function IdeaBoard({
             key={f.value}
             href={ideaBoardHref({ sort, status: f.value })}
             aria-current={filter === f.value ? 'page' : undefined}
-            className="rounded-full border px-3 py-1 text-xs font-medium"
-            style={chip(filter === f.value)}
+            className="ch-filter"
           >
-            {f.label} <span style={{ color: 'var(--muted)' }}>{board.counts[f.value]}</span>
+            {f.label} <span className="ch-mono ch-filter-count">{board.counts[f.value]}</span>
           </Link>
         ))}
       </nav>
@@ -85,7 +78,7 @@ export function IdeaBoard({
           action={<PrimaryButtonLink href={pitchHref}>Pitch an idea</PrimaryButtonLink>}
         />
       ) : (
-        <div className="space-y-3">
+        <div className="ch-stack">
           {board.ideas.map((p) =>
             p.idea ? (
               <IdeaCard
