@@ -362,6 +362,23 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <p className="af-ch-muted">{data.history.draftAvailable ? t('No draft sessions on file.') : t('Draft history unavailable.')}</p>
         )}
         <p className="af-ch-muted">{t(data.history.draftNote)}</p>
+        {data.history.lotteryReadFailed ? <p className="af-ch-muted">{t('Lottery history is temporarily unavailable.')}</p> : null}
+        {data.history.lotteries?.length ? (
+          <>
+            <h3>{t('Weighted lottery history')}</h3>
+            <p className="af-ch-muted">{t('Recorded AllFantasy draws; older or imported results may be missing.')}</p>
+            {data.history.lotteries.map((draw) => (
+              <details key={draw.id}>
+                <summary>{draw.season != null ? `${draw.season} · ` : ''}{new Date(draw.at).toLocaleDateString(hubDateLocale(language))}</summary>
+                <ol>
+                  {draw.slots.map((slot) => (
+                    <li key={slot.slot}>{t('Pick')} {slot.slot}: {slot.team}{slot.odds != null ? ` · ${slot.odds.toLocaleString(hubDateLocale(language), { maximumFractionDigits: 2 })}% ${t('odds at pick 1')}` : ''}</li>
+                  ))}
+                </ol>
+              </details>
+            ))}
+          </>
+        ) : null}
       </HubSection>
 
       {/* ── 2 · Cockpit (item 1) — the tiles are in the band above ─────── */}
