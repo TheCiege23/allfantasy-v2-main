@@ -81,9 +81,9 @@ describe('applying the missed-deadline rule at lock', () => {
     expect(db.prisma.keeperRecord.create).not.toHaveBeenCalled()
   })
 
-  it('a record that lands first (a late submission racing the lock) wins', async () => {
+  it('propagates a failed write so the deadline transaction rolls back partial defaults', async () => {
     db.prisma.keeperRecord.create.mockRejectedValueOnce(new Error('unique'))
-    const out = await applyMissedDeadlineRule('L', 'S')
-    expect(out.applied[0].keepers.map((k) => k.playerId)).toEqual(['p3'])
+    await expect(applyMissedDeadlineRule('L', 'S')).rejects.toThrow('unique')
+    expect(db.prisma.keeperRecord.create).toHaveBeenCalledTimes(1)
   })
 })

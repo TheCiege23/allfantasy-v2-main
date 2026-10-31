@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
@@ -32,24 +33,24 @@ export const KEEPER_SUBMITTED_NONE = 'keeper_submitted_none'
 const keyOf = (name: string | null | undefined, position: string | null | undefined) =>
   `${normalizePlayerName(name)}|${String(position ?? '').trim().toUpperCase()}`
 
-async function audit(leagueId: string, userId: string | null, actionType: string, metadata: Record<string, unknown>) {
+async function audit(db: Prisma.TransactionClient, leagueId: string, userId: string | null, actionType: string, metadata: Record<string, unknown>) {
   try {
-    await prisma.leagueAuditLog.create({ data: { leagueId, userId, actionType, entityType: 'keeper_session', metadata: metadata as object } })
+    await db.leagueAuditLog.create({ data: { leagueId, userId, actionType, entityType: 'keeper_session', metadata: metadata as object } })
   } catch (e) {
     console.warn('[keeper] missed-deadline audit write failed', e instanceof Error ? e.message : e)
   }
 }
 
-export async function applyMissedDeadlineRule(leagueId: string, seasonId: string): Promise<MissedDeadlineOutcome> {
-  const league = await prisma.league.findFirst({ where: { id: leagueId } })
+export async function applyMissedDeadlineRule(leagueId: string, seasonId: string, db: Prisma.TransactionClient = prisma): Promise<MissedDeadlineOutcome> {
+  const league = await db.league.findFirst({ where: { id: leagueId } })
   if (!league) return { rule: 'auto_no_keepers', applied: [], skippedReason: null }
   const rule = readMissedDeadlineRule(league.keeperMissedDeadlineRule)
   if (rule === 'auto_no_keepers') return { rule, applied: [], skippedReason: null }
 
   const [rosters, records, emptySubmissions] = await Promise.all([
-    prisma.redraftRoster.findMany({ where: { leagueId, seasonId }, include: { players: true } }),
-    prisma.keeperRecord.findMany({ where: { leagueId, seasonId }, select: { rosterId: true } }),
-    prisma.leagueAuditLog.findMany({ where: { leagueId, actionType: KEEPER_SUBMITTED_NONE, entityId: seasonId }, select: { metadata: true } }),
+    db.redraftRoster.findMany({ where: { leagueId, seasonId }, include: { players: true } }),
+    db.keeperRecord.findMany({ where: { leagueId, seasonId }, select: { rosterId: true } }),
+    db.leagueAuditLog.findMany({ where: { leagueId, actionType: KEEPER_SUBMITTED_NONE, entityId: seasonId }, select: { metadata: true } }),
   ])
   const answered = new Set(records.map((r) => r.rosterId))
   for (const e of emptySubmissions) {
@@ -64,7 +65,7 @@ export async function applyMissedDeadlineRule(leagueId: string, seasonId: string
     ? await new FeatureGateService().evaluateUserFeatureAccess(league.userId, 'commissioner_automation').catch(() => null)
     : null
   if (!access?.allowed) {
-    await audit(leagueId, null, 'keeper_missed_deadline_skipped', { reason: 'not_entitled', rosterIds: silent.map((r) => r.id) })
+    await audit(db, leagueId, null, 'keeper_missed_deadline_skipped', { reason: 'not_entitled', rosterIds: silent.map((r) => r.id) })
     return { rule, applied: [], skippedReason: 'not_entitled' }
   }
 
@@ -76,7 +77,7 @@ export async function applyMissedDeadlineRule(leagueId: string, seasonId: string
     ? await getFantasyCalcValuesDbFirst({ isDynasty: false, numQbs: superflex ? 2 : 1, numTeams: Math.max(8, Math.min(16, teams)), ppr: 1 }).catch(() => [])
     : []
   if (!chart.length) {
-    await audit(leagueId, null, 'keeper_missed_deadline_skipped', { reason: 'no_market_values', sport, rosterIds: silent.map((r) => r.id) })
+    await audit(db, leagueId, null, 'keeper_missed_deadline_skipped', { reason: 'no_market_values', sport, rosterIds: silent.map((r) => r.id) })
     return { rule, applied: [], skippedReason: 'no_market_values' }
   }
   const rankBySleeper = new Map<string, number>()
@@ -86,13 +87,13 @@ export async function applyMissedDeadlineRule(leagueId: string, seasonId: string
     rankByName.set(keyOf(p.player.name, p.player.position), p.overallRank)
   }
 
-  let eligibility = await prisma.keeperEligibility.findMany({ where: { leagueId, seasonId } })
+  let eligibility = await db.keeperEligibility.findMany({ where: { leagueId, seasonId } })
   if (!eligibility.length) {
     await computeKeeperEligibility(leagueId, seasonId)
-    eligibility = await prisma.keeperEligibility.findMany({ where: { leagueId, seasonId } })
+    eligibility = await db.keeperEligibility.findMany({ where: { leagueId, seasonId } })
   }
   const rules = resolveKeeperRules(league)
-  const latestDraft = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { rounds: true } })
+  const latestDraft = await db.draftSession.findFirst({ where: { leagueId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { rounds: true } })
   const totalRounds = latestDraft?.rounds ?? 15
   const maxKeepers = league.keeperCount ?? 3
 
@@ -121,24 +122,20 @@ export async function applyMissedDeadlineRule(leagueId: string, seasonId: string
       if (!spot) continue
       const p = byId.get(c.playerId)!
       const costLabel = `${placedKeeperLabel(spot)} · kept by AF (deadline missed)`
-      // `create` only: a record that appeared since the read (a late submission racing the lock)
-      // wins, and this one is skipped by the unique key.
-      try {
-        await prisma.keeperRecord.create({
-          data: {
-            leagueId, seasonId, rosterId: roster.id, playerId: c.playerId,
-            playerName: p.playerName, position: p.position, team: p.team, sport: p.sport,
-            originalDraftYear: new Date().getFullYear(), yearsKept: 1,
-            costRound: spot.round, costLabel, status: 'pending', acquisitionType: p.acquisitionType,
-          },
-        })
-        kept.push({ playerId: c.playerId, name: p.playerName, costLabel })
-      } catch {
-        /* the manager's own record got there first */
-      }
+      // Called under the session transaction lock by the deadline runner. Any failed write
+      // must roll back all defaults through its savepoint, never leave a partial team.
+      await db.keeperRecord.create({
+        data: {
+          leagueId, seasonId, rosterId: roster.id, playerId: c.playerId,
+          playerName: p.playerName, position: p.position, team: p.team, sport: p.sport,
+          originalDraftYear: new Date().getFullYear(), yearsKept: 1,
+          costRound: spot.round, costLabel, status: 'pending', acquisitionType: p.acquisitionType,
+        },
+      })
+      kept.push({ playerId: c.playerId, name: p.playerName, costLabel })
     }
     if (kept.length) applied.push({ rosterId: roster.id, keepers: kept })
   }
-  await audit(leagueId, null, 'keeper_missed_deadline_applied', { rule, applied })
+  await audit(db, leagueId, null, 'keeper_missed_deadline_applied', { rule, applied })
   return { rule, applied, skippedReason: null }
 }
