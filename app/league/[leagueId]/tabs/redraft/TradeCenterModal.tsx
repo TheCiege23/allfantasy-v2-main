@@ -15,6 +15,7 @@ import {
   type RedraftTradeSettings,
   type TradeDecisionOsCard,
 } from '@/lib/redraft/client'
+import { MAX_REDRAFT_TRADE_TEAMS, uninvolvedTradeParticipants } from '@/lib/redraft/tradeParticipants'
 
 type Step = 'partner' | 'assets' | 'review'
 
@@ -28,8 +29,6 @@ type PreviewGrade = {
   getValue: number | null
   evaluationReceiptId: string | null
 }
-
-type Side = 'mine' | 'theirs'
 
 function initials(name: string): string {
   return name
@@ -149,6 +148,17 @@ export function TradeCenterModal({
   const [theirsSel, setTheirsSel] = useState<string[]>([])
   const [mineFaab, setMineFaab] = useState(0)
   const [theirsFaab, setTheirsFaab] = useState(0)
+  /*
+   * MULTI-TEAM TRADES: up to two more teams beyond the receiver (four in all). With none chosen,
+   * every piece of this modal is the two-team flow it always was — these stay empty and unused.
+   */
+  const [extraPartnerIds, setExtraPartnerIds] = useState<string[]>([])
+  /** Loaded once per team; `null` records a team whose roster came back empty, so it is not refetched. */
+  const [extraRosters, setExtraRosters] = useState<Record<string, RedraftRosterClient | null>>({})
+  const [extraSel, setExtraSel] = useState<Record<string, string[]>>({})
+  const [extraFaab, setExtraFaab] = useState<Record<string, number>>({})
+  /** Multi-team only: which team receives each chosen asset, keyed `${fromRosterId}:${playerId | 'faab'}`. */
+  const [destOf, setDestOf] = useState<Record<string, string>>({})
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -178,6 +188,11 @@ export function TradeCenterModal({
     setTheirsSel([])
     setMineFaab(0)
     setTheirsFaab(0)
+    setExtraPartnerIds([])
+    setExtraRosters({})
+    setExtraSel({})
+    setExtraFaab({})
+    setDestOf({})
     setReason('')
     setError(null)
     setSuccessId(null)
@@ -223,6 +238,61 @@ export function TradeCenterModal({
     [standings, proposerRosterId],
   )
 
+  // The extra teams can never include the proposer or the receiver.
+  useEffect(() => {
+    setExtraPartnerIds((prev) => prev.filter((id) => id !== receiverRosterId && id !== proposerRosterId))
+  }, [receiverRosterId, proposerRosterId])
+
+  const multiTeam = extraPartnerIds.length > 0
+  const participantIds = useMemo(
+    () => (proposerRosterId && receiverRosterId ? [proposerRosterId, receiverRosterId, ...extraPartnerIds] : []),
+    [proposerRosterId, receiverRosterId, extraPartnerIds],
+  )
+
+  // Load each extra team's players.
+  useEffect(() => {
+    if (!open || extraPartnerIds.length === 0) return
+    const missing = extraPartnerIds.filter((id) => !(id in extraRosters))
+    if (missing.length === 0) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const loaded = await Promise.all(missing.map((id) => fetchRedraftRoster(id, currentWeek)))
+        if (!cancelled) {
+          setExtraRosters((prev) => {
+            const next = { ...prev }
+            missing.forEach((id, i) => {
+              next[id] = loaded[i] ?? null
+            })
+            return next
+          })
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load rosters')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, extraPartnerIds, extraRosters, currentWeek])
+
+  const toggleExtraPartner = (id: string) => {
+    setExtraPartnerIds((prev) =>
+      prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : prev.length >= MAX_REDRAFT_TRADE_TEAMS - 2
+          ? prev
+          : [...prev, id],
+    )
+  }
+
+  /** Multi-team: where an asset goes. Defaults to the receiver for the proposer's assets, else the proposer. */
+  const destinationFor = (fromRosterId: string, key: string): string => {
+    const chosen = destOf[`${fromRosterId}:${key}`]
+    if (chosen && chosen !== fromRosterId && participantIds.includes(chosen)) return chosen
+    return fromRosterId === proposerRosterId ? receiverRosterId : proposerRosterId
+  }
+
   const mineFaabAvail = faabByRosterId[proposerRosterId] ?? 0
   const theirsFaabAvail = faabByRosterId[receiverRosterId] ?? 0
 
@@ -238,14 +308,40 @@ export function TradeCenterModal({
   const mineHasAssets = selectedMinePlayers.length > 0 || mineFaab > 0
   const theirsHasAssets = selectedTheirsPlayers.length > 0 || theirsFaab > 0
 
+  const selectedExtraPlayers = useMemo(() => {
+    const out: Record<string, RedraftRosterPlayerClient[]> = {}
+    for (const id of extraPartnerIds) {
+      const picked = extraSel[id] ?? []
+      out[id] = (extraRosters[id]?.players ?? []).filter((p) => picked.includes(playerSelId(p)))
+    }
+    return out
+  }, [extraPartnerIds, extraRosters, extraSel])
+
   const deadlinePassed =
     settings?.tradeDeadlineWeek != null && currentWeek > settings.tradeDeadlineWeek
   const lockedSelected =
-    selectedMinePlayers.some((p) => p.isLocked) || selectedTheirsPlayers.some((p) => p.isLocked)
-  const faabOver = mineFaab > mineFaabAvail || theirsFaab > theirsFaabAvail
+    selectedMinePlayers.some((p) => p.isLocked) ||
+    selectedTheirsPlayers.some((p) => p.isLocked) ||
+    (multiTeam && Object.values(selectedExtraPlayers).some((ps) => ps.some((p) => p.isLocked)))
+  const faabOver =
+    mineFaab > mineFaabAvail ||
+    theirsFaab > theirsFaabAvail ||
+    (multiTeam && extraPartnerIds.some((id) => (extraFaab[id] ?? 0) > (faabByRosterId[id] ?? 0)))
 
   const apiAssets = useMemo<RedraftTradeAssetInput[]>(() => {
     if (!proposerRosterId || !receiverRosterId) return []
+    if (multiTeam) {
+      // Every chosen asset goes to the team picked for it.
+      const out: RedraftTradeAssetInput[] = []
+      const add = (fromRosterId: string, players: RedraftRosterPlayerClient[], faab: number) => {
+        for (const p of players) out.push(playerToAsset(p, fromRosterId, destinationFor(fromRosterId, playerSelId(p))))
+        if (faab > 0) out.push(faabAsset(faab, fromRosterId, destinationFor(fromRosterId, 'faab')))
+      }
+      add(proposerRosterId, selectedMinePlayers, mineFaab)
+      add(receiverRosterId, selectedTheirsPlayers, theirsFaab)
+      for (const id of extraPartnerIds) add(id, selectedExtraPlayers[id] ?? [], extraFaab[id] ?? 0)
+      return out
+    }
     const out: RedraftTradeAssetInput[] = [
       ...selectedMinePlayers.map((p) => playerToAsset(p, proposerRosterId, receiverRosterId)),
       ...selectedTheirsPlayers.map((p) => playerToAsset(p, receiverRosterId, proposerRosterId)),
@@ -253,7 +349,15 @@ export function TradeCenterModal({
     if (mineFaab > 0) out.push(faabAsset(mineFaab, proposerRosterId, receiverRosterId))
     if (theirsFaab > 0) out.push(faabAsset(theirsFaab, receiverRosterId, proposerRosterId))
     return out
-  }, [proposerRosterId, receiverRosterId, selectedMinePlayers, selectedTheirsPlayers, mineFaab, theirsFaab])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- destinationFor reads destOf + participantIds, listed
+  }, [proposerRosterId, receiverRosterId, selectedMinePlayers, selectedTheirsPlayers, mineFaab, theirsFaab, multiTeam, extraPartnerIds, selectedExtraPlayers, extraFaab, destOf, participantIds])
+
+  /** Multi-team: every team must send or receive something. */
+  const uninvolvedIds = useMemo(
+    () => (multiTeam ? uninvolvedTradeParticipants(participantIds, apiAssets) : []),
+    [multiTeam, participantIds, apiAssets],
+  )
+  const assetsReady = multiTeam ? apiAssets.length > 0 && uninvolvedIds.length === 0 : mineHasAssets && theirsHasAssets
 
   /*
    * ⚠ THE FALLBACK, NOT THE ANSWER. This runs the same engine, but on what a browser can see:
@@ -266,6 +370,8 @@ export function TradeCenterModal({
    * and because it renders instantly while the request is in flight.
    */
   const clientPreview = useMemo(() => {
+    // A value preview is one side against the other: two-team trades only.
+    if (multiTeam) return null
     if (!proposerRosterId || !receiverRosterId || (!mineHasAssets && !theirsHasAssets)) return null
     const enriched: EnrichedTradeAsset[] = [
       ...selectedMinePlayers.map((p) => ({
@@ -285,7 +391,7 @@ export function TradeCenterModal({
       proposerRosterId, receiverRosterId, assets: enriched, currentSeason: null,
       context: { sport: '', leagueType: 'redraft', scoring: '', rosterFormat: 'standard', capturedAt: new Date().toISOString() },
     })
-  }, [proposerRosterId, receiverRosterId, selectedMinePlayers, selectedTheirsPlayers, mineFaab, theirsFaab, mineHasAssets, theirsHasAssets])
+  }, [multiTeam, proposerRosterId, receiverRosterId, selectedMinePlayers, selectedTheirsPlayers, mineFaab, theirsFaab, mineHasAssets, theirsHasAssets])
 
   /*
    * The REAL valuation, from the same function that writes the captured snapshot.
@@ -305,7 +411,8 @@ export function TradeCenterModal({
   const [previewPending, setPreviewPending] = useState(false)
 
   useEffect(() => {
-    if (!proposerRosterId || !receiverRosterId || apiAssets.length === 0) {
+    // Two-team only: the preview route grades the proposer's side against the receiver's.
+    if (multiTeam || !proposerRosterId || !receiverRosterId || apiAssets.length === 0) {
       setServerPreview(null)
       setServerGrade(null)
       return
@@ -341,13 +448,13 @@ export function TradeCenterModal({
     }, 400)
 
     return () => { ac.abort(); clearTimeout(t); }
-  }, [leagueId, seasonId, proposerRosterId, receiverRosterId, apiAssets])
+  }, [multiTeam, leagueId, seasonId, proposerRosterId, receiverRosterId, apiAssets])
 
   const valuePreview = serverPreview ?? clientPreview
   const previewIsEstimate = serverPreview === null && clientPreview !== null
 
   const canSubmit = Boolean(
-    seasonId && proposerRosterId && receiverRosterId && mineHasAssets && theirsHasAssets &&
+    seasonId && proposerRosterId && receiverRosterId && assetsReady &&
       !deadlinePassed && !faabOver && !submitting,
   )
 
@@ -361,6 +468,7 @@ export function TradeCenterModal({
         seasonId,
         proposerRosterId,
         receiverRosterId,
+        ...(multiTeam ? { additionalRosterIds: extraPartnerIds } : {}),
         reason: reason.trim() || undefined,
         assets: apiAssets,
       })
@@ -372,10 +480,28 @@ export function TradeCenterModal({
     } finally {
       setSubmitting(false)
     }
-  }, [canSubmit, leagueId, seasonId, proposerRosterId, receiverRosterId, reason, apiAssets, onSubmitted])
+  }, [canSubmit, leagueId, seasonId, proposerRosterId, receiverRosterId, multiTeam, extraPartnerIds, reason, apiAssets, onSubmitted])
 
   const proposerName = rosterLabel(rosterRowById.get(proposerRosterId), proposerRosterId)
   const receiverName = rosterLabel(rosterRowById.get(receiverRosterId), receiverRosterId)
+  const nameOf = (id: string) => rosterLabel(rosterRowById.get(id), id)
+
+  /** Every team's side of the board, in participant order. Two entries for a two-team trade. */
+  const sides = [
+    { key: 'mine', rosterId: proposerRosterId, roster: proposerRoster, sel: mineSel, setSel: setMineSel, faab: mineFaab, setFaab: setMineFaab, faabAvail: mineFaabAvail, name: proposerName },
+    { key: 'theirs', rosterId: receiverRosterId, roster: receiverRoster, sel: theirsSel, setSel: setTheirsSel, faab: theirsFaab, setFaab: setTheirsFaab, faabAvail: theirsFaabAvail, name: receiverName },
+    ...extraPartnerIds.map((id) => ({
+      key: `extra-${id}`,
+      rosterId: id,
+      roster: extraRosters[id] ?? null,
+      sel: extraSel[id] ?? [],
+      setSel: (fn: (prev: string[]) => string[]) => setExtraSel((prev) => ({ ...prev, [id]: fn(prev[id] ?? []) })),
+      faab: extraFaab[id] ?? 0,
+      setFaab: (n: number) => setExtraFaab((prev) => ({ ...prev, [id]: n })),
+      faabAvail: faabByRosterId[id] ?? 0,
+      name: nameOf(id),
+    })),
+  ]
 
   const footer = successId ? (
     <div className="flex justify-end">
@@ -415,7 +541,7 @@ export function TradeCenterModal({
           onClick={() => setStep((s) => (s === 'partner' ? 'assets' : 'review'))}
           disabled={
             (step === 'partner' && (!receiverRosterId || receiverRosterId === proposerRosterId)) ||
-            (step === 'assets' && (!mineHasAssets || !theirsHasAssets))
+            (step === 'assets' && !assetsReady)
           }
           className="rounded-lg bg-[#ff3d81]/85 px-4 py-1.5 text-[12px] font-semibold text-black disabled:opacity-40"
         >
@@ -439,7 +565,9 @@ export function TradeCenterModal({
         <div className="space-y-2 py-6 text-center" data-testid="trade-success">
           <p className="text-[15px] font-semibold text-emerald-300">Trade proposal sent</p>
           <p className="text-[12px] text-white/60">
-            {proposerName} → {receiverName}. The other manager can now review and respond.
+            {multiTeam
+              ? `${[proposerName, receiverName, ...extraPartnerIds.map(nameOf)].join(', ')}. Every team has to accept before it goes through.`
+              : `${proposerName} → ${receiverName}. The other manager can now review and respond.`}
           </p>
           {decisionOs ? (
             /*
@@ -497,21 +625,66 @@ export function TradeCenterModal({
               )
             })}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">
-            Multi-team trades — <span className="text-white/55">coming soon</span> (the engine currently supports
-            two-team trades).
-          </div>
+          {receiverRosterId && partners.length > 1 ? (
+            <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2" data-testid="trade-extra-partners">
+              <p className="text-[11px] text-white/55">
+                Make it a multi-team trade: add up to {MAX_REDRAFT_TRADE_TEAMS - 2} more teams. Every team has to
+                send or receive something, and every team has to accept before it goes through.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {partners
+                  .filter((r) => r.id !== receiverRosterId)
+                  .map((r) => {
+                    const on = extraPartnerIds.includes(r.id)
+                    const full = !on && extraPartnerIds.length >= MAX_REDRAFT_TRADE_TEAMS - 2
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        aria-pressed={on}
+                        disabled={full}
+                        data-testid={`trade-extra-partner-${r.id}`}
+                        onClick={() => toggleExtraPartner(r.id)}
+                        className={[
+                          'rounded-full border px-2.5 py-1 text-[11px] transition disabled:opacity-40',
+                          on ? 'border-[#ff9ec0]/70 bg-[#ff3d81]/15 text-white' : 'border-white/15 text-white/70 hover:border-white/30',
+                        ].join(' ')}
+                      >
+                        {on ? '✓ ' : '+ '}
+                        {rosterLabel(r, r.id)}
+                      </button>
+                    )
+                  })}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : step === 'assets' ? (
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_0.9fr]">
-          {(['mine', 'theirs'] as Side[]).map((side) => {
-            const roster = side === 'mine' ? proposerRoster : receiverRoster
-            const sel = side === 'mine' ? mineSel : theirsSel
-            const setSel = side === 'mine' ? setMineSel : setTheirsSel
-            const faab = side === 'mine' ? mineFaab : theirsFaab
-            const setFaab = side === 'mine' ? setMineFaab : setTheirsFaab
-            const faabAvail = side === 'mine' ? mineFaabAvail : theirsFaabAvail
-            const name = side === 'mine' ? proposerName : receiverName
+        <div className={multiTeam ? 'grid gap-3 md:grid-cols-2' : 'grid gap-3 lg:grid-cols-[1fr_1fr_0.9fr]'}>
+          {sides.map((s) => {
+            const { roster, sel, setSel, faab, setFaab, faabAvail, name } = s
+            const side = s.key
+            /** Multi-team: the "to" picker under a chosen asset. */
+            const destPicker = (key: string) =>
+              multiTeam ? (
+                <label className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-white/50">
+                  To
+                  <select
+                    value={destinationFor(s.rosterId, key)}
+                    data-testid={`trade-dest-${s.rosterId}-${key}`}
+                    onChange={(e) => setDestOf((prev) => ({ ...prev, [`${s.rosterId}:${key}`]: e.target.value }))}
+                    className="rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white"
+                  >
+                    {participantIds
+                      .filter((id) => id !== s.rosterId)
+                      .map((id) => (
+                        <option key={id} value={id}>
+                          {nameOf(id)}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : null
             return (
               <section key={side} className="space-y-2 rounded-lg border border-white/10 bg-black/20 p-2.5">
                 <p className="text-[12px] font-semibold text-white">{name} sends</p>
@@ -520,18 +693,20 @@ export function TradeCenterModal({
                     <p className="text-[11px] text-white/45">Loading roster…</p>
                   ) : (roster?.players ?? []).length ? (
                     (roster?.players ?? []).map((p) => (
-                      <PlayerCard
-                        key={p.id}
-                        player={p}
-                        selected={sel.includes(playerSelId(p))}
-                        onToggle={() =>
-                          setSel((prev) =>
-                            prev.includes(playerSelId(p))
-                              ? prev.filter((x) => x !== playerSelId(p))
-                              : [...prev, playerSelId(p)],
-                          )
-                        }
-                      />
+                      <div key={p.id}>
+                        <PlayerCard
+                          player={p}
+                          selected={sel.includes(playerSelId(p))}
+                          onToggle={() =>
+                            setSel((prev) =>
+                              prev.includes(playerSelId(p))
+                                ? prev.filter((x) => x !== playerSelId(p))
+                                : [...prev, playerSelId(p)],
+                            )
+                          }
+                        />
+                        {sel.includes(playerSelId(p)) ? destPicker(playerSelId(p)) : null}
+                      </div>
                     ))
                   ) : (
                     <p className="text-[11px] text-white/45">No players.</p>
@@ -549,6 +724,7 @@ export function TradeCenterModal({
                       onChange={(e) => setFaab(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
                       className="mt-1 w-full rounded border border-white/15 bg-black/30 px-2 py-1 text-[11px] text-white"
                     />
+                    {faab > 0 ? destPicker('faab') : null}
                   </label>
                 ) : null}
                 {settings?.draftPickTrading ? (
@@ -560,19 +736,40 @@ export function TradeCenterModal({
               </section>
             )
           })}
-          <aside className="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
+          <aside className={['space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-2.5', multiTeam ? 'md:col-span-2' : ''].join(' ')}>
             <p className="text-[12px] font-semibold text-white">Trade summary</p>
-            <SummarySide label={`${proposerName} sends`} players={selectedMinePlayers} faab={mineFaab} />
-            <SummarySide label={`${receiverName} sends`} players={selectedTheirsPlayers} faab={theirsFaab} />
+            {multiTeam ? (
+              <MultiTeamSummary participantIds={participantIds} assets={apiAssets} nameOf={nameOf} />
+            ) : (
+              <>
+                <SummarySide label={`${proposerName} sends`} players={selectedMinePlayers} faab={mineFaab} />
+                <SummarySide label={`${receiverName} sends`} players={selectedTheirsPlayers} faab={theirsFaab} />
+              </>
+            )}
+            {multiTeam && uninvolvedIds.length > 0 ? (
+              <p className="text-[11px] text-amber-200/80" data-testid="trade-uninvolved-teams">
+                {uninvolvedIds.map(nameOf).join(', ')} {uninvolvedIds.length === 1 ? 'has' : 'have'} nothing in this
+                trade yet. Every team has to send or receive something.
+              </p>
+            ) : null}
             {faabOver ? <p className="text-[11px] text-rose-300">FAAB exceeds available balance.</p> : null}
           </aside>
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ReviewSide label={`${proposerName} sends`} players={selectedMinePlayers} faab={mineFaab} />
-            <ReviewSide label={`${receiverName} sends`} players={selectedTheirsPlayers} faab={theirsFaab} />
-          </div>
+          {multiTeam ? (
+            <>
+              <MultiTeamSummary participantIds={participantIds} assets={apiAssets} nameOf={nameOf} />
+              <p className="text-[11px] text-white/45" data-testid="trade-multi-team-grade-note">
+                Grades are shown for two-team trades. Every team has to accept this one before it goes through.
+              </p>
+            </>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ReviewSide label={`${proposerName} sends`} players={selectedMinePlayers} faab={mineFaab} />
+              <ReviewSide label={`${receiverName} sends`} players={selectedTheirsPlayers} faab={theirsFaab} />
+            </div>
+          )}
 
           {valuePreview ? (
             <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-3" data-testid="trade-value-panel">
@@ -647,7 +844,7 @@ export function TradeCenterModal({
             </div>
           )}
           <label className="block text-[11px] text-white/55">
-            Note for the other manager (optional)
+            {multiTeam ? 'Note for the other managers (optional)' : 'Note for the other manager (optional)'}
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -663,6 +860,57 @@ export function TradeCenterModal({
       )}
       {error ? <p className="mt-3 text-[11px] text-rose-300">{error}</p> : null}
     </AppModal>
+  )
+}
+
+/** Multi-team: each team's gives and gets, from the assets as they will be sent. */
+function MultiTeamSummary({
+  participantIds,
+  assets,
+  nameOf,
+}: {
+  participantIds: string[]
+  assets: RedraftTradeAssetInput[]
+  nameOf: (id: string) => string
+}) {
+  const label = (a: RedraftTradeAssetInput) =>
+    a.assetType === 'faab' ? `$${Number((a.metadata as { amount?: number } | undefined)?.amount ?? 0)} FAAB` : a.playerName ?? 'Player'
+  return (
+    <div className="grid gap-2 sm:grid-cols-2" data-testid="trade-multi-team-summary">
+      {participantIds.map((id) => {
+        const gives = assets.filter((a) => a.fromRosterId === id)
+        const gets = assets.filter((a) => a.toRosterId === id)
+        return (
+          <div key={id} className="rounded border border-white/10 bg-black/20 p-2 text-[11px]" data-testid={`trade-multi-team-side-${id}`}>
+            <p className="font-semibold text-white/80">{nameOf(id)}</p>
+            <p className="mt-1 text-white/45">Gives</p>
+            {gives.length ? (
+              <ul className="space-y-0.5 text-white/65">
+                {gives.map((a, i) => (
+                  <li key={`g${i}`}>
+                    {label(a)} <span className="text-white/40">→ {nameOf(a.toRosterId)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-white/35">Nothing</p>
+            )}
+            <p className="mt-1 text-white/45">Gets</p>
+            {gets.length ? (
+              <ul className="space-y-0.5 text-emerald-200/80">
+                {gets.map((a, i) => (
+                  <li key={`r${i}`}>
+                    {label(a)} <span className="text-white/40">← {nameOf(a.fromRosterId)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-white/35">Nothing</p>
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

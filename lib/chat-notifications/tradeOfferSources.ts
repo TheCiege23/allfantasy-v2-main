@@ -183,6 +183,9 @@ export async function loadNativeTradeOffer(tradeId: string): Promise<Loaded | nu
 export async function loadRedraftTradeOffer(proposalId: string): Promise<Loaded | null> {
   const proposal = await prisma.redraftTradeProposal.findUnique({ where: { id: proposalId }, include: { assets: true } })
   if (!proposal) return null
+  // The card is two managers in a two-person DM. A multi-team trade has no truthful card, so it posts
+  // none (its teams are notified instead: lib/redraft/multiTeamTradeNotices.ts).
+  if (Array.isArray(proposal.additionalRosterIds) && proposal.additionalRosterIds.length > 0) return null
   const rosters = await prisma.redraftRoster.findMany({
     where: { id: { in: [proposal.proposerRosterId, proposal.receiverRosterId] } },
     select: { id: true, ownerId: true, ownerName: true, teamName: true },
