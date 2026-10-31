@@ -1,0 +1,102 @@
+name: Survivor season rehearsal
+
+# A whole Survivor season (create → autopick draft → every week's scores, councils and votes →
+# merge → jury → finale) on a moved clock, against an ISOLATED Neon branch. The connection string is
+# a role that exists only on that branch, so this job cannot reach production. The run's log is
+# posted to the branch's pull request, because job logs and artifacts are not readable from every
+# place this is driven from.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sport:
+        description: 'Sport (NFL, NBA, NHL or MLB)'
+        default: 'NFL'
+      cast:
+        description: 'Cast size'
+        default: '16'
+      start:
+        description: 'Rehearsal clock start (ISO, before the draft)'
+        default: '2026-09-08T16:00:00Z'
+      chimmy:
+        description: 'Teams handed to Chimmy before the draft (0-4; 0 = all human)'
+        default: '2'
+  push:
+    branches: [claude/survivor-season-harness]
+    paths: ['scripts/survivor-season-rehearsal/**', '.github/workflows/survivor-season-rehearsal.yml']
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+# One queue per sport. GitHub keeps only the newest pending run in a group, so a shared group
+# would cancel a queued NBA run the moment an NHL one was dispatched. Each run makes its own
+# league under its own marker, so two sports can share the branch database.
+concurrency:
+  group: survivor-season-rehearsal-${{ inputs.sport || 'NFL' }}
+  cancel-in-progress: false
+
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Require the isolated connection
+        env:
+          URL: ${{ secrets.SURVIVOR_REHEARSAL_DATABASE_URL }}
+        # Reasons go out as ::error:: annotations, which are readable where the job log is not. The
+        # value itself is never printed; only which rule it broke.
+        run: |
+          if [ -z "$URL" ]; then echo "::error::SURVIVOR_REHEARSAL_DATABASE_URL is empty or not a repository Actions secret."; exit 1; fi
+          case "$URL" in postgres://*|postgresql://*) ;; *) echo "::error::The secret does not start with postgresql:// (check for quotes or a psql command around it)."; exit 1;; esac
+          case "$URL" in *ep-curly-block-ad0dlt9o*) echo "::error::Refusing the production endpoint."; exit 1;; esac
+          case "$URL" in *ep-old-queen-ade7otjh*) ;; *) echo "::error::The secret is not the staging-survivor-season branch (endpoint ep-old-queen-ade7otjh)."; exit 1;; esac
+          DB=$(printf '%s' "$URL" | sed -E 's#^[^/]*//[^/]*/([^?]*).*#\1#')
+          if [ "$DB" != "neondb" ]; then echo "::error::The secret names database '$DB'; it must be 'neondb' (the branch's current schema). Change the path after the host to /neondb."; exit 1; fi
+          echo "::notice::Isolated connection accepted (staging-survivor-season branch, database neondb)."
+      - run: npm ci
+      - name: Run the season
+        env:
+          DATABASE_URL: ${{ secrets.SURVIVOR_REHEARSAL_DATABASE_URL }}
+          SURVIVOR_REHEARSAL_ENDPOINT: ep-old-queen-ade7otjh
+          NODE_ENV: production
+          SPORT: ${{ inputs.sport || 'NFL' }}
+          CAST: ${{ inputs.cast || '16' }}
+          START: ${{ inputs.start || '2026-09-08T16:00:00Z' }}
+          CHIMMY: ${{ inputs.chimmy || '2' }}
+        run: |
+          export NEXTAUTH_SECRET="$(openssl rand -hex 32)"
+          export DIRECT_URL="${DATABASE_URL/-pooler./.}"
+          set +e
+          npx tsx --conditions=react-server scripts/survivor-season-rehearsal/run.ts \
+            --sport="$SPORT" --cast="$CAST" --start="$START" --chimmy="$CHIMMY" --log=rehearsal.log > rehearsal.out 2>&1
+          echo "RC=$?" >> rehearsal.log
+          exit 0
+      - name: Post the log to the pull request
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          touch rehearsal.log rehearsal.out
+          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          {
+            echo "### Survivor rehearsal · ${{ inputs.sport || 'NFL' }} ${{ inputs.cast || '16' }} · run ${{ github.run_id }}"
+            echo '```'
+            sed -E 's#postgres(ql)?://[^ ]+#[redacted]#g' rehearsal.log | tail -c 45000
+            echo '```'
+            echo '<details><summary>stderr tail</summary>'
+            echo
+            echo '```'
+            sed -E 's#postgres(ql)?://[^ ]+#[redacted]#g' rehearsal.out | grep -v '^\[' | tail -c 12000
+            echo '```'
+            echo '</details>'
+          } > comment.md
+          if [ -n "$PR" ]; then gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md; fi
+          cat comment.md >> "$GITHUB_STEP_SUMMARY"
