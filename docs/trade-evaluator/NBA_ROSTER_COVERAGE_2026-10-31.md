@@ -41,6 +41,12 @@ The [read-only smoke](../../scripts/audits/smoke-fantrax-nba-trade-grade.ts) pas
 
 The public league ID is enough to discover the 10 teams and let a signed-in AllFantasy user select a team they control for import. A Fantrax Secret ID is optional for automatic ownership verification and should remain inside the app. The next end-to-end check is a staging import through that selection flow, followed by a trade-evaluator request involving linked players on two teams. Trades involving any of the eight unresolved players must continue to return an explicit coverage error.
 
+## Account and import check, 2026-10-31
+
+The [read-only account ownership audit](../../scripts/audits/fantrax-account-league-ownership.ts) found one connected Fantrax account in production that owns one team in this league. The staging database has zero connected Fantrax accounts and no imported copy of this league. The account's Secret ID was decrypted only inside the audit process to ask Fantrax about membership; it was never printed, copied into staging, or written to a file. The local staging import page at `http://127.0.0.1:3010/import?provider=fantrax` returned HTTP 200 after starting the staging app.
+
+The public league URL alone cannot prove which team a signed-in user owns. A full import from the public-ID path asks for commissioner attestation unless the user's own connected Secret ID verifies the selected team. The connected-account path accepts verified members without a commissioner claim, including two teams held by one account. [Gate tests](../../__tests__/trades/fantraxPublicImportGate.test.ts) cover both outcomes and rejection of a different team in the same league. No staging league import or team claim was made while the staging connection was absent.
+
 Commands:
 
 ```text
@@ -50,4 +56,6 @@ node scripts/audits/fantrax-nba-league-readiness.cjs .env.staging 51isdapqmt6atv
 node scripts/audits/fantrax-nba-league-readiness.cjs .env 51isdapqmt6atvdz --production-readonly
 node scripts/sync-fantrax-nba-trade-data.cjs 51isdapqmt6atvdz
 node --env-file=.env.staging --require ./scripts/_audit-preload.cjs --import tsx scripts/audits/smoke-fantrax-nba-trade-grade.ts 51isdapqmt6atvdz
+node --env-file=.env.staging --require ./scripts/_audit-preload.cjs --import tsx scripts/audits/fantrax-account-league-ownership.ts 51isdapqmt6atvdz
+node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/audits/fantrax-account-league-ownership.ts 51isdapqmt6atvdz --production-readonly
 ```
