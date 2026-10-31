@@ -13,6 +13,7 @@ import { RecapShareButton } from './RecapShareButton'
 import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
 import { PresenceStrip, type PresentViewer } from './PresenceStrip'
 import { PinnedBoard } from './PinnedBoard'
+import { LeagueMoveCard } from './LeagueMoveCard'
 import { DraftPollView, draftPollVoteUrl, readDraftPoll } from './draftPoll'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { readPinnedRefs, type PinnedRef } from '@/lib/chat-core/pinnedMessages'
@@ -22,6 +23,14 @@ import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { isDraftRoomSource, type LeagueDraftLink } from '@/lib/league-chat/draftChatLink'
 import { CHIMMY_DISPLAY_NAME, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 import type { LeagueChatChannelId } from '@/lib/league-chat/leagueChatChannels'
+import {
+  LEAGUE_MOVE_MESSAGE_TYPE,
+  describeMove,
+  mergeMovesIntoMessages,
+  movesForChannel,
+  readLeagueMoves,
+  type LeagueMove,
+} from '@/lib/league-chat/leagueMoves'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import '@/components/core-app/af-comms.css'
 
@@ -134,6 +143,18 @@ function str(v: unknown): string | null {
   return typeof v === 'string' && v ? v : null
 }
 
+function moveToListMessage(move: LeagueMove): ChatListMessage {
+  return {
+    id: `move:${move.id}`,
+    authorId: null,
+    authorName: move.teamName ?? move.managerName ?? 'League',
+    body: describeMove(move),
+    createdAt: move.occurredAt,
+    messageType: LEAGUE_MOVE_MESSAGE_TYPE,
+    metadata: null,
+  }
+}
+
 /**
  * Chimmy's rows as Chimmy, whichever route delivered them. The server already swaps the identity in
  * (LeagueChatMessageService); this keeps the reply bar, the quote and "who is this" honest even for a
@@ -230,6 +251,8 @@ export function LeagueConversation({
    * which this viewer is). False until it answers, so a member never sees a Pin that would 403.
    */
   const [canPin, setCanPin] = useState(false)
+  /* The league's recent transactions, drawn as cards between messages (lib/league-chat/leagueMoves.ts). */
+  const [moves, setMoves] = useState<LeagueMove[]>([])
   /*
    * Whether the draft room's messages are folded in. `null` means the reader has not chosen,
    * and the server decides: in while a draft is live, out otherwise. Inside the draft room
@@ -365,6 +388,22 @@ export function LeagueConversation({
     }
   }, [room, tribe])
 
+  /*
+   * Read once per league: the moves come from the daily ingest, so polling them with the messages
+   * would ask for the same rows every few seconds. A tribe channel is not the league's chat.
+   */
+  const loadMoves = useCallback(async () => {
+    if (tribe) return
+    try {
+      const res = await fetch(`/api/app/leagues/${encodeURIComponent(leagueId)}/chat/moves`)
+      if (!res.ok) return
+      const data = (await res.json().catch(() => ({}))) as { moves?: unknown }
+      if (activeLeague.current === leagueId) setMoves(readLeagueMoves(data.moves))
+    } catch {
+      /* No cards is a quieter chat, not a broken one. */
+    }
+  }, [leagueId, tribe])
+
   useEffect(() => {
     void load()
   }, [load])
@@ -378,13 +417,15 @@ export function LeagueConversation({
     setReplyTo(null)
     setPins([])
     setCanPin(false)
+    setMoves([])
     setTyping([])
     setLoadedOnce(false)
     setSearching(false)
     setFocusRequest(null)
     setDraft(null)
     void loadPins()
-  }, [leagueId, loadPins])
+    void loadMoves()
+  }, [leagueId, loadPins, loadMoves])
 
   /*
    * Near-realtime. League chat loaded once when you picked a league and never again, so a
@@ -631,9 +672,11 @@ export function LeagueConversation({
    * now shows at once as a pending bubble. It lives in its OWN list, appended after the server's:
    * a poll that lands mid-send replaces `messages` wholesale and would otherwise erase it.
    */
+  const shownMoves = useMemo(() => moves.filter(movesForChannel(channel)), [moves, channel])
+  const moveById = useMemo(() => new Map(shownMoves.map((mv) => [`move:${mv.id}`, mv])), [shownMoves])
   const listMessages = useMemo(
-    () => [...messages, ...pendingSends].map(leagueToListMessage),
-    [messages, pendingSends],
+    () => mergeMovesIntoMessages([...messages, ...pendingSends].map(leagueToListMessage), shownMoves, moveToListMessage),
+    [messages, pendingSends, shownMoves],
   )
   const sourceById = useMemo(() => {
     const map = new Map<string, string | null>()
@@ -896,6 +939,10 @@ export function LeagueConversation({
           }
           onReply={(m) => setReplyTo(byId.get(m.id) ?? null)}
           onPin={tribe || !canPin ? undefined : (m) => void pinMessage(m.id)}
+          renderSystem={(m) => {
+            const move = m.messageType === LEAGUE_MOVE_MESSAGE_TYPE ? moveById.get(m.id) : undefined
+            return move ? <LeagueMoveCard move={move} /> : null
+          }}
           pinBusy={pinBusy}
           onEdit={editMessage}
           onDelete={deleteMessage}

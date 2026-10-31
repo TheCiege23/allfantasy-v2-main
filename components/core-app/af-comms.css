@@ -3996,3 +3996,67 @@ html[data-mode='light'] .af-cm-typing-dots { background: var(--surface); box-sha
   background: var(--accent-soft);
   color: var(--accent);
 }
+
+/*
+ * LEAGUE MOVES IN LEAGUE CHAT (2026-10-31) — waiver claims, free-agent moves and trades as cards
+ * between messages, the way Sleeper's league chat shows them. A card is a `renderSystem` row
+ * (`.af-cm-row-system`), so it spans the conversation with no bubble and no actions.
+ * Same surface as an incoming bubble (`--af-bubble-in`), with a left rule in the move's colour.
+ */
+.af-cm-move {
+  width: 100%;
+  max-width: 340px;
+  margin: 6px 0 6px 40px;
+  padding: 9px 12px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line2);
+  border-radius: 0 12px 12px 0;
+  background: var(--af-bubble-in, var(--surface2));
+  color: var(--text);
+}
+.af-cm-move[data-kind='trade'] { border-left-color: var(--accent); }
+.af-cm-move-head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.af-cm-move-av,
+.af-cm-move-photo {
+  display: grid;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line2);
+  color: var(--text2);
+  font-size: 10px;
+  font-weight: 800;
+}
+.af-cm-move-av { width: 24px; height: 24px; }
+.af-cm-move[data-kind='trade'] .af-cm-move-av { color: var(--accent); }
+.af-cm-move-av img,
+.af-cm-move-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.af-cm-move-title { flex: 1; min-width: 0; margin: 0; font-size: 12.5px; line-height: 1.35; color: var(--text2); }
+.af-cm-move-title strong { color: var(--text); font-weight: 700; }
+.af-cm-move-head .af-cm-msg-time { flex: none; font-size: 11px; color: var(--muted); }
+.af-cm-move-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.af-cm-move-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.af-cm-move-sign { width: 12px; flex: none; font-size: 16px; font-weight: 800; line-height: 1; text-align: center; }
+.af-cm-move-row[data-sign='add'] .af-cm-move-sign { color: var(--good, #34d399); }
+.af-cm-move-row[data-sign='drop'] .af-cm-move-sign { color: var(--bad, #fb5b78); }
+.af-cm-move-photo { width: 30px; height: 30px; }
+.af-cm-move-who { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.af-cm-move-name { overflow: hidden; font-size: 13px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.af-cm-move-meta { font-size: 11px; color: var(--muted); }
+.af-cm-move-bid {
+  flex: none;
+  padding: 2px 9px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.af-cm-move-trade { display: grid; gap: 8px; }
+.af-cm-move-side-name { margin: 0 0 4px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.af-cm-move-picks { margin: 0; font-size: 12px; color: var(--text2); }
+@media (max-width: 520px) {
+  .af-cm-move { margin-left: 0; max-width: 100%; }
+}
