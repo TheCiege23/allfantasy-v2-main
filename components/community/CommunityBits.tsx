@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
-import { clubhouseChannelHref, clubhousePostHref, getChannel } from '@/lib/community/channels'
+import { clubhouseChannelHref, clubhouseMemberHref, clubhousePostHref, getChannel } from '@/lib/community/channels'
 import { displayNameOf, linkifySegments, timeAgo } from '@/lib/community/format'
 import type { AuthorBadge, CommunityAuthor, PostSummary } from '@/lib/community/service'
 
@@ -117,9 +117,15 @@ export function AuthorLine({
 }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs" style={{ color: 'var(--muted)' }}>
-      <span className="font-semibold" style={{ color: 'var(--text)' }}>
-        {author ? displayNameOf(author) : 'Removed'}
-      </span>
+      {author ? (
+        <Link href={clubhouseMemberHref(author.username)} className="font-semibold hover:underline" style={{ color: 'var(--text)' }}>
+          {displayNameOf(author)}
+        </Link>
+      ) : (
+        <span className="font-semibold" style={{ color: 'var(--text)' }}>
+          Removed
+        </span>
+      )}
       {author && author.displayName && <span>@{author.username}</span>}
       {author && <AuthorBadges badges={author.badges} />}
       <span aria-hidden>·</span>

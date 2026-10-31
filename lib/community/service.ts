@@ -166,6 +166,12 @@ function requireModerator(viewer: CommunityViewer): string {
 
 // ─── shaping ─────────────────────────────────────────────────────────────────
 
+/**
+ * League owners only. `lib/commissioner/permissions.ts` also counts a claimed team marked
+ * `isCommissioner`, which would cover imported leagues — but `league_teams` has no index on
+ * `claimedByUserId`, and this runs on every Clubhouse render. Add that index before
+ * widening this.
+ */
 async function commissionerIds(userIds: string[]): Promise<Set<string>> {
   if (userIds.length === 0) return new Set()
   const rows = await prisma.league.findMany({
@@ -495,7 +501,7 @@ export async function createPost(
 ): Promise<{ id: string }> {
   const userId = await requireWriter(viewer)
   const channel = getChannel(input.channel)
-  if (!channel) throw new CommunityError(400, 'Pick a channel')
+  if (!channel || channel.systemOnly) throw new CommunityError(400, 'Pick a channel')
   await enforceNewAccountLimit(userId, 'post')
   const post = await prisma.communityPost.create({
     data: {
@@ -958,4 +964,130 @@ export async function setIdeaStatus(
     data: { ideaStatus: status, ideaStatusAt: status ? new Date() : null },
   })
   if (status) await notifyIdeaAuthorOfStatus({ post: idea, status }).catch(() => {})
+}
+
+// ─── member profiles ─────────────────────────────────────────────────────────
+
+export type MemberReply = {
+  id: string
+  body: string
+  createdAt: string
+  postId: string
+  postTitle: string
+}
+
+export type MemberProfile = {
+  author: CommunityAuthor
+  joinedAt: string
+  counts: { posts: number; replies: number; ideas: number; shippedIdeas: number; upvotesReceived: number }
+  posts: PostSummary[]
+  replies: MemberReply[]
+}
+
+const PROFILE_ITEMS = 20
+
+/**
+ * A member's public Clubhouse page: badges, counts, and their latest live posts and
+ * replies. Null for an unknown username, or when either side has blocked the other.
+ * Removed content never appears, and a reply on a removed post is left out with it.
+ */
+export async function getMemberProfile(username: string, viewer: CommunityViewer): Promise<MemberProfile | null> {
+  const user = await prisma.appUser.findFirst({
+    where: { username: { equals: username, mode: 'insensitive' } },
+    select: AUTHOR_SELECT,
+  })
+  if (!user) return null
+  const blocked = await blockedFor(viewer)
+  if (blocked.has(user.id)) return null
+
+  const livePost = { authorUserId: user.id, removedAt: null }
+  const [postRows, replyRows, posts, replies, ideas, shippedIdeas, upvotes, shape] = await Promise.all([
+    prisma.communityPost.findMany({
+      where: livePost,
+      orderBy: { createdAt: 'desc' },
+      take: PROFILE_ITEMS,
+      select: POST_LIST_SELECT,
+    }),
+    prisma.communityReply.findMany({
+      where: { authorUserId: user.id, removedAt: null, post: { removedAt: null } },
+      orderBy: { createdAt: 'desc' },
+      take: PROFILE_ITEMS,
+      select: { id: true, body: true, createdAt: true, post: { select: { id: true, title: true } } },
+    }),
+    prisma.communityPost.count({ where: livePost }),
+    prisma.communityReply.count({ where: { authorUserId: user.id, removedAt: null, post: { removedAt: null } } }),
+    prisma.communityPost.count({ where: { ...livePost, kind: IDEA_KIND } }),
+    prisma.communityPost.count({ where: { ...livePost, kind: IDEA_KIND, ideaStatus: 'shipped' } }),
+    prisma.communityPost.aggregate({ where: { ...livePost, kind: IDEA_KIND }, _sum: { upvoteCount: true } }),
+    authorShaper([user]),
+  ])
+
+  return {
+    author: shape(user),
+    joinedAt: user.createdAt.toISOString(),
+    counts: { posts, replies, ideas, shippedIdeas, upvotesReceived: upvotes._sum.upvoteCount ?? 0 },
+    posts: await shapePosts(postRows, viewer),
+    replies: replyRows.map((r) => ({
+      id: r.id,
+      body: excerptOf(r.body, 280),
+      createdAt: r.createdAt.toISOString(),
+      postId: r.post.id,
+      postTitle: r.post.title,
+    })),
+  }
+}
+
+// ─── live room polling ───────────────────────────────────────────────────────
+
+export type ChatMessage = {
+  id: string
+  body: string
+  createdAt: string
+  author: CommunityAuthor
+  mine: boolean
+}
+
+export const CHAT_PAGE = 60
+
+/**
+ * Replies at or after `after`, oldest first — what a polling chat appends. With
+ * no `after`, the latest page. Removed replies and blocked authors are left out entirely:
+ * a live room has no "this reply was removed" placeholders.
+ */
+export async function listRepliesSince(
+  viewer: CommunityViewer,
+  postId: string,
+  after: string | null,
+): Promise<ChatMessage[]> {
+  const post = await prisma.communityPost.findUnique({
+    where: { id: postId },
+    select: { removedAt: true, authorUserId: true },
+  })
+  if (!post || post.removedAt) throw new CommunityError(404, 'Not found')
+  const blocked = await blockedFor(viewer)
+  const afterDate = after ? new Date(after) : null
+  const where: Prisma.CommunityReplyWhereInput = {
+    postId,
+    removedAt: null,
+    ...(blocked.size ? { authorUserId: { notIn: Array.from(blocked) } } : {}),
+    // `gte`, not `gt`: two replies can share a millisecond, and one committed just after a poll
+    // would be skipped forever. The client drops the ids it already has.
+    ...(afterDate && !Number.isNaN(afterDate.getTime()) ? { createdAt: { gte: afterDate } } : {}),
+  }
+  const rows = await prisma.communityReply.findMany({
+    where,
+    // Latest page when catching up from nothing; otherwise everything since, in order.
+    orderBy: { createdAt: afterDate ? 'asc' : 'desc' },
+    take: CHAT_PAGE,
+    select: { id: true, body: true, createdAt: true, author: { select: AUTHOR_SELECT } },
+  })
+  const ordered = afterDate ? rows : [...rows].reverse()
+  const shape = await authorShaper(ordered.map((r) => r.author))
+  return ordered.map((r) => ({
+    id: r.id,
+    body: r.body,
+    createdAt: r.createdAt.toISOString(),
+    author: shape(r.author),
+    mine: r.author.id === viewer.userId,
+  }))
 }
