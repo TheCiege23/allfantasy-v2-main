@@ -11,6 +11,9 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
 
 import { loadNbaPointsTradeEvaluation, priceNbaHistory, readNbaPlayerHistory, scoreNbaStats } from '@/lib/trades/nbaPointsTradeEvaluation'
 import type { TradeLeagueContext } from '@/lib/trades/loadTradeLeagueContext'
+import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
+import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
+import nbaFantraxFixture from '../fixtures/fantrax-nba-points-scoring.json'
 
 const league = {
   scoringRules: { points_scored: 1, rebound: 1.2, assist: 1.5, turnover: -1 },
@@ -35,6 +38,31 @@ describe('NBA points trade evaluation', () => {
     expect(scoreNbaStats({ points: 20, total_rebounds: 10, assists: 5, turnovers: 3 }, league.scoringRules))
       .toBe(36.5)
     expect(scoreNbaStats({ points: 20 }, { points: 0 })).toBeNull()
+  })
+
+  it('compares two teams with every weight from the captured Fantrax NBA league', async () => {
+    const mapped = fantraxScoringRules(nbaFantraxFixture as unknown as FantraxLeagueInfo, 'nba')
+    expect(mapped.gaps).toEqual([])
+    const fantraxLeague = {
+      ...league,
+      scoringRules: Object.fromEntries(mapped.rules.map((rule) => [rule.stat_key, rule.points_value])),
+    } as TradeLeagueContext
+    identities.mockImplementation(async ({ where }: any) => {
+      const name = where.OR[0].canonicalName.equals
+      return [{ id: name, canonicalName: name, sleeperId: null, rollingInsightsId: null,
+        espnId: null, fantraxId: null }]
+    })
+    seasons.mockImplementation(async ({ where }: any) => {
+      const factor = where.playerId.in[0] === 'Player A' ? 1 : 0.5
+      return [{ season: '2025-2026', gamesPlayed: 10, fetchedAt: new Date('2026-04-01'),
+        source: 'rolling_insights', stats: { points: 200 * factor, total_rebounds: 100 * factor,
+          assists: 50 * factor, steals: 20 * factor, blocks: 10 * factor, turnovers: 30 * factor } }]
+    })
+    const result = await loadNbaPointsTradeEvaluation({
+      league: fantraxLeague,
+      senderGives: [{ name: 'Player A' }], receiverGives: [{ name: 'Player B' }],
+    })
+    expect(result).toMatchObject({ ok: true, senderTotal: 43, receiverTotal: 21.5 })
   })
 
   it('blends current and previous measured season rates and reports recent data separately', () => {

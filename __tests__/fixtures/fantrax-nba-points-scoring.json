@@ -1,0 +1,19 @@
+{
+  "source": "Fantrax getLeagueInfo, league 51isdapqmt6atvdz, captured 2026-10-31",
+  "seasonYear": 2026,
+  "scoringSystem": {
+    "type": "HEAD_TO_HEAD_POINTS_BASED",
+    "scoringCategorySettings": [
+      {
+        "configs": [
+          { "position": { "shortName": "Default" }, "points": 1.5, "scoringCategory": { "code": "INDIVIDUAL_ASSISTS", "name": "Assists", "shortName": "AST" } },
+          { "position": { "shortName": "Default" }, "points": 2, "scoringCategory": { "code": "INDIVIDUAL_BLOCKS", "name": "Blocks", "shortName": "BLK" } },
+          { "position": { "shortName": "Default" }, "points": 1, "scoringCategory": { "code": "INDIVIDUAL_POINTS", "name": "Points", "shortName": "PTS" } },
+          { "position": { "shortName": "Default" }, "points": 1.25, "scoringCategory": { "code": "INDIVIDUAL_REBOUNDS", "name": "Rebounds", "shortName": "REB" } },
+          { "position": { "shortName": "Default" }, "points": 2, "scoringCategory": { "code": "INDIVIDUAL_STEALS", "name": "Steals", "shortName": "ST" } },
+          { "position": { "shortName": "Default" }, "points": -1, "scoringCategory": { "code": "INDIVIDUAL_TURNOVERS", "name": "Turnovers", "shortName": "TO" } }
+        ]
+      }
+    ]
+  }
+}

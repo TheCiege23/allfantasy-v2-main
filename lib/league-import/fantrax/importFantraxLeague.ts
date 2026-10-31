@@ -200,7 +200,7 @@ export async function importFantraxLeague(args: {
   }
 
   const season = Number(info.data.seasonYear) || new Date().getFullYear()
-  const scoring = fantraxScoringRules(info.data)
+  const scoring = fantraxScoringRules(info.data, best.sport)
 
   const snapshotOwnerKey = `fantrax-team:${args.leagueId}:${mine.teamId}`
   const fantraxUser = await prisma.fantraxUser.upsert({

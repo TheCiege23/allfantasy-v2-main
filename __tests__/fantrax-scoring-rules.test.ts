@@ -5,6 +5,8 @@ import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
 import { FantraxLeagueMapper } from '@/lib/league-import/adapters/fantrax/FantraxLeagueMapper'
 import { FantraxScoringMapper } from '@/lib/league-import/adapters/fantrax/FantraxScoringMapper'
 import type { FantraxImportPayload } from '@/lib/league-import/adapters/fantrax/types'
+import nbaFixture from './fixtures/fantrax-nba-points-scoring.json'
+import { NBA_CONFIG } from '@/lib/sportConfig/configs/nba'
 
 /**
  * Captured live from a real league 2026-08-27. The shape matters more than the
@@ -37,6 +39,38 @@ const REAL_CONFIGS = [
   { position: DEFAULT, points: 1, scoringCategory: cat('INDIVIDUAL_RECEPTIONS', 'Receptions', 'REC') },
   { position: { shortName: 'TE', code: 'TE' }, points: 1.5, scoringCategory: cat('INDIVIDUAL_RECEPTIONS', 'Receptions', 'REC') },
 ]
+
+describe('captured Fantrax NBA points league', () => {
+  const captured = nbaFixture as unknown as FantraxLeagueInfo
+  const expected = [
+    { stat_key: 'ast', points_value: 1.5 },
+    { stat_key: 'blk', points_value: 2 },
+    { stat_key: 'pts', points_value: 1 },
+    { stat_key: 'reb', points_value: 1.25 },
+    { stat_key: 'stl', points_value: 2 },
+    { stat_key: 'to', points_value: -1 },
+  ]
+
+  it('keeps all six source weights, including the negative turnover rule', () => {
+    expect(fantraxScoringMode(captured)).toBe('h2h_points')
+    expect(fantraxScoringRules(captured, 'nba')).toEqual({ rules: expected, gaps: [] })
+    expect(expected.every((rule) => NBA_CONFIG.scoringCategories.some((category) => category.key === rule.stat_key)))
+      .toBe(true)
+    const source = {
+      settings: { scoringType: fantraxScoringMode(captured),
+        scoringRules: expected.map((rule) => ({ statKey: rule.stat_key, points: rule.points_value })) },
+    } as unknown as FantraxImportPayload
+    expect(FantraxScoringMapper.map(source)).toMatchObject({
+      scoring_format: 'h2h_points', rules: expected,
+    })
+  })
+
+  it('does not apply NBA categories to a football import', () => {
+    const football = fantraxScoringRules(captured, 'nfl')
+    expect(football.rules).toEqual([])
+    expect(football.gaps).toHaveLength(6)
+  })
+})
 
 describe('Fantrax scoring-system type', () => {
   it.each([

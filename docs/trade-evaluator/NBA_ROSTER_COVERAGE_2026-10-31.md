@@ -15,7 +15,9 @@ The one Fantrax league has no stored scoring mode or numeric points rules. The 1
 
 The audit's season metric means a regular-season `PlayerSeasonStats` row with games played exists under an identity ID or provider alias. It does not prove that every custom scoring stat is present or that the evaluator can price the player. The evaluator continues to refuse a verified lineup grade when any selected roster player cannot be identified or scored.
 
-The live Fantrax import now preserves the documented `scoringSystem.type` and selects among CFB, NFL, and NBA player directories. It does not invent NBA scoring-rule translations when the provider supplies category codes this codebase has not mapped. A real NBA points-league `scoringCategorySettings` fixture is needed to add and verify those translations.
+The live Fantrax import preserves `scoringSystem.type` and selects among CFB, NFL, and NBA player directories. The [supplied Fantrax league](https://www.fantrax.com/fantasy/league/51isdapqmt6atvdz/home) is a 2026 head-to-head points NBA league. Its public API lists 10 teams and 140 roster references; all 140 IDs match Fantrax's NBA player directory. The reduced [scoring fixture](../../__tests__/fixtures/fantrax-nba-points-scoring.json) contains only its six scoring categories, not team or account details. On 2026-10-31 the fixture's mode, category codes, positions, and weights matched a fresh `getLeagueInfo` response exactly.
+
+The six imported rules are `pts: 1`, `reb: 1.25`, `ast: 1.5`, `stl: 2`, `blk: 2`, and `to: -1`. These are NBA's canonical stat keys and the NBA trade evaluator accepts them. A deterministic two-team points comparison using all six weights passes. This verifies the scoring translation and evaluator calculation; a live league trade grade remains unverified until the league is refreshed in a nonproduction environment and its unresolved player identities are reviewed. Other Fantrax NBA categories still produce named scoring gaps rather than guessed rules.
 
 Commands:
 

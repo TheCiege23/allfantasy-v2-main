@@ -48,7 +48,7 @@ export function fantraxScoringMode(info: FantraxLeagueInfo):
  * punt returns. Fanning the value out to each is the only reading that scores a
  * player correctly; picking one would silently zero the other two.
  */
-const CATEGORY_KEYS: Record<string, string[]> = {
+const FOOTBALL_CATEGORY_KEYS: Record<string, string[]> = {
   INDIVIDUAL_PASSING_YARDS: ['pass_yd'],
   INDIVIDUAL_PASSING_TOUCHDOWNS: ['pass_td'],
   INDIVIDUAL_RUSHING_YARDS: ['rush_yd'],
@@ -59,6 +59,16 @@ const CATEGORY_KEYS: Record<string, string[]> = {
   INDIVIDUAL_FUMBLES_RECOVERED_TOUCHDOWNS_OFFENSE: ['fum_rec_td'],
   INDIVIDUAL_TWO_POINT_CONVERSIONS_SCORES: ['pass_2pt', 'rush_2pt', 'rec_2pt'],
   INDIVIDUAL_RETURN_TOUCHDOWNS: ['kr_td', 'pr_td'],
+}
+
+/** Keys in NBA_CONFIG, also accepted by the NBA trade evaluator. */
+const NBA_CATEGORY_KEYS: Record<string, string[]> = {
+  INDIVIDUAL_POINTS: ['pts'],
+  INDIVIDUAL_REBOUNDS: ['reb'],
+  INDIVIDUAL_ASSISTS: ['ast'],
+  INDIVIDUAL_STEALS: ['stl'],
+  INDIVIDUAL_BLOCKS: ['blk'],
+  INDIVIDUAL_TURNOVERS: ['to'],
 }
 
 /** Position-specific reception values map to a bonus, keyed by position code. */
@@ -89,8 +99,9 @@ function readConfigs(info: FantraxLeagueInfo): Config[] {
  * tight ends 2.5 a catch. The default is subtracted to get the 0.5 that is
  * actually the premium.
  */
-export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResult {
+export function fantraxScoringRules(info: FantraxLeagueInfo, sport: 'cfb' | 'nfl' | 'nba' = 'nfl'): FantraxScoringResult {
   const configs = readConfigs(info)
+  const categoryKeys = sport === 'nba' ? NBA_CATEGORY_KEYS : FOOTBALL_CATEGORY_KEYS
   const rules: FantraxScoringRule[] = []
   const gaps: string[] = []
 
@@ -124,7 +135,7 @@ export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResu
       continue
     }
 
-    const keys = CATEGORY_KEYS[code]
+    const keys = categoryKeys[code]
     if (!keys) {
       gaps.push(`${config.scoringCategory?.name ?? code} has no equivalent here, so it is not scored`)
       continue
