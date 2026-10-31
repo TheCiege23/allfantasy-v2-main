@@ -378,9 +378,12 @@ async function main() {
       const config = await prisma.survivorLeagueConfig.findUniqueOrThrow({ where: { leagueId }, select: { id: true } })
       for (const c of cast) {
         const rosterId = chimmyRosterIds.find(id => c.userId === `orphan-${id}`) ?? chimmyRosterIds[0]
-        const held = await prisma.redraftRosterPlayer.findFirst({ where: { roster: { leagueId }, droppedAt: null }, select: { playerId: true } })
+        // The idol rides a player on Chimmy's OWN roster: the engine checks the holder's roster owns it.
+        const link = await prisma.roster.findUniqueOrThrow({ where: { id: rosterId }, select: { redraftRosterId: true } })
+        const held = link.redraftRosterId ? await prisma.redraftRosterPlayer.findFirst({ where: { rosterId: link.redraftRosterId, droppedAt: null }, select: { playerId: true } }) : null
+        assert.ok(held, `Chimmy roster ${rosterId} has no drafted player to carry an idol`)
         await prisma.survivorIdol.create({ data: {
-          leagueId, configId: config.id, rosterId, playerId: held?.playerId ?? 'rehearsal', powerType: 'protect_self',
+          leagueId, configId: config.id, rosterId, playerId: held.playerId, powerType: 'protect_self',
           status: 'hidden', currentOwnerUserId: c.userId, originalOwnerUserId: c.userId, powerLabel: 'Hidden Immunity Idol',
         } })
       }
