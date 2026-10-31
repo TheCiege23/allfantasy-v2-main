@@ -825,17 +825,23 @@ export async function scoreRosterForWeek(args: {
 
 /**
  * C2C (Campus to Canton): each team's campus starters score on top of its pro lineup — one total
- * (lib/c2c/campusScoring.ts). Native football C2C leagues only; null when no one starts a college
- * player, so a league without a campus lineup scores exactly as before. Imported lazily: the campus
- * scorer uses this module's stat scorer.
+ * (lib/c2c/campusScoring.ts). Native C2C leagues: NFL from college football weeks, NBA from the college
+ * basketball games inside the week's dates. Null when no one starts a college player, so a league
+ * without a campus lineup scores exactly as before. Imported lazily: the campus scorer uses this
+ * module's stat scorer.
  */
 async function loadCampusPoints(
   league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
-  args: { season: number; nflWeek: number; homeRosterId: string; awayRosterId: string },
+  args: { season: number; week: number; homeRosterId: string; awayRosterId: string },
 ) {
   if (!league || !isNativePlatform(league.platform)) return null
-  const { campusPointsForMatchup, isFootballC2CLeague } = await import('@/lib/c2c/campusScoring')
-  return isFootballC2CLeague(league) ? campusPointsForMatchup(prisma as never, args) : null
+  const { campusBasketballPointsForMatchup, campusPointsForMatchup, campusSport } = await import('@/lib/c2c/campusScoring')
+  const sport = campusSport(league)
+  if (sport === 'football') {
+    return campusPointsForMatchup(prisma as never, { season: args.season, nflWeek: args.week, homeRosterId: args.homeRosterId, awayRosterId: args.awayRosterId })
+  }
+  if (sport === 'basketball') return campusBasketballPointsForMatchup(prisma as never, args)
+  return null
 }
 
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
@@ -916,7 +922,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   }
   const campus =
     scoringMode === 'points' && !bestBall && !useDevyEngine
-      ? await loadCampusPoints(scoringLeague, { season: seasonYear, nflWeek: week, homeRosterId, awayRosterId })
+      ? await loadCampusPoints(scoringLeague, { season: seasonYear, week, homeRosterId, awayRosterId })
       : null
   if (campus) {
     home.points = Math.round((home.points + campus.home.points) * 100) / 100
@@ -1127,7 +1133,7 @@ async function updateByeRowScore(row: {
   if (adjustments.length) home.points = adjustedScore(home.points, adjustments, m.id, m.homeRosterId)
   // A C2C bye team's campus starters count toward its median / extra-game score too.
   const campus = !bestBall && !useDevyEngine
-    ? await loadCampusPoints(league, { season: season.season, nflWeek: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
+    ? await loadCampusPoints(league, { season: season.season, week: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
     : null
   if (campus) home.points = Math.round((home.points + campus.home.points) * 100) / 100
   const isComplete =
@@ -1145,7 +1151,7 @@ async function updateByeRowScore(row: {
           bye: true,
           home,
           missingPlayerIds: home.missingPlayerIds,
-          ...(campus ? { campus: { cfbWeeks: campus.cfbWeeks, home: campus.home } } : {}),
+          ...(campus ? { campus: { ...('cfbWeeks' in campus ? { cfbWeeks: campus.cfbWeeks } : { window: campus.window }), home: campus.home } } : {}),
         },
       },
     },
