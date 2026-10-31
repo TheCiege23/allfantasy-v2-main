@@ -13,6 +13,14 @@
  * Pure. The loader is ./importedGuillyHealthLoad.ts; the tab is app/league/[leagueId]/tabs/ImportedGuillyTab.tsx.
  */
 import { chopTimeline, importedGuillyFormat, type ImportedGuillyRow } from './importedGuillyHealth'
+import { DEFAULT_DANGER_MARGIN_POINTS } from './constants'
+
+/**
+ * A team's danger this week, by the native rule (./chopPreview.ts): the chop zone is the chop line itself,
+ * danger is within the margin of it, everyone else is safe. An imported league has no AllFantasy config, so
+ * the margin is the native default.
+ */
+export type ImportedDangerTier = 'chop_zone' | 'danger' | 'safe'
 
 export type ImportedGuillyStanding = {
   rosterId: string
@@ -20,6 +28,8 @@ export type ImportedGuillyStanding = {
   points: number
   /** This week's lowest score among the teams still alive (ties all shown). */
   onChopLine: boolean
+  /** Null until the alive field has scores to compare — the same moment the chop line appears. */
+  tier: ImportedDangerTier | null
 }
 
 export type ImportedGuillyViewData = {
@@ -38,7 +48,9 @@ export function buildImportedGuillyView(args: {
   rows: ReadonlyArray<ImportedGuillyRow>
   /** Every team in the league: provider roster id → name. */
   teams: ReadonlyArray<{ rosterId: string; name: string }>
+  dangerMarginPoints?: number
 }): ImportedGuillyViewData {
+  const margin = args.dangerMarginPoints ?? DEFAULT_DANGER_MARGIN_POINTS
   const scoredWeeks = args.rows.filter((r) => r.pointsFor > 0).map((r) => r.week)
   const week = scoredWeeks.length ? Math.max(...scoredWeeks) : null
   const nameOf = new Map(args.teams.map((t) => [t.rosterId, t.name]))
@@ -53,7 +65,10 @@ export function buildImportedGuillyView(args: {
   const standings = alive
     .map((t) => {
       const points = Math.round((pointsThisWeek.get(t.rosterId) ?? 0) * 100) / 100
-      return { rosterId: t.rosterId, name: t.name, points, onChopLine: low != null && points === Math.round(low * 100) / 100 }
+      const line = low == null ? null : Math.round(low * 100) / 100
+      const onChopLine = line != null && points === line
+      const tier: ImportedDangerTier | null = line == null ? null : onChopLine ? 'chop_zone' : points - line <= margin ? 'danger' : 'safe'
+      return { rosterId: t.rosterId, name: t.name, points, onChopLine, tier }
     })
     .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))
 
@@ -78,4 +93,16 @@ export function guillyTabKind(
     return importedGuillyFormat({ leagueType: league.leagueType ?? null, guillotineMode: league.guillotineMode ?? null, settings: league.settings }) ? 'imported' : null
   }
   return league.guillotineMode === true || league.leagueVariant === 'guillotine' ? 'native' : null
+}
+
+/**
+ * Every team's place for the league dashboard's Guilly standings (lib/league/league-dashboard-view.ts),
+ * keyed by provider roster id: this week's tier for the teams alive, `chopped` for the teams out. A team
+ * alive before the field has scores has no entry.
+ */
+export function importedGuillyTiers(view: ImportedGuillyViewData): Record<string, ImportedDangerTier | 'chopped'> {
+  const out: Record<string, ImportedDangerTier | 'chopped'> = {}
+  for (const c of view.chopped) out[c.rosterId] = 'chopped'
+  for (const s of view.standings) if (s.tier) out[s.rosterId] = s.tier
+  return out
 }

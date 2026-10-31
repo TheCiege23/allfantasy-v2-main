@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { ImportedGuillyTabData } from '@/lib/guillotine/importedGuillyHealthLoad'
+import { DEFAULT_DANGER_MARGIN_POINTS as IMPORTED_DANGER_NOTE_POINTS } from '@/lib/guillotine/constants'
 
 /**
  * The Guilly tab for an imported league (lib/guillotine/importedGuillyView.ts): this week's scores among
@@ -80,6 +81,11 @@ export function ImportedGuillyTab({ leagueId }: { leagueId: string }) {
         <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">
           {view.week != null ? `Week ${view.week}` : 'This week'} · the chop line
         </h3>
+        {view.scoredThisWeek > 0 ? (
+          <p className="mb-2 text-[12px] text-white/50" data-testid="imported-guilly-danger-note">
+            In danger: within {IMPORTED_DANGER_NOTE_POINTS} points of the chop line on {platform}&apos;s scores so far.
+          </p>
+        ) : null}
         {view.scoredThisWeek === 0 ? (
           <p className="text-[13px] text-white/55" data-testid="imported-guilly-no-scores">No scores yet this week. The chop line shows once games are played.</p>
         ) : null}
@@ -87,13 +93,14 @@ export function ImportedGuillyTab({ leagueId }: { leagueId: string }) {
           {view.standings.map((t, i) => (
             <li
               key={t.rosterId}
-              className={`flex items-center justify-between rounded-lg px-3 py-2 text-[13px] ${t.onChopLine ? 'border border-rose-500/40 bg-rose-500/10' : 'bg-white/[0.02]'}`}
+              className={`flex items-center justify-between rounded-lg px-3 py-2 text-[13px] ${t.onChopLine ? 'border border-rose-500/40 bg-rose-500/10' : t.tier === 'danger' ? 'border border-amber-500/30 bg-amber-500/[0.06]' : 'bg-white/[0.02]'}`}
               data-testid={`imported-guilly-team-${t.rosterId}`}
             >
               <span className="text-white/90">
                 <span className="mr-2 tabular-nums text-white/40">{i + 1}</span>
                 {t.name}
                 {t.onChopLine ? <span className="ml-2 text-[11px] font-semibold text-rose-300">on the chop line</span> : null}
+                {t.tier === 'danger' ? <span className="ml-2 text-[11px] font-semibold text-amber-300">in danger</span> : null}
               </span>
               <span className="tabular-nums text-white/80">{t.points.toFixed(2)}</span>
             </li>
