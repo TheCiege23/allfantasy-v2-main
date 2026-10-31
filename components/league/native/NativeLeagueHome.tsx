@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { LeagueSection, CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import { ArrowRight, MessageSquare, PlayCircle, Shield } from 'lucide-react'
@@ -18,6 +19,24 @@ import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSett
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 import { isLeagueEligibleForDispersalDraft } from '@/lib/league/dispersal-draft-eligibility'
 import { sortTeamsForManagerListing, type LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
+import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
+import { buildPlayoffRace, draftCountdown } from '@/lib/league-media/redraftLeagueHome'
+import { formatScoringMode } from '@/lib/league-settings-home/buildLeagueSettingsHome'
+import { RedraftPlayoffRace } from '@/components/league/native/redraft/RedraftPlayoffRace'
+import { RedraftLastWeekRecap } from '@/components/league/native/redraft/RedraftLastWeekRecap'
+import '@/components/league/native/redraft-home.css'
+
+/** A clock that moves every 30s — enough for a draft countdown, cheap for a page. Idle unless active. */
+function useHalfMinuteClock(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!active) return
+    setNow(Date.now())
+    const id = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(id)
+  }, [active])
+  return now
+}
 
 export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, draftDateIso, snapshot, settingsOpen, onOpenSettings, onSelectTab, inviteCode = '' }: {
   league: UserLeague
@@ -44,7 +63,21 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
   // Seats matter until the league is full or drafted; after that the card would only take space.
   const showSeats = predraft || claimedSeats < league.teamCount
   const stakesFormat = stakesFormatFor(league)
-  const standings = sortTeamsForManagerListing(teams, league, snapshot).slice(0, 6)
+  const ordered = sortTeamsForManagerListing(teams, league, snapshot)
+  const standings = ordered.slice(0, 6)
+  /*
+   * Redraft identity, batch A1 (docs/design/redraft-tab-inventory.md): a native redraft league gets the
+   * season-race home — score bug, playoff race, last week's recap, a draft countdown. Every other format
+   * renders exactly what it did. Each piece drops when its data does not exist
+   * (lib/league-media/redraftLeagueHome.ts says what each one needs).
+   */
+  const redraft = resolveRedraftIdentity(league)
+  const race = redraft && inSeason ? buildPlayoffRace(ordered, league.settings, userTeamId) : null
+  const currentWeek = typeof league.currentWeek === 'number' ? league.currentWeek : null
+  const season = Number(league.season)
+  const recapWeek = redraft && inSeason && formatScoringMode(league.settings) === 'Points' && currentWeek != null && currentWeek > 1 && Number.isFinite(season) ? currentWeek - 1 : null
+  const now = useHalfMinuteClock(Boolean(redraft && predraft && draftDateIso))
+  const countdown = redraft && predraft ? draftCountdown(draftDateIso, now) : null
   const date = draftDateIso ? new Date(draftDateIso) : null
   /*
    * Handoff §3: the third pre-draft tile is the Supplemental draft — late joiners and dispersal
@@ -66,9 +99,13 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
     <div className="nl-home-primary">
       <CustomizeLeagueLink returnTo={`/league/${encodeURIComponent(league.id)}`} className="nl-text-link" />
       {/* League rules: the button, the first-time popup and the "What changed" card. League home only. */}
-      <LeagueRulesHomeHost leagueId={league.id} blocked={settingsOpen} />
-      <LeagueSection id="week">{inSeason &&<LeagueYourWeekStrip leagueId={league.id} week={typeof league.currentWeek === 'number' ? league.currentWeek : null} onSelectTab={onSelectTab} />}</LeagueSection>
+      {/* A redraft league in season leads with the score bug; its rules card follows the week. */}
+      {!(redraft && inSeason) && <LeagueRulesHomeHost leagueId={league.id} blocked={settingsOpen} />}
+      <LeagueSection id="week">{inSeason &&<LeagueYourWeekStrip leagueId={league.id} week={currentWeek} onSelectTab={onSelectTab} scoreBug={redraft ? { sport: String(league.sport) } : undefined} />}</LeagueSection>
+      <LeagueSection id="week">{recapWeek != null && <RedraftLastWeekRecap leagueId={league.id} season={season} week={recapWeek} />}</LeagueSection>
+      {redraft && inSeason && <LeagueRulesHomeHost leagueId={league.id} blocked={settingsOpen} />}
       <section className="nl-card nl-next"><div className="nl-card-label"><span>Next up</span><span>{predraft ? 'Draft HQ' : survivor ? 'Survivor' : phase}</span></div>
+        {countdown && <p className="rdh-next-countdown" data-testid="redraft-draft-countdown">Draft in <strong>{countdown.label}</strong></p>}
         <h2>{predraft ? `Draft · ${draftLabel}` : survivor ? 'Your island this week' : phase === 'Offseason' ? 'Your season archive' : `Week ${league.currentWeek ?? '—'}`}</h2>
         <p>{predraft ? `${league.teamCount}-team ${league.format}. Review your settings and queue before the draft.` : survivor ? 'Check the challenge, immunity, Elimination Council, and your private powers.' : phase === 'Offseason' ? 'Review final standings and prepare for the next season.' : 'Set your lineup and follow the latest matchup scores.'}</p>
         <div className="nl-actions">{predraft ? <><button type="button" className="nl-button nl-primary" onClick={() => onSelectTab('draft')}>Enter Draft HQ <ArrowRight size={16} aria-hidden /></button><Link className="nl-button" href={`/league/${encodeURIComponent(league.id)}/draft`}>Draft board</Link></> : <button type="button" className="nl-button nl-primary" onClick={() => onSelectTab(survivor ? 'survivor' : phase === 'Offseason' ? 'standings' : 'matchups')}>{survivor ? 'Open Survivor' : phase === 'Offseason' ? 'Final standings' : 'Open matchup'}<ArrowRight size={16} aria-hidden /></button>}</div>
@@ -86,7 +123,7 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
     </div>
     <aside className="nl-home-secondary" aria-label="League overview"><LeagueSection id="team"><section className="nl-card"><div className="nl-card-label">Your team</div><h2>{team?.teamName || (hostOnly ? 'Commissioner host' : 'Join a team')}</h2>{team ? <><dl className="nl-team-stats"><div><dt>Record</dt><dd>{team.wins}–{team.losses}{team.ties ? `–${team.ties}` : ''}</dd></div><div><dt>PF</dt><dd>{team.pointsFor.toFixed(1)}</dd></div><div><dt>FAAB</dt><dd>{team.faabRemaining ?? '—'}</dd></div></dl><div className="nl-actions"><button type="button" className="nl-button" onClick={() => onSelectTab('roster')}>My team</button><button type="button" className="nl-button" onClick={() => onSelectTab('players')}>Players</button></div></> : <p>{hostOnly ? 'You are hosting this season without a playing team. Manage invitations, rules, and league readiness from Commissioner.' : 'Ask your commissioner for a team invitation.'}</p>}</section></LeagueSection>
       <LeagueSection id="chat"><section className="nl-card nl-chat-preview"><div className="nl-card-label"><span>League chat</span><MessageSquare size={16} aria-hidden /></div><h2>Your league, together</h2><p>Announcements, draft discussion, and league conversation.</p><button type="button" className="nl-button" onClick={() => onSelectTab('league_chat')}>Open league chat</button></section></LeagueSection>
-      <LeagueSection id="standings"><section className="nl-card"><div className="nl-card-label"><span>Standings</span><button type="button" className="nl-text-link" onClick={() => onSelectTab('standings')}>Full table</button></div><ol className="nl-standings-preview">{standings.map((row, index) => <li key={row.id} data-own-team={row.id === userTeamId}><span>{index + 1}</span><strong>{row.teamName}</strong><span>{row.wins}–{row.losses}{row.ties ? `–${row.ties}` : ''}</span></li>)}</ol>{!standings.length && <p>Standings appear when teams are ready.</p>}</section></LeagueSection>
+      <LeagueSection id="standings">{race ? <RedraftPlayoffRace race={race} onOpenStandings={() => onSelectTab('standings')} /> : <section className="nl-card"><div className="nl-card-label"><span>Standings</span><button type="button" className="nl-text-link" onClick={() => onSelectTab('standings')}>Full table</button></div><ol className="nl-standings-preview">{standings.map((row, index) => <li key={row.id} data-own-team={row.id === userTeamId}><span>{index + 1}</span><strong>{row.teamName}</strong><span>{row.wins}–{row.losses}{row.ties ? `–${row.ties}` : ''}</span></li>)}</ol>{!standings.length && <p>Standings appear when teams are ready.</p>}</section>}</LeagueSection>
     </aside>
   </div>
 }

@@ -442,3 +442,30 @@ describe('cancel and expiry on /api/redraft/trade-votes', () => {
     ])
   })
 })
+
+describe('🛑 the two commissioner-veto routes send the SAME notice (notifyMultiTeamTradeCommissionerVeto)', () => {
+  async function vetoRoute() {
+    h.actor = 'commish'
+    const { POST } = await import('../../app/api/redraft/trades/veto/route')
+    const res = await POST(
+      createMockNextRequest('http://localhost/api/redraft/trades/veto', { method: 'POST', body: { proposalId: 'p-3' } }) as never,
+    )
+    return res.status
+  }
+
+  it('trade-votes commissioner_veto and /api/redraft/trades/veto: identical title, body, recipients and key', async () => {
+    threeTeam(agreed)
+    expect((await post('commish', { proposalId: 'p-3', action: 'commissioner_veto' })).status).toBe(200)
+    const fromVotes = await sent()
+    h.dispatch.mockClear()
+    threeTeam(agreed)
+    expect(await vetoRoute()).toBe(200)
+    const fromVetoRoute = await sent()
+    expect(fromVotes).toHaveLength(1)
+    expect(fromVetoRoute).toEqual(fromVotes)
+    expect(fromVetoRoute[0]).toMatchObject({
+      body: 'The commissioner vetoed the multi-team trade between Alpha, Bravo and Cat, so it will not go through.',
+      dedupePrefix: 'redraft_trade:p-3:vetoed',
+    })
+  })
+})

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { ownerCommissions } from "@/lib/public-discovery/ownerCommissionerTeams"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -41,7 +42,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     select: { id: true, name: true, userId: true, platform: true, isCommissioner: true, settings: true },
   })
   const listing = league ? readExternalListing(league.settings) : null
-  if (!league || isNativePlatform(league.platform) || !listing?.listed || listing.openSpots < 1 || !listingVerification(league)) {
+  const ownerCommissionsTeam = league && listing?.listed ? await ownerCommissions(league) : false
+  if (
+    !league ||
+    isNativePlatform(league.platform) ||
+    !listing?.listed ||
+    listing.openSpots < 1 ||
+    !listingVerification({ ...league, ownerCommissionsTeam })
+  ) {
     return NextResponse.json({ error: "This league isn't taking requests right now." }, { status: 404 })
   }
   if (league.userId === userId) return NextResponse.json({ error: "This is your league." }, { status: 400 })
