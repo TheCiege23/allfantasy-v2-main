@@ -16,6 +16,24 @@ export const CHIMMY_EXILE_FORM_WEEKS = 3
 const SEAT_PREFIX = 'orphan-'
 
 /**
+ * How long Chimmy waits before trying a castaway's Exile pick again after an attempt that came to
+ * nothing (no team open, no legal lineup, a claim refused, Exile not open yet). A full attempt reads
+ * every active player in the sport and their recent scores, and the season runner calls this on
+ * every tick: without a pause, a week with nothing to claim repeats that read until the week ends.
+ * Cheap answers — a team already reserved, a roster locked — need no pause. Per process: the worker's
+ * replicas each keep their own, which at worst doubles the attempts and never blocks a real claim
+ * for longer than this.
+ */
+export const CHIMMY_EXILE_RETRY_MS = 30 * 60 * 1000
+const NO_PAUSE = new Set(['already_set', 'locked', 'cooling_down', 'no_scoring_rules'])
+const retryAfter = new Map<string, number>()
+
+/** Tests only: forget every pause. */
+export function resetChimmyExileRetries(): void {
+  retryAfter.clear()
+}
+
+/**
  * Every id a player's weekly scores may be stored under. Exile claims a `Player` row, but a league's
  * roster — and so the score sync — keys a player by its draft pool's provider id (Sleeper's `12527`
  * for NFL, held on the row as `providerIds.sleeper = "sleeper:12527"`). Reading only `Player.id` saw
@@ -68,25 +86,25 @@ export async function runChimmyExileTurn(leagueId: string, now = new Date()): Pr
     return turn
   }
 
-  for (const castaway of chimmy) {
+  const exileTurnFor = async (castaway: { userId: string }): Promise<void> => {
     let waivers: Awaited<ReturnType<typeof getExileWaivers>>
     try {
       waivers = await getExileWaivers(leagueId, castaway.userId, '', now)
     } catch (error) {
       turn.skipped[castaway.userId] = error instanceof Error ? error.message : 'exile_closed'
-      continue
+      return
     }
-    if (waivers.roster.team) { turn.skipped[castaway.userId] = 'already_set'; continue }
-    if (waivers.locked) { turn.skipped[castaway.userId] = 'locked'; continue }
+    if (waivers.roster.team) { turn.skipped[castaway.userId] = 'already_set'; return }
+    if (waivers.locked) { turn.skipped[castaway.userId] = 'locked'; return }
     const window = await exileWeekWindow(prisma as unknown as Prisma.TransactionClient, league.sport, league.season, waivers.week)
-    if (!window) { turn.skipped[castaway.userId] = 'no_calendar'; continue }
+    if (!window) { turn.skipped[castaway.userId] = 'no_calendar'; return }
 
     // A team can be reserved only until its first game of the period starts. The same games, and the
     // same team key, the Exile claim itself checks — so a daily sport's full team names match.
     const firstGame = await exileFirstGames(prisma as unknown as Prisma.TransactionClient, league.sport, league.season, waivers.week, window.start, window.end)
     const openKeys = new Set([...firstGame].filter(([, start]) => start > now).map(([key]) => key))
     const taken = waivers.takenTeamIds.map((t) => t.toUpperCase())
-    if (openKeys.size === 0) { turn.skipped[castaway.userId] = 'no_open_team'; continue }
+    if (openKeys.size === 0) { turn.skipped[castaway.userId] = 'no_open_team'; return }
 
     const players = (await prisma.player.findMany({
       where: { sport: { equals: league.sport, mode: 'insensitive' }, active: true, team: { not: null } },
@@ -94,7 +112,7 @@ export async function runChimmyExileTurn(leagueId: string, now = new Date()): Pr
     })).filter((p) => p.team && openKeys.has(exileTeamKey(league.sport, p.team)))
     // Exile reserves a team under the player row's own spelling (upper-cased), so that is the name the plan uses.
     const openTeams = [...new Set(players.map((p) => p.team!.trim().toUpperCase()))].filter((t) => !taken.includes(t))
-    if (openTeams.length === 0) { turn.skipped[castaway.userId] = 'no_open_team'; continue }
+    if (openTeams.length === 0) { turn.skipped[castaway.userId] = 'no_open_team'; return }
     const ownerOf = new Map<string, string>()
     for (const p of players) for (const alias of playerScoreAliases(p)) if (!ownerOf.has(alias)) ownerOf.set(alias, p.id)
     const scores = await prisma.playerWeeklyScore.findMany({
@@ -124,7 +142,7 @@ export async function runChimmyExileTurn(leagueId: string, now = new Date()): Pr
         return { id: p.id, name: p.name, position: p.position, team: p.team, recentPoints: t ? t.sum / t.weeks : 0 }
       })
     const plan = chimmyExilePlan(candidates, league.sport, league.settings, openTeams, taken)
-    if (!plan) { turn.skipped[castaway.userId] = 'no_legal_roster'; continue }
+    if (!plan) { turn.skipped[castaway.userId] = 'no_legal_roster'; return }
 
     let claimed = 0
     for (const pick of plan.picks) {
@@ -140,6 +158,14 @@ export async function runChimmyExileTurn(leagueId: string, now = new Date()): Pr
       turn.claimed[castaway.userId] = { team: plan.team, expected: plan.expected, players: claimed }
       await postChimmyCastawayLine(leagueId, castaway.userId, { kind: 'exile', team: plan.team })
     }
+  }
+
+  for (const castaway of chimmy) {
+    const pauseKey = `${leagueId}:${castaway.userId}`
+    if ((retryAfter.get(pauseKey) ?? 0) > now.getTime()) { turn.skipped[castaway.userId] = 'cooling_down'; continue }
+    await exileTurnFor(castaway)
+    if (turn.claimed[castaway.userId]) retryAfter.delete(pauseKey)
+    else if (turn.skipped[castaway.userId] && !NO_PAUSE.has(turn.skipped[castaway.userId])) retryAfter.set(pauseKey, now.getTime() + CHIMMY_EXILE_RETRY_MS)
   }
   return turn
 }
