@@ -10,8 +10,20 @@ import {
   isUserMuted,
 } from '@/lib/moderation'
 import { COMMUNITY_CHANNELS, clubhousePostHref, getChannel } from './channels'
+import {
+  IDEA_CHANNEL,
+  IDEA_KIND,
+  ideaDetailsFrom,
+  isIdeaStatus,
+  parseIdeaDetails,
+  type CreateIdeaInput,
+  type IdeaDetails,
+  type IdeaFilter,
+  type IdeaSort,
+  type IdeaStatus,
+} from './ideas'
 import { newAccountLimitMessage } from './validation'
-import { notifyCommunityMentions, notifyPostAuthorOfReply } from './notify'
+import { notifyCommunityMentions, notifyIdeaAuthorOfStatus, notifyPostAuthorOfReply } from './notify'
 
 /**
  * Clubhouse reads and writes. Every page and route goes through here, so the rules that
@@ -33,7 +45,8 @@ export class CommunityError extends Error {
 
 export type CommunityViewer = { userId: string | null; isModerator: boolean }
 
-export type AuthorBadge = 'staff' | 'commish' | 'new'
+/** `shipped`: at least one of their League Lab ideas has shipped — the public credit. */
+export type AuthorBadge = 'staff' | 'commish' | 'shipped' | 'new'
 
 export type CommunityAuthor = {
   id: string
@@ -44,6 +57,13 @@ export type CommunityAuthor = {
 }
 
 export type ReactionSummary = { emoji: string; count: number; mine: boolean }
+
+export type IdeaView = IdeaDetails & {
+  status: IdeaStatus | null
+  statusAt: string | null
+  upvotes: number
+  votedByMe: boolean
+}
 
 export type PostSummary = {
   id: string
@@ -58,6 +78,8 @@ export type PostSummary = {
   lastActivityAt: string
   author: CommunityAuthor
   reactions: ReactionSummary[]
+  /** Set only for a League Lab idea (`kind = 'idea'`). */
+  idea: IdeaView | null
 }
 
 export type ReplyView = {
@@ -156,18 +178,30 @@ async function commissionerIds(userIds: string[]): Promise<Set<string>> {
 
 export function badgesFor(
   author: Pick<AuthorRow, 'id' | 'email' | 'createdAt'>,
-  ctx: { staff: Set<string>; commish: Set<string>; now: number },
+  ctx: { staff: Set<string>; commish: Set<string>; shipped?: Set<string>; now: number },
 ): AuthorBadge[] {
   const badges: AuthorBadge[] = []
   if (author.email && ctx.staff.has(author.email.toLowerCase())) badges.push('staff')
   if (ctx.commish.has(author.id)) badges.push('commish')
+  if (ctx.shipped?.has(author.id)) badges.push('shipped')
   if (ctx.now - author.createdAt.getTime() < NEW_MEMBER_BADGE_MS) badges.push('new')
   return badges
 }
 
+async function shippedIdeaAuthorIds(userIds: string[]): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set()
+  const rows = await prisma.communityPost.findMany({
+    where: { authorUserId: { in: userIds }, kind: IDEA_KIND, ideaStatus: 'shipped', removedAt: null },
+    select: { authorUserId: true },
+    distinct: ['authorUserId'],
+  })
+  return new Set(rows.map((r) => r.authorUserId))
+}
+
 async function authorShaper(rows: AuthorRow[]): Promise<(row: AuthorRow) => CommunityAuthor> {
   const ids = Array.from(new Set(rows.map((r) => r.id)))
-  const ctx = { staff: staffEmailSet(), commish: await commissionerIds(ids), now: Date.now() }
+  const [commish, shipped] = await Promise.all([commissionerIds(ids), shippedIdeaAuthorIds(ids)])
+  const ctx = { staff: staffEmailSet(), commish, shipped, now: Date.now() }
   return (row) => ({
     id: row.id,
     username: row.username,
@@ -222,15 +256,44 @@ const POST_LIST_SELECT = {
   replyCount: true,
   createdAt: true,
   lastActivityAt: true,
+  kind: true,
+  ideaStatus: true,
+  ideaStatusAt: true,
+  ideaDetails: true,
+  upvoteCount: true,
   author: { select: AUTHOR_SELECT },
 } satisfies Prisma.CommunityPostSelect
 
 type PostListRow = Prisma.CommunityPostGetPayload<{ select: typeof POST_LIST_SELECT }>
 
+async function votedIdeaIds(postIds: string[], viewerId: string | null): Promise<Set<string>> {
+  if (!viewerId || postIds.length === 0) return new Set()
+  const rows = await prisma.communityIdeaVote.findMany({
+    where: { userId: viewerId, postId: { in: postIds } },
+    select: { postId: true },
+  })
+  return new Set(rows.map((r) => r.postId))
+}
+
+export function ideaViewOf(
+  row: Pick<PostListRow, 'kind' | 'ideaStatus' | 'ideaStatusAt' | 'ideaDetails' | 'upvoteCount'>,
+  votedByMe: boolean,
+): IdeaView | null {
+  if (row.kind !== IDEA_KIND) return null
+  return {
+    ...parseIdeaDetails(row.ideaDetails),
+    status: isIdeaStatus(row.ideaStatus) ? row.ideaStatus : null,
+    statusAt: row.ideaStatusAt?.toISOString() ?? null,
+    upvotes: row.upvoteCount,
+    votedByMe,
+  }
+}
+
 async function shapePosts(rows: PostListRow[], viewer: CommunityViewer): Promise<PostSummary[]> {
-  const [shape, reactions] = await Promise.all([
+  const [shape, reactions, voted] = await Promise.all([
     authorShaper(rows.map((r) => r.author)),
     reactionSummaries('post', rows.map((r) => r.id), viewer.userId),
+    votedIdeaIds(rows.filter((r) => r.kind === IDEA_KIND).map((r) => r.id), viewer.userId),
   ])
   return rows.map((r) => ({
     id: r.id,
@@ -245,6 +308,7 @@ async function shapePosts(rows: PostListRow[], viewer: CommunityViewer): Promise
     lastActivityAt: r.lastActivityAt.toISOString(),
     author: shape(r.author),
     reactions: reactions.get(r.id) ?? [],
+    idea: ideaViewOf(r, voted.has(r.id)),
   }))
 }
 
@@ -260,6 +324,8 @@ export type PostListPage = { pinned: PostSummary[]; posts: PostSummary[]; nextCu
 export async function listPosts(args: {
   viewer: CommunityViewer
   channel?: string | null
+  /** 'post' leaves League Lab ideas out — they have their own board. */
+  kind?: 'post' | 'idea' | null
   before?: string | null
   limit?: number
 }): Promise<PostListPage> {
@@ -269,6 +335,7 @@ export async function listPosts(args: {
   const base: Prisma.CommunityPostWhereInput = {
     removedAt: null,
     ...(args.channel ? { channel: args.channel } : {}),
+    ...(args.kind ? { kind: args.kind } : {}),
     ...(blocked.size ? { authorUserId: { notIn: Array.from(blocked) } } : {}),
   }
 
@@ -361,10 +428,11 @@ export async function getPost(postId: string, viewer: CommunityViewer): Promise<
   if (blocked.has(row.author.id)) return null
 
   const replies = row.replies.filter((r) => !blocked.has(r.author.id))
-  const [shape, postReactions, replyReactions] = await Promise.all([
+  const [shape, postReactions, replyReactions, voted] = await Promise.all([
     authorShaper([row.author, ...replies.map((r) => r.author)]),
     reactionSummaries('post', [row.id], viewer.userId),
     reactionSummaries('reply', replies.map((r) => r.id), viewer.userId),
+    votedIdeaIds(row.kind === IDEA_KIND ? [row.id] : [], viewer.userId),
   ])
 
   return {
@@ -384,6 +452,7 @@ export async function getPost(postId: string, viewer: CommunityViewer): Promise<
     canEdit: viewer.userId === row.author.id && !row.removedAt,
     author: shape(row.author),
     reactions: postReactions.get(row.id) ?? [],
+    idea: ideaViewOf(row, voted.has(row.id)),
     replies: replies.map((r) => {
       const removed = Boolean(r.removedAt)
       return {
@@ -743,4 +812,150 @@ export async function resolveReport(
     where: { targetType: report.targetType, targetId: report.targetId, status: 'pending' },
     data: { status: 'actioned', resolvedAt: now, resolvedByUserId: modId },
   })
+}
+
+// ─── League Lab ideas ────────────────────────────────────────────────────────
+
+export const IDEAS_PER_PAGE = 20
+
+export type IdeaBoardPage = {
+  ideas: PostSummary[]
+  page: number
+  hasMore: boolean
+  counts: Record<IdeaFilter, number>
+}
+
+export function ideaStatusWhere(filter: IdeaFilter): Prisma.CommunityPostWhereInput {
+  if (filter === 'all') return {}
+  if (filter === 'open') return { ideaStatus: null }
+  return { ideaStatus: filter }
+}
+
+/**
+ * The idea board. `top` is by upvotes (newest first on a tie), `new` by creation. Offset
+ * paging, because a vote count is not a stable cursor.
+ */
+export async function listIdeas(args: {
+  viewer: CommunityViewer
+  sort: IdeaSort
+  filter: IdeaFilter
+  page?: number
+}): Promise<IdeaBoardPage> {
+  const page = Math.max(1, Math.floor(args.page ?? 1))
+  const blocked = await blockedFor(args.viewer)
+  const base: Prisma.CommunityPostWhereInput = {
+    kind: IDEA_KIND,
+    removedAt: null,
+    ...(blocked.size ? { authorUserId: { notIn: Array.from(blocked) } } : {}),
+  }
+  const orderBy: Prisma.CommunityPostOrderByWithRelationInput[] =
+    args.sort === 'new' ? [{ createdAt: 'desc' }] : [{ upvoteCount: 'desc' }, { createdAt: 'desc' }]
+  const [rows, grouped] = await Promise.all([
+    prisma.communityPost.findMany({
+      where: { ...base, ...ideaStatusWhere(args.filter) },
+      orderBy,
+      skip: (page - 1) * IDEAS_PER_PAGE,
+      take: IDEAS_PER_PAGE + 1,
+      select: POST_LIST_SELECT,
+    }),
+    prisma.communityPost.groupBy({ by: ['ideaStatus'], where: base, _count: { _all: true } }),
+  ])
+  const counts: Record<IdeaFilter, number> = { all: 0, open: 0, under_review: 0, building: 0, shipped: 0 }
+  for (const g of grouped) {
+    const n = g._count._all
+    counts.all += n
+    if (g.ideaStatus === null) counts.open += n
+    else if (isIdeaStatus(g.ideaStatus)) counts[g.ideaStatus] += n
+  }
+  const hasMore = rows.length > IDEAS_PER_PAGE
+  return {
+    ideas: await shapePosts(hasMore ? rows.slice(0, IDEAS_PER_PAGE) : rows, args.viewer),
+    page,
+    hasMore,
+    counts,
+  }
+}
+
+/** Counts against the same new-account post limit as any other thread. */
+export async function createIdea(viewer: CommunityViewer, input: CreateIdeaInput): Promise<{ id: string }> {
+  const userId = await requireWriter(viewer)
+  await enforceNewAccountLimit(userId, 'post')
+  const details = ideaDetailsFrom(input)
+  const post = await prisma.communityPost.create({
+    data: {
+      channel: IDEA_CHANNEL,
+      kind: IDEA_KIND,
+      authorUserId: userId,
+      title: input.title,
+      body: input.body,
+      tags: details.sport ? [details.sport] : [],
+      ideaDetails: details as Prisma.InputJsonObject,
+    },
+    select: { id: true },
+  })
+  await notifyCommunityMentions({
+    text: `${input.title}\n${input.hook}\n${input.body}`,
+    actorUserId: userId,
+    actorName: await actorName(userId),
+    postId: post.id,
+    postTitle: input.title,
+    sourceKeyBase: `community:post:${post.id}`,
+  }).catch(() => {})
+  return post
+}
+
+async function loadIdeaForWrite(postId: string) {
+  const post = await prisma.communityPost.findUnique({
+    where: { id: postId },
+    select: { id: true, kind: true, authorUserId: true, title: true, removedAt: true, ideaStatus: true },
+  })
+  if (!post || post.kind !== IDEA_KIND || post.removedAt) throw new CommunityError(404, 'Idea not found')
+  return post
+}
+
+/**
+ * Toggles the viewer's upvote. The count moves in the same transaction as the vote row,
+ * and only by the number of rows actually created or deleted — so a double-tap racing
+ * itself cannot count twice.
+ */
+export async function toggleIdeaVote(
+  viewer: CommunityViewer,
+  postId: string,
+): Promise<{ upvotes: number; votedByMe: boolean }> {
+  const userId = await requireWriter(viewer)
+  const idea = await loadIdeaForWrite(postId)
+  if (idea.authorUserId === userId) throw new CommunityError(400, "You can't upvote your own idea.")
+  const blocked = await blockedFor(viewer)
+  if (blocked.has(idea.authorUserId)) throw new CommunityError(404, 'Idea not found')
+
+  const votedByMe = await prisma.$transaction(async (tx) => {
+    const removed = await tx.communityIdeaVote.deleteMany({ where: { postId, userId } })
+    if (removed.count > 0) {
+      await tx.communityPost.update({ where: { id: postId }, data: { upvoteCount: { decrement: removed.count } } })
+      return false
+    }
+    const created = await tx.communityIdeaVote.createMany({ data: [{ postId, userId }], skipDuplicates: true })
+    if (created.count > 0) {
+      await tx.communityPost.update({ where: { id: postId }, data: { upvoteCount: { increment: created.count } } })
+    }
+    return true
+  })
+  const row = await prisma.communityPost.findUnique({ where: { id: postId }, select: { upvoteCount: true } })
+  return { upvotes: Math.max(0, row?.upvoteCount ?? 0), votedByMe }
+}
+
+/** Staff only. Tells the author whenever the status actually changes to something. */
+export async function setIdeaStatus(
+  viewer: CommunityViewer,
+  postId: string,
+  status: IdeaStatus | null,
+): Promise<void> {
+  requireModerator(viewer)
+  const idea = await loadIdeaForWrite(postId)
+  if (idea.ideaStatus === status) return
+  await prisma.communityPost.update({
+    where: { id: postId },
+    data: { ideaStatus: status, ideaStatusAt: status ? new Date() : null },
+  })
+  if (status) await notifyIdeaAuthorOfStatus({ post: idea, status }).catch(() => {})
 }
