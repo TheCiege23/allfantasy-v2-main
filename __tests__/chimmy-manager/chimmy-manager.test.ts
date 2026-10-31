@@ -132,3 +132,19 @@ describe('the draft room hands its AI teams to Chimmy for the season', () => {
     expect(seasonStyleForDraftStyle('STARS_AND_SCRUBS')).toBe('dynasty_owner')
   })
 })
+
+import { draftAiSaveMessage } from '@/lib/commissioner-ai-draft-manager/chimmySeason'
+
+describe('the draft room says what happened to the season', () => {
+  it('confirms Chimmy runs the teams, or names why one could not be handed over', () => {
+    expect(draftAiSaveMessage([{ rosterId: 'a', ok: true }])).toBe('Saved. Chimmy drafts these teams and runs them all season.')
+    expect(draftAiSaveMessage([])).toBe('Saved.')
+    expect(draftAiSaveMessage(undefined)).toBe('Saved.')
+    expect(draftAiSaveMessage([
+      { rosterId: 'a', ok: true },
+      { rosterId: 'b', ok: false, error: 'Chimmy can run up to 4 teams in a league. Take Chimmy off a team first.' },
+    ])).toBe('Saved. Chimmy will run 1 of them all season. 1 team could not be handed to Chimmy for the season: Chimmy can run up to 4 teams in a league. Take Chimmy off a team first.')
+    expect(draftAiSaveMessage([{ rosterId: 'a', ok: false, error: 'Chimmy autopilot is part of the AF Commissioner plan.' }]))
+      .toBe('Saved. Chimmy will draft these teams. 1 team could not be handed to Chimmy for the season: Chimmy autopilot is part of the AF Commissioner plan.')
+  })
+})

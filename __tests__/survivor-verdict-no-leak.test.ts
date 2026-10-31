@@ -70,6 +70,15 @@ describe('league chat follows the scroll', () => {
     expect(everythingPublished()).not.toMatch(/tied|revote/i)
   })
 
+  it('a revote notifies the managers who can vote, never a castaway Chimmy runs (it has no account)', async () => {
+    Object.assign(council, { isTie: true, tiePhase: 'revote_required', tiePlayerIds: ['u-out', 'u-other'], eliminatedName: null, eliminatedUserId: null })
+    m.db.league.findUnique.mockResolvedValue({ survivorRevealMode: 'simultaneous' })
+    m.db.survivorTribalCouncil.aggregate.mockResolvedValue({ _max: { councilNumber: 1 } })
+    m.db.survivorPlayer.findMany.mockResolvedValue([{ userId: 'u-voter' }, { userId: 'orphan-r7' }, { userId: 'u-out' }])
+    await revealCouncil('l1', 'c1', 'host')
+    expect(m.db.platformNotification.create.mock.calls.map(([args]) => args.data.userId)).toEqual(['u-voter'])
+  })
+
   it('a tied council in a double-elimination week opens its revote with the week\'s next free number', async () => {
     // Council 1 of the week tied; council 2 already holds number 2. councilNumber + 1 would collide.
     Object.assign(council, { isTie: true, tiePhase: 'revote_required', tiePlayerIds: ['u-out', 'u-other'], eliminatedName: null, eliminatedUserId: null })
