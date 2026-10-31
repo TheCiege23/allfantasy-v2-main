@@ -13,6 +13,8 @@
 #   ./probe.sh roster <SPORT> <espn_team_id>
 #   ./probe.sh fantasy-league MLB <league_id> <season>
 #   ./probe.sh summary NFL <espn_event_id>
+#   ./probe.sh summary NCAAB <espn_event_id>
+#   ./probe.sh scoreboard NCAAB <YYYYMMDD>
 #
 # Examples:
 #   ./probe.sh teams  NCAAB
@@ -70,6 +72,14 @@ case "$ENDPOINT" in
     PATH_SEG="/${SPORT_PATH}/summary"
     QS="event=${TEAM_ID}"
     NAME="summary.${SPORT}.event${TEAM_ID}"
+    ;;
+  scoreboard)
+    if [[ "$SPORT" != "NCAAB" ]] || ! [[ "$TEAM_ID" =~ ^[0-9]{8}$ ]]; then
+      echo "usage: probe.sh scoreboard NCAAB <YYYYMMDD>" >&2; exit 2
+    fi
+    PATH_SEG="/${SPORT_PATH}/scoreboard"
+    QS="dates=${TEAM_ID}&groups=50&limit=1000"
+    NAME="scoreboard.${SPORT}.${TEAM_ID}"
     ;;
   teams)
     # `limit` is required in practice: the default page is short. The value is recorded
