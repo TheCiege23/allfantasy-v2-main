@@ -1,6 +1,7 @@
 'use client'
 
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
 
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
@@ -2581,6 +2582,8 @@ function LeagueTabRouter({
             isCommissioner={isCommissioner}
             teamCount={selectedLeague.teamCount ?? null}
             importedLeagueCount={importedLeagueCount}
+            redraftSport={resolveRedraftIdentity(selectedLeague)?.sport ?? null}
+            matchup={leagueRail?.matchups?.[leagueId] ?? null}
           />
         </div>
       )
