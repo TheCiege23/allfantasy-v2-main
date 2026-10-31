@@ -204,10 +204,11 @@ export async function importFantraxLeague(args: {
   const season = Number(info.data.seasonYear) || new Date().getFullYear()
   const scoring = fantraxScoringRules(info.data)
 
+  const snapshotOwnerKey = `fantrax-team:${args.leagueId}:${mine.teamId}`
   const fantraxUser = await prisma.fantraxUser.upsert({
-    where: { fantraxUsername: mine.teamName },
-    create: { fantraxUsername: mine.teamName, displayName: mine.teamName },
-    update: {},
+    where: { fantraxUsername: snapshotOwnerKey },
+    create: { fantraxUsername: snapshotOwnerKey, displayName: mine.teamName },
+    update: { displayName: mine.teamName },
     select: { id: true },
   })
 
@@ -224,12 +225,8 @@ export async function importFantraxLeague(args: {
   /*
    * ⚠ THIS REFUSED PEOPLE THEIR OWN LEAGUES, AND THE IDENTITY IS WHY.
    *
-   * `fantraxUser` above is keyed on `mine.teamName` — a TEAM NAME, not a person.
-   * Two unrelated managers in two unrelated leagues can both be "Ciege82", and one
-   * CSV snapshot uploaded under any account then owns that string forever. Measured
-   * on production 2026-08-27: the single `FantraxLeague` row was the importer's OWN
-   * earlier upload, carrying a different `appUserId`, and it blocked them from
-   * importing their own league — with no surface anywhere to release it.
+   * The snapshot owner key combines the real league and team IDs. It stays
+   * distinct when two teams share a name or one AllFantasy user owns both.
    *
    * A Fantrax Secret ID IS a real identity, and `getFantraxLeagues` reports which
    * teams it owns. When the caller has proven ownership of this team, that beats
@@ -256,11 +253,8 @@ export async function importFantraxLeague(args: {
     /*
      * The id this import was handed, kept so the snapshot can be refreshed.
      *
-     * It was previously used and discarded: `FantraxLeague.id` is a local uuid,
-     * `League.platformLeagueId` is set to THAT uuid, and no column held Fantrax's
-     * own id — so every snapshot was write-once and the scheduled refresh had
-     * nothing to re-fetch with. Both the fixtures and the results live behind
-     * this id.
+     * `FantraxLeague.id` is a private snapshot UUID; this is Fantrax's league ID.
+     * New live League rows use this stable ID so all owners join one league.
      */
     sourceLeagueId: args.leagueId,
     sport: best.sport,
@@ -280,7 +274,7 @@ export async function importFantraxLeague(args: {
      * how the old snapshots keep working.
      */
     roster: resolved.flatMap((r) =>
-      r.players.map((pl) => ({ ...pl, teamName: r.teamName })),
+      r.players.map((pl) => ({ ...pl, teamName: r.teamName, teamId: r.teamId })),
     ) as unknown as object,
     standings: summarise(resolved, standings.ok ? standings.data : null) as unknown as object,
     /*
@@ -349,11 +343,9 @@ export async function importFantraxLeague(args: {
  * fixing.
  */
 function summarise(resolved: ResolvedRoster[], standings: FantraxStandingRow[] | null) {
-  const byName = new Map(
-    (standings ?? []).map((row) => [row.teamName.trim().toLowerCase(), row]),
-  )
+  const byId = new Map((standings ?? []).map((row) => [row.teamId, row]))
   return resolved.map((r) => {
-    const row = byName.get(r.teamName.trim().toLowerCase()) ?? null
+    const row = byId.get(r.teamId) ?? null
     return {
       team: r.teamName,
       rosterCount: r.total,
@@ -366,7 +358,7 @@ function summarise(resolved: ResolvedRoster[], standings: FantraxStandingRow[] |
       /* Fantrax reports no points-against, and a zero would read as a real one. */
       pointsAgainst: null,
       /* The durable id, so a team rename does not create a new team. */
-      fantraxTeamId: row?.teamId ?? null,
+      fantraxTeamId: r.teamId,
     }
   })
 }

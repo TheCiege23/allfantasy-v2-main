@@ -2358,11 +2358,9 @@ model FantraxLeague {
   transactions   Json?
   /// The Fantrax league id this snapshot was imported from, e.g. `v2kzedypmm8jp61b`.
   ///
-  /// ⚠ WITHOUT THIS A SNAPSHOT CANNOT BE REFRESHED. `League.platformLeagueId` for a
-  /// Fantrax league is THIS ROW'S uuid, not Fantrax's id, and the id the import was
-  /// given was never persisted anywhere — so every scheduled refresh had nothing to
-  /// re-fetch with, which is what "Fantrax > Sync - never read" means on the league
-  /// home. Fixtures and results both live behind that id.
+  /// Live `League.platformLeagueId` now uses this real Fantrax ID so several
+  /// owners share one league. Older imports may still use this snapshot's UUID;
+  /// the historical reader resolves either form back to an authorized snapshot.
   ///
   /// Nullable because CSV-era rows were uploaded without one and can never acquire
   /// one; a null here means "snapshot only, not refreshable", which is a real state
@@ -8090,7 +8088,7 @@ model LeagueManagerClaim {
   isConfirmed    Boolean  @default(false)
   league         League   @relation(fields: [leagueId], references: [id])
 
-  @@unique([leagueId, afUserId])
+  @@index([leagueId, afUserId])
   @@unique([leagueId, teamExternalId])
 }
 

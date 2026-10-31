@@ -6,7 +6,7 @@ import type {
   FantraxImportTeam,
   FantraxImportTransaction,
 } from '@/lib/league-import/adapters/fantrax/types'
-import { assignFantraxTeamIds } from './fantraxTeamIds'
+import { assignFantraxSourceTeamIds, assignFantraxTeamIds } from './fantraxTeamIds'
 import { ownedFantraxTeamName, parseFantraxTeamSourceId } from './fantraxTeamSelection'
 
 type LegacyStanding = {
@@ -40,6 +40,7 @@ type LegacyMatchup = {
 
 type LegacyRosterPlayer = {
   fantraxId?: unknown
+  teamId?: unknown
   name?: unknown
   primaryPosition?: unknown
   position?: unknown
@@ -393,7 +394,7 @@ function buildRosterPositionCounts(): Array<{ position: string; count: number }>
 function medianRosterSize(players: LegacyRosterPlayer[]): number | null {
   const byTeam = new Map<string, number>()
   for (const player of players) {
-    const team = asString(player.teamName).trim().toLowerCase()
+    const team = asString(player.teamId) || asString(player.teamName).trim().toLowerCase()
     if (!team) continue
     byTeam.set(team, (byTeam.get(team) ?? 0) + 1)
   }
@@ -446,8 +447,7 @@ function resolveTeamId(teamLabel: string, teamMap: Map<string, string>): string 
  *
  * The Secret ID is the only thing Fantrax offers that identifies a PERSON —
  * `getLeagues` is the one endpoint keyed on it, and it names the teams the holder
- * owns. Everything else in this integration is keyed on a league id (public) or a
- * team name (a display string, not an identity).
+ * owns. Live roster and claim identity uses Fantrax's team ID.
  *
  * ⚠ FAILS CLOSED, DELIBERATELY. No stored credential, an API failure, a thrown
  * import — every one returns false, which leaves the ownership guard in
@@ -588,42 +588,78 @@ export async function fetchFantraxLeagueForImport(
   const transactionRows = parseTransactions(leagueRecord.transactions)
   const userTeam = leagueRecord.userTeam?.trim() || username
   const sport = resolveFantraxSport(leagueRecord.sport ?? '', Boolean(leagueRecord.isDevy))
-  const teamMap = buildTeamIdMap({
-    standings,
-    matchups,
-    userTeam,
-  })
+  const selectedPrefix = leagueRecord.sourceLeagueId
+    ? `fantrax-team:${leagueRecord.sourceLeagueId}:`
+    : ''
+  const selectedSourceId = selectedPrefix && username.startsWith(selectedPrefix)
+    ? username.slice(selectedPrefix.length)
+    : ''
+  const sourceTeamIds = assignFantraxSourceTeamIds(standings.map((row) => asString(row.fantraxTeamId)))
+  const liveTeams = standings
+    .map((standing) => {
+      const sourceId = asString(standing.fantraxTeamId)
+      const teamId = sourceTeamIds.get(sourceId)
+      return sourceId && teamId
+        ? { sourceId, teamId: String(teamId), teamName: asString(standing.team), standing }
+        : null
+    })
+    .filter((team): team is NonNullable<typeof team> => team !== null)
+  const isLiveSnapshot = liveTeams.length === standings.length && liveTeams.length > 0
+  const teamMap = isLiveSnapshot
+    ? new Map<string, string>()
+    : buildTeamIdMap({ standings, matchups, userTeam })
+  if (isLiveSnapshot) {
+    const nameCounts = new Map<string, number>()
+    for (const team of liveTeams) {
+      const name = normalizeTeamLabel(team.teamName)
+      nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1)
+    }
+    for (const team of liveTeams) {
+      const name = normalizeTeamLabel(team.teamName)
+      if (nameCounts.get(name) === 1) teamMap.set(name, team.teamId)
+    }
+  }
   const rosterPlayerMap = buildRosterPlayerMap(rosterPlayers)
   /*
    * ⚠ ROSTERS ARE PER TEAM NOW. Everything used to be attributed to the
    * uploader's team because a CSV export contained nothing else; the live API
-   * returns all of them, so they are grouped by the `teamName` each row carries.
+   * returns all of them, so live rows are grouped by durable Fantrax team ID.
    * An untagged row is a CSV-era roster and still falls to the uploader.
    */
   const rosterByTeam = new Map<string, LegacyRosterPlayer[]>()
   for (const player of rosterPlayers) {
     const label = normalizeTeamLabel(asString(player.teamName)) || normalizeTeamLabel(userTeam)
-    if (!label) continue
-    const bucket = rosterByTeam.get(label)
+    const key = isLiveSnapshot && asString(player.teamId)
+      ? `id:${asString(player.teamId)}`
+      : `name:${label}`
+    if (!label && !asString(player.teamId)) continue
+    const bucket = rosterByTeam.get(key)
     if (bucket) bucket.push(player)
-    else rosterByTeam.set(label, [player])
+    else rosterByTeam.set(key, [player])
   }
-  const userTeamId = resolveTeamId(userTeam, teamMap)
-  const standingsByNormalizedTeam = new Map<string, LegacyStanding>()
-  for (const standing of standings) {
-    const label = asString(standing.team)
-    const normalized = normalizeTeamLabel(label)
-    if (normalized) standingsByNormalizedTeam.set(normalized, standing)
-  }
+  const userTeamId = selectedSourceId && sourceTeamIds.has(selectedSourceId)
+    ? String(sourceTeamIds.get(selectedSourceId))
+    : resolveTeamId(userTeam, teamMap)
+  const teamRows = isLiveSnapshot
+    ? liveTeams
+    : [...teamMap.entries()].map(([name, teamId]) => ({
+        sourceId: '', teamId, teamName: name,
+        standing: standings.find((row) => normalizeTeamLabel(asString(row.team)) === name),
+      }))
 
-  const teams: FantraxImportTeam[] = Array.from(teamMap.entries()).map(([normalizedLabel, teamId], index) => {
-    const standing = standingsByNormalizedTeam.get(normalizedLabel)
-    const teamName = asString(standing?.team) || normalizedLabel
-    const isUserTeam = normalizeTeamLabel(userTeam) === normalizedLabel
-    const ownPlayers = rosterByTeam.get(normalizedLabel) ?? []
+  const teams: FantraxImportTeam[] = teamRows.map(({ sourceId, teamId, teamName: sourceName, standing }) => {
+    const teamName = asString(standing?.team) || sourceName
+    const isUserTeam = selectedSourceId
+      ? sourceId === selectedSourceId
+      : normalizeTeamLabel(userTeam) === normalizeTeamLabel(teamName)
+    const ownPlayers = rosterByTeam.get(sourceId ? `id:${sourceId}` : `name:${normalizeTeamLabel(teamName)}`)
+      ?? (teamMap.has(normalizeTeamLabel(teamName))
+        ? rosterByTeam.get(`name:${normalizeTeamLabel(teamName)}`)
+        : undefined)
+      ?? []
     const teamPlayerMap = ownPlayers.length
       ? buildRosterPlayerMap(ownPlayers)
-      : isUserTeam
+      : isUserTeam && !isLiveSnapshot
         ? rosterPlayerMap
         : {}
     const rosterPlayerIds = Object.keys(teamPlayerMap)
@@ -631,12 +667,12 @@ export async function fetchFantraxLeagueForImport(
      * The same source `teamPlayerMap` was built from, so the lineup split and
      * the player map can never describe different squads.
      */
-    const lineupSource = ownPlayers.length > 0 ? ownPlayers : isUserTeam ? rosterPlayers : []
+    const lineupSource = ownPlayers.length > 0 ? ownPlayers : isUserTeam && !isLiveSnapshot ? rosterPlayers : []
     const lineup = splitLineup(lineupSource)
     return {
       teamId,
-      managerId: isUserTeam ? `fantrax-user:${username}` : `fantrax-manager:${slugify(teamName) || teamId}`,
-      managerName: isUserTeam ? username : teamName,
+      managerId: `fantrax-team:${teamId}`,
+      managerName: teamName,
       teamName,
       logoUrl: null,
       wins: asNumber(standing?.wins, 0) ?? 0,
@@ -682,8 +718,12 @@ export async function fetchFantraxLeagueForImport(
     if (week == null || week < 1) continue
     const awayTeamName = asString(matchup.awayTeam)
     const homeTeamName = asString(matchup.homeTeam)
-    const teamId1 = resolveTeamId(awayTeamName, teamMap)
-    const teamId2 = resolveTeamId(homeTeamName, teamMap)
+    const teamId1 = sourceTeamIds.has(asString(matchup.awayTeamId))
+      ? String(sourceTeamIds.get(asString(matchup.awayTeamId)))
+      : resolveTeamId(awayTeamName, teamMap)
+    const teamId2 = sourceTeamIds.has(asString(matchup.homeTeamId))
+      ? String(sourceTeamIds.get(asString(matchup.homeTeamId)))
+      : resolveTeamId(homeTeamName, teamMap)
     if (!teamId1 || !teamId2) continue
     if (!scheduleByWeek.has(week)) scheduleByWeek.set(week, [])
     scheduleByWeek.get(week)!.push({
@@ -798,8 +838,9 @@ export async function fetchFantraxLeagueForImport(
 
   const previousSeasonRecords = await prisma.fantraxLeague.findMany({
     where: {
-      userId: leagueRecord.userId,
+      appUserId: userId,
       leagueName: leagueRecord.leagueName,
+      userTeam: leagueRecord.userTeam,
       season: { lt: season },
     },
     select: {
@@ -814,6 +855,7 @@ export async function fetchFantraxLeagueForImport(
     sourceInput,
     league: {
       leagueId: leagueRecord.id,
+      sourceLeagueId: leagueRecord.sourceLeagueId,
       name: leagueRecord.leagueName,
       sport,
       season,
@@ -823,6 +865,7 @@ export async function fetchFantraxLeagueForImport(
       url: null,
       isDevy: Boolean(leagueRecord.isDevy),
     },
+    viewerTeamId: userTeamId,
     settings: {
       scoringType: leagueRecord.isDevy ? 'devy' : null,
       rosterPositions: buildRosterPositionCounts(),

@@ -47,6 +47,7 @@ vi.mock('@/lib/league-import/fantrax/fantraxApi', () => ({
 }))
 
 import { runFantraxMatchupParity } from '@/lib/import-os/collector/fantraxMatchupParity'
+import { assignFantraxSourceTeamIds } from '@/lib/league-import/fantrax/fantraxTeamIds'
 
 const NOW = new Date('2026-10-01T12:00:00Z')
 
@@ -93,6 +94,38 @@ beforeEach(() => {
 })
 
 describe('writing a scored Fantrax week', () => {
+  it('writes one shared league with two same-named teams by their Fantrax IDs', async () => {
+    const ids = assignFantraxSourceTeamIds(['source-a', 'source-b'])
+    fantraxLeagueFindMany.mockResolvedValue([
+      { id: 'snapshot-a', sourceLeagueId: 'real-source', season: 2026, leagueName: 'Large League' },
+      { id: 'snapshot-b', sourceLeagueId: 'real-source', season: 2026, leagueName: 'Large League' },
+    ])
+    leagueFindMany.mockResolvedValue([{ platformLeagueId: 'real-source', season: 2026 }])
+    leagueTeamFindMany.mockResolvedValue([
+      { externalId: String(ids.get('source-a')), teamName: 'Same Name', ownerName: null },
+      { externalId: String(ids.get('source-b')), teamName: 'Same Name', ownerName: null },
+    ])
+    getFantraxLeagueInfo.mockResolvedValue({ ok: true, data: {
+      teamInfo: { a: { id: 'source-a', name: 'Same Name' }, b: { id: 'source-b', name: 'Same Name' } },
+    } })
+    fetchFantraxScheduleWithScores.mockResolvedValue({
+      rows: [fixture({ awayTeam: 'Same Name', homeTeam: 'Same Name', awayTeamId: 'source-a', homeTeamId: 'source-b' })],
+      position: { period: 1, state: 'in_progress', scoredThrough: 1 },
+      periodsRead: 1,
+      periodsFailed: 0,
+    })
+
+    const out = await runFantraxMatchupParity({ now: NOW })
+
+    expect(out.enumerated).toBe(1)
+    expect(out.synced).toBe(1)
+    const rows = (weeklyCreateMany.mock.calls[0][0] as { data: Array<Record<string, unknown>> }).data
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ leagueId: 'real-source', rosterId: String(ids.get('source-a')) }),
+      expect.objectContaining({ leagueId: 'real-source', rosterId: String(ids.get('source-b')) }),
+    ]))
+  })
+
   it('writes both sides of the pairing under the roster ids LeagueTeam holds', async () => {
     const out = await runFantraxMatchupParity({ now: NOW })
 

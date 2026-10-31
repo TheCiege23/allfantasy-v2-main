@@ -16,14 +16,9 @@
  * IS shared is the part that must never diverge — `applySchedule`, which defines
  * what a WeeklyMatchup row means.
  *
- * ⚠ THE ROSTER ID IS READ FROM `LeagueTeam`, NOT RECOMPUTED. It would be easy to
- * re-derive it from the live API with `assignFantraxTeamIds`, and that is the
- * subtle way to get this wrong: the import computes ids over the SNAPSHOT's team
- * set, and a live read could see a slightly different set and land one team on a
- * different number. Every reader joins `WeeklyMatchup.rosterId` to
- * `Number(LeagueTeam.externalId)`, so `LeagueTeam` is the authority and this
- * maps onto it by name. A team that cannot be mapped is DROPPED, never numbered
- * by guess — a wrong roster id files somebody else's week under your team.
+ * WeeklyMatchup must use a numeric ID that exists in LeagueTeam. Live Fantrax
+ * team IDs distinguish teams with matching names; the stored LeagueTeam rows
+ * remain the authority for whether a derived ID is valid.
  */
 import { prisma } from '@/lib/prisma'
 import { applySchedule, type ScheduleWeekInput } from './externalMatchupParity'
@@ -31,7 +26,7 @@ import {
   fetchFantraxScheduleWithScores,
   getFantraxLeagueInfo,
 } from '@/lib/league-import/fantrax/fantraxApi'
-import { normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
+import { assignFantraxSourceTeamIds, normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
 
 const CACHE_KEY_PREFIX = 'fantrax_matchup_sync'
 /** Fantrax costs one request per played period, so refresh less often than Sleeper. */
@@ -39,7 +34,7 @@ const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000
 const FAILURE_RETRY_MS = 30 * 60 * 1000
 
 export interface FantraxMatchupConnection {
-  /** `League.platformLeagueId` — for Fantrax this is the `FantraxLeague` row's uuid. */
+  /** `League.platformLeagueId`: real Fantrax ID for new imports, snapshot UUID for older ones. */
   platformLeagueId: string
   /** Fantrax's own league id, the only thing the API can be called with. */
   sourceLeagueId: string
@@ -86,7 +81,10 @@ export async function enumerateFantraxMatchupConnections(): Promise<FantraxMatch
    * has nothing to write against.
    */
   const leagues = await prisma.league.findMany({
-    where: { platform: 'fantrax', platformLeagueId: { in: snapshots.map((s) => s.id) } },
+    where: {
+      platform: 'fantrax',
+      platformLeagueId: { in: snapshots.flatMap((snap) => [snap.id, String(snap.sourceLeagueId)]) },
+    },
     select: { platformLeagueId: true, season: true },
   })
   const seasonByPlatformId = new Map(leagues.map((l) => [l.platformLeagueId, l.season]))
@@ -94,13 +92,17 @@ export async function enumerateFantraxMatchupConnections(): Promise<FantraxMatch
   const out: FantraxMatchupConnection[] = []
   const seen = new Set<string>()
   for (const snap of snapshots) {
-    if (!seasonByPlatformId.has(snap.id)) continue
-    if (seen.has(snap.id)) continue
-    seen.add(snap.id)
+    const sourceId = String(snap.sourceLeagueId)
+    const platformId = seasonByPlatformId.has(sourceId) ? sourceId : snap.id
+    const season = seasonByPlatformId.get(platformId)
+    if (season == null) continue
+    const key = `${platformId}:${season}`
+    if (seen.has(key)) continue
+    seen.add(key)
     out.push({
-      platformLeagueId: snap.id,
-      sourceLeagueId: String(snap.sourceLeagueId),
-      season: seasonByPlatformId.get(snap.id) ?? snap.season,
+      platformLeagueId: platformId,
+      sourceLeagueId: sourceId,
+      season,
       leagueName: snap.leagueName,
     })
   }
@@ -115,25 +117,30 @@ export async function enumerateFantraxMatchupConnections(): Promise<FantraxMatch
  * rows in that state would produce a scoreboard whose every team is unnameable,
  * so the league is skipped with a note that says exactly that.
  */
-async function readRosterIdsByTeamName(
+async function readRosterIds(
   leaguePlatformId: string,
-): Promise<Map<string, string> | null> {
+): Promise<{ byName: Map<string, string>; validIds: Set<string> } | null> {
   const teams = await prisma.leagueTeam.findMany({
     where: { league: { platformLeagueId: leaguePlatformId } },
     select: { externalId: true, teamName: true, ownerName: true },
   })
   const map = new Map<string, string>()
+  const validIds = new Set<string>()
+  const duplicateNames = new Set<string>()
   for (const t of teams) {
     // WeeklyMatchup.rosterId is String now, but the validation stays: still reject
     // anything that is not the plain-integer fantraxTeamHash form this map has
     // always held, rather than writing a row keyed on garbage.
     const roster = Number(String(t.externalId ?? '').trim())
     if (!Number.isInteger(roster) || roster < 0) continue
+    validIds.add(String(roster))
     const label = normalizeFantraxTeamName(t.teamName?.trim() || t.ownerName?.trim() || '')
     if (!label) continue
-    map.set(label, String(roster))
+    if (map.has(label)) duplicateNames.add(label)
+    else map.set(label, String(roster))
   }
-  return map.size > 0 ? map : null
+  for (const name of duplicateNames) map.delete(name)
+  return validIds.size > 0 ? { byName: map, validIds } : null
 }
 
 function cacheKeyFor(connection: FantraxMatchupConnection): string {
@@ -203,7 +210,7 @@ export async function runFantraxMatchupParity(input?: {
     try {
       budget--
 
-      const rosterIds = await readRosterIdsByTeamName(connection.platformLeagueId)
+      const rosterIds = await readRosterIds(connection.platformLeagueId)
       if (!rosterIds) {
         const note =
           'no numeric LeagueTeam ids for this league — run scripts/backfill-fantrax-team-ids.ts'
@@ -220,6 +227,19 @@ export async function runFantraxMatchupParity(input?: {
         summary.results.push({ runKey, status: 'skipped', note })
         await recordSyncState(cacheKey, FAILURE_RETRY_MS, { status: 'skipped', note })
         continue
+      }
+
+      const sourceIds = assignFantraxSourceTeamIds(
+        Object.values(info.data.teamInfo ?? {}).map((team) => team.id),
+      )
+      const rosterIdFor = (sourceId: string, teamName: string): string | undefined => {
+        if (sourceIds.size > 0 && sourceId) {
+          const externalId = sourceIds.get(sourceId)
+          return externalId && rosterIds.validIds.has(String(externalId))
+            ? String(externalId)
+            : undefined
+        }
+        return rosterIds.byName.get(normalizeFantraxTeamName(teamName))
       }
 
       const fetched = await fetchFantraxScheduleWithScores(connection.sourceLeagueId, info.data, {
@@ -241,8 +261,8 @@ export async function runFantraxMatchupParity(input?: {
       const byWeek = new Map<number, ScheduleWeekInput>()
       for (const row of fetched.rows) {
         if (!row.played || row.awayScore == null || row.homeScore == null) continue
-        const away = rosterIds.get(normalizeFantraxTeamName(row.awayTeam))
-        const home = rosterIds.get(normalizeFantraxTeamName(row.homeTeam))
+        const away = rosterIdFor(row.awayTeamId, row.awayTeam)
+        const home = rosterIdFor(row.homeTeamId, row.homeTeam)
         if (away == null || home == null) continue
         let week = byWeek.get(row.week)
         if (!week) {

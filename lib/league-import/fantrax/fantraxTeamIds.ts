@@ -92,6 +92,20 @@ export function assignFantraxTeamIds(teams: FantraxTeamKey[]): Map<string, numbe
   return out
 }
 
+/** Live snapshots key teams by Fantrax ID, so duplicate display names stay separate. */
+export function assignFantraxSourceTeamIds(sourceIds: string[]): Map<string, number> {
+  const ids = [...new Set(sourceIds.map((id) => id.trim()).filter(Boolean))].sort()
+  const taken = new Set<number>()
+  const out = new Map<string, number>()
+  for (const sourceId of ids) {
+    let id = fantraxTeamHash(sourceId)
+    while (taken.has(id)) id = (id % MODULUS) + 1
+    taken.add(id)
+    out.set(sourceId, id)
+  }
+  return out
+}
+
 /**
  * The lookup key a team is stored under. Must match `buildTeamIdMap`'s
  * `normalizeTeamLabel` exactly — the two sit either side of the snapshot and a

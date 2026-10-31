@@ -34,6 +34,7 @@ const h = vi.hoisted(() => ({
       findMany: vi.fn().mockResolvedValue([]),
     },
     league: { findFirst: vi.fn() },
+    fantraxLeague: { findMany: vi.fn().mockResolvedValue([]) },
     leagueTeam: { findFirst: vi.fn(), update: vi.fn(async () => ({})) },
     leagueManagerClaim: { create: vi.fn(async () => ({})) },
     $transaction: vi.fn(async (ops: unknown) =>
@@ -135,6 +136,93 @@ describe('claimExistingLeagueForMember — the happy path', () => {
     await claimExistingLeagueForMember(ARGS)
 
     expect(h.prisma.$transaction).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Fantrax multi-team claims', () => {
+  const fantraxArgs = {
+    userId: 'af-user-bob',
+    provider: 'fantrax' as const,
+    platformLeagueId: 'real-fantrax-league',
+    seasonYear: 2026,
+    sourceManagerId: 'fantrax-team:2201',
+    sourceTeamId: '2201',
+  }
+
+  it('claims a second team in the same AllFantasy league for the same account', async () => {
+    h.prisma.league.findFirst.mockResolvedValue(OTHER_LEAGUE)
+    h.prisma.leagueTeam.findFirst.mockResolvedValue({ id: 'team-2', externalId: '2201', platformUserId: 'fantrax-team:2201' })
+
+    const result = await claimExistingLeagueForMember(fantraxArgs)
+
+    expect(result?.league.id).toBe('league-abc')
+    expect(result?.joinedExisting).toBe(true)
+    expect(h.prisma.league.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ userId: 'af-user-bob', platform: 'fantrax' }),
+    }))
+    expect(h.prisma.leagueTeam.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { leagueId: 'league-abc', externalId: '2201', claimedByUserId: null },
+    }))
+    expect(h.prisma.leagueManagerClaim.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ afUserId: 'af-user-bob', teamExternalId: '2201' }),
+    }))
+  })
+
+  it('finds an older shared league whose platform ID is a private snapshot UUID', async () => {
+    h.prisma.fantraxLeague.findMany.mockResolvedValueOnce([{ id: 'old-snapshot-uuid' }])
+    h.prisma.league.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(OTHER_LEAGUE)
+    h.prisma.leagueTeam.findFirst.mockResolvedValue({ id: 'team-2', externalId: '2201' })
+
+    const result = await claimExistingLeagueForMember(fantraxArgs)
+
+    expect(result?.joinedExisting).toBe(true)
+    expect(h.prisma.league.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ platformLeagueId: { in: ['real-fantrax-league', 'old-snapshot-uuid'] } }),
+    }))
+  })
+
+  it('does not create a duplicate league when another account already holds the selected team', async () => {
+    h.prisma.league.findFirst.mockResolvedValue(OTHER_LEAGUE)
+    h.prisma.leagueTeam.findFirst.mockResolvedValue(null)
+
+    await expect(claimExistingLeagueForMember(fantraxArgs)).rejects.toThrow(/cannot be claimed/i)
+    expect(h.prisma.leagueManagerClaim.create).not.toHaveBeenCalled()
+  })
+
+  it('joins from the public persistence entry point before creating another league', async () => {
+    const { persistImportedLeagueFromNormalization } = await import('@/lib/league-import/ImportedLeagueCommitService')
+    h.prisma.league.findFirst.mockResolvedValue(OTHER_LEAGUE)
+    h.prisma.leagueTeam.findFirst.mockResolvedValue({ id: 'team-2', externalId: '2201', platformUserId: 'fantrax-team:2201' })
+    const normalized = {
+      source: { source_provider: 'fantrax', source_league_id: 'real-fantrax-league' },
+      league: { season: 2026 },
+      viewer_source_team_id: '2201',
+      rosters: [{ source_team_id: '2201', source_manager_id: 'fantrax-team:2201' }],
+    } as never
+
+    const result = await persistImportedLeagueFromNormalization({
+      userId: 'af-user-bob', provider: 'fantrax', normalized,
+      importerSourceManagerId: 'Same Name',
+    })
+
+    expect(result.joinedExisting).toBe(true)
+    expect(result.league.id).toBe('league-abc')
+  })
+
+  it('requires linked-account ownership proof before joining an existing Fantrax league', async () => {
+    const { persistImportedLeagueFromNormalization } = await import('@/lib/league-import/ImportedLeagueCommitService')
+    h.prisma.league.findFirst.mockResolvedValue(OTHER_LEAGUE)
+    const normalized = {
+      source: { source_provider: 'fantrax', source_league_id: 'real-fantrax-league' },
+      league: { season: 2026 },
+      viewer_source_team_id: '2201',
+      rosters: [{ source_team_id: '2201', source_manager_id: 'fantrax-team:2201' }],
+    } as never
+
+    await expect(persistImportedLeagueFromNormalization({
+      userId: 'af-user-bob', provider: 'fantrax', normalized,
+    })).rejects.toThrow(/verify ownership/i)
+    expect(h.prisma.leagueTeam.update).not.toHaveBeenCalled()
   })
 })
 

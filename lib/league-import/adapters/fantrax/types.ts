@@ -1,5 +1,7 @@
 export interface FantraxImportLeague {
   leagueId: string
+  /** Real Fantrax league ID for live imports; CSV snapshots only have leagueId. */
+  sourceLeagueId?: string | null
   name: string
   sport: string
   season: number | null
@@ -80,6 +82,8 @@ export interface FantraxImportDraftPick {
 
 export interface FantraxImportPayload {
   sourceInput: string
+  /** Selected team's numeric source_team_id, independent of manager display name. */
+  viewerTeamId?: string | null
   league: FantraxImportLeague
   settings: FantraxImportSettings | null
   teams: FantraxImportTeam[]

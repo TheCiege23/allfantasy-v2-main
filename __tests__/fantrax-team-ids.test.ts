@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   assignFantraxTeamIds,
+  assignFantraxSourceTeamIds,
   fantraxTeamHash,
   isLegacyFantraxTeamId,
   normalizeFantraxTeamName,
@@ -78,6 +79,13 @@ describe('an id survives the league changing around it', () => {
 })
 
 describe('two teams never share a roster id', () => {
+  it('keeps 128 live teams distinct even when every display name is identical', () => {
+    const sourceIds = Array.from({ length: 128 }, (_, i) => `fantrax-team-${i}`)
+    const ids = assignFantraxSourceTeamIds(sourceIds)
+    expect(ids.size).toBe(128)
+    expect(new Set(ids.values()).size).toBe(128)
+    expect(assignFantraxSourceTeamIds([...sourceIds].reverse())).toEqual(ids)
+  })
   /**
    * ⚠ A SHARED ROSTER ID READS AS ONE TEAM PLAYING ITSELF. A 32-bit collision
    * inside a twelve-team league is vanishingly unlikely, but "unlikely" across

@@ -345,9 +345,20 @@ export async function syncFantraxHistoricalBackfillAfterImport(args: {
   }
 
   try {
+    // Live imports use the real Fantrax league ID on League; the reader still
+    // needs this user's private snapshot UUID for its authorization check.
+    const snapshot = await prisma.fantraxLeague.findFirst({
+      where: {
+        sourceLeagueId: league.platformLeagueId,
+        appUserId: args.userId,
+        season: league.season,
+      },
+      select: { id: true },
+      orderBy: { updatedAt: 'desc' },
+    })
     const currentPayload = await fetchFantraxLeagueForImport(
       args.userId,
-      `id:${league.platformLeagueId}`
+      `id:${snapshot?.id ?? league.platformLeagueId}`
     )
     const additionalPayloadResults = await Promise.allSettled(
       currentPayload.previousSeasons.map((season) =>

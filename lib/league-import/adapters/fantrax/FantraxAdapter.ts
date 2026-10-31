@@ -15,7 +15,7 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
     const importBatchId = `fantrax-${raw.league.leagueId}-${Date.now()}`
     const source: SourceTracking = {
       source_provider: 'fantrax',
-      source_league_id: raw.league.leagueId,
+      source_league_id: raw.league.sourceLeagueId || raw.league.leagueId,
       source_season_id: raw.league.season != null ? String(raw.league.season) : undefined,
       import_batch_id: importBatchId,
       imported_at: new Date().toISOString(),
@@ -41,7 +41,7 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
 
     const result: NormalizedImportResult = {
       source,
-      viewer_source_team_id: viewerTeam?.teamId ?? null,
+      viewer_source_team_id: raw.viewerTeamId ?? viewerTeam?.teamId ?? null,
       league,
       rosters,
       scoring,

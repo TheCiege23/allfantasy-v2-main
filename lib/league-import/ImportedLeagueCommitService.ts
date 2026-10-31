@@ -498,9 +498,9 @@ async function resolveSelfManagerId(
   normalized: NormalizedImportResult,
 ): Promise<string | null> {
   if (provider === 'fantrax') {
-    const own = normalized.rosters.find((r) =>
-      String(r.source_manager_id ?? '').startsWith('fantrax-user:'),
-    )
+    const own = normalized.viewer_source_team_id
+      ? normalized.rosters.find((r) => r.source_team_id === normalized.viewer_source_team_id)
+      : normalized.rosters.find((r) => String(r.source_manager_id ?? '').startsWith('fantrax-user:'))
     return own?.source_manager_id ?? null
   }
 
@@ -581,18 +581,36 @@ export async function claimExistingLeagueForMember(args: {
   platformLeagueId: string
   seasonYear: number
   sourceManagerId: string
+  sourceTeamId?: string | null
 }): Promise<PersistImportedLeagueResult | null> {
-  const { userId, provider, platformLeagueId, seasonYear, sourceManagerId } = args
+  const { userId, provider, platformLeagueId, seasonYear, sourceManagerId, sourceTeamId } = args
 
-  const otherLeague = await (prisma as any).league.findFirst({
-    where: {
-      userId: { not: userId },
-      platform: provider,
-      platformLeagueId,
-      season: seasonYear,
-    },
-    select: { id: true, name: true, sport: true },
-  })
+  const legacySnapshotIds = provider === 'fantrax'
+    ? (await prisma.fantraxLeague.findMany({
+        where: { sourceLeagueId: platformLeagueId, season: seasonYear },
+        select: { id: true },
+      })).map((snapshot) => snapshot.id)
+    : []
+  const baseWhere = {
+    platform: provider,
+    platformLeagueId: provider === 'fantrax'
+      ? { in: [platformLeagueId, ...legacySnapshotIds] }
+      : platformLeagueId,
+    season: seasonYear,
+  }
+  const leagueSelect = { id: true, name: true, sport: true }
+  const otherLeague = provider === 'fantrax'
+    ? (await (prisma as any).league.findFirst({
+        where: { ...baseWhere, userId },
+        select: leagueSelect,
+      })) ?? await (prisma as any).league.findFirst({
+        where: { ...baseWhere, userId: { not: userId } },
+        select: leagueSelect,
+      })
+    : await (prisma as any).league.findFirst({
+        where: { ...baseWhere, userId: { not: userId } },
+        select: leagueSelect,
+      })
   if (!otherLeague) return null
 
   /*
@@ -606,9 +624,12 @@ export async function claimExistingLeagueForMember(args: {
    * import), that is a real conflict for a person to resolve, not something to silently
    * reassign or silently duplicate past.
    */
+  const teamWhere = provider === 'fantrax' && sourceTeamId
+    ? { leagueId: otherLeague.id, externalId: sourceTeamId }
+    : { leagueId: otherLeague.id, platformUserId: sourceManagerId }
   const team = await (prisma as any).leagueTeam.findFirst({
-    where: { leagueId: otherLeague.id, platformUserId: sourceManagerId, claimedByUserId: null },
-    select: { id: true, externalId: true },
+    where: { ...teamWhere, claimedByUserId: null },
+    select: { id: true, externalId: true, platformUserId: true },
   })
 
   if (!team) {
@@ -622,10 +643,15 @@ export async function claimExistingLeagueForMember(args: {
      * already held by THIS user before concluding it belongs to someone else.
      */
     const mine = await (prisma as any).leagueTeam.findFirst({
-      where: { leagueId: otherLeague.id, platformUserId: sourceManagerId, claimedByUserId: userId },
+      where: { ...teamWhere, claimedByUserId: userId },
       select: { id: true, externalId: true },
     })
-    if (!mine) return null
+    if (!mine) {
+      if (provider === 'fantrax') {
+        throw new ImportedLeagueConflictError('This Fantrax league is already imported, but the selected team cannot be claimed.')
+      }
+      return null
+    }
     return {
       league: { id: otherLeague.id, name: otherLeague.name, sport: otherLeague.sport },
       historicalBackfill: null,
@@ -646,7 +672,7 @@ export async function claimExistingLeagueForMember(args: {
           leagueId: otherLeague.id,
           afUserId: userId,
           teamExternalId: team.externalId,
-          platformUserId: sourceManagerId,
+          platformUserId: team.platformUserId ?? sourceManagerId,
           isConfirmed: true,
         },
       }),
@@ -662,6 +688,9 @@ export async function claimExistingLeagueForMember(args: {
      * function exists to avoid, not a crash or a claim taken from its rightful holder.
      */
     console.warn(`[ImportedLeagueCommitService] ${provider}: cross-account claim lost a race:`, err)
+    if (provider === 'fantrax') {
+      throw new ImportedLeagueConflictError('The selected Fantrax team could not be claimed. Try again after the other import finishes.')
+    }
     return null
   }
 
@@ -683,6 +712,9 @@ export async function persistImportedLeagueFromNormalization(
     typeof normalized.league.season === 'number' && Number.isFinite(normalized.league.season)
       ? normalized.league.season
       : new Date().getFullYear()
+  const effectiveSourceManagerId = provider === 'fantrax'
+    ? await resolveSelfManagerId(userId, provider, normalized)
+    : options.importerSourceManagerId ?? null
 
   const existing = await (prisma as any).league.findFirst({
     where: {
@@ -693,7 +725,7 @@ export async function persistImportedLeagueFromNormalization(
     },
   })
 
-  if (existing && !allowUpdateExisting) {
+  if (existing && !allowUpdateExisting && provider !== 'fantrax') {
     throw new ImportedLeagueConflictError('This league already exists in your account')
   }
 
@@ -760,13 +792,47 @@ export async function persistImportedLeagueFromNormalization(
    * silently redirecting a re-import into someone else's league is a bigger surprise than
    * the duplicate it would avoid — that is a merge decision for a person, not an import click.
    */
-  if (!existing && options.importerSourceManagerId) {
+  if (provider === 'fantrax' && normalized.viewer_source_team_id && !options.importerSourceManagerId) {
+    const snapshots = await prisma.fantraxLeague.findMany({
+      where: { sourceLeagueId: platformLeagueId, season: seasonYear },
+      select: { id: true },
+    })
+    const shared = await (prisma as any).league.findFirst({
+      where: {
+        platform: 'fantrax',
+        platformLeagueId: { in: [platformLeagueId, ...snapshots.map((snapshot) => snapshot.id)] },
+        season: seasonYear,
+      },
+      select: { id: true },
+    })
+    if (shared) {
+      throw new ImportedLeagueConflictError('Connect your Fantrax account to verify ownership before claiming a team in this imported league.')
+    }
+  }
+
+  if (provider === 'fantrax' && normalized.viewer_source_team_id && options.importerSourceManagerId && effectiveSourceManagerId) {
     const joined = await claimExistingLeagueForMember({
       userId,
       provider,
       platformLeagueId,
       seasonYear,
-      sourceManagerId: options.importerSourceManagerId,
+      sourceManagerId: effectiveSourceManagerId,
+      sourceTeamId: normalized.viewer_source_team_id,
+    })
+    if (joined && (!allowUpdateExisting || !joined.existed)) return joined
+  }
+
+  if (existing && !allowUpdateExisting) {
+    throw new ImportedLeagueConflictError('This league already exists in your account')
+  }
+
+  if (!existing && effectiveSourceManagerId && provider !== 'fantrax') {
+    const joined = await claimExistingLeagueForMember({
+      userId,
+      provider,
+      platformLeagueId,
+      seasonYear,
+      sourceManagerId: effectiveSourceManagerId,
     })
     if (joined) return joined
   }
@@ -800,6 +866,9 @@ export async function persistImportedLeagueFromNormalization(
       ? mergeCanonicalBundleIntoSettings(normalized, canonicalBundle)
       : buildImportedLeagueSettings(normalized),
   )
+  // The partial DB index applies only to imports made with this identity
+  // contract. Older Fantrax rows used a private snapshot UUID and stay valid.
+  if (provider === 'fantrax') settingsJson.fantraxSourceLeagueId = platformLeagueId
 
   // Tier 0 (Block C) — passthrough for League columns whose values used to be
   // silently dropped and replaced by Prisma defaults. Every value comes from
@@ -849,17 +918,29 @@ export async function persistImportedLeagueFromNormalization(
     ...tier0LeaguePayload,
   }
 
-  const league = existing
-    ? await (prisma as any).league.update({
-        where: { id: existing.id },
-        data: leaguePayload,
+  let league
+  if (existing) {
+    league = await (prisma as any).league.update({
+      where: { id: existing.id },
+      data: leaguePayload,
+    })
+  } else {
+    try {
+      league = await (prisma as any).league.create({
+        data: { userId, ...leaguePayload },
       })
-    : await (prisma as any).league.create({
-        data: {
-          userId,
-          ...leaguePayload,
-        },
-      })
+    } catch (error) {
+      if (
+        provider === 'fantrax' &&
+        options.importerSourceManagerId &&
+        normalized.viewer_source_team_id &&
+        (error as { code?: unknown } | null)?.code === 'P2002'
+      ) {
+        throw new ImportedLeagueConflictError('This Fantrax league is being imported by another manager. Try again shortly to claim your team.')
+      }
+      throw error
+    }
+  }
 
   /*
    * The league is back by explicit request, so stop suppressing it.
@@ -903,7 +984,7 @@ export async function persistImportedLeagueFromNormalization(
       const { bootstrapLeagueFromImport } = await import('@/lib/league-import/LeagueCreationBootstrapService')
       await bootstrapLeagueFromImport(league.id, normalized, {
         userId,
-        sourceManagerId: options.importerSourceManagerId ?? null,
+        sourceManagerId: effectiveSourceManagerId,
       })
     },
   )
@@ -921,8 +1002,7 @@ export async function persistImportedLeagueFromNormalization(
    *
    * BOTH PROVIDERS ALREADY SAY WHICH TEAM IS THE CALLER'S. Nothing read it:
    *
-   *   fantrax  FantraxLeagueFetchService stamps `managerId` as `fantrax-user:<username>`
-   *            for the caller's own team and `fantrax-manager:<slug>` for everyone else.
+   *   fantrax  The selected `viewer_source_team_id` points to a stable team key.
    *   espn     `managerId` IS the owner's SWID (`uniqueOwners[0].id`), and the caller's
    *            own SWID is already stored in `leagueAuth` for the ESPN connection.
    *
@@ -963,6 +1043,30 @@ export async function persistImportedLeagueFromNormalization(
               })
               .catch(() => 0)
           : 0
+
+      if (provider === 'fantrax' && (claimed.count > 0 || alreadyMine > 0)) {
+        const ownedTeam = await (prisma as any).leagueTeam.findFirst({
+          where: { leagueId: league.id, platformUserId: selfManagerId, claimedByUserId: userId },
+          select: { externalId: true, platformUserId: true },
+        })
+        if (ownedTeam) {
+          const priorClaim = await (prisma as any).leagueManagerClaim.findFirst({
+            where: { leagueId: league.id, teamExternalId: ownedTeam.externalId },
+            select: { id: true },
+          })
+          if (!priorClaim) {
+            await (prisma as any).leagueManagerClaim.create({
+              data: {
+                leagueId: league.id,
+                afUserId: userId,
+                teamExternalId: ownedTeam.externalId,
+                platformUserId: ownedTeam.platformUserId,
+                isConfirmed: true,
+              },
+            })
+          }
+        }
+      }
 
       if (claimed.count === 0 && alreadyMine === 0) {
         /*
