@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { ownerCommissions } from "@/lib/public-discovery/ownerCommissionerTeams"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -50,7 +51,8 @@ async function loadOwnedImportedLeague(leagueId: string) {
   if (isNativePlatform(league.platform)) {
     return { error: NextResponse.json({ error: "This league is on AllFantasy; list it from the league finder." }, { status: 400 }) }
   }
-  return { league, userId, verification: listingVerification(league) }
+  const ownerCommissionsTeam = await ownerCommissions(league)
+  return { league, userId, verification: listingVerification({ ...league, ownerCommissionsTeam }) }
 }
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
