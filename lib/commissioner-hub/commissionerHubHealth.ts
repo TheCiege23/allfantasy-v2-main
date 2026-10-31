@@ -15,6 +15,8 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
 // subsystem and this file needs exactly one provider from it.
 import { realDataProvider } from '@/lib/decision-os/behavioral/api/real-data-provider'
 import type { CanonicalNflDataCoverage } from '@/lib/nfl-data-foundation/types'
+import { dynastyAlertLines, type DynastyHealthSignals } from '@/lib/commissioner-hub/dynastyHealthSignals'
+import { loadDynastySignalsByLeague } from '@/lib/commissioner-hub/dynastyHealthReads'
 
 export type CommissionerHealthDataConfidence = 'high' | 'medium' | 'low'
 export type CommissionerHealthDataSource = 'database' | 'dashboard-fallback'
@@ -163,6 +165,15 @@ export type CommissionerLeagueHealthSnapshot = {
   actions: CommissionerHealthAction[]
   assistantQuestions: CommissionerAssistantQuestion[]
   nflDataCoverage?: CanonicalNflDataCoverage | null
+  /**
+   * Dynasty-only signals (pick balance, taxi squads over their limit) — ./dynastyHealthSignals.ts.
+   *
+   * ⚠ THE KEY IS ABSENT, NOT NULL, ON EVERY OTHER LEAGUE, and absent everywhere unless the caller
+   * passed `dynastySignals: true`. A redraft league's snapshot is therefore exactly what it was
+   * before this field existed. When present, its measured findings are also in `alerts`, which is
+   * what the health decision — and through it Chimmy's commissioner grounding — reads.
+   */
+  dynasty?: DynastyHealthSignals
   decisionOsShadow?: {
     decisionId: string
     parityPassed: boolean | null
@@ -915,9 +926,28 @@ export async function loadParticipationByLeague(
   return out
 }
 
+/**
+ * A dynasty league's measured findings joined to the engine's alerts. Two engine alerts first, so
+ * the engine's most urgent ones survive, then the dynasty lines, then the rest — capped at the same
+ * four the builder keeps.
+ */
+export function withDynastyAlerts(alerts: readonly string[], signals: DynastyHealthSignals): string[] {
+  const lines = dynastyAlertLines(signals)
+  if (lines.length === 0) return [...alerts]
+  return [...alerts.slice(0, 2), ...lines, ...alerts.slice(2)].slice(0, 4)
+}
+
 export async function getCommissionerHubHealthForUser(
   userId: string,
   leagues: UserLeague[],
+  options: {
+    /**
+     * Read pick balance and taxi limits for the dynasty leagues (dynastyHealthReads.ts). Off by
+     * default: three bounded reads per dynasty league, which the one-league hub and Chimmy's
+     * grounding pay for and the all-leagues dashboards do not need.
+     */
+    dynastySignals?: boolean
+  } = {},
 ): Promise<CommissionerLeagueHealthSnapshot[]> {
   if (!userId) return []
   const commissionerLeagues = leagues.filter((league) => league.isCommissioner)
@@ -1040,9 +1070,12 @@ export async function getCommissionerHubHealthForUser(
     // Gated and bounded — see loadParticipationByLeague. Empty map when the gate is off, so
     // this costs nothing and every snapshot keeps `participation: null`.
     // Independent reads, so neither waits on the other. Both degrade to empty rather than throw.
-    const [participationByLeague, importedActivity] = await Promise.all([
+    const [participationByLeague, importedActivity, dynastyByLeague] = await Promise.all([
       loadParticipationByLeague(leagueIds),
       loadImportedActivityByLeague(leagueIds, sevenDaysAgo),
+      options.dynastySignals
+        ? loadDynastySignalsByLeague(leagueIds, userId).catch(() => new Map<string, DynastyHealthSignals>())
+        : Promise.resolve(new Map<string, DynastyHealthSignals>()),
     ])
 
     const snapshots = leagueIds.map((leagueId) => {
@@ -1072,6 +1105,10 @@ export async function getCommissionerHubHealthForUser(
       // "we do not know" rather than a missing field it might coerce to zero.
       const participation = participationByLeague.get(snap.leagueId) ?? null
       return participation ? { ...snap, participation } : snap
+    }).map((snap) => {
+      // Dynasty leagues only, and only from a database snapshot: a fallback read no rosters.
+      const dynasty = snap.source === 'database' ? dynastyByLeague.get(snap.leagueId) : undefined
+      return dynasty ? { ...snap, dynasty, alerts: withDynastyAlerts(snap.alerts, dynasty) } : snap
     })
 
     // Decision OS Slice 4 — commissioner.league.health shadow/live runner. Assessment only;

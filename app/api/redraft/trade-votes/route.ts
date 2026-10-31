@@ -40,11 +40,10 @@ import {
   MULTI_TEAM_TRADE_CANCELLED_TITLE,
   MULTI_TEAM_TRADE_EXPIRED_TITLE,
   MULTI_TEAM_TRADE_LEAGUE_VETOED_TITLE,
-  MULTI_TEAM_TRADE_VETOED_TITLE,
   multiTeamTradeCancelledBody,
   multiTeamTradeExpiredBody,
   multiTeamTradeLeagueVetoedBody,
-  multiTeamTradeVetoedBody,
+  notifyMultiTeamTradeCommissionerVeto,
   notifyMultiTeamTradeOutcome,
   notifyMultiTeamTradeParties,
 } from '@/lib/redraft/multiTeamTradeNotices'
@@ -627,13 +626,7 @@ export async function POST(req: NextRequest) {
      * approved it.) Best-effort: the helper never rejects.
      */
     if (multiTeam) {
-      await notifyMultiTeamTradeOutcome({
-        proposal,
-        actorUserId: userId,
-        key: 'vetoed',
-        title: MULTI_TEAM_TRADE_VETOED_TITLE,
-        body: ({ teams }) => multiTeamTradeVetoedBody(teams),
-      })
+      await notifyMultiTeamTradeCommissionerVeto({ proposal, actorUserId: userId })
     }
     return NextResponse.json({ proposal: updated, resolved: true })
   }

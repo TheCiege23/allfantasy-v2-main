@@ -100,7 +100,8 @@ describe('trade reversal client', () => {
   it('names a 403 as a permission problem', async () => {
     respond(403, { error: 'Commissioner access required' })
     const pre = await previewGenericTradeReversal('l-1', 't-1')
-    expect(pre).toEqual({ ok: false, message: 'Only a commissioner can reverse a trade.' })
+    // The English message is unchanged; the code beside it lets the dialog say it in Spanish.
+    expect(pre).toEqual({ ok: false, message: 'Only a commissioner can reverse a trade.', messageCode: 'not_commissioner', status: 403 })
   })
 
   it('describes known blockers in plain language and still names unknown ones', () => {
