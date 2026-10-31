@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, Clock, Repeat, Swords } from 'lucide-react'
 import { buildYourWeek, type LineupIssue, type YourWeek } from '@/lib/league/your-week'
 import type { MatchupCenterPayload } from '@/lib/matchup-center/types'
+import { buildScoreBug, type ScoreBug } from '@/lib/league-media/redraftLeagueHome'
+import { RedraftScoreBug } from '@/components/league/native/redraft/RedraftScoreBug'
 
 async function getJson(url: string): Promise<unknown | null> {
   try {
@@ -26,6 +28,11 @@ function fmtWhen(iso: string): string {
  * matchup's NFL game evidence when the server includes it.
  */
 export async function loadYourWeek(leagueId: string, week: number | null, now: () => string = () => new Date().toISOString()): Promise<YourWeek> {
+  return (await loadYourWeekWithMatchup(leagueId, week, now)).week
+}
+
+/** The same load, also returning the raw `matchup-center` payload — the redraft score bug draws from it. */
+export async function loadYourWeekWithMatchup(leagueId: string, week: number | null, now: () => string = () => new Date().toISOString()): Promise<{ week: YourWeek; matchup: MatchupCenterPayload | null }> {
   const id = encodeURIComponent(leagueId)
   const weekQuery = week != null ? `?week=${week}` : ''
   const [rosterRes, waiverRes] = await Promise.all([
@@ -41,13 +48,14 @@ export async function loadYourWeek(leagueId: string, week: number | null, now: (
   const m = matchupRes as { payload?: MatchupCenterPayload; sportsContext?: { games?: { scheduledStart: string; final?: boolean }[] } } | null
   const r = rosterRes as { roster?: { lineupValidation?: { issues?: LineupIssue[] } } } | null
   const w = waiverRes as { settings?: { nextRunAt?: string | null } } | null
-  return buildYourWeek({
+  const yourWeek = buildYourWeek({
     matchup: m?.payload ?? null,
     games: m?.sportsContext?.games ?? null,
     lineupIssues: r?.roster?.lineupValidation?.issues ?? null,
     waiverNextRunAt: w?.settings?.nextRunAt ?? null,
     now: now(),
   })
+  return { week: yourWeek, matchup: m?.payload ?? null }
 }
 
 /**
@@ -55,13 +63,30 @@ export async function loadYourWeek(leagueId: string, week: number | null, now: (
  * opponent, when your lineup locks, what is wrong with your starters, when waivers run. Each tile
  * opens the tab that fixes it. Renders nothing until something real loads.
  */
-export function LeagueYourWeekStrip({ leagueId, week, onSelectTab }: { leagueId: string; week: number | null; onSelectTab: (tab: string) => void }) {
+export function LeagueYourWeekStrip({
+  leagueId,
+  week,
+  onSelectTab,
+  scoreBug,
+}: {
+  leagueId: string
+  week: number | null
+  onSelectTab: (tab: string) => void
+  /**
+   * Native redraft leagues (batch A1): draw this week's matchup as the broadcast score bug above the
+   * tiles, in place of the matchup tile. Same payload, same load — nothing extra is fetched.
+   */
+  scoreBug?: { sport: string }
+}) {
   const [data, setData] = useState<YourWeek | null>(null)
+  const [bug, setBug] = useState<ScoreBug | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    loadYourWeek(leagueId, week).then((result) => {
-      if (!cancelled) setData(result)
+    loadYourWeekWithMatchup(leagueId, week).then((result) => {
+      if (cancelled) return
+      setData(result.week)
+      setBug(buildScoreBug(result.matchup))
     })
     return () => {
       cancelled = true
@@ -70,14 +95,18 @@ export function LeagueYourWeekStrip({ leagueId, week, onSelectTab }: { leagueId:
 
   if (!data || data.empty) return null
   const problems = data.emptySlots + data.onBye.length + data.otherErrors + data.injured.length
+  const showBug = Boolean(scoreBug && bug && data.matchup)
+  const tiles = (data.matchup && !showBug ? 1 : 0) + (data.lock ? 1 : 0) + (problems > 0 ? 1 : 0) + (data.waivers ? 1 : 0)
 
   return (
-    <section className="nl-card nl-yourweek" aria-label="Your week" data-testid="your-week">
+    <>
+    {showBug && bug && scoreBug ? <RedraftScoreBug bug={bug} sport={scoreBug.sport} /> : null}
+    {tiles > 0 ? <section className="nl-card nl-yourweek" aria-label="Your week" data-testid="your-week">
       <div className="nl-card-label">
         <span>Your week{data.week != null ? ` · Week ${data.week}` : ''}</span>
       </div>
       <div className="nl-yourweek-grid">
-        {data.matchup ? (
+        {data.matchup && !showBug ? (
           <button type="button" className="nl-yw-tile" onClick={() => onSelectTab('matchups')} data-testid="your-week-matchup">
             <span className="nl-yw-label"><Swords size={14} aria-hidden /> {data.matchup.them ? `vs ${data.matchup.them.name}` : 'This week'}</span>
             <strong data-testid="your-week-score">
@@ -122,6 +151,7 @@ export function LeagueYourWeekStrip({ leagueId, week, onSelectTab }: { leagueId:
           </button>
         ) : null}
       </div>
-    </section>
+    </section> : null}
+    </>
   )
 }

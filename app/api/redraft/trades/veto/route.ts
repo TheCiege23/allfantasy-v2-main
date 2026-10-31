@@ -6,12 +6,8 @@ import { hasLeagueCommissionerRights } from '@/lib/league/permissions'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
-import {
-  MULTI_TEAM_TRADE_VETOED_BODY,
-  MULTI_TEAM_TRADE_VETOED_TITLE,
-  notifyMultiTeamTradeParties,
-} from '@/lib/redraft/multiTeamTradeNotices'
-import { isMultiTeamTrade, tradeParticipantRosterIds } from '@/lib/redraft/tradeParticipants'
+import { notifyMultiTeamTradeCommissionerVeto } from '@/lib/redraft/multiTeamTradeNotices'
+import { isMultiTeamTrade } from '@/lib/redraft/tradeParticipants'
 
 export const dynamic = 'force-dynamic'
 
@@ -145,17 +141,11 @@ export async function POST(req: NextRequest) {
 
   // The ruling, under the offer card in the two managers' DM. Fire-and-forget; no-op when there is no card.
   queueTradeStatusInDm({ source: 'redraft', tradeId: proposalId, status: 'vetoed', detail: 'The commissioner made the call.' })
-  // A multi-team trade has no DM card, so every team in it hears the ruling here instead.
+  // A multi-team trade has no DM card, so every team in it hears the ruling here instead — by name, through
+  // the same helper (and so the same text and `vetoed` key) as trade-votes' commissioner_veto. Best-effort:
+  // the helper never rejects, and the veto has already been written.
   if (isMultiTeamTrade(proposal)) {
-    notifyMultiTeamTradeParties({
-      proposalId,
-      leagueId: proposal.leagueId,
-      userIds: tradeParticipantRosterIds(proposal).map((id) => rosterById.get(id)?.ownerId),
-      actorUserId: userId,
-      key: 'vetoed',
-      title: MULTI_TEAM_TRADE_VETOED_TITLE,
-      body: MULTI_TEAM_TRADE_VETOED_BODY,
-    })
+    await notifyMultiTeamTradeCommissionerVeto({ proposal, actorUserId: userId })
   }
 
   return NextResponse.json({

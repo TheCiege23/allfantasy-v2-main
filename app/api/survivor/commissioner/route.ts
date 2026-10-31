@@ -322,7 +322,8 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     })
     if (r0) {
-      await voidPendingRedraftTradesForRoster(leagueId, r0.id).catch(() => {})
+      // The commissioner removing them is never told about their own action.
+      await voidPendingRedraftTradesForRoster(leagueId, r0.id, { actorUserId: userId }).catch(() => {})
     }
 
     await prisma.survivorPlayer.updateMany({
