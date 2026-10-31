@@ -1813,6 +1813,7 @@ export function LeagueShell({
               activeTab={activeTab}
               tabDefs={tabDefs}
               importedLeagueCount={leagueList.filter((l) => !isAfHostedPlatform(l.platform)).length}
+              leagueRail={leagueRail}
               leagueId={league.id}
               selectedLeague={selectedLeague}
               userTeam={userTeam}
@@ -2151,6 +2152,7 @@ function LeagueTabRouter({
   draftSetupSession,
   hasActiveRedraftSeason,
   importedLeagueCount,
+  leagueRail,
 }: {
   activeTab: string
   tabDefs: TabDef[]
@@ -2177,6 +2179,8 @@ function LeagueTabRouter({
   hasActiveRedraftSeason: boolean
   /** Imported (non AF-hosted) leagues this user has — 10a's "chat is AF-only" note. */
   importedLeagueCount: number
+  /** The rail's saved matchup summaries — the chat's pinned score card reads this league's entry. */
+  leagueRail?: LeagueRailData | null
 }) {
   const router = useRouter()
   const tab = tabDefs.find((t) => t.id === activeTab)
