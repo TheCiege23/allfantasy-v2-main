@@ -581,6 +581,11 @@ export const translationsEsParity: Record<string, string> = {
   "waiverWire.prospects.searchHint": "Se muestran {{listed}} de {{total}} prospectos. Busca por nombre para encontrar el resto.",
   "draftRoom.pool.prospectTooltipMlb":
     "Prospecto de la MLB listado por Fantrax que no figura en ningún plantel de la MLB en nuestros datos: un jugador de ligas menores o sin contrato. El equipo indicado es el club de la MLB que tiene sus derechos. No hay edad, nivel ni año de draft disponibles.",
+  "dynastyWarRoom.prospects.title": "Prospectos libres de la NHL (sin ranking)",
+  "dynastyWarRoom.prospects.note":
+    "Los prospectos no tienen valor, ADP ni edad, así que no se clasifican ni se recomiendan. Aparecen después de los jugadores recomendados.",
+  "dynastyWarRoom.prospects.listHint":
+    "Se muestran {{listed}} de {{total}} prospectos libres. Busca el resto por nombre en la lista de agentes libres de la liga.",
   "draftRoom.playerPanel.rookieFilterFallbackTitle": "Filtro de rookies no disponible para este deporte",
   "draftRoom.playerPanel.rookieFilterFallbackBody":
     "Los datos de rookies aún no están disponibles para este deporte, así que este draft de solo rookies muestra todo el pool de jugadores. Los picks no se verifican por condición de rookie: confirma que un jugador es rookie antes de draftearlo.",
