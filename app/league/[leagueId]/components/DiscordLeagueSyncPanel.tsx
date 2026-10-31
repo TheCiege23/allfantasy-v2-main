@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { DiscordIcon } from '@/app/components/icons/DiscordIcon'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
-import type { SubPanelContext } from './LeagueSettingsSubPanels'
 
 type LeagueStatus = {
   botConfigured: boolean
@@ -34,12 +33,11 @@ type LeagueStatus = {
  *     "not available yet" instead.
  * One guided screen, with honest privacy copy, beats two that disagree.
  */
-export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
+export function DiscordLeagueSyncPanel({ leagueId, isLeagueOwner }: { leagueId: string; isLeagueOwner: boolean }) {
   const { t } = useLanguage()
   const [status, setStatus] = useState<LeagueStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const leagueId = ctx.league.id
   const setupHref = `/core/discord?league=${encodeURIComponent(leagueId)}`
 
   const refresh = useCallback(async () => {
@@ -60,8 +58,7 @@ export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
     void refresh()
   }, [refresh])
 
-  /** AllFantasy league owner (imported league) — not Sleeper-only `isCommissioner` */
-  const isLeagueOwner = ctx.league.userId === ctx.userId
+  // `isLeagueOwner`: the AllFantasy league owner (League.userId), not Sleeper-only `isCommissioner`.
   if (!isLeagueOwner) {
     return <p className="text-[12px] text-white/45">{t('lsPanel.discord.ownerOnly')}</p>
   }

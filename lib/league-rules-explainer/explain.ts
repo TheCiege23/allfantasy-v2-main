@@ -205,6 +205,7 @@ function describeValue(key: RuleKey, value: unknown, snapshot: Pick<RuleSnapshot
     case 'feederBenchSize':
       return isNum(value) && Number.isInteger(value) && value >= 0 ? plural('v.players', value) : null
     case 'keeperMaxYears':
+    case 'pickTradeYears':
     case 'taxiMaxYears':
     case 'taxiEligibilityYears':
       return isPosInt(value) ? plural('v.seasons', value) : null
@@ -648,6 +649,7 @@ function pickLines(s: RuleSnapshot): RuleLine[] {
   const pd = s.pickTradeDeadline
   return compact([
     line('trades-picks', text('trades.picks.on')),
+    line('trades-pick-years', isPosInt(s.pickTradeYears) ? plural('trades.pickYears', s.pickTradeYears) : null),
     line('trades-pick-deadline', pd === 'open' ? text('trades.pickDeadline.open') : isPosInt(pd) ? text('trades.pickDeadline.week', { week: pd }) : null),
     line('trades-pick-terms', s.pickTerms === true ? text('trades.pickTerms') : null),
   ])
@@ -802,6 +804,8 @@ function consequenceFor(key: RuleKey, before: unknown, after: unknown): RuleText
       return typeof after === 'boolean' ? text(after ? 'trades.picks.on' : 'trades.picks.off') : null
     case 'pickTerms':
       return typeof after === 'boolean' ? text(after ? 'trades.pickTerms' : 'change.pickTerms.off') : null
+    case 'pickTradeYears':
+      return isPosInt(after) ? plural('trades.pickYears', after) : null
     case 'pickTradeDeadline':
       return after === 'open' ? text('trades.pickDeadline.open') : after === 'same' ? text('change.pickDeadline.same') : isPosInt(after) ? text('trades.pickDeadline.week', { week: after }) : null
     case 'taxiSlots':

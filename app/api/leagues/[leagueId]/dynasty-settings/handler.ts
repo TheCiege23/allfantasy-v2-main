@@ -43,6 +43,7 @@ import {
 import { effectiveDynastyRules, taxiRulesFromEffective } from '@/lib/league-rules-explainer/snapshot'
 import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
+import { NATIVE_PICK_YEARS_MAX, NATIVE_PICK_YEARS_MIN } from '@/lib/league-trade-engine/nativePickYears'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 import { getDynastySportPresets } from '@/lib/dynasty-core/DynastySportPresets'
 import { applyDynastySportPresetToLeague, isLeagueBeforeDraft } from '@/lib/dynasty-core/applyDynastySportPreset'
@@ -57,6 +58,10 @@ export const dynamic = 'force-dynamic'
 
 /** The taxi fields the rules popup shows (lib/league-rules-explainer/load.ts). */
 const TAXI_CARD_FIELDS = ['taxiSlots', 'taxiEligibilityYears', 'taxiDeadlineWeek'] as const
+
+function isPickYearsValue(v: unknown): boolean {
+  return typeof v === 'number' && Number.isInteger(v) && v >= NATIVE_PICK_YEARS_MIN && v <= NATIVE_PICK_YEARS_MAX
+}
 
 export async function GET(
   _req: NextRequest,
@@ -187,6 +192,15 @@ export async function PUT(
   if (body.taxiSlots != null && isTaxiIncreaseRefused(String(leagueSport), Number(body.taxiSlots), priorDynasty?.taxiSlots ?? 4)) {
     return NextResponse.json(
       { error: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE },
+      { status: 400 },
+    )
+  }
+
+  // Seasons ahead a pick can be traded: the trade engine clamps to 1-5, so anything else is refused
+  // rather than stored as a number the league never runs.
+  if (body.futurePicksYearsOut != null && !isPickYearsValue(body.futurePicksYearsOut)) {
+    return NextResponse.json(
+      { error: `Future picks can be traded ${NATIVE_PICK_YEARS_MIN} to ${NATIVE_PICK_YEARS_MAX} seasons ahead.` },
       { status: 400 },
     )
   }
