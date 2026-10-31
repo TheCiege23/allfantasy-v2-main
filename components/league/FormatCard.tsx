@@ -42,7 +42,7 @@ export function FormatCard({
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle className="text-white">{title}</CardTitle>
             {badges.map((badge) => (
-              <Badge key={badge} variant="outline" className="border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+              <Badge key={badge} variant="outline" className="border-cyan-300/20 bg-cyan-300/10 text-[var(--badge-text-cyan)]">
                 {badge}
               </Badge>
             ))}
