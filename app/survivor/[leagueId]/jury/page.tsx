@@ -15,8 +15,8 @@ export default function SurvivorJuryPage() {
   return (
     <div className="px-3 pb-28 pt-4 md:px-6 md:pb-10">
       <header className="survivor-panel rounded-2xl p-5">
-        <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-amber-200">Jury chamber</p>
-        <h1 className="mt-2 text-2xl font-black uppercase tracking-wide text-white">Justice · Drama · Payoff</h1>
+        <p className="sv-eyebrow">Jury chamber</p>
+        <h1 className="sv-h mt-2 text-2xl uppercase md:text-3xl">Justice · Drama · Payoff</h1>
         <p className="mt-2 text-[13px] text-white/55">The jury decides who wins the season.</p>
       </header>
 
@@ -25,10 +25,10 @@ export default function SurvivorJuryPage() {
         {leagueId ? <JuryFinale leagueId={leagueId} /> : null}
       </section>
 
-      <section className="mt-8 survivor-panel p-4">
-        <p className="text-[11px] font-bold uppercase text-white/45">Jury Q&A</p>
+      <section className="mt-8 survivor-panel rounded-2xl p-4">
+        <p className="sv-kicker text-[11px]">Jury Q&A</p>
         <textarea
-          className="mt-2 min-h-[100px] w-full rounded-xl border border-white/10 bg-black/30 p-3 text-[13px] text-white"
+          className="mt-2 min-h-[100px] w-full rounded-xl border border-white/10 bg-black/30 p-3 text-[13px] text-white placeholder:text-white/40 focus:border-[rgba(240,163,94,0.55)] focus:outline-none"
           placeholder="Ask a finalist a question or make a statement…"
           disabled={!isJury}
         />
@@ -36,7 +36,7 @@ export default function SurvivorJuryPage() {
       </section>
 
       <div className="mt-6 text-center">
-        <Link href={`${base}/finale`} className="text-[13px] font-semibold text-amber-200">
+        <Link href={`${base}/finale`} className="sv-link text-[13px]">
           Finale stage →
         </Link>
       </div>

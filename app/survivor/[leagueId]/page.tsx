@@ -9,8 +9,8 @@ import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { TribeCard } from '@/app/survivor/components/TribeCard'
 import { SurvivorStatusBadge } from '@/app/survivor/components/SurvivorStatusBadge'
 import type { SurvivorSeasonPlayer } from '@/lib/survivor/survivorUiTypes'
-import { getSurvivorThemeById } from '@/lib/survivor/survivorVisuals'
-import { SurvivorIslandHero } from '@/components/survivor/SurvivorIslandHero'
+import { SurvivorHubBanner } from '@/app/survivor/components/SurvivorHubBanner'
+import { legacyIslandScene } from '@/lib/survivor/survivorLegacyIsland'
 import { SurvivorStatusCard } from '@/app/survivor/components/SurvivorStatusCard'
 import { buildSurvivorStatusCard } from '@/lib/survivor/survivorStatusCard'
 
@@ -42,7 +42,7 @@ export default function SurvivorIslandHomePage() {
   const council = ctx.season?.activeCouncil
   const ch = ctx.season?.currentChallenge
   const us = ctx.season?.userState
-  const theme = getSurvivorThemeById(ctx.season?.visualThemeId, leagueId)
+  const scene = legacyIslandScene({ phase, councilStatus: council?.status, challengeStatus: ch?.status, playerState: ctx.playerState })
   const [showIntro, setShowIntro] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -144,38 +144,36 @@ export default function SurvivorIslandHomePage() {
         visualThemeId={ctx.season?.visualThemeId}
       />
       {leagueId ? <LeagueClipOverlayHost leagueId={leagueId} variant="survivor" enabled /> : null}
-      <div className={`min-h-screen px-3 py-4 md:px-6 md:py-6 ${theme.backgroundClass}`}>
-      <SurvivorIslandHero
-        leagueId={leagueId}
+      <div className="min-h-screen px-3 py-4 md:px-6 md:py-6">
+      <SurvivorHubBanner
+        scene={scene}
         leagueName={ctx.leagueName}
         sport={ctx.leagueSport}
         week={ctx.currentWeek}
         phase={phase}
-        visualThemeId={ctx.season?.visualThemeId}
-        voteDeadlineAt={council && !council.isRevealed ? council.voteDeadlineAt ?? council.votingDeadline ?? null : null}
         headline={heroTitle}
         description={heroSubtext}
         primaryAction={primaryAction}
         secondaryAction={{ href: `/league/${leagueId}`, label: 'League dashboard' }}
       />
-      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-black/35 px-4 py-3 text-sm text-white/75">
+      <div className="survivor-panel mt-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 text-sm text-white/75">
         {us ? <SurvivorStatusBadge variant={headerBadgeVariant} /> : null}
         <span>{us?.displayName ?? 'Your island'}{us?.hasImmunityThisWeek ? ' · Immune this week' : ''}{ctx.hasActiveIdol ? ' · Private advantage held' : ''}</span>
-        {ctx.isCommissioner ? <Link href={`${base}/commissioner`} className="ml-auto font-semibold text-amber-200 hover:underline">Commissioner hub</Link> : null}
+        {ctx.isCommissioner ? <Link href={`${base}/commissioner`} className="sv-link ml-auto">Commissioner hub</Link> : null}
       </div>
       {statusCard && phase !== 'pre_draft' && phase !== 'drafting' ? <SurvivorStatusCard card={statusCard} /> : null}
 
       {/* Tribes or individual */}
       {!postMerge ? (
         <section className="mt-6">
-          <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-text-dim)]">
+          <h2 className="sv-kicker mb-3 text-[12px]">
             Tribe standings
           </h2>
           {tribes.length === 0 ? (
-            <div className="rounded-2xl border border-amber-300/20 bg-black/30 p-5 text-sm text-white/75">
-              <p className="font-semibold text-white">Tribes form after the draft</p>
+            <div className="survivor-panel rounded-2xl p-5 text-sm text-white/75">
+              <p className="sv-h text-[15px]">Tribes form after the draft</p>
               <p className="mt-1">The tribe board will show members and weekly scores once rosters are finalized.</p>
-              <Link href={`/league/${leagueId}/draft`} className="mt-3 inline-block font-semibold text-amber-200 hover:underline">Open draft board</Link>
+              <Link href={`/league/${leagueId}/draft`} className="sv-link mt-3 inline-block">Open draft board</Link>
             </div>
           ) : <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:overflow-visible lg:grid-cols-4">
             {tribes.map((t) => {
@@ -195,7 +193,7 @@ export default function SurvivorIslandHomePage() {
         </section>
       ) : (
         <section className="mt-6">
-          <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-text-dim)]">
+          <h2 className="sv-kicker mb-3 text-[12px]">
             Individual standings
           </h2>
           <div className="survivor-panel overflow-x-auto rounded-xl">
@@ -213,10 +211,10 @@ export default function SurvivorIslandHomePage() {
                   <tr key={p.userId} className="border-b border-white/[0.04]">
                     <td className="px-3 py-2 font-mono tabular-nums text-white/60">{i + 1}</td>
                     <td className="px-3 py-2 text-white">{p.displayName}</td>
-                    <td className="px-3 py-2 font-mono text-sky-200">{scoresByUser.has(p.userId) ? scoresByUser.get(p.userId)!.finalScore.toFixed(1) : 'No score yet'}</td>
+                    <td className="sv-score px-3 py-2 font-mono">{scoresByUser.has(p.userId) ? scoresByUser.get(p.userId)!.finalScore.toFixed(1) : 'No score yet'}</td>
                     <td className="px-3 py-2">
                       {p.hasImmunityThisWeek ? (
-                        <span className="text-[11px] text-cyan-300">Immune</span>
+                        <span className="sv-immune text-[11px] font-semibold">Immune</span>
                       ) : (
                         <span className="text-[11px] text-white/35">—</span>
                       )}
@@ -231,13 +229,13 @@ export default function SurvivorIslandHomePage() {
 
       {/* Challenge module */}
       <section className="mt-6">
-        <div className="survivor-panel border-l-4 border-[var(--survivor-torch)] p-4 md:p-5">
-          <h2 className="text-[11px] font-bold uppercase tracking-wider text-[var(--survivor-torch)]">
+        <div className="survivor-panel rounded-2xl sv-torch-bar p-4 md:p-5">
+          <h2 className="sv-kicker text-[12px]">
             Challenge status
           </h2>
           {ch ? (
             <>
-              <p className="mt-2 text-lg font-bold text-white">{ch.title || 'Island challenge'}</p>
+              <p className="sv-h mt-2 text-lg">{ch.title || 'Island challenge'}</p>
               <p className="mt-1 text-[12px] text-white/55">
                 {(ch.scope ?? 'tribe').toUpperCase()} · {ch.submissionMode ?? 'tribe_chat'}
               </p>
@@ -245,12 +243,12 @@ export default function SurvivorIslandHomePage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <span
                   className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${
-                    ch.status === 'open' ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/10 text-white/50'
+                    ch.status === 'open' ? 'sv-chip-torch' : 'bg-white/10 text-white/50'
                   }`}
                 >
                   {ch.status === 'open' ? 'Open' : ch.status ?? '—'}
                 </span>
-                <Link href={`${base}/challenges`} className="text-[12px] font-semibold text-sky-300">
+                <Link href={`${base}/challenges`} className="sv-link text-[12px]">
                   View challenge →
                 </Link>
               </div>
@@ -262,13 +260,13 @@ export default function SurvivorIslandHomePage() {
       </section>
 
       {/* Host message */}
-      <section className="mt-6 survivor-panel p-4">
+      <section className="mt-6 survivor-panel rounded-2xl p-4">
         <div className="flex gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--survivor-torch)]/20 text-lg">
             🔥
           </div>
           <div>
-            <p className="text-[11px] font-bold text-[var(--survivor-torch)]">Chimmy</p>
+            <p className="sv-kicker text-[11px]">Chimmy</p>
             <p className="mt-1 text-[13px] text-white/75">
               The host posts ceremony beats here. Tune into League Chat for the full feed.
             </p>
@@ -279,7 +277,7 @@ export default function SurvivorIslandHomePage() {
       {/* Exile / jury modules */}
       {ctx.season?.exileStatus?.isActive ? (
         <section className="mt-6 rounded-2xl border border-violet-500/25 bg-violet-950/20 p-4">
-          <h2 className="text-[11px] font-bold uppercase tracking-wider text-violet-200">Exile Island</h2>
+          <h2 className="sv-kicker text-[12px] !text-violet-200">Exile Island</h2>
           <p className="mt-2 text-[13px] text-white/70">
             {(ctx.season.players ?? []).filter((p) => p.playerState === 'exile').length} players on Exile · Return path
             follows commissioner rules.
@@ -291,12 +289,12 @@ export default function SurvivorIslandHomePage() {
       ) : null}
 
       {(phase === 'jury' || phase === 'finale') && (
-        <section className="mt-6 rounded-2xl border border-amber-500/25 bg-amber-950/20 p-4">
-          <h2 className="text-[11px] font-bold uppercase tracking-wider text-amber-200">Jury</h2>
+        <section className="survivor-panel mt-6 rounded-2xl p-4">
+          <h2 className="sv-kicker text-[12px]">Jury</h2>
           <p className="mt-2 text-[13px] text-white/70">
             Jury of {(ctx.season?.players ?? []).filter((p) => p.isJuryMember).length}
           </p>
-          <Link href={`${base}/jury`} className="mt-2 inline-block text-[12px] text-amber-200">
+          <Link href={`${base}/jury`} className="sv-link mt-2 inline-block text-[12px]">
             Jury chamber →
           </Link>
         </section>
@@ -306,7 +304,7 @@ export default function SurvivorIslandHomePage() {
         <div className="mt-6 flex justify-center">
           <Link
             href={`${base}/merge`}
-            className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-cyan-100"
+            className="sv-chip-torch rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-wider"
           >
             🌊 Watch merge moment
           </Link>

@@ -41,20 +41,19 @@ export default function SurvivorExilePage() {
     <div
       className="relative min-h-[75vh] px-3 pb-28 pt-4 md:px-6 md:pb-10"
       style={{
-        background: 'linear-gradient(180deg, #0c0818 0%, var(--survivor-bg) 45%, #070510 100%)',
+        background: 'linear-gradient(180deg, rgba(12, 8, 24, 0.55) 0%, rgba(7, 8, 13, 0.82) 320px, var(--survivor-bg) 520px)',
       }}
     >
       <div
-        className="pointer-events-none fixed inset-x-0 bottom-0 h-32 opacity-40"
+        className="pointer-events-none fixed inset-x-0 bottom-0 h-32 opacity-40 motion-safe:[animation:survivor-fog-shift_18s_linear_infinite]"
         style={{
           background: `linear-gradient(0deg, rgba(139,92,246,0.15), transparent)`,
-          animation: 'survivor-fog-shift 18s linear infinite',
         }}
       />
 
       <header className="relative">
-        <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-violet-300/90">🏚 Exile Island</p>
-        <h1 className="mt-1 text-2xl font-black uppercase tracking-wide text-white/90">Isolation · Grind · Return</h1>
+        <p className="sv-kicker text-[12px] !text-violet-200">🏚 Exile Island</p>
+        <h1 className="sv-h mt-1 text-2xl uppercase md:text-3xl">Isolation · Grind · Return</h1>
         <p className="mt-2 text-[13px] text-white/50">
           {exiledCount} players marooned · Week {data?.bossContest?.week ?? island?.currentWeek ?? ctx.currentWeek}
         </p>
@@ -67,7 +66,7 @@ export default function SurvivorExilePage() {
       ) : null}
 
       {viewerSummary ? (
-        <section className="relative mt-6 survivor-panel p-5">
+        <section className="relative mt-6 survivor-panel rounded-2xl p-5">
           <p className="text-[14px] text-white/75">The main island only sees a summary.</p>
           <p className="mt-2 text-[12px] text-white/45">Token math and exile challenges stay private to exiles.</p>
         </section>
@@ -85,7 +84,7 @@ export default function SurvivorExilePage() {
           ) : null}
 
           {island?.bossWinsEnabled && data?.bossMode === 'chimmy_roster' ? <section className="relative mt-6 rounded-2xl border border-violet-400/30 bg-violet-950/20 p-4" aria-live="polite">
-            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-violet-200">Chimmy score to beat · Week {data?.bossContest?.week ?? island?.currentWeek ?? ctx.currentWeek}</p>
+            <p className="sv-kicker text-[11px] !text-violet-200">Chimmy score to beat · Week {data?.bossContest?.week ?? island?.currentWeek ?? ctx.currentWeek}</p>
             {data?.bossContest?.status === 'pending' ? (
               <p className="mt-2 text-[13px] text-white/70">Chimmy&apos;s NBA roster has not locked yet. The contest starts once a verified lineup is set before the week&apos;s first game.</p>
             ) : data?.bossContest ? (
@@ -116,12 +115,12 @@ export default function SurvivorExilePage() {
           </section> : null}
 
           <section className="relative mt-6 rounded-2xl border border-violet-500/25 bg-black/30 p-4">
-            <p className="text-[11px] font-bold uppercase text-violet-200">Exile challenges</p>
+            <p className="sv-kicker text-[11px] !text-violet-200">Exile challenges</p>
             <p className="mt-2 text-[12px] text-white/55">Chimmy announces available challenges and their deadlines in Exile Chat. Your main-island roster has been released; Exile continues your season with its own competition.</p>
           </section>
 
-          <section className="relative mt-6 survivor-panel p-4">
-            <p className="text-[11px] font-bold uppercase text-white/45">Exile managers</p>
+          <section className="relative mt-6 survivor-panel rounded-2xl p-4">
+            <p className="sv-kicker text-[11px]">Exile managers</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {(ctx.season?.players ?? [])
                 .filter((p) => p.playerState === 'exile')
