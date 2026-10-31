@@ -313,7 +313,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
       message.includes("starter is locked") ||
       message.includes("bench player is locked") ||
       message.includes("All roster moves are locked") ||
-      message.includes("Weekly drop limit")
+      message.includes("Weekly drop limit") ||
+      // NHL dynasty prospects (lib/waiver-wire/nhlProspectFreeAgency.ts): a refused id is a 400, not a 500.
+      message.includes("is unavailable") ||
+      message.includes("already on another roster")
     ) {
       return waiverClaimError(message, 400)
     }
