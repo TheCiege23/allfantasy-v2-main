@@ -9,6 +9,7 @@ import { getCachedSleeperUserId, setCachedSleeperUserId } from '@/lib/league/sle
 import { expandStarterSlots } from '@/lib/league/lineup-expand-template'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { resolveFullLineupLockContext } from '@/lib/roster-lineup-engine/lineupLockService'
+import { lineupVersionOf } from '@/lib/roster/lineupVersion'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { expandLockedRedraftStarterSlots, resolveLockedRedraftStarterLayout } from '@/lib/league/lineupStarterSlots'
 import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
@@ -342,6 +343,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       source: 'db' as const,
       rosterId: roster.id,
+      // Sent back with a save (`expectedLineupVersion`); see lib/roster/lineupVersion.ts.
+      lineupVersion: lineupVersionOf(roster.playerData),
       dailyLineups,
       collegeRights,
       campus,
