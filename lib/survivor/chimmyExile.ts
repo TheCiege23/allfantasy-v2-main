@@ -58,6 +58,40 @@ export function playerScoreAliases(player: { id: string; providerIds?: unknown }
   return [...ids]
 }
 
+/**
+ * Chimmy's Exile form, pure: each player's average fantasy points per finalized week across `scores`
+ * (already narrowed to the form weeks) under `scorer`. A score row belongs to the first player whose
+ * aliases (playerScoreAliases) include its id; the same week under two of a player's ids counts once,
+ * at the higher reading. A player with no row has form 0. Exported so the season rehearsal can rank
+ * every open team by the same measure Chimmy picks with.
+ */
+export function exileCandidatesFromScores(
+  players: ReadonlyArray<{ id: string; name: string; position: string; team: string | null; providerIds?: unknown }>,
+  scores: ReadonlyArray<{ playerId: string; week: number; stats: unknown }>,
+  scorer: (stats: Record<string, number>, position: string | null) => number,
+): ExileCandidate[] {
+  const ownerOf = new Map<string, string>()
+  for (const p of players) for (const alias of playerScoreAliases(p)) if (!ownerOf.has(alias)) ownerOf.set(alias, p.id)
+  const weekly = new Map<string, Map<number, number>>()
+  const positionOf = new Map(players.map((p) => [p.id, p.position]))
+  for (const row of scores) {
+    const owner = ownerOf.get(row.playerId)
+    if (!owner || !row.stats || typeof row.stats !== 'object' || Array.isArray(row.stats)) continue
+    const points = scorer(row.stats as Record<string, number>, positionOf.get(owner) ?? null)
+    if (!Number.isFinite(points)) continue
+    const weeks = weekly.get(owner) ?? new Map<number, number>()
+    weeks.set(row.week, Math.max(weeks.get(row.week) ?? -Infinity, points))
+    weekly.set(owner, weeks)
+  }
+  const totals = new Map([...weekly].map(([id, weeks]) => [id, { sum: [...weeks.values()].reduce((a, b) => a + b, 0), weeks: weeks.size }]))
+  return players
+    .filter((p): p is typeof p & { team: string } => Boolean(p.team))
+    .map((p) => {
+      const t = totals.get(p.id)
+      return { id: p.id, name: p.name, position: p.position, team: p.team, recentPoints: t ? t.sum / t.weeks : 0 }
+    })
+}
+
 export type ChimmyExileTurn = { claimed: Record<string, { team: string; expected: number; players: number }>; skipped: Record<string, string> }
 
 /**
@@ -114,34 +148,14 @@ export async function runChimmyExileTurn(leagueId: string, now = new Date()): Pr
     // Exile reserves a team under the player row's own spelling (upper-cased), so that is the name the plan uses.
     const openTeams = [...new Set(players.map((p) => p.team!.trim().toUpperCase()))].filter((t) => !taken.includes(t))
     if (openTeams.length === 0) { turn.skipped[castaway.userId] = 'no_open_team'; return }
-    const ownerOf = new Map<string, string>()
-    for (const p of players) for (const alias of playerScoreAliases(p)) if (!ownerOf.has(alias)) ownerOf.set(alias, p.id)
     const scores = await prisma.playerWeeklyScore.findMany({
       where: {
-        playerId: { in: [...ownerOf.keys()] }, sport: league.sport, season: league.season, isFinalized: true,
+        playerId: { in: [...new Set(players.flatMap((p) => playerScoreAliases(p)))] }, sport: league.sport, season: league.season, isFinalized: true,
         week: { gte: waivers.week - CHIMMY_EXILE_FORM_WEEKS, lt: waivers.week },
       },
       select: { playerId: true, week: true, stats: true },
     })
-    // One reading per player per week: the same week can sit under two of a player's ids.
-    const weekly = new Map<string, Map<number, number>>()
-    const positionOf = new Map(players.map((p) => [p.id, p.position]))
-    for (const row of scores) {
-      const owner = ownerOf.get(row.playerId)
-      if (!owner || !row.stats || typeof row.stats !== 'object' || Array.isArray(row.stats)) continue
-      const points = scorer(row.stats as Record<string, number>, positionOf.get(owner) ?? null)
-      if (!Number.isFinite(points)) continue
-      const weeks = weekly.get(owner) ?? new Map<number, number>()
-      weeks.set(row.week, Math.max(weeks.get(row.week) ?? -Infinity, points))
-      weekly.set(owner, weeks)
-    }
-    const totals = new Map([...weekly].map(([id, weeks]) => [id, { sum: [...weeks.values()].reduce((a, b) => a + b, 0), weeks: weeks.size }]))
-    const candidates: ExileCandidate[] = players
-      .filter((p): p is typeof p & { team: string } => Boolean(p.team))
-      .map((p) => {
-        const t = totals.get(p.id)
-        return { id: p.id, name: p.name, position: p.position, team: p.team, recentPoints: t ? t.sum / t.weeks : 0 }
-      })
+    const candidates = exileCandidatesFromScores(players, scores, scorer)
     const plan = chimmyExilePlan(candidates, league.sport, league.settings, openTeams, taken)
     if (!plan) { turn.skipped[castaway.userId] = 'no_legal_roster'; return }
 

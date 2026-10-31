@@ -21,6 +21,9 @@ on:
       chimmy:
         description: 'Teams handed to Chimmy before the draft (0-4; 0 = all human)'
         default: '2'
+      real_scores:
+        description: 'Keep real PlayerWeeklyScore rows already on the branch and seed only the gaps (true/false)'
+        default: 'false'
   push:
     branches: [claude/survivor-season-harness]
     paths: ['scripts/survivor-season-rehearsal/**', '.github/workflows/survivor-season-rehearsal.yml']
@@ -70,12 +73,13 @@ jobs:
           CAST: ${{ inputs.cast || '16' }}
           START: ${{ inputs.start || '2026-09-08T16:00:00Z' }}
           CHIMMY: ${{ inputs.chimmy || '2' }}
+          REAL_SCORES: ${{ inputs.real_scores || 'false' }}
         run: |
           export NEXTAUTH_SECRET="$(openssl rand -hex 32)"
           export DIRECT_URL="${DATABASE_URL/-pooler./.}"
           set +e
           npx tsx --conditions=react-server scripts/survivor-season-rehearsal/run.ts \
-            --sport="$SPORT" --cast="$CAST" --start="$START" --chimmy="$CHIMMY" --log=rehearsal.log > rehearsal.out 2>&1
+            --sport="$SPORT" --cast="$CAST" --start="$START" --chimmy="$CHIMMY" --real-scores="$REAL_SCORES" --log=rehearsal.log > rehearsal.out 2>&1
           echo "RC=$?" >> rehearsal.log
           exit 0
       - name: Post the log to the pull request
@@ -86,6 +90,8 @@ jobs:
         run: |
           touch rehearsal.log rehearsal.out
           PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          # A run dispatched from a branch with no PR of its own reports to the harness's PR.
+          if [ -z "$PR" ]; then PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head claude/survivor-season-harness --state open --json number --jq '.[0].number'); fi
           {
             echo "### Survivor rehearsal · ${{ inputs.sport || 'NFL' }} ${{ inputs.cast || '16' }} · run ${{ github.run_id }}"
             echo '```'

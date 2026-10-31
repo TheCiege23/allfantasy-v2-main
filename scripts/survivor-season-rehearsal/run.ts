@@ -34,6 +34,10 @@ const CHIMMY = Number(arg('chimmy', '0'))
 // Hand each Chimmy castaway a protective idol at setup, so a season exercises "play it when at risk"
 // (the seeded draw rarely lands on two particular teams). 0 leaves the draw alone.
 const CHIMMY_IDOLS = Number(arg('chimmy-idols', '1'))
+// Judge Chimmy against real stats: a PlayerWeeklyScore row that already holds a real stat line for a
+// week is kept, and only the gaps are seeded (so every council still has scores). Off: every rostered
+// player's week is seeded over, as the rehearsal always did. `--real-scores` or `--real-scores=true`.
+const REAL_SCORES = process.argv.includes('--real-scores') || arg('real-scores', 'false').toLowerCase() === 'true'
 
 function log(line: string) {
   const out = `[${rehearsalNow().toISOString()}] ${line}`
@@ -50,6 +54,19 @@ function guard() {
   assert.equal(endpoint, process.env.SURVIVOR_REHEARSAL_ENDPOINT, 'DATABASE_URL must point at SURVIVOR_REHEARSAL_ENDPOINT')
   const present = DELIVERY_ENV.filter(k => process.env[k])
   assert.deepEqual(present, [], `Unset delivery credentials first: ${present.join(', ')}`)
+}
+
+type ExileTeamForm = { team: string; expected: number; filled: number; readings: number; real: number }
+type ExileField = { week: number; ranking: ExileTeamForm[] }
+
+/**
+ * A real stat line: a non-empty stat map carrying the points the score sync computed. The rehearsal's
+ * own seeds — this run's and every earlier run's on the shared branch — write fantasyPts 0, and a
+ * sealed no-show row is `{}`. A real line that genuinely scored exactly 0 is counted as a gap.
+ */
+function isRealScoreRow(row: { stats: unknown; fantasyPts: number }): boolean {
+  const s = row.stats
+  return Boolean(s) && typeof s === 'object' && !Array.isArray(s) && Object.keys(s as object).length > 0 && row.fantasyPts !== 0
 }
 
 let seed = 0x5eed
@@ -155,6 +172,7 @@ async function main() {
   const plan = readSurvivorFullSeasonPlan(league.settings)
   assert.ok(plan, 'no season plan')
   log(`plan: weeks ${plan.startWeek}-${plan.endWeek}, eliminations ${JSON.stringify(plan.eliminationWeeks)}, finale ${plan.finaleWeek}, exile return ${plan.exileReturnWeek ?? '-'}`)
+  if (REAL_SCORES) await logRealScoreCensus(league.season)
 
   // Read by seedWeekScores, which the season loop calls: declared before the loop, not beside it.
   type SeedCategory = { key: string; group: string; points: number }
@@ -165,11 +183,18 @@ async function main() {
   const seeded = new Set<number>()
   const exileSeeded = new Set<number>()
   const exileReasons = new Set<string>()
+  // Rows this run's seeding wrote ("playerId:week"), so a real-scores gap fill never mistakes them for real.
+  const seededThisRun = new Set<string>()
+  const exileCompared = new Set<string>()
+  let exileFieldCache: { key: string; fields: Map<string, ExileField> } | null = null
   let last = '', repeats = 0
   for (let step = 0; step < MAX_STEPS; step++) {
     const game = await prisma.survivorGameState.findUnique({ where: { leagueId } })
     const week = game?.currentWeek ?? 0
+    // Chimmy's Exile claim happens inside the runner's tick: read the field it chooses from first.
+    const exileBefore = CHIMMY > 0 ? await chimmyExileFields(rehearsalNow()) : null
     const outcome = await runPlannedSurvivorLeague(leagueId, rehearsalNow())
+    if (exileBefore?.size) await logChimmyExileClaims(exileBefore)
     const key = `${outcome}@${week}`
     repeats = key === last ? repeats + 1 : 0
     if (repeats === 0) log(`week ${week} phase ${game?.phase}: ${outcome}`)
@@ -226,7 +251,27 @@ async function main() {
     const all = [...new Map(rows.map(r => [r.playerId, r])).values()]
     const scoring = await leagueScoring()
     const points: number[] = []
+    // Real-scores mode: the rows already there for this week, keyed the way the scorer reads them.
+    const existing = REAL_SCORES
+      ? new Map((await prisma.playerWeeklyScore.findMany({
+          where: { playerId: { in: all.map(p => p.playerId) }, week, season: season.season },
+          select: { playerId: true, sport: true, stats: true, fantasyPts: true, isFinalized: true },
+        })).map(r => [`${r.playerId}:${r.sport}`, r]))
+      : null
+    let kept = 0, finalizedReal = 0, replaced = 0
     for (const p of all) {
+      const have = existing?.get(`${p.playerId}:${p.sport}`)
+      if (have && isRealScoreRow(have) && !seededThisRun.has(`${p.playerId}:${week}`)) {
+        kept++
+        points.push(scoring.score(have.stats as Record<string, number>, p.position))
+        if (!have.isFinalized) {
+          // A real line the week never sealed: seal it as it is, or the rehearsal's week cannot finalize.
+          await prisma.playerWeeklyScore.update({ where: { playerId_week_season_sport: { playerId: p.playerId, week, season: season.season, sport: p.sport } }, data: { isFinalized: true } })
+          finalizedReal++
+        }
+        continue
+      }
+      if (have) replaced++
       const stats = statsFor(p.position ?? '', scoring.categories)
       points.push(scoring.score(stats, p.position))
       await prisma.playerWeeklyScore.upsert({
@@ -234,8 +279,10 @@ async function main() {
         create: { playerId: p.playerId, week, season: season.season, sport: p.sport, stats, fantasyPts: 0, isFinalized: true },
         update: { stats, isFinalized: true },
       })
+      seededThisRun.add(`${p.playerId}:${week}`)
     }
     const scored = points.filter(n => n > 0).length
+    if (REAL_SCORES) log(`real scores week ${week}: kept ${kept} real rows of ${all.length} rostered players (${finalizedReal} sealed in place), seeded ${all.length - kept} gaps (${replaced} of them over a non-real row)`)
     log(`seeded week ${week} scores for ${all.length} players: ${scored} score above 0 under the league's scoring, range ${Math.min(...points).toFixed(1)} to ${Math.max(...points).toFixed(1)}`)
     // Stat names the league does not score make every team 0 and every council a tie, which looks
     // like a tiebreak problem rather than a seeding one. Stop here instead.
@@ -244,7 +291,9 @@ async function main() {
 
   async function explainChimmyExile(week: number) {
     const { runChimmyExileTurn } = await import('../../lib/survivor/chimmyExile')
+    const exileBefore = await chimmyExileFields(rehearsalNow())
     const turn = await runChimmyExileTurn(leagueId, rehearsalNow())
+    if (exileBefore.size) await logChimmyExileClaims(exileBefore)
     for (const [userId, reason] of Object.entries(turn.skipped)) {
       if (reason === 'already_set') continue
       const key = `${userId}:${reason}`
@@ -255,22 +304,127 @@ async function main() {
     for (const [userId, c] of Object.entries(turn.claimed)) log(`Chimmy Exile w${week}: ${userId.slice(0, 15)} took ${c.team} (${c.players} players, form ${c.expected})`)
   }
 
+  /**
+   * What a real-scores run has to work with: finalized rows per week for this sport and season. "real"
+   * is a row with points the score sync computed (fantasyPts ≠ 0); the rest are sealed no-show rows
+   * ({}) and rehearsal seeds, this branch's earlier runs included, which always write fantasyPts 0.
+   */
+  async function logRealScoreCensus(seasonYear: number) {
+    const where = { sport: { equals: SPORT, mode: 'insensitive' as const }, season: seasonYear }
+    const [finalized, real, unsealed] = await Promise.all([
+      prisma.playerWeeklyScore.groupBy({ by: ['week'], where: { ...where, isFinalized: true }, _count: { _all: true } }),
+      prisma.playerWeeklyScore.groupBy({ by: ['week'], where: { ...where, isFinalized: true, fantasyPts: { not: 0 } }, _count: { _all: true } }),
+      prisma.playerWeeklyScore.groupBy({ by: ['week'], where: { ...where, isFinalized: false }, _count: { _all: true } }),
+    ])
+    const count = (rows: typeof finalized) => new Map(rows.map(r => [r.week, r._count._all]))
+    const f = count(finalized), r = count(real), u = count(unsealed)
+    const weeks = [...new Set([...f.keys(), ...u.keys()])].sort((a, b) => a - b)
+    const total = [...r.values()].reduce((a, b) => a + b, 0)
+    log(`real-score census ${SPORT} ${seasonYear}: ${total} real finalized rows${weeks.length ? `; per week real/finalized(+unsealed) ${weeks.map(w => `w${w}:${r.get(w) ?? 0}/${f.get(w) ?? 0}${u.get(w) ? `(+${u.get(w)})` : ''}`).join(' ')}` : '; no PlayerWeeklyScore rows at all'}`)
+  }
+
+  /**
+   * The field each exiled Chimmy castaway without a team picks from right now: every open team, ranked
+   * by the same form Chimmy uses (exileCandidatesFromScores + chimmyExilePlan for that team alone), the
+   * same open-team rule (first game of the period not started, not reserved by another castaway).
+   * Read before a tick so the comparison sees the field as it was when Chimmy chose.
+   */
+  async function chimmyExileFields(now: Date): Promise<Map<string, ExileField>> {
+    const fields = new Map<string, ExileField>()
+    const exiled = await prisma.survivorPlayer.findMany({ where: { leagueId, playerState: 'exile', redraftRosterId: { in: chimmyRosterIds }, userId: { startsWith: 'orphan-' } }, select: { userId: true }, orderBy: { userId: 'asc' } })
+    if (!exiled.length) return fields
+    const cacheKey = `${now.getTime()}|${exiled.map(e => e.userId).join(',')}`
+    if (exileFieldCache?.key === cacheKey) return exileFieldCache.fields
+    const { getExileWaivers, exileWeekWindow, exileFirstGames, exileTeamKey } = await import('../../lib/survivor/exileRosterService')
+    const { exileCandidatesFromScores, playerScoreAliases, chimmyExilePlan, CHIMMY_EXILE_FORM_WEEKS } = await import('../../lib/survivor/chimmyExile')
+    const { buildLeagueStatScorer } = await import('../../lib/redraft/scoringEngine')
+    const lg = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { sport: true, season: true, settings: true } })
+    const scorer = buildLeagueStatScorer(lg)
+    if (!scorer || lg.season == null) return fields
+    for (const { userId } of exiled) {
+      let waivers: Awaited<ReturnType<typeof getExileWaivers>>
+      try { waivers = await getExileWaivers(leagueId, userId, '', now) } catch { continue }
+      if (waivers.roster.team || waivers.locked || exileCompared.has(`${userId}:${waivers.week}`)) continue
+      const window = await exileWeekWindow(prisma as never, lg.sport, lg.season, waivers.week)
+      if (!window) continue
+      const firstGame = await exileFirstGames(prisma as never, lg.sport, lg.season, waivers.week, window.start, window.end)
+      const openKeys = new Set([...firstGame].filter(([, start]) => start > now).map(([key]) => key))
+      const taken = waivers.takenTeamIds.map(t => t.toUpperCase())
+      const players = (await prisma.player.findMany({
+        where: { sport: { equals: lg.sport, mode: 'insensitive' }, active: true, team: { not: null } },
+        select: { id: true, name: true, position: true, team: true, providerIds: true },
+      })).filter(p => p.team && openKeys.has(exileTeamKey(lg.sport, p.team)))
+      const openTeams = [...new Set(players.map(p => p.team!.trim().toUpperCase()))].filter(t => !taken.includes(t))
+      const aliasesOf = new Map(players.map(p => [p.id, playerScoreAliases(p)]))
+      const rows = await prisma.playerWeeklyScore.findMany({
+        where: { playerId: { in: [...new Set([...aliasesOf.values()].flat())] }, sport: lg.sport, season: lg.season, isFinalized: true, week: { gte: waivers.week - CHIMMY_EXILE_FORM_WEEKS, lt: waivers.week } },
+        select: { playerId: true, week: true, stats: true, fantasyPts: true },
+      })
+      const candidates = exileCandidatesFromScores(players, rows, scorer)
+      const ranking: ExileTeamForm[] = []
+      for (const team of openTeams) {
+        const plan = chimmyExilePlan(candidates, lg.sport, lg.settings, [team], taken)
+        if (!plan) continue
+        const ids = new Set(plan.picks.flatMap(p => aliasesOf.get(p.id) ?? [p.id]))
+        const readings = rows.filter(r => ids.has(r.playerId))
+        ranking.push({ team: plan.team, expected: plan.expected, filled: plan.picks.length, readings: readings.length, real: readings.filter(r => isRealScoreRow(r)).length })
+      }
+      // Chimmy's own order (chimmyExileStrategy): form, then starting spots filled, then team code.
+      ranking.sort((a, b) => b.expected - a.expected || b.filled - a.filled || (a.team < b.team ? -1 : a.team > b.team ? 1 : 0))
+      fields.set(userId, { week: waivers.week, ranking })
+    }
+    exileFieldCache = { key: cacheKey, fields }
+    return fields
+  }
+
+  /** After a tick: for each castaway whose team was set by it, how Chimmy's pick ranks in the field it chose from. */
+  async function logChimmyExileClaims(before: Map<string, ExileField>) {
+    const { getExileWaivers } = await import('../../lib/survivor/exileRosterService')
+    const claimed: Array<[string, string]> = []
+    for (const [userId, field] of before) {
+      if (exileCompared.has(`${userId}:${field.week}`)) continue
+      try {
+        const after = await getExileWaivers(leagueId, userId, '', rehearsalNow())
+        if (after.week === field.week && after.roster.team) claimed.push([userId, after.roster.team.toUpperCase()])
+      } catch { /* left Exile in the tick: nothing claimed to judge */ }
+    }
+    if (!claimed.length) return
+    exileFieldCache = null
+    for (const [userId, team] of claimed) {
+      const field = before.get(userId)!
+      exileCompared.add(`${userId}:${field.week}`)
+      // Another castaway claiming in the same tick took its team out of this one's field.
+      const others = new Set(claimed.filter(([u]) => u !== userId).map(([, t]) => t))
+      const open = field.ranking.filter(t => t.team === team || !others.has(t.team))
+      const at = open.findIndex(t => t.team === team)
+      const mine = open[at]
+      const best = open[0]
+      const tied = best ? open.filter(t => t.expected === best.expected).length : 0
+      const withForm = open.filter(t => t.expected > 0).length
+      const desc = (t: ExileTeamForm) => `form ${t.expected} (${t.filled} starters, ${t.real}/${t.readings} form readings real)`
+      log(`Chimmy Exile pick w${field.week}: ${userId.slice(0, 15)} took ${team} ${mine ? desc(mine) : '(not in the pre-claim open field)'}; rank ${at >= 0 ? at + 1 : '-'}/${open.length}; best open ${best ? `${best.team} ${desc(best)}` : 'none'}${tied > 1 ? `, ${tied}-way tie at the top` : ''}; ${withForm}/${open.length} open teams have any form`)
+    }
+  }
+
   async function seedExileScores(week: number) {
     const season = await prisma.redraftSeason.findFirstOrThrow({ where: { leagueId } })
     const entries = await prisma.exileWeeklyEntry.findMany({ where: { leagueId, week }, select: { userId: true, submittedLineup: true } })
     const scoring = await leagueScoring()
-    let wrote = 0
+    let wrote = 0, real = 0
     for (const entry of entries) {
       const lineup = entry.submittedLineup as { players?: Array<{ id: string; position: string }> } | null
       for (const p of lineup?.players ?? []) {
         const key = { playerId_week_season_sport: { playerId: p.id, week, season: season.season, sport: SPORT } }
-        if (await prisma.playerWeeklyScore.findUnique({ where: key, select: { id: true } })) continue
+        // Any row already there is kept, real or not: Exile seeding never overwrote, with or without --real-scores.
+        const have = await prisma.playerWeeklyScore.findUnique({ where: key, select: { stats: true, fantasyPts: true } })
+        if (have) { if (isRealScoreRow(have) && !seededThisRun.has(`${p.id}:${week}`)) real++; continue }
         const stats = statsFor(p.position, scoring.categories)
         await prisma.playerWeeklyScore.create({ data: { playerId: p.id, week, season: season.season, sport: SPORT, stats, fantasyPts: 0, isFinalized: true } })
+        seededThisRun.add(`${p.id}:${week}`)
         wrote++
       }
     }
-    log(`seeded week ${week} Exile scores: ${wrote} players across ${entries.length} Exile rosters`)
+    log(`seeded week ${week} Exile scores: ${wrote} players across ${entries.length} Exile rosters${REAL_SCORES ? `; ${real} Exile players already had a real row` : ''}`)
   }
 
   /** The scorer's own inputs for the first cast member, so a week that will not finalize says why. */

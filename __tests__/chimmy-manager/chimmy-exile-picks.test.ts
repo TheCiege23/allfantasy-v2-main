@@ -49,7 +49,7 @@ vi.mock('@/lib/survivor/exileRosterService', () => ({
 }))
 
 import { chimmyExilePlan, type ExileCandidate } from '@/lib/survivor/chimmyExileStrategy'
-import { CHIMMY_EXILE_RETRY_MS, playerScoreAliases, resetChimmyExileRetries, runChimmyExileTurn } from '@/lib/survivor/chimmyExile'
+import { CHIMMY_EXILE_RETRY_MS, exileCandidatesFromScores, playerScoreAliases, resetChimmyExileRetries, runChimmyExileTurn } from '@/lib/survivor/chimmyExile'
 import { prisma } from '@/lib/prisma'
 
 const c = (id: string, position: string, team: string, recentPoints: number): ExileCandidate => ({ id, name: id, position, team, recentPoints })
@@ -219,5 +219,28 @@ describe('the pause after an Exile turn that came to nothing', () => {
     h.exiled = [{ userId: 'orphan-r8', redraftRosterId: 'r8' }]
     h.settings = { af_managed_lineups: { r8: { since: 's', byUserId: 'c', ownerUserId: 'orphan-r8', autopilot: { style: 'win_now', since: 's', byUserId: 'c' } } } }
     expect((await runChimmyExileTurn('L1', new Date(t0.getTime() + 60_000))).skipped['orphan-r8']).toBe('no_open_team')
+  })
+})
+
+describe('exileCandidatesFromScores', () => {
+  const scorer = (stats: Record<string, number>) => stats.pts ?? 0
+  const players = [
+    { id: 'p1', name: 'One', position: 'C', team: 'TOR', providerIds: { rolling: 'ri:501' } },
+    { id: 'p2', name: 'Two', position: 'LW', team: 'TOR' },
+    { id: 'p3', name: 'Three', position: 'D', team: null },
+  ]
+
+  it('averages each player over the weeks he has, under any of his ids, counting a week once at its higher reading', () => {
+    const out = exileCandidatesFromScores(players, [
+      { playerId: 'p1', week: 3, stats: { pts: 4 } },
+      { playerId: '501', week: 3, stats: { pts: 6 } },
+      { playerId: 'ri:501', week: 4, stats: { pts: 2 } },
+      { playerId: 'p2', week: 4, stats: [] },
+      { playerId: 'stranger', week: 4, stats: { pts: 50 } },
+    ], scorer)
+    expect(out).toEqual([
+      { id: 'p1', name: 'One', position: 'C', team: 'TOR', recentPoints: 4 },
+      { id: 'p2', name: 'Two', position: 'LW', team: 'TOR', recentPoints: 0 },
+    ])
   })
 })
