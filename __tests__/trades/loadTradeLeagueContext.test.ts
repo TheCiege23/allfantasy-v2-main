@@ -5,7 +5,7 @@ type Row = Parameters<typeof buildTradeLeagueContext>[0]
 type Team = Parameters<typeof buildTradeLeagueContext>[1][number]
 
 const league = (patch: Partial<Row> = {}): Row => ({
-  id: 'league-1', platformLeagueId: 'source-1', platform: 'fantrax',
+  id: 'league-1', platformLeagueId: 'source-1', name: 'Test league', platform: 'fantrax',
   sport: 'NCAAF', season: 2026, leagueType: 'dynasty', isDynasty: true,
   leagueSize: null, scoring: null, settings: null, starters: null,
   waiverBudget: null, taxiSlots: null, irSlots: null,

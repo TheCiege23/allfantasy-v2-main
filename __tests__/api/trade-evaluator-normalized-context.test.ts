@@ -12,6 +12,7 @@ const setCachedResponseMock = vi.fn()
 const buildCacheKeyMock = vi.fn()
 
 const resolveTradeEvaluatorInternalLeagueIdMock = vi.fn()
+const loadTradeLeagueContextMock = vi.fn()
 const resolveTradePlayerAssetsMock = vi.fn()
 const buildNormalizedTradeContextMock = vi.fn()
 const buildNormalizedTradeEvidencePromptMock = vi.fn()
@@ -52,6 +53,10 @@ vi.mock('@/lib/ai-protection', () => ({
 vi.mock('@/lib/trades/resolveTradeEvaluatorInternalLeagueId', () => ({
   resolveTradeEvaluatorInternalLeagueId: (...a: unknown[]) =>
     resolveTradeEvaluatorInternalLeagueIdMock(...a),
+}))
+
+vi.mock('@/lib/trades/loadTradeLeagueContext', () => ({
+  loadTradeLeagueContext: (...a: unknown[]) => loadTradeLeagueContextMock(...a),
 }))
 
 vi.mock('@/lib/trades/tradePlayerIdentityResolver', () => ({
@@ -203,6 +208,15 @@ describe('POST /api/trade-evaluator normalized provider context', () => {
     })
     assertLeagueMemberMock.mockResolvedValue(undefined)
     resolveTradeEvaluatorInternalLeagueIdMock.mockResolvedValue('af-league-1')
+    loadTradeLeagueContextMock.mockResolvedValue({
+      leagueId: 'af-league-1', platformLeagueId: 'sleeper-league-1', name: 'Stored league',
+      platform: 'sleeper', sport: 'NFL', season: 2026, format: 'dynasty', dynasty: true,
+      teamCount: 16, scoringMode: 'points', categoryPresetId: null,
+      scoringRules: { rec: 0.5 }, scoringRuleDetails: [],
+      starterSlots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1 },
+      benchSlots: 6, irSlots: 2, taxiSlots: 0, waiverBudget: 200,
+      teams: [], viewerTeamIds: [], missing: [],
+    })
     buildNormalizedTradeEvidencePromptMock.mockReturnValue('MOCK_EVIDENCE_PROMPT')
   })
 
@@ -244,6 +258,80 @@ describe('POST /api/trade-evaluator normalized provider context', () => {
     })
     expect(buildNormalizedTradeContextMock).toHaveBeenCalled()
     expect(buildNormalizedTradeEvidencePromptMock).toHaveBeenCalled()
+    expect(body.leagueSettings).toMatchObject({
+      source: 'sleeper', teamCount: 16, sport: 'nfl', scoringRules: { rec: 0.5 },
+      starterSlots: { QB: 1, RB: 2 }, qbFormat: '1qb',
+    })
+    expect(assertLeagueMemberMock).toHaveBeenCalledWith('af-league-1', 'user-1')
+    expect(loadTradeLeagueContextMock).toHaveBeenCalledWith('af-league-1', 'user-1')
+  })
+
+  it('grades an authorized native NFL league from stored rules without calling Sleeper league APIs', async () => {
+    loadTradeLeagueContextMock.mockResolvedValueOnce({
+      leagueId: 'af-league-1', platformLeagueId: 'native-source-1', name: 'Native league',
+      platform: 'allfantasy', sport: 'NFL', season: 2026, format: 'dynasty', dynasty: true,
+      teamCount: 24, scoringMode: 'points', categoryPresetId: null,
+      scoringRules: { rec: 1 }, scoringRuleDetails: [],
+      starterSlots: { QB: 1, RB: 2, WR: 3, TE: 1 },
+      benchSlots: 8, irSlots: 2, taxiSlots: 0, waiverBudget: 100,
+      teams: [], viewerTeamIds: [], missing: [],
+    })
+    resolveTradePlayerAssetsMock.mockResolvedValue({ resolved: [], unresolved: [] })
+    buildNormalizedTradeContextMock.mockResolvedValue(null)
+    const { POST } = await import('@/app/api/trade-evaluator/route')
+    const { getLeagueInfo, getLeagueRosters, getTradedDraftPicks } = await import('@/lib/sleeper-client')
+    const res = await POST(createMockNextRequest('http://localhost/api/trade-evaluator', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...baseBody(), league_id: 'af-league-1' }),
+    }) as any)
+
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({
+      leagueSettings: { source: 'allfantasy', teamCount: 24, scoringRules: { rec: 1 } },
+    })
+    expect(getLeagueInfo).not.toHaveBeenCalled()
+    expect(getLeagueRosters).not.toHaveBeenCalled()
+    expect(getTradedDraftPicks).not.toHaveBeenCalled()
+  })
+
+  it('refuses to grade a stored NBA league with the NFL market model before spending a token', async () => {
+    loadTradeLeagueContextMock.mockResolvedValueOnce({
+      leagueId: 'af-league-1', platformLeagueId: 'nba-source-1', name: 'NBA league',
+      platform: 'espn', sport: 'NBA', season: 2026, format: 'redraft', dynasty: false,
+      teamCount: 12, scoringMode: 'h2h_category', categoryPresetId: 'nba_9cat',
+      scoringRules: {}, scoringRuleDetails: [], starterSlots: { PG: 1 },
+      benchSlots: 3, irSlots: 1, taxiSlots: 0, waiverBudget: null,
+      teams: [], viewerTeamIds: [], missing: [],
+    })
+    const { POST } = await import('@/app/api/trade-evaluator/route')
+    const res = await POST(createMockNextRequest('http://localhost/api/trade-evaluator', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...baseBody(), league: { sport: 'NFL', format: 'dynasty' } }),
+    }) as any)
+
+    expect(res.status).toBe(422)
+    await expect(res.json()).resolves.toMatchObject({ error: 'SPORT_VALUATION_UNAVAILABLE', sport: 'NBA' })
+    expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses unsupported custom reception scoring before spending a token', async () => {
+    loadTradeLeagueContextMock.mockResolvedValueOnce({
+      leagueId: 'af-league-1', platformLeagueId: 'espn-source-1', name: 'Custom league',
+      platform: 'espn', sport: 'NFL', season: 2026, format: 'redraft', dynasty: false,
+      teamCount: 12, scoringMode: 'points', categoryPresetId: null,
+      scoringRules: { rec: 0.25 }, scoringRuleDetails: [], starterSlots: { QB: 1, RB: 2 },
+      benchSlots: 6, irSlots: 1, taxiSlots: 0, waiverBudget: null,
+      teams: [], viewerTeamIds: [], missing: [],
+    })
+    const { POST } = await import('@/app/api/trade-evaluator/route')
+    const res = await POST(createMockNextRequest('http://localhost/api/trade-evaluator', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(baseBody()),
+    }) as any)
+
+    expect(res.status).toBe(422)
+    await expect(res.json()).resolves.toMatchObject({ error: 'SCORING_MODEL_UNAVAILABLE' })
+    expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
   })
 
   it('omits providerEvidence when no players resolve for normalized fetch', async () => {

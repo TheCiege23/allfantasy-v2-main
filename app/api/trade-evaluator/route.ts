@@ -56,6 +56,7 @@ import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middle
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { resolveTradeEvaluatorInternalLeagueId } from '@/lib/trades/resolveTradeEvaluatorInternalLeagueId'
+import { loadTradeLeagueContext, type TradeLeagueContext } from '@/lib/trades/loadTradeLeagueContext'
 import { resolveTradePlayerAssets } from '@/lib/trades/tradePlayerIdentityResolver'
 import {
   buildNormalizedTradeContext,
@@ -447,12 +448,23 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
     const body = await request.json()
     const data = TradeRequestSchema.parse(body)
 
+    const internalLeagueId = data.league_id
+      ? await resolveTradeEvaluatorInternalLeagueId(data.league_id, userId).catch(() => null)
+      : null
+    let tradeLeagueContext: TradeLeagueContext | null = null
     if (data.league_id) {
+      if (!internalLeagueId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       try {
-        await assertLeagueMember(data.league_id, userId)
+        await assertLeagueMember(internalLeagueId, userId)
       } catch {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
+      try {
+        tradeLeagueContext = await loadTradeLeagueContext(internalLeagueId, userId)
+      } catch {
+        return NextResponse.json({ error: 'League context is temporarily unavailable' }, { status: 503 })
+      }
+      if (!tradeLeagueContext) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     /*
@@ -489,6 +501,41 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         { status: 422 },
       )
     }
+
+    // The pricing path below uses an NFL FantasyCalc board and NFL lineup math.
+    // A stored NBA/NHL/MLB/college/soccer league must never receive that grade.
+    const evaluatedSport = normalizeToSupportedSport(String(tradeLeagueContext?.sport ?? data.league?.sport ?? 'NFL'))
+    if (evaluatedSport !== 'NFL') {
+      return NextResponse.json({
+        error: 'SPORT_VALUATION_UNAVAILABLE',
+        message: `Trade grading for ${evaluatedSport} is not available in this evaluator yet.`,
+        sport: evaluatedSport,
+      }, { status: 422 })
+    }
+    if (tradeLeagueContext) {
+      const required = tradeLeagueContext.missing.filter((key) =>
+        key === 'team_count' || key === 'scoring_rules' || key === 'roster_slots',
+      )
+      if (required.length > 0) {
+        return NextResponse.json({
+          error: 'LEAGUE_RULES_UNAVAILABLE',
+          message: 'This league needs its team count, scoring rules, and starting slots before it can be graded.',
+          missing: required,
+        }, { status: 422 })
+      }
+    }
+    const storedReceptionPoints = tradeLeagueContext?.scoringRules.rec ?? 0
+    if (tradeLeagueContext && storedReceptionPoints !== 0 && storedReceptionPoints !== 0.5 && storedReceptionPoints !== 1) {
+      return NextResponse.json({
+        error: 'SCORING_MODEL_UNAVAILABLE',
+        message: `This evaluator cannot price ${storedReceptionPoints}-point receptions yet.`,
+      }, { status: 422 })
+    }
+    const marketPpr: 0 | 0.5 | 1 | undefined = tradeLeagueContext
+      ? storedReceptionPoints === 0 || storedReceptionPoints === 0.5 || storedReceptionPoints === 1
+        ? storedReceptionPoints
+        : undefined
+      : undefined
 
     const sId = (data.sender.team_id || data.sender.manager_name || '').trim().toLowerCase()
     const rId = (data.receiver.team_id || data.receiver.manager_name || '').trim().toLowerCase()
@@ -540,7 +587,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
      * fetched, because the league's own roster positions outrank anything a client asserts.
      */
     const declaredQbFormat = data.league?.qb_format ?? null
-    const leagueSport = normalizeToSupportedSport(String(data.league?.sport || 'nfl'))
+    const leagueSport = evaluatedSport
     const leagueSportSlug = String(leagueSport).toLowerCase()
     const biasMode = data.sender.is_af_pro && data.receiver.is_af_pro ? 'neutral' : 'protect_receiver'
 
@@ -565,10 +612,6 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
 
     let normalizedTradeBundle: BuildNormalizedTradeContextResult | null = null
     const tradePlayerAssets = [...data.sender.gives_players, ...data.receiver.gives_players]
-    const internalLeagueId =
-      data.league_id && userId
-        ? await resolveTradeEvaluatorInternalLeagueId(data.league_id, userId).catch(() => null)
-        : null
     const identityResult = await resolveTradePlayerAssets({
       sport: leagueSportSlug,
       nameLowerToExternalPid: playerNameToId,
@@ -640,13 +683,16 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
 
     let rosterConfigForVorp: import('@/lib/vorp-engine').LeagueRosterConfig | undefined
     let sleeperLeagueForConfig: Awaited<ReturnType<typeof getLeagueInfo>> = null
-    if (data.league_id) {
+    const sleeperLeagueId = tradeLeagueContext?.platform === 'sleeper'
+      ? tradeLeagueContext.platformLeagueId
+      : null
+    if (sleeperLeagueId) {
       try {
-        sleeperLeagueForConfig = await getLeagueInfo(data.league_id)
-        if (sleeperLeagueForConfig?.roster_positions) {
+        sleeperLeagueForConfig = await getLeagueInfo(sleeperLeagueId)
+        if (sleeperLeagueForConfig?.roster_positions && !Object.keys(tradeLeagueContext?.starterSlots ?? {}).length) {
           const parsed = parseSleeperRosterPositions(sleeperLeagueForConfig.roster_positions)
           rosterConfigForVorp = {
-            numTeams: sleeperLeagueForConfig.total_rosters || 12,
+            numTeams: tradeLeagueContext?.teamCount ?? sleeperLeagueForConfig.total_rosters ?? 12,
             startingQB: parsed.startingQB,
             startingRB: parsed.startingRB,
             startingWR: parsed.startingWR,
@@ -656,6 +702,18 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
           }
         }
       } catch { /* use defaults */ }
+    }
+    if (tradeLeagueContext?.teamCount && Object.keys(tradeLeagueContext.starterSlots).length > 0) {
+      const slots = tradeLeagueContext.starterSlots
+      rosterConfigForVorp = {
+        numTeams: tradeLeagueContext.teamCount,
+        startingQB: slots.QB ?? 0,
+        startingRB: slots.RB ?? 0,
+        startingWR: slots.WR ?? 0,
+        startingTE: slots.TE ?? 0,
+        startingFlex: (slots.FLEX ?? 0) + (slots.REC_FLEX ?? 0) + (slots.SUPER_FLEX ?? 0),
+        superflex: (slots.SUPER_FLEX ?? slots.SUPERFLEX ?? 0) > 0,
+      }
     }
 
     /*
@@ -692,11 +750,11 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
      * Reuses the league info and player index already fetched above rather than
      * paying for them twice.
      */
-    const leagueValues = data.league_id
+    const leagueValues = sleeperLeagueId
       ? await loadLeagueTradeValues({
           prisma,
-          platformLeagueId: data.league_id,
-          isDynasty: (data.league?.format ?? 'dynasty') !== 'redraft',
+          platformLeagueId: sleeperLeagueId,
+          isDynasty: tradeLeagueContext?.dynasty ?? (data.league?.format ?? 'dynasty') !== 'redraft',
           prefetched: {
             rosterPositions: sleeperLeagueForConfig?.roster_positions ?? null,
             numTeams: sleeperLeagueForConfig?.total_rosters ?? null,
@@ -718,16 +776,18 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
      * because `ValuationContext.numTeams` feeds a market profile that must be SOME size, and 12
      * is what every downstream `?? 12` already assumes. It is now reached only when nobody knows.
      */
-    const resolvedNumTeams = data.league?.team_count ?? sleeperLeagueForConfig?.total_rosters ?? 12
+    const resolvedNumTeams = tradeLeagueContext?.teamCount
+      ?? sleeperLeagueForConfig?.total_rosters
+      ?? data.league?.team_count
+      ?? 12
 
     /*
-     * The budget a traded FAAB amount is a fraction OF. Caller first, then the Sleeper league's
-     * own `settings.waiver_budget` (the key `lib/sleeper-sync.ts` already reads), then undefined —
-     * which lets `normalizedFaabValue` apply `FAAB_DEFAULT_BUDGET` rather than this route
-     * inventing a second fallback.
+     * The budget a traded FAAB amount is a fraction of. Stored league rules take
+     * precedence over caller input and the Sleeper live fallback.
      */
     const sleeperWaiverBudget = Number((sleeperLeagueForConfig?.settings as Record<string, unknown> | undefined)?.waiver_budget)
-    const faabBudget = data.league?.waiver_budget
+    const faabBudget = tradeLeagueContext?.waiverBudget
+      ?? data.league?.waiver_budget
       ?? (Number.isFinite(sleeperWaiverBudget) && sleeperWaiverBudget > 0 ? sleeperWaiverBudget : undefined)
 
     /**
@@ -744,6 +804,8 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       asOfDate: data.asOfDate || new Date().toISOString().split('T')[0],
       isSuperFlex: isSF,
       numTeams: resolvedNumTeams,
+      isDynasty: tradeLeagueContext?.dynasty ?? (data.league?.format ?? 'dynasty') !== 'redraft',
+      ppr: marketPpr,
       rosterConfig: rosterConfigForVorp,
       ...(leagueValues && leagueValues.byNameLower.size > 0 && { leagueValueByNameLower: leagueValues.byNameLower }),
     }
@@ -1275,11 +1337,11 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
 
     let leagueDecisionCtx: LeagueDecisionContext | null = null
     try {
-      if (data.league_id) {
+      if (sleeperLeagueId) {
         const [sleeperLeague, sleeperRosters, sleeperTradedPicks] = await Promise.all([
-          getLeagueInfo(data.league_id),
-          getLeagueRosters(data.league_id),
-          getTradedDraftPicks(data.league_id),
+          getLeagueInfo(sleeperLeagueId),
+          getLeagueRosters(sleeperLeagueId),
+          getTradedDraftPicks(sleeperLeagueId),
         ])
         if (sleeperLeague && sleeperRosters.length > 0) {
           const senderRosterId = data.sender.team_id ? parseInt(data.sender.team_id) : undefined
@@ -1298,19 +1360,8 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
 
     let leagueHistoryContext = ''
     try {
-      if (data.league_id && userId) {
-        const afLeague = await prisma.league.findFirst({
-          where: {
-            userId,
-            platform: 'sleeper',
-            platformLeagueId: String(data.league_id),
-          },
-          orderBy: { season: 'desc' },
-          select: { id: true },
-        })
-        if (afLeague) {
-          leagueHistoryContext = await buildLeagueContext(afLeague.id, data.sender.manager_name)
-        }
+      if (internalLeagueId) {
+        leagueHistoryContext = await buildLeagueContext(internalLeagueId, data.sender.manager_name)
       }
     } catch (histErr) {
       console.warn('[TradeEval] League history context failed (non-blocking):', (histErr as Error)?.message)
@@ -1321,6 +1372,11 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
 
     const positiveLabels = getPositiveLabels(tradeLabels).map(l => l.id)
     const warningLabelIds = getWarningLabels(tradeLabels).map(l => l.id)
+    const storedTeam = (id: string | undefined) => id
+      ? tradeLeagueContext?.teams.find((team) => team.id === id || team.externalId === id)
+      : undefined
+    const senderStoredTeam = storedTeam(data.sender.team_id)
+    const receiverStoredTeam = storedTeam(data.receiver.team_id)
 
     const structuredPayload: Record<string, any> = {
       trade: {
@@ -1376,9 +1432,26 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         warningText: vetoResult.warningText,
       },
       leagueSettings: {
-        format: data.league?.format ?? 'redraft',
-        leagueType: data.league?.format === 'best_ball' ? 'bestball' : 'standard',
+        format: tradeLeagueContext?.format ?? data.league?.format ?? 'redraft',
+        leagueType: tradeLeagueContext?.format ?? (data.league?.format === 'best_ball' ? 'bestball' : 'standard'),
         sport: leagueSportSlug,
+        ...(tradeLeagueContext && {
+          source: tradeLeagueContext.platform,
+          teamCount: tradeLeagueContext.teamCount,
+          scoringMode: tradeLeagueContext.scoringMode,
+          scoringRules: tradeLeagueContext.scoringRules,
+          scoringRuleDetails: tradeLeagueContext.scoringRuleDetails,
+          starterSlots: tradeLeagueContext.starterSlots,
+          benchSlots: tradeLeagueContext.benchSlots,
+          irSlots: tradeLeagueContext.irSlots,
+          taxiSlots: tradeLeagueContext.taxiSlots,
+          viewerTeamIds: tradeLeagueContext.viewerTeamIds,
+          missing: tradeLeagueContext.missing,
+          participantRecords: {
+            sender: senderStoredTeam ? { record: senderStoredTeam.record, rank: senderStoredTeam.rank } : null,
+            receiver: receiverStoredTeam ? { record: receiverStoredTeam.record, rank: receiverStoredTeam.rank } : null,
+          },
+        }),
         // The RESOLVED format, not the raw flag — and how it was decided, so a caller can tell
         // a measured answer from an assumption.
         qbFormat: isSF ? 'sf' : '1qb',
@@ -1562,11 +1635,20 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         sideAAssets: sideALegacyAssets,
         sideBAssets: sideBLegacyAssets,
         leagueConfig: {
-          leagueId: data.league_id,
-          leagueName: data.league?.scoring_summary || 'League',
-          scoringType: data.league?.scoring_summary || 'ppr',
+          leagueId: internalLeagueId,
+          leagueName: tradeLeagueContext?.name || 'League',
+          platform: tradeLeagueContext?.platform,
+          scoringType: (tradeLeagueContext?.scoringMode ?? data.league?.scoring_summary) || 'ppr',
+          numTeams: resolvedNumTeams,
           isSF,
-          isTEP: data.league?.scoring_summary?.toLowerCase().includes('te premium') || false,
+          isTEP: tradeLeagueContext
+            ? (tradeLeagueContext.scoringRules.bonus_rec_te ?? 0) > 0
+            : Boolean(data.league?.scoring_summary?.toLowerCase().includes('te premium')),
+          rosterPositions: Object.entries(tradeLeagueContext?.starterSlots ?? {}).flatMap(([slot, count]) => Array(count).fill(slot)),
+          starterSlots: Object.values(tradeLeagueContext?.starterSlots ?? {}).reduce((sum, count) => sum + count, 0),
+          benchSlots: tradeLeagueContext?.benchSlots ?? 0,
+          taxiSlots: tradeLeagueContext?.taxiSlots ?? 0,
+          scoringSettings: tradeLeagueContext?.scoringRules ?? {},
         },
         valuationFetchedAt: new Date().toISOString(),
       })
@@ -1575,7 +1657,9 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
     }
 
     const calWeights = await getCalibratedWeights()
-    const isTEP = data.league?.scoring_summary?.toLowerCase().includes('te premium') || false
+    const isTEP = tradeLeagueContext
+      ? (tradeLeagueContext.scoringRules.bonus_rec_te ?? 0) > 0
+      : Boolean(data.league?.scoring_summary?.toLowerCase().includes('te premium'))
 
     let tradeDriverData: ReturnType<typeof computeTradeDrivers> | null = null
     try {
@@ -2012,6 +2096,7 @@ ${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — i
         success: true,
         evaluation: parsed,
         schemaValid: false,
+        leagueSettings: structuredPayload.leagueSettings,
         warning: 'Response partially validated — AI output did not match strict schema',
         rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
         tokenSpend: gate.tokenSpend
@@ -2258,7 +2343,7 @@ ${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — i
        * the response carried neither — `leagueSettings` lives on `structuredPayload`, which is
        * the AI prompt contract and is never returned.
        */
-      leagueSettings: { qbFormat: isSF ? 'sf' : '1qb', qbFormatBasis },
+      leagueSettings: structuredPayload.leagueSettings,
       rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
       tokenSpend: gate.tokenSpend
         ? {

@@ -10,6 +10,7 @@ const getAiActionConfigMock = vi.fn()
 const getCachedResponseMock = vi.fn()
 const setCachedResponseMock = vi.fn()
 const buildCacheKeyMock = vi.fn()
+const resolveTradeEvaluatorInternalLeagueIdMock = vi.fn()
 
 vi.mock("next-auth", () => ({
   getServerSession: getServerSessionMock,
@@ -25,6 +26,10 @@ vi.mock("@/lib/feature-toggle", () => ({
 
 vi.mock("@/lib/league-access", () => ({
   assertLeagueMember: assertLeagueMemberMock,
+}))
+
+vi.mock("@/lib/trades/resolveTradeEvaluatorInternalLeagueId", () => ({
+  resolveTradeEvaluatorInternalLeagueId: (...a: unknown[]) => resolveTradeEvaluatorInternalLeagueIdMock(...a),
 }))
 
 vi.mock("@/lib/subscription/entitlement-middleware", () => ({
@@ -92,6 +97,7 @@ describe("POST /api/trade-evaluator contract", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    resolveTradeEvaluatorInternalLeagueIdMock.mockResolvedValue('league-1')
     isToolTradeAnalyzerEnabledMock.mockResolvedValue(true)
     getAiActionConfigMock.mockReturnValue({
       maxRequests: 50,

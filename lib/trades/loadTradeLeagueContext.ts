@@ -18,6 +18,7 @@ export type TradeLeagueTeam = {
 export type TradeLeagueContext = {
   leagueId: string
   platformLeagueId: string
+  name: string | null
   platform: string
   sport: LeagueSport
   season: number
@@ -42,6 +43,7 @@ export type TradeLeagueContext = {
 type LeagueRow = {
   id: string
   platformLeagueId: string
+  name: string | null
   platform: string
   sport: LeagueSport
   season: number
@@ -196,6 +198,7 @@ export function buildTradeLeagueContext(row: LeagueRow, teams: TeamRow[], userId
   return {
     leagueId: row.id,
     platformLeagueId: row.platformLeagueId,
+    name: row.name,
     platform: row.platform,
     sport: row.sport,
     season: row.season,
@@ -225,7 +228,7 @@ export async function loadTradeLeagueContext(leagueId: string, userId: string): 
     prisma.league.findUnique({
       where: { id: leagueId },
       select: {
-        id: true, platformLeagueId: true, platform: true, sport: true, season: true,
+        id: true, platformLeagueId: true, name: true, platform: true, sport: true, season: true,
         leagueType: true, isDynasty: true, leagueSize: true, scoring: true, settings: true,
         starters: true, waiverBudget: true, taxiSlots: true, irSlots: true,
       },
