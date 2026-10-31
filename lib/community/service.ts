@@ -1105,3 +1105,73 @@ export async function listRepliesSince(
     mine: r.author.id === viewer.userId,
   }))
 }
+
+// ─── home overview ───────────────────────────────────────────────────────────
+
+export type ActiveMember = { author: CommunityAuthor; contributions: number }
+
+export type ClubhouseOverview = {
+  stats: { activeMembers: number; postsThisWeek: number; ideas: number; shippedIdeas: number }
+  weeklyPrompt: { id: string; title: string; replyCount: number; channel: string } | null
+  topIdeas: PostSummary[]
+  activeMembers: ActiveMember[]
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Everything the Clubhouse home shows around the feed: the headline numbers, this week's
+ * pinned prompt, the top League Lab ideas and the most active members over 30 days.
+ * Counts are of live content only; blocked members are left out of the member list.
+ */
+export async function getClubhouseOverview(viewer: CommunityViewer, now = Date.now()): Promise<ClubhouseOverview> {
+  const weekAgo = new Date(now - 7 * DAY_MS)
+  const monthAgo = new Date(now - 30 * DAY_MS)
+  const [blocked, postsThisWeek, ideas, shippedIdeas, postAuthors, replyAuthors, prompt, board] = await Promise.all([
+    blockedFor(viewer),
+    prisma.communityPost.count({ where: { removedAt: null, createdAt: { gte: weekAgo } } }),
+    prisma.communityPost.count({ where: { removedAt: null, kind: IDEA_KIND } }),
+    prisma.communityPost.count({ where: { removedAt: null, kind: IDEA_KIND, ideaStatus: 'shipped' } }),
+    prisma.communityPost.groupBy({
+      by: ['authorUserId'],
+      where: { removedAt: null, createdAt: { gte: monthAgo } },
+      _count: { _all: true },
+    }),
+    prisma.communityReply.groupBy({
+      by: ['authorUserId'],
+      where: { removedAt: null, createdAt: { gte: monthAgo } },
+      _count: { _all: true },
+    }),
+    prisma.communityPost.findFirst({
+      where: { systemKey: { startsWith: 'prompt:' }, isPinned: true, removedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, title: true, replyCount: true, channel: true },
+    }),
+    listIdeas({ viewer, sort: 'top', filter: 'all' }),
+  ])
+
+  const tally = new Map<string, number>()
+  for (const g of [...postAuthors, ...replyAuthors]) {
+    tally.set(g.authorUserId, (tally.get(g.authorUserId) ?? 0) + g._count._all)
+  }
+  const topIds = Array.from(tally.entries())
+    .filter(([id]) => !blocked.has(id))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([id]) => id)
+  const memberRows = topIds.length
+    ? await prisma.appUser.findMany({ where: { id: { in: topIds } }, select: AUTHOR_SELECT })
+    : []
+  const shape = await authorShaper(memberRows)
+  const byId = new Map(memberRows.map((r) => [r.id, r]))
+
+  return {
+    stats: { activeMembers: tally.size, postsThisWeek, ideas, shippedIdeas },
+    weeklyPrompt: prompt,
+    topIdeas: board.ideas.slice(0, 3),
+    activeMembers: topIds.flatMap((id) => {
+      const row = byId.get(id)
+      return row ? [{ author: shape(row), contributions: tally.get(id) ?? 0 }] : []
+    }),
+  }
+}

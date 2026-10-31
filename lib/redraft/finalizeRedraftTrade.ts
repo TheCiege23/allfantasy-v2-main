@@ -23,6 +23,11 @@ import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
 import { MULTI_TEAM_CAP_LEAGUE_REFUSAL, isMultiTeamTrade, tradeParticipantRosterIds } from '@/lib/redraft/tradeParticipants'
+import {
+  MULTI_TEAM_TRADE_PROCESSED_TITLE,
+  multiTeamTradeProcessedBody,
+  notifyMultiTeamTradeOutcome,
+} from '@/lib/redraft/multiTeamTradeNotices'
 
 export type TradeAssetRow = {
   fromRosterId: string
@@ -373,6 +378,27 @@ export async function finalizeRedraftTrade(
                 : 'The league vote approved it.',
         },
   )
+
+  /*
+   * 🛑 A MULTI-TEAM TRADE HAS NO DM CARD, SO THE STATUS ABOVE IS A NO-OP FOR IT AND NOBODY WAS TOLD IT
+   * WENT THROUGH. Every team hears it here, with every team named and what each one got.
+   *
+   * HERE AND NOWHERE ELSE, because this is the one settlement every path calls (accept under no_veto,
+   * commissioner approval, a passed league vote, the review-window sweep) and only the race winner gets
+   * this far — so a trade is told "processed" exactly once, and a commissioner approval is that notice
+   * rather than a second one beside it. The sweep notifies only when settlement FAILS; the veto route
+   * never settles. Best-effort: `notifyMultiTeamTradeOutcome` never rejects, and the trade has committed.
+   * A two-team trade never reaches it.
+   */
+  if (multiTeam) {
+    await notifyMultiTeamTradeOutcome({
+      proposal,
+      actorUserId: decidedByUserId,
+      key: 'processed',
+      title: MULTI_TEAM_TRADE_PROCESSED_TITLE,
+      body: ({ teams, moves }) => multiTeamTradeProcessedBody(teams, executedByRole, moves),
+    })
+  }
 
   return { ok: true, proposal: updated }
 }

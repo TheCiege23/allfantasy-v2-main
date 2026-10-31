@@ -1,16 +1,18 @@
 'use client'
 
 import Link from 'next/link'
+import '@/components/core-app/af-core.css'
+import '@/components/community/clubhouse.css'
 
 /** Any Clubhouse page that fails to load lands here rather than on the global error screen. */
 export default function ClubhouseError({ reset }: { error: Error; reset: () => void }) {
   return (
-    <div className="min-h-screen mode-surface mode-readable">
-      <div className="mx-auto max-w-xl px-4 py-16 text-center">
-        <p className="text-3xl" aria-hidden>
+    <div className="af-core ch">
+      <div className="mx-auto max-w-xl px-4 py-24 text-center">
+        <p className="text-5xl" aria-hidden>
           🏟️
         </p>
-        <h1 className="mt-2 text-xl font-bold" style={{ color: 'var(--text)' }}>
+        <h1 className="ch-article-title mt-4">
           The Clubhouse didn't load
         </h1>
         <p className="mt-1 text-sm" style={{ color: 'var(--muted)' }}>
@@ -20,12 +22,11 @@ export default function ClubhouseError({ reset }: { error: Error; reset: () => v
           <button
             type="button"
             onClick={reset}
-            className="rounded-lg px-4 py-2 text-sm font-semibold"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            className="ch-btn ch-btn-primary"
           >
             Try again
           </button>
-          <Link href="/" className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>
+          <Link href="/" className="ch-btn ch-btn-ghost">
             Home
           </Link>
         </div>

@@ -128,6 +128,19 @@ describe("parseLeagueSearch", () => {
     expect(parsed).toMatchObject({ teamCount: 10, tzRegion: "pacific", entryFee: "paid", draftType: "auction" })
   })
 
+  it("reads a request in plain sentences — Chimmy passes them whole", () => {
+    expect(parseLeagueSearch("open NBA league to join")).toEqual({ sport: "NBA", text: "" })
+    expect(parseLeagueSearch("Find me an open NBA league I can join")).toEqual({ sport: "NBA", text: "" })
+    expect(parseLeagueSearch("I'm looking for a casual 10 team redraft with spots available")).toEqual({
+      teamCount: 10,
+      style: "redraft",
+      vibe: "casual",
+      text: "",
+    })
+    // A real name word still survives the filler.
+    expect(parseLeagueSearch("find me the gridiron gang league").text).toBe("gridiron gang")
+  })
+
   it("leaves a league-name search alone", () => {
     expect(parseLeagueSearch("Gridiron Gang")).toEqual({ text: "gridiron gang" })
   })

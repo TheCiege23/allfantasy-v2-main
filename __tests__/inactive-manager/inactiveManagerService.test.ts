@@ -160,6 +160,7 @@ describe('the view', () => {
     // Chimmy as a manager: empty seats are marked, and the commissioner sees the limit.
     expect(view.teams.map((t) => t.emptySeat)).toEqual([false, false, true])
     expect(view.chimmyLimit).toBe(4)
+    expect(view.chimmyFreeTeams).toBe(1)
     expect(view.chimmyReports).toEqual([])
   })
 

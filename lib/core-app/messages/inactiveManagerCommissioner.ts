@@ -54,6 +54,9 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     emptySeat: 'Empty seat',
     chimmyLimitReached: (limit: number) => `Chimmy already runs ${limit} teams. Take Chimmy off one to hand it another.`,
     chimmyReportsTitle: 'Chimmy’s weekly reports',
+    chimmyFreeCount: (n: number, free: number) => `Chimmy runs ${n} of ${free} free team${free === 1 ? '' : 's'}`,
+    chimmyFreeLimitReached: (limit: number) => `Your free Chimmy team is in use. AF Commissioner lets Chimmy run up to ${limit} teams.`,
+    chimmyFreeUpsell: (limit: number) => `Let Chimmy run up to ${limit} teams (AF Commissioner)`,
   },
   es: {
     loadFailed: 'Se requiere permiso del comisionado o conexión.',
@@ -101,5 +104,8 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     emptySeat: 'Puesto vacío',
     chimmyLimitReached: (limit) => `Chimmy ya dirige ${limit} equipos. Quítale uno para entregarle otro.`,
     chimmyReportsTitle: 'Informes semanales de Chimmy',
+    chimmyFreeCount: (n, free) => `Chimmy dirige ${n} de ${free} equipo${free === 1 ? '' : 's'} gratis`,
+    chimmyFreeLimitReached: (limit) => `Tu equipo gratis de Chimmy ya está en uso. AF Commissioner permite que Chimmy dirija hasta ${limit} equipos.`,
+    chimmyFreeUpsell: (limit) => `Que Chimmy dirija hasta ${limit} equipos (AF Commissioner)`,
   },
 })
