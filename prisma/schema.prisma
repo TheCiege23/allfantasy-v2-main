@@ -8634,6 +8634,8 @@ model LeagueTeam {
   @@index([leagueId, pointsFor])
   @@index([divisionId])
   @@index([aiPowerScore])
+  /// The Clubhouse Commish badge looks claimed commissioner teams up by user, on every render.
+  @@index([claimedByUserId])
   @@map("league_teams")
 }
 
