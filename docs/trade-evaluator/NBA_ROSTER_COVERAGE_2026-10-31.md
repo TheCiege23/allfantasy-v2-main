@@ -47,6 +47,8 @@ The [read-only account ownership audit](../../scripts/audits/fantrax-account-lea
 
 The public league URL alone cannot prove which team a signed-in user owns. A full import from the public-ID path asks for commissioner attestation unless the user's own connected Secret ID verifies the selected team. The connected-account path accepts verified members without a commissioner claim, including two teams held by one account. [Gate tests](../../__tests__/trades/fantraxPublicImportGate.test.ts) cover both outcomes and rejection of a different team in the same league. No staging league import or team claim was made while the staging connection was absent.
 
+The first local staging connection attempt returned `Failed to save credentials` because `.env.staging` lacked `LEAGUE_AUTH_ENCRYPTION_KEY`; the `/api/league/auth` handler raised that exact missing-key error before its database upsert. Staging had zero saved `LeagueAuth` rows, so adding a new staging-only key did not invalidate any stored credentials. The key was generated locally into the ignored `.env.staging` file without printing it or copying the production key. After restarting the local staging app, an encrypt/decrypt round trip passed and the import page returned HTTP 200. A fresh user-side connection attempt is still required; the failed attempt did not save the Secret ID.
+
 Commands:
 
 ```text
