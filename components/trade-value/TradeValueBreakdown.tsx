@@ -27,38 +27,36 @@
  */
 
 import type { AssetValueSnapshot, TradeValueSnapshot } from '@/lib/trade-value/types'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
-/** How each basis is described to a manager. Plain language; no internal field names. */
-const BASIS_LABEL: Record<string, { short: string; long: string }> = {
-  projection: {
-    short: 'Projection',
-    long: 'Priced from the AllFantasy projection for the rest of this season, scaled for how scarce the position is in your league.',
-  },
-  idp: {
-    short: 'IDP scarcity',
-    long: "Priced against your league's own defensive starting slots and scoring — no market ranks defenders, so this is computed rather than quoted.",
-  },
-  market: {
-    short: 'Market',
-    long: 'No projection was available, so this falls back to the market price for the player.',
-  },
-  none: {
-    short: 'Not priced',
-    long: 'No projection, market price or defensive value reached the engine for this player. This is a gap in our data, NOT a judgement that he is worthless.',
-  },
-}
+type Translate = (key: string) => string
+type TranslateVars = (key: string, vars?: Record<string, string | number | undefined>) => string
 
-function assetLabel(a: AssetValueSnapshot): string {
+/**
+ * How each basis is described to a manager. Plain language; no internal field names. The copy is
+ * `tradeCenter.value.basis.<basis>.short` / `.long`; a basis with no copy shows no sentence.
+ */
+const KNOWN_BASES = new Set(['projection', 'idp', 'market', 'none'])
+
+function assetLabel(a: AssetValueSnapshot, t: Translate, tInterpolate: TranslateVars): string {
   if (a.kind === 'draft_pick') {
-    return a.pickLabel?.trim() || [a.pickSeason, a.pickRound ? `Round ${a.pickRound}` : null].filter(Boolean).join(' ') || 'Draft pick'
+    return (
+      a.pickLabel?.trim() ||
+      [a.pickSeason, a.pickRound ? tInterpolate('tradeCenter.value.round', { round: a.pickRound }) : null].filter(Boolean).join(' ') ||
+      t('tradeCenter.value.draftPick')
+    )
   }
   if (a.kind === 'faab') return `$${a.faabAmount ?? 0} FAAB`
-  return a.playerName?.trim() || 'Unnamed player'
+  return a.playerName?.trim() || t('tradeCenter.value.unnamedPlayer')
 }
 
 function AssetRow({ a }: { a: AssetValueSnapshot }) {
+  const { t, tInterpolate } = useOptionalLanguage()
   const basis = a.valuationBasis ?? null
-  const info = basis ? BASIS_LABEL[basis] : null
+  const info =
+    basis && KNOWN_BASES.has(basis)
+      ? { short: t(`tradeCenter.value.basis.${basis}.short`), long: t(`tradeCenter.value.basis.${basis}.long`) }
+      : null
   const unpriced = basis === 'none' || (a.kind === 'player' && a.internalValue === 0)
   const fit = a.formatFit?.fit ?? null
   const legality = a.formatFit?.legality ?? null
@@ -67,7 +65,7 @@ function AssetRow({ a }: { a: AssetValueSnapshot }) {
     <li className="rounded border border-white/10 bg-black/20 p-2" data-testid="tv-asset-row">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-[12px] font-medium text-white">
-          {assetLabel(a)}
+          {assetLabel(a, t, tInterpolate)}
           {a.position ? <span className="ml-1 text-[11px] text-white/40">{a.position}</span> : null}
         </span>
         {/*
@@ -87,29 +85,27 @@ function AssetRow({ a }: { a: AssetValueSnapshot }) {
           <span className="text-white/60">{info.short}</span> · {info.long}
         </p>
       ) : a.kind === 'draft_pick' ? (
-        <p className="mt-0.5 text-[11px] text-white/45">
-          Priced from where the pick actually falls in your league, not from its round number.
-        </p>
+        <p className="mt-0.5 text-[11px] text-white/45">{t('tradeCenter.value.pickBasis')}</p>
       ) : a.kind === 'faab' ? (
-        <p className="mt-0.5 text-[11px] text-white/45">Priced from the amount itself.</p>
+        <p className="mt-0.5 text-[11px] text-white/45">{t('tradeCenter.value.faabBasis')}</p>
       ) : (
         /*
          * ⚠ ABSENT IS NOT A BASIS. A snapshot written before `valuationBasis` existed carries no
          * label, and inventing one from `sources` here would be the second implementation of the
          * engine's precedence — the thing `valueBasisFor` exists to prevent.
          */
-        <p className="mt-0.5 text-[11px] text-white/35">Basis not recorded for this snapshot.</p>
+        <p className="mt-0.5 text-[11px] text-white/35">{t('tradeCenter.value.noBasis')}</p>
       )}
 
       {/* ── The format's opinion, as its own number ──────────────────────────────────── */}
       {fit ? (
         <div className="mt-1.5 flex items-baseline justify-between gap-2 rounded border border-sky-400/20 bg-sky-400/5 px-1.5 py-1">
           <p className="text-[11px] text-sky-200/80" data-testid="tv-asset-fit-reason">
-            <span className="font-semibold">{a.formatFit?.label ?? 'Format'}</span> · {fit.reason}
+            <span className="font-semibold">{a.formatFit?.label ?? t('tradeCenter.value.format')}</span> · {fit.reason}
           </p>
           <span className="shrink-0 text-[12px] font-bold tabular-nums text-sky-200" data-testid="tv-asset-fit">
             {fit.multiplier === 1
-              ? 'no change'
+              ? t('tradeCenter.value.noChange')
               : `${fit.multiplier > 1 ? '+' : ''}${Math.round((fit.multiplier - 1) * 100)}%`}
           </span>
         </div>
@@ -120,7 +116,7 @@ function AssetRow({ a }: { a: AssetValueSnapshot }) {
           className="mt-1 rounded border border-amber-400/25 bg-amber-400/5 px-1.5 py-1 text-[11px] text-amber-200/85"
           data-testid="tv-asset-legality"
         >
-          ⚠ {legality.reason ?? 'This asset cannot be traded right now.'}
+          ⚠ {legality.reason ?? t('tradeCenter.value.notTradable')}
         </p>
       ) : null}
     </li>
@@ -135,6 +131,7 @@ export function TradeValueBreakdown({
   /** Display names by roster id. Falls back to the roster id when a name is missing. */
   sideNames?: Record<string, string>
 }) {
+  const { t, tInterpolate } = useOptionalLanguage()
   const unpricedCount = snapshot.sides
     .flatMap((s) => s.assets)
     .filter((a) => a.kind === 'player' && (a.valuationBasis === 'none' || a.internalValue === 0)).length
@@ -146,7 +143,7 @@ export function TradeValueBreakdown({
           <div key={side.rosterId} className="space-y-1.5">
             <div className="flex items-baseline justify-between gap-2">
               <p className="text-[11px] font-semibold text-white/70">
-                {sideNames?.[side.rosterId] ?? side.rosterId} sends
+                {tInterpolate('tradeCenter.value.sends', { name: sideNames?.[side.rosterId] ?? side.rosterId })}
               </p>
               <span className="text-[12px] font-bold tabular-nums text-white/80">
                 {side.total.toLocaleString()}
@@ -154,7 +151,7 @@ export function TradeValueBreakdown({
             </div>
             {side.assets.length === 0 ? (
               <p className="rounded border border-white/10 bg-black/20 p-2 text-[11px] text-white/40">
-                Nothing on this side.
+                {t('tradeCenter.value.emptySide')}
               </p>
             ) : (
               <ul className="space-y-1.5">
@@ -178,9 +175,7 @@ export function TradeValueBreakdown({
           className="rounded border border-amber-400/25 bg-amber-400/5 px-2 py-1.5 text-[11px] text-amber-200/85"
           data-testid="tv-unpriced-note"
         >
-          ⚠ {unpricedCount} player{unpricedCount === 1 ? '' : 's'} in this trade could not be priced, so the
-          totals above are incomplete. That is missing data on our side, not a judgement that{' '}
-          {unpricedCount === 1 ? 'he is' : "they are"} worthless.
+          {tInterpolate(`tradeCenter.value.unpriced.${unpricedCount === 1 ? 'one' : 'many'}`, { count: unpricedCount })}
         </p>
       ) : null}
     </div>
