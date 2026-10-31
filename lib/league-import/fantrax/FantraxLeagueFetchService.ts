@@ -485,6 +485,7 @@ export async function fetchFantraxLeagueForImport(
   const lookup = parseFantraxSourceInput(sourceInput)
   let liveScoringRules: Array<{ stat_key: string; points_value: number }> = []
   let liveScoringGaps: string[] = []
+  let liveScoringType: 'points' | 'h2h_points' | 'roto' | 'h2h_category' | null = null
 
   /*
    * ⚠ A LIVE LEAGUE IS FETCHED HERE, THEN READ BACK AS A SNAPSHOT. Fantrax has a
@@ -531,6 +532,7 @@ export async function fetchFantraxLeagueForImport(
      */
     liveScoringRules = outcome.scoringRules
     liveScoringGaps = outcome.scoringGaps
+    liveScoringType = outcome.scoringType
   }
 
   const includeConfig = {
@@ -867,7 +869,7 @@ export async function fetchFantraxLeagueForImport(
     },
     viewerTeamId: userTeamId,
     settings: {
-      scoringType: leagueRecord.isDevy ? 'devy' : null,
+      scoringType: leagueRecord.isDevy ? 'devy' : liveScoringType,
       rosterPositions: buildRosterPositionCounts(),
       /* The real per-team size, so the mapper stops deriving it from the pool. */
       rosterSize: medianRosterSize(rosterPlayers),

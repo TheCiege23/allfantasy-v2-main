@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
+import { fantraxScoringMode, fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
 import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
+import { FantraxLeagueMapper } from '@/lib/league-import/adapters/fantrax/FantraxLeagueMapper'
+import { FantraxScoringMapper } from '@/lib/league-import/adapters/fantrax/FantraxScoringMapper'
+import type { FantraxImportPayload } from '@/lib/league-import/adapters/fantrax/types'
 
 /**
  * Captured live from a real league 2026-08-27. The shape matters more than the
@@ -34,6 +37,33 @@ const REAL_CONFIGS = [
   { position: DEFAULT, points: 1, scoringCategory: cat('INDIVIDUAL_RECEPTIONS', 'Receptions', 'REC') },
   { position: { shortName: 'TE', code: 'TE' }, points: 1.5, scoringCategory: cat('INDIVIDUAL_RECEPTIONS', 'Receptions', 'REC') },
 ]
+
+describe('Fantrax scoring-system type', () => {
+  it.each([
+    ['POINTS_BASED', 'points'],
+    ['HEAD_TO_HEAD_POINTS_BASED', 'h2h_points'],
+    ['ROTISSERIE', 'roto'],
+    ['HEAD_TO_HEAD_ROTI_SINGLE_WIN', 'h2h_category'],
+    ['HEAD_TO_HEAD_ROTI_MULTI_WIN', 'h2h_category'],
+    ['BRACKET', null],
+  ] as const)('preserves %s as %s', (type, expected) => {
+    expect(fantraxScoringMode({ ...info([]), scoringSystem: { type } })).toBe(expected)
+  })
+
+  it('refuses to infer points mode when the source omits its type', () => {
+    expect(fantraxScoringMode(info(REAL_CONFIGS))).toBeNull()
+  })
+
+  it('carries a live NBA mode through league and scoring normalization', () => {
+    const source = {
+      league: { name: 'NBA league', sport: 'NBA', season: 2026, size: 10, isDevy: false, isFinished: false },
+      settings: { scoringType: 'h2h_points', scoringRules: [], rosterPositions: [], raw: {} },
+      schedule: [],
+    } as unknown as FantraxImportPayload
+    expect(FantraxLeagueMapper.map(source)?.scoring).toBe('h2h_points')
+    expect(FantraxScoringMapper.map(source)?.scoring_format).toBe('h2h_points')
+  })
+})
 
 function valueOf(rules: { stat_key: string; points_value: number }[], key: string) {
   return rules.find((r) => r.stat_key === key)?.points_value

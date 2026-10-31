@@ -27,6 +27,18 @@ export type FantraxScoringResult = {
   gaps: string[]
 }
 
+/** Preserve Fantrax's explicit mode; never infer points from numeric category settings. */
+export function fantraxScoringMode(info: FantraxLeagueInfo):
+  'points' | 'h2h_points' | 'roto' | 'h2h_category' | null {
+  const raw = info.scoringSystem?.type
+  const mode = typeof raw === 'string' ? raw.trim().toUpperCase() : ''
+  if (mode === 'POINTS_BASED') return 'points'
+  if (mode === 'HEAD_TO_HEAD_POINTS_BASED') return 'h2h_points'
+  if (mode === 'ROTISSERIE') return 'roto'
+  if (mode === 'HEAD_TO_HEAD_ROTI_SINGLE_WIN' || mode === 'HEAD_TO_HEAD_ROTI_MULTI_WIN') return 'h2h_category'
+  return null
+}
+
 /**
  * Fantrax category code -> the stat key(s) it means here.
  *

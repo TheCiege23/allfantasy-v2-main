@@ -11,19 +11,19 @@
 
 import 'server-only'
 import { selectFantraxRoster } from './fantraxTeamSelection'
+import { selectFantraxSportMap } from './fantraxSportSelection'
 
 import { getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
 import { mapFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxDraft'
 import type { NormalizedDraftPick } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
-import { fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
+import { fantraxScoringMode, fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
 import {
   fetchFantraxScheduleWithScores,
   getFantraxLeagueInfo,
   getFantraxPlayerIds,
   getFantraxStandings,
   getFantraxTeamRosters,
-  resolveRosters,
   type FantraxFailure,
   type FantraxStandingRow,
   type ResolvedRoster,
@@ -45,6 +45,7 @@ export type FantraxImportOutcome =
        */
       scoringRules: FantraxScoringRule[]
       scoringGaps: string[]
+      scoringType: 'points' | 'h2h_points' | 'roto' | 'h2h_category' | null
       /**
        * What the league's draft board actually contained.
        *
@@ -142,18 +143,19 @@ export async function importFantraxLeague(args: {
    * drafted, or whose draft could not be read, is still worth importing. The
    * coverage note reports which of those happened.
    */
-  const [rosters, standings, cfb, nfl, schedule, draft] = await Promise.all([
+  const [rosters, standings, cfb, nfl, nba, schedule, draft] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     getFantraxPlayerIds('CFB'),
     getFantraxPlayerIds('NFL'),
+    getFantraxPlayerIds('NBA'),
     fetchFantraxScheduleWithScores(args.leagueId, info.data),
     getFantraxDraftResults(args.leagueId).catch(() => null),
   ])
   if (!rosters.ok) return { ok: false, error: rosters.failure.message, kind: rosters.failure.kind }
   /* Only one map has to load. A league is one sport, so failing the whole
      import because the OTHER sport's map was unavailable would be wrong. */
-  if (!cfb.ok && !nfl.ok) return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
+  if (!cfb.ok && !nfl.ok && !nba.ok) return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
 
   /*
    * ⚠ THE SPORT IS NOT IN THE LEAGUE INFO, SO IT IS MEASURED RATHER THAN
@@ -163,16 +165,12 @@ export async function importFantraxLeague(args: {
    * map names more players IS the sport. Hardcoding CFB made every NFL Fantrax
    * league look empty, which is why the tile could only ever claim college.
    */
-  const candidates = [
-    cfb.ok ? { sport: 'cfb' as const, isDevy: true, resolved: resolveRosters(rosters.data, cfb.data) } : null,
-    nfl.ok ? { sport: 'nfl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nfl.data) } : null,
-  ].filter((c): c is NonNullable<typeof c> => c !== null)
-
-  const scored = candidates
-    .map((c) => ({ ...c, named: c.resolved.reduce((a, r) => a + r.resolved, 0) }))
-    .sort((a, b) => b.named - a.named)
-
-  const best = scored[0]
+  const best = selectFantraxSportMap(rosters.data, {
+    ...(cfb.ok ? { CFB: cfb.data } : {}),
+    ...(nfl.ok ? { NFL: nfl.data } : {}),
+    ...(nba.ok ? { NBA: nba.data } : {}),
+  })
+  if (!best) return { ok: false, error: 'Fantrax roster IDs did not uniquely identify a supported sport.' }
   const resolved = best.resolved
   const total = resolved.reduce((a, r) => a + r.total, 0)
   const named = best.named
@@ -186,7 +184,7 @@ export async function importFantraxLeague(args: {
   if (total > 0 && named / total < 0.5) {
     return {
       ok: false,
-      error: `only ${named} of ${total} players could be named against either the college or the NFL player map, which is the signature of a sport we do not handle rather than a real league. Nothing was imported.`,
+      error: `only ${named} of ${total} players could be named against the college football, NFL, or NBA player map, which is the signature of a sport we do not handle rather than a real league. Nothing was imported.`,
     }
   }
 
@@ -314,6 +312,7 @@ export async function importFantraxLeague(args: {
     resolved: mine.resolved,
     total: mine.total,
     scoringRules: scoring.rules,
+    scoringType: fantraxScoringMode(info.data),
     draft: {
       picks: draftSummary.picks,
       slots: draftSummary.slotCount,
