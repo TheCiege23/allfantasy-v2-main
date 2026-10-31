@@ -160,6 +160,7 @@ async function main() {
   // ── Season loop ──
   const chimmyBallotsExpected = new Map<string, Set<string>>()
   const seeded = new Set<number>()
+  const exileSeeded = new Set<number>()
   let last = '', repeats = 0
   for (let step = 0; step < MAX_STEPS; step++) {
     const game = await prisma.survivorGameState.findUnique({ where: { leagueId } })
@@ -172,6 +173,13 @@ async function main() {
     if (outcome === 'season_complete' || outcome === 'complete') break
     if (repeats > 60) { log(`STALL: ${outcome} at week ${week} after ${repeats} tries`); break }
 
+    // Exile rosters (Chimmy's included) are real players off any team; the week's Exile result waits
+    // for their scores, which the week's seed above never wrote. Once a week.
+    if (outcome === 'awaiting_exile_results' && !exileSeeded.has(week)) {
+      exileSeeded.add(week)
+      await seedExileScores(week)
+      continue
+    }
     if (outcome === 'awaiting_verified_scores' && !seeded.has(week)) {
       seeded.add(week)
       await seedWeekScores(week)
@@ -226,6 +234,24 @@ async function main() {
     // Stat names the league does not score make every team 0 and every council a tie, which looks
     // like a tiebreak problem rather than a seeding one. Stop here instead.
     assert.ok(scored > 0, `week ${week}: no seeded player scores above 0 under this league's scoring; the seeded stat names are wrong for ${SPORT}`)
+  }
+
+  async function seedExileScores(week: number) {
+    const season = await prisma.redraftSeason.findFirstOrThrow({ where: { leagueId } })
+    const entries = await prisma.exileWeeklyEntry.findMany({ where: { leagueId, week }, select: { userId: true, submittedLineup: true } })
+    const scoring = await leagueScoring()
+    let wrote = 0
+    for (const entry of entries) {
+      const lineup = entry.submittedLineup as { players?: Array<{ id: string; position: string }> } | null
+      for (const p of lineup?.players ?? []) {
+        const key = { playerId_week_season_sport: { playerId: p.id, week, season: season.season, sport: SPORT } }
+        if (await prisma.playerWeeklyScore.findUnique({ where: key, select: { id: true } })) continue
+        const stats = statsFor(p.position, scoring.categories)
+        await prisma.playerWeeklyScore.create({ data: { playerId: p.id, week, season: season.season, sport: SPORT, stats, fantasyPts: 0, isFinalized: true } })
+        wrote++
+      }
+    }
+    log(`seeded week ${week} Exile scores: ${wrote} players across ${entries.length} Exile rosters`)
   }
 
   /** The scorer's own inputs for the first cast member, so a week that will not finalize says why. */
@@ -347,6 +373,9 @@ async function main() {
     const userIdsChimmy = cast_.map(c => c.userId)
     const idols = await prisma.survivorIdol.findMany({ where: { leagueId, OR: [{ currentOwnerUserId: { in: userIdsChimmy } }, { rosterId: { in: chimmyRosterIds } }] }, select: { status: true, powerType: true } })
     const played = idols.filter(i => i.status !== 'hidden')
+    const exileEntries = await prisma.exileWeeklyEntry.findMany({ where: { leagueId, userId: { in: userIdsChimmy } }, select: { week: true, submittedLineup: true } })
+    const exileTeams = exileEntries.map(e => { const l = e.submittedLineup as { team?: string | null; players?: unknown[] } | null; return `w${e.week}:${l?.team ?? '-'}(${l?.players?.length ?? 0})` })
+    log(`Chimmy on Exile: ${exileTeams.length ? exileTeams.join(' ') : 'no Exile weeks'}`)
     log(`Chimmy season: ${cast}/${expected} ballots cast across ${chimmyBallotsExpected.size} councils; idols held ${idols.length}, played ${played.length} (${played.map(i => i.powerType).join(', ') || 'none'}); finished ${cast_.map(c => `${c.displayName}=${c.playerState}`).join(', ')}`)
     assert.ok(chimmyBallotsExpected.size > 0, 'Chimmy never sat at a council')
     assert.deepEqual(missing, [], 'Chimmy left a ballot unsent')
