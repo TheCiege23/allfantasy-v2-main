@@ -1,15 +1,33 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 /**
  * The commissioner's "fix a problem" tools. The season runs itself; these are for the few things
  * only a person can know: a stat correction the provider missed, a manager who quit, or a cast that
- * is ready to merge early. Each one asks for a second tap before it runs and lands in the audit log.
+ * is ready to merge early, a Tribal result that named the wrong manager, or tribes that need redrawing.
+ * Each one asks for a second tap before it runs and lands in the audit log.
  */
 
 type Manager = { userId: string; name: string }
-type FixId = 'score' | 'remove' | 'merge'
+type FixId = 'score' | 'remove' | 'merge' | 'tribal' | 'redraw'
+
+/** GET /api/survivor/commissioner?type=tribal_override (lib/survivor/survivorTribalOverride.ts). */
+type OverrideTarget = {
+  councilId: string
+  week: number
+  eliminatedUserId: string
+  eliminatedName: string | null
+  resolved: boolean
+  candidates: Array<{ userId: string; name: string }>
+}
+
+type OverrideResult = {
+  restoredPlayerIds?: string[]
+  claimedElsewherePlayerIds?: string[]
+  eliminationApplied?: boolean
+  eliminationError?: string
+}
 
 export function SurvivorSeasonFixPanel({ leagueId, managers, week, merged }: { leagueId: string; managers: Manager[]; week: number; merged: boolean }) {
   const [open, setOpen] = useState<FixId | null>(null)
@@ -23,6 +41,17 @@ export function SurvivorSeasonFixPanel({ leagueId, managers, week, merged }: { l
   const [scoreReason, setScoreReason] = useState('')
   const [removeUserId, setRemoveUserId] = useState('')
   const [removeReason, setRemoveReason] = useState('')
+  const [target, setTarget] = useState<OverrideTarget | null | undefined>(undefined)
+  const [tribalUserId, setTribalUserId] = useState('')
+  const [tribalReason, setTribalReason] = useState('')
+
+  useEffect(() => {
+    if (open !== 'tribal' || target !== undefined) return
+    fetch(`/api/survivor/commissioner?leagueId=${encodeURIComponent(leagueId)}&type=tribal_override`, { cache: 'no-store' })
+      .then(response => (response.ok ? response.json() : null))
+      .then((json: { target?: OverrideTarget | null } | null) => setTarget(json?.target ?? null))
+      .catch(() => setTarget(null))
+  }, [open, target, leagueId])
 
   const points = Number(scorePoints)
   const weekNumber = Number(scoreWeek)
@@ -30,7 +59,21 @@ export function SurvivorSeasonFixPanel({ leagueId, managers, week, merged }: { l
   const removeReady = Boolean(removeUserId)
   const nameOf = (userId: string) => managers.find(manager => manager.userId === userId)?.name ?? 'this manager'
 
-  const run = async (fix: FixId, body: Record<string, unknown>, success: string) => {
+  const tribalName = (userId: string) => target?.candidates.find(c => c.userId === userId)?.name ?? 'this manager'
+  /** What the override could not give back, said plainly after it runs. */
+  const overrideNotice = (result: OverrideResult) => {
+    const restored = result.restoredPlayerIds?.length ?? 0
+    const kept = result.claimedElsewherePlayerIds?.length ?? 0
+    const parts = [`${tribalName(tribalUserId)} is now the one voted out.`]
+    if (target?.resolved) {
+      parts.push(`${target.eliminatedName ?? 'The other manager'} is back in the game${restored ? ` with ${restored} of their released player${restored === 1 ? '' : 's'}` : ''}.`)
+      if (kept) parts.push(`${kept} released player${kept === 1 ? ' was' : 's were'} already claimed by another team and stay${kept === 1 ? 's' : ''} there.`)
+      if (result.eliminationApplied === false) parts.push(`Their elimination did not finish (${result.eliminationError ?? 'try again'}); run the change again to complete it.`)
+    }
+    return parts.join(' ')
+  }
+
+  const run = async (fix: FixId, body: Record<string, unknown>, success: string | ((json: Record<string, unknown>) => string)) => {
     if (confirming !== fix) { setConfirming(fix); setNotice(null); setError(null); return }
     setBusy(true)
     setError(null)
@@ -41,10 +84,11 @@ export function SurvivorSeasonFixPanel({ leagueId, managers, week, merged }: { l
       })
       const json = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(typeof json.error === 'string' ? json.error : 'That change could not be made.')
-      setNotice(success)
+      setNotice(typeof success === 'function' ? success(json as Record<string, unknown>) : success)
       setOpen(null)
       if (fix === 'score') { setScorePoints(''); setScoreReason('') }
       if (fix === 'remove') { setRemoveUserId(''); setRemoveReason('') }
+      if (fix === 'tribal') { setTribalUserId(''); setTribalReason(''); setTarget(undefined) }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'That change could not be made.')
     } finally {
@@ -115,6 +159,50 @@ export function SurvivorSeasonFixPanel({ leagueId, managers, week, merged }: { l
             onClick={() => void run('remove', { action: 'remove_player', userId: removeUserId, reason: removeReason.trim() || 'Left the league' },
               `${nameOf(removeUserId)} was removed. If a tribe is now too small, Chimmy rebalances it before the next council.`)}>
             {confirming === 'remove' ? `Confirm: remove ${nameOf(removeUserId)}` : 'Remove manager'}
+          </button>
+        </div>
+      )}
+
+      {choice('tribal', 'Change a Tribal result', 'The wrong manager was voted out. Bring them back and vote out the right one instead.')}
+      {open === 'tribal' && (
+        <div className="space-y-3 rounded-xl border border-white/10 p-3" data-testid="survivor-tribal-override">
+          {target === undefined ? <p className="text-xs text-white/50">Loading the latest Tribal Council…</p>
+            : target === null ? <p className="text-xs text-white/50">No Tribal Council result can be changed right now.</p>
+            : (
+              <>
+                <p className="text-xs text-white/60">Week {target.week}: <strong className="text-white">{target.eliminatedName ?? 'A manager'}</strong> was voted out.</p>
+                <label className="block text-xs text-white/60">Vote out instead
+                  <select aria-label="Manager to vote out instead" className={field} value={tribalUserId} onChange={event => { setTribalUserId(event.target.value); setConfirming(null) }}>
+                    <option value="">Choose a manager</option>
+                    {target.candidates.map(candidate => <option key={candidate.userId} value={candidate.userId}>{candidate.name}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs text-white/60">Reason (shown in the audit log)
+                  <input aria-label="Reason for changing the result" className={field} value={tribalReason} onChange={event => setTribalReason(event.target.value)} />
+                </label>
+                <p className="text-xs text-white/50">
+                  {target.resolved
+                    ? `${target.eliminatedName ?? 'They'} come back to their tribe and chat, leave Exile or the jury, and get back released players nobody has claimed. Trades cancelled at the vote-out stay cancelled.`
+                    : 'The result has not been carried out yet, so nothing needs undoing.'}
+                  {' '}Only the most recent Tribal Council can be changed.
+                </p>
+                <button type="button" disabled={busy || !tribalUserId} className={`${button} ${confirming === 'tribal' ? 'bg-red-500 text-white' : ''}`}
+                  onClick={() => void run('tribal', { action: 'override_tribal', councilId: target.councilId, eliminateUserId: tribalUserId, notes: tribalReason.trim() || undefined },
+                    json => overrideNotice(json as OverrideResult))}>
+                  {confirming === 'tribal' ? `Confirm: vote out ${tribalName(tribalUserId)}` : 'Change the result'}
+                </button>
+              </>
+            )}
+        </div>
+      )}
+
+      {!merged && choice('redraw', 'Redraw the tribes', 'Shuffle every active manager into new tribes now, before the next Tribal Council.')}
+      {!merged && open === 'redraw' && (
+        <div className="space-y-3 rounded-xl border border-white/10 p-3">
+          <p className="text-xs text-white/50">Every active manager gets a new tribe and new tribe chats. Works only before the merge and between Tribal Councils. This cannot be undone.</p>
+          <button type="button" disabled={busy} className={`${button} ${confirming === 'redraw' ? 'bg-amber-400 text-black' : ''}`}
+            onClick={() => void run('redraw', { action: 'redraw_tribes', notes: 'Commissioner redrew the tribes' }, 'The tribes have been redrawn.')}>
+            {confirming === 'redraw' ? 'Confirm: redraw now' : 'Redraw the tribes'}
           </button>
         </div>
       )}
