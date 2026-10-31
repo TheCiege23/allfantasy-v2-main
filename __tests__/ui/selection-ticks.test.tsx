@@ -142,7 +142,7 @@ describe('draft room pool table: the queue button', () => {
     { id: 'b', name: 'Bravo Wide', position: 'WR', team: 'DAL', adp: 20 },
   ]
 
-  it('a queued player shows a check, aria-pressed=true and a "is in your queue" label', () => {
+  it('a queued player shows a check and aria-pressed=true, and keeps the same accessible name', () => {
     render(
       <SleeperPoolTable
         filtered={players}
@@ -165,16 +165,16 @@ describe('draft room pool table: the queue button', () => {
     const queued = screen.getByTestId('sleeper-pool-row-0-queue')
     const idle = screen.getByTestId('sleeper-pool-row-1-queue')
     expect(queued.getAttribute('aria-pressed')).toBe('true')
-    expect(queued.getAttribute('aria-label')).toBe('Alpha Back is in your queue')
+    expect(queued.getAttribute('aria-label')).toBe('Add Alpha Back to queue')
     expect(queued.querySelector('svg')?.getAttribute('class')).toContain('lucide-check')
     expect(idle.getAttribute('aria-pressed')).toBe('false')
-    expect(idle.getAttribute('aria-label')).toBe('Add Bravo Wide to your queue')
+    expect(idle.getAttribute('aria-label')).toBe('Add Bravo Wide to queue')
     expect(idle.querySelector('svg')?.getAttribute('class')).toContain('lucide-plus')
   })
 })
 
 describe('draft room player cards: the queue button', () => {
-  it('turns from + into a check, with aria-pressed and a label, once the player is queued', async () => {
+  it('turns from + into a check, with aria-pressed, once the player is queued; the name stays Queue X', async () => {
     const players: PlayerEntry[] = [
       { id: 'a', name: 'Alpha Back', position: 'RB', team: 'MIA', adp: 10 },
       { id: 'b', name: 'Bravo Wide', position: 'WR', team: 'DAL', adp: 20 },
@@ -191,11 +191,11 @@ describe('draft room player cards: the queue button', () => {
         isPlayerQueued={(p) => p.name === 'Alpha Back'}
       />,
     )
-    const queued = await screen.findByRole('button', { name: 'Alpha Back is in your queue' })
+    const queued = await screen.findByRole('button', { name: 'Queue Alpha Back' })
     expect(queued.getAttribute('aria-pressed')).toBe('true')
     expect(queued.getAttribute('data-queued')).toBe('true')
     expect(queued.querySelector('svg')?.getAttribute('class')).toContain('lucide-check')
-    const idle = screen.getByRole('button', { name: 'Add Bravo Wide to your queue' })
+    const idle = screen.getByRole('button', { name: 'Queue Bravo Wide' })
     expect(idle.getAttribute('aria-pressed')).toBe('false')
     expect(idle.querySelector('svg')?.getAttribute('class')).toContain('lucide-plus')
   })
@@ -246,7 +246,7 @@ describe('Survivor twist presets', () => {
 
 describe('new queue strings', () => {
   it('exist in English and Spanish, keep their placeholder, and never say waiver in Spanish', () => {
-    for (const key of ['draftRoom.queue.addPlayer', 'draftRoom.queue.inQueue']) {
+    for (const key of ['draftRoom.queue.addPlayer', 'draftRoom.queue.queuePlayer']) {
       expect(translations.en[key]).toContain('{{name}}')
       expect(translations.es[key]).toContain('{{name}}')
       expect(translations.es[key]).not.toBe(translations.en[key])

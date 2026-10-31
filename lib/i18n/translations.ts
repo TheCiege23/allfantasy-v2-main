@@ -6878,6 +6878,8 @@ export const translations: Record<string, Record<string, string>> = {
     "taxiPanel.overHint": "Lower the count once they promote or release a player, or keep it where it is.",
     "draftRoom.queue.addPlayer": "Add {{name}} to your queue",
     "draftRoom.queue.inQueue": "{{name}} is in your queue",
+    "draftRoom.queue.addPlayer": "Add {{name}} to queue",
+    "draftRoom.queue.queuePlayer": "Queue {{name}}",
   },
   es: {
     ...translationsEsParity,
