@@ -65,3 +65,17 @@ export async function loadTaxiSeasonsUsed(db: TenureDb, leagueId: string, player
   }
   return new Map([...seasons].map(([id, set]) => [id, set.size]))
 }
+
+export type TaxiTenureView = { maxYears: number | null; seasonsUsed: Record<string, number> }
+
+/**
+ * What a lineup screen draws on a taxi row: the league's limit and each player's completed taxi
+ * seasons. Players never on a taxi squad are absent from `seasonsUsed` (zero used). Null for a league
+ * with no limit and nothing to count, so a caller can leave the field off.
+ */
+export async function loadTaxiTenureView(db: TenureDb, leagueId: string, settings: unknown, playerIds: readonly string[]): Promise<TaxiTenureView | null> {
+  const maxYears = readTaxiMaxYears(settings)
+  if (maxYears == null) return null
+  const used = await loadTaxiSeasonsUsed(db, leagueId, playerIds)
+  return { maxYears, seasonsUsed: Object.fromEntries(used) }
+}

@@ -22,6 +22,7 @@ import {
   SettingsRadioGroup,
   controlClass,
 } from './settings-ui'
+import { ImportedKeeperGrid } from '@/components/import-assist/ImportedKeeperGrid'
 
 /** `League.keeperRoundPenalty`: rounds EARLIER than last season; 0 = same round, negative = later. */
 const KEEPER_ROUND_SHIFTS = [5, 4, 3, 2, 1, 0, -1, -2, -3]
@@ -700,6 +701,8 @@ export function LeagueSettingsPanel({
               ))}
             </select>
           </div>
+
+          <ImportedKeeperGrid leagueId={leagueId} />
 
           {subHint ? (
             <PremiumGate

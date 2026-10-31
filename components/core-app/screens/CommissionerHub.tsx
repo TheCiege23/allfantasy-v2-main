@@ -52,6 +52,7 @@ import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButto
 import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
 import { RolloverWizard } from '@/components/core-app/commissioner/RolloverWizard'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
+import { DynastyFormatCard } from '@/components/core-app/commissioner/DynastyFormatCard'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { DisputeDesk } from '@/components/disputes/DisputeDesk'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
@@ -292,13 +293,17 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         )}
         {data.formatCards.length ? (
           <ul className="af-ch-areas">
-            {data.formatCards.map((card) => (
-              <li key={card.key}>
-                <strong>{t(card.title)}</strong>
-                <p>{t(card.detail)}</p>
-                <Link href={card.href}>{t(card.action)} →</Link>
-              </li>
-            ))}
+            {data.formatCards.map((card) =>
+              card.tone === 'dynasty' ? (
+                <DynastyFormatCard key={card.key} card={card} />
+              ) : (
+                <li key={card.key}>
+                  <strong>{t(card.title)}</strong>
+                  <p>{t(card.detail)}</p>
+                  <Link href={card.href}>{t(card.action)} →</Link>
+                </li>
+              ),
+            )}
           </ul>
         ) : (
           <p className="af-ch-muted">

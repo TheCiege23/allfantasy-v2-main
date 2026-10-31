@@ -35,7 +35,7 @@ vi.mock('@/components/i18n/LanguageProviderClient', async () => {
   return { useOptionalLanguage: () => ({ language: lang.language, t: (k: string) => translations[lang.language][k] ?? translations.en[k] ?? k }) }
 })
 
-import { hasUsedTaxiSeasons, loadTaxiSeasonsUsed, readTaxiMaxYears, storedTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
+import { hasUsedTaxiSeasons, loadTaxiSeasonsUsed, loadTaxiTenureView, readTaxiMaxYears, storedTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
 import { planRolloverHousekeeping, type HousekeepingPlayer } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
 import { checkTaxiSave, readTaxiRulesView, saveTaxiRules } from '@/lib/taxi/taxiRulesService'
 import { TaxiRulesPanel } from '@/components/league-settings/TaxiRulesPanel'
@@ -65,6 +65,15 @@ describe('the setting', () => {
       where: { playerId: { in: ['a', 'b', 'c'] }, droppedAt: null, slotType: { in: ['TAXI', 'taxi', 'Taxi'] }, roster: { leagueId: 'L', season: { status: 'complete' } } },
     }))
     expect(await loadTaxiSeasonsUsed(db as never, 'L', [])).toEqual(new Map())
+  })
+
+  it('the lineup screen’s tenure view: the limit plus seasons used, and nothing at all with no limit', async () => {
+    const db = { redraftRosterPlayer: { findMany: vi.fn(async () => [{ playerId: 'a', roster: { seasonId: 's24' } }]) } }
+    expect(await loadTaxiTenureView(db as never, 'L', { taxi_max_years: 3 }, ['a', 'b'])).toEqual({ maxYears: 3, seasonsUsed: { a: 1 } })
+    expect(await loadTaxiTenureView(db as never, 'L', {}, ['a'])).toEqual({ maxYears: 2, seasonsUsed: { a: 1 } })
+    db.redraftRosterPlayer.findMany.mockClear()
+    expect(await loadTaxiTenureView(db as never, 'L', { taxi_max_years: 0 }, ['a'])).toBeNull()
+    expect(db.redraftRosterPlayer.findMany).not.toHaveBeenCalled()
   })
 })
 
