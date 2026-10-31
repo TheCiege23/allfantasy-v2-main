@@ -18,6 +18,7 @@ import {
 import { MAX_REDRAFT_TRADE_TEAMS, uninvolvedTradeParticipants } from '@/lib/redraft/tradeParticipants'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SelectionCheck } from '@/components/ui/selection-check'
+import { intlLocaleOrBrowserDefault } from '@/lib/i18n/bilingual'
 
 type Step = 'partner' | 'assets' | 'review'
 
@@ -856,7 +857,7 @@ export function TradeCenterModal({
               ) : (
                 <p className="text-[11px] text-white/40">
                   {tInterpolate('tradeCenter.modal.review.fullValuation', {
-                    when: new Date(valuePreview.context.capturedAt).toLocaleString(language === 'es' ? 'es' : undefined),
+                    when: new Date(valuePreview.context.capturedAt).toLocaleString(intlLocaleOrBrowserDefault(language)),
                   })}
                 </p>
               )}
