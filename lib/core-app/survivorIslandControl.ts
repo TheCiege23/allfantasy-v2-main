@@ -4,6 +4,7 @@
  * (`/api/leagues/[leagueId]/survivor/commissioner-dashboard`). Pure, so every rule is testable; the
  * words live in lib/core-app/messages/survivorIsland.ts so they translate.
  */
+import type { RulebookConfig } from './survivorRulebook'
 
 export type TorchState = 'lit' | 'low' | 'out'
 export type HealthDetail =
@@ -26,7 +27,7 @@ export type IslandControlFacts = {
     readinessIssues?: string[]
   } | null
   council?: { status?: string; isRevealed?: boolean } | null
-  config?: { exileReturnEnabled?: boolean } | null
+  config?: (RulebookConfig & { exileReturnEnabled?: boolean | null }) | null
   todo?: { headline?: string; items?: IslandTodoItem[] } | null
 }
 

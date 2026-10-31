@@ -36,7 +36,7 @@ import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNav
 import ConnectedDecisionScopeBar from '@/components/core-app/ConnectedDecisionScopeBar'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
-import { leagueThemeForTypeKey } from '@/lib/core-app/survivorTheme'
+import { SURVIVOR_BANNER_TABS, leagueThemeForTypeKey } from '@/lib/core-app/survivorTheme'
 import { SurvivorIslandBanner } from '@/components/core-app/survivor/SurvivorIslandBanner'
 import { SurvivorIslandControl } from '@/components/core-app/survivor/SurvivorIslandControl'
 import { navLabel } from '@/lib/core-app/navLabels'
@@ -4471,6 +4471,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           }))}
         />
       ) : null}
+
+      {/* The island banner over every other league tab of a Survivor league (survivorTheme.ts). */}
+      {SURVIVOR_BANNER_TABS.has(activeKey) && segment !== 'bracket' && segment !== 'hubs' && segment !== 'discord' ? survivorBanner('compact') : null}
 
       {segment === 'bracket' ? (
         bracket ? (

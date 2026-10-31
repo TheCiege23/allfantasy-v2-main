@@ -6,6 +6,7 @@ import type { SurvivorSummary } from '@/components/survivor/types'
 import { useMessages } from '@/components/i18n/useMessages'
 import { survivorIslandMessages } from '@/lib/core-app/messages/survivorIsland'
 import { clockText, islandView, sportBall, tribeColor, type SportBall } from '@/lib/core-app/survivorIsland'
+import { SurvivorRulebook } from './SurvivorRulebook'
 
 /**
  * The island banner at the top of a Survivor league's Camp, Tribe standings and Immunity challenge
@@ -104,6 +105,7 @@ export function SurvivorIslandBanner({
         </div>
       </section>
       {full && summary && summary.tribes.some((t) => t.members.length > 0) ? <TribeBoard summary={summary} /> : null}
+      {full && summary ? <SurvivorRulebook config={summary.config} collapsible /> : null}
     </>
   )
 }

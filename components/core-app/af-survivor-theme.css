@@ -231,3 +231,17 @@ html[data-mode='light'] .af-core[data-league-theme='survivor'] {
   .af-core .sv-issue { grid-template-columns: 4px minmax(0, 1fr); }
   .af-core .sv-issue > .sv-btn { grid-column: 2; justify-self: start; }
 }
+
+/* ── Season rulebook (components/core-app/survivor/SurvivorRulebook.tsx) ── */
+
+.af-core .sv-rulebook summary { cursor: pointer; list-style: none; }
+.af-core .sv-rulebook summary::-webkit-details-marker { display: none; }
+.af-core .sv-rulebook summary::after { content: ' ▾'; color: var(--faint); }
+.af-core .sv-rulebook[open] summary { margin-bottom: 12px; }
+.af-core .sv-rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 0 0 12px; }
+.af-core .sv-rule {
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 6%, var(--surface2)), var(--surface2));
+}
+.af-core .sv-rule dt { font: 700 12px/1.3 'Cinzel', Georgia, serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sv-heading); }
+.af-core .sv-rule dd { margin: 4px 0 0; font-size: 14px; color: var(--text); }

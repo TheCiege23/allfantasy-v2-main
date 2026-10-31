@@ -127,7 +127,7 @@ describe('the core page', () => {
   it('opens Camp, Tribe standings, Immunity challenge and Island control with the banner, only in a Survivor league', () => {
     expect(page).toContain("leagueThemeForTypeKey(tradeLeagueTypeKey) === 'survivor' && selectedLeagueId ?")
     expect(page.match(/survivorBanner\('full'\)/g)?.length).toBe(1)
-    // Tribe standings, Immunity challenge, and Island control (the Commissioner screen).
-    expect(page.match(/survivorBanner\('compact'\)/g)?.length).toBe(3)
+    // Tribe standings, Immunity challenge, Island control, and the shared slot over every other league tab.
+    expect(page.match(/survivorBanner\('compact'\)/g)?.length).toBe(4)
   })
 })
