@@ -11,6 +11,7 @@ import { buildNbaCampusWeekSnapshot } from '@/lib/c2c/nbaCampusWeekSnapshot'
 import { nbaCampusWeekCacheKey, persistNbaCampusWeekSnapshot } from '@/lib/c2c/storeNbaCampusWeekSnapshot'
 import { nbaCampusGameMappingKey } from '@/lib/c2c/refreshNbaCampusWeek'
 import { nbaCampusPointsForMatchup } from '@/lib/c2c/nbaCampusMatchupScoring'
+import { refreshEspnCollegeGameBoxes } from '@/lib/espn/refreshNcaabCollegeGameBoxes'
 
 const pilot = process.env.NBA_CAMPUS_POSTGRES_PILOT === '1' ? describe : describe.skip
 pilot('NBA campus snapshot and correction on isolated Postgres', () => {
@@ -37,6 +38,7 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
       afRosterLineupAssignment: prisma.afRosterLineupAssignment,
       teamProviderIdentity: prisma.teamProviderIdentity,
       sportsDataCache: {
+        upsert: (args: any) => prisma.sportsDataCache.upsert({ ...args, where: { cacheKey: rewrite(args.where.cacheKey) }, create: { ...args.create, cacheKey: rewrite(args.create.cacheKey) } }),
         findMany: async (args: any) => {
           const keys: string[] = args.where.cacheKey.in
           const rows = await prisma.sportsDataCache.findMany({ ...args, where: { ...args.where, cacheKey: { in: keys.map(rewrite) } } })
@@ -48,7 +50,12 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
       },
     }
     const input = { leagueId: id, season: 2026, week: 2, homeRosterId: homeId, awayRosterId: awayId, now, scorer: (s: Record<string, number>) => (s.pts ?? 0) + (s.reb ?? 0) }
-    const box = (points: number) => ({ eventId, status: 'final', complete: true, rejected: 0, players: [{ espnId, teamId: '10', didNotPlay: false, stats: { pts: points, reb: 5, ast: 0, to: 0, stl: 0, blk: 0, threes: 0 } }] })
+    const box = (points: number) => ({ eventId, status: 'final' as const, complete: true, rejected: 0, players: [{ espnId, teamId: '10', didNotPlay: false, stats: { pts: points, reb: 5, ast: 0, to: 0, stl: 0, blk: 0, threes: 0 } }] })
+    const refresh = (points: number, observedAt: Date) => refreshEspnCollegeGameBoxes(db as never, {
+      games: [game], espnForRi: new Map([['1', '10'], ['2', '20']]), now: observedAt, deadlineAt: Date.now() + 30000, maxEvents: 1,
+      fetchScoreboard: async () => ({ games: [{ id: eventId, day: game.day, homeTeamId: '10', awayTeamId: '20', startTime: game.startTime, status: 'final' as const }], rejected: 0 }),
+      fetchBox: async () => box(points),
+    })
     try {
       await prisma.appUser.create({ data: { id: ownerId, email: `${id}@example.invalid`, username: id } })
       await prisma.league.create({ data: { id, userId: ownerId, platform: 'manual', platformLeagueId: id, leagueType: 'dynasty', leagueVariant: 'c2c', sport: 'NBA', isDynasty: true, settings: {} } })
@@ -62,10 +69,11 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
       })
       await prisma.sportsDataCache.create({ data: { cacheKey: localMappingKey, expiresAt: new Date('2028-01-01'), data: { season: 2026, week: 2, mappings: [{ gameId: game.gameId, eventId, day: game.day, homeTeamId: '1', awayTeamId: '2' }] } } })
       expect((await nbaCampusPointsForMatchup(db as never, input))?.home).toMatchObject({ missingPlayerIds: [playerId], allFinal: false })
-      await prisma.sportsDataCache.create({ data: { cacheKey: localBoxKey, expiresAt: new Date('2028-01-01'), data: box(20) } })
+      expect(await refresh(20, now)).toMatchObject({ stored: 1, unresolved: [] })
       expect((await nbaCampusPointsForMatchup(db as never, input))?.home).toEqual({ points: 25, missingPlayerIds: [], allFinal: true })
-      await prisma.sportsDataCache.update({ where: { cacheKey: localBoxKey }, data: { data: box(22) } })
-      expect((await nbaCampusPointsForMatchup(db as never, input))?.home).toEqual({ points: 27, missingPlayerIds: [], allFinal: true })
+      const correctedAt = new Date(now.getTime() + 13 * 60 * 60 * 1000)
+      expect(await refresh(22, correctedAt)).toMatchObject({ stored: 1, unresolved: [] })
+      expect((await nbaCampusPointsForMatchup(db as never, { ...input, now: correctedAt }))?.home).toEqual({ points: 27, missingPlayerIds: [], allFinal: true })
       await persistNbaCampusWeekSnapshot(prisma, { leagueId: id, rosterId: homeRoster, snapshot: { ...built.snapshot!, players: built.snapshot!.players.map(player => ({ ...player, selectedAt: '2026-11-01T19:00:00.000Z' })) }, now: savedAt })
       expect((await nbaCampusPointsForMatchup(db as never, input))?.home).toMatchObject({ missingPlayerIds: [playerId], allFinal: false })
 
