@@ -10,6 +10,7 @@ const h = vi.hoisted(() => {
   const prisma = {
     appUser: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(async () => []) },
     league: { findMany: vi.fn(async () => []) },
+    leagueTeam: { findMany: vi.fn(async () => []) },
     communityPost: {
       findUnique: vi.fn(),
       findMany: vi.fn(async () => []),
@@ -347,5 +348,36 @@ describe('chat polling', () => {
     })
     const merged = mergeMessages([m('1', 1), m('2', 2)], [m('2', 2), m('3', 2)])
     expect(merged.map((x) => x.id)).toEqual(['1', '2', '3'])
+  })
+})
+
+describe('the Commish badge', () => {
+  const user = { id: 'm1', username: 'rae', displayName: 'Rae', avatarUrl: null, email: null, createdAt: new Date('2026-01-01') }
+  const viewer = { userId: null, isModerator: false }
+
+  async function badgesWith(teams: unknown[], owned: unknown[] = []) {
+    h.prisma.appUser.findFirst.mockResolvedValueOnce(user)
+    h.prisma.league.findMany.mockResolvedValueOnce(owned as never)
+    h.prisma.leagueTeam.findMany.mockResolvedValueOnce(teams as never)
+    return (await getMemberProfile('rae', viewer))!.author.badges
+  }
+
+  it('goes to whoever claimed the commissioner team of an imported league', async () => {
+    expect(await badgesWith([{ claimedByUserId: 'm1', isCommissioner: true, role: 'member' }])).toContain('commish')
+    expect(h.prisma.leagueTeam.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { claimedByUserId: { in: ['m1'] }, isCommissioner: true, role: { not: 'viewer' } },
+      }),
+    )
+  })
+
+  it('still goes to league owners', async () => {
+    expect(await badgesWith([], [{ userId: 'm1' }])).toContain('commish')
+  })
+
+  it('fails closed when a row comes back that is not a commissioner team', async () => {
+    expect(await badgesWith([{ claimedByUserId: 'm1', isCommissioner: false, role: 'member' }])).not.toContain('commish')
+    expect(await badgesWith([{ claimedByUserId: 'm1', isCommissioner: true, role: 'viewer' }])).not.toContain('commish')
+    expect(await badgesWith([])).not.toContain('commish')
   })
 })
