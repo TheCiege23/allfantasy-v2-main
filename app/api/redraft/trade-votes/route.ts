@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { hasLeagueCommissionerRights } from '@/lib/league/permissions'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
 import { refreshCapProjections } from '@/lib/idp/capEngine'
 import { evaluateNativeTradeReversalReadiness, reverseNativeTrade } from '@/lib/redraft/tradeReversal'
 import { publishTradeReversalNotice } from '@/lib/trade-reversal/notice'
@@ -90,6 +91,26 @@ async function refuseIfMovesLocked(leagueId: string): Promise<NextResponse | nul
     { error: REDRAFT_MOVES_LOCKED_MESSAGE, code: REDRAFT_MOVES_LOCKED_CODE },
     { status: REDRAFT_MOVES_LOCKED_STATUS },
   )
+}
+
+/**
+ * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts): bound when a trade is accepted and when
+ * an approve vote could settle it, like the move lock. A commissioner's approval is the override, as it
+ * is for the deadline in the trade runtime. One league read and out for every non-Survivor league.
+ */
+async function refuseIfSurvivorTradeRules(proposal: {
+  leagueId: string
+  proposerRosterId: string
+  receiverRosterId: string
+  assets: Array<{ assetType: string; playerId: string | null; playerName: string | null; fromRosterId: string; toRosterId: string }>
+}): Promise<NextResponse | null> {
+  const check = await checkSurvivorTradeRules({
+    leagueId: proposal.leagueId,
+    rosterIds: [proposal.proposerRosterId, proposal.receiverRosterId, ...proposal.assets.flatMap((a) => [a.fromRosterId, a.toRosterId])],
+    rosterIdSpace: 'redraft',
+    players: proposal.assets.filter((a) => a.assetType === 'player' && a.playerId).map((a) => ({ playerId: String(a.playerId), playerName: a.playerName, fromRosterId: a.fromRosterId })),
+  })
+  return check.ok ? null : NextResponse.json({ error: check.message, code: check.code }, { status: check.status })
 }
 
 /** Record the commissioner review a decision was made with (design step 6: "decision logged"). */
@@ -366,6 +387,8 @@ export async function POST(req: NextRequest) {
       // The move lock first, as the trade runtime orders it ahead of the deadline.
       const lockedAtAccept = await refuseIfMovesLocked(proposal.leagueId)
       if (lockedAtAccept) return lockedAtAccept
+      const survivorAtAccept = await refuseIfSurvivorTradeRules(proposal)
+      if (survivorAtAccept) return survivorAtAccept
 
       /*
        * 🛑 THE DEADLINE BINDS AT ACCEPTANCE, AND THIS PATH NEVER CHECKED IT. A proposal made before the
@@ -663,6 +686,8 @@ export async function POST(req: NextRequest) {
     if (action === 'vote_approve') {
       const lockedAtVote = await refuseIfMovesLocked(proposal.leagueId)
       if (lockedAtVote) return lockedAtVote
+      const survivorAtVote = await refuseIfSurvivorTradeRules(proposal)
+      if (survivorAtVote) return survivorAtVote
     }
 
     const voteValue = action === 'vote_approve' ? 'approve' : 'veto'

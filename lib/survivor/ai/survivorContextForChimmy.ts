@@ -7,6 +7,9 @@
 import { isSurvivorLeague } from '../SurvivorLeagueConfig'
 import { buildSurvivorAIContext } from './SurvivorAIContext'
 import { resolveSurvivorCurrentWeek } from '../SurvivorTimelineResolver'
+import { readSurvivorGovernanceSettings } from '../survivorGovernanceSettings'
+import { survivorGovernanceGroundingLine } from '../survivorGovernanceSummary'
+import { survivorTradeWindowStatus } from '../survivorTradeRules'
 
 /**
  * Returns a plain-text summary of the Survivor league state for injection into Chimmy's context.
@@ -41,6 +44,8 @@ export async function buildSurvivorContextForChimmy(
     ? `Council week ${ctx.council.week}, phase ${ctx.council.phase}, deadline ${ctx.council.voteDeadlineAt.toISOString()}, closed: ${!!ctx.council.closedAt}`
     : 'No council this week'
 
+  const governanceLine = await loadGovernanceGroundingLine(leagueId, userId, ctx.currentWeek, ctx.merged).catch(() => '')
+
   return `[SURVIVOR LEAGUE CONTEXT - for explanation only; you never decide who is eliminated, vote validity, idol validity, immunity, or exile return]
 League ${leagueId}. Week ${ctx.currentWeek}. Sport: ${ctx.sport}. Mode: ${ctx.config.mode}. Merge: ${ctx.merged ? 'Yes' : 'No'}.
 Tribes: ${tribesStr}.
@@ -52,5 +57,29 @@ Finale: ${ctx.finale ? `open ${ctx.finale.open}, finalists ${ctx.finale.finalist
 User's roster: ${ctx.myRosterId ? ctx.rosterDisplayNames[ctx.myRosterId] ?? ctx.myRosterId : 'N/A'}. User's idols: ${ctx.myIdols.map((i) => i.powerType).join(', ') || 'None'}.
 User's active effects: ${ctx.myActiveEffects.map((effect) => `${effect.rewardType}${effect.appliedMode === 'queued' ? ' (queued)' : effect.appliedMode === 'record_only' ? ' (tracked)' : ''}`).join(', ') || 'None'}.
 User's exile status: ${ctx.myExileStatus ? `tokens ${ctx.myExileStatus.tokens}, eliminated ${ctx.myExileStatus.eliminated}, eligible to return ${ctx.myExileStatus.eligibleToReturn}` : 'N/A'}.
-Official commands (suggest wording only; engine processes): @Chimmy vote [manager], @Chimmy jury vote [finalist], @Chimmy play idol [idol], @Chimmy play idol [idol] on [manager], @Chimmy play idol steal_player on [manager] pick [player], @Chimmy play idol swap_starter on [manager] swap [bench] for [starter], @Chimmy submit challenge [choice], @Chimmy confirm tribe decision [choice].`
+Official commands (suggest wording only; engine processes): @Chimmy vote [manager], @Chimmy jury vote [finalist], @Chimmy play idol [idol], @Chimmy play idol [idol] on [manager], @Chimmy play idol steal_player on [manager] pick [player], @Chimmy play idol swap_starter on [manager] swap [bench] for [starter], @Chimmy submit challenge [choice], @Chimmy confirm tribe decision [choice].${governanceLine ? `\nGovernance: ${governanceLine}` : ''}`
+}
+
+/** Trade rules and today's window, the strike policy with the USER'S OWN strike count, alliances, swaps. */
+async function loadGovernanceGroundingLine(leagueId: string, userId: string, currentWeek: number, merged: boolean): Promise<string> {
+  const [{ prisma }, { listSurvivorConductStrikes }, { normalizeSurvivorFoundationSettings }] = await Promise.all([
+    import('@/lib/prisma'),
+    import('../survivorConductService'),
+    import('../normalizeSurvivorSettings'),
+  ])
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const settings = readSurvivorGovernanceSettings(league?.settings)
+  const foundation = normalizeSurvivorFoundationSettings(league?.settings && typeof league.settings === 'object' ? league.settings as Record<string, unknown> : {})
+  const [strikes, allianceCount] = await Promise.all([
+    listSurvivorConductStrikes(leagueId, userId).catch(() => null),
+    prisma.survivorChatChannel.count({ where: { leagueId, channelType: 'alliance', isArchived: false, memberUserIds: { has: userId } } }).catch(() => null),
+  ])
+  return survivorGovernanceGroundingLine({
+    settings,
+    tradeWindow: settings.tradeRulesEnabled ? survivorTradeWindowStatus(settings, { tribalDay: foundation.tribalCouncilDay, tribalTime: foundation.tribalCouncilTime, now: new Date() }, merged) : null,
+    currentWeek,
+    myStrikeCount: strikes ? strikes.length : null,
+    myAllianceCount: allianceCount,
+    merged,
+  })
 }

@@ -54,6 +54,12 @@ export type AttentionSignalType =
   /** Live-career plan, phase 4: what winning a live league would mean for the career — read off
    * the Career screen's own stakes (`careerMilestones.ts`), never re-derived. */
   | 'career_title_stake'
+  /** Survivor governance (`survivorSignals.ts`): the cross-tribe trade window or weekly freeze closing
+   * soon, the castaway's own conduct strikes, and a tribe swap this week — read off persisted league
+   * settings and audit rows, never inferred. */
+  | 'survivor_trade_window'
+  | 'survivor_conduct_strike'
+  | 'survivor_tribe_swap'
 
 export type AttentionSignalSource =
   | 'league_health_engine'
@@ -64,6 +70,8 @@ export type AttentionSignalSource =
   | 'user_os'
   /** Live-career plan, phase 4: the Career Wire's sync read and the Career screen's stakes. */
   | 'career'
+  /** Survivor governance settings, conduct-strike audit rows and sealed swaps (`survivorSignals.ts`). */
+  | 'survivor'
 
 export interface DecisionOsAttentionSignal {
   /** Stable and deterministic — the same underlying condition always produces the same id, so a

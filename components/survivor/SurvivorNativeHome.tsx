@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { SurvivorGovernanceCard } from '@/components/survivor/SurvivorGovernanceCard'
 import Link from 'next/link'
 import { LeagueSection, CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import { ArrowRight, MessageSquare, PlayCircle, Settings, Shield } from 'lucide-react'
@@ -264,6 +265,8 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
             </li>)}</ul>
           </div> : null}</LeagueSection>
           <LeagueSection id="week"><SurvivorWeeklyMoments leagueId={league.id} exileHref={`/survivor/${encodeURIComponent(league.id)}/exile`} /></LeagueSection>
+          {/* Trade window, the castaway's own strikes, and alliances; nothing when the league uses none. */}
+          <LeagueSection id="week"><SurvivorGovernanceCard leagueId={league.id} /></LeagueSection>
           {/* The league's week after Tribal Council, for anyone to share; renders nothing until there is one. */}
           <LeagueSection id="week"><div className="svh-recap-share" data-testid="survivor-home-recap-share"><SurvivorShareCardsButton leagueId={league.id} type="recap" label="Share this week’s recap" className="svh-btn" /></div></LeagueSection>
           {raced.length > 1 && <div className="svh-card svh-pad svh-race-card" data-testid="survivor-tribe-race">

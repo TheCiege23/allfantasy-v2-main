@@ -38,6 +38,7 @@ export type SettingsNavTabId =
   | 'survivor_chat'
   | 'survivor_ai'
   | 'survivor_advanced'
+  | 'survivor_governance'
   | 'zombie_setup'
   | 'zombie_whisperer'
   | 'zombie_combat'
@@ -157,6 +158,7 @@ const SURVIVOR_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'survivor_merge', label: '🌊 Merge & Jury' },
   { id: 'survivor_chat', label: '💬 Chat & Permissions' },
   { id: 'survivor_ai', label: '🤖 League Guide' },
+  { id: 'survivor_governance', label: '⚖️ Rules & Conduct' },
   { id: 'survivor_advanced', label: '⚙️ Advanced Rules' },
 ]
 

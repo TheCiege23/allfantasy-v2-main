@@ -22,6 +22,7 @@ import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedIntelligenceIntegrationService } from '@/lib/sports-evidence/intelligenceIntegration'
 import { resolveManagerCommandCenterSnapshot } from '@/lib/decision-os/managerCommandCenter'
 import { loadCareerDecisionInput } from '@/lib/core-app/careerDecisionInput'
+import { loadSurvivorAttentionSignals } from '@/lib/survivor/survivorDecisionSignalInput'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,9 +85,16 @@ export async function GET() {
   // line. Read once here from the same rows; null (never a throw) when the career read fails.
   // Started, not awaited: the snapshot awaits it only after its own per-league reads.
   const career = loadCareerDecisionInput({ userId, leagueRows, now })
+  // Survivor governance signals (trade window closing, the viewer's strikes, a swap this week) join
+  // the career signals: same input slot, so they compete on severity and the cap like every other
+  // signal, and are admitted only for leagues in this snapshot's scope. Never a throw.
+  const survivor = loadSurvivorAttentionSignals(userId, leagueIds, now).catch(() => [])
+  const careerAndSurvivor = Promise.all([career, survivor]).then(([c, s]) =>
+    c || s.length ? { signals: [...(c?.signals ?? []), ...s], legacyLine: c?.legacyLine ?? null } : null,
+  )
 
   const [snapshot, draftsApproachingCount] = await Promise.all([
-    resolveManagerCommandCenterSnapshot(userId, leagueIds, now, career),
+    resolveManagerCommandCenterSnapshot(userId, leagueIds, now, careerAndSurvivor),
     countDraftsApproaching(leagueIds, now),
   ])
 
