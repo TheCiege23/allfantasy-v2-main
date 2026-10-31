@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
-import { Award, Axe, BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight } from 'lucide-react'
+import { Award, Axe, BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight, Landmark, CarTaxiFront, Ticket } from 'lucide-react'
 import AppShell, { type AppShellProps } from '@/app/components/AppShell'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -16,7 +16,7 @@ import type { RedraftSeasonFacts } from '@/lib/league-media/redraftSeasonTrack'
 import { RedraftSeasonTrack } from './RedraftSeasonTrack'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { ALL_LEAGUES_DASHBOARD_HREF, leagueDashboardHref } from '@/lib/league/league-workspace-navigation'
-import { buildNativeLeagueNavigation, leagueSectionHref, nativeLeaguePhase, nativeLeagueRecordLinks, type WorkspaceTab } from '@/lib/league/nativeLeagueNavigation'
+import { buildNativeLeagueNavigation, leagueSectionHref, nativeLeaguePhase, nativeLeagueRecordLinks, nativeLeagueRecordTitle, type WorkspaceTab } from '@/lib/league/nativeLeagueNavigation'
 import { adjacentLeagueId, unreadBadgeText } from '@/lib/league/leagueRailStatus'
 import { LeagueRailRow, useLeagueRail, type LeagueRailData, type LeagueRailRowView } from './LeagueRail'
 import { hideLeagueForAccount, RailLeagueMenu, saveLeaguePreference, useRailDrag, useRailHold } from '@/components/core-app/RailLeagueMenu'
@@ -63,7 +63,7 @@ type Props = AppShellProps & {
    */
   seasonFacts?: Partial<RedraftSeasonFacts> | null
 }
-const icons = { career: Star, rankings: Award, home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, guillotine: Axe, war: Swords, scores: Zap, insight: Bot, more: CircleHelp }
+const icons = { career: Star, rankings: Award, home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, guillotine: Axe, war: Swords, scores: Zap, insight: Bot, dynasty: Landmark, taxi: CarTaxiFront, picks: Ticket, more: CircleHelp }
 const memoryKey = (id: string) => `af:league-section:${id}`
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase() || 'AF'
 
@@ -104,7 +104,8 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   const searchRef = useRef<HTMLInputElement>(null)
   const switcherRef = useRef<HTMLDialogElement>(null)
   const survivor = league.leagueVariant === 'survivor' || league.format.toLowerCase() === 'survivor'
-  const groups = buildNativeLeagueNavigation(tabs, isCommissioner, survivor)
+  const { t } = useOptionalLanguage()
+  const groups = buildNativeLeagueNavigation(tabs, isCommissioner, survivor, t)
   const primary = groups[0]?.items ?? []
   const restoredLeague = useRef<string | null>(null)
   const phase = nativeLeaguePhase(league)
@@ -263,12 +264,13 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
     {hiddenCount > 0 ? <Link className="af-rail-hint nl-rail-hidden" href={`/settings?tab=preferences&returnTo=${encodeURIComponent(`/league/${league.id}`)}#your-leagues`} aria-label={railMsg.hiddenCountAria(hiddenCount)}>{railMsg.hiddenCount(hiddenCount)}</Link> : null}
   </> : sections.flatMap(section => section.rows).map(row => leagueTile(row, false))
   const chatBadge = unreadBadgeText(activeTab === 'league_chat' ? 0 : unread[league.id])
-  const navGroup = (title: string, items: typeof primary) => <section key={title} className="nl-nav-group"><h2>{title}</h2>{items.map(item => {
+  const navGroup = (id: string, title: string, items: typeof primary) => <section key={id} className="nl-nav-group" data-nav-group={id}><h2>{title}</h2>{items.map(item => {
     const Icon = icons[item.icon as keyof typeof icons] ?? CircleHelp
     const count = item.id === 'league_chat' ? chatBadge : null
     return <button key={item.id} type="button" onClick={() => choose(item.id)} aria-current={activeTab === item.id ? 'page' : undefined}><Icon size={16} aria-hidden /><span>{item.label}</span>{count ? <span className="nl-nav-count" aria-label={`${count} unread`}>{count}</span> : null}</button>
   })}</section>
-  const recordGroup = <section className="nl-nav-group" aria-label="Your record"><h2>Your record</h2>{nativeLeagueRecordLinks(league.id).map(item => {
+  const recordTitle = nativeLeagueRecordTitle(t)
+  const recordGroup = <section className="nl-nav-group" aria-label={recordTitle}><h2>{recordTitle}</h2>{nativeLeagueRecordLinks(league.id, t).map(item => {
     const Icon = icons[item.icon as keyof typeof icons] ?? CircleHelp
     return <Link key={item.id} href={item.href}><Icon size={16} aria-hidden /><span>{item.label}</span></Link>
   })}</section>
@@ -292,7 +294,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
       <aside className={`nl-sidebar ${menuOpen ? 'nl-menu-open' : ''}`} aria-label="League navigation">
         <Link className="nl-back" href={ALL_LEAGUES_DASHBOARD_HREF}><ChevronLeft size={16} aria-hidden /> All leagues</Link>
         <div className="nl-nav-league"><span className="nl-initial">{initials(league.name)}</span><div><strong>{league.name}</strong><span className="nl-eyebrow">{phase}</span></div></div>
-        {groups.map(group => navGroup(group.title, group.items))}
+        {groups.map(group => navGroup(group.id, group.title, group.items))}
         {recordGroup}
         {!native && <Link className="nl-back" href={leagueDashboardHref(league.id)}><BarChart3 size={16} aria-hidden /> League Dashboard</Link>}
         <CustomizeLeagueLink returnTo={`/league/${encodeURIComponent(league.id)}`} className="nl-back" />
@@ -304,7 +306,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
       {!shell.embedCenterOnly && <header className="nl-topbar"><button type="button" className="nl-viewing" onClick={openSwitcher}><span>Viewing</span><strong>{league.name}</strong><ChevronDown size={14} aria-hidden /></button><button type="button" className="nl-search" onClick={openSwitcher}><Search size={16} aria-hidden /><span>Jump to a league</span><kbd>⌘K</kbd></button><span className="nl-chip nl-accent">Hosted on AF · Beta</span><span className="nl-sport-week">{league.sport}{league.currentWeek ? ` · Wk ${league.currentWeek}` : ` · ${league.season ?? ''}`}</span></header>}
       <div className="nl-content">
         <header className="nl-league-heading" data-format={guillotineBanner ? 'guillotine' : undefined} data-testid={guillotineBanner ? 'guillotine-league-banner' : undefined}>{guillotineBanner && <img className="nl-guillotine-art" src="/artwork/tournaments/specialty/guillotine/assets/banner.svg" alt="" aria-hidden />}<span className="nl-heading-avatar"><LeagueMark src={currentView.imageUrl ?? league.logoUrl} letter={initials(league.name)} className="nl-heading-image" /></span><div className="nl-heading-name"><div className="nl-badges">{redraft ? <><span className="nl-chip nl-rd-chip" data-testid="redraft-season-chip">Redraft{league.season ? ` · ${league.season}` : ''}</span><span className="nl-chip nl-rd-sport-chip">{redraft.sportLabel}</span></> : <span className="nl-chip nl-accent">Native on AllFantasy</span>}{seasonClock && <span className="nl-chip nl-dyn-clock" data-testid="dynasty-season-clock" aria-label={`${tLang('dynastyEra.seasonClock.label')}: ${seasonClockText}`}>{seasonClockText}</span>}{guillotineBanner && <span className="nl-chip nl-guillotine-chip">Guilly</span>}{isCommissioner && <span className="nl-chip nl-gold">Commissioner</span>}</div><h1>{league.name}</h1>{guillotineBanner?.line && <p className="nl-guillotine-line" data-testid="guillotine-banner-line">{guillotineBanner.line}</p>}<p>{league.sport} · {league.season} · {league.teamCount} teams · {league.scoring || league.format}</p></div><button type="button" className="nl-button" aria-label="League settings" onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>League settings</span></button>{redraft ? <RedraftSeasonTrack phase={phase} facts={{ ...seasonFacts, currentWeek: seasonFacts?.currentWeek ?? league.currentWeek ?? null, tradeDeadlineWeek: seasonFacts?.tradeDeadlineWeek ?? league.tradeDeadlineWeek ?? null, draftComplete: seasonFacts?.draftComplete ?? ['Regular season', 'Playoffs', 'Offseason'].includes(phase), drafting: phase === 'Draft' }} /> : <ol className="nl-phase" aria-label="League progress">{(survivor ? ['Setup', 'Draft', 'Island', 'Finale', 'Complete'] : ['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason']).map(label => <li key={label} aria-current={(survivor ? ({ 'Regular season': 'Island', Playoffs: 'Finale', Offseason: 'Complete' } as Record<string, string>)[phase] ?? phase : phase) === label ? 'step' : undefined}>{label}</li>)}</ol>}</header>
-        <label className="nl-section-picker"><span>Section</span><select aria-label="League section" value={activeTab} onChange={event => choose(event.target.value)}>{!groups.some(group => group.items.some(item => item.id === activeTab)) && <option value={activeTab}>Current section</option>}{groups.map(group => <optgroup key={group.title} label={group.title}>{group.items.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>
+        <label className="nl-section-picker"><span>Section</span><select aria-label="League section" value={activeTab} onChange={event => choose(event.target.value)}>{!groups.some(group => group.items.some(item => item.id === activeTab)) && <option value={activeTab}>Current section</option>}{groups.map(group => <optgroup key={group.id} label={group.title}>{group.items.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>
         <nav className="nl-mobile-tabs" aria-label="League sections">{primary.map(item => <button key={item.id} type="button" aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => choose(item.id)}>{item.label}</button>)}</nav>
         <div className="nl-tab-content">{children}</div>
       </div>

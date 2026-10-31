@@ -26,8 +26,14 @@ decision in `isRedraftFormatLeague`'s caller, not a new rule.
 `data-sport="<theme>"` on its root — the same attribute mechanism Dynasty (`data-dynasty-background`) and
 Guillotine (`data-format=guillotine`) use. `components/league/native/redraft-identity.css` does the rest.
 
-⚠ **`/core` (AfCoreShell) does not carry the attributes yet.** A redraft league opened from `/core`'s
-sidebar renders the default look. See the inventory for that surface.
+**`/core` (AfCoreShell) carries them too** (batch CORE-1): the page passes
+`coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform)` (`lib/core-app/coreShellRedraftIdentity.ts`,
+a wrapper over `resolveRedraftIdentity` — no `?league=` → null) and the shell stamps the same two
+attributes on `.af-core.af-shell`. The token blocks here match either root through
+`.af-core:is(.nl-workspace,.af-shell)` (same specificity). /core-only chrome — art sizing for a page
+that scrolls, the top-bar divider, the switcher frame, the nav-column rule — is in
+`components/core-app/af-core-redraft.css`. DB-free harness: `/e2e/redraft-core/shell`
+(`scripts/redraft-core-capture.mjs --state before|after`).
 
 ## Tokens
 
