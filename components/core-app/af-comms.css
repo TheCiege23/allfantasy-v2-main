@@ -3943,3 +3943,56 @@ html[data-mode='light'] .af-cm-typing-dots { background: var(--surface); box-sha
 }
 
 .af-core .af-cm-loading { position: fixed; z-index: 90; right: 20px; bottom: calc(82px + env(safe-area-inset-bottom, 0px)); padding: 14px 18px; border: 1px solid var(--line2); border-radius: 16px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); font-size: 14px; }
+
+/*
+ * CHIMMY'S ANSWER AS A BUBBLE (2026-10-31). Owner, with a Sleeper league chat beside it: "it feels so
+ * basic". The answer sat in a cramped half-box, then three lines of 11px monospace.
+ *
+ * 🛑 THE HALF-BOX WAS A SPECIFICITY BUG, NOT A DESIGN. `.af-cm-turn .af-cm-turn-text` above strips the
+ * answer's box, and loses to the older `.af-cm-turn[data-role='chimmy'] .af-cm-turn-text` (an
+ * attribute outranks order): the background and border survived, the padding and three of the four
+ * corners did not. Every rule here carries `[data-role='chimmy']`, so it wins on specificity AND
+ * order, whatever is added above.
+ *
+ * Same surface as an incoming League-chat bubble (`--af-bubble-in`), so Chimmy reads as one more
+ * voice in the drawer rather than a document pasted into it. The ✦ avatar is the author's ::before;
+ * everything under the name lines up with the name, past it.
+ */
+.af-cm-turn[data-role='chimmy'] { max-width: 100%; padding-left: 30px; }
+/* The indent is the TURN's, so a pill that wraps keeps it; only the name steps back out under the avatar. */
+.af-cm-turn[data-role='chimmy'] .af-cm-turn-author { gap: 8px; margin: 0 0 6px -30px; font-size: 12.5px; }
+.af-cm-turn[data-role='chimmy'] .af-cm-turn-text {
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 4px 16px 16px 16px;
+  background: var(--af-bubble-in, var(--surface2));
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.af-cm-turn[data-role='you'] { border-radius: 16px 16px 4px 16px; }
+
+/* Mode, cost and plan: one row of quiet pills under the answer, in the body font. */
+.af-cm-turn[data-role='chimmy'] .af-cm-mode-tag,
+.af-cm-turn[data-role='chimmy'] .af-cm-cost {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 8px;
+  margin-right: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.af-cm-turn[data-role='chimmy'] .af-cm-mode-tag[data-mode='deep_analysis'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
