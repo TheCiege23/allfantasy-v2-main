@@ -63,9 +63,15 @@ import { resolveCommissionerLeagueProfile } from '@/lib/commissioner-os/profile/
 import { commissionerFormatCards, type CommissionerFormatCard } from './commissioner/formatCards'
 import { applicableTemplates } from '@/lib/commissioner-os/profile/templateOffers'
 import { loadCommissionerHistory, type CommissionerHistory } from './commissioner/history'
+import { loadDynastyFormatFacts } from './commissioner/dynastyFormatFacts'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { messagesFor } from '@/lib/i18n/messages'
 import { commissionerHubMessages } from './messages/commissionerHub'
 import { pickTradeDeadlineFor } from '@/lib/trade-deadline/pickTradeDeadline'
+import { readDynastyRolloverView, type DynastyRolloverView } from '@/lib/season-rollover/dynastyRolloverService'
+import type { DynastyRolloverStep } from '@/lib/season-rollover/dynastyRolloverWizard'
+import type { DynastyPickBalance, DynastyTaxiOverLimit } from '@/lib/commissioner-hub/dynastyHealthSignals'
+import { pickBalanceFlag, rookieOrderFlag, taxiOverLimitFlag } from './commissioner/dynastyHealthFlags'
 
 /**
  * Commissioner Hub — 38a screen 9.
@@ -338,9 +344,35 @@ export type CommissionerHubData = {
    * the charts, automations, waivers and the audit log. Absent renders everything, as before.
    */
   depth?: CoreDepthAccess | null
+  /** Dynasty leagues only; null (or absent) for every other league, which renders as before. */
+  dynasty?: CommissionerHubDynasty | null
 }
 
 export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDenied
+
+/**
+ * A dynasty league's extra health: what the pick-balance bars and the rollover checklist draw. The
+ * matching flags are already in `health.flags` (and so in the task cards).
+ */
+export type CommissionerHubDynasty = {
+  picks: DynastyPickBalance
+  /** Null when the taxi read did not complete. */
+  taxi: DynastyTaxiOverLimit | null
+  /**
+   * The dynasty rollover wizard's own steps and states (lib/season-rollover/dynastyRolloverWizard.ts),
+   * read from the league as the wizard reads it. Null for an imported league — its platform runs the
+   * rollover — and for a native one with no finished season on file.
+   */
+  rollover: {
+    season: number
+    nextSeason: number
+    seasonOver: boolean
+    started: boolean
+    steps: DynastyRolloverStep[]
+    /** The wizard itself is on this screen, so the checklist can link to it. */
+    wizardHref: string | null
+  } | null
+}
 
 /**
  * ⚠ COLLUSION AND TANKING DO NOT RUN ON IMPORTED LEAGUES, SO THE DESIGN'S
@@ -530,6 +562,8 @@ export async function getCommissionerHub(input: {
       bestBallMode: true,
       isDynasty: true,
       lifecycleState: true,
+      rosterSize: true,
+      taxiSlots: true,
     },
   })
 
@@ -559,6 +593,8 @@ export async function getCommissionerHub(input: {
   const native = resolveWriteAuthority(platform) === 'NATIVE'
   const platformName = platformLabel(platform)
   const seasonStatus = (league.status ?? '').toLowerCase()
+  // Dynasty-family leagues get the dynasty health signals; nothing else changes for anyone else.
+  const dynastyLeague = usesDynastyBackground(league)
 
   /*
    * ⚠ LOADED ONLY AFTER THE GATE PASSES. Reading health for a league the caller
@@ -585,6 +621,7 @@ export async function getCommissionerHub(input: {
     reviewSignals,
     networkMember,
     history,
+    dynastyRollover,
   ] = await Promise.all([
     prisma.leagueTeam
       .findMany({
@@ -638,7 +675,7 @@ export async function getCommissionerHub(input: {
         status: league.status,
         lastSyncedAt: league.lastSyncedAt,
       } as unknown as Parameters<typeof getCommissionerHubHealthForUser>[1][number],
-    ]).catch(() => []),
+    ], { dynastySignals: dynastyLeague }).catch(() => []),
     native
       ? prisma.leagueSettings.findUnique({ where: { leagueId }, select: { draftDateUtc: true } }).catch(() => null)
       : Promise.resolve(null),
@@ -677,6 +714,10 @@ export async function getCommissionerHub(input: {
       select: { role: true, network: { select: { id: true, name: true } } },
     })).catch(() => null),
     loadCommissionerHistory(leagueId, native, { platform, sport }, language).catch((): CommissionerHistory => ({ tradeAvailable: false, draftAvailable: false, trades: [], drafts: [], tradeNote: m.tradeHistoryUnread, draftNote: m.draftHistoryUnread })),
+    // The dynasty rollover wizard's own read (the card below renders it too): native dynasty only.
+    dynastyLeague && native
+      ? readDynastyRolloverView(leagueId, userId).catch((): DynastyRolloverView | null => null)
+      : Promise.resolve<DynastyRolloverView | null>(null),
   ])
   /* A Fantrax row is AllFantasy's bootstrap defaults, never the league's rules (waiverRowMeta.ts). */
   const waiverSettings = importedWaiverSettings(storedWaiverSettings, platform)
@@ -688,6 +729,17 @@ export async function getCommissionerHub(input: {
       ? { networkId: networkMember.network.id, role: networkMember.role === 'host' ? 'host' : 'member', label: networkMember.network.name }
       : null,
   })
+
+  // The dynasty format card (formatCards.ts) — read only for a dynasty league, so every other
+  // league's hub is unchanged.
+  const dynastyFacts = usesDynastyBackground(league)
+    ? await loadDynastyFormatFacts({
+        leagueId,
+        native,
+        variant: profile.canonicalFormatId === 'devy' ? 'devy' : profile.canonicalFormatId === 'c2c' ? 'c2c' : null,
+        league: { rosterSize: league.rosterSize, taxiSlots: league.taxiSlots },
+      }).catch(() => null)
+    : null
 
   const teamCount = teams.length || rosters.length
   const settingsJson = league.settings
@@ -784,6 +836,45 @@ export async function getCommissionerHub(input: {
 
   const quietManagers = memberRows && !activityStale ? quietManagerNames(memberRows, teams, native, userId) : []
 
+  // ── Dynasty signals ─────────────────────────────────────────────────────
+  const dynastySignals = dynastyLeague
+    ? healthSnapshots.find((s) => s.leagueId === leagueId)?.dynasty ?? null
+    : null
+  const dynasty: CommissionerHubDynasty | null = dynastyLeague
+    ? {
+        picks: dynastySignals?.picks ?? { measured: false, reason: 'missing' },
+        taxi: dynastySignals?.taxi ?? null,
+        rollover: dynastyRollover
+          ? {
+              season: dynastyRollover.input.season,
+              nextSeason: dynastyRollover.nextSeason,
+              seasonOver: dynastyRollover.input.seasonOver,
+              started: dynastyRollover.input.started,
+              steps: dynastyRollover.plan.steps,
+              // RolloverWizard renders for the head commissioner while `show` is on.
+              wizardHref: role === 'commissioner' && dynastyRollover.show ? '#ch-rollover' : null,
+            }
+          : null,
+      }
+    : null
+  const dynastyFlags: HealthFlag[] = dynasty
+    ? [
+        pickBalanceFlag(dynasty.picks, inAppLink('', '#ch-dynasty-picks'), language),
+        rookieOrderFlag(
+          native
+            ? { kind: 'native', rollover: dynastyRollover?.input ?? null }
+            : { kind: 'imported', platformLabel: platformName },
+          dynasty.rollover?.wizardHref ? inAppLink('', dynasty.rollover.wizardHref) : null,
+          language,
+        ),
+        taxiOverLimitFlag(
+          dynasty.taxi,
+          native ? inAppLink('', `/league/${encodeURIComponent(leagueId)}`) : null,
+          language,
+        ),
+      ]
+    : []
+
   const flags = rankFlags([
     abandonedTeamsFlag({
       managers: memberRows,
@@ -842,6 +933,7 @@ export async function getCommissionerHub(input: {
       action: inAppLink(m.openLeagueChat, `/league/${encodeURIComponent(leagueId)}?view=league_chat`),
       language,
     }),
+    ...dynastyFlags,
   ])
 
   // ── Calendar ────────────────────────────────────────────────────────────
@@ -1089,7 +1181,7 @@ export async function getCommissionerHub(input: {
 
   return {
     allowed: true,
-    formatCards: commissionerFormatCards(profile, league.leagueType, language),
+    formatCards: commissionerFormatCards(profile, league.leagueType, language, dynastyFacts),
     formatTemplate: {
       applied: profile.template
         ? {
@@ -1124,6 +1216,8 @@ export async function getCommissionerHub(input: {
           ? m.tasksEmptyNeverSynced
           : m.tasksEmptyQuiet,
     health: { score: healthScore, flags },
+    // Absent rather than null on every other league, so its hub data is exactly what it was.
+    ...(dynasty ? { dynasty } : {}),
     members: activityStale ? { available: false, reason: stale?.reason ?? '' } : memberActivity,
     calendar: { ...calendar, ics },
     areas: buildLeagueAreas(hubLeague, language),

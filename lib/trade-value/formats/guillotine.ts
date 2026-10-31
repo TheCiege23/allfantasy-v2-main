@@ -125,6 +125,7 @@ export const guillotineModel: FormatValueModel = {
         ok: false,
         reason:
           'This team has been chopped — its whole roster went to waivers, so there is nothing left to trade.',
+        reasonCode: 'guillotine.chopped',
       }
     }
 
@@ -139,6 +140,8 @@ export const guillotineModel: FormatValueModel = {
       return {
         ok: false,
         reason: `Trades closed after week ${deadline}. There is no offseason here — the format ends with one team standing, so this does not reopen.`,
+        reasonCode: 'guillotine.closed',
+        reasonParams: { week: deadline },
       }
     }
 

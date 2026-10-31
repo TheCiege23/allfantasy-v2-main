@@ -42,6 +42,7 @@ import { getStoredTeamLogoResolver } from '@/lib/sport-teams/storedTeamLogos'
 import { getSleeperTradeHistory } from '@/lib/core-app/sleeperTradeHistory'
 import { importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
 import { gradeProviderCompletedTrades } from '@/lib/provider-trades/providerCompletedGrades'
+import { pickChipFromTradeItem } from '@/lib/dynasty-core/dynastyDetails'
 
 export const dynamic = 'force-dynamic'
 
@@ -139,11 +140,12 @@ async function storedLogoFor(sport: string | null | undefined): Promise<StoredLo
 }
 
 function assetLabel(
-  item: { itemType: string; itemReference: string | null; metadata: unknown },
+  item: { itemType: string; itemReference: string | null; metadata: unknown; fromRosterId?: string | null },
   sport = 'NFL',
   storedLogo: StoredLogo = null,
 ): {
   label: string; sublabel: string | null; playerId: string | null; team: string | null; headshotUrl: string | null; teamLogoUrl: string | null
+  pick?: LeagueTradeAsset['pick']
 } {
   const meta = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
     ? (item.metadata as Record<string, unknown>)
@@ -154,6 +156,7 @@ function assetLabel(
   const itemType = String(item.itemType ?? 'player').toLowerCase()
   const playerId = itemType.includes('player') ? item.itemReference : null
   const explicitHeadshot = typeof meta.headshotUrl === 'string' && meta.headshotUrl.trim() ? meta.headshotUrl.trim() : null
+  const pick = pickChipFromTradeItem(item)
   return {
     label: name ?? item.itemReference ?? 'Asset',
     sublabel: [position, team].filter(Boolean).join(' · ') || null,
@@ -161,6 +164,8 @@ function assetLabel(
     team,
     headshotUrl: explicitHeadshot ?? sleeperPlayerHeadshot(playerId),
     teamLogoUrl: storedLogo?.(team) ?? teamLogoUrl(sport, team),
+    // A pick's year, round and original team, from its own id; absent on every other asset.
+    ...(pick ? { pick } : {}),
   }
 }
 
@@ -728,6 +733,7 @@ function providerAsset(
   provider: string = 'sleeper',
 ): LeagueTradeAsset {
   const isPlayer = !asset.isPick && asset.faabAmount == null
+  const pickRound = asset.isPick && Number.isInteger(asset.pickRoundNumber) && (asset.pickRoundNumber ?? 0) > 0 ? asset.pickRoundNumber! : null
   return {
     id: `${asset.playerId ?? 'pick'}:${idx}`,
     label: asset.playerName,
@@ -735,6 +741,10 @@ function providerAsset(
     // ⚠ SLEEPER IDS ONLY. A Yahoo player key fed to Sleeper's CDN is a different player's face, or a 404.
     headshotUrl: isPlayer && provider === 'sleeper' ? sleeperPlayerHeadshot(asset.playerId) : null,
     accent,
+    // The sending roster is not on a provider asset, so a provider pick never claims a "via".
+    ...(pickRound != null
+      ? { pick: { season: Number.isInteger(asset.pickYear) ? asset.pickYear! : null, round: pickRound, originalRosterId: asset.pickOriginalRosterExternalId ?? null, fromRosterId: null } }
+      : {}),
   }
 }
 

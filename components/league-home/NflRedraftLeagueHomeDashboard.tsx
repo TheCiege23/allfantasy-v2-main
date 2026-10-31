@@ -3,6 +3,7 @@
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-overview.css'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Activity,
@@ -22,6 +23,29 @@ import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { RedraftCommunicationPanel } from '@/components/redraft/RedraftCommunicationPanel'
 import { ManagerReplayInsightsCard } from '@/components/dashboard/ManagerReplayInsightsCard'
+import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
+import { buildScoreBug, draftCountdown, type ScoreBug } from '@/lib/league-media/redraftLeagueHome'
+import { loadYourWeekWithMatchup } from '@/components/league/native/LeagueYourWeekStrip'
+import { RedraftScoreBug } from '@/components/league/native/redraft/RedraftScoreBug'
+import '@/components/league/native/redraft-home.css'
+
+/**
+ * This week's score bug on the football Home — the same `matchup-center` load League home's strip
+ * uses. Renders nothing until a head-to-head matchup loads.
+ */
+function RedraftHomeScoreBug({ leagueId, week, sport, onOpen }: { leagueId: string; week: number | null; sport: string; onOpen: () => void }) {
+  const [bug, setBug] = useState<ScoreBug | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    loadYourWeekWithMatchup(leagueId, week).then((r) => {
+      if (!cancelled) setBug(buildScoreBug(r.matchup))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [leagueId, week])
+  return bug ? <RedraftScoreBug bug={bug} sport={sport} onOpen={onOpen} /> : null
+}
 
 type NflRedraftLeagueHomeDashboardProps = {
   league: UserLeague
@@ -154,6 +178,10 @@ export function NflRedraftLeagueHomeDashboard({
   }
 
   const currentWeek = league.currentWeek ?? null
+  // Redraft identity (batch A1): the sport's own name, this week's score bug, a draft countdown.
+  // Null for anything that is not a native redraft league, which keeps the default look below.
+  const redraft = resolveRedraftIdentity(league)
+  const countdown = redraft && !hasActiveRedraftSeason ? draftCountdown(draftDateIso, Date.now()) : null
 
   const baseTiles: Tile[] = isCommissioner
     ? hasActiveRedraftSeason
@@ -354,12 +382,12 @@ export function NflRedraftLeagueHomeDashboard({
       : 'Get ready for draft night, keep league chat nearby, and track the next steps before kickoff.'
 
   return (
-    <div className="af-core af-league-overview flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6" data-testid="g32-nfl-redraft-home">
+    <div className={`af-core af-league-overview flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6${redraft ? ' rdh-football-home' : ''}`} data-testid="g32-nfl-redraft-home">
       <section className="af-overview-header relative overflow-hidden rounded-3xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.12] via-[#050814] to-[#ff3d81]/[0.06] p-5 shadow-[0_18px_70px_rgba(0,0,0,0.32)]">
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-violet-200/75">
-              NFL Redraft League Home
+              {redraft ? `${redraft.sportLabel} redraft · League home` : 'NFL Redraft League Home'}
             </p>
             <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">{headline}</h2>
             <p className="mt-2 text-sm leading-6 text-white/58">{subtitle}</p>
@@ -377,11 +405,15 @@ export function NflRedraftLeagueHomeDashboard({
             {hasActiveRedraftSeason ? (
               <Metric icon={CalendarClock} label="Week" value={currentWeek != null ? `Week ${currentWeek}` : 'In season'} />
             ) : (
-              <Metric icon={CalendarClock} label="Draft" value={draftDate} />
+              <Metric icon={CalendarClock} label="Draft" value={countdown ? `${draftDate} · in ${countdown.label}` : draftDate} />
             )}
           </div>
         </div>
       </section>
+
+      {redraft && hasActiveRedraftSeason ? (
+        <RedraftHomeScoreBug leagueId={leagueId} week={typeof currentWeek === 'number' ? currentWeek : null} sport={String(league.sport)} onOpen={() => onOpenTab('matchups')} />
+      ) : null}
 
       <section className="af-overview-grid mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="League home actions">
         {baseTiles.map((tile) => (

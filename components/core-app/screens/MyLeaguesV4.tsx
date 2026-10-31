@@ -618,6 +618,11 @@ function LeagueCard({
             {league.formatLabel ? ` · ${league.formatLabel}` : null}
           </p>
         </div>
+        {league.audience ? (
+          <span className="af-ml-audience" data-audience={league.audience} data-testid="ml-league-audience">
+            {coreUiCopy(league.audience === 'public' ? 'PUBLIC' : 'PRIVATE', language)}
+          </span>
+        ) : null}
         {league.isCommissioner ? <span className="af-ml-role">COMMISH</span> : null}
       </div>
 
