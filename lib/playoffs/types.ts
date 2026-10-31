@@ -11,6 +11,27 @@
  */
 export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup"
 
+/** Persisted challenge summaries returned by the authenticated list endpoint. */
+export type PlayoffChallengeListItem = {
+  challengeId: string
+  sport: PlayoffSport
+  name: string
+  redirectUrl: string
+  seasonYear: number
+  participantCount: number
+  entryCount: number
+  inviteCode: string
+  config?: PlayoffChallengeConfig | null
+}
+
+export type PlayoffCreateResponse = {
+  challengeId: string
+  entryId: string | null
+  sport: PlayoffSport
+  name: string
+  redirectUrl: string
+}
+
 export type PlayoffChallengeConfig = {
   visibility: "private" | "public"
   maxParticipants: number
@@ -131,6 +152,7 @@ export type BracketTeamProfile = {
 }
 
 export type PlayoffChallengeView = {
+  participants?: Array<{ userId: string; displayName: string; entryCount: number }>
   challenge: {
     id: string
     name: string

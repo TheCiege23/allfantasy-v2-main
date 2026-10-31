@@ -162,7 +162,7 @@ export default function BracketExperienceHub({ language, season }: { language: s
       </section>
       <aside className="af-bx-side" id="bracket-leagues">
         <section className="af-bx-panel"><div className="af-bx-sidebody"><p className="af-bx-eyebrow">{copy.leagues}</p><h2>{view?.challenge.name || copy.crew}</h2>
-          <p className="af-bx-muted">{view ? `${view.participants.length} ${copy.members} · ${view.entries.length} ${copy.brackets}` : copy.crewBody}</p>
+          <p className="af-bx-muted">{view ? `${view.participants?.length ?? 0} ${copy.members} · ${view.entries.length} ${copy.brackets}` : copy.crewBody}</p>
           {leagues.length > 1 ? <label className="af-bx-select">{copy.selectLeague}<select value={view?.challenge.id ?? leagues[0].challengeId} onChange={(event) => void selectLeague(event.target.value)}>{leagues.map((league) => <option key={league.challengeId} value={league.challengeId}>{league.name}</option>)}</select></label> : null}
           {view ? <><div className="af-bx-invite"><code>{view.challenge.inviteCode}</code><button type="button" className="af-bx-icon-btn" onClick={() => void share(true)} aria-label={copy.invite}><Copy size={17} /></button></div><button type="button" className="af-bx-btn af-bx-primary af-bx-wide" onClick={() => void share(true)}>{copy.invite}</button><Link className="af-bx-text-link" href={`/brackets/leagues/${view.challenge.id}`}>{copy.leagueHome} <ArrowRight size={14} /></Link></> : <><Link className="af-bx-btn af-bx-primary af-bx-wide" href={createHref(sport)}><Users size={16} />{copy.create}</Link><Link className="af-bx-text-link" href="/brackets/join">{copy.join} <ArrowRight size={14} /></Link></>}
         </div></section>
