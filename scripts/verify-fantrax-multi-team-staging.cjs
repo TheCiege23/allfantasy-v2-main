@@ -1,4 +1,4 @@
-/** Rollback-only database probe for the Fantrax multi-team migration. */
+/** Rollback-only schema probe, or read-only verification of two real Fantrax imports. */
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
@@ -6,7 +6,52 @@ const dotenv = require('dotenv')
 const { Client } = require('pg')
 const { identifyTarget } = require('./db-target-identity.cjs')
 
+async function verifyRealImports(db, sourceId) {
+  const leagues = await db.query(
+    `SELECT id, season FROM leagues
+     WHERE platform = 'fantrax' AND "platformLeagueId" = $1
+       AND settings->>'fantraxSourceLeagueId' = $1
+     ORDER BY season DESC`,
+    [sourceId],
+  )
+  assert.ok(leagues.rowCount, 'No completed live Fantrax import found for that league ID')
+  const season = leagues.rows[0].season
+  assert.equal(
+    leagues.rows.filter((row) => row.season === season).length,
+    1,
+    'Multiple live League rows exist for the latest season',
+  )
+  const leagueId = leagues.rows[0].id
+
+  const snapshots = await db.query(
+    `SELECT fl."appUserId", COUNT(DISTINCT fu."fantraxUsername")::int AS teams
+     FROM "FantraxLeague" fl JOIN "FantraxUser" fu ON fu.id = fl."userId"
+     WHERE fl."sourceLeagueId" = $1 AND fl.season = $2
+       AND starts_with(fu."fantraxUsername", $3)
+     GROUP BY fl."appUserId"`,
+    [sourceId, season, `fantrax-team:${sourceId}:`],
+  )
+  const owner = snapshots.rows.find((row) => row.appUserId && row.teams >= 2)
+  assert.ok(owner, 'No staging account has two distinct live snapshots for this Fantrax league')
+
+  const claims = await db.query(
+    `SELECT COUNT(DISTINCT c."teamExternalId")::int AS teams,
+            COUNT(*) FILTER (WHERE c."isConfirmed" AND t."claimedByUserId" = c."afUserId")::int AS valid_claims
+     FROM "LeagueManagerClaim" c
+     JOIN league_teams t ON t."leagueId" = c."leagueId" AND t."externalId" = c."teamExternalId"
+     WHERE c."leagueId" = $1 AND c."afUserId" = $2`,
+    [leagueId, owner.appUserId],
+  )
+  assert.ok(claims.rows[0].teams >= 2, 'The account does not have two distinct team claims on the shared league')
+  assert.equal(claims.rows[0].valid_claims, claims.rows[0].teams, 'A team claim is unconfirmed or mismatches its team owner')
+
+  console.log(`PASS: latest season ${season} has one live Fantrax League row, ${owner.teams} distinct owner snapshots, and ${claims.rows[0].teams} confirmed team claims for one account.`)
+}
+
 async function main() {
+  const realImportId = process.argv[2] === '--league-id' ? process.argv[3] : null
+  assert.ok(process.argv.length === 2 || (process.argv.length === 4 && realImportId),
+    'Usage: node scripts/verify-fantrax-multi-team-staging.cjs [--league-id FANTRAX_LEAGUE_ID]')
   const staging = dotenv.parse(fs.readFileSync('.env.staging'))
   assert.equal(identifyTarget(staging.DIRECT_URL).label, 'staging', 'Refusing a non-staging database')
 
@@ -14,6 +59,14 @@ async function main() {
   const id = crypto.randomUUID()
   const sourceId = `af-fantrax-staging-probe-${id}`
   await db.connect()
+  if (realImportId) {
+    try {
+      await verifyRealImports(db, realImportId)
+    } finally {
+      await db.end()
+    }
+    return
+  }
   try {
     const users = await db.query('SELECT DISTINCT "userId" FROM leagues LIMIT 2')
     assert.equal(users.rowCount, 2, 'Need two staging accounts for the uniqueness probe')
