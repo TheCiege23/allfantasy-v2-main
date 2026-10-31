@@ -85,7 +85,7 @@ describe('the dynasty section names the rookie draft and the tanking penalty', (
   })
 
   it('a league with no dynasty config reads the settings page defaults', () => {
-    expect(dynastyRulesFromConfig(null)).toEqual({ rookieDraftOrder: 'max_pf', rookieDraftRounds: 4, rookieDraftType: 'linear' })
+    expect(dynastyRulesFromConfig(null)).toEqual({ rookieDraftOrder: 'max_pf', rookieDraftRounds: 4, rookieDraftType: 'linear', pickTradeYears: 3 })
   })
 })
 

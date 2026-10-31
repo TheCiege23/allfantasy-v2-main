@@ -147,6 +147,8 @@ export type RuleSnapshot = {
   /** Dynasty: how the rookie draft order is set (`DynastyLeagueConfig.rookiePickOrderMethod`; read path). */
   rookieDraftOrder?: string | null
   rookieDraftRounds?: number | null
+  /** Dynasty on AllFantasy: seasons ahead a pick can be traded (`DynastyLeagueConfig.futurePicksYearsOut`, 1-5). */
+  pickTradeYears?: number | null
   /** `linear` | `snake`. */
   rookieDraftType?: string | null
   /** Days after an automatic open that the rookie draft starts by itself; null = the commissioner starts it. */

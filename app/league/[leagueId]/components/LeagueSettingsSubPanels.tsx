@@ -744,7 +744,7 @@ export function SettingsSubPanelBody({
 
   switch (panelId) {
     case 'discord-sync':
-      return <DiscordLeagueSyncPanel ctx={ctx} />
+      return <DiscordLeagueSyncPanel leagueId={ctx.league.id} isLeagueOwner={ctx.league.userId === ctx.userId} />
     case 'my-team':
       return <MyTeamPanel ctx={ctx} />
     case 'general-info':

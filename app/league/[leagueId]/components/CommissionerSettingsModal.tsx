@@ -7,6 +7,16 @@ import { useAutosave } from '@/lib/hooks/useAutosave'
 import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 import { LeagueSettingsPanel } from './settings/LeagueSettingsPanel'
 import { PlaceholderPanel } from './settings/PlaceholderPanel'
+import {
+  AdvancedRulesTab,
+  AppearanceTab,
+  DraftPicksTab,
+  DuesTab,
+  ImportSyncTab,
+  IntegrationsTab,
+  PermissionsTab,
+} from './settings/CommissionerExtraTabs'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { TeamSettingsPanel } from './settings/TeamSettingsPanel'
 import { PlayoffSettingsPanel } from './settings/PlayoffSettingsPanel'
 import { GamesLimitsSettingsPanel } from './settings/GamesLimitsSettingsPanel'
@@ -83,6 +93,17 @@ import {
   commissionerKeeperSectionHeading,
   showKeeperSelectionInCommissionerSettings,
 } from '@/lib/league/keeper-policy'
+
+/** A dynasty-family league that plays on AllFantasy: the trade engine's native pick test (isNativeFuturePickLeague). */
+function isNativeDynastyLeague(row: Record<string, unknown>): boolean {
+  return (
+    String(row.platform ?? '').trim().toLowerCase() === 'manual' &&
+    isDynastyFamilyLeague({
+      leagueType: typeof row.leagueType === 'string' ? row.leagueType : null,
+      isDynasty: typeof row.isDynasty === 'boolean' ? row.isDynasty : null,
+    })
+  )
+}
 
 type ApiGet = {
   userRole: 'commissioner' | 'co_commissioner' | 'member' | null
@@ -280,6 +301,8 @@ export function CommissionerSettingsModal({
   const canEdit = payload?.canEdit ?? false
   const hasSub = hasCommissioner || (payload?.hasAfCommissionerSub ?? false)
   const initialData = payload?.league as CommissionerSettingsFormData | undefined
+  /** The raw league row from /api/league/settings, for the fields the form data does not type. */
+  const leagueRow: Record<string, unknown> = payload?.league ?? {}
 
   const showKeeperSessionStrip = showKeeperSelectionInCommissionerSettings({
     leagueType: initialData?.leagueType ?? null,
@@ -459,19 +482,24 @@ export function CommissionerSettingsModal({
               save={save}
             />
           ) : activeTab === 'dues' ? (
-            <PlaceholderPanel title="Payments / League Dues" subtitle="Buy-ins, deadlines, and tracked payouts." />
+            <DuesTab leagueId={leagueId} />
           ) : activeTab === 'import_sync' ? (
-            <PlaceholderPanel title="Import / Sync" subtitle="Provider mapping, refresh, and conflict handling." />
+            <ImportSyncTab
+              platform={typeof leagueRow.platform === 'string' ? leagueRow.platform : null}
+              importedAt={typeof leagueRow.importedAt === 'string' ? leagueRow.importedAt : null}
+              lastSyncedAt={typeof leagueRow.lastSyncedAt === 'string' ? leagueRow.lastSyncedAt : null}
+              syncStatus={typeof leagueRow.syncStatus === 'string' ? leagueRow.syncStatus : null}
+            />
           ) : activeTab === 'advanced' ? (
-            <PlaceholderPanel title="Advanced Rules" subtitle="Overrides, offseason mode, and custom enforcement." />
+            <AdvancedRulesTab leagueId={leagueId} />
           ) : activeTab === 'appearance' ? (
-            <PlaceholderPanel title="Appearance / Branding" subtitle="League visuals and discovery presentation." />
+            <AppearanceTab leagueId={leagueId} logoUrl={typeof leagueRow.logoUrl === 'string' ? leagueRow.logoUrl : null} canEdit={canEdit} />
           ) : activeTab === 'security' ? (
-            <PlaceholderPanel title="Security / Permissions" subtitle="Who can change what, audit, and locks." />
+            <PermissionsTab leagueId={leagueId} />
           ) : activeTab === 'draft_picks' ? (
-            <PlaceholderPanel title="Draft Pick Settings" subtitle="Future picks, years traded, and display rules." />
+            <DraftPicksTab leagueId={leagueId} nativeDynasty={isNativeDynastyLeague(leagueRow)} canEdit={canEdit} />
           ) : activeTab === 'integrations' ? (
-            <PlaceholderPanel title="Integrations" subtitle="External tools and webhooks (when enabled)." />
+            <IntegrationsTab leagueId={leagueId} leagueOwnerUserId={payload?.leagueOwnerUserId ?? ''} />
           ) : activeTab === 'commissioner' ? (
             <div className="space-y-8 px-6 py-6">
               {showKeeperSessionStrip ? (
