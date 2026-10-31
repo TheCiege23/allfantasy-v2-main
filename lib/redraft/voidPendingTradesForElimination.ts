@@ -20,7 +20,8 @@ export async function voidPendingRedraftTradesForRoster(leagueId: string, roster
     where: {
       seasonId: season.id,
       status: 'pending',
-      OR: [{ proposerRosterId: rosterId }, { receiverRosterId: rosterId }],
+      // A multi-team trade the roster is a third or fourth team in is voided too.
+      OR: [{ proposerRosterId: rosterId }, { receiverRosterId: rosterId }, { additionalRosterIds: { has: rosterId } }],
     },
     data: {
       status: 'cancelled',

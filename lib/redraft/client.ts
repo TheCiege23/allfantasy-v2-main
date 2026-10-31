@@ -129,6 +129,10 @@ export type RedraftTradeProposal = {
   seasonId: string
   proposerRosterId: string
   receiverRosterId: string
+  /** Multi-team trades: the teams beyond proposer and receiver. Empty or absent for two teams. */
+  additionalRosterIds?: string[]
+  /** Multi-team trades: the non-proposer teams that have accepted so far. */
+  acceptedRosterIds?: string[]
   status: string
   vetoMode: string
   vetoThreshold: number | null
@@ -614,6 +618,8 @@ export async function createTradeProposal(payload: {
   seasonId: string
   proposerRosterId: string
   receiverRosterId: string
+  /** Multi-team trades: up to two more teams. Omit (or leave empty) for a two-team trade. */
+  additionalRosterIds?: string[]
   reason?: string
   assets?: RedraftTradeAssetInput[]
 }) {
@@ -633,6 +639,7 @@ export async function createTradeProposal(payload: {
     seasonId: payload.seasonId,
     proposerRosterId: payload.proposerRosterId,
     receiverRosterId: payload.receiverRosterId,
+    ...(payload.additionalRosterIds?.length ? { additionalRosterIds: payload.additionalRosterIds } : {}),
     reason: payload.reason,
   }
   const res = await fetch('/api/redraft/trade-proposals', {
@@ -667,7 +674,12 @@ export async function submitTradeVote(payload: {
     headers: jsonHeaders,
     body: JSON.stringify(payload),
   })
-  return parseJson<{ proposal: RedraftTradeProposal; resolved: boolean }>(res)
+  return parseJson<{
+    proposal: RedraftTradeProposal
+    resolved: boolean
+    /** Multi-team trades: the teams still to accept after this one did. */
+    awaitingAcceptance?: string[]
+  }>(res)
 }
 
 export async function vetoRedraftTradeProposal(payload: { proposalId: string; reason?: string; reviewId?: string | null }) {
