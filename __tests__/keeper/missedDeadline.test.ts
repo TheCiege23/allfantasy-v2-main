@@ -38,3 +38,13 @@ describe('missed-deadline keepers: AF picks best value', () => {
     expect(kept.map((k) => [k.playerId, k.pickRound])).toEqual([['x', 8], ['y', 7]])
   })
 })
+
+describe('keeper value report: one player against his cost', () => {
+  it('is the middle of his cost round minus his market rank; unpriced players have none', async () => {
+    const { keeperValue } = await import('@/lib/keeper/missedDeadline')
+    expect(keeperValue(9, 10, 12)).toEqual({ marketRank: 10, pickSlot: 102, surplus: 92 })
+    expect(keeperValue(3, 80, 12)).toEqual({ marketRank: 80, pickSlot: 30, surplus: -50 })
+    expect(keeperValue(null, 10, 12)).toBeNull()
+    expect(keeperValue(5, null, 12)).toBeNull()
+  })
+})

@@ -1,11 +1,10 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
-import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { computeKeeperEligibility } from './eligibilityEngine'
 import { placeTeamKeepers, placedKeeperLabel, resolveKeeperRules } from './keeperRules'
 import { chooseBestValueKeepers, readMissedDeadlineRule, type BestValueCandidate } from './missedDeadline'
+import { loadKeeperMarketRanks } from './keeperMarketValues'
 
 /**
  * Apply the league's missed-deadline rule (./missedDeadline) as keepers lock: every team with no
@@ -29,9 +28,6 @@ export type MissedDeadlineOutcome = {
 
 /** Audit action a deliberate "no keepers" submission leaves (entityId = the incoming season). */
 export const KEEPER_SUBMITTED_NONE = 'keeper_submitted_none'
-
-const keyOf = (name: string | null | undefined, position: string | null | undefined) =>
-  `${normalizePlayerName(name)}|${String(position ?? '').trim().toUpperCase()}`
 
 async function audit(db: Prisma.TransactionClient, leagueId: string, userId: string | null, actionType: string, metadata: Record<string, unknown>) {
   try {
@@ -71,20 +67,10 @@ export async function applyMissedDeadlineRule(leagueId: string, seasonId: string
 
   const sport = String(league.sport ?? 'NFL').toUpperCase()
   const teams = league.leagueSize ?? rosters.length
-  const settings = (league.settings as Record<string, unknown> | null) ?? {}
-  const superflex = /superflex|\bsf\b|2qb/i.test(String(league.scoringPresetId ?? settings.scoring_preset_id ?? ''))
-  const chart = sport === 'NFL'
-    ? await getFantasyCalcValuesDbFirst({ isDynasty: false, numQbs: superflex ? 2 : 1, numTeams: Math.max(8, Math.min(16, teams)), ppr: 1 }).catch(() => [])
-    : []
-  if (!chart.length) {
+  const rankOf = await loadKeeperMarketRanks(league, rosters.length)
+  if (!rankOf) {
     await audit(db, leagueId, null, 'keeper_missed_deadline_skipped', { reason: 'no_market_values', sport, rosterIds: silent.map((r) => r.id) })
     return { rule, applied: [], skippedReason: 'no_market_values' }
-  }
-  const rankBySleeper = new Map<string, number>()
-  const rankByName = new Map<string, number>()
-  for (const p of chart) {
-    if (p.player.sleeperId) rankBySleeper.set(String(p.player.sleeperId), p.overallRank)
-    rankByName.set(keyOf(p.player.name, p.player.position), p.overallRank)
   }
 
   let eligibility = await db.keeperEligibility.findMany({ where: { leagueId, seasonId } })
@@ -109,7 +95,7 @@ export async function applyMissedDeadlineRule(leagueId: string, seasonId: string
           playerId: e.playerId,
           name: p.playerName,
           costRound: e.projectedCostRound,
-          marketRank: rankBySleeper.get(e.playerId) ?? rankByName.get(keyOf(p.playerName, p.position)) ?? null,
+          marketRank: rankOf({ playerId: e.playerId, name: p.playerName, position: p.position }),
         }
       })
     const chosen = chooseBestValueKeepers({ candidates, maxKeepers, teams, rules, totalRounds })
