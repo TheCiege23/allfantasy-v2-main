@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 
 /**
  * Teams whose live-draft picks are made AS SOON AS they are on the clock, not when the clock runs out
@@ -20,9 +20,14 @@ import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
  */
 export type InstantAutopickReason = 'autopilot' | 'autopick_me'
 
-/** Pure: is this roster Chimmy-run in these league settings? */
-export function isAutopilotRoster(leagueSettings: unknown, rosterId: string): boolean {
-  return Boolean(readManagedLineups(leagueSettings)[rosterId]?.autopilot)
+/**
+ * Pure: is this roster Chimmy-run in these league settings? With `currentOwnerId`, a team that has
+ * changed hands since Chimmy was switched on is NOT: its new manager picks for themselves, even in
+ * the minutes before the hourly sweep clears the entry.
+ */
+export function isAutopilotRoster(leagueSettings: unknown, rosterId: string, currentOwnerId?: string | null): boolean {
+  const managed = readManagedLineups(leagueSettings)
+  return currentOwnerId === undefined ? Boolean(managed[rosterId]?.autopilot) : isChimmyRunning(managed, rosterId, currentOwnerId)
 }
 
 export async function instantAutopickReason(args: {
@@ -36,9 +41,9 @@ export async function instantAutopickReason(args: {
     args.leagueSettings !== undefined
       ? args.leagueSettings
       : (await prisma.league.findUnique({ where: { id: args.leagueId }, select: { settings: true } }))?.settings
-  if (isAutopilotRoster(settings, args.rosterId)) return 'autopilot'
-
   const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { platformUserId: true } })
+  if (isAutopilotRoster(settings, args.rosterId, roster?.platformUserId ?? null)) return 'autopilot'
+
   const userId = String(roster?.platformUserId ?? '')
   if (!userId || userId.startsWith('orphan-') || userId.startsWith('ai-manager-')) return null
   const pref = await prisma.liveDraftAutopickPreference.findUnique({

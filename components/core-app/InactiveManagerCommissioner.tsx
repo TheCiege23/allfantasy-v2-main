@@ -15,6 +15,7 @@ type Team = {
   status: 'active' | 'at_risk' | 'inactive' | 'unknown'
   managed: { since: string; byUserId: string; autopilot?: { style: AutopilotStyle; since: string } } | null
   suggested: boolean
+  emptySeat?: boolean
 }
 
 /**
@@ -30,6 +31,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
   const [entitled, setEntitled] = useState(false)
   const [draftAsMe, setDraftAsMeState] = useState(true)
   const [autoHandover, setAutoHandoverState] = useState<AutoHandover>(null)
+  const [chimmyLimit, setChimmyLimit] = useState(4)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState('')
 
@@ -37,8 +39,9 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
     try {
       const r = await fetch(url, { cache: 'no-store' })
       if (!r.ok) throw new Error(String(r.status))
-      const body = (await r.json()) as { native: boolean; autopilotEntitled?: boolean; draftAsMe?: boolean; autoHandover?: AutoHandover; teams: Team[] }
+      const body = (await r.json()) as { native: boolean; autopilotEntitled?: boolean; draftAsMe?: boolean; autoHandover?: AutoHandover; chimmyLimit?: number; teams: Team[] }
       setNative(body.native)
+      if (typeof body.chimmyLimit === 'number') setChimmyLimit(body.chimmyLimit)
       setEntitled(Boolean(body.autopilotEntitled))
       setDraftAsMeState(body.draftAsMe !== false)
       setAutoHandoverState(body.autoHandover ? { days: body.autoHandover.days, to: body.autoHandover.to } : null)
@@ -147,7 +150,11 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
         : m.styleRebuild
 
   if (!native) return null
-  const name = (team: Team) => team.teamName || team.managerName || m.team
+  const name = (team: Team) => (team.emptySeat && !team.teamName ? m.emptySeat : team.teamName || team.managerName || m.team)
+  const chimmyTeams = (teams ?? []).filter((team) => team.managed?.autopilot)
+  const atLimit = chimmyTeams.length >= chimmyLimit
+  // Empty seats first: they are the teams nobody else will run.
+  const chimmyRows = [...(teams ?? [])].sort((a, b) => Number(Boolean(b.emptySeat)) - Number(Boolean(a.emptySeat)))
   const shown = (teams ?? []).filter((team) => team.managed || team.suggested)
   const others = (teams ?? []).filter((team) => !team.managed && !team.suggested)
 
@@ -157,6 +164,42 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       <p>
         {m.intro}
       </p>
+      {teams && native ? (
+        <div data-testid="chimmy-managers">
+          <h3>{m.chimmyManagersTitle}</h3>
+          <p>{m.chimmyManagersIntro}</p>
+          {entitled ? (
+            <>
+              <p role="status" data-testid="chimmy-manager-count">{m.chimmyCount(chimmyTeams.length, chimmyLimit)}</p>
+              {atLimit ? <p data-testid="chimmy-manager-limit">{m.chimmyLimitReached(chimmyLimit)}</p> : null}
+              <ul>
+                {chimmyRows.map((team) => {
+                  const running = Boolean(team.managed?.autopilot)
+                  return (
+                    <li key={team.rosterId} data-testid="chimmy-manager-team" data-empty-seat={team.emptySeat ? 'true' : undefined}>
+                      <label>
+                        <strong>{name(team)}</strong>{' '}
+                        <select
+                          value={team.managed?.autopilot?.style ?? ''}
+                          disabled={busy !== null || (!running && atLimit)}
+                          onChange={(e) => void setAutopilot(team, (e.target.value || null) as AutopilotStyle | null)}
+                        >
+                          <option value="">{m.off}</option>
+                          <option value="dynasty_owner">{styleLabel('dynasty_owner')}</option>
+                          <option value="win_now">{styleLabel('win_now')}</option>
+                          <option value="rebuild">{styleLabel('rebuild')}</option>
+                        </select>
+                      </label>
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
+          ) : (
+            <a href="/commissioner-upgrade?highlight=chimmy_autopilot">{m.autopilotUpsell}</a>
+          )}
+        </div>
+      ) : null}
       <p data-testid="draft-as-me-toggle">
         {entitled ? (
           <label>
