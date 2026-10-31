@@ -20,7 +20,8 @@ export function PinnedBoard({
 }: {
   pins: PinnedRef[]
   onJump: (messageId: string) => void
-  onUnpin: (pinId: string) => void
+  /** Absent for a viewer who may not unpin: everyone reads the board, only the commissioners clear it. */
+  onUnpin?: (pinId: string) => void
   busy?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -51,15 +52,17 @@ export function PinnedBoard({
                 {censorProfanity(p.snippet)}
               </button>
               <MessageTime value={p.pinnedAt} />
-              <button
-                type="button"
-                className="af-cm-pin-x"
-                disabled={busy}
-                onClick={() => onUnpin(p.pinId)}
-                aria-label="Unpin this message"
-              >
-                ×
-              </button>
+              {onUnpin ? (
+                <button
+                  type="button"
+                  className="af-cm-pin-x"
+                  disabled={busy}
+                  onClick={() => onUnpin(p.pinId)}
+                  aria-label="Unpin this message"
+                >
+                  ×
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>
