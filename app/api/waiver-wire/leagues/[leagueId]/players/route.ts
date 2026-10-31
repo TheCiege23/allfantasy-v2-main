@@ -16,6 +16,16 @@ import {
 } from "@/lib/waiver-wire/dropped-player-waivers"
 import { isDailyFormSport } from "@/lib/projections/dailySportForm"
 import { applyDailySportOutlook, loadDailySportOutlook } from "@/lib/projections/dailySportOutlook"
+import { identityNameKey } from "@/lib/redraft/rosterGameLogIdBridge"
+import {
+  linkedRosteredProspectIds,
+  loadNhlProspectFreeAgents,
+  NHL_PROSPECT_FA_LIST_LIMIT,
+  NHL_PROSPECT_FA_SEARCH_LIMIT,
+  NHL_PROSPECT_WIRE_SOURCE,
+  nhlProspectPoolRow,
+  offersNhlProspectFreeAgency,
+} from "@/lib/waiver-wire/nhlProspectFreeAgency"
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -29,11 +39,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const querySport = searchParams.get("sport")?.toUpperCase() ?? undefined
   const position = searchParams.get("position") ?? undefined
   const teamId = searchParams.get("teamId") ?? undefined
+  // NHL dynasty: `prospectsOnly=1&q=<name>` searches the Fantrax prospects beyond the listed cap.
+  const prospectsOnly = searchParams.get("prospectsOnly") === "1"
+  const prospectQuery = searchParams.get("q")?.trim() ?? ""
 
   const [league, rosterAsMember] = await Promise.all([
     (prisma as any).league.findFirst({
       where: { id: leagueId },
-      select: { id: true, sport: true, userId: true, isDynasty: true, leagueVariant: true, waiverHours: true, season: true, settings: true },
+      select: { id: true, sport: true, userId: true, isDynasty: true, leagueType: true, leagueVariant: true, waiverHours: true, season: true, settings: true },
     }),
     (prisma as any).roster.findFirst({
       where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },
@@ -66,17 +79,37 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       }
     }
 
+    // NHL dynasty only (lib/waiver-wire/nhlProspectFreeAgency.ts). Everywhere else this is false and
+    // the route below is exactly what it was.
+    const offerProspects = offersNhlProspectFreeAgency(league)
+    if (prospectsOnly) {
+      if (!offerProspects || prospectQuery.length < 2) return NextResponse.json({ players: [], rosteredCount: rosteredIds.size })
+      const found = await loadNhlProspectFreeAgents(prisma as never, {
+        rosteredIds,
+        query: prospectQuery,
+        limit: NHL_PROSPECT_FA_SEARCH_LIMIT,
+      }).catch(() => null)
+      const players = (found?.prospects ?? []).map((p) => prospectWireRow(p, String(league.sport)))
+      return NextResponse.json({ players, rosteredCount: rosteredIds.size })
+    }
+
     const pool = await loadLeagueWaiverPlayerPool(league, {
       position,
       teamId,
     })
 
+    // A rostered `fantrax:X` the weekly link has since attached to an NHL identity: that identity's pro
+    // row is the same man, so it is rostered too. A failed read changes nothing.
+    const linkedProspectIds = offerProspects
+      ? await linkedRosteredProspectIds(prisma as never, rosteredIds).catch(() => new Set<string>())
+      : new Set<string>()
+
     const available = pool.filter((p: any) => {
       const playerId = p.player_id == null ? null : String(p.player_id)
       const externalSourceId = p.external_source_id == null ? null : String(p.external_source_id)
       return !(
-        (playerId && rosteredIds.has(playerId)) ||
-        (externalSourceId && rosteredIds.has(externalSourceId))
+        (playerId && (rosteredIds.has(playerId) || linkedProspectIds.has(playerId))) ||
+        (externalSourceId && (rosteredIds.has(externalSourceId) || linkedProspectIds.has(externalSourceId)))
       )
     })
 
@@ -138,9 +171,45 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       }
     }
 
+    // Prospects go AFTER every pool player: no projection, ADP or rank exists for them. A failed
+    // universe read leaves the list as it was. Position / team filters apply to them as to the pool.
+    if (offerProspects) {
+      const poolNames = new Set<string>()
+      for (const p of pool as any[]) {
+        const k = identityNameKey(p.full_name)
+        if (k) poolNames.add(k)
+      }
+      const loaded = await loadNhlProspectFreeAgents(prisma as never, { rosteredIds, poolNames, limit: NHL_PROSPECT_FA_LIST_LIMIT }).catch((err) => {
+        console.warn("[waiver-wire/players] NHL Fantrax prospects unavailable", err instanceof Error ? err.message : String(err))
+        return null
+      })
+      if (loaded) {
+        const pos = position?.trim().toUpperCase()
+        const team = teamId?.trim().toUpperCase()
+        const rows = loaded.prospects
+          .filter((p) => (!pos || pos === "ALL" || p.position === pos) && (!team || (p.orgTeam ?? "") === team))
+          .map((p) => {
+            const dto = prospectWireRow(p, String(league.sport))
+            const hold = holds.get(p.playerId)
+            return hold ? { ...dto, onWaiversUntil: hold.until.toISOString() } : dto
+          })
+        return NextResponse.json({
+          players: [...priced, ...rows],
+          rosteredCount: rosteredIds.size,
+          nhlProspects: { total: loaded.total, listed: loaded.prospects.length },
+        })
+      }
+    }
+
     return NextResponse.json({ players: priced, rosteredCount: rosteredIds.size })
   } catch (error) {
     console.error("Failed to fetch waiver wire players:", error)
     return NextResponse.json({ error: "Failed to fetch players" }, { status: 500 })
   }
+}
+
+/** A Fantrax prospect serialized like any pool player, marked so the screens badge him. */
+function prospectWireRow(p: Parameters<typeof nhlProspectPoolRow>[0], sport: string) {
+  const dto = serializeUnifiedPlayerForApi(normalizePoolRowToUnified(nhlProspectPoolRow(p) as never, sport))
+  return { ...dto, id: p.playerId, team: p.orgTeam, prospectSource: NHL_PROSPECT_WIRE_SOURCE }
 }

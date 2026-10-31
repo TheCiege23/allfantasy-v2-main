@@ -677,6 +677,7 @@ export function DraftRoomPageClient({
             graduatedToNFL: e.graduatedToNFL,
             poolType: e.poolType,
             nflDraftProjectionSplits: e.nflDraftProjectionSplits ?? null,
+            ...(e.prospectSource === 'fantrax' ? { prospectSource: 'fantrax' as const } : {}),
           }
         })
       : rawEntries.map((e: any) => {

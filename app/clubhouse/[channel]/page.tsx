@@ -4,7 +4,15 @@ import { notFound } from 'next/navigation'
 import { CLUBHOUSE_NAME, clubhouseChannelHref, getChannel } from '@/lib/community/channels'
 import { IDEA_CHANNEL, NEW_IDEA_HREF, parseIdeaFilter, parseIdeaSort } from '@/lib/community/ideas'
 import { getCommunityViewer, listIdeas, listPosts } from '@/lib/community/service'
-import { ClubhouseFrame, EmptyState, PostCard, PrimaryButtonLink, loginHref } from '@/components/community/CommunityBits'
+import {
+  ClubhouseFrame,
+  EmptyState,
+  GhostButtonLink,
+  PageHeader,
+  PostCard,
+  PrimaryButtonLink,
+  loginHref,
+} from '@/components/community/CommunityBits'
 import { IdeaBoard } from '@/components/community/IdeaBoard'
 
 export const dynamic = 'force-dynamic'
@@ -44,43 +52,43 @@ export default async function ClubhouseChannelPage({ params, searchParams }: Pro
   const pitchHref = viewer.userId ? NEW_IDEA_HREF : loginHref(NEW_IDEA_HREF)
 
   return (
-    <ClubhouseFrame crumbs={[{ href: '/clubhouse', label: CLUBHOUSE_NAME }]}>
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>
-            {channel.emoji} {channel.label}
-          </h1>
-          <p className="mt-1 max-w-xl text-sm" style={{ color: 'var(--muted)' }}>
-            {channel.blurb}
-          </p>
-        </div>
-        {isLab ? (
-          <div className="flex flex-wrap gap-2">
-            <PrimaryButtonLink href={pitchHref}>💡 Pitch an idea</PrimaryButtonLink>
-            <Link
-              href={newPostHref}
-              className="inline-flex items-center rounded-lg border px-4 py-2 text-sm font-semibold hover:opacity-90"
-              style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
-            >
-              ＋ Discussion post
-            </Link>
-          </div>
-        ) : (
-          <PrimaryButtonLink href={newPostHref}>＋ New post</PrimaryButtonLink>
-        )}
-      </header>
-
-      {isLab && (
-        <div className="mb-6 rounded-xl border p-4 text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}>
-          Pitch a league format in three boxes, upvote the ones you would play, and watch them move from{' '}
-          <strong>Under review</strong> to <strong>Building</strong> to <strong>Shipped</strong>. Shipped ideas carry
-          their creator&apos;s name. Have the whole rulebook written?{' '}
-          <Link href="/submit-league" className="font-semibold underline" style={{ color: 'var(--accent)' }}>
-            Send the detailed version
-          </Link>
-          .
-        </div>
-      )}
+    <ClubhouseFrame
+      narrow
+      active={clubhouseChannelHref(channel.slug)}
+      crumbs={[{ href: '/clubhouse', label: CLUBHOUSE_NAME }]}
+      cta={<PrimaryButtonLink href={isLab ? pitchHref : newPostHref} small>{isLab ? '💡 Pitch' : '＋ New post'}</PrimaryButtonLink>}
+    >
+      <PageHeader
+        channel={channel.slug}
+        icon={channel.emoji}
+        eyebrow={isLab ? 'Pitch · vote · ship' : 'Channel'}
+        title={channel.label}
+        sub={
+          isLab ? (
+            <>
+              Pitch a league format in three boxes, upvote the ones you would play, and watch them move from{' '}
+              <strong>Under review</strong> to <strong>Building</strong> to <strong>Shipped</strong>. Shipped ideas carry
+              their creator&apos;s name. Whole rulebook written?{' '}
+              <Link href="/submit-league" className="font-bold underline" style={{ color: 'var(--tone)' }}>
+                Send the detailed version
+              </Link>
+              .
+            </>
+          ) : (
+            channel.blurb
+          )
+        }
+        actions={
+          isLab ? (
+            <>
+              <PrimaryButtonLink href={pitchHref}>💡 Pitch an idea</PrimaryButtonLink>
+              <GhostButtonLink href={newPostHref}>＋ Discussion post</GhostButtonLink>
+            </>
+          ) : (
+            <PrimaryButtonLink href={newPostHref}>＋ New post</PrimaryButtonLink>
+          )
+        }
+      />
 
       {board && (
         <div className="mb-8">
@@ -89,13 +97,13 @@ export default async function ClubhouseChannelPage({ params, searchParams }: Pro
       )}
 
       {isLab && (
-        <h2 className="mb-3 text-lg font-bold" style={{ color: 'var(--text)' }}>
-          💬 Discussion
-        </h2>
+        <div className="ch-section-label">
+          <h2 className="ch-h2">💬 Discussion</h2>
+        </div>
       )}
 
       {page.pinned.length > 0 && (
-        <div className="mb-4 space-y-3">
+        <div className="ch-stack mb-3">
           {page.pinned.map((p) => (
             <PostCard key={p.id} post={p} now={now} />
           ))}
@@ -104,12 +112,13 @@ export default async function ClubhouseChannelPage({ params, searchParams }: Pro
 
       {page.posts.length === 0 && page.pinned.length === 0 ? (
         <EmptyState
+          icon={channel.emoji}
           title="No posts here yet"
           body="Start the first one. Early posts set the tone for everyone who follows."
           action={<PrimaryButtonLink href={newPostHref}>Start the conversation</PrimaryButtonLink>}
         />
       ) : (
-        <div className="space-y-3">
+        <div className="ch-stack">
           {page.posts.map((p) => (
             <PostCard key={p.id} post={p} now={now} />
           ))}

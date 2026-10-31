@@ -25,6 +25,9 @@ export type RedraftSeasonClient = {
   sport: string
   season: number
   currentWeek: number
+  /** RedraftSeason.totalWeeks — the route returns the whole row, so these two are always present. */
+  totalWeeks?: number
+  playoffStartWeek?: number
   status: string
   rosters: RedraftRosterRow[]
 }

@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { translations } from '@/lib/i18n/translations'
 
 function read(rel: string): string {
   return fs.readFileSync(path.join(process.cwd(), rel), 'utf8')
@@ -16,7 +17,9 @@ const voteRouteSrc = read('app/api/redraft/trade-votes/route.ts')
 describe('redraft Trade Center rebuild — stepped flow contract', () => {
   it('hosts a stepped propose flow (partner -> assets -> review) in the shared AppModal', () => {
     expect(tradeModalSrc).toContain("from '@/components/ui/AppModal'")
-    expect(tradeModalSrc).toContain('Propose a Trade')
+    // The copy lives in the i18n dictionary (English + Spanish) since the Trade Center was translated.
+    expect(tradeModalSrc).toContain("t('tradeCenter.modal.title')")
+    expect(translations.en['tradeCenter.modal.title']).toBe('Propose a Trade')
     expect(tradeModalSrc).toContain("'partner'")
     expect(tradeModalSrc).toContain("'assets'")
     expect(tradeModalSrc).toContain("'review'")
@@ -44,7 +47,8 @@ describe('redraft Trade Center rebuild — stepped flow contract', () => {
     // (DRAFT_PICK_NOT_SETTLED), so the modal must not promise a pick will be recorded.
     expect(tradeModalSrc).toContain('settings?.draftPickTrading')
     expect(tradeModalSrc.toLowerCase()).not.toContain('reference-only')
-    expect(tradeModalSrc).toContain('Trade Center')
+    expect(tradeModalSrc).toContain("t('tradeCenter.modal.assets.picksNote')")
+    expect(translations.en['tradeCenter.modal.assets.picksNote']).toContain('Trade Center')
   })
 
   it('settles accepted trades for real (players + FAAB) on the accept path', () => {

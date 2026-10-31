@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueCommissioner, assertLeagueMember } from '@/lib/league/league-access'
+import { isTaxiLockMode } from '@/lib/c2c/taxiLockResolver'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,10 @@ export async function GET(req: NextRequest) {
 
   const cfg = await prisma.c2CLeague.findUnique({ where: { leagueId } })
   if (!cfg) return NextResponse.json({ error: 'C2C not configured' }, { status: 404 })
-  return NextResponse.json({ c2c: cfg })
+  // The taxi lock mode is stored on League.settings (see lib/c2c/taxiLockResolver.ts); the
+  // Commissioner Settings Taxi tab shows it beside the record's own taxi fields.
+  const modeRaw = ((gate.league as { settings?: unknown }).settings as Record<string, unknown> | null)?.c2cTaxiLockMode
+  return NextResponse.json({ c2c: { ...cfg, taxiLockMode: isTaxiLockMode(modeRaw) ? modeRaw : 'no_limit' } })
 }
 
 export async function POST(req: NextRequest) {

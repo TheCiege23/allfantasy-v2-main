@@ -76,6 +76,12 @@ export interface DynastyPlayerFact {
   weekProjection: number | null
   /** True when no value/ADP/projection signal exists for this player. */
   hasNoValueSignal: boolean
+  /**
+   * 'fantrax' for a Fantrax-only NHL prospect in an NHL dynasty league's free-agent pool
+   * (lib/waiver-wire/nhlProspectFreeAgency.ts). He has no value, ADP or age, is listed after every
+   * real free agent, and is never ranked or recommended. Absent for every other player.
+   */
+  prospectSource?: 'fantrax'
 }
 
 export interface DynastyFuturePick {
@@ -146,6 +152,12 @@ export interface DynastyWarRoomContext {
   isCommissioner: boolean
   teams: DynastyTeamSummary[]
   freeAgents: DynastyPlayerFact[]
+  /**
+   * NHL dynasty only: how many Fantrax prospects are free in this league (`total`) and how many of
+   * them `freeAgents` lists after the real players (`listed`). Absent everywhere else, and when the
+   * stored universe could not be read (the pool is then exactly the ADP pool).
+   */
+  nhlProspectFreeAgents?: { total: number; listed: number } | null
   /** Rookie draft windows for upcoming seasons (empty when none recorded). */
   rookieDraftWindows: DynastyRookieDraftWindow[]
   availability: DynastyDataAvailability

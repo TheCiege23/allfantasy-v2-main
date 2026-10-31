@@ -36,7 +36,17 @@ import {
   tradePartiesPendingAcceptance,
   tradePartiesToAccept,
 } from '@/lib/redraft/tradeParticipants'
-import { notifyMultiTeamTradeParties } from '@/lib/redraft/multiTeamTradeNotices'
+import {
+  MULTI_TEAM_TRADE_CANCELLED_TITLE,
+  MULTI_TEAM_TRADE_EXPIRED_TITLE,
+  MULTI_TEAM_TRADE_LEAGUE_VETOED_TITLE,
+  multiTeamTradeCancelledBody,
+  multiTeamTradeExpiredBody,
+  multiTeamTradeLeagueVetoedBody,
+  notifyMultiTeamTradeCommissionerVeto,
+  notifyMultiTeamTradeOutcome,
+  notifyMultiTeamTradeParties,
+} from '@/lib/redraft/multiTeamTradeNotices'
 
 export const dynamic = 'force-dynamic'
 
@@ -238,6 +248,16 @@ export async function POST(req: NextRequest) {
       )
     }
     queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'expired' })
+    // A multi-team trade has no DM card, so every team in it hears it here (best-effort, never rejects).
+    // No actor: whoever clicked did not choose the expiry.
+    if (isMultiTeamTrade(proposal)) {
+      await notifyMultiTeamTradeOutcome({
+        proposal,
+        key: 'expired',
+        title: MULTI_TEAM_TRADE_EXPIRED_TITLE,
+        body: ({ teams }) => multiTeamTradeExpiredBody(teams),
+      })
+    }
     return NextResponse.json({ proposal: expired, resolved: true })
   }
 
@@ -297,6 +317,16 @@ export async function POST(req: NextRequest) {
       )
     }
     queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'cancelled', actorUserId: userId })
+    // The proposer withdrawing ends a multi-team trade for every team; they hear it here (no DM card).
+    if (multiTeam) {
+      await notifyMultiTeamTradeOutcome({
+        proposal,
+        actorUserId: userId,
+        key: 'cancelled',
+        title: MULTI_TEAM_TRADE_CANCELLED_TITLE,
+        body: ({ teams, nameOf }) => multiTeamTradeCancelledBody(teams, nameOf(proposal.proposerRosterId)),
+      })
+    }
     return NextResponse.json({ proposal: cancelled, resolved: true })
   }
 
@@ -588,6 +618,16 @@ export async function POST(req: NextRequest) {
       payload: { proposalId: proposal.id, source: 'redraft_trade_proposal' },
     })
     queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'vetoed', detail: 'The commissioner made the call.' })
+    /*
+     * A multi-team trade has no DM card, so every team in it hears the ruling here — the gap the dedicated
+     * veto route (app/api/redraft/trades/veto) already closed. Same event key, `vetoed`, so a ruling is
+     * one notice whichever route made it. (Approval needs no notice here: it settles through
+     * finalizeRedraftTrade, which tells every team the trade was processed and that the commissioner
+     * approved it.) Best-effort: the helper never rejects.
+     */
+    if (multiTeam) {
+      await notifyMultiTeamTradeCommissionerVeto({ proposal, actorUserId: userId })
+    }
     return NextResponse.json({ proposal: updated, resolved: true })
   }
 
@@ -682,6 +722,17 @@ export async function POST(req: NextRequest) {
         payload: { proposalId: proposal.id, source: 'redraft_trade_vote' },
       })
       queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'vetoed', detail: `${vetoCount} of ${threshold} veto votes were in.` })
+      // A multi-team trade has no DM card, so every team in it hears the league's veto here (best-effort).
+      // A vote that APPROVES settles through finalizeRedraftTrade, which tells every team it was processed.
+      if (multiTeam) {
+        await notifyMultiTeamTradeOutcome({
+          proposal,
+          actorUserId: userId,
+          key: 'league_vetoed',
+          title: MULTI_TEAM_TRADE_LEAGUE_VETOED_TITLE,
+          body: ({ teams }) => multiTeamTradeLeagueVetoedBody(teams, vetoCount, threshold),
+        })
+      }
       return NextResponse.json({ proposal: updated, resolved: true, approveCount, vetoCount, threshold })
     }
 

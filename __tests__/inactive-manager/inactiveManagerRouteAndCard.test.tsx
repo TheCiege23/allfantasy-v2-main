@@ -88,6 +88,26 @@ describe('the commissioner card', () => {
     expect(container.querySelector('[data-testid="chimmy-reports"]')).toBeNull()
   })
 
+  it('without AF Commissioner, offers one free Chimmy team and the upgrade, and locks the rest once it is used', async () => {
+    const free = { rosterId: 'r1', teamName: 'Taco Tuesday', managerName: 'sam', status: 'inactive', suggested: false, managed: null, emptySeat: true }
+    const other = { ...free, rosterId: 'r2', teamName: 'Other' }
+    const body = (running: boolean) => ({ native: true, autopilotEntitled: false, chimmyLimit: 4, chimmyFreeTeams: 1, chimmyReports: [],
+      teams: [running ? { ...free, managed: { since: 's', byUserId: 'c', autopilot: { style: 'win_now', since: 's' } } } : free, other] })
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body(false) })))
+    render(<InactiveManagerCommissioner leagueId="L" />)
+    await screen.findByText('Chimmy runs 0 of 1 free team')
+    expect(screen.getByTestId('chimmy-free-upsell').textContent).toBe('Let Chimmy run up to 4 teams (AF Commissioner)')
+    const selects = () => screen.getAllByTestId('chimmy-manager-team').map((li) => li.querySelector('select') as HTMLSelectElement)
+    expect(selects().map((x) => x.disabled)).toEqual([false, false])
+    cleanup()
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body(true) })))
+    render(<InactiveManagerCommissioner leagueId="L" />)
+    await screen.findByText('Chimmy runs 1 of 1 free team')
+    expect(screen.getByTestId('chimmy-manager-limit').textContent).toBe('Your free Chimmy team is in use. AF Commissioner lets Chimmy run up to 4 teams.')
+    // The free team can still change style or be switched off; the other is locked.
+    expect(selects().map((x) => x.disabled)).toEqual([false, true])
+  })
+
   it('renders nothing for an imported league', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ native: false, teams: [] }) })))
     const { container } = render(<InactiveManagerCommissioner leagueId="L" />)

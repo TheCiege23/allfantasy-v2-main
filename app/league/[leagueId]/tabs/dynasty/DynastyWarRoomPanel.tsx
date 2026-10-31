@@ -29,6 +29,7 @@ import type { DynastyTradeAnalysis, DynastyTradeFinderResult } from '@/lib/dynas
 import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
 import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
 import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
+import { DynastyProspectFreeAgents } from './DynastyProspectFreeAgents'
 
 type Tool = 'buy-sell-hold' | 'waivers' | 'lineup' | 'trade-analyze' | 'trade-find' | null
 
@@ -212,7 +213,8 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Data</p>
           <p className="text-[11px] text-white/60">
-            {context.freeAgents?.length ?? 0} FAs · val{' '}
+            {/* Ranked free agents only: NHL dynasty prospects are listed in the waiver tool. */}
+            {context.freeAgents?.filter((p) => p.prospectSource !== 'fantrax').length ?? 0} FAs · val{' '}
             {context.availability?.playerValues === 'available' ? '✓' : '—'} · age{' '}
             {context.availability?.playerAges === 'available' ? '✓' : '—'} · picks{' '}
             {context.availability?.futurePicks === 'available'
@@ -418,6 +420,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
               – {d.playerName} ({d.position}) — {d.reason}
             </p>
           ))}
+          <DynastyProspectFreeAgents prospects={waivers.unrankedProspects} list={waivers.prospectList} />
           {waivers.missingDataFlags.length > 0 && (
             <ul className="mt-2 space-y-1">
               {waivers.missingDataFlags.map((f) => (

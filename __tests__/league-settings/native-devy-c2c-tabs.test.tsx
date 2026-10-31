@@ -44,9 +44,13 @@ describe('the native Devy / C2C tabs', () => {
     expect(c2c).toMatch(/canEdit \?\s*\(\s*<MergedDevyC2CCommissionerSettings leagueId=\{leagueId\} \/>/)
   })
 
-  it('the legacy Devy panel no longer promises edits "in a follow-up"', () => {
+  it('the legacy Devy panel no longer promises edits "in a follow-up", and points native leagues to Devy Settings', async () => {
     const src = fs.readFileSync(path.join(process.cwd(), 'app/devy/components/settings/DevyFormatPanel.tsx'), 'utf8')
     expect(src).not.toMatch(/follow-up/)
-    expect(src).toMatch(/Devy Settings/)
+    // The copy moved into the dictionaries (English and Spanish) when the panel became an editor.
+    expect(src).toMatch(/t\('legacyDevy\.format\.intro'\)/)
+    const { translations } = await import('@/lib/i18n/translations')
+    expect(translations.en['legacyDevy.format.intro']).toMatch(/Devy Settings/)
+    expect(translations.es['legacyDevy.format.intro']).toMatch(/Devy Settings/)
   })
 })
