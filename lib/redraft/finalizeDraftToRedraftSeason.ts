@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
+import { loadSeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
 import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
@@ -397,11 +398,13 @@ export async function ensureScheduleForNewSeason(params: {
   // round-robin schedule is reproducible across runs.
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId: params.seasonId },
-    select: { id: true },
+    select: { id: true, ownerId: true },
     orderBy: { id: 'asc' },
   })
 
   if (rosters.length < 2) return
+  // The commissioner's divisions (best-effort: a failed read schedules without them, as before).
+  const divisions = await loadSeasonRosterDivisions(params.leagueId, rosters)
 
   /*
    * A late start schedules only the weeks left: a full round-robin generated for that many weeks and
@@ -415,7 +418,11 @@ export async function ensureScheduleForNewSeason(params: {
     startWeek > 1 ? weeksLeft : params.totalWeeks,
     startWeek > 1 ? weeksLeft + 1 : params.playoffStartWeek,
     params.sport,
-    { medianGame: params.medianGame },
+    {
+      medianGame: params.medianGame,
+      divisionByRoster: divisions?.byRoster ?? null,
+      divisionRivalsTwice: divisions?.rivalsTwice === true,
+    },
   ).map((slot) => ({ ...slot, week: slot.week + startWeek - 1 }))
 
   const rows = slots

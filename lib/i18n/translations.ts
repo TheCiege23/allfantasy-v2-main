@@ -4499,7 +4499,9 @@ export const translations: Record<string, Record<string, string>> = {
     "division.playoffRule.top_seeds": "Top seeds: every division winner makes the playoffs and takes the top seeds",
     "division.playoffRule.guaranteed": "Guaranteed spot: every division winner makes the playoffs, seeded by record",
     "division.playoffRule.none": "No playoff advantage: divisions are for the standings only",
-    "division.scheduleNote": "The schedule plays division rivals first. Playing them twice is not available yet.",
+    "division.rivalsTwice": "Play division rivals twice",
+    "division.scheduleNote.once": "The schedule plays division rivals first, then everyone else once.",
+    "division.scheduleNote.twice": "Everyone is played once, then each division rival a second time with home and away swapped. If the season is too short, the last rematches are not played. Applies the next time the schedule is built.",
 
     // Member
     "member.title": "Member Settings",
