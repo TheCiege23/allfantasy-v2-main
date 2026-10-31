@@ -3,6 +3,7 @@
  * Aggregates public fantasy leagues, creator leagues, and bracket challenges.
  */
 
+import { isLeagueVibe, type LeagueVibeFilter } from "./vibes"
 import { prisma } from "@/lib/prisma"
 import { getCareerTierName, clampCareerTier, isLeagueVisibleForCareerTier } from "@/lib/ranking/tier-visibility"
 import { decideDivisionGate, getLeagueDivisions } from "@/lib/class-rating/divisionGate"
@@ -220,6 +221,15 @@ function applyDraftWhen(cards: DiscoveryCard[], draftWhen: DraftWhenFilter, view
 function applyTimeZoneRegion(cards: DiscoveryCard[], tzRegion: TimeZoneRegionFilter): DiscoveryCard[] {
   if (tzRegion === "any") return cards
   return cards.filter((card) => timeZoneRegionFor(card.timezone) === tzRegion)
+}
+
+function normalizeVibe(value: unknown): LeagueVibeFilter {
+  return isLeagueVibe(value) ? value : "all"
+}
+
+function applyVibe(cards: DiscoveryCard[], vibe: LeagueVibeFilter): DiscoveryCard[] {
+  if (vibe === "all") return cards
+  return cards.filter((card) => card.vibes?.includes(vibe) === true)
 }
 
 function applyRankBand(cards: DiscoveryCard[], rankBand: RankBandFilter): DiscoveryCard[] {
@@ -548,6 +558,7 @@ export async function discoverPublicLeagues(
   const draftWhen = normalizeDraftWhen(input.draftWhen)
   const tzRegion = normalizeTimeZoneRegion(input.tzRegion)
   const rankBand = normalizeRankBand(input.rankBand)
+  const vibe = normalizeVibe(input.vibe)
   const viewerTimeZone =
     typeof input.viewerTimeZone === "string" && isValidIanaTimeZone(input.viewerTimeZone)
       ? input.viewerTimeZone
@@ -570,6 +581,7 @@ export async function discoverPublicLeagues(
     draftWhen,
     tzRegion,
     rankBand,
+    vibe,
     // Only the windows that read a wall clock depend on the viewer's zone; keeping it
     // out of the key otherwise stops every zone from caching its own copy.
     viewerTimeZone: draftWhen === "weeknight" || draftWhen === "weekend" ? viewerTimeZone ?? "" : "",
@@ -621,6 +633,7 @@ export async function discoverPublicLeagues(
   combined = applyDraftWhen(combined, draftWhen, viewerTimeZone)
   combined = applyTimeZoneRegion(combined, tzRegion)
   combined = applyRankBand(combined, rankBand)
+  combined = applyVibe(combined, vibe)
   combined = applySort(combined, sort)
   setCachedComputedDiscoveryList(computedCacheKey, {
     cards: combined,

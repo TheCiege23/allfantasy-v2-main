@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { LeagueVibePicker } from './LeagueVibePicker'
 
 /**
  * Find a League for a league that plays on another platform, on its Commissioner Hub.
@@ -156,6 +157,7 @@ export function ExternalListingCard({ leagueId }: { leagueId: string }) {
               </button>
             ) : null}
           </div>
+          {state.listing.listed ? <LeagueVibePicker leagueId={leagueId} /> : null}
         </>
       )}
 

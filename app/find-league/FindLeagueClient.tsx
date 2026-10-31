@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { Loader2, Inbox, Search, ShieldAlert, SlidersHorizontal } from "lucide-react"
+import { Bell, Loader2, Inbox, Search, ShieldAlert, SlidersHorizontal, X } from "lucide-react"
 import { FindLeagueCard } from "@/components/discovery/FindLeagueCard"
 import { DiscoveryRailSkeleton } from "@/components/find-league/DiscoveryRail"
 import { getDiscoverySports } from "@/lib/public-discovery/discovery-sports"
@@ -29,6 +29,7 @@ import {
   type ParsedLeagueSearch,
 } from "@/lib/public-discovery/findLeagueFilters"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
+import { LEAGUE_VIBES, vibeLabel, type LeagueVibeFilter } from "@/lib/public-discovery/vibes"
 
 type RecsStatus = 'ok' | 'anonymous' | 'empty' | 'error'
 
@@ -179,6 +180,7 @@ function describeParsedSearch(parsed: ParsedLeagueSearch): string[] {
   if (parsed.entryFee) parts.push(parsed.entryFee)
   if (parsed.draftWhen) parts.push(DRAFT_WHEN_LABELS[parsed.draftWhen].toLowerCase())
   if (parsed.tzRegion) parts.push(`${TIME_ZONE_REGION_LABELS[parsed.tzRegion]} time`)
+  if (parsed.vibe) parts.push(vibeLabel(parsed.vibe).toLowerCase())
   if (parsed.text) parts.push(`"${parsed.text}"`)
   return parts
 }
@@ -189,21 +191,32 @@ const VISIBILITY_OPTIONS: { value: VisibilityFilter; label: string }[] = [
 ]
 
 /** Filters the page opens with, read from the URL once (?sport=, ?style=, ?q=). */
+/**
+ * Filters the page opens with, read from the URL once. Every filter key is read, so a link from
+ * a saved-search alert (`/find-league?<the saved query>`) reopens exactly that search. A plain
+ * English `q` (from the home page) is parsed; a parsed word wins over an explicit key.
+ */
 function initialFiltersFrom(searchParams: { get(name: string): string | null } | null) {
-  const q = searchParams?.get("q") ?? ""
-  const parsed = q.trim() ? parseLeagueSearch(q) : null
-  const styleParam = (searchParams?.get("style") as LeagueStyleFilter | null) ?? null
+  const get = (key: string) => searchParams?.get(key)?.trim() || ""
+  const q = get("q")
+  const parsed = q ? parseLeagueSearch(q) : null
   const readAs = parsed ? describeParsedSearch(parsed) : []
+  const teamCount = parsed?.teamCount ? String(parsed.teamCount) : ""
   return {
     query: q,
     appliedQuery: parsed ? parsed.text : "",
-    sport: parsed?.sport ?? searchParams?.get("sport") ?? "",
-    leagueType: (parsed?.style ?? (styleParam && styleParam !== "all" ? styleParam : "all")) as LeagueStyleFilter,
-    draftType: parsed?.draftType ?? ("all" as DraftTypeFilter),
-    entryFee: parsed?.entryFee ?? ("all" as EntryFeeFilter),
-    draftWhen: parsed?.draftWhen ?? ("any" as DraftWhenFilter),
-    tzRegion: parsed?.tzRegion ?? ("any" as TimeZoneRegionFilter),
-    teamCount: parsed?.teamCount ? String(parsed.teamCount) : "",
+    sport: parsed?.sport ?? get("sport"),
+    leagueType: (parsed?.style ?? (get("style") || "all")) as LeagueStyleFilter,
+    draftType: (parsed?.draftType ?? (get("draftType") || "all")) as DraftTypeFilter,
+    draftStatus: (get("draftStatus") || "all") as DraftStatusFilter,
+    entryFee: (parsed?.entryFee ?? (get("entryFee") || "all")) as EntryFeeFilter,
+    draftWhen: (parsed?.draftWhen ?? (get("draftWhen") || "any")) as DraftWhenFilter,
+    tzRegion: (parsed?.tzRegion ?? (get("tzRegion") || "any")) as TimeZoneRegionFilter,
+    rankBand: (get("rankBand") || "all") as RankBandFilter,
+    vibe: (parsed?.vibe ?? (get("vibe") || "all")) as LeagueVibeFilter,
+    aiEnabled: get("aiEnabled") === "true",
+    teamCountMin: teamCount || get("teamCountMin"),
+    teamCountMax: teamCount || get("teamCountMax"),
     searchReadAs:
       parsed && (readAs.length > 1 || (readAs.length === 1 && !parsed.text)) ? readAs : [],
   }
@@ -218,14 +231,15 @@ export function FindLeagueClient() {
   const [sport, setSport] = useState(initial.sport)
   const [leagueType, setLeagueType] = useState<LeagueStyleFilter>(initial.leagueType)
   const [draftType, setDraftType] = useState<DraftTypeFilter>(initial.draftType)
-  const [teamCountMin, setTeamCountMin] = useState(initial.teamCount)
-  const [teamCountMax, setTeamCountMax] = useState(initial.teamCount)
-  const [draftStatus, setDraftStatus] = useState<DraftStatusFilter>("all")
+  const [teamCountMin, setTeamCountMin] = useState(initial.teamCountMin)
+  const [teamCountMax, setTeamCountMax] = useState(initial.teamCountMax)
+  const [draftStatus, setDraftStatus] = useState<DraftStatusFilter>(initial.draftStatus)
   const [entryFee, setEntryFee] = useState<EntryFeeFilter>(initial.entryFee)
-  const [aiEnabled, setAiEnabled] = useState(false)
+  const [aiEnabled, setAiEnabled] = useState(initial.aiEnabled)
   const [draftWhen, setDraftWhen] = useState<DraftWhenFilter>(initial.draftWhen)
   const [tzRegion, setTzRegion] = useState<TimeZoneRegionFilter>(initial.tzRegion)
-  const [rankBand, setRankBand] = useState<RankBandFilter>("all")
+  const [rankBand, setRankBand] = useState<RankBandFilter>(initial.rankBand)
+  const [vibe, setVibe] = useState<LeagueVibeFilter>(initial.vibe)
   const [searchReadAs, setSearchReadAs] = useState<string[]>(initial.searchReadAs)
   const [visibility, setVisibility] = useState<VisibilityFilter>("public")
   const [sort, setSort] = useState<DiscoverySort>("ranking_match")
@@ -250,6 +264,7 @@ export function FindLeagueClient() {
     teamCountMax !== '',
     draftWhen !== 'any',
     tzRegion !== 'any',
+    vibe !== 'all',
   ].filter(Boolean).length
 
   /**
@@ -276,6 +291,7 @@ export function FindLeagueClient() {
     if (draftWhen !== "any") params.set("draftWhen", draftWhen)
     if (tzRegion !== "any") params.set("tzRegion", tzRegion)
     if (rankBand !== "all") params.set("rankBand", rankBand)
+    if (vibe !== "all") params.set("vibe", vibe)
     // Same zone the cards print draft times in (FindLeagueCard), so a filter and the time it is
     // filtering on can never disagree. Only the weeknight/weekend windows read it, so it is sent
     // only for those — otherwise the profile zone arriving after mount would refetch for nothing.
@@ -334,6 +350,7 @@ export function FindLeagueClient() {
     if (parsed.entryFee) setEntryFee(parsed.entryFee)
     if (parsed.draftWhen) setDraftWhen(parsed.draftWhen)
     if (parsed.tzRegion) setTzRegion(parsed.tzRegion)
+    if (parsed.vibe) setVibe(parsed.vibe)
     if (parsed.teamCount) {
       setTeamCountMin(String(parsed.teamCount))
       setTeamCountMax(String(parsed.teamCount))
@@ -342,6 +359,22 @@ export function FindLeagueClient() {
     const readAs = describeParsedSearch(parsed)
     // Only worth saying when something was recognised; a plain name search reads as itself.
     setSearchReadAs(readAs.length > 1 || (readAs.length === 1 && !parsed.text) ? readAs : [])
+  }
+
+  /** "NFL · dynasty · 12 teams · casual" — how a saved search is named in the list and its alert. */
+  function currentSearchLabel(): string {
+    const parts: string[] = []
+    if (sport) parts.push(SPORT_LABELS[sport] ?? sport)
+    if (leagueType !== "all") parts.push(leagueType.replace(/_/g, " "))
+    if (teamCountMin && teamCountMin === teamCountMax) parts.push(`${teamCountMin} teams`)
+    if (draftType !== "all") parts.push(draftType)
+    if (entryFee !== "all") parts.push(entryFee)
+    if (draftWhen !== "any") parts.push(DRAFT_WHEN_LABELS[draftWhen].toLowerCase())
+    if (tzRegion !== "any") parts.push(`${TIME_ZONE_REGION_LABELS[tzRegion]} time`)
+    if (vibe !== "all") parts.push(vibeLabel(vibe).toLowerCase())
+    if (rankBand !== "all") parts.push(RANK_BAND_LABELS[rankBand].toLowerCase())
+    if (appliedQuery.trim()) parts.push(`"${appliedQuery.trim()}"`)
+    return parts.join(" · ") || "Any league"
   }
 
   const handleSearch = () => {
@@ -450,12 +483,36 @@ export function FindLeagueClient() {
             </span>
           )}
         </button>
+        <SavedSearches filterKey={filterKey} label={currentSearchLabel()} hasFilters={activeFilterCount > 0 || appliedQuery.trim() !== ""} />
         {searchReadAs.length > 0 ? (
           <p className="text-xs" style={{ color: "var(--muted)" }} data-testid="find-league-search-read-as">
             Searching for <span style={{ color: "var(--text)" }}>{searchReadAs.join(" · ")}</span>. Change any of it in
             the filters below.
           </p>
         ) : null}
+      </div>
+
+      {/* What the league is like — the one thing the format filters can't say. */}
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="League vibe" data-testid="find-league-vibes">
+        {(["all", ...LEAGUE_VIBES.map((v) => v.id)] as LeagueVibeFilter[]).map((value) => {
+          const active = vibe === value
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setVibe(value)}
+              className="min-h-[36px] rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+              style={{
+                borderColor: active ? "var(--accent)" : "var(--border)",
+                background: active ? "color-mix(in srgb, var(--accent) 16%, var(--panel))" : "var(--panel)",
+                color: active ? "var(--text)" : "var(--muted)",
+              }}
+            >
+              {value === "all" ? "Any vibe" : vibeLabel(value)}
+            </button>
+          )
+        })}
       </div>
 
       {/* Filters — collapsible on mobile */}
@@ -778,6 +835,104 @@ export function FindLeagueClient() {
           </>
         )}
       </section>
+    </div>
+  )
+}
+
+type SavedSearch = { id: string; label: string; query: string; lastAlertedAt: string | null }
+
+/**
+ * "Alert me when new leagues match", plus the searches already saved. Alerts arrive as in-app
+ * notifications from the daily check (lib/public-discovery/runSavedSearchAlerts.ts). A saved
+ * search opens with a full page load so every filter is read back from its URL.
+ */
+function SavedSearches({ filterKey, label, hasFilters }: { filterKey: string; label: string; hasFilters: boolean }) {
+  const [searches, setSearches] = useState<SavedSearch[]>([])
+  const [status, setStatus] = useState("")
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch("/api/find-league/saved-searches", { credentials: "include", signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { searches?: SavedSearch[] } | null) => setSearches(Array.isArray(d?.searches) ? d!.searches! : []))
+      .catch(() => {})
+    return () => controller.abort()
+  }, [])
+
+  const save = async () => {
+    setBusy(true)
+    setStatus("")
+    try {
+      const r = await fetch("/api/find-league/saved-searches", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: filterKey, label }),
+      })
+      const body = (await r.json().catch(() => ({}))) as { error?: string; search?: SavedSearch; alreadySaved?: boolean }
+      if (r.status === 401) {
+        window.location.href = `/login?callbackUrl=${encodeURIComponent(`/find-league?${filterKey}`)}`
+        return
+      }
+      if (!r.ok || !body.search) throw new Error(body.error || "")
+      const saved = body.search
+      setSearches((prev) => (prev.some((s) => s.id === saved.id) ? prev : [saved, ...prev]))
+      setStatus(body.alreadySaved ? "Already saved." : "Saved. We'll tell you when new leagues match.")
+    } catch (e) {
+      setStatus(e instanceof Error && e.message ? e.message : "That didn't save. Try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async (id: string) => {
+    setSearches((prev) => prev.filter((s) => s.id !== id))
+    await fetch(`/api/find-league/saved-searches?id=${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" }).catch(() => {})
+  }
+
+  return (
+    <div className="flex flex-col gap-2" data-testid="find-league-saved-searches">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={busy || !hasFilters}
+          title={hasFilters ? undefined : "Pick a filter or search first"}
+          data-testid="find-league-save-search"
+          className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border px-3 text-xs font-semibold disabled:opacity-50"
+          style={{ borderColor: "var(--border)", color: "var(--text)" }}
+        >
+          <Bell className="h-3.5 w-3.5" />
+          Alert me when new leagues match
+        </button>
+        {searches.map((s) => (
+          <span
+            key={s.id}
+            className="inline-flex min-h-[36px] items-center gap-1 rounded-full px-3 text-xs"
+            style={{ background: "var(--panel2)", color: "var(--text)" }}
+            data-testid={`find-league-saved-${s.id}`}
+          >
+            <a href={`/find-league?${s.query}`} className="hover:underline">
+              {s.label}
+            </a>
+            <button
+              type="button"
+              onClick={() => void remove(s.id)}
+              aria-label={`Stop alerts for ${s.label}`}
+              className="ml-1 grid h-6 w-6 place-items-center rounded-full"
+              style={{ color: "var(--muted)" }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        ))}
+      </div>
+      {status ? (
+        <p role="status" className="text-xs" style={{ color: "var(--muted)" }}>
+          {status}
+        </p>
+      ) : null}
     </div>
   )
 }
