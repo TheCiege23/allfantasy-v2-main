@@ -16,6 +16,9 @@ const h = vi.hoisted(() => ({
   votes: [] as Array<{ councilId: string; voterUserId: string }>,
   entries: [] as Array<{ userId: string; submittedLineup: unknown }>,
   alerts: [] as Array<{ kind: string; input: { dedupeKey: string; title: string; body: string } }>,
+  upserts: new Map<string, Record<string, unknown>>(),
+  phase: 'pre_merge',
+  revealed: [] as Array<{ id: string; eliminatedUserId: string | null }>,
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -30,13 +33,19 @@ vi.mock('@/lib/prisma', () => ({
       }),
     },
     league: { findUnique: vi.fn(async () => ({ settings: h.settings })) },
-    survivorTribalCouncil: { findMany: vi.fn(async () => h.councils) },
+    survivorTribalCouncil: { findMany: vi.fn(async (q: { where: { isRevealed?: boolean } }) => (q.where.isRevealed ? h.revealed : h.councils)) },
+    survivorGameState: { findUnique: vi.fn(async () => ({ phase: h.phase })) },
     survivorVote: { findMany: vi.fn(async () => h.votes) },
     exileWeeklyEntry: { findMany: vi.fn(async () => h.entries) },
   },
 }))
 vi.mock('@/lib/survivor/survivorChatBridge', () => ({
   createSurvivorChatMessage: vi.fn(async (_db: unknown, args: { data: Record<string, unknown> }) => { h.posted.push(args.data); return { id: 'm1' } }),
+  // Keyed like the real upsert: a second post under the same id changes nothing.
+  upsertSurvivorChatMessage: vi.fn(async (_db: unknown, args: { where: { id: string }; create: Record<string, unknown> }) => {
+    if (!h.upserts.has(args.where.id)) h.upserts.set(args.where.id, args.create)
+    return { id: args.where.id }
+  }),
 }))
 vi.mock('@/lib/survivor/survivorCommissionerAlerts', () => ({
   notifySurvivorCommissionerOnce: vi.fn(async (_l: string, kind: string, input: { dedupeKey: string; title: string; body: string }) => {
@@ -46,7 +55,7 @@ vi.mock('@/lib/survivor/survivorCommissionerAlerts', () => ({
   }),
 }))
 
-import { chimmyExileLine, chimmyVoteLine, postChimmyCastawayLine } from '@/lib/survivor/chimmyCastawayChat'
+import { CHIMMY_MERGED_LINE, chimmyExileLine, chimmySurvivedLine, chimmyVoteLine, postChimmyCastawayLine, postChimmyWeekLines } from '@/lib/survivor/chimmyCastawayChat'
 import { chimmyWeeklyReportBody, sendChimmyWeeklyReport } from '@/lib/survivor/chimmyWeeklyReport'
 
 const chimmyEntry = (seat: string) => ({ since: 's', byUserId: 'c', ownerUserId: seat, autopilot: { style: 'win_now', since: 's', byUserId: 'c' } })
@@ -64,6 +73,9 @@ beforeEach(() => {
   h.votes = [{ councilId: 'c1', voterUserId: 'orphan-r9' }]
   h.entries = [{ userId: 'orphan-r8', submittedLineup: { version: 1, anchorId: 'p', team: 'KC', players: [], closedAt: null, lockedAt: null } }]
   h.alerts = []
+  h.upserts = new Map()
+  h.phase = 'pre_merge'
+  h.revealed = [{ id: 'c1', eliminatedUserId: 'someone' }]
 })
 
 describe('Chimmy\'s chat lines', () => {
@@ -130,5 +142,46 @@ describe('the commissioner\'s weekly Chimmy report', () => {
     h.cast = []
     expect(await sendChimmyWeeklyReport('L', 6)).toBe(false)
     expect(h.alerts).toEqual([])
+  })
+})
+
+describe('Chimmy\'s end-of-week lines', () => {
+  beforeEach(() => {
+    // Only castaways still in the game are asked; the active one voted at c1 and stayed.
+    h.cast = [{ userId: 'orphan-r9', displayName: 'Bay Raiders (Chimmy)', playerState: 'active', redraftRosterId: 'r9' }]
+  })
+
+  it('says it survived each council it voted at, once, however often the week closes', async () => {
+    expect(await postChimmyWeekLines('L', 6)).toBe(1)
+    await postChimmyWeekLines('L', 6)
+    expect([...h.upserts.keys()]).toEqual(['chimmy-survived-c1-orphan-r9'])
+    expect(h.upserts.get('chimmy-survived-c1-orphan-r9')).toMatchObject({ channelId: 'tribe-t1', content: chimmySurvivedLine(6), senderName: 'Bay Raiders (Chimmy)' })
+    expect(chimmySurvivedLine(6)).not.toMatch(/idol/i)
+  })
+
+  it('says nothing for the council that sent it home, or for a council not yet read', async () => {
+    h.revealed = [{ id: 'c1', eliminatedUserId: 'orphan-r9' }]
+    expect(await postChimmyWeekLines('L', 6)).toBe(0)
+    h.revealed = []
+    expect(await postChimmyWeekLines('L', 6)).toBe(0)
+    expect(h.upserts.size).toBe(0)
+  })
+
+  it('marks the merge once, and never before it', async () => {
+    h.revealed = []
+    await postChimmyWeekLines('L', 6)
+    expect(h.upserts.size).toBe(0)
+    h.phase = 'merge'
+    await postChimmyWeekLines('L', 7)
+    h.phase = 'jury'
+    await postChimmyWeekLines('L', 8)
+    expect([...h.upserts.entries()].map(([id, row]) => [id, row.content])).toEqual([['chimmy-merged-L-orphan-r9', CHIMMY_MERGED_LINE]])
+  })
+
+  it('CONTROL: a seat Chimmy does not run says nothing', async () => {
+    h.settings = {}
+    h.phase = 'merge'
+    expect(await postChimmyWeekLines('L', 7)).toBe(0)
+    expect(h.upserts.size).toBe(0)
   })
 })

@@ -53,6 +53,7 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     chimmyCount: (n: number, limit: number) => `Chimmy runs ${n} of ${limit} teams`,
     emptySeat: 'Empty seat',
     chimmyLimitReached: (limit: number) => `Chimmy already runs ${limit} teams. Take Chimmy off one to hand it another.`,
+    chimmyReportsTitle: 'Chimmy’s weekly reports',
   },
   es: {
     loadFailed: 'Se requiere permiso del comisionado o conexión.',
@@ -99,5 +100,6 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     chimmyCount: (n, limit) => `Chimmy dirige ${n} de ${limit} equipos`,
     emptySeat: 'Puesto vacío',
     chimmyLimitReached: (limit) => `Chimmy ya dirige ${limit} equipos. Quítale uno para entregarle otro.`,
+    chimmyReportsTitle: 'Informes semanales de Chimmy',
   },
 })

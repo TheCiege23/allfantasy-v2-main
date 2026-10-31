@@ -73,6 +73,21 @@ describe('the commissioner card', () => {
     await screen.findByRole('button', { name: 'Stop' })
   })
 
+  it('shows the weekly Chimmy reports, line by line, and nothing when there are none', async () => {
+    const body = { native: true, autopilotEntitled: true, chimmyLimit: 4, teams: [team({ suggested: false, managed: { since: 's', byUserId: 'c', autopilot: { style: 'win_now', since: 's' } } })],
+      chimmyReports: [{ title: "Chimmy's week 6", body: 'Here is what Chimmy did for its team in week 6.\nTaco Tuesday (Chimmy): still in the game, voted at Tribal Council.', sentAt: '2026-10-20T12:00:00.000Z' }] }
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body })))
+    render(<InactiveManagerCommissioner leagueId="L" />)
+    await screen.findByText('Chimmy’s weekly reports')
+    expect(screen.getByText("Chimmy's week 6")).toBeTruthy()
+    expect(screen.getByText('Taco Tuesday (Chimmy): still in the game, voted at Tribal Council.')).toBeTruthy()
+    cleanup()
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ ...body, chimmyReports: [] }) })))
+    const { container } = render(<InactiveManagerCommissioner leagueId="L" />)
+    await screen.findByTestId('chimmy-managers')
+    expect(container.querySelector('[data-testid="chimmy-reports"]')).toBeNull()
+  })
+
   it('renders nothing for an imported league', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ native: false, teams: [] }) })))
     const { container } = render(<InactiveManagerCommissioner leagueId="L" />)
