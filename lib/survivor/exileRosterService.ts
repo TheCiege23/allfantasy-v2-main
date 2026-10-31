@@ -9,6 +9,8 @@ import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { addExilePlayer, dropExilePlayer, emptyExileRoster, readExileRoster } from './exileRosterRules'
 import { keyPositionForSport } from './constants'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
+import { buildWeekKickoffMap, normalizeLockTeam } from '@/lib/redraft/lineupLock'
+import { DATE_WINDOWED_SPORTS } from '@/lib/redraft/weekGames'
 
 type Db = Prisma.TransactionClient
 const easternMidnight = (day: Date) => fromZonedTime(`${day.toISOString().slice(0, 10)}T00:00:00`, 'America/New_York')
@@ -41,8 +43,37 @@ async function context(db: Db, leagueId: string, now: Date) {
   return { league, island, week, window }
 }
 
-async function firstTeamGame(db: Db, sport: string, team: string, start: Date, end: Date) {
-  return db.gameSchedule.findFirst({ where: { sportType: sport, startTime: { gte: start, lt: end }, OR: [{ homeTeam: { equals: team, mode: 'insensitive' } }, { awayTeam: { equals: team, mode: 'insensitive' } }] }, orderBy: { startTime: 'asc' }, select: { startTime: true } })
+/**
+ * Each team's first game in an Exile period, keyed by `normalizeLockTeam`.
+ *
+ * 🛑 NBA, NHL AND MLB EXILE NEVER OPENED. This read `GameSchedule`, which holds NFL alone, so every
+ * daily-sport claim failed "This team has no verified game in this scoring period" — for every exiled
+ * manager, human or Chimmy. Measured on the season-rehearsal branch: `game_schedules` carries 339 NFL
+ * rows and nothing else, and the NBA and NHL rehearsals finished with no Exile week played. A daily
+ * sport now reads the same games its lineups lock on (`buildWeekKickoffMap`: the Eastern-day window
+ * over `SportsGame`), matched on the same team key, so "Edmonton Oilers" on a player row finds the
+ * schedule's game whichever feed spelled it. Football keeps its schedule.
+ */
+export async function exileFirstGames(db: Db, sport: string, season: number, week: number, start: Date, end: Date): Promise<Map<string, Date>> {
+  const firsts = new Map<string, Date>()
+  const keep = (team: string | null | undefined, at: Date | null | undefined) => {
+    if (!team || !at || at < start || at >= end) return
+    const key = normalizeLockTeam(sport, team)
+    const seen = firsts.get(key)
+    if (key && (!seen || at < seen)) firsts.set(key, at)
+  }
+  if (DATE_WINDOWED_SPORTS.includes(sport.toUpperCase())) {
+    const kickoffs = await buildWeekKickoffMap(prisma, { sport, season, week })
+    for (const [key, at] of kickoffs.byTeam) if (at >= start && at < end) firsts.set(key, at)
+    return firsts
+  }
+  const games = await db.gameSchedule.findMany({ where: { sportType: sport, startTime: { gte: start, lt: end } }, select: { homeTeam: true, awayTeam: true, startTime: true } })
+  for (const g of games) { keep(g.homeTeam, g.startTime); keep(g.awayTeam, g.startTime) }
+  return firsts
+}
+
+export function exileTeamKey(sport: string, team: string): string {
+  return normalizeLockTeam(sport, team)
 }
 
 export async function mutateExileRoster(params: { leagueId: string; userId: string; week: number; playerId: string; action: 'claim' | 'drop' | 'move'; slot?: string }, now = new Date()) {
@@ -59,7 +90,8 @@ export async function mutateExileRoster(params: { leagueId: string; userId: stri
     const player = params.action === 'claim' ? await db.player.findFirst({ where: { id: params.playerId, sport: { equals: league.sport, mode: 'insensitive' }, active: true }, select: { id: true, name: true, position: true, team: true } }) : roster.players.find(p => p.id === params.playerId)
     if (!player?.team) throw new Error('An active player with a verified team is required.')
     team ??= player.team.trim().toUpperCase()
-    const first = await firstTeamGame(db, league.sport, team, window.start, window.end)
+    const firstAt = (await exileFirstGames(db, league.sport, league.season, week, window.start, window.end)).get(exileTeamKey(league.sport, team))
+    const first = firstAt ? { startTime: firstAt } : null
     if (!first?.startTime) throw new Error('This team has no verified game in this scoring period.')
     if (first.startTime <= now || roster.closedAt) throw new Error('This team’s roster is locked for the scoring period.')
     let next = roster
