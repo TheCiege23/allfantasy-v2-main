@@ -55,6 +55,7 @@ export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'pickTrading',
   'pickTradeDeadline',
   'pickTerms',
+  'pickTradeYears',
   'taxiSlots',
   'taxiEligibilityYears',
   'taxiDeadlineWeek',
