@@ -5,6 +5,8 @@
  *  - The `out` card is opt-in for the eliminated manager. Nobody else is ever offered it.
  *  - Immunity, idol and exile cards are offered to their subject only.
  *  - The champion card is offered to the champion and to the whole league as a recap.
+ *  - The week recap is offered to the whole league. It names no manager, so sharing it can never
+ *    share someone's exit for them (the `out` card stays theirs alone).
  *  - Nothing is public until it is final AND someone allowed to share it has published it.
  *  - A league with `shareCardsEnabled = false` serves nothing, to anyone.
  */
@@ -25,7 +27,7 @@ export interface ViewerFacts {
 /** May this viewer see the moment in their share UI (and its private preview PNG)? */
 export function isMomentOfferedTo(moment: MomentAccessFacts, viewer: ViewerFacts): boolean {
   if (!viewer.userId || !moment.final) return false
-  if (moment.type === 'champ') return viewer.isLeagueMember
+  if (moment.type === 'champ' || moment.type === 'recap') return viewer.isLeagueMember
   return viewer.userId === moment.subjectUserId
 }
 

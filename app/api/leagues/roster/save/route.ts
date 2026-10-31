@@ -12,6 +12,7 @@ import { resolveSportForTrend } from '@/lib/player-trend/SportTrendContextResolv
 import { prisma } from '@/lib/prisma'
 import { validateAiActionExecution } from '@/lib/ai/action-validation'
 import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineupService'
+import { lineupVersionOf } from '@/lib/roster/lineupVersion'
 import { applyStarterSwap } from '@/lib/roster/starterSwap'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -245,10 +246,11 @@ export async function POST(req: NextRequest) {
     source: 'user_save',
     skipLockCheck: false,
     expectedStarters: Array.isArray(body.expectedStarters) ? body.expectedStarters.map(String) : undefined,
+    expectedLineupVersion: typeof body.expectedLineupVersion === 'string' && body.expectedLineupVersion ? body.expectedLineupVersion : undefined,
   })
 
   if (!persisted.ok) {
-    return NextResponse.json({ error: persisted.error }, { status: persisted.status ?? 400 })
+    return NextResponse.json({ error: persisted.error, ...(persisted.code ? { code: persisted.code } : {}) }, { status: persisted.status ?? 400 })
   }
 
   const prevStarters = extractStarterIds({}, currentRoster.playerData)
@@ -305,6 +307,8 @@ export async function POST(req: NextRequest) {
     ok: true,
     rosterId: targetRosterId,
     writeAuthority,
+    // The version the next save from this screen is built on, so a second move needs no reload first.
+    lineupVersion: lineupVersionOf(nextPlayerData),
     ...(sportsDataDecision ? { sportsDataDecision } : {}),
   })
 }

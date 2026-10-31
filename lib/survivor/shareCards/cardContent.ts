@@ -34,15 +34,17 @@ const THEMES: Record<ShareMomentType, ShareCardTheme> = {
   idol: { accent: '#7fe0c0', head: '#f1d58a', glow: 'rgba(127,224,192,.4)' },
   exile: { accent: '#f2c94c', head: '#f1d58a', glow: 'rgba(242,201,76,.5)' },
   champ: { accent: '#f2c94c', head: '#ffe7a3', glow: 'rgba(255,214,107,.6)' },
+  recap: { accent: '#ffb35c', head: '#f3ead6', glow: 'rgba(255,170,80,.4)' },
 }
 
-const MOODS: Record<ShareMomentType, ShareMood> = { immunity: 'dusk', out: 'night', idol: 'night', exile: 'exile', champ: 'day' }
+const MOODS: Record<ShareMomentType, ShareMood> = { immunity: 'dusk', out: 'night', idol: 'night', exile: 'exile', champ: 'day', recap: 'dusk' }
 
 const HERO: Record<Exclude<ShareMomentType, 'idol'>, string> = {
   immunity: '/survivor/weekly/immunity-necklace.svg',
   out: '/survivor/weekly/torch-out.svg',
   exile: '/survivor/exile/token-coin-earned.svg',
   champ: '/survivor/late/champion-trophy.svg',
+  recap: '/survivor/weekly/torch-lit.svg',
 }
 
 const ICON: Record<Exclude<ShareMomentType, 'idol'>, string> = {
@@ -50,6 +52,7 @@ const ICON: Record<Exclude<ShareMomentType, 'idol'>, string> = {
   out: '/survivor/weekly/torch-out-icon.svg',
   exile: '/survivor/exile/token-icon.svg',
   champ: '/survivor/late/champion-icon.svg',
+  recap: '/survivor/weekly/torch-lit-icon.svg',
 }
 
 const DEFAULT_IDOL_ID = 'immunity'
@@ -117,6 +120,7 @@ export const SHARE_MOMENT_TITLES: Record<ShareMomentType, string> = {
   idol: 'Idol played',
   exile: 'Back from Exile',
   champ: 'Season champion',
+  recap: 'Week recap',
 }
 
 export const SHARE_MOMENT_OFFERED: Record<ShareMomentType, string> = {
@@ -125,17 +129,20 @@ export const SHARE_MOMENT_OFFERED: Record<ShareMomentType, string> = {
   idol: 'To the manager who played an idol, once the scroll reveal shows it.',
   exile: 'To a manager who returns from Exile Island with enough tokens.',
   champ: 'To the champion after the final jury vote, and to the whole league as a recap.',
+  recap: 'To the whole league after each Tribal Council read. Names no manager, only the tribe and the counts.',
 }
 
 /** Copy for the phone sheet heading, e.g. "Share your immunity win". */
 export function shareSheetHeading(type: ShareMomentType, isSubject: boolean): string {
   if (type === 'champ' && !isSubject) return 'Share the season recap'
+  if (type === 'recap') return 'Share this week’s recap'
   return {
     immunity: 'Share your immunity win',
     out: 'Share your exit',
     idol: 'Share your idol play',
     exile: 'Share your return',
     champ: 'Share your championship',
+    recap: 'Share this week’s recap',
   }[type]
 }
 
@@ -205,6 +212,22 @@ export function buildShareCardContent(type: ShareMomentType, week: number, paylo
       if (payload.tally) stats.push({ value: payload.tally, label: 'Jury' })
       if (finite(payload.immunityWins)) stats.push({ value: String(payload.immunityWins), label: 'Immunity' })
       if (finite(payload.points)) stats.push({ value: formatPoints(payload.points), label: 'Points' })
+      break
+    }
+    case 'recap': {
+      kicker = `Week ${week} · Tribal Council`
+      const remaining = finite(payload.remaining) ? payload.remaining : null
+      headline = remaining != null
+        ? `${remaining} ${remaining === 1 ? 'castaway remains' : 'castaways remain'}`
+        : 'One more torch goes out'
+      const who = payload.merged ? 'The merged tribe' : tribe ?? 'A tribe'
+      const exile = finite(payload.onExile) && payload.onExile > 0
+        ? ` ${payload.onExile === 1 ? 'One castaway is' : `${payload.onExile} are`} on Exile Island.`
+        : ''
+      sub = `${who} went to Tribal Council, and one more torch went out.${exile}`
+      if (remaining != null) stats.push({ value: String(remaining), label: 'Remaining' })
+      if (finite(payload.onExile)) stats.push({ value: String(payload.onExile), label: 'On Exile' })
+      stats.push({ value: String(week), label: 'Week' })
       break
     }
   }

@@ -175,7 +175,7 @@ export async function listOfferedMoments(leagueId: string, viewer: ViewerFacts):
   if (!viewer.userId) return []
   try {
     const rows = await prisma.survivorShareMoment.findMany({
-      where: { leagueId, final: true, OR: [{ subjectUserId: viewer.userId }, { type: 'champ' }] },
+      where: { leagueId, final: true, OR: [{ subjectUserId: viewer.userId }, { type: { in: ['champ', 'recap'] } }] },
       orderBy: [{ week: 'desc' }, { createdAt: 'desc' }],
       take: 50,
     })

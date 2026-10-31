@@ -40,7 +40,17 @@ import { MyTeamAutomations } from './MyTeamAutomations'
 import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
 import { WelcomeBackCard } from '@/components/league/WelcomeBackCard'
 import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE } from '@/lib/projections/dailySportFormLabels'
-import { buildOfflineLineupSnapshot, readOfflineLineupSnapshot, saveOfflineLineupSnapshot, type OfflineLineupSnapshot } from '@/lib/pwa/offlineLineupSnapshots'
+import { buildOfflineLineupSnapshot, readOfflineLineupSnapshot, saveOfflineLineupSnapshot, snapshotAgeLabel, type OfflineLineupSnapshot } from '@/lib/pwa/offlineLineupSnapshots'
+import {
+  OFFLINE_LINEUP_SYNC_EVENT,
+  flushQueuedLineupEdits,
+  queueLineupEdit,
+  readOfflineRosterData,
+  readQueuedLineupEdit,
+  saveOfflineRosterData,
+  type LineupSyncResult,
+  type QueuedLineupEdit,
+} from '@/lib/pwa/offlineLineupQueue'
 import { OfflineLineupSnapshotView } from './OfflineLineupSnapshotView'
 
 /**
@@ -65,6 +75,8 @@ type DbRoster = {
   roster: unknown
   unifiedRoster?: UnifiedPlayerWireDto[]
   rosterId?: string
+  /** Echoed back on save as `expectedLineupVersion` (lib/roster/lineupVersion.ts). */
+  lineupVersion?: string
   faabRemaining?: number | null
   leagueWeek?: number
   starterSlots?: ExpandedStarterSlot[]
@@ -213,9 +225,29 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const [pickedDay, setPickedDay] = useState<string | null>(null)
   /** Set only when the roster fetch failed for lack of a network and a saved copy exists. */
   const [offlineSnapshot, setOfflineSnapshot] = useState<OfflineLineupSnapshot | null>(null)
+  /** When the roster on screen came from this device's copy rather than the server: that copy's time. */
+  const [offlineSince, setOfflineSince] = useState<string | null>(null)
+  /** A lineup change kept on this device and not yet accepted by the server (lib/pwa/offlineLineupQueue.ts). */
+  const [pendingEdit, setPendingEdit] = useState<QueuedLineupEdit | null>(null)
   const copy =useMemo(() => writeAuthorityCopy('lineup', league.platform), [league.platform])
   /** Only the newest load may land: switching days quickly must not let an older day's answer win. */
   const loadSeq = useRef(0)
+
+  /** Puts a roster answer on screen, with a not-yet-sent change on top of it when there is one for it. */
+  const showRoster = useCallback((json: DbRoster, pending: QueuedLineupEdit | null) => {
+    setData(json)
+    const mine = pending && pending.rosterId === json.rosterId && pending.week === (json.leagueWeek ?? 1) ? pending : null
+    setPendingEdit(mine)
+    const slots = json.starterSlots ?? []
+    if (mine) setLists(mine.lists)
+    else if (slots.length) {
+      const base = initOrSyncLineupLists(json.roster, slots)
+      // A lineup saved with slot positions comes back slot-for-slot, holes included, and the re-seat
+      // leaves it alone. One saved without them (before positions) is compacted; re-seat it.
+      const byId = buildDisplayPlayerMap(null, json.unifiedRoster ?? [])
+      setLists({ ...base, starters: seatStartersInSlots(base.starters, slots, (pid) => byId[pid]?.position) })
+    } else setLists(null)
+  }, [])
 
   const load = useCallback(async () => {
     if (!userTeam) {
@@ -230,33 +262,35 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       const dayParam = pickedDay ? `&day=${encodeURIComponent(pickedDay)}` : ''
       const res = await fetch(`/api/league/roster?leagueId=${encodeURIComponent(league.id)}${dayParam}`, { cache: 'no-store' })
       const json = (await res.json().catch(() => ({}))) as DbRoster
+      const pending = await readQueuedLineupEdit(league.id)
       if (seq !== loadSeq.current) return
       if (!res.ok) {
         setError(res.status === 404 ? 'No roster yet for your team.' : 'We could not load your roster.')
         setData(null)
         return
       }
-      setData(json)
-      const slots = json.starterSlots ?? []
-      if (slots.length) {
-        const base = initOrSyncLineupLists(json.roster, slots)
-        // A lineup saved with slot positions comes back slot-for-slot, holes included, and the re-seat
-        // leaves it alone. One saved without them (before positions) is compacted; re-seat it.
-        const byId = buildDisplayPlayerMap(null, json.unifiedRoster ?? [])
-        setLists({ ...base, starters: seatStartersInSlots(base.starters, slots, (pid) => byId[pid]?.position) })
-      } else setLists(null)
+      showRoster(json, pending)
+      setOfflineSince(null)
       setOfflineSnapshot(null)
+      // The editor's own data, so the whole screen — editing included — opens with no network next time.
+      if (!pickedDay) void saveOfflineRosterData(league.id, json)
     } catch {
-      // The fetch itself failed — no network, not a server answer. Fall back to the copy this screen
-      // saved on its last online load, if there is one; only an error when there is nothing to show.
-      const snapshot = await readOfflineLineupSnapshot(league.id)
+      // The fetch itself failed — no network, not a server answer. Fall back to what this screen kept
+      // on its last online load: the full roster if there is one (editable; changes are queued), else the
+      // read-only snapshot. Only an error when there is nothing to show.
+      const cached = pickedDay ? null : await readOfflineRosterData<DbRoster>(league.id)
+      const pending = await readQueuedLineupEdit(league.id)
+      const snapshot = cached ? null : await readOfflineLineupSnapshot(league.id)
       if (seq !== loadSeq.current) return
-      if (snapshot) setOfflineSnapshot(snapshot)
+      if (cached) {
+        showRoster(cached.data, pending)
+        setOfflineSince(cached.savedAt)
+      } else if (snapshot) setOfflineSnapshot(snapshot)
       else setError('We could not load your roster.')
     } finally {
       if (seq === loadSeq.current) setLoading(false)
     }
-  }, [league.id, userTeam, pickedDay])
+  }, [league.id, userTeam, pickedDay, showRoster])
 
   useEffect(() => {
     void load()
@@ -267,6 +301,18 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     window.addEventListener('online', onOnline)
     return () => window.removeEventListener('online', onOnline)
   }, [load])
+  // A change kept on this device was sent (components/pwa/OfflineLineupSync.tsx says how it went):
+  // show what the server now holds.
+  useEffect(() => {
+    const onSync = (e: Event) => {
+      const r = (e as CustomEvent<LineupSyncResult>).detail
+      if (r?.leagueId !== league.id || r.outcome === 'kept') return
+      setPendingEdit(null)
+      void load()
+    }
+    window.addEventListener(OFFLINE_LINEUP_SYNC_EVENT, onSync)
+    return () => window.removeEventListener(OFFLINE_LINEUP_SYNC_EVENT, onSync)
+  }, [league.id, load])
   useLeagueRealtimeRefresh(league.id, (env) => {
     const t = String(env.eventType ?? '')
     if (t === 'player_changed' || t === 'league_changed' || t.includes('score')) void load()
@@ -362,18 +408,52 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
           taxi: next.taxi.map((id) => buildPlayerRow(id, players)),
           devy: next.devy.map((id) => buildPlayerRow(id, players)),
         }
-        const res = await fetch('/api/leagues/roster/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ leagueId: league.id, rosterId: data.rosterId, week: data.leagueWeek ?? 1, roster }),
-        })
-        const j = (await res.json().catch(() => ({}))) as { writeAuthority?: { copy?: { title?: string; detail?: string } }; error?: string }
+        const rosterId = data.rosterId
+        const week = data.leagueWeek ?? 1
+        // No network: keep the change on this device; it is sent, and judged by the server, on reconnect.
+        // A change already waiting goes the same way even online, so the two are sent as one, in order.
+        const keep = async (quiet: boolean) => {
+          const stored = await queueLineupEdit({ leagueId: league.id, rosterId, week, roster, lists: next, baseVersion: data.lineupVersion ?? null })
+          if (!stored) {
+            toast.error('Lineup was not saved. You are offline and this device could not keep the change.')
+            return false
+          }
+          setPendingEdit(stored)
+          setLists(next)
+          setMove(null)
+          setPicked(null)
+          if (!quiet) toast.success('Saved on this device', { description: 'It will be sent when you are back online. A player whose game starts before then cannot be moved.' })
+          return true
+        }
+        const online = !offlineSince && (typeof navigator === 'undefined' || navigator.onLine !== false)
+        if (!online) return await keep(false)
+        if (pendingEdit) {
+          const kept = await keep(true)
+          if (kept) void flushQueuedLineupEdits()
+          return kept
+        }
+        let res: Response
+        try {
+          res = await fetch('/api/leagues/roster/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ leagueId: league.id, rosterId, week, roster, ...(data.lineupVersion ? { expectedLineupVersion: data.lineupVersion } : {}) }),
+          })
+        } catch {
+          // The request never reached the server — the connection dropped. Keep it rather than lose it.
+          return await keep(false)
+        }
+        const j = (await res.json().catch(() => ({}))) as { writeAuthority?: { copy?: { title?: string; detail?: string } }; error?: string; code?: string; lineupVersion?: string }
         if (!res.ok) {
           toast.error(j.error ? `Lineup was not saved: ${j.error}` : 'Lineup was not saved. Your previous lineup is still active.')
+          // Built on a roster that has since changed: show the current one rather than the stale screen.
+          if (j.code === 'LINEUP_CONFLICT') void load()
           return false
         }
         const c = j.writeAuthority?.copy ?? copy
         toast.success(c.title ?? copy.title, { description: c.detail || undefined })
+        // The next move is built on this save, before the reload below lands.
+        if (j.lineupVersion) setData((d) => (d ? { ...d, lineupVersion: j.lineupVersion } : d))
         setLists(next)
         setMove(null)
         setPicked(null)
@@ -388,7 +468,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         setSaving(false)
       }
     },
-    [data, editable, players, league.id, copy, load],
+    [data, editable, players, league.id, copy, load, offlineSince, pendingEdit],
   )
 
   const moveCtx: LineupMoveContext | null = useMemo(
@@ -505,7 +585,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   // daily league is a view of another day, not what the reader would want to see with no signal.
   const teamName = userTeam?.teamName ?? ''
   useEffect(() => {
-    if (!data || !lists || !slots.length || !teamName || viewingOtherDay) return
+    // Not while a change is unsent: the cold-launch page would show it as the lineup the server holds.
+    if (!data || !lists || !slots.length || !teamName || viewingOtherDay || pendingEdit) return
     void saveOfflineLineupSnapshot(
       buildOfflineLineupSnapshot({
         leagueId: league.id,
@@ -518,7 +599,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         players,
       }),
     )
-  }, [data, lists, slots, players, teamName, viewingOtherDay, league.id, league.name, league.sport])
+  }, [data, lists, slots, players, teamName, viewingOtherDay, pendingEdit, league.id, league.name, league.sport])
 
   if (!userTeam) {
     return (
@@ -764,6 +845,17 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       {data ? (
         <div className="nls-cols">
           <div className="nls nls-stack">
+            {pendingEdit ? (
+              <div className="nls-lockbar" role="status" data-testid="lineup-pending-sync">
+                <span className="nls-chip" data-tone="warn">Not sent yet</span>
+                <span>Your lineup changes are saved on this device and will be sent when you are back online. A player whose game starts before then cannot be moved.</span>
+              </div>
+            ) : offlineSince ? (
+              <div className="nls-lockbar" role="status" data-testid="lineup-offline">
+                <span className="nls-chip" data-tone="warn">Offline</span>
+                <span>{snapshotAgeLabel(offlineSince)}. Changes you make are saved on this device and sent when you reconnect.</span>
+              </div>
+            ) : null}
             {lockText ? (
               <div className="nls-lockbar" data-tone={editable ? undefined : 'locked'} role="status">
                 {editable && nextLock ? <span className="nls-chip" data-tone="warn">Next lock {untilLabel(nextLock.getTime() - now.getTime())}</span> : null}

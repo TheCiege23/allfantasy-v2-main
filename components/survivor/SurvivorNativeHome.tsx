@@ -21,6 +21,10 @@ import { tribeCrestAlt } from '@/lib/survivor/survivorTribeIdentity'
 import { SvkSkeleton } from './core/SurvivorKit'
 import { SURVIVOR_STATES, SurvivorStateCard } from './core/SurvivorStateCard'
 import { hasSeenTribeReveal, SurvivorTribeReveal } from './core/SurvivorTribeReveal'
+import { SurvivorFirstWeekGuide } from './SurvivorFirstWeekGuide'
+import { SurvivorCommissionerChecklist } from './SurvivorCommissionerChecklist'
+import { SurvivorShareCardsButton } from './share/SurvivorShareCards'
+import { showFirstWeekGuide } from '@/lib/survivor/survivorFirstWeekGuide'
 import './survivor-home.css'
 
 const TRIBE_COLORS = ['#b8a8ff', '#7fd3de', '#f0a35e', '#8fd694']
@@ -234,8 +238,24 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
               <li><strong>Exile, merge, jury</strong><span>{plan ? `One exile returns in week ${plan.exileReturnWeek}. The jury crowns a winner from the final ${plan.finalistCount} in week ${plan.finaleWeek}.` : 'Voted-out managers fight on from Exile Island; the jury picks the winner.'}</span></li>
             </ol>
           </div></LeagueSection>
-          <LeagueSection id="commissioner">{isCommissioner && <CommissionerSetupChecklist leagueId={league.id} settingsOpen={settingsOpen} onOpenSettings={onOpenSettings} />}</LeagueSection>
+          <LeagueSection id="commissioner">{isCommissioner && <>
+            <CommissionerSetupChecklist leagueId={league.id} settingsOpen={settingsOpen} onOpenSettings={onOpenSettings} />
+            <SurvivorCommissionerChecklist leagueId={league.id} draftScheduled={Boolean(draftDateIso)} inSeason={false} />
+          </>}</LeagueSection>
         </> : <>
+          {isCommissioner && <LeagueSection id="commissioner"><SurvivorCommissionerChecklist leagueId={league.id} draftScheduled={Boolean(draftDateIso)} inSeason /></LeagueSection>}
+          {showFirstWeekGuide(summary?.currentWeek, Boolean(summary?.myRosterId)) && <LeagueSection id="week"><SurvivorFirstWeekGuide leagueId={league.id} rules={{
+            tribeName: myTribe ? tribeName(myTribe) : null,
+            idolCount: summary?.config?.idolCount ?? null,
+            mergeTrigger: summary?.config?.mergeTrigger ?? null,
+            mergeWeek: summary?.config?.mergeWeek ?? null,
+            mergePlayerCount: summary?.config?.mergePlayerCount ?? null,
+            exileReturnEnabled: Boolean(summary?.config?.exileReturnEnabled),
+            exileReturnTokens: summary?.config?.exileReturnTokens ?? null,
+            exileReturnWeek: plan?.exileReturnWeek ?? null,
+            finalistCount: plan?.finalistCount ?? null,
+            finaleWeek: plan?.finaleWeek ?? null,
+          }} /></LeagueSection>}
           <LeagueSection id="week">{summary?.weekAdvice?.length ? <div className="svh-card svh-pad svh-advice" data-testid="survivor-week-advice">
             <span className="svh-lbl">Your week · private</span>
             <ul>{summary.weekAdvice.map(item => <li key={item.id} className={`svh-advice-item svh-advice-${item.tone}`} data-testid={`survivor-advice-${item.id}`}>
@@ -244,6 +264,8 @@ export function SurvivorNativeHome({ league, teams, userTeamId, isCommissioner, 
             </li>)}</ul>
           </div> : null}</LeagueSection>
           <LeagueSection id="week"><SurvivorWeeklyMoments leagueId={league.id} exileHref={`/survivor/${encodeURIComponent(league.id)}/exile`} /></LeagueSection>
+          {/* The league's week after Tribal Council, for anyone to share; renders nothing until there is one. */}
+          <LeagueSection id="week"><div className="svh-recap-share" data-testid="survivor-home-recap-share"><SurvivorShareCardsButton leagueId={league.id} type="recap" label="Share this week’s recap" className="svh-btn" /></div></LeagueSection>
           {raced.length > 1 && <div className="svh-card svh-pad svh-race-card" data-testid="survivor-tribe-race">
             <div className="svh-row"><span className="svh-lbl svh-grow">Tribe race · week {week}</span><span className="svh-faint svh-sm">Lowest tribe total goes to Tribal Council</span></div>
             <div className="svh-race-legend">{raced.map((tribe, index) => <span key={tribe.id} style={{ color: tribeColor(tribe, index) }}><b className="svh-tribe-name">{tribeName(tribe)}</b> <span className="svh-num">{(scores[tribe.id] ?? 0).toFixed(1)}</span></span>)}</div>
