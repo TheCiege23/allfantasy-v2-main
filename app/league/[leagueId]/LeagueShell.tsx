@@ -4,6 +4,7 @@ import { leagueAudience } from '@/lib/league-privacy/leagueAudience'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
 import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
+import { dynastySeasonClock, type DynastySeasonClock } from '@/lib/league-chat/dynastyChatSkin'
 
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
@@ -1125,6 +1126,14 @@ export function LeagueShell({
     () => prismaLeagueToUserLeague(league, { draftDate: draftDateIso, redraftCurrentWeek }),
     [league, draftDateIso, redraftCurrentWeek],
   )
+  /*
+   * Dynasty Era chat header clock. Read from the raw row, not `selectedLeague`: the season there
+   * falls back to the calendar year, and the first-season fallback needs `createdAt`.
+   */
+  const dynastyChatClock = useMemo(
+    () => (usesDynastyBackground(selectedLeague) ? dynastySeasonClock(league) : null),
+    [league, selectedLeague],
+  )
 
   const rosterWalletByPlatformUserId = useMemo(() => {
     const m = new Map<string, { faabRemaining: number | null; waiverPriority: number | null }>()
@@ -1822,6 +1831,7 @@ export function LeagueShell({
               leagueRail={leagueRail}
               leagueId={league.id}
               selectedLeague={selectedLeague}
+              dynastyChatClock={dynastyChatClock}
               userTeam={userTeam}
               teamSlots={teamSlots}
               inviteToken={inviteToken}
@@ -2138,6 +2148,7 @@ function LeagueTabRouter({
   tabDefs,
   leagueId,
   selectedLeague,
+  dynastyChatClock = null,
   userTeam,
   teamSlots,
   inviteToken,
@@ -2164,6 +2175,8 @@ function LeagueTabRouter({
   tabDefs: TabDef[]
   leagueId: string
   selectedLeague: UserLeague
+  /** "Year N · YYYY" for a dynasty league's chat header, from the raw league row (createdAt). */
+  dynastyChatClock?: DynastySeasonClock | null
   userTeam: LeagueTeam | null
   teamSlots: UserLeagueTeam[]
   inviteToken: string | undefined
@@ -2588,6 +2601,7 @@ function LeagueTabRouter({
             leagueId={leagueId}
             leagueName={selectedLeague.name ?? 'League'}
             dynastyBackground={usesDynastyBackground(selectedLeague)}
+            dynastyClock={dynastyChatClock}
             platform={selectedLeague.platform}
             isCommissioner={isCommissioner}
             teamCount={selectedLeague.teamCount ?? null}

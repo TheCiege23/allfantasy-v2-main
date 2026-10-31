@@ -31,6 +31,8 @@ import {
   readLeagueMoves,
   type LeagueMove,
 } from '@/lib/league-chat/leagueMoves'
+import { readDynastyDraftOrderNotice } from '@/lib/league-chat/dynastyChatSkin'
+import { DynastyDraftOrderCard } from '@/components/chat/DynastyChatParts'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import '@/components/core-app/af-comms.css'
 
@@ -101,6 +103,11 @@ export type LeagueConversationProps = {
   renderEvent?: (m: ChatListMessage) => ReactNode | null
   /** A message that keeps its bubble but carries a league event (ChatMessageList `eventKindFor`). */
   eventKindFor?: (m: ChatListMessage) => string | null
+  /**
+   * A dynasty league's chat (Dynasty Era): trade cards draw picks as chips and draft-order
+   * announcements get the gold card. Off by default, where every row renders as before.
+   */
+  dynasty?: boolean
 }
 
 type LeagueMessage = {
@@ -223,6 +230,7 @@ export function LeagueConversation({
   channel = null,
   renderEvent,
   eventKindFor,
+  dynasty = false,
 }: LeagueConversationProps) {
   const tribe = typeof source === 'string' && source.startsWith('tribe_') ? source : null
   const room = `league:${leagueId}`
@@ -966,9 +974,21 @@ export function LeagueConversation({
           hasRichFor={(m) =>
             hasRichContent(m.metadata, m.messageType, m.body) ||
             readDraftPoll(m.metadata, m.messageType, viewer) != null ||
-            isWeeklyRecap(m.metadata)
+            isWeeklyRecap(m.metadata) ||
+            (dynasty && readDynastyDraftOrderNotice(m.metadata, m.messageType) != null)
           }
           renderRich={(m) => {
+            const orderNotice = dynasty ? readDynastyDraftOrderNotice(m.metadata, m.messageType) : null
+            if (orderNotice) {
+              return (
+                <>
+                  <DynastyDraftOrderCard notice={orderNotice} />
+                  {hasRichContent(m.metadata, m.messageType, m.body) ? (
+                    <RichMessage metadata={m.metadata} messageType={m.messageType} body={m.body} viewerUserId={viewer} dynasty />
+                  ) : null}
+                </>
+              )
+            }
             /*
              * Chimmy's weekly recap carries a way OUT: most leagues have one AllFantasy member, so the
              * recap is shared into the league's own group chat with the invite link (recapShare.ts).
@@ -977,7 +997,7 @@ export function LeagueConversation({
               return (
                 <>
                   {hasRichContent(m.metadata, m.messageType, m.body) ? (
-                    <RichMessage metadata={m.metadata} messageType={m.messageType} body={m.body} viewerUserId={viewer} />
+                    <RichMessage metadata={m.metadata} messageType={m.messageType} body={m.body} viewerUserId={viewer} dynasty={dynasty} />
                   ) : null}
                   <RecapShareButton leagueId={leagueId} leagueName={leagueName} recap={m.body} />
                 </>
@@ -999,6 +1019,7 @@ export function LeagueConversation({
                 messageType={m.messageType}
                 body={m.body}
                 viewerUserId={viewer}
+                dynasty={dynasty}
                 onVote={(optionId) => void votePoll(m.id, optionId)}
                 onClosePoll={
                   /*
