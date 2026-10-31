@@ -26,6 +26,11 @@
  * in the free-agent pool, nothing reads it for taxi eligibility, and it carries no age or draft year to
  * tell a 19-year-old from an unsigned veteran. Offering a taxi squad would promise a stash nobody can
  * fill outside the draft. Open it here, for NHL only, when those exist.
+ *
+ * ⚠ 2026-10-31: MLB ROOKIE DRAFTS NOW OFFER FANTRAX PROSPECTS TOO (`lib/player-identity/mlbFantraxProspects.ts`),
+ * and the gate stays CLOSED for MLB for the same reason: the layer exists only on a rookie-draft board,
+ * nothing reads it for taxi or minors eligibility, and it has no age, draft year or level to tell a
+ * prospect from an unsigned veteran. Open it for MLB only when those exist.
  */
 
 /** Sports with no committed prospect / minor-league player pool. */
