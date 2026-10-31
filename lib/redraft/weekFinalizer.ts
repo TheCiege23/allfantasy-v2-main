@@ -483,7 +483,7 @@ export async function finalizeRedraftWeek(
    */
   const league = await prisma.league.findFirst({
       where: { id: season.leagueId },
-      select: { bestBallMode: true, leagueVariant: true, leagueType: true, survivorMode: true, platform: true },
+      select: { bestBallMode: true, leagueVariant: true, leagueType: true, survivorMode: true, platform: true, guillotineMode: true, settings: true },
     })
   const bestBall = leagueIsBestBall(league)
 

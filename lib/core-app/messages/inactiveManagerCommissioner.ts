@@ -47,6 +47,16 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     off: 'Off',
     autopilotUpsell: 'Let Chimmy run this team (AF Commissioner)',
     otherTeams: 'Other teams',
+    chimmyManagersTitle: 'Chimmy as a manager',
+    chimmyManagersIntro:
+      'Hand an empty seat or an absent manager’s team to Chimmy. Chimmy drafts it (in any draft type) and runs it all season: lineups, free agents, Tribal Council votes. When a real manager joins, assign them the team and Chimmy steps off.',
+    chimmyCount: (n: number, limit: number) => `Chimmy runs ${n} of ${limit} teams`,
+    emptySeat: 'Empty seat',
+    chimmyLimitReached: (limit: number) => `Chimmy already runs ${limit} teams. Take Chimmy off one to hand it another.`,
+    chimmyReportsTitle: 'Chimmy’s weekly reports',
+    chimmyFreeCount: (n: number, free: number) => `Chimmy runs ${n} of ${free} free team${free === 1 ? '' : 's'}`,
+    chimmyFreeLimitReached: (limit: number) => `Your free Chimmy team is in use. AF Commissioner lets Chimmy run up to ${limit} teams.`,
+    chimmyFreeUpsell: (limit: number) => `Let Chimmy run up to ${limit} teams (AF Commissioner)`,
   },
   es: {
     loadFailed: 'Se requiere permiso del comisionado o conexión.',
@@ -87,5 +97,15 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     off: 'Apagado',
     autopilotUpsell: 'Que Chimmy dirija este equipo (AF Commissioner)',
     otherTeams: 'Otros equipos',
+    chimmyManagersTitle: 'Chimmy como mánager',
+    chimmyManagersIntro:
+      'Entrega a Chimmy un puesto vacío o el equipo de un mánager ausente. Chimmy lo elige en el draft (cualquier tipo de draft) y lo dirige toda la temporada: alineaciones, agentes libres y votos en el Consejo Tribal. Cuando llegue un mánager real, asígnale el equipo y Chimmy se retira.',
+    chimmyCount: (n, limit) => `Chimmy dirige ${n} de ${limit} equipos`,
+    emptySeat: 'Puesto vacío',
+    chimmyLimitReached: (limit) => `Chimmy ya dirige ${limit} equipos. Quítale uno para entregarle otro.`,
+    chimmyReportsTitle: 'Informes semanales de Chimmy',
+    chimmyFreeCount: (n, free) => `Chimmy dirige ${n} de ${free} equipo${free === 1 ? '' : 's'} gratis`,
+    chimmyFreeLimitReached: (limit) => `Tu equipo gratis de Chimmy ya está en uso. AF Commissioner permite que Chimmy dirija hasta ${limit} equipos.`,
+    chimmyFreeUpsell: (limit) => `Que Chimmy dirija hasta ${limit} equipos (AF Commissioner)`,
   },
 })

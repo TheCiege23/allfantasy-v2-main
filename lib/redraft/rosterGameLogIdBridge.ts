@@ -38,6 +38,16 @@
  * id of this league already reaches is REFUSED, not shared — the old pool listed one man under both ids,
  * and that league drafted Aatu Raty twice (`3020` on one team, `tsdb_34184761` on another). Crediting
  * both would score one man's games for two teams.
+ *
+ * A `fantrax:<id>` ROSTER ID IS BRIDGED THROUGH `PlayerIdentityMap.fantraxId` (2026-10-31). NHL rookie
+ * drafts now offer Fantrax-only prospects (`lib/player-identity/nhlFantraxProspects.ts`), who have no
+ * Rolling Insights id when drafted. The weekly Fantrax link writes that `fantraxId` onto the Rolling
+ * Insights identity once he reaches an NHL roster, and from then on this maps him to that identity's
+ * game logs. Same refusals as above: an identity another roster id already reaches is not shared, and
+ * a Fantrax id carried by two identities in the sport is refused.
+ *
+ * MLB rookie drafts offer Fantrax prospects too (`mlbFantraxProspects.ts`); the same lookup, scoped to
+ * the MLB sport keys the caller passes, covers them with no MLB-specific code.
  */
 import { normalizePlayerName } from '@/lib/team-abbrev'
 
@@ -46,13 +56,14 @@ type IdentityRow = {
   rollingInsightsId: string | null
   sleeperId: string | null
   normalizedName?: string | null
+  fantraxId?: string | null
 }
 
 export type IdentityDb = {
   playerIdentityMap: {
     findMany(args: {
       where: Record<string, unknown>
-      select: { id: true; rollingInsightsId: true; sleeperId: true; normalizedName?: true }
+      select: { id: true; rollingInsightsId: true; sleeperId: true; normalizedName?: true; fantraxId?: true }
     }): Promise<IdentityRow[]>
   }
 }
@@ -70,10 +81,15 @@ export type GameLogIdBridge = {
   bridgedByName: number
   /** `tsdb_…` ids whose name is another roster id's identity, or more than one man — refused. */
   nameRefused: string[]
+  /** `fantrax:…` ids translated through `PlayerIdentityMap.fantraxId` (already counted in `bridged`). */
+  bridgedByFantrax: number
+  /** `fantrax:…` ids whose Fantrax id two identities carry, or whose identity another roster id reaches — refused. */
+  fantraxRefused: string[]
 }
 
 const NUMERIC = /^\d+$/
 const TSDB = /^tsdb_/
+const FANTRAX = /^fantrax:(.+)$/
 
 /** The form `PlayerIdentityMap.normalizedName` holds: accents folded first ("Räty" -> "raty"). */
 export function identityNameKey(name: string | null | undefined): string {
@@ -152,6 +168,37 @@ export async function bridgeRosterIdsToGameLogIds(
     }
   }
 
+  // Last, so an identity a Rolling Insights or name-matched roster id already reaches is seen as claimed.
+  let bridgedByFantrax = 0
+  const fantraxRefused: string[] = []
+  const fantraxRosterIds = new Map<string, string>()
+  for (const id of rosterIds) {
+    const m = FANTRAX.exec(id)
+    if (m?.[1]) fantraxRosterIds.set(m[1], id)
+  }
+  if (fantraxRosterIds.size > 0) {
+    const rows = await db.playerIdentityMap.findMany({
+      where: { sport: { in: sportKeys }, fantraxId: { in: [...fantraxRosterIds.keys()] } },
+      select: { id: true, rollingInsightsId: true, sleeperId: true, fantraxId: true },
+    })
+    const byFantrax = new Map<string, string[]>()
+    for (const row of rows) {
+      if (!row.fantraxId) continue
+      byFantrax.set(row.fantraxId, [...(byFantrax.get(row.fantraxId) ?? []), row.id])
+    }
+    for (const [fantraxId, rosterId] of fantraxRosterIds) {
+      const identities = [...new Set(byFantrax.get(fantraxId) ?? [])]
+      if (identities.length === 0) continue
+      if (identities.length > 1 || toRoster.has(identities[0])) {
+        fantraxRefused.push(rosterId)
+        continue
+      }
+      toRoster.set(identities[0], rosterId)
+      bridged += 1
+      bridgedByFantrax += 1
+    }
+  }
+
   return {
     gameLogIds: [...toRoster.keys()],
     rosterIdFor: (gameLogId) => toRoster.get(gameLogId),
@@ -159,5 +206,7 @@ export async function bridgeRosterIdsToGameLogIds(
     bridged,
     bridgedByName,
     nameRefused,
+    bridgedByFantrax,
+    fantraxRefused,
   }
 }

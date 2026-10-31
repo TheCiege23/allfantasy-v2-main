@@ -1,3 +1,4 @@
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -158,7 +159,7 @@ async function lotterySeatsDraftOrder(
   league: { isDynasty: boolean; leagueVariant: string | null; dynastyConfig?: { rookiePickOrderMethod: string | null } | null },
 ): Promise<boolean> {
   if (!isDynastyLeagueRow(league)) return false
-  if (league.dynastyConfig?.rookiePickOrderMethod !== 'weighted_lottery') return false
+  if (!isWeightedRookieLottery(league.dynastyConfig?.rookiePickOrderMethod)) return false
   return (await checkDynastyLotteryEligibility(leagueId)).eligible
 }
 

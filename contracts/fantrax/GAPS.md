@@ -241,3 +241,54 @@ out.
 **Needed:** a `getLeagueInfo` or `getTeamRosters` capture from a league whose teams have custom
 logos, committed under `contracts/fantrax/fixtures/`. If a logo field exists, map it in
 `FantraxLeagueFetchService` (one line) and the list shows it on the next scheduled refresh.
+
+## F-15 — NHL prospects come from "not in our NHL data", not from any Fantrax field (recorded 2026-10-31, no probe)
+
+NHL rookie drafts now offer Fantrax-only prospects (`lib/player-identity/nhlFantraxProspects.ts`).
+`ingestProFantraxIdentities('NHL')` stores the whole `getPlayerIds?sport=NHL` response, compacted,
+under `sportsDataCache['fantrax:nhl-player-universe']` — the same weekly read, no new endpoint.
+A row is a prospect when its `fantraxId` is on no NHL `PlayerIdentityMap` row, its name is no NHL
+identity's or pool player's, its team is a current NHL club or `(N/A)`, and its position is hockey.
+
+Still unknown (F-01 shape has no such field): age, draft year, league/level (AHL vs CHL vs Europe)
+and whether a `(N/A)` row is an unsigned draftee or a retired/European veteran. The `team` of an
+AHL player is his NHL parent club (Tyler Madden → MIN in the capture), never the affiliate.
+
+**Needed before ranking or age-gating prospects:** a field carrying level/draft data, which no
+committed Fantrax capture shows.
+
+## F-16 — MLB prospects: the same "not in our MLB data" rule, with a far larger unlinked registry (recorded 2026-10-31, no probe)
+
+MLB rookie drafts now offer Fantrax-only prospects — minor leaguers and unsigned players
+(`lib/player-identity/mlbFantraxProspects.ts`). `ingestProFantraxIdentities('MLB')` stores the whole
+`getPlayerIds?sport=MLB` response, compacted, under `sportsDataCache['fantrax:mlb-player-universe']`
+— the same weekly read, no new endpoint. Partly answers F-10: the universe is now kept, but nothing
+in it marks a prospect.
+
+**Sized from production, read 2026-10-31 (no probe):** the `fantrax:mlb-identities:last-run` marker of
+2026-10-25 reads provided 10,687, unchanged (already linked) 2,802, unmatched 7,882, ambiguous 3. MLB
+`PlayerIdentityMap` holds 7,320 rows, only 2,825 with a `fantraxId` (NHL: 4,386 and 2,388). So about
+**4,500 MLB players we already track carry no Fantrax id**, and "fantraxId on no identity" alone would
+list every one as a prospect. The rule therefore also excludes a row whose name is any MLB identity's
+name, or whose club + surname + first initial + role (pitcher / hitter) matches one — the second
+catching nicknames and initials spelt differently on the two sides. Names on the league's pool are
+excluded too, and two candidates sharing a name are both dropped.
+
+Still unknown, and assumed rather than captured:
+
+- **The MLB no-club marker.** `(N/A)` is captured for NBA and NHL (F-01). The only MLB capture
+  (`tests/fixtures/fantrax/mlb-player-map-public.json`) holds three major leaguers — Will Smith (LAD,
+  C), Aaron Judge (NYY, RF), Shohei Ohtani (LAD, DH) — and no unsigned row. If Fantrax MLB spells it
+  differently, those rows are refused as an unrecognised team, never guessed.
+- **What `team` means for a minor leaguer.** Assumed to be the parent MLB club, as it is for an AHL
+  player in the NHL capture. A minor-league affiliate name would be refused the same way.
+- **Two-way spelling.** The capture lists Ohtani as `DH`. A row carrying `TWP`, or both a pitching and
+  a hitting position, is listed as `TWP`.
+- Age, draft year, level (AAA … rookie ball, college, international) and a prospect flag: none exists
+  in the F-01 shape. So the `(N/A)` bucket also holds released veterans and retirees, a signed
+  minor-league veteran looks like a prospect, and the order (signed first, newest Fantrax id first,
+  cap 900 = 30 clubs × 30) is a proxy, not a ranking.
+
+**Needed:** one trimmed `getPlayerIds?sport=MLB` slice with a minor leaguer, an unsigned player and a
+two-way player, committed under `tests/fixtures/fantrax/` via `contracts/fantrax/scripts/probe.sh`
+when that combination is next added — and a level/draft field before ranking or age-gating.

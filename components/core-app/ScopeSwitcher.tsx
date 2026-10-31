@@ -19,6 +19,8 @@ import {
   type ScopeOption,
 } from '@/lib/core-app/homeScope'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
+import { pairExileUnderSurvivor, pairedExileIds } from '@/lib/core-app/survivorExileRail'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { scopeLabelText } from '@/lib/core-app/shellCopy'
 import { useMessages } from '@/components/i18n/useMessages'
@@ -70,6 +72,8 @@ export type ScopeSwitcherLeague = {
   imageUrl?: string | null
   /** The viewer commissions it — draws the blue C (CommissionerBadge). */
   isCommissioner?: boolean
+  /** On an Exile Island: its Survivor league's id. The list draws the island under that league. */
+  exileOf?: string
 }
 
 type Props = {
@@ -175,9 +179,11 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
             platformLabel(l.platform).toLowerCase().includes(q),
         )
       : offered.filter((l) => !hidden.has(l.id) || l.id === selectedLeagueId)
-    // Starred first, then the order the rail uses (by name) — stable within each group.
-    return [...matched].sort((a, b) => Number(favorites.has(b.id)) - Number(favorites.has(a.id)))
+    // Starred first, then the order the rail uses (by name) — stable within each group. Each Exile
+    // Island then moves directly under its Survivor league when that league is in the list.
+    return pairExileUnderSurvivor([...matched].sort((a, b) => Number(favorites.has(b.id)) - Number(favorites.has(a.id))))
   }, [leagues, labels, favorites, q, hiddenKey, archivedKey, selectedLeagueId])
+  const exileRows = useMemo(() => pairedExileIds(shownLeagues), [shownLeagues])
 
   const filterHref = (value: string | null) =>
     value == null ? `/core?view=all&${HOME_SCOPE_PARAM}=all` : `/core?view=all&${HOME_SCOPE_PARAM}=${encodeURIComponent(value)}`
@@ -332,8 +338,9 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
               ) : (
                 shownLeagues.map((league) => {
                   const starred = favorites.has(league.id)
-                  return (
-                    <li key={league.id} className="af-scope-row" data-current={league.id === selectedLeagueId}>
+                  const isExile = exileRows.has(league.id)
+                  const row = (
+                    <li key={league.id} className="af-scope-row" data-current={league.id === selectedLeagueId} data-exile={isExile ? 'true' : undefined}>
                       <button
                         type="button"
                         className="af-scope-star"
@@ -347,12 +354,13 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                         href={leagueHref(league.id)}
                         className="af-scope-league"
                         aria-current={league.id === selectedLeagueId ? 'true' : undefined}
+                        aria-label={isExile ? labelOf(league) : undefined}
                         prefetch={false}
                         onClick={(event) => navigate(event, leagueHref(league.id))}
                       >
                         <span className="af-scope-league-art"><LeagueMark src={league.imageUrl} letter={Array.from(league.name)[0] ?? "L"} /></span>
                         <span className="af-scope-league-name">
-                          {labelOf(league)}
+                          {isExile ? coreUiCopy('Exile Island', language) : labelOf(league)}
                           {league.isCommissioner ? <CommissionerBadge /> : null}
                         </span>
                         <span className="af-scope-league-meta">
@@ -361,6 +369,11 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                       </Link>
                     </li>
                   )
+                  if (!isExile) return row
+                  return [
+                    <li key={`exile-link-${league.id}`} className="af-scope-exile-link" data-testid="scope-exile-link" aria-hidden>↕</li>,
+                    row,
+                  ]
                 })
               )}
             </ul>

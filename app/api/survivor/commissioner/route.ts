@@ -7,7 +7,8 @@ import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { advancePhase } from '@/lib/survivor/gameStateMachine'
 import { processReturnFromExile } from '@/lib/survivor/exileEngine'
-import { rebalanceTribes } from '@/lib/survivor/tribeEngine'
+import { runShuffle } from '@/lib/survivor/SurvivorTribeShuffleEngine'
+import { overrideTribalResult, readTribalOverrideTarget } from '@/lib/survivor/survivorTribalOverride'
 import { getSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
 import { enqueueNotification } from '@/lib/survivor/notificationEngine'
 import { voidPendingRedraftTradesForRoster } from '@/lib/redraft/voidPendingTradesForElimination'
@@ -49,6 +50,11 @@ export async function GET(req: NextRequest) {
 
   const guard1 = await commissionerGuard(leagueId, userId)
   if (guard1) return guard1
+
+  if (type === 'tribal_override') {
+    // The latest council with a result, who it names, and who could be named instead.
+    return NextResponse.json({ target: await readTribalOverrideTarget(leagueId) })
+  }
 
   if (type === 'state') {
     const gs = await prisma.survivorGameState.findUnique({ where: { leagueId } })
@@ -147,34 +153,15 @@ export async function POST(req: NextRequest) {
     if (!councilId || !eliminateUserId) {
       return NextResponse.json({ error: 'councilId and eliminateUserId required' }, { status: 400 })
     }
-    const council = await prisma.survivorTribalCouncil.findFirst({
-      where: { id: councilId, leagueId },
-    })
-    const victim = await prisma.survivorPlayer.findUnique({
-      where: { leagueId_userId: { leagueId, userId: eliminateUserId } },
-    })
-    const prev = council ? { eliminatedUserId: council.eliminatedUserId, eliminatedName: council.eliminatedName } : {}
-    await prisma.survivorTribalCouncil.update({
-      where: { id: councilId },
-      data: {
-        eliminatedUserId: eliminateUserId,
-        eliminatedName: victim?.displayName ?? '',
-        auditLog: { commissionerOverride: true, notes } as object,
-      },
-    })
-    if (victim) {
-      await prisma.survivorPlayer.update({
-        where: { leagueId_userId: { leagueId, userId: eliminateUserId } },
-        data: { playerState: 'eliminated', eliminatedWeek: council?.week ?? victim.eliminatedWeek },
-      })
-    }
+    // The whole change: the wrong manager back in the game, the right one voted out the normal way.
+    const result = await overrideTribalResult({ leagueId, councilId, eliminateUserId, actorUserId: userId, notes })
+    if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
     await log('override_tribal', notes || 'Tribal result overridden', {
       targetUserId: eliminateUserId,
-      previousState: prev as object,
-      newState: { eliminateUserId },
-      week: council?.week,
+      previousState: { eliminatedUserId: result.reinstatedUserId } as object,
+      newState: { eliminateUserId, restoredPlayerIds: result.restoredPlayerIds, claimedElsewherePlayerIds: result.claimedElsewherePlayerIds } as object,
     })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json(result)
   }
 
   if (action === 'grant_return') {
@@ -296,11 +283,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  if (action === 'rebalance') {
+  if (action === 'rebalance' || action === 'redraw_tribes') {
     const notes = typeof body.notes === 'string' ? body.notes : ''
-    await rebalanceTribes(leagueId)
-    await log('change_setting', notes || 'Force tribe rebalance', {})
-    return NextResponse.json({ ok: true })
+    /*
+     * The current redraw (SurvivorTribeShuffleEngine.runShuffle): every active manager reassigned and
+     * the tribe chats replaced in one transaction, pre-merge and between councils only. `rebalance`
+     * used to call the legacy tribeEngine.rebalanceTribes, which moves only `SurvivorTribeMember` rows
+     * and never `SurvivorPlayer.tribeId`, the field councils, chats and the redraw itself now read.
+     */
+    const redraw = await runShuffle(leagueId, { actorUserId: userId })
+    if (!redraw.ok) return NextResponse.json({ error: redraw.error ?? 'The tribes could not be redrawn.' }, { status: 409 })
+    await log('change_setting', notes || 'Commissioner redrew the tribes', { newState: { tribeCount: redraw.tribes?.length ?? null } as object })
+    return NextResponse.json({ ok: true, tribeCount: redraw.tribes?.length ?? null })
   }
 
   if (action === 'remove_player') {
@@ -328,7 +322,8 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     })
     if (r0) {
-      await voidPendingRedraftTradesForRoster(leagueId, r0.id).catch(() => {})
+      // The commissioner removing them is never told about their own action.
+      await voidPendingRedraftTradesForRoster(leagueId, r0.id, { actorUserId: userId }).catch(() => {})
     }
 
     await prisma.survivorPlayer.updateMany({

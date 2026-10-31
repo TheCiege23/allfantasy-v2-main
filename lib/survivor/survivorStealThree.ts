@@ -10,6 +10,7 @@ import { movePlayerBoundIdolsInTransaction } from './playerBoundIdolTransfer'
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { transferNbaSurvivorRosterPlayer } from './transferNbaSurvivorRosterPlayer'
 import { createSurvivorChatMessage } from './survivorChatBridge'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 
 type Power = 'triple_steal' | 'island_raid'
 type Result<T> = { ok: true; value: T } | { ok: false; status: 403 | 404 | 409 | 422; code: string; error: string }
@@ -131,8 +132,9 @@ export async function playStealThree(leagueId: string, userId: string, input: { 
         const prior = source.waiverPriority
         await tx.redraftRoster.update({ where: { id: source.id }, data: { waiverPriority: boostedPriority } })
         await tx.survivorAuditEntry.create({ data: { leagueId, week: initial.week, category: 'idol', action: 'steal_three_waiver_boost', actorUserId: userId, targetUserId: source.ownerId, relatedEntityId: source.id, relatedEntityType: 'redraft_roster', data: { previousPriority: prior, boostedPriority, week: initial.week }, isVisibleToCommissioner: true, isVisibleToPublic: false } })
-        await tx.notificationOutbox.create({ data: { leagueId, userId: source.ownerId, channel: 'push', eventType: 'survivor_steal_three', title: 'Your Survivor roster was raided', body: 'You have top waiver priority this week. Open your league to see the raid.', metadata: { actionHref: `/league/${leagueId}` } } })
-        await tx.platformNotification.create({ data: { userId: source.ownerId, type: 'survivor:steal_three', title: 'Your roster was raided', body: 'Three-player raid results are in your league. You have top waiver priority for this week.', severity: 'high', productType: 'sports', meta: { leagueId, deepLinkPath: `/league/${leagueId}` } } })
+        if (!isSeatPlaceholderUserId(source.ownerId)) await tx.notificationOutbox.create({ data: { leagueId, userId: source.ownerId, channel: 'push', eventType: 'survivor_steal_three', title: 'Your Survivor roster was raided', body: 'You have top waiver priority this week. Open your league to see the raid.', metadata: { actionHref: `/league/${leagueId}` } } })
+        // A raided team Chimmy runs has no account: a notification row needs one and would fail the raid.
+        if (!isSeatPlaceholderUserId(source.ownerId)) await tx.platformNotification.create({ data: { userId: source.ownerId, type: 'survivor:steal_three', title: 'Your roster was raided', body: 'Three-player raid results are in your league. You have top waiver priority for this week.', severity: 'high', productType: 'sports', meta: { leagueId, deepLinkPath: `/league/${leagueId}` } } })
         await tx.leagueChatMessage.create({ data: { leagueId, userId, message: `AF Host: ${initial.ownerName} played Steal 3 on your team. ${chosen.filter(row => row.rosterId === source.id).map(row => row.playerName).join(', ')} moved to another roster. You have top waiver priority for week ${initial.week}. ${drops.length ? `${drops.length} dropped players are now on waivers.` : 'No players needed to be dropped.'}`, type: 'system', isPrivate: true, visibleToUserId: source.ownerId, messageSubtype: 'chimmy_private' } })
       }
       const channel = await tx.survivorChatChannel.findFirst({ where: { leagueId, channelType: 'league', isArchived: false }, select: { id: true } })

@@ -21,4 +21,3 @@ describe('ESPN college box ingestion', () => {
     expect(upsert).not.toHaveBeenCalled()
   })
 })
-

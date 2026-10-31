@@ -41,6 +41,8 @@ export const weeklyBlueprintMessages = defineMessages({
     sportPlanBlurb:
       'Sport alone does not establish the format. Confirm points, categories, roto and lock rules in each league. Game-volume, category and limit forecasts require verified data.',
     loadingLocalTime: 'Loading local time…',
+    /** The locale the game and calculation times are formatted in. */
+    timeLocale: 'en',
     playoffPath: 'Your playoff path',
     estimatedProbability: 'estimated probability',
     statusClinched: 'Clinched under the modeled rules.',
@@ -106,6 +108,7 @@ export const weeklyBlueprintMessages = defineMessages({
     sportPlanBlurb:
       'El deporte no confirma el formato. Comprueba puntos, categorías, roto y reglas de bloqueo en cada liga. Los pronósticos de volumen, categorías y límites solo se muestran cuando hay datos verificados.',
     loadingLocalTime: 'Cargando hora local…',
+    timeLocale: 'es',
     playoffPath: 'Tu camino a los playoffs',
     estimatedProbability: 'probabilidad estimada',
     statusClinched: 'Clasificación asegurada según las reglas modeladas.',

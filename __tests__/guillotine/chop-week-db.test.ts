@@ -55,6 +55,10 @@ vi.mock('@/lib/ai/providerRouter', () => ({
 
 import { prisma } from '@/lib/prisma'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
+import { runElimination } from '@/lib/guillotine/GuillotineEliminationEngine'
+import { releaseChoppedRosters } from '@/lib/guillotine/GuillotineRosterReleaseEngine'
+import { upsertGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
+import { runGuillotineHandler } from '@/lib/specialty-automation/handlers/guillotineHandler'
 
 const SEASON = 2026
 /** Each week's Monday night kickoff; the chop waits a day past it for stat corrections. */
@@ -79,7 +83,7 @@ const TEAMS: Team[] = [
 
 const created = { leagueIds: [] as string[], userIds: [] as string[], playerIds: [] as string[] }
 
-async function league(teams: Team[] = TEAMS) {
+async function league(teams: Team[] = TEAMS, opts: { platform?: string; settings?: Record<string, unknown> } = {}) {
   const tag = randomUUID().slice(0, 8)
   const users = []
   for (let i = 0; i < teams.length; i++) {
@@ -89,8 +93,9 @@ async function league(teams: Team[] = TEAMS) {
   await prisma.tenant.upsert({ where: { id: 'allfantasy' }, create: { id: 'allfantasy', slug: 'allfantasy', name: 'Chop-week test' }, update: {} })
   const lg = await prisma.league.create({
     data: {
-      userId: users[0]!.id, platform: 'allfantasy', platformLeagueId: `chop-${tag}`, name: `Chop Week ${tag}`,
+      userId: users[0]!.id, platform: opts.platform ?? 'allfantasy', platformLeagueId: `chop-${tag}`, name: `Chop Week ${tag}`,
       season: SEASON, sport: 'NFL', leagueType: 'guillotine', leagueVariant: 'guillotine', guillotineMode: true,
+      ...(opts.settings ? { settings: opts.settings } : {}),
     },
   })
   created.leagueIds.push(lg.id)
@@ -302,5 +307,90 @@ describe.runIf(enabled)('a Guilly chop week against a real database', () => {
     expect(await sync(lg, 2, afterWeek(1))).toMatchObject({ outcome: 'chopped', week: 1, choppedRedraftRosterIds: [lg.byName('Daggers').redraftId] })
     const [chop] = (await state(lg)).eliminations
     expect(chop).toMatchObject({ eliminatedTeamName: 'Daggers', wasTiebreaker: true })
+  })
+
+  describe('an imported league is never chopped here (lib/guillotine/importedLeagueGuard.ts)', () => {
+    // Week 1's scores on file and its last game long final: everything the engine needs to chop someone.
+    // Blades is the low score, so an engine that ran would chop Blades.
+    async function seedWeekOne(lg: League) {
+      const pts: Record<string, number> = { Axes: 12, Blades: 6, Cleavers: 10, Daggers: 8 }
+      await prisma.guillotinePeriodScore.createMany({
+        data: lg.rosters.map((r) => ({ leagueId: lg.leagueId, rosterId: r.rosterId, weekOrPeriod: 1, season: SEASON, periodPoints: pts[r.name]!, seasonPointsCumul: pts[r.name]! })),
+      })
+    }
+    const chop = (lg: League) => runElimination({ leagueId: lg.leagueId, weekOrPeriod: 1, season: SEASON, periodEndedAt: new Date(KICKOFF[1]!), skipChat: true })
+
+    it('the same calls chop a native league (the control: the data really is chop-ready)', async () => {
+      const lg = await league()
+      await seedWeekOne(lg)
+      expect(await chop(lg)).toMatchObject({ choppedRosterIds: [lg.byName('Blades').rosterId] })
+      expect((await state(lg)).emptied).toEqual(['Blades'])
+    })
+
+    it('a Sleeper league with a config row: the engine, the automation handler and the roster release all leave it untouched', async () => {
+      const lg = await league(TEAMS, { platform: 'sleeper' })
+      await seedWeekOne(lg)
+      expect(await chop(lg)).toMatchObject({ choppedRosterIds: [], reason: expect.stringMatching(/imported/) })
+      const handler = await runGuillotineHandler({ leagueId: lg.leagueId, week: 1, season: SEASON, trigger: 'onManualRun' } as never)
+      expect(handler).toMatchObject({ skipped: true, skipReason: 'imported_league' })
+      await releaseChoppedRosters({ leagueId: lg.leagueId, rosterIds: [lg.byName('Blades').rosterId], releaseTiming: 'immediate' })
+
+      const after = await state(lg)
+      expect(after.choppedByWeek).toEqual({})
+      expect(after.eliminations).toHaveLength(0)
+      expect(after.emptied).toEqual([])
+      expect(after.eliminated).toEqual([])
+      expect(after.teamsOut).toEqual([])
+    })
+
+    it('no config row is written for an imported league; a native league still gets one', async () => {
+      const imported = await league(TEAMS, { platform: 'sleeper' })
+      await prisma.guillotineLeagueConfig.delete({ where: { leagueId: imported.leagueId } })
+      expect(await upsertGuillotineConfig(imported.leagueId, { teamsPerChop: 2 })).toBeNull()
+      expect(await prisma.guillotineLeagueConfig.count({ where: { leagueId: imported.leagueId } })).toBe(0)
+
+      const native = await league()
+      await upsertGuillotineConfig(native.leagueId, { teamsPerChop: 2 })
+      expect((await prisma.guillotineLeagueConfig.findUniqueOrThrow({ where: { leagueId: native.leagueId } })).teamsPerChop).toBe(2)
+      })
+    })
+
+  describe('best ball Guilly (settings.best_ball, lib/guillotine/guillotineBestBall.ts)', () => {
+    // Blades' starter had a bad week and its backup a big one: a lineup league chops Blades, a best
+    // ball league starts the backup and chops Daggers instead.
+    const SWAP: Team[] = [
+      { name: 'Axes', starter: [300], bench: [100] },
+      { name: 'Blades', starter: [150], bench: [280] },
+      { name: 'Cleavers', starter: [250], bench: [100] },
+      { name: 'Daggers', starter: [200], bench: [100] },
+    ]
+
+    it('scores every team on its best lineup, so the benched big week counts and a different team is chopped', async () => {
+      const lg = await league(SWAP, { settings: { best_ball: true } })
+      expect(await sync(lg, 2, afterWeek(1))).toMatchObject({ outcome: 'chopped', week: 1, choppedRedraftRosterIds: [lg.byName('Daggers').redraftId] })
+      const scores = await prisma.guillotinePeriodScore.findMany({ where: { leagueId: lg.leagueId, weekOrPeriod: 1 } })
+      const points = Object.fromEntries(scores.map((p) => [lg.rosters.find((x) => x.rosterId === p.rosterId)!.name, p.periodPoints]))
+      // Blades scored its backup's line, not its starter's.
+      const lineupLeague = await league(SWAP)
+      await sync(lineupLeague, 2, afterWeek(1))
+      const lineupScores = await prisma.guillotinePeriodScore.findMany({ where: { leagueId: lineupLeague.leagueId, weekOrPeriod: 1 } })
+      const lineupPoints = Object.fromEntries(lineupScores.map((p) => [lineupLeague.rosters.find((x) => x.rosterId === p.rosterId)!.name, p.periodPoints]))
+      expect(points.Blades).toBeGreaterThan(lineupPoints.Blades!)
+      expect(points.Axes).toBe(lineupPoints.Axes)
+      expect((await state(lineupLeague)).choppedByWeek).toEqual({ Blades: 1 })
+      expect((await state(lg)).choppedByWeek).toEqual({ Daggers: 1 })
+    })
+
+    it('a tie at the bottom still goes to bench points: the players the best lineup left out', async () => {
+      // Cleavers and Daggers both start 200 yards; Daggers' left-out quarterback scored less.
+      const lg = await league([
+        { name: 'Axes', starter: [300], bench: [100] },
+        { name: 'Blades', starter: [280], bench: [100] },
+        { name: 'Cleavers', starter: [200], bench: [150] },
+        { name: 'Daggers', starter: [200], bench: [50] },
+      ], { settings: { best_ball: true } })
+      expect(await sync(lg, 2, afterWeek(1))).toMatchObject({ outcome: 'chopped', week: 1, choppedRedraftRosterIds: [lg.byName('Daggers').redraftId] })
+      expect((await state(lg)).eliminations[0]).toMatchObject({ eliminatedTeamName: 'Daggers', wasTiebreaker: true })
+    })
   })
 })

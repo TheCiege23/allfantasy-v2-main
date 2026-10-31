@@ -1,3 +1,4 @@
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { defineMessages } from '@/lib/i18n/messages'
 
 /**
@@ -29,6 +30,16 @@ type CheckKind = 'out' | 'bye' | 'empty' | 'swap' | 'questionable'
 const CHECK_TAG: Record<CheckKind, string> = { out: 'OUT', bye: 'BYE', empty: 'EMPTY', swap: 'SWAP', questionable: 'Q' }
 const CHECK_TAG_ES: Record<CheckKind, string> = { out: 'FUERA', bye: 'DESCANSO', empty: 'VACÍO', swap: 'CAMBIO', questionable: 'Q' }
 
+/**
+ * The status in Spanish, by its abbreviation — the same words as `RosterKey`. `full` is the
+ * provider's own text ("Questionable"), so without this a screen reader said English in Spanish.
+ * An unfamiliar designation keeps the provider's text, as `abbreviate` does.
+ */
+const STATUS_ES: Record<string, string> = {
+  H: 'sano', Q: 'dudoso', D: 'poco probable', O: 'fuera', IR: 'reserva de lesionados', DNP: 'no entrenó',
+  P: 'probable', SUS: 'suspendido', PUP: 'no apto físicamente', INA: 'inactivo',
+}
+
 const CONFIDENCE_ES: Record<string, string> = { HIGH: 'alta', MEDIUM: 'media', LOW: 'baja', INSUFFICIENT: 'insuficiente' }
 
 export const myTeamScreenMessages = defineMessages({
@@ -36,6 +47,10 @@ export const myTeamScreenMessages = defineMessages({
     ordinal: ordinalEn,
     /** "3 of 12" — the word between a rank and its field. */
     of: 'of',
+    /** The lock time's locale, once the reader's zone is known; empty is "none" — the browser's own. */
+    lockTimeLocale: '',
+    /** StatusChip's spoken/hover text: the provider's own designation. */
+    statusFull: (_short: string, provider: string): string => provider,
 
     // UnidentifiedNote
     unidentifiedNote: (count: number) =>
@@ -52,6 +67,7 @@ export const myTeamScreenMessages = defineMessages({
     rightOnMedian: 'right on the league median',
     /** `amount` is already formatted in the reader's locale. */
     vsMedian: (amount: string, above: boolean) => `${amount} ${above ? 'above' : 'below'} the median`,
+    vsMedianAmount: (amount: number): string => amount.toLocaleString(getAppIntlLocale()),
     bestPosition: (position: string, rank: number) => `${position} is your best (${ordinalEn(rank)})`,
     thinnestPosition: (position: string, rank: number) => `${position} your thinnest (${ordinalEn(rank)})`,
     pricedOf: (priced: number, total: number) => `priced ${priced} of your ${total}`,
@@ -219,6 +235,8 @@ export const myTeamScreenMessages = defineMessages({
   es: {
     ordinal: ordinalEs,
     of: 'de',
+    lockTimeLocale: 'es',
+    statusFull: (short, provider) => STATUS_ES[short] ?? provider,
 
     unidentifiedNote: (count) =>
       `${count} ${count === 1 ? 'jugador más' : 'jugadores más'} en esta lista no ${count === 1 ? 'coincide' : 'coinciden'} con nadie en nuestros datos, así que no se muestra${count === 1 ? '' : 'n'}. Siguen en tu plantilla.`,
@@ -230,6 +248,7 @@ export const myTeamScreenMessages = defineMessages({
 
     rightOnMedian: 'justo en la mediana de la liga',
     vsMedian: (amount, above) => `${amount} ${above ? 'por encima' : 'por debajo'} de la mediana`,
+    vsMedianAmount: (amount) => amount.toLocaleString('es'),
     bestPosition: (position, rank) => `${position} es tu mejor posición (${ordinalEs(rank)})`,
     thinnestPosition: (position, rank) => `${position} la más débil (${ordinalEs(rank)})`,
     pricedOf: (priced, total) => `valorados ${priced} de tus ${total}`,

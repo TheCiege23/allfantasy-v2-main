@@ -12,6 +12,16 @@ import { campusToggles } from '@/lib/c2c/campusLineup'
 import type { CampusLineupView } from '@/lib/c2c/campusLineupView'
 import { campusCopy, campusLang } from '@/lib/i18n/c2c-campus-copy'
 
+/** A UTC-midnight date key as "Nov 3" / "3 nov" — the window's bounds are date keys, not instants. */
+function shortDate(iso: string, lang: 'en' | 'es'): string {
+  return new Date(iso).toLocaleDateString(lang === 'es' ? 'es' : 'en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+/** The window is `[start, end)`: the last day that counts is the day before `end`. */
+function lastDay(endIso: string): string {
+  return new Date(new Date(endIso).getTime() - 86_400_000).toISOString()
+}
+
 export function CampusLineupPanel({
   view,
   editable,
@@ -55,9 +65,15 @@ export function CampusLineupPanel({
             <p className="text-xs font-semibold text-primary">
               {t('filled', { n: view.starterIds.length, total: view.seats.length })} · {t('slots', { slots })}
             </p>
-            {view.sport !== 'basketball' ? <p className="text-xs text-muted">
-              {view.cfbWeeks.length ? t('weeks', { weeks: view.cfbWeeks.join(', '), nfl: view.nflWeek }) : t('noWeeks')}
-            </p> : null}
+            <p className="text-xs text-muted">
+              {view.sport === 'basketball'
+                ? view.window
+                  ? t('dates', { from: shortDate(view.window.start, lang), to: shortDate(lastDay(view.window.end), lang) })
+                  : t('noDates')
+                : view.cfbWeeks.length
+                  ? t('weeks', { weeks: view.cfbWeeks.join(', '), nfl: view.nflWeek })
+                  : t('noWeeks')}
+            </p>
             {!editable ? <p className="text-xs text-muted">{t('locked')}</p> : null}
             {view.players.length === 0 ? (
               <p className="text-xs text-muted">{t('noPlayers')}</p>

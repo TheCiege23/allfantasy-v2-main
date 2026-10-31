@@ -8,8 +8,8 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { waiverFactText } from '@/lib/core-app/playerCardCopy'
 import { useMessages } from '@/components/i18n/useMessages'
 import { waiverEdgeMessages } from '@/lib/core-app/messages/waiverEdge'
+import { coreLocale } from '@/lib/core-app/messages/coreLocale'
 import type { WaiverEdge } from '@/lib/competitive-edge/waiverEdge'
-import { getIntlLocale } from '@/lib/i18n/constants'
 
 /*
  * Competitive Edge on Waivers: who you are bidding against — how much FAAB each other manager has
@@ -65,7 +65,7 @@ export function WaiverCompetitiveEdge({
   }
 
   const { leagueFacts, rivals, coverage } = edge.data
-  const asOf = asOfLabel(coverage.asOf, language === 'es' ? getIntlLocale('es') : 'en-US')
+  const asOf = asOfLabel(coverage.asOf, coreLocale(language).intlLocale)
 
   return (
     <section className="af-card af-wv-section" data-testid="waiver-competitive-edge" aria-label={aria}>

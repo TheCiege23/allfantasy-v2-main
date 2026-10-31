@@ -73,6 +73,14 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   await ensureVerifiedSlateChallenges(leagueId, week, plan.sport, ['pre_merge', 'post_swap'].includes(game.phase))
   // The weekly mini-game is bragging rights only: a failure here never holds up the season.
   await ensureWeeklyCall(leagueId, week, { sport: plan.sport, season: plan.season, merged: !['pre_merge', 'post_swap'].includes(game.phase), now }).catch(() => {})
+  // Exiled castaways Chimmy runs reserve a team and set their Exile lineup, once a period. Best-effort,
+  // like its council turn: a failure never holds up the island.
+  {
+    const { runChimmyExileTurn } = await import('./chimmyExile')
+    await runChimmyExileTurn(leagueId, now).catch(error => {
+      console.warn('[survivor] Chimmy Exile turn failed', error instanceof Error ? error.message : error)
+    })
+  }
 
   // Finalized player rows only exist after the common NBA/NHL slate, window,
   // grace and coverage checks. A missing or late feed simply keeps this pending.
@@ -100,7 +108,15 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
 
   if (kind === 'elimination') {
     if (game.activeCouncilId) {
-      if (!game.tribalDeadline || game.tribalDeadline > now) return 'voting_open'
+      if (!game.tribalDeadline || game.tribalDeadline > now) {
+        // Castaways Chimmy runs vote (and play an idol when at risk) while the window is open.
+        // Idempotent, best-effort: a failure never holds up the council.
+        const { runChimmyCouncilTurn } = await import('./chimmyCastaway')
+        await runChimmyCouncilTurn(leagueId, game.activeCouncilId).catch(error => {
+          console.warn('[survivor] Chimmy council turn failed', error instanceof Error ? error.message : error)
+        })
+        return 'voting_open'
+      }
       await processTribalDeadline(leagueId)
       return 'ceremony_processed'
     }
@@ -190,6 +206,16 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   }
   if (calendarWeek <= week) return 'awaiting_next_week'
   await generateAndPostWeeklyRecap(leagueId, week)
+  // The commissioner's weekly line per Chimmy team. Once per week; never holds the island up.
+  {
+    const { sendChimmyWeeklyReport } = await import('./chimmyWeeklyReport')
+    await sendChimmyWeeklyReport(leagueId, week).catch(error => {
+      console.warn('[survivor] Chimmy weekly report failed', error instanceof Error ? error.message : error)
+    })
+    // Chimmy's castaways that made it through the week say so in their huddle (never throws).
+    const { postChimmyWeekLines } = await import('./chimmyCastawayChat')
+    await postChimmyWeekLines(leagueId, week)
+  }
   await dissolveSurpriseTribes(leagueId, week)
   await advanceWeek(leagueId)
   return 'week_advanced'

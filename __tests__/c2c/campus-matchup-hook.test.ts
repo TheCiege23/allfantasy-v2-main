@@ -21,7 +21,7 @@ const { db, campusPointsForMatchup, nbaCampusPointsForMatchup } = vi.hoisted(() 
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('@/lib/c2c/campusScoring', async () => ({
   campusPointsForMatchup,
-  isFootballC2CLeague: (await vi.importActual<typeof import('@/lib/c2c/campusLineup')>('@/lib/c2c/campusLineup')).isFootballC2CLeague,
+  campusSport: (await vi.importActual<typeof import('@/lib/c2c/campusLineup')>('@/lib/c2c/campusLineup')).campusSport,
 }))
 vi.mock('@/lib/merged-devy-c2c/C2CLeagueConfig', () => ({ getC2CConfig: vi.fn(async () => ({ collegeScoringSystem: 'points', bestBallCollege: false, standingsModel: 'unified' })) }))
 vi.mock('@/lib/c2c/nbaCampusMatchupScoring', () => ({ nbaCampusPointsForMatchup }))
@@ -106,15 +106,31 @@ describe('campus points in the matchup score', () => {
   })
 
   it('any other league is never asked', async () => {
-    for (const over of [{ leagueVariant: 'devy_dynasty' }, { platform: 'sleeper' }]) {
+    for (const over of [{ leagueVariant: 'devy_dynasty' }, { platform: 'sleeper' }, { sport: 'NHL' }, { sport: 'NBA', platform: 'sleeper' }]) {
       db.league.findFirst.mockResolvedValue(league(over))
       await updateMatchupScores('m1')
     }
     expect(campusPointsForMatchup).not.toHaveBeenCalled()
+    expect(nbaCampusPointsForMatchup).not.toHaveBeenCalled()
     for (const [call] of db.redraftMatchup.update.mock.calls) {
       expect(call.data.homeScore).toBe(call.data.awayScore)
       expect(call.data.lineupSnapshots.redraftScoring.campus).toBeUndefined()
     }
+  })
+
+  it('a native NBA C2C league adds its college basketball campus points, by the week’s dates', async () => {
+    const hoops = {
+      home: { points: 31.25, missingPlayerIds: [], allFinal: true },
+      away: { points: 0, missingPlayerIds: [], allFinal: true },
+    }
+    nbaCampusPointsForMatchup.mockResolvedValue(hoops)
+    db.league.findFirst.mockResolvedValue(league({ sport: 'NBA' }))
+    await updateMatchupScores('m1')
+    expect(campusPointsForMatchup).not.toHaveBeenCalled()
+    expect(nbaCampusPointsForMatchup).toHaveBeenCalledWith(db, expect.objectContaining({ leagueId: 'L1', season: 2026, week: 3, homeRosterId: 'H', awayRosterId: 'A' }))
+    const data = db.redraftMatchup.update.mock.calls[0]![0].data
+    expect(data.homeScore).toBe(Math.round((data.awayScore + 31.25) * 100) / 100)
+    expect(data.lineupSnapshots.redraftScoring.campus).toEqual(hoops)
   })
 
   it('a bye team’s median score counts its campus starters', async () => {

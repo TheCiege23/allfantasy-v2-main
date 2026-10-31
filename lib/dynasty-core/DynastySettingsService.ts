@@ -1,3 +1,5 @@
+import { readRookieAuctionSettings } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
+import { normalizeRookieOrderMethod } from '@/lib/draft-lottery/rookieOrderMethod'
 /**
  * Dynasty settings service: effective settings, presets, upsert config, draft order audit.
  */
@@ -130,10 +132,11 @@ export async function getEffectiveDynastySettings(
     playoffTeamCount,
     playoffStructure,
     regularSeasonWeeks,
-    rookiePickOrderMethod: config?.rookiePickOrderMethod ?? 'max_pf',
+    rookiePickOrderMethod: normalizeRookieOrderMethod(config?.rookiePickOrderMethod ?? 'max_pf'),
     useMaxPfForNonPlayoff: config?.useMaxPfForNonPlayoff ?? true,
     rookieDraftRounds: config?.rookieDraftRounds ?? DYNASTY_DEFAULT_ROOKIE_DRAFT_ROUNDS,
     rookieDraftType: config?.rookieDraftType ?? DYNASTY_DEFAULT_ROOKIE_DRAFT_TYPE,
+    rookieAuction: readRookieAuctionSettings(settings),
     divisionsEnabled: config?.divisionsEnabled ?? false,
     tradeDeadlineWeek: config?.tradeDeadlineWeek ?? null,
     waiverTypeRecommended: config?.waiverTypeRecommended ?? 'faab',

@@ -3,8 +3,9 @@ import type { WeeklyPlayoffPath } from './weeklyPlayoffPath'
 import { formatPct1 } from './weeklyPercent'
 import { messagesFor } from '@/lib/i18n/messages'
 import { weeklyShareTextMessages } from './messages/weeklyShareText'
+import { langFromFlag } from './messages/coreLocale'
 
-const copy = (es: boolean) => messagesFor(weeklyShareTextMessages, es ? 'es' : 'en')
+const copy = (es: boolean) => messagesFor(weeklyShareTextMessages, langFromFlag(es))
 
 export const WEEK_SOCIALS = ['X', 'Facebook', 'Instagram', 'TikTok', 'Threads', 'LinkedIn', 'YouTube'] as const
 export type WeekSocial = typeof WEEK_SOCIALS[number]

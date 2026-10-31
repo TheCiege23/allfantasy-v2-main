@@ -23,6 +23,7 @@ import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
 import { getPausedSyncKeys } from '@/lib/core-app/syncPreferences'
 import { getLeagueDataSignals } from '@/lib/core-app/leagueDataSignals'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
+import { coreShellRedraftSport } from '@/lib/core-app/coreShellRedraftIdentity'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
 import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSignals'
@@ -31,10 +32,12 @@ import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-ava
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import { isSubscriptionEntitlementBypassUserId } from '@/lib/dev-admin/access'
 import { attachLeagueHubs } from '@/lib/core-app/attachLeagueHubs'
+import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLinks'
 import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNavigation'
 import ConnectedDecisionScopeBar from '@/components/core-app/ConnectedDecisionScopeBar'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
+import { leagueThemeForTypeKey } from '@/lib/core-app/survivorTheme'
 import { navLabel } from '@/lib/core-app/navLabels'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
@@ -942,6 +945,9 @@ export default async function AfCorePage({
    */
   const railHubsRead = attachLeagueHubs(userId, rail)
   railHubsRead.catch(() => {})
+  // Each Exile Island under its Survivor league (lib/core-app/survivorExileRail.ts). Same start-early shape.
+  const railExileRead = attachSurvivorExileLinks(rail, userId)
+  railExileRead.catch(() => {})
 
   const tradeLeagueRow = selectedLeagueRow
   const tradeLeagueTypeKey = tradeLeagueRow
@@ -1283,6 +1289,7 @@ export default async function AfCorePage({
     railRecords,
   ] = await shellReads
   await railHubsRead
+  await railExileRead
 
   /*
    * The league-first landing. A redirect, so it must stay in AfCorePage ahead of the shell render
@@ -1651,6 +1658,8 @@ export default async function AfCorePage({
   return (
     <AfCoreShell
       nativeLeague={!!selectedLeagueId && !!selectedLeaguePlatform && !isImportedPlatform(selectedLeaguePlatform)}
+      /* Redraft identity for a native redraft ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
+      redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform)}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
@@ -1661,6 +1670,7 @@ export default async function AfCorePage({
       syncEligibleCount={syncEligibleCount}
       leagueHasScoredWeek={leagueHasScoredWeek}
       selectedLeagueId={selectedLeagueId}
+      leagueTheme={leagueThemeForTypeKey(tradeLeagueTypeKey)}
       lineupHandoff={lineupHandoff}
       scope={shellScope}
       hasIdpDefense={hasIdpDefense}
@@ -5463,9 +5473,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               {language === 'es'
                 ? 'No pudimos leer esta liga en este momento. Es un fallo de lectura de nuestra parte: tus otras ligas no se ven afectadas y nada de esta ha cambiado. Recarga o '
                 : 'We could not read this league just now. This is a read failure on our side — your other leagues are unaffected, and nothing about this one has changed. Reload, or '}
-              <a href="/core" style={{ color: 'var(--accent)' }}>
+              <Link href="/core" style={{ color: 'var(--accent)' }}>
                 {language === 'es' ? 'vuelve a todas tus ligas' : 'go back to all leagues'}
-              </a>
+              </Link>
               .
             </p>
           </div>

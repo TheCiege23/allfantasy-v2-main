@@ -12,8 +12,8 @@ describe('basketball campus lineup seating', () => {
   it('checks that basketball starters belong to the college roster and fit seats', () => {
     const data = { lineup_sections: { devy: ['guard', 'center'], campus: ['guard', 'center'] } }
     const positions: Record<string, string> = { guard: 'SG', center: 'C' }
-    expect(validateCampusLineup({ before: data, after: data, slots: { G: 1, C: 1 }, positionOf: id => positions[id], football: false, basketball: true })).toEqual([])
-    expect(validateCampusLineup({ before: { lineup_sections: { devy: ['guard'] } }, after: data, slots: { G: 1, C: 1 }, positionOf: id => positions[id], football: false, basketball: true })[0]?.code).toBe('campus_not_college')
+    expect(validateCampusLineup({ before: data, after: data, slots: { G: 1, C: 1 }, positionOf: id => positions[id], sport: 'basketball' })).toEqual([])
+    expect(validateCampusLineup({ before: { lineup_sections: { devy: ['guard'] } }, after: data, slots: { G: 1, C: 1 }, positionOf: id => positions[id], sport: 'basketball' })[0]?.code).toBe('campus_not_college')
     expect(campusToggles(['G'], [], [{ id: 'g', position: 'SG' }, { id: 'c', position: 'C' }], 'basketball').map(x => x.canStart)).toEqual([true, false])
   })
 })

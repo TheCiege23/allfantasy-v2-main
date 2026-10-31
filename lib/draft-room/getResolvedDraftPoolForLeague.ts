@@ -86,6 +86,11 @@ import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { computeAfAdp } from '@/lib/adp/afAdp'
 import type { AdpCorpusSplit } from '@/lib/adp/loadAdpBoard'
+import { loadNhlFantraxProspects } from '@/lib/player-identity/nhlFantraxProspects'
+import { identityNameKey } from '@/lib/redraft/rosterGameLogIdBridge'
+import { isTeamlessExemptProspect, nhlProspectRawRows, shouldOfferNhlFantraxProspects } from '@/lib/draft-room/nhlProspectPoolRows'
+import { loadMlbFantraxProspects } from '@/lib/player-identity/mlbFantraxProspects'
+import { mlbProspectRawRows, shouldOfferMlbFantraxProspects } from '@/lib/draft-room/mlbProspectPoolRows'
 import { shouldVerifyCurrentNbaRoster, loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches, nbaSurvivorPlayerIsEligible, type NbaRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
 const DEFAULT_LIMIT = 300
@@ -157,6 +162,8 @@ export type DraftPoolRawRow = {
   sourcePlayerId?: string | null
   sourceSleeperId?: string | null
   draftIdProvenance?: DraftIdProvenance
+  /** NHL / MLB rookie drafts: a Fantrax-only prospect (`lib/draft-room/nhlProspectPoolRows.ts`, `mlbProspectPoolRows.ts`). */
+  prospectSource?: 'fantrax'
 }
 
 export type GetResolvedDraftPoolOptions = {
@@ -1564,6 +1571,44 @@ export async function getResolvedDraftPoolForLeague(
     }
   }
 
+  /*
+   * NHL rookie drafts: Fantrax-only prospects (AHL / junior / unsigned), read from Postgres
+   * (`lib/player-identity/nhlFantraxProspects.ts` has the rule and its limits). Every name already on
+   * this board or in the sport's pool is excluded, so a pro is never listed twice. A failure leaves the
+   * board as it was — the old behaviour — rather than failing the draft.
+   */
+  if (shouldOfferNhlFantraxProspects({ sport, playerPool: draftSession?.playerPool, draftModeLabel: draftSession?.draftModeLabel })) {
+    const perfProspects = perfStart('5b. loadNhlFantraxProspects')
+    const poolNames = new Set<string>()
+    for (const p of poolRows) { const k = identityNameKey(p.full_name); if (k) poolNames.add(k) }
+    for (const r of rawList) { const k = identityNameKey(r.name ?? r.playerName ?? r.full_name ?? ''); if (k) poolNames.add(k) }
+    const loaded = await loadNhlFantraxProspects(prisma as never, { poolNames }).catch((err) => {
+      console.warn('[draft-pool] NHL Fantrax prospects unavailable:', err instanceof Error ? err.message : String(err))
+      return null
+    })
+    if (loaded && loaded.prospects.length > 0) rawList = [...rawList, ...nhlProspectRawRows(loaded.prospects, useMixedPoolTypeMarkers)]
+    perfProspects()
+  }
+
+  /*
+   * MLB rookie drafts: the same, for Fantrax-only minor leaguers and unsigned players
+   * (`lib/player-identity/mlbFantraxProspects.ts`). About 4,500 MLB players we already track carry no
+   * Fantrax id, so the reader excludes by name (and club + surname) against every MLB identity, and
+   * this caller adds every name already on the board. A failure leaves the board as it was.
+   */
+  if (shouldOfferMlbFantraxProspects({ sport, playerPool: draftSession?.playerPool, draftModeLabel: draftSession?.draftModeLabel })) {
+    const perfMlbProspects = perfStart('5c. loadMlbFantraxProspects')
+    const poolNames = new Set<string>()
+    for (const p of poolRows) { const k = identityNameKey(p.full_name); if (k) poolNames.add(k) }
+    for (const r of rawList) { const k = identityNameKey(r.name ?? r.playerName ?? r.full_name ?? ''); if (k) poolNames.add(k) }
+    const loaded = await loadMlbFantraxProspects(prisma as never, { poolNames }).catch((err) => {
+      console.warn('[draft-pool] MLB Fantrax prospects unavailable:', err instanceof Error ? err.message : String(err))
+      return null
+    })
+    if (loaded && loaded.prospects.length > 0) rawList = [...rawList, ...mlbProspectRawRows(loaded.prospects, useMixedPoolTypeMarkers)]
+    perfMlbProspects()
+  }
+
   const proNames = new Set(rawList.map((r) => normalizeDraftPoolNameForDedupe(r.name ?? r.playerName ?? r.full_name ?? '')))
   const includeCollegeInPool =
     mergeCollegePool && !(strictPoolSeparation && (poolType === 'startup_vet' || poolType === 'startup_pro'))
@@ -2737,6 +2782,8 @@ export async function getResolvedDraftPoolForLeague(
   entries = entries.filter((e) => {
     const pos = canonicalPosition(e.position ?? '')
     if (pos === 'DEF' || pos === 'DST') return true
+    // An unsigned NHL / MLB prospect has no club by definition; the board labels him "Unsigned".
+    if (isTeamlessExemptProspect(e)) return true
     const team = e.team ?? null
     return team !== null && String(team).trim() !== '' && String(team).trim().toUpperCase() !== 'FA'
   })

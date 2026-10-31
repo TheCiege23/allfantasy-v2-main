@@ -20,6 +20,8 @@ type RulesView = {
   startWeek: number
   seasonWeeks: number
   endgameLocked: boolean
+  /** The draft has started: best ball is fixed for the season. Absent from an older server = unlocked. */
+  bestBallLocked?: boolean
   canEditPaid: boolean
   aiRecapAvailable: boolean
 }
@@ -173,6 +175,27 @@ export function GuillotineRulesEditor({ leagueId, onSaved }: { leagueId: string;
           })}
         </select>
       </Field>
+
+      <section className="space-y-1.5">
+        <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3">
+          <span>
+            <span className="block text-[13px] font-semibold text-white">Best ball lineups</span>
+            <span className="block text-[12px] text-white/50" data-testid="guillotine-rules-best-ball-help">
+              {view.bestBallLocked
+                ? `Fixed for this season — the draft has started. ${rules.bestBall ? 'Every team plays its best possible lineup each week.' : 'Managers set their own lineups.'}`
+                : 'Nobody sets a lineup: each week every team is scored on its best possible lineup from its players’ points. Can only be changed before the draft.'}
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            className="h-5 w-5"
+            checked={rules.bestBall === true}
+            disabled={view.bestBallLocked === true}
+            onChange={(e) => update({ bestBall: e.target.checked })}
+            data-testid="guillotine-rules-best-ball"
+          />
+        </label>
+      </section>
 
       <section className="space-y-1.5">
         <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3">

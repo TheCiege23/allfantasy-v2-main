@@ -23,6 +23,8 @@ import { resolveLineupStarterSlots } from '@/lib/league/lineupStarterSlots'
 import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { checkTaxiSave, logTaxiPromotions, type TaxiSaveCheck } from '@/lib/taxi/taxiRulesService'
 import { checkCampusSave } from '@/lib/c2c/campusLineupCheck'
+import { BEST_BALL_LINEUP_MESSAGE, isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
+import { lineupVersionOf } from '@/lib/roster/lineupVersion'
 
 /**
  * Locked starters keep their exact slot; a locked bench/IR player stays in that section.
@@ -113,6 +115,13 @@ export type PersistRosterLineupInput = {
   automationAudit?: { id: string; action: string; message: string; metadata: Record<string,unknown> }
   expectedOwnerUserId?: string
   expectedStarters?: string[]
+  /**
+   * The roster version (lib/roster/lineupVersion.ts) the caller built this lineup on. A mismatch is a 409
+   * with `code: 'LINEUP_CONFLICT'`, and a match makes the write conditional on the roster still being the one
+   * read here. The lineup screen sends it, which is what keeps an edit queued offline from overwriting a
+   * waiver add, a trade or a change made on another device in the meantime.
+   */
+  expectedLineupVersion?: string
   /** Taxi players this save promotes to answer a steal claim (lib/taxi/taxiStealing.ts). */
   taxiProtection?: readonly string[]
 }
@@ -126,7 +135,7 @@ function canonicalLineupEventTypeForSource(source: PersistRosterLineupInput['sou
 
 export async function persistRosterLineupWithEngine(
   input: PersistRosterLineupInput,
-): Promise<{ ok: true } | { ok: false; error: string; status?: number }> {
+): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' }> {
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
   })
@@ -141,9 +150,24 @@ export async function persistRosterLineupWithEngine(
     const current=(roster.playerData as Record<string,unknown> | null)?.starters
     if (!Array.isArray(current) || JSON.stringify(current.map(String))!==JSON.stringify(input.expectedStarters)) return {ok:false,error:'Your lineup changed. Refresh and compare again.',status:409}
   }
+  if (input.expectedLineupVersion && lineupVersionOf(roster.playerData) !== input.expectedLineupVersion) {
+    return { ok: false, error: 'Your roster changed since these lineup changes were made, so they were not applied.', status: 409, code: 'LINEUP_CONFLICT' }
+  }
 
   if ((input.source === 'user_save' || input.source === 'system') && await isCommissionerRosterLocked(input.leagueId, input.rosterId)) {
     return { ok: false, error: 'This roster is locked by the commissioner.', status: 403 }
+  }
+
+  // A best ball Guilly league sets its own lineup (lib/guillotine/guillotineBestBall.ts): a starter/bench
+  // shuffle would save and change nothing. IR and taxi moves (a player active on only one side) still save,
+  // as does a commissioner correcting a roster.
+  if (input.source !== 'commissioner_override' && isBestBallGuillotine(league)) {
+    const active = (data: unknown) => new Set([...lineupPlayerIds(data, 'starters'), ...lineupPlayerIds(data, 'bench')])
+    const after = active(input.nextPlayerData)
+    const stayedActive = [...active(roster.playerData)].filter((id) => after.has(id))
+    if (movedLockedLineupPlayer(roster.playerData, input.nextPlayerData, stayedActive)) {
+      return { ok: false, error: BEST_BALL_LINEUP_MESSAGE, status: 409 }
+    }
   }
 
   const sport = String(league.sport ?? 'NFL')
@@ -302,7 +326,7 @@ export async function persistRosterLineupWithEngine(
 
   try { await prisma.$transaction(async (tx) => {
     await input.transactionCheck?.(tx)
-    if (input.expectedStarters || nbaCampusRoster) {
+    if (input.expectedStarters || input.expectedLineupVersion || nbaCampusRoster) {
       const result=await tx.roster.updateMany({ where:{id:input.rosterId,...(input.expectedOwnerUserId?{platformUserId:input.expectedOwnerUserId}:{}),playerData:{equals:before}},data:{playerData:input.nextPlayerData as Prisma.InputJsonValue} })
       if(result.count!==1) throw new Error('STALE_TEAM_LINEUP')
     } else await tx.roster.update({
@@ -359,7 +383,7 @@ export async function persistRosterLineupWithEngine(
       }
     }
   }) } catch(e) {
-    if(e instanceof Error && e.message==='STALE_TEAM_LINEUP') return {ok:false,error:'Your roster changed while saving. Refresh and compare again.',status:409}
+    if(e instanceof Error && e.message==='STALE_TEAM_LINEUP') return {ok:false,error:'Your roster changed while saving. Refresh and compare again.',status:409,...(input.expectedLineupVersion?{code:'LINEUP_CONFLICT' as const}:{})}
     throw e
   }
 

@@ -7,6 +7,7 @@ import { tournamentCoCommissionerIds } from '@/lib/league/tournamentCoCommission
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { trackDiscoveryOrphanAdoption } from '@/lib/discovery-analytics/server'
 import { assignLeagueSeat, releaseLeagueSeat } from '@/lib/league/leagueSeats'
+import { endManagedForNewOwners } from '@/lib/inactive-manager/inactiveManagerService'
 
 type SessionWithUser = { user?: { id?: string } } | null
 
@@ -177,6 +178,13 @@ export async function PATCH(
     const status = seat.code === 'ROSTER_NOT_FOUND' || seat.code === 'USER_NOT_FOUND' ? 404 : 409
     return NextResponse.json({ error: seat.message, code: seat.code }, { status })
   }
+
+  // The team has a real manager now: if Chimmy was running it, Chimmy steps off at once (not at the
+  // next hourly sweep), and the commissioner who handed it to Chimmy is told.
+  const leagueName = (await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true } }))?.name ?? null
+  await endManagedForNewOwners(leagueId, commissionerId, leagueName).catch((error) => {
+    console.warn('[commissioner managers] Chimmy hand-back failed; the hourly sweep will retry', error instanceof Error ? error.message : error)
+  })
 
   if (wasOrphan) {
     await trackDiscoveryOrphanAdoption(

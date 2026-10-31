@@ -2,9 +2,10 @@ import type { WeeklyBlueprint } from './weeklyBlueprint'
 import { weeklyActionText } from './weeklyBlueprint'
 import { buildWeeklySwings } from './weeklySportPlan'
 import { commissionerWeeklyPlanMessages } from '@/lib/core-app/messages/commissionerWeeklyPlan'
+import { langFromFlag } from '@/lib/core-app/messages/coreLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 
-const copy = (es: boolean) => messagesFor(commissionerWeeklyPlanMessages, es ? 'es' : 'en')
+const copy = (es: boolean) => messagesFor(commissionerWeeklyPlanMessages, langFromFlag(es))
 
 /** Unsent, explicitly reviewed league-chat content. Never carry it across leagues. */
 export type ReviewedLeagueDraft = {

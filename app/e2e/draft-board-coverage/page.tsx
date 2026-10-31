@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { DraftBoard } from '@/components/app/draft-room/DraftBoard'
 import { DraftBoardPreview } from '@/components/app/draft-room/DraftBoardPreview'
+import { DraftCenterDockTabBar, type CenterDockTab } from '@/components/app/draft-room/DraftCenterDockTabBar'
 import { DraftRightDockTabs } from '@/components/app/draft-room/DraftRightDockTabs'
 import { QueuePanel } from '@/components/app/draft-room/QueuePanel'
 import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
@@ -56,5 +57,14 @@ export default function DraftBoardCoveragePage() {
         intelBody={<div>Intel</div>} chimmyBody={<div>Chimmy</div>} rosterBody={<div>Roster</div>}
         warRoomBody={<div>AF Legacy</div>} activityBody={<div>Activity</div>} chatBody={<div>Chat</div>} />
     </section>
+    {/* Below 1280px the room's dock is the center tab bar; at 768px it gets about 300px, at 1024 about 400. */}
+    {[240, 300, 400].map(width => <section key={width} data-testid={`coverage-mid-dock-${width}`} style={{ width }}>
+      <MidDockTabs />
+    </section>)}
   </main>
+}
+
+function MidDockTabs() {
+  const [tab, setTab] = useState<CenterDockTab>('queue')
+  return <DraftCenterDockTabBar active={tab} onSelect={setTab} showIntel showCommish redraftSnake />
 }

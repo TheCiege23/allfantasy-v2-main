@@ -4,8 +4,8 @@ import { defineMessages } from '@/lib/i18n/messages'
  * Live Scores sentences that carry numbers or names (lib/core-app/liveScoresCopy.ts, rendered by
  * components/core-app/screens/LiveScores.tsx and the game view). liveScoresCopy.ts keeps its exported
  * functions and their signatures; each now reads its sentence from here. Its exact-match `ES` table
- * and the label localisers (`playAgeCopy`, `projectionCopy`, `starterStageDetailCopy`) translate
- * English they are handed, so they stay where they are.
+ * stays there and hands its entry to `exact`; the label localisers (`playAge`, `projection`,
+ * `starterStageDetail`) are handed the English label and return it unchanged in English.
  * Every string is the one the function wrote before the move, byte for byte, in both languages —
  * a relocation, not a rewrite.
  */
@@ -14,6 +14,9 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
 
 /** Base names inside the Spanish diamond label; only `runnersOn`'s Spanish sentence reads it. */
 const BASE_ES: Record<string, string> = { first: 'primera', second: 'segunda', third: 'tercera' }
+
+/** The starter-stage counts `starterStageDetail` in lib/live/liveImpact was built from. */
+type StageImpact = { livePlayers: number; liveGames: number; upcomingPlayers?: number; finishedPlayers?: number }
 
 export const liveScoresMessages = defineMessages({
   en: {
@@ -53,6 +56,11 @@ export const liveScoresMessages = defineMessages({
     lockBenched: (n: number) => `${n} benched`,
     lockStarting: (n: number) => `${n} starting`,
     lockLeagues: (n: number) => `${n} leagues`,
+    // liveScoresCopy's exact-match table entry, and the label localisers
+    exact: (english: string, _translation: string | undefined): string => english,
+    starterStageDetail: (english: string, _impact: StageImpact): string => english,
+    playAge: (label: string): string => label,
+    projection: (label: string): string => label,
   },
   es: {
     updatedAgo: (age) => ` · actualizado hace ${age}`,
@@ -88,5 +96,26 @@ export const liveScoresMessages = defineMessages({
     lockBenched: (n) => `${n} en la banca`,
     lockStarting: (n) => `${n} ${plural(n, 'titular', 'titulares')}`,
     lockLeagues: (n) => `${n} ligas`,
+    exact: (english, translation) => translation ?? english,
+    starterStageDetail: (_english, impact) => {
+      const parts: string[] = []
+      if (impact.livePlayers > 0) parts.push(`en ${impact.liveGames} ${plural(impact.liveGames, 'partido', 'partidos')}`)
+      if (impact.upcomingPlayers) parts.push(`${impact.upcomingPlayers} por jugar`)
+      if (impact.finishedPlayers) parts.push(`${impact.finishedPlayers} ${plural(impact.finishedPlayers, 'terminado', 'terminados')}`)
+      return parts.join(' · ')
+    },
+    playAge: (label) => {
+      if (label === 'just now') return 'justo ahora'
+      const min = /^(\d+) min ago$/.exec(label)
+      if (min) return `hace ${min[1]} min`
+      const hr = /^(\d+) hr ago$/.exec(label)
+      if (hr) return `hace ${hr[1]} h`
+      return label
+    },
+    projection: (label) => {
+      if (label === 'out') return 'fuera'
+      if (label.startsWith('proj ')) return `proy. ${label.slice(5)}`
+      return label
+    },
   },
 })

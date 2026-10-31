@@ -1,3 +1,4 @@
+import { isWeightedRookieLottery, normalizeRookieOrderMethod } from '@/lib/draft-lottery/rookieOrderMethod'
 import { readVetoRule } from '@/lib/league-trade-engine/vetoRule'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 /**
@@ -31,12 +32,14 @@ import { isWaiverProcessingMode, readDailyWaiverScheduleFromSettings, WAIVER_DAY
 import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
 import { readAdvanced, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { readFaabOnChop } from '@/lib/guillotine/faabOnChop'
+import { readGuillotineBestBall } from '@/lib/guillotine/guillotineBestBall'
 import { isBlindAuctionLeague } from '@/lib/guillotine/blindWaiverCutoff'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import { readPickTradeDeadline } from '@/lib/trade-deadline/pickTradeDeadline'
 import { readPickTermsEnabled } from '@/lib/league-trade-engine/pickTerms'
+import { resolveNativePickYears } from '@/lib/league-trade-engine/nativePickYears'
 import { readTaxiStealingRule } from '@/lib/taxi/taxiStealing'
 import { readTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
 import { supportsDailyLineups } from '@/lib/redraft/lineupModeSwitch'
@@ -304,6 +307,7 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
     snapshot.faabOnChop = readFaabOnChop(row.settings)
     // The waiver rule the claims hold enforces (lib/guillotine/blindWaiverCutoff.ts); the sport decides it.
     snapshot.blindAuction = isBlindAuctionLeague({ sport: row.sport ?? null, guillotineMode: true, leagueVariant: 'guillotine' })
+    snapshot.bestBallLineups = readGuillotineBestBall(row.settings)
     Object.assign(snapshot, guillotineAdvancedSnapshot(readAdvanced(row.settings)))
   } else if (format === 'redraft' || format === 'keeper' || format === 'dynasty') {
     snapshot.medianGame = row.medianGame === true
@@ -443,7 +447,7 @@ export function tankingPenaltyRule(settings: unknown): TankingPenaltyRule {
  * `reverse_standings` reads as the commissioner setting it — never as an order the draft does not use.
  */
 export function effectiveRookieDraftOrder(configMethod: string | null | undefined, leagueSettings: unknown): string | null {
-  if (configMethod === 'weighted_lottery') return configMethod
+  if (isWeightedRookieLottery(configMethod)) return 'weighted_lottery'
   const rookie = record(record(leagueSettings).rookie_draft_order)
   if (record(rookie.live).enabled === true) return 'live'
   if (rookie.enabled === true) return rookie.mode === 'reverse_max_pf' ? 'auto_reverse_max_pf' : 'auto_worst_to_first'
@@ -456,12 +460,19 @@ export function effectiveRookieDraftOrder(configMethod: string | null | undefine
  * defaults the dynasty settings page shows. Shared by the popup and the dynasty settings save.
  */
 export function dynastyRulesFromConfig(
-  c: { rookiePickOrderMethod?: string | null; rookieDraftRounds?: number | null; rookieDraftType?: string | null } | null,
-): Pick<RuleSnapshot, 'rookieDraftOrder' | 'rookieDraftRounds' | 'rookieDraftType'> {
+  c: {
+    rookiePickOrderMethod?: string | null
+    rookieDraftRounds?: number | null
+    rookieDraftType?: string | null
+    futurePicksYearsOut?: number | null
+  } | null,
+): Pick<RuleSnapshot, 'rookieDraftOrder' | 'rookieDraftRounds' | 'rookieDraftType' | 'pickTradeYears'> {
   return {
-    rookieDraftOrder: c?.rookiePickOrderMethod ?? 'max_pf',
+    rookieDraftOrder: normalizeRookieOrderMethod(c?.rookiePickOrderMethod ?? 'max_pf'),
     rookieDraftRounds: c?.rookieDraftRounds ?? 4,
     rookieDraftType: c?.rookieDraftType ?? 'linear',
+    // The horizon the trade engine offers native picks over (resolveNativePickYears clamps it to 1-5).
+    pickTradeYears: resolveNativePickYears(c?.futurePicksYearsOut),
   }
 }
 

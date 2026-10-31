@@ -5,6 +5,7 @@ import type { HighlightAction } from '@/lib/analytics/highlights'
 import type { XPost } from '@/lib/highlights/x-types'
 import { messagesFor } from '@/lib/i18n/messages'
 import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
+import { langFromFlag } from '@/lib/core-app/messages/coreLocale'
 
 type Widgets = { createTweet(id: string, target: HTMLElement, options: Record<string, unknown>): Promise<HTMLElement | undefined> }
 let loader: Promise<Widgets> | null = null
@@ -31,7 +32,7 @@ function loadWidgets(): Promise<Widgets> {
 }
 
 export default function XPostEmbed({ post, es = false, onEvent }: { post: XPost; es?: boolean; onEvent?: (action: HighlightAction, post: XPost) => void }) {
-  const m = messagesFor(coreWidgetsMessages, es ? 'es' : 'en')
+  const m = messagesFor(coreWidgetsMessages, langFromFlag(es))
   const [requested, setRequested] = useState(false)
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const target = useRef<HTMLDivElement>(null)

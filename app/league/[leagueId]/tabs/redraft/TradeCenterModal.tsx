@@ -15,6 +15,8 @@ import {
   type RedraftTradeSettings,
   type TradeDecisionOsCard,
 } from '@/lib/redraft/client'
+import { MAX_REDRAFT_TRADE_TEAMS, uninvolvedTradeParticipants } from '@/lib/redraft/tradeParticipants'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 type Step = 'partner' | 'assets' | 'review'
 
@@ -29,8 +31,6 @@ type PreviewGrade = {
   evaluationReceiptId: string | null
 }
 
-type Side = 'mine' | 'theirs'
-
 function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -39,6 +39,13 @@ function initials(name: string): string {
     .slice(0, 2)
     .join('')
     .toUpperCase()
+}
+
+/** The league's review rule as words; an unknown value is shown as-is. */
+function reviewTypeLabel(t: (key: string) => string, value: string): string {
+  const key = `tradeCenter.reviewType.${value}`
+  const out = t(key)
+  return out === key ? value : out
 }
 
 function rosterLabel(row: RedraftRosterRow | undefined, fallbackId: string): string {
@@ -82,6 +89,7 @@ function PlayerCard({
   selected: boolean
   onToggle: () => void
 }) {
+  const { tInterpolate } = useOptionalLanguage()
   const proj = player.restOfSeasonProjection ?? player.weeklyProjection ?? null
   return (
     <button
@@ -101,13 +109,13 @@ function PlayerCard({
         <span className="text-[11px] text-white/50">
           {player.position}
           {player.team ? ` · ${player.team}` : ''}
-          {player.byeWeek ? ` · BYE ${player.byeWeek}` : ''}
+          {player.byeWeek ? ` · ${tInterpolate('tradeCenter.modal.bye', { week: player.byeWeek })}` : ''}
           {player.injuryStatus ? ` · ${player.injuryStatus}` : ''}
           {player.isLocked ? ' · 🔒' : ''}
         </span>
       </span>
       <span className="shrink-0 text-right text-[11px] text-white/55">
-        {proj != null ? `${proj.toFixed(1)} pts` : '—'}
+        {proj != null ? tInterpolate('tradeCenter.modal.points', { points: proj.toFixed(1) }) : '—'}
       </span>
     </button>
   )
@@ -139,6 +147,7 @@ export function TradeCenterModal({
   /** T7: when set (e.g. from "Build proposal"), preselect this partner and open at the assets step. */
   initialReceiverRosterId?: string | null
 }) {
+  const { t, tInterpolate, language } = useOptionalLanguage()
   const [step, setStep] = useState<Step>('partner')
   const [proposerRosterId, setProposerRosterId] = useState<string>('')
   const [receiverRosterId, setReceiverRosterId] = useState<string>('')
@@ -149,6 +158,17 @@ export function TradeCenterModal({
   const [theirsSel, setTheirsSel] = useState<string[]>([])
   const [mineFaab, setMineFaab] = useState(0)
   const [theirsFaab, setTheirsFaab] = useState(0)
+  /*
+   * MULTI-TEAM TRADES: up to two more teams beyond the receiver (four in all). With none chosen,
+   * every piece of this modal is the two-team flow it always was — these stay empty and unused.
+   */
+  const [extraPartnerIds, setExtraPartnerIds] = useState<string[]>([])
+  /** Loaded once per team; `null` records a team whose roster came back empty, so it is not refetched. */
+  const [extraRosters, setExtraRosters] = useState<Record<string, RedraftRosterClient | null>>({})
+  const [extraSel, setExtraSel] = useState<Record<string, string[]>>({})
+  const [extraFaab, setExtraFaab] = useState<Record<string, number>>({})
+  /** Multi-team only: which team receives each chosen asset, keyed `${fromRosterId}:${playerId | 'faab'}`. */
+  const [destOf, setDestOf] = useState<Record<string, string>>({})
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -178,6 +198,11 @@ export function TradeCenterModal({
     setTheirsSel([])
     setMineFaab(0)
     setTheirsFaab(0)
+    setExtraPartnerIds([])
+    setExtraRosters({})
+    setExtraSel({})
+    setExtraFaab({})
+    setDestOf({})
     setReason('')
     setError(null)
     setSuccessId(null)
@@ -208,7 +233,7 @@ export function TradeCenterModal({
           setReceiverRoster(b)
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load rosters')
+        if (!cancelled) setError(e instanceof Error ? e.message : t('tradeCenter.modal.error.loadRosters'))
       } finally {
         if (!cancelled) setAssetLoading(false)
       }
@@ -216,12 +241,69 @@ export function TradeCenterModal({
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `t` only changes with the language
   }, [open, proposerRosterId, receiverRosterId, currentWeek])
 
   const partners = useMemo(
     () => standings.filter((r) => r.id !== proposerRosterId),
     [standings, proposerRosterId],
   )
+
+  // The extra teams can never include the proposer or the receiver.
+  useEffect(() => {
+    setExtraPartnerIds((prev) => prev.filter((id) => id !== receiverRosterId && id !== proposerRosterId))
+  }, [receiverRosterId, proposerRosterId])
+
+  const multiTeam = extraPartnerIds.length > 0
+  const participantIds = useMemo(
+    () => (proposerRosterId && receiverRosterId ? [proposerRosterId, receiverRosterId, ...extraPartnerIds] : []),
+    [proposerRosterId, receiverRosterId, extraPartnerIds],
+  )
+
+  // Load each extra team's players.
+  useEffect(() => {
+    if (!open || extraPartnerIds.length === 0) return
+    const missing = extraPartnerIds.filter((id) => !(id in extraRosters))
+    if (missing.length === 0) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const loaded = await Promise.all(missing.map((id) => fetchRedraftRoster(id, currentWeek)))
+        if (!cancelled) {
+          setExtraRosters((prev) => {
+            const next = { ...prev }
+            missing.forEach((id, i) => {
+              next[id] = loaded[i] ?? null
+            })
+            return next
+          })
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : t('tradeCenter.modal.error.loadRosters'))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `t` only changes with the language
+  }, [open, extraPartnerIds, extraRosters, currentWeek])
+
+  const toggleExtraPartner = (id: string) => {
+    setExtraPartnerIds((prev) =>
+      prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : prev.length >= MAX_REDRAFT_TRADE_TEAMS - 2
+          ? prev
+          : [...prev, id],
+    )
+  }
+
+  /** Multi-team: where an asset goes. Defaults to the receiver for the proposer's assets, else the proposer. */
+  const destinationFor = (fromRosterId: string, key: string): string => {
+    const chosen = destOf[`${fromRosterId}:${key}`]
+    if (chosen && chosen !== fromRosterId && participantIds.includes(chosen)) return chosen
+    return fromRosterId === proposerRosterId ? receiverRosterId : proposerRosterId
+  }
 
   const mineFaabAvail = faabByRosterId[proposerRosterId] ?? 0
   const theirsFaabAvail = faabByRosterId[receiverRosterId] ?? 0
@@ -238,14 +320,40 @@ export function TradeCenterModal({
   const mineHasAssets = selectedMinePlayers.length > 0 || mineFaab > 0
   const theirsHasAssets = selectedTheirsPlayers.length > 0 || theirsFaab > 0
 
+  const selectedExtraPlayers = useMemo(() => {
+    const out: Record<string, RedraftRosterPlayerClient[]> = {}
+    for (const id of extraPartnerIds) {
+      const picked = extraSel[id] ?? []
+      out[id] = (extraRosters[id]?.players ?? []).filter((p) => picked.includes(playerSelId(p)))
+    }
+    return out
+  }, [extraPartnerIds, extraRosters, extraSel])
+
   const deadlinePassed =
     settings?.tradeDeadlineWeek != null && currentWeek > settings.tradeDeadlineWeek
   const lockedSelected =
-    selectedMinePlayers.some((p) => p.isLocked) || selectedTheirsPlayers.some((p) => p.isLocked)
-  const faabOver = mineFaab > mineFaabAvail || theirsFaab > theirsFaabAvail
+    selectedMinePlayers.some((p) => p.isLocked) ||
+    selectedTheirsPlayers.some((p) => p.isLocked) ||
+    (multiTeam && Object.values(selectedExtraPlayers).some((ps) => ps.some((p) => p.isLocked)))
+  const faabOver =
+    mineFaab > mineFaabAvail ||
+    theirsFaab > theirsFaabAvail ||
+    (multiTeam && extraPartnerIds.some((id) => (extraFaab[id] ?? 0) > (faabByRosterId[id] ?? 0)))
 
   const apiAssets = useMemo<RedraftTradeAssetInput[]>(() => {
     if (!proposerRosterId || !receiverRosterId) return []
+    if (multiTeam) {
+      // Every chosen asset goes to the team picked for it.
+      const out: RedraftTradeAssetInput[] = []
+      const add = (fromRosterId: string, players: RedraftRosterPlayerClient[], faab: number) => {
+        for (const p of players) out.push(playerToAsset(p, fromRosterId, destinationFor(fromRosterId, playerSelId(p))))
+        if (faab > 0) out.push(faabAsset(faab, fromRosterId, destinationFor(fromRosterId, 'faab')))
+      }
+      add(proposerRosterId, selectedMinePlayers, mineFaab)
+      add(receiverRosterId, selectedTheirsPlayers, theirsFaab)
+      for (const id of extraPartnerIds) add(id, selectedExtraPlayers[id] ?? [], extraFaab[id] ?? 0)
+      return out
+    }
     const out: RedraftTradeAssetInput[] = [
       ...selectedMinePlayers.map((p) => playerToAsset(p, proposerRosterId, receiverRosterId)),
       ...selectedTheirsPlayers.map((p) => playerToAsset(p, receiverRosterId, proposerRosterId)),
@@ -253,7 +361,15 @@ export function TradeCenterModal({
     if (mineFaab > 0) out.push(faabAsset(mineFaab, proposerRosterId, receiverRosterId))
     if (theirsFaab > 0) out.push(faabAsset(theirsFaab, receiverRosterId, proposerRosterId))
     return out
-  }, [proposerRosterId, receiverRosterId, selectedMinePlayers, selectedTheirsPlayers, mineFaab, theirsFaab])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- destinationFor reads destOf + participantIds, listed
+  }, [proposerRosterId, receiverRosterId, selectedMinePlayers, selectedTheirsPlayers, mineFaab, theirsFaab, multiTeam, extraPartnerIds, selectedExtraPlayers, extraFaab, destOf, participantIds])
+
+  /** Multi-team: every team must send or receive something. */
+  const uninvolvedIds = useMemo(
+    () => (multiTeam ? uninvolvedTradeParticipants(participantIds, apiAssets) : []),
+    [multiTeam, participantIds, apiAssets],
+  )
+  const assetsReady = multiTeam ? apiAssets.length > 0 && uninvolvedIds.length === 0 : mineHasAssets && theirsHasAssets
 
   /*
    * ⚠ THE FALLBACK, NOT THE ANSWER. This runs the same engine, but on what a browser can see:
@@ -266,6 +382,8 @@ export function TradeCenterModal({
    * and because it renders instantly while the request is in flight.
    */
   const clientPreview = useMemo(() => {
+    // A value preview is one side against the other: two-team trades only.
+    if (multiTeam) return null
     if (!proposerRosterId || !receiverRosterId || (!mineHasAssets && !theirsHasAssets)) return null
     const enriched: EnrichedTradeAsset[] = [
       ...selectedMinePlayers.map((p) => ({
@@ -285,7 +403,7 @@ export function TradeCenterModal({
       proposerRosterId, receiverRosterId, assets: enriched, currentSeason: null,
       context: { sport: '', leagueType: 'redraft', scoring: '', rosterFormat: 'standard', capturedAt: new Date().toISOString() },
     })
-  }, [proposerRosterId, receiverRosterId, selectedMinePlayers, selectedTheirsPlayers, mineFaab, theirsFaab, mineHasAssets, theirsHasAssets])
+  }, [multiTeam, proposerRosterId, receiverRosterId, selectedMinePlayers, selectedTheirsPlayers, mineFaab, theirsFaab, mineHasAssets, theirsHasAssets])
 
   /*
    * The REAL valuation, from the same function that writes the captured snapshot.
@@ -305,7 +423,8 @@ export function TradeCenterModal({
   const [previewPending, setPreviewPending] = useState(false)
 
   useEffect(() => {
-    if (!proposerRosterId || !receiverRosterId || apiAssets.length === 0) {
+    // Two-team only: the preview route grades the proposer's side against the receiver's.
+    if (multiTeam || !proposerRosterId || !receiverRosterId || apiAssets.length === 0) {
       setServerPreview(null)
       setServerGrade(null)
       return
@@ -341,13 +460,13 @@ export function TradeCenterModal({
     }, 400)
 
     return () => { ac.abort(); clearTimeout(t); }
-  }, [leagueId, seasonId, proposerRosterId, receiverRosterId, apiAssets])
+  }, [multiTeam, leagueId, seasonId, proposerRosterId, receiverRosterId, apiAssets])
 
   const valuePreview = serverPreview ?? clientPreview
   const previewIsEstimate = serverPreview === null && clientPreview !== null
 
   const canSubmit = Boolean(
-    seasonId && proposerRosterId && receiverRosterId && mineHasAssets && theirsHasAssets &&
+    seasonId && proposerRosterId && receiverRosterId && assetsReady &&
       !deadlinePassed && !faabOver && !submitting,
   )
 
@@ -361,6 +480,7 @@ export function TradeCenterModal({
         seasonId,
         proposerRosterId,
         receiverRosterId,
+        ...(multiTeam ? { additionalRosterIds: extraPartnerIds } : {}),
         reason: reason.trim() || undefined,
         assets: apiAssets,
       })
@@ -368,14 +488,32 @@ export function TradeCenterModal({
       setDecisionOs(res.decisionOs ?? null)
       onSubmitted?.()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to submit trade')
+      setError(e instanceof Error ? e.message : t('tradeCenter.modal.error.submit'))
     } finally {
       setSubmitting(false)
     }
-  }, [canSubmit, leagueId, seasonId, proposerRosterId, receiverRosterId, reason, apiAssets, onSubmitted])
+  }, [canSubmit, leagueId, seasonId, proposerRosterId, receiverRosterId, multiTeam, extraPartnerIds, reason, apiAssets, onSubmitted, t])
 
   const proposerName = rosterLabel(rosterRowById.get(proposerRosterId), proposerRosterId)
   const receiverName = rosterLabel(rosterRowById.get(receiverRosterId), receiverRosterId)
+  const nameOf = (id: string) => rosterLabel(rosterRowById.get(id), id)
+
+  /** Every team's side of the board, in participant order. Two entries for a two-team trade. */
+  const sides = [
+    { key: 'mine', rosterId: proposerRosterId, roster: proposerRoster, sel: mineSel, setSel: setMineSel, faab: mineFaab, setFaab: setMineFaab, faabAvail: mineFaabAvail, name: proposerName },
+    { key: 'theirs', rosterId: receiverRosterId, roster: receiverRoster, sel: theirsSel, setSel: setTheirsSel, faab: theirsFaab, setFaab: setTheirsFaab, faabAvail: theirsFaabAvail, name: receiverName },
+    ...extraPartnerIds.map((id) => ({
+      key: `extra-${id}`,
+      rosterId: id,
+      roster: extraRosters[id] ?? null,
+      sel: extraSel[id] ?? [],
+      setSel: (fn: (prev: string[]) => string[]) => setExtraSel((prev) => ({ ...prev, [id]: fn(prev[id] ?? []) })),
+      faab: extraFaab[id] ?? 0,
+      setFaab: (n: number) => setExtraFaab((prev) => ({ ...prev, [id]: n })),
+      faabAvail: faabByRosterId[id] ?? 0,
+      name: nameOf(id),
+    })),
+  ]
 
   const footer = successId ? (
     <div className="flex justify-end">
@@ -384,7 +522,7 @@ export function TradeCenterModal({
         onClick={onClose}
         className="rounded-lg bg-[#ff3d81]/80 px-4 py-1.5 text-[12px] font-semibold text-black"
       >
-        Done
+        {t('tradeCenter.modal.done')}
       </button>
     </div>
   ) : (
@@ -396,7 +534,7 @@ export function TradeCenterModal({
         disabled={step === 'partner'}
         className="rounded-lg border border-white/15 px-3 py-1.5 text-[12px] text-white/80 disabled:opacity-40"
       >
-        Back
+        {t('tradeCenter.modal.back')}
       </button>
       {step === 'review' ? (
         <button
@@ -406,7 +544,7 @@ export function TradeCenterModal({
           disabled={!canSubmit}
           className="rounded-lg bg-emerald-500/85 px-4 py-1.5 text-[12px] font-semibold text-black disabled:opacity-40"
         >
-          {submitting ? 'Submitting…' : 'Submit proposal'}
+          {submitting ? t('tradeCenter.modal.submitting') : t('tradeCenter.modal.submit')}
         </button>
       ) : (
         <button
@@ -415,11 +553,11 @@ export function TradeCenterModal({
           onClick={() => setStep((s) => (s === 'partner' ? 'assets' : 'review'))}
           disabled={
             (step === 'partner' && (!receiverRosterId || receiverRosterId === proposerRosterId)) ||
-            (step === 'assets' && (!mineHasAssets || !theirsHasAssets))
+            (step === 'assets' && !assetsReady)
           }
           className="rounded-lg bg-[#ff3d81]/85 px-4 py-1.5 text-[12px] font-semibold text-black disabled:opacity-40"
         >
-          Next
+          {t('tradeCenter.modal.next')}
         </button>
       )}
     </div>
@@ -429,17 +567,26 @@ export function TradeCenterModal({
     <AppModal
       open={open}
       onClose={onClose}
-      title="Propose a Trade"
-      description={`Step ${step === 'partner' ? 1 : step === 'assets' ? 2 : 3} of 3 · ${proposerName}`}
+      title={t('tradeCenter.modal.title')}
+      closeLabel={t('tradeCenter.modal.close')}
+      description={tInterpolate('tradeCenter.modal.step', {
+        step: step === 'partner' ? 1 : step === 'assets' ? 2 : 3,
+        total: 3,
+        name: proposerName,
+      })}
       size="xl"
       footer={footer}
       data-testid="trade-center-modal"
     >
       {successId ? (
         <div className="space-y-2 py-6 text-center" data-testid="trade-success">
-          <p className="text-[15px] font-semibold text-emerald-300">Trade proposal sent</p>
+          <p className="text-[15px] font-semibold text-emerald-300">{t('tradeCenter.modal.success.title')}</p>
           <p className="text-[12px] text-white/60">
-            {proposerName} → {receiverName}. The other manager can now review and respond.
+            {multiTeam
+              ? tInterpolate('tradeCenter.modal.success.multiTeam', {
+                  teams: [proposerName, receiverName, ...extraPartnerIds.map(nameOf)].join(', '),
+                })
+              : tInterpolate('tradeCenter.modal.success.twoTeam', { from: proposerName, to: receiverName })}
           </p>
           {decisionOs ? (
             /*
@@ -455,8 +602,8 @@ export function TradeCenterModal({
               <div className="flex items-center justify-between gap-2 text-xs text-violet-200/80">
                 <span className="font-medium text-violet-200">Decision OS</span>
                 <span>
-                  Data completeness {Math.round(decisionOs.completeness)}/100
-                  {!decisionOs.card.legal ? ' · Blocked by league rules' : ''}
+                  {tInterpolate('tradeCenter.modal.decisionOs.completeness', { score: Math.round(decisionOs.completeness) })}
+                  {!decisionOs.card.legal ? ` · ${t('tradeCenter.modal.decisionOs.blocked')}` : ''}
                 </span>
               </div>
               <p className="text-sm text-white">{decisionOs.card.title}</p>
@@ -467,7 +614,7 @@ export function TradeCenterModal({
         </div>
       ) : step === 'partner' ? (
         <div className="space-y-3">
-          <p className="text-[12px] text-white/60">Choose the team you want to trade with.</p>
+          <p className="text-[12px] text-white/60">{t('tradeCenter.modal.partner.prompt')}</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {partners.map((r) => {
               const sel = r.id === receiverRosterId
@@ -489,7 +636,7 @@ export function TradeCenterModal({
                   <span className="min-w-0">
                     <span className="block truncate text-[13px] font-semibold text-white">{rosterLabel(r, r.id)}</span>
                     <span className="block truncate text-[11px] text-white/50">
-                      {r.ownerName ?? 'Manager'} · {r.wins}-{r.losses}
+                      {r.ownerName ?? t('tradeCenter.modal.partner.managerFallback')} · {r.wins}-{r.losses}
                       {r.ties ? `-${r.ties}` : ''}
                     </span>
                   </span>
@@ -497,49 +644,98 @@ export function TradeCenterModal({
               )
             })}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">
-            Multi-team trades — <span className="text-white/55">coming soon</span> (the engine currently supports
-            two-team trades).
-          </div>
+          {receiverRosterId && partners.length > 1 ? (
+            <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2" data-testid="trade-extra-partners">
+              <p className="text-[11px] text-white/55">
+                {tInterpolate(
+                  MAX_REDRAFT_TRADE_TEAMS - 2 === 1 ? 'tradeCenter.modal.extra.hint.one' : 'tradeCenter.modal.extra.hint.many',
+                  { count: MAX_REDRAFT_TRADE_TEAMS - 2 },
+                )}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {partners
+                  .filter((r) => r.id !== receiverRosterId)
+                  .map((r) => {
+                    const on = extraPartnerIds.includes(r.id)
+                    const full = !on && extraPartnerIds.length >= MAX_REDRAFT_TRADE_TEAMS - 2
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        aria-pressed={on}
+                        disabled={full}
+                        data-testid={`trade-extra-partner-${r.id}`}
+                        onClick={() => toggleExtraPartner(r.id)}
+                        className={[
+                          'rounded-full border px-2.5 py-1 text-[11px] transition disabled:opacity-40',
+                          on ? 'border-[#ff9ec0]/70 bg-[#ff3d81]/15 text-white' : 'border-white/15 text-white/70 hover:border-white/30',
+                        ].join(' ')}
+                      >
+                        {on ? '✓ ' : '+ '}
+                        {rosterLabel(r, r.id)}
+                      </button>
+                    )
+                  })}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : step === 'assets' ? (
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_0.9fr]">
-          {(['mine', 'theirs'] as Side[]).map((side) => {
-            const roster = side === 'mine' ? proposerRoster : receiverRoster
-            const sel = side === 'mine' ? mineSel : theirsSel
-            const setSel = side === 'mine' ? setMineSel : setTheirsSel
-            const faab = side === 'mine' ? mineFaab : theirsFaab
-            const setFaab = side === 'mine' ? setMineFaab : setTheirsFaab
-            const faabAvail = side === 'mine' ? mineFaabAvail : theirsFaabAvail
-            const name = side === 'mine' ? proposerName : receiverName
+        <div className={multiTeam ? 'grid gap-3 md:grid-cols-2' : 'grid gap-3 lg:grid-cols-[1fr_1fr_0.9fr]'}>
+          {sides.map((s) => {
+            const { roster, sel, setSel, faab, setFaab, faabAvail, name } = s
+            const side = s.key
+            /** Multi-team: the "to" picker under a chosen asset. */
+            const destPicker = (key: string) =>
+              multiTeam ? (
+                <label className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-white/50">
+                  {t('tradeCenter.modal.assets.to')}
+                  <select
+                    value={destinationFor(s.rosterId, key)}
+                    data-testid={`trade-dest-${s.rosterId}-${key}`}
+                    onChange={(e) => setDestOf((prev) => ({ ...prev, [`${s.rosterId}:${key}`]: e.target.value }))}
+                    className="rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white"
+                  >
+                    {participantIds
+                      .filter((id) => id !== s.rosterId)
+                      .map((id) => (
+                        <option key={id} value={id}>
+                          {nameOf(id)}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : null
             return (
               <section key={side} className="space-y-2 rounded-lg border border-white/10 bg-black/20 p-2.5">
-                <p className="text-[12px] font-semibold text-white">{name} sends</p>
+                <p className="text-[12px] font-semibold text-white">{tInterpolate('tradeCenter.modal.teamSends', { name })}</p>
                 <div className="space-y-1.5">
                   {assetLoading ? (
-                    <p className="text-[11px] text-white/45">Loading roster…</p>
+                    <p className="text-[11px] text-white/45">{t('tradeCenter.modal.assets.loadingRoster')}</p>
                   ) : (roster?.players ?? []).length ? (
                     (roster?.players ?? []).map((p) => (
-                      <PlayerCard
-                        key={p.id}
-                        player={p}
-                        selected={sel.includes(playerSelId(p))}
-                        onToggle={() =>
-                          setSel((prev) =>
-                            prev.includes(playerSelId(p))
-                              ? prev.filter((x) => x !== playerSelId(p))
-                              : [...prev, playerSelId(p)],
-                          )
-                        }
-                      />
+                      <div key={p.id}>
+                        <PlayerCard
+                          player={p}
+                          selected={sel.includes(playerSelId(p))}
+                          onToggle={() =>
+                            setSel((prev) =>
+                              prev.includes(playerSelId(p))
+                                ? prev.filter((x) => x !== playerSelId(p))
+                                : [...prev, playerSelId(p)],
+                            )
+                          }
+                        />
+                        {sel.includes(playerSelId(p)) ? destPicker(playerSelId(p)) : null}
+                      </div>
                     ))
                   ) : (
-                    <p className="text-[11px] text-white/45">No players.</p>
+                    <p className="text-[11px] text-white/45">{t('tradeCenter.modal.assets.noPlayers')}</p>
                   )}
                 </div>
                 {faabAvail > 0 ? (
                   <label className="block text-[11px] text-white/55">
-                    FAAB ({faabAvail} available)
+                    {tInterpolate('tradeCenter.modal.assets.faabAvailable', { amount: faabAvail })}
                     <input
                       type="number"
                       min={0}
@@ -549,35 +745,58 @@ export function TradeCenterModal({
                       onChange={(e) => setFaab(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
                       className="mt-1 w-full rounded border border-white/15 bg-black/30 px-2 py-1 text-[11px] text-white"
                     />
+                    {faab > 0 ? destPicker('faab') : null}
                   </label>
                 ) : null}
                 {settings?.draftPickTrading ? (
                   <p className="rounded border border-sky-400/20 bg-sky-400/5 px-2 py-1 text-[11px] text-sky-200/70">
-                    Draft picks can’t be offered here — a pick would be recorded without ever changing hands.
-                    Dynasty leagues trade future picks in the Trade Center.
+                    {t('tradeCenter.modal.assets.picksNote')}
                   </p>
                 ) : null}
               </section>
             )
           })}
-          <aside className="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
-            <p className="text-[12px] font-semibold text-white">Trade summary</p>
-            <SummarySide label={`${proposerName} sends`} players={selectedMinePlayers} faab={mineFaab} />
-            <SummarySide label={`${receiverName} sends`} players={selectedTheirsPlayers} faab={theirsFaab} />
-            {faabOver ? <p className="text-[11px] text-rose-300">FAAB exceeds available balance.</p> : null}
+          <aside className={['space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-2.5', multiTeam ? 'md:col-span-2' : ''].join(' ')}>
+            <p className="text-[12px] font-semibold text-white">{t('tradeCenter.modal.assets.summary')}</p>
+            {multiTeam ? (
+              <MultiTeamSummary participantIds={participantIds} assets={apiAssets} nameOf={nameOf} />
+            ) : (
+              <>
+                <SummarySide label={tInterpolate('tradeCenter.modal.teamSends', { name: proposerName })} players={selectedMinePlayers} faab={mineFaab} />
+                <SummarySide label={tInterpolate('tradeCenter.modal.teamSends', { name: receiverName })} players={selectedTheirsPlayers} faab={theirsFaab} />
+              </>
+            )}
+            {multiTeam && uninvolvedIds.length > 0 ? (
+              <p className="text-[11px] text-amber-200/80" data-testid="trade-uninvolved-teams">
+                {tInterpolate(
+                  uninvolvedIds.length === 1 ? 'tradeCenter.modal.assets.uninvolved.one' : 'tradeCenter.modal.assets.uninvolved.many',
+                  { teams: uninvolvedIds.map(nameOf).join(', ') },
+                )}
+              </p>
+            ) : null}
+            {faabOver ? <p className="text-[11px] text-rose-300">{t('tradeCenter.modal.assets.faabOver')}</p> : null}
           </aside>
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ReviewSide label={`${proposerName} sends`} players={selectedMinePlayers} faab={mineFaab} />
-            <ReviewSide label={`${receiverName} sends`} players={selectedTheirsPlayers} faab={theirsFaab} />
-          </div>
+          {multiTeam ? (
+            <>
+              <MultiTeamSummary participantIds={participantIds} assets={apiAssets} nameOf={nameOf} />
+              <p className="text-[11px] text-white/45" data-testid="trade-multi-team-grade-note">
+                {t('tradeCenter.modal.review.multiTeamGradeNote')}
+              </p>
+            </>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ReviewSide label={tInterpolate('tradeCenter.modal.teamSends', { name: proposerName })} players={selectedMinePlayers} faab={mineFaab} />
+              <ReviewSide label={tInterpolate('tradeCenter.modal.teamSends', { name: receiverName })} players={selectedTheirsPlayers} faab={theirsFaab} />
+            </div>
+          )}
 
           {valuePreview ? (
             <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-3" data-testid="trade-value-panel">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[12px] font-semibold text-white">Trade Value</p>
+                <p className="text-[12px] font-semibold text-white">{t('tradeCenter.modal.review.tradeValue')}</p>
                 {serverGrade?.grade ? (
                   <span
                     className="rounded-md border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-2 py-0.5 text-[13px] font-bold text-[#ffd7e5]"
@@ -590,16 +809,18 @@ export function TradeCenterModal({
               {serverGrade?.grade && serverGrade.giveValue != null && serverGrade.getValue != null ? (
                 <div className="grid grid-cols-2 gap-2 text-[11px]" data-testid="trade-value-grade-totals">
                   <div className="rounded border border-white/10 bg-black/20 p-2">
-                    <p className="text-white/50">{proposerName} sends</p>
+                    <p className="text-white/50">{tInterpolate('tradeCenter.modal.teamSends', { name: proposerName })}</p>
                     <p className="text-[15px] font-bold text-white">{Math.round(serverGrade.giveValue)}</p>
                   </div>
                   <div className="rounded border border-white/10 bg-black/20 p-2">
-                    <p className="text-white/50">{proposerName} gets</p>
+                    <p className="text-white/50">{tInterpolate('tradeCenter.modal.teamGets', { name: proposerName })}</p>
                     <p className="text-[15px] font-bold text-white">{Math.round(serverGrade.getValue)}</p>
                   </div>
                 </div>
               ) : serverGrade?.gradeWithheld ? (
-                <p className="text-[11px] text-white/60" data-testid="trade-value-grade-withheld">Not graded: {serverGrade.gradeWithheld}</p>
+                <p className="text-[11px] text-white/60" data-testid="trade-value-grade-withheld">
+                  {tInterpolate('tradeCenter.modal.review.notGraded', { reason: serverGrade.gradeWithheld })}
+                </p>
               ) : null}
               {serverGrade?.gradeLabel ? <p className="text-[11px] text-white/70">{serverGrade.gradeLabel}</p> : null}
               {/*
@@ -609,8 +830,8 @@ export function TradeCenterModal({
                 */}
               <details className="group" data-testid="trade-value-why">
                 <summary className="cursor-pointer list-none text-[11px] font-medium text-[#ffd7e5]/80 hover:text-[#ffd7e5]">
-                  <span className="group-open:hidden">The valuation recorded with the proposal ▸</span>
-                  <span className="hidden group-open:inline">The valuation recorded with the proposal ▾</span>
+                  <span className="group-open:hidden">{t('tradeCenter.modal.review.valuationRecorded')} ▸</span>
+                  <span className="hidden group-open:inline">{t('tradeCenter.modal.review.valuationRecorded')} ▾</span>
                 </summary>
                 <div className="mt-2">
                   <TradeValueBreakdown
@@ -627,42 +848,99 @@ export function TradeCenterModal({
                 */}
               {previewIsEstimate ? (
                 <p className="text-[11px] text-amber-200/70" data-testid="trade-value-estimate-note">
-                  ⚠ Rough estimate{previewPending ? ' — still loading the full valuation…' : ''}. Priced from
-                  projections alone, without market values, defensive pricing or your league&apos;s scarcity
-                  settings. The value recorded when you send this trade will differ.
+                  {previewPending ? t('tradeCenter.modal.review.estimateLoading') : t('tradeCenter.modal.review.estimate')}
                 </p>
               ) : (
                 <p className="text-[11px] text-white/40">
-                  Full valuation · your league&apos;s scoring, slots and team count · same engine that records
-                  the trade · {new Date(valuePreview.context.capturedAt).toLocaleString()}
+                  {tInterpolate('tradeCenter.modal.review.fullValuation', {
+                    when: new Date(valuePreview.context.capturedAt).toLocaleString(language === 'es' ? 'es' : undefined),
+                  })}
                 </p>
               )}
             </div>
           ) : null}
           {(deadlinePassed || lockedSelected || faabOver) && (
             <div className="space-y-1 rounded-lg border border-amber-400/25 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-200/85">
-              {deadlinePassed ? <p>⚠ Trade deadline (week {settings?.tradeDeadlineWeek}) has passed.</p> : null}
-              {lockedSelected ? <p>⚠ A selected player is locked this week.</p> : null}
-              {faabOver ? <p>⚠ FAAB amount exceeds available balance.</p> : null}
+              {deadlinePassed ? (
+                <p>{tInterpolate('tradeCenter.modal.warn.deadline', { week: settings?.tradeDeadlineWeek ?? '' })}</p>
+              ) : null}
+              {lockedSelected ? <p>{t('tradeCenter.modal.warn.locked')}</p> : null}
+              {faabOver ? <p>{t('tradeCenter.modal.warn.faabOver')}</p> : null}
             </div>
           )}
           <label className="block text-[11px] text-white/55">
-            Note for the other manager (optional)
+            {multiTeam ? t('tradeCenter.modal.review.note.many') : t('tradeCenter.modal.review.note.one')}
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Why this works for both teams…"
+              placeholder={t('tradeCenter.modal.review.notePlaceholder')}
               className="mt-1 w-full rounded border border-white/15 bg-black/30 px-2 py-1.5 text-[12px] text-white placeholder:text-white/30"
             />
           </label>
           <p className="text-[11px] text-white/40">
-            Review mode: {settings?.commissionerTradeReviewType ?? 'commissioner'} · expires in{' '}
-            {settings?.tradeReviewHours ?? 48}h.
+            {tInterpolate('tradeCenter.modal.review.reviewMode', {
+              type: reviewTypeLabel(t, settings?.commissionerTradeReviewType ?? 'commissioner'),
+              hours: settings?.tradeReviewHours ?? 48,
+            })}
           </p>
         </div>
       )}
       {error ? <p className="mt-3 text-[11px] text-rose-300">{error}</p> : null}
     </AppModal>
+  )
+}
+
+/** Multi-team: each team's gives and gets, from the assets as they will be sent. */
+function MultiTeamSummary({
+  participantIds,
+  assets,
+  nameOf,
+}: {
+  participantIds: string[]
+  assets: RedraftTradeAssetInput[]
+  nameOf: (id: string) => string
+}) {
+  const { t } = useOptionalLanguage()
+  const label = (a: RedraftTradeAssetInput) =>
+    a.assetType === 'faab'
+      ? `$${Number((a.metadata as { amount?: number } | undefined)?.amount ?? 0)} FAAB`
+      : a.playerName ?? t('tradeCenter.asset.player')
+  return (
+    <div className="grid gap-2 sm:grid-cols-2" data-testid="trade-multi-team-summary">
+      {participantIds.map((id) => {
+        const gives = assets.filter((a) => a.fromRosterId === id)
+        const gets = assets.filter((a) => a.toRosterId === id)
+        return (
+          <div key={id} className="rounded border border-white/10 bg-black/20 p-2 text-[11px]" data-testid={`trade-multi-team-side-${id}`}>
+            <p className="font-semibold text-white/80">{nameOf(id)}</p>
+            <p className="mt-1 text-white/45">{t('tradeCenter.modal.summary.gives')}</p>
+            {gives.length ? (
+              <ul className="space-y-0.5 text-white/65">
+                {gives.map((a, i) => (
+                  <li key={`g${i}`}>
+                    {label(a)} <span className="text-white/40">→ {nameOf(a.toRosterId)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-white/35">{t('tradeCenter.modal.summary.nothing')}</p>
+            )}
+            <p className="mt-1 text-white/45">{t('tradeCenter.modal.summary.gets')}</p>
+            {gets.length ? (
+              <ul className="space-y-0.5 text-emerald-200/80">
+                {gets.map((a, i) => (
+                  <li key={`r${i}`}>
+                    {label(a)} <span className="text-white/40">← {nameOf(a.fromRosterId)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-white/35">{t('tradeCenter.modal.summary.nothing')}</p>
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -675,11 +953,12 @@ function SummarySide({
   players: RedraftRosterPlayerClient[]
   faab: number
 }) {
+  const { t } = useOptionalLanguage()
   return (
     <div className="rounded border border-white/10 bg-black/20 p-2 text-[11px]">
       <p className="font-semibold text-white/75">{label}</p>
       {players.length === 0 && faab === 0 ? (
-        <p className="text-white/40">Nothing selected</p>
+        <p className="text-white/40">{t('tradeCenter.modal.summary.nothingSelected')}</p>
       ) : (
         <ul className="mt-1 space-y-0.5 text-white/60">
           {players.map((p) => (
@@ -693,11 +972,12 @@ function SummarySide({
 }
 
 function ReviewSide(props: { label: string; players: RedraftRosterPlayerClient[]; faab: number }) {
+  const { t } = useOptionalLanguage()
   return (
     <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-[12px]">
       <p className="font-semibold text-white">{props.label}</p>
       {props.players.length === 0 && props.faab === 0 ? (
-        <p className="mt-1 text-white/40">Nothing selected</p>
+        <p className="mt-1 text-white/40">{t('tradeCenter.modal.summary.nothingSelected')}</p>
       ) : (
         <ul className="mt-1.5 space-y-1 text-white/70">
           {props.players.map((p) => (

@@ -3983,6 +3983,13 @@ model AppUser {
   platformChatThreadMemberships            PlatformChatThreadMember[]
   platformChatThreadsCreated               PlatformChatThread[]                   @relation("PlatformChatThreadCreator")
   platformMessageReports                   PlatformMessageReport[]                @relation("PlatformMessageReportReporter")
+  communityPosts                           CommunityPost[]                        @relation("CommunityPostAuthor")
+  communityReplies                         CommunityReply[]                       @relation("CommunityReplyAuthor")
+  communityReactions                       CommunityReaction[]                    @relation("CommunityReactionUser")
+  communityReports                         CommunityReport[]                      @relation("CommunityReportReporter")
+  communityIdeaVotes                       CommunityIdeaVote[]                    @relation("CommunityIdeaVoter")
+  findLeagueSpotRequests                   FindLeagueSpotRequest[]                @relation("FindLeagueSpotRequester")
+  savedLeagueSearches                      SavedLeagueSearch[]                    @relation("SavedLeagueSearchOwner")
   platformNotifications                    PlatformNotification[]
   platformUserReportsAgainst               PlatformUserReport[]                   @relation("PlatformUserReportReported")
   platformUserReportsCreated               PlatformUserReport[]                   @relation("PlatformUserReportReporter")
@@ -6537,6 +6544,7 @@ model League {
   dispersalDrafts                       DispersalDraft[]
   dynastyConfig                         DynastyLeagueConfig?
   findLeagueListings                    FindLeagueListing[]
+  findLeagueSpotRequests                FindLeagueSpotRequest[]
   guillotineAiInsights                  GuillotineAIInsight[]
   guillotineConfig                      GuillotineLeagueConfig?
   guillotineSeasons                     GuillotineSeason[]
@@ -8230,6 +8238,54 @@ model FindLeagueListing {
   @@map("find_league_listings")
 }
 
+/// A player asking for a spot in a league that plays on another platform (Sleeper, ESPN, …) and
+/// was listed in Find a League by its verified commissioner. The seats live on the other
+/// platform, so there is no join here: the commissioner accepts and sends their own invite.
+/// See lib/public-discovery/externalListing.ts. One row per player per league; asking again
+/// after a decline reopens the same row.
+model FindLeagueSpotRequest {
+  id              String    @id @default(cuid())
+  leagueId        String
+  requesterUserId String
+  message         String?   @db.VarChar(500)
+  /// pending | accepted | declined | withdrawn
+  status          String    @default("pending") @db.VarChar(16)
+  /// The commissioner's reply: their platform invite link, or why not.
+  responseNote    String?   @db.VarChar(500)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  respondedAt     DateTime?
+  league          League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  requester       AppUser   @relation("FindLeagueSpotRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, requesterUserId])
+  @@index([leagueId, status])
+  @@index([requesterUserId, createdAt])
+  @@map("find_league_spot_requests")
+}
+
+/// A Find a League search a player asked to be alerted about. Once a day the morning-briefing
+/// cron re-runs it (lib/public-discovery/savedSearchAlerts.ts) and sends one in-app notification
+/// when leagues appear that it hasn't shown them before. Up to 5 per player.
+model SavedLeagueSearch {
+  id             String    @id @default(cuid())
+  userId         String
+  /// What the person sees: "NFL · dynasty · 12 teams".
+  label          String    @db.VarChar(160)
+  /// The discovery query string, exactly what /api/discover/leagues receives (no page).
+  query          String    @db.VarChar(1000)
+  /// League ids already shown for this search, so an alert only ever names new ones. Capped.
+  seenLeagueIds  String[]  @default([])
+  lastCheckedAt  DateTime?
+  lastAlertedAt  DateTime?
+  createdAt      DateTime  @default(now())
+  user           AppUser   @relation("SavedLeagueSearchOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, query])
+  @@index([lastCheckedAt])
+  @@map("saved_league_searches")
+}
+
 model Roster {
   id                   String                     @id @default(uuid())
   leagueId             String
@@ -8629,6 +8685,8 @@ model LeagueTeam {
   @@index([leagueId, pointsFor])
   @@index([divisionId])
   @@index([aiPowerScore])
+  /// The Clubhouse Commish badge looks claimed commissioner teams up by user, on every render.
+  @@index([claimedByUserId])
   @@map("league_teams")
 }
 
@@ -14912,6 +14970,10 @@ model RedraftTradeProposal {
   seasonId          String
   proposerRosterId  String
   receiverRosterId  String
+  /// Teams in the trade beyond proposer + receiver (3- and 4-team trades). Empty for a two-team trade.
+  additionalRosterIds String[]                 @default([])
+  /// Non-proposer teams that have accepted. The trade is agreed only once every one of them has.
+  acceptedRosterIds String[]                   @default([])
   status            String                     @default("pending")
   vetoMode          String                     @default("commissioner")
   vetoThreshold     Int?
@@ -19858,4 +19920,119 @@ model DispersalDraftParticipant {
   @@unique([draftId, userId])
   @@index([draftId])
   @@map("dispersal_draft_participants")
+}
+
+/// Clubhouse — the public community board (lib/community/). A post lives in one fixed
+/// channel (lib/community/channels.ts); `channel` is a slug, not an FK, so adding a
+/// channel is a code change rather than a migration.
+///
+/// `replyCount` and `lastActivityAt` are denormalized so a channel list sorts and counts
+/// without a join; both are written in the same transaction as the reply that moves them.
+/// A removed post keeps its row (`removedAt`) so a moderation decision can be reviewed
+/// and reversed, and so reply notifications already sent do not point at nothing.
+model CommunityPost {
+  id              String           @id @default(uuid())
+  channel         String           @db.VarChar(32)
+  authorUserId    String
+  title           String           @db.VarChar(160)
+  body            String
+  tags            String[]         @default([])
+  isPinned        Boolean          @default(false)
+  isLocked        Boolean          @default(false)
+  replyCount      Int              @default(0)
+  lastActivityAt  DateTime         @default(now())
+  editedAt        DateTime?
+  removedAt       DateTime?
+  removedByUserId String?
+  /// "post", or "idea" for a League Lab idea (the idea* columns below apply only to those).
+  kind            String           @default("post") @db.VarChar(16)
+  /// Null while an idea is open; then "under_review" | "building" | "shipped", set by staff.
+  ideaStatus      String?          @db.VarChar(16)
+  ideaStatusAt    DateTime?
+  /// { hook, sport, teamSize, draftType } from the short idea form.
+  ideaDetails     Json?
+  /// Denormalised count of CommunityIdeaVote rows, so the board can sort by it.
+  upvoteCount     Int              @default(0)
+  /// Set only on threads the Clubhouse writes itself ("prompt:2026-11-02", "news:2026-11-02",
+  /// "gameday:2026-11-02"). Unique, so a cron that fires twice converges on one row.
+  systemKey       String?          @unique @db.VarChar(64)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  author          AppUser          @relation("CommunityPostAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  replies         CommunityReply[]
+  ideaVotes       CommunityIdeaVote[]
+
+  @@index([channel, isPinned, lastActivityAt])
+  @@index([lastActivityAt])
+  @@index([authorUserId, createdAt])
+  @@index([kind, upvoteCount])
+  @@map("community_posts")
+}
+
+/// One upvote per (person, idea).
+model CommunityIdeaVote {
+  id        String        @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime      @default(now())
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      AppUser       @relation("CommunityIdeaVoter", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@map("community_idea_votes")
+}
+
+model CommunityReply {
+  id              String        @id @default(uuid())
+  postId          String
+  authorUserId    String
+  body            String
+  editedAt        DateTime?
+  removedAt       DateTime?
+  removedByUserId String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  post            CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author          AppUser       @relation("CommunityReplyAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@index([authorUserId, createdAt])
+  @@map("community_replies")
+}
+
+/// One row per (person, target, emoji). `targetType` is "post" or "reply"; polymorphic,
+/// so no FK on `targetId` — a reaction outliving its target is harmless and invisible.
+model CommunityReaction {
+  id         String   @id @default(uuid())
+  userId     String
+  targetType String   @db.VarChar(8)
+  targetId   String
+  emoji      String   @db.VarChar(16)
+  createdAt  DateTime @default(now())
+  user       AppUser  @relation("CommunityReactionUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId, emoji])
+  @@index([targetType, targetId])
+  @@map("community_reactions")
+}
+
+/// One report per (reporter, target): reporting twice does not make a thing twice as bad.
+model CommunityReport {
+  id               String    @id @default(uuid())
+  reporterUserId   String
+  targetType       String    @db.VarChar(8)
+  targetId         String
+  reason           String    @db.VarChar(32)
+  details          String?   @db.VarChar(500)
+  status           String    @default("pending") @db.VarChar(16)
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  createdAt        DateTime  @default(now())
+  reporter         AppUser   @relation("CommunityReportReporter", fields: [reporterUserId], references: [id], onDelete: Cascade)
+
+  @@unique([reporterUserId, targetType, targetId])
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@map("community_reports")
 }

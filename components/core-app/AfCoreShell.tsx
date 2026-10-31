@@ -3,14 +3,18 @@
 import Link from 'next/link'
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import type { RedraftSportTheme } from '@/lib/league-media/redraftIdentity'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
 import { navLabel } from '@/lib/core-app/navLabels'
+import { themeNavItems, themeSectionHeading, type LeagueTheme } from '@/lib/core-app/survivorTheme'
 import { CoreLanguageChip } from '@/components/core-app/CoreLanguageChip'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { leagueSportIcon, leagueSportLabel } from '@/lib/core-app/leagueSports'
+import { pairExileUnderSurvivor, pairedExileIds } from '@/lib/core-app/survivorExileRail'
+import type { ExileRailStatus } from '@/lib/core-app/survivorExileStatus'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
@@ -47,6 +51,7 @@ import {
   RAIL_FILTERS,
   RAIL_FILTER_MIN_LEAGUES,
   moveInOrder,
+  reorderWithinSection,
   passesRailFilter,
   railFilterCounts,
   railSections as arrangeRailSections,
@@ -73,7 +78,7 @@ import { badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { RailRowBody, mergeRailMatchup, railTapTarget, type RailAttention } from '@/components/core-app/RailRowBody'
 import { useRailOdds } from '@/components/core-app/useRailOdds'
-import { hideLeagueForAccount, RailLeagueMenu, saveLeaguePreference, useRailHold } from '@/components/core-app/RailLeagueMenu'
+import { hideLeagueForAccount, RailLeagueMenu, saveLeaguePreference, useRailDrag, useRailHold } from '@/components/core-app/RailLeagueMenu'
 import { railRowMessages } from '@/lib/core-app/messages/railRow'
 import {
   currentRailCareerLines,
@@ -83,6 +88,9 @@ import {
 } from '@/lib/core-app/railCareerChannel'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
+import '@/components/league/native/redraft-identity.css'
+import '@/components/core-app/af-core-redraft.css'
+import '@/components/core-app/af-survivor-theme.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
@@ -126,6 +134,10 @@ export type RailLeague = {
   isCommissioner?: boolean
   /** League sport (NFL / NBA / …). The rail splits into one section per sport when there are two or more. */
   sport?: string | null
+  /** This is an Exile Island league; the id is its Survivor league (attachSurvivorExileLinks). */
+  exileOf?: string
+  /** On an Exile Island row: the line it shows in place of a matchup (survivorExileStatus.ts). */
+  exileStatus?: ExileRailStatus
 }
 
 /**
@@ -155,11 +167,20 @@ export type RailStandingSummary = {
   outOf: number
   /** Points over the lowest team in the league. Null when you ARE the lowest. */
   overCut: number | null
-  basis: 'points' | 'projected'
+  basis: 'points' | 'projected' | 'best_ball'
+  /** `best_ball` only: a game that can still change a total is not final. */
+  provisional?: boolean
   placesAboveCut: number
   cutLine: number
   /** The bottom of this table goes home, so the copy says "cut" rather than "last". */
   elimination: boolean
+  /** Teams with points on the board (railMatchups.ts `RailStanding`). */
+  played?: number
+  /** The lowest team other than you, and its value on the same basis. */
+  cutTeam?: string | null
+  cutTeamValue?: number | null
+  /** An elimination league's weeks left, this one included. */
+  weeksLeft?: number | null
 }
 
 /**
@@ -231,6 +252,7 @@ export type CoreNavKey =
   // active item — they are exits, not screens.
   | 'live-scores'
   | 'brackets'
+  | 'find-league'
   | 'my-leagues'
   | 'settings'
   | 'plans'
@@ -309,6 +331,13 @@ type NavSection = { id: string; heading: string | null; items: NavItem[] }
 export type AfCoreShellProps = {
   nativeLeague?: boolean
   /**
+   * The redraft identity's sport theme for a native redraft `?league=` (lib/core-app/coreShellRedraftIdentity.ts).
+   * Stamped on the root as `data-format="redraft"` + `data-sport`, which is all
+   * components/league/native/redraft-identity.css needs to re-point /core's accent tokens. Null or absent
+   * — every other league type and every no-league page — keeps the default look.
+   */
+  redraftSport?: RedraftSportTheme | null
+  /**
    * Where the open imported league's lineup is changed (lib/core-app/shellLineupHandoff.ts): the
    * platform's verified lineup screen, else its league page, else null. The Updates menu turns its
    * "make lineup changes on your league's platform" line into this button when present.
@@ -386,6 +415,11 @@ export type AfCoreShellProps = {
   } | null
   /** Keeps league-scoped nav links pointed at the league in context. */
   selectedLeagueId?: string | null
+  /**
+   * The selected league's look. 'survivor' renames its tabs after the show, hides Defense Hub and
+   * dresses the shell as the island (lib/core-app/survivorTheme.ts, af-survivor-theme.css).
+   */
+  leagueTheme?: LeagueTheme | null
   /** Your record and place per league — the "6-3 · 2nd" line on the list (lib/core-app/railRecords.ts). */
   railRecords?: Record<string, RailRecord> | null
   /** Unread league-chat messages per league — the chat bubble's own count (getChatBadge `byLeague`). */
@@ -540,7 +574,12 @@ const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
 ]
 
 
+/** The nav items as the selected league shows them: a Survivor league renames and hides some. */
 function navItems(props: AfCoreShellProps): NavItem[] {
+  return themeNavItems(baseNavItems(props), props.leagueTheme)
+}
+
+function baseNavItems(props: AfCoreShellProps): NavItem[] {
   /*
    * ⚠ A CROSS-LEAGUE SCREEN STILL CARRIES THE LEAGUE. Home, Portfolio, Rankings
    * and Tools each read across every league, and each used to link without
@@ -587,6 +626,9 @@ function navItems(props: AfCoreShellProps): NavItem[] {
   return [
     { key: 'home', label: navLabel('home'), glyph: '▣', href: inLeague('/core') },
     { key: 'brackets', label: 'Brackets', glyph: '⚑', href: '/brackets' },
+    // Top level rather than only in the Play sheet: finding a league to join is how a
+    // new player starts, and the sheet is two taps deep.
+    { key: 'find-league', label: 'Find a League', glyph: '⌕', href: '/find-league' },
     // My team is league-scoped in the handoff, so the link carries the selected
     // league rather than dropping the user on a screen that has to ask which one.
     {
@@ -939,7 +981,7 @@ function navSections(props: AfCoreShellProps): NavSection[] {
       placed.add(k)
       return [item]
     })
-    return { id: s.id, heading: s.heading, items: picked }
+    return { id: s.id, heading: themeSectionHeading(s.id, s.heading, props.leagueTheme), items: picked }
   }).filter((s) => s.items.length > 0)
 
   const leftover = items.filter((i) => !placed.has(i.key))
@@ -990,6 +1032,7 @@ const LEAGUE_FIRST_PLAY_LINKS: ReadonlyArray<{ href: string; label: string; glyp
   { href: '/mock-draft', label: 'Mock draft', glyph: '◷' },
   { href: '/brackets', label: "Brackets and pick'em", glyph: '⚑' },
   { href: '/leaderboards', label: 'Leaderboards', glyph: '▲' },
+  { href: '/clubhouse', label: 'Clubhouse community', glyph: '☰' },
 ]
 
 type PlayerSearchHit = {
@@ -1682,7 +1725,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     () => withoutHidden(leagues, archivedLeagueKey ? archivedLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
     [leagues, archivedLeagueKey, props.selectedLeagueId],
   )
-  const railRows = useMemo(() => groupLeagueHubs(railLeagues), [railLeagues])
+  /*
+   * Each Exile Island sits directly under its Survivor league, joined by a ↕, instead of being one
+   * more league in the list: with two NBA Survivor leagues the rail never said which island was whose.
+   */
+  const railRows = useMemo(() => pairExileUnderSurvivor(groupLeagueHubs(railLeagues)), [railLeagues])
   /*
    * One section per sport, each headed by its sport, once the account plays two or more. Within a
    * section the rail keeps the account's own order; only the grouping is new.
@@ -1750,6 +1797,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    */
   const [railMenuId, setRailMenuId] = useState<string | null>(null)
   const railHold = useRailHold(setRailMenuId)
+  // Drag to reorder (a mouse straight away, a finger in reorder mode): the same saved order Move writes.
+  const railDrag = useRailDrag((sectionIds, id, toIndex) => {
+    const next = reorderWithinSection(orderedLeagues.map((l) => l.id), sectionIds, id, toIndex)
+    if (!next) return
+    setOrderOverride(next)
+    saveLeaguePreference('order', next, () => router.refresh())
+  })
   const pinLeague = (id: string) => {
     const next = toggleFavorite(favoriteIds, id)
     setFavoriteOverride(next)
@@ -1817,6 +1871,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   return (
     <div
       className="af-core af-shell"
+      data-format={props.redraftSport ? 'redraft' : undefined}
+      data-sport={props.redraftSport ?? undefined}
+      data-league-theme={props.leagueTheme ?? undefined}
       data-league-first={props.leagueFirst ? 'true' : undefined}
       data-nav-pending={navPending ? 'true' : undefined}
       onClickCapture={markNavigation}
@@ -1904,7 +1961,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <span className="af-rail-toggle-text">
             {leagues.length}{' '}
             {msg.leagueNoun(leagues.length)}
-            {railWeekLabel ? ` · ${language === 'es' ? railWeekLabel.replace(/^Week (\d+)/, 'Semana $1') : railWeekLabel}` : ''}
+            {railWeekLabel ? ` · ${railMsg.weekLabel(railWeekLabel)}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
               <span className="af-rail-live-state">
                 {badgeText('LIVE', language)}
@@ -1947,7 +2004,15 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           scroll, but nothing is out of reach and no count is hidden behind a
           second screen.
         */}
-        <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef}>
+        <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef} data-reorder={railDrag.reorderMode ? 'true' : undefined}>
+          {railDrag.reorderMode && railOpen ? (
+            <div className="af-rail-reorder-bar" role="status">
+              <span>{railMsg.reorderHint}</span>
+              <button type="button" className="af-rail-reorder-done" onClick={() => railDrag.setReorderMode(false)}>
+                {railMsg.menuDone}
+              </button>
+            </div>
+          ) : null}
           {/*
             The filter chips are the list's first child, held at its top while it scrolls. Inside the
             scroller rather than beside it: the phone tray is a grid with fixed rows (header, list, foot),
@@ -1977,6 +2042,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             const folded = activeRailFilter === 'all' && foldedSports.includes(sectionKey)
             const rows = section.rows.filter((r) => passesRailFilter(activeRailFilter, r.hub ? null : railFacts.get(r.id) ?? null))
             if (rows.length === 0) return null
+            // Islands joined to their Survivor league in THIS section: favorites or a filter can part a pair.
+            const sectionExile = pairedExileIds(rows)
             const headed = railSections.length > 1 || favorites
             return [
             /*
@@ -2036,7 +2103,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               ? `/core/matchup?league=${encodeURIComponent(l.id)}`
               : null
             const alertTone = attention?.includes('lineup') ? 'bad' : attention ? 'warn' : l.hasAlert ? (l.alertTone ?? 'warn') : null
-            return (
+            const isExile = sectionExile.has(l.id)
+            const tile = (
               <Link
                 key={l.id}
                 href={leagueHref}
@@ -2069,6 +2137,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                  * already uses `aria-current="page"` for the page itself.
                  */
                 data-active={l.id === props.selectedLeagueId}
+                data-exile={isExile ? 'true' : undefined}
                 data-score-changed={railSwings[l.id] != null ? 'true' : undefined}
                 aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
                 title={msg.railRowTitle(railName, l.platform, careerLine)}
@@ -2079,7 +2148,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                  * Move for this league. A hold that fired swallows the click that follows it, so lifting
                  * the finger does not also open the league.
                  */
-                {...railHold.handlers(l.id)}
+                {...(railDrag.reorderMode ? {} : railHold.handlers(l.id))}
+                /* Drag to reorder within this section; see useRailDrag. */
+                {...railDrag.rowProps(l.id, sectionKey)}
                 /*
                   ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
                   for it, and it matters: the tray is full-screen, so navigating
@@ -2089,6 +2160,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   preference the user set, not a transient overlay.
                 */
                 onClick={(event) => {
+                  if (railDrag.swallowClick(event)) return
                   if (railHold.swallowClick(event)) return
                   // Before anything navigates: the next screen may rebuild this rail from the top.
                   saveRailScroll(railScrollRef.current, railLayout)
@@ -2107,6 +2179,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   }
                 }}
               >
+                {railDrag.reorderMode ? <span className="af-rail-drag-handle" aria-hidden>⠿</span> : null}
                 <span className="af-rail-tile-art">
                   <RailMark src={l.imageUrl} letter={l.mark} />
                   {alertTone ? (
@@ -2122,9 +2195,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   one accessible name either way.
                 */}
                 <RailRowBody
-                  name={railName}
+                  name={isExile ? copy('Exile Island') : railName}
                   platform={String(l.platform)}
                   m={m}
+                  exileStatus={l.exileStatus ?? null}
                   live={live}
                   isCommissioner={l.isCommissioner}
                   syncPaused={l.syncPaused}
@@ -2140,10 +2214,24 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 />
               </Link>
             )
+            if (!isExile) return tile
+            const survivorName = (l.exileOf && railLabels.get(l.exileOf)) || null
+            return [
+              <div
+                key={`exile-link-${l.id}`}
+                className="af-rail-exile-link"
+                data-testid="rail-exile-link"
+                title={survivorName ? `${copy('Exile Island for')} ${survivorName}` : copy('Exile Island')}
+                aria-hidden
+              >
+                ↕
+              </div>,
+              tile,
+            ]
           }),
           ]
           })}
-          {railOpen && railRows.length > 1 ? <p className="af-rail-hint">{railMsg.holdHint}</p> : null}
+          {railOpen && railRows.length > 1 && !railDrag.reorderMode ? <p className="af-rail-hint">{railMsg.holdHint}</p> : null}
           {/*
             ⚠ THE WAY BACK TO A HIDDEN LEAGUE. The header counts hidden leagues, but that count sits
             inside the expand/collapse button and cannot be a link of its own. Without this row an
@@ -2226,6 +2314,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           onPin={() => pinLeague(railMenuLeague.id)}
           onMove={(direction) => moveLeague(railMenuLeague.id, direction)}
           onHide={() => hideLeague(railMenuLeague.id)}
+          onReorder={() => railDrag.setReorderMode(true)}
           onClose={() => setRailMenuId(null)}
         />
       ) : null}
@@ -2361,7 +2450,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           */}
           {props.scope ? (
             <ScopeSwitcher
-              leagues={props.scope.leagues.map((league) => ({ ...league, imageUrl: leagues.find((row) => row.id === league.id)?.imageUrl }))}
+              leagues={props.scope.leagues.map((league) => {
+                const row = leagues.find((r) => r.id === league.id)
+                return { ...league, imageUrl: row?.imageUrl, exileOf: row?.exileOf }
+              })}
               scopeValue={props.scope.value}
               label={props.scope.label}
               selectedLeagueId={props.selectedLeagueId ?? null}

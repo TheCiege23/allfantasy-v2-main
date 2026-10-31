@@ -45,8 +45,11 @@ export function DynastyAdvancedSettings({ state, accent, onChange }: Props) {
         <label className="space-y-1 text-xs text-white/70">
           <span>Startup draft type</span>
           <select
-            value={d.startupDraftType}
-            onChange={(e) => updateDynasty({ startupDraftType: e.target.value as DynastySetupState['startupDraftType'] })}
+            value={state.draftType}
+            onChange={(e) => {
+              const draftType = e.target.value as DynastySetupState['startupDraftType']
+              onChange({ draftType, dynasty: { ...d, startupDraftType: draftType } })
+            }}
             className="w-full rounded-xl border border-white/[0.1] bg-black/35 px-3 py-2 text-sm text-white"
           >
             <option value="snake">Snake</option>
@@ -243,19 +246,20 @@ export function DynastyAdvancedSettings({ state, accent, onChange }: Props) {
           >
             <option value="linear">Linear</option>
             <option value="snake">Snake</option>
+            <option value="auction">Auction</option>
           </select>
         </label>
 
         <label className="space-y-1 text-xs text-white/70">
           <span>Rookie order method</span>
           <select
-            value={d.rookieDraftOrderMethod}
+            value={d.rookieDraftOrderMethod === 'lottery' ? 'weighted_lottery' : d.rookieDraftOrderMethod}
             onChange={(e) => updateDynasty({ rookieDraftOrderMethod: e.target.value as DynastySetupState['rookieDraftOrderMethod'] })}
             className="w-full rounded-xl border border-white/[0.1] bg-black/35 px-3 py-2 text-sm text-white"
           >
             <option value="max_pf">Max PF</option>
             <option value="reverse_standings">Reverse standings</option>
-            <option value="lottery">Lottery</option>
+            <option value="weighted_lottery">Weighted lottery (future rookie drafts)</option>
             <option value="commissioner">Commissioner</option>
           </select>
         </label>

@@ -614,7 +614,7 @@ function OfficialTable({
                   <tr data-you={t.isYou ? 'true' : undefined} data-zone={zoneOf(t)}>
                     <td className="af-stb-sticky af-stb-sticky-rank af-num">{t.seed}</td>
                     <th scope="row" className="af-stb-sticky af-stb-sticky-team">
-                      <TeamCell team={t} showTiebreak tiebreakText={language === 'es' ? spanishTiebreak(board, t) : null} />
+                      <TeamCell team={t} showTiebreak tiebreakText={t.tiebreak ? m.tiebreak(t.tiebreak, () => spanishTiebreak(board, t)) : null} />
                     </th>
                     <td>
                       <ZoneChip team={t} />
@@ -1087,7 +1087,7 @@ function Cards({
                         </div>
                       ) : null}
                     </dl>
-                    {view === 'official' && t.tiebreak ? <p className="af-stb-cardnote">{language === 'es' ? spanishTiebreak(board, t) ?? t.tiebreak : t.tiebreak}</p> : null}
+                    {view === 'official' && t.tiebreak ? <p className="af-stb-cardnote">{m.tiebreak(t.tiebreak, () => spanishTiebreak(board, t))}</p> : null}
                     {view === 'official' && t.projected ? (
                       <p className="af-stb-cardproj">
                         <span className="af-stb-projtag">{copy('Model')}</span>{' '}
@@ -1341,7 +1341,7 @@ function WhyAbove({ board, view }: { board: StandingsBoard; view: StandingsViewK
         lowSeed: low.seed,
         upOrd: ordinal(up.seed),
         lowOrd: ordinal(low.seed),
-        reason: language === 'es' ? spanishOrderReason(up, low, board) : explanation,
+        reason: m.orderReason(explanation, () => spanishOrderReason(up, low, board)),
       })
     }
   }
@@ -1686,7 +1686,7 @@ export function StandingsBoardView({
               <p>
                 {m.oddsLead}{' '}
                 <Link href={odds.href}>{m.oddsLink}</Link>
-                {m.oddsTail(odds.iterations.toLocaleString(language === 'es' ? 'es-ES' : 'en-US'))}
+                {m.oddsTail(odds.iterations.toLocaleString(m.numberLocale))}
               </p>
             ) : null}
             <p className="af-stb-projnote">

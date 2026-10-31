@@ -33,6 +33,9 @@ import { loadNextChopPickState, saveNextChopPick } from '@/lib/guillotine/nextCh
 import { guillotineAdvancedSnapshot, guillotineRulesSnapshot } from '@/lib/league-rules-explainer/snapshot'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
+import { prisma } from '@/lib/prisma'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { providerLabel } from '@/lib/guillotine/importedLeagueGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -195,6 +198,14 @@ export async function PATCH(
 
   if (!(await isGuillotineLeague(leagueId))) {
     return NextResponse.json({ error: 'Not a Guilly league' }, { status: 404 })
+  }
+  // An imported league's chops and rules are its provider's (lib/guillotine/importedLeagueGuard.ts).
+  const platformRow = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
+  if (platformRow && !isNativePlatform(platformRow.platform)) {
+    return NextResponse.json(
+      { error: `This league was imported, so its Guilly rules and chops are set on ${providerLabel(platformRow.platform)}.`, code: 'imported_league' },
+      { status: 409 },
+    )
   }
 
   const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown; advanced?: unknown; rules?: unknown } | null

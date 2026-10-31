@@ -1284,9 +1284,11 @@
   /* Anchors the visually-hidden label below; without it that span positions
      against the viewport and can drag the page's scroll width. */
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  column-gap: 8px;
+  row-gap: 4px;
   width: 100%;
   padding: 9px 4px;
   border: none;
@@ -1302,6 +1304,8 @@
 .af-cm-act:not([data-static='true']):hover { background: var(--line); }
 
 .af-cm-act-top {
+  grid-column: 1;
+  min-width: 0;
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -1318,6 +1322,8 @@
 
 /* The league is the point of this view, so it reads before the description. */
 .af-cm-act-league {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 11px;
   font-weight: 700;
 }
@@ -1325,18 +1331,24 @@
 .af-cm-act-when { font-size: 11px; color: var(--faint); }
 
 .af-cm-act-desc {
-  display: block;
+  grid-column: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 11.5px;
   line-height: 1.4;
 }
 
 /* A trade's grade, one chip per team — lib/activity/tradeGradeLabel.ts. */
-.af-cm-act-grade { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; font-size: 11px; color: var(--faint); }
+.af-cm-act-grade { grid-column: 1; min-width: 0; overflow-wrap: anywhere; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; font-size: 11px; color: var(--faint); }
 .af-cm-act-grade-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
 .af-cm-act-grade-chip b { font-weight: 800; }
 
-.af-cm-act > span:first-child { flex: 1; min-width: 0; }
-.af-cm-act-go { flex: none; font-size: 15px; color: var(--faint); }
+.af-cm-act-go {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  font-size: 15px;
+  color: var(--faint);
+}
 
 /* Visually hidden, still read aloud — the arrow alone is not a label. */
 .af-cm-sr {

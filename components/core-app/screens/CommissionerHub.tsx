@@ -43,6 +43,8 @@ import { AutomationOverview } from '@/components/core-app/commissioner/Automatio
 import { OffseasonCalendar } from '@/components/core-app/commissioner/OffseasonCalendar'
 import { IrAutoMove } from '@/components/core-app/commissioner/IrAutoMove'
 import { OrphanAuction } from '@/components/core-app/commissioner/OrphanAuction'
+import { FindLeagueListingCard } from '@/components/core-app/commissioner/FindLeagueListingCard'
+import { ExternalListingCard } from '@/components/core-app/commissioner/ExternalListingCard'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { StorylineStudio } from '@/components/core-app/commissioner/StorylineStudio'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
@@ -50,6 +52,7 @@ import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButto
 import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
 import { RolloverWizard } from '@/components/core-app/commissioner/RolloverWizard'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
+import { DynastyFormatCard } from '@/components/core-app/commissioner/DynastyFormatCard'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { DisputeDesk } from '@/components/disputes/DisputeDesk'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
@@ -260,6 +263,9 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
       {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
       {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
+      {/* Open seats → Find a League. Native only: an imported league's seats are filled on its own platform. */}
+      {league.native && data.role === 'commissioner' ? <FindLeagueListingCard leagueId={league.id} /> : null}
+      {!league.native && data.role === 'commissioner' ? <ExternalListingCard leagueId={league.id} /> : null}
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />
@@ -287,13 +293,17 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         )}
         {data.formatCards.length ? (
           <ul className="af-ch-areas">
-            {data.formatCards.map((card) => (
-              <li key={card.key}>
-                <strong>{t(card.title)}</strong>
-                <p>{t(card.detail)}</p>
-                <Link href={card.href}>{t(card.action)} →</Link>
-              </li>
-            ))}
+            {data.formatCards.map((card) =>
+              card.tone === 'dynasty' ? (
+                <DynastyFormatCard key={card.key} card={card} />
+              ) : (
+                <li key={card.key}>
+                  <strong>{t(card.title)}</strong>
+                  <p>{t(card.detail)}</p>
+                  <Link href={card.href}>{t(card.action)} →</Link>
+                </li>
+              ),
+            )}
           </ul>
         ) : (
           <p className="af-ch-muted">

@@ -47,6 +47,7 @@ import {
 import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
@@ -1506,7 +1507,7 @@ export function TradeCenter(props: {
       myLetter: letter(yourGrade),
       theirLetter: letter(theirGrade),
       score: typeof result.fairnessScore === 'number' ? Math.max(0, Math.min(100, result.fairnessScore)) : null,
-      language: language === 'es' ? 'es' : 'en',
+      language: coreLang(language),
       verdict: clip(copy(result.labels?.fairnessLabel ?? 'Graded')),
       basis: (result.valueBasis?.label ?? result.grade?.basis ?? 'League value').slice(0, 100),
       asOf: result.evaluationReceipt?.status === 'saved' ? result.evaluationReceipt.evaluatedAt : analyzedAt ?? new Date().toISOString(),

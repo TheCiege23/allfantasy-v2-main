@@ -24,7 +24,10 @@ import { BestBallWarRoomPanel } from './best-ball/BestBallWarRoomPanel'
 import { GuillotineWarRoomPanel } from './guillotine/GuillotineWarRoomPanel'
 import { FeatureGate } from '@/components/subscription/FeatureGate'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import '@/components/dynasty/dynasty-details.css'
 
 export type WarRoomTabProps = {
   league: UserLeague
@@ -91,29 +94,33 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
   // `format` is the canonical UserLeague discriminator ('redraft' for non-dynasty,
   // non-variant leagues; specialty variants carry their own format). Fall back to
   // `leagueType` when present. Dynasty/specialty formats keep the strategy/meta view.
+  // One shared predicate (lib/league/isDynastyLeague.ts); this used to read `isDynasty` only.
+  const isDynasty = isDynastyLeague(league)
   const isGuillotineLeague =
     Boolean(league.guillotineMode) || String(league.leagueVariant ?? '').toLowerCase() === 'guillotine'
   const isBestBallLeague = !isGuillotineLeague && Boolean(league.bestBallMode)
   const isKeeperLeague =
-    !league.isDynasty &&
+    !isDynasty &&
     !isGuillotineLeague &&
     !isBestBallLeague &&
     (String(league.format ?? '').toLowerCase() === 'keeper' ||
       String(league.leagueType ?? '').toLowerCase() === 'keeper')
   const isRedraftLeague =
-    !league.isDynasty &&
+    !isDynasty &&
     !isGuillotineLeague &&
     !isKeeperLeague &&
     !isBestBallLeague &&
     (String(league.format ?? '').toLowerCase() === 'redraft' ||
       String(league.leagueType ?? '').toLowerCase() === 'redraft')
   const [metaFrame, setMetaFrame] = useState<'24h' | '7d' | '30d'>('7d')
+  // Dynasty only: the header's violet becomes the Dynasty Era gold.
+  const dynastyEra = usesDynastyBackground(league)
   const liveDraftCompanion = league.status === 'drafting'
   const leagueDraftCompanion = useLeagueWarRoomCompanion({
     leagueId: league.id,
     sport: resolved,
     leagueName: league.name,
-    isDynasty: Boolean(league.isDynasty),
+    isDynasty,
     enabled: liveDraftCompanion,
   })
 
@@ -243,8 +250,8 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-violet-400/25 bg-violet-500/15">
-              <Telescope className="h-4 w-4 text-violet-200" strokeWidth={2} />
+            <span className={dynastyEra ? 'dyd-accent-box flex h-9 w-9 items-center justify-center rounded-xl' : 'flex h-9 w-9 items-center justify-center rounded-xl border border-violet-400/25 bg-violet-500/15'}>
+              <Telescope className={dynastyEra ? 'dyd-accent-icon h-4 w-4' : 'h-4 w-4 text-violet-200'} strokeWidth={2} />
             </span>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-white md:text-xl">AF Legacy</h1>
@@ -257,7 +264,11 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         </div>
         <Link
           href="/war-room"
-          className="shrink-0 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1.5 text-[11px] font-semibold text-violet-100 transition hover:bg-violet-500/20"
+          className={
+            dynastyEra
+              ? 'dyd-accent-box shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition'
+              : 'shrink-0 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1.5 text-[11px] font-semibold text-violet-100 transition hover:bg-violet-500/20'
+          }
         >
           Plans & pricing
         </Link>
@@ -269,7 +280,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       {isRedraftLeague ? <RedraftWarRoomPanel leagueId={league.id} /> : null}
 
       {/* Dynasty leagues get the dynasty-horizon War Room (value/age/direction). */}
-      {league.isDynasty ? <DynastyWarRoomPanel leagueId={league.id} /> : null}
+      {isDynasty ? <DynastyWarRoomPanel leagueId={league.id} /> : null}
 
       {/* Keeper leagues get the keeper War Room (value surplus / keep-cut / draft plan). */}
       {isKeeperLeague ? <KeeperWarRoomPanel leagueId={league.id} /> : null}

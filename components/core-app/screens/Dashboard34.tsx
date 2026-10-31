@@ -52,6 +52,8 @@ export type Dash34League = {
   chips?: Dash34StateChip[]
   /** The viewer commissions it — the same test as the "YOU COMMISH" chip; draws the blue C. */
   isCommissioner?: boolean
+  /** Set on an Exile Island league: the id of the Survivor league it belongs to. */
+  exileOf?: string
   /** Null until live scoring exists for this league. */
   score?: { you: number; opponent: number; opponentName: string } | null
   /** Kickoff/opponent line shown when there is no live score yet. */

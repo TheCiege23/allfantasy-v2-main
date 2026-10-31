@@ -32,6 +32,14 @@ export const railRowMessages = defineMessages({
     rank: (n: number): string => ordinal(n),
     of: ' of ',
     tiedLowest: 'tied lowest',
+    chopLine: (team: string, value: string) => `Lowest: ${team} · ${value}`,
+    toPass: (team: string, value: string) => `To pass: ${team} · ${value}`,
+    weeksLeft: (n: number) => (n === 1 ? '1 week left' : `${n} weeks left`),
+    /* The draft time ("Mon 8pm"): the locale, and how the clock reads — English drops the space and lowercases AM/PM. */
+    dateLocale: 'en-US',
+    shortTime: (time: string): string => time.replace(/\s?([AP])M$/i, (_, h: string) => `${h.toLowerCase()}m`),
+    /* The rail header's week ("Week 8"), which arrives in English from the server. */
+    weekLabel: (label: string): string => label,
     onTheBlock: 'on the block',
     bottomOfLeague: 'bottom of the league',
     overTheCut: (margin: string) => `+${margin} over the cut`,
@@ -40,6 +48,9 @@ export const railRowMessages = defineMessages({
     placesClear: (n: number): string => `${n} ${n === 1 ? 'place' : 'places'} clear`,
     onPoints: 'on points',
     onProjection: 'on projection',
+    /* A best-ball league ranks on projected finals: banked points plus the best lineup still possible. */
+    onBestBallProvisional: 'on projected best-ball final · provisional',
+    onBestBallFinal: 'on final best-ball points',
     /* RailGuillotine */
     ofAlive: (n: number) => ` of ${n} alive`,
     choppedWeek: (week: number) => `Chopped wk ${week}`,
@@ -86,7 +97,7 @@ export const railRowMessages = defineMessages({
     filterGroupAria: 'Filter leagues',
     filterLabel: (f: 'all' | 'live' | 'commissioner' | 'needs'): string =>
       f === 'all' ? 'All' : f === 'live' ? 'Live' : f === 'commissioner' ? 'Commissioner' : 'Needs action',
-    holdHint: 'Press and hold a league (or right-click it) to pin, move or hide it.',
+    holdHint: 'Drag a league to reorder it, or press and hold (right-click) it to pin, move or hide it.',
     /* The Pin and Move sheet. */
     menuTitle: (name: string) => `Options for ${name}`,
     menuClose: 'Close',
@@ -94,7 +105,15 @@ export const railRowMessages = defineMessages({
     unpin: 'Unpin',
     moveUp: 'Move up',
     moveDown: 'Move down',
+    reorder: 'Reorder leagues',
+    reorderHint: 'Drag ⠿ to put your leagues in order.',
     hide: 'Hide from this list',
+    /* An Exile Island row, in place of a matchup. */
+    exileTokens: (tokens: number, need: number | null, week: number | null): string =>
+      need != null && week != null
+        ? `${tokens} of ${need} tokens · return after week ${week}`
+        : `${tokens} ${tokens === 1 ? 'token' : 'tokens'}`,
+    exileOnIsland: (count: number): string => (count === 0 ? 'Nobody on the island yet' : `${count} on the island`),
     hideNote: 'Bring it back any time in Settings.',
     hiddenCount: (n: number) => `${n} hidden · Settings`,
     hiddenCountAria: (n: number) => `${n} hidden ${n === 1 ? 'league' : 'leagues'} — manage in Settings`,
@@ -117,6 +136,12 @@ export const railRowMessages = defineMessages({
     rank: (n) => `#${n}`,
     of: ' de ',
     tiedLowest: 'empatado en el último lugar',
+    chopLine: (team, value) => `Más bajo: ${team} · ${value}`,
+    toPass: (team, value) => `Por superar: ${team} · ${value}`,
+    weeksLeft: (n) => (n === 1 ? 'queda 1 semana' : `quedan ${n} semanas`),
+    dateLocale: 'es',
+    shortTime: (time) => time,
+    weekLabel: (label) => label.replace(/^Week (\d+)/, 'Semana $1'),
     onTheBlock: 'en la línea de corte',
     bottomOfLeague: 'último de la liga',
     overTheCut: (margin) => `+${margin} sobre el corte`,
@@ -125,6 +150,8 @@ export const railRowMessages = defineMessages({
     placesClear: (n) => `${n} ${n === 1 ? 'puesto' : 'puestos'} de margen`,
     onPoints: 'por puntos',
     onProjection: 'por proyección',
+    onBestBallProvisional: 'por final proyectado de best ball · provisional',
+    onBestBallFinal: 'por puntos finales de best ball',
     ofAlive: (n) => ` de ${n} vivos`,
     choppedWeek: (week) => `Eliminado sem ${week}`,
     chopped: 'Eliminado',
@@ -160,14 +187,21 @@ export const railRowMessages = defineMessages({
     filterGroupAria: 'Filtrar ligas',
     filterLabel: (f) =>
       f === 'all' ? 'Todas' : f === 'live' ? 'En vivo' : f === 'commissioner' ? 'Comisionado' : 'Requieren acción',
-    holdHint: 'Mantén pulsada una liga (o haz clic derecho) para fijarla, moverla u ocultarla.',
+    holdHint: 'Arrastra una liga para reordenarla, o mantenla pulsada (clic derecho) para fijarla, moverla u ocultarla.',
     menuTitle: (name) => `Opciones de ${name}`,
     menuClose: 'Cerrar',
     pin: 'Fijar arriba',
     unpin: 'Quitar de arriba',
     moveUp: 'Subir',
     moveDown: 'Bajar',
+    reorder: 'Reordenar ligas',
+    reorderHint: 'Arrastra ⠿ para ordenar tus ligas.',
     hide: 'Ocultar de esta lista',
+    exileTokens: (tokens, need, week) =>
+      need != null && week != null
+        ? `${tokens} de ${need} fichas · regreso tras la semana ${week}`
+        : `${tokens} ${tokens === 1 ? 'ficha' : 'fichas'}`,
+    exileOnIsland: (count) => (count === 0 ? 'Nadie en la isla todavía' : `${count} en la isla`),
     hideNote: 'Puedes volver a mostrarla en Ajustes.',
     hiddenCount: (n) => `${n} ${n === 1 ? 'oculta' : 'ocultas'} · Ajustes`,
     hiddenCountAria: (n) => `${n} ${n === 1 ? 'liga oculta' : 'ligas ocultas'}; gestiónalas en Ajustes`,

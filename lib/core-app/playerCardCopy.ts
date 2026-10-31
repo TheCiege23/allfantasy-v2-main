@@ -7,6 +7,7 @@ import type { PlayerCardInsight } from './playerCard'
 import type { WaiverEdgeFact } from '@/lib/competitive-edge/waiverEdge'
 import { messagesFor } from '@/lib/i18n/messages'
 import { modeEs, playerCardMessages } from './messages/playerCard'
+import { spanishFlag } from './messages/coreLocale'
 
 /**
  * The player card pop-up (components/core-app/player-card/PlayerCardSheet.tsx) and the Waivers
@@ -36,7 +37,8 @@ import { modeEs, playerCardMessages } from './messages/playerCard'
  * PURE, client-safe (the two `import type`s are erased).
  */
 
-const es = (language: string) => language === 'es'
+/** Spanish is the one language these rebuild into; every other language keeps the English. */
+const es = spanishFlag
 
 /* ── the player card ────────────────────────────────────────────────────────────────────────────── */
 

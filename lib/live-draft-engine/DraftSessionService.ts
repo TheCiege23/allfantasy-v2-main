@@ -525,10 +525,11 @@ export async function buildSessionSnapshot(
       budgets: getBudgetsFromSession(session),
       auctionState,
       minBidIncrement: config.minBidIncrement,
-      nominationOrder: slotOrder,
+      nominationOrder: auctionState.nominationOrder?.length ? auctionState.nominationOrder : slotOrder,
     }
+    const nominationOrder = auction.nominationOrder
     const auctionNominator =
-      slotOrder[((Math.max(0, auctionState.nominationOrderIndex) % Math.max(1, slotOrder.length)) + Math.max(1, slotOrder.length)) % Math.max(1, slotOrder.length)]
+      nominationOrder[((Math.max(0, auctionState.nominationOrderIndex) % Math.max(1, nominationOrder.length)) + Math.max(1, nominationOrder.length)) % Math.max(1, nominationOrder.length)]
     if (auctionNominator) {
       const overall = resolveNextOpenPickOverall(progressPicks, totalPicks) ?? picksCount + 1
       const round = Math.ceil(overall / teamCount)
@@ -712,7 +713,7 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
     where: { id: session.id, status: 'pre_draft', version: session.version },
     data: {
       ...(ls
-        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
+        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: session.draftModeLabel === 'rookie' ? session.playerPool : ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
         : {}),
       startedAt: startedAtNow,
       version: { increment: 1 },
@@ -734,8 +735,13 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
   })
 
   if (session.draftType === 'auction') {
-    const { initializeAuctionForSession } = await import('./auction/AuctionEngine')
-    await initializeAuctionForSession(leagueId)
+    const { buildInitialAuctionSessionUpdate } = await import('./auction/AuctionEngine')
+    let auctionStart: Awaited<ReturnType<typeof buildInitialAuctionSessionUpdate>>
+    try {
+      auctionStart = await buildInitialAuctionSessionUpdate(leagueId, session)
+    } catch (error) {
+      return { ok: false, reason: 'session_not_ready', error: error instanceof Error ? error.message : 'Auction settings are unavailable.' }
+    }
     try {
       const { isSalaryCapLeague } = await import('@/lib/salary-cap/SalaryCapLeagueConfig')
       const { initializeStartupLedgers } = await import('@/lib/salary-cap/AuctionStartupService')
@@ -747,7 +753,7 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
       console.warn('[startDraftSession] Salary cap startup ledger init non-fatal:', e)
     }
     if (!(await startClaimedSession(session, {
-      status: 'in_progress', pausedRemainingSeconds: null, overnightFrozenPickSeconds: null,
+      ...auctionStart, status: 'in_progress', overnightFrozenPickSeconds: null,
       startedAt: startedAtNow, completedAt: null, version: { increment: 1 },
     }, claimedVersion))) return { ok: false, reason: 'session_not_ready' }
     await ensureDraftingLifecycleForActiveSession(leagueId)
@@ -1311,6 +1317,9 @@ export async function resetDraftSession(
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return false
   if (session.status === COMPLETED_DRAFT_SESSION_STATUS && !options?.allowCompleted) return false
+  const auctionState = session.auctionState && typeof session.auctionState === 'object' && !Array.isArray(session.auctionState)
+    ? session.auctionState as Record<string, unknown> : null
+  const rookieAuction = session.draftModeLabel === 'rookie' && session.draftType === 'auction' ? auctionState?.rookieAuction : null
   const outcome = await prisma.$transaction(async (tx) => {
     const archivedPicks = await tx.draftPick.findMany({where:{sessionId:session.id},orderBy:{overall:'asc'}})
     await recordArchiveEvent(tx, session, 'reset_draft', {priorSession:session, archivedPicks})
@@ -1331,7 +1340,7 @@ export async function resetDraftSession(
         timerEndAt: null,
         pausedRemainingSeconds: null,
         auctionBudgets: Prisma.JsonNull,
-        auctionState: Prisma.JsonNull,
+        auctionState: rookieAuction ? ({ rookieAuction } as Prisma.InputJsonValue) : Prisma.JsonNull,
         version: { increment: 1 },
         updatedAt: new Date(),
       },

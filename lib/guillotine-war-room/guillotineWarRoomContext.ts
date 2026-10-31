@@ -27,6 +27,7 @@ import { getLiveDangerTiers } from '@/lib/guillotine/chopWatchLoad'
 import { claimedPlayerIds } from '@/lib/guillotine/choppedReleases'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
+import { readGuillotineBestBall } from '@/lib/guillotine/guillotineBestBall'
 import type {
   DangerTier,
   DataState,
@@ -342,10 +343,12 @@ export async function buildGuillotineWarRoomContext(
       injuriesAsOf: injuryNews.injuriesAsOf ? injuryNews.injuriesAsOf.toISOString() : null,
     },
     missingDataFlags,
+    bestBallLineups: readGuillotineBestBall(league.settings),
     featureAvailability: {
       survivalRisk: survivalAvailable,
       rosterRisk: availability.rosters === 'available',
-      lineupSafety: availability.rosters === 'available' && rosterRulesState === 'available',
+      // A best ball Guilly league sets its own lineups (lib/guillotine/guillotineBestBall.ts): nothing to make safe.
+      lineupSafety: !readGuillotineBestBall(league.settings) && availability.rosters === 'available' && rosterRulesState === 'available',
       waivers: availability.rosters === 'available',
       faabPlan: availability.rosters === 'available',
       droppedPlayers: availability.droppedPlayerPool === 'available',

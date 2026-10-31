@@ -103,7 +103,7 @@ describe('campus lineup', () => {
   const after = (campus: string[]) => ({ lineup_sections: { ...before.lineup_sections, campus } })
   const pos: Record<string, string> = { c1: 'QB', c2: 'RB', c3: 'WR', p1: 'QB' }
   const check = (campus: string[], slots = { QB: 1, RB: 1, FLEX: 1 }) =>
-    validateCampusLineup({ before, after: after(campus), slots, positionOf: (id) => pos[id], football: true }).map((i) => i.code)
+    validateCampusLineup({ before, after: after(campus), slots, positionOf: (id) => pos[id], sport: 'football' }).map((i) => i.code)
 
   it('accepts college players that fit', () => {
     expect(check(['c1', 'c2', 'c3'])).toEqual([])
@@ -117,7 +117,7 @@ describe('campus lineup', () => {
   })
 
   it('refuses outside football', () => {
-    expect(validateCampusLineup({ before, after: after(['c1']), slots: {}, positionOf: () => 'G', football: false }).map((i) => i.code)).toEqual(['campus_not_football'])
+    expect(validateCampusLineup({ before, after: after(['c1']), slots: {}, positionOf: () => 'G', sport: null }).map((i) => i.code)).toEqual(['campus_not_football'])
   })
 
   it('a campus starter is still a devy player to every generic reader', () => {

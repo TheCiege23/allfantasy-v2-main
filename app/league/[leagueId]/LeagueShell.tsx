@@ -1,5 +1,9 @@
 'use client'
 
+import { leagueAudience } from '@/lib/league-privacy/leagueAudience'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
+
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
 import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
@@ -7,12 +11,14 @@ import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQu
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
 import { usesNativeLineupScreen } from '@/lib/league/native/lineupScreenRouting'
+import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { KickerValuePanel } from '@/components/league/KickerValuePanel'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
 import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
+import { readChosenPlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { shouldApplyIncomingView } from '@/lib/league/leagueTabSync'
 import { LeagueLiveStrip } from '@/components/sports/LeagueLiveStrip'
 import { LeagueStoryCard } from '@/components/sports/LeagueStoryCard'
@@ -68,6 +74,9 @@ import {
   Brain,
   Swords,
   Wallet,
+  Landmark,
+  CarTaxiFront,
+  Ticket,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
@@ -149,6 +158,8 @@ import { CanonicalRedraftScheduleTab } from './tabs/redraft/CanonicalRedraftSche
 import { KeeperSelectionTab } from './tabs/KeeperSelectionTab'
 import { BestBallTab } from './tabs/BestBallTab'
 import { GuillotineTab } from './tabs/GuillotineTab'
+import { ImportedGuillyTab } from './tabs/ImportedGuillyTab'
+import { guillyTabKind } from '@/lib/guillotine/importedGuillyView'
 import { DynastyHome } from './tabs/DynastyHome'
 import { SurvivorHome } from '@/components/survivor/SurvivorHome'
 import { SurvivorNativeHome } from '@/components/survivor/SurvivorNativeHome'
@@ -457,8 +468,24 @@ export function LeagueShell({
   }, [nflRedraftCore, league.id])
   const redraftCurrentWeek = redraftSeason?.currentWeek ?? null
   const hasActiveRedraftSeason = redraftSeason != null
+  // The redraft header's season track (NativeLeagueWorkspace → RedraftSeasonTrack). Only the league's
+  // own numbers: the RedraftSeason row when one is loaded, else the commissioner's chosen playoff week
+  // (never the sport default) and the trade-deadline column. A missing value drops its marker.
+  const redraftSeasonFacts = useMemo(
+    () => ({
+      totalWeeks: redraftSeason?.totalWeeks ?? null,
+      playoffStartWeek: redraftSeason?.playoffStartWeek ?? readChosenPlayoffStartWeek(league),
+      tradeDeadlineWeek: league.tradeDeadlineWeek ?? null,
+      // A RedraftSeason row is only created once the draft finalizes (see the note above).
+      ...(redraftSeason ? { draftComplete: true } : {}),
+    }),
+    [redraftSeason, league],
+  )
 
   const nativeWorkspace = isNativePlatform(league.platform)
+  // An imported Guilly league (lib/guillotine/importedGuillyView.ts): its tab reads the provider's scores, not
+  // our chop engine. Most imports carry only `leagueType: 'guillotine'`, which the native gate below never read.
+  const guillyTab = guillyTabKind(league, nativeWorkspace)
   const [nativeChimmyOpen, setNativeChimmyOpen] = useState(false)
   const tabDefs = useMemo(() => {
     if (nflRedraftCore) {
@@ -506,7 +533,7 @@ export function LeagueShell({
       const bb = { id: 'bestball', label: 'Best Ball' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), bb, ...base.slice(idx + 1)] : [bb, ...base]
     }
-    if (league.guillotineMode || league.leagueVariant === 'guillotine') {
+    if (guillyTab) {
       const idx = base.findIndex((t) => t.id === 'redraft')
       const g = { id: 'guillotine', label: 'Guilly' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), g, ...base.slice(idx + 1)] : [g, ...base]
@@ -564,7 +591,8 @@ export function LeagueShell({
     if (league.leagueType === 'keeper' && league.keeperPhaseActive) {
       base = [{ id: 'keeper', label: 'Keepers' }, ...base]
     }
-    if (league.leagueType === 'dynasty' || league.leagueType === 'devy' || league.leagueType === 'c2c') {
+    // One shared predicate (lib/league/isDynastyLeague.ts): this used to read `leagueType` only, exact case.
+    if (isDynastyLeague(league)) {
       const idx = base.findIndex((t) => t.id === 'redraft')
       const dynastyTabs: TabDef[] = [
         { id: 'dynasty', label: 'Dynasty' },
@@ -594,10 +622,12 @@ export function LeagueShell({
     nflRedraftCore,
     league.sport,
     league.leagueType,
+    league.isDynasty,
     league.keeperPhaseActive,
     league.bestBallMode,
     league.guillotineMode,
     league.leagueVariant,
+    guillyTab,
     isCommissioner,
     shouldUseMatchupPrimary,
     t,
@@ -1275,7 +1305,6 @@ export function LeagueShell({
       guillotineMode: league.guillotineMode,
       bestBallMode: league.bestBallMode,
     })
-    const visibility = settings.league_privacy_visibility
     return {
       id: league.id,
       name: league.name ?? 'Your league',
@@ -1287,7 +1316,7 @@ export function LeagueShell({
       tePremiumPoints: typeof settings.te_premium_points === 'number' ? settings.te_premium_points : null,
       draftDateIso,
       timezone: league.timezone ?? null,
-      privacy: visibility === 'public' ? 'public' : visibility === 'private' ? 'private' : null,
+      privacy: leagueAudience(settings),
     }
   }, [league, draftDateIso])
 
@@ -1523,6 +1552,7 @@ export function LeagueShell({
           onOpenChimmy={() => { setNativeChimmyOpen(true); setMobileLeftOpen(true) }}
           rail={leagueRail}
           guillotineBanner={guillotineAtmosphere ? { line: guillotineAtmosphere.line, mood: guillotineAtmosphere.mood } : null}
+          seasonFacts={redraftSeasonFacts}
           layoutMode="balanced-three-panel"
           embedCenterOnly={embedMode}
           immersive={specialtyImmersive}
@@ -2324,7 +2354,8 @@ function LeagueTabRouter({
             : id === 'settings' ? firstTab('settings', 'commissioner', 'league')
               : id,
       )
-    const bestBall = isBestBallLeague(selectedLeague.leagueVariant ?? null, selectedLeague.bestBallMode ?? null)
+    // A best ball Guilly league keeps the classic tab like a Best Ball league: its lineup sets itself.
+    const bestBall = isBestBallLeague(selectedLeague.leagueVariant ?? null, selectedLeague.bestBallMode ?? null) || isBestBallGuillotine(selectedLeague)
     switch (activeTab) {
       case 'matchups':
       case 'matchup':
@@ -2395,6 +2426,8 @@ function LeagueTabRouter({
     case 'bestball':
       return <BestBallTab leagueId={leagueId} sport={sport} />
     case 'guillotine':
+      // An imported league is chopped by its provider: its tab reads the provider's scores, not our engine.
+      if (guillyTabKind(selectedLeague, isNativePlatform(selectedLeague.platform)) === 'imported') return <ImportedGuillyTab leagueId={leagueId} />
       return (
         <GuillotineTab leagueId={leagueId} sport={sport} leagueName={selectedLeague.name} />
       )
@@ -2549,6 +2582,7 @@ function LeagueTabRouter({
           <LeagueChatSurface
             leagueId={leagueId}
             leagueName={selectedLeague.name ?? 'League'}
+            dynastyBackground={usesDynastyBackground(selectedLeague)}
             platform={selectedLeague.platform}
             isCommissioner={isCommissioner}
             teamCount={selectedLeague.teamCount ?? null}
@@ -2651,6 +2685,9 @@ const LEAGUE_TAB_NAV_ICONS: Record<string, LucideIcon> = {
   leaderboard: Trophy,
   'my-picks': Crosshair,
   schedule: CalendarRange,
+  dynasty: Landmark,
+  dynasty_taxi: CarTaxiFront,
+  dynasty_picks: Ticket,
   bestball: Sparkles,
   guillotine: Scissors,
   survivor: TreePalm,
