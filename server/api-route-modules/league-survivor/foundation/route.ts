@@ -36,6 +36,7 @@ import { getNbaSurvivorGameOptions, saveNbaSurvivorGamePick } from '@/lib/surviv
 import { createSurvivorChatMessage } from '@/lib/survivor/survivorChatBridge'
 import { getSurvivorIdolSetupView, isSurvivorDraftStarted, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
 import { isSurvivorTwistPresetId, SURVIVOR_TWIST_PRESET_SETTING, survivorTwistFoundationPatch, survivorTwistIdolConfig } from '@/lib/survivor/survivorTwistPresets'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -526,10 +527,10 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
         const voted = await tx.survivorVote.findFirst({ where: { councilId, voterUserId: targetUserId, doesNotCount: false }, select: { id: true } })
         if (voted) return false
         await tx.survivorCommissionerAction.create({ data: { leagueId, commissionerId: userId, week: ctx.council.week, actionType: 'council_vote_nudge', targetUserId, description: councilId } })
-        await tx.platformNotification.create({ data: { userId: targetUserId, type: 'survivor:vote_nudge', title: 'Your vote is still due', body: 'Message @Chimmy before the Council deadline.', severity: 'medium', productType: 'sports', meta: { leagueId, councilId, deepLinkPath: `/survivor/${leagueId}/tribal` } } })
+        if (!isSeatPlaceholderUserId(targetUserId)) await tx.platformNotification.create({ data: { userId: targetUserId, type: 'survivor:vote_nudge', title: 'Your vote is still due', body: 'Message @Chimmy before the Council deadline.', severity: 'medium', productType: 'sports', meta: { leagueId, councilId, deepLinkPath: `/survivor/${leagueId}/tribal` } } })
         return true
       })
-      if (outcome) await sendPushToUser(targetUserId, { title: 'Your vote is still due', body: 'Message @Chimmy before the Council deadline.', href: `/survivor/${leagueId}/tribal` }).catch(() => [])
+      if (outcome && !isSeatPlaceholderUserId(targetUserId)) await sendPushToUser(targetUserId, { title: 'Your vote is still due', body: 'Message @Chimmy before the Council deadline.', href: `/survivor/${leagueId}/tribal` }).catch(() => [])
       return NextResponse.json(outcome ? { ok: true, sent: true } : { ok: false, error: 'Reminder already sent or voting unavailable' }, { status: outcome ? 200 : 429 })
     }
     const deadline = await prisma.$transaction(async tx => {

@@ -100,8 +100,13 @@ export async function mirrorSurvivorChatMessageToLeagueChat(
   }
 
   const cardData = row.cardData && typeof row.cardData === 'object' ? (row.cardData as Record<string, unknown>) : null
+  // A Survivor share card shows as its picture in league chat (RichMessage draws `attachments`).
+  const cardImage = cardData?.type === 'share_card' && typeof cardData.momentId === 'string'
+    ? `/api/share/survivor/${encodeURIComponent(cardData.momentId)}?f=post`
+    : null
   const metadata: Record<string, unknown> = {
     ...(host ? { chimmy: true } : {}),
+    ...(cardImage ? { attachments: [{ type: 'image', url: cardImage, mimeType: 'image/png' }] } : {}),
     survivorChat: {
       messageId: row.id,
       channelId: row.channelId,

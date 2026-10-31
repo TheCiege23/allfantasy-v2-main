@@ -58,7 +58,8 @@ describe('DraftBoard — snake outer scroll overscroll-x-contain (Commit 24)', (
 
 describe('DraftBoard — board grid min-w-max (Commit 24)', () => {
   it('snake board grid has min-w-max to prevent column squeezing', () => {
-    expect(boardSrc).toMatch(/min-w-max.*data-testid="draft-board-grid"/)
+    // className and testid sit on separate lines since the phone column vars (2026-10-29).
+    expect(boardSrc).toMatch(/className="min-w-max[^"]*"\s+data-testid="draft-board-grid"/)
   })
 
   it('draft-board-grid testid is preserved', () => {

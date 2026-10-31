@@ -13,6 +13,7 @@ import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import { resolveTiebreak } from './GuillotineTiebreakResolver'
 import { evaluateWeek, getDraftSlotByRoster } from './GuillotineWeekEvaluator'
 import { releaseChoppedRosters } from './GuillotineRosterReleaseEngine'
+import { IMPORTED_CHOP_REASON, isImportedLeague } from './importedLeagueGuard'
 import { appendEvent } from './GuillotineEventLog'
 import { postChopToLeagueChat } from './guillotineChat'
 import { postAutomaticGuillotineRecap } from './weeklyRecap'
@@ -101,6 +102,10 @@ export async function markRedraftRostersEliminated(
 }
 
 export async function runElimination(input: RunEliminationInput): Promise<GuillotineChopResult | null> {
+  // 🛑 Never on an imported league: the provider chops it (./importedLeagueGuard.ts).
+  if (await isImportedLeague(input.leagueId)) {
+    return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: IMPORTED_CHOP_REASON }
+  }
   const key = `guillotine-elimination:${input.leagueId}:${input.weekOrPeriod}`
   const owner = randomUUID()
   const lock = await acquireAutomationLock(key, { owner, ttlMs: 300_000 })
@@ -532,6 +537,27 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     } catch (e) {
       console.warn('[guillotine] weekly recap not posted', e instanceof Error ? e.message : 'unknown error')
     }
+  }
+
+  /*
+   * Chop alerts (./chopAlerts.ts): the chopped team is told it is out, this week's survivors who went and
+   * when those players can be claimed — push, email and the bell, by each manager's own settings.
+   * Not tied to `skipChat`: a league with no owner to author a chat post still has managers to tell.
+   * A retry of the same week is deduped per person. Best-effort for the same reason as the chat post.
+   */
+  try {
+    const { sendChopResultAlerts } = await import('./chopAlerts')
+    await sendChopResultAlerts({
+      leagueId: input.leagueId,
+      season: input.season,
+      week: input.weekOrPeriod,
+      choppedRosterIds,
+      aliveRosterIds: evalResult.scores.map((s) => s.rosterId),
+      displayNames: await getDisplayNamesForRosters(input.leagueId, choppedRosterIds),
+      rosterReleaseTiming: config.rosterReleaseTiming,
+    })
+  } catch (e) {
+    console.warn('[guillotine] chop alerts not sent; the chop stands', e instanceof Error ? e.message : 'unknown error')
   }
 
   await appendEvent(input.leagueId, 'chop_animation_trigger', {

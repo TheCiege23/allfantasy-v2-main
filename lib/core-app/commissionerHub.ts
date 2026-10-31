@@ -17,6 +17,7 @@ import type { CoreIssue } from './outstandingIssues'
 import type { CoreDepthAccess } from './coreDepthAccess'
 import { isScored } from './currentWeek'
 import { platformLabel, verifiedHandoff } from './platformLinks'
+import { importedWaiverSettings } from './waiverRowMeta'
 import { followsRenewalAutomatically } from '@/lib/league-import/sleeper/followRenewedLeagues'
 import { leagueWeekFromSettings, playoffStartWeek, regularSeasonWeeks, tradeDeadlineWeek } from './seasonTimeline'
 import {
@@ -62,6 +63,9 @@ import { resolveCommissionerLeagueProfile } from '@/lib/commissioner-os/profile/
 import { commissionerFormatCards, type CommissionerFormatCard } from './commissioner/formatCards'
 import { applicableTemplates } from '@/lib/commissioner-os/profile/templateOffers'
 import { loadCommissionerHistory, type CommissionerHistory } from './commissioner/history'
+import { messagesFor } from '@/lib/i18n/messages'
+import { commissionerHubMessages } from './messages/commissionerHub'
+import { pickTradeDeadlineFor } from '@/lib/trade-deadline/pickTradeDeadline'
 
 /**
  * Commissioner Hub — 38a screen 9.
@@ -173,14 +177,14 @@ export function buildCommissionerAccessRows(
 ): CommissionerAccessRow[] {
   const { ownerUserId = null, native = false } = league
   // The fallbacks below stand in for a name, so they are worded in the reader's language too.
-  const es = league.language === 'es'
-  const YOU = es ? 'Tú' : 'You'
+  const m = messagesFor(commissionerHubMessages, league.language)
+  const YOU = m.you
   const handleOf = (t: AccessTeam | undefined, fallback: string) => t?.ownerName?.trim() || t?.teamName?.trim() || fallback
 
   const flagged: CommissionerAccessRow[] = teams
     .filter((t) => t.isCommissioner || t.isCoCommissioner)
     .map((t) => {
-      const handle = handleOf(t, es ? 'Mánager desconocido' : 'Unknown manager')
+      const handle = handleOf(t, m.unknownManager)
       const isOwner = Boolean(ownerUserId) && t.claimedByUserId === ownerUserId
       return {
         handle,
@@ -195,7 +199,7 @@ export function buildCommissionerAccessRows(
   const listed = (id: string) => teams.some((t) => t.claimedByUserId === id && (t.isCommissioner || t.isCoCommissioner))
 
   if (ownerUserId && !listed(ownerUserId)) {
-    const handle = handleOf(teams.find((t) => t.claimedByUserId === ownerUserId), ownerUserId === userId ? YOU : es ? 'Dueño de la liga' : 'League owner')
+    const handle = handleOf(teams.find((t) => t.claimedByUserId === ownerUserId), ownerUserId === userId ? YOU : m.leagueOwner)
     rows.push({ handle, initials: initialsOf(handle), role: 'commissioner', isYou: ownerUserId === userId, basis: 'allfantasy' })
   }
 
@@ -350,12 +354,6 @@ export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDeni
  * the tile states the gap instead. The "Resolve a dispute" guide is the
  * replacement: it works the same way whether or not a scan exists.
  */
-const IMPORTED_DISPUTES_REASON =
-  'Dispute detection only runs on leagues created in AllFantasy — it has no data to read for an imported league, so "none found" would not mean anything here. The “Resolve a dispute” guide on this page works for every league.'
-
-const IMPORTED_DISPUTES_REASON_ES =
-  'La detección de disputas solo funciona en ligas creadas en AllFantasy: no tiene datos que leer en una liga importada, así que "ninguna encontrada" no significaría nada aquí. La guía «Resolver una disputa» de esta página sirve para cualquier liga.'
-
 const ROLE_LABEL: Record<'commissioner' | 'co_commissioner', string> = {
   commissioner: 'Commissioner',
   co_commissioner: 'Co-commissioner',
@@ -500,7 +498,7 @@ export async function getCommissionerHub(input: {
 }): Promise<CommissionerHubResult> {
   const { leagueId, userId, issues } = input
   const language = input.language ?? 'en'
-  const es = language === 'es'
+  const m = messagesFor(commissionerHubMessages, language)
   const now = input.now ?? new Date()
   const depthOpen = input.depth?.unlocked !== false
 
@@ -552,9 +550,7 @@ export async function getCommissionerHub(input: {
       allowed: false,
       role,
       leagueName,
-      reason: es
-        ? 'Solo para comisionados y cocomisionados. Esta es la zona de administración de la liga (configuración, disputas y la cola de atención), así que está limitada a quienes la dirigen.'
-        : 'Commissioners and co-commissioners only. This is the league’s admin surface — settings, disputes and the attention queue — so it is limited to the people who run it.',
+      reason: m.commissionersOnly,
     }
   }
 
@@ -574,7 +570,7 @@ export async function getCommissionerHub(input: {
    */
   const [
     teams,
-    waiverSettings,
+    storedWaiverSettings,
     rosters,
     waivers,
     healthSnapshots,
@@ -624,14 +620,12 @@ export async function getCommissionerHub(input: {
       ? getCommissionerWaiverOversight({ leagueId, platform, role, now, language }).catch(
           (): WaiverOversight => ({
             available: false,
-            reason: es
-              ? 'No se pudieron leer los datos de agentes libres en este momento. Es un fallo de lectura por nuestra parte, no una liga sin agentes libres.'
-              : 'Waiver data couldn’t be read just now. This is a read failure on our side, not a league with no waivers.',
+            reason: m.waiverReadFailed,
           }),
         )
       : Promise.resolve<WaiverOversight>({
           available: false,
-          reason: es ? 'La supervisión de agentes libres es parte de AF Commissioner.' : 'Waiver oversight is part of AF Commissioner.',
+          reason: m.waiverOversightUpsell,
         }),
     getCommissionerHubHealthForUser(userId, [
       {
@@ -682,8 +676,10 @@ export async function getCommissionerHub(input: {
       where: { leagueId, network: { ownerUserId: userId } },
       select: { role: true, network: { select: { id: true, name: true } } },
     })).catch(() => null),
-    loadCommissionerHistory(leagueId, native, { platform, sport }, language).catch((): CommissionerHistory => ({ tradeAvailable: false, draftAvailable: false, trades: [], drafts: [], tradeNote: es ? 'No se pudo leer el historial de intercambios.' : 'Trade history could not be read.', draftNote: es ? 'No se pudo leer el historial de drafts.' : 'Draft history could not be read.' })),
+    loadCommissionerHistory(leagueId, native, { platform, sport }, language).catch((): CommissionerHistory => ({ tradeAvailable: false, draftAvailable: false, trades: [], drafts: [], tradeNote: m.tradeHistoryUnread, draftNote: m.draftHistoryUnread })),
   ])
+  /* A Fantrax row is AllFantasy's bootstrap defaults, never the league's rules (waiverRowMeta.ts). */
+  const waiverSettings = importedWaiverSettings(storedWaiverSettings, platform)
 
   const profile = resolveCommissionerLeagueProfile({
     league,
@@ -770,10 +766,10 @@ export async function getCommissionerHub(input: {
   const stale = staleReason
     ? {
         reason: staleReason,
-        action: inAppLink(es ? 'Volver a sincronizar esta liga' : 'Re-sync this league', `/core/sync?league=${encodeURIComponent(leagueId)}`),
+        action: inAppLink(m.resyncLeague, `/core/sync?league=${encodeURIComponent(leagueId)}`),
       }
     : null
-  const replaceGuide = inAppLink(es ? 'Reemplazar a un mánager' : 'Replace a manager', '#workflow-replace-manager')
+  const replaceGuide = inAppLink(m.replaceManager, '#workflow-replace-manager')
   const duesTracker = readDuesTracker(settingsJson)
 
   // The same judgement the league Overview's commissioner card shows.
@@ -795,7 +791,7 @@ export async function getCommissionerHub(input: {
       orphanTeams: unownedTeamNames(teams, language),
       totalTeams: teamCount,
       action: native
-        ? inAppLink(es ? 'Abrir equipos huérfanos' : 'Open orphan teams', `/league/${encodeURIComponent(leagueId)}/orphan-teams`)
+        ? inAppLink(m.openOrphanTeams, `/league/${encodeURIComponent(leagueId)}/orphan-teams`)
         : replaceGuide,
       stale,
       language,
@@ -815,7 +811,7 @@ export async function getCommissionerHub(input: {
       // A stored lineup has no empty-slot marker, so holes are counted against the rules.
       requiredStarters: readRequiredStarterCount(league),
       action: native
-        ? inAppLink(es ? 'Abrir la liga' : 'Open league', `/league/${encodeURIComponent(leagueId)}`)
+        ? inAppLink(m.openLeague, `/league/${encodeURIComponent(leagueId)}`)
         : (() => {
             const link = verifiedHandoff(hubLeague, 'league')
             return link ? { label: link.label, href: link.href, external: true } : null
@@ -827,23 +823,23 @@ export async function getCommissionerHub(input: {
       rosterIds: teams.map((t) => t.externalId),
       teamName: (id) => {
         const t = teamByExternal.get(id)
-        return t ? teamLabel(t, language) : es ? `Equipo ${id}` : `Team ${id}`
+        return t ? teamLabel(t, language) : m.teamFallback(id)
       },
       throughWeek: lastPlayedWeek,
       eliminationFormat,
-      action: inAppLink(es ? 'Abrir el calendario de partidos' : 'Open schedule', `/league/${encodeURIComponent(leagueId)}?view=schedule`),
+      action: inAppLink(m.openSchedule, `/league/${encodeURIComponent(leagueId)}?view=schedule`),
       language,
     }),
     unpaidDuesFlag({
       tracker: duesTracker,
       teams: teams.map((t) => ({ id: t.id, name: teamLabel(t, language) })),
-      action: inAppLink(es ? 'Abrir el control de cuotas' : 'Open dues tracker', `/league/${encodeURIComponent(leagueId)}?view=settings`),
+      action: inAppLink(m.openDuesTracker, `/league/${encodeURIComponent(leagueId)}?view=settings`),
       language,
     }),
     unresolvedVotesFlag({
       polls,
       now,
-      action: inAppLink(es ? 'Abrir el chat de la liga' : 'Open league chat', `/league/${encodeURIComponent(leagueId)}?view=league_chat`),
+      action: inAppLink(m.openLeagueChat, `/league/${encodeURIComponent(leagueId)}?view=league_chat`),
       language,
     }),
   ])
@@ -871,6 +867,10 @@ export async function getCommissionerHub(input: {
       : null,
     tradeDeadlineWeek: noTradeDeadline ? null : tradeDeadline,
     noTradeDeadline,
+    pickTradeDeadline: (() => {
+      const rule = pickTradeDeadlineFor(league)
+      return rule.mode === 'same' ? null : rule
+    })(),
     playoffStartWeek: playoffStart,
     currentWeek,
     weekStarts,
@@ -939,7 +939,7 @@ export async function getCommissionerHub(input: {
   const tiles: CommissionerTile[] = [
     {
       key: 'health',
-      label: es ? 'Salud de la liga' : 'League health',
+      label: m.tileHealth,
       tone: !healthScore.available
         ? 'neutral'
         : healthScore.data.score >= 70
@@ -953,47 +953,37 @@ export async function getCommissionerHub(input: {
             data: {
               value: String(Math.round(healthScore.data.score)),
               // A stale import never reaches here: resolveHubHealthScore withholds its score.
-              sub: es
-                ? `${humanStatus(healthScore.data.status, language)} · ${Math.round(healthScore.data.confidencePct)} % de confianza`
-                : `${humanStatus(healthScore.data.status)} · ${Math.round(healthScore.data.confidencePct)}% confidence`,
+              sub: m.healthSub(humanStatus(healthScore.data.status, language), Math.round(healthScore.data.confidencePct)),
             },
           }
         : { available: false, reason: healthScore.reason },
     },
     {
       key: 'needs-you',
-      label: es ? 'Te necesita' : 'Needs you',
+      label: m.tileNeedsYou,
       tone: worstTask === 'bad' ? 'bad' : worstTask === 'warn' ? 'warn' : taskCount > 0 ? 'neutral' : 'good',
       state: {
         available: true,
         data: {
           value: String(taskCount),
-          sub: es
-            ? taskCount === 0
-              ? 'nada necesita una decisión'
-              : 'tareas arriba'
-            : taskCount === 0
-              ? 'nothing needs a ruling'
-              : 'task cards above',
+          sub: taskCount === 0 ? m.needsYouNone : m.needsYouSome,
         },
       },
     },
     {
       key: 'deadline',
-      label: es ? 'Próxima fecha límite' : 'Next deadline',
+      label: m.tileDeadline,
       tone: upcoming?.status === 'soon' ? 'warn' : 'neutral',
       state: upcoming
         ? { available: true, data: { value: upcoming.title, sub: upcoming.whenLabel } }
         : {
             available: false,
-            reason: es
-              ? 'no se acerca nada con fecha: mira el calendario para ver lo registrado'
-              : 'nothing dated is coming up — see the calendar for what is on file',
+            reason: m.deadlineNone,
           },
     },
     {
       key: 'managers',
-      label: es ? 'Mánagers activos' : 'Active managers',
+      label: m.tileManagers,
       tone:
         !activityStale && memberActivity.available
           ? memberActivity.data.inactive > 0
@@ -1003,25 +993,21 @@ export async function getCommissionerHub(input: {
       state: activityStale
         ? {
             available: false,
-            reason: es
-              ? `la última sincronización fue hace ${staleDays} días: no se juzga la actividad con datos tan viejos`
-              : `last sync was ${staleDays} days ago — activity isn’t judged on data that old`,
+            reason: m.managersStale(staleDays),
           }
         : memberActivity.available
           ? {
               available: true,
               data: {
                 value: String(memberActivity.data.active),
-                sub: es
-                  ? `de ${memberActivity.data.total} · ${memberActivity.data.inactive} sin movimientos en ${MANAGER_INACTIVE_AFTER_DAYS} días`
-                  : `of ${memberActivity.data.total} · ${memberActivity.data.inactive} with no move in ${MANAGER_INACTIVE_AFTER_DAYS} days`,
+                sub: m.managersSub(memberActivity.data.total, memberActivity.data.inactive, MANAGER_INACTIVE_AFTER_DAYS),
               },
             }
           : { available: false, reason: memberActivity.reason },
     },
     {
       key: 'claimed',
-      label: es ? 'Equipos reclamados' : 'Claimed teams',
+      label: m.tileClaimed,
       tone: claimed === teamCount && teamCount > 0 ? 'good' : 'neutral',
       state:
         teamCount > 0
@@ -1029,38 +1015,29 @@ export async function getCommissionerHub(input: {
               available: true,
               data: {
                 value: String(claimed),
-                sub:
-                  claimed === teamCount
-                    ? es
-                      ? `de ${teamCount} · todos los equipos están conectados`
-                      : `of ${teamCount} · every team is connected`
-                    : es
-                      ? `de ${teamCount} · ${teamCount - claimed} sin cuenta de AllFantasy`
-                      : `of ${teamCount} · ${teamCount - claimed} with no AllFantasy account`,
+                sub: claimed === teamCount ? m.claimedAll(teamCount) : m.claimedSome(teamCount, teamCount - claimed),
               },
             }
           : {
               available: false,
-              reason: es ? 'aún no se ha importado ningún equipo en esta liga' : 'no teams have been ingested for this league yet',
+              reason: m.noTeamsIngested,
             },
     },
     {
       key: 'sync',
-      label: es ? 'Sincronización' : 'Sync',
+      label: m.tileSync,
       tone: unread ? 'warn' : syncStale ? 'warn' : 'good',
       state: native
-        ? { available: true, data: { value: es ? 'En vivo' : 'Live', sub: es ? 'funciona en AllFantasy' : 'runs on AllFantasy' } }
+        ? { available: true, data: { value: m.syncLive, sub: m.syncLiveSub } }
         : unread
           ? {
               available: false,
-              reason: es
-                ? 'esta liga nunca se ha sincronizado, así que aún no se ha medido nada en esta pantalla'
-                : 'this league has never synced, so nothing on this screen has been measured yet',
+              reason: m.neverSyncedReason,
             }
           : {
               available: true,
               data: {
-                value: syncStale ? (es ? 'Desactualizada' : 'Stale') : es ? 'Al día' : 'OK',
+                value: syncStale ? m.syncStale : m.syncOk,
                 sub: describeSyncAge(syncAgeMs, language),
               },
             },
@@ -1069,7 +1046,7 @@ export async function getCommissionerHub(input: {
 
   const settings: CommissionerSettingRow[] = [
     {
-      key: es ? 'Fecha límite de intercambios' : 'Trade deadline',
+      key: m.settingTradeDeadline,
       state: describeTradeDeadline(settingsJson, league.tradeDeadlineWeek ?? null, language),
     },
     {
@@ -1077,19 +1054,19 @@ export async function getCommissionerHub(input: {
       state: describePlayoffs(settingsJson, league.playoffStartWeek ?? null, league.playoffTeams ?? null, language),
     },
     {
-      key: es ? 'Agentes libres' : 'Waivers',
+      key: m.settingWaivers,
       state: waiverSettings?.waiverType
         ? {
             available: true,
             data: (() => {
               const kind = String(waiverSettings.waiverType).toLowerCase()
-              const label = (es ? WAIVER_TYPE_LABEL_ES : WAIVER_TYPE_LABEL)[kind] ?? kind
+              const label = m.waiverTypeLabel(kind, WAIVER_TYPE_LABEL[kind], WAIVER_TYPE_LABEL_ES[kind])
               return kind === 'faab' && waiverSettings.faabBudget != null ? `${label} · $${waiverSettings.faabBudget}` : label
             })(),
           }
         : {
             available: false,
-            reason: es ? 'no se importó la configuración de agentes libres de esta liga' : 'no waiver settings were ingested for this league',
+            reason: m.noWaiverSettings,
           },
     },
   ]
@@ -1144,12 +1121,8 @@ export async function getCommissionerHub(input: {
       taskCount > 0
         ? null
         : unread
-          ? es
-            ? 'Esta liga nunca se ha sincronizado, así que no se ha revisado nada. Una lista vacía aquí no es lo mismo que una liga tranquila.'
-            : 'This league has never synced, so nothing has been checked. An empty list here is not the same as a quiet league.'
-          : es
-            ? 'Nada en esta liga te necesita ahora mismo.'
-            : 'Nothing in this league needs you right now.',
+          ? m.tasksEmptyNeverSynced
+          : m.tasksEmptyQuiet,
     health: { score: healthScore, flags },
     members: activityStale ? { available: false, reason: stale?.reason ?? '' } : memberActivity,
     calendar: { ...calendar, ics },
@@ -1192,12 +1165,8 @@ export async function getCommissionerHub(input: {
     disputes: {
       available: false,
       reason: native
-        ? es
-          ? 'Abre el monitor de integridad para ver las alertas y el estado de revisión de cada detector. Que no haya alertas registradas no demuestra que se haya hecho una revisión.'
-          : 'Open the integrity monitor for flags and each detector’s scan status. No flags on file does not establish that a scan ran.'
-        : es
-          ? IMPORTED_DISPUTES_REASON_ES
-          : IMPORTED_DISPUTES_REASON,
+        ? m.disputesNative
+        : m.disputesImported,
     },
     publicStandings: {
       /*
@@ -1220,29 +1189,19 @@ export async function getCommissionerHub(input: {
   }
 }
 
-const STATUS_ES: Record<string, string> = {
-  excellent: 'Excelente',
-  healthy: 'Saludable',
-  watch: 'En observación',
-  at_risk: 'En riesgo',
-  critical: 'Crítica',
-}
-
 function humanStatus(status: string, language = 'en'): string {
-  if (language === 'es' && STATUS_ES[status.toLowerCase()]) return STATUS_ES[status.toLowerCase()]
-  const s = status.replace(/_/g, ' ').toLowerCase()
-  return s.charAt(0).toUpperCase() + s.slice(1)
+  return messagesFor(commissionerHubMessages, language).healthStatus(status)
 }
 
 function describeSyncAge(ms: number | null, language = 'en'): string {
-  const es = language === 'es'
-  if (ms == null) return es ? 'nunca sincronizada' : 'never synced'
+  const m = messagesFor(commissionerHubMessages, language)
+  if (ms == null) return m.syncAgeNever
   const minutes = Math.floor(ms / 60000)
-  if (minutes < 1) return es ? 'sincronizada ahora mismo' : 'synced just now'
-  if (minutes < 60) return es ? `sincronizada hace ${minutes} min` : `synced ${minutes}m ago`
+  if (minutes < 1) return m.syncAgeNow
+  if (minutes < 60) return m.syncAgeMinutes(minutes)
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return es ? `sincronizada hace ${hours} h` : `synced ${hours}h ago`
-  return es ? `sincronizada hace ${Math.floor(hours / 24)} d` : `synced ${Math.floor(hours / 24)}d ago`
+  if (hours < 24) return m.syncAgeHours(hours)
+  return m.syncAgeDays(Math.floor(hours / 24))
 }
 
 /**
@@ -1251,19 +1210,19 @@ function describeSyncAge(ms: number | null, language = 'en'): string {
  * would be the literal value and the wrong fact.
  */
 function describeTradeDeadline(settings: unknown, column: number | null, language = 'en'): SectionState<string> {
-  const es = language === 'es'
+  const m = messagesFor(commissionerHubMessages, language)
   const fromJson = readSetting(settings, ['trade_deadline_week', 'trade_deadline'])
   const week = fromJson ?? column
   if (week == null) {
     return {
       available: false,
-      reason: es ? 'no figura en la configuración de la plataforma de esta liga' : 'not published in this league’s platform settings',
+      reason: m.notPublished,
     }
   }
   if (week >= 99) {
-    return { available: true, data: es ? 'Sin fecha límite: los intercambios siguen abiertos toda la temporada' : 'No deadline — trades stay open all season' }
+    return { available: true, data: m.noTradeDeadline }
   }
-  return { available: true, data: es ? `Semana ${week}` : `Week ${week}` }
+  return { available: true, data: m.tradeDeadlineWeek(week) }
 }
 
 function describePlayoffs(
@@ -1272,7 +1231,7 @@ function describePlayoffs(
   teamsColumn: number | null,
   language = 'en',
 ): SectionState<string> {
-  const es = language === 'es'
+  const m = messagesFor(commissionerHubMessages, language)
   const start = readSetting(settings, ['playoff_start_week', 'playoff_week_start'])
   const teams = readSetting(settings, ['playoff_teams', 'playoffTeams'])
 
@@ -1287,19 +1246,13 @@ function describePlayoffs(
     const columnsAreDefaults = startColumn === 14 && teamsColumn === 4
     return {
       available: false,
-      reason: columnsAreDefaults
-        ? es
-          ? 'el formato de playoffs de esta liga nunca se importó: los valores guardados son los predeterminados, no su configuración real'
-          : 'this league’s playoff format was never ingested — the stored values are schema defaults, not its real settings'
-        : es
-          ? 'no figura en la configuración de la plataforma de esta liga'
-          : 'not published in this league’s platform settings',
+      reason: columnsAreDefaults ? m.playoffsDefaults : m.notPublished,
     }
   }
 
   const parts: string[] = []
-  if (teams != null) parts.push(es ? `Los ${teams} mejores` : `Top ${teams}`)
-  if (start != null) parts.push(es ? `desde la semana ${start}` : `from Week ${start}`)
+  if (teams != null) parts.push(m.playoffsTop(teams))
+  if (start != null) parts.push(m.playoffsFrom(start))
   return { available: true, data: parts.join(' · ') }
 }
 

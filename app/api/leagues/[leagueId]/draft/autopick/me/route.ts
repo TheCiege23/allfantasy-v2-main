@@ -3,7 +3,7 @@
  *
  * Writes to the canonical LiveDraftAutopickPreference table (not legacy DraftAutopickSetting).
  * A user can only read/write their own preference — no body userId accepted.
- * AF Pro gating: mode="ai_queue" requires the pro_draft_ai entitlement.
+ * AF Pro gating: mode="ai_queue" and mode="draft_as_me" require the pro_draft_ai entitlement.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -15,11 +15,12 @@ import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import {
   setViewerAutopickPreference,
 } from '@/lib/live-draft-engine/LiveDraftAutopickPreferenceService'
+import { AUTOPICK_MODES, PRO_AUTOPICK_MODES, type AutopickMode } from '@/lib/live-draft-engine/autopickModes'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
-const VALID_MODES = new Set(['standard', 'ai_queue'])
+const VALID_MODES = new Set<string>(AUTOPICK_MODES)
 
 export async function POST(
   req: NextRequest,
@@ -52,18 +53,18 @@ export async function POST(
   const rawMode = body.mode
   if (rawMode !== undefined && !VALID_MODES.has(rawMode as string)) {
     return NextResponse.json(
-      { error: `Invalid mode "${rawMode}". Allowed values: standard, ai_queue` },
+      { error: `Invalid mode "${rawMode}". Allowed values: standard, ai_queue, draft_as_me` },
       { status: 400 }
     )
   }
-  const mode = (rawMode as 'standard' | 'ai_queue' | undefined) ?? 'standard'
+  const mode = (rawMode as AutopickMode | undefined) ?? 'standard'
 
-  // AF Pro gate: non-Pro users may not write mode="ai_queue" (no silent downgrade on write).
-  if (enabled && mode === 'ai_queue') {
+  // AF Pro gate: non-Pro users may not write a Pro mode (no silent downgrade on write).
+  if (enabled && PRO_AUTOPICK_MODES.has(mode)) {
     const { hasAccess } = await new EntitlementResolver().resolveForUser(userId, 'pro_draft_ai')
     if (!hasAccess) {
       return NextResponse.json(
-        { error: 'AF Pro required to enable AI queue auto-pick.' },
+        { error: mode === 'draft_as_me' ? 'AF Pro required to have Chimmy draft like you.' : 'AF Pro required to enable AI queue auto-pick.' },
         { status: 403 }
       )
     }

@@ -17,9 +17,12 @@ import {
   TradePremiumShells,
   WaiverPremiumShells,
 } from '@/components/redraft-premium'
+import { PlayoffSeriesStrip } from '@/components/league/PlayoffSeriesStrip'
 import {
   fetchRedraftLiveScoring,
   fetchRedraftMatchups,
+  fetchRedraftPlayoffRuntime,
+  type RedraftPlayoffRuntimeClient,
   fetchRedraftRoster,
   fetchRedraftSchedule,
   fetchRedraftSeason,
@@ -101,6 +104,28 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
       cancelled = true
     }
   }, [leagueId, seasonId, currentWeek, season?.source])
+
+  // Best-of-N playoff series (lib/playoff-runtime/playoffSeries.ts): the bracket, read only while the
+  // season is in its playoffs, so the matchup screen can show the selected team's series record.
+  const [playoffRuntime, setPlayoffRuntime] = useState<RedraftPlayoffRuntimeClient | null>(null)
+  const inPlayoffs = season?.status === 'playoffs'
+  useEffect(() => {
+    if (!seasonId || !inPlayoffs) {
+      setPlayoffRuntime(null)
+      return
+    }
+    let cancelled = false
+    fetchRedraftPlayoffRuntime({ seasonId })
+      .then((runtime) => {
+        if (!cancelled) setPlayoffRuntime(runtime)
+      })
+      .catch(() => {
+        if (!cancelled) setPlayoffRuntime(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [seasonId, inPlayoffs, currentWeek])
 
   useEffect(() => {
     if (!seasonId) {
@@ -220,6 +245,21 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
             season={season.season}
             compact
           />
+
+          {playoffRuntime?.settings?.seriesLengths ? (
+            <PlayoffSeriesStrip
+              seriesLengths={playoffRuntime.settings.seriesLengths}
+              matchups={[
+                ...playoffRuntime.bracket.rounds.flatMap((round) => round.matchups),
+                ...(playoffRuntime.bracket.thirdPlaceMatchup ? [playoffRuntime.bracket.thirdPlaceMatchup] : []),
+                ...(playoffRuntime.bracket.consolationRounds ?? []).flatMap((round) => round.matchups),
+              ]}
+              rosterId={selectedRosterId}
+              nameOf={(rosterId) =>
+                playoffRuntime.teams.find((team) => team.rosterId === rosterId)?.displayName ?? (rosterId ? rosterId.slice(0, 6) : '')
+              }
+            />
+          ) : null}
 
           <MatchupView
             matchup={visibleMatchup}

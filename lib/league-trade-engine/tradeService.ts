@@ -1,14 +1,16 @@
+import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster } from '@/lib/team-coowners/access'
 /**
  * AF league trade orchestration — create, accept, reject, counter, veto, commissioner, process.
  */
 
+import { checkOfferPickTerms } from '@/lib/league-trade-engine/pickTermsService'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assertLifecycleActionAllowed } from '@/server/services/leagueLifecycleService'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
-import { resolveTradeDeadlineStatus, serverWeekForTradeDeadline, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import { resolveTradeDeadlineStatus, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
 import { loadNativeFuturePicks, parseInventoryPickId } from '@/lib/league-trade-engine/nativeFuturePicks'
 import {
@@ -43,6 +45,7 @@ import { receiptColumns, receiptColumnsReady } from '@/lib/decision-os/trade/rec
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
+import { storedVetoRule, vetoVotesNeeded } from './vetoRule'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -517,6 +520,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   if (participants.length !== participantRosterIds.length) throw new Error('Every trade participant must belong to this league')
   const proposerOwnsRoster = proposer.platformUserId === input.proposedByUserId
     || (await managedPlatformIds(input.leagueId, input.proposedByUserId)).has(proposer.platformUserId)
+    || await isAcceptedCoOwnerForRoster(input.leagueId, proposer.id, input.proposedByUserId)
   if (!proposerOwnsRoster) {
     throw new Error('Proposer must own the proposing roster')
   }
@@ -531,6 +535,13 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   if (!rosterTxGate.ok) throw new Error(rosterTxGate.error)
 
   const settings = resolveLeagueTradeSettings(league)
+  /*
+   * A picks-only offer in a league whose pick trades have their own deadline is held to that one
+   * (lib/trade-deadline/pickTradeDeadline.ts), so the validator is given no week and checks no
+   * deadline. Every other offer: the validator's check, at the server's week.
+   */
+  const deadline = await resolveTradeDeadlineStatus(league, settings.tradeDeadlineWeek, {}, { items: input.assets })
+  if (deadline.scope === 'picks' && deadline.passed) throw new CodedTradeError('TRADE_DEADLINE', tradeDeadlinePassedMessage(deadline))
   // A native dynasty league's future picks are checked against its inventory, not `playerData`.
   const offersNativePick = input.assets.some((a) => parseInventoryPickId(String(a.itemReference ?? '')) != null)
   const nativePicks = offersNativePick ? await loadNativeFuturePicks(input.leagueId).catch(() => null) : null
@@ -544,12 +555,15 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     receiver,
     participants,
     assets: input.assets,
-    currentWeek: await serverWeekForTradeDeadline(league, settings.tradeDeadlineWeek),
+    currentWeek: deadline.scope === 'picks' || !deadline.window?.inSeason ? null : deadline.window.week,
     nativeFuturePickOwners: nativePicks?.ownerByPickId ?? null,
     redraftDraftPicks: redraftPicks,
   })
   // The code rides on the error so the route can return it (e.g. `future_picks_not_allowed_in_redraft`).
   if (!v.ok) throw new CodedTradeError(v.code, v.message)
+  // Conditional and protected picks (./pickTerms.ts): checked against the league, stored in the shape
+  // the settlement reads. An offer without terms is returned as it came.
+  const offerAssets = await checkOfferPickTerms(input.leagueId, input.assets)
 
   const expiresHours = input.expiresInHours ?? 48
   const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000)
@@ -599,9 +613,12 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
         participantRosterIds,
         acceptedRosterIds: [],
         multiTeam: participantRosterIds.length > 2,
+        // The league's veto rule when the trade was proposed (./vetoRule.ts): a later settings change
+        // never moves the line on a vote already under way.
+        vetoRule: settings.vetoRule,
       } as Prisma.InputJsonValue,
       items: {
-        create: input.assets.map((a) => {
+        create: offerAssets.map((a) => {
           // A native future pick's item carries its own season and round, read from its id, so
           // every reader of the item (grades, history, notices) can price it without the id format.
           const nativePick = parseInventoryPickId(String(a.itemReference ?? ''))
@@ -837,6 +854,10 @@ export async function acceptAfLeagueTrade(input: {
     const acceptingIdentityIds = await managedPlatformIds(input.leagueId, input.userId)
     acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && acceptingIdentityIds.has(r.platformUserId))
   }
+  if (!acceptingRoster) {
+    const coOwnerRosterId = await acceptedCoOwnerRosterId(input.leagueId, input.userId)
+    acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && r.id === coOwnerRosterId)
+  }
   if (!acceptingRoster) throw new Error('Only a participating manager can accept')
 
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
@@ -848,7 +869,7 @@ export async function acceptAfLeagueTrade(input: {
    * acceptance leaves the offer exactly as it was. Once accepted, the review period (commissioner,
    * league vote, processing delay) may finish after the deadline — see `finalizeAfLeagueTradeProcessing`.
    */
-  const deadline = await resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek)
+  const deadline = await resolveTradeDeadlineStatus(league, resolveLeagueTradeSettings(league).tradeDeadlineWeek, {}, { items: trade.items })
   if (deadline.passed) throw new CodedTradeError('TRADE_DEADLINE', tradeDeadlinePassedMessage(deadline))
 
   const metadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
@@ -1065,7 +1086,7 @@ export async function finalizeAfLeagueTradeProcessing(input: {
    * to the deadline like a new proposal.
    */
   if (trade.status === 'pending' && !input.deadlineChecked && !input.commissionerOverride) {
-    const deadline = await resolveTradeDeadlineStatus(league, settings.tradeDeadlineWeek)
+    const deadline = await resolveTradeDeadlineStatus(league, settings.tradeDeadlineWeek, {}, { items: trade.items })
     if (deadline.passed) throw new CodedTradeError('TRADE_DEADLINE', tradeDeadlinePassedMessage(deadline))
   }
   const delayH = settings.processingDelayHours ?? trade.processingDelayHours ?? 0
@@ -1284,7 +1305,10 @@ export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: st
   }
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   const isComm = league?.userId === input.userId
-  if (!isRecv && !isComm) throw new Error('Only the receiving manager or commissioner can reject')
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(input.leagueId, input.userId)
+  const isCoOwnerReceiver = !!coOwnerRosterId && participantIds.includes(coOwnerRosterId) && coOwnerRosterId !== trade.proposerRosterId
+  if (!isRecv && !isCoOwnerReceiver && !isComm) throw new Error('Only the receiving manager or commissioner can reject')
+  isRecv ||= isCoOwnerReceiver
 
   await prisma.afLeagueTrade.update({
     where: { id: trade.id },
@@ -1324,7 +1348,8 @@ export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: st
     where: { id: trade.proposerRosterId, platformUserId: input.userId },
   })
   const elevated = await isElevatedCommissioner(input.leagueId, input.userId)
-  if (!isProp && !elevated) throw new Error('Only proposer or commissioner can cancel')
+  const isCoOwnerProposer = await isAcceptedCoOwnerForRoster(input.leagueId, trade.proposerRosterId, input.userId)
+  if (!isProp && !isCoOwnerProposer && !elevated) throw new Error('Only proposer or commissioner can cancel')
 
   /*
    * 🛑 THE PROPOSER COULD WITHDRAW A TRADE THE OTHER MANAGER HAD ALREADY ACCEPTED. `scheduled` is set only
@@ -1446,9 +1471,9 @@ export async function castAfTradeVetoVote(input: {
   if (trade.status !== 'awaiting_votes') throw new Error('Trade is not in veto window')
 
   const vr = await prisma.roster.findFirst({
-    where: { id: input.voterRosterId, leagueId: input.leagueId, platformUserId: input.userId },
+    where: { id: input.voterRosterId, leagueId: input.leagueId },
   })
-  if (!vr) throw new Error('Invalid voter roster')
+  if (!vr || (vr.platformUserId !== input.userId && !await isAcceptedCoOwnerForRoster(input.leagueId, vr.id, input.userId))) throw new Error('Invalid voter roster')
   const tradeMetadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
     ? trade.metadata as Record<string, unknown>
     : {}
@@ -1476,7 +1501,9 @@ export async function castAfTradeVetoVote(input: {
   const vetoCount = await prisma.afLeagueTradeVote.count({
     where: { tradeId: trade.id, vote: 'veto' },
   })
-  const needed = Math.ceil((allRosters * (trade.vetoThresholdPercent ?? 50)) / 100)
+  // The rule stored with the trade; a trade proposed before rules were stored keeps its percent (50% default).
+  const rule = storedVetoRule(trade.metadata) ?? { mode: 'percent' as const, value: trade.vetoThresholdPercent ?? 50 }
+  const needed = vetoVotesNeeded(rule, { teamCount: allRosters, tradingTeams: tradingParties.size })
 
   if (input.vote === 'veto' && vetoCount >= needed) {
     await prisma.afLeagueTrade.update({

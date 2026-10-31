@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -6,7 +7,7 @@ import { applyInjuryStatuses } from '@/lib/redraft/rosterInjuryStatus'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { buildAllFantasyProjection } from '@/lib/redraft/projectionEngine'
-import { calculateScoreFromSportConfig } from '@/lib/redraft/scoringEngine'
+import { calculateScoreFromSportConfig, isBestBallCandidateSlot } from '@/lib/redraft/scoringEngine'
 import {
   applyRedraftLineupMoves,
   validateRedraftLineup,
@@ -29,7 +30,7 @@ import {
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { getTeamLogo } from '@/lib/players/getTeamLogo'
-import { resolveRedraftRosterLookup } from '@/lib/redraft/redraftRosterIdentity'
+import { resolveRedraftRosterLookup, resolveRedraftRosterLookupReadOnly } from '@/lib/redraft/redraftRosterIdentity'
 import { checkTaxiSave, logTaxiPromotions } from '@/lib/taxi/taxiRulesService'
 import { recordRedraftRosterMoveHistory } from '@/lib/redraft/rosterMoveHistory'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
@@ -41,6 +42,7 @@ import {
   type RiCrosswalkDb,
 } from '@/lib/player-identity/rollingInsightsCrosswalk'
 import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from '@/lib/core-app/rosterIdCrosswalk'
+import { BEST_BALL_LINEUP_CODE, BEST_BALL_LINEUP_MESSAGE, isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
 
 export const dynamic = 'force-dynamic'
 
@@ -240,12 +242,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: parsedWeek.error }, { status: 400 })
   }
 
-  const lookup = await resolveRedraftRosterLookup({
-    userId,
-    requestedRosterId: rosterId,
-    seasonId,
-    leagueId,
-  })
+  const lookupLeagueId = leagueId ?? (seasonId ? (await prisma.redraftSeason.findUnique({ where: { id: seasonId }, select: { leagueId: true } }))?.leagueId : null)
+  const coOwnerRosterId = !rosterId && lookupLeagueId ? await acceptedCoOwnerRosterId(lookupLeagueId, userId) : null
+  const coOwnerRoster = coOwnerRosterId && lookupLeagueId ? await prisma.roster.findFirst({ where: { id: coOwnerRosterId, leagueId: lookupLeagueId }, select: { redraftRosterId: true } }) : null
+  const lookup = coOwnerRoster?.redraftRosterId
+    ? await resolveRedraftRosterLookupReadOnly({ userId, requestedRosterId: coOwnerRoster.redraftRosterId, seasonId, leagueId: lookupLeagueId })
+    : await resolveRedraftRosterLookup({ userId, requestedRosterId: rosterId, seasonId, leagueId })
   if (!lookup.season || !lookup.roster) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const gate = await assertLeagueMember(lookup.season.leagueId, userId)
@@ -644,7 +646,8 @@ export async function PATCH(req: NextRequest) {
     seasonId: targetLookup.season.id,
     leagueId: targetLookup.season.leagueId,
   })
-  if (!viewerLookup.roster || viewerLookup.roster.id !== targetLookup.roster.id) {
+  if ((!viewerLookup.roster || viewerLookup.roster.id !== targetLookup.roster.id) &&
+      !await isAcceptedCoOwnerForRedraftRoster(targetLookup.season.leagueId, targetLookup.roster.id, userId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -660,7 +663,7 @@ export async function PATCH(req: NextRequest) {
   // applying moves, so a player whose game has kicked off cannot be moved.
   const leagueForLock = await prisma.league.findUnique({
     where: { id: roster.leagueId },
-    select: { settings: true, platform: true, survivorMode: true, lockAllMoves: true },
+    select: { settings: true, platform: true, survivorMode: true, lockAllMoves: true, guillotineMode: true, leagueType: true, leagueVariant: true },
   })
   // 🛑 The commissioner's move lock. The lineup screen's save (persistRosterLineupWithEngine) refuses every
   // lineup and IR move under it; this PATCH has no UI caller and did not, so it was the way around the lock.
@@ -687,6 +690,17 @@ export async function PATCH(req: NextRequest) {
   const currentPlayers = leagueForLock?.survivorMode && roster.season.sport === 'NBA'
     ? await applyNbaSurvivorPickLineupLocks({ leagueId: roster.leagueId, redraftRosterId: roster.id, week, settings: leagueForLock.settings, players: hydratedPlayers })
     : hydratedPlayers
+  // A best ball Guilly league sets its own lineup (lib/guillotine/guillotineBestBall.ts): a move between two
+  // active slots (starter or bench) would save and change nothing. On or off IR / taxi still saves.
+  if (leagueForLock && isBestBallGuillotine(leagueForLock)) {
+    const slotOf = new Map(currentPlayers.map((p) => [p.playerId, p.slotType]))
+    const shuffle = body.moves.find(
+      (m) => slotOf.has(m.playerId) && isBestBallCandidateSlot(slotOf.get(m.playerId)) && isBestBallCandidateSlot(m.toSlot),
+    )
+    if (shuffle) {
+      return NextResponse.json({ error: BEST_BALL_LINEUP_MESSAGE, code: BEST_BALL_LINEUP_CODE }, { status: 409 })
+    }
+  }
   const rosterConfig = resolveRedraftRosterConfig(roster.season.sport, leagueForLock?.settings ?? null)
   const applied = applyRedraftLineupMoves(currentPlayers, body.moves)
   const lineupValidation = buildLineupValidation({

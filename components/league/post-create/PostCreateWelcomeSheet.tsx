@@ -4,6 +4,7 @@ import { useEffect, useId, useRef } from 'react'
 import { ArrowRight, CalendarClock, PartyPopper, Settings2, X } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { LeagueInviteShare } from '@/components/league/invite/LeagueInviteShare'
+import { FindLeagueListingCard } from '@/components/core-app/commissioner/FindLeagueListingCard'
 
 type Translate = (key: string) => string
 
@@ -186,6 +187,9 @@ export function PostCreateWelcomeSheet({
             </p>
             <LeagueInviteShare url={inviteUrl} leagueName={league.name} testIdPrefix="post-create-invite" />
           </section>
+
+          {/* Strangers fill seats too: the one moment a commissioner is already thinking about who joins. */}
+          <FindLeagueListingCard leagueId={league.id} variant="welcome" />
 
           <section className="space-y-2" aria-label={tx(t, 'league.welcome.nextHeading', 'Next steps')}>
             <h3 className="text-base font-black">{tx(t, 'league.welcome.nextHeading', 'Next steps')}</h3>

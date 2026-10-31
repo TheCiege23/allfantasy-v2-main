@@ -80,6 +80,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
         wins: standingByRoster.get(s.rosterId)?.wins ?? 0,
         pointsFor: standingByRoster.get(s.rosterId)?.pointsFor ?? 0,
       })),
+      // Best-of-N series rounds (lib/playoff-runtime/playoffSeries.ts), from the scorer's own week rule.
+      series: native.series,
     })
   }
 

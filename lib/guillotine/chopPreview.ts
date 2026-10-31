@@ -60,6 +60,8 @@ export type ChopPreviewRow = {
   status: 'chopped' | 'danger' | 'immune' | 'safe'
   /** Points above the chop line (0 or less for a chopped team). */
   margin: number | null
+  /** Season points through this week, live (the tiebreak's season_points). */
+  seasonPoints?: number
   /** FAAB this team gains from the split (survivors) or loses (chopped). */
   faabChange: number | null
 }
@@ -171,7 +173,7 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
         : margin != null && margin <= input.dangerMarginPoints
           ? 'danger'
           : 'safe'
-    return { rosterId: t.rosterId, name: t.name, points: round1(t.periodPoints), status, margin, faabChange: faabChange.get(t.rosterId) ?? null }
+    return { rosterId: t.rosterId, name: t.name, points: round1(t.periodPoints), seasonPoints: round1(t.seasonPointsCumul), status, margin, faabChange: faabChange.get(t.rosterId) ?? null }
   })
 
   const notes: string[] = []

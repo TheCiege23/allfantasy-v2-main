@@ -106,6 +106,8 @@ vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({ createLeagueChatM
 vi.mock('@/lib/guillotine/guillotineChat', () => ({
   postChopToLeagueChat: postChopToLeagueChatMock,
 }))
+const sendChopResultAlertsMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/guillotine/chopAlerts', () => ({ sendChopResultAlerts: sendChopResultAlertsMock }))
 vi.mock('@/lib/guillotine/GuillotineStandingsProjectionService', () => ({
   getSurvivalStandings: standingsMock,
 }))
@@ -416,6 +418,15 @@ describe('Guilly full regression matrix', () => {
     // The announcement is read by the whole league: a name, never the fixture's email.
     expect(postChopToLeagueChatMock.mock.calls[0][0].displayNames).toEqual({ 'r-low': 'Lowest Team' })
     expect(JSON.stringify(postChopToLeagueChatMock.mock.calls[0][0])).not.toContain('@test.com')
+    // Chop alerts (lib/guillotine/chopAlerts.ts): everyone scored this week, and the same names.
+    expect(sendChopResultAlertsMock).toHaveBeenCalledWith(expect.objectContaining({
+      leagueId: 'league-1',
+      week: 3,
+      choppedRosterIds: ['r-low'],
+      aliveRosterIds: ['r-low', 'r-mid'],
+      displayNames: { 'r-low': 'Lowest Team' },
+      rosterReleaseTiming: 'next_waiver_run',
+    }))
   })
 
   describe("a chopped team's unspent FAAB (lib/guillotine/faabOnChop.ts)", () => {
@@ -491,10 +502,13 @@ describe('Guilly full regression matrix', () => {
     prismaMock.redraftRoster.findMany.mockResolvedValue([{ id: 'rr-low', teamName: 'Lowest Team', ownerName: 'u1', ownerId: 'u1' }])
     postChopToLeagueChatMock.mockRejectedValueOnce(new Error('chat down'))
     postAutomaticGuillotineRecapMock.mockRejectedValueOnce(new Error('recap down'))
+    sendChopResultAlertsMock.mockRejectedValueOnce(new Error('alerts down'))
 
     const out = await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, systemUserId: 'owner' })
 
     expect(out?.choppedRosterIds).toEqual(['r-low'])
+    // Alerts are sent even though chat failed, and their own failure does not undo the chop either.
+    expect(sendChopResultAlertsMock).toHaveBeenCalledTimes(1)
     expect(postChopToLeagueChatMock).toHaveBeenCalledTimes(1)
     // The weekly recap follows the announcement, from this week's scores, and a failure in either
     // never undoes the chop (lib/guillotine/weeklyRecap.ts).

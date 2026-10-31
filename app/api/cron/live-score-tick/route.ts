@@ -155,10 +155,10 @@ export async function GET(request: NextRequest) {
     let clipPilot: Awaited<ReturnType<typeof runGrokTdClipPilot>> | null = null
     let daily: Awaited<ReturnType<typeof runDailySportLiveTick>> | null = null
     /*
-     * NBA / NHL / MLB in-game scoring (Phase 3.3d) — OFF unless DAILY_SPORT_LIVE_SCORING is set.
+     * NBA / NHL / MLB in-game scoring (Phase 3.3d); the flag can narrow or disable it.
      * Folded into this route rather than a new cron slot (cron-budget-check caps the list at 60),
      * and bounded by THIS invocation's poll budget so it can never push the tick past its 2-minute
-     * interval. With the flag unset it issues no query at all.
+     * interval. An explicit off value issues no query at all.
      */
     const dailySports = resolveDailyLiveSports()
     const dailyBudget = createRunBudget(POLL_BUDGET_MS)

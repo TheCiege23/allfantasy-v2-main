@@ -29,26 +29,13 @@ import { futurePickInventory, inventoryPickId, type InventoryPick } from './futu
 
 type Db = Prisma.TransactionClient
 
-/** Seasons ahead a native pick can be traded when the league has not set one — the three-year horizon imported leagues use. */
-export const NATIVE_PICK_YEARS = 3
-/** Bounds on the commissioner's `futurePicksYearsOut`; past five years a pick has no market to speak of. */
-export const NATIVE_PICK_YEARS_MIN = 1
-export const NATIVE_PICK_YEARS_MAX = 5
-
-/**
- * The league's tradeable-pick horizon in seasons: `DynastyLeagueConfig.futurePicksYearsOut`, clamped
- * to [1, 5], or 3 when unset or not a number. It used to be a flat 3 whatever the commissioner chose.
- *
- * Shrinking it never loses a pick: a stored trade for a season now beyond the horizon stays in
- * `future_draft_picks` and is still applied when that season's draft is created
- * (`consumeNativeFuturePicksForDraft` reads by season, not by horizon); it is only not offered again
- * until the season comes back inside the window.
- */
-export function resolveNativePickYears(configured: number | null | undefined): number {
-  const n = Number(configured)
-  if (configured == null || !Number.isFinite(n)) return NATIVE_PICK_YEARS
-  return Math.min(Math.max(NATIVE_PICK_YEARS_MIN, Math.floor(n)), NATIVE_PICK_YEARS_MAX)
+/** Serialize pick ownership changes with creation of their rookie auction. */
+export async function lockNativeFuturePicks(tx: Db, leagueId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`native-future-picks:${leagueId}`}, 0))`
 }
+
+export { NATIVE_PICK_YEARS, NATIVE_PICK_YEARS_MAX, NATIVE_PICK_YEARS_MIN, resolveNativePickYears } from './nativePickYears'
+import { resolveNativePickYears } from './nativePickYears'
 
 /** The league's rookie-draft round count, clamped exactly as `createNextLeagueDraft` clamps it. */
 export function resolveRookieDraftRounds(configured: number | null | undefined): number {
@@ -173,6 +160,7 @@ export async function transferNativeFuturePick(
 ): Promise<void> {
   const parsed = parseInventoryPickId(args.ref)
   if (!parsed) throw new Error('Pick not found on roster')
+  await lockNativeFuturePicks(tx, args.leagueId)
   const inventory = await loadNativeFuturePicks(args.leagueId, tx)
   const holder = inventory?.ownerByPickId.get(args.ref)
   if (!holder) throw new Error('Pick is no longer tradeable')
@@ -228,13 +216,30 @@ export async function consumeNativeFuturePicksForDraft(
   })
   if (rows.length === 0) return []
 
+  // Conditional and protected picks (./pickTerms.ts) settle here, on the order this draft seats:
+  // a protected pick stays, a conditional one may convey as another round. Imported lazily — the
+  // terms module reads this one.
+  const { settlePickTermsForDraft } = await import('./pickTermsService')
+  const overrides = await settlePickTermsForDraft(tx, {
+    leagueId: args.leagueId,
+    season: args.season,
+    rows,
+    slotOrder: args.slotOrder,
+    rounds: args.rounds,
+    draftSessionId: args.draftSessionId,
+    now: args.now ?? new Date(),
+  })
+
   const nameByRoster = new Map(args.slotOrder.map((e) => [e.rosterId, e.displayName]))
   const traded: TradedPickRecord[] = []
   for (const row of rows) {
-    if (row.currentOwnerId === row.originalRosterId || row.round > args.rounds) continue
+    const override = overrides.get(row.id)
+    if (override && 'skip' in override) continue
+    const round = override?.round ?? row.round
+    if (row.currentOwnerId === row.originalRosterId || round > args.rounds) continue
     if (!nameByRoster.has(row.originalRosterId) || !nameByRoster.has(row.currentOwnerId)) continue
     traded.push({
-      round: row.round,
+      round,
       originalRosterId: row.originalRosterId,
       previousOwnerName: nameByRoster.get(row.originalRosterId) ?? '',
       newRosterId: row.currentOwnerId,

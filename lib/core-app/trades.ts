@@ -19,7 +19,7 @@ import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { collapseMirroredTradeRows } from './tradeHistorySelection'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
-import { loadTradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import { loadPickTradeDeadlineView, loadTradeDeadlineCountdown, type PickTradeDeadlineView } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
 
 /**
@@ -200,6 +200,8 @@ async function resolveGrades(
   viewerPlatformUserId: string | null,
   /** The viewer, recorded on each grade's receipt. */
   userId: string | null = null,
+  /** The league's sport, so a Sleeper id is named from its own sport's pool. */
+  sport: string | null = null,
 ): Promise<SectionState<GradedTrade[]>> {
   if (!platformLeagueId) {
     return { available: false, reason: 'this league has no source platform id, so its trades cannot be matched' }
@@ -294,7 +296,8 @@ async function resolveGrades(
     ids.size > 0
       ? prisma.sportsPlayer
           .findMany({
-            where: { sleeperId: { in: [...ids] } },
+            // Scoped to the league's sport when known: Sleeper numbers its NFL and NBA pools independently.
+            where: { ...(sport ? { sport: sport.toUpperCase() } : {}), sleeperId: { in: [...ids] } },
             select: { sleeperId: true, name: true, position: true },
           })
           .catch(() => [] as Array<{ sleeperId: string; name: string; position: string | null }>)
@@ -423,6 +426,8 @@ export type TradesData = {
    * not be read — the chip then falls back to `deadline`.
    */
   deadlineCountdown?: TradeDeadlineCountdown | null
+  /** A dynasty league's separate rule for pick-only trades (lib/trade-deadline/pickTradeDeadline.ts); null when they follow the deadline. */
+  pickTradeDeadline?: PickTradeDeadlineView | null
   /**
    * The nightly trade agent's ideas for this manager (design step 9): deals the one grade reads C for
    * both sides, on which both rosters gain. Suggest only — nothing is sent, and the partner is not told.
@@ -714,6 +719,7 @@ export async function getTradesData(
       league.platformLeagueId ?? null,
       myTeam?.platformUserId?.trim() || null,
       userId,
+      league.sport ?? null,
     )
     const current = sleeperHistory
       ? await getSleeperTradeHistory(
@@ -767,6 +773,7 @@ export async function getTradesData(
     grades,
     deadline: resolveDeadline(league.settings),
     deadlineCountdown: await loadTradeDeadlineCountdown(league.id).catch(() => null),
+    pickTradeDeadline: await loadPickTradeDeadlineView(league.id).catch(() => null),
     ...agentIdeas,
   }
 
@@ -898,7 +905,7 @@ export async function getTradesData(
   const namedRows = allTradeIds.length
     ? await prisma.sportsPlayer
         .findMany({
-          where: { sleeperId: { in: allTradeIds } },
+          where: { ...(league.sport ? { sport: league.sport.toUpperCase() } : {}), sleeperId: { in: allTradeIds } },
           distinct: ['sleeperId'],
           orderBy: [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }],
           select: { sleeperId: true, name: true, position: true, team: true },

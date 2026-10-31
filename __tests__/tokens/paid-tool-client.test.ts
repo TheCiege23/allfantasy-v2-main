@@ -56,7 +56,11 @@ it('concurrent calls each use current authentication while sharing a server rece
  const ids=fetcher.mock.calls.map(([,options]:any)=>new Headers(options.headers).get('x-paid-tool-request-id'))
  expect(ids[0]).toBe(ids[1])
  releases[0](done());releases[1](new Response(JSON.stringify({error:'Forbidden'}),{status:403}))
- expect(await(await one).json()).toEqual({ok:true,result:'detail'});expect((await two).status).toBe(403)
+ // Which call reached the fetcher first is not deterministic (each awaits an async fingerprint),
+ // so check the pair of outcomes rather than which call got which.
+ const results=await Promise.all([one,two])
+ expect(results.map(r=>r.status).sort()).toEqual([200,403])
+ expect(await results.find(r=>r.status===200)!.json()).toEqual({ok:true,result:'detail'})
 })
 
 it('an overlapping lost response cannot discard an approved identity when another call finishes',async()=>{
@@ -64,9 +68,16 @@ it('an overlapping lost response cannot discard an approved identity when anothe
  const fetcher=vi.fn(async(_url,options)=>{calls.push(options);if(calls.length===1)return offer(new Headers(options.headers));if(calls.length===2)return new Promise<Response>((_r,no)=>{reject=no});if(calls.length===3)return new Promise<Response>(yes=>{resolve=yes});return done()}) as any
  const first=await client.paidToolFetch(url,{...init,body:JSON.stringify({question:'same question',confirmTokenSpend:false})},fetcher)
  client.approvePaidToolQuote(await first.json())
+ // Each call awaits an async fingerprint before fetching, so which of the two reaches the
+ // fetcher first (and gets the lost response) is not deterministic. Settle both regardless of
+ // order: assuming `one` loses left `two` as an unhandled rejection and `one` waiting forever.
  const one=client.paidToolFetch(url,init,fetcher),two=client.paidToolFetch(url,init,fetcher)
+ const settled=Promise.allSettled([one,two])
  await vi.waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(3))
- const failure=expect(one).rejects.toThrow('lost');reject(new Error('lost'));await failure;resolve(done());await two
+ reject(new Error('lost'));resolve(done())
+ const results=await settled
+ expect(results.map(r=>r.status).sort()).toEqual(['fulfilled','rejected'])
+ expect((results.find(r=>r.status==='rejected') as PromiseRejectedResult).reason.message).toBe('lost')
  await client.paidToolFetch(url,init,fetcher)
  const ids=calls.slice(1).map(options=>new Headers(options.headers).get('x-paid-tool-request-id'))
  expect(new Set(ids).size).toBe(1)

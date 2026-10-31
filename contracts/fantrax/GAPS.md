@@ -167,3 +167,77 @@ Out of season (MLB in October) the board may be stale or empty; that is reported
 
 **Needed:** a trimmed `getAdp?sport=MLB` and `?sport=NHL` capture (a few rows each, including a
 pitcher and a goalie), committed under `contracts/fantrax/fixtures/`.
+
+## F-12 — `getPlayerIds?sport=NFL` shape and team spelling (recorded 2026-10-30, no probe)
+
+`importFantraxLeague` now links an NFL league's rostered and drafted Fantrax ids to
+`PlayerIdentityMap.fantraxId` (`lib/player-identity/nflFantraxIdentityPlan.ts`, called through
+`linkNflFantraxIdentities.ts`). The NFL map is ASSUMED to have the captured MLB/CFB/NBA/NHL shape —
+id-keyed `{ fantraxId, name: "Last, First", team, position }` — and there is **no NFL capture**: the
+committed `nfl-public-2026.json` is a pre-draft league whose `playerInfo` carries only
+`eligiblePos`/`status`, no name or team.
+
+Unknown: whether `team` is an abbreviation (`KC`), a full name or something else, what a free agent
+reads (`(N/A)` on NBA/NHL), how team defences are named, and whether `position` is one code or a
+list. Workaround: the planner requires a team that `lib/team-abbrev.ts` recognises (abbreviation,
+alias or full name) and a compatible position group, skips any row whose name has no comma or whose
+position is `DST`/`DEF`, and refuses rather than guesses — a different spelling costs links, never
+wrong ones.
+
+**Needed:** a trimmed `getPlayerIds?sport=NFL` slice (a QB, a two-position player, a free agent, a
+team defence, an IDP player) committed under `tests/fixtures/fantrax/`.
+
+## F-13 — Transaction history is INFERRED from refresh-to-refresh roster diffs (recorded 2026-10-30)
+
+Fantrax publishes no transactions endpoint. A live import now stores, in the snapshot's existing
+`FantraxLeague.transactions` JSON (`fantraxDerived`, see
+`lib/league-import/fantrax/fantraxSnapshotHistory.ts`), the difference between the roster the
+previous import stored and the rosters just fetched. These rows reach `TransactionFact` with
+`status: inferred` (adds/drops) or `suspected` (two-way exchanges) — never `completed`.
+
+Known limits, by construction: history starts at the first refresh after this change; a move made
+and reversed between two refreshes is invisible; an add cannot be told apart as a waiver claim or a
+free-agent pickup; the period stamped is the one current at the refresh, not the one the move
+happened in. `getTeamRosters&period=N` (per-period rosters, which `deriveFantraxTransactions` was
+written for) is still NOT called — it would cost one request per played period on every refresh,
+and no per-period capture exists to confirm that a past period returns that period's roster rather
+than today's.
+
+**Needed before replacing the inference:** a `getTeamRosters&period=N` capture for two consecutive
+past periods of one public in-season league, showing a known add/drop between them.
+
+The stored draft board (`fantraxDraft`) is the captured `getDraftResults` shape (made picks only);
+prior seasons' boards are still not imported (F-09).
+
+## F-14 — Team logos / manager pictures — **ANSWERED 2026-10-30: the `fxea` API has no picture field**
+
+Captured with the owner's consent from one of their own leagues by the new
+`contracts/fantrax/scripts/probe.sh` → `fixtures/cfb-league-2026.json`. The script prints every key
+path of the RAW `getLeagueInfo`, `getTeamRosters` and `getStandings` responses before redacting, and
+lists any key that looks like a picture (`logo|image|img|avatar|icon|photo|pic|url`). **There is
+none.** A team is `{ id, name }` in `teamInfo`, `{ id, name, shortName, seed }` in a matchup,
+`{ teamName, rosterItems }` in a roster and `{ teamId, teamName, rank, points, … }` in standings.
+
+So `logoUrl: null` in `FantraxLeagueFetchService` is correct, not a bug: there is nothing to map.
+Fantrax teams keep the lettered badge. ⚠ One league proves only that these three endpoints send no
+picture field for teams without one; a league whose teams DO have uploaded logos could still add a
+key. The probe answers that in one run (`probe.sh <leagueId> <label>`) if such a league turns up.
+The remaining `fxea` endpoints (`getLeagues` needs a user secret id; `getMatchupScores`) are
+uncaptured.
+
+The original note follows.
+
+### (original) Team logos / manager pictures (recorded 2026-10-30, no probe)
+
+Every Fantrax team renders a letter instead of a picture in the league list. Measured on production
+2026-10-30: **0 of 209** Fantrax `LeagueTeam` rows carry an `avatarUrl` (ESPN 106 of 106, Sleeper
+6,551 of 7,003). The cause is ours, not the data: `FantraxLeagueFetchService` builds every team with
+`logoUrl: null`, and `FantraxRosterMapper` passes that through as `avatar_url`.
+
+Unknown: whether any `fxea` endpoint (`getLeagueInfo`, `getTeamRosters`, `getStandings`) returns a
+team logo URL at all. No committed capture shows one, and per CLAUDE.md this is not probed to find
+out.
+
+**Needed:** a `getLeagueInfo` or `getTeamRosters` capture from a league whose teams have custom
+logos, committed under `contracts/fantrax/fixtures/`. If a logo field exists, map it in
+`FantraxLeagueFetchService` (one line) and the list shows it on the next scheduled refresh.

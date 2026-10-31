@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
 import { MOCK_DRAFT_ROSTER_HINT_DELAY_MS } from '@/lib/draft-room/mock-draft-ui-constants'
+import { answerCspReportsInBrowser } from './helpers/csp-report-sink'
+
+// See the helper: dev-mode CSP reports otherwise saturate the shared `next dev`.
+test.beforeEach(async ({ context }) => {
+  await answerCspReportsInBrowser(context)
+})
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 

@@ -22,7 +22,12 @@ const mocks = vi.hoisted(() => ({
   processExpiredDraftPicks: vi.fn(),
   startScheduledSurvivorDrafts: vi.fn(),
   startScheduledRedraftDrafts: vi.fn(),
+  startScheduledDynastyDrafts: vi.fn(),
   fillAutoDraftBoards: vi.fn(),
+  processExpiredDispersalPicks: vi.fn(),
+}))
+vi.mock('@/lib/dispersal-draft/expiredDispersalPicks', () => ({
+  processExpiredDispersalPicks: mocks.processExpiredDispersalPicks,
 }))
 vi.mock('@/lib/live-draft-engine/autoDraftFill', () => ({
   fillAutoDraftBoards: mocks.fillAutoDraftBoards,
@@ -33,6 +38,7 @@ vi.mock('@/lib/survivor/startScheduledSurvivorDrafts', () => ({
 }))
 vi.mock('@/lib/draft/startScheduledRedraftDrafts', () => ({
   startScheduledRedraftDrafts: mocks.startScheduledRedraftDrafts,
+  startScheduledDynastyDrafts: mocks.startScheduledDynastyDrafts,
 }))
 vi.mock('@/lib/draft/mirrorActiveSleeperDrafts', () => ({
   mirrorActiveSleeperDrafts: vi.fn(async () => ({ scanned: 0 })),
@@ -65,7 +71,9 @@ describe('GET /api/cron/draft-tick', () => {
     mocks.processExpiredDraftPicks.mockResolvedValue(SUMMARY)
     mocks.startScheduledSurvivorDrafts.mockResolvedValue({ scanned: 0, started: 0, skipped: 0, errors: [] })
     mocks.startScheduledRedraftDrafts.mockResolvedValue({ scanned: 1, started: 1, skipped: 0, skips: [], errors: [] })
+    mocks.startScheduledDynastyDrafts.mockResolvedValue({ scanned: 1, started: 1, skipped: 0, skips: [], errors: [] })
     mocks.fillAutoDraftBoards.mockResolvedValue({ scanned: 2, filled: 1, picks: 7, completed: 0, outcomes: [], errors: [] })
+    mocks.processExpiredDispersalPicks.mockResolvedValue({ scanned: 1, advanced: 1, errors: [] })
     process.env.CRON_SECRET = CRON_SECRET
     delete process.env.LEAGUE_CRON_SECRET
     delete process.env.ADMIN_PASSWORD
@@ -167,6 +175,38 @@ describe('GET /api/cron/draft-tick', () => {
     await expect(res.json()).resolves.toMatchObject({ disabled: true, redraftStarts: { started: 1 } })
     expect(mocks.startScheduledRedraftDrafts).toHaveBeenCalledTimes(1)
     expect(mocks.startScheduledSurvivorDrafts).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts scheduled dynasty drafts every tick, and keeps ticking when that starter throws', async () => {
+    const { GET } = await import('@/app/api/cron/draft-tick/route')
+    const res = await GET(request(CRON_SECRET))
+    await expect(res.json()).resolves.toMatchObject({ disabled: true, dynastyStarts: { started: 1 } })
+    expect(mocks.startScheduledDynastyDrafts).toHaveBeenCalledTimes(1)
+
+    process.env.DRAFT_TICK_CRON_ENABLED = 'true'
+    mocks.startScheduledDynastyDrafts.mockRejectedValue(new Error('dynasty scan failed'))
+    const again = await GET(request(CRON_SECRET))
+    expect(again.status).toBe(200)
+    await expect(again.json()).resolves.toMatchObject({ ok: true, dynastyStarts: { errors: [{ error: 'dynasty scan failed' }] } })
+  })
+
+  it('runs a dispersal draft’s clock every tick, even while autopick is disabled: its commissioner turned auto-pick on', async () => {
+    const { GET } = await import('@/app/api/cron/draft-tick/route')
+    const res = await GET(request(CRON_SECRET))
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({ disabled: true, dispersal: { scanned: 1, advanced: 1, errors: [] } })
+    expect(mocks.processExpiredDispersalPicks).toHaveBeenCalledWith({ maxDrafts: 25 })
+    expect(mocks.processExpiredDraftPicks).not.toHaveBeenCalled()
+  })
+
+  it('keeps ticking when the dispersal sweep throws', async () => {
+    process.env.DRAFT_TICK_CRON_ENABLED = 'true'
+    mocks.processExpiredDispersalPicks.mockRejectedValue(new Error('dispersal read failed'))
+    const { GET } = await import('@/app/api/cron/draft-tick/route')
+    const res = await GET(request(CRON_SECRET))
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({ ok: true, dispersal: { errors: [{ error: 'dispersal read failed' }] } })
+    expect(mocks.processExpiredDraftPicks).toHaveBeenCalledTimes(1)
   })
 
   it('keeps ticking when the redraft starter throws', async () => {

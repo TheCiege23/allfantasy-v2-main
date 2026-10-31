@@ -24,6 +24,7 @@ import { SwapManagerModal } from './SwapManagerModal'
 import { TimerPresetSelect } from '@/components/draft/TimerPresetSelect'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { draftAiSaveMessage, type ChimmySeasonResult } from '@/lib/commissioner-ai-draft-manager/chimmySeason'
 
 const TIMER_MODE_OPTIONS: Array<{ value: TimerMode; label: string }> = [
   { value: 'per_pick', label: 'Per pick' },
@@ -69,6 +70,8 @@ export type CommissionerControlCenterModalProps = {
   onOpenDraftRoomSettings?: () => void
   onResync: () => void
   loading?: boolean
+  /** Draft-order team names, so the Chimmy AI manager rows name teams instead of roster ids. */
+  teamNameByRosterId?: Record<string, string>
   commissionerAiDraft?: {
     assignedAiTeams: Array<{ teamId: string; teamName: string; aiStyle: string; tradeAggression: string; active: boolean }>
     tradeRules: {
@@ -117,6 +120,7 @@ export function CommissionerControlCenterModal({
   loading = false,
   commissionerAiDraft = null,
   onSaveCommissionerAiDraft,
+  teamNameByRosterId = {},
 }: CommissionerControlCenterModalProps) {
   // What "Set timer" will send. null = Off (0 seconds); starts from the draft's current timer.
   const [pendingTimerSeconds, setPendingTimerSeconds] = useState<number | null>(timerSeconds && timerSeconds > 0 ? timerSeconds : null)
@@ -164,7 +168,9 @@ export function CommissionerControlCenterModal({
       next[rid] = {
         aiStyle: ex?.aiStyle ?? 'BALANCED',
         tradeAggression: ex?.tradeAggression ?? 'medium',
-        active: ex?.active ?? true,
+        // Chimmy is opt-in per team: a team only gets an AI manager when the commissioner ticks it.
+        // (This defaulted to true, so saving the panel for any reason assigned every orphan.)
+        active: ex?.active ?? false,
       }
     }
     setAiRowState(next)
@@ -824,9 +830,11 @@ export function CommissionerControlCenterModal({
                 className="rounded-lg border border-emerald-400/20 bg-emerald-500/8 px-3 py-2 text-xs"
                 data-testid="draft-commissioner-ai-managers-panel"
               >
-                <p className="font-medium text-emerald-100/95">Commissioner AI managers (max 4 orphan teams)</p>
+                <p className="font-medium text-emerald-100/95">Chimmy AI managers (up to 4 open teams)</p>
                 <p className="mt-1 text-[11px] text-white/55">
-                  Only orphan (unassigned) rosters. AI↔AI trades respect “Block AI ↔ AI”.
+                  Tick an open (unclaimed) team to hand it to Chimmy. Chimmy drafts for it a few seconds after it
+                  comes on the clock, using the draft style you choose. Needs the orphan AI manager setting on.
+                  AI↔AI trades respect “Block AI ↔ AI”.
                 </p>
                 <div className="mt-2 space-y-1.5">
                   {(
@@ -894,7 +902,7 @@ export function CommissionerControlCenterModal({
                 </div>
                 <div className="mt-2 space-y-2">
                   {(orphanStatus?.orphanRosterIds ?? []).slice(0, 4).map((rid) => {
-                    const row = aiRowState[rid] ?? { aiStyle: 'BALANCED', tradeAggression: 'medium', active: true }
+                    const row = aiRowState[rid] ?? { aiStyle: 'BALANCED', tradeAggression: 'medium', active: false }
                     return (
                       <div key={rid} className="flex flex-wrap items-center gap-2 rounded border border-white/10 bg-black/30 px-2 py-1.5">
                         <label className="flex items-center gap-1 text-[11px] text-white/70">
@@ -908,7 +916,9 @@ export function CommissionerControlCenterModal({
                               }))
                             }
                           />
-                          <span className="font-mono">{rid.slice(0, 8)}…</span>
+                          <span data-testid={`draft-commissioner-ai-team-${rid}`}>
+                            {teamNameByRosterId[rid] ?? `Open team ${rid.slice(0, 6)}`}
+                          </span>
                         </label>
                         <select
                           className="rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white"
@@ -953,7 +963,7 @@ export function CommissionerControlCenterModal({
                     setAiMgrMessage(null)
                     try {
                       const assignedAiTeams = (orphanStatus?.orphanRosterIds ?? []).slice(0, 4).map((rid) => {
-                        const row = aiRowState[rid] ?? { aiStyle: 'BALANCED', tradeAggression: 'medium', active: true }
+                        const row = aiRowState[rid] ?? { aiStyle: 'BALANCED', tradeAggression: 'medium', active: false }
                         return {
                           teamId: rid,
                           aiStyle: row.aiStyle,
@@ -965,7 +975,9 @@ export function CommissionerControlCenterModal({
                       if (res && typeof res === 'object' && 'error' in res && res.error) {
                         setAiMgrMessage(String(res.error))
                       } else {
-                        setAiMgrMessage('Saved.')
+                        // Say whether Chimmy will also run them all season, and why one could not be handed over.
+                        const season = res && typeof res === 'object' && 'chimmySeason' in res ? (res as { chimmySeason?: ChimmySeasonResult[] }).chimmySeason : null
+                        setAiMgrMessage(draftAiSaveMessage(season))
                         void onResync()
                       }
                     } finally {

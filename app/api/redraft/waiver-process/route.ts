@@ -15,6 +15,7 @@ import type { EliminatedLineupRunResult } from '@/lib/eliminated-lineups/elimina
 import type { RookieOrderRoundNoticeRun } from '@/lib/rookie-order/roundNoticeService'
 import type { IrAutoMoveRunResult } from '@/lib/ir-activation/irAutoMoveService'
 import type { OrphanAuctionRunResult } from '@/lib/orphan-auction/orphanAuctionService'
+import type { TaxiStealRunResult } from '@/lib/taxi/taxiStealingService'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -173,6 +174,70 @@ export async function GET(request: Request) {
    * to AllFantasy. Hourly keeps it current as injuries and projections move; guarded and on its own job
    * identity, for the same reasons as the sweep above.
    */
+  /*
+   * The commissioner's opt-in auto-handover (lib/inactive-manager/autoHandover.ts): a team idle for the
+   * chosen number of days is handed to AllFantasy (or Chimmy autopilot). Before the lineup run, so a team
+   * handed over now gets its lineup set this same hour. Guarded and on its own job identity.
+   */
+  let autoHandovers: unknown = null
+  try {
+    const { runAutoHandovers } = await import('@/lib/inactive-manager/inactiveManagerService')
+    autoHandovers = await withSyncJobRun(
+      { jobName: 'cron-inactive-auto-handover', trigger: 'cron' },
+      () => runAutoHandovers(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.handedOver,
+        errors: r.failures.map((f) => `${f.leagueId}: ${f.error}`),
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] auto handover failed', e)
+    autoHandovers = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  // "Trades don't wait forever" (lib/league-trade-engine/tradeReviewAutoApprove.ts): commissioner opt-in.
+  let tradeAutoApprovals: unknown = null
+  try {
+    const { runTradeReviewAutoApprovals } = await import('@/lib/league-trade-engine/tradeReviewAutoApproveService')
+    tradeAutoApprovals = await withSyncJobRun(
+      { jobName: 'cron-trade-review-auto-approve', trigger: 'cron' },
+      () => runTradeReviewAutoApprovals(),
+      (r) => ({
+        rowsRead: r.waiting,
+        rowsWritten: r.approved,
+        errors: r.failures.map((f) => `${f.tradeId}: ${f.error}`),
+        metadata: { warned: r.warned, flagged: r.flagged },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] trade review auto-approve failed', e)
+    tradeAutoApprovals = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Seats the old orphan-teams "Assign AI manager" button left as `ai-manager-…` go back to ordinary
+   * empty seats run by Chimmy (lib/inactive-manager/repairAiManagerSeats.ts). Before the lineup run, so
+   * a repaired team gets its lineup set this same hour. Finds nothing once every seat is repaired.
+   */
+  let aiManagerSeatRepair: unknown = null
+  try {
+    const { repairAiManagerSeats } = await import('@/lib/inactive-manager/repairAiManagerSeats')
+    aiManagerSeatRepair = await withSyncJobRun(
+      { jobName: 'cron-ai-manager-seat-repair', trigger: 'cron' },
+      () => repairAiManagerSeats(),
+      (r) => ({
+        rowsRead: r.found,
+        rowsWritten: r.repaired,
+        errors: r.chimmyRefused.map((f) => `${f.rosterId}: ${f.error}`),
+        metadata: { chimmy: r.chimmy },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] ai-manager seat repair failed', e)
+    aiManagerSeatRepair = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   let inactiveLineups: InactiveLineupRunResult | { error: string } | null = null
   try {
     const { runInactiveManagerLineups } = await import('@/lib/inactive-manager/inactiveManagerService')
@@ -189,6 +254,99 @@ export async function GET(request: Request) {
   } catch (e) {
     console.error('[redraft/waiver-process] inactive manager lineups failed', e)
     inactiveLineups = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * The free "bench my starters on bye automatically" switch (lib/lineup-automation): hourly, swap a
+   * starter whose bye week is this week for the best bench player who can play. Guarded and on its own
+   * job identity, like the sweeps around it.
+   */
+  let autoBenchByes: unknown = null
+  try {
+    const { runAutoBenchByes } = await import('@/lib/lineup-automation/autoBenchByeService')
+    autoBenchByes = await withSyncJobRun(
+      { jobName: 'cron-auto-bench-bye', trigger: 'cron' },
+      () => runAutoBenchByes(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.swapped,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { unchanged: r.unchanged, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] auto bench bye failed', e)
+    autoBenchByes = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Fill an empty starting spot before lock (lib/lineup-automation/fillEmptyStartersService): on by
+   * default in every weekly-lineup league played on AllFantasy, unless the commissioner switched it off.
+   * Fills only empty spots from the bench and tells the commissioner about a spot nobody can play.
+   * Guarded and on its own job identity, like the sweeps around it.
+   */
+  let fillEmptyStarters: unknown = null
+  try {
+    const { runFillEmptyStarters } = await import('@/lib/lineup-automation/fillEmptyStartersService')
+    fillEmptyStarters = await withSyncJobRun(
+      { jobName: 'cron-fill-empty-starters', trigger: 'cron' },
+      () => runFillEmptyStarters(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.filled,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, flagged: r.flagged, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] fill empty starters failed', e)
+    fillEmptyStarters = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Taxi deadline notices (lib/taxi/taxiDeadlineNoticeService): in the week a taxi promotion deadline
+   * or lock week closes, every owner is told before it does and the commissioner gets a summary. Leagues
+   * with taxi enforcement on (AF Commissioner). Guarded and on its own job identity, like the sweeps around it.
+   */
+  let taxiDeadlines: unknown = null
+  try {
+    const { runTaxiDeadlineNotices } = await import('@/lib/taxi/taxiDeadlineNoticeService')
+    taxiDeadlines = await withSyncJobRun(
+      { jobName: 'cron-taxi-deadline-notices', trigger: 'cron' },
+      () => runTaxiDeadlineNotices(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.notified,
+        errors: r.failures.map((f) => `${f.leagueId}: ${f.error}`),
+        metadata: { skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] taxi deadline notices failed', e)
+    taxiDeadlines = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * "What AllFantasy did this week" (lib/commissioner-hub/weeklyAutomationRecapService): on Mondays,
+   * one message per league to its commissioner summing up the automations' own actions last week.
+   * Guarded and on its own job identity, like the sweeps around it.
+   */
+  let automationRecaps: unknown = null
+  try {
+    const { runWeeklyAutomationRecaps } = await import('@/lib/commissioner-hub/weeklyAutomationRecapService')
+    automationRecaps = await withSyncJobRun(
+      { jobName: 'cron-weekly-automation-recap', trigger: 'cron' },
+      () => runWeeklyAutomationRecaps(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.sent,
+        errors: r.failures.map((f) => `${f.leagueId}: ${f.error}`),
+        metadata: { nothing: r.nothing, alreadySent: r.alreadySent },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] weekly automation recap failed', e)
+    automationRecaps = { error: e instanceof Error ? e.message : String(e) }
   }
 
   /*
@@ -307,6 +465,29 @@ export async function GET(request: Request) {
     orphanAuctions = { error: e instanceof Error ? e.message : String(e) }
   }
 
+  /*
+   * Taxi stealing (lib/taxi/taxiStealing.ts): AF Commissioner. Every claim whose protection window has
+   * closed is resolved — the player moves to the claiming team, or the claim ends if they left the
+   * taxi squad. Hourly, so a steal lands within the hour of its deadline; on its own job identity.
+   */
+  let taxiSteals: TaxiStealRunResult | { error: string } | null = null
+  try {
+    const { runTaxiStealResolution } = await import('@/lib/taxi/taxiStealingService')
+    taxiSteals = await withSyncJobRun(
+      { jobName: 'cron-taxi-steal-resolve', trigger: 'cron' },
+      () => runTaxiStealResolution(),
+      (r) => ({
+        rowsRead: r.leagues,
+        rowsWritten: r.stolen + r.voided,
+        errors: r.failures.map((f) => `${f.leagueId}${f.claimId ? `/${f.claimId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, stolen: r.stolen, voided: r.voided },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] taxi steal resolution failed', e)
+    taxiSteals = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   const out = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
     () => processDueWaiverWindows(),
@@ -332,5 +513,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, inactiveLineups, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, fillEmptyStarters, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

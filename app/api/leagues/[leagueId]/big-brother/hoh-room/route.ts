@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { isBigBrotherLeague } from '@/lib/big-brother/BigBrotherLeagueConfig'
 import { getCurrentCycleForLeague } from '@/lib/big-brother/BigBrotherPhaseStateMachine'
 
@@ -35,7 +36,7 @@ async function resolveAuthorization(
     prisma.bigBrotherCycle.findUnique({ where: { id: cycleId }, select: { hohRosterId: true } }),
   ])
   const isCommissioner = league?.userId === userId
-  const myRosterId = roster?.id ?? null
+  const myRosterId = roster?.id ?? await acceptedCoOwnerRosterId(leagueId, userId)
   const isHoh = myRosterId != null && myRosterId === cycle?.hohRosterId
   return { isHoh, isCommissioner, myRosterId }
 }

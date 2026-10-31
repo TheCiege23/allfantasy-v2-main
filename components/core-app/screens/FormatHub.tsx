@@ -11,6 +11,8 @@ import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
 import { HubBroadcast } from '@/components/core-app/hubs/HubBroadcast'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import type { HelpTopicId } from '@/lib/core-app/helpTopics'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { hubCopy, hubTab, hubText, themeCopyFor } from '@/lib/core-app/formatHubCopy'
 
 /**
  * What each format's card meter measures — one "?" beside the leagues heading, never one per card.
@@ -180,7 +182,15 @@ function ago(iso: string): string {
 }
 
 export default function FormatHub({ data }: { data: FormatHubData }) {
-  const theme = THEMES[data.format]
+  const { language } = useOptionalLanguage()
+  const c = (english: string) => hubCopy(english, language)
+  const base = THEMES[data.format]
+  // Spanish overlays the themed copy; media, glyph and canCreate stay from THEMES.
+  const themeCopy = themeCopyFor(language)
+  const theme: Theme =
+    themeCopy
+      ? { ...base, ...themeCopy(availableImportPlatformsPhrase())[data.format], tab: hubTab(data.format, base.tab, language) }
+      : base
   const [connectOpen, setConnectOpen] = useState(false)
   const [tradesTab, setTradesTab] = useState<'pending' | 'completed'>('pending')
   const has = data.totalLeagues > 0
@@ -188,11 +198,11 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
 
   return (
     <div className="afh" data-format={data.format}>
-      <HubSwitcher current={data.format} counts={data.counts} />
+      <HubSwitcher current={data.format} counts={data.counts} language={language} />
 
       <header className="afh-head">
         <div className="afh-title">
-          <div className="afh-label">Core · Format hubs</div>
+          <div className="afh-label">{c('Core · Format hubs')}</div>
           <div className="afh-title-row">
             <span className="afh-badge" aria-hidden>
               {theme.glyph}
@@ -213,41 +223,37 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
       </header>
 
       {data.format === 'tournament' ? (
-        <section className="afh-connect" aria-label="Tournament management">
-          <p>Connect leagues already imported into AllFantasy. Get manager standings and weekly top scorers across all conferences, then copy or download the Excel report.</p>
+        <section className="afh-connect" aria-label={c('Tournament management')}>
+          <p>{c('Connect leagues already imported into AllFantasy. Get manager standings and weekly top scorers across all conferences, then copy or download the Excel report.')}</p>
           <div className="afh-connect-row">
-            <Link className="afh-btn" href="/tournament-hub/new">Connect imported leagues</Link>
-            <Link className="afh-btn" href="/tournament-hub">Your tournaments and weekly reports</Link>
+            <Link className="afh-btn" href="/tournament-hub/new">{c('Connect imported leagues')}</Link>
+            <Link className="afh-btn" href="/tournament-hub">{c('Your tournaments and weekly reports')}</Link>
           </div>
         </section>
       ) : null}
       {connectOpen ? (
-        <section id="afh-connect" className="afh-connect" aria-label="Connect a league">
+        <section id="afh-connect" className="afh-connect" aria-label={c('Connect a league')}>
           <div className="afh-connect-head">
-            <div className="afh-label">Bring a league into this hub</div>
-            <button type="button" className="afh-close" aria-label="Close" onClick={() => setConnectOpen(false)}>
+            <div className="afh-label">{c('Bring a league into this hub')}</div>
+            <button type="button" className="afh-close" aria-label={c('Close')} onClick={() => setConnectOpen(false)}>
               ✕
             </button>
           </div>
           {data.format === 'tournament' ? <div className="afh-connect-row">
-            <div className="afh-row-main"><span className="afh-row-title">Already imported?</span><span className="afh-row-detail">Select your leagues and group them into a tournament.</span></div>
-            <Link className="afh-btn afh-btn--sm" href="/tournament-hub/new">Connect leagues</Link>
+            <div className="afh-row-main"><span className="afh-row-title">{c('Already imported?')}</span><span className="afh-row-detail">{c('Select your leagues and group them into a tournament.')}</span></div>
+            <Link className="afh-btn afh-btn--sm" href="/tournament-hub/new">{c('Connect leagues')}</Link>
           </div> : null}
-          <p>
-            This hub gathers every {theme.tab} league you’re already in. To add one, import it from the platform it
-            lives on{theme.canCreate ? ', or start a new one on AllFantasy' : ''}. Nothing changes on the original
-            platform.
-          </p>
+          <p>{hubText.connectBody(theme.tab, theme.canCreate, language)}</p>
           <div className="afh-connect-row">
             <span className="afh-pmark" aria-hidden>
               ↓
             </span>
             <div className="afh-row-main">
-              <span className="afh-row-title">Import from {availableImportPlatformsPhrase()}</span>
-              <span className="afh-row-detail">It appears here as soon as it is recognised as a {theme.tab} league.</span>
+              <span className="afh-row-title">{hubText.importFrom(availableImportPlatformsPhrase(), language)}</span>
+              <span className="afh-row-detail">{hubText.appearsWhen(theme.tab, language)}</span>
             </div>
             <Link className="afh-btn afh-btn--sm" href="/import">
-              Import
+              {c('Import')}
             </Link>
           </div>
           {theme.canCreate ? (
@@ -256,18 +262,18 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
                 +
               </span>
               <div className="afh-row-main">
-                <span className="afh-row-title">Start a {theme.tab} league on AllFantasy</span>
-                <span className="afh-row-detail">Pick the {theme.tab} format in league creation.</span>
+                <span className="afh-row-title">{hubText.startOn(theme.tab, language)}</span>
+                <span className="afh-row-detail">{hubText.pickFormat(theme.tab, language)}</span>
               </div>
               <Link className="afh-btn afh-btn--sm" href="/create-league">
-                Create
+                {c('Create')}
               </Link>
             </div>
           ) : null}
         </section>
       ) : null}
 
-      <section className="afh-hero" aria-label={`${theme.tab} at a glance`}>
+      <section className="afh-hero" aria-label={hubText.atAGlance(theme.tab, language)}>
         <HubHeroMedia video={theme.video} poster={theme.poster} />
         <div className="afh-seal" aria-hidden>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -276,9 +282,7 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
         <div className="afh-hero-body">
           {has ? (
             <>
-              <div className="afh-label">
-                Across your {data.totalLeagues} {data.totalLeagues === 1 ? 'league' : 'leagues'}
-              </div>
+              <div className="afh-label">{hubText.across(data.totalLeagues, language)}</div>
               <div className="afh-stats">
                 {data.stats.map((s) => (
                   <div className="afh-stat" key={s.label}>
@@ -292,7 +296,7 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
             <div className="afh-stats">
               <div className="afh-stat">
                 <b data-tone="accent">0</b>
-                <span>{theme.tab} leagues you play in</span>
+                <span>{hubText.leaguesYouPlay(theme.tab, language)}</span>
               </div>
             </div>
           )}
@@ -302,9 +306,9 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
       {has ? (
         <>
           <WorkbookBarChart
-            title={`${theme.tab} league comparison`}
+            title={hubText.comparison(theme.tab, language)}
             subtitle={theme.meterLabel}
-            valueLabel="Percent"
+            valueLabel={c('Percent')}
             data={data.leagues
               .filter((league) => league.meter)
               .map((league) => ({
@@ -341,7 +345,7 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
                       <span className="afh-card-name">{l.name}</span>
                       <span className="afh-card-sub">
                         {l.sub}
-                        {l.youCommission ? ' · you commish' : ''}
+                        {l.youCommission ? c(' · you commish') : ''}
                       </span>
                     </div>
                   </div>
@@ -369,21 +373,21 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
                       <div className="afh-meter-top">
                         <span className="afh-label">{theme.meterLabel}</span>
                       </div>
-                      <span className="afh-row-detail">{l.detail ?? 'Nothing on file yet'}</span>
+                      <span className="afh-row-detail">{l.detail ?? c('Nothing on file yet')}</span>
                     </div>
                   )}
                   {l.meter && l.detail ? <span className="afh-row-detail">{l.detail}</span> : null}
                   <span className="afh-chip" data-tone={l.statusTone === 'muted' ? undefined : l.statusTone}>
                     {l.status}
                   </span>
-                  <nav className="afh-card-actions" aria-label={`${l.name} tools`}>
-                    <Link href={l.href}>Overview</Link>
-                    <Link href={`/core/standings?league=${encodeURIComponent(l.leagueId)}`}>Standings</Link>
-                    <Link href={`/core/trades?league=${encodeURIComponent(l.leagueId)}`}>Trades</Link>
-                    <Link href={`/core/draft-hq?league=${encodeURIComponent(l.leagueId)}`}>Draft</Link>
+                  <nav className="afh-card-actions" aria-label={hubText.leagueTools(l.name, language)}>
+                    <Link href={l.href}>{c('Overview')}</Link>
+                    <Link href={`/core/standings?league=${encodeURIComponent(l.leagueId)}`}>{c('Standings')}</Link>
+                    <Link href={`/core/trades?league=${encodeURIComponent(l.leagueId)}`}>{c('Trades')}</Link>
+                    <Link href={`/core/draft-hq?league=${encodeURIComponent(l.leagueId)}`}>{c('Draft')}</Link>
                     {l.youCommission ? (
                       <Link className="afh-card-commissioner" href={`/core/commissioner?league=${encodeURIComponent(l.leagueId)}`}>
-                        Commissioner
+                        {c('Commissioner')}
                       </Link>
                     ) : null}
                   </nav>
@@ -392,9 +396,9 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
             </div>
             {data.totalLeagues > data.leagues.length ? (
               <p className="afh-row-detail" style={{ margin: 0 }}>
-                Showing {data.leagues.length} of {data.totalLeagues}. Every league is in{' '}
+                {hubText.showing(data.leagues.length, data.totalLeagues, language)}
                 <Link className="afh-link" href="/core/portfolio">
-                  Portfolio →
+                  {c('Portfolio →')}
                 </Link>
               </p>
             ) : null}
@@ -406,20 +410,20 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
                 <h2 id="afh-trades" className="afh-label" style={{ margin: 0 }}>
                   {theme.tradesLabel}
                 </h2>
-                <div className="afh-seg" role="group" aria-label="Trade status">
+                <div className="afh-seg" role="group" aria-label={c('Trade status')}>
                   <button type="button" aria-pressed={tradesTab === 'pending'} onClick={() => setTradesTab('pending')}>
-                    Pending
+                    {c('Pending')}
                   </button>
                   <button type="button" aria-pressed={tradesTab === 'completed'} onClick={() => setTradesTab('completed')}>
-                    Completed
+                    {c('Completed')}
                   </button>
                 </div>
               </div>
               {tradeRows == null ? (
-                <p className="afh-none">Trades couldn’t be read just now. This is a read failure, not an empty trade log.</p>
+                <p className="afh-none">{c('Trades couldn’t be read just now. This is a read failure, not an empty trade log.')}</p>
               ) : tradeRows.length === 0 ? (
                 <p className="afh-none">
-                  {tradesTab === 'pending' ? 'No offers waiting in these leagues.' : 'No completed trades on file for these leagues.'}
+                  {tradesTab === 'pending' ? c('No offers waiting in these leagues.') : c('No completed trades on file for these leagues.')}
                 </p>
               ) : (
                 tradeRows.map((t) => (
@@ -429,7 +433,7 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
                       <span className="afh-row-detail">{t.detail}</span>
                     </div>
                     <span className="afh-chip" data-tone={tradesTab === 'pending' ? 'warn' : 'accent'}>
-                      {tradesTab === 'pending' ? 'Pending' : 'Done'}
+                      {tradesTab === 'pending' ? c('Pending') : c('Done')}
                     </span>
                   </div>
                 ))
@@ -443,9 +447,9 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
                 </h2>
               </div>
               {data.mentions == null ? (
-                <p className="afh-none">Mentions couldn’t be read just now.</p>
+                <p className="afh-none">{c('Mentions couldn’t be read just now.')}</p>
               ) : data.mentions.length === 0 ? (
-                <p className="afh-none">Nobody has @-mentioned you in these league chats.</p>
+                <p className="afh-none">{c('Nobody has @-mentioned you in these league chats.')}</p>
               ) : (
                 data.mentions.map((m) => (
                   <div className="afh-mention" key={m.id}>
@@ -468,8 +472,8 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
           <div>
             <h2>{theme.emptyTitle}</h2>
             <p>
-              This hub fills in by itself the moment one of your leagues is a {theme.tab} league — imported or created.
-              {data.partial ? ' Some league data couldn’t be read just now, so this count may be low.' : ''}
+              {hubText.fillsIn(theme.tab, language)}
+              {data.partial ? c(' Some league data couldn’t be read just now, so this count may be low.') : ''}
             </p>
           </div>
           <button type="button" className="afh-btn" onClick={() => setConnectOpen(true)}>
@@ -481,10 +485,10 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
       <footer className="afh-foot">
         <p>
           {theme.foot}
-          {has && data.partial ? ' Some figures couldn’t be read just now and may be low.' : ''}
+          {has && data.partial ? c(' Some figures couldn’t be read just now and may be low.') : ''}
         </p>
         <Link className="afh-link" href="/core/commissioner">
-          Commissioner hub →
+          {c('Commissioner hub →')}
         </Link>
       </footer>
     </div>

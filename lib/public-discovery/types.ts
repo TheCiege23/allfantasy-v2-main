@@ -26,6 +26,21 @@ export type DraftTypeFilter = "all" | "snake" | "linear" | "auction"
 export type DraftStatusFilter = "all" | "pre_draft" | "in_progress" | "paused" | "completed"
 export type VisibilityFilter = "public" | "all"
 
+/** When a draft lands on the VIEWER's clock (lib/public-discovery/findLeagueFilters). */
+export type DraftWhenFilter = "any" | "upcoming" | "next_7_days" | "weeknight" | "weekend"
+/** US region of a league's official time zone. */
+export type TimeZoneRegionFilter =
+  | "any"
+  | "eastern"
+  | "central"
+  | "mountain"
+  | "pacific"
+  | "alaska_hawaii"
+  | "outside_us"
+/** Where a league sits against the viewer's rank. */
+export type RankBand = "step_up" | "your_level" | "chill"
+export type RankBandFilter = "all" | RankBand
+
 export interface DiscoveryCard {
   source: DiscoverySource
   id: string
@@ -59,6 +74,8 @@ export interface DiscoveryCard {
   teamCount: number
   /** Draft or join deadline when available (ISO). */
   draftDate: string | null
+  /** The league's official IANA time zone, when it has one. */
+  timezone?: string | null
   /** Commissioner display name (same as ownerName). */
   commissionerName: string | null
   /** Commish reputation, only when the commissioner made it public for this league (lib/commish-reputation). */
@@ -79,6 +96,18 @@ export interface DiscoveryCard {
   rankingEffectScore?: number
   /** Absolute tier distance between viewer and league tier. */
   rankingTierDelta?: number
+  /** Step up / your level / chill against the signed-in viewer's rank; absent for anonymous viewers. */
+  rankBand?: RankBand | null
+  /** "invite": join here with the code. "request": the league plays elsewhere; ask the commissioner. */
+  joinMode?: "invite" | "request"
+  /** For a league that plays on another platform: which one (sleeper, espn, …). */
+  externalPlatform?: string | null
+  /** How the lister was shown to be the commissioner (lib/public-discovery/externalListing.ts). */
+  listingVerification?: "provider" | "attestation" | null
+  /** The commissioner's note on an external listing. */
+  listingNote?: string | null
+  /** Entry fee in dollars, when the league states one. AllFantasy never collects it. */
+  entryFee?: number | null
 }
 
 export interface DiscoverLeaguesInput {
@@ -96,6 +125,11 @@ export interface DiscoverLeaguesInput {
   draftType?: DraftTypeFilter
   draftStatus?: DraftStatusFilter
   aiEnabled?: boolean | null
+  draftWhen?: DraftWhenFilter
+  tzRegion?: TimeZoneRegionFilter
+  rankBand?: RankBandFilter
+  /** The viewer's IANA zone, so draft windows are judged on their clock. */
+  viewerTimeZone?: string | null
 }
 
 export interface DiscoverLeaguesResult {
@@ -108,4 +142,6 @@ export interface DiscoverLeaguesResult {
   viewerTier?: number
   viewerTierName?: string
   hiddenByTierPolicy?: number
+  /** Set when paid leagues were withheld because of where the viewer is (lib/geo/paidLeagueGeo.ts). */
+  paidLeaguesHidden?: { message: string } | null
 }

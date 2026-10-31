@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ROOKIE_DRAFT_AUTO_OPEN_DEFAULT,
   ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY,
+  ROOKIE_DRAFT_PLAN_DEFAULT_FROM,
   defaultRookieDraftWindow,
   describeRookieDraftWindow,
   normalizeCustomOpenDate,
   readRookieDraftCalendarSettings,
+  resolveRookieDraftAutoOpen,
   resolveRookieDraftWindow,
 } from '@/lib/dynasty-core/rookieDraftCalendar'
 import { DYNASTY_SPORT_CONFIGS } from '@/lib/dynasty-core/dynastySportConfig'
@@ -80,11 +82,11 @@ describe('rookie-draft windows, per sport', () => {
 describe('commissioner settings', () => {
   it('auto-open is OFF unless a commissioner turns it on', () => {
     expect(ROOKIE_DRAFT_AUTO_OPEN_DEFAULT).toBe(false)
-    expect(readRookieDraftCalendarSettings({})).toEqual({ autoOpen: false, customOpenDate: null })
+    expect(readRookieDraftCalendarSettings({})).toEqual({ autoOpen: false, customOpenDate: null, autoStartDays: null })
     expect(readRookieDraftCalendarSettings(null).autoOpen).toBe(false)
     expect(
       readRookieDraftCalendarSettings({ [ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]: { autoOpen: true, customOpenDate: '2027-05-10' } }),
-    ).toEqual({ autoOpen: true, customOpenDate: '2027-05-10' })
+    ).toEqual({ autoOpen: true, customOpenDate: '2027-05-10', autoStartDays: null })
   })
 
   it('accepts only real YYYY-MM-DD dates', () => {
@@ -133,5 +135,52 @@ describe('pick valuation reads the same calendar', () => {
     vi.setSystemTime(new Date('2027-01-10T12:00:00Z'))
     // January 2027: the 2027 class was drafted in November, so no bump (it was 1.06 when MLB said January).
     expect(getPickValue(2027, 1, true, undefined, undefined, 'MLB')).toBe(6000)
+  })
+})
+
+describe('resolveRookieDraftAutoOpen', () => {
+  const after = new Date('2027-01-12T05:00:00Z')
+  const before = new Date('2026-10-04T05:00:00Z')
+  const set = (autoOpen: boolean) => ({ [ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]: { autoOpen } })
+
+  it('the commissioner\'s own switch always wins', () => {
+    for (const commissionerPlan of [true, false]) {
+      for (const offseasonStartedAt of [before, after]) {
+        expect(resolveRookieDraftAutoOpen({ settings: set(false), commissionerPlan, offseasonStartedAt })).toEqual({ autoOpen: false, source: 'commissioner' })
+        expect(resolveRookieDraftAutoOpen({ settings: set(true), commissionerPlan, offseasonStartedAt })).toEqual({ autoOpen: true, source: 'commissioner' })
+      }
+    }
+  })
+
+  it('unset: on for AF Commissioner, off for free', () => {
+    expect(resolveRookieDraftAutoOpen({ settings: {}, commissionerPlan: true, offseasonStartedAt: after })).toEqual({ autoOpen: true, source: 'plan_default' })
+    expect(resolveRookieDraftAutoOpen({ settings: {}, commissionerPlan: false, offseasonStartedAt: after })).toEqual({ autoOpen: false, source: 'free_default' })
+  })
+
+  it('unset, AF Commissioner, offseason under way before the default shipped: off', () => {
+    expect(resolveRookieDraftAutoOpen({ settings: {}, commissionerPlan: true, offseasonStartedAt: before })).toEqual({ autoOpen: false, source: 'plan_default_predates' })
+    // The boundary instant itself counts as after.
+    expect(resolveRookieDraftAutoOpen({ settings: {}, commissionerPlan: true, offseasonStartedAt: ROOKIE_DRAFT_PLAN_DEFAULT_FROM }).source).toBe('plan_default')
+  })
+
+  it('a custom date alone is not a switch', () => {
+    const dateOnly = { [ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]: { customOpenDate: '2027-06-01' } }
+    expect(resolveRookieDraftAutoOpen({ settings: dateOnly, commissionerPlan: true, offseasonStartedAt: after }).source).toBe('plan_default')
+  })
+})
+
+describe('starting an opened rookie draft by itself (phase 6, 2026-10-29)', () => {
+  it('offers 3, 7 or 14 days and nothing else', async () => {
+    const { normalizeAutoStartDays } = await import('@/lib/dynasty-core/rookieDraftCalendar')
+    expect([3, 7, 14].map(normalizeAutoStartDays)).toEqual([3, 7, 14])
+    expect([0, 5, '7', null, undefined].map(normalizeAutoStartDays)).toEqual([null, null, null, null, null])
+    expect(readRookieDraftCalendarSettings({ [ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY]: { autoStartDays: 7 } }).autoStartDays).toBe(7)
+  })
+
+  it('starts that many days after the day it opened, at 8 pm Eastern, and says so plainly', async () => {
+    const { rookieDraftAutoStartAt, describeRookieDraftStart } = await import('@/lib/dynasty-core/rookieDraftCalendar')
+    const start = rookieDraftAutoStartAt(new Date('2027-05-01T12:00:00Z'), 7)
+    expect(start.toISOString()).toBe('2027-05-09T00:00:00.000Z')
+    expect(describeRookieDraftStart(start)).toBe('Saturday, May 8 at 8:00 PM ET')
   })
 })

@@ -617,9 +617,9 @@ html[data-mode='light'] .af-core .af-tc {
  *
  * ⚠ THE BOTTOM EDGE BELONGS TO THE SHELL. This comment used to say "/core has no
  * bottom nav on any other screen", and it stopped being true when the shell grew
- * a phone tab bar (`.af-tabbar`, af-core-shell.css, fixed, z 40) — then a league
- * pill (`.af-rail-handle`, fixed, z 60) and the Comms launcher (fixed, z 59) on
- * top of it. The tab bar is still core chrome and still not this screen's to
+ * a phone tab bar (`.af-tabbar`, af-core-shell.css, fixed, z 40) — then the Comms
+ * launcher (fixed, z 59) on top of it. (A floating league pill sat there too until
+ * 2026-10-29; the bar's Leagues tab replaced it.) The tab bar is still core chrome and still not this screen's to
  * draw; what changed is that this screen can no longer put anything of its own
  * there. See the phone step bar at the end of the file.
  *

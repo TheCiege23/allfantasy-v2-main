@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { LeagueDisplayPreferences, LeagueSection, CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
+import type { LeagueSectionId } from '@/lib/league/leagueSections'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING. This screen used to render only
@@ -15,12 +17,13 @@ import '@/components/core-app/af-league-home.css'
 import type { LeagueHomeData, SectionState } from '@/lib/core-app/leagueHome'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'
-import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 import { ConnectedRoster } from './ConnectedRoster'
 import { PredictionLeaderboard } from '@/components/core-app/PredictionLeaderboard'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
 import { rosterLabel } from '@/lib/core-app/managerName'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -30,6 +33,9 @@ import { TradeDeadlineCountdownChip } from '@/components/core-app/TradeDeadlineC
 import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { useMessages } from '@/components/i18n/useMessages'
+import { leagueHomeMessages } from '@/lib/core-app/messages/leagueHome'
 
 /**
  * Jump to another week.
@@ -114,6 +120,7 @@ function WeekPicker({
  */
 
 export type LeagueHomeProps = {
+  hiddenSections?: LeagueSectionId[]
   data: LeagueHomeData
   /** The enforced trade deadline as a countdown ("Trade deadline in 3d 4h" / "Trades closed"). */
   tradeDeadline?: TradeDeadlineCountdown | null
@@ -210,6 +217,7 @@ function PairedBand({
   leagueName: string
 }) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(leagueHomeMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const connectHref = `/core/connect-leagues?league=${encodeURIComponent(leagueId)}`
 
@@ -217,7 +225,7 @@ function PairedBand({
     return (
       <section className="af-card af-lh-paired af-lh-paired--offer">
         <div className="af-lh-paired-body">
-          <h2 className="af-lh-paired-title">{language === 'es' ? `¿${leagueName} forma parte de un equipo más grande?` : `Is ${leagueName} half of a bigger team?`}</h2>
+          <h2 className="af-lh-paired-title">{m.pairedOfferTitle(leagueName)}</h2>
           <p className="af-lh-paired-text">
             {copy('Connect a related league to see both rosters in one shared hub, with each league’s rules, scoring and lineup close at hand.')}
           </p>
@@ -241,11 +249,9 @@ function PairedBand({
     return (
       <section className="af-card af-lh-paired af-lh-paired--offer">
         <div className="af-lh-paired-body">
-          <h2 className="af-lh-paired-title">{language === 'es' ? `${franchiseName} solo tiene una parte` : `${franchiseName} has only one half`}</h2>
+          <h2 className="af-lh-paired-title">{m.pairedHalfTitle(franchiseName)}</h2>
           <p className="af-lh-paired-text">
-            {language === 'es'
-              ? `Esta liga está registrada como la parte ${viewingRole}. Añade la otra para verlas como un solo equipo.`
-              : `This league is filed as the ${viewingRole} side. Add the other half to see them as one team.`}
+            {m.pairedHalfText(viewingRole)}
           </p>
         </div>
         <Link href={connectHref} className="af-btn af-lh-paired-cta">
@@ -279,7 +285,7 @@ function PairedBand({
           smaller than it is, and looks like a fact rather than a gap.
         */}
         {!anyUnavailable ? (
-          <span className="af-lh-paired-role">{language === 'es' ? `${totalPlayers} jugadores entre ambas` : `${totalPlayers} players across both`}</span>
+          <span className="af-lh-paired-role">{m.pairedTotalPlayers(totalPlayers)}</span>
         ) : null}
       </div>
       <div className="af-lh-paired-sides">
@@ -348,9 +354,7 @@ function PairedBand({
               <p className="af-lh-paired-text">_ {sd.unavailableReason}</p>
             ) : (
               <p className="af-lh-paired-text">
-                {language === 'es'
-                  ? `${sd.playerCount} ${sd.playerCount === 1 ? 'jugador' : 'jugadores'} en tu plantilla`
-                  : `${sd.playerCount} ${sd.playerCount === 1 ? 'player' : 'players'} on your roster`}
+                {m.pairedRosterCount(sd.playerCount)}
               </p>
             )}
             {/*
@@ -469,13 +473,17 @@ export function LeagueHome({
   otherLeagueIssueCount,
   issues = [],
   identityInShell = false,
+  hiddenSections = [],
   coverageSlot,
   lineups = null,
   tradeDeadline = null,
 }: LeagueHomeProps) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(leagueHomeMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const { league } = data
+  const teamDirectory = data.teamDirectory ?? []
+  const rosteredPlayerCount = data.rosteredPlayerCount ?? 0
   const platformLabel = league.platform === 'manual' ? copy('your platform') : league.platform
 
   /*
@@ -486,7 +494,7 @@ export function LeagueHome({
   const urgent = issues[0] ?? null
 
   return (
-    <div className="af-lh">
+    <LeagueDisplayPreferences hidden={hiddenSections}><div className="af-lh">
       {/* ── League identity ─────────────────────────────────────────── */}
       <header className="af-lh-head">
         <div className="af-lh-ident">
@@ -516,6 +524,7 @@ export function LeagueHome({
         </div>
 
         <div className="af-lh-headside">
+          <CustomizeLeagueLink returnTo={`/core?league=${encodeURIComponent(league.id)}`} className="af-btn af-btn--ghost" />
           {/*
             The READ-ONLY chip is on every signed-in screen per the shared
             contract. At /dashboard?league= this screen renders outside
@@ -536,6 +545,16 @@ export function LeagueHome({
         </div>
       </header>
 
+      {!isNativePlatform(league.platform) ? (
+        <ImportedLeagueQuickActions
+          leagueId={league.id}
+          leagueName={league.name}
+          platform={platformLabel}
+          canRemove={data.league.canRemoveImported === true}
+          supportEvent={SUPPORT_OPEN_EVENT}
+        />
+      ) : null}
+
       {league.variant === 'survivor_guillotine' && (
         <section className="af-card" aria-label="Survivor Guilly league">
           <span className="af-label">Survivor Guilly</span>
@@ -545,21 +564,21 @@ export function LeagueHome({
         </section>
       )}
 
-      <section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
+      <LeagueSection id="week"><section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
         <div className="af-lh-week-summary-head">
-          <div><span className="af-label">{copy('Your next steps')}</span><h2 id="af-lh-week-summary-title">{copy('This week')}</h2></div>
+          <div><span className="af-label">{copy('Your next steps')}</span><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
           <span className="af-lh-week-summary-fresh" data-stale={data.syncAge.stale}>{data.syncAge.label}</span>
         </div>
         <div className="af-lh-week-summary-grid">
           <Link href={`/core/my-team?league=${league.id}`}>
             <span className="af-label">{copy('Lineup')}</span>
-            <strong>{urgent ? urgent.title : copy('Review your starters')}</strong>
-            <span>{urgent ? urgent.meta : copy('Check before the first kickoff')} →</span>
+            <strong>{data.preSeason && rosteredPlayerCount === 0 ? copy('Your roster is awaiting the draft') : urgent ? urgent.title : copy('Review your starters')}</strong>
+            <span>{data.preSeason && rosteredPlayerCount === 0 ? `${teamDirectory.length} ${copy('teams imported')}` : urgent ? urgent.meta : copy('Check before the first kickoff')} →</span>
           </Link>
           <Link href={`/core/matchup?league=${league.id}`}>
             <span className="af-label">{copy('Matchup')}</span>
-            <strong>{data.matchup?.available ? `${data.matchup.data.you.name} vs ${data.matchup.data.opponent.name}` : copy('Open matchup')}</strong>
-            <span>{data.matchup?.available ? `Week ${data.matchup.data.week} · ${copy('league scoring')}` : copy('Matchup data is not ready')} →</span>
+            <strong>{data.matchup?.available ? `${data.matchup.data.you.name} vs ${data.matchup.data.opponent.name}` : data.preSeason ? copy('Matchups begin after the draft') : copy('Open matchup')}</strong>
+            <span>{data.matchup?.available ? `Week ${data.matchup.data.week} · ${copy('league scoring')}` : data.preSeason ? copy('No games have been scored yet') : copy('Matchup data is not ready')} →</span>
           </Link>
           <div className="af-lh-week-summary-moves">
             <span className="af-label">{copy('Moves')}</span>
@@ -567,7 +586,7 @@ export function LeagueHome({
             <span><Link href={`/core/trades?league=${league.id}`}>{copy('Trades')} →</Link><Link href={`/core/waivers?league=${league.id}`}>{copy('Waivers')} →</Link></span>
           </div>
         </div>
-      </section>
+      </section></LeagueSection>
 
       {/*
         ── What this import could not bring across ───────────────────
@@ -596,11 +615,29 @@ export function LeagueHome({
         </section>
       ) : null}
 
+      {teamDirectory.length > 0 ? (
+        <LeagueSection id="managers"><details className="af-card af-lh-team-directory" open={data.preSeason}>
+          <summary>{copy('Teams in this league')} · {teamDirectory.length}</summary>
+          {rosteredPlayerCount === 0 ? (
+            <p>{copy('All teams are on file. Player rosters are empty until the draft or a later sync, so player trades cannot be analyzed yet.')}</p>
+          ) : null}
+          <ol>
+            {teamDirectory.map((team) => (
+              <li key={team.id}>
+                <strong>{team.name}</strong>
+                {team.ownerName && team.ownerName !== team.name ? <span>{team.ownerName}</span> : null}
+                {team.isYou ? <small>{copy('you')}</small> : null}
+              </li>
+            ))}
+          </ol>
+        </details></LeagueSection>
+      ) : null}
+
       {/* ── The other half of this franchise ────────────────────────── */}
-      <PairedBand pairing={data.pairing} leagueId={league.id} leagueName={league.name} />
+      <LeagueSection id="pairing"><PairedBand pairing={data.pairing} leagueId={league.id} leagueName={league.name} /></LeagueSection>
 
       {/* ── Season timeline ─────────────────────────────────────────── */}
-      <StatePanel
+      <LeagueSection id="timeline"><StatePanel
         title={`${copy('Season timeline')} · ${league.name}`}
         help={
           league.currentWeek != null ? (
@@ -621,7 +658,7 @@ export function LeagueHome({
             ))}
           </ol>
         )}
-      </StatePanel>
+      </StatePanel></LeagueSection>
 
       {/* ── Every game in the league ────────────────────────────────── */}
       {/*
@@ -630,7 +667,7 @@ export function LeagueHome({
         who was getting blown out, who was in a shootout, or whether next week's
         opponent was in trouble.
       */}
-      <StatePanel
+      <LeagueSection id="matchups"><StatePanel
         title={
           data.weekPicker && data.weekPicker.isFuture
             ? `${copy('Week')} ${data.weekPicker.selected} ${copy('in the league')}`
@@ -653,17 +690,13 @@ export function LeagueHome({
             */}
             {data.weekPicker?.isFuture ? (
               <p className="af-lh-weeknote">
-                {language === 'es'
-                  ? `Aún no se ha jugado nada de la semana ${data.weekPicker.selected}.`
-                  : `Nothing in week ${data.weekPicker.selected} has been played.`}
+                {m.futureWeekNotPlayed(data.weekPicker.selected)}
                 {/* With no league-scored totals there are no numbers to vouch for; the board says why. */}
                 {board.unpricedReason ? null : (
                   <>
                     {' '}{copy('Every number is projected from today’s rosters')}
                     {board.projectionBasis && !board.projectionBasis.matchesViewedWeek
-                      ? language === 'es'
-                        ? `, con proyecciones de la semana ${board.projectionBasis.week}; la fuente aún no tiene la semana ${data.weekPicker.selected}`
-                        : `, using week ${board.projectionBasis.week} projections — the feed does not carry week ${data.weekPicker.selected} yet`
+                      ? m.futureWeekBasis(board.projectionBasis.week, data.weekPicker.selected)
                       : ''}
                     .
                   </>
@@ -676,7 +709,7 @@ export function LeagueHome({
             />
           </>
         )}
-      </StatePanel>
+      </StatePanel></LeagueSection>
 
       {/* ── Power board: all-play + movement ────────────────────────── */}
       {/*
@@ -686,7 +719,7 @@ export function LeagueHome({
         between that and the real record is the schedule's contribution —
         measured rather than argued about.
       */}
-      <StatePanel
+      <LeagueSection id="insights"><StatePanel
         title={copy('Power board')}
         help={
           data.powerBoard.available ? (
@@ -713,9 +746,7 @@ export function LeagueHome({
                   <span
                     className="af-pb-move af-num"
                     data-dir={r.powerRankChange > 0 ? 'up' : 'down'}
-                    title={language === 'es'
-                      ? `${Math.abs(r.powerRankChange)} ${Math.abs(r.powerRankChange) === 1 ? 'puesto' : 'puestos'} ${r.powerRankChange > 0 ? 'arriba' : 'abajo'} desde la semana pasada`
-                      : `${Math.abs(r.powerRankChange)} place${Math.abs(r.powerRankChange) === 1 ? '' : 's'} ${r.powerRankChange > 0 ? 'up' : 'down'} since last week`}
+                    title={m.powerMoveTitle(Math.abs(r.powerRankChange), r.powerRankChange > 0)}
                   >
                     {r.powerRankChange > 0 ? '▲' : '▼'}
                     {Math.abs(r.powerRankChange)}
@@ -748,8 +779,8 @@ export function LeagueHome({
                     data-dir={r.luckWins > 0 ? 'lucky' : 'unlucky'}
                     title={
                       r.luckWins > 0
-                        ? language === 'es' ? `${r.luckWins.toFixed(1)} victorias más de lo esperado` : `${r.luckWins.toFixed(1)} wins better than they have played`
-                        : language === 'es' ? `${Math.abs(r.luckWins).toFixed(1)} victorias menos de lo esperado` : `${Math.abs(r.luckWins).toFixed(1)} wins worse than they have played`
+                        ? m.luckBetter(r.luckWins.toFixed(1))
+                        : m.luckWorse(Math.abs(r.luckWins).toFixed(1))
                     }
                   >
                     {r.luckWins > 0 ? '+' : ''}
@@ -763,7 +794,7 @@ export function LeagueHome({
             ))}
           </ol>
         )}
-      </StatePanel>
+      </StatePanel></LeagueSection>
 
       {/* ── Main / side ─────────────────────────────────────────────── */}
       <div className="af-lh-grid">
@@ -805,7 +836,7 @@ export function LeagueHome({
 
           {/* Draft HQ + Commissioner Hub, two-up */}
           <div className="af-lh-two">
-            <StatePanel title={copy('Draft HQ')} state={data.draftHq}>
+            <LeagueSection id="draft"><StatePanel title={copy('Draft HQ')} state={data.draftHq}>
             {(d) => (
               <div className="af-ch">
                 <p className="af-ch-headline">{d.headline}</p>
@@ -817,9 +848,9 @@ export function LeagueHome({
                 ) : null}
               </div>
             )}
-          </StatePanel>
+          </StatePanel></LeagueSection>
 
-            <StatePanel
+            <LeagueSection id="commissioner"><StatePanel
             title={copy('Commissioner Hub')}
             help={<span className="af-lh-scope">{copy('Commissioners only')}</span>}
             state={data.commissioner}
@@ -870,7 +901,7 @@ export function LeagueHome({
                   <p className="af-ch-names">
                     {copy('Inactive:')} {hub.inactiveNames.join(', ')}
                     {hub.inactiveCount > hub.inactiveNames.length
-                      ? language === 'es' ? ` y ${hub.inactiveCount - hub.inactiveNames.length} más` : ` and ${hub.inactiveCount - hub.inactiveNames.length} more`
+                      ? m.inactiveMore(hub.inactiveCount - hub.inactiveNames.length)
                       : ''}
                   </p>
                 ) : (
@@ -883,11 +914,11 @@ export function LeagueHome({
                 </Link>
               </div>
             )}
-          </StatePanel>
+          </StatePanel></LeagueSection>
           </div>
 
           {/* Standings */}
-          <StatePanel title={copy('Standings')} state={data.standings}>
+          <LeagueSection id="standings"><StatePanel title={copy('Standings')} state={data.standings}>
             {(rows) => (
               <div className="af-standings-wrap" data-faab={data.faabEnabled === true}>
                 <WorkbookBarChart
@@ -898,7 +929,7 @@ export function LeagueHome({
                     key: team.teamId,
                     label: team.teamName,
                     value: team.pointsFor,
-                    displayValue: Math.round(team.pointsFor).toLocaleString(),
+                    displayValue: Math.round(team.pointsFor).toLocaleString(getAppIntlLocale()),
                     tone: team.isYou ? 'good' : 'accent',
                   }))}
                 />
@@ -940,7 +971,7 @@ export function LeagueHome({
                 </ol>
               </div>
             )}
-          </StatePanel>
+          </StatePanel></LeagueSection>
         </div>
 
         <aside className="af-lh-side">
@@ -960,7 +991,7 @@ export function LeagueHome({
             So the card now offers the question when there is something to
             reason about, and says what is missing when there is not.
           */}
-          <Panel title={copy('Ask Chimmy')} help={<span className="af-lh-scope">{copy('This league only')}</span>}>
+          <LeagueSection id="chat"><Panel title={copy('Ask Chimmy')} help={<span className="af-lh-scope">{copy('This league only')}</span>}>
             {data.scoreboard.available ? (
               <>
                 <p className="af-lh-chimmy-note">
@@ -975,9 +1006,7 @@ export function LeagueHome({
                         detail: {
                           tab: 'chimmy',
                           // Seeded, never sent — see the note on COMMS_OPEN_EVENT.
-                          prefill: language === 'es'
-                            ? `Explícame la semana ${data.scoreboard.available ? data.scoreboard.data.week : ''} en ${league.name}: ¿qué enfrentamientos están más ajustados, dónde puede haber sorpresas y qué debo vigilar en mi partido?`
-                            : `Walk me through week ${data.scoreboard.available ? data.scoreboard.data.week : ''} in ${league.name}: which matchups are closest, who is most likely to be upset, and what should I be watching in my own game?`,
+                          prefill: m.askWeekPrefill(data.scoreboard.available ? data.scoreboard.data.week : '', league.name),
                         },
                       }),
                     )
@@ -992,13 +1021,11 @@ export function LeagueHome({
               </p>
             )}
             <p className="af-lh-readonly-note">
-              {language === 'es'
-                ? `Haz los cambios en ${platformLabel}; AllFantasy solo consulta tu liga.`
-                : `Make changes in ${platformLabel} — AllFantasy only reads your league.`}
+              {m.readOnlyNote(platformLabel)}
             </p>
-          </Panel>
+          </Panel></LeagueSection>
 
-          <StatePanel title={copy('League buzz')} state={data.buzz}>
+          <LeagueSection id="activity"><StatePanel title={copy('League buzz')} state={data.buzz}>
             {(items) => (
               <ul className="af-buzz">
                 {items.map((b) => (
@@ -1090,14 +1117,14 @@ export function LeagueHome({
                 ))}
               </ul>
             )}
-          </StatePanel>
+          </StatePanel></LeagueSection>
 
           {/*
             Rivalry radar. Same `() => null` trap as the matchup strip above.
             The design also shows when a manager is usually online; nothing records
             that, so it is the one line omitted rather than invented.
            */}
-          <StatePanel title={copy('Rivalry radar · this league')} state={data.rivalry}>
+          <LeagueSection id="insights"><StatePanel title={copy('Rivalry radar · this league')} state={data.rivalry}>
             {(rows) => (
               <div className="af-lh-rivals">
                 {rows.map((r) => (
@@ -1120,12 +1147,12 @@ export function LeagueHome({
                 ))}
               </div>
             )}
-          </StatePanel>
+          </StatePanel></LeagueSection>
         </aside>
       </div>
 
       {/* The league chat's prediction polls, scored over the season. AF-hosted leagues only. */}
-      {isNativePlatform(league.platform) ? <PredictionLeaderboard leagueId={league.id} /> : null}
+      <LeagueSection id="insights">{isNativePlatform(league.platform) ? <PredictionLeaderboard leagueId={league.id} /> : null}</LeagueSection>
 
       {/*
         ── All leagues ──────────────────────────────────────────────────
@@ -1136,16 +1163,14 @@ export function LeagueHome({
         <section className="af-card af-lh-elsewhere">
           <span className="af-label">{copy('All leagues')}</span>
           <p className="af-lh-elsewhere-text">
-            {language === 'es'
-              ? `${otherLeagueIssueCount} ${otherLeagueIssueCount === 1 ? 'asunto pendiente está' : 'asuntos pendientes están'} fuera de esta liga.`
-              : `${otherLeagueIssueCount} more ${otherLeagueIssueCount === 1 ? 'issue lives' : 'issues live'} outside this league.`}
+            {m.otherLeagueIssues(otherLeagueIssueCount)}
           </p>
           <Link href="/core" className="af-lh-cardlink">
             {copy('Back to home')} →
           </Link>
         </section>
       ) : null}
-    </div>
+    </div></LeagueDisplayPreferences>
   )
 }
 

@@ -6,7 +6,7 @@ import { track } from '@/lib/analytics/dataLayer'
 import { resolvePlanTierFromSku } from '@/lib/monetization-analytics'
 import { useGeoRestriction } from '@/lib/geo/useGeoRestriction'
 import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
-import { manageAppleSubscriptions, restoreApplePurchases, useAppleIapPrices } from '@/lib/monetization/apple-iap-client'
+import { manageNativeSubscriptions, restoreNativePurchases, useNativeIapPrices } from '@/lib/monetization/native-iap-client'
 import { PLAN_FAMILY_INCLUDES, type PlanFamilyKey } from '@/lib/monetization/planIncludes'
 import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
 import { LockedFeatureBanner } from '@/components/monetization/LockedFeatureBanner'
@@ -30,6 +30,7 @@ import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
 // equivalent note. This screen was simply missed when those two were repaired.
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-pricing.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 18a — pricing.
@@ -182,7 +183,7 @@ const FAQS: { q: string; a: string; appleA?: string }[] = [
 ]
 
 export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
-  const { appleApp, prices: applePrices, needsUpdate } = useAppleIapPrices()
+  const { nativeApp, prices: nativePrices, needsUpdate, playApp, error: playError } = useNativeIapPrices()
   const [interval, setInterval] = useState<Interval>('month')
   const [pendingSku, setPendingSku] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -259,7 +260,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
   async function restorePurchases() {
     setError(null)
     try {
-      await restoreApplePurchases()
+      await restoreNativePurchases()
       window.location.reload()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to restore purchases.')
@@ -268,6 +269,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
 
   return (
     <div className="af-core af-pr">
+      {playError && <p role="status">{playError}</p>}
       {needsUpdate && <p role="status">Update the AllFantasy iOS app to make purchases.</p>}
       {/*
         ⚠ THIS PAGE HAD NO NAVIGATION AT ALL. Measured on the live page: zero
@@ -334,7 +336,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
             "yearly = 2 months free". That was true of the old prices and is not of
             these. Deriving it means the chip cannot outlive the prices it describes.
           */}
-          {!appleApp && savingsHeadline ? <span className="af-pr-savechip">{savingsHeadline}</span> : null}
+          {!nativeApp && savingsHeadline ? <span className="af-pr-savechip">{savingsHeadline}</span> : null}
         </div>
       </header>
 
@@ -395,7 +397,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                 {price == null ? (
                   <span className="af-pr-amount af-pr-amount--none">—</span>
                 ) : (
-                  <span className="af-pr-amount">{appleApp ? (sku ? applePrices[sku] ?? 'Loading Apple price…' : '—') : money(price)}</span>
+                  <span className="af-pr-amount">{nativeApp ? (sku ? nativePrices[sku] ?? 'Loading store price…' : '—') : money(price)}</span>
                 )}
               </div>
               <p className="af-pr-per">
@@ -412,7 +414,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                 because .99 pricing makes "2 months free" a fudge in one direction
                 or the other.
               */}
-              {!appleApp && interval === 'year' && plan.savings ? (
+              {!nativeApp && interval === 'year' && plan.savings ? (
                 <p className="af-pr-save">
                   {money(plan.savings.effectiveMonthly)}/mo · save {money(plan.savings.savedUsd)} (
                   {plan.savings.savedPct}%)
@@ -436,7 +438,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                 type="button"
                 className="af-pr-cta"
                 data-testid={sku ? `pricing-subscription-cta-${sku}` : undefined}
-                disabled={!sku || blocked || pendingSku === sku || (appleApp && !applePrices[sku])}
+                disabled={!sku || blocked || pendingSku === sku || (nativeApp && !nativePrices[sku])}
                 onClick={() => sku && startCheckout(sku, 'subscription')}
               >
                 {pendingSku === sku ? 'Opening checkout…' : `Choose ${plan.name}`}
@@ -485,8 +487,8 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
               {yearlyLanes.map((plan) => (
                 <div key={plan.planFamily} className="af-pr-yearly-card">
                   <span className="af-pr-yearly-name">{plan.name} Yearly</span>
-                  <span className="af-pr-yearly-price">{appleApp ? (plan.yearlySku ? applePrices[plan.yearlySku] ?? 'Loading Apple price…' : '—') : money(plan.yearlyPrice as number)}</span>
-                  {!appleApp && plan.savings ? (
+                  <span className="af-pr-yearly-price">{nativeApp ? (plan.yearlySku ? nativePrices[plan.yearlySku] ?? 'Loading store price…' : '—') : money(plan.yearlyPrice as number)}</span>
+                  {!nativeApp && plan.savings ? (
                     <span className="af-pr-yearly-save af-num">
                       {money(plan.savings.effectiveMonthly)}/mo · save {plan.savings.savedPct}%
                     </span>
@@ -512,15 +514,15 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           {packs.map((pack) => (
             <div key={pack.sku} className="af-pr-pack">
               <span className="af-pr-pack-tokens">
-                {pack.tokenAmount != null ? pack.tokenAmount.toLocaleString() : '—'}
+                {pack.tokenAmount != null ? pack.tokenAmount.toLocaleString(getAppIntlLocale()) : '—'}
               </span>
               <span className="af-pr-pack-label">tokens</span>
-              <span className="af-pr-pack-price">{appleApp ? (applePrices[pack.sku] ?? 'Loading Apple price…') : money(pack.amountUsd)}</span>
+              <span className="af-pr-pack-price">{nativeApp ? (nativePrices[pack.sku] ?? 'Loading store price…') : money(pack.amountUsd)}</span>
               <button
                 type="button"
                 className="af-pr-cta af-pr-cta--small"
                 data-testid={`pricing-token-cta-${pack.sku}`}
-                disabled={blocked || pendingSku === pack.sku || (appleApp && !applePrices[pack.sku])}
+                disabled={blocked || pendingSku === pack.sku || (nativeApp && !nativePrices[pack.sku])}
                 onClick={() => startCheckout(pack.sku, 'token_pack')}
               >
                 {pendingSku === pack.sku ? 'Opening…' : 'Buy'}
@@ -540,7 +542,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           {FAQS.map((f) => (
             <article key={f.q} className="af-pr-faq-item">
               <h3 className="af-pr-faq-q">{f.q}</h3>
-              <p className="af-pr-faq-a">{appleApp && f.appleA ? f.appleA : f.a}</p>
+              <p className="af-pr-faq-a">{playApp && f.appleA ? "Google Play manages Android subscriptions, renewals and refund requests. Use Manage Subscriptions below to cancel future renewals; access continues until your paid period ends. Token packs are credited once and do not refill on restore." : nativeApp && f.appleA ? f.appleA : f.a}</p>
             </article>
           ))}
         </div>
@@ -552,9 +554,9 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         the part a hesitating buyer actually needs.
       */}
       <footer className="af-pr-foot">
-        {appleApp && <button type="button" onClick={restorePurchases} className="af-pr-foot-cta">Restore Purchases</button>}
-        {appleApp && <button type="button" onClick={() => void manageAppleSubscriptions().catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to open subscription settings.'))} className="af-pr-foot-cta">Manage Subscriptions</button>}
-        {!appleApp && <p>
+        {nativeApp && <button type="button" onClick={restorePurchases} className="af-pr-foot-cta">Restore Purchases</button>}
+        {nativeApp && <button type="button" onClick={() => void manageNativeSubscriptions().catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to open subscription settings.'))} className="af-pr-foot-cta">Manage Subscriptions</button>}
+        {!nativeApp && <p>
           Checkout is handled by Stripe — we never see your card details. League dues and payouts
           are handled on FanCred, separately from your AllFantasy subscription.
         </p>}

@@ -41,3 +41,6 @@
   background: color-mix(in srgb, var(--p-gold-fg, var(--accent-amber-strong)) 12%, transparent);
   color: var(--p-gold-fg, var(--accent-amber-strong));
 }
+
+/* The artwork belongs to the league conversation; the message bubbles remain opaque. */
+[data-dynasty-background=true] [data-testid=league-chat-conversation]{background-color:#0a1018;background-image:linear-gradient(rgba(7,11,17,.58),rgba(7,11,17,.70)),url('/artwork/dynasty/dynasty-chat-background-v1.png');background-position:center;background-size:cover}

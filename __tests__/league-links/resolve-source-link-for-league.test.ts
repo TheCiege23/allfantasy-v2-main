@@ -5,8 +5,11 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const h = vi.hoisted(() => ({ findUnique: vi.fn(), findMany: vi.fn() }))
-vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.findUnique, findMany: h.findMany } } }))
+const h = vi.hoisted(() => ({ findUnique: vi.fn(), findMany: vi.fn(), fxFindMany: vi.fn() }))
+vi.mock('@/lib/prisma', () => ({ prisma: {
+  league: { findUnique: h.findUnique, findMany: h.findMany },
+  fantraxLeague: { findMany: h.fxFindMany },
+} }))
 
 import {
   resolveSourceLinkForLeague,
@@ -45,5 +48,36 @@ describe('resolveSourceLinkForLeague', () => {
     expect(map.get('A')?.label).toBe('Manage Waivers in A')
     expect(map.get('B')?.href).toBe('https://fantasy.espn.com/football/league?leagueId=222&seasonId=2026')
     expect(map.has('C')).toBe(false)
+  })
+})
+
+/*
+ * A Fantrax League row's `platformLeagueId` is AllFantasy's own FantraxLeague uuid, not
+ * Fantrax's id — so the real id has to be read from that snapshot row (DB only, no fetch).
+ */
+describe('resolveSourceLinkForLeague — Fantrax', () => {
+  it('links to the Fantrax league page via the snapshot\'s stored source id', async () => {
+    h.findUnique.mockResolvedValue({ platform: 'fantrax', platformLeagueId: 'snap-uuid-1', name: 'Cream Bowl', season: 2026 })
+    h.fxFindMany.mockResolvedValue([{ id: 'snap-uuid-1', sourceLeagueId: 'v2kzedypmm8jp61b' }])
+    const link = await resolveSourceLinkForLeague('L1')
+    expect(new URL(link!.href).pathname).toBe('/fantasy/league/v2kzedypmm8jp61b/home')
+    expect(link?.destinationType).toBe('league')
+  })
+  it('falls back to the homepage for a CSV-era snapshot that has no source id', async () => {
+    h.findUnique.mockResolvedValue({ platform: 'fantrax', platformLeagueId: 'snap-uuid-1', name: 'Old', season: 2024 })
+    h.fxFindMany.mockResolvedValue([{ id: 'snap-uuid-1', sourceLeagueId: null }])
+    const link = await resolveSourceLinkForLeague('L1')
+    expect(link?.destinationType).toBe('homepage')
+  })
+  it('batch: one extra query for all Fantrax rows', async () => {
+    h.findMany.mockResolvedValue([
+      { id: 'A', platform: 'fantrax', platformLeagueId: 'snap-a', name: 'A', season: 2026 },
+      { id: 'B', platform: 'sleeper', platformLeagueId: '111', name: 'B', season: 2026 },
+    ])
+    h.fxFindMany.mockResolvedValue([{ id: 'snap-a', sourceLeagueId: 'abcd1234efgh' }])
+    const map = await resolveSourceLinksForLeagueIds(['A', 'B'])
+    expect(new URL(map.get('A')!.href).pathname).toBe('/fantasy/league/abcd1234efgh/home')
+    expect(map.get('B')?.href).toBe('https://sleeper.com/leagues/111/league')
+    expect(h.fxFindMany).toHaveBeenCalledTimes(1)
   })
 })

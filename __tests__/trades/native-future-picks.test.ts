@@ -52,6 +52,7 @@ function fakeDb(opts: {
   const inSeason = (w: { pickSeason?: number | { in: number[] } }, r: Row) =>
     w.pickSeason == null || (typeof w.pickSeason === 'number' ? r.pickSeason === w.pickSeason : w.pickSeason.in.includes(r.pickSeason))
   const db = {
+    $executeRaw: vi.fn(async () => 1),
     salaryCapLeagueConfig: { findUnique: vi.fn(async () => null) },
     league: {
       findUnique: vi.fn(async () => ({
@@ -209,6 +210,23 @@ describe('settling a trade', () => {
     expect(rows).toEqual([
       expect.objectContaining({ pickSeason: 2027, round: 1, originalRosterId: 'R-a', currentOwnerId: 'R-b', traded: true, status: 'active', sourceTradeId: 'trade-1' }),
     ])
+  })
+
+  it('records the terms the offer gave the pick, in the same transaction', async () => {
+    const { db } = fakeDb()
+    const executeRaw = vi.fn(async () => 1)
+    const terms = { kind: 'protected', top: 3, ifProtected: 'stays' }
+    await applyTradeAssetsInTransaction(Object.assign(db, { $executeRaw: executeRaw }) as never, {
+      leagueId: 'L1',
+      proposerRosterId: 'R-a',
+      receiverRosterId: 'R-b',
+      assets: [{ itemType: 'rookie_pick', itemReference: 'fdp:2027:1:R-a', fromRosterId: 'R-a', toRosterId: 'R-b', metadata: { pickTerms: terms } }],
+      tradeId: 'trade-1',
+    })
+    expect(executeRaw).toHaveBeenCalledTimes(2)
+    const values = (executeRaw.mock.calls[1] as unknown[]).slice(1)
+    expect(values).toContain('fdp:2027:1:R-a')
+    expect(JSON.parse(values.find((v) => typeof v === 'string' && v.startsWith('{')) as string)).toMatchObject({ terms, tradeId: 'trade-1', result: null })
   })
 
   it('refuses a pick the sender no longer holds', async () => {

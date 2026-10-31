@@ -28,6 +28,7 @@ import { deriveLeagueFormat } from '@/lib/league-runtime/leagueFormat'
 import { readTiebreakerOrder } from '@/lib/standings/tiebreakerOrder'
 import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { readSavedRosterLayout } from '@/lib/redraft-core-contract/savedRosterLayout'
+import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 
 type JsonRecord = Record<string, unknown>
 
@@ -235,6 +236,8 @@ export type CanonicalLeagueRules = {
     thirdPlaceGameEnabled: boolean
     toiletBowlEnabled: boolean
     championshipLength: number | null
+    /** Best-of-N series per round (`settings.playoff_series`, lib/playoff-runtime/playoffSeries.ts); null = cumulative. */
+    seriesLengths?: number[] | null
     consolationPlaysFor: string | null
     seedingRules: string | null
     tiebreakerRules: string[]
@@ -561,6 +564,7 @@ export function buildCanonicalLeagueRulesFromResolved({
       thirdPlaceGameEnabled: Boolean(playoffConfig?.third_place_game_enabled),
       toiletBowlEnabled: Boolean(playoffConfig?.toilet_bowl_enabled),
       championshipLength: playoffConfig?.championship_length ?? null,
+      seriesLengths: readPlayoffSeriesLengths(settings),
       consolationPlaysFor: playoffConfig?.consolation_plays_for ?? stringOrNull(league.playoffLowerBracket),
       seedingRules: playoffConfig?.seeding_rules ?? stringOrNull(league.playoffSeedingRule),
       tiebreakerRules: playoffConfig?.tiebreaker_rules ?? [],

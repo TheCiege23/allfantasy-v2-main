@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import { postWithTokenConfirm } from '@/lib/tokens/clientTokenConfirm'
 import { formatForPlatform, platformDisplayName } from '@/lib/storyline-studio/copyFormat'
 import { studioCopy, WEEKDAY_NAMES } from '@/lib/storyline-studio/studioCopy'
@@ -55,7 +56,7 @@ function browserTimeZone(): string {
 
 export function StorylineStudio({ leagueId }: { leagueId: string }) {
   const { language } = useOptionalLanguage()
-  const lang = language === 'es' ? 'es' : 'en'
+  const lang = coreLang(language)
   const t = (english: string) => studioCopy(english, language)
   const endpoint = `/api/leagues/${encodeURIComponent(leagueId)}/storylines`
 

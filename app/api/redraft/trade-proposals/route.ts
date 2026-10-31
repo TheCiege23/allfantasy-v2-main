@@ -1,3 +1,4 @@
+import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -222,7 +223,7 @@ export async function POST(req: NextRequest) {
   if (!proposer || !receiver) {
     return NextResponse.json({ error: 'Roster not found for season' }, { status: 404 })
   }
-  if (proposer.ownerId !== userId) {
+  if (proposer.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, proposerRosterId, userId)) {
     return NextResponse.json({ error: 'Only proposer roster owner can create trade' }, { status: 403 })
   }
   // Chimmy autopilot (AF Commissioner): a team nobody is running does not take trade offers.

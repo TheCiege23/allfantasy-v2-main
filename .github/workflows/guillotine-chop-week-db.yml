@@ -1,0 +1,53 @@
+name: Guilly chop week integration
+# A Guilly season chopped week by week against a real, throwaway PostgreSQL
+# (__tests__/guillotine/chop-week-db.test.ts): scoring, tiebreak, the elimination engine, the chop
+# audit and its row lock, roster release, the automation locks and the season finish, unmocked.
+on:
+  pull_request:
+    paths:
+      - 'lib/guillotine/**'
+      - 'lib/automation/locks.ts'
+      - 'lib/redraft/scoringEngine.ts'
+      - 'lib/redraft/weekFinalizer.ts'
+      - 'lib/league-runtime/reconcileRosterRedraftLinks.ts'
+      - 'app/api/redraft/score-sync/**'
+      - 'prisma/schema.prisma'
+      - '__tests__/guillotine/chop-week-db.test.ts'
+      - '.github/workflows/guillotine-chop-week-db.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: guillotine-chop-week-db-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integration:
+    name: Guilly chop week real database
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: chopweek
+          POSTGRES_PASSWORD: chopweek-test-only
+          POSTGRES_DB: chopweek
+        ports: ['55478:5432']
+        options: >-
+          --health-cmd "pg_isready -U chopweek -d chopweek"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://chopweek:chopweek-test-only@127.0.0.1:55478/chopweek
+      DIRECT_URL: postgresql://chopweek:chopweek-test-only@127.0.0.1:55478/chopweek
+      RUN_GUILLOTINE_CHOP_WEEK_DB: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - name: Create isolated test schema
+        run: node scripts/prisma-cli-guard.cjs db push --skip-generate
+      - name: Chop weeks, reruns, two replicas, a tiebreak and the season finish
+        run: npx vitest run __tests__/guillotine/chop-week-db.test.ts

@@ -38,8 +38,24 @@ export function isAutopilotStyle(v: unknown): v is AutopilotStyle {
  */
 export type ChimmyAutopilot = { style: AutopilotStyle; since: string; byUserId: string }
 
-export type ManagedLineup = { since: string; byUserId: string; autopilot?: ChimmyAutopilot }
+/**
+ * `ownerUserId` is who owned the team when the commissioner switched it on (phase 9, 2026-10-29). The
+ * mode is for THAT owner's absence: once the team has a new owner — claimed, adopted, won at auction,
+ * reassigned — it no longer applies (`managedForOwner`), and the hourly run ends it. Entries written
+ * before this field existed carry none; the hourly run stamps the current owner onto them.
+ */
+export type ManagedLineup = { since: string; byUserId: string; ownerUserId?: string | null; autopilot?: ChimmyAutopilot }
 export type ManagedLineups = Record<string, ManagedLineup>
+
+/**
+ * Whether a managed entry still applies to the team's current owner: `current` when it was switched on
+ * for this owner, `new_owner` when the team has changed hands since, `unstamped` for an entry written
+ * before owners were recorded (treated as current until the hourly run stamps it).
+ */
+export function managedForOwner(entry: ManagedLineup, currentOwnerId: string | null | undefined): 'current' | 'new_owner' | 'unstamped' {
+  if (entry.ownerUserId === undefined) return 'unstamped'
+  return (entry.ownerUserId ?? null) === (currentOwnerId ?? null) ? 'current' : 'new_owner'
+}
 
 /** Above this share of the open player pool without a projection, the lineup is left alone. */
 export const MAX_MISSING_PROJECTION_SHARE = 0.25
@@ -52,6 +68,7 @@ export function readManagedLineups(settings: unknown): ManagedLineups {
     const o = v && typeof v === 'object' ? (v as Record<string, unknown>) : null
     if (!o || typeof o.since !== 'string' || typeof o.byUserId !== 'string') continue
     const entry: ManagedLineup = { since: o.since, byUserId: o.byUserId }
+    if (typeof o.ownerUserId === 'string' || o.ownerUserId === null) entry.ownerUserId = o.ownerUserId as string | null
     const ap = o.autopilot && typeof o.autopilot === 'object' ? (o.autopilot as Record<string, unknown>) : null
     if (ap && typeof ap.since === 'string' && typeof ap.byUserId === 'string') {
       entry.autopilot = { style: isAutopilotStyle(ap.style) ? ap.style : DEFAULT_AUTOPILOT_STYLE, since: ap.since, byUserId: ap.byUserId }
@@ -75,6 +92,12 @@ export function planBestLineup(args: {
   playerData: unknown
   players: Record<string, LineupPlayerInfo | undefined>
   isLocked: (playerId: string) => boolean
+  /**
+   * Players whose team has no game this week. Each is projected at ZERO, so he is benched whenever a
+   * bench player can fill his slot — the weekly projection does not reliably say 0 for a bye (a season
+   * rate, or none), and a bye player kept in the lineup scores nothing (phase 6, 2026-10-27).
+   */
+  onBye?: (playerId: string) => boolean
 }): LineupPlan {
   const { slots, playerData, isLocked } = args
   if (slots.length === 0) return { kind: 'skip', reason: 'no_slots' }
@@ -87,7 +110,8 @@ export function planBestLineup(args: {
   const players: Record<string, LineupPlayerInfo | undefined> = {}
   for (const id of [...lists.starters, ...lists.bench].filter(Boolean)) {
     const p = args.players[id]
-    players[id] = { position: (rows.get(id)?.position as string | undefined) ?? p?.position ?? null, projectedPoints: p?.projectedPoints ?? null }
+    const projectedPoints = args.onBye?.(id) ? 0 : p?.projectedPoints ?? null
+    players[id] = { position: (rows.get(id)?.position as string | undefined) ?? p?.position ?? null, projectedPoints }
   }
 
   const open = [...lists.starters, ...lists.bench].filter((id) => id && !isLocked(id))
@@ -119,6 +143,29 @@ export type SuggestionInput = { rosterId: string; status: 'active' | 'at_risk' |
 /** Teams to suggest: inactive ones not already managed. AllFantasy never acts on these by itself. */
 export function suggestInactiveTeams(rows: readonly SuggestionInput[], managed: ManagedLineups): string[] {
   return rows.filter((r) => r.status === 'inactive' && !managed[r.rosterId]).map((r) => r.rosterId)
+}
+
+/**
+ * Chimmy as a manager (owner decision 2026-10-31): a commissioner can hand up to this many teams in a
+ * league to Chimmy — empty seats or absent managers' teams, in any league or draft type AllFantasy
+ * runs. Chimmy drafts for them (instantly; in an auction it nominates and bids) and runs them for the
+ * season, until a real manager takes the team.
+ */
+export const CHIMMY_MANAGER_LIMIT = 4
+
+/** Pure: would giving `rosterId` to Chimmy take the league past the limit? */
+export function chimmyManagerLimitReached(managed: ManagedLineups, rosterId: string, limit = CHIMMY_MANAGER_LIMIT): boolean {
+  if (managed[rosterId]?.autopilot) return false
+  return autopilotRosterIds(managed).length >= limit
+}
+
+/**
+ * Pure: is Chimmy running this roster for its CURRENT owner? An entry switched on before the team
+ * changed hands speaks for nobody: the new manager runs it, even before the hourly sweep clears it.
+ */
+export function isChimmyRunning(managed: ManagedLineups, rosterId: string, currentOwnerId: string | null | undefined): boolean {
+  const entry = managed[rosterId]
+  return Boolean(entry?.autopilot) && managedForOwner(entry!, currentOwnerId) !== 'new_owner'
 }
 
 /** Roster ids Chimmy runs on autopilot in this league. */

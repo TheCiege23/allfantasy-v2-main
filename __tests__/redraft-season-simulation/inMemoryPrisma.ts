@@ -12,6 +12,8 @@
  *
  * `$queryRaw` / `$executeRaw` return empty results; a simulation that depends on raw SQL is out of scope.
  */
+import fs from 'node:fs'
+import path from 'node:path'
 import { Prisma } from '@prisma/client'
 
 type Row = Record<string, any>
@@ -89,7 +91,33 @@ export type InMemoryPrisma = Record<string, any> & {
   $rawQueries: string[]
 }
 
+/**
+ * Models in prisma/schema.prisma that the generated client does not know. Every table here comes from
+ * the client's DMMF, so a client generated before a model was added has no delegate for it, and the
+ * engine's first `db.newModel.x(...)` died as "Cannot read properties of undefined" — which reads as a
+ * broken engine or test rather than a stale `node_modules/.prisma/client`. Unreadable schema: no check.
+ */
+export function modelsMissingFromClient(schemaText: string, known: ReadonlySet<string> = new Set(MODELS.keys())): string[] {
+  return [...schemaText.matchAll(/^model\s+(\w+)\s*\{/gm)].map((m) => m[1]).filter((name) => !known.has(name))
+}
+
+function assertClientMatchesSchema(): void {
+  let schema: string
+  try {
+    schema = fs.readFileSync(path.join(process.cwd(), 'prisma', 'schema.prisma'), 'utf8')
+  } catch {
+    return
+  }
+  const missing = modelsMissingFromClient(schema)
+  if (missing.length) {
+    throw new Error(
+      `in-memory prisma: the generated Prisma client is older than prisma/schema.prisma (missing ${missing.length} model(s): ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ', …' : ''}). Run \`npx prisma generate\` and re-run.`,
+    )
+  }
+}
+
 export function createInMemoryPrisma(): InMemoryPrisma {
+  assertClientMatchesSchema()
   const tables = new Map<string, Row[]>()
   const rawQueries: string[] = []
   let autoincrement = 1

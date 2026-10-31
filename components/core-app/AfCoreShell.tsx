@@ -1,12 +1,18 @@
 'use client'
 
 import Link from 'next/link'
+import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
+import { navLabel } from '@/lib/core-app/navLabels'
+import { CoreLanguageChip } from '@/components/core-app/CoreLanguageChip'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
-import { leagueSportLabel, leagueSportSections } from '@/lib/core-app/leagueSports'
+import { leagueSportIcon, leagueSportLabel } from '@/lib/core-app/leagueSports'
+import { pairExileUnderSurvivor, pairedExileIds } from '@/lib/core-app/survivorExileRail'
+import type { ExileRailStatus } from '@/lib/core-app/survivorExileStatus'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
@@ -33,22 +39,45 @@ import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
 import { saveRailScroll, useRailScrollMemory, type RailLayout } from './useRailScrollMemory'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
+import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
-import { withoutHidden } from '@/lib/core-app/leaguePreferences'
+import { applyLeagueOrder, withoutHidden } from '@/lib/core-app/leaguePreferences'
+import {
+  FAVORITES_SECTION,
+  RAIL_FILTERS,
+  RAIL_FILTER_MIN_LEAGUES,
+  moveInOrder,
+  reorderWithinSection,
+  passesRailFilter,
+  railFilterCounts,
+  railSections as arrangeRailSections,
+  toggleFavorite,
+  type RailFilter,
+  type RailRowFacts,
+} from '@/lib/core-app/railArrange'
+import type { RailRecord } from '@/lib/core-app/railRecordRank'
+import { unreadBadgeText } from '@/lib/league/leagueRailStatus'
+import type { PlatformLink } from '@/lib/core-app/platformLinks'
 import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
 import { RAIL_WARM_DWELL_MS, railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
 import { speculationGate } from '@/components/core-app/speculationGate'
 import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
 import { CORE_NAV_ATTRIBUTE, CoreNavPendingContext, pendingCoreNavTarget } from '@/components/core-app/coreNavPending'
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { ageText, badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '@/lib/core-app/shellCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { messagesFor } from '@/lib/i18n/messages'
+import { coreShellMessages } from '@/lib/core-app/messages/coreShell'
+import { badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '@/lib/core-app/shellCopy'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
-import { RailRowBody, mergeRailMatchup } from '@/components/core-app/RailRowBody'
+import { RailRowBody, mergeRailMatchup, railTapTarget, type RailAttention } from '@/components/core-app/RailRowBody'
+import { useRailOdds } from '@/components/core-app/useRailOdds'
+import { hideLeagueForAccount, RailLeagueMenu, saveLeaguePreference, useRailDrag, useRailHold } from '@/components/core-app/RailLeagueMenu'
+import { railRowMessages } from '@/lib/core-app/messages/railRow'
 import {
   currentRailCareerLines,
   RAIL_CAREER_EVENT,
@@ -57,6 +86,7 @@ import {
 } from '@/lib/core-app/railCareerChannel'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The chrome every AF Core screen sits inside: league rail, primary nav, top bar.
@@ -74,6 +104,9 @@ import '@/components/core-app/af-core-shell.css'
  */
 
 export type PlatformId = 'sleeper' | 'espn' | 'yahoo'
+
+/** Sport sections folded in the league list on this device (AfCoreShell `foldedSports`). */
+const RAIL_FOLDED_KEY = 'af-rail-folded-sports'
 
 export type RailLeague = {
   hub?: LeagueHub
@@ -96,6 +129,10 @@ export type RailLeague = {
   isCommissioner?: boolean
   /** League sport (NFL / NBA / …). The rail splits into one section per sport when there are two or more. */
   sport?: string | null
+  /** This is an Exile Island league; the id is its Survivor league (attachSurvivorExileLinks). */
+  exileOf?: string
+  /** On an Exile Island row: the line it shows in place of a matchup (survivorExileStatus.ts). */
+  exileStatus?: ExileRailStatus
 }
 
 /**
@@ -125,11 +162,20 @@ export type RailStandingSummary = {
   outOf: number
   /** Points over the lowest team in the league. Null when you ARE the lowest. */
   overCut: number | null
-  basis: 'points' | 'projected'
+  basis: 'points' | 'projected' | 'best_ball'
+  /** `best_ball` only: a game that can still change a total is not final. */
+  provisional?: boolean
   placesAboveCut: number
   cutLine: number
   /** The bottom of this table goes home, so the copy says "cut" rather than "last". */
   elimination: boolean
+  /** Teams with points on the board (railMatchups.ts `RailStanding`). */
+  played?: number
+  /** The lowest team other than you, and its value on the same basis. */
+  cutTeam?: string | null
+  cutTeamValue?: number | null
+  /** An elimination league's weeks left, this one included. */
+  weeksLeft?: number | null
 }
 
 /**
@@ -201,6 +247,7 @@ export type CoreNavKey =
   // active item — they are exits, not screens.
   | 'live-scores'
   | 'brackets'
+  | 'find-league'
   | 'my-leagues'
   | 'settings'
   | 'plans'
@@ -278,6 +325,12 @@ type NavSection = { id: string; heading: string | null; items: NavItem[] }
 
 export type AfCoreShellProps = {
   nativeLeague?: boolean
+  /**
+   * Where the open imported league's lineup is changed (lib/core-app/shellLineupHandoff.ts): the
+   * platform's verified lineup screen, else its league page, else null. The Updates menu turns its
+   * "make lineup changes on your league's platform" line into this button when present.
+   */
+  lineupHandoff?: Pick<PlatformLink, 'href' | 'screen' | 'platformLabel'> | null
   active: CoreNavKey
   /**
    * League-first phone shell (lib/core-app/leagueFirst.ts): the bottom bar becomes
@@ -344,9 +397,16 @@ export type AfCoreShellProps = {
     trades?: number | null
     draftHq?: number | null
     sync?: number | null
+    /** The leagues behind `myTeam` and `trades` — the rail flags each one. */
+    lineupLeagueIds?: string[] | null
+    offerLeagueIds?: string[]
   } | null
   /** Keeps league-scoped nav links pointed at the league in context. */
   selectedLeagueId?: string | null
+  /** Your record and place per league — the "6-3 · 2nd" line on the list (lib/core-app/railRecords.ts). */
+  railRecords?: Record<string, RailRecord> | null
+  /** Unread league-chat messages per league — the chat bubble's own count (getChatBadge `byLeague`). */
+  railUnread?: Record<string, number> | null
   /**
    * What the scope switcher shows and offers — see components/core-app/ScopeSwitcher.tsx. Always
    * rendered when present, so every screen states which leagues it is about. `label` is the
@@ -542,13 +602,16 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     flag === false ? [] : [item]
 
   return [
-    { key: 'home', label: 'Home', glyph: '▣', href: inLeague('/core') },
+    { key: 'home', label: navLabel('home'), glyph: '▣', href: inLeague('/core') },
     { key: 'brackets', label: 'Brackets', glyph: '⚑', href: '/brackets' },
+    // Top level rather than only in the Play sheet: finding a league to join is how a
+    // new player starts, and the sheet is two taps deep.
+    { key: 'find-league', label: 'Find a League', glyph: '⌕', href: '/find-league' },
     // My team is league-scoped in the handoff, so the link carries the selected
     // league rather than dropping the user on a screen that has to ask which one.
     {
       key: 'my-team',
-      label: 'My team',
+      label: navLabel('my-team'),
       glyph: '◈',
       href: props.selectedLeagueId
         ? `/core/my-team?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -570,7 +633,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Reads a scored week — hidden until this league has one. */
     ...ifScored({
       key: 'matchup',
-      label: 'Matchup',
+      label: navLabel('matchup'),
       glyph: '⚔',
       href: props.selectedLeagueId
         ? `/core/matchup?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -578,7 +641,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     }),
     ...ifImported(props.importCapabilities?.trades, {
       key: 'trades',
-      label: 'Trades',
+      label: navLabel('trades'),
       glyph: '⇄',
       href: props.selectedLeagueId
         ? `/core/trades?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -588,7 +651,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     }),
     {
       key: 'waivers',
-      label: 'Waivers',
+      label: navLabel('waivers'),
       glyph: '◷',
       href: props.selectedLeagueId
         ? `/core/waivers?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -596,7 +659,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     },
     {
       key: 'players',
-      label: 'Player Finder',
+      label: navLabel('players'),
       glyph: '●',
       // 38a scopes this to the league in context — "in THIS league" rather than
       // "across every platform" — so the link carries the league the way the
@@ -617,7 +680,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Reads a scored week — hidden until this league has one. */
     ...ifScored({
       key: 'week',
-      label: 'Your week',
+      label: navLabel('week'),
       glyph: '◱',
       href: props.selectedLeagueId
         ? `/core/week?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -631,7 +694,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
      */
     {
       key: 'live',
-      label: 'Live scores',
+      label: navLabel('live'),
       glyph: '◉',
       href: props.selectedLeagueId
         ? `/core/live?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -642,7 +705,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     },
     {
       key: 'war-room',
-      label: 'War Room',
+      label: navLabel('war-room'),
       glyph: '◆',
       href: props.selectedLeagueId
         ? `/core/war-room?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -650,7 +713,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     },
     {
       key: 'draft-hq',
-      label: 'Draft HQ',
+      label: navLabel('draft-hq'),
       glyph: '▤',
       href: props.selectedLeagueId
         ? `/core/draft-hq?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -744,7 +807,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Ranks by points scored, so it needs a scored week. */
     ...ifScored({
       key: 'standings',
-      label: 'Standings',
+      label: navLabel('standings'),
       glyph: '≡',
       href: props.selectedLeagueId
         ? `/core/standings?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -753,7 +816,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /* Projects from played weeks — nothing to project from yet. */
     ...ifScored({
       key: 'season-outlook',
-      label: 'Season Outlook',
+      label: navLabel('season-outlook'),
       glyph: '◎',
       href: props.selectedLeagueId
         ? `/core/season-outlook?league=${encodeURIComponent(props.selectedLeagueId)}`
@@ -918,7 +981,26 @@ function navSections(props: AfCoreShellProps): NavSection[] {
  * `home` is included even when a league is selected: on a phone the league
  * switcher is off-screen, so the way back to the league list has to be here.
  */
-const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'trades', 'week', 'live']
+const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'matchup', 'trades']
+
+/*
+ * ⚠ "LEAGUES" IS A BAR SLOT, NOT A LINK, AND IT TOOK LIVE'S PLACE (2026-10-29). A user on Android
+ * reported that getting into their leagues was "too complicated and not straightforward": the bar
+ * had no Leagues entry, the floating pill (`.af-rail-handle`, since removed) read as an action
+ * button rather than navigation, and the text route was the last group of More. The tab opens the
+ * league tray in place — not /leagues, whose ProductShell chrome swaps the whole header and bar and
+ * was itself part of the confusion. Trades stays pinned (see mobile-trade-access.test.ts); Live moves
+ * to More → This week, one tap further.
+ */
+const MOBILE_BAR_LEAGUES_AFTER_INDEX = 0
+
+/**
+ * Stand-ins, in order, for bar slots whose item is hidden. Matchup (and Your week)
+ * only exist once the selected league has a scored week (`ifScored`), and Trades
+ * only where the platform publishes trades, so without these the bar shrank to
+ * four. Player Finder is unconditional, so the bar stays at five in every state.
+ */
+const MOBILE_BAR_FALLBACK_KEYS: CoreNavKey[] = ['week', 'players']
 
 /** The league-first Play sheet: starting or joining something, as opposed to a league you are in. */
 const LEAGUE_FIRST_PLAY_LINKS: ReadonlyArray<{ href: string; label: string; glyph: string }> = [
@@ -928,6 +1010,7 @@ const LEAGUE_FIRST_PLAY_LINKS: ReadonlyArray<{ href: string; label: string; glyp
   { href: '/mock-draft', label: 'Mock draft', glyph: '◷' },
   { href: '/brackets', label: "Brackets and pick'em", glyph: '⚑' },
   { href: '/leaderboards', label: 'Leaderboards', glyph: '▲' },
+  { href: '/clubhouse', label: 'Clubhouse community', glyph: '☰' },
 ]
 
 type PlayerSearchHit = {
@@ -957,8 +1040,7 @@ type TopSearchHit = PlayerSearchHit | LeagueSearchHit
 function TopSearch({ leagues }: { leagues: RailLeague[] }) {
   const router = useRouter()
   // The search box sits on every /core screen; its words follow the language switch (2026-10-03).
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(coreShellMessages)
   const [q, setQ] = useState('')
   const [playerHits, setPlayerHits] = useState<PlayerSearchHit[]>([])
   const [open, setOpen] = useState(false)
@@ -1015,7 +1097,7 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
   function go(hit: TopSearchHit) {
     setOpen(false)
     setQ('')
-    router.push(hit.kind === 'league' ? `/core?league=${encodeURIComponent(hit.id)}` : `/players/${hit.slug}`)
+    router.push(hit.kind === 'league' ? leagueEntryHref(leagues.find(row => row.id === hit.id) ?? { id: hit.id, platform: 'unknown' }) : `/players/${hit.slug}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -1050,8 +1132,8 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
           className="af-search-input"
           name="q"
           type="search"
-          placeholder={es ? 'Busca un jugador o ve a una liga' : 'Find a player or jump to a league'}
-          aria-label={es ? 'Busca cualquier jugador o liga' : 'Search any player or league'}
+          placeholder={m.searchPlaceholder}
+          aria-label={m.searchAria}
           autoComplete="off"
           role="combobox"
           aria-expanded={showList}
@@ -1075,13 +1157,13 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
           className="af-search-ac"
           id={listId}
           role="listbox"
-          aria-label={es ? 'Resultados de jugadores y ligas' : 'Player and league results'}
+          aria-label={m.searchResultsAria}
         >
           {hits.length === 0 ? (
             <li className="af-search-ac-empty" role="presentation">
               {loading
-                ? es ? 'Buscando…' : 'Searching…'
-                : es ? 'Ningún jugador ni liga coincide.' : 'No players or leagues match that.'}
+                ? m.searchSearching
+                : m.searchNoMatch}
             </li>
           ) : (
             hits.map((hit, i) => (
@@ -1103,8 +1185,8 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
                     <span className="af-search-ac-name">{hit.name}</span>
                     <span className="af-search-ac-meta">
                       {hit.kind === 'league'
-                        ? `${es ? 'Liga' : 'League'} · ${hit.platform}`
-                        : [hit.position, hit.team].filter(Boolean).join(' · ') || (es ? 'Jugador' : 'Player')}
+                        ? `${m.searchLeague} · ${hit.platform}`
+                        : [hit.position, hit.team].filter(Boolean).join(' · ') || m.searchPlayer}
                     </span>
                   </span>
                 </button>
@@ -1165,13 +1247,15 @@ function HelpDot({ title, body }: { title: string; body: string }) {
  */
 export function syncChipText(ageLabel: string, language = 'en'): string {
   const never = /^never\b/i.test(ageLabel.trim())
-  if (language === 'es') return never ? 'Nunca sincronizado' : `sincronizado ${ageText(ageLabel, 'es')}`
-  return never ? 'Never synced' : `synced ${ageLabel}`
+  const m = messagesFor(coreShellMessages, language)
+  return never ? m.syncNever : m.synced(ageLabel)
 }
 
 export function AfCoreShell(incoming: AfCoreShellProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const msg = useMessages(coreShellMessages)
+  const railMsg = useMessages(railRowMessages)
   /*
    * The screen streams in after this shell paints, so the few pieces of chrome only a screen
    * can know (week label, tab badges, Chimmy's home signals, the live slate count) arrive by
@@ -1187,8 +1271,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const sections = useMemo(() => navSections(props), [props])
   const mobileItems = useMemo(() => {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
-    return MOBILE_BAR_KEYS.flatMap((k) => {
+    const fallbacks = MOBILE_BAR_FALLBACK_KEYS.flatMap((k) => {
       const item = byKey.get(k)
+      return item ? [item] : []
+    })
+    return MOBILE_BAR_KEYS.flatMap((k) => {
+      const item = byKey.get(k) ?? fallbacks.shift()
       return item ? [item] : []
     })
   }, [props])
@@ -1281,7 +1369,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     if (!speculationGate.tryAcquire()) return
     railWarmedRef.current.add(leagueId)
     /* FULL by default — `router.prefetch` is the only path that warms the data. */
-    router.prefetch(`/core?league=${encodeURIComponent(leagueId)}`)
+    const league = props.leagues.find(row => row.id === leagueId)
+    if (league) router.prefetch(leagueEntryHref(league))
   }
   /*
    * A warm needs the pointer (or focus) to REST on a crest for `RAIL_WARM_DWELL_MS`; leaving
@@ -1456,17 +1545,35 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     coreRefreshIntervalMs(Boolean(props.gameDayActive), props.liveGameCount ?? 0),
     nativeRailIds,
   )
+  /* Your win chance per league, for the odds bar — the Matchup board's own numbers (useRailOdds.ts). */
+  const railOdds = useRailOdds(railOpen)
+  /*
+   * What needs you, per league — the same facts as the My team and Trades tab badges (urgencyBadges.ts),
+   * so a league's dot and the tab's count can never disagree.
+   */
+  const lineupLeagueKey = (props.urgencyBadges?.lineupLeagueIds ?? []).join('|')
+  const offerLeagueKey = (props.urgencyBadges?.offerLeagueIds ?? []).join('|')
+  const railAttention = useMemo(() => {
+    const byLeague = new Map<string, RailAttention[]>()
+    const add = (key: string, kind: RailAttention) => {
+      for (const id of key ? key.split('|') : []) byLeague.set(id, [...(byLeague.get(id) ?? []), kind])
+    }
+    add(lineupLeagueKey, 'lineup')
+    add(offerLeagueKey, 'offer')
+    return byLeague
+  }, [lineupLeagueKey, offerLeagueKey])
   /* The heading names the NFL provider week; a native row runs on its own league's calendar. */
   const liveWeek = Object.values(liveRail.scores).find((s) => !s.native)?.week
   const railWeekLabel = liveWeek ? `Week ${liveWeek}` : props.railWeekLabel
   const railRef = useRef<HTMLElement>(null)
-  const railHandleRef = useRef<HTMLButtonElement>(null)
   /*
-   * The DESKTOP control that replaces the phone handle above 720px, and so the
-   * only sane place for focus to land when the viewport widens with the tray
-   * open. The handle itself is `display: none` by then — still mounted, which is
-   * exactly why the overlay hook's old `isConnected` check waved it through and
-   * focus fell to <body>.
+   * The tray's own header row: its ✕ close control on a phone, and the DESKTOP
+   * collapse toggle above 720px. So it is where focus starts when the tray
+   * opens, and the only sane place for focus to land when the viewport widens
+   * with the tray open — the phone's opener (the bar's Leagues tab) is
+   * `display: none` by then, still mounted, which is exactly why the overlay
+   * hook's old `isConnected` check waved such an opener through and focus fell
+   * to <body>.
    */
   const railToggleRef = useRef<HTMLButtonElement>(null)
   const [phoneLayout, setPhoneLayout] = useState(false)
@@ -1477,8 +1584,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const railScrollRef = useRef<HTMLDivElement>(null)
   const railLayout: RailLayout | null = !layoutKnown ? null : phoneLayout ? 'tray' : railOpen ? 'open' : 'collapsed'
   useRailScrollMemory(railScrollRef, railLayout, props.selectedLeagueId ?? null)
-  /** The tray's close control lives outside the tray — see the hook call below. */
-  const railKeepRefs = useMemo(() => [railHandleRef], [])
 
   /*
    * The phone tray covers the screen, so it is modal: focus and scrolling stay
@@ -1496,17 +1601,15 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * walking that overlay's ancestor chain — so the tray still inerts the shell
    * when the tray is on top, and stops doing so the moment a card opens above it.
    *
-   * `keepInteractiveRefs` is what preserves this tray's one unusual property:
-   * its close control is the handle, which is rendered as a SIBLING of the tray
-   * rather than inside it. It stays out of the inert sweep and stays at the end
-   * of the Tab cycle, exactly as the hand-rolled version had it.
+   * The tray no longer needs `keepInteractiveRefs`: its close control used to
+   * be the floating handle, a SIBLING of the tray kept out of the inert sweep.
+   * The handle is gone, and the ✕ header row inside the tray is the way out.
    */
   useOverlayContainment({
     active: mobileRailOpen,
     containerRef: railRef,
     onClose: () => setRailChoice('closed'),
-    initialFocusRef: railHandleRef,
-    keepInteractiveRefs: railKeepRefs,
+    initialFocusRef: railToggleRef,
     restoreFallbackRef: railToggleRef,
   })
 
@@ -1565,10 +1668,34 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * Computed ONCE over exactly the rows the rail draws by name — a hub card draws its own
    * members — and the header reads the same label, so the two never disagree.
    */
-  const hiddenLeagueKey = (props.hiddenLeagueIds ?? []).join('.')
+  /*
+   * Pin and move (user call, 2026-10-30), shown at once and saved behind: a moved or pinned league
+   * jumps the moment it is chosen, the account's lists are written in the background, and the next
+   * server render — which already arranges by them — replaces these overrides.
+   */
+  const serverOrderKey = leagues.map((l) => l.id).join('|')
+  const [orderOverride, setOrderOverride] = useState<string[] | null>(null)
+  useEffect(() => setOrderOverride(null), [serverOrderKey])
+  const orderedLeagues = useMemo(
+    () => (orderOverride ? applyLeagueOrder(leagues, orderOverride) : leagues),
+    [leagues, orderOverride],
+  )
+  const serverFavoriteKey = (props.scope?.favoriteIds ?? []).join('|')
+  const [favoriteOverride, setFavoriteOverride] = useState<string[] | null>(null)
+  useEffect(() => setFavoriteOverride(null), [serverFavoriteKey])
+  const favoriteIds = useMemo(
+    () => favoriteOverride ?? (serverFavoriteKey ? serverFavoriteKey.split('|') : []),
+    [favoriteOverride, serverFavoriteKey],
+  )
+  const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds])
+  const serverHiddenKey = (props.hiddenLeagueIds ?? []).join('.')
+  // Leagues hidden from the sheet this visit, gone at once; the next server render carries them.
+  const [hiddenAdded, setHiddenAdded] = useState<string[]>([])
+  useEffect(() => setHiddenAdded([]), [serverHiddenKey])
+  const hiddenLeagueKey = [serverHiddenKey, ...hiddenAdded].filter(Boolean).join('.')
   const railLeagues = useMemo(
-    () => withoutHidden(leagues, hiddenLeagueKey ? hiddenLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
-    [leagues, hiddenLeagueKey, props.selectedLeagueId],
+    () => withoutHidden(orderedLeagues, hiddenLeagueKey ? hiddenLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
+    [orderedLeagues, hiddenLeagueKey, props.selectedLeagueId],
   )
   const hiddenRailCount = leagues.length - railLeagues.length
   const archivedLeagueKey = (props.archivedLeagueIds ?? []).join('.')
@@ -1576,13 +1703,110 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     () => withoutHidden(leagues, archivedLeagueKey ? archivedLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
     [leagues, archivedLeagueKey, props.selectedLeagueId],
   )
-  const railRows = useMemo(() => groupLeagueHubs(railLeagues), [railLeagues])
+  /*
+   * Each Exile Island sits directly under its Survivor league, joined by a ↕, instead of being one
+   * more league in the list: with two NBA Survivor leagues the rail never said which island was whose.
+   */
+  const railRows = useMemo(() => pairExileUnderSurvivor(groupLeagueHubs(railLeagues)), [railLeagues])
   /*
    * One section per sport, each headed by its sport, once the account plays two or more. Within a
    * section the rail keeps the account's own order; only the grouping is new.
    */
-  const railSections = useMemo(() => leagueSportSections(railRows), [railRows])
+  const railSections = useMemo(() => arrangeRailSections(railRows, favoriteSet), [railRows, favoriteSet])
   const railLabels = useMemo(() => distinctLeagueLabels(railRows.filter((l) => !l.hub)), [railRows])
+
+  /* One league's live state and what needs you in it — read by the filter chips and by the row itself. */
+  const railRowState = (l: RailLeague) => {
+    const saved = props.railMatchups?.[l.id]
+    const live = l.syncPaused ? undefined : liveRail.scores[l.id]
+    // The live poll overlaid on the server snapshot — shared with the /league rail (RailRowBody.tsx).
+    const m = mergeRailMatchup(saved, live)
+    const delayed = liveRail.delayed.includes(l.id) || Boolean(live && (railClock ?? Date.now()) - Date.parse(live.updatedAt) > 90_000)
+    /* Scores are moving: a live poll row that is not delayed, on a week that has been played. */
+    const isLive = Boolean(live && !delayed && m?.scored)
+    const attention = railAttention.get(l.id)
+    return { m, live, delayed, isLive, attention }
+  }
+
+  /*
+   * Filter chips (All / Live / Commissioner / Needs action), from six leagues up — below that there is
+   * nothing to narrow. A chip with nothing in it is not drawn, and a filter that empties (the games
+   * end) falls back to All rather than leaving a blank list.
+   */
+  const [railFilter, setRailFilter] = useState<RailFilter>('all')
+  const railFacts = new Map<string, RailRowFacts>()
+  for (const row of railRows) {
+    if (row.hub) continue
+    const st = railRowState(row)
+    railFacts.set(row.id, { live: st.isLive, commissioner: Boolean(row.isCommissioner), needs: Boolean(st.attention?.length) })
+  }
+  const railCounts = railFilterCounts([...railFacts.values()])
+  const showRailFilters = railOpen && railRows.length >= RAIL_FILTER_MIN_LEAGUES
+  const activeRailFilter: RailFilter = showRailFilters && railCounts[railFilter] > 0 ? railFilter : 'all'
+
+  /*
+   * Folded sport sections, remembered on this device — a per-viewer convenience, so browser storage,
+   * read after mount (the server cannot know it) and never trusted to exist.
+   */
+  const [foldedSports, setFoldedSports] = useState<string[]>([])
+  useEffect(() => {
+    try {
+      const raw = JSON.parse(window.localStorage.getItem(RAIL_FOLDED_KEY) ?? '[]')
+      if (Array.isArray(raw)) setFoldedSports(raw.filter((k): k is string => typeof k === 'string').slice(0, 20))
+    } catch {
+      /* private mode or a corrupt value: nothing folded */
+    }
+  }, [])
+  const toggleSportFold = (key: string) => {
+    setFoldedSports((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+      try {
+        window.localStorage.setItem(RAIL_FOLDED_KEY, JSON.stringify(next))
+      } catch {
+        /* the fold still applies for this visit */
+      }
+      return next
+    })
+  }
+
+  /*
+   * Pin and move, from a press-and-hold (touch) or a right-click / context-menu key (desktop). The row
+   * stays one link, so the actions live in a sheet beside it rather than as buttons inside it.
+   */
+  const [railMenuId, setRailMenuId] = useState<string | null>(null)
+  const railHold = useRailHold(setRailMenuId)
+  // Drag to reorder (a mouse straight away, a finger in reorder mode): the same saved order Move writes.
+  const railDrag = useRailDrag((sectionIds, id, toIndex) => {
+    const next = reorderWithinSection(orderedLeagues.map((l) => l.id), sectionIds, id, toIndex)
+    if (!next) return
+    setOrderOverride(next)
+    saveLeaguePreference('order', next, () => router.refresh())
+  })
+  const pinLeague = (id: string) => {
+    const next = toggleFavorite(favoriteIds, id)
+    setFavoriteOverride(next)
+    saveLeaguePreference('favorites', next, () => router.refresh())
+  }
+  const moveLeague = (id: string, direction: -1 | 1) => {
+    const section = railSections.find((sec) => sec.rows.some((r) => !r.hub && r.id === id))
+    if (!section) return
+    const next = moveInOrder(
+      orderedLeagues.map((l) => l.id),
+      section.rows.filter((r) => !r.hub).map((r) => r.id),
+      id,
+      direction,
+    )
+    if (!next) return
+    setOrderOverride(next)
+    saveLeaguePreference('order', next, () => router.refresh())
+  }
+  const hideLeague = (id: string) => {
+    setHiddenAdded((prev) => (prev.includes(id) ? prev : [...prev, id]))
+    hideLeagueForAccount(id, () => router.refresh())
+  }
+  const railMenuSection = railMenuId ? railSections.find((sec) => sec.rows.some((r) => !r.hub && r.id === railMenuId)) : null
+  const railMenuIds = railMenuSection ? railMenuSection.rows.filter((r) => !r.hub).map((r) => r.id) : []
+  const railMenuLeague = railMenuId ? railLeagues.find((l) => l.id === railMenuId) ?? null : null
   const selectedLeague = leagues.find((league) => league.id === props.selectedLeagueId)
   const selectedLeagueName = selectedLeague ? (railLabels.get(selectedLeague.id) ?? selectedLeague.name) : null
 
@@ -1647,37 +1871,21 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         visually: it is off-screen until focused.
       */}
       <a href="#af-content" className="af-skip">
-        {language === 'es' ? 'Saltar al contenido' : 'Skip to content'}
+        {msg.skipToContent}
       </a>
 
       {/*
-        ⚠ THE MOBILE HANDLE IS OUTSIDE THE RAIL, NOT INSIDE IT. Below 720px the
-        rail becomes a full-screen tray; a handle rendered inside it would be
-        inside the thing it opens. Hidden above 720px, where the rail's own
-        header carries the toggle.
+        ⚠ THERE IS NO FLOATING "LEAGUES" PILL ANY MORE (2026-10-29). The phone opens the league tray
+        from the bar's Leagues tab (`af-tabbar-leagues`), or the league name in the league-first
+        top bar; the tray closes from its own ✕ header row (`.af-rail-toggle`). The pill was the
+        tray's only labelled entry for a long time, and users read it as an action button.
       */}
-      <button
-        type="button"
-        className="af-rail-handle"
-        ref={railHandleRef}
-        aria-label={railOpen ? (language === 'es' ? 'Cerrar ligas' : 'Close leagues') : (language === 'es' ? 'Abrir ligas' : 'Open leagues')}
-        aria-expanded={railOpen}
-        aria-controls="af-rail"
-        onClick={toggleRail}
-      >
-        <span className="af-rail-handle-mark">
-          <AfCrest size={20} tone="inherit" />
-        </span>
-        <span className="af-rail-handle-text">
-          {railOpen ? copy('Close') : selectedLeagueName ?? copy('Leagues')}
-        </span>
-      </button>
-
       {/* ── League rail ─────────────────────────────────────────────── */}
       <nav
         ref={railRef}
         className="af-rail"
         id="af-rail"
+        data-has-hidden={hiddenRailCount > 0 ? 'true' : undefined}
         aria-label={copy('Leagues')}
         onClick={(event) => {
           if (mobileRailOpen && (event.target as HTMLElement).closest('a[href]')) {
@@ -1689,7 +1897,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           The crest, above the leagues, drawn rather than loaded — see
           AfCrest's header for why /af-crest.png cannot sit on a dark rail.
         */}
-        <Link href="/core" className="af-rail-logo" aria-label={language === 'es' ? 'Inicio de AllFantasy' : 'AllFantasy home'}>
+        <Link href="/core" className="af-rail-logo" aria-label={msg.homeAria}>
           <AfCrest size={34} />
         </Link>
 
@@ -1710,15 +1918,16 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           /*
            * On a phone this row IS the tray's header and its way out, so it says "close" and draws a ✕
            * (moved to the right edge by af-core-shell.css) rather than the desktop's « collapse arrow.
-           * The floating handle still closes it too; this is the control a reader looks for at the top.
+           * It is the tray's only close control on a phone (with Escape and the scrim-free full-screen
+           * tray, there is nothing else to tap), so it is also where focus starts when the tray opens.
            */
-          aria-label={mobileRailOpen ? (language === 'es' ? 'Cerrar ligas' : 'Close leagues') : undefined}
+          aria-label={mobileRailOpen ? msg.closeLeagues : undefined}
           title={
             mobileRailOpen
-              ? language === 'es' ? 'Cerrar ligas' : 'Close leagues'
+              ? msg.closeLeagues
               : railOpen
-                ? language === 'es' ? 'Contraer la barra de ligas' : 'Collapse the league rail'
-                : language === 'es' ? 'Expandir la barra de ligas' : 'Expand the league rail'
+                ? msg.collapseRail
+                : msg.expandRail
           }
         >
           <span className="af-rail-toggle-icon" aria-hidden>
@@ -1726,10 +1935,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           </span>
           <span className="af-rail-toggle-text">
             {leagues.length}{' '}
-            {language === 'es' ? (leagues.length === 1 ? 'liga' : 'ligas') : leagues.length === 1 ? 'league' : 'leagues'}
-            {/* The rail draws fewer rows than the count when some are hidden; say so. */}
-            {hiddenRailCount > 0 ? (language === 'es' ? ` · ${hiddenRailCount} ocultas` : ` · ${hiddenRailCount} hidden`) : ''}
-            {railWeekLabel ? ` · ${language === 'es' ? railWeekLabel.replace(/^Week (\d+)/, 'Semana $1') : railWeekLabel}` : ''}
+            {msg.leagueNoun(leagues.length)}
+            {railWeekLabel ? ` · ${railMsg.weekLabel(railWeekLabel)}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
               <span className="af-rail-live-state">
                 {badgeText('LIVE', language)}
@@ -1738,6 +1945,24 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             ) : null}
           </span>
         </button>
+
+        {/*
+          The rail draws fewer rows than the count when some are hidden; say so — and make it
+          tappable. It used to be " · 2 hidden" inside the toggle above, where tapping it only
+          closed the tray. A link cannot live inside a button, so it is a sibling: on a phone it
+          takes the line under the header, in the expanded desktop rail it sits under the toggle,
+          and in the 42px collapsed rail it is not drawn (the list's last row carries the count).
+        */}
+        {hiddenRailCount > 0 ? (
+          <Link
+            href="/settings?tab=preferences&returnTo=%2Fcore#your-leagues"
+            className="af-rail-hidden-count"
+            data-testid="rail-hidden-count-link"
+            aria-label={msg.hiddenLeaguesAria(hiddenRailCount)}
+          >
+            {msg.hiddenLeaguesShow(hiddenRailCount)}
+          </Link>
+        ) : null}
 
         {/*
           ⚠ EVERY LEAGUE, NOT THE FIRST EIGHT.
@@ -1754,40 +1979,107 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           scroll, but nothing is out of reach and no count is hidden behind a
           second screen.
         */}
-        <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef}>
-          {railSections.map((section) => [
+        <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef} data-reorder={railDrag.reorderMode ? 'true' : undefined}>
+          {railDrag.reorderMode && railOpen ? (
+            <div className="af-rail-reorder-bar" role="status">
+              <span>{railMsg.reorderHint}</span>
+              <button type="button" className="af-rail-reorder-done" onClick={() => railDrag.setReorderMode(false)}>
+                {railMsg.menuDone}
+              </button>
+            </div>
+          ) : null}
+          {/*
+            The filter chips are the list's first child, held at its top while it scrolls. Inside the
+            scroller rather than beside it: the phone tray is a grid with fixed rows (header, list, foot),
+            and a new sibling would be placed after the foot.
+          */}
+          {showRailFilters ? (
+            <div className="af-rail-filters" role="group" aria-label={railMsg.filterGroupAria}>
+              {RAIL_FILTERS.filter((f) => f === 'all' || railCounts[f] > 0).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  className="af-rail-filter"
+                  aria-pressed={activeRailFilter === f}
+                  data-filter={f}
+                  onClick={() => setRailFilter(f)}
+                >
+                  {railMsg.filterLabel(f)}
+                  <span className="af-rail-filter-count af-num">{railCounts[f]}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {railSections.map((section) => {
+            const sectionKey = section.key ?? 'other'
+            const favorites = section.key === FAVORITES_SECTION
+            /* A filter shows every match, folded or not; folding is for browsing the whole list. */
+            const folded = activeRailFilter === 'all' && foldedSports.includes(sectionKey)
+            const rows = section.rows.filter((r) => passesRailFilter(activeRailFilter, r.hub ? null : railFacts.get(r.id) ?? null))
+            if (rows.length === 0) return null
+            // Islands joined to their Survivor league in THIS section: favorites or a filter can part a pair.
+            const sectionExile = pairedExileIds(rows)
+            const headed = railSections.length > 1 || favorites
+            return [
             /*
              * The sport heading. Short form ("NFL", "CBB") so it fits the 42px collapsed rail as well
              * as the open one, and not a heading element: the rail is a list of links, and seven
              * <h2>s would crowd the page outline every /core screen shares.
+             *
+             * The open rail adds the sport's ball and its league count, centred between two rules, so
+             * the eye finds where NBA ends and NFL begins (user report, 2026-10-30). The collapsed
+             * rail hides both and keeps the short label alone.
              */
-            railSections.length > 1 ? (
-              <div
-                key={`sport-${section.key ?? 'other'}`}
+            headed ? (
+              /*
+               * A button: tapping a sport folds its leagues away and tapping again brings them back
+               * (user call, 2026-10-30), remembered on this device.
+               */
+              <button
+                type="button"
+                key={`sport-${sectionKey}`}
                 className="af-rail-sport"
-                title={leagueSportLabel(section.key)}
+                title={favorites ? railMsg.favoritesHeading : leagueSportLabel(section.key)}
+                aria-expanded={!folded}
+                aria-label={railMsg.sectionToggleAria(favorites ? railMsg.favoritesHeading : leagueSportLabel(section.key), rows.length, folded)}
                 data-testid="rail-sport-heading"
+                data-section={sectionKey}
+                onClick={() => toggleSportFold(sectionKey)}
               >
-                {leagueSportLabel(section.key, { short: true })}
-              </div>
+                {favorites ? (
+                  <span className="af-rail-sport-icon" aria-hidden>★</span>
+                ) : leagueSportIcon(section.key) ? (
+                  <span className="af-rail-sport-icon" aria-hidden>{leagueSportIcon(section.key)}</span>
+                ) : null}
+                <span className="af-rail-sport-label">{favorites ? railMsg.favoritesShort : leagueSportLabel(section.key, { short: true })}</span>
+                <span className="af-rail-sport-count af-num" aria-hidden>{rows.length}</span>
+                <span className="af-rail-sport-chevron" aria-hidden>{folded ? '▸' : '▾'}</span>
+              </button>
             ) : null,
-            ...section.rows.map((l) => {
+            ...(folded ? [] : rows).map((l) => {
             if (l.hub) return <ConnectedLeagueRailGroup key={l.hub.id} hub={l.hub} selectedLeagueId={props.selectedLeagueId} expanded={railOpen} onNavigate={(href, event) => { saveRailScroll(railScrollRef.current, railLayout); if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720 && !event.metaKey && !event.ctrlKey) { event.preventDefault(); setRailChoice('closed'); router.push(href) } }} />
-            const saved = props.railMatchups?.[l.id]
-            const live = l.syncPaused ? undefined : liveRail.scores[l.id]
-            // The live poll overlaid on the server snapshot — shared with the /league rail (RailRowBody.tsx).
-            const m = mergeRailMatchup(saved, live)
-            const delayed = liveRail.delayed.includes(l.id) || Boolean(live && (railClock ?? Date.now()) - Date.parse(live.updatedAt) > 90_000)
+            const { m, live, delayed, isLive, attention } = railRowState(l)
+            const unread = unreadBadgeText(props.railUnread?.[l.id])
+            /* A field race's line is its place among the survivors; a W-L record says nothing there. */
+            const record = m?.guillotine || m?.standing?.elimination ? null : props.railRecords?.[l.id] ?? null
             const railName = railLabels.get(l.id) ?? l.name
             // Keyed on the league's own name, not the rail's disambiguated label: that is Career's identity.
             const careerRaw = railCareer?.[railLeagueKey(l.name)] ?? null
             const careerLine = careerRaw ? careerLineText(careerRaw, language) : null
-            /* League-first opens a league on its matchup when it has a head-to-head this week —
-               the same rule the /core landing uses (resolveLeagueFirstLanding). */
-            const leagueHref = props.leagueFirst && m && !m.unpaired
+            /*
+             * TWO DESTINATIONS, ONE LINK (user call, 2026-10-30): a tap on the head-to-head opens
+             * the league's Matchup screen, a tap anywhere else opens the league. Before this the
+             * whole row went to the matchup in league-first mode, which left no way to reach the
+             * league itself from the list. The row stays a single link — see `railTapTarget`.
+             * A native league's matchup lives inside its own workspace, so it keeps one destination.
+             */
+            const leagueHref = leagueEntryHref(l)
+            const matchupHref = !isNativePlatform(l.platform) && m && !m.unpaired && !m.guillotine
               ? `/core/matchup?league=${encodeURIComponent(l.id)}`
-              : `/core?league=${encodeURIComponent(l.id)}`
-            return (
+              : null
+            const alertTone = attention?.includes('lineup') ? 'bad' : attention ? 'warn' : l.hasAlert ? (l.alertTone ?? 'warn') : null
+            const isExile = sectionExile.has(l.id)
+            const tile = (
               <Link
                 key={l.id}
                 href={leagueHref}
@@ -1820,18 +2112,20 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                  * already uses `aria-current="page"` for the page itself.
                  */
                 data-active={l.id === props.selectedLeagueId}
+                data-exile={isExile ? 'true' : undefined}
                 data-score-changed={railSwings[l.id] != null ? 'true' : undefined}
                 aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
-                title={
-                  language === 'es'
-                    ? `${railName} · ${l.platform}${careerLine ? ` · tu historial aquí ${careerLine}` : ''}`
-                    : `${railName} · ${l.platform}${careerLine ? ` · your career here ${careerLine}` : ''}`
-                }
-                aria-label={
-                  language === 'es'
-                    ? `${railName} en ${l.platform}${careerLine ? `, tu historial aquí ${careerLine}` : ''}`
-                    : `${railName} on ${l.platform}${careerLine ? `, your career here ${careerLine}` : ''}`
-                }
+                title={msg.railRowTitle(railName, l.platform, careerLine)}
+                aria-label={`${msg.railRowAria(railName, l.platform, careerLine)}${attention ? railMsg.attentionAria(attention.includes('lineup'), attention.includes('offer')) : ''}${unread ? railMsg.unreadAria(unread) : ''}`}
+                data-favorite={favoriteSet.has(l.id) ? 'true' : undefined}
+                /*
+                 * Press and hold (touch) or right-click / the context-menu key (desktop) opens Pin and
+                 * Move for this league. A hold that fired swallows the click that follows it, so lifting
+                 * the finger does not also open the league.
+                 */
+                {...(railDrag.reorderMode ? {} : railHold.handlers(l.id))}
+                /* Drag to reorder within this section; see useRailDrag. */
+                {...railDrag.rowProps(l.id, sectionKey)}
                 /*
                   ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
                   for it, and it matters: the tray is full-screen, so navigating
@@ -1841,8 +2135,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   preference the user set, not a transient overlay.
                 */
                 onClick={(event) => {
+                  if (railDrag.swallowClick(event)) return
+                  if (railHold.swallowClick(event)) return
                   // Before anything navigates: the next screen may rebuild this rail from the top.
                   saveRailScroll(railScrollRef.current, railLayout)
+                  const target = railTapTarget(event) ?? leagueHref
                   if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720) {
                     /* On iOS, closing the full-screen tray can remove the tapped
                        anchor before Next's delegated navigation finishes. Own
@@ -1850,15 +2147,20 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                        closes the tray and opens the selected league. */
                     event.preventDefault()
                     setRailChoice('closed')
-                    router.push(leagueHref)
+                    router.push(target)
+                  } else if (target !== leagueHref) {
+                    event.preventDefault()
+                    router.push(target)
                   }
                 }}
               >
+                {railDrag.reorderMode ? <span className="af-rail-drag-handle" aria-hidden>⠿</span> : null}
                 <span className="af-rail-tile-art">
                   <RailMark src={l.imageUrl} letter={l.mark} />
-                  {l.hasAlert ? (
-                    <span className="af-rail-dot" data-tone={l.alertTone ?? 'warn'} />
+                  {alertTone ? (
+                    <span className="af-rail-dot" data-tone={alertTone} />
                   ) : null}
+                  {unread ? <span className="af-rail-unread" aria-hidden>{unread}</span> : null}
                 </span>
 
                 {/*
@@ -1868,9 +2170,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   one accessible name either way.
                 */}
                 <RailRowBody
-                  name={railName}
+                  name={isExile ? copy('Exile Island') : railName}
                   platform={String(l.platform)}
                   m={m}
+                  exileStatus={l.exileStatus ?? null}
                   live={live}
                   isCommissioner={l.isCommissioner}
                   syncPaused={l.syncPaused}
@@ -1878,11 +2181,58 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   showScoreStatus={railOpen}
                   swing={railSwings[l.id]}
                   careerLine={careerLine}
+                  isLive={isLive}
+                  pWin={railOdds[l.id] ?? null}
+                  attention={attention}
+                  matchupHref={matchupHref}
+                  record={record}
                 />
               </Link>
             )
+            if (!isExile) return tile
+            const survivorName = (l.exileOf && railLabels.get(l.exileOf)) || null
+            return [
+              <div
+                key={`exile-link-${l.id}`}
+                className="af-rail-exile-link"
+                data-testid="rail-exile-link"
+                title={survivorName ? `${copy('Exile Island for')} ${survivorName}` : copy('Exile Island')}
+                aria-hidden
+              >
+                ↕
+              </div>,
+              tile,
+            ]
           }),
-          ])}
+          ]
+          })}
+          {railOpen && railRows.length > 1 && !railDrag.reorderMode ? <p className="af-rail-hint">{railMsg.holdHint}</p> : null}
+          {/*
+            ⚠ THE WAY BACK TO A HIDDEN LEAGUE. The header counts hidden leagues, but that count sits
+            inside the expand/collapse button and cannot be a link of its own. Without this row an
+            account that hid every league opened the tray to "2 leagues · 2 hidden" and nothing else —
+            no rows and no pointer to Settings, where unhiding lives. Reported by a user 2026-10-29.
+          */}
+          {hiddenRailCount > 0 ? (
+            <Link
+              href="/settings?tab=preferences&returnTo=%2Fcore#your-leagues"
+              className="af-rail-tile af-rail-add af-rail-hidden-link"
+              data-all-hidden={railLeagues.length === 0 ? 'true' : undefined}
+              data-testid="rail-hidden-leagues-link"
+              title={msg.showHideLeaguesTitle}
+            >
+              {/* The count, so the collapsed 42px rail still says how many are tucked away. */}
+              <span className="af-rail-foot-icon af-num" aria-hidden>
+                {hiddenRailCount}
+              </span>
+              <span className="af-rail-foot-copy">
+                <strong>
+                  {msg.showHiddenLeagues(hiddenRailCount)}
+                </strong>
+                <small>{msg.manageInSettings}</small>
+              </span>
+            </Link>
+          ) : null}
         </div>
 
         {/*
@@ -1903,7 +2253,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         <Link
           href="/settings"
           className="af-rail-tile af-rail-profile"
-          title={language === 'es' ? 'Perfil, ajustes y modos' : 'Profile, settings and modes'}
+          title={msg.profileTitle}
         >
           {/*
            * ⚠ THIS WAS A HARDCODED 'G' — every account saw the same letter
@@ -1919,15 +2269,33 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             letter={(Array.from(props.profile?.name?.trim() || '•')[0] ?? '•').toUpperCase()}
           />
           <span className="af-rail-foot-copy">
-            <strong>{props.profile?.name?.trim() || (language === 'es' ? 'Tu cuenta' : 'Your account')}</strong>
-            <small>{language === 'es' ? 'Perfil y ajustes' : 'Profile & settings'}</small>
+            <strong>{props.profile?.name?.trim() || msg.yourAccount}</strong>
+            <small>{msg.profileAndSettings}</small>
           </span>
         </Link>
         </div>
       </nav>
 
+      {/*
+        Pin, Move and Hide for one league — opened by a press-and-hold or a right-click on its row. A sibling
+        of the rail, not inside it, so the rail's own tray rules (close on any link) never touch it.
+      */}
+      {railMenuLeague ? (
+        <RailLeagueMenu
+          name={railLabels.get(railMenuLeague.id) ?? railMenuLeague.name}
+          pinned={favoriteSet.has(railMenuLeague.id)}
+          canMoveUp={railMenuIds.indexOf(railMenuLeague.id) > 0}
+          canMoveDown={railMenuIds.indexOf(railMenuLeague.id) < railMenuIds.length - 1}
+          onPin={() => pinLeague(railMenuLeague.id)}
+          onMove={(direction) => moveLeague(railMenuLeague.id, direction)}
+          onHide={() => hideLeague(railMenuLeague.id)}
+          onReorder={() => railDrag.setReorderMode(true)}
+          onClose={() => setRailMenuId(null)}
+        />
+      ) : null}
+
       {/* ── Primary nav ─────────────────────────────────────────────── */}
-      <aside className="af-nav" id="af-nav" aria-label={language === 'es' ? 'Secciones' : 'Sections'}>
+      <aside className="af-nav" id="af-nav" aria-label={msg.sectionsAria}>
         {/*
           The section list scrolls; the CTA and support button below it do not.
           Same split as the rail, for the same reason — with a long nav the two
@@ -1960,7 +2328,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     aria-current={item.key === active ? 'page' : undefined}
                   >
                     <span className="af-nav-glyph" aria-hidden>
-                      {item.glyph}
+                      <CoreNavIcon navKey={item.key} size={16} />
                     </span>
                     <span className="af-nav-label">{copy(item.label)}</span>
                     {item.badge ? (
@@ -1990,7 +2358,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <div className="af-import-title">{copy('Import a league')}</div>
           <p className="af-import-body">
             {platformsPhraseText(availableImportPlatformsPhrase(), language)}.{' '}
-            {language === 'es' ? 'Solo lectura, tarda cerca de un minuto.' : 'Read-only, takes about a minute.'}
+            {msg.importReadOnly}
           </p>
           <Link href="/import" className="af-btn af-import-btn">
             {copy('Connect a platform')}
@@ -2015,14 +2383,14 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
       {/* ── Main column ─────────────────────────────────────────────── */}
       <div className="af-main">
-        <header className="af-topbar" data-lf-search-open={props.leagueFirst && lfSearchOpen ? 'true' : undefined}>
+        <header className="af-topbar" data-lf-search-open={lfSearchOpen ? 'true' : undefined}>
           {/*
             ⚠ THE CREST, PHONE ONLY — `display: none` above 720px.
 
             Reported from a real phone as "the AF crest is not shown anywhere".
             It was drawn in exactly two places, and below 720px neither is on
             screen: `.af-rail-logo` lives inside the rail, which becomes a
-            full-screen tray you have to OPEN to see, and `.af-rail-handle`
+            full-screen tray you have to OPEN to see, and `.af-rail-handle` (since removed)
             carries a 20px mark that reads as part of a "LEAGUES" pill rather
             than as the product's mark. So a phone user never saw the brand on
             any screen without opening a tray first.
@@ -2031,7 +2399,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             horizontal scroller — a logo inside one scrolls away, which is the
             opposite of what a wordmark is for.
           */}
-          <Link href="/core" className="af-topbar-crest" aria-label={language === 'es' ? 'Inicio de AllFantasy' : 'AllFantasy home'}>
+          <Link href="/core" className="af-topbar-crest" aria-label={msg.homeAria}>
             <AfCrest size={26} />
           </Link>
           {/*
@@ -2047,7 +2415,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               aria-controls="af-rail"
               onClick={toggleRail}
             >
-              <span className="af-lf-switch-name">{selectedLeagueName ?? (language === 'es' ? 'Tus ligas' : 'Your leagues')}</span>
+              <span className="af-lf-switch-name">{selectedLeagueName ?? msg.yourLeagues}</span>
               <span aria-hidden>▾</span>
             </button>
           ) : null}
@@ -2057,7 +2425,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           */}
           {props.scope ? (
             <ScopeSwitcher
-              leagues={props.scope.leagues.map((league) => ({ ...league, imageUrl: leagues.find((row) => row.id === league.id)?.imageUrl }))}
+              leagues={props.scope.leagues.map((league) => {
+                const row = leagues.find((r) => r.id === league.id)
+                return { ...league, imageUrl: row?.imageUrl, exileOf: row?.exileOf }
+              })}
               scopeValue={props.scope.value}
               label={props.scope.label}
               selectedLeagueId={props.selectedLeagueId ?? null}
@@ -2067,21 +2438,27 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               archivedIds={props.archivedLeagueIds}
             />
           ) : null}
-          {props.leagueFirst ? (
-            <button
-              type="button"
-              className="af-lf-search-btn"
-              aria-label={
-                language === 'es'
-                  ? lfSearchOpen ? 'Cerrar búsqueda' : 'Buscar jugadores y ligas'
-                  : lfSearchOpen ? 'Close search' : 'Search players and leagues'
+          {/*
+            The search icon. Phone only in both modes (hidden above 720px by af-core-shell.css): the
+            phone header folds the full-width search behind it so the topbar stays one row.
+          */}
+          <button
+            type="button"
+            className="af-lf-search-btn"
+            aria-label={lfSearchOpen ? msg.closeSearch : msg.searchPlayersAndLeagues}
+            aria-expanded={lfSearchOpen}
+            onClick={(event) => {
+              const opening = !lfSearchOpen
+              setLfSearchOpen(opening)
+              // Put the cursor in the field it just revealed, so one tap is enough to start typing.
+              if (opening) {
+                const header = event.currentTarget.closest('.af-topbar')
+                requestAnimationFrame(() => header?.querySelector<HTMLInputElement>('.af-search-input')?.focus())
               }
-              aria-expanded={lfSearchOpen}
-              onClick={() => setLfSearchOpen((open) => !open)}
-            >
-              <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
-            </button>
-          ) : null}
+            }}
+          >
+            <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
+          </button>
           {/*
             League-first: the inbox — trade offers, waiver results, mentions, lineup alerts — one tap
             from every screen. The phone header hides `.af-topbar-right` and the nav, so without this
@@ -2114,7 +2491,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               <Link
                 className="af-admin-shortcut"
                 href="/admin"
-                aria-label={language === 'es' ? 'Abrir la administración de AllFantasy' : 'Open AllFantasy administration'}
+                aria-label={msg.adminAria}
               >
                 <span aria-hidden>⬢</span>
                 {copy('Admin')}
@@ -2123,17 +2500,71 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             {weekLabel ? <span className="af-week af-num">{weekLabel}</span> : null}
 
             <details className="af-data-menu">
-              <summary aria-label={language === 'es' ? 'Actualizaciones de liga' : 'League updates and refresh'}>↻ <span>{language === 'es' ? 'Actualizaciones' : 'Updates'}</span></summary>
+              <summary aria-label={msg.updatesAria}>↻ <span>{msg.updates}</span></summary>
               <div className="af-data-menu-panel">
-                <strong>{language === 'es' ? 'Actualizaciones de liga' : 'League updates'}</strong>
+                <strong>{msg.leagueUpdates}</strong>
                 <p>{syncChipText(syncAge.label, language)}</p>
                 <SyncNowButton eligibleCount={syncEligibleCount} />
-                <p>{props.nativeLeague ? (language === 'es' ? 'Los cambios se guardan en AllFantasy.' : 'Changes save to AllFantasy.') : (language === 'es' ? 'Cambia la alineación en la plataforma de tu liga.' : 'Make lineup changes on your league’s platform.')}</p>
+                {/*
+                  ⚠ A BUTTON, NOT JUST A SENTENCE, WHEN WE KNOW WHERE. This said "make lineup changes
+                  on your league's platform" and stopped. `lineupHandoff` is the verified lineup screen
+                  (or, labelled, the league page) for the open league; with no league open, or none
+                  we can build, the sentence stays — never a homepage under a "lineup" label.
+                */}
+                {props.nativeLeague ? (
+                  <p>{msg.nativeChangesSave}</p>
+                ) : props.lineupHandoff ? (
+                  <>
+                    <p>{msg.readOnlyChangesIn(props.lineupHandoff.platformLabel)}</p>
+                    <a
+                      className="af-btn af-data-menu-handoff"
+                      href={props.lineupHandoff.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="updates-lineup-handoff"
+                    >
+                      {props.lineupHandoff.screen === 'Lineup'
+                        ? msg.fixLineupIn(props.lineupHandoff.platformLabel)
+                        : msg.openLeagueIn(props.lineupHandoff.platformLabel)}{' '}
+                      <span aria-hidden>↗</span>
+                    </a>
+                  </>
+                ) : (
+                  <p>{msg.platformLineupChanges}</p>
+                )}
+                {/*
+                  Phone only (af-core-shell.css): the theme and language chips move in here. Beside the
+                  crest, the scope pill, this menu and the search icon they made the row ~520px wide on a
+                  ~370px phone, so "AF LEGACY" ran under the search icon and the language chip off-screen
+                  (reported 2026-10-30).
+                */}
+                <div className="af-data-menu-display">
+                  {/*
+                    The plan chip is hidden on phones, so a tester granted access saw nothing change
+                    (reported 2026-10-30). The same line, readable here.
+                  */}
+                  {plan ? (
+                    <p className="af-data-menu-plan">
+                      Plan:{' '}
+                      <span className="af-data-menu-plan-name">{plan.name}</span>
+                      {plan.tokensLeft != null
+                        ? ` · ${plan.tokensLeft.toLocaleString(getAppIntlLocale())} ${copy('tokens left')}`
+                        : null}
+                    </p>
+                  ) : null}
+                  <strong>{copy('Display')}</strong>
+                  <div className="af-data-menu-display-row">
+                    <ModeToggle className="af-mode-chip" />
+                    <CoreLanguageChip className="af-mode-chip" />
+                  </div>
+                </div>
               </div>
             </details>
 
             {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
-            <ModeToggle className="af-mode-chip" />
+            <ModeToggle className="af-mode-chip af-topbar-chip" />
+            {/* Language beside it, so switching never means leaving /core for /settings. */}
+            <CoreLanguageChip className="af-mode-chip af-topbar-chip" />
 
             {/*
               The COMPACT form, and only where the visible panel is not already
@@ -2147,17 +2578,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 <span className="af-plan-name af-label">{plan.name}</span>
                 {plan.tokensLeft != null ? (
                   <>
-                    <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString()}</span>
-                    <span className="af-label">{language === 'es' ? 'tokens restantes' : 'tokens left'}</span>
+                    <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString(getAppIntlLocale())}</span>
+                    <span className="af-label">{msg.tokensLeft}</span>
                   </>
                 ) : null}
                 <HelpDot
-                  title={language === 'es' ? 'Tokens del plan' : 'Plan tokens'}
-                  body={
-                    language === 'es'
-                      ? 'Tu plan incluye una cantidad mensual de solicitudes a Chimmy: calificaciones, proyecciones y recomendaciones. Se renueva en tu fecha de facturación.'
-                      : 'Your plan includes a monthly allowance of Chimmy requests — grades, projections and recommendations. Resets on your billing date.'
-                  }
+                  title={msg.planTokens}
+                  body={msg.planTokensBody}
                 />
               </span>
             ) : null}
@@ -2177,16 +2604,16 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           {active === 'home' ? (
             <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry">
               <div className="af-core-bracket-promo-copy">
-                <p className="af-core-bracket-promo-kicker">{language === 'es' ? 'LIGAS DE BRACKETS' : 'BRACKET LEAGUES'}</p>
-                <h2 id="af-core-bracket-promo-title">{language === 'es' ? 'Crea un bracket. Invita a tus amigos.' : 'Build a bracket. Bring your friends.'}</h2>
-                <p>{language === 'es' ? 'Elige ganadores, comparte tus picks y compite en la clasificación.' : 'Pick winners, share your bracket, and climb the leaderboard.'}</p>
+                <p className="af-core-bracket-promo-kicker">{msg.bracketKicker}</p>
+                <h2 id="af-core-bracket-promo-title">{msg.bracketTitle}</h2>
+                <p>{msg.bracketBody}</p>
               </div>
               <div className="af-core-bracket-promo-actions">
                 <Link href="/brackets" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
-                  {language === 'es' ? 'Explorar y crear' : 'Explore and create'}
+                  {msg.bracketExplore}
                 </Link>
                 <Link href="/brackets/join" className="af-core-bracket-promo-browse">
-                  {language === 'es' ? 'Unirme a una liga' : 'Join a league'}
+                  {msg.bracketJoin}
                 </Link>
               </div>
             </section>
@@ -2199,11 +2626,17 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             It LINKS to /core/notifications rather than asking for permission itself; there
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
-          {active === 'home' ? <GameDayAlertsBanner /> : null}
-          {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
-          {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
-          {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
-          <CoreWelcomeTour leagueCount={leagues.length} />
+          {/*
+            The optional prompts queue for ONE slot on home (HomePromptSlot) instead of stacking
+            up to four deep above the content. Off home the slot is disabled; the tour shows on home only.
+          */}
+          <HomePromptSlot enabled={active === 'home'}>
+            {active === 'home' ? <GameDayAlertsBanner /> : null}
+            {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
+            {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} initialSport={props.teamFollowPromptSport} /> : null}
+            {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
+            {active === 'home' ? <CoreWelcomeTour leagueCount={leagues.length} /> : null}
+          </HomePromptSlot>
           {/*
             The VISIBLE button, on the /core home screen: a real action row
             above the dashboard rather than a chip in the chrome. This is the
@@ -2267,7 +2700,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       ) : null}
       {/* ── Phone bottom bar ────────────────────────────────────────── */}
       {props.leagueFirst ? (
-        <nav className="af-tabbar" aria-label={language === 'es' ? 'Principal' : 'Main'}>
+        <nav className="af-tabbar" aria-label={msg.mainNavAria}>
           <Link
             href="/core"
             className="af-tabbar-item"
@@ -2275,7 +2708,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             data-active={active !== 'live' && !mobileMoreOpen}
             aria-current={active !== 'live' && !mobileMoreOpen ? 'page' : undefined}
           >
-            <span className="af-tabbar-glyph" aria-hidden>▣</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="home" size={20} /></span>
             <span className="af-tabbar-label">{copy('Leagues')}</span>
           </Link>
           <Link
@@ -2288,7 +2721,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             aria-label={props.liveGameCount && props.liveGameCount > 0 ? `Live, ${props.liveGameCount} ${props.liveGameCount === 1 ? 'game' : 'games'} in progress` : undefined}
           >
             <span className="af-tabbar-glyph" aria-hidden>
-              ●
+              <CoreNavIcon navKey="live" size={20} />
               {props.liveGameCount && props.liveGameCount > 0 ? <span className="af-tabbar-dot" data-tone="live" /> : null}
             </span>
             <span className="af-tabbar-label">{copy('Live')}</span>
@@ -2298,7 +2731,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             className="af-tabbar-item af-tabbar-chimmy"
             onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: { tab: 'chimmy' } }))}
           >
-            <span className="af-tabbar-glyph" aria-hidden>✦</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="chimmy" size={20} /></span>
             <span className="af-tabbar-label">Chimmy</span>
           </button>
           <button
@@ -2312,7 +2745,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               setMobileMoreOpen((open) => !(open && mobileSheet === 'play'))
             }}
           >
-            <span className="af-tabbar-glyph" aria-hidden>⊕</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="play" size={20} /></span>
             <span className="af-tabbar-label">{copy('Play')}</span>
           </button>
           <button
@@ -2327,27 +2760,44 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               setMobileMoreOpen((open) => !(open && mobileSheet === 'me'))
             }}
           >
-            <span className="af-tabbar-glyph" aria-hidden>◉</span>
+            <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey="me" size={20} /></span>
             <span className="af-tabbar-label">{copy('Me')}</span>
           </button>
         </nav>
       ) : (
-        <nav className="af-tabbar" aria-label={language === 'es' ? 'Principal' : 'Main'}>
-          {mobileItems.map((item) => (
-            <Link
-              key={item.key}
-              href={item.href}
-              className="af-tabbar-item"
-              data-core-nav=""
-              data-active={item.key === active}
-              aria-current={item.key === active ? 'page' : undefined}
-            >
-              <span className="af-tabbar-glyph" aria-hidden>
-                {item.glyph}
-                {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
-              </span>
-              <span className="af-tabbar-label">{copy(item.label)}</span>
-            </Link>
+        <nav className="af-tabbar" aria-label={msg.mainNavAria}>
+          {mobileItems.map((item, index) => (
+            <Fragment key={item.key}>
+              <Link
+                href={item.href}
+                className="af-tabbar-item"
+                data-core-nav=""
+                data-active={item.key === active}
+                aria-current={item.key === active ? 'page' : undefined}
+              >
+                <span className="af-tabbar-glyph" aria-hidden>
+                  <CoreNavIcon navKey={item.key} size={20} />
+                  {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
+                </span>
+                <span className="af-tabbar-label">{copy(item.label)}</span>
+              </Link>
+              {index === MOBILE_BAR_LEAGUES_AFTER_INDEX ? (
+                <button
+                  type="button"
+                  className="af-tabbar-item"
+                  data-testid="af-tabbar-leagues"
+                  data-active={mobileRailOpen}
+                  aria-expanded={railOpen}
+                  aria-controls="af-rail"
+                  onClick={toggleRail}
+                >
+                  <span className="af-tabbar-glyph" aria-hidden>
+                    <CoreNavIcon navKey="my-leagues" size={20} />
+                  </span>
+                  <span className="af-tabbar-label">{copy('Leagues')}</span>
+                </button>
+              ) : null}
+            </Fragment>
           ))}
           <button
             type="button"
@@ -2359,7 +2809,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             onClick={() => setMobileMoreOpen((open) => !open)}
           >
             <span className="af-tabbar-glyph" aria-hidden>
-              ⋯
+              <CoreNavIcon navKey="more" size={20} />
             </span>
             <span className="af-tabbar-label">{copy('More')}</span>
           </button>
@@ -2372,7 +2822,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             type="button"
             ref={mobileMoreScrimRef}
             className="af-mobile-more-scrim"
-            aria-label={language === 'es' ? 'Cerrar el menú' : 'Close more menu'}
+            aria-label={msg.closeMenu}
             onClick={() => setMobileMoreOpen(false)}
           />
           {/*
@@ -2396,7 +2846,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   {selectedLeagueName ?? (props.scope?.label ? scopeLabelText(props.scope.label, language) : copy('All leagues'))}
                 </strong>
               </span>
-              <button type="button" aria-label={language === 'es' ? 'Cerrar el menú' : 'Close more menu'} onClick={() => setMobileMoreOpen(false)}>
+              <button type="button" aria-label={msg.closeMenu} onClick={() => setMobileMoreOpen(false)}>
                 ×
               </button>
             </header>

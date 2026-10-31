@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
 import { ageText } from '@/lib/core-app/shellCopy'
-import { kickoffText } from '@/lib/core-app/kickoffText'
+import { dashScheduleBandMessages, type DashScheduleBandMessages } from '@/lib/core-app/messages/dashScheduleBand'
 import { realManagerName, rosterLabel } from '@/lib/core-app/managerName'
 
 /**
@@ -41,45 +42,35 @@ export type ScheduleBandViewProps = {
 }
 
 /** Never invent a manager. An unnamed roster says which roster it is. */
-function opponentLabel(o: ScheduleBandCard['opponent'], es: boolean): string {
-  if (!es) return rosterLabel([o.name], o.rosterId)
-  const real = realManagerName(o.name)
-  if (real) return real
-  const id = String(o.rosterId ?? '').trim()
-  return id ? `Equipo ${id}` : 'Rival'
+function opponentLabel(o: ScheduleBandCard['opponent'], t: DashScheduleBandMessages): string {
+  return t.opponent(rosterLabel([o.name], o.rosterId), realManagerName(o.name), String(o.rosterId ?? '').trim())
 }
 
 /** "4m ago" (the page passes describeAge's label) or "synced 4m ago" — the age through shellCopy's `ageText`. */
-function syncText(label: string, language: string): string {
+function syncText(label: string, language: string, t: DashScheduleBandMessages): string {
   const m = label.match(/^synced (.+)$/)
-  return m ? (language === 'es' ? `sincronizado ${ageText(m[1]!, language)}` : label) : ageText(label, language)
+  return m ? t.synced(label, ageText(m[1]!, language)) : ageText(label, language)
 }
 
 export function DashScheduleBandView({ week, kickoff, total, visible, overflow, withoutSchedule, syncLabel }: ScheduleBandViewProps) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
-  const weekLabel = week != null ? (es ? `Semana ${week}` : `Week ${week}`) : es ? 'Esta semana' : 'This week'
+  const t = useMessages(dashScheduleBandMessages)
+  const weekLabel = week != null ? t.week(week) : t.thisWeek
 
   return (
-    <section className="af-core af-sched" aria-label={es ? 'Contra quién juegas esta semana' : 'Who you play this week'}>
+    <section className="af-core af-sched" aria-label={t.whoYouPlayThisWeek}>
       <div className="af-sched-head">
         <span className="af-label af-sched-kicker">
-          {weekLabel} · {es ? 'contra quién juegas' : 'who you play'}
+          {weekLabel} · {t.whoYouPlay}
         </span>
         {/* One "?" for the ELIM chip, at the heading — the cards are links, and a tip may not sit in one. */}
         {visible.some((m) => m.elimination) ? <TopicTip topic="eliminationFormat" /> : null}
         <span className="af-sched-when af-num">
           {[
-            es
-              ? total === 1
-                ? '1 enfrentamiento'
-                : `${total} enfrentamientos`
-              : total === 1
-                ? '1 matchup'
-                : `${total} matchups`,
+            total === 1 ? t.oneMatchup : t.matchups(total),
             /* "next", not "first": only a FUTURE kickoff is shown, and on a Monday that is the
                Monday-night game, not the week's first (it read "first kickoff Sep 28" for week 3). */
-            kickoff ? (es ? `próximo inicio ${kickoffText(kickoff, 'es')}` : `next kickoff ${kickoff}`) : null,
+            kickoff ? t.nextKickoff(kickoff) : null,
           ]
             .filter(Boolean)
             .join(' · ')}
@@ -91,7 +82,7 @@ export function DashScheduleBandView({ week, kickoff, total, visible, overflow, 
           <Link key={m.key} className="af-sched-card" href={m.href}>
             <span className="af-sched-league">{m.leagueName}</span>
             <span className="af-sched-vs">
-              vs <b>{opponentLabel(m.opponent, es)}</b>
+              vs <b>{opponentLabel(m.opponent, t)}</b>
             </span>
             <span className="af-sched-plat af-num">
               {/*
@@ -110,20 +101,14 @@ export function DashScheduleBandView({ week, kickoff, total, visible, overflow, 
 
       <p className="af-sched-foot af-num">
         {[
-          overflow > 0 ? (es ? `+${overflow} más` : `+${overflow} more`) : null,
+          overflow > 0 ? t.more(overflow) : null,
           /*
            * Leagues whose schedule we hold nothing for — stated, not hidden,
            * so "6 matchups" on a 61-league account reads as coverage rather
            * than as a claim that the other 55 have no games.
            */
-          withoutSchedule > 0
-            ? es
-              ? withoutSchedule === 1
-                ? 'aún sin calendario para tu otra liga'
-                : `aún sin calendario para tus otras ${withoutSchedule} ligas`
-              : `no schedule yet for your other ${withoutSchedule} ${withoutSchedule === 1 ? 'league' : 'leagues'}`
-            : null,
-          syncLabel ? syncText(syncLabel, language) : null,
+          withoutSchedule > 0 ? t.noSchedule(withoutSchedule) : null,
+          syncLabel ? syncText(syncLabel, language, t) : null,
         ]
           .filter(Boolean)
           .join(' · ')}
@@ -131,7 +116,7 @@ export function DashScheduleBandView({ week, kickoff, total, visible, overflow, 
           <>
             {' '}
             <Link className="af-sched-all" href="/core/week">
-              {es ? 'Abrir tu semana' : 'Open your week'}
+              {t.openYourWeek}
             </Link>
           </>
         ) : null}

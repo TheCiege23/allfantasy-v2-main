@@ -52,7 +52,9 @@ export async function appendPickToRosterDraftSnapshot(
   })
   if (!roster) return
   const data = (roster.playerData as Record<string, unknown>) ?? {}
-  const draftPicks = (data.draftPicks as AssignedPlayer[]) ?? []
+  const draftPicks = Array.isArray(data.draftPicks) ? (data.draftPicks as AssignedPlayer[]) : []
+  // Completion can materialize the final pick before a caller appends its live snapshot.
+  if (draftPicks.some((existing) => playerKey(existing) === playerKey(player))) return
   draftPicks.push(player)
   await prisma.roster.update({
     where: { id: rosterId },
@@ -235,8 +237,12 @@ export function addFollowUpDraftPlayers(
         ? (raw as Record<string, Array<Record<string, unknown>>>)
         : {}
     const listed = new Set(Array.isArray(playerData.players) ? (playerData.players as unknown[]).map(String) : [])
+    for (const entries of Object.values(sections)) {
+      if (Array.isArray(entries)) for (const entry of entries) if (entry?.id) listed.add(String(entry.id))
+    }
     const bench = [...(sections.bench ?? [])]
-    for (const p of added) {
+    // A live snapshot may already contain the pick before completion; it still needs a lineup slot.
+    for (const p of players) {
       const id = String(p.playerId ?? '').trim()
       if (!id || listed.has(id)) continue
       bench.push({ id, name: p.playerName, position: String(p.position || 'UTIL').toUpperCase(), team: p.team ?? null })

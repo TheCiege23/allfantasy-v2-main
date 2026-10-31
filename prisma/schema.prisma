@@ -3343,7 +3343,7 @@ model LeaguePlayerWeeklyScore {
   /// (contracts/rolling-insights/ENDPOINTS.yaml, `stat_corrections`), so a score is still
   /// moving well after the whistle. Only a reconcile pass past that window may set this.
   isFinalized Boolean  @default(false)
-  /// Which platform reported it — 'sleeper' today; espn/yahoo would each add their own.
+  /// Which platform reported it: 'sleeper' (scheduled), or 'fantrax' (manual browser-download import only).
   source      String   @db.VarChar(16)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -3956,6 +3956,7 @@ model AppUser {
   creatorProfile                           CreatorProfile?
   devyImportSessionsCommissioned           DevyImportSession[]                    @relation("DevyImportSessionCommissioner")
   discordGuildLinks                        DiscordGuildLink[]
+  teamCoOwnerships                        TeamCoOwner[]
   draftAutopickSettings                    DraftAutopickSetting[]
   liveDraftAutopickPreferences             LiveDraftAutopickPreference[]
   draftRoomChatMessages                    DraftRoomChatMessage[]
@@ -3982,6 +3983,12 @@ model AppUser {
   platformChatThreadMemberships            PlatformChatThreadMember[]
   platformChatThreadsCreated               PlatformChatThread[]                   @relation("PlatformChatThreadCreator")
   platformMessageReports                   PlatformMessageReport[]                @relation("PlatformMessageReportReporter")
+  communityPosts                           CommunityPost[]                        @relation("CommunityPostAuthor")
+  communityReplies                         CommunityReply[]                       @relation("CommunityReplyAuthor")
+  communityReactions                       CommunityReaction[]                    @relation("CommunityReactionUser")
+  communityReports                         CommunityReport[]                      @relation("CommunityReportReporter")
+  communityIdeaVotes                       CommunityIdeaVote[]                    @relation("CommunityIdeaVoter")
+  findLeagueSpotRequests                   FindLeagueSpotRequest[]                @relation("FindLeagueSpotRequester")
   platformNotifications                    PlatformNotification[]
   platformUserReportsAgainst               PlatformUserReport[]                   @relation("PlatformUserReportReported")
   platformUserReportsCreated               PlatformUserReport[]                   @relation("PlatformUserReportReporter")
@@ -4621,10 +4628,12 @@ model PlayoffBracketChallenge {
 }
 
 model PlayoffBracketEntry {
-  id          String                  @id @default(cuid())
-  challengeId String                  @map("challenge_id")
-  userId      String                  @map("user_id")
-  name        String
+  id                    String                  @id @default(cuid())
+  challengeId           String                  @map("challenge_id")
+  userId                String                  @map("user_id")
+  name                  String
+  finalizedAt           DateTime?               @map("finalized_at")
+  tiebreakerTotalScore  Int?                    @map("tiebreaker_total_score")
   createdAt   DateTime                @default(now()) @map("created_at")
   updatedAt   DateTime                @updatedAt @map("updated_at")
   challenge   PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -4634,6 +4643,7 @@ model PlayoffBracketEntry {
   @@index([challengeId])
   @@index([userId])
   @@index([challengeId, userId])
+  @@index([challengeId, finalizedAt])
   @@map("playoff_bracket_entries")
 }
 
@@ -6533,6 +6543,7 @@ model League {
   dispersalDrafts                       DispersalDraft[]
   dynastyConfig                         DynastyLeagueConfig?
   findLeagueListings                    FindLeagueListing[]
+  findLeagueSpotRequests                FindLeagueSpotRequest[]
   guillotineAiInsights                  GuillotineAIInsight[]
   guillotineConfig                      GuillotineLeagueConfig?
   guillotineSeasons                     GuillotineSeason[]
@@ -6555,6 +6566,7 @@ model League {
   leagueSettings                        LeagueSettings?
   storylines                            LeagueStoryline[]
   teams                                 LeagueTeam[]
+  teamCoOwners                          TeamCoOwner[]
   waiverSettings                        LeagueWaiverSettings?
   bbContest                             BestBallContest?                       @relation("LeagueBestBallContest", fields: [bbContestId], references: [id])
   legacyLeague                          LegacyLeague?                          @relation(fields: [legacyLeagueId], references: [id])
@@ -8225,6 +8237,32 @@ model FindLeagueListing {
   @@map("find_league_listings")
 }
 
+/// A player asking for a spot in a league that plays on another platform (Sleeper, ESPN, …) and
+/// was listed in Find a League by its verified commissioner. The seats live on the other
+/// platform, so there is no join here: the commissioner accepts and sends their own invite.
+/// See lib/public-discovery/externalListing.ts. One row per player per league; asking again
+/// after a decline reopens the same row.
+model FindLeagueSpotRequest {
+  id              String    @id @default(cuid())
+  leagueId        String
+  requesterUserId String
+  message         String?   @db.VarChar(500)
+  /// pending | accepted | declined | withdrawn
+  status          String    @default("pending") @db.VarChar(16)
+  /// The commissioner's reply: their platform invite link, or why not.
+  responseNote    String?   @db.VarChar(500)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  respondedAt     DateTime?
+  league          League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  requester       AppUser   @relation("FindLeagueSpotRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, requesterUserId])
+  @@index([leagueId, status])
+  @@index([requesterUserId, createdAt])
+  @@map("find_league_spot_requests")
+}
+
 model Roster {
   id                   String                     @id @default(uuid())
   leagueId             String
@@ -8255,6 +8293,7 @@ model Roster {
   settings             Json?
   dispersalDraftPasses Boolean                    @default(false)
   devyRights           DevyRights[]
+  coOwners             TeamCoOwner[]
   keeperDeclarations   KeeperDeclaration[]
   redraftDraftPicks    RedraftDraftPick[]
   redraftDraftQueue    RedraftDraftQueue[]
@@ -8277,6 +8316,28 @@ model Roster {
   @@index([leagueId, updatedAt])
   @@index([platformUserId])
   @@map("rosters")
+}
+
+/// A league member invited to help manage one canonical roster. Pending invites grant no access.
+model TeamCoOwner {
+  id              String   @id @default(uuid())
+  leagueId        String
+  rosterId        String
+  userId          String
+  invitedByUserId String
+  rosterOwnerKey  String
+  claimedOwnerId  String?
+  acceptedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  league          League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  roster          Roster   @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  user            AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, userId])
+  @@index([rosterId])
+  @@index([userId, acceptedAt])
+  @@map("team_co_owners")
 }
 
 /// Normalized weekly lineup rows (mirrors `Roster.playerData.lineup_sections`) for scoring queries and audits.
@@ -16030,6 +16091,8 @@ model GuillotineElimination {
   eliminatedAt         DateTime         @default(now())
   season               GuillotineSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
 
+  /// One elimination per team per week: a re-run of a week cannot record it twice (lib/guillotine/guillotineChopAudit.ts).
+  @@unique([seasonId, scoringPeriod, eliminatedRosterId])
   @@index([seasonId, scoringPeriod])
   @@index([leagueId])
   @@map("guillotine_eliminations")
@@ -19673,6 +19736,42 @@ model RookieEligibilityRecord {
   @@map("rookie_eligibility_records")
 }
 
+/// Private Play receipt store. Tokens are AES-GCM encrypted; identity is package-scoped SHA-256.
+/// Ownership survives account deletion to prevent reassigning a previously fulfilled purchase.
+model GooglePlayPurchase {
+  checkoutIntentId String? @unique
+  tokenHash       String @id @db.VarChar(64)
+  tokenCiphertext String
+  ownerId         String?
+  productId       String @db.VarChar(64)
+  sku             String @db.VarChar(64)
+  purchaseType    String @db.VarChar(32)
+  state           String @db.VarChar(64)
+  orderId         String? @db.VarChar(256)
+  revokedAt       DateTime?
+  finalizedAt     DateTime?
+  lastCheckedAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([lastCheckedAt])
+  @@map("google_play_purchases")
+}
+
+/// Checkout authorization retained for delayed payments and interrupted verification.
+model GooglePlayCheckoutIntent {
+  id        String @id @default(uuid())
+  userId    String
+  sku       String @db.VarChar(64)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("google_play_checkout_intents")
+}
+
 /// Dispersal draft (lib/dispersal-draft): an orphaned or dissolved team's assets drafted by the rest of
 /// the league. These models describe tables that already exist — created by migration
 /// 20260410143800_fix_schema_drift under their older "supplemental" names — and were missing from this
@@ -19792,4 +19891,119 @@ model DispersalDraftParticipant {
   @@unique([draftId, userId])
   @@index([draftId])
   @@map("dispersal_draft_participants")
+}
+
+/// Clubhouse — the public community board (lib/community/). A post lives in one fixed
+/// channel (lib/community/channels.ts); `channel` is a slug, not an FK, so adding a
+/// channel is a code change rather than a migration.
+///
+/// `replyCount` and `lastActivityAt` are denormalized so a channel list sorts and counts
+/// without a join; both are written in the same transaction as the reply that moves them.
+/// A removed post keeps its row (`removedAt`) so a moderation decision can be reviewed
+/// and reversed, and so reply notifications already sent do not point at nothing.
+model CommunityPost {
+  id              String           @id @default(uuid())
+  channel         String           @db.VarChar(32)
+  authorUserId    String
+  title           String           @db.VarChar(160)
+  body            String
+  tags            String[]         @default([])
+  isPinned        Boolean          @default(false)
+  isLocked        Boolean          @default(false)
+  replyCount      Int              @default(0)
+  lastActivityAt  DateTime         @default(now())
+  editedAt        DateTime?
+  removedAt       DateTime?
+  removedByUserId String?
+  /// "post", or "idea" for a League Lab idea (the idea* columns below apply only to those).
+  kind            String           @default("post") @db.VarChar(16)
+  /// Null while an idea is open; then "under_review" | "building" | "shipped", set by staff.
+  ideaStatus      String?          @db.VarChar(16)
+  ideaStatusAt    DateTime?
+  /// { hook, sport, teamSize, draftType } from the short idea form.
+  ideaDetails     Json?
+  /// Denormalised count of CommunityIdeaVote rows, so the board can sort by it.
+  upvoteCount     Int              @default(0)
+  /// Set only on threads the Clubhouse writes itself ("prompt:2026-11-02", "news:2026-11-02",
+  /// "gameday:2026-11-02"). Unique, so a cron that fires twice converges on one row.
+  systemKey       String?          @unique @db.VarChar(64)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  author          AppUser          @relation("CommunityPostAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  replies         CommunityReply[]
+  ideaVotes       CommunityIdeaVote[]
+
+  @@index([channel, isPinned, lastActivityAt])
+  @@index([lastActivityAt])
+  @@index([authorUserId, createdAt])
+  @@index([kind, upvoteCount])
+  @@map("community_posts")
+}
+
+/// One upvote per (person, idea).
+model CommunityIdeaVote {
+  id        String        @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime      @default(now())
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      AppUser       @relation("CommunityIdeaVoter", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@map("community_idea_votes")
+}
+
+model CommunityReply {
+  id              String        @id @default(uuid())
+  postId          String
+  authorUserId    String
+  body            String
+  editedAt        DateTime?
+  removedAt       DateTime?
+  removedByUserId String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  post            CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author          AppUser       @relation("CommunityReplyAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@index([authorUserId, createdAt])
+  @@map("community_replies")
+}
+
+/// One row per (person, target, emoji). `targetType` is "post" or "reply"; polymorphic,
+/// so no FK on `targetId` — a reaction outliving its target is harmless and invisible.
+model CommunityReaction {
+  id         String   @id @default(uuid())
+  userId     String
+  targetType String   @db.VarChar(8)
+  targetId   String
+  emoji      String   @db.VarChar(16)
+  createdAt  DateTime @default(now())
+  user       AppUser  @relation("CommunityReactionUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId, emoji])
+  @@index([targetType, targetId])
+  @@map("community_reactions")
+}
+
+/// One report per (reporter, target): reporting twice does not make a thing twice as bad.
+model CommunityReport {
+  id               String    @id @default(uuid())
+  reporterUserId   String
+  targetType       String    @db.VarChar(8)
+  targetId         String
+  reason           String    @db.VarChar(32)
+  details          String?   @db.VarChar(500)
+  status           String    @default("pending") @db.VarChar(16)
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  createdAt        DateTime  @default(now())
+  reporter         AppUser   @relation("CommunityReportReporter", fields: [reporterUserId], references: [id], onDelete: Cascade)
+
+  @@unique([reporterUserId, targetType, targetId])
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@map("community_reports")
 }

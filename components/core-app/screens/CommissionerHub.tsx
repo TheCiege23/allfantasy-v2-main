@@ -38,8 +38,13 @@ import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkfl
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
 import { EliminatedLineups } from '@/components/core-app/commissioner/EliminatedLineups'
+import { FillEmptyStarters } from '@/components/core-app/commissioner/FillEmptyStarters'
+import { AutomationOverview } from '@/components/core-app/commissioner/AutomationOverview'
+import { OffseasonCalendar } from '@/components/core-app/commissioner/OffseasonCalendar'
 import { IrAutoMove } from '@/components/core-app/commissioner/IrAutoMove'
 import { OrphanAuction } from '@/components/core-app/commissioner/OrphanAuction'
+import { FindLeagueListingCard } from '@/components/core-app/commissioner/FindLeagueListingCard'
+import { ExternalListingCard } from '@/components/core-app/commissioner/ExternalListingCard'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { StorylineStudio } from '@/components/core-app/commissioner/StorylineStudio'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
@@ -257,13 +262,19 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
       {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
       {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
+      {/* Open seats → Find a League. Native only: an imported league's seats are filled on its own platform. */}
+      {league.native && data.role === 'commissioner' ? <FindLeagueListingCard leagueId={league.id} /> : null}
+      {!league.native && data.role === 'commissioner' ? <ExternalListingCard leagueId={league.id} /> : null}
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />
       {data.role === 'commissioner' && <CommissionerActionQueue leagueId={league.id} />}
       {data.role === 'commissioner' && <CommissionerWeeklyPlan key={league.id} leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <AutomationOverview leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <OffseasonCalendar leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <NativeAutoSubsCommissioner leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <InactiveManagerCommissioner leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <FillEmptyStarters leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <EliminatedLineups leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <IrAutoMove leagueId={league.id} />}
       {league.native && data.role === 'commissioner' && <OrphanAuction leagueId={league.id} />}

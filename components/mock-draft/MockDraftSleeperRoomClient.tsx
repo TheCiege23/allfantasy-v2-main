@@ -7,9 +7,12 @@ import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { getMockDraftTeamCountOptions } from '@/lib/mock-draft/mockTeamCount'
 import { LayoutGrid, MessageCircle, User, Users } from 'lucide-react'
+import { DraftBoardPreview } from '@/components/app/draft-room/DraftBoardPreview'
 import { DraftMobileTray } from '@/components/app/draft-room/DraftMobileTray'
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import { mockPlayerAssetUrls } from '@/lib/mock-draft/mockPlayerAssets'
+import { parseAfAdpContributions, sortByAfAdp, type MockPoolSort } from '@/lib/mock-draft/mockAfAdpSort'
+import { ADP_LABEL_AF, AF_BLUE, TOOLTIP_AF_ADP, afAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
 
 type EntryStep = 'entry' | 'league' | 'open' | 'draft' | 'complete'
 type DraftMode = 'league' | 'open'
@@ -133,6 +136,11 @@ interface AvailablePlayer {
   position: string
   team: string
   adp: number | null
+  /* AF ADP (lib/adp/afAdp.ts) beside market ADP. Optional so a mock saved before it still restores. */
+  afAdp?: number | null
+  afAdpContributions?: { market: number; imported: number; af: number } | null
+  afAdpImportedSampleSize?: number | null
+  afAdpOwnSampleSize?: number | null
   projectedPts: number
   ownership: number
   injuryStatus: string | null
@@ -575,6 +583,7 @@ export default function MockDraftSleeperRoomClient({
   const [filter, setFilter] = useState('All')
   const [showDrafted, setShowDrafted] = useState(false)
   const [rookiesOnly, setRookiesOnly] = useState(false)
+  const [poolSort, setPoolSort] = useState<MockPoolSort>('adp')
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -720,7 +729,7 @@ export default function MockDraftSleeperRoomClient({
   const filteredPlayers = useMemo(() => {
     if (!draftState) return []
 
-    return draftState.availablePlayers.filter((player) => {
+    const visible = draftState.availablePlayers.filter((player) => {
       if (!showDrafted && draftedIds.has(player.id)) return false
       if (rookiesOnly && !player.isRookie) return false
       if (filter !== 'All' && player.position.toUpperCase() !== filter.toUpperCase()) return false
@@ -730,7 +739,8 @@ export default function MockDraftSleeperRoomClient({
       }
       return true
     })
-  }, [draftState, draftedIds, filter, rookiesOnly, search, showDrafted])
+    return poolSort === 'afAdp' ? sortByAfAdp(visible) : visible
+  }, [draftState, draftedIds, filter, poolSort, rookiesOnly, search, showDrafted])
 
   const onTheClockTeam = useMemo(
     () => draftState?.teams.find((team) => team.slot === draftState.onTheClock) ?? null,
@@ -1107,6 +1117,10 @@ export default function MockDraftSleeperRoomClient({
           headshotUrl,
           teamLogoUrl,
           adp: numberFromUnknown(raw.adp) ?? (nextSettings.sport === 'NBA' ? null : index + 1),
+          afAdp: numberFromUnknown(raw.afAdp),
+          afAdpContributions: parseAfAdpContributions(raw.afAdpContributions),
+          afAdpImportedSampleSize: numberFromUnknown(raw.afAdpImportedSampleSize),
+          afAdpOwnSampleSize: numberFromUnknown(raw.afAdpOwnSampleSize),
           projectedPts: numberFromUnknown(raw.value) ?? (nextSettings.sport === 'NBA' ? 0 : Math.max(0, 250 - index)),
           ownership: numberFromUnknown(raw.timesDrafted) ?? Math.max(10, 95 - index / 4),
           injuryStatus: stringFromUnknown(raw.injuryStatus),
@@ -1751,6 +1765,17 @@ export default function MockDraftSleeperRoomClient({
   function renderDraftBoard() {
     if (!draftState) return null
 
+    const boardNode = <DraftBoardPreview
+      teams={draftState.teams.map((team) => ({
+        id: String(team.slot), slot: team.slot, name: team.managerName + (team.slotPredicted ? ' (predicted)' : ''),
+        avatarUrl: team.avatarUrl, isUser: team.isUser, isCpu: team.isAI, isOrphan: team.isOrphan,
+      }))}
+      picks={draftState.picks.map((pick) => ({ ...pick, rosterId: String(pick.slot) }))}
+      teamCount={draftState.settings.teamCount} rounds={draftState.settings.rounds}
+      draftType={draftState.settings.draftType} sport={draftState.settings.sport}
+      currentOverall={draftState.status === 'drafting' ? draftState.currentPick : null}
+    />
+
     const playerPanel = (
       <div className="flex h-full flex-col bg-[#0c0c1e]">
         {isUserTurn && draftState.settings.speed > 0 ? (
@@ -1868,6 +1893,15 @@ export default function MockDraftSleeperRoomClient({
               <input type="checkbox" checked={rookiesOnly} onChange={(event) => setRookiesOnly(event.target.checked)} />
               Rookies Only
             </label>
+            <label className="inline-flex items-center gap-2" title={TOOLTIP_AF_ADP}>
+              <input
+                type="checkbox"
+                checked={poolSort === 'afAdp'}
+                onChange={(event) => setPoolSort(event.target.checked ? 'afAdp' : 'adp')}
+                data-testid="mock-draft-sort-af-adp"
+              />
+              Sort by <span style={{ color: AF_BLUE }}>{ADP_LABEL_AF}</span>
+            </label>
           </div>
         </div>
 
@@ -1920,7 +1954,28 @@ export default function MockDraftSleeperRoomClient({
                 {player.injuryStatus ? (
                   <span className="text-[11px] font-black text-red-300">{player.injuryStatus}</span>
                 ) : null}
-                <div className="text-[11px] font-mono text-white/40">{player.adp?.toFixed(1) ?? '\u2014'}</div>
+                <div className="flex shrink-0 flex-col items-end leading-tight">
+                  <span
+                    className="text-[11px] font-mono text-white/40"
+                    title={systemAdpCellTitle(player.adp != null)}
+                    data-testid={`mock-draft-player-adp-${player.id}`}
+                  >
+                    {player.adp?.toFixed(1) ?? '\u2014'}
+                  </span>
+                  <span
+                    className="text-[11px] font-mono font-semibold"
+                    style={player.afAdp != null ? { color: AF_BLUE } : { color: 'rgba(255,255,255,0.3)' }}
+                    title={afAdpCellTitle({
+                      hasValue: player.afAdp != null,
+                      contributions: player.afAdpContributions ?? null,
+                      importedSampleSize: player.afAdpImportedSampleSize ?? null,
+                      ownSampleSize: player.afAdpOwnSampleSize ?? null,
+                    })}
+                    data-testid={`mock-draft-player-af-adp-${player.id}`}
+                  >
+                    AF {player.afAdp != null ? player.afAdp.toFixed(1) : '\u2014'}
+                  </span>
+                </div>
               </button>
               <button
                 type="button"
@@ -2090,105 +2145,12 @@ export default function MockDraftSleeperRoomClient({
 
         <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 max-lg:flex max-lg:min-h-0 max-lg:w-full max-lg:flex-1 max-lg:flex-col max-lg:px-0 max-lg:pb-0 max-lg:pt-2">
           {recoveredDraft && draftState.status === 'paused' ? <p role="status" className="mb-3 text-sm text-cyan-200 max-lg:px-3">Recovered your mock draft. Review your picks and queue, then tap Resume.</p> : null}
-          <div className="hidden gap-0 overflow-hidden rounded-3xl border border-white/8 bg-[#0c0c1e] lg:grid lg:grid-cols-[260px_minmax(0,1fr)_240px]">
-            <div className="min-h-[78vh] border-r border-white/8">{playerPanel}</div>
-            <div className="min-h-[78vh] overflow-auto">
-              <div className="min-w-[960px]">
-                <div
-                  className="grid border-b border-white/6"
-                  style={{ gridTemplateColumns: `repeat(${draftState.settings.teamCount}, minmax(110px, 1fr))` }}
-                >
-                  {draftState.teams.map((team) => (
-                    <div key={team.slot} className="border-r border-white/6 p-2 text-center">
-                      <div
-                        className={`mx-auto mb-1 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border-2 ${
-                          team.isUser ? 'border-cyan-400' : 'border-white/20'
-                        }`}
-                      >
-                        {team.avatarUrl ? (
-                          <img src={team.avatarUrl} alt={team.managerName} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-violet-500/30 to-cyan-500/30 text-xs font-black text-white">
-                            {team.managerName.slice(0, 1).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-center gap-1">
-                        <div className="truncate text-[11px] font-bold text-white/70">{team.managerName}</div>
-                        <ManagerRoleBadge role={team.isOrphan ? 'orphan' : team.role ?? 'member'} />
-                      </div>
-                      {team.isUser ? <div className="text-[11px] text-cyan-400">YOU</div> : null}
-                      {team.slotPredicted ? <div className="text-[11px] text-amber-300">(predicted)</div> : null}
-                    </div>
-                  ))}
-                </div>
-
-                {Array.from({ length: draftState.settings.rounds }, (_, roundIndex) => {
-                  const round = roundIndex + 1
-                  const orderedTeams = getRoundOrder(draftState.teams, round, draftState.settings.draftType)
-                  return (
-                    <div
-                      key={round}
-                      className="grid border-b border-white/6"
-                      style={{ gridTemplateColumns: `repeat(${draftState.settings.teamCount}, minmax(110px, 1fr))` }}
-                    >
-                      {orderedTeams.map((team, pickIndex) => {
-                        const overallPick = (round - 1) * draftState.settings.teamCount + pickIndex + 1
-                        const pick = draftState.picks.find((entry) => entry.overall === overallPick)
-                        const onClock = draftState.currentPick === overallPick && draftState.status === 'drafting'
-                        return (
-                          <div
-                            key={`${team.slot}-${overallPick}`}
-                            className={`min-h-[52px] border-r border-white/6 p-1.5 transition-all ${
-                              onClock
-                                ? 'bg-cyan-500/15 ring-1 ring-cyan-400/40'
-                                : team.isUser
-                                  ? 'bg-violet-500/5'
-                                  : ''
-                            } ${isUserTurn && !pick ? 'hover:bg-white/[0.04]' : ''}`}
-                          >
-                            <div className="mb-1 text-[11px] text-white/20">
-                              {round}.{String(pickIndex + 1).padStart(2, '0')}
-                            </div>
-                            {pick ? (
-                              <div>
-                                <div className="mb-0.5 flex items-center gap-1.5">
-                                  <PlayerAvatar
-                                    headshotUrl={pick.headshotUrl}
-                                    displayName={pick.playerName}
-                                    teamLogoUrl={pick.teamLogoUrl}
-                                    teamAbbr={pick.team}
-                                    position={pick.position}
-                                    size={24}
-                                  />
-                                  <div className={`inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
-                                    {pick.position}
-                                  </div>
-                                </div>
-                                <div className="truncate text-[11px] font-semibold leading-tight text-white/85">
-                                  {pick.playerName}
-                                </div>
-                                <div className="truncate text-[11px] text-white/30">{pick.team || 'FA'}</div>
-                                {pick.aiReason && !pick.isUser ? (
-                                  <div className="mt-0.5 line-clamp-1 text-[11px] italic leading-tight text-cyan-300/70">
-                                    {pick.aiReason}
-                                  </div>
-                                ) : null}
-                              </div>
-                            ) : onClock ? (
-                              <div className="flex h-8 items-center justify-center">
-                                <div className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
-                              </div>
-                            ) : null}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })}
-              </div>
+          <div className="hidden min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-[#0d1424] lg:flex lg:flex-col" data-testid="mock-draft-desktop-layout">
+            <div className="max-h-[min(50vh,600px)] min-h-[240px] min-w-0 overflow-auto">{boardNode}</div>
+            <div className="grid h-[min(50vh,560px)] min-h-[320px] grid-cols-[minmax(0,1fr)_minmax(320px,35%)] border-t border-white/[0.06]">
+              <div className="min-h-0 min-w-0 overflow-hidden border-r border-white/[0.06]">{playerPanel}</div>
+              <div className="min-h-0 min-w-0 overflow-hidden">{rosterAndChatPanel}</div>
             </div>
-            <div className="min-h-[78vh] border-l border-white/8">{rosterAndChatPanel}</div>
           </div>
 
           <div
@@ -2205,67 +2167,8 @@ export default function MockDraftSleeperRoomClient({
                 <span>{draftState.status}</span>
                 {draftState.settings.speed > 0 && isUserTurn ? <span data-testid="mock-draft-clock">{draftState.timerSeconds}s remaining</span> : null}
               </div>
-              <div className="overflow-x-auto">
-                <div className="min-w-[960px]">
-                  <div
-                    className="grid border-b border-white/6"
-                    style={{ gridTemplateColumns: `repeat(${draftState.settings.teamCount}, minmax(110px, 1fr))` }}
-                  >
-                    {draftState.teams.map((team) => (
-                      <div key={team.slot} className="border-r border-white/6 p-2 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <div className="truncate text-[11px] font-bold text-white/70">{team.managerName}</div>
-                          <ManagerRoleBadge role={team.isOrphan ? 'orphan' : team.role ?? 'member'} />
-                        </div>
-                        {team.isUser ? <div className="text-[11px] text-cyan-400">YOU</div> : null}
-                      </div>
-                    ))}
-                  </div>
-                  {Array.from({ length: draftState.settings.rounds }, (_, roundIndex) => {
-                    const round = roundIndex + 1
-                    const orderedTeams = getRoundOrder(draftState.teams, round, draftState.settings.draftType)
-                    return (
-                      <div
-                        key={round}
-                        className="grid border-b border-white/6"
-                        style={{ gridTemplateColumns: `repeat(${draftState.settings.teamCount}, minmax(110px, 1fr))` }}
-                      >
-                        {orderedTeams.map((team, pickIndex) => {
-                          const overallPick = (round - 1) * draftState.settings.teamCount + pickIndex + 1
-                          const pick = draftState.picks.find((entry) => entry.overall === overallPick)
-                          return (
-                            <div key={`${team.slot}-${overallPick}`} className="min-h-[52px] border-r border-white/6 p-1.5">
-                              <div className="mb-1 text-[11px] text-white/20">
-                                {round}.{String(pickIndex + 1).padStart(2, '0')}
-                              </div>
-                              {pick ? (
-                                <>
-                                  <div className="flex items-center gap-1.5">
-                                    <PlayerAvatar
-                                      headshotUrl={pick.headshotUrl}
-                                      displayName={pick.playerName}
-                                      teamLogoUrl={pick.teamLogoUrl}
-                                      teamAbbr={pick.team}
-                                      position={pick.position}
-                                      size={24}
-                                    />
-                                    <div className={`inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
-                                      {pick.position}
-                                    </div>
-                                  </div>
-                                  <div className="truncate text-[11px] font-semibold text-white/85">{pick.playerName}</div>
-                                </>
-                              ) : null}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
+              {boardNode}
             </div>
-
             </div>
 
             <DraftMobileTray

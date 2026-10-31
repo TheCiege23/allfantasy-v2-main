@@ -12,8 +12,11 @@
  * unchanged until its entries are added here.
  *
  * `__tests__/core-app/commissioner-hub-copy.test.tsx` parses every hub component and fails on raw
- * English in JSX, and on any prose literal without Spanish. PURE and client-safe: no imports.
+ * English in JSX, and on any prose literal without Spanish. PURE and client-safe: its one import is
+ * the EN/ES locale catalog.
  */
+
+import { coreLocale } from './messages/coreLocale'
 
 const ES: Record<string, string> = {
   // ── Storyline Studio (components/core-app/commissioner/StorylineStudio.tsx keeps its own strings) ──
@@ -488,5 +491,5 @@ export function hubCopy(english: string | null | undefined, language: string): s
 
 /** The locale dates on the hub are formatted in. */
 export function hubDateLocale(language: string): string {
-  return language === 'es' ? 'es-US' : 'en-US'
+  return coreLocale(language).usLocale
 }

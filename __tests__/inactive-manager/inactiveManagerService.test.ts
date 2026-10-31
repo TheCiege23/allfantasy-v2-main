@@ -18,7 +18,7 @@ const m = vi.hoisted(() => {
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
       $queryRaw: vi.fn(async () => [{ id: 'L' }]),
       league: { findUnique: vi.fn(async (args: { select?: unknown }) => (args.select ? { platform: state.platform, settings: state.settings } : { ...state.league, settings: state.settings, platform: state.platform })) },
-      roster: { findFirst: vi.fn() },
+      roster: { findFirst: vi.fn(), findMany: vi.fn(async () => [] as Array<{ id: string; platformUserId: string | null }>) },
     },
     elevated: vi.fn(async () => true),
     log: vi.fn(async () => ({ id: 'a' })),
@@ -27,8 +27,12 @@ const m = vi.hoisted(() => {
     players: vi.fn(),
     persist: vi.fn(),
     template: vi.fn(async () => ({ slots: [] })),
+    notify: vi.fn(async () => ({})),
+    welcome: vi.fn(),
   }
 })
+vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: m.notify }))
+vi.mock('@/lib/inactive-manager/welcomeBackService', () => ({ buildWelcomeBack: m.welcome }))
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/server/services/permissionService', () => ({ isElevatedCommissioner: m.elevated }))
 vi.mock('@/server/services/auditService', () => ({ logAction: m.log }))
@@ -115,7 +119,23 @@ describe('the owner coming back', () => {
     m.state.settings = { af_managed_lineups: { r1: { since: 'x', byUserId: 'c' }, r2: { since: 'x', byUserId: 'c' } } }
     expect(await endInactiveManagerModeOnOwnerSave('L', 'r1', 'owner')).toBe(true)
     expect(Object.keys(managedMap())).toEqual(['r2'])
-    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: ENDED_ACTION, userId: 'owner', entityId: 'r1', metadata: { rosterId: 'r1', reason: 'owner_saved_lineup' } }))
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: ENDED_ACTION, userId: 'owner', entityId: 'r1', metadata: { rosterId: 'r1', reason: 'owner_saved_lineup', since: 'x', autopilot: false } }))
+  })
+
+  it('sends one welcome-back notice with what was done while they were away', async () => {
+    m.state.settings = { af_managed_lineups: { r1: { since: '2026-10-01T00:00:00.000Z', byUserId: 'c', autopilot: { style: 'balanced', since: '2026-10-01T00:00:00.000Z', byUserId: 'c' } } } }
+    m.welcome.mockResolvedValue({ lineupChanges: 3, claims: 1, en: { headline: 'Welcome back. In the 28 days you were away, Chimmy autopilot set your lineup 3 times and made 1 waiver claim.' } })
+    expect(await endInactiveManagerModeOnOwnerSave('L', 'r1', 'owner')).toBe(true)
+    expect(m.welcome).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L', rosterId: 'r1', since: new Date('2026-10-01T00:00:00.000Z'), autopilot: true }))
+    expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({ userIds: ['owner'], type: 'inactive_manager_welcome_back', body: expect.stringContaining('set your lineup 3 times') }))
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: ENDED_ACTION, metadata: expect.objectContaining({ since: '2026-10-01T00:00:00.000Z', autopilot: true }) }))
+  })
+
+  it("never fails the owner's return when the notice cannot be built", async () => {
+    m.state.settings = { af_managed_lineups: { r1: { since: '2026-10-01T00:00:00.000Z', byUserId: 'c' } } }
+    m.welcome.mockRejectedValue(new Error('db down'))
+    expect(await endInactiveManagerModeOnOwnerSave('L', 'r1', 'owner')).toBe(true)
+    expect(m.notify).not.toHaveBeenCalled()
   })
 
   it('does nothing for a team that is not managed', async () => {
@@ -133,8 +153,12 @@ describe('the view', () => {
       { rosterId: 'r2', teamName: 'B', managerName: 'b', status: 'inactive', lastActionAt: null },
       { rosterId: 'r3', teamName: 'C', managerName: 'c', status: 'active', lastActionAt: null },
     ] })
+    m.prisma.roster.findMany.mockResolvedValueOnce([{ id: 'r1', platformUserId: 'u1' }, { id: 'r2', platformUserId: 'u2' }, { id: 'r3', platformUserId: 'orphan-r3' }])
     const view = await readInactiveManagerView('L')
     expect(view.teams.map((t) => [t.rosterId, t.suggested, Boolean(t.managed)])).toEqual([['r1', true, false], ['r2', false, true], ['r3', false, false]])
+    // Chimmy as a manager: empty seats are marked, and the commissioner sees the limit.
+    expect(view.teams.map((t) => t.emptySeat)).toEqual([false, false, true])
+    expect(view.chimmyLimit).toBe(4)
   })
 })
 
@@ -158,10 +182,30 @@ describe('the hourly run', () => {
     expect(m.players).toHaveBeenCalledWith(expect.objectContaining({ surface: 'roster', leagueId: 'L', userId: 'owner' }))
   })
 
+  it('says Chimmy set the lineup on a team Chimmy runs, and AllFantasy on one it only manages', async () => {
+    m.state.settings = { current_week: 7, af_managed_lineups: { r1: { since: 's', byUserId: 'c', autopilot: { style: 'dynasty_owner', since: 's', byUserId: 'c' } } } }
+    await runInactiveManagerLineups()
+    expect(m.persist.mock.calls[0][0].automationAudit.message).toMatch(/^Chimmy set the best lineup/)
+    m.persist.mockClear()
+    m.state.settings = { current_week: 7, af_managed_lineups: { r1: { since: 's', byUserId: 'c' } } }
+    await runInactiveManagerLineups()
+    expect(m.persist.mock.calls[0][0].automationAudit.message).toMatch(/^AllFantasy set the best lineup/)
+  })
+
   it('writes nothing when the lineup is already the best', async () => {
     m.players.mockResolvedValue([{ id: 'qb', position: 'QB', projectedPoints: 20 }, { id: 'rb-out', position: 'RB', projectedPoints: 15 }, { id: 'rb-good', position: 'RB', projectedPoints: 12 }])
     expect(await runInactiveManagerLineups()).toMatchObject({ set: 0, unchanged: 1 })
     expect(m.persist).not.toHaveBeenCalled()
+  })
+
+  it('benches a starter whose bye week is this week, though his projection says he will score', async () => {
+    m.players.mockResolvedValue([
+      { id: 'qb', position: 'QB', projectedPoints: 20 },
+      { id: 'rb-out', position: 'RB', projectedPoints: 15, product: { byeWeek: 7 } },
+      { id: 'rb-good', position: 'RB', projectedPoints: 12, product: { byeWeek: 9 } },
+    ])
+    expect(await runInactiveManagerLineups()).toMatchObject({ set: 1 })
+    expect(m.persist.mock.calls[0][0].automationAudit.metadata.changes).toEqual([{ slot: 'RB', in: 'rb-good', out: 'rb-out' }])
   })
 
   it('never moves a player whose game has started', async () => {

@@ -1,5 +1,6 @@
 import 'server-only'
 
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { transitionToFinalStage } from './endgameEngine'
 
@@ -96,8 +97,11 @@ export async function findGuillotineSeasonId(
  * 🛑 THIS IS THE CAPABILITY THE AUTOMATION ENGINE NEVER HAD. It would happily chop the same week
  * twice if re-triggered — `guillotineRosterState` is an upsert so the state looked unchanged, but a
  * second `GuillotineElimination` row would have been written for the same period with nothing
- * preventing it. `GuillotineElimination` carries indexes but NO unique constraint, so the database
- * will not catch a duplicate; this check is the only thing that does.
+ * preventing it.
+ *
+ * ⚠ A FAST PATH, NOT THE GUARD. Two runs can both read "not recorded" here before either writes;
+ * `recordChopAudit` repeats this check inside its transaction under a lock on the season row, and
+ * the unique index on (seasonId, scoringPeriod, eliminatedRosterId) backs that up (2026-10-29).
  */
 export async function isPeriodAlreadyRecorded(
   seasonId: string,
@@ -126,80 +130,30 @@ export async function recordChopAudit(input: ChopAuditInput): Promise<ChopAuditR
     return { recorded: false, reason: 'already_recorded' }
   }
 
-  await prisma.$transaction(async (tx) => {
-    for (const c of input.chopped) {
-      await tx.guillotineElimination.create({
-        data: {
-          seasonId,
-          leagueId: input.leagueId,
-          eliminatedRosterId: c.redraftRosterId,
-          eliminatedTeamName: c.teamName,
-          eliminatedOwnerId: c.ownerId,
-          scoringPeriod: input.scoringPeriod,
-          finalScore: c.score,
-          rankAmongActive: c.rankAmongActive,
-          marginBelowSafe: c.marginBelowSafe,
-          /*
-           * ⚠ REAL, WHERE THE OLD ENGINE HARDCODED `false`. `eliminationEngine` always wrote false
-           * because its own tiebreak was inline and it never reported which step decided. The
-           * automation engine runs `resolveTiebreak`, which does — so the audit can finally record
-           * whether a tie was broken, which is exactly the thing a manager disputes.
-           */
-          wasTiebreaker: input.wasTiebreaker,
-        },
+  try {
+    await prisma.$transaction(async (tx) => {
+      /*
+       * 🛑 THE CHECK ABOVE IS NOT ENOUGH ON ITS OWN. Two runs of the same week can both pass it — the
+       * elimination lock expires under a slow run, or two worker replicas reach the week together —
+       * and both would then write the week's eliminations and decrement `currentTeamsActive`. Two
+       * decrements for one chop can tip a season into its final stage a week early.
+       *
+       * So the season row is locked and the check repeated INSIDE the transaction: the second run
+       * waits for the first to commit, then sees its rows and stops. The unique index on
+       * (seasonId, scoringPeriod, eliminatedRosterId) is the database's own backstop.
+       */
+      await tx.$queryRaw`SELECT id FROM guillotine_seasons WHERE id = ${seasonId} FOR UPDATE`
+      const already = await tx.guillotineElimination.findFirst({
+        where: { seasonId, scoringPeriod: input.scoringPeriod },
+        select: { id: true },
       })
-    }
-
-    for (const s of input.standings) {
-      await tx.guillotineSurvivalLog.upsert({
-        where: {
-          seasonId_rosterId_scoringPeriod: {
-            seasonId,
-            rosterId: s.redraftRosterId,
-            scoringPeriod: input.scoringPeriod,
-          },
-        },
-        create: {
-          seasonId,
-          leagueId: input.leagueId,
-          rosterId: s.redraftRosterId,
-          scoringPeriod: input.scoringPeriod,
-          totalScore: s.score,
-          rankAmongActive: s.rankAmongActive,
-          teamsActiveThisPeriod: input.teamsActiveThisPeriod,
-          survivalStatus: s.eliminated ? 'eliminated' : 'survived',
-          marginAboveChopLine: s.marginAboveChopLine,
-          wasInDangerZone: s.wasInDangerZone,
-        },
-        update: {
-          totalScore: s.score,
-          rankAmongActive: s.rankAmongActive,
-          teamsActiveThisPeriod: input.teamsActiveThisPeriod,
-          survivalStatus: s.eliminated ? 'eliminated' : 'survived',
-          marginAboveChopLine: s.marginAboveChopLine,
-          wasInDangerZone: s.wasInDangerZone,
-        },
-      })
-    }
-
-    /*
-     * `currentTeamsActive` is DECREMENTED rather than assigned from the caller's count.
-     *
-     * The caller knows how many teams it scored this period, which is not the same number: a team
-     * with no score row is absent from the standings but is still active. Decrementing by the chop
-     * count keeps the counter tied to the only event that actually changes it, and cannot drift
-     * because a scoring source was incomplete for one week.
-     */
-    await tx.guillotineSeason.update({
-      where: { id: seasonId },
-      data: {
-        currentScoringPeriod: input.scoringPeriod,
-        ...(input.chopped.length
-          ? { currentTeamsActive: { decrement: input.chopped.length } }
-          : {}),
-      },
+      if (already) throw new PeriodAlreadyRecorded()
+      await writeAudit(tx, seasonId, input)
     })
-  })
+  } catch (e) {
+    if (e instanceof PeriodAlreadyRecorded || isUniqueViolation(e)) return { recorded: false, reason: 'already_recorded' }
+    throw e
+  }
 
   /*
    * ── THE FINAL-STAGE TRANSITION, PORTED FROM THE ENGINE BEING DELETED ───────────────────────
@@ -238,4 +192,86 @@ export async function recordChopAudit(input: ChopAuditInput): Promise<ChopAuditR
     survivalRows: input.standings.length,
     finalStageReached,
   }
+}
+
+class PeriodAlreadyRecorded extends Error {}
+
+/** Postgres unique violation, as Prisma reports it. */
+function isUniqueViolation(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'P2002'
+}
+
+async function writeAudit(tx: Prisma.TransactionClient, seasonId: string, input: ChopAuditInput): Promise<void> {
+  for (const c of input.chopped) {
+    await tx.guillotineElimination.create({
+      data: {
+        seasonId,
+        leagueId: input.leagueId,
+        eliminatedRosterId: c.redraftRosterId,
+        eliminatedTeamName: c.teamName,
+        eliminatedOwnerId: c.ownerId,
+        scoringPeriod: input.scoringPeriod,
+        finalScore: c.score,
+        rankAmongActive: c.rankAmongActive,
+        marginBelowSafe: c.marginBelowSafe,
+        /*
+         * ⚠ REAL, WHERE THE OLD ENGINE HARDCODED `false`. `eliminationEngine` always wrote false
+         * because its own tiebreak was inline and it never reported which step decided. The
+         * automation engine runs `resolveTiebreak`, which does — so the audit can finally record
+         * whether a tie was broken, which is exactly the thing a manager disputes.
+         */
+        wasTiebreaker: input.wasTiebreaker,
+      },
+    })
+  }
+
+  for (const s of input.standings) {
+    await tx.guillotineSurvivalLog.upsert({
+      where: {
+        seasonId_rosterId_scoringPeriod: {
+          seasonId,
+          rosterId: s.redraftRosterId,
+          scoringPeriod: input.scoringPeriod,
+        },
+      },
+      create: {
+        seasonId,
+        leagueId: input.leagueId,
+        rosterId: s.redraftRosterId,
+        scoringPeriod: input.scoringPeriod,
+        totalScore: s.score,
+        rankAmongActive: s.rankAmongActive,
+        teamsActiveThisPeriod: input.teamsActiveThisPeriod,
+        survivalStatus: s.eliminated ? 'eliminated' : 'survived',
+        marginAboveChopLine: s.marginAboveChopLine,
+        wasInDangerZone: s.wasInDangerZone,
+      },
+      update: {
+        totalScore: s.score,
+        rankAmongActive: s.rankAmongActive,
+        teamsActiveThisPeriod: input.teamsActiveThisPeriod,
+        survivalStatus: s.eliminated ? 'eliminated' : 'survived',
+        marginAboveChopLine: s.marginAboveChopLine,
+        wasInDangerZone: s.wasInDangerZone,
+      },
+    })
+  }
+
+  /*
+   * `currentTeamsActive` is DECREMENTED rather than assigned from the caller's count.
+   *
+   * The caller knows how many teams it scored this period, which is not the same number: a team
+   * with no score row is absent from the standings but is still active. Decrementing by the chop
+   * count keeps the counter tied to the only event that actually changes it, and cannot drift
+   * because a scoring source was incomplete for one week.
+   */
+  await tx.guillotineSeason.update({
+    where: { id: seasonId },
+    data: {
+      currentScoringPeriod: input.scoringPeriod,
+      ...(input.chopped.length
+        ? { currentTeamsActive: { decrement: input.chopped.length } }
+        : {}),
+    },
+  })
 }

@@ -394,18 +394,21 @@ export async function resolveBestAvailableAutopickCandidate(
 
   let selected: BestAvailableAutopickResolved | null = null
 
-  // Draft as me (AF Commissioner): a live draft's missed pick is made the way this manager drafts.
+  // Draft as me (AF Commissioner league-wide, or the manager's own AF Pro "Draft like me"): a live
+  // draft's missed pick is made the way this manager drafts.
   // Any miss — no plan, no history, no board — falls through to the ordinary autopick below.
   if (draftSession.sessionKind !== 'mock') {
     const { tryDraftAsMePick } = await import('@/lib/draft-room/draftAsMeAutopick')
     const mine = await tryDraftAsMePick({
       leagueId,
+      draftSessionId: draftSession.id,
       rosterId: rid,
       overall: ctx.overallPick,
       board: fallbackPool,
       ownPositions: draftSession.picks.filter((pick) => pick.rosterId === rid).map((pick) => pick.position),
       eligible: draftEligiblePositions,
       aiAdpByKey,
+      sport,
     }).catch(() => null)
     if (mine) {
       return { playerName: mine.playerName, position: mine.position, team: mine.team, playerId: mine.playerId, byeWeek: mine.byeWeek, reason: mine.reason, strategy: 'draft-as-me' }

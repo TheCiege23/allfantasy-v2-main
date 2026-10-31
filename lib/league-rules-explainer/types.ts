@@ -1,0 +1,292 @@
+/**
+ * League rules explainer — shared types. Pure and client-safe.
+ *
+ * Every explanation is DETERMINISTIC, HAND-WRITTEN TEXT: a line is an i18n key from
+ * `lib/i18n/league-rules-copy.ts` plus the values it interpolates. Nothing here is generated, and
+ * nothing here ever renders a raw settings value it does not have a sentence for — an unknown key
+ * is omitted, never shown as JSON.
+ */
+
+/**
+ * The scope of this feature (owner's decision, widened 2026-10-28 from NFL/NBA/NHL redraft and
+ * guillotine): every sport AllFantasy hosts, and every format. A format whose own rules this module has
+ * no sentences for (`specialty`: Survivor, Big Brother, Zombie, tournaments, salary cap…) gets the
+ * basics, scoring and roster only — never a trades, waivers or playoffs line that may not apply to it.
+ */
+export const RULES_EXPLAINER_SPORTS = ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const
+export type RulesSport = (typeof RULES_EXPLAINER_SPORTS)[number]
+export type RulesFormat = 'redraft' | 'guillotine' | 'keeper' | 'dynasty' | 'best_ball' | 'specialty'
+
+/** The concepts the overview names, beyond the format itself (`overview.concept.*`). */
+export const RULES_CONCEPTS = [
+  'devy',
+  'c2c',
+  'survivor',
+  'survivor_guillotine',
+  'big_brother',
+  'zombie',
+  'tournament',
+  'salary_cap',
+  'king_of_the_hill',
+  'pirate_vampire',
+  'royal',
+] as const
+export type RulesConcept = (typeof RULES_CONCEPTS)[number]
+
+export type GuillotineChopStep = { fromWeek: number; chops: number }
+
+/**
+ * A league's explainable rules, in one canonical shape. Built from the league row (and, on the
+ * read path, the roster / scoring / guillotine config tables) by ./snapshot.ts.
+ *
+ * ⚠ THIS IS ALSO WHAT `settings_changed` EVENTS CARRY as `ruleChanges[].before/after`. Every field is
+ * a non-secret league rule a member can already read on the settings page; nothing else may be added
+ * here, because whatever is here is written into `league_events.payload` for every member.
+ */
+export type RuleSnapshot = {
+  sport: string
+  format: RulesFormat | null
+  /** A named concept within the format (Devy within dynasty, Survivor within specialty). */
+  concept?: RulesConcept | null
+  /**
+   * The host platform of an imported league (`sleeper`, `espn`…). Its rules are the platform's: only
+   * the values an import carries are read, and nothing an import does not carry is stated.
+   */
+  importedFrom?: string | null
+  teamCount?: number | null
+  /** Values saved by the tournament feeder settings editor, shown separately from league rules. */
+  feederScoring?: string | null
+  feederRosterSize?: number | null
+  feederBenchSize?: number | null
+  feederWaiverType?: string | null
+  feederFaabBudget?: number | null
+  feederFaabReset?: boolean | null
+  feederTradeDeadline?: number | null
+  feederTradeLockHours?: number | null
+  /** `settings.scoring_mode`: points, h2h_category or roto. */
+  scoringMode?: string | null
+  /** `League.scoring` (e.g. ppr, half_ppr, standard). */
+  scoringPreset?: string | null
+  /** `settings.category_record_mode`: each / most / roto. */
+  categoryRecordMode?: string | null
+  /** Category labels, category leagues only (read path). */
+  categories?: string[] | null
+  /** Effective points per stat for the sport's headline stats (read path). */
+  scoringValues?: Record<string, number> | null
+  /** Roster slot counts by slot key (read path, and the roster settings save). */
+  rosterSlots?: Record<string, number> | null
+  medianGame?: boolean | null
+  playoffTeams?: number | null
+  playoffStartWeek?: number | null
+  playoffWeeksPerRound?: number | null
+  championshipLength?: number | null
+  /** Best-of lengths per round; null = cumulative (no series). NBA / NHL. */
+  playoffSeries?: number[] | null
+  /** Seeds that skip the first round. */
+  playoffByes?: number | null
+  thirdPlaceGame?: boolean | null
+  tradeDeadlineWeek?: number | null
+  /** ISO timestamp of a time-of-day trade deadline (`settings.trade_deadline_at`). */
+  tradeDeadlineAt?: string | null
+  tradeReview?: string | null
+  vetoThreshold?: { mode: 'count' | 'percent'; value: number } | null
+  tradeReviewHours?: number | null
+  waiverType?: string | null
+  waiverBudget?: number | null
+  waiverMinBid?: number | null
+  waiverHours?: number | null
+  /** Processing days of an enabled daily claim schedule (mon…sun). */
+  waiverDays?: string[] | null
+  waiverProcessHour?: number | null
+  /** NBA / NHL only. */
+  lineupMode?: 'daily' | 'weekly' | null
+  /**
+   * When a weekly lineup locks, as the lock enforces it (`readLineupLockSettings`): each player at his
+   * team's first game of the week, the whole lineup at the week's first game, or by the commissioner.
+   * Null for daily lineups (their own line says it) and where no lock is enforced (soccer).
+   */
+  lineupLock?: 'per_player' | 'first_game' | 'manual' | null
+  teamsPerChop?: number | null
+  chopStartWeek?: number | null
+  chopEndWeek?: number | null
+  chopSteps?: GuillotineChopStep[] | null
+  /** Week (as a string key) -> chops that week; 0 = no chop. */
+  chopOverrides?: Record<string, number> | null
+  chopImmunity?: string | null
+  endgame?: string | null
+  tiebreakers?: string[] | null
+  statCorrectionHours?: number | null
+  dangerMarginPoints?: number | null
+  releaseTiming?: string | null
+  faabOnChop?: string | null
+  /** Guilly: claims are held before each waiver run and settled as one blind FAAB auction (fixed by sport). */
+  blindAuction?: boolean | null
+  /** Guilly: best ball — lineups set themselves; each team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
+  bestBallLineups?: boolean | null
+  /** Keeper leagues: `League.keeperCount`, `keeperCostSystem`, `keeperMaxYears`. */
+  keeperCount?: number | null
+  keeperCost?: string | null
+  keeperMaxYears?: number | null
+  /** Dynasty family: whether future picks trade (`isDraftPickTradingAllowed`). */
+  pickTrading?: boolean | null
+  /**
+   * `settings.pick_trade_deadline` (lib/trade-deadline/pickTradeDeadline.ts): `same` (with the trade
+   * deadline), `open` (all season), or the week after which pick-only trades close.
+   */
+  pickTradeDeadline?: 'same' | 'open' | number | null
+  /** `settings.pick_terms_rule.enabled` — protected and conditional picks. */
+  pickTerms?: boolean | null
+  /** Taxi squad (read path: lib/taxi/TaxiSettingsService.ts, the dynasty config). */
+  taxiSlots?: number | null
+  taxiEligibilityYears?: number | null
+  taxiDeadlineWeek?: number | null
+  /** `settings.taxi_max_years` — seasons a player may spend on the taxi squad; null = no limit. */
+  taxiMaxYears?: number | null
+  /** `settings.taxi_stealing` (lib/taxi/taxiStealing.ts): null when off; claims 0 = no limit. */
+  taxiStealing?: { hours: number; claims: number } | null
+  /** Dynasty: how the rookie draft order is set (`DynastyLeagueConfig.rookiePickOrderMethod`; read path). */
+  rookieDraftOrder?: string | null
+  rookieDraftRounds?: number | null
+  /** Dynasty on AllFantasy: seasons ahead a pick can be traded (`DynastyLeagueConfig.futurePicksYearsOut`, 1-5). */
+  pickTradeYears?: number | null
+  /** `linear` | `snake`. */
+  rookieDraftType?: string | null
+  /** Days after an automatic open that the rookie draft starts by itself; null = the commissioner starts it. */
+  rookieDraftAutoStartDays?: number | null
+  /**
+   * The weighted lottery that orders the rookie draft, as the engine runs it (lib/draft-lottery/): set
+   * only when `rookieDraftOrder` is `weighted_lottery`, null otherwise. Audit seeds are never here.
+   */
+  rookieDraftLottery?: RookieDraftLotteryRule | null
+  /** Dynasty: what a confirmed tanking strike costs (lib/integrity/tankingPenalties.ts). */
+  tankingPenalty?: TankingPenaltyRule | null
+  /*
+   * The league's main draft (startup / redraft / keeper / specialty), read by ./loadDraftRules.ts from
+   * the draft session the room runs, else what that session will be created from. Absent for an
+   * imported league and while the current draft is a dynasty rookie draft (the Dynasty section
+   * explains that one).
+   */
+  /** Not a rule: where the draft is. `completed` keeps the section, labelled as done. */
+  draftStatus?: DraftStatus | null
+  /** `snake` | `linear` | `auction`. */
+  draftType?: string | null
+  /** Rounds (an auction: roster spots each team fills). */
+  draftRounds?: number | null
+  /** Seconds per pick (an auction: per bid); null = no clock. */
+  draftPickSeconds?: number | null
+  /** The overnight clock pause, league time; null = none. */
+  draftOvernightPause?: DraftOvernightPause | null
+  /** What happens when a manager's clock runs out (snake / linear with a clock). */
+  draftOnTimeout?: string | null
+  /** How the order is set: weighted_lottery, random, manual, standings, reverse_standings. */
+  draftOrderMethod?: string | null
+  /** Snake only. */
+  draftThirdRoundReversal?: boolean | null
+  /** Auction only. */
+  draftAuctionBudget?: number | null
+  /** Auction only, and not a setting: the auction engine's minimum bid. Never a change. */
+  draftAuctionMinBid?: number | null
+  /** ISO time the draft is scheduled for; null = not scheduled. */
+  draftStartAt?: string | null
+  /** Whether the draft starts by itself at its time. */
+  draftAutostart?: boolean | null
+  /** Who drafts for a team without a manager: `ai` (Chimmy), `cpu`; null = nobody (off). */
+  draftOrphanPicks?: string | null
+  /*
+   * Devy / C2C leagues: the rounds of the main draft set aside for college players, as the pick check
+   * enforces them (lib/live-draft-engine/PickValidation.ts, from `DraftSession.devyConfig` /
+   * `c2cConfig`). In a listed round only a college player can be picked; in every other round a
+   * college player is refused. `[]` = the rule is on with no listed round, so no college player can be
+   * picked at all. Null = no such rule (off, an auction, no session, or not a devy / C2C league). At
+   * most one of the two is set: the engine checks the C2C rounds instead of the devy rounds when both
+   * are on.
+   */
+  /** A devy league's devy rounds (`devyConfig.devyRounds`). */
+  draftDevyRounds?: number[] | null
+  /** A C2C league's college rounds (`c2cConfig.collegeRounds`). */
+  draftCollegeRounds?: number[] | null
+}
+
+export type DraftStatus = 'scheduled' | 'in_progress' | 'completed'
+export type DraftOvernightPause = { from: string; to: string; picksAllowed: boolean }
+
+/**
+ * The rookie lottery as it actually draws (WeightedDraftLotteryEngine / standingsForLottery), not as
+ * the config spells it: `bottom_n`, `all_teams` and `custom` eligibility all take the worst `teams` of
+ * the whole league, `custom_weights` gives every team the same weight, and a `manual` fallback seats
+ * the rest in reverse standings. `picks` is capped at `teams` — the draw cannot place more.
+ * `tiebreak` is which team of a tie in the standings is the worse finish (`applyTiebreak`): the one
+ * that scored fewer points, the lower max PF, or fewer points then a seeded draw. Optional only so a
+ * change stored before it existed still reads.
+ */
+export type RookieDraftLotteryRule = {
+  teams: number
+  picks: number
+  /** `non_playoff`: the worst teams that missed the playoffs; `worst`: the worst teams overall. */
+  pool: 'non_playoff' | 'worst'
+  odds: 'record' | 'points_for' | 'max_pf' | 'equal'
+  rest: 'reverse_standings' | 'reverse_max_pf'
+  tiebreak?: 'points_for' | 'max_pf' | 'random'
+}
+
+/** A dynasty league's tanking penalty as a rule, non-secret. */
+export type TankingPenaltyRule = {
+  enabled: boolean
+  penalty: string
+  atStrike: number
+  pickRound: number
+  lotteryOddsCutPct: number
+  faabPercent: number
+}
+
+/** Every snapshot key that can appear in a change. */
+export type RuleKey = Exclude<keyof RuleSnapshot, 'sport' | 'format' | 'concept' | 'importedFrom' | 'draftStatus' | 'draftAuctionMinBid'>
+
+/**
+ * A value inside a line: plain text / number, a nested translated phrase, a date (formatted in the
+ * viewer's language), or a list of values (joined in the viewer's language).
+ */
+export type RuleVar =
+  | string
+  | number
+  | { k: string; vars?: Record<string, RuleVar> }
+  | { date: string }
+  | { list: RuleVar[] }
+
+export type RuleText = { k: string; vars?: Record<string, RuleVar> }
+
+export type RuleLine = { id: string; text: RuleText }
+
+export type RuleSectionId = 'overview' | 'scoring' | 'roster' | 'lineups' | 'playoffs' | 'trades' | 'waivers' | 'guillotine' | 'keeper' | 'dynasty' | 'draft' | 'feeder'
+
+export type RuleSection = { id: RuleSectionId; title: RuleText; lines: RuleLine[] }
+
+/** One changed rule as stored on a `settings_changed` event. */
+export type RuleChange = { key: string; before: unknown; after: unknown }
+
+/** One explained change: "Trade deadline: Week 12 → Week 13 — trades are allowed one week longer." */
+export type ChangeLine = {
+  key: RuleKey
+  label: RuleText
+  before: RuleText
+  after: RuleText
+  consequence: RuleText | null
+}
+
+/** A `settings_changed` event that carries before/after values. */
+export type SettingsChangeEvent = {
+  id: string
+  createdAt: string
+  actorUserId: string | null
+  changes: RuleChange[]
+}
+
+/** Changes made close together, shown as ONE card. */
+export type ChangeGroup = {
+  /** The newest event in the group — what "seen" is recorded up to. */
+  lastEventId: string
+  firstAt: string
+  lastAt: string
+  eventIds: string[]
+  lines: ChangeLine[]
+}

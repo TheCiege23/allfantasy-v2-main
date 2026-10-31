@@ -47,6 +47,7 @@ import {
 import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
@@ -73,11 +74,15 @@ import type { ProposalCardInput } from '@/lib/share/proposalCard'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { TradeDeadlineCountdownChip } from '@/components/core-app/TradeDeadlineCountdown'
+import { useMessages } from '@/components/i18n/useMessages'
+import { tradeCenterMessages } from '@/lib/core-app/messages/tradeCenter'
+import { PickTradeDeadlineChip, TradeDeadlineCountdownChip } from '@/components/core-app/TradeDeadlineCountdown'
 import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
+import type { PickTradeDeadlineView } from '@/lib/trade-deadline/pickTradeDeadline'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { isBlockingFormatNote } from '@/lib/trade-intel/formatNoteBlocking'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 36a — Trade Center.
@@ -298,7 +303,7 @@ type AnalyzeResult = {
  * cannot price is not worthless, and rendering 0 would say he is.
  */
 function money(v: number | null | undefined): string {
-  return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString() : '—'
+  return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString(getAppIntlLocale()) : '—'
 }
 
 /**
@@ -315,7 +320,7 @@ function totalOf(lines: Line[]): string {
     .map(valueOf)
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
   if (priced.length === 0) return '—'
-  return priced.reduce((a, b) => a + b, 0).toLocaleString()
+  return priced.reduce((a, b) => a + b, 0).toLocaleString(getAppIntlLocale())
 }
 
 /**
@@ -553,6 +558,8 @@ export function TradeCenter(props: {
   deadlineLabel?: string | null
   /** The enforced deadline as a countdown ("Trade deadline in 3d 4h" / "Trades closed"). Wins over `deadlineLabel`. */
   deadlineCountdown?: TradeDeadlineCountdown | null
+  /** A dynasty league's separate rule for pick-only trades; null when pick trades follow the deadline. */
+  pickTradeDeadline?: PickTradeDeadlineView | null
   /** Source platform id (sleeper, espn, …) — drives the platform marks. */
   platform?: string | null
   /** Resolved league type key (redraft, dynasty, keeper, …) — scopes the asset legend. */
@@ -595,6 +602,7 @@ export function TradeCenter(props: {
   startWithOfferEntry?: boolean
 }) {
   const language = useOptionalLanguage().language
+  const tcm = useMessages(tradeCenterMessages)
   const depthAccess = props.depthAccess ?? null
   const depthLocked = depthAccess?.unlocked === false
   const [result, setResult] = useState<AnalyzeResult | null>(null)
@@ -1499,7 +1507,7 @@ export function TradeCenter(props: {
       myLetter: letter(yourGrade),
       theirLetter: letter(theirGrade),
       score: typeof result.fairnessScore === 'number' ? Math.max(0, Math.min(100, result.fairnessScore)) : null,
-      language: language === 'es' ? 'es' : 'en',
+      language: coreLang(language),
       verdict: clip(copy(result.labels?.fairnessLabel ?? 'Graded')),
       basis: (result.valueBasis?.label ?? result.grade?.basis ?? 'League value').slice(0, 100),
       asOf: result.evaluationReceipt?.status === 'saved' ? result.evaluationReceipt.evaluatedAt : analyzedAt ?? new Date().toISOString(),
@@ -1680,6 +1688,7 @@ export function TradeCenter(props: {
           ) : props.deadlineLabel ? (
             <span className="af-tc-chip af-tc-chip--deadline">{props.deadlineLabel}</span>
           ) : null}
+          <PickTradeDeadlineChip view={props.pickTradeDeadline} className="af-tc-chip af-tc-chip--deadline" />
         </div>
       ) : null}
 
@@ -1831,7 +1840,7 @@ export function TradeCenter(props: {
             {balance?.diff != null && balance.diff !== 0 ? (
               <span className="af-tc-stepbar-delta" data-tone={balance.diff > 0 ? 'good' : 'bad'}>
                 {balance.diff > 0 ? '+' : '−'}
-                {Math.abs(balance.diff).toLocaleString()}
+                {Math.abs(balance.diff).toLocaleString(getAppIntlLocale())}
               </span>
             ) : null}
           </span>
@@ -2181,7 +2190,7 @@ export function TradeCenter(props: {
       <section className="af-tc-review" data-mstep="review" aria-label={copy('Trade summary')}>
         {([
           { side: 'give' as const, title: copy('You send'), lines: give },
-          { side: 'get' as const, title: `${copy('You get')}${partnerRoster ? ` · ${language === 'es' ? 'de' : 'from'} ${theirLabel}` : ''}`, lines: get },
+          { side: 'get' as const, title: `${copy('You get')}${partnerRoster ? ` · ${tcm.fromPartner} ${theirLabel}` : ''}`, lines: get },
         ]).map((s) => (
           <div key={s.side} className="af-tc-review-side">
             <div className="af-tc-review-head">
@@ -2254,7 +2263,7 @@ export function TradeCenter(props: {
                 ? copy('Nothing priced on one side')
                 : balance.diff === 0
                   ? copy('Even on priced value')
-                  : `${balance.diff > 0 ? '+' : '−'}${Math.abs(balance.diff).toLocaleString()} ${copy('to you')} · ${balance.pct}% ${copy('apart')}`}
+                  : `${balance.diff > 0 ? '+' : '−'}${Math.abs(balance.diff).toLocaleString(getAppIntlLocale())} ${copy('to you')} · ${balance.pct}% ${copy('apart')}`}
             </span>
           </div>
           {balance.givePct != null ? (

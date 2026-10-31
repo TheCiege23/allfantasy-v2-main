@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
@@ -240,8 +241,13 @@ export async function POST(req: NextRequest) {
   const rosterById = new Map(seasonRosters.map((r) => [r.id, r]))
   const proposerOwnerId = rosterById.get(proposal.proposerRosterId)?.ownerId
   const receiverOwnerId = rosterById.get(proposal.receiverRosterId)?.ownerId
-  const isProposerOwner = proposerOwnerId === userId
-  const isReceiverOwner = receiverOwnerId === userId
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(proposal.leagueId, userId)
+  const coOwnerRoster = coOwnerRosterId ? await prisma.roster.findFirst({
+    where: { id: coOwnerRosterId, leagueId: proposal.leagueId }, select: { redraftRosterId: true },
+  }) : null
+  const coOwnerRedraftId = coOwnerRoster?.redraftRosterId ?? null
+  const isProposerOwner = proposerOwnerId === userId || proposal.proposerRosterId === coOwnerRedraftId
+  const isReceiverOwner = receiverOwnerId === userId || proposal.receiverRosterId === coOwnerRedraftId
   const isCommissioner = await isCommissionerOrCo(proposal.leagueId, userId)
 
   if (action === 'cancel') {
@@ -519,10 +525,10 @@ export async function POST(req: NextRequest) {
     }
 
     const voteValue = action === 'vote_approve' ? 'approve' : 'veto'
+    const voterRoster = seasonRosters.find((r) => r.ownerId === userId || r.id === coOwnerRedraftId)
     const existingVote = await prisma.redraftTradeVote.findFirst({
-      where: { proposalId: proposal.id, rosterId: seasonRosters.find((r) => r.ownerId === userId)?.id },
+      where: { proposalId: proposal.id, rosterId: voterRoster?.id },
     })
-    const voterRoster = seasonRosters.find((r) => r.ownerId === userId)
     if (!voterRoster) {
       return NextResponse.json({ error: 'No roster found for voter in this season' }, { status: 403 })
     }

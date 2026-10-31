@@ -142,6 +142,24 @@ finals only, so two things are unknown:
 **How to resolve.** Ask the vendor. Or, when a `/live` NHL date containing a shootout game is next
 captured through `scripts/probe.sh`, commit it as a second fixture in the same change.
 
+### ✉️ VENDOR ANSWERED 2026-10-27 (Aidan, Rolling Insights support, by email) — partly resolved
+
+1. **Score: ANSWERED — it includes the shootout winner's extra goal.** Their example: Detroit beat
+   Edmonton 4–3 in a shootout and the final reads 4–3, not 3–3. So a FINAL `/live` NHL box should never
+   show a tie, and `riWinningTeam`'s unequal-score path decides every completed game. The tie-handling
+   branch stays as a guard for in-progress or malformed rows, not as the normal shootout path.
+2. **`quarter_scores`: PARTLY ANSWERED — there is an `SO` section** holding the shootout goals. That is
+   enough to tell a **shootout** loss from a regulation one. Still unanswered: whether an **OT** key
+   exists, so an overtime (non-shootout) loss still cannot be told from a regulation loss, and the
+   shape of the `SO` value (a number per side, or an object) is not captured. Do not derive
+   `overtime_loss` from `SO` alone until a shootout game is in a fixture.
+3. **`shootout_goals` (skater field, 0 in every stored season): NOT ANSWERED.** Treat it as
+   unpopulated; read shootout goals from `quarter_scores.SO` instead once its shape is captured.
+
+Status: score convention RESOLVED (vendor statement, not yet fixture-verified); OT key and `SO` shape
+still OPEN. The cheapest way to close both: the next `scripts/probe.sh` capture of a `/live` NHL date
+with a shootout game, committed as a fixture.
+
 ---
 
 ## Blocking — resolve before shipping that sport
@@ -592,3 +610,22 @@ uses 2025 season totals for NHL skaters only. Goalies are excluded and `so_g` is
 **Open — vendor question, do not probe:** why 2025 goalie W/L/OTL in `/player-stats/2025/NHL` cover about
 half the decisions, and whether `shutouts` is still populated anywhere (`/player-stats` 2025 and 2026,
 `/live` 2026). A re-sync would not help until the vendor answers: we already store what they send.
+
+### ✉️ VENDOR ANSWERED 2026-10-27 (Aidan, Rolling Insights support, by email) — confirmed vendor bugs
+
+- **Goalie W/L: a KNOWN vendor bug, fix in progress.** They are "aware of some inaccuracies with goalie
+  wins and losses for both the current season and last season" and have a development ticket open.
+  The fix includes **backfilling every game from last season (2025)**. This also covers the `/live`
+  2026 games with no goalie credited with the win (68 of 179).
+- **Shutouts: a vendor bug, newly ticketed.** Support confirmed `shutouts` = 0 is a bug and opened a
+  development ticket.
+- **They will email when the goalie fixes are deployed.** No date was given.
+
+**What to do, and when.** Nothing until that email; our derivations (`derivedNhlWin`,
+`derivedNhlShutout` in `lib/scoring-runtime/dailySportStatNormalization.ts`) cover live scoring in
+the meantime. When the fix email arrives: (1) re-run the 2025 NHL season sync
+(`/api/cron/import-stat-lines?sport=NHL&season=2025`), because we store what they sent on
+2026-10-22 and nothing refreshes a finished season on its own; (2) re-measure the table above (wins
+should be ~1,280, shutouts ~115–150); (3) only then consider letting goalies back into the
+prior-season blend (`lib/projections/dailySportSeasonTotals.ts`) and mapping `so_g`. The
+derivations take max(vendor, derived), so a vendor fix can never double-count.

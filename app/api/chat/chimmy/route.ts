@@ -91,6 +91,7 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { buildC2CContextForChimmy } from '@/lib/merged-devy-c2c/ai/c2cContextForChimmy'
 import { buildSalaryCapContextForChimmy } from '@/lib/salary-cap/ai/salaryCapContextForChimmy'
 import { buildDynastyContextForChimmy } from '@/lib/dynasty-core/dynastyContextForChimmy'
+import { buildRuleChangesContextForChimmy } from '@/lib/league-rules-explainer/awarenessService'
 import { buildDynastyWarRoomContextForChimmy } from '@/lib/dynasty-war-room/dynastyChimmyGrounding'
 import { buildKeeperContextForChimmy } from '@/lib/keeper-war-room/keeperChimmyGrounding'
 import { buildBestBallContextForChimmy } from '@/lib/best-ball-war-room/bestBallChimmyGrounding'
@@ -3716,6 +3717,26 @@ ${legacyEnrichmentContext}`
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${salaryCapCtx}`
                   : salaryCapCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              // "What changed in my league?" — the same changes and sentences as the league home's card.
+              const ruleChangesCtx = await buildRuleChangesContextForChimmy(leagueSnapshot.id, planInput.userId)
+              if (ruleChangesCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}\n\n${ruleChangesCtx}`
+                  : ruleChangesCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              // "What does AllFantasy do in my league?" / "Why did my lineup change?" — the automations,
+              // from the same views the Commissioner Hub and the lineup screen show (phase 12).
+              const { buildAutomationContextForChimmy } = await import('@/lib/commissioner-hub/automationChimmyContextService')
+              const automationCtx = await buildAutomationContextForChimmy(leagueSnapshot.id, planInput.userId)
+              if (automationCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}\n\n${automationCtx}`
+                  : automationCtx
               }
             } catch { /* non-fatal */ }
             try {

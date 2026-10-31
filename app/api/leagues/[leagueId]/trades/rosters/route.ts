@@ -1,3 +1,4 @@
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { rosterManagerHandles } from '@/lib/trade-screenshot/managerHandles'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -706,7 +707,8 @@ export async function GET(
    * They are deliberately separate fields. Collapsing them either breaks the
    * counterparty list on imports or breaks the propose gate on natives.
    */
-  const viewerRosterId = rosters.find((r) => r.platformUserId === userId) ?? null
+  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
+  const viewerRosterId = rosters.find((r) => r.platformUserId === userId || r.id === coOwnerRosterId) ?? null
 
   // `identityIds` (claimed team + linked Sleeper id) was read in wave one.
   const viewerTeamRosterId =

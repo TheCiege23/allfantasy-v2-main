@@ -22,6 +22,9 @@ import type {
   MatchupSlot,
   MatchupTeam,
 } from '@/lib/core-app/matchup'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { useMessages } from '@/components/i18n/useMessages'
+import { matchupScreenMessages } from '@/lib/core-app/messages/matchupScreen'
 
 /**
  * Screen 5 — Matchup.
@@ -57,36 +60,29 @@ export type MatchupProps = {
  * never-HIGH confidence are `lib/projections/winProbability.ts`. The AF sentence only appears when
  * an AF figure is on screen.
  */
-function BannerTip({ es, showsAf }: { es: boolean; showsAf: boolean }) {
-  const t = es ? 'Cómo leer este marcador' : 'How to read this scoreboard'
+function BannerTip({ showsAf }: { showsAf: boolean }) {
+  const m = useMessages(matchupScreenMessages)
+  const t = m.bannerTipTitle
   return (
     <InfoTip label={t} title={t}>
       <span className="af-info-para">
-        {es
-          /*
-            The tag is quoted AS IT RENDERS — `copy('proj')`, the same lookup the banner uses — so the
-            tip cannot drift from it. It said «proj» while the banner showed «proy.» (live check,
-            2026-10-03).
-          */
-          ? `Los números grandes son los puntos anotados en cuanto juega un titular. Antes de eso son el total final proyectado de cada alineación —la proyección de Sleeper recalculada con la configuración de esta liga—, marcado «${coreUiCopy('proj', 'es')}».`
-          : 'The big numbers are points scored, once any starter has played. Before that they are each lineup’s projected final — Sleeper’s projection, re-scored under this league’s settings — marked “proj”.'}
+        {/*
+          The tag is quoted AS IT RENDERS — `copy('proj')`, the same lookup the banner uses — so the
+          tip cannot drift from it. It said «proj» while the banner showed «proy.» (live check,
+          2026-10-03).
+        */}
+        {m.bannerTipScore(coreUiCopy('proj', 'es'))}
       </span>
       {showsAf ? (
         <span className="af-info-para">
-          {es
-            ? 'AF debajo es el motor propio de AllFantasy con la misma alineación, para comparar.'
-            : 'AF beneath it is AllFantasy’s own engine on the same lineup, for comparison.'}
+          {m.bannerTipAf}
         </span>
       ) : null}
       <span className="af-info-para">
-        {es
-          ? 'La probabilidad de victoria suma los puntos ya anotados y la proyección de cada titular pendiente, con una dispersión medida en puntuaciones semanales reales; una posición vacía o un titular descartado cuenta como cero. Trata a los jugadores como independientes, aunque un mariscal y su receptor anotan juntos, así que tiende a ser demasiado segura: por eso la confianza nunca es ALTA mientras quede alguien por jugar. Si a un titular pendiente le falta la proyección, o no se puede confirmar el estado de un partido, no se muestra un porcentaje en vez de adivinarlo.'
-          : 'Win probability adds the points already scored to each remaining starter’s projection, with a spread measured from real weekly scores; an empty slot or a starter ruled out counts as zero. It treats players as independent — though a quarterback and his receiver score together — so it leans too sure, which is why confidence never reads HIGH while anyone is still to play. If a starter still to play has no projection, or a game’s state can’t be confirmed, no percentage is shown rather than a guess.'}
+        {m.bannerTipWinProbability}
       </span>
       <span className="af-info-para">
-        {es
-          ? 'La etiqueta de abajo es la diferencia entre los dos números grandes: «proyectada» hasta que juega un titular.'
-          : 'The chip below it is the gap between the two big numbers — “Projected” until a starter has played.'}
+        {m.bannerTipChip}
       </span>
     </InfoTip>
   )
@@ -99,28 +95,21 @@ function BannerTip({ es, showsAf }: { es: boolean; showsAf: boolean }) {
  * ⚠ RESTATES `slotEdges` (Sleeper projection before kickoff, scored points live; no tint when either
  * side has no number) and the tally above the board.
  */
-function BoardTip({ es, live }: { es: boolean; live: boolean }) {
-  const t = es ? 'Cómo leer esta tabla' : 'How to read this board'
+function BoardTip({ live }: { live: boolean }) {
+  const m = useMessages(matchupScreenMessages)
+  const t = m.boardTipTitle
   return (
     <InfoTip label={t} title={t}>
       <span className="af-info-para">
         {live
-          ? es
-            ? 'PTS son los puntos de cada jugador esta semana, tal como los anotó la plataforma.'
-            : 'PTS is each player’s points this week, as the platform scored them.'
-          : es
-            ? 'Antes del inicio cada jugador muestra dos proyecciones: SLPR es la de Sleeper, recalculada con la configuración de esta liga; AF es el motor propio de AllFantasy con la misma configuración.'
-            : 'Before kickoff each player shows two projections: SLPR is Sleeper’s, re-scored under this league’s settings; AF is AllFantasy’s own engine on the same settings.'}
+          ? m.boardTipLive
+          : m.boardTipPre}
       </span>
       <span className="af-info-para">
-        {es
-          ? `Cada fila empareja tu titular con el suyo, posición por posición, y se tiñe del lado que la gana${live ? '' : ' según la proyección de Sleeper'}. Sin tinte cuando a un lado le falta el número: no se puede comparar.`
-          : `Each row pairs your starter with theirs, slot by slot, and is tinted on the side winning it${live ? '' : ' on Sleeper’s projection'}. No tint when one side has no number — there is nothing to compare.`}
+        {m.boardTipRows(live)}
       </span>
       <span className="af-info-para">
-        {es
-          ? 'El recuento de arriba cuenta esas posiciones; «de N comparables» significa que en algunas faltaba el número de un lado.'
-          : 'The tally above counts those slots; “of N comparable” means some slots were missing a number on one side.'}
+        {m.boardTipTally}
       </span>
     </InfoTip>
   )
@@ -341,7 +330,7 @@ function Kickoff({ iso }: { iso: string }) {
     const at = new Date(iso)
     if (Number.isNaN(at.getTime())) return
     setLabel(
-      at.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }),
+      at.toLocaleString(getAppIntlLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit' }),
     )
   }, [iso])
   return label ? <time dateTime={iso}>{label}</time> : null
@@ -609,6 +598,7 @@ function columnTotal(slots: MatchupSlot[], key: 'you' | 'opponent', live: boolea
 
 function LineupBoard({ data }: { data: MatchupData }) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(matchupScreenMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   if (!data.lineups.available) {
     return <p className="af-mu-unavailable">{matchupReasonText(data.lineups.reason, language)}</p>
@@ -653,7 +643,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
       */}
       <p className="af-mu-note af-mu-note--lead">
         {live
-          ? language === 'es' ? `Puntos en vivo según ${data.playerScoring.data.source} — ${data.playerScoring.data.playersScored} jugadores registrados.` : `Live points as ${data.playerScoring.data.source} scored them — ${data.playerScoring.data.playersScored} players on file.`
+          ? m.livePoints(data.playerScoring.data.source, data.playerScoring.data.playersScored)
           : matchupReasonText(data.playerScoring.reason, language)}
       </p>
       {/* The key for the per-player markers — only when one is on the board. */}
@@ -669,13 +659,11 @@ function LineupBoard({ data }: { data: MatchupData }) {
         <p className="af-mu-tally" data-leader={tally.you > tally.opponent ? 'you' : tally.you < tally.opponent ? 'opponent' : 'tied'}>
           <span className="af-mu-tally-n af-num" data-side="you">{tally.you}</span>
           <span className="af-mu-tally-label">
-            {language === 'es'
-              ? `posiciones ${live ? 'ganando' : 'proyectadas a favor'} · ${tally.opponent} en contra${tally.even ? ` · ${tally.even} igualadas` : ''}`
-              : `${live ? 'slots winning' : 'slots projected to win'} · ${tally.opponent} losing${tally.even ? ` · ${tally.even} even` : ''}`}
+            {m.tallyLabel(live, tally.opponent, tally.even)}
           </span>
           {tallied < slots.length ? (
             <span className="af-mu-tally-of">
-              {language === 'es' ? `de ${tallied} comparables` : `of ${tallied} comparable`}
+              {m.tallyOf(tallied)}
             </span>
           ) : null}
         </p>
@@ -735,9 +723,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
       */}
       {yours.from < yours.of || theirs.from < theirs.of ? (
         <p className="af-mu-note">
-          {language === 'es'
-            ? `Calculado con ${yours.from} de tus ${yours.of} titulares y ${theirs.from} de sus ${theirs.of}; ambos totales pueden ser bajos en distinta medida.`
-            : `Built from ${yours.from} of your ${yours.of} starters and ${theirs.from} of their ${theirs.of}, so both totals read low — and by different amounts.`}
+          {m.coverage(yours.from, yours.of, theirs.from, theirs.of)}
         </p>
       ) : null}
     </>
@@ -746,6 +732,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
 
 export function Matchup({ data }: MatchupProps) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(matchupScreenMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   /*
    * The two numbers the banner compares: the scored totals when the week has
@@ -1001,9 +988,7 @@ export function Matchup({ data }: MatchupProps) {
             </h2>
           </header>
           <p className="af-mu-basis">
-            {language === 'es'
-              ? 'En una liga Guilly compites contra toda la liga: cada semana se elimina la puntuación más baja, así que no hay un único rival.'
-              : 'In a Guilly league you play the whole field: the lowest score each week is eliminated, so there is no single opponent to face.'}
+            {m.guillyBasis}
           </p>
           <p className="af-mu-basis">
             <Link href={`/core/standings?league=${encodeURIComponent(data.league.id)}`} prefetch={false}>
@@ -1033,7 +1018,7 @@ export function Matchup({ data }: MatchupProps) {
             <div className="af-mu-centre">
               <div className="af-label af-mu-centre-label">
                 {copy('Win probability')}
-                <BannerTip es={language === 'es'} showsAf={!scored && afTotals != null && (afTotals.you != null || afTotals.opponent != null)} />
+                <BannerTip showsAf={!scored && afTotals != null && (afTotals.you != null || afTotals.opponent != null)} />
               </div>
               {data.winProbability.available ? (
                 <>
@@ -1144,7 +1129,7 @@ export function Matchup({ data }: MatchupProps) {
         <header className="af-mu-section-head">
           <h2 className="af-label">{copy('Head to head, slot by slot')}</h2>
           {/* Only over a board: an unavailable lineup renders its reason instead, with nothing to read. */}
-          {data.lineups.available ? <BoardTip es={language === 'es'} live={data.playerScoring.available} /> : null}
+          {data.lineups.available ? <BoardTip live={data.playerScoring.available} /> : null}
         </header>
         <LineupBoard data={data} />
       </section>
@@ -1167,9 +1152,7 @@ export function Matchup({ data }: MatchupProps) {
                 {data.headToHead.ties ? `–${data.headToHead.ties}` : ''}
                 <em className="af-mu-missing-caveat">
                   {' '}
-                  — {language === 'es'
-                    ? `enfrentamientos registrados; último: ${data.headToHead.meetings[0].you.toFixed(1)}–${data.headToHead.meetings[0].them.toFixed(1)} (sem. ${data.headToHead.meetings[0].week})`
-                    : `meetings on file; last: ${data.headToHead.meetings[0].you > data.headToHead.meetings[0].them ? 'W' : data.headToHead.meetings[0].you < data.headToHead.meetings[0].them ? 'L' : 'T'} ${data.headToHead.meetings[0].you.toFixed(1)}–${data.headToHead.meetings[0].them.toFixed(1)} (wk ${data.headToHead.meetings[0].week})`}
+                  — {m.meetingsOnFile(data.headToHead.meetings[0].you, data.headToHead.meetings[0].them, data.headToHead.meetings[0].week)}
                 </em>
               </span>
             </li>
@@ -1198,9 +1181,7 @@ export function Matchup({ data }: MatchupProps) {
                 0 ? (
                   <em className="af-mu-missing-caveat">
                     {' '}
-                    — {language === 'es'
-                      ? `calculado sin ${data.projectedFinal.data.unprojected.you} de tus titulares y ${data.projectedFinal.data.unprojected.opponent} de los suyos; ambos totales pueden ser bajos`
-                      : `built without ${data.projectedFinal.data.unprojected.you} of your starters and ${data.projectedFinal.data.unprojected.opponent} of theirs, so both totals read low`}
+                    — {m.builtWithout(data.projectedFinal.data.unprojected.you, data.projectedFinal.data.unprojected.opponent)}
                   </em>
                 ) : null}
               </span>

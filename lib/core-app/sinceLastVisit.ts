@@ -598,6 +598,11 @@ async function snapshotInjuries(
   for (const r of rosters) {
     if (seenLeague.has(r.leagueId)) continue
     seenLeague.add(r.leagueId)
+    /*
+     * The injury feed read below is NFL's, and Sleeper reuses ids across sports — another sport's
+     * roster id would be named, and given an injury, as the NFL player who shares it.
+     */
+    if (String(r.league?.sport ?? 'NFL').toUpperCase() !== 'NFL') continue
     const pd = (r.playerData ?? {}) as Record<string, unknown>
     for (const id of [...asIds(pd.players), ...asIds(pd.starters), ...asIds(pd.reserve), ...asIds(pd.taxi)]) {
       if (!isResolvableId(id)) continue
@@ -617,7 +622,7 @@ async function snapshotInjuries(
   if (ids.length === 0) return empty
 
   const players = await prisma.sportsPlayer
-    .findMany({ where: { sleeperId: { in: ids } }, select: { sleeperId: true, name: true, position: true, team: true } })
+    .findMany({ where: { sport: 'NFL', sleeperId: { in: ids } }, select: { sleeperId: true, name: true, position: true, team: true } })
     .catch(() => [])
   const playerById = new Map<string, { name: string; position: string | null; team: string | null }>()
   for (const p of players) {

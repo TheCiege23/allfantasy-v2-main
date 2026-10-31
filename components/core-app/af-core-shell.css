@@ -241,8 +241,11 @@
 }
 
 .af-nav-glyph {
+  /* Holds a drawn CoreNavIcon (an inline SVG), not a unicode glyph. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 16px;
-  text-align: center;
   opacity: 0.85;
 }
 .af-nav-label {
@@ -1015,7 +1018,9 @@
     display: grid;
     grid-template-columns: repeat(6, 1fr);
     gap: 2px;
-    padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    /* Side insets too: in landscape on a notched phone the end tabs sat under the notch. */
+    padding: 6px calc(6px + env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px))
+      calc(6px + env(safe-area-inset-left, 0px));
     background: color-mix(in srgb, var(--surface2) 92%, transparent);
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
@@ -1051,6 +1056,7 @@
 
   .af-core .af-tabbar-glyph {
     position: relative;
+    display: inline-flex;
     font-size: 15px;
     line-height: 1;
   }
@@ -1511,6 +1517,27 @@
   text-align: left;
 }
 
+/*
+ * The ↕ between a Survivor league and its Exile Island (AfCoreShell pairs the rows). Centred under
+ * the 42px crest in both rail states: the collapsed rail centres everything, and the open row puts
+ * the crest 8px in, so its centre is 29px from the edge.
+ */
+.af-rail-exile-link {
+  flex: none;
+  width: 100%;
+  margin: -4px 0;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  color: var(--accent);
+}
+
+.af-shell[data-rail-open='true'] .af-rail-exile-link {
+  padding-left: 23px;
+  text-align: left;
+}
+
 .af-shell[data-rail-open='true'] .af-rail-tile {
   display: flex;
   align-items: center;
@@ -1780,6 +1807,17 @@
  * projections; "14th of 18" with no basis presents a projected ordering as a
  * played one.
  */
+/* An elimination league's chop line: the lowest team other than you, on the same basis as the rank. */
+.af-core .af-rail-row-rank-low {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text2);
+}
+
 .af-core .af-rail-row-rank-basis {
   flex-basis: 100%;
   font: 500 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
@@ -1787,15 +1825,12 @@
   color: var(--faint);
 }
 
-/* ── the mobile handle and tray ────────────────────────────────────────── */
+/* ── the mobile tray ─────────────────────────────────────────────────── */
 
 /*
- * Desktop never shows the handle: the rail is always visible there and its own
- * header carries the toggle.
+ * The floating "Leagues" handle that used to open this tray is gone (2026-10-29):
+ * the phone bar's Leagues tab opens it, and its ✕ header row closes it.
  */
-.af-core .af-rail-handle {
-  display: none;
-}
 
 @media (max-width: 720px) {
   /*
@@ -1807,40 +1842,6 @@
    * a sibling block equivalent and impossible to get wrong. See CLAUDE.md.
    */
 
-  .af-core .af-rail-handle {
-    position: fixed;
-    left: 12px;
-    top: auto;
-    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
-    z-index: 60;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 0 12px;
-    border: 1px solid var(--accent-line);
-    border-radius: 999px;
-    background: var(--accent);
-    color: var(--accent-ink);
-    cursor: pointer;
-    /* This is the only way into the league list on a phone. */
-    min-width: 44px;
-    max-width: min(58vw, 240px);
-    min-height: 44px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-  }
-
-  .af-core .af-rail-handle-text {
-    font: 800 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    writing-mode: horizontal-tb;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   /*
    * The rail leaves the flow. Its grid track then has no in-flow content and
    * collapses to zero on its own, so the content row keeps the space.
@@ -1851,7 +1852,8 @@
     z-index: 59;
     flex-direction: column;
     align-items: stretch;
-    padding: max(16px, env(safe-area-inset-top)) 14px calc(132px + env(safe-area-inset-bottom));
+    /* The tray covers the tab bar (z 59 over 40); nothing floats over its foot now, so no 132px reserve. */
+    padding: max(16px, env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
     overscroll-behavior: contain;
     background: var(--rail);
     border-right: 0;
@@ -2527,6 +2529,118 @@ html[data-mode='light'] .af-core {
   }
 }
 
+/*
+ * "Show N hidden leagues" — the last row of the scroller, not the foot: it belongs with the leagues
+ * it stands in for. It borrows the foot tiles' icon + two-line copy, so it repeats their expanded
+ * layout here (those rules are scoped to `.af-rail-foot`). Collapsed, it is a square showing the count.
+ */
+.af-core .af-rail-tile.af-rail-hidden-link {
+  flex: 0 0 auto;
+  margin-top: 6px;
+  background: var(--chip);
+  border-color: var(--chip-line);
+  color: var(--muted);
+}
+
+.af-core .af-rail-hidden-link .af-rail-foot-icon {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+@media (min-width: 721px) {
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-tile.af-rail-hidden-link,
+  .af-core.af-shell[data-rail-open='true'] .af-rail-tile.af-rail-hidden-link {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    padding: 6px 8px;
+  }
+}
+
+@media (max-width: 720px) {
+  .af-core .af-rail-tile.af-rail-hidden-link {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;
+    padding: 8px 12px;
+  }
+}
+
+/*
+ * Every league hidden: this row is the whole tray, so it reads as the primary thing to do.
+ * Specific enough to beat the open tray's card rule (`[data-rail-open='true'] .af-rail-scroll
+ * .af-rail-tile`, later in this file), which would otherwise repaint the border `--line`.
+ */
+.af-core.af-shell .af-rail-scroll .af-rail-tile.af-rail-hidden-link[data-all-hidden='true'] {
+  border-color: var(--accent);
+}
+
+/*
+ * "2 hidden · Show" — the header's hidden count as its own link, under the toggle. Shown exactly
+ * where `.af-rail-toggle-text` is shown (expanded desktop rail, phone tray) and nowhere else: the
+ * collapsed 42px rail has no room, and the list's last row carries the count there.
+ */
+.af-core .af-rail-hidden-count {
+  display: none;
+  align-self: stretch;
+  margin-top: -4px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  color: var(--accent);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.af-core .af-rail-hidden-count:hover,
+.af-core .af-rail-hidden-count:focus-visible {
+  background: var(--chip);
+}
+
+.af-shell[data-rail-open='true'] .af-rail-hidden-count {
+  display: block;
+}
+
+@media (min-width: 1281px) {
+  .af-shell:not([data-rail-open='false']) .af-rail-hidden-count {
+    display: block;
+  }
+}
+
+/* The phone tray is a grid (logo | header, then list, then foot); give the link its own row under the header. */
+@media (max-width: 720px) {
+  .af-core .af-rail-hidden-count {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] {
+    grid-template-rows: auto auto minmax(0, max-content) auto;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] .af-rail-hidden-count {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] .af-rail-scroll {
+    grid-row: 3;
+  }
+
+  .af-core.af-shell .af-rail[data-has-hidden='true'] .af-rail-foot {
+    grid-row: 4;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .af-core .af-rail-live-state::before {
     animation: af-rail-live-pulse 1.8s ease-out infinite;
@@ -2718,7 +2832,6 @@ html[data-mode='light'] .af-core {
 }
 
 @media (max-width: 720px) {
-  .af-core.af-shell[data-league-first='true'] .af-rail-handle,
   .af-core.af-shell[data-league-first='true'] .af-topbar .af-scope {
     display: none;
   }
@@ -3324,6 +3437,7 @@ html[data-mode='light'] .af-core {
   }
   .af-core.af-shell:not([data-league-first='true']) .af-tabbar-glyph {
     position: relative;
+    display: inline-flex;
     font-size: 15px;
     line-height: 1;
   }
@@ -3559,6 +3673,85 @@ html[data-mode='light'] .af-core {
   }
 }
 
+/* ── Phone header: one row, search behind an icon (default mode) ─────────────
+ *
+ * ⚠ APPENDED AT END OF FILE ON PURPOSE — the one insertion point with no enclosing
+ * query (see the window-controls-overlay note above).
+ *
+ * Below 720px the default topbar wrapped to two rows because the search took a full-width
+ * row of its own, and with the league bars under it roughly a third of a phone was chrome
+ * before any content. League-first already folded search into an icon (`.af-lf-search-btn`);
+ * the default header now does the same, so it is one row until the manager asks to search.
+ * Desktop and tablet are untouched.
+ *
+ * `overscroll-behavior-y: contain` stops Android Chrome's own pull-to-refresh firing alongside
+ * PullToRefresh.tsx, whose listeners are passive and so cannot cancel the native gesture.
+ */
+@media (max-width: 720px) {
+  html:has(.af-core.af-shell) {
+    overscroll-behavior-y: contain;
+  }
+
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar .af-search-wrap {
+    display: none;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar[data-lf-search-open='true'] .af-search-wrap {
+    display: block;
+    flex-basis: 100%;
+    order: 10;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar-right {
+    flex: 1 1 0;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-lf-search-btn {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    order: 5;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--line2);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text2);
+    font: inherit;
+    font-size: 20px;
+    cursor: pointer;
+  }
+}
+
+/* ── Tap areas for small close / remove / search buttons ─────────────────────
+ * Same technique as `.af-help-dot` and `.af-mu-weeknav-btn`: the paint stays small, a
+ * transparent centred ::after makes the touch target 44px. Coarse pointers only.
+ */
+@media (pointer: coarse) {
+  .af-sp-close,
+  .af-olk-chip-x,
+  .af-cm-close,
+  .af-pf-search-btn {
+    position: relative;
+  }
+  .af-sp-close::after,
+  .af-olk-chip-x::after,
+  .af-cm-close::after,
+  .af-pf-search-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: 44px;
+    transform: translate(-50%, -50%);
+    background: transparent;
+  }
+}
+
 /*
  * ── Phone league tray: one header row and a close control at the top (2026-10-08) ──────────────────
  *
@@ -3636,6 +3829,8 @@ html[data-mode='light'] .af-core {
 .af-core .af-data-menu > summary::-webkit-details-marker { display: none; }
 .af-core .af-data-menu-panel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 45; width: min(280px, calc(100vw - 28px)); padding: 16px; border: 1px solid var(--line2); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .af-core .af-data-menu-panel p { font-size: 13px; line-height: 1.5; color: var(--muted); margin: 8px 0; }
+/* The Updates menu's "Fix lineup in <platform>" handoff: full width, a 44px tap target. */
+.af-core .af-data-menu-handoff { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 44px; margin-top: 4px; text-decoration: none; }
 .af-core .af-cardfresh-details { margin: 8px 0 0; color: var(--warn); font-size: 12px; }
 .af-core .af-cardfresh-details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
 .af-core.af-shell[data-rail-open='true'] .af-rail-scroll { gap: 8px; padding: 8px; }
@@ -3739,4 +3934,721 @@ html[data-mode='light'] .af-core {
   .af-core .af-core-bracket-promo { padding: 16px; }
   .af-core .af-core-bracket-promo-actions { flex: 1 1 100%; justify-content: flex-start; }
   .af-core .af-core-bracket-promo-button { flex: 1 1 145px; }
+}
+
+/* ── Phone header: theme and language live in the ↻ menu ─────────────────────
+ * The default (not league-first) phone header kept the theme and language chips in the top
+ * row. With the crest, the scope pill, the ↻ menu and the search icon that is ~520px of
+ * controls on a ~370px phone, so the AF Legacy theme's long name ran under the search icon and
+ * the language chip off the edge (reported from a real phone 2026-10-30). Below 720px the two
+ * chips render inside the ↻ panel instead (`.af-data-menu-display`); above it they stay put.
+ * The plan line rides along: the topbar's plan chip is hidden on phones, so a tester granted access
+ * had no way to see it. Its own top-level @media, appended — never nested inside an earlier block.
+ */
+.af-core .af-data-menu-display { display: none; }
+@media (max-width: 720px) {
+  .af-core .af-topbar-right > .af-topbar-chip { display: none; }
+  .af-core .af-topbar .af-topbar-right { flex: 0 0 auto; min-width: 0; }
+  .af-core .af-topbar .af-scope { flex: 1 1 auto; min-width: 0; }
+  .af-core .af-topbar .af-scope-btn { max-width: 100%; }
+  .af-core .af-data-menu-display {
+    display: block;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .af-core .af-data-menu-display-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .af-core .af-data-menu-panel .af-data-menu-plan { margin: 0 0 10px; color: var(--muted); }
+  .af-core .af-data-menu-plan-name { color: var(--text); font-weight: 700; }
+}
+
+
+/* ── League list, Sleeper-style (user call, 2026-10-30) ───────────────────────
+ *
+ * One card per league: crest, name and commissioner C on top, the platform in its own colour
+ * beneath, and this week's head-to-head across the full width of the card — each manager's avatar,
+ * name and points, VS between them. The SCORE / SLPR / AF table and the "Week N" line are gone
+ * (RailRowBody.tsx says why).
+ *
+ * The same row renders in /core's rail and the /league workspace rail, so every rule is written
+ * once, at top level and at end of file, per this stylesheet's own convention: a block dropped
+ * inside an existing @media closes the outer query early and silently moves every rule below it.
+ *
+ * Widths this was laid out against: the 280–300px desktop and tablet rail (≈200px of card) and the
+ * phone tray at 360px (Galaxy S) and 375–430px (iPhone), ≈270–330px of card.
+ */
+
+/* Sport headings: centred between two rules, bigger, with the sport's ball and its league count. */
+.af-rail-sport-icon,
+.af-rail-sport-count {
+  display: none;
+}
+.af-core.af-shell[data-rail-open='true'] .af-rail-sport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 14px 0 2px;
+  padding: 0 4px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+.af-core.af-shell[data-rail-open='true'] .af-rail-sport:first-child {
+  margin-top: 2px;
+}
+.af-core.af-shell[data-rail-open='true'] .af-rail-sport::before,
+.af-core.af-shell[data-rail-open='true'] .af-rail-sport::after {
+  content: '';
+  flex: 1 1 0;
+  min-width: 12px;
+  height: 1px;
+  background: var(--line2, var(--line));
+}
+.af-core.af-shell[data-rail-open='true'] .af-rail-sport-icon {
+  display: inline;
+  font-size: 15px;
+  letter-spacing: 0;
+  line-height: 1;
+}
+.af-core.af-shell[data-rail-open='true'] .af-rail-sport-count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font: 700 11px/18px var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0;
+}
+/* The wide desktop rail is open by default (no attribute), so the same rules again for that state. */
+@media (min-width: 1281px) {
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-sport {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 14px 0 2px;
+    padding: 0 4px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-align: center;
+  }
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-sport:first-child {
+    margin-top: 2px;
+  }
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-sport::before,
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-sport::after {
+    content: '';
+    flex: 1 1 0;
+    min-width: 12px;
+    height: 1px;
+    background: var(--line2, var(--line));
+  }
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-sport-icon {
+    display: inline;
+    font-size: 15px;
+    letter-spacing: 0;
+    line-height: 1;
+  }
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-sport-count {
+    display: inline-block;
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--chip);
+    color: var(--muted);
+    font: 700 11px/18px var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+    letter-spacing: 0;
+  }
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-scroll .af-rail-tile {
+    align-items: flex-start;
+  }
+}
+
+/*
+ * The crest sits at the top of the card rather than centred against it, so the matchup can run
+ * the card's full width underneath. `--af-rail-art-offset` is how far left of the text column the
+ * matchup reaches back: the 42px crest plus the 10px gap here, the 52px crest column plus its gap
+ * on /league.
+ */
+.af-core.af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile,
+.nl-workspace .nl-rail-tile {
+  align-items: flex-start;
+}
+.nl-workspace {
+  --af-rail-art-offset: 62px;
+}
+
+.af-core .af-rail-row-plat {
+  align-self: flex-start;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+/* AllFantasy's own leagues in AF blue; every other platform keeps its colour from `.af-platform`. */
+.af-core .af-rail-row-plat[data-platform='native'] {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.af-core .af-rail-row-line {
+  margin-top: 8px;
+  margin-left: calc(-1 * var(--af-rail-art-offset, 52px));
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--chip);
+  gap: 6px;
+}
+.af-core .af-rail-row-line[data-vs='true'] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+}
+
+.af-core .af-rail-row-line[data-vs='true'] {
+  row-gap: 8px;
+}
+/*
+ * One manager, Sleeper's shape (user call, 2026-10-30): picture and name on the first line, their
+ * points centred beneath on the second. Both managers read the same way round — picture, name — with
+ * VS between them, centred across both lines. `.af-rail-row-who` is `display: contents` so the name
+ * and the points sit straight on this grid: the points span the whole side and centre under it.
+ */
+.af-core .af-rail-row-side,
+.af-core .af-rail-row-side[data-side='them'] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 3px;
+  min-width: 0;
+  min-height: 0;
+  text-align: left;
+  border-top: 0;
+  padding-top: 0;
+}
+.af-core .af-rail-row-av {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+}
+.af-core .af-rail-row-who {
+  display: contents;
+}
+.af-core .af-rail-row-team,
+.af-core .af-rail-row-side[data-side='them'] .af-rail-row-team {
+  grid-column: 2;
+  grid-row: 1;
+  font: 700 12px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text);
+}
+/* Score and projection, centred under the manager; they share a line when there is room. */
+.af-core .af-rail-row-pts,
+.af-core .af-rail-row-side[data-side='them'] .af-rail-row-pts {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 2px 6px;
+  min-width: 0;
+  text-align: center;
+}
+.af-core .af-rail-row-score {
+  font: 800 13px/1.1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--text);
+  text-align: inherit;
+  white-space: nowrap;
+}
+.af-core .af-rail-row-projected {
+  font: 600 11px/1.1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--muted);
+  text-align: inherit;
+  white-space: nowrap;
+}
+.af-core .af-rail-row-proj-label {
+  margin-right: 3px;
+  color: var(--faint);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+/* The AF twist: the VS is a small accent pill rather than a bare letter pair. */
+.af-core .af-rail-row-vs {
+  padding: 3px 6px;
+  border: 1px solid var(--accent-line, var(--line));
+  border-radius: 999px;
+  color: var(--accent);
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.08em;
+}
+
+/* Phones get a touch more room for names: the tray card is ≈270px+ wide. */
+@media (max-width: 720px) {
+  .af-core .af-rail-row-av {
+    width: 26px;
+    height: 26px;
+  }
+  .af-core .af-rail-row-team,
+  .af-core .af-rail-row-side[data-side='them'] .af-rail-row-team {
+    font-size: 13px;
+  }
+}
+
+/*
+ * The desktop and tablet rail cards are ≈200px wide. They keep the same side-by-side layout as the
+ * phone (user call, 2026-10-30: "1 manager shouldn't be above another"), just tighter: a smaller
+ * picture, a smaller VS and less padding, so each name keeps as many letters as the card allows and
+ * the rest ends in an ellipsis, as Sleeper's list does.
+ */
+@media (min-width: 721px) {
+  .af-core .af-rail-row-line[data-vs='true'] {
+    column-gap: 4px;
+    padding: 8px 8px;
+  }
+  .af-core .af-rail-row-side,
+  .af-core .af-rail-row-side[data-side='them'] {
+    column-gap: 4px;
+  }
+  .af-core .af-rail-row-av {
+    width: 18px;
+    height: 18px;
+  }
+  .af-core .af-rail-row-team,
+  .af-core .af-rail-row-side[data-side='them'] .af-rail-row-team {
+    font-size: 11.5px;
+  }
+  .af-core .af-rail-row-vs {
+    padding: 2px 4px;
+    letter-spacing: 0.02em;
+  }
+  .af-core .af-rail-row-proj-label {
+    margin-right: 2px;
+  }
+}
+
+/* ── League list: live, odds, what needs you, and the matchup tap (2026-10-30) ──────────────────
+ * Its own block at end of file, top level, per this stylesheet's convention.
+ */
+
+/* The leader's score in the winning colour. Only a played week has a leader (RailRowBody `lead`). */
+.af-core .af-rail-row-side[data-leading='true'] .af-rail-row-score {
+  color: var(--good);
+}
+
+/*
+ * The odds bar: your chance on the left, theirs on the right, one bar between. It spans the whole
+ * head-to-head on a phone (side by side) and sits under the stacked pair on the desktop rail.
+ */
+.af-core .af-rail-row-odds {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 2px;
+}
+.af-core .af-rail-row-odds-pct {
+  flex: none;
+  min-width: 30px;
+  color: var(--accent);
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+.af-core .af-rail-row-odds-pct[data-side='them'] {
+  color: var(--muted);
+  text-align: right;
+}
+.af-core .af-rail-row-odds-bar {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+}
+.af-core .af-rail-row-odds-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+/* What needs you: the same red and amber as the crest dot. */
+.af-core .af-rail-row-flag {
+  align-self: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font: 700 11px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  white-space: nowrap;
+}
+.af-core .af-rail-row-flag[data-tone='bad'] {
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+  color: var(--bad);
+}
+.af-core .af-rail-row-flag[data-tone='warn'] {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+}
+
+/* The crest's dot sits on a 42px crest that clips its corners, so it moves inside the corner. */
+.af-core .af-rail-tile-art .af-rail-dot {
+  top: 3px;
+  right: 3px;
+  z-index: 1;
+}
+
+/* A head-to-head that opens the Matchup screen says so on hover (touch has no hover to say it with). */
+.af-core .af-rail-row-line[data-matchup-href] {
+  cursor: pointer;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+@media (hover: hover) {
+  .af-core .af-rail-row-line[data-matchup-href]:hover {
+    background: color-mix(in srgb, var(--accent) 10%, var(--chip));
+    box-shadow: inset 0 0 0 1px var(--accent-line, var(--line));
+  }
+}
+
+/* ── League list: favorites, filters, folding, unread, record, Pin and Move (2026-10-30) ──────────
+ * Its own block at end of file, top level, per this stylesheet's convention.
+ */
+
+/* The sport heading is a button now (it folds its section): no button chrome, the same look. */
+button.af-rail-sport {
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+}
+button.af-rail-sport:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-rail-sport-chevron {
+  display: none;
+}
+.af-core.af-shell[data-rail-open='true'] .af-rail-sport-chevron {
+  display: inline;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+@media (min-width: 1281px) {
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-sport-chevron {
+    display: inline;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0;
+  }
+}
+
+/* Filter chips: one scrollable row, never wrapping the tray wider than the screen. */
+.af-core .af-rail-filters {
+  display: flex;
+  gap: 6px;
+  flex: none;
+  padding: 2px 8px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.af-core .af-rail-filters::-webkit-scrollbar {
+  display: none;
+}
+.af-core .af-rail-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--text2);
+  font: 700 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.af-core .af-rail-filter[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+  color: var(--accent);
+}
+.af-core .af-rail-filter-count {
+  color: var(--muted);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+}
+@media (pointer: coarse) {
+  .af-core .af-rail-filter {
+    min-height: 40px;
+  }
+}
+
+/* Unread league chat: a count on the crest's lower corner (the alert dot owns the upper one). */
+.af-core .af-rail-unread {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 1;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  font: 800 11px/18px var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--rail);
+}
+
+/* Your record and place, beside the platform. */
+.af-core .af-rail-row-record {
+  align-self: center;
+  color: var(--text2);
+  font: 700 11px/1.5 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  white-space: nowrap;
+}
+
+/* A favorite's row carries a small star after its name. */
+.af-core .af-rail-tile[data-favorite='true'] .af-rail-row-name::after {
+  content: ' ★';
+  color: #f6c445;
+  font-size: 11px;
+}
+
+.af-core .af-rail-hint {
+  margin: 6px 8px 2px;
+  color: var(--faint);
+  font: 500 11px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  text-align: center;
+}
+
+/*
+ * Drag to reorder (useRailDrag). The dragged row fades, and a line in the accent colour marks where
+ * it will land — above the row it would go before, or below the last row. In reorder mode a finger
+ * drags instead of scrolling the list, so the rows take the touch themselves.
+ */
+.af-core [data-rail-id][data-dragging='true'] {
+  opacity: 0.45;
+}
+.af-core [data-rail-id][data-drop='before'] {
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+.af-core [data-rail-id][data-drop='after'] {
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+.af-core [data-reorder='true'] [data-rail-id] {
+  touch-action: none;
+  cursor: grab;
+}
+.af-core .af-rail-drag-handle {
+  flex: none;
+  align-self: center;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+}
+.af-core .af-rail-reorder-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 6px 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--chip);
+  color: var(--text);
+  font: 600 12px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-core .af-rail-reorder-done {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink, #04121a);
+  font: 800 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
+}
+
+/*
+ * A press-and-hold on a league opens Pin and Move — so the phone's own long-press link preview and
+ * text selection must not get there first.
+ */
+.af-core .af-rail-scroll .af-rail-tile {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The Pin and Move sheet: a bottom sheet on a phone, a centred card above it. */
+.af-core .af-rail-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  border: 0;
+  background: rgba(2, 6, 23, 0.55);
+}
+.af-core .af-rail-menu {
+  position: fixed;
+  z-index: 81;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(340px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid var(--line2, var(--line));
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.af-core .af-rail-menu-title {
+  margin: 0 0 4px;
+  color: var(--text);
+  font: 800 14px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-rail-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--chip);
+  color: var(--text);
+  font: 700 14px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  text-align: left;
+  cursor: pointer;
+}
+.af-core .af-rail-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.af-core .af-rail-menu-item[data-kind='hide'] {
+  padding-block: 8px;
+}
+.af-core .af-rail-menu-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.af-core .af-rail-menu-label small {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+}
+.af-core .af-rail-menu-item[data-kind='done'] {
+  justify-content: center;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink, #04121a);
+}
+@media (max-width: 720px) {
+  .af-core .af-rail-menu {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    transform: none;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    border-radius: 20px 20px 0 0;
+  }
+}
+
+/* The filter chips ride at the top of the scrolling list (they are its first child). */
+.af-core .af-rail-scroll > .af-rail-filters {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0 -8px;
+  padding: 6px 8px 8px;
+  background: var(--rail);
+}
+
+/* ── The /league workspace rail, arranged like /core's (2026-10-30) ─────────────────────────────
+ * Same headings, chips and star as the /core rail above; the open state there is `data-expanded`.
+ */
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 12px 0 2px;
+  padding: 0 4px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport::before,
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport::after {
+  content: '';
+  flex: 1 1 0;
+  min-width: 12px;
+  height: 1px;
+  background: var(--line2, var(--line));
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport-icon {
+  display: inline;
+  font-size: 15px;
+  letter-spacing: 0;
+  line-height: 1;
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport-count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font: 700 11px/18px var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0;
+}
+.nl-workspace .nl-rail[data-expanded='true'] .af-rail-sport-chevron {
+  display: inline;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+.nl-workspace .nl-rail-leagues > .af-rail-filters {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 2px 0 8px;
+  background: var(--rail);
+}
+.nl-workspace .nl-rail-tile[data-favorite='true'] .af-rail-row-name::after {
+  content: ' ★';
+  color: #f6c445;
+  font-size: 11px;
+}
+.nl-workspace .nl-rail-leagues .nl-rail-tile {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }

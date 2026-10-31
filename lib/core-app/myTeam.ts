@@ -36,7 +36,9 @@ import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { displayPosition, inferSlotLabel } from './positionLabels'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, resolveSourceScreenLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
+import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { identityGapNote } from './identityGap'
+import { applyDailySportToLineup } from './myTeamDailySport'
 import { kickoffClock, LOCK_ZONE } from './lineupLock'
 import { readLineupGameDay, summariseStarterGameDay, type PlayerGameDay, type StarterGameDaySummary } from './myTeamGameDay'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
@@ -516,7 +518,9 @@ async function resolvePlayers(
   ]
 
   const rows = await prisma.sportsPlayer.findMany({
-    where: { sleeperId: { in: lookupIds } },
+    // ⚠ SCOPED TO THE LEAGUE'S SPORT. Sleeper numbers each sport's pool independently, so an NBA
+    // roster id can equal an NFL player's; the unscoped join put that NFL player in the lineup.
+    where: { sport: sport.toUpperCase(), sleeperId: { in: lookupIds } },
     // `sport` is required by `composePlayerIdentities` — it gates the NFL-only
     // club fold, and omitting it would silently leave every club unfolded.
     select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
@@ -947,6 +951,13 @@ async function zeroByeWeekPlayers(
     for (const id of byes.byWeek.get(sportsWeek.week) ?? []) {
       const p = players.get(id)
       if (!p) continue
+      /*
+       * 🛑 A PLAYER WITH THIS WEEK'S KICKOFF ON FILE HAS A GAME. `kickoff` comes from this week's
+       * fixture join, so when the bye read and the fixture read disagree, the fixture is the
+       * evidence and the bye is an inference from absence. Seen 2026-10-30 as "Bench Keshaun
+       * Singleton — On bye" for a USF receiver whose team played the next day.
+       */
+      if (p.kickoff) continue
       p.onBye = true
       /*
        * A player on bye scores nothing, and unlike "no projection on file" that
@@ -989,6 +1000,8 @@ async function loadMyTeamData(
    */
   const league = await timing.read('league',()=>lc.league())
   if (!league) return null
+  /* Fantrax's real league id, for the "Open in Fantrax" link — `platformLeagueId` is our own snapshot uuid there. */
+  const linkLeagueId = linkableSourceLeagueId(league, await fantraxSourceLeagueIds([league]))
 
   const sport = String(league.sport ?? 'NFL')
   const base = {
@@ -1005,7 +1018,7 @@ async function loadMyTeamData(
       lineupMode: league.bestBallMode || automaticLineup(league.leagueType, league.settings) ? 'automatic' as const : 'manual' as const,
       sourceLink: resolveSourceLink({
         platform: league.platform,
-        sourceLeagueId: league.platformLeagueId,
+        sourceLeagueId: linkLeagueId,
         leagueName: leagueDisplayName(league.name),
         season: league.season,
         /* "Fix Lineup in <league>" — the action this screen is actually about. */
@@ -1107,12 +1120,12 @@ async function loadMyTeamData(
     base.completed = ['complete', 'completed'].includes(liveRoster.leagueStatus.toLowerCase())
   }
   const sourceScreen = resolveSourceScreenLink({
-    platform: league.platform, sourceLeagueId: league.platformLeagueId,
+    platform: league.platform, sourceLeagueId: linkLeagueId,
     leagueName: leagueDisplayName(league.name), season: league.season,
     teamId: myTeamRow.externalId, screen: base.league.bestBall ? 'league' : 'lineup',
   })
   base.league.sourceLink = sourceScreen?.verified ? sourceScreen : resolveSourceLink({
-    platform: league.platform, sourceLeagueId: league.platformLeagueId,
+    platform: league.platform, sourceLeagueId: linkLeagueId,
     leagueName: leagueDisplayName(league.name), season: league.season, action: 'league',
   })
   const roster = isSleeper && !savedRosterOnly
@@ -1205,6 +1218,17 @@ async function loadMyTeamData(
     scoringSettings,
     String(league.platform ?? '')
   ))
+
+  // NBA / NHL / MLB: projection and game from the daily-sport outlook — see lib/core-app/myTeamDailySport.ts.
+  // Before the bye pass and everything else that reads a projection; a no-op for every other sport.
+  await timing.read('projections', () =>
+    applyDailySportToLineup(resolved, {
+      sport,
+      season: league.season ?? null,
+      settings: league.settings,
+      platform: league.platform ?? null,
+    }).catch(() => undefined),
+  )
 
   /*
    * ⚠ THE BYE PASS RUNS HERE, BEFORE ANYTHING READS A PROJECTION. It ran after the bench check,
@@ -1358,7 +1382,7 @@ async function loadMyTeamData(
        */
       if (benchProj == null || bench.onBye || bench.ruledOut) continue
       if (bench.kickoff && bench.kickoff.getTime() <= adviceAt) continue
-      if (!isEligibleForSlot(slot.slotLabel, bench.position)) continue
+      if (!isEligibleForSlot(slot.slotLabel, bench.position, sport)) continue
       if (benchProj <= starterProj) continue
       benchCandidates.push({
         slotIndex,

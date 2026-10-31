@@ -1,19 +1,20 @@
 import { coreUiCopy } from './coreUiCopy'
-import { FOREIGN_IDS_UNREADABLE } from './foreignIdSpaceCopy'
 import { infoReasonText } from './finderPlayerInfoCopy'
 import { designationText } from './playerFinderCopy'
-import { freeAgentText } from './finderSearchCopy'
 import { ageText } from './shellCopy'
 import { tradeVisualCopy } from './tradeVisualCopy'
 import type { PlayerCardInsight } from './playerCard'
 import type { WaiverEdgeFact } from '@/lib/competitive-edge/waiverEdge'
+import { messagesFor } from '@/lib/i18n/messages'
+import { modeEs, playerCardMessages } from './messages/playerCard'
+import { spanishFlag } from './messages/coreLocale'
 
 /**
  * The player card pop-up (components/core-app/player-card/PlayerCardSheet.tsx) and the Waivers
  * screens' Competitive Edge card (components/core-app/screens/WaiverCompetitiveEdge.tsx) in the
  * reader's language (2026-10-06).
  *
- * One EN and one ES table behind the same type, as playerFinderCopy.ts does. The EN is each
+ * One EN and one ES table behind the same type, in lib/core-app/messages/playerCard.ts. The EN is each
  * component's English BYTE FOR BYTE — the player-card-* and competitive-edge-waiver-* suites pin it —
  * so English mode is unchanged.
  *
@@ -36,10 +37,8 @@ import type { WaiverEdgeFact } from '@/lib/competitive-edge/waiverEdge'
  * PURE, client-safe (the two `import type`s are erased).
  */
 
-const es = (language: string) => language === 'es'
-
-/** A market mode or format ("dynasty", "DYNASTY", "redraft") as Player Finder's value basis says it. */
-const modeEs = (mode: string) => (mode.toLowerCase() === 'dynasty' ? 'dinastía' : mode.toLowerCase())
+/** Spanish is the one language these rebuild into; every other language keeps the English. */
+const es = spanishFlag
 
 /* ── the player card ────────────────────────────────────────────────────────────────────────────── */
 
@@ -125,167 +124,8 @@ export type PlayerCardCopy = {
   notGraded: (reason: string) => string
 }
 
-const EN: PlayerCardCopy = {
-  back: '‹ Back',
-  dialogLabel: (name) => `${name} player card`,
-  follow: (name) => `Follow ${name}`,
-  unfollow: (name) => `Unfollow ${name}`,
-  followTitle: 'Follow in every league: his status and next game on your home',
-  followingTitle: 'Following in every league — click to stop',
-  watch: (name) => `Watch ${name}`,
-  stopWatching: (name) => `Stop watching ${name}`,
-  watchTitle: 'Add to your watchlist',
-  watchingTitle: 'Watching — click to remove',
-  close: 'Close player card',
-  unreadable: FOREIGN_IDS_UNREADABLE,
-  freeAgent: 'FREE AGENT',
-  onYourRoster: 'ON YOUR ROSTER',
-  ownedBy: (owner) => `OWNED BY ${(owner ?? 'another manager').toUpperCase()}`,
-  proposeTrade: 'Propose Trade',
-  blockOn: 'On your trade block ✓ · Take off',
-  blockPut: 'Put on trade block',
-  blockTag: 'ON THE TRADE BLOCK',
-  blockListed: (ago) => ` · listed ${ago} ago`,
-  blockSaveFailed: 'That did not save. Try again.',
-  age: 'AGE',
-  height: 'HT',
-  weight: 'WT',
-  experience: 'EXP',
-  college: 'COLLEGE',
-  rookie: 'ROOKIE',
-  loading: 'Loading this player’s market…',
-  loadError: 'This player’s card could not be loaded.',
-  feedChecked: (ago) => `feed checked ${ago ?? 'just now'}`,
-  feedNeverRan: 'feed has not completed a run for this sport yet',
-  feedLastError: (ago) => ` · last error ${ago}`,
-  feedSkipped: (n) => ` · ${n} run${n === 1 ? '' : 's'} skipped for budget`,
-  basedOn: (basis) => `Based on ${basis}.`,
-  leaguePrice: 'LEAGUE PRICE',
-  leaguePriceSub: (mode, numQbs, teams) => `${mode} · ${numQbs === 2 ? 'SF' : '1QB'} · ${teams}-team`,
-  notPriced: 'not priced',
-  slot: 'SLOT',
-  tradePrice: 'TRADE PRICE',
-  deltaDays: (days) => `${days}d`,
-  priceMoveLocked: (plan) => `price move · ${plan}`,
-  noMove: 'no move on file',
-  overallRank: 'OVERALL RK',
-  posRank: (position) => `POS RK${position ? ` · ${position.toUpperCase()}` : ''}`,
-  rostered: 'ROSTERED',
-  ofLeagues: (n) => `of ${n} AF leagues`,
-  startPct: (pct) => ` · ${pct}% start`,
-  marketBasis: (format, qbFormat, source) =>
-    `${format.toLowerCase()} · ${qbFormat === 'SUPERFLEX' ? 'superflex' : 'one-QB'} · ${source.toLowerCase()}`,
-  noMarketPrice: 'No market price.',
-  weekRow: (week, bye, home, opponent) => `WK${week} · ${bye ? 'BYE' : `${home ? 'vs' : '@'} ${opponent}`}`,
-  projTitle: (p) => `${p}: ${p}’s projection · AF: AllFantasy engine projection`,
-  projNote: (p) => `${p} is ${p}’s own projection; AF is AllFantasy’s own engine. Both are PPR.`,
-  schedule: 'SCHEDULE',
-  nextUp: 'NEXT UP · SCHEDULE',
-  playoffSchedule: (start, end) => (start != null && end != null ? `PLAYOFF SCHEDULE · WK ${start}-${end}` : 'PLAYOFF SCHEDULE'),
-  yourRosterAt: (position) => `YOUR ROSTER${position ? ` AT ${position.toUpperCase()}` : ''}`,
-  nobodyElse: 'You have nobody else at this position in this league, or your team is not claimed here.',
-  unreadableSentence: `${FOREIGN_IDS_UNREADABLE}.`,
-  tradesInLeague: 'TRADES IN THIS LEAGUE',
-  recentTrades: 'RECENT TRADES',
-  noLeagueTrade: 'No trade in this league has moved him.',
-  importedScope: 'Trades in leagues AllFantasy has imported.',
-  similarPrice: 'SIMILAR PRICE',
-  latest: 'LATEST',
-  cost: (list) => `Cost ${list}`,
-  packageNotRecorded: 'Package not recorded',
-  movedWith: (list) => `Moved with ${list}`,
-  gradeAria: 'Trade grade for each side',
-  gotHim: 'Got him',
-  paid: 'Paid',
-  gradeLine: (got, gave, moment) => `${got} for ${gave} on the league’s values ${moment}`,
-  notGraded: (reason) => `Not graded: ${reason}`,
-}
-
-/** "Todavía no podemos emparejar…" — coreUiCopy holds the clause; the card prints it as a sentence. */
-const UNREADABLE_ES = (() => {
-  const clause = coreUiCopy("this league's player ids can't be matched to ours yet", 'es')
-  return clause.charAt(0).toUpperCase() + clause.slice(1)
-})()
-
-const ES: PlayerCardCopy = {
-  back: '‹ Volver',
-  dialogLabel: (name) => `Ficha de ${name}`,
-  follow: (name) => `Seguir a ${name}`,
-  unfollow: (name) => `Dejar de seguir a ${name}`,
-  followTitle: 'Síguelo en todas tus ligas: su estado y su próximo partido en tu inicio',
-  followingTitle: 'Lo sigues en todas tus ligas: haz clic para dejar de seguirlo',
-  watch: (name) => `Añadir a ${name} a tu lista de seguimiento`,
-  stopWatching: (name) => `Quitar a ${name} de tu lista de seguimiento`,
-  watchTitle: 'Añadir a tu lista de seguimiento',
-  watchingTitle: 'En tu lista de seguimiento: haz clic para quitarlo',
-  close: 'Cerrar la ficha del jugador',
-  unreadable: UNREADABLE_ES,
-  freeAgent: freeAgentText('es').toUpperCase(),
-  onYourRoster: 'EN TU PLANTILLA',
-  ownedBy: (owner) => `LO TIENE ${(owner ?? 'otro mánager').toUpperCase()}`,
-  proposeTrade: 'Proponer intercambio',
-  blockOn: 'En venta ✓ · Retirar',
-  blockPut: 'Poner en venta',
-  blockTag: 'EN VENTA',
-  blockListed: (ago) => ` · publicado ${ago}`,
-  blockSaveFailed: 'No se guardó. Inténtalo de nuevo.',
-  age: 'EDAD',
-  height: 'ALT.',
-  weight: 'PESO',
-  experience: 'EXP.',
-  college: 'UNIVERSIDAD',
-  rookie: 'NOVATO',
-  loading: 'Cargando el mercado de este jugador…',
-  loadError: 'No se pudo cargar la ficha de este jugador.',
-  feedChecked: (ago) => `fuente revisada ${ago ?? 'justo ahora'}`,
-  feedNeverRan: 'la fuente todavía no completó una ejecución para este deporte',
-  feedLastError: (ago) => ` · último error ${ago}`,
-  feedSkipped: (n) => ` · ${n} ${n === 1 ? 'ejecución omitida' : 'ejecuciones omitidas'} por presupuesto`,
-  basedOn: (basis) => `Basado en ${basis}.`,
-  leaguePrice: 'PRECIO EN LA LIGA',
-  leaguePriceSub: (mode, numQbs, teams) => `${modeEs(mode)} · ${numQbs === 2 ? 'SF' : '1QB'} · ${teams} equipos`,
-  notPriced: 'sin precio',
-  slot: 'PUESTO',
-  tradePrice: 'PRECIO DE INTERCAMBIO',
-  deltaDays: (days) => `${days} d`,
-  priceMoveLocked: (plan) => `movimiento de precio · ${plan}`,
-  noMove: 'sin movimiento registrado',
-  overallRank: 'RANGO GENERAL',
-  posRank: (position) => `RANGO POS.${position ? ` · ${position.toUpperCase()}` : ''}`,
-  rostered: 'EN PLANTILLAS',
-  ofLeagues: (n) => `de ${n} ligas de AF`,
-  startPct: (pct) => ` · ${pct}% titular`,
-  marketBasis: (format, qbFormat, source) =>
-    `${modeEs(format)} · ${qbFormat === 'SUPERFLEX' ? 'superflex' : 'un QB'} · ${source.toLowerCase()}`,
-  noMarketPrice: 'Sin precio de mercado.',
-  weekRow: (week, bye, home, opponent) => `SEM ${week} · ${bye ? 'DESCANSO' : `${home ? 'vs' : '@'} ${opponent}`}`,
-  projTitle: (p) => `${p}: proyección de ${p} · AF: proyección del motor de AllFantasy`,
-  projNote: (p) => `${p} es la proyección propia de ${p}; AF es el motor propio de AllFantasy. Ambas son PPR.`,
-  schedule: 'CALENDARIO',
-  nextUp: 'PRÓXIMOS PARTIDOS · CALENDARIO',
-  playoffSchedule: (start, end) =>
-    start != null && end != null ? `CALENDARIO DE PLAYOFFS · SEM ${start}-${end}` : 'CALENDARIO DE PLAYOFFS',
-  yourRosterAt: (position) => `TU PLANTILLA${position ? ` EN ${position.toUpperCase()}` : ''}`,
-  nobodyElse: 'No tienes a nadie más en esta posición en esta liga, o tu equipo no está reclamado aquí.',
-  unreadableSentence: `${UNREADABLE_ES}.`,
-  tradesInLeague: 'INTERCAMBIOS EN ESTA LIGA',
-  recentTrades: 'INTERCAMBIOS RECIENTES',
-  noLeagueTrade: 'Ningún intercambio de esta liga lo ha movido.',
-  importedScope: 'Intercambios en ligas que AllFantasy ha importado.',
-  similarPrice: 'PRECIO SIMILAR',
-  latest: 'LO ÚLTIMO',
-  cost: (list) => `Costó ${list}`,
-  packageNotRecorded: 'Paquete no registrado',
-  movedWith: (list) => `Llegó junto a ${list}`,
-  gradeAria: 'Calificación del intercambio para cada lado',
-  gotHim: 'Lo recibió',
-  paid: 'Pagó',
-  gradeLine: (got, gave, moment) => `${got} por ${gave} con los valores de la liga ${moment}`,
-  notGraded: (reason) => `${coreUiCopy('Not graded:', 'es')} ${reason}`,
-}
-
 export function playerCardCopy(language: string): PlayerCardCopy {
-  return es(language) ? ES : EN
+  return messagesFor(playerCardMessages, language)
 }
 
 /**
@@ -479,7 +319,7 @@ export type WaiverEdgeCopy = {
 }
 
 /**
- * Spanish only — WaiverCompetitiveEdge keeps its English JSX as it was. "Ventaja competitiva" in the
+ * Spanish only — the English lives in lib/core-app/messages/waiverEdge.ts, whose `es` block reads these. "Ventaja competitiva" in the
  * heading, as Draft HQ's (`coreUiCopy('Competitive Edge · how the others draft')`); the lock keeps the
  * product name, as coreDepthLockCopy says. Claims are "reclamos" and bids "ofertas", the Waivers
  * screens' words (coreUiCopy, help-topics/waivers.ts).

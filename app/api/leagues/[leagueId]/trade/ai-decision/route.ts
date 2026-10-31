@@ -131,7 +131,7 @@ export async function POST(
 
     let createdProposalId: string | null = null
     if (createProposal) {
-      const deadlineRefusal = await tradeDeadlineRefusal(leagueId)
+      const deadlineRefusal = await tradeDeadlineRefusal(leagueId, {}, { picksOnly: true })
       if (deadlineRefusal) return NextResponse.json({ error: deadlineRefusal, code: 'TRADE_DEADLINE_PASSED' }, { status: 409 })
       const created = await (prisma as any).draftPickTradeProposal.create({
         data: {
@@ -253,7 +253,7 @@ export async function POST(
 
   if (applyDecision && proposalId && proposalStatus === 'pending') {
     // An AI manager accepting for an orphan roster is still an acceptance, and the deadline binds it.
-    const deadlineRefusal = result.decision === 'accept' ? await tradeDeadlineRefusal(leagueId) : null
+    const deadlineRefusal = result.decision === 'accept' ? await tradeDeadlineRefusal(leagueId, {}, { picksOnly: true }) : null
     if (deadlineRefusal) return NextResponse.json({ error: deadlineRefusal, code: 'TRADE_DEADLINE_PASSED' }, { status: 409 })
     if (result.decision === 'accept') {
       const slotOrder = ((draftSession as any).slotOrder ?? []) as Array<{ slot: number; rosterId: string; displayName: string }>

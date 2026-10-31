@@ -645,15 +645,31 @@ export async function getTradesBoard(
 
   /* Names, faces and values for every asset we are about to print. */
   const assetIds = new Set<string>()
+  /*
+   * ⚠ AND BY SPORT, FOR THE IDENTITY READ. Sleeper numbers its NFL and NBA pools independently, so a
+   * board spanning an NFL and an NBA league can hold one id meaning two players. Each trade's ids are
+   * looked up in that trade's own sport and its names come back keyed by sport + id.
+   */
+  const assetIdsBySport = new Map<string, Set<string>>()
   for (const t of trades) {
-    for (const id of [...idsOf(t.playersGiven), ...idsOf(t.playersReceived)]) assetIds.add(id)
+    const sport = tradeSport(t)
+    const bucket = assetIdsBySport.get(sport) ?? new Set<string>()
+    assetIdsBySport.set(sport, bucket)
+    for (const id of [...idsOf(t.playersGiven), ...idsOf(t.playersReceived)]) {
+      assetIds.add(id)
+      bucket.add(id)
+    }
   }
 
   const [players, snaps, pickRowsPerBook, defenderPricers] = await Promise.all([
     assetIds.size > 0
       ? prisma.sportsPlayer
           .findMany({
-            where: { sleeperId: { in: [...assetIds] } },
+            where: {
+              OR: [...assetIdsBySport]
+                .filter(([, ids]) => ids.size > 0)
+                .map(([sport, ids]) => ({ sport, sleeperId: { in: [...ids] } })),
+            },
             select: { sleeperId: true, sport: true, name: true, position: true, team: true, imageUrl: true, source: true, fetchedAt: true },
           })
           .catch(() => [])
@@ -741,7 +757,11 @@ export async function getTradesBoard(
    * Montgomery and Drake Maye on one board, 2026-10-01. Each field now comes from the
    * row that actually holds it; see `playerIdentityCompose.ts`.
    */
-  const playerById = composePlayerIdentities(players)
+  const playerBySport = new Map<string, ReturnType<typeof composePlayerIdentities>>()
+  for (const sport of assetIdsBySport.keys()) {
+    playerBySport.set(sport, composePlayerIdentities(players.filter((p) => String(p.sport ?? '').toUpperCase() === sport)))
+  }
+  const playerOf = (sport: string, id: string) => playerBySport.get(sport)?.get(id)
   /*
    * ⚠ KEYED ON BOOK + PLAYER, NOT PLAYER. Two of this user's leagues can want
    * different books for the same man, so a `Map<sleeperId, …>` silently served
@@ -794,8 +814,8 @@ export async function getTradesBoard(
     pickRowsPerBook.map(([key, rows]) => [key, pickPricerFrom(rows)] as const),
   )
 
-  function toAsset(id: string, book: ValueBook, defenders: DefenderPricer = NO_DEFENDERS): TradeAsset {
-    const p = playerById.get(id)
+  function toAsset(id: string, sport: string, book: ValueBook, defenders: DefenderPricer = NO_DEFENDERS): TradeAsset {
+    const p = playerOf(sport, id)
     const v = valueByBookAndId.get(`${book.format}:${book.qbFormat}:${id}`)
     /* FantasyCalc first; the defender board only where the book holds nothing for him. */
     const defence = v ? null : defenders(id)
@@ -947,7 +967,7 @@ export async function getTradesBoard(
      * ORIGINAL from the first time it was graded, not a re-price on today's values.
      */
     // Priced by the Sleeper id the row keys each player by, as the live paths price him — see `sleeperPlayerInput`.
-    const nameOfId = (id: string) => ({ name: playerById.get(id)?.name?.trim() || null, sleeperId: id })
+    const nameOfId = (id: string) => ({ name: playerOf(tradeSport(t), id)?.name?.trim() || null, sleeperId: id })
     const pickRef = (p: TradeAsset & { drafted?: string | null; draftedId?: string | null }) => ({
       season: p.pickSeason ?? null,
       round: p.pickRound ?? null,
@@ -986,8 +1006,8 @@ export async function getTradesBoard(
      *
      * Players first, then the picks that moved with them — Sleeper's own order.
      */
-    const sentBase = [...sentIds.map((id) => toAsset(id, leagueBook, defenders)), ...sentPicks]
-    const recvBase = [...recvIds.map((id) => toAsset(id, leagueBook, defenders)), ...recvPicks]
+    const sentBase = [...sentIds.map((id) => toAsset(id, tradeSport(t), leagueBook, defenders)), ...sentPicks]
+    const recvBase = [...recvIds.map((id) => toAsset(id, tradeSport(t), leagueBook, defenders)), ...recvPicks]
     /*
      * With a grade, every printed value is the value the grade was taken on — the league value per
      * asset, in the same order the grader was handed them (players, then picks).
@@ -1203,6 +1223,9 @@ export function pointBoardAtReachableLeagues(
  * has one without a Sleeper id, otherwise "Unrecognised <Platform> player"), and it stays unpriced.
  */
 const FOREIGN_PLATFORM_LABEL: Record<string, string> = { espn: 'ESPN', yahoo: 'Yahoo', mfl: 'MFL', fantrax: 'Fantrax', fleaflicker: 'Fleaflicker' }
+
+/** A trade row's sport, upper-cased as `SportsPlayer.sport` stores it; the column defaults to NFL. */
+const tradeSport = (t: { sport?: string | null }) => String(t.sport ?? 'nfl').toUpperCase()
 
 export async function translateForeignTrades<T extends { platform: string | null; sport: string | null; playersGiven: unknown; playersReceived: unknown }>(
   rows: T[],

@@ -69,4 +69,44 @@ describe('reviewStatCorrections', () => {
     expect(one).toBe(two)
     expect(moved).not.toBe(one)
   })
+
+  describe('daily-lineup starters (one line per day started)', () => {
+    const days = (d: StarterStatLine['days']) => line({ storedStats: null, freshStats: null, days: d })
+
+    it('sums the started days on each side and reports the difference', () => {
+      const r = reviewStatCorrections({
+        starters: [days([
+          { storedStats: { yds: 100 }, freshStats: { yds: 100 } },
+          { storedStats: { yds: 50 }, freshStats: { yds: 30 } },
+        ])],
+        matchups: [matchup],
+        score,
+      })
+      expect(r.changes).toEqual([{ rosterId: 'A', playerId: 'p1', playerName: 'Player One', position: 'RB', before: 15, after: 13, delta: -2 }])
+      expect(r.matchups[0].home.after).toBe(98)
+    })
+
+    it('a day that had no line and now has one adds its points; one struck off removes them', () => {
+      const added = reviewStatCorrections({
+        starters: [days([{ storedStats: { yds: 100 }, freshStats: { yds: 100 } }, { storedStats: null, freshStats: { yds: 20 } }])],
+        matchups: [matchup],
+        score,
+      })
+      expect(added.changes[0]).toMatchObject({ before: 10, after: 12, delta: 2 })
+      const removed = reviewStatCorrections({
+        starters: [days([{ storedStats: { yds: 100 }, freshStats: { yds: 100 } }, { storedStats: { yds: 20 }, freshStats: null }])],
+        matchups: [matchup],
+        score,
+      })
+      expect(removed.changes[0]).toMatchObject({ before: 12, after: 10, delta: -2 })
+    })
+
+    it('no game on any started day is nothing to check; a whole side missing is unchecked', () => {
+      const idle = reviewStatCorrections({ starters: [days([{ storedStats: null, freshStats: null }])], matchups: [matchup], score })
+      expect(idle).toEqual({ changes: [], matchups: [], unchecked: 0, fingerprint: '' })
+      const gap = reviewStatCorrections({ starters: [days([{ storedStats: { yds: 100 }, freshStats: null }])], matchups: [matchup], score })
+      expect(gap.unchecked).toBe(1)
+      expect(gap.changes).toEqual([])
+    })
+  })
 })

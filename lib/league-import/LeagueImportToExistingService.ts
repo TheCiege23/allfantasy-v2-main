@@ -12,6 +12,7 @@ import { leagueTypeForUpdate } from './leagueTypeWrite'
 import { bootstrapLeagueFromImport } from './LeagueCreationBootstrapService'
 import { mergeCanonicalBundleIntoLeagueSettingsJson } from '@/lib/league-import/ImportedLeagueCommitService'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
+import { hasIdpRosterSlot } from './idpRosterSlots'
 
 export interface ExistingLeagueImportApplyOptions {
   leagueStructure: boolean
@@ -67,12 +68,9 @@ function resolveImportedLeagueVariant(normalized: NormalizedImportResult): strin
   const scoringFormat = String(
     normalized.league.scoring ?? normalized.scoring?.scoring_format ?? ''
   ).toUpperCase()
-  const rosterPositions = Array.isArray(leagueData.roster_positions)
-    ? (leagueData.roster_positions as unknown[]).map((p) => String(p).toUpperCase())
-    : []
   const hasIdpSignal =
     scoringFormat.includes('IDP') ||
-    rosterPositions.some((p) => ['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'DB', 'IDP_FLEX'].includes(p))
+    hasIdpRosterSlot(Array.isArray(leagueData.roster_positions) ? (leagueData.roster_positions as unknown[]) : [])
   if (!hasIdpSignal) return null
   return normalized.league.isDynasty ? 'DYNASTY_IDP' : 'IDP'
 }
