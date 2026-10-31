@@ -572,6 +572,10 @@ export const translationsEsParity: Record<string, string> = {
 
   "draftRoom.playerPanel.close": "Cerrar",
   "draftRoom.playerPanel.noPicksYet": "Aún no hay picks.",
+  "draftRoom.pool.prospectBadge": "Prospecto",
+  "draftRoom.pool.prospectUnsigned": "Sin contrato",
+  "draftRoom.pool.prospectTooltip":
+    "Prospecto de la NHL listado por Fantrax que no figura en ningún plantel de la NHL en nuestros datos. El equipo indicado es el club de la NHL que tiene sus derechos. No hay edad ni año de draft disponibles.",
   "draftRoom.playerPanel.rookieFilterFallbackTitle": "Filtro de rookies no disponible para este deporte",
   "draftRoom.playerPanel.rookieFilterFallbackBody":
     "Los datos de rookies aún no están disponibles para este deporte, así que este draft de solo rookies muestra todo el pool de jugadores. Los picks no se verifican por condición de rookie: confirma que un jugador es rookie antes de draftearlo.",

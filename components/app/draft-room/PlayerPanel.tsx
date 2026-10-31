@@ -113,6 +113,8 @@ export type PlayerEntry = {
   yearsExp?: number | null
   /** D.7 — derived rookie flag (true when yearsExp === 0 or upstream marked as rookie). */
   isRookie?: boolean
+  /** NHL rookie drafts: a Fantrax-only prospect; `team` is his NHL org, null when unsigned. */
+  prospectSource?: 'fantrax'
   /** Provider-prioritized unified layer for fallback image/injury/source metadata */
   unifiedProductView?: UnifiedPlayerProductView | null
 }

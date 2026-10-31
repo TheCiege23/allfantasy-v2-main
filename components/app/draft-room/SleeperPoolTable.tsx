@@ -45,6 +45,7 @@ import {
 } from './SleeperPoolSort'
 import { AF_BLUE, afAdpCellTitle, aiAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
 import { formatSurvival, survivalProbability, survivalTone } from '@/lib/draft-room/draftPulse'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /** Re-export sizing constants for stories/tests that imported them from this module. */
 export {
@@ -178,6 +179,9 @@ function SleeperRow(props: SleeperRowProps) {
     leftAtOverall,
   } = props
 
+  const { t } = useOptionalLanguage()
+  const isProspect = p.prospectSource === 'fantrax'
+
   const normalized = useMemo(
     () =>
       normalizePlayer({
@@ -271,7 +275,22 @@ function SleeperRow(props: SleeperRowProps) {
               </div>
               <div className="flex min-w-0 items-center gap-1">
                 <PositionChip pos={p.position} />
-                {p.team ? <span className="truncate text-[11px] text-white/38">{p.team}</span> : null}
+                {p.team ? (
+                  <span className="truncate text-[11px] text-white/38">{p.team}</span>
+                ) : isProspect ? (
+                  <span className="truncate text-[11px] text-white/38" data-testid={`${testIdBase}-prospect-unsigned`}>
+                    {t('draftRoom.pool.prospectUnsigned')}
+                  </span>
+                ) : null}
+                {isProspect ? (
+                  <span
+                    className="flex-shrink-0 rounded border border-sky-300/35 bg-sky-500/12 px-1 py-px text-[10px] font-semibold uppercase tracking-[0.06em] text-sky-100"
+                    title={t('draftRoom.pool.prospectTooltip')}
+                    data-testid={`${testIdBase}-prospect-badge`}
+                  >
+                    {t('draftRoom.pool.prospectBadge')}
+                  </span>
+                ) : null}
               </div>
               {showAi ? (
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1">

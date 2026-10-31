@@ -241,3 +241,18 @@ out.
 **Needed:** a `getLeagueInfo` or `getTeamRosters` capture from a league whose teams have custom
 logos, committed under `contracts/fantrax/fixtures/`. If a logo field exists, map it in
 `FantraxLeagueFetchService` (one line) and the list shows it on the next scheduled refresh.
+
+## F-15 — NHL prospects come from "not in our NHL data", not from any Fantrax field (recorded 2026-10-31, no probe)
+
+NHL rookie drafts now offer Fantrax-only prospects (`lib/player-identity/nhlFantraxProspects.ts`).
+`ingestProFantraxIdentities('NHL')` stores the whole `getPlayerIds?sport=NHL` response, compacted,
+under `sportsDataCache['fantrax:nhl-player-universe']` — the same weekly read, no new endpoint.
+A row is a prospect when its `fantraxId` is on no NHL `PlayerIdentityMap` row, its name is no NHL
+identity's or pool player's, its team is a current NHL club or `(N/A)`, and its position is hockey.
+
+Still unknown (F-01 shape has no such field): age, draft year, league/level (AHL vs CHL vs Europe)
+and whether a `(N/A)` row is an unsigned draftee or a retired/European veteran. The `team` of an
+AHL player is his NHL parent club (Tyler Madden → MIN in the capture), never the affiliate.
+
+**Needed before ranking or age-gating prospects:** a field carrying level/draft data, which no
+committed Fantrax capture shows.
