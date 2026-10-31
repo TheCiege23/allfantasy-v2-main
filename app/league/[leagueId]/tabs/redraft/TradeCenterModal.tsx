@@ -568,6 +568,7 @@ export function TradeCenterModal({
       open={open}
       onClose={onClose}
       title={t('tradeCenter.modal.title')}
+      closeLabel={t('tradeCenter.modal.close')}
       description={tInterpolate('tradeCenter.modal.step', {
         step: step === 'partner' ? 1 : step === 'assets' ? 2 : 3,
         total: 3,

@@ -220,6 +220,8 @@ describe('redraft Trade Center modal — Spanish, every step', () => {
     // Step 1.
     expect(document.body.textContent).toContain('Paso 1 de 3 · Los Halcones')
     expect(document.body.textContent).toContain('Elige el equipo con el que quieres intercambiar.')
+    // The shared modal's close (X) button is named in Spanish too.
+    expect(screen.getByTestId('app-modal-close').getAttribute('aria-label')).toBe('Cerrar')
     fireEvent.click(screen.getByTestId('trade-partner-card-r2'))
     expect(document.body.textContent).toContain('agrega hasta 2 equipos más')
     expectFullySpanish()
