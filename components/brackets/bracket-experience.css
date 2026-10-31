@@ -1,4 +1,12 @@
 /* Scoped canvas matches the approved bracket-experience preview in every app mode. */
+.af-bx-shell.af-bx-saved { padding-top: 24px; }
+.af-bx-saved-grid { display: grid; gap: 18px; }
+.af-bx-saved-entries { list-style: none; padding: 0; margin: 0; }
+.af-bx-saved-entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2b4c4a; }
+.af-bx-saved-entry:first-child { padding-top: 0; }
+.af-bx-saved-entry h3 { margin: 0 0 6px; overflow-wrap: anywhere; }
+.af-bx-saved-entry > div { min-width: 0; flex: 1 1 180px; }
+.af-bx-saved-entry .af-bx-btn { flex-shrink: 0; }
 .af-bracket-experience { background: radial-gradient(circle at 70% 0, #123b3b, transparent 38%), #071519; color: #eafff6; min-height: 100vh; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
 .af-bracket-experience .af-bx-top { max-width: 1400px; padding: 24px 28px 18px; border-bottom: 1px solid #2a4a4a; }
 .af-bracket-experience .af-bx-top a { color: #b6d7cf; }

@@ -161,6 +161,7 @@ export default async function BracketsHomePage() {
         />
         <div className="flex items-center gap-2">
           <nav className="af-bx-navigation" aria-label={copy.bracket}>
+            <Link href="/brackets/my">{copy.myBrackets}</Link>
             <Link href="#bracket-leagues">{copy.myLeagues}</Link>
             <Link href="/brackets/discover">{copy.discover}</Link>
           </nav>

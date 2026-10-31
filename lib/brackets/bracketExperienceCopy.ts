@@ -1,4 +1,5 @@
 const en = {
+  myBrackets: "My Brackets",
   eyebrow: "Playoff picks · League competition", title: "Own the bracket.", titleEnd: "Win the league.",
   subtitle: "Make your picks, invite your friends, and follow every matchup to the championship.",
   create: "Create Bracket League", join: "Join with Code", share: "Share Bracket", copied: "Link copied", copyFailed: "Could not copy the link. Please try again.",
@@ -20,6 +21,7 @@ const en = {
 } as const
 
 const es: Record<keyof typeof en, string> = {
+  myBrackets: "Mis cuadros",
   eyebrow: "Pronósticos · Competencia entre ligas", title: "Domina el cuadro.", titleEnd: "Gana la liga.",
   subtitle: "Elige tus ganadores, invita a tus amigos y sigue cada partido hasta el campeonato.",
   create: "Crear liga de cuadros", join: "Unirse con código", share: "Compartir cuadro", copied: "Enlace copiado", copyFailed: "No se pudo copiar el enlace. Inténtalo de nuevo.",

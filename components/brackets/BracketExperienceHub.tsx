@@ -117,6 +117,7 @@ export default function BracketExperienceHub({ language, season }: { language: s
     <section className="af-bx-hero" data-testid="brackets-hub-hero">
       <div><p className="af-bx-eyebrow">{copy.eyebrow}</p><h1>{copy.title}<br />{copy.titleEnd}</h1><p>{copy.subtitle}</p></div>
       <div className="af-bx-actions">
+        <Link className="af-bx-btn" href="/brackets/my" data-testid="brackets-hub-my-brackets"><Trophy size={17} aria-hidden />{copy.myBrackets}</Link>
         <Link className="af-bx-btn af-bx-primary" href={createHref(sport)}><Plus size={17} />{copy.create}</Link>
         {view ? <button className="af-bx-btn" onClick={() => void share()}><Share2 size={16} />{copy.share}</button> : <Link className="af-bx-btn" href="/brackets/join"><Users size={16} />{copy.join}</Link>}
       </div>
