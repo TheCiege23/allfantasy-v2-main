@@ -186,6 +186,9 @@ const LEAGUE_TAB_I18N_KEY: Record<string, string> = {
   bb_command: 'league.tab.bbCommand',
   idp: 'league.tab.idp',
   keeper: 'league.tab.keepers',
+  dynasty: 'league.tab.dynasty',
+  dynasty_taxi: 'league.tab.dynastyTaxi',
+  dynasty_picks: 'league.tab.dynastyPicks',
   settings: 'league.tab.settings',
 }
 
