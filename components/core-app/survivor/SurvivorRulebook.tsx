@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useMessages } from '@/components/i18n/useMessages'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { getIntlLocale } from '@/lib/i18n/constants'
 import { survivorRulebookMessages } from '@/lib/core-app/messages/survivorRulebook'
 import { localDeadline, rulebook, type RulebookConfig, type RulebookRule } from '@/lib/core-app/survivorRulebook'
 
@@ -17,7 +18,7 @@ export function SurvivorRulebook({ config, editHref, collapsible = false }: { co
   const language = useOptionalLanguage().language
   // The deadline is worded in the reader's own time zone, so it is only filled in on the client.
   const [locale, setLocale] = useState<string | null>(null)
-  useEffect(() => { setLocale(language === 'es' ? 'es' : 'en-US') }, [language])
+  useEffect(() => { setLocale(getIntlLocale(language)) }, [language])
 
   const rules = rulebook(config)
   if (rules.length === 0) return null
