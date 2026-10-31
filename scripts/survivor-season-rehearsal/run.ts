@@ -161,6 +161,7 @@ async function main() {
   const chimmyBallotsExpected = new Map<string, Set<string>>()
   const seeded = new Set<number>()
   const exileSeeded = new Set<number>()
+  const exileReasons = new Set<string>()
   let last = '', repeats = 0
   for (let step = 0; step < MAX_STEPS; step++) {
     const game = await prisma.survivorGameState.findUnique({ where: { leagueId } })
@@ -201,6 +202,8 @@ async function main() {
     // before its revote can open. Back-to-back ticks finish in milliseconds, so step the clock like a
     // cron would (run 40565068405 hit the stall limit 14 s into a 25 s read).
     if (outcome === 'ceremony_processed') { advanceRehearsalClock(5 * 60_000); continue }
+    // The runner discards Chimmy's Exile result; ask again so a week Chimmy sits out says why.
+    if (CHIMMY > 0 && outcome === 'scores_finalized') await explainChimmyExile(week)
     if (['council_opened', 'second_council_opened', 'scores_finalized', 'week_advanced', 'opening_started', 'exile_return_settled', 'final_three_preserved'].includes(outcome)) continue
     advanceRehearsalClock(6 * 3_600_000)
   }
@@ -234,6 +237,19 @@ async function main() {
     // Stat names the league does not score make every team 0 and every council a tie, which looks
     // like a tiebreak problem rather than a seeding one. Stop here instead.
     assert.ok(scored > 0, `week ${week}: no seeded player scores above 0 under this league's scoring; the seeded stat names are wrong for ${SPORT}`)
+  }
+
+  async function explainChimmyExile(week: number) {
+    const { runChimmyExileTurn } = await import('../../lib/survivor/chimmyExile')
+    const turn = await runChimmyExileTurn(leagueId, rehearsalNow())
+    for (const [userId, reason] of Object.entries(turn.skipped)) {
+      if (reason === 'already_set') continue
+      const key = `${userId}:${reason}`
+      if (exileReasons.has(key)) continue
+      exileReasons.add(key)
+      log(`Chimmy Exile w${week}: ${userId.slice(0, 15)} skipped (${reason})`)
+    }
+    for (const [userId, c] of Object.entries(turn.claimed)) log(`Chimmy Exile w${week}: ${userId.slice(0, 15)} took ${c.team} (${c.players} players, form ${c.expected})`)
   }
 
   async function seedExileScores(week: number) {
