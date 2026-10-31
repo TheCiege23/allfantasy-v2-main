@@ -19,6 +19,8 @@ import {
   type SurvivorSettingsLocks,
 } from '@/lib/survivor/survivorSettingsScreen'
 import { SurvivorStateCard } from './core/SurvivorStateCard'
+import { SurvivorExileExtras, SurvivorJuryExtras, SurvivorPrizesSection, SurvivorRulesSection, survivorSettingsExtrasMessages } from './SurvivorSettingsExtras'
+import { useMessages } from '@/components/i18n/useMessages'
 import { SvkEmpty, SvkField, SvkSegmented, SvkSkeleton, SvkStepper, SvkToggle } from './core/SurvivorKit'
 import './survivor-core.css'
 
@@ -37,6 +39,8 @@ const SECTIONS = [
   { id: 'svt-idols', label: 'Hidden idols', icon: '/survivor/idols/immunity-icon.svg' },
   { id: 'svt-exile', label: 'Exile Island', icon: '/survivor/exile/token-icon.svg' },
   { id: 'svt-swap', label: 'Swap, merge, jury', icon: '/survivor/late/jury-icon.svg' },
+  { id: 'svt-prizes', label: 'Weekly prizes', icon: '/survivor/weekly/urn.svg' },
+  { id: 'svt-rules', label: 'League rules', icon: '/survivor/exile/wax-seal.svg' },
   { id: 'svt-sharing', label: 'Sharing', icon: '/survivor/late/champion-icon.svg' },
 ] as const
 
@@ -57,6 +61,7 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
   const [panel, setPanel] = useState<'crests' | 'idols' | null>(null)
   const [active, setActive] = useState<string>(SECTIONS[0].id)
+  const extrasText = useMessages(survivorSettingsExtrasMessages)
 
   const load = useCallback(async () => {
     setLoadError(null)
@@ -118,6 +123,7 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
     ? <span className="svt-lock"><Lock size={12} aria-hidden /> Locked</span>
     : state.locks.draftStarted && SURVIVOR_SETTINGS_EDITABLE_ALL_SEASON.includes(key) ? <span className="svk-pill svk-pill-warn">Editable all season</span> : null
   const disabled = (key: SurvivorSettingsKey) => saving || locked(key)
+  const extraProps = { draft, set, disabled, lockNote }
   const perTribe = Math.round(state.context.managers / Math.max(1, draft.tribeCount))
   const bossOptions = [
     ...(state.chimmyBossAvailable ? [{ value: 'chimmy_roster' as const, label: 'Chimmy’s roster' }] : []),
@@ -142,7 +148,7 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
       <nav className="svt-nav" aria-label="Settings sections">
         {SECTIONS.map(s => <a key={s.id} href={`#${s.id}`} aria-current={active === s.id} onClick={() => setActive(s.id)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={s.icon} alt="" />{s.label}
+          <img src={s.icon} alt="" />{s.id === 'svt-prizes' ? extrasText.prizesHeading : s.id === 'svt-rules' ? extrasText.rulesHeading : s.label}
         </a>)}
       </nav>
 
@@ -234,6 +240,7 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
               {draft.exileBossMode === 'fixed' && <input className="svk-input" type="number" min={0} max={10000} step={0.5} aria-label="Fixed boss score" value={draft.exileBossFixedScore ?? ''} onChange={e => set('exileBossFixedScore', e.target.value === '' ? null : Number(e.target.value))} disabled={disabled('exileBossFixedScore')} />}
               {draft.exileBossMode === 'topN' && <SvkStepper label="Scores averaged" value={draft.exileBossTopN} min={1} max={20} onChange={n => set('exileBossTopN', n)} disabled={disabled('exileBossTopN')} />}
             </SvkField>
+            <SurvivorExileExtras {...extraProps} />
           </>}
         </section>
 
@@ -256,7 +263,11 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
             {lockNote('finalistCount')}
             <SvkSegmented label="Finalists" value={draft.finalistCount} onChange={v => set('finalistCount', v)} disabled={disabled('finalistCount')} options={[{ value: 2, label: '2 finalists' }, { value: 3, label: '3 finalists' }]} />
           </SvkField>
+          <SurvivorJuryExtras {...extraProps} />
         </section>
+
+        <SurvivorPrizesSection {...extraProps} icon="/survivor/weekly/urn.svg" sport={state.context.sport} />
+        <SurvivorRulesSection {...extraProps} icon="/survivor/exile/wax-seal.svg" />
 
         <section id="svt-sharing" className="svk-card svt-sec" aria-labelledby="svt-sharing-h">
           {/* eslint-disable-next-line @next/next/no-img-element */}

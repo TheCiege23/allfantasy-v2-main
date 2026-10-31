@@ -6,9 +6,11 @@
 
 import type { SurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import type { SurvivorFoundationSettings } from './survivorSettings'
+import { weeklyPrizesActive, type SurvivorWeeklyPrizeSettings } from './survivorWeeklyPrizes'
 
 export type SurvivorRulesTopic =
   | 'voting' | 'ties' | 'idols' | 'merge' | 'exile' | 'jury' | 'immunity' | 'challenges' | 'schedule' | 'overview'
+  | 'prizes' | 'house_rules'
 
 export type SurvivorRulesContext = {
   sport: string
@@ -16,11 +18,20 @@ export type SurvivorRulesContext = {
   plan: SurvivorFullSeasonPlan | null
   /** Active managers right now, when known. */
   activeCount?: number | null
+  /** The commissioner's weekly tribe prizes (survivorWeeklyPrizes.ts). Absent = none. */
+  prizes?: SurvivorWeeklyPrizeSettings | null
+  /** The commissioner's free-text house rules. Quoted as written, never paraphrased. */
+  houseRules?: string | null
+  /** League.language: the prize and house-rules answers follow it (English / Spanish). */
+  language?: string | null
 }
 
 // Survivor words only: a league chat full of fantasy questions ("when does he play?", "who won the
 // game?") must not be pulled away from general Chimmy.
 const TOPIC_PATTERNS: Array<[SurvivorRulesTopic, RegExp]> = [
+  ['house_rules', /\b(house rules?|conduct|screenshots?|reglas de la casa)\b/],
+  // "Steal" alone stays with idols (a vote-steal idol); only the reward words are prizes.
+  ['prizes', /\b(prizes?|premios?|tie[- ]?break(?:ers?)?|free trades?|steal blockers?|blockers?)\b/],
   ['ties', /\b(tie|tied|ties|rocks|deadlock(?:ed)?)\b/],
   ['idols', /\b(idols?|shot in the dark)\b/],
   ['exile', /\b(exile|return(?:ing)? to the island)\b/],
@@ -103,10 +114,43 @@ function scheduleLine(ctx: SurvivorRulesContext): string {
   ].filter(Boolean).join(' ')
 }
 
+const isEs = (ctx: SurvivorRulesContext) => String(ctx.language ?? '').toLowerCase().startsWith('es')
+
+function prizesAnswer(ctx: SurvivorRulesContext): string {
+  const p = ctx.prizes
+  const es = isEs(ctx)
+  const lines: string[] = [es ? '**Premios semanales**' : '**Weekly prizes**']
+  if (!p || (!weeklyPrizesActive(p) && p.tribeTieBreakPosition === 'none')) {
+    lines.push(es ? '• Esta liga no tiene premios semanales de tribu. Los retos pueden dar sus propias recompensas.' : '• This league has no weekly tribe prizes. Challenges can still pay their own rewards.')
+  } else {
+    if (p.winningTribeFaabPerPlayer > 0) lines.push(es ? `• Antes de la fusión, la tribu con más puntos cada semana gana $${p.winningTribeFaabPerPlayer} de FAAB por jugador.` : `• Before the merge, the top-scoring tribe each week wins $${p.winningTribeFaabPerPlayer} FAAB per player.`)
+    if (p.topScorerReward === 'faab') lines.push(es ? `• El máximo anotador de esa tribu gana además $${p.topScorerAmount} de FAAB.` : `• That tribe's top scorer also wins $${p.topScorerAmount} FAAB.`)
+    if (p.topScorerReward === 'score_boost') lines.push(es ? `• El máximo anotador de esa tribu gana +${p.topScorerAmount} puntos en la semana siguiente.` : `• That tribe's top scorer wins +${p.topScorerAmount} points on the next week's score.`)
+    if (p.topScorerReward === 'advantage') lines.push(es ? `• El máximo anotador de esa tribu gana una ventaja (${p.topScorerPowerType.replace(/_/g, ' ')}).` : `• That tribe's top scorer wins an advantage (${p.topScorerPowerType.replace(/_/g, ' ')}).`)
+    if (p.tribeTieBreakPosition !== 'none') lines.push(es ? `• Si dos tribus empatan en puntos, gana la tribu con el ${p.tribeTieBreakPosition} titular que más puntuó.` : `• If two tribes tie on points, the tribe whose starting ${p.tribeTieBreakPosition} scored more wins the tie.`)
+  }
+  lines.push(es
+    ? '• Las recompensas de los retos pueden incluir puntos (a favor o en contra), FAAB tomado de otra tribu, puntos para un compañero, un premio para la semana siguiente, un intercambio libre o un robo que un bloqueador cancela. Pregúntame "¿qué gané?" para ver los tuyos.'
+    : '• Challenge rewards can include points (up or down), FAAB taken from another tribe, points you place on a tribemate, a prize that pays next week, a free trade, or a steal that a blocker cancels. Ask me "what did I win?" to see yours.')
+  return lines.join('\n')
+}
+
+function houseRulesAnswer(ctx: SurvivorRulesContext): string {
+  const es = isEs(ctx)
+  const text = (ctx.houseRules ?? '').trim()
+  if (!text) return es ? '**Reglas de la casa**\n• El comisionado no ha escrito reglas de la casa.' : '**House rules**\n• The commissioner has not written any house rules.'
+  const lines = text.split('\n').map(line => line.trim()).filter(Boolean).map(line => `• ${line.replace(/^[-•*]\s*/, '')}`)
+  return [es ? '**Reglas de la casa (del comisionado)**' : "**House rules (from the commissioner)**", ...lines].join('\n')
+}
+
 export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRulesContext): string {
   const s = ctx.settings
   const period = periodWord(ctx.sport)
   switch (topic) {
+    case 'prizes':
+      return prizesAnswer(ctx)
+    case 'house_rules':
+      return houseRulesAnswer(ctx)
     case 'voting':
       return [
         '**Voting**',
@@ -192,7 +236,14 @@ export function survivorRulesSection(topic: SurvivorRulesTopic, ctx: SurvivorRul
   }
 }
 
-/** The whole rulebook for a league, from its current settings. Recomputed on every read. */
+/**
+ * The whole rulebook for a league, from its current settings. Recomputed on every read. The prizes
+ * section appears only when the commissioner set weekly prizes or a tie-break position, and the
+ * house rules (pinned last) only when written, so a league with neither reads exactly as before.
+ */
 export function buildSurvivorRulebook(ctx: SurvivorRulesContext): SurvivorRulesSection[] {
-  return SURVIVOR_RULEBOOK_TOPICS.map(topic => survivorRulesSection(topic, ctx))
+  const topics: SurvivorRulesTopic[] = [...SURVIVOR_RULEBOOK_TOPICS]
+  if (ctx.prizes && (weeklyPrizesActive(ctx.prizes) || ctx.prizes.tribeTieBreakPosition !== 'none')) topics.splice(topics.indexOf('challenges') + 1, 0, 'prizes')
+  if (ctx.houseRules?.trim()) topics.push('house_rules')
+  return topics.map(topic => survivorRulesSection(topic, ctx))
 }

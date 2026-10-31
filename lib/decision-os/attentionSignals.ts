@@ -54,6 +54,9 @@ export type AttentionSignalType =
   /** Live-career plan, phase 4: what winning a live league would mean for the career — read off
    * the Career screen's own stakes (`careerMilestones.ts`), never re-derived. */
   | 'career_title_stake'
+  /** Survivor leagues (`survivorPrizeSignals.ts`): the manager's OWN reward state from the Survivor
+   * reward ledger — a choice to make, a free trade held, a prize pending or just won. */
+  | 'survivor_reward'
 
 export type AttentionSignalSource =
   | 'league_health_engine'
@@ -64,6 +67,8 @@ export type AttentionSignalSource =
   | 'user_os'
   /** Live-career plan, phase 4: the Career Wire's sync read and the Career screen's stakes. */
   | 'career'
+  /** The Survivor reward ledger (`lib/survivor/survivorRewardEngine.ts`), read for one manager. */
+  | 'survivor'
 
 export interface DecisionOsAttentionSignal {
   /** Stable and deterministic — the same underlying condition always produces the same id, so a

@@ -73,6 +73,14 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   await ensureVerifiedSlateChallenges(leagueId, week, plan.sport, ['pre_merge', 'post_swap'].includes(game.phase))
   // The weekly mini-game is bragging rights only: a failure here never holds up the season.
   await ensureWeeklyCall(leagueId, week, { sport: plan.sport, season: plan.season, merged: !['pre_merge', 'post_swap'].includes(game.phase), now }).catch(() => {})
+  // Rewards: deferred prizes whose week has come, and Chimmy's reward choices for the seats it runs
+  // (points on a tribemate, steal targets). Idempotent and best-effort: never holds up the island.
+  {
+    const { runSurvivorRewardOpenStep } = await import('./survivorWeeklyPrizeRunner')
+    await runSurvivorRewardOpenStep(leagueId, week).catch(error => {
+      console.warn('[survivor] reward step failed', error instanceof Error ? error.message : error)
+    })
+  }
   // Exiled castaways Chimmy runs reserve a team and set their Exile lineup, once a period. Best-effort,
   // like its council turn: a failure never holds up the island.
   {
@@ -105,6 +113,13 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   }
   await settleVerifiedSlateChallenges(leagueId, week)
   await settleWeeklyCall(leagueId, week).catch(() => {})
+  // The commissioner's weekly tribe prizes, from the final scores. Once per week (idempotent keys).
+  {
+    const { applyWeeklyTribePrizes } = await import('./survivorWeeklyPrizeRunner')
+    await applyWeeklyTribePrizes(leagueId, week).catch(error => {
+      console.warn('[survivor] weekly tribe prizes failed', error instanceof Error ? error.message : error)
+    })
+  }
 
   if (kind === 'elimination') {
     if (game.activeCouncilId) {

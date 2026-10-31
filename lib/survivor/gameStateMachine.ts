@@ -461,6 +461,7 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
         totals: immunity.totals,
         tribeIds: surprise ? surprise.tribeIds : tribes.map((t) => t.id),
         immuneTribeIds: [...immunity.immuneTribeIds, ...progress.attendedTribeIds],
+        tieBreak: immunity.tieBreak,
       }) ?? losingTribe
     }
     const merged = !surprise && (Boolean(gs.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(gs.phase))

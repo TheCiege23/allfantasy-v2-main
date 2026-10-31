@@ -15,8 +15,19 @@ import { voidPendingRedraftTradesForRoster } from '@/lib/redraft/voidPendingTrad
 import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from '@/lib/survivor/survivorIdolSeedingEngine'
 import { readSurvivorLateSeasonSettings, validateSurvivorLateSeasonPatch } from '@/lib/survivor/lateSeasonSettings'
 import { maybeTriggerSurvivorTribeShuffleRecommendation } from '@/lib/survivor/SurvivorSitOutEngine'
+import {
+  applySurvivorReward,
+  chooseSurvivorRewardTarget,
+  listSurvivorRewards,
+  reverseSurvivorReward,
+  type SurvivorRewardSpec,
+} from '@/lib/survivor/SurvivorEffectEngine'
 
 export const dynamic = 'force-dynamic'
+
+function rewardErrorStatus(code: 'invalid' | 'not_found' | 'conflict' | 'forbidden'): number {
+  return code === 'invalid' ? 400 : code === 'not_found' ? 404 : code === 'forbidden' ? 403 : 409
+}
 
 /**
  * Wraps requireCommissionerRole (which throws a bare Response) in a
@@ -54,6 +65,11 @@ export async function GET(req: NextRequest) {
   if (type === 'tribal_override') {
     // The latest council with a result, who it names, and who could be named instead.
     return NextResponse.json({ target: await readTribalOverrideTarget(leagueId) })
+  }
+
+  if (type === 'rewards') {
+    // Every Survivor reward in the league, with its state — the Hub's ledger and undo list.
+    return NextResponse.json({ rewards: await listSurvivorRewards(leagueId) })
   }
 
   if (type === 'state') {
@@ -217,6 +233,42 @@ export async function POST(req: NextRequest) {
       week,
     })
     return NextResponse.json({ ok: true })
+  }
+
+  // Rewards (survivorRewardEngine.ts): grant any reward by hand, make a pending choice for a
+  // manager, or undo a reward. Each one is validated and idempotent; the ledger is the audit trail.
+  if (action === 'grant_reward') {
+    const week = typeof body.week === 'number' ? body.week : NaN
+    const key = typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim()
+      ? body.idempotencyKey.trim()
+      : `commissioner:${userId}:${typeof body.requestId === 'string' ? body.requestId.trim() : ''}`
+    if (key.endsWith(':')) return NextResponse.json({ error: 'requestId or idempotencyKey required' }, { status: 400 })
+    const result = await applySurvivorReward({
+      leagueId,
+      idempotencyKey: key,
+      source: { kind: 'commissioner', label: typeof body.notes === 'string' ? body.notes.slice(0, 120) : null },
+      week,
+      reward: body.reward as SurvivorRewardSpec,
+      deferToWeek: typeof body.deferToWeek === 'number' ? body.deferToWeek : null,
+      actorUserId: userId,
+    })
+    if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: rewardErrorStatus(result.code) })
+    if (!result.duplicate) await log('grant_reward', `Granted a ${(body.reward as { type?: string } | null)?.type ?? 'reward'} reward`, { newState: { rewardId: result.rewardId, status: result.status }, week })
+    return NextResponse.json(result)
+  }
+
+  if (action === 'choose_reward_target' || action === 'reverse_reward') {
+    const rewardId = typeof body.rewardId === 'string' ? body.rewardId.trim() : ''
+    if (!rewardId) return NextResponse.json({ error: 'rewardId required' }, { status: 400 })
+    const result = action === 'reverse_reward'
+      ? await reverseSurvivorReward({ leagueId, rewardId, actorUserId: userId, reason: typeof body.notes === 'string' ? body.notes : null })
+      : await chooseSurvivorRewardTarget({
+          leagueId, rewardId, actorRosterId: null, asCommissioner: true, actorUserId: userId,
+          targetRosterId: typeof body.targetRosterId === 'string' ? body.targetRosterId.trim() : '',
+        })
+    if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: rewardErrorStatus(result.code) })
+    if (!result.duplicate) await log(action, action === 'reverse_reward' ? `Reversed reward ${rewardId}` : `Chose the target for reward ${rewardId}`, { newState: { rewardId, status: result.status } })
+    return NextResponse.json(result)
   }
 
   if (action === 'grant_idol') {

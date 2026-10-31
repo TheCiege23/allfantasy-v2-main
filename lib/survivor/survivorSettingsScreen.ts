@@ -13,7 +13,18 @@
  */
 import { defaultTribeSlots, validateTribeSlots } from './survivorTribeIdentity'
 import { SURVIVOR_TIE_RULES, type SurvivorTieRule } from './survivorSettings'
-import type { SurvivorExileBossMode } from './lateSeasonSettings'
+import type { SurvivorExileBossMode, SurvivorMergeNamingMode } from './lateSeasonSettings'
+import type { SurvivorCoCommissionerMode } from './survivorSettings'
+import type { SurvivorRewardAdvantagePower } from './survivorRewardModel'
+import {
+  SURVIVOR_HOUSE_RULES_MAX,
+  SURVIVOR_TOP_SCORER_REWARDS,
+  SURVIVOR_WEEKLY_PRIZE_DEFAULTS,
+  validateSurvivorWeeklyPrizes,
+  weeklyPrizesActive,
+  type SurvivorTopScorerReward,
+} from './survivorWeeklyPrizes'
+import { SURVIVOR_REWARD_ADVANTAGE_POWERS } from './survivorRewardModel'
 
 export type SurvivorTribeFormation = 'random' | 'commissioner_manual' | 'draft_pattern'
 /** The council tie rule: the owner's rocks rules, plus the two season-points rules older leagues carry. */
@@ -44,6 +55,25 @@ export interface SurvivorSettingsForm {
   publicMomentPages: boolean
   /** The public watch page for fans of the show (off by default). */
   spectatorPageEnabled: boolean
+  /**
+   * Settings that existed in storage with no screen (each one has a live reader — see the PR).
+   * coCommissionerMode → survivorAccessControl; mergeNamingMode → tribeSwapService; juryEnabled →
+   * survivorEliminationService; tribeChatsEnabled → survivorTribeChatProvisioning;
+   * exileHarshTokenLoss (League.survivorExileHarshTokenLoss) → tokenPoolEngine.
+   */
+  coCommissionerMode: SurvivorCoCommissionerMode
+  mergeNamingMode: SurvivorMergeNamingMode
+  juryEnabled: boolean
+  tribeChatsEnabled: boolean
+  exileHarshTokenLoss: boolean
+  /** Free text, shown in the rulebook and quoted by Chimmy (League.settings.survivorHouseRules). */
+  houseRules: string
+  /** Weekly tribe prizes (League.settings.survivorWeeklyPrizes; survivorWeeklyPrizes.ts). */
+  winningTribeFaabPerPlayer: number
+  topScorerReward: SurvivorTopScorerReward
+  topScorerAmount: number
+  topScorerPowerType: SurvivorRewardAdvantagePower
+  tribeTieBreakPosition: string
 }
 
 export type SurvivorSettingsKey = keyof SurvivorSettingsForm
@@ -52,6 +82,10 @@ export type SurvivorSettingsKey = keyof SurvivorSettingsForm
 export const SURVIVOR_SETTINGS_EDITABLE_ALL_SEASON: readonly SurvivorSettingsKey[] = [
   'voteDay', 'voteTime', 'exileBossMode', 'exileBossFixedScore', 'exileBossTopN', 'shareCardsEnabled', 'publicMomentPages',
   'spectatorPageEnabled',
+  // Merge naming is already changeable mid-season from the Hub; the token-pool rule, the house rules
+  // and the weekly prizes apply going forward, so changing them never rewrites a past week.
+  'mergeNamingMode', 'exileHarshTokenLoss', 'houseRules',
+  'winningTribeFaabPerPlayer', 'topScorerReward', 'topScorerAmount', 'topScorerPowerType',
 ]
 
 export const SURVIVOR_VOTE_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
@@ -69,6 +103,8 @@ export interface SurvivorSettingsContext {
   managers: number
   firstWeek: number
   lastWeek: number
+  /** The league's sport (tie-break positions). Defaults to NFL. */
+  sport?: string
 }
 
 export function formatVoteTime(time: string): string {
@@ -133,7 +169,25 @@ export function validateSettingsForm(form: SurvivorSettingsForm, ctx: SurvivorSe
     if (!Number.isInteger(form.swapWeek) || form.swapWeek <= ctx.firstWeek) errors.push('The swap must come after the first Tribal Council.')
     else if (form.swapWeek >= merge) errors.push('The swap must come before the merge.')
   }
+  if ((form.houseRules ?? '').length > SURVIVOR_HOUSE_RULES_MAX) errors.push(`House rules can be at most ${SURVIVOR_HOUSE_RULES_MAX} characters.`)
+  errors.push(...validateSurvivorWeeklyPrizes(weeklyPrizesFromForm(form), ctx.sport))
   return errors
+}
+
+/**
+ * The weekly-prize part of the form, in the stored shape. Tolerates a form from before these fields
+ * existed (an older client or cached payload): a missing field is the default, no prize.
+ */
+export function weeklyPrizesFromForm(form: SurvivorSettingsForm) {
+  const d = SURVIVOR_WEEKLY_PRIZE_DEFAULTS
+  const reward = form.topScorerReward ?? d.topScorerReward
+  return {
+    winningTribeFaabPerPlayer: form.winningTribeFaabPerPlayer ?? d.winningTribeFaabPerPlayer,
+    topScorerReward: reward,
+    topScorerAmount: reward === 'none' || reward === 'advantage' ? 0 : form.topScorerAmount ?? 0,
+    topScorerPowerType: form.topScorerPowerType ?? d.topScorerPowerType,
+    tribeTieBreakPosition: form.tribeTieBreakPosition ?? d.tribeTieBreakPosition,
+  }
 }
 
 export type SeasonWeekKind = 'tribal' | 'swap' | 'merge' | 'jury' | 'finale'
@@ -154,6 +208,15 @@ function describeBoss(form: SurvivorSettingsForm): string {
     case 'chimmy_roster': return "Chimmy's locked roster"
     default: return 'the league median'
   }
+}
+
+function describePrizes(form: SurvivorSettingsForm): string {
+  const parts: string[] = []
+  if (form.winningTribeFaabPerPlayer > 0) parts.push(`$${form.winningTribeFaabPerPlayer} FAAB per player`)
+  if (form.topScorerReward === 'faab') parts.push(`$${form.topScorerAmount} more for its top scorer`)
+  if (form.topScorerReward === 'score_boost') parts.push(`+${form.topScorerAmount} points next week for its top scorer`)
+  if (form.topScorerReward === 'advantage') parts.push('an advantage for its top scorer')
+  return `Weekly tribe prize: ${parts.join(', ')}`
 }
 
 /** The right-hand preview: a strip of every week, a plain-English summary and the validation. */
@@ -180,7 +243,10 @@ export function buildSeasonPreview(form: SurvivorSettingsForm, ctx: SurvivorSett
     form.mergeTrigger === 'week'
       ? form.swapEnabled ? `Swap in week ${form.swapWeek}, merge in week ${form.mergeWeek}` : `No swap, merge in week ${form.mergeWeek}`
       : form.swapEnabled ? `Swap in week ${form.swapWeek}, merge at ${form.mergeActivePlayerCount} managers left` : `No swap, merge at ${form.mergeActivePlayerCount} managers left`,
-    `${jurors} ${jurors === 1 ? 'juror picks' : 'jurors pick'} from ${form.finalistCount} finalists in week ${ctx.lastWeek}`,
+    form.juryEnabled !== false
+      ? `${jurors} ${jurors === 1 ? 'juror picks' : 'jurors pick'} from ${form.finalistCount} finalists in week ${ctx.lastWeek}`
+      : `No jury: ${form.finalistCount} finalists in week ${ctx.lastWeek}`,
+    ...(weeklyPrizesActive(weeklyPrizesFromForm(form)) ? [describePrizes(form)] : []),
   ]
   const weekCount = ctx.lastWeek - ctx.firstWeek + 1
   const note = `One manager goes home each week. With ${ctx.managers} managers and ${weekCount} weeks there is room for ${form.finalistCount} finalists${form.exileEnabled ? ' plus Exile returns' : ''}.`
@@ -206,6 +272,15 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
   if (trigger !== 'week' && trigger !== 'active_player_count') return null
   const finalist = num('finalistCount')
   if (finalist !== 2 && finalist !== 3) return null
+  const coRaw = str('coCommissionerMode')
+  const coMode = coRaw == null ? null : coRaw === 'disabled' || coRaw === 'non_participating_host' || coRaw === 'same_privacy_as_commissioner' ? coRaw : undefined
+  if (coMode === undefined) return null
+  const topRaw = str('topScorerReward')
+  const topReward = topRaw == null ? null : (SURVIVOR_TOP_SCORER_REWARDS as readonly string[]).includes(topRaw) ? (topRaw as SurvivorTopScorerReward) : undefined
+  if (topReward === undefined) return null
+  const powerRaw = str('topScorerPowerType')
+  const power = powerRaw == null ? null : (SURVIVOR_REWARD_ADVANTAGE_POWERS as readonly string[]).includes(powerRaw) ? (powerRaw as SurvivorRewardAdvantagePower) : undefined
+  if (power === undefined) return null
   const fixedRaw = r.exileBossFixedScore
   const fixed = fixedRaw == null ? null : typeof fixedRaw === 'number' && Number.isFinite(fixedRaw) ? fixedRaw : NaN
   const form: SurvivorSettingsForm = {
@@ -232,8 +307,20 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
     publicMomentPages: bools[5]!,
     // Added later than the others, so a form without it reads as off rather than invalid.
     spectatorPageEnabled: bool('spectatorPageEnabled') ?? false,
+    // Added later still: a form without them keeps today's behaviour (the defaults).
+    coCommissionerMode: coMode ?? 'disabled',
+    mergeNamingMode: str('mergeNamingMode') === 'manager_vote' ? 'manager_vote' : 'commissioner',
+    juryEnabled: bool('juryEnabled') ?? true,
+    tribeChatsEnabled: bool('tribeChatsEnabled') ?? true,
+    exileHarshTokenLoss: bool('exileHarshTokenLoss') ?? false,
+    houseRules: (str('houseRules') ?? '').replace(/\r\n/g, '\n'),
+    winningTribeFaabPerPlayer: r.winningTribeFaabPerPlayer == null ? SURVIVOR_WEEKLY_PRIZE_DEFAULTS.winningTribeFaabPerPlayer : num('winningTribeFaabPerPlayer'),
+    topScorerReward: topReward ?? 'none',
+    topScorerAmount: r.topScorerAmount == null ? 0 : num('topScorerAmount'),
+    topScorerPowerType: power ?? 'extra_vote',
+    tribeTieBreakPosition: (str('tribeTieBreakPosition') ?? 'none').trim() || 'none',
   }
-  const numeric: SurvivorSettingsKey[] = ['tribeCount', 'idolCount', 'exileReturnTokens', 'exileBossTopN', 'swapWeek', 'mergeWeek', 'mergeActivePlayerCount']
+  const numeric: SurvivorSettingsKey[] = ['tribeCount', 'idolCount', 'exileReturnTokens', 'exileBossTopN', 'swapWeek', 'mergeWeek', 'mergeActivePlayerCount', 'winningTribeFaabPerPlayer', 'topScorerAmount']
   if (numeric.some(k => Number.isNaN(form[k] as number)) || Number.isNaN(fixed as number)) return null
   return form
 }

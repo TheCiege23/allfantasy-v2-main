@@ -23,6 +23,9 @@ import { survivorPublicCouncil } from '../survivorPublicCouncil'
 import { isCouncilReadComplete } from '../survivorRevealGate'
 import { normalizeSurvivorFoundationSettings } from '../survivorSettings'
 import { survivorIdolExpiryRule, survivorIdolExpiryText, survivorIdolPlayCutoffText, survivorIdolPlayDeadline } from '../survivorIdolExpiry'
+import { listSurvivorRewards } from '../survivorRewardEngine'
+import { describeSurvivorReward, isOpenRewardStatus } from '../survivorRewardModel'
+import { readSurvivorHouseRules, readSurvivorWeeklyPrizes, type SurvivorWeeklyPrizeSettings } from '../survivorWeeklyPrizes'
 import { prisma } from '@/lib/prisma'
 import type { LeagueSport } from '@prisma/client'
 import { buildHistoricalContext, type HistoricalContext } from '@/lib/ai/historicalContextBuilder'
@@ -82,6 +85,15 @@ export interface SurvivorAIDeterministicContext {
   myIdols: { id: string; playerId: string; powerType: string }[]
   myActiveEffects: { rewardType: string; week: number; appliedMode: 'full' | 'record_only' | 'queued'; rosterId?: string | null; tribeId?: string | null; sourceRosterId?: string | null }[]
   myExileStatus: { exileRosterId: string; tokens: number; eliminated: boolean; eligibleToReturn: boolean; reason: string | null } | null
+  /**
+   * The user's OWN Survivor rewards (survivorRewardEngine): what they won, what is pending (a
+   * deferred prize, a choice to make) and tokens they hold (free trade, steal blocker). Never anyone
+   * else's — a blocker is private to its holder.
+   */
+  myRewards?: { rewardId: string; type: string; status: string; week: number; applyWeek: number; open: boolean; text: string }[]
+  /** The commissioner's weekly tribe prizes and house rules (public league rules). */
+  weeklyPrizes?: SurvivorWeeklyPrizeSettings
+  houseRules?: string
   /** The league's idol rules: last moment to play this week (open council only), the cutoff and the expiry rule, in words. */
   idolRules: { playDeadlineAt: Date | null; cutoffText: string | null; expiryText: string }
   finale: {
@@ -111,7 +123,7 @@ export async function buildSurvivorAIContext(args: {
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, survivorRevealMode: true, settings: true },
+    select: { sport: true, survivorRevealMode: true, settings: true, language: true },
   })
   const sport = (league?.sport ?? 'NFL') as LeagueSport
 
@@ -186,9 +198,14 @@ export async function buildSurvivorAIContext(args: {
   let myIdols: { id: string; playerId: string; powerType: string }[] = []
   let myActiveEffects: { rewardType: string; week: number; appliedMode: 'full' | 'record_only' | 'queued'; rosterId?: string | null; tribeId?: string | null; sourceRosterId?: string | null }[] = []
   let myExileStatus: { exileRosterId: string; tokens: number; eliminated: boolean; eligibleToReturn: boolean; reason: string | null } | null = null
+  let myRewards: NonNullable<SurvivorAIDeterministicContext['myRewards']> = []
   if (myRosterId) {
     myIdols = await getActiveIdolsForRoster(leagueId, myRosterId)
     myActiveEffects = await getActiveEffectsForRoster(leagueId, myRosterId, currentWeek)
+    // Best-effort: Chimmy still answers when the reward ledger cannot be read.
+    myRewards = (await listSurvivorRewards(leagueId, { rosterId: myRosterId }).catch(() => []))
+      .slice(0, 12)
+      .map((r) => ({ rewardId: r.rewardId, type: r.type, status: r.status, week: r.week, applyWeek: r.applyWeek, open: isOpenRewardStatus(r.status), text: describeSurvivorReward(r, league?.language) }))
   }
 
   if (exileLeagueId && myRosterId) {
@@ -273,6 +290,9 @@ export async function buildSurvivorAIContext(args: {
     myRosterId,
     myIdols,
     myActiveEffects,
+    myRewards,
+    weeklyPrizes: readSurvivorWeeklyPrizes(league?.settings),
+    houseRules: readSurvivorHouseRules(league?.settings),
     myExileStatus,
     finale:
       finaleState.finalists.length > 0 || finaleState.closed

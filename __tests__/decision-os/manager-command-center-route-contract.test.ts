@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   resolveManagerCommandCenterSnapshot: vi.fn(),
   leagueSettingsCount: vi.fn(),
   loadCareerDecisionInput: vi.fn(),
+  loadSurvivorDecisionSignals: vi.fn(async () => []),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: mocks.getServerSession }))
@@ -23,6 +24,10 @@ vi.mock('@/lib/decision-os/managerCommandCenter', async () => {
 // promise over. Mocked so this contract test never reaches the career profile or Prisma.
 vi.mock('@/lib/core-app/careerDecisionInput', () => ({
   loadCareerDecisionInput: mocks.loadCareerDecisionInput,
+}))
+// Survivor reward signals: started beside the snapshot, handed over as a promise like career.
+vi.mock('@/lib/survivor/survivorDecisionSignals', () => ({
+  loadSurvivorDecisionSignals: mocks.loadSurvivorDecisionSignals,
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { leagueSettings: { count: mocks.leagueSettingsCount } },
@@ -83,6 +88,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
       ['league-1', 'league-2', 'league-3'],
       expect.any(Date),
       expect.any(Promise),
+      expect.any(Promise),
     )
     // The career read gets the SAME rows the league ids came from — no second list read.
     expect(mocks.loadCareerDecisionInput).toHaveBeenCalledWith(
@@ -142,6 +148,6 @@ describe('GET /api/decision-os/manager-command-center', () => {
     expect(res.status).toBe(200)
     expect(body.totalLeagues).toBe(0)
     expect(body.draftsApproachingCount).toBe(0)
-    expect(mocks.resolveManagerCommandCenterSnapshot).toHaveBeenCalledWith('user-1', [], expect.any(Date), expect.any(Promise))
+    expect(mocks.resolveManagerCommandCenterSnapshot).toHaveBeenCalledWith('user-1', [], expect.any(Date), expect.any(Promise), expect.any(Promise))
   })
 })
