@@ -29,7 +29,7 @@ vi.mock('@/lib/c2c/scoringEngine', () => ({ leagueUsesC2CEngine: vi.fn(async () 
 vi.mock('@/lib/events', () => ({ getPlatformEvents: () => ({ emit: vi.fn(async () => undefined) }), EVENT: {} }))
 vi.mock('@/lib/sports-evidence/gates', () => ({ isSportsDataEnabled: () => false }))
 
-import { updateMatchupScores } from '@/lib/redraft/scoringEngine'
+import { scoreRosterForWeek, updateMatchupScores } from '@/lib/redraft/scoringEngine'
 
 const CAMPUS = {
   cfbWeeks: [2],
@@ -93,6 +93,27 @@ describe('campus points in the matchup score', () => {
     const data = db.redraftMatchup.update.mock.calls[0]![0].data
     expect(data.homeScore).toBe(Math.round((data.awayScore + 31.25) * 100) / 100)
     expect(data.lineupSnapshots.redraftScoring.campus).toEqual(hoops)
+    expect(data.status).toBe('active')
+    expect(data.lineupSnapshots.redraftScoring.campusPending).toBe(true)
+  })
+
+  it('keeps NBA campus byes and playoff roster scores provisional without complete college evidence', async () => {
+    const hoops = { window: null, home: { points: 0, players: [{ playerId: 'c1', points: 0 }] }, away: { points: 0, players: [] } }
+    campusBasketballPointsForMatchup.mockResolvedValue(hoops)
+    db.league.findFirst.mockResolvedValue(league({ sport: 'NBA', medianGame: true }))
+    db.redraftMatchup.findFirst.mockResolvedValue({ id: 'bye', leagueId: 'L1', seasonId: 's1', week: 3, homeRosterId: 'H', awayRosterId: null, homeRoster: {}, lineupSnapshots: null })
+    await updateMatchupScores('bye')
+    expect(db.redraftMatchup.update.mock.calls[0]![0].data).toMatchObject({ status: 'active', lineupSnapshots: { redraftScoring: { campusPending: true } } })
+    const result = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'H', week: 3, seasonYear: 2026 })
+    expect(result.allFinal).toBe(false)
+    expect(result.missingPlayerIds).toContain('campus-evidence-pending')
+  })
+
+  it('does not hold an NBA league with no campus lineup', async () => {
+    campusBasketballPointsForMatchup.mockResolvedValue(null)
+    db.league.findFirst.mockResolvedValue(league({ sport: 'NBA' }))
+    await updateMatchupScores('m1')
+    expect(db.redraftMatchup.update.mock.calls[0]![0].data.status).toBe('final')
   })
 
   it('a bye team’s median score counts its campus starters', async () => {
