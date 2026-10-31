@@ -28,6 +28,9 @@ const START = new Date(arg('start', '2026-09-08T16:00:00Z'))
 const VOTE_RATE = Number(arg('vote-rate', '0.85'))
 const LOG = arg('log', 'survivor-rehearsal.log')
 const MAX_STEPS = Number(arg('max-steps', '4000'))
+// Teams handed to Chimmy before the draft ("Chimmy as a manager"): it drafts them, then plays them
+// all season, votes and idols included. 0 runs the all-human season the rehearsal always ran.
+const CHIMMY = Number(arg('chimmy', '0'))
 
 function log(line: string) {
   const out = `[${rehearsalNow().toISOString()}] ${line}`
@@ -47,6 +50,7 @@ function guard() {
 }
 
 let seed = 0x5eed
+let planGateLogged = false
 const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
 const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]
 
@@ -103,6 +107,9 @@ async function main() {
     } })
   }
 
+  // ── Chimmy seats: emptied through the app's own release, then handed to Chimmy by its own switch ──
+  const chimmyRosterIds = await handChimmySeats()
+
   // ── Draft: every pick by the app's own autopick ──
   const draft = await prisma.draftSession.findFirstOrThrow({ where: { leagueId } })
   await prisma.draftSession.update({ where: { id: draft.id }, data: {
@@ -138,6 +145,7 @@ async function main() {
   const draftedRosterIds = (await prisma.redraftRoster.findMany({ where: { leagueId }, select: { id: true } })).map(r => r.id)
   const restamped = await prisma.redraftRosterPlayer.updateMany({ where: { rosterId: { in: draftedRosterIds }, addedAt: { gt: rehearsalNow() } }, data: { addedAt: rehearsalNow() } })
   log(`restamped ${restamped.count} drafted players to the rehearsal clock`)
+  if (CHIMMY > 0) await checkChimmyCast()
   log(`cast ${await prisma.survivorPlayer.count({ where: { leagueId } })}, tribes ${await prisma.survivorTribe.count({ where: { leagueId } })}, idols ${await prisma.survivorIdol.count({ where: { leagueId } })}`)
 
   const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { settings: true, season: true } })
@@ -150,6 +158,7 @@ async function main() {
   let scoringCache: { categories: SeedCategory[]; score: (stats: Record<string, number>, position: string | null) => number } | null = null
 
   // ── Season loop ──
+  const chimmyBallotsExpected = new Map<string, Set<string>>()
   const seeded = new Set<number>()
   let last = '', repeats = 0
   for (let step = 0; step < MAX_STEPS; step++) {
@@ -193,6 +202,7 @@ async function main() {
   const councils = await prisma.survivorTribalCouncil.findMany({ where: { leagueId }, orderBy: [{ week: 'asc' }, { councilNumber: 'asc' }], select: { week: true, councilNumber: true, phase: true, status: true, isRevealed: true, eliminatedUserId: true } })
   const finalGame = await prisma.survivorGameState.findUnique({ where: { leagueId } })
   log(`phase ${finalGame?.phase}, week ${finalGame?.currentWeek}; states ${JSON.stringify(players.reduce<Record<string, number>>((a, p) => ({ ...a, [p.playerState]: (a[p.playerState] ?? 0) + 1 }), {}))}`)
+  if (CHIMMY > 0) await chimmySummary()
   log(`councils ${councils.length}: ${councils.map(c => `w${c.week}#${c.councilNumber}:${c.phase}/${c.status}${c.isRevealed ? '' : '(unrevealed)'}`).join(' ')}`)
 
   async function seedWeekScores(week: number) {
@@ -273,14 +283,91 @@ async function main() {
     return Object.fromEntries(own.map(c => [c.key, r(0, c.points > 0 ? 4 : 2)]))
   }
 
+  async function handChimmySeats(): Promise<string[]> {
+    if (CHIMMY <= 0) return []
+    assert.ok(CHIMMY < CAST, 'leave at least one human manager')
+    const { releaseLeagueSeat } = await import('../../lib/league/leagueSeats')
+    const { applyChimmyAutopilot } = await import('../../lib/inactive-manager/inactiveManagerService')
+    const { AF_MANAGED_LINEUPS_KEY, readManagedLineups, isChimmyRunning, CHIMMY_MANAGER_LIMIT } = await import('../../lib/inactive-manager/inactiveManagerMode')
+    const seats = rosters.slice(CAST - CHIMMY)
+    const ids = seats.map(r => r.id)
+    for (const [i, r] of seats.entries()) {
+      const released = await releaseLeagueSeat(prisma, { leagueId, rosterId: r.id })
+      assert.ok(released.ok, `release seat ${r.id}: ${JSON.stringify(released)}`)
+      await prisma.leagueTeam.updateMany({ where: { leagueId, externalId: r.id }, data: { teamName: `Team ${CAST - CHIMMY + i + 1}` } })
+      const on = await applyChimmyAutopilot(leagueId, userIds[0], r.id, 'win_now')
+      if (!on.ok && on.status === 402 && !planGateLogged) {
+        // The rehearsal's test owner has no AF Commissioner plan, so the gate refuses: that is the gate
+        // working. Write the same entry the switch writes, so the rest of the season is Chimmy's.
+        planGateLogged = true
+        log(`Chimmy switch refused for the unpaid test owner (${on.error}); writing its entry directly`)
+      } else if (!on.ok && on.status !== 402) {
+        assert.fail(`Chimmy switch for ${r.id}: ${JSON.stringify(on)}`)
+      }
+      if (!on.ok) {
+        const row = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { settings: true } })
+        const settings = (row.settings ?? {}) as Record<string, unknown>
+        const managed = readManagedLineups(settings)
+        const now = rehearsalNow().toISOString()
+        managed[r.id] = { since: now, byUserId: userIds[0], ownerUserId: `orphan-${r.id}`, autopilot: { style: 'win_now', since: now, byUserId: userIds[0] } } as (typeof managed)[string]
+        await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...settings, [AF_MANAGED_LINEUPS_KEY]: managed } as object } })
+      }
+    }
+    const row = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { settings: true } })
+    const managed = readManagedLineups(row.settings)
+    const owners = await prisma.roster.findMany({ where: { id: { in: ids } }, select: { id: true, platformUserId: true } })
+    for (const o of owners) assert.ok(isChimmyRunning(managed, o.id, o.platformUserId), `Chimmy is not running ${o.id} (owner ${o.platformUserId})`)
+    log(`Chimmy runs ${ids.length} of ${CAST} teams (limit ${CHIMMY_MANAGER_LIMIT}): seats ${owners.map(o => o.platformUserId).join(', ')}`)
+    return ids
+  }
+
+  async function checkChimmyCast() {
+    const cast = await prisma.survivorPlayer.findMany({ where: { leagueId, redraftRosterId: { in: chimmyRosterIds } }, select: { userId: true, displayName: true, tribeId: true } })
+    log(`Chimmy castaways: ${cast.map(c => `${c.displayName}${c.tribeId ? '' : ' (no tribe)'}`).join(', ')}`)
+    assert.equal(cast.length, chimmyRosterIds.length, 'every Chimmy team should be a castaway')
+    for (const c of cast) {
+      assert.match(c.displayName, /\(Chimmy\)$|^Chimmy \d+$/, `Chimmy castaway named ${c.displayName}`)
+      assert.ok(c.tribeId, `${c.displayName} has no tribe`)
+    }
+    const picks = await prisma.draftPick.groupBy({ by: ['rosterId'], where: { sessionId: draft.id, rosterId: { in: chimmyRosterIds } }, _count: { _all: true } })
+    log(`Chimmy drafted: ${picks.map(p => p._count._all).join(', ')} picks (rounds ${draft.rounds})`)
+    assert.equal(picks.length, chimmyRosterIds.length)
+    for (const p of picks) assert.equal(p._count._all, draft.rounds, `a Chimmy team drafted ${p._count._all} of ${draft.rounds}`)
+  }
+
+  async function chimmySummary() {
+    let expected = 0, cast = 0
+    const missing: string[] = []
+    for (const [councilId, voters] of chimmyBallotsExpected) {
+      const votes = await prisma.survivorVote.findMany({ where: { councilId, voterUserId: { in: [...voters] } }, select: { voterUserId: true } })
+      const have = new Set(votes.map(v => v.voterUserId))
+      for (const v of voters) { expected++; if (have.has(v)) cast++; else missing.push(`${councilId}:${v}`) }
+    }
+    const cast_ = await prisma.survivorPlayer.findMany({ where: { leagueId, redraftRosterId: { in: chimmyRosterIds } }, select: { userId: true, displayName: true, playerState: true } })
+    const userIdsChimmy = cast_.map(c => c.userId)
+    const idols = await prisma.survivorIdol.findMany({ where: { leagueId, OR: [{ currentOwnerUserId: { in: userIdsChimmy } }, { rosterId: { in: chimmyRosterIds } }] }, select: { status: true, powerType: true } })
+    const played = idols.filter(i => i.status !== 'hidden')
+    log(`Chimmy season: ${cast}/${expected} ballots cast across ${chimmyBallotsExpected.size} councils; idols held ${idols.length}, played ${played.length} (${played.map(i => i.powerType).join(', ') || 'none'}); finished ${cast_.map(c => `${c.displayName}=${c.playerState}`).join(', ')}`)
+    assert.ok(chimmyBallotsExpected.size > 0, 'Chimmy never sat at a council')
+    assert.deepEqual(missing, [], 'Chimmy left a ballot unsent')
+  }
+
   async function castVotes() {
     const ctx = await loadCouncilContext(leagueId)
     if (!ctx) return
     const votedRosters = new Set((await prisma.survivorVote.findMany({ where: { councilId: ctx.council.id }, select: { voterRosterId: true } })).map(v => v.voterRosterId))
     const existing = new Set(ctx.eligibility.voterUserIds.filter(u => votedRosters.has(ctx.userToRoster[u])))
     let cast = 0, skipped = 0, refused = 0
+    const chimmyVoters = ctx.eligibility.voterUserIds.filter(u => chimmyRosterIds.includes(ctx.userToRoster[u] ?? ''))
+    if (chimmyVoters.length) {
+      const seen = chimmyBallotsExpected.get(ctx.council.id) ?? new Set<string>()
+      chimmyVoters.forEach(u => seen.add(u))
+      chimmyBallotsExpected.set(ctx.council.id, seen)
+      log(`council w${ctx.council.week}#${ctx.council.councilNumber}: Chimmy had already voted for ${chimmyVoters.filter(u => existing.has(u)).length}/${chimmyVoters.length} of its castaways when the managers' ballots opened`)
+    }
     for (const voter of ctx.eligibility.voterUserIds) {
       if (existing.has(voter)) continue
+      if (chimmyVoters.includes(voter)) continue // Chimmy's own turn casts these; never the harness
       if (rand() > VOTE_RATE) { skipped++; continue }
       const targets = ctx.eligibility.targetsByVoter[voter] ?? []
       if (!targets.length) continue

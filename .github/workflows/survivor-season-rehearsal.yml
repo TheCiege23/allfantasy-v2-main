@@ -18,6 +18,9 @@ on:
       start:
         description: 'Rehearsal clock start (ISO, before the draft)'
         default: '2026-09-08T16:00:00Z'
+      chimmy:
+        description: 'Teams handed to Chimmy before the draft (0-4; 0 = all human)'
+        default: '2'
   push:
     branches: [claude/survivor-season-harness]
     paths: ['scripts/survivor-season-rehearsal/**', '.github/workflows/survivor-season-rehearsal.yml']
@@ -66,12 +69,13 @@ jobs:
           SPORT: ${{ inputs.sport || 'NFL' }}
           CAST: ${{ inputs.cast || '16' }}
           START: ${{ inputs.start || '2026-09-08T16:00:00Z' }}
+          CHIMMY: ${{ inputs.chimmy || '2' }}
         run: |
           export NEXTAUTH_SECRET="$(openssl rand -hex 32)"
           export DIRECT_URL="${DATABASE_URL/-pooler./.}"
           set +e
           npx tsx --conditions=react-server scripts/survivor-season-rehearsal/run.ts \
-            --sport="$SPORT" --cast="$CAST" --start="$START" --log=rehearsal.log > rehearsal.out 2>&1
+            --sport="$SPORT" --cast="$CAST" --start="$START" --chimmy="$CHIMMY" --log=rehearsal.log > rehearsal.out 2>&1
           echo "RC=$?" >> rehearsal.log
           exit 0
       - name: Post the log to the pull request
