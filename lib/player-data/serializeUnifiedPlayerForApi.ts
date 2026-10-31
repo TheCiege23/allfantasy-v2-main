@@ -30,6 +30,16 @@ import {
 
 export type UnifiedPlayerWireDto = {
   id: string
+  /**
+   * Waiver wire only: a recently dropped player is on waivers until this ISO time
+   * (lib/waiver-wire/dropped-player-waivers.ts). Absent for every other player and surface.
+   */
+  onWaiversUntil?: string | null
+  /**
+   * Waiver wire, NHL dynasty only: a Fantrax-only prospect (`lib/waiver-wire/nhlProspectFreeAgency.ts`),
+   * id `fantrax:<id>`, with no projection, ADP or rank. Absent for every other player.
+   */
+  prospectSource?: 'fantrax'
   name: string
   position: string | null
   team: string | null
@@ -74,6 +84,19 @@ export type UnifiedPlayerWireDto = {
   }
   /** Present when rows came from `getNormalizedPlayerData` with diagnostics enabled */
   providerFallbackDiagnostics?: ProviderFallbackDiagnostics
+  /**
+   * NBA / NHL / MLB only: rank within position by season fantasy points under THIS league's scoring,
+   * stamped by the roster and waiver routes (lib/projections/dailySportOutlook.ts). Absent elsewhere.
+   */
+  positionRank?: { position: string; rank: number; of: number } | null
+  /** The same rank as the screens print it: "C12", "SP34". */
+  positionRankLabel?: string | null
+  /**
+   * NBA / NHL / MLB daily-lineup leagues: the opponent and venue on the day the lineup screen has
+   * selected, stamped beside the AF projection for that day. Absent elsewhere.
+   */
+  periodOpponent?: string | null
+  periodHomeAway?: 'home' | 'away' | null
 }
 
 export type { ProviderFallbackDiagnostics }

@@ -4,10 +4,10 @@
  * the caller already holds (league row, roster GET, draft settings GET, guillotine summary GET),
  * so the list is testable without a browser or a database.
  *
- * A row's `target` names the sub-page that edits it. Members get the same list with every target
- * removed (values shown, no way into an editor). The Commissioner tools row is commissioner-only.
+ * A row's `target` names its sub-page. Members can open read-only history; editors remain commissioner-only.
  */
 
+import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 
@@ -22,12 +22,20 @@ export type SettingsSubPageId =
   | 'guillotine-first-chop'
   /** Guillotine: chop schedule, double/no-chop weeks and immunity (lib/guillotine/chopSchedule.ts). */
   | 'guillotine-chop-rules'
+  /** Guillotine: endgame, release timing, tiebreakers, correction wait… (lib/guillotine/guillotineRules.ts). */
+  | 'guillotine-rules'
   | 'playoffs'
   | 'members'
+  | 'team-settings'
+  | 'previous-leagues'
   | 'co-commissioners'
   | 'divisions'
   | 'ai'
   | 'commissioner-tools'
+  /** Lock areas of the rules for the season; unlocking mid-season takes a league vote (lib/league/settingsLock). */
+  | 'settings-lock'
+  /** Manual point adjustments per matchup, with a reason (lib/score-adjustments). */
+  | 'score-adjustments'
   /** Survivor leagues only: tribe count, identities and the pre-draft tribe plan (handoff §5.4). */
   | 'survivor-tribes'
 
@@ -88,6 +96,8 @@ export type SettingsHomeGuillotine = {
   teamsPerChop?: number
   /** The first chop has happened — the start week can no longer move. */
   locked: boolean
+  /** The server's AF Commissioner check for guillotine rules; null when not reported. */
+  canEditPaidRules?: boolean | null
 }
 
 export type BuildSettingsHomeInput = {
@@ -269,7 +279,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       title: 'General',
       rows: [
         { id: 'name', label: 'League name', value: league.name?.trim() || 'Untitled league', ...edit('general') },
-        { id: 'teams', label: 'Teams', value: String(teamCount) },
+        { id: 'teams', label: 'Teams', value: String(teamCount), ...edit('general') },
         { id: 'format', label: 'Format', value: `${input.formatLabel} · ${formatScoringMode(league.settings)}`, ...edit('format') },
       ],
     },
@@ -317,7 +327,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
     const g = input.guillotine
     sections.push({
       id: 'guillotine',
-      title: 'Guillotine',
+      title: 'Guilly',
       rows: [
         {
           id: 'first-chop',
@@ -334,6 +344,12 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
           ...edit('guillotine-chop-rules'),
         },
         {
+          id: 'league-rules',
+          label: 'League rules',
+          value: 'Endgame · tiebreakers · release timing',
+          ...edit('guillotine-rules'),
+        },
+        {
           id: 'chop-schedule',
           label: 'Chop & waiver schedule',
           value: profile ? `Chop ${profile.chopLabel.replace(/^By /, 'by ')} · Waivers ${profile.waiverLabel}` : 'Weekly',
@@ -342,6 +358,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
           id: 'endgame',
           label: 'Endgame',
           value: ENDGAME_LABELS[String(league.guillotineEndgame ?? 'last_team_standing')] ?? titleCase(String(league.guillotineEndgame)),
+          ...edit('guillotine-rules'),
         },
       ],
     })
@@ -353,7 +370,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
         {
           id: 'playoffs',
           label: 'Playoffs',
-          value: `${league.playoffTeams ?? 4} teams · starts Wk ${league.playoffStartWeek ?? 14}`,
+          value: `${league.playoffTeams ?? 6} teams · starts Wk ${resolvePlayoffStartWeek(league).week}`,
           ...edit('playoffs'),
         },
       ],
@@ -364,6 +381,8 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   const divisions = divisionCount(league.settings)
   const memberRows: SettingsHomeRow[] = [
     { id: 'managers', label: 'Managers', value: `${joined} / ${teamCount} joined`, ...edit('members') },
+    ...(canEdit ? [{ id: 'team-settings', label: 'Team settings', value: 'Names, logos and managers', target: 'team-settings' as const }] : []),
+    { id: 'previous-leagues', label: 'Previous Leagues', value: 'View history', target: 'previous-leagues' },
     {
       id: 'invite',
       label: 'Invite link',
@@ -372,7 +391,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
     },
     { id: 'co-commissioners', label: 'Co-commissioners', value: coCommissioners.length ? coCommissioners.join(', ') : 'None', ...edit('co-commissioners') },
   ]
-  if (divisions > 0) memberRows.push({ id: 'divisions', label: 'Divisions', value: `${divisions} divisions`, ...edit('divisions') })
+  if (divisions > 0 || canEdit) memberRows.push({ id: 'divisions', label: 'Divisions', value: divisions > 0 ? `${divisions} divisions` : 'Off', ...edit('divisions') })
   sections.push({ id: 'members', title: 'Members', rows: memberRows })
 
   if (canEdit) {
@@ -382,6 +401,8 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       rows: [
         { id: 'league-ai', label: 'League AI', value: 'Helpers & commissioner intelligence', target: 'ai' },
         { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls, dues, history', target: 'commissioner-tools' },
+        { id: 'settings-lock', label: 'Settings lock', value: 'Lock rules for the season', target: 'settings-lock' },
+        { id: 'score-adjustments', label: 'Score adjustments', value: 'Add or take away points, with a reason', target: 'score-adjustments' },
         ...(isSurvivorSettingsLeague(league)
           ? [{ id: 'survivor-tribes', label: 'Survivor tribes', value: 'Tribes, assignment & announce', target: 'survivor-tribes' as const }]
           : []),

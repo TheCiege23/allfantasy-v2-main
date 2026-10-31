@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   if (!g) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   try {
-    await requireCommissionerRole(g.leagueId, userId)
+    await requireCommissionerRole(g.leagueId, userId, 'league')
   } catch (err) {
     if (err instanceof Response) return err
     throw err

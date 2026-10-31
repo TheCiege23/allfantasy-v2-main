@@ -22,6 +22,7 @@ import {
   getAllowedTeamCountsFromCatalog,
   getLeagueCreateOptionsCatalog,
 } from '@/lib/league-creation/options-catalog'
+import { isImportedTeamCountAllowed } from '@/lib/league-creation/importedTeamCount'
 import { buildFantasyLeagueLeadMetaEvent } from '@/lib/meta-funnel-events'
 import { trackMetaServerEvent } from '@/lib/meta-capi'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
@@ -32,6 +33,8 @@ import {
   findPremiumCreateSettingKeys,
   hasAfCommissionerCreateEntitlement,
 } from '@/lib/league-creation/canonical/premiumCreateSettingsGate'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
+import { oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -73,18 +76,9 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
     log('client_user_id_fields_stripped', { strippedKeys })
   }
 
-  const validated = validateCreatePayload(sanitizedBody)
-  if (!validated.ok) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: validated.error,
-        errors: validated.errors.map((e) => ({ path: e.path, message: e.message, code: e.code })),
-      },
-      { status: validated.status }
-    )
-  }
-
+  // The imported league is read before validation so its real team count can be handed to the
+  // validator: a carryover may keep a team count the native list for its type lacks.
+  let importedSource: { sport: string; teamCount: number } | null = null
   if (typeof sourceLeagueId === 'string') {
     const source = await prisma.league.findUnique({
       where: { id: sourceLeagueId },
@@ -97,14 +91,28 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
     const currentTeams = await prisma.leagueTeam.count({
       where: { leagueId: source.id, lifecycleState: { not: 'ARCHIVED' } },
     })
-    if (String(source.sport) !== String(validated.data.sport) ||
-        currentTeams !== validated.data.teamCount) {
-      return NextResponse.json({
+    importedSource = { sport: String(source.sport), teamCount: currentTeams }
+  }
+
+  const validated = validateCreatePayload(sanitizedBody, { importedTeamCount: importedSource?.teamCount ?? null })
+  if (!validated.ok) {
+    return NextResponse.json(
+      {
         success: false,
-        error: 'Sport and team count must match the imported league to carry over rosters.',
-        errors: [],
-      }, { status: 400 })
-    }
+        error: validated.error,
+        errors: validated.errors.map((e) => ({ path: e.path, message: e.message, code: e.code })),
+      },
+      { status: validated.status }
+    )
+  }
+
+  if (importedSource && (importedSource.sport !== String(validated.data.sport) ||
+      importedSource.teamCount !== validated.data.teamCount)) {
+    return NextResponse.json({
+      success: false,
+      error: 'Sport and team count must match the imported league to carry over rosters.',
+      errors: [],
+    }, { status: 400 })
   }
 
   const catalog = await getLeagueCreateOptionsCatalog()
@@ -166,7 +174,11 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
   }
 
   const allowedTeamCounts = getAllowedTeamCountsFromCatalog(catalog, catalogConcept, validated.data.sport)
-  if (allowedTeamCounts.length > 0 && !allowedTeamCounts.includes(validated.data.teamCount)) {
+  // A carryover keeps its imported team count (already required above to equal the import's) for
+  // the import-flexible types; every other request keeps the catalog list.
+  const importedTeamCountAllowed = importedSource != null &&
+    isImportedTeamCountAllowed(catalogConcept, validated.data.teamCount, allowedTeamCounts)
+  if (allowedTeamCounts.length > 0 && !allowedTeamCounts.includes(validated.data.teamCount) && !importedTeamCountAllowed) {
     return NextResponse.json(
       {
         success: false,
@@ -205,6 +217,28 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
             {
               path: 'conceptSetup.advancedSetup',
               message: 'Upgrade to AF Commissioner before saving premium advanced setup.',
+            },
+          ],
+        },
+        { status: 403 },
+      )
+    }
+  }
+
+  // Odd keeper sizes are an AF Commissioner option (lib/league/oddTeamLeagues.ts). A carryover keeps
+  // the imported league's own size, so it is never refused here.
+  if (!importedTeamCountAllowed && oddTeamCountNeedsAfCommissioner(catalogConcept, validated.data.teamCount)) {
+    const hasPlan = await hasAfCommissionerPlan({ ...session.user, id: resolvedUser.appUserId })
+    if (!hasPlan) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'AF Commissioner is required for an odd-team keeper league',
+          errors: [
+            {
+              path: 'teamCount',
+              message: `A ${validated.data.teamCount}-team keeper league is part of AF Commissioner. Choose an even team count or upgrade.`,
+              code: 'ODD_TEAM_COUNT_REQUIRES_AF_COMMISSIONER',
             },
           ],
         },

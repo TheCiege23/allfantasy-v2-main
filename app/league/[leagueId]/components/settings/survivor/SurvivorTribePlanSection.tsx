@@ -134,7 +134,7 @@ export function SurvivorTribePlanSection({ leagueId, setup, disabled }: { league
         {invalid ? ` · ${invalid}` : ''}
       </p>
       {!hasStrength ? (
-        <p className="stp-help">AF strength comes from the ADP of players already on each roster. Before the draft a redraft roster is empty, so Balanced by AF waits; Random and Manual work now. Every tribe needs {TRIBE_MIN_MANAGERS}–{TRIBE_MAX_MANAGERS} managers.</p>
+        <p className="stp-help">AF strength comes from the ADP of players already on each roster. Before the draft a redraft roster is empty, so Balanced by AF waits; Random and Manual work now. Tribes are equal shares of the cast (at least {TRIBE_MIN_MANAGERS}, at most {TRIBE_MAX_MANAGERS} managers each).</p>
       ) : null}
 
       <div className="stp-grid">

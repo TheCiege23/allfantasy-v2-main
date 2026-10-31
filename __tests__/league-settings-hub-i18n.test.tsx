@@ -129,14 +129,15 @@ describe('🛑 the hub reads Spanish in Spanish', () => {
 
   it.each([
     // Waivers is a section of General now (2026-10-14), not its own tab. FAAB fields show only when FAAB is in use.
-    ['general', ['Básicos', 'Guardado automático', 'Nombre de la liga', 'Zona horaria', 'URL del logo', 'Reclamos y agentes libres', 'Tipo de reclamos', 'Prioridad de reclamo rotativa', 'Prioridad de reclamo por clasificación inversa', 'Período de reclamos (h)', 'Calendario diario']],
+    ['general', ['Número de equipos', 'Solo se pueden quitar plazas vacías sin manager.', 'Básicos', 'Guardado automático', 'Nombre de la liga', 'Zona horaria', 'URL del logo', 'Reclamos y agentes libres', 'Tipo de reclamos', 'Prioridad de reclamo rotativa', 'Prioridad de reclamo por clasificación inversa', 'Período de reclamos (h)', 'Calendario diario']],
     ['trades', ['Permitir trades de picks del draft', 'Ventana de revisión (horas)', 'Límite de trades (n.º de semana)']],
     ['playoffs', ['Calendario rápido', 'Equipos en playoffs', 'Inicio de playoffs (semana)', 'Fases y brackets']],
     ['scoring', []],
     ['roster', []],
     ['notifications', ['Las notificaciones básicas de la liga están en los ajustes de la cuenta.']],
-    ['commissioner', ['Registro de auditoría', 'El registro de auditoría está listo', 'Quitar de AllFantasy', 'es solo para el comisionado principal.']],
-    ['conceptRules', ['Resumen del formato', 'Guillotina: Activado', 'Survivor: Desactivado', 'Best ball: Activado', 'Variante: —', 'Ajustes de Best Ball', 'Notas del comisionado sobre el formato (fusión JSON)']],
+    ['commissioner', ['Registro de auditoría', 'Aquí aparecerá el historial de cambios del comisionado.', 'Quitar de AllFantasy', 'es solo para el comisionado principal.']],
+    // The raw-JSON "concept notes" box is gone (nothing read it); the format reads as a name.
+    ['conceptRules', ['Formato de la liga', 'Guilly: Activado', 'Survivor: Desactivado', 'Best ball: Activado', 'Formato: —', 'Ajustes de Best Ball', 'tienen sus propias páginas en los Ajustes de la liga']],
     ['ai', ['Controla los ajustes del Asistente de la liga.', 'Asistente de la liga', 'Lista de seguimiento de agentes libres', 'Salud de trades', 'Participación de los managers', 'Preparación para el draft']],
   ])('%s', (tab, expected) => {
     lang.language = 'es'

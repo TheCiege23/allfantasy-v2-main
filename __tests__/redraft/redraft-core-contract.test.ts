@@ -38,7 +38,9 @@ describe('redraft core contract hardening', () => {
 
     expect(plan.eligible).toBe(true)
     expect(plan.settingsChanged).toBe(true)
-    expect(plan.nextSettings.starter_slots).toEqual({ QB: 1, RB: 2, WR: 2, TE: 1, FLX: 1, K: 1, DEF: 1 })
+    // A saved layout is kept as saved, legacy spelling included (owner, 2026-10-20): the repair no
+    // longer respells FLEX/DST to FLX/DEF, which for NCAAF also dropped a saved DEF.
+    expect(plan.nextSettings.starter_slots).toEqual({ QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DST: 1 })
     expect(plan.nextSettings.scoring_preset_id).toBe('fb_full_ppr')
     expect(plan.draftSession.shouldCreate).toBe(false)
     expect(plan.draftSession.shouldUpdate).toBe(true)
@@ -63,7 +65,8 @@ describe('redraft core contract hardening', () => {
       teams: [{ ownerName: 'Done' }],
     })
 
-    expect(plan.nextSettings.starter_slots).toEqual({ QB: 1, RB: 2, WR: 3, TE: 1, FLX: 1, DEF: 1, K: 1 })
+    // Exactly as saved: the repair used to deep-merge the default starters in and add K: 1 here.
+    expect(plan.nextSettings.starter_slots).toEqual({ QB: 1, RB: 2, WR: 3, TE: 1, FLX: 1, DEF: 1 })
     expect(plan.nextSettings.scoring_preset_id).toBe('custom_college_power')
     expect(plan.draftSession.shouldCreate).toBe(false)
     expect(plan.draftSession.shouldUpdate).toBe(false)
@@ -120,9 +123,12 @@ describe('redraft core contract hardening', () => {
       players: [
         { playerId: 'qb', playerName: 'QB', position: 'QB', sport: 'NFL', slotType: 'QB' },
         { playerId: 'rb', playerName: 'RB', position: 'RB', sport: 'NFL', slotType: 'RB' },
+        { playerId: 'rb2', playerName: 'RB2', position: 'RB', sport: 'NFL', slotType: 'RB' },
         { playerId: 'wr1', playerName: 'WR1', position: 'WR', sport: 'NFL', slotType: 'WR' },
         { playerId: 'wr2', playerName: 'WR2', position: 'WR', sport: 'NFL', slotType: 'WR' },
         { playerId: 'te', playerName: 'TE', position: 'TE', sport: 'NFL', slotType: 'TE' },
+        { playerId: 'flex', playerName: 'Flex', position: 'WR', sport: 'NFL', slotType: 'FLEX' },
+        { playerId: 'k', playerName: 'K', position: 'K', sport: 'NFL', slotType: 'K' },
         { playerId: 'def', playerName: 'Defense', position: 'DST', sport: 'NFL', slotType: 'DST' },
       ],
     })

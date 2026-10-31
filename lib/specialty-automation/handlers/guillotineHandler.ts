@@ -1,4 +1,5 @@
 import { runElimination } from '@/lib/guillotine/GuillotineEliminationEngine'
+import { IMPORTED_CHOP_REASON } from '@/lib/guillotine/importedLeagueGuard'
 import { planEliminateRoster } from '@/lib/specialty-automation/actionPlans'
 import type { HandlerContext, HandlerResult } from '@/lib/specialty-automation/types'
 
@@ -7,7 +8,7 @@ const ALLOWED: Set<string> = new Set(['onWeekFinalized', 'onManualRun', 'onSched
 export async function runGuillotineHandler(ctx: HandlerContext): Promise<HandlerResult> {
   if (!ALLOWED.has(ctx.trigger)) {
     return {
-      summary: 'Guillotine automation skipped for this trigger.',
+      summary: 'Guilly automation skipped for this trigger.',
       actions: [],
       events: [],
       skipped: true,
@@ -18,7 +19,7 @@ export async function runGuillotineHandler(ctx: HandlerContext): Promise<Handler
   const week = ctx.week
   if (week == null || week < 1) {
     return {
-      summary: 'Guillotine needs a valid week context.',
+      summary: 'Guilly needs a valid week context.',
       actions: [],
       events: [],
       skipped: true,
@@ -34,9 +35,19 @@ export async function runGuillotineHandler(ctx: HandlerContext): Promise<Handler
     skipRosterRelease: false,
   })
 
+  if (chop?.reason === IMPORTED_CHOP_REASON) {
+    return {
+      summary: 'Guilly automation skipped: an imported league is chopped by its provider.',
+      actions: [],
+      events: [],
+      skipped: true,
+      skipReason: 'imported_league',
+    }
+  }
+
   if (!chop) {
     return {
-      summary: 'No guillotine config or elimination not applicable.',
+      summary: 'No Guilly config or elimination not applicable.',
       actions: [{ actionType: 'guillotine_evaluate', metadata: { result: 'no_config' } }],
       events: [],
       skipped: true,
@@ -74,8 +85,8 @@ export async function runGuillotineHandler(ctx: HandlerContext): Promise<Handler
   return {
     summary:
       chop.choppedRosterIds.length > 0
-        ? `Guillotine: ${chop.choppedRosterIds.length} chop(s). ${chop.reason ?? ''}`
-        : `Guillotine: no chop. ${chop.reason ?? ''}`,
+        ? `Guilly: ${chop.choppedRosterIds.length} chop(s). ${chop.reason ?? ''}`
+        : `Guilly: no chop. ${chop.reason ?? ''}`,
     actions,
     events,
     phaseState: {

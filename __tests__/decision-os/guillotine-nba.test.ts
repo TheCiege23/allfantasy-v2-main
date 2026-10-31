@@ -75,7 +75,7 @@ beforeEach(() => {
 })
 
 describe('isGuillotineTradeLeague', () => {
-  it('takes an NBA guillotine league, by type or variant — not another sport, and not survivor_guillotine', () => {
+  it('takes an NBA Guilly league, by type or variant — not another sport, and not survivor_guillotine', () => {
     expect(isGuillotineTradeLeague({ sport: 'NBA', leagueType: 'guillotine' })).toBe(true)
     expect(isGuillotineTradeLeague({ sport: 'nba', leagueType: 'redraft', leagueVariant: 'guillotine' })).toBe(true)
     expect(isGuillotineTradeLeague({ sport: 'NFL', leagueType: 'guillotine' })).toBe(true)
@@ -162,7 +162,7 @@ describe('loadGuillotineContext — NBA', () => {
       ['Star Guard', 'guillotine_points'],
       ['$40 FAAB', 'guillotine_faab'],
     ])
-    expect(view.basis).toMatch(/^Guillotine value/)
+    expect(view.basis).toMatch(/^Guilly value/)
     expect(view.basis).toMatch(/An NBA week is about 3 games a team/)
   })
 

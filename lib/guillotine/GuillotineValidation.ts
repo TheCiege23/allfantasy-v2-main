@@ -17,50 +17,33 @@ export type GuillotineRosterMode = (typeof GUILLOTINE_ALLOWED_ROSTER_MODES)[numb
 /** Draft types allowed for Guillotine (snake, linear, auction; 3RR only for snake). */
 export const GUILLOTINE_DRAFT_TYPES = ['snake', 'linear', 'auction'] as const
 
-/** NFL: fixed 4–32 teams, 18-week season; final week highest scorer wins. */
-const NFL_GUILLOTINE_TEAM_MIN = 4
-const NFL_GUILLOTINE_TEAM_MAX = 32
-
-/** Minimum teams for any sport. */
-const GUILLOTINE_TEAM_MIN_DEFAULT = 8
-/** Maximum teams cap across sports. */
-const GUILLOTINE_TEAM_MAX_CAP = 32
+import {
+  GUILLOTINE_MAX_TEAMS,
+  GUILLOTINE_MIN_TEAMS,
+  GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS,
+} from './teamCountLimits'
 
 export interface ValidTeamCountRange {
   min: number
   max: number
+  /** Largest league that finishes with one chop per week; above it needs double-elimination weeks. */
+  singleEliminationMax: number
   /** When true, double (or more) eliminations per period may be needed for large leagues. */
   supportsDoubleElimination: boolean
 }
 
 /**
- * Get valid Guillotine team count range for a sport.
- * NFL: 4–32. Others: derived from schedule template regularSeasonWeeks (one winner by final week).
+ * Get valid Guilly team count range. Same for every sport: 4–27 with single elimination,
+ * up to 35 when the commissioner adds double-elimination weeks (see ./teamCountLimits.ts).
  */
 export async function getValidGuillotineTeamCountRange(
-  sport: LeagueSport | string
+  _sport: LeagueSport | string
 ): Promise<ValidTeamCountRange> {
-  const s = (typeof sport === 'string' ? sport : sport) as LeagueSport
-  const sportType = toSportType(s) as SportType
-
-  if (sportType === 'NFL') {
-    return {
-      min: NFL_GUILLOTINE_TEAM_MIN,
-      max: NFL_GUILLOTINE_TEAM_MAX,
-      supportsDoubleElimination: true,
-    }
-  }
-
-  const template = await getScheduleTemplate(sportType, 'DEFAULT')
-  const weeks = template.regularSeasonWeeks ?? 17
-  // One elimination per week -> max teams = weeks + 1 (final week = 2 teams, one winner).
-  const maxFromWeeks = Math.min(GUILLOTINE_TEAM_MAX_CAP, weeks + 1)
-  const min = GUILLOTINE_TEAM_MIN_DEFAULT
-  const max = Math.max(min, maxFromWeeks)
   return {
-    min,
-    max,
-    supportsDoubleElimination: weeks < 15,
+    min: GUILLOTINE_MIN_TEAMS,
+    max: GUILLOTINE_MAX_TEAMS,
+    singleEliminationMax: GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS,
+    supportsDoubleElimination: true,
   }
 }
 
@@ -163,14 +146,14 @@ export async function validateGuillotineCreation(
   const { sport, teamCount, rosterMode, draftType } = input
 
   if (!isSportSupportedForGuillotine(sport)) {
-    return { valid: false, error: 'This sport is not supported for Guillotine leagues.' }
+    return { valid: false, error: 'This sport is not supported for Guilly leagues.' }
   }
 
   const range = await getValidGuillotineTeamCountRange(sport)
   if (teamCount < range.min || teamCount > range.max) {
     return {
       valid: false,
-      error: `Team count must be between ${range.min} and ${range.max} for this sport.`,
+      error: `Guilly leagues support ${range.min}–${range.singleEliminationMax} teams, or up to ${range.max} with double-elimination weeks.`,
       teamCountRange: range,
     }
   }
@@ -179,7 +162,7 @@ export async function validateGuillotineCreation(
   if (!isAllowedRosterModeForGuillotine(effectiveRosterMode)) {
     return {
       valid: false,
-      error: 'Guillotine leagues support only Redraft or Best Ball. Dynasty, Keeper, and Devy are not supported.',
+      error: 'Guilly leagues support only Redraft or Best Ball. Dynasty, Keeper, and Devy are not supported.',
     }
   }
 
@@ -187,7 +170,7 @@ export async function validateGuillotineCreation(
     if (!isAllowedDraftTypeForGuillotine(draftType)) {
       return {
         valid: false,
-        error: 'Guillotine supports Snake, Linear, or Auction draft only.',
+        error: 'Guilly supports Snake, Linear, or Auction draft only.',
       }
     }
   }

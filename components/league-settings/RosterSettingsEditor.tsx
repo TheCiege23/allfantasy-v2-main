@@ -23,6 +23,7 @@ import { emitLeagueDraftRoomRevalidate } from '@/lib/draft-room/emitLeagueDraftR
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { RosterLabel } from '@/components/league-labels/RosterLabel'
 import { matchRosterLabel } from '@/lib/league-labels/liveValues'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 interface RosterTemplateOption {
   key: string
@@ -106,6 +107,7 @@ function sportLabel(sport: string | null | undefined): string {
 
 export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueId: string; sport?: string | null }) {
   const { t } = useLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const [slotDefs, setSlotDefs] = useState<SlotDef[]>([])
   const [config, setConfig] = useState<RosterConfig | null>(null)
   const [baselineSlots, setBaselineSlots] = useState<Record<string, number>>({})
@@ -123,6 +125,8 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
   const [unavailable, setUnavailable] = useState(false)
   const [foreignRoster, setForeignRoster] = useState(false)
   const [success, setSuccess] = useState(false)
+  // What the roster change did to the draft (rounds follow the roster), so it is never a surprise.
+  const [draftNote, setDraftNote] = useState<string | null>(null)
   const [pendingSlots, setPendingSlots] = useState<Record<string, number>>({})
 
   /** Apply a roster-settings payload (GET, PUT or reset) to state, sport-correctly. */
@@ -198,7 +202,7 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
     try {
       // Only this sport's keys are ever sent.
       const slots = alignSlotsToSport(pendingSlots, slotDefs).slots
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings`, {
+      const res = await confirmFetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slots, templateKey: selectedTemplateKey }),
       })
@@ -209,10 +213,11 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
       setMatchesTemplate(data.unifiedConfig?.rosterMatchesTemplate ?? true)
       applyPayload({ ...data, sport: rosterSport }, slotDefs)
       setSuccess(true)
+      setDraftNote(describeDraftRoundsSync(data.draftRounds, t))
       emitLeagueDraftRoomRevalidate(leagueId)
     } catch { setError(t('lsEd.requestFailed')) }
     finally { setSaving(false) }
-  }, [applyPayload, leagueId, pendingSlots, rosterSport, selectedTemplateKey, slotDefs])
+  }, [applyPayload, confirmFetch, leagueId, pendingSlots, rosterSport, selectedTemplateKey, slotDefs])
 
   const resetToSaved = useCallback(() => {
     setPendingSlots(baselineSlots)
@@ -234,7 +239,7 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
     setError(null)
     setSuccess(false)
     try {
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings/reset-default`, {
+      const res = await confirmFetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings/reset-default`, {
         method: 'POST',
       })
       const data = await res.json()
@@ -245,13 +250,14 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
       applyPayload({ ...data, sport: data.sport ?? rosterSport, templates }, slotDefs)
       if (!data.config?.templateKey) setSelectedTemplateKey(defaultTemplateKey ?? 'custom')
       setSuccess(true)
+      setDraftNote(describeDraftRoundsSync(data.draftRounds, t))
       emitLeagueDraftRoomRevalidate(leagueId)
     } catch {
       setError(t('lsEd.ro.resetRequestFailed'))
     } finally {
       setSaving(false)
     }
-  }, [applyPayload, defaultTemplateKey, isCommissioner, leagueId, rosterSport, slotDefs, templates])
+  }, [applyPayload, confirmFetch, defaultTemplateKey, isCommissioner, leagueId, rosterSport, slotDefs, templates])
 
   const groups = useMemo(
     () => buildRosterGroups(slotDefs, pendingSlots, { isCommissioner, sport: rosterSport }),
@@ -288,6 +294,8 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
   )
 
   return (
+    <>
+      {midSeasonDialog}
     <RosterSettingsModalShell title={t('lsEd.ro.title')} subtitle={t('lsEd.ro.subtitle')} badge={badge}>
       <RosterValidationBanner warnings={warnings} errors={error ? [error] : []} />
 
@@ -364,7 +372,12 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
 
       {canEdit && (
         <div className="space-y-2 border-t border-white/10 pt-3">
-          {success && <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{t('lsEd.ro.saved')}</div>}
+          {success && (
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300" data-testid="roster-settings-saved">
+              {t('lsEd.ro.saved')}
+              {draftNote ? <span className="mt-1 block text-emerald-200/80">{draftNote}</span> : null}
+            </div>
+          )}
           <button
             type="button"
             disabled={saving || !hasChanges}
@@ -389,5 +402,16 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
         </div>
       )}
     </RosterSettingsModalShell>
+    </>
   )
+}
+
+/** One line for the roster save's `draftRounds` result (lib/draft/syncDraftRoundsToRoster.ts). */
+function describeDraftRoundsSync(result: unknown, t: (key: string) => string): string | null {
+  if (!result || typeof result !== 'object') return null
+  const r = result as { synced?: boolean; rounds?: number; reason?: string }
+  if (r.synced && typeof r.rounds === 'number') return t('lsEd.ro.draftSynced').replace('{{n}}', String(r.rounds))
+  if (r.reason === 'manual_override') return t('lsEd.ro.draftKept')
+  if (r.reason === 'draft_started') return t('lsEd.ro.draftStarted')
+  return null
 }

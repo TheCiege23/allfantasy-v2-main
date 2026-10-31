@@ -477,7 +477,7 @@ function formatLabel(r: CareerLedgerRow): string {
 
 function typeLabel(r: CareerLedgerRow): string {
   const base = r.leagueType === 'unknown' ? '' : r.leagueType.charAt(0).toUpperCase() + r.leagueType.slice(1)
-  const special = r.specialty === 'bestball' ? 'Best ball' : r.specialty === 'guillotine' ? 'Guillotine' : r.specialty === 'draft_only' ? 'Draft only' : ''
+  const special = r.specialty === 'bestball' ? 'Best ball' : r.specialty === 'guillotine' ? 'Guilly' : r.specialty === 'draft_only' ? 'Draft only' : ''
   return [base, special].filter(Boolean).join(' · ') || '—'
 }
 

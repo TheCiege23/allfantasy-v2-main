@@ -1,6 +1,11 @@
 import type { WeeklyBlueprint } from './weeklyBlueprint'
 import { weeklyActionText } from './weeklyBlueprint'
 import { buildWeeklySwings } from './weeklySportPlan'
+import { commissionerWeeklyPlanMessages } from '@/lib/core-app/messages/commissionerWeeklyPlan'
+import { langFromFlag } from '@/lib/core-app/messages/coreLocale'
+import { messagesFor } from '@/lib/i18n/messages'
+
+const copy = (es: boolean) => messagesFor(commissionerWeeklyPlanMessages, langFromFlag(es))
 
 /** Unsent, explicitly reviewed league-chat content. Never carry it across leagues. */
 export type ReviewedLeagueDraft = {
@@ -11,10 +16,11 @@ export type ReviewedLeagueDraft = {
 }
 
 export function weeklyTaskSuggestions(data: WeeklyBlueprint, leagueId: string, es = false) {
+  const m = copy(es)
   return data.actions.filter(a => a.leagueId === leagueId).map(a => ({
     id: a.id,
     title: weeklyActionText(a, es),
-    description: `${buildWeeklySwings(data,es).find(s=>s.id===a.id)?.detail ?? ''}\n${a.leagueName}${a.period ? ` · ${es ? 'Período' : 'Period'} ${a.period}` : ''}\n${es ? 'Revisar los datos actuales y coordinar el seguimiento con el manager.' : 'Review current evidence and coordinate follow-up with the manager.'}`,
+    description: `${buildWeeklySwings(data,es).find(s=>s.id===a.id)?.detail ?? ''}\n${a.leagueName}${a.period ? ` · ${m.period} ${a.period}` : ''}\n${m.reviewFollowUp}`,
   }))
 }
 

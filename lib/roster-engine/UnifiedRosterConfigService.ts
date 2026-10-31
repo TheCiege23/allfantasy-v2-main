@@ -8,6 +8,7 @@ import {
   detectReadOnlyRosterView,
 } from './RosterPermissionsService'
 import { mapImportedRosterToAF } from './RosterImportMapper'
+import { sportSupportsProspectStash, stripProspectStashSlots } from '@/lib/league-creation/prospectStashPolicy'
 import { validateRosterConfig } from './RosterValidationEngine'
 import type {
   RosterAuditEntry,
@@ -198,6 +199,13 @@ export async function createDefaultLeagueRosterConfig(
   const settings = (league?.settings as Record<string, unknown>) ?? {}
   let config = await service.getConfig(leagueId)
   const setup = settings.conceptSetup as Record<string, unknown> | undefined
+  const withoutStash = stripProspectStashSlots(sport, config.slots)
+  if (Object.keys(withoutStash).length !== Object.keys(config.slots).length) {
+    // NHL / MLB: the sport templates still carry TAXI / PROSPECT / RIGHTS / MINORS for existing
+    // leagues, but a NEW league gets none of them (lib/league-creation/prospectStashPolicy.ts).
+    await service.saveConfig(leagueId, { templateKey: config.templateKey, slots: withoutStash, isCustom: config.isCustom })
+    config = await service.getConfig(leagueId)
+  }
   if (leagueType === 'dynasty' && setup) {
     const slots = { ...config.slots }
     let changed = false
@@ -205,6 +213,7 @@ export async function createDefaultLeagueRosterConfig(
     const irSlot = 'IL' in slots ? 'IL' : 'IR'
     for (const [choice, slot] of [['benchCount', benchSlot], ['irCount', irSlot], ['taxiSlots', 'TAXI']] as const) {
       const value = setup[choice]
+      if (slot === 'TAXI' && !sportSupportsProspectStash(sport)) continue
       if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && slots[slot] !== value) {
         slots[slot] = value
         changed = true

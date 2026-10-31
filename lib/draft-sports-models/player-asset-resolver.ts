@@ -6,6 +6,7 @@
 import type { DraftSport } from './types'
 import { getPrimaryLogoUrlForTeam } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 import { buildPlayerMedia } from '@/lib/player-media'
+import { boundMap } from '@/lib/ttl-memo'
 import { liveLogoOrNull } from '@/lib/sport-teams/knownDeadLogoGuess'
 import type { PlayerAssetModel, TeamDisplayModel } from './types'
 
@@ -19,6 +20,8 @@ const FALLBACK_TEAM_LOGO_PLACEHOLDER = `data:image/svg+xml;utf8,${encodeURICompo
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000
 const memoryCache = new Map<string, { data: PlayerAssetModel; expiresAt: number }>()
+// The key carries the image URL and team, so every image restamp or trade orphans the old key.
+const MEMORY_CACHE_MAX_ENTRIES = 20_000
 
 function cacheKey(playerId: string, teamAbbr: string | null, sport: string): string {
   return `assets:${sport}:${playerId}:${teamAbbr ?? ''}`
@@ -108,6 +111,7 @@ export function resolvePlayerAssets(
     headshotFallbackUsed: !headshotUrl,
     teamLogoFallbackUsed: !teamLogoUrl,
   }
+  boundMap(memoryCache, (e) => e.expiresAt <= Date.now(), MEMORY_CACHE_MAX_ENTRIES)
   memoryCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS })
   return data
 }

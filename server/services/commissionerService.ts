@@ -23,6 +23,7 @@ import {
   isHeadCommissioner,
 } from '@/server/services/permissionService'
 import type { LeagueLifecycleState } from '@prisma/client'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 
 export type CommissionerConfirmation = {
   confirmed?: boolean
@@ -258,6 +259,7 @@ export async function editFaabOverride(leagueId: string, userId: string, rosterI
     where: { id: rosterId },
     data: { faabRemaining: faab },
   })
+  await copyGenericFaabToRedraft(prisma, [rosterId])
   await logAction({
     leagueId,
     userId,
@@ -493,9 +495,10 @@ export async function assertSettingsEditAllowed(
   ) {
     const err = new Error(
       'Scoring settings are frozen during playoffs/completed unless explicitly overridden.',
-    ) as Error & { status?: number; code?: string }
+    ) as Error & { status?: number; code?: string; lifecycleState?: LeagueLifecycleState }
     err.status = 400
     err.code = 'SCORING_LOCKED'
+    err.lifecycleState = state
     throw err
   }
 
@@ -508,8 +511,16 @@ export async function assertSettingsEditAllowed(
     },
   })
   if (!gate.ok) {
-    const err = new Error(gate.err.error) as Error & { status?: number }
+    // `code` and `lifecycleState` let a caller tell a lifecycle refusal (LIFECYCLE_BLOCKED) from a
+    // lock, pause or permission refusal, and word it for the phase the league is in.
+    const err = new Error(gate.err.error) as Error & {
+      status?: number
+      code?: string
+      lifecycleState?: LeagueLifecycleState
+    }
     err.status = gate.err.status
+    err.code = gate.err.code
+    err.lifecycleState = state
     throw err
   }
 }

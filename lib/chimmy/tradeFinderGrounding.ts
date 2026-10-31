@@ -25,7 +25,7 @@ import {
   type PartnerMatch,
   type TradePackage,
 } from '@/lib/trade-discovery/redraftTradeDiscovery'
-import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
+import { tradeBanReason } from '@/lib/league-rules/tradeLegality'
 import { getMarketValues, type MarketValuesPayload } from '@/lib/trade-intel/marketValueService'
 import type { TeamStance } from '@/lib/trade-value/types'
 
@@ -228,13 +228,12 @@ export async function buildTradeFinder(input: TradeFinderInput): Promise<TradeFi
   const leagueSize = rows.rosters.length || 12
   const marketContext = marketContextFor(league.settings, league.leagueType, leagueSize)
 
-  /* 🛑 A NO-TRADE LEAGUE GETS NO IDEAS — the same check, from the same source, as the player card. */
-  const concept = readFormatRules({
-    leagueType: league.leagueType,
-    isDynasty: marketContext.variant.dynasty,
-    settings: league.settings,
-  }).concept
-  if (concept === 'guillotine' || concept === 'survivor') {
+  /*
+   * 🛑 A NO-TRADE LEAGUE GETS NO IDEAS — the same check, from the same source, as the player card:
+   * the concept catalog. Survivor and guillotine leagues trade; only formats like Survivor All-Stars
+   * Guillotine and tournaments forbid it.
+   */
+  if (tradeBanReason({ leagueType: league.leagueType, isDynasty: marketContext.variant.dynasty, settings: league.settings })) {
     return { status: 'unavailable', reason: 'this league does not allow trades' }
   }
 
@@ -245,7 +244,7 @@ export async function buildTradeFinder(input: TradeFinderInput): Promise<TradeFi
 
   const tradable = rows.rosters.filter((r) => r.platformUserId && !OPEN_ROSTER.test(r.platformUserId))
   const ids = [...new Set(tradable.flatMap(tradeRosterPlayerIds))].slice(0, MAX_LEAGUE_PLAYER_IDS)
-  const byId = await readTradePlayerRows(ids)
+  const byId = await readTradePlayerRows(ids, sport)
   const leagueScoring = marketContext.scoring.settings
   const shape = { leagueSize, rosterSlots: rosterSlotsOf(league.settings) }
 

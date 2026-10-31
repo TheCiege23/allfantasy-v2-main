@@ -3,7 +3,7 @@ import { requireCronAuth } from '@/app/api/cron/_auth'
 import {
   generateEliminationPage,
   generateFinalStagePreview,
-  generateWaiverWarRecap,
+  generateChopWeekWaiverRecap,
   generateWeeklyGuillotineRecap,
 } from '@/lib/guillotine/ai/storylineGenerator'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   void req
-  return NextResponse.json({ ok: true, message: 'Guillotine storyline cron tick.' })
+  return NextResponse.json({ ok: true, message: 'Guilly storyline cron tick.' })
 }
 
 export async function POST(req: NextRequest) {
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ storyline: await generateEliminationPage(body.eliminationId) })
     case 'waiver_war':
       if (body.scoringPeriod == null) return NextResponse.json({ error: 'scoringPeriod required' }, { status: 400 })
-      return NextResponse.json({ storyline: await generateWaiverWarRecap(seasonId, body.scoringPeriod) })
+      return NextResponse.json({ storyline: await generateChopWeekWaiverRecap(seasonId, body.scoringPeriod) })
     case 'finals_preview':
       return NextResponse.json({ storyline: await generateFinalStagePreview(seasonId) })
     default:

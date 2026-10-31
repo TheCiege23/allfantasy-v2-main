@@ -491,6 +491,34 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
     vi.useRealTimers()
   })
 
+  it('absent-manager rule: the next team gets the short clock after two auto-picks in a row', async () => {
+    const { getDraftUISettingsForLeague } = await import('@/lib/draft-defaults/DraftUISettingsResolver')
+    const row = (overall: number, rosterId: string, source: string) => ({
+      id: `seed-${overall}`, sessionId: 'session-1', overall, round: Math.ceil(overall / 2), slot: rosterId === 'roster-a' ? 1 : 2,
+      rosterId, playerName: `Seed ${overall}`, position: 'RB', source,
+    })
+    const frozen = new Date('2026-07-04T12:00:00.000Z')
+    const pickFour = async (rule: { enabled: boolean; missedPicks: number; seconds: number }) => {
+      ctx.resetStore()
+      Object.assign(ctx.store.session, { rounds: 4, teamCount: 2, draftType: 'linear', thirdRoundReversal: false })
+      ctx.store.picks = [row(1, 'roster-a', 'auto'), row(2, 'roster-b', 'user'), row(3, 'roster-a', 'auto')]
+      vi.mocked(getDraftUISettingsForLeague).mockResolvedValueOnce({ tradedPickOwnerNameRedEnabled: false, tradedPickColorModeEnabled: false, absentManagerRule: rule } as never)
+      const r = await submitPick({ leagueId: 'league-1', playerName: 'Fourth', position: 'WR', rosterId: 'roster-b', playerId: 'p4', expectedOverall: 4 })
+      expect(r).toMatchObject({ success: true })
+      return ctx.store.session.timerEndAt!.getTime() - frozen.getTime()
+    }
+    vi.useFakeTimers()
+    vi.setSystemTime(frozen)
+    try {
+      // Linear, 2 teams: pick 5 is roster-a, whose last two picks were both auto-picked.
+      expect(await pickFour({ enabled: true, missedPicks: 2, seconds: 15 })).toBe(15_000)
+      expect(await pickFour({ enabled: true, missedPicks: 3, seconds: 15 })).toBe(90_000)
+      expect(await pickFour({ enabled: false, missedPicks: 2, seconds: 15 })).toBe(90_000)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('traded pick: on-clock owner is new roster; wrong roster rejected', async () => {
     ctx.store.session.tradedPicks = [
       {

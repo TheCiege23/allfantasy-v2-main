@@ -1,5 +1,7 @@
 'use client'
 
+import { paidToolFetch, approvePaidToolQuote } from '@/lib/tokens/paidToolClient'
+import { useRef } from 'react'
 import { useCallback, useState } from 'react'
 
 export type SurvivorAiResponseBody = {
@@ -17,17 +19,20 @@ export type SurvivorAiResponseBody = {
  */
 export function useSurvivorAiRequest() {
   const [loading, setLoading] = useState(false)
+  const offer = useRef<unknown>(null)
 
   const run = useCallback(
     async (leagueId: string, type: string, confirmTokenSpend: boolean) => {
+      if (confirmTokenSpend && !approvePaidToolQuote(offer.current)) return { ok: false, status: 409, body: { error: 'Review the current token price first.' } as SurvivorAiResponseBody }
       setLoading(true)
       try {
-        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/ai`, {
+        const res = await paidToolFetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/ai`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type, confirmTokenSpend }),
         })
         const body = (await res.json().catch(() => ({}))) as SurvivorAiResponseBody
+        if (res.status === 409 && body.code === 'token_confirmation_required') offer.current = body
         return { ok: res.ok, status: res.status, body }
       } finally {
         setLoading(false)

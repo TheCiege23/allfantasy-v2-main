@@ -87,6 +87,7 @@ export type ChimmyResponseStructure = {
 }
 
 export type ChimmyMessageMeta = {
+  analysisPreview?: import("@/lib/chimmy/deepAnalysisPreview").DeepAnalysisPreview
   mode?: ChimmyAssistantMode
   answerContract?: ChimmyAnswerContract
   confidencePct?: number

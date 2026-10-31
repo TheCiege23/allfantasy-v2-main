@@ -20,6 +20,15 @@
  * in which case the worse finish picks first. Byes need no special case: a bye team simply has no
  * game in round 1.
  *
+ * ## A lower bracket that plays for the pick
+ *
+ * With `consolation_plays_for = 'pick'` (`lowerBracket.playsForPick`), the non-playoff teams are
+ * seated with the lower bracket's result FIRST: a consolation bracket's winner (a toilet bowl's final
+ * loser — last place — or, with `pickGoesTo: 'winner'`, that final's winner) takes pick 1, and every other non-playoff team follows by `nonPlayoff`, the
+ * reverse-standings order they get without the setting. The playoff teams are unchanged. Until the
+ * bracket is decided those slots are provisional and the order is never `final`, so automation does
+ * not save an order the lower bracket can still change. `cash` / `none` change nothing.
+ *
  * ## Max PF
  *
  * Max PF must be TRUE Max PF (the optimal legal lineup each week), never points-for. See
@@ -77,11 +86,25 @@ export type RookieOrderPlayoffGame = {
   winner: string | null
 }
 
+export type RookieOrderLowerBracket = {
+  mode: 'consolation' | 'toilet_bowl'
+  /** `consolation_plays_for === 'pick'`. Anything else leaves the order alone. */
+  playsForPick: boolean
+  /** Non-playoff teams, best finish first, once the lower bracket is decided; null while it is played. */
+  finishOrder: readonly string[] | null
+  /** Toilet bowl only: which finalist picks first. Absent is `loser` (last place). */
+  pickGoesTo?: 'loser' | 'winner'
+  /** The lower bracket's final, when the caller can read it; else the finish order is used. */
+  final?: { winner: string; loser: string } | null
+}
+
 export type RookieOrderInput = {
   teams: readonly RookieOrderTeam[]
   regularSeasonComplete: boolean
   playoffGames: readonly RookieOrderPlayoffGame[]
   config?: Partial<RookieOrderConfig>
+  /** The season's consolation bracket or toilet bowl; absent when it had none. */
+  lowerBracket?: RookieOrderLowerBracket | null
 }
 
 export type RookieOrderSlot = {
@@ -232,15 +255,20 @@ export function computeRookieOrder(input: RookieOrderInput): RookieOrderResult {
   const nonPlayoff = teams.filter((t) => t.playoffSeed == null).sort(nonPlayoffComparator(config.nonPlayoff, ctx))
   const playoff = teams.filter((t) => t.playoffSeed != null)
 
-  const slots: RookieOrderSlot[] = nonPlayoff.map((t, i) => ({
-    slot: i + 1,
-    teamId: t.teamId,
-    name: t.name,
-    group: 'non_playoff',
-    status: 'locked',
-    finish: null,
-    reason: nonPlayoffReason(config.nonPlayoff, t, i + 1, nonPlayoff.length, ctx),
-  }))
+  const lower = input.lowerBracket?.playsForPick && nonPlayoff.length > 0 ? input.lowerBracket : null
+  const slots: RookieOrderSlot[] = lower
+    ? lowerBracketSlots(nonPlayoff, lower, config.nonPlayoff, ctx)
+    : nonPlayoff.map((t, i) => ({
+        slot: i + 1,
+        teamId: t.teamId,
+        name: t.name,
+        group: 'non_playoff',
+        status: 'locked',
+        finish: null,
+        reason: nonPlayoffReason(config.nonPlayoff, t, i + 1, nonPlayoff.length, ctx),
+      }))
+  // The order is not final while a lower bracket that plays for the pick is undecided.
+  const lowerPending = Boolean(lower && !lower.finishOrder)
   const push = (t: RookieOrderTeam, status: RookieOrderSlot['status'], finish: string | null, reason: string) =>
     slots.push({ slot: slots.length + 1, teamId: t.teamId, name: t.name, group: 'playoff', status, finish, reason })
 
@@ -251,7 +279,7 @@ export function computeRookieOrder(input: RookieOrderInput): RookieOrderResult {
       const value = method === 'reverse_record' ? recordLabel(t) : `${ctx.metric(t).toFixed(1)} ${ctx.metricLabel}`
       push(t, 'locked', `Seed ${t.playoffSeed}`, `${value} — ${ordinal(i + 1)} ${method === 'reverse_record' ? 'worst' : 'lowest'} of ${playoff.length} playoff teams`)
     })
-    return { ...base, phase: 'final', slots }
+    return { ...base, phase: lowerPending ? 'playoffs' : 'final', slots }
   }
 
   // ── Playoff finish, then seed. ──
@@ -346,5 +374,67 @@ export function computeRookieOrder(input: RookieOrderInput): RookieOrderResult {
   )
   if (champion) push(champion, 'locked', 'Champion', 'Won the title — picks last')
 
-  return { ...base, phase: champion ? 'final' : 'playoffs', slots }
+  return { ...base, phase: champion && !lowerPending ? 'final' : 'playoffs', slots }
+}
+
+/**
+ * Non-playoff slots when the lower bracket plays for the pick: the team it decided picks FIRST — a
+ * consolation bracket's winner, or a toilet bowl's final loser (last place; its winner with
+ * `pickGoesTo: 'winner'`) — and every other
+ * non-playoff team follows in `nonPlayoff`, the same reverse-standings order they get without the
+ * setting. Only slot 1 is the bracket's; the rest of its finish order is not used. A result that does
+ * not name a non-playoff team (it cannot happen for a native bracket) leaves the standings order alone.
+ */
+function lowerBracketSlots(nonPlayoff: RookieOrderTeam[], lower: RookieOrderLowerBracket, method: NonPlayoffOrderMethod, ctx: Ctx): RookieOrderSlot[] {
+  const label = lower.mode === 'toilet_bowl' ? 'toilet bowl' : 'consolation bracket'
+  const standings = (t: RookieOrderTeam, i: number): RookieOrderSlot => ({
+    slot: i + 1,
+    teamId: t.teamId,
+    name: t.name,
+    group: 'non_playoff',
+    status: 'locked',
+    finish: null,
+    reason: nonPlayoffReason(method, t, i + 1, nonPlayoff.length, ctx),
+  })
+  if (!lower.finishOrder) {
+    return nonPlayoff.map((t, i) => ({
+      ...standings(t, i),
+      status: 'provisional',
+      reason:
+        lower.mode === 'toilet_bowl'
+          ? `Waiting on the ${label} — its final's ${lower.pickGoesTo === 'winner' ? 'winner' : 'loser'} picks first`
+          : `Waiting on the ${label} — its winner picks first`,
+    }))
+  }
+  const ids = new Set(nonPlayoff.map((t) => t.teamId))
+  const named = lower.finishOrder.filter((id) => ids.has(id))
+  // A toilet bowl's final loser finishes last and its winner second to last; the final itself is
+  // preferred when the caller read it, so a finish-order tie can never pick the wrong team.
+  const toiletWinner = lower.mode === 'toilet_bowl' && lower.pickGoesTo === 'winner'
+  const firstId =
+    lower.mode !== 'toilet_bowl'
+      ? named[0]
+      : toiletWinner
+        ? (lower.final?.winner ?? (named.length >= 2 ? named.at(-2) : undefined))
+        : (lower.final?.loser ?? named.at(-1))
+  const first = nonPlayoff.find((t) => t.teamId === firstId)
+  if (!first) return nonPlayoff.map(standings)
+  const rest = nonPlayoff.filter((t) => t !== first)
+  return [
+    {
+      slot: 1,
+      teamId: first.teamId,
+      name: first.name,
+      group: 'non_playoff',
+      status: 'locked',
+      finish: lower.mode !== 'toilet_bowl' ? 'Consolation winner' : toiletWinner ? 'Toilet bowl winner' : 'Toilet bowl loser',
+      reason:
+        lower.mode !== 'toilet_bowl'
+          ? 'Won the consolation bracket — picks first'
+          : toiletWinner
+            ? 'Won the toilet bowl final — picks first'
+            : 'Lost the toilet bowl final (last place) — picks first',
+    },
+    ...rest.map((t, i) => ({ ...standings(t, i + 1), reason: nonPlayoffReason(method, t, i + 1, rest.length, ctx) })),
+  ]
 }

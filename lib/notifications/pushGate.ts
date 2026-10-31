@@ -6,6 +6,7 @@ import type { NotificationCategoryId, NotificationPreferences } from "@/lib/noti
 import { isPushCategory } from "@/lib/push-notifications/categories"
 import { isCategoryAllowedForLeague } from "./leagueOverrides"
 import { quietHoursSuppression } from "./quietHours"
+import { isCategoryHiddenByHomeSection } from "@/lib/core-app/homeSections"
 
 /**
  * May this push reach this user's phone? ONE rule, used by the dispatcher and by every
@@ -20,7 +21,7 @@ import { quietHoursSuppression } from "./quietHours"
  * switch: the user is told they chose, and the phone disagrees.
  *
  * Checks, in order, each with a reason a caller can log:
- *   account switch -> category on -> push-capable category -> the category's push switch
+ *   account switch -> category on -> home section shown -> push-capable category -> the category's push switch
  *   -> league not muted -> outside quiet hours (high severity passes only with allowCritical)
  *
  * ⚠ THE ACCOUNT SWITCH IS READ RAW AS WELL AS RESOLVED. The resolver's no-categories path
@@ -32,6 +33,7 @@ export type PushBlockReason =
   | "no_profile"
   | "global_off"
   | "category_off"
+  | "home_section_hidden"
   | "not_push_category"
   | "push_off"
   | "league_muted"
@@ -59,6 +61,8 @@ export function decidePush(
 
   const cat = prefs.categories?.[input.category]
   if (!cat?.enabled) return blocked("category_off")
+  // Settings → Home page: a hidden section silences its alerts (lib/core-app/homeSections.ts). Read RAW.
+  if (isCategoryHiddenByHomeSection(saved, input.category)) return blocked("home_section_hidden")
   if (!isPushCategory(input.category)) return blocked("not_push_category")
   if (!(cat.push ?? cat.inApp)) return blocked("push_off")
 

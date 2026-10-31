@@ -18,9 +18,10 @@ import 'server-only'
  * Each result carries `rosterIdForTeam`, the live-draft `Roster.id` for every engine team, so a
  * caller can seat the order without guessing (see `resolveRookieDraftSlotOrderForLeague`).
  *
- * ⚠ NATIVE LEAGUES HAVE NO TRUE MAX PF YET. The optimal-lineup engine reads Sleeper weekly player
- * scores; nothing computes it from native weekly scores. Native teams get `maxPf: null`, so the
- * engine falls back to points for and says so in its warnings rather than calling points for
+ * Native leagues get true Max PF from their own weeks (./loadNativeMaxPf.ts): each team's best
+ * possible lineup in every finished regular-season week, scored by the league's rules. Where matchups
+ * are scored some other way (daily lineups, games count, the devy engine) teams get `maxPf: null`,
+ * so the engine falls back to points for and says so in its warnings rather than calling points for
  * "Max PF" — the mislabel `lib/league/rookieDraftOrder.ts` ships today.
  */
 
@@ -32,6 +33,15 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import type { RookieOrderInput, RookieOrderTeam } from './rookieOrderEngine'
 import { playoffGamesFromRedraftMatchups, playoffGamesFromSleeperBracket } from './playoffGameAdapters'
+import {
+  consolationPlaysForSetsDraftOrder,
+  lowerBracketFinal,
+  readConsolationPickGoesTo,
+  readLowerBracketDraftResult,
+} from '@/lib/playoff-runtime/consolationPlaysFor'
+import { CONSOLATION_ROUND_OFFSET } from '@/lib/playoff-runtime/playoffRoundWeeks'
+import { loadNativeMaxPf } from './loadNativeMaxPf'
+import { nativeMaxPfNote } from './nativeMaxPf'
 
 export type LoadedRookieOrderInput = {
   source: 'native' | 'imported'
@@ -40,7 +50,19 @@ export type LoadedRookieOrderInput = {
   input: Omit<RookieOrderInput, 'config'>
   rosterIdForTeam: Map<string, string | null>
   notes: string[]
+  /**
+   * Native leagues: where Max PF came from, for the panel to word in the viewer's language. `note` is
+   * the English line that also sits in `notes`.
+   */
+  maxPfInfo?: MaxPfInfo
 }
+
+export type MaxPfInfo =
+  | { kind: 'computed'; weeks: number; estimated: number; note: string }
+  | { kind: 'best_ball'; note: string }
+  | { kind: 'unsupported'; reason: NativeMaxPfUnsupported; note: string }
+
+type NativeMaxPfUnsupported = 'daily_lineups' | 'games_count' | 'devy_engine' | 'no_scoring' | 'no_slots' | 'no_finished_week' | 'read_failed'
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -49,11 +71,25 @@ function asRecord(value: unknown): Record<string, unknown> {
 export async function loadRookieOrderInput(leagueId: string): Promise<LoadedRookieOrderInput | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, season: true, platform: true, platformLeagueId: true, playoffStartWeek: true, settings: true },
+    select: {
+      id: true, season: true, platform: true, platformLeagueId: true, playoffStartWeek: true, settings: true, sport: true, leagueVariant: true,
+      leagueType: true, isDynasty: true, bestBallMode: true,
+    },
   })
   if (!league) return null
 
-  return isNativePlatform(league.platform) ? loadNative(league.id) : loadImported(league)
+  return isNativePlatform(league.platform) ? loadNative(league.id, league) : loadImported(league)
+}
+
+/** Why a native league has no true Max PF; the order then uses points for. */
+const NATIVE_MAX_PF_UNSUPPORTED: Record<NativeMaxPfUnsupported, string> = {
+  daily_lineups: 'Max PF is not computed for daily-lineup leagues yet; points for is used.',
+  games_count: 'Max PF is not computed when only some games count; points for is used.',
+  devy_engine: 'Max PF is not computed for devy-scored leagues yet; points for is used.',
+  no_scoring: 'Max PF needs the league scoring, which could not be read; points for is used.',
+  no_slots: 'Max PF needs the league lineup slots, which could not be read; points for is used.',
+  no_finished_week: 'No regular-season week is final yet, so there is no Max PF; points for is used.',
+  read_failed: 'Max PF could not be read just now; points for is used.',
 }
 
 const SEASON_OVER: readonly string[] = [
@@ -62,13 +98,19 @@ const SEASON_OVER: readonly string[] = [
   REDRAFT_SEASON_STATUS.COMPLETE,
 ]
 
-async function loadNative(leagueId: string): Promise<LoadedRookieOrderInput | null> {
+async function loadNative(
+  leagueId: string,
+  league: { settings: unknown; sport: string | null; leagueVariant: string | null; leagueType: string | null; isDynasty: boolean; bestBallMode: boolean | null },
+): Promise<LoadedRookieOrderInput | null> {
   // The most recent season that has started. After rollover the new season sits in `setup`, and
   // the order it needs comes from the season before it.
   const redraftSeason = await prisma.redraftSeason.findFirst({
     where: { leagueId, status: { not: REDRAFT_SEASON_STATUS.SETUP } },
     orderBy: { season: 'desc' },
-    select: { id: true, season: true, currentWeek: true, playoffStartWeek: true, status: true },
+    select: {
+      id: true, season: true, currentWeek: true, playoffStartWeek: true, status: true,
+      playoffBracket: { select: { structure: true } },
+    },
   })
   if (!redraftSeason) return null
   const season = redraftSeason.season
@@ -90,6 +132,26 @@ async function loadNative(leagueId: string): Promise<LoadedRookieOrderInput | nu
   if (rosters.length === 0) return null
 
   const seedByRoster = new Map(seeds.map((s) => [s.rosterId, s.seed]))
+  // A failed Max PF read must not take the whole order down: points for, with a note that says so.
+  const maxPf = await loadNativeMaxPf({
+    leagueId,
+    league,
+    seasonId: redraftSeason.id,
+    season,
+    playoffStartWeek: redraftSeason.playoffStartWeek,
+    teamIds: rosters.map((r) => r.id),
+  }).catch((e: unknown) => {
+    console.warn('[rookie-order] native max PF read failed', leagueId, e instanceof Error ? e.message : e)
+    return { kind: 'unsupported' as const, reason: 'read_failed' as const }
+  })
+  const maxPfOf = (r: { id: string; pointsFor: number }): number | null =>
+    maxPf.kind === 'best_ball' ? r.pointsFor : maxPf.kind === 'computed' ? maxPf.result.maxPfByTeam.get(r.id) ?? null : null
+  const maxPfInfo: MaxPfInfo =
+    maxPf.kind === 'computed'
+      ? { kind: 'computed', weeks: maxPf.result.weeks.length, estimated: maxPf.result.carried + maxPf.result.fromCurrent, note: nativeMaxPfNote(maxPf.result) }
+      : maxPf.kind === 'best_ball'
+        ? { kind: 'best_ball', note: 'Best ball: every week already scores the best possible lineup, so Max PF is points for.' }
+        : { kind: 'unsupported', reason: maxPf.reason, note: NATIVE_MAX_PF_UNSUPPORTED[maxPf.reason] }
   const teams: RookieOrderTeam[] = rosters.map((r) => ({
     teamId: r.id,
     name: r.teamName || r.ownerName,
@@ -97,13 +159,28 @@ async function loadNative(leagueId: string): Promise<LoadedRookieOrderInput | nu
     losses: r.losses,
     ties: r.ties,
     pointsFor: r.pointsFor,
-    maxPf: null,
+    maxPf: maxPfOf(r),
     playoffSeed: seedByRoster.get(r.id) ?? r.playoffSeed ?? null,
   }))
 
   const playoffGames = playoffGamesFromRedraftMatchups(
     rounds.flatMap((round) => round.matchups.map((m) => ({ ...m, roundNumber: round.roundNumber }))),
   )
+
+  // The consolation bracket / toilet bowl, when it plays for the pick (lib/playoff-runtime/consolationPlaysFor.ts).
+  // A redraft league's bracket is still read — it never plays for the pick, so the order is left alone.
+  const lowerResult = readLowerBracketDraftResult(
+    redraftSeason.playoffBracket?.structure,
+    rounds.some((round) => round.roundNumber >= CONSOLATION_ROUND_OFFSET && round.matchups.length > 0),
+  )
+  const lowerBracket = lowerResult
+    ? {
+        ...lowerResult,
+        playsForPick: consolationPlaysForSetsDraftOrder(league.settings, league.sport, league.leagueVariant, league),
+        pickGoesTo: readConsolationPickGoesTo(league.settings),
+        final: lowerBracketFinal(rounds, CONSOLATION_ROUND_OFFSET),
+      }
+    : null
 
   // Seeds are written when the bracket is generated, which is when the regular season is over.
   const regularSeasonComplete = seeds.length > 0 || SEASON_OVER.includes(redraftSeason.status)
@@ -117,9 +194,10 @@ async function loadNative(leagueId: string): Promise<LoadedRookieOrderInput | nu
   return {
     source: 'native',
     season,
-    input: { teams, regularSeasonComplete, playoffGames },
+    input: { teams, regularSeasonComplete, playoffGames, lowerBracket },
     rosterIdForTeam: new Map(rosters.map((r) => [r.id, rosterByRedraft.get(r.id) ?? null])),
-    notes: ['True Max PF is not computed for leagues that play on AllFantasy yet; points for is used.'],
+    notes: [maxPfInfo.note],
+    maxPfInfo,
   }
 }
 

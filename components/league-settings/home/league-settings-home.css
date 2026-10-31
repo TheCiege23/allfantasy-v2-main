@@ -208,6 +208,22 @@
 }
 .af-core .lsh-primary:disabled { opacity: 0.45; cursor: default; }
 
+/* One save bar for every settings page (SettingsSaveScope.tsx): status on the left, actions right;
+ * stacks on a narrow phone so neither button shrinks below a comfortable tap target. */
+.af-core .lsh-savebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+/* On the phone sub-page it runs edge to edge, like the other sticky footers. */
+.af-core .lsh-subpage-body .lsh-savebar { margin: 16px -16px -16px; }
+.af-core .lsh-savebar-status { flex: 1 1 140px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.af-core .lsh-savebar-actions { display: flex; gap: 8px; flex: 1 1 220px; }
+.af-core .lsh-savebar-actions .lsh-primary,
+.af-core .lsh-savebar-actions .lsh-secondary { flex: 1; width: auto; height: 44px; }
+
 /* First chop week editor */
 .af-core .lsh-field-card {
   padding: 16px;
@@ -244,3 +260,86 @@
 }
 .af-core .lsh-error { margin-top: 10px; color: var(--bad); font-size: 13px; }
 .af-core .lsh-ok { margin-top: 10px; color: var(--good); font-size: 13px; }
+
+/* Score adjustments editor and settings lock panel (shared button and field styles) */
+.af-core .lsh-secondary {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.af-core .lsh-secondary:disabled { opacity: 0.45; cursor: default; }
+.af-core [data-testid='settings-lock'] select,
+.af-core [data-testid='settings-lock'] input[type='text'],
+.af-core [data-testid='score-adjustments'] select,
+.af-core [data-testid='score-adjustments'] input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+}
+.af-core [data-testid='settings-lock'] input[type='checkbox'] { accent-color: var(--accent, currentColor); }
+
+/* "Set up your league in 5 decisions" (SetupDecisionsCard.tsx): before the draft, at the top of
+ * the list (phone) and above the sections (Commissioner center). */
+.af-core .lsh-setup {
+  margin: 16px 16px 0;
+  padding: 16px;
+  border: 1px solid var(--accent-line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.af-core .cc-root .lsh-setup { margin: 0 0 20px; }
+.af-core .lsh-setup-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.af-core .lsh-setup-head h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text); }
+.af-core .lsh-setup-count { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.af-core .lsh-setup-bar { height: 4px; margin-top: 10px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+.af-core .lsh-setup-bar span { display: block; height: 100%; background: var(--accent); transition: width 0.2s ease; }
+.af-core .lsh-setup-steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.af-core .lsh-setup-steps button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.af-core .lsh-setup-steps button[data-done='true'] { color: var(--text); }
+.af-core .lsh-setup-steps button[aria-current='step'] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+.af-core .lsh-setup-body { margin-top: 14px; }
+.af-core .lsh-setup-kicker { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.af-core .lsh-setup-body h3 { margin: 2px 0 0; font-size: 18px; font-weight: 700; color: var(--text); }
+.af-core .lsh-setup-value { margin: 8px 0 0; font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.af-core .lsh-setup-value[data-pending='true'] { color: var(--faint); }
+.af-core .lsh-setup-actions { display: flex; gap: 8px; margin-top: 14px; }
+.af-core .lsh-setup-actions .lsh-primary,
+.af-core .lsh-setup-actions .lsh-secondary { flex: 1; width: auto; height: 44px; }
+.af-core .lsh-setup-hide {
+  display: block;
+  margin: 10px auto 0;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}

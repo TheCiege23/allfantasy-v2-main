@@ -1,6 +1,7 @@
 'use client'
 
 import '@/components/core-app/af-core.css'
+import '@/components/league/league-admin.css'
 import './league-settings-home.css'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
@@ -11,6 +12,7 @@ import {
   type SettingsHomeSection,
   type SettingsSubPageId,
 } from '@/lib/league-settings-home/buildLeagueSettingsHome'
+import { SettingsSaveScope, confirmDiscardIfDirty, useSaveScopeHandleRef } from './SettingsSaveScope'
 
 export type SettingsSubPageRender = {
   title: string
@@ -96,6 +98,8 @@ export type LeagueSettingsHomeProps = {
   /** Fired when a sub-page closes, so the caller can refetch the values it shows. */
   onSubPageClosed?: (id: SettingsSubPageId) => void
   initialSubPage?: SettingsSubPageId | null
+  /** Drawn above the sections (the pre-draft setup card); given a way to open a sub-page. */
+  header?: (openSubPage: (id: SettingsSubPageId) => void) => ReactNode
 }
 
 /**
@@ -111,9 +115,11 @@ export function LeagueSettingsHome({
   onExit,
   onSubPageClosed,
   initialSubPage = null,
+  header,
 }: LeagueSettingsHomeProps) {
   const [open, setOpen] = useState<SettingsSubPageId | null>(initialSubPage)
   const listScroll = useRef(0)
+  const saveScope = useSaveScopeHandleRef()
 
   const openSubPage = useCallback((id: SettingsSubPageId) => {
     if (typeof window !== 'undefined') listScroll.current = window.scrollY
@@ -122,6 +128,7 @@ export function LeagueSettingsHome({
   }, [])
 
   const closeSubPage = useCallback(() => {
+    if (!confirmDiscardIfDirty(saveScope.ref.current)) return
     const closing = open
     setOpen(null)
     if (closing) onSubPageClosed?.(closing)
@@ -129,7 +136,7 @@ export function LeagueSettingsHome({
       const y = listScroll.current
       window.requestAnimationFrame(() => window.scrollTo?.({ top: y }))
     }
-  }, [open, onSubPageClosed])
+  }, [open, onSubPageClosed, saveScope.ref])
 
   const sub = open ? renderSubPage(open) : null
 
@@ -138,7 +145,12 @@ export function LeagueSettingsHome({
       <div className="af-core lsh-root" data-testid="league-settings-subpage" data-subpage={open}>
         <SettingsHeader title={sub.title} onBack={closeSubPage} backLabel="Back to league settings" />
         <div className="lsh-column">
-          <div className="lsh-subpage-body">{sub.content}</div>
+          {/* af-league-admin maps the older editors' fixed colours onto the theme (league-admin.css). */}
+          <div className="lsh-subpage-body af-league-admin">
+            <SettingsSaveScope key={open} onReady={saveScope.onReady}>
+              {sub.content}
+            </SettingsSaveScope>
+          </div>
         </div>
       </div>
     )
@@ -154,6 +166,7 @@ export function LeagueSettingsHome({
             Only the commissioner can change these settings.
           </p>
         ) : null}
+        {header?.(openSubPage)}
         {sections.map((section) => (
           <section key={section.id} className="lsh-section" aria-labelledby={`lsh-section-${section.id}`} data-testid={`lsh-section-${section.id}`}>
             <h2 id={`lsh-section-${section.id}`}>{section.title}</h2>

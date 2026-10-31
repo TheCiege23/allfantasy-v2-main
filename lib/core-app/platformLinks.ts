@@ -159,8 +159,8 @@ export function tradeLink(league: LinkLeague): { here: PlatformLink; there: Plat
  * rows, the since-last-visit brief and the matchup screen send the user to the
  * provider screen that acts on what they are looking at. A destination the resolver
  * cannot verify returns null — a homepage fallback, a missing league or team id, or
- * MFL / Fantrax / Fleaflicker, whose per-league URLs cannot be built from what is
- * stored — and the surface keeps its in-app destination. A button that promises
+ * MFL / Fleaflicker, whose per-league URLs cannot be built from what is stored, and
+ * every Fantrax screen except its league page — and the surface keeps its in-app destination. A button that promises
  * "your lineup" and opens a homepage is worse than no button.
  *
  * ⚠ UNLIKE `lineupLink` / `claimLink` ABOVE, THIS NEVER RETURNS THE LEAGUE PAGE UNDER

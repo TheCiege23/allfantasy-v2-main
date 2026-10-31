@@ -5,6 +5,8 @@ import { TIMELINE_KIND_LABEL, recentChanges, type TimelineEntry } from '@/lib/co
 import { HubBars, HubSection } from './HubSections'
 import { TimelineList } from './TimelineList'
 import { hubCopy, hubDateLocale } from '@/lib/core-app/commissionerHubCopy'
+import { commissionerScreensMessages } from '@/lib/core-app/messages/commissionerScreens'
+import { messagesFor } from '@/lib/i18n/messages'
 
 /**
  * The streamed half of the hub: the activity charts and the audit log.
@@ -18,7 +20,7 @@ import { hubCopy, hubDateLocale } from '@/lib/core-app/commissionerHubCopy'
 function newestLabel(iso: string | null, language: string): string {
   if (!iso) return hubCopy('no moves imported yet', language)
   const day = new Date(iso).toLocaleDateString(hubDateLocale(language), { month: 'short', day: 'numeric', timeZone: 'America/New_York' })
-  return language === 'es' ? `último movimiento: ${day}` : `newest move ${day}`
+  return messagesFor(commissionerScreensMessages, language).reportsNewestMove(day)
 }
 
 export async function OperationalCharts({

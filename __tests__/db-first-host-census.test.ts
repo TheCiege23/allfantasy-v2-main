@@ -87,6 +87,9 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  { name: 'oauth', why: 'Google OIDC issuer used to authenticate signed Pub/Sub purchase notifications', test: /^accounts\.google\.com$/i },
+  { name: 'platform-infra', why: 'Google Play purchase verification, fulfillment and catalog management, not fantasy data', test: /^androidpublisher\.googleapis\.com$/i },
+  { name: 'payment-platform', why: 'Digital Goods payment method identifier and Google subscription-management link', test: /^play\.google\.com$/i },
   // Reviewed college/NFL biographies in verifiedNcaafReserves.ts are attribution
   // links returned with season-readiness evidence, never live provider reads.
   // The NEVER_FETCHED assertion below must continue to fail if a caller fetches them.
@@ -169,6 +172,13 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
   { name: 'oauth', why: 'authentication endpoint, not a data feed', test: /^(accounts\.spotify\.com|api\.login\.yahoo\.com|oauth2\.googleapis\.com|oauth\.reddit\.com|connect\.facebook\.net|js\.stripe\.com|appleid\.apple\.com)$/i },
   { name: 'ai-provider', why: 'covered by the AI spend guard, a different boundary', test: /^(api\.openai\.com|api\.anthropic\.com|api\.x\.ai|api\.deepseek\.com|google\.serper\.dev|generativelanguage\.googleapis\.com|api\.groq\.com|openrouter\.ai)$/i },
   { name: 'platform-infra', why: 'Twilio messaging transport status reads; not a fantasy data feed', test: /^api\.twilio\.com$/i },
+  /*
+   * Google Cloud Storage, read by lib/google-play/playInstallStats.ts for the Play
+   * Console's own installs export (admin dashboard download counts). It IS fetched,
+   * from the admin page only, cached in-process for hours; it is our app-store
+   * reporting, not a fantasy data feed, so the DB-first rule does not apply.
+   */
+  { name: 'platform-infra', why: 'Play Console installs export for admin download counts; not a fantasy data feed', test: /^storage\.googleapis\.com$/i },
   { name: 'platform-infra', why: 'email, push delivery, analytics, media generation, translation, search and publishing', test: /^(api\.resend\.com|api\.push\.apple\.com|api\.sandbox\.push\.apple\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com|www\.googleapis\.com)$/i },
   /*
    * PostHog's asset CDN. app/api/ph-assets proxies the browser SDK's lazy-loaded

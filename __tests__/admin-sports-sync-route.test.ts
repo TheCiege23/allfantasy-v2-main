@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   getAdminPerSportDataReliabilityRows: vi.fn(),
   getSportImportMatrix: vi.fn(),
   getDashboardAiToolAvailability: vi.fn(),
+  getPlayerGameLogHealthDashboard: vi.fn(),
+  getSportsP0PipelineHealth: vi.fn(),
 }))
 
 vi.mock("@/lib/adminAuth", () => ({
@@ -28,6 +30,16 @@ vi.mock("@/lib/admin-dashboard/SportImportMatrixService", () => ({
   getDashboardAiToolAvailability: mocks.getDashboardAiToolAvailability,
 }))
 
+// The GET status payload gained these two health reads after this suite was written; unmocked,
+// they reached the real Prisma client from a unit test.
+vi.mock("@/lib/sports-reporting/PlayerGameLogImportService", () => ({
+  getPlayerGameLogHealthDashboard: mocks.getPlayerGameLogHealthDashboard,
+}))
+
+vi.mock("@/lib/admin-dashboard/SportsP0PipelineHealthService", () => ({
+  getSportsP0PipelineHealth: mocks.getSportsP0PipelineHealth,
+}))
+
 function req(url: string, init?: RequestInit) {
   return new NextRequest(url, init)
 }
@@ -40,6 +52,8 @@ describe("/api/admin/sports/sync", () => {
     mocks.getAdminPerSportDataReliabilityRows.mockResolvedValue([])
     mocks.getSportImportMatrix.mockReturnValue([])
     mocks.getDashboardAiToolAvailability.mockReturnValue([])
+    mocks.getPlayerGameLogHealthDashboard.mockResolvedValue({ generatedAt: "t", rows: [] })
+    mocks.getSportsP0PipelineHealth.mockResolvedValue({ rows: [] })
   })
 
   it("blocks unauthenticated/non-admin callers server-side", async () => {
@@ -66,6 +80,8 @@ describe("/api/admin/sports/sync", () => {
     expect(response.status).toBe(200)
     expect(body.importMatrix).toEqual([{ id: "nfl" }])
     expect(body.aiToolAvailability).toEqual([{ id: "startSit" }])
+    expect(body.playerGameLogHealth).toEqual({ generatedAt: "t", rows: [] })
+    expect(body.p0PipelineHealth).toEqual({ rows: [] })
   })
 
   it("runs dry-run admin sync without exposing provider keys", async () => {

@@ -95,7 +95,7 @@ async function seedUsersAndEntitlement() {
 
   const plan = await prisma.subscriptionPlan.upsert({
     where: { code: 'af_war_room' },
-    create: { code: 'af_war_room', name: 'AF War Room', description: 'Runtime seed entitlement for Guillotine War Room QA.', isBundle: false, isActive: true, metadata: { seed: 'guillotine-war-room-runtime' } },
+    create: { code: 'af_war_room', name: 'AF War Room', description: 'Runtime seed entitlement for Guilly War Room QA.', isBundle: false, isActive: true, metadata: { seed: 'guillotine-war-room-runtime' } },
     update: { name: 'AF War Room', isActive: true },
   })
   await prisma.userSubscription.upsert({
@@ -158,14 +158,14 @@ async function seedLeague() {
     where: { id: leagueId },
     create: {
       id: leagueId, userId: commissionerUserId, platform: 'allfantasy', platformLeagueId: leagueId,
-      name: 'Runtime Seed NFL Guillotine War Room', sport: 'NFL', season,
+      name: 'Runtime Seed NFL Guilly War Room', sport: 'NFL', season,
       leagueSize: GUILLOTINE_WAR_ROOM_RUNTIME_SEED.teamCount, scoring: 'PPR', scoringPresetId: 'ppr',
       isDynasty: false, rosterSize: 12, leagueType: 'redraft', leagueVariant: 'guillotine', guillotineMode: true,
       status: 'active', lifecycleState: 'in_season', waiverType: 'faab', waiverBudget: 100, settingsSnapshotVersion: 1,
       settings, starters: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 1 },
     },
     update: {
-      userId: commissionerUserId, name: 'Runtime Seed NFL Guillotine War Room', sport: 'NFL', season,
+      userId: commissionerUserId, name: 'Runtime Seed NFL Guilly War Room', sport: 'NFL', season,
       isDynasty: false, leagueVariant: 'guillotine', guillotineMode: true, status: 'active', lifecycleState: 'in_season',
       settings, starters: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 1 },
     },

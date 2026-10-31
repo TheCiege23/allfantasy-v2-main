@@ -26,8 +26,10 @@ const h = vi.hoisted(() => {
     failDecisionFor: new Set<string>(),
   }
 
-  const passes = (row: Row, where: { status?: string; expiresAt?: { lt: Date } }) =>
+  const passes = (row: Row, where: { status?: string; expiresAt?: { lt: Date }; acceptedAt?: null }) =>
     (where.status === undefined || row.status === where.status) &&
+    // `acceptedAt: null` in the where must actually filter, or a test about it cannot fail.
+    (!('acceptedAt' in where) || row.acceptedAt === where.acceptedAt) &&
     (where.expiresAt === undefined || (row.expiresAt !== null && row.expiresAt < where.expiresAt.lt))
 
   const redraftTradeProposal = {
@@ -152,10 +154,12 @@ describe('expireDueRedraftTradeProposals', () => {
     expect(h.marketEvent).not.toHaveBeenCalled()
   })
 
-  it('expires an accepted trade still awaiting review — the rule the route already applies on the next click', async () => {
+  it('🛑 leaves an accepted trade past its review window alone: it goes through (tradeReviewWindowSweep), it does not expire', async () => {
     h.store.proposals = [proposal('p-awaiting-review', { acceptedAt: hoursFromNow(-30) })]
-    await expireDueRedraftTradeProposals({ now: NOW })
-    expect(statusOf('p-awaiting-review')).toBe('expired')
+    const result = await expireDueRedraftTradeProposals({ now: NOW })
+    expect(result.due).toBe(0)
+    expect(statusOf('p-awaiting-review')).toBe('pending')
+    expect(h.marketEvent).not.toHaveBeenCalled()
   })
 
   it('🛑 leaves alone a proposal someone acted on between the read and the claim, with no side effects', async () => {

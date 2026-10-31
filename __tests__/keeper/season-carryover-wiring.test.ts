@@ -57,6 +57,7 @@ vi.mock('@/lib/prisma', () => ({
     league: { findFirst: mockLeagueFindFirst, update: mockLeagueUpdate },
     redraftRoster: { findMany: mockRedraftRosterFindMany },
     $transaction: mockTransaction,
+    $executeRaw: vi.fn(async () => 1),
     keeperSelectionSession: { findFirst: mockKeeperSelectionSessionFindFirst, update: mockKeeperSelectionSessionUpdate },
     keeperRecord: { updateMany: mockKeeperRecordUpdateMany },
   },
@@ -82,9 +83,11 @@ vi.mock('@/lib/keeper/missedDeadlineService', () => ({
 
 import { ensureNextRedraftSeasonShell } from '@/lib/redraft/offseason/ensureNextRedraftSeasonShell'
 import { lockKeeperSelections } from '@/lib/keeper/selectionEngine'
+import { prisma } from '@/lib/prisma'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockTransaction.mockImplementation(async (action) => action(prisma))
   mockExecuteSeasonCarryover.mockResolvedValue({ totalKept: 0, byTeam: [] })
   // No rosters in the completed season: the shell falls back to building from LeagueTeam.
   mockRedraftRosterFindMany.mockResolvedValue([])
@@ -206,7 +209,7 @@ describe('ensureNextRedraftSeasonShell', () => {
 
 describe('lockKeeperSelections — carryover wiring', () => {
   it('fires executeSeasonCarryover exactly once when locking an open session', async () => {
-    mockKeeperSelectionSessionFindFirst.mockResolvedValueOnce({
+    mockKeeperSelectionSessionFindFirst.mockResolvedValue({
       id: 'sess-1',
       leagueId: 'league-1',
       seasonId: 'season-2',
@@ -221,7 +224,7 @@ describe('lockKeeperSelections — carryover wiring', () => {
   })
 
   it('does not re-fire carryover when the session was already locked (duplicate-row guard)', async () => {
-    mockKeeperSelectionSessionFindFirst.mockResolvedValueOnce({
+    mockKeeperSelectionSessionFindFirst.mockResolvedValue({
       id: 'sess-1',
       leagueId: 'league-1',
       seasonId: 'season-2',
@@ -236,7 +239,7 @@ describe('lockKeeperSelections — carryover wiring', () => {
   })
 
   it('does not throw when carryover fails — locking must still succeed', async () => {
-    mockKeeperSelectionSessionFindFirst.mockResolvedValueOnce({
+    mockKeeperSelectionSessionFindFirst.mockResolvedValue({
       id: 'sess-1',
       leagueId: 'league-1',
       seasonId: 'season-2',
@@ -255,20 +258,20 @@ describe('lockKeeperSelections — carryover wiring', () => {
 
 describe('lockKeeperSelections — missed-deadline rule', () => {
   it('applies the rule once, for the incoming season, before pending keepers are locked', async () => {
-    mockKeeperSelectionSessionFindFirst.mockResolvedValueOnce({ id: 'sess-1', leagueId: 'league-1', seasonId: 'season-2', status: 'open' })
+    mockKeeperSelectionSessionFindFirst.mockResolvedValue({ id: 'sess-1', leagueId: 'league-1', seasonId: 'season-2', status: 'open' })
     mockRedraftSeasonFindFirst.mockResolvedValueOnce({ id: 'season-1' })
     await lockKeeperSelections('league-1', 'sess-1')
     expect(mockApplyMissedDeadlineRule).toHaveBeenCalledTimes(1)
-    expect(mockApplyMissedDeadlineRule).toHaveBeenCalledWith('league-1', 'season-2')
+    expect(mockApplyMissedDeadlineRule).toHaveBeenCalledWith('league-1', 'season-2', prisma)
     expect(mockApplyMissedDeadlineRule.mock.invocationCallOrder[0]).toBeLessThan(mockKeeperRecordUpdateMany.mock.invocationCallOrder[0])
   })
 
   it('never picks again on a repeat lock, and a failure never stops the lock', async () => {
-    mockKeeperSelectionSessionFindFirst.mockResolvedValueOnce({ id: 'sess-1', leagueId: 'league-1', seasonId: 'season-2', status: 'locked' })
+    mockKeeperSelectionSessionFindFirst.mockResolvedValue({ id: 'sess-1', leagueId: 'league-1', seasonId: 'season-2', status: 'locked' })
     await lockKeeperSelections('league-1', 'sess-1')
     expect(mockApplyMissedDeadlineRule).not.toHaveBeenCalled()
 
-    mockKeeperSelectionSessionFindFirst.mockResolvedValueOnce({ id: 'sess-1', leagueId: 'league-1', seasonId: 'season-2', status: 'open' })
+    mockKeeperSelectionSessionFindFirst.mockResolvedValue({ id: 'sess-1', leagueId: 'league-1', seasonId: 'season-2', status: 'open' })
     mockRedraftSeasonFindFirst.mockResolvedValueOnce({ id: 'season-1' })
     mockApplyMissedDeadlineRule.mockRejectedValueOnce(new Error('chart down'))
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})

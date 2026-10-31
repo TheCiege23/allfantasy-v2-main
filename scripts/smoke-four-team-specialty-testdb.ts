@@ -70,7 +70,7 @@ async function main(){
      }
      survivors -= expectedChops
      const active=await prisma.redraftRoster.count({where:{seasonId:season.id,isEliminated:false}});check(active===survivors,'SURVIVORS_'+week)
-     console.log('Guillotine period '+week+' verified')
+     console.log('Guilly period '+week+' verified')
     }
     const winner=await determineFinalChampion(shell.seasonId);check(winner,'GUILLOTINE_CHAMPION')
     const before=await prisma.guillotineRosterState.count({where:{leagueId,choppedAt:{not:null}}})

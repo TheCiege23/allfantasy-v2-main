@@ -308,3 +308,29 @@ describe('the scheduled draft', () => {
     expect(await resolveGuillotineSeatSummary(LEAGUE)).toBeNull()
   })
 })
+
+describe('guillotineChopWindow — a final-stage ending needs its final weeks (2026-10-29)', () => {
+  it('final two: chops end three weeks early and two teams are left', async () => {
+    const { guillotineChopWindow } = await import('@/lib/guillotine/lateStartSeatMath')
+    const base = { eliminationStartWeek: 1, eliminationEndWeek: 18, teamsPerChop: 1, draftWeek: 0 }
+    expect(guillotineChopWindow(base)).toMatchObject({ chopWeeks: 18, maxTeams: 19 })
+    expect(guillotineChopWindow({ ...base, endgame: { threshold: 1, cumulativePeriods: 0 } })).toMatchObject({ chopWeeks: 18, maxTeams: 19 })
+    // Chops in weeks 1–15 leave 2 teams; the final runs weeks 16–18.
+    expect(guillotineChopWindow({ ...base, endgame: { threshold: 2, cumulativePeriods: 3 } })).toMatchObject({ chopWeeks: 15, maxTeams: 17 })
+    expect(guillotineChopWindow({ ...base, endgame: { threshold: 4, cumulativePeriods: 3 }, draftWeek: 10 })).toMatchObject({ firstChopWeek: 11, chopWeeks: 5, maxTeams: 9 })
+  })
+})
+
+describe('the seat count reads the league endgame (2026-10-29)', () => {
+  it('final two leaves room for its three final weeks: 14 seats where last team standing has 16', async () => {
+    seed(16, 2)
+    const lastTeam = (await resolveGuillotineSeatSummary(LEAGUE, new Date('2026-10-18T12:00:00Z')))!
+    expect(lastTeam.seats).toBe(16)
+    db.league = { ...db.league!, guillotineEndgame: 'final_two' }
+    const state = (await loadGuillotineSeatState(LEAGUE))!
+    expect(state.endgame).toEqual({ format: 'final_two', threshold: 2, cumulativePeriods: 3 })
+    // Chops in weeks 10–21 (12 teams) leave 2 for the final in weeks 22–24.
+    const finalTwo = (await resolveGuillotineSeatSummary(LEAGUE, new Date('2026-10-18T12:00:00Z')))!
+    expect(finalTwo.seats).toBe(14)
+  })
+})

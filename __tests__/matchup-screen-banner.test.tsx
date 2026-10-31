@@ -197,7 +197,7 @@ describe('Matchup banner — scored week', () => {
  * explains the format and points at the two pages that answer the real question.
  */
 describe('Matchup — an elimination league', () => {
-  const noOpponent = { available: false as const, reason: 'a guillotine league is scored against the whole field' }
+  const noOpponent = { available: false as const, reason: 'a Guilly league is scored against the whole field' }
   const elim = (format: 'guillotine' | 'survivor_guillotine') =>
     data({
       league: { ...data().league, elimination: format },
@@ -211,7 +211,7 @@ describe('Matchup — an elimination league', () => {
     const { container } = render(<Matchup data={elim('guillotine')} />)
     const text = container.textContent ?? ''
     expect(text).toContain('No head-to-head in this league')
-    expect(text).toContain('Guillotine')
+    expect(text).toContain('Guilly')
     expect(text).not.toContain('Win probability')
     expect(text).not.toContain('Head to head, slot by slot')
     expect(container.querySelector('.af-mu-h2h')).toBeNull()
@@ -222,7 +222,7 @@ describe('Matchup — an elimination league', () => {
 
   it('names a survivor guillotine as such', () => {
     render(<Matchup data={elim('survivor_guillotine')} />)
-    expect(screen.getByText('Survivor Guillotine')).toBeTruthy()
+    expect(screen.getByText('Survivor Guilly')).toBeTruthy()
   })
 
   it('CONTROL: an ordinary league still draws the head-to-head', () => {

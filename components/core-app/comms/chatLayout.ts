@@ -16,6 +16,7 @@
  */
 
 import { CHAT_THREAD_GROUP_MS } from '@/lib/chat-core/chat-timestamps'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 export type ChatLayoutMessage = {
   id: string
@@ -62,11 +63,11 @@ export function dayLabel(value: string, now: Date = new Date()): string {
   if (sameCalendarDay(d, yesterday)) return 'Yesterday'
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
   const days = Math.round((startOfToday - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000)
-  if (days > 0 && days < 7) return d.toLocaleDateString(undefined, { weekday: 'long' })
+  if (days > 0 && days < 7) return d.toLocaleDateString(getAppIntlLocale(), { weekday: 'long' })
   if (d.getFullYear() === now.getFullYear()) {
-    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+    return d.toLocaleDateString(getAppIntlLocale(), { weekday: 'short', month: 'short', day: 'numeric' })
   }
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  return d.toLocaleDateString(getAppIntlLocale(), { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function dayKey(d: Date): string {

@@ -1,7 +1,8 @@
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
-import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { guillotineTeamCountOptions } from '@/lib/guillotine/teamCountLimits'
 import { SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailability'
+import { KEEPER_EVEN_TEAM_COUNTS, KEEPER_ODD_TEAM_COUNTS } from '@/lib/league/oddTeamLeagues'
 
 export type CreateMode = 'quick' | 'advanced'
 
@@ -31,12 +32,7 @@ const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = [...SURVIVOR_CREATION_SPORTS]
 
 const UNIVERSAL_CREATE_TEAM_COUNTS = Array.from({ length: 31 }, (_, index) => index + 2)
 
-function guillotineTeamCounts(sport: SupportedSport): number[] {
-  const profile = getGuillotineSportConfig(sport)
-  const min = Math.max(4, profile?.minTeams ?? 8)
-  const max = Math.max(min, profile?.maxTeams ?? 18)
-  return Array.from({ length: max - min + 1 }, (_, index) => min + index)
-}
+const KEEPER_TEAM_COUNTS_WITH_ODD = [...KEEPER_EVEN_TEAM_COUNTS, ...KEEPER_ODD_TEAM_COUNTS].sort((a, b) => a - b)
 
 export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   version: 1,
@@ -47,7 +43,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       id: 'redraft',
       title: 'Redraft',
       subtitle: 'Fresh draft every season',
-      introVideoUrl: '/media/league-intros/redraft-league-intro.mp4',
+      introVideoUrl: '/media/create-league/concept/videos/Redraft.mp4',
       introPosterUrl: '/images/league-types/redraft.png',
     },
     {
@@ -101,7 +97,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     },
     {
       id: 'guillotine',
-      title: 'Guillotine',
+      title: 'Guilly',
       subtitle: 'Lowest score is eliminated',
       introVideoUrl: '/league-type-guillotine-intro.mp4',
       introPosterUrl: '/league-type-guillotine.png',
@@ -164,7 +160,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     c2c: ['snake', 'linear', 'auction', 'offline', 'auto'],
     guillotine: ['snake', 'linear', 'auction', 'offline', 'auto'],
     zombie: ['snake', 'offline', 'auto'],
-    survivor: ['snake', 'auction', 'offline', 'auto'],
+    survivor: ['snake', 'linear', 'auction', 'offline', 'auto'],
     tournament: ['snake', 'linear', 'auction', 'offline', 'auto'],
     big_brother: ['snake', 'offline', 'auto'],
   },
@@ -172,27 +168,27 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   allowedScoringPresetsByConceptSport: {
     redraft: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
-      NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
+      NBA: ['nba_points', 'nba_8cat', 'nba_9cat', 'nba_9cat_roto'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
-      NHL: ['nhl_points'],
+      NHL: ['nhl_points', 'nhl_cats_each', 'nhl_cats_most', 'nhl_cats_roto'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr', 'ncaaf_standard'],
       NCAAB: ['ncaab_points'],
       SOCCER: ['soc_points'],
     },
     dynasty: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_superflex', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
-      NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
+      NBA: ['nba_points', 'nba_8cat', 'nba_9cat', 'nba_9cat_roto'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
-      NHL: ['nhl_points'],
+      NHL: ['nhl_points', 'nhl_cats_each', 'nhl_cats_most', 'nhl_cats_roto'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr'],
       NCAAB: ['ncaab_points'],
       SOCCER: ['soc_points'],
     },
     keeper: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
-      NBA: ['nba_points', 'nba_8cat', 'nba_9cat'],
+      NBA: ['nba_points', 'nba_8cat', 'nba_9cat', 'nba_9cat_roto'],
       MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
-      NHL: ['nhl_points'],
+      NHL: ['nhl_points', 'nhl_cats_each', 'nhl_cats_most', 'nhl_cats_roto'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr', 'ncaaf_standard'],
       NCAAB: ['ncaab_points'],
       SOCCER: ['soc_points'],
@@ -246,6 +242,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: ['ncaaf_half_ppr'],
       NBA: ['nba_points'],
       NHL: ['nhl_points'],
+      MLB: ['mlb_points'],
     },
     tournament: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard', 'fb_espn_ppr', 'fb_sleeper_ppr'],
@@ -285,11 +282,15 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAB: [4, 6, 8, 10, 12, 14, 16],
       SOCCER: [4, 6, 8, 10, 12, 14, 16],
     },
+    // Keeper runs 4–20 for these four sports. Even sizes are free; odd sizes (5–19) are an AF
+    // Commissioner option: listed so the server accepts them,
+    // refused at POST /api/leagues without the plan, and shown locked in the wizard
+    // (lib/league/oddTeamLeagues.ts). Redraft has offered every size from 2 to 32 all along.
     keeper: {
-      NFL: [4, 6, 8, 10, 12, 14, 16],
-      NBA: [4, 6, 8, 10, 12, 14, 16],
-      MLB: [4, 6, 8, 10, 12, 14, 16],
-      NHL: [4, 6, 8, 10, 12, 14, 16],
+      NFL: KEEPER_TEAM_COUNTS_WITH_ODD,
+      NBA: KEEPER_TEAM_COUNTS_WITH_ODD,
+      MLB: KEEPER_TEAM_COUNTS_WITH_ODD,
+      NHL: KEEPER_TEAM_COUNTS_WITH_ODD,
       NCAAF: [4, 6, 8, 10, 12, 14, 16],
       NCAAB: [4, 6, 8, 10, 12, 14, 16],
       SOCCER: [4, 6, 8, 10, 12, 14, 16],
@@ -325,15 +326,10 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: [8, 10, 12, 14, 16],
       NCAAB: [8, 10, 12, 14, 16],
     },
-    // One chop per scoring period, so the sport's schedule decides how many teams fit. The
-    // hand-written even list here allowed an 18-team NFL guillotine that 17 chops cannot finish.
-    guillotine: {
-      NFL: guillotineTeamCounts('NFL'),
-      NCAAF: guillotineTeamCounts('NCAAF'),
-      NBA: guillotineTeamCounts('NBA'),
-      NHL: guillotineTeamCounts('NHL'),
-      MLB: guillotineTeamCounts('MLB'),
-    },
+    // Guilly: 4–27 teams single elimination, up to 35 with double-elimination weeks — the
+    // same for every sport (lib/guillotine/teamCountLimits.ts). A commissioner on a short
+    // schedule adds double-chop weeks in league settings to finish a large league in time.
+    guillotine: Object.fromEntries(ALL_SPORTS.map((sport) => [sport, guillotineTeamCountOptions()])),
     zombie: {
       NFL: [8, 10, 12, 14],
       NBA: [8, 10, 12, 14],
@@ -348,6 +344,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: [...SURVIVOR_CREATE_CAST_SIZES],
       NBA: [...SURVIVOR_CREATE_CAST_SIZES],
       NHL: [...SURVIVOR_CREATE_CAST_SIZES],
+      MLB: [...SURVIVOR_CREATE_CAST_SIZES],
     },
     tournament: {
       NFL: [32, 64, 96, 128, 160, 192, 224],

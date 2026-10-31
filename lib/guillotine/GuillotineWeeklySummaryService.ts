@@ -3,7 +3,7 @@
  */
 
 import { getSurvivalStandings } from './GuillotineStandingsProjectionService'
-import { getDangerTiers } from './GuillotineDangerEngine'
+import { getLiveDangerTiers } from './chopWatchLoad'
 import { getRecentEvents } from './GuillotineEventLog'
 import { GUILLOTINE_LEAGUE_IMAGE, GUILLOTINE_INTRO_VIDEO } from './constants'
 
@@ -60,7 +60,7 @@ export async function buildWeeklySummary(input: WeeklySummaryInput): Promise<Gui
 
   let dangerTiers: GuillotineWeeklySummary['dangerTiers'] | undefined
   if (includeDanger) {
-    const danger = await getDangerTiers({ leagueId, weekOrPeriod })
+    const danger = (await getLiveDangerTiers({ leagueId, weekOrPeriod })).rows
     dangerTiers = danger.map((d) => ({
       rosterId: d.rosterId,
       displayName: d.displayName,

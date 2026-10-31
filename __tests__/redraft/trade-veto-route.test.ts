@@ -19,6 +19,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createMockNextRequest } from '../helpers/createMockNextRequest'
+import { translations } from '@/lib/i18n/translations'
 
 function read(rel: string): string {
   return fs.readFileSync(path.join(process.cwd(), rel), 'utf8')
@@ -164,7 +165,9 @@ describe('TradeCenter — commissioner veto button', () => {
   it('only renders the commissioner veto button for commissioners', () => {
     // T4 broadened the gate to `isCommissioner || settingsCommissioner` (commish derived from settings).
     expect(tradeCenterSrc).toContain('isCommissioner || settingsCommissioner')
-    expect(tradeCenterSrc).toContain('commissioner veto')
+    // The label lives in the i18n dictionary (English + Spanish) since the Trade Center was translated.
+    expect(tradeCenterSrc).toContain("t('tradeCenter.action.commissionerVeto')")
+    expect(translations.en['tradeCenter.action.commissionerVeto']).toBe('commissioner veto')
   })
 
   it('has onVeto handler that calls vetoRedraftTradeProposal', () => {

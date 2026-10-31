@@ -20,7 +20,7 @@ import { SURVIVOR_SETTINGS_TRIBAL_VOTE_WINDOW_HOURS } from '@/lib/survivor/survi
 import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { applySurvivorSitOutToScoring } from '@/lib/survivor/SurvivorSitOutEngine'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
-import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
+import { planWeekForInstant } from './survivorPlanCalendar'
 import { openTribalCouncil as openVerifiedCouncil, closeVoteWindow } from '@/lib/survivor/survivorCouncilService'
 import { tallyCouncil, revealCouncil } from '@/lib/survivor/survivorVoteTallyService'
 import { resolveAutonomousCouncil } from '@/lib/survivor/survivorAutonomousCouncil'
@@ -31,6 +31,9 @@ import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSur
 import { scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from './survivorNbaWeeklyScoring'
 import { applySurvivorMergeCast } from './survivorMergeCast'
 import { awardTribeImmunity, clearExpiredTribeImmunity } from './survivorTribeImmunity'
+import { pickAttendingTribeId, resolveWeekImmuneTribeIds } from './survivorCouncilImmunity'
+import { loadWeekCouncilProgress } from './survivorWeekCouncilProgress'
+import { getActiveSurpriseTribeWeek } from './survivorSurpriseTribes'
 import { postImmunityWinLine } from './leagueChatPoster'
 
 /** SurvivorPlayer.redraftRosterId is the legacy Roster id; resolve its actual season roster. */
@@ -201,13 +204,14 @@ export async function advanceWeek(leagueId: string): Promise<void> {
   const plan = readSurvivorFullSeasonPlan(league?.settings)
   const next = plan && gs.currentWeek < plan.startWeek ? plan.startWeek : gs.currentWeek + 1
   if (plan) {
-    const calendarWeek = dailySportWeekForInstant(plan.sport, plan.season, new Date()) ?? 0
+    const calendarWeek = planWeekForInstant(plan.sport, plan.season, new Date()) ?? 0
     if (next > plan.endWeek || next > calendarWeek) return
     if (gs.currentWeek >= plan.startWeek) {
       if (!gs.weekScoringFinalAt || gs.activeCouncilId) return
+      // Every council the week owes must have sent someone home (a double week owes two).
       if (plan.eliminationWeeks.includes(gs.currentWeek)) {
-        const eliminated = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, week: gs.currentWeek, action: { in: ['player_eliminated', 'planned_elimination_skipped_final_three'] } }, select: { id: true } })
-        if (!eliminated) return
+        const progress = await loadWeekCouncilProgress(leagueId, gs.currentWeek, plan.eliminationWeeks)
+        if (!progress.done) return
       }
       if (plan.exileReturnWeek === gs.currentWeek) {
         const settled = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, action: 'scheduled_exile_return_resolved' }, select: { id: true } })
@@ -426,26 +430,41 @@ export async function triggerTribalOpen(leagueId: string): Promise<void> {
   const hours = tribalVoteWindowHoursFromLeague(leagueRow?.settings)
   const deadline = plan ? nextTorchCeremonyDeadline(new Date(), leagueRow?.settings) : new Date(Date.now() + hours * 60 * 60 * 1000)
 
-  const immune = gs.immuneTribeId
   const tribes = await prisma.survivorTribe.findMany({
     where: { leagueId, isActive: true },
     select: { id: true },
   })
-  const tribeId =
-    immune && tribes.some((t) => t.id !== immune)
-      ? tribes.find((t) => t.id !== immune)?.id ?? null
-      : tribes[0]?.id ?? null
+  // The lowest scoring tribe that is not immune attends, planned season or not. Immunity is the
+  // top tribe (the top two under that rule) plus any tribe that won it through a challenge, from
+  // the same resolver the necklace uses, so a tribe told it is safe is never sent. The unplanned
+  // path used to send the FIRST non-immune tribe, which with three or more tribes was wrong.
+  // A surprise two-tribe week after the merge: only its two temporary tribes count, the score
+  // sync's merged pick does not, and the lower tribe alone attends.
+  const surprise = await getActiveSurpriseTribeWeek(leagueId, gs.currentWeek)
+  const immunity = await resolveWeekImmuneTribeIds(leagueId, gs.currentWeek, {
+    settings: normalizeSurvivorFoundationSettings(leagueRow?.settings as Record<string, unknown> | null),
+    tribeIds: surprise ? surprise.tribeIds : tribes.map((t) => t.id),
+    scoreImmuneTribeId: surprise ? null : gs.immuneTribeId,
+  })
+  let losingTribe = immunity.attendingTribeId
+  const tribeId = losingTribe
 
   if (plan) {
-    const prior = await prisma.survivorTribalCouncil.findFirst({ where: { leagueId, week: gs.currentWeek }, select: { id: true } })
-    if (prior) return
-    // With more than two tribes, the lowest scoring nonimmune tribe attends.
-    const scores = await prisma.survivorWeeklyScore.findMany({ where: { leagueId, week: gs.currentWeek, isFinalized: true, countedTowardTribeTotal: true, tribeId: { not: null } }, select: { tribeId: true, finalScore: true } })
-    const totals = new Map<string, number>()
-    for (const score of scores) if (score.tribeId) totals.set(score.tribeId, (totals.get(score.tribeId) ?? 0) + score.finalScore)
-    const losingTribe = [...totals.entries()].filter(([id]) => id !== immune).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? tribeId
-    const merged = Boolean(gs.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(gs.phase)
-    const opened = await openVerifiedCouncil(leagueId, { week: gs.currentWeek, attendingTribeId: merged ? null : losingTribe, voteDeadlineAt: deadline })
+    // A planned week opens its councils one at a time: the next only once the last has sent
+    // someone home, and never more than the plan schedules (two in a double-elimination week).
+    const progress = await loadWeekCouncilProgress(leagueId, gs.currentWeek, plan.eliminationWeeks)
+    if (!progress.canOpenNext) return
+    // The second council of a pre-merge double week goes to the next-lowest tribe that is not
+    // immune and has not attended this week. With nobody else left, the same tribe goes back.
+    if (progress.attendedTribeIds.length) {
+      losingTribe = pickAttendingTribeId({
+        totals: immunity.totals,
+        tribeIds: surprise ? surprise.tribeIds : tribes.map((t) => t.id),
+        immuneTribeIds: [...immunity.immuneTribeIds, ...progress.attendedTribeIds],
+      }) ?? losingTribe
+    }
+    const merged = !surprise && (Boolean(gs.mergeTriggeredAt) || ['merge', 'post_merge', 'jury', 'finale'].includes(gs.phase))
+    const opened = await openVerifiedCouncil(leagueId, { week: gs.currentWeek, attendingTribeId: merged ? null : losingTribe, voteDeadlineAt: deadline, ...(surprise ? { scope: 'surprise' as const } : {}) })
     if (!opened.ok) throw new Error(opened.error)
     await scheduleTribalReminders(leagueId, deadline)
     return

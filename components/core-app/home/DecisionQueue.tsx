@@ -6,6 +6,8 @@ import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { splitDecisionQueue, TOP_DECISION_LIMIT } from '@/lib/core-app/decisionQueue'
 import { usePersistentDisclosure } from '@/components/core-app/home/homeViewState'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { decisionQueueMessages } from '@/lib/core-app/messages/decisionQueue'
 import { scopeLabelText } from '@/lib/core-app/shellCopy'
 import { issueText } from '@/lib/core-app/decisionQueueCopy'
 import '@/components/core-app/af-dash-3a.css'
@@ -52,19 +54,18 @@ function ActionLink({
   action,
   label,
   severity,
-  es,
 }: {
   action: NonNullable<CoreIssue['action']>
   label: string
   severity: CoreIssue['severity']
-  es: boolean
 }) {
+  const t = useMessages(decisionQueueMessages)
   const className = `af3a-btn ${severity === 'info' ? '' : 'af3a-btn-accent'}`
   if (action.external) {
     return (
       <a className={className} href={action.href} target="_blank" rel="noopener noreferrer">
         {label}
-        <span className="af-sr-only">{es ? ' (abre la plataforma de la liga en una pestaña nueva)' : <> (opens the league&rsquo;s platform in a new tab)</>}</span>
+        <span className="af-sr-only">{t.opensInNewTab}</span>
       </a>
     )
   }
@@ -109,17 +110,17 @@ export function DecisionQueue({
   const { top, rest, total } = splitDecisionQueue(issues)
   const restId = 'af-decisions-rest'
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const t = useMessages(decisionQueueMessages)
   const scopeText = scopeLabelText(scopeLabel, language)
 
   return (
     <section className="af3a-sec af-decisions" aria-labelledby="af-decisions-title">
       <header className="af3a-sechead">
-        <h2 id="af-decisions-title">{es ? 'Decisiones principales' : 'Top decisions'}</h2>
+        <h2 id="af-decisions-title">{t.title}</h2>
         {help}
-        {total > 0 ? <span className="af3a-open">{es ? `${total} ${total === 1 ? 'ABIERTA' : 'ABIERTAS'}` : `${total} OPEN`}</span> : null}
+        {total > 0 ? <span className="af3a-open">{t.openCount(total)}</span> : null}
         <span className="af3a-note">
-          {es ? 'Lo más urgente primero' : 'Most urgent first'} · <b>{scopeText}</b>
+          {t.mostUrgentFirst} · <b>{scopeText}</b>
         </span>
       </header>
 
@@ -129,37 +130,31 @@ export function DecisionQueue({
          * "all good" to a user we cannot see anything for. The connect card above says what to do.
          */
         <div className="af3a-card af3a-empty">
-          <h3>{es ? 'Todavía no hay nada que decidir.' : 'Nothing to decide yet.'}</h3>
-          <p>
-            {es
-              ? 'Conecta una liga y esto se llena con lo que te necesita: puestos vacíos, titulares lesionados, drafts e intercambios.'
-              : 'Connect a league and this fills with what needs you: empty slots, injured starters, drafts and trades.'}
-          </p>
+          <h3>{t.nothingToDecide}</h3>
+          <p>{t.connectALeague}</p>
         </div>
       ) : total === 0 ? (
         <div className="af3a-card af3a-empty">
-          <h3>{es ? 'Nada te está esperando.' : 'Nothing is waiting on you.'}</h3>
-          {es ? (
-            <p>
-              Sin puestos vacíos, titulares lesionados, drafts ni ligas desactualizadas
-              {scopeLabel === 'All leagues' ? ' en ninguna liga' : <> en tus <b>{scopeText}</b></>} que podamos leer.
-            </p>
-          ) : (
-            <p>
-              No empty slots, injured starters, drafts or stale leagues
-              {scopeLabel === 'All leagues' ? ' in any league' : <> in your <b>{scopeLabel}</b></>} that we can read.
-            </p>
-          )}
+          <h3>{t.nothingWaiting}</h3>
+          {/* The bold scope is `scopeText`, which is `scopeLabel` itself outside Spanish (scopeLabelText). */}
+          <p>
+            {t.emptyNone}
+            {scopeLabel === 'All leagues' ? (
+              t.emptyInAnyLeague
+            ) : (
+              <>
+                {t.emptyInYour}
+                <b>{scopeText}</b>
+              </>
+            )}
+            {t.emptyWeCanRead}
+          </p>
         </div>
       ) : (
         <>
           <ol
             className="af-decisions-top"
-            aria-label={
-              es
-                ? `Las ${Math.min(total, TOP_DECISION_LIMIT)} más urgentes`
-                : `The ${Math.min(total, TOP_DECISION_LIMIT)} most urgent`
-            }
+            aria-label={t.topUrgentLabel(Math.min(total, TOP_DECISION_LIMIT))}
           >
             {top.map((issue) => {
               const when = deadlineLabel(issue.deadline, nowMs)
@@ -181,7 +176,7 @@ export function DecisionQueue({
                       {when ? (
                         <>
                           <b className="af3a-mono af-decision-when">
-                            {when === 'now' ? (es ? 'AHORA' : 'NOW') : `${es ? 'EN' : 'IN'} ${when}`}
+                            {when === 'now' ? t.now : t.inWhen(when)}
                           </b>{' '}
                         </>
                       ) : null}
@@ -189,7 +184,7 @@ export function DecisionQueue({
                     </p>
                   </div>
                   {issue.action ? (
-                    <ActionLink action={issue.action} label={text.actionLabel ?? issue.action.label} severity={issue.severity} es={es} />
+                    <ActionLink action={issue.action} label={text.actionLabel ?? issue.action.label} severity={issue.severity} />
                   ) : null}
                 </li>
               )
@@ -205,7 +200,7 @@ export function DecisionQueue({
                 aria-controls={restId}
                 onClick={() => setShowAll(!showAll)}
               >
-                {showAll ? (es ? 'Mostrar menos' : 'Show fewer') : es ? `Mostrar ${rest.length} más` : `Show ${rest.length} more`}
+                {showAll ? t.showFewer : t.showMore(rest.length)}
               </button>
               <ol id={restId} className="af3a-card af3a-rows af-decisions-rest" hidden={!showAll} start={top.length + 1}>
                 {rest.map((issue) => {
@@ -226,7 +221,7 @@ export function DecisionQueue({
                           title
                         )}
                       </span>
-                      <span className="af3a-row-league">{issue.leagueName ?? (es ? 'En todas tus ligas' : 'Across your leagues')}</span>
+                      <span className="af3a-row-league">{issue.leagueName ?? t.acrossYourLeagues}</span>
                       <span className="af3a-row-when af3a-mono">{deadlineLabel(issue.deadline, nowMs) ?? '—'}</span>
                     </li>
                   )

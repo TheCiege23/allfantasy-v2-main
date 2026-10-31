@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { HelpCircle } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
@@ -39,7 +40,7 @@ export function GeneralTab({
 }) {
   const { t } = useLanguage()
   const leagueId = ctx.league.id
-  const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'general', {
+  const { queuePatch, saving, lastError, savedAt } = useLeagueSettingsSectionAutosave(leagueId, 'general', {
     enabled: canEdit,
   })
 
@@ -47,16 +48,19 @@ export function GeneralTab({
   const seedTz = () => String(savedOr(leagueId, 'timezone', ctx.league.timezone ?? DEFAULT_TZ) || DEFAULT_TZ)
   const seedLogo = () => String(savedOr<string | null>(leagueId, 'logoUrl', ctx.league.logoUrl ?? '') ?? '')
 
+  const [capacityError, setCapacityError] = useState<string | null>(null)
+  const [teamCount, setTeamCount] = useState(String(savedOr(leagueId, 'leagueSize', ctx.league.leagueSize ?? 12)))
   const [name, setName] = useState(seedName)
   const [timezone, setTimezone] = useState(seedTz)
   const [logoUrl, setLogoUrl] = useState(seedLogo)
 
   useEffect(() => {
+    setTeamCount(String(savedOr(leagueId, 'leagueSize', ctx.league.leagueSize ?? 12)))
     setName(seedName())
     setTimezone(seedTz())
     setLogoUrl(seedLogo())
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.league.name, ctx.league.timezone, ctx.league.logoUrl])
+  }, [ctx.league.name, ctx.league.timezone, ctx.league.logoUrl, ctx.league.leagueSize])
 
   // A league saved with a zone outside the presets must still show (and keep) that zone.
   const tzOptions = useMemo(
@@ -76,12 +80,25 @@ export function GeneralTab({
             <HelpCircle className="h-3 w-3" aria-hidden />
             {t('lsHub.gen.autosave')}
           </span>
-          {saving ? (
-            <span className="ml-auto shrink-0 text-[11px] font-semibold text-cyan-300/80">{t('lsHub.saving')}</span>
-          ) : null}
+          {saving || savedAt != null ? <AutosaveStatus className="ml-auto" saving={saving} savedAt={savedAt} /> : null}
         </div>
 
+        {capacityError ? <p role="alert" className="mb-3 text-sm text-red-300">{capacityError}</p> : null}
+        {lastError ? <p role="alert" className="mb-3 text-sm text-red-300">{lastError}</p> : null}
         <div className="space-y-4">
+          <label className="block">
+            <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.gen.teamCount')}</span>
+            <input type="number" inputMode="numeric" min={2} max={32} value={teamCount} disabled={!canEdit}
+              onChange={event => setTeamCount(event.target.value)}
+              onBlur={() => {
+                const size = Number(teamCount)
+                if (!Number.isInteger(size) || size < 2 || size > 32) { setCapacityError(t('lsHub.gen.teamCountRange')); return }
+                setCapacityError(null)
+                if (size !== ctx.league.leagueSize) queuePatch({ leagueSize: size })
+              }}
+              className={SETTINGS_INPUT_CLASS} data-testid="league-settings-general-team-count" />
+            <span className="mt-1 block text-xs text-white/60">{t('lsHub.gen.teamCountHint')}</span>
+          </label>
           <label className="block">
             <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.gen.leagueName')}</span>
             <input

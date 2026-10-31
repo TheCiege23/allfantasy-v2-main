@@ -1,0 +1,144 @@
+/*
+ * Dynasty format card (DynastyFormatCard.tsx). The Commissioner Hub sits outside the dynasty
+ * workspace, so every token carries its fallback from the dynasty token contract.
+ */
+.af-ch-areas li.af-dyn-format {
+  grid-column: 1 / -1;
+  gap: 10px;
+  padding: 16px;
+  min-width: 0;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--dyn-gold, #D4A24C) 10%, transparent), transparent 70%),
+    var(--dyn-vault, #121826);
+  border: 1px solid var(--dyn-line, #2A3345);
+  border-top: 3px solid var(--dyn-gold, #D4A24C);
+  color: var(--dyn-text, #E8ECF2);
+}
+.af-dyn-format-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-dyn-format-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 8px;
+  color: var(--dyn-gold, #D4A24C);
+  background: var(--dyn-rail, #1C2333);
+  border: 1px solid var(--dyn-line, #2A3345);
+}
+.af-dyn-format-title {
+  font-family: 'Archivo', 'Inter', system-ui, sans-serif;
+  font-stretch: 112%;
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  color: var(--dyn-text, #E8ECF2);
+}
+.af-dyn-format-detail {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--dyn-text2, #C3CAD5);
+}
+.af-dyn-format-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+.af-dyn-format-fact {
+  min-width: 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--dyn-rail, #1C2333);
+  border: 1px solid var(--dyn-line, #2A3345);
+}
+.af-dyn-format-fact dt {
+  font-family: 'Archivo', 'Inter', system-ui, sans-serif;
+  font-stretch: 75%;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dyn-faint, #9AA4B2);
+}
+.af-dyn-format-fact dd {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--dyn-text, #E8ECF2);
+  overflow-wrap: anywhere;
+}
+.af-dyn-format-fact[data-fact='rollover'] dd {
+  color: var(--dyn-gold-soft, #F3D79F);
+}
+.af-dyn-format-chips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.af-ch-areas li.af-dyn-format .af-dyn-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: transparent;
+  font-family: 'Archivo', 'Inter', system-ui, sans-serif;
+  font-stretch: 75%;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dyn-text2, #C3CAD5);
+  border: 1px solid var(--dyn-line, #2A3345);
+}
+.af-ch-areas li.af-dyn-format .af-dyn-chip[data-round='first'] {
+  color: var(--dyn-gold-soft, #F3D79F);
+  border-color: var(--dyn-gold, #D4A24C);
+}
+.af-dyn-format-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 2px;
+}
+.af-dyn-format-primary,
+.af-dyn-format-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-dyn-format-primary {
+  color: var(--dyn-gold, #D4A24C);
+}
+.af-dyn-format-link {
+  color: var(--dyn-text2, #C3CAD5);
+}
+.af-dyn-format-primary:hover,
+.af-dyn-format-link:hover {
+  text-decoration: underline;
+}
+.af-dyn-format-primary:focus-visible,
+.af-dyn-format-link:focus-visible {
+  outline: 2px solid var(--dyn-teal, #2DD4BF);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-ch-areas li.af-dyn-format * {
+    transition: none !important;
+  }
+}

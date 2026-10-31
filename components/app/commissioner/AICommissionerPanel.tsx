@@ -1,5 +1,7 @@
 'use client'
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Bot, Loader2, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react'
@@ -370,7 +372,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
   const executeRunCycle = useCallback(async () => {
     setRunning(true)
     try {
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/ai-commissioner/run`, {
+      const res = await paidToolFetchWithConfirm(`/api/leagues/${encodeURIComponent(leagueId)}/ai-commissioner/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -481,7 +483,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
 
     setChatting(true)
     try {
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/ai-commissioner/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/leagues/${encodeURIComponent(leagueId)}/ai-commissioner/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -542,7 +544,8 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
           }),
         })
         const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
-        if (!res.ok) throw new Error(data.error || 'Failed to apply unified action')
+        // A refused action comes back as { ok: false, message } (e.g. the league locked that area).
+        if (!res.ok) throw new Error(data.error || data.message || 'Failed to apply unified action')
         toast.success(data.message || 'Commissioner action applied')
         await refreshAll()
       } catch (e: any) {

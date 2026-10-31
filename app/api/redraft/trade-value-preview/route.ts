@@ -1,3 +1,4 @@
+import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 /**
  * Price a redraft trade WITHOUT proposing it.
  *
@@ -147,7 +148,7 @@ export async function POST(req: NextRequest) {
    * ⚠ See the header. Without this a member can price trades from somebody else's roster and read
    * the per-asset breakdown back.
    */
-  if (proposer.ownerId !== userId) {
+  if (proposer.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, proposerRosterId, userId)) {
     return NextResponse.json({ error: 'Only the proposer roster owner can price this trade' }, { status: 403 })
   }
 

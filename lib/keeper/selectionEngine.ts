@@ -1,4 +1,6 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { withKeeperSessionLock } from './keeperSessionLock'
 import { computeKeeperEligibility } from './eligibilityEngine'
 import { executeSeasonCarryover } from './carryoverEngine'
 import type { ConflictReport, SubmitKeeperResult } from './types'
@@ -56,28 +58,41 @@ export async function submitKeeperSelections(
   seasonId: string,
   playerIds: string[],
 ): Promise<SubmitKeeperResult> {
-  const league = await prisma.league.findFirst({ where: { id: leagueId } })
+  return withKeeperSessionLock(leagueId, seasonId, (db) =>
+    submitKeeperSelectionsLocked(db, rosterId, leagueId, seasonId, playerIds))
+}
+
+async function submitKeeperSelectionsLocked(
+  db: Prisma.TransactionClient,
+  rosterId: string,
+  leagueId: string,
+  seasonId: string,
+  playerIds: string[],
+): Promise<SubmitKeeperResult> {
+  const session = await db.keeperSelectionSession.findFirst({ where: { leagueId, seasonId } })
+  if (session && (session.status !== 'open' || session.deadline && new Date(session.deadline).getTime() <= Date.now())) {
+    throw new Error('Keeper selections are closed')
+  }
+  const league = await db.league.findFirst({ where: { id: leagueId } })
   if (!league) throw new Error('League not found')
 
   const maxKeepers = league.keeperCount ?? 3
   if (playerIds.length > maxKeepers) {
     throw new Error(`At most ${maxKeepers} keepers`)
   }
-  if (playerIds.length === 0) {
-    // "Keep nobody" writes no keeper record, so leave a marker: the missed-deadline rule
-    // (./missedDeadlineService) must not mistake a deliberate empty list for silence.
-    await prisma.leagueAuditLog
-      .create({ data: { leagueId, actionType: KEEPER_SUBMITTED_NONE, entityType: 'keeper_session', entityId: seasonId, metadata: { rosterId } } })
-      .catch(() => undefined)
-  }
 
-  const roster = await prisma.redraftRoster.findFirst({
+  const roster = await db.redraftRoster.findFirst({
     where: { id: rosterId, leagueId, seasonId },
     include: { players: true },
   })
   if (!roster) throw new Error('Roster not found')
 
-  const elig = await prisma.keeperEligibility.findMany({
+  if (playerIds.length === 0) {
+    // Persist the deliberate choice atomically; a failed write must not report success.
+    await db.leagueAuditLog.create({ data: { leagueId, actionType: KEEPER_SUBMITTED_NONE, entityType: 'keeper_session', entityId: seasonId, metadata: { rosterId } } })
+  }
+
+  const elig = await db.keeperEligibility.findMany({
     where: { seasonId, rosterId, playerId: { in: playerIds } },
   })
   const eligMap = new Map(elig.map((e) => [e.playerId, e]))
@@ -113,7 +128,7 @@ export async function submitKeeperSelections(
    * which is what the carryover forfeits and the next draft places.
    */
   const rules = resolveKeeperRules(league)
-  const latestDraft = await prisma.draftSession.findFirst({
+  const latestDraft = await db.draftSession.findFirst({
     where: { leagueId },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     select: { rounds: true },
@@ -142,7 +157,7 @@ export async function submitKeeperSelections(
   for (const { pid, e } of candidates) {
     if (refusedById.has(pid)) {
       if (rules.sameRoundRule === 'reject_both') {
-        await prisma.keeperRecord.deleteMany({
+        await db.keeperRecord.deleteMany({
           where: { seasonId, rosterId, playerId: pid },
         })
       }
@@ -155,7 +170,7 @@ export async function submitKeeperSelections(
     if (spot && spot.round !== spot.costRound) warnings.push(`${pid}: ${costLabel}`)
 
     const player = roster.players.find((p) => p.playerId === pid)!
-    const rec = await prisma.keeperRecord.upsert({
+    const rec = await db.keeperRecord.upsert({
       where: {
         seasonId_rosterId_playerId: {
           seasonId,
@@ -196,7 +211,7 @@ export async function submitKeeperSelections(
     })
   }
 
-  await prisma.keeperSelectionSession.updateMany({
+  await db.keeperSelectionSession.updateMany({
     where: { seasonId, leagueId },
     data: { teamsSubmitted: { increment: 1 } },
   })
@@ -243,60 +258,48 @@ export async function validateAllConflicts(
 }
 
 export async function lockKeeperSelections(leagueId: string, sessionId: string): Promise<void> {
-  const session = await prisma.keeperSelectionSession.findFirst({
-    where: { id: sessionId, leagueId },
-  })
-  if (!session) throw new Error('Session not found')
+  const initial = await prisma.keeperSelectionSession.findFirst({ where: { id: sessionId, leagueId } })
+  if (!initial) throw new Error('Session not found')
 
-  const wasAlreadyLocked = session.status === 'locked'
+  const session = await withKeeperSessionLock(leagueId, initial.seasonId, async (db) => {
+    // Re-read after the lock: another deadline runner may have completed while we waited.
+    const current = await db.keeperSelectionSession.findFirst({ where: { id: sessionId, leagueId } })
+    if (!current) throw new Error('Session not found')
+    if (current.status === 'locked') return null
 
-  // Teams that never answered get the league's missed-deadline rule (default: no keepers) as
-  // pending records, which the lock below locks with everyone else's. Once per session: a
-  // repeat lock must not pick again. A failure leaves those teams with no keepers, as before.
-  if (!wasAlreadyLocked) {
-    await applyMissedDeadlineRule(leagueId, session.seasonId).catch((e) => {
-      console.error('[keeper] missed-deadline rule failed; silent teams keep nobody', { leagueId, sessionId, error: e instanceof Error ? e.message : e })
+    // A provider/value failure keeps the old no-default behavior. A savepoint removes ALL
+    // partially created defaults before locking the manager selections already on file.
+    await db.$executeRaw`SAVEPOINT keeper_defaults`
+    try {
+      await applyMissedDeadlineRule(leagueId, current.seasonId, db)
+      await db.$executeRaw`RELEASE SAVEPOINT keeper_defaults`
+    } catch (error) {
+      await db.$executeRaw`ROLLBACK TO SAVEPOINT keeper_defaults`
+      await db.$executeRaw`RELEASE SAVEPOINT keeper_defaults`
+      console.error('[keeper] missed-deadline rule failed; defaults rolled back', { leagueId, sessionId, error: error instanceof Error ? error.message : error })
+    }
+
+    await db.keeperRecord.updateMany({
+      where: { leagueId, seasonId: current.seasonId, status: 'pending' },
+      data: { status: 'locked', lockedAt: new Date() },
     })
-  }
-
-  await prisma.keeperRecord.updateMany({
-    where: { leagueId, seasonId: session.seasonId, status: 'pending' },
-    data: { status: 'locked', lockedAt: new Date() },
+    await db.keeperSelectionSession.update({ where: { id: sessionId }, data: { status: 'locked', lockedAt: new Date() } })
+    await db.league.update({ where: { id: leagueId }, data: { keeperPhaseActive: false } })
+    return current
   })
 
-  await prisma.keeperSelectionSession.update({
-    where: { id: sessionId },
-    data: { status: 'locked', lockedAt: new Date() },
+  // Only the transaction that changed open -> locked materializes the season carryover.
+  if (!session) return
+  const outgoing = await prisma.redraftSeason.findFirst({
+    where: { leagueId, NOT: { id: session.seasonId } },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
   })
-
-  await prisma.league.update({
-    where: { id: leagueId },
-    data: { keeperPhaseActive: false },
-  })
-
-  // Materialize locked keepers onto the incoming season's rosters. Guarded on
-  // `wasAlreadyLocked` because `executeSeasonCarryover` creates roster-player
-  // rows rather than upserting them — re-running it on an already-locked
-  // session (a repeat commissioner click, or the deadline sweep racing a
-  // manual lock) would duplicate every kept player instead of no-op'ing.
-  if (!wasAlreadyLocked) {
-    const outgoing = await prisma.redraftSeason.findFirst({
-      where: { leagueId, NOT: { id: session.seasonId } },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true },
-    })
-    if (outgoing) {
-      try {
-        await executeSeasonCarryover(leagueId, outgoing.id, session.seasonId)
-      } catch (error) {
-        console.error('[keeper] executeSeasonCarryover failed after lock', {
-          leagueId,
-          sessionId,
-          incomingSeasonId: session.seasonId,
-          outgoingSeasonId: outgoing.id,
-          error,
-        })
-      }
+  if (outgoing) {
+    try {
+      await executeSeasonCarryover(leagueId, outgoing.id, session.seasonId)
+    } catch (error) {
+      console.error('[keeper] executeSeasonCarryover failed after lock', { leagueId, sessionId, incomingSeasonId: session.seasonId, outgoingSeasonId: outgoing.id, error })
     }
   }
 }

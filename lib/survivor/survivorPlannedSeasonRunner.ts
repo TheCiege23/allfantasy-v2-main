@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
-import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
+import { planWeekForInstant, planWeekWindow, SURVIVOR_PLAN_SPORTS } from './survivorPlanCalendar'
 import { rotatingBatch } from '@/lib/redraft/scoreSyncBatch'
 import { readSurvivorFullSeasonPlan, type SurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import {
@@ -11,12 +11,21 @@ import {
   triggerTribalOpen, tryAutomaticPhaseAdvance,
 } from './gameStateMachine'
 import { processReturnFromExile, scoreExileWeek } from './exileEngine'
-import { getFinaleState } from './SurvivorFinaleEngine'
+import { getFinaleState, settleFinaleIfDue } from './SurvivorFinaleEngine'
+import { ensureJuryVotingOpen } from './juryEngine'
+import { nextTorchCeremonyDeadline } from './survivorCeremonySchedule'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { closeExpiredExileRosters, finalizeExileRosterResults } from './exileRosterService'
 import { ensureVerifiedSlateChallenges, settleVerifiedSlateChallenges } from './survivorVerifiedSlateChallenges'
+import { ensureWeeklyCall, settleWeeklyCall } from './survivorWeeklyCall'
 import { generateAndPostWeeklyRecap } from './weeklyRecapGenerator'
 import { settleNbaTribeSitOutDeadline } from './SurvivorSitOutEngine'
+import { notifySurvivorCommissionerOnce, SURVIVOR_JURY_OVERDUE_MS, SURVIVOR_SCORES_OVERDUE_MS } from './survivorCommissionerAlerts'
+import { autoApplyPendingTribeRedraw, rebalanceTribesBeforeCouncil, redrawTribesForSitOutBalance } from './survivorTribeRedrawDecision'
+import { dissolveSurpriseTribes, ensureSurpriseTribeWeek } from './survivorSurpriseTribes'
+import { loadWeekCouncilProgress } from './survivorWeekCouncilProgress'
+import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
+import { reportSurvivorAutomationError } from './survivorAutomationReporting'
 
 export type PlannedWeekKind = 'opening' | 'elimination' | 'rest' | 'finale' | 'outside'
 
@@ -37,7 +46,7 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   if (['pre_draft', 'drafting', 'complete', 'paused'].includes(game.phase)) return game.phase
   // The commissioner's pause writes pausedSnapshot and leaves phase alone.
   if (game.pausedSnapshot != null) return 'paused'
-  const calendarWeek = dailySportWeekForInstant(plan.sport, plan.season, now)
+  const calendarWeek = planWeekForInstant(plan.sport, plan.season, now)
   if (!calendarWeek || calendarWeek < plan.startWeek) return 'awaiting_opening'
 
   if (game.currentWeek < plan.startWeek) {
@@ -48,36 +57,84 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   if (week > plan.endWeek || week > calendarWeek) return 'awaiting_calendar'
   const kind = plannedWeekKind(plan, week)
   if (kind === 'outside') return 'outside_plan'
-  const participation = await settleNbaTribeSitOutDeadline(leagueId, week, now)
+  // Surprise two-tribe weeks after the merge: sealed on the first post-merge call, drawn at the top
+  // of a sealed week so the week's scores land on the two temporary tribes, dissolved at the flip.
+  if (kind === 'elimination' && normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown> | null).postMergeSurpriseTribeWeeks > 0) {
+    await ensureSurpriseTribeWeek(leagueId, week, plan)
+  }
+  let participation = await settleNbaTribeSitOutDeadline(leagueId, week, now)
+  // No fair NBA sit-out rotation exists for these tribes: redraw them (once a week) and settle again
+  // rather than wait for the commissioner.
+  if (participation === 'blocked' && (await redrawTribesForSitOutBalance(leagueId, week)).redrawn) {
+    participation = await settleNbaTribeSitOutDeadline(leagueId, week, now)
+  }
   if (participation === 'blocked') return 'awaiting_tribe_rebalance'
   if (participation === 'awaiting_schedule' || participation === 'before_deadline') return 'awaiting_tribe_sit_out_lock'
   await ensureVerifiedSlateChallenges(leagueId, week, plan.sport, ['pre_merge', 'post_swap'].includes(game.phase))
+  // The weekly mini-game is bragging rights only: a failure here never holds up the season.
+  await ensureWeeklyCall(leagueId, week, { sport: plan.sport, season: plan.season, merged: !['pre_merge', 'post_swap'].includes(game.phase), now }).catch(() => {})
+  // Exiled castaways Chimmy runs reserve a team and set their Exile lineup, once a period. Best-effort,
+  // like its council turn: a failure never holds up the island.
+  {
+    const { runChimmyExileTurn } = await import('./chimmyExile')
+    await runChimmyExileTurn(leagueId, now).catch(error => {
+      console.warn('[survivor] Chimmy Exile turn failed', error instanceof Error ? error.message : error)
+    })
+  }
 
   // Finalized player rows only exist after the common NBA/NHL slate, window,
   // grace and coverage checks. A missing or late feed simply keeps this pending.
   if (!game.weekScoringFinalAt) {
-    if (!await allScoresFinalizedForWeek(leagueId, week)) return 'awaiting_verified_scores'
+    if (!await allScoresFinalizedForWeek(leagueId, week)) {
+      // The week has rolled over on the calendar and the feed is still not final: a person has to
+      // look at the provider. Once per week, after a six-hour grace.
+      const window = planWeekWindow(plan.sport, plan.season, week)
+      if (window && calendarWeek > week && now.getTime() - window.end.getTime() > SURVIVOR_SCORES_OVERDUE_MS) {
+        await notifySurvivorCommissionerOnce(leagueId, 'scores_overdue', {
+          dedupeKey: String(week), week,
+          title: `Week ${week} scores are overdue`,
+          body: `Week ${week} ended but its verified scores are still not final, so the island is waiting. Check the stat feed; the season continues on its own once the scores arrive.`,
+          deepLinkPath: `/survivor/${leagueId}`,
+        }).catch(() => {})
+      }
+      return 'awaiting_verified_scores'
+    }
     await syncWeeklyScores(leagueId, week)
     await finalizeWeeklyScores(leagueId, week)
     return 'scores_finalized'
   }
   await settleVerifiedSlateChallenges(leagueId, week)
+  await settleWeeklyCall(leagueId, week).catch(() => {})
 
   if (kind === 'elimination') {
     if (game.activeCouncilId) {
-      if (!game.tribalDeadline || game.tribalDeadline > now) return 'voting_open'
+      if (!game.tribalDeadline || game.tribalDeadline > now) {
+        // Castaways Chimmy runs vote (and play an idol when at risk) while the window is open.
+        // Idempotent, best-effort: a failure never holds up the council.
+        const { runChimmyCouncilTurn } = await import('./chimmyCastaway')
+        await runChimmyCouncilTurn(leagueId, game.activeCouncilId).catch(error => {
+          console.warn('[survivor] Chimmy council turn failed', error instanceof Error ? error.message : error)
+        })
+        return 'voting_open'
+      }
       await processTribalDeadline(leagueId)
       return 'ceremony_processed'
     }
-    const resolved = await prisma.survivorAuditEntry.findFirst({ where: { leagueId, week, action: { in: ['player_eliminated', 'planned_elimination_skipped_final_three'] } }, select: { id: true } })
-    if (!resolved) {
+    // A double-elimination week runs its councils back to back: the second opens only after the
+    // first has been revealed and its manager sent home.
+    const progress = await loadWeekCouncilProgress(leagueId, week, plan.eliminationWeeks)
+    if (!progress.done) {
+      if (!progress.canOpenNext) {
+        const latest = await prisma.survivorTribalCouncil.findFirst({ where: { leagueId, week }, orderBy: { councilNumber: 'desc' }, select: { isRevealed: true } })
+        return latest && !latest.isRevealed ? 'awaiting_reveal' : 'awaiting_elimination'
+      }
       // The plan reserves one extra elimination for an Exile return. When
       // nobody qualifies, three finalists arrive a period early; never vote
       // out a fourth manager just to satisfy the static schedule.
       const active = await prisma.survivorPlayer.count({ where: { leagueId, playerState: 'active' } })
       if (active === 3) {
         await withSurvivorSetupTransaction(leagueId, async tx => {
-          const existing = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: { in: ['player_eliminated', 'planned_elimination_skipped_final_three'] } }, select: { id: true } })
+          const existing = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'planned_elimination_skipped_final_three' }, select: { id: true } })
           if (existing || await tx.survivorPlayer.count({ where: { leagueId, playerState: 'active' } }) !== 3) return
           await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'automation', action: 'planned_elimination_skipped_final_three', data: { reason: 'final_three_reached' }, isVisibleToPublic: true, isVisibleToCommissioner: true } })
           await tx.survivorGameState.update({ where: { leagueId }, data: { needsTribalLock: false } })
@@ -85,9 +142,14 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
         return 'final_three_preserved'
       }
       if (active < 3) return 'cast_below_final_three'
+      // A tribe-imbalance recommendation nobody answered gets its default, a random redraw, now:
+      // the commissioner has had until this council to choose otherwise.
+      await autoApplyPendingTribeRedraw(leagueId, week)
+      // A tribe of two or fewer cannot hold a real vote (two can only tie): redraw or merge now.
+      await rebalanceTribesBeforeCouncil(leagueId, week)
       await tryAutomaticPhaseAdvance(leagueId)
       await triggerTribalOpen(leagueId)
-      return 'council_opened'
+      return progress.nextOrdinal > 1 ? 'second_council_opened' : 'council_opened'
     }
   }
 
@@ -120,16 +182,41 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
 
   await tryAutomaticPhaseAdvance(leagueId)
   if (kind === 'finale') {
-    const finale = await getFinaleState(leagueId, week)
+    let finale = await getFinaleState(leagueId, week)
+    if (finale.open && !finale.closed) {
+      // Nobody has to click "open voting": the jury votes until the ceremony, and the engine
+      // crowns the winner itself once every juror has voted or that deadline passes.
+      if (!finale.votingDeadline) await ensureJuryVotingOpen(leagueId, nextTorchCeremonyDeadline(now, league.settings))
+      finale = await settleFinaleIfDue(leagueId, week)
+    }
     if (finale.closed && finale.winnerRosterId) {
       await generateAndPostWeeklyRecap(leagueId, week)
       await advancePhase(leagueId, 'automatic', undefined, { toPhase: 'complete', notes: 'jury_winner_revealed' })
       return 'season_complete'
     }
+    if (finale.votingDeadline && now.getTime() - new Date(finale.votingDeadline).getTime() > SURVIVOR_JURY_OVERDUE_MS) {
+      await notifySurvivorCommissionerOnce(leagueId, 'jury_overdue', {
+        dedupeKey: new Date(finale.votingDeadline).toISOString(), week,
+        title: 'The jury vote did not produce a champion',
+        body: 'The jury deadline passed a day ago and no winner could be crowned. Open the finale controls to review the jury.',
+        deepLinkPath: `/survivor/${leagueId}/jury`, urgency: 'critical',
+      }).catch(() => {})
+    }
     return 'awaiting_jury'
   }
   if (calendarWeek <= week) return 'awaiting_next_week'
   await generateAndPostWeeklyRecap(leagueId, week)
+  // The commissioner's weekly line per Chimmy team. Once per week; never holds the island up.
+  {
+    const { sendChimmyWeeklyReport } = await import('./chimmyWeeklyReport')
+    await sendChimmyWeeklyReport(leagueId, week).catch(error => {
+      console.warn('[survivor] Chimmy weekly report failed', error instanceof Error ? error.message : error)
+    })
+    // Chimmy's castaways that made it through the week say so in their huddle (never throws).
+    const { postChimmyWeekLines } = await import('./chimmyCastawayChat')
+    await postChimmyWeekLines(leagueId, week)
+  }
+  await dissolveSurpriseTribes(leagueId, week)
   await advanceWeek(leagueId)
   return 'week_advanced'
 }
@@ -141,7 +228,7 @@ export async function runPlannedSurvivorSeasonBatch(now = new Date()) {
   if (process.env.SURVIVOR_PLANNED_SEASON_AUTOMATION_ENABLED !== 'true') {
     return { considered: 0, failed: 0, outcomes: { disabled: 1 } }
   }
-  const leagues = await prisma.league.findMany({ where: { survivorMode: true, sport: { in: ['NBA', 'NHL'] } }, select: { id: true, settings: true }, orderBy: { id: 'asc' } })
+  const leagues = await prisma.league.findMany({ where: { survivorMode: true, sport: { in: [...SURVIVOR_PLAN_SPORTS] } }, select: { id: true, settings: true }, orderBy: { id: 'asc' } })
   const planned = leagues.filter(league => readSurvivorFullSeasonPlan(league.settings))
   const outcomes: Record<string, number> = {}
   let failed = 0
@@ -151,7 +238,16 @@ export async function runPlannedSurvivorSeasonBatch(now = new Date()) {
       outcomes[outcome] = (outcomes[outcome] ?? 0) + 1
     } catch (error) {
       failed++
-      await prisma.survivorGameState.updateMany({ where: { leagueId: league.id }, data: { lastError: error instanceof Error ? error.message : String(error) } }).catch(() => {})
+      const message = error instanceof Error ? error.message : String(error)
+      reportSurvivorAutomationError(error, { job: 'season_runner', leagueId: league.id })
+      await prisma.survivorGameState.updateMany({ where: { leagueId: league.id }, data: { lastError: message } }).catch(() => {})
+      // The dashboard shows lastError, but nobody opens the dashboard to find out. Once a day.
+      await notifySurvivorCommissionerOnce(league.id, 'automation_error', {
+        dedupeKey: now.toISOString().slice(0, 10),
+        title: 'Survivor automation hit an error',
+        body: `The season runner stopped on: ${message.slice(0, 200)}. It retries every few minutes; if this keeps failing, open the Commissioner Hub.`,
+        deepLinkPath: `/league/${league.id}?guide=settings`, urgency: 'critical',
+      }).catch(() => {})
     }
   }
   return { considered: Math.min(planned.length, 4), failed, outcomes }

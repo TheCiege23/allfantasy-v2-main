@@ -8,8 +8,9 @@ import { HomeActivity, HomePrefetch } from '@/components/core-app/home/HomeClien
 import { freshnessStamp, leagueDataStamp, type CardFreshnessStamp } from '@/lib/core-app/cardFreshness'
 import { rankDecisions } from '@/lib/core-app/decisionQueue'
 import type { HomeCardOrder } from '@/lib/core-app/homeCardOrder'
+import { hiddenHomeCards, type HomeSectionId } from '@/lib/core-app/homeSections'
 import { homePrefetchTargets } from '@/lib/core-app/homePrefetchTargets'
-import { HomeReadFailure, HomeScopeEmpty, HomeScopeNote } from '@/components/core-app/home/HomePanels'
+import { HomeCustomizeLink, HomeReadFailure, HomeScopeEmpty, HomeScopeNote } from '@/components/core-app/home/HomePanels'
 import Dashboard3A, {
   Dash3ACareer,
   Dash3AChimmy,
@@ -467,6 +468,7 @@ async function LeaguesCard({ dash34, leagueStamp }: { dash34: HomeLoads['dash34'
   return (
     <Dash3ALeagues
       leagues={data.leagues ?? []}
+      allLeagues={data.allLeagues}
       totalLeagues={data.totalLeagues ?? null}
       freshness={<Stamps stamps={[leagueStamp]} />}
     />
@@ -496,6 +498,7 @@ export function CoreHomeCards({
   order,
   prefetch,
   lead,
+  hiddenSections,
 }: {
   loads: HomeLoads
   now: Date
@@ -520,8 +523,17 @@ export function CoreHomeCards({
    * whose team we do not know yet (ConnectLeagueCard). It renders nothing for everyone else.
    */
   lead?: ReactNode
+  /**
+   * Sections the viewer switched off in Settings → Home page (lib/core-app/homeSections.ts). Their
+   * cards are not rendered at all — not drawn and collapsed — so they also stream nothing.
+   */
+  hiddenSections?: ReadonlySet<HomeSectionId>
 }) {
-  const card = (name: HomeCardName, content: ReactNode, placeholderHeight?: number) => (
+  const hidden = hiddenSections ? hiddenHomeCards(hiddenSections) : null
+  const isHidden = (name: string) => hidden?.has(name) ?? false
+  const card = (name: HomeCardName, content: ReactNode, placeholderHeight?: number) => {
+    if (isHidden(name)) return null
+    return (
     /*
      * `data-home-card` is what the usage counts read (HomeActivity). `display: contents` keeps the
      * wrapper out of the layout, so the grid and flex rules around each card are unchanged.
@@ -531,7 +543,10 @@ export function CoreHomeCards({
         <Suspense fallback={placeholderHeight ? <CardSkeleton height={placeholderHeight} /> : null}>{content}</Suspense>
       </CoreCardBoundary>
     </div>
-  )
+    )
+  }
+  // A key left out of a column is not rendered there (Dashboard3A), so hidden cards leave the order too.
+  const shown = <T extends string>(keys: T[]) => keys.filter((k) => !isHidden(k))
 
   const leagueStamp = leagueDataStamp(leagueData, now)
 
@@ -615,7 +630,7 @@ export function CoreHomeCards({
             220,
           )}
 
-          {order.bands.map((name) => bands[name])}
+          {shown(order.bands).map((name) => bands[name])}
 
           {/*
             3a mounted as the screen BODY. It ships its own rail/nav/topbar
@@ -627,7 +642,7 @@ export function CoreHomeCards({
             planName={planName}
             commissionerCount={commissionerCount}
             nowLabel={syncLabel}
-            order={{ main: order.main, side: order.side, stack: order.stack }}
+            order={{ main: shown(order.main), side: shown(order.side), stack: shown(order.stack) }}
             slots={{
               routine: card('routine', <RoutineCard routine={loads.routine} />, 150),
               // Rendered at the top of the home instead — `order.main` leaves it out.
@@ -658,6 +673,12 @@ export function CoreHomeCards({
             anything the product does know.
           */}
           {card('coverage', <CoverageCard dash34={loads.dash34} />)}
+          {/*
+            The way to a quieter home, from the home itself — a user found it "way too much
+            information" (2026-10-24). Names how many sections are off so a hidden card is never a
+            mystery: the reader can see they chose it, and where to bring it back.
+          */}
+          <HomeCustomizeLink hiddenCount={hiddenSections?.size ?? 0} />
         </>
       )}
     </HomeActivity>

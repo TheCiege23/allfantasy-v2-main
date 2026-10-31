@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { LeaguePickBoard } from '@/components/dynasty/LeaguePickBoard'
 
 export type DynastyHomeProps = {
   leagueId: string
   view?: 'dynasty' | 'dynasty_taxi' | 'dynasty_picks'
 }
 
-type Sub = 'overview' | 'taxi' | 'picks' | 'standings' | 'schedule'
+type Sub = 'overview' | 'taxi' | 'picks' | 'league_picks' | 'standings' | 'schedule'
 
 const VIEW_TO_SUB: Record<string, Sub> = {
   dynasty: 'overview',
@@ -88,6 +89,7 @@ export function DynastyHome({ leagueId, view = 'dynasty' }: DynastyHomeProps) {
     ['overview', 'Overview'],
     ['taxi', '🚕 Taxi Squad'],
     ['picks', '📋 Draft Picks'],
+    ['league_picks', '🗂 All Teams’ Picks'],
     ['standings', '📊 Standings'],
     ['schedule', '📅 Schedule'],
   ]
@@ -123,6 +125,7 @@ export function DynastyHome({ leagueId, view = 'dynasty' }: DynastyHomeProps) {
           )}
           {sub === 'taxi' && <TaxiSquadView taxi={taxi} />}
           {sub === 'picks' && <FuturePicksView picks={picks} />}
+          {sub === 'league_picks' && <LeaguePickBoard leagueId={leagueId} />}
           {sub === 'standings' && <DynastyStandingsView standings={standings} />}
           {sub === 'schedule' && <DynastyScheduleView leagueId={leagueId} />}
         </>

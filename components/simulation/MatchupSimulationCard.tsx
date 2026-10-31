@@ -1,5 +1,7 @@
 'use client'
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 import Link from 'next/link'
 import { useMemo, useState, useEffect, useCallback } from 'react'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
@@ -100,7 +102,7 @@ export function MatchupSimulationCard({
     if (!hasProjections) return
     setError(null)
     setLoading(true)
-    fetch('/api/simulation/matchup', {
+    paidToolFetchWithConfirm('/api/simulation/matchup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -149,7 +151,7 @@ export function MatchupSimulationCard({
     }
     let cancelled = false
     setError(null)
-    fetch('/api/simulation/matchup', {
+    paidToolFetchWithConfirm('/api/simulation/matchup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

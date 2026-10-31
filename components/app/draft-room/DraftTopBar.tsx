@@ -69,6 +69,8 @@ export type DraftTopBarProps = {
   isReconnecting?: boolean
   /** Orphan roster on clock: show CPU/AI Manager badge and allow Run pick */
   isOrphanOnClock?: boolean
+  /** The team on the clock is a Chimmy AI manager slot, which picks on its own after a short delay. */
+  chimmyManagerOnClock?: boolean
   /** When orphan on clock: 'cpu' | 'ai' - label shows "CPU Manager" or "AI Manager" */
   orphanDrafterMode?: 'cpu' | 'ai'
   /** Selected setting mode; used to show fallback state when requested AI runs in CPU fallback. */
@@ -222,6 +224,7 @@ export function DraftTopBar({
   commissionerPauseControlsEnabled = true,
   isReconnecting = false,
   isOrphanOnClock = false,
+  chimmyManagerOnClock = false,
   orphanDrafterMode = 'cpu',
   orphanDrafterRequestedMode = orphanDrafterMode,
   orphanFallbackActive = false,
@@ -338,8 +341,20 @@ export function DraftTopBar({
         setMenuOpen(false)
       }
     }
-    window.addEventListener('mousedown', handlePointerDown)
-    return () => window.removeEventListener('mousedown', handlePointerDown)
+    const closeOnResize = () => setMenuOpen(false)
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setMenuOpen(false); menuButtonRef.current?.focus() }
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('resize', closeOnResize)
+    window.visualViewport?.addEventListener('resize', closeOnResize)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('resize', closeOnResize)
+      window.visualViewport?.removeEventListener('resize', closeOnResize)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
   }, [menuOpen])
 
   const effectiveRemaining =
@@ -454,7 +469,7 @@ export function DraftTopBar({
           <span data-testid="draft-topbar-timer-value">{timerDisplay}</span>
           <span className="sr-only" data-testid="draft-topbar-clock-time">{timerDisplay}</span>
           {isPausedCommissioner ? (
-            <span className="rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-50">
+            <span className="hidden sm:inline rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-50">
               Resume
             </span>
           ) : draftStatus === 'paused' ? (
@@ -807,7 +822,9 @@ export function DraftTopBar({
                   isCurrentUserOnClock ? 'text-amber-100' : 'text-violet-200/75'
                 }`}
               >
-                {isOrphanOnClock
+                {isOrphanOnClock && chimmyManagerOnClock
+                  ? 'Chimmy is picking…'
+                  : isOrphanOnClock
                   ? orphanModeLabel
                   : isCurrentUserOnClock
                     ? "You're on the clock"
@@ -895,8 +912,8 @@ export function DraftTopBar({
               ? createPortal(
                 <div
                   ref={menuDropdownRef}
-                  className="fixed z-[9999] w-64 overflow-hidden rounded-2xl border border-white/12 bg-[#1d2638] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
-                  style={{ top: menuPos.top, right: menuPos.right }}
+                  className="fixed z-[9999] w-64 overflow-y-auto overscroll-contain rounded-2xl border border-white/12 bg-[#1d2638] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+                  style={{ top: menuPos.top, right: Math.max(8, menuPos.right), maxHeight: `calc(100dvh - ${menuPos.top + 16}px - env(safe-area-inset-bottom, 0px))`, maxWidth: 'calc(100vw - 16px)' }}
                   data-testid="draft-topbar-menu"
                 >
                 <button

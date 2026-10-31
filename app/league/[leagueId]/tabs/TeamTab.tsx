@@ -12,6 +12,7 @@ import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGat
 import { useEntitlement } from '@/hooks/useEntitlement'
 import { useSubscriptionGateOptional } from '@/hooks/useSubscriptionGate'
 import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
+import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
 import type { LeagueTeam } from '@prisma/client'
 import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
 import { TeamLogo } from '@/app/components/TeamLogo'
@@ -34,7 +35,7 @@ import type { SwapCandidate } from '@/components/league/TeamLineupSwapModal'
 import { StartVsComparisonLauncher } from '@/components/app/player-comparison/StartVsComparisonLauncher'
 import {
   applyLineupPick,
-  buildPlayerRow,
+  buildLineupSaveRoster,
   buildReserveSwapCandidates,
   buildSwapCandidates,
   initOrSyncLineupLists,
@@ -54,6 +55,8 @@ import { teamDefenseDisplayNameFromId } from '@/lib/redraft/teamDefenseIdentity'
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { CollegeRightsSection } from '@/app/league/[leagueId]/components/CollegeRightsSection'
 import type { CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
+import { CampusLineupPanel } from '@/app/league/[leagueId]/components/CampusLineupPanel'
+import type { CampusLineupView } from '@/lib/c2c/campusLineupView'
 
 const TeamTabMatchupBanner = dynamic(
   () =>
@@ -134,6 +137,8 @@ type DbRosterPayload = {
   canEditLineup?: boolean
   lineupLockHelp?: string | null
   collegeRights?: CollegeRightsViewModel | null
+  /** The C2C campus lineup (native football C2C only). */
+  campus?: CampusLineupView | null
 }
 
 type SleeperRosterBody = {
@@ -1107,7 +1112,9 @@ export function TeamTab({
   const proEnt = useEntitlement('pro_autocoach')
   const gateOptional = useSubscriptionGateOptional()
   const hasProAutoCoach = proEnt.hasAccess('pro_autocoach')
-  const isBestBall = isBestBallLeague(league.leagueVariant ?? null, league.bestBallMode ?? null)
+  // A best ball Guilly league sets its own lineups (lib/guillotine/guillotineBestBall.ts): nothing to edit.
+  const bestBallGuillotine = isBestBallGuillotine(league)
+  const isBestBall = isBestBallLeague(league.leagueVariant ?? null, league.bestBallMode ?? null) || bestBallGuillotine
 
   const nflRedraftCoreRoster = useMemo(
     () => isNflRedraftCoreDashboardFromUserLeague(league),
@@ -1407,6 +1414,8 @@ export function TeamTab({
     league.isDynasty === true &&
     ((dbParts?.taxi.length ?? 0) > 0 || ((payload as DbRosterPayload)?.slotLimits?.taxi ?? 0) > 0)
   const showDevySectionDb = ((payload as DbRosterPayload)?.slotLimits?.devy ?? 0) > 0
+  const campusView =
+    payload && payload.source !== 'sleeper' ? ((payload as DbRosterPayload).campus ?? null) : null
   const collegeRights =
     payload && payload.source !== 'sleeper'
       ? ((payload as DbRosterPayload).collegeRights ?? null)
@@ -1445,6 +1454,7 @@ const maxWeekMenu = useMemo(() => {
   }, [dbRosterMeta, resolvedSport, week])
 
   const lineupEditable =
+    !bestBallGuillotine &&
     !isSleeper &&
     Boolean(dbRosterMeta) &&
     dbRosterMeta?.canEditLineup !== false &&
@@ -1452,18 +1462,16 @@ const maxWeekMenu = useMemo(() => {
     !weekLock!.locked
 
   const saveLineup = useCallback(
-    async (next: RosterLineupLists): Promise<boolean> => {
+    async (next: RosterLineupLists, campus?: string[]): Promise<boolean> => {
       if (!dbRosterMeta?.rosterId || !lineupEditable) return false
       setSavingLineup(true)
       try {
+        // Each starter carries his slot index, so FLEX vs RB2 (or UTIL 2) is still his after a reload.
+        // IR rows carry the player's real designation; the save route refuses an IR row marked healthy.
+        // A C2C campus change sends the campus list too; any other save leaves it as it is.
         const roster = {
-          starters: next.starters
-            .map((id) => (id ? buildPlayerRow(id, players) : null))
-            .filter((x): x is Record<string, unknown> => x != null),
-          bench: next.bench.map((id) => buildPlayerRow(id, players)),
-          ir: next.ir.map((id) => buildPlayerRow(id, players)),
-          taxi: next.taxi.map((id) => buildPlayerRow(id, players)),
-          devy: next.devy.map((id) => buildPlayerRow(id, players)),
+          ...buildLineupSaveRoster(next, players, payload && payload.source !== 'sleeper' ? payload.roster : null),
+          ...(campus ? { campus } : {}),
         }
         const res = await fetch('/api/leagues/roster/save', {
           method: 'POST',
@@ -1502,7 +1510,7 @@ const maxWeekMenu = useMemo(() => {
         setSavingLineup(false)
       }
     },
-    [dbRosterMeta, lineupEditable, players, league.id, week, load, lineupWriteCopy],
+    [dbRosterMeta, lineupEditable, players, payload, league.id, week, load, lineupWriteCopy],
   )
 
   const replacementContextsByPlayer = useMemo(() => {
@@ -1821,6 +1829,16 @@ const maxWeekMenu = useMemo(() => {
       {payload?.source === 'sleeper' && 'lineupLockHelp' in (payload as object) ? (
         <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
           {(payload as { lineupLockHelp?: string }).lineupLockHelp}
+        </p>
+      ) : null}
+
+      {bestBallGuillotine ? (
+        <p
+          data-testid="team-tab-best-ball-guillotine"
+          className="rounded-lg border border-violet-500/25 bg-violet-500/10 px-3 py-2 text-[11px] text-violet-100/90"
+        >
+          Best ball league: your lineup sets itself. After each week your highest scorers fill your starting spots, and
+          that score is what faces the chop.
         </p>
       ) : null}
 
@@ -2288,6 +2306,18 @@ const maxWeekMenu = useMemo(() => {
                 )}
               </div>
             </section>
+          ) : null}
+
+          {campusView ? (
+            <CampusLineupPanel
+              view={campusView}
+              editable={lineupEditable}
+              saving={savingLineup}
+              onChange={(ids) => {
+                if (lineupLists) void saveLineup(lineupLists, ids)
+              }}
+              onAskChimmy={(prompt) => openChimmyWithPrompt({ leagueId: league.id, source: 'roster', prompt })}
+            />
           ) : null}
 
           <TeamLineupSwapModal

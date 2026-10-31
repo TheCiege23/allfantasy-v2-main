@@ -7,6 +7,7 @@ export type SleeperImportPreviewFailureCode =
   | 'NORMALIZATION_FAILED'
   | 'CONNECTION_REQUIRED'
   | 'UNAUTHORIZED'
+  | 'UNSUPPORTED_SPORT'
 
 export interface SleeperImportPreviewSuccess {
   success: true

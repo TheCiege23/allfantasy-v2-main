@@ -1,5 +1,7 @@
 import { teamLoadTiming } from '@/lib/observability/teamLoadTiming'
 import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
+import { leagueArtUrl } from '@/lib/core-app/leagueArt'
+import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLinks'
 import 'server-only'
 import type { LineupVerification } from './lineupVerification'
 import { currentSleeperRoster } from './currentSleeperRoster'
@@ -127,6 +129,7 @@ export type Dash34LeagueRow = {
   lastSyncedAt?: Date | string | null
   avatarUrl?: string | null
   logoUrl?: string | null
+  settings?: unknown
   platformLeagueId?: string | null
   sleeperLeagueId?: string | null
   hasUnifiedRecord?: boolean | null
@@ -313,15 +316,7 @@ function formatLabelOf(row: Dash34LeagueRow): string | null {
  * a Sleeper id, and anything else falls through to initials.
  */
 export function imageOf(row: Dash34LeagueRow): string | null {
-  const logo = row.logoUrl?.trim()
-  if (logo && /^https?:\/\//i.test(logo)) return logo
-  const avatar = row.avatarUrl?.trim()
-  if (!avatar) return null
-  if (/^https?:\/\//i.test(avatar)) return avatar
-  if (String(row.platform ?? '').toLowerCase() === 'sleeper') {
-    return `https://sleepercdn.com/avatars/thumbs/${encodeURIComponent(avatar)}`
-  }
-  return null
+  return leagueArtUrl(row)
 }
 
 /**
@@ -2157,6 +2152,9 @@ async function loadDash34Data(
     moreHref: '#af-d2-needs',
     moreLabel: 'See every call',
   }
+
+  // Exile Island rows learn which Survivor league they belong to, so the home card can pair them.
+  await attachSurvivorExileLinks([...needs, ...quietLeagues])
 
   return {
     injuryCheckedAt: injuryChecks.length && injuryChecks.every(check => check?.lastSuccessAt)

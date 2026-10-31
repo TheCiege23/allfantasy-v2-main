@@ -12,15 +12,16 @@
  * button read "UNAUTHENTICATED". Those become a sentence in either language.
  *
  * `__tests__/core-app/sync-message-text.test.ts` scans the producing modules, so a new English line
- * without a Spanish one fails there. PURE and client-safe: no imports.
+ * without a Spanish one fails there. PURE and client-safe: its only imports are the catalog and its helper.
  */
 
-const CODE_TEXT: Record<string, { en: string; es: string }> = {
-  UNAUTHENTICATED: { en: 'Sign in again to sync your leagues.', es: 'Vuelve a iniciar sesión para sincronizar tus ligas.' },
-  INTERNAL_ERROR: { en: 'Sync did not run. Try again shortly.', es: 'La sincronización no se ejecutó. Inténtalo de nuevo en un momento.' },
-  AGE_REQUIRED: { en: 'Confirm your age in Settings to sync your leagues.', es: 'Confirma tu edad en Configuración para sincronizar tus ligas.' },
-  VERIFICATION_REQUIRED: { en: 'Verify your email to sync your leagues.', es: 'Verifica tu correo para sincronizar tus ligas.' },
-}
+import { messagesFor } from '@/lib/i18n/messages'
+import { syncNowButtonMessages } from './messages/syncNowButton'
+
+/** The auth codes that become sentences in either language; their words are in the Sync button's catalog. */
+const CODES = ['UNAUTHENTICATED', 'INTERNAL_ERROR', 'AGE_REQUIRED', 'VERIFICATION_REQUIRED'] as const
+type SyncCode = (typeof CODES)[number]
+const isCode = (s: string): s is SyncCode => (CODES as readonly string[]).includes(s)
 
 const EXACT_ES: Record<string, string> = {
   // lib/core-app/clientSyncJob.ts
@@ -64,8 +65,8 @@ const PATTERNS_ES: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
 /** The status line in the reader's language. Auth codes become sentences in English too. */
 export function syncMessageText(message: string | null | undefined, language: string): string {
   if (!message) return ''
-  const code = CODE_TEXT[message.trim()]
-  if (code) return language === 'es' ? code.es : code.en
+  const code = message.trim()
+  if (isCode(code)) return messagesFor(syncNowButtonMessages, language)[code]
   if (language !== 'es') return message
   const exact = EXACT_ES[message]
   if (exact) return exact

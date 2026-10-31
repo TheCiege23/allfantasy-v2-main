@@ -70,6 +70,11 @@ describe('tool specs', () => {
        */
       'find_league_by_name',
       /*
+       * Find a League search: public listings with open seats, the same discovery read the page
+       * uses. Reads no league of the user's and takes no id — only their words.
+       */
+      'find_open_leagues',
+      /*
        * Reads the user's OWN team, resolved through LeagueTeam.claimedByUserId
        * from the session — no id crosses the model boundary. Read-only, and it
        * returns roster facts with no projections attached.
@@ -183,6 +188,7 @@ describe('tool specs', () => {
        */
       'propose_lineup_change',
       'propose_trade',
+      'propose_automation_change',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
   })

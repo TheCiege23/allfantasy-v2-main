@@ -33,25 +33,19 @@ const toggleSrc = read('components/app/draft-room/AutopickMeToggle.tsx')
 const chatSrc = read('components/app/draft-room/DraftChatPanel.tsx')
 
 // ---------------------------------------------------------------------------
-// 1. Active tab underline — cyan→violet gradient (fixes pre-existing d6-1 gap)
+// 1. Active tab underline - solid white, matching the flat board (2026-10-29 restyle)
 // ---------------------------------------------------------------------------
 
-describe('DraftRightDockTabs — active tab gradient underline (Commit 23)', () => {
-  it('active underline span uses from-cyan-400', () => {
-    expect(dockSrc).toMatch(/from-cyan-400/)
+describe('DraftRightDockTabs - active tab underline', () => {
+  it('active underline is a solid white 2px bar, not the old cyan/violet glow', () => {
+    expect(dockSrc).toMatch(/absolute inset-x-3 bottom-0 h-\[2px\] rounded-full bg-white/)
+    expect(dockSrc).not.toMatch(/from-cyan-400 to-violet-400/)
+    expect(dockSrc).not.toMatch(/rgba\(34,211,238/)
   })
 
-  it('active underline span uses to-violet-400', () => {
-    expect(dockSrc).toMatch(/to-violet-400/)
-  })
-
-  it('active underline uses bg-gradient-to-r (not the old solid bg-cyan-300/90)', () => {
-    expect(dockSrc).toMatch(/bg-gradient-to-r from-cyan-400 to-violet-400/)
-    expect(dockSrc).not.toMatch(/bg-cyan-300\/90/)
-  })
-
-  it('active underline still carries the ambient glow shadow', () => {
-    expect(dockSrc).toMatch(/shadow-\[0_0_10px_rgba\(34,211,238/)
+  it('active tab text is white; idle tabs are muted', () => {
+    expect(dockSrc).toMatch(/\? 'text-white'/)
+    expect(dockSrc).toMatch(/text-\[#8b91a7\]/)
   })
 })
 
@@ -77,7 +71,7 @@ describe('DraftRightDockTabs — compact tab header (Commit 23)', () => {
    * density, so this now pins the floor. Do not "restore" the 8px to make a diff smaller.
    */
   it('tab button font size respects the 11px floor, uppercase (was 8px for density)', () => {
-    expect(dockSrc).toMatch(/text-\[11px\] font-semibold uppercase tracking-\[0\.14em\]/)
+    expect(dockSrc).toMatch(/text-\[11px\] font-semibold uppercase tracking-\[0\.08em\]/)
   })
 })
 
@@ -101,11 +95,12 @@ describe('QueuePanel — compact header (Commit 23)', () => {
 
 describe('QueuePanel — compact filter bar (Commit 23)', () => {
   it('filter bar uses gap-1 (reduced from gap-1.5)', () => {
-    expect(queueSrc).toMatch(/grid-cols-1 gap-1 border-b/)
+    // Base is grid-cols-2 since 2026-10-29 (search + sort share a row on phones); the gap is what this pins.
+    expect(queueSrc).toMatch(/grid-cols-2 gap-1 border-b/)
   })
 
   it('filter bar uses p-1 (reduced from p-1.5)', () => {
-    expect(queueSrc).toMatch(/border-white\/\[0\.06\] p-1 sm:grid-cols-2/)
+    expect(queueSrc).toMatch(/border-white\/\[0\.06\] p-1/)
   })
 
   it('old gap-1.5 filter bar is gone', () => {

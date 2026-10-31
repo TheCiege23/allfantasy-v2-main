@@ -4,7 +4,7 @@ import { SurvivorGuillotineSetup } from '@/components/survivor-guillotine/Surviv
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
 
-describe('Survivor Guillotine commissioner workshop', () => {
+describe('Survivor Guilly commissioner workshop', () => {
   it('opens with a valid football schedule and snake draft', () => {
     render(<SurvivorGuillotineSetup />)
     expect(screen.getByText('Season fits · three finalists remain')).toBeTruthy()
@@ -38,7 +38,7 @@ describe('Survivor Guillotine commissioner workshop', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<SurvivorGuillotineSetup />)
     fireEvent.change(screen.getByLabelText('League name'), { target: { value: 'Island League' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create Survivor Guillotine league' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create Survivor Guilly league' }))
     expect(await screen.findByRole('link', { name: 'https://example.test/join?code=ABC' })).toBeTruthy()
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
       concept: 'redraft', sport: 'NFL', teamCount: 22, leagueName: 'Island League', draftType: 'snake',

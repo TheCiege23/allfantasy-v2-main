@@ -4,6 +4,8 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { createSurvivorChatMessage, upsertSurvivorChatMessage } from './survivorChatBridge'
+import { survivorEpisodeText, type SurvivorEpisode } from './survivorEpisode'
 
 const AI_HOST_ID = 'survivor-ai-host'
 const AI_HOST_NAME = '@Chimmy'
@@ -48,9 +50,9 @@ async function postToChannel(
     isPinned: contentType === 'announcement',
   }
   if (messageId) {
-    await (prisma as any).survivorChatMessage.upsert({ where: { id: messageId }, create: data, update: {} })
+    await upsertSurvivorChatMessage(prisma, { where: { id: messageId }, create: data, update: {} })
   } else {
-    await (prisma as any).survivorChatMessage.create({ data })
+    await createSurvivorChatMessage(prisma, { data })
   }
 }
 
@@ -135,6 +137,8 @@ export async function postWeeklyRecap(
   leagueId: string,
   week: number,
   recap: {
+    /** When present the post reads as the episode (lib/survivor/survivorEpisode.ts). */
+    episode?: SurvivorEpisode
     challengeWinner?: string
     tribalLoser?: string
     eliminatedPlayer?: string
@@ -145,6 +149,14 @@ export async function postWeeklyRecap(
     topScore?: number
   },
 ): Promise<void> {
+  if (recap.episode) {
+    await postToLeagueChat(leagueId, survivorEpisodeText(recap.episode), 'card', {
+      type: 'weekly_recap',
+      week,
+      ...recap,
+    }, `survivor-weekly-recap:${leagueId}:${week}`)
+    return
+  }
   const lines: string[] = [`**Week ${week} Recap**`]
 
   if (recap.challengeWinner) lines.push(`Challenge won by ${recap.challengeWinner}`)

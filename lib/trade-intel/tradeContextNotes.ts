@@ -286,7 +286,8 @@ export async function buildTradeContextNotes(args: {
 
   const players = await prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: rosterIds } },
+      // In this league's sport: Sleeper numbers its NFL and NBA pools independently.
+      where: { ...(league.sport ? { sport: league.sport.toUpperCase() } : {}), sleeperId: { in: rosterIds } },
       select: { sleeperId: true, position: true, team: true, name: true },
     })
     .catch(() => [])
@@ -651,7 +652,7 @@ async function zombieNotesFor(
 function survivorGuillotineTradeNote(): string | null {
   const trade = getConceptById('survivor_guillotine')?.actions.find((a) => a.id === 'trade')
   if (!trade || trade.legalInFormat) return null
-  return `Survivor Guillotine: trades are not allowed in this league. ${trade.note ?? ''}`.trim()
+  return `Survivor Guilly: trades are not allowed in this league. ${trade.note ?? ''}`.trim()
 }
 
 async function guillotineNotes(leagueId: string): Promise<string[]> {
@@ -1391,7 +1392,8 @@ async function buildLeverageNotes(args: {
 
   const players = await prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: ids } },
+      // In this league's sport: Sleeper numbers its NFL and NBA pools independently.
+      where: { sport: sport.toUpperCase(), sleeperId: { in: ids } },
       select: { sleeperId: true, name: true, position: true, team: true },
     })
     .catch(() => [])

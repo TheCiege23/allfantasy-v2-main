@@ -15,6 +15,9 @@ const db = vi.hoisted(() => ({
   teams: [] as Team[],
   seq: 0,
   linked: new Map<string, string>(),
+  /** Full-row roster rewrites, and `updatedAt`-only touches, so a no-op sync can be told apart. */
+  rosterUpdates: 0,
+  rosterTouches: [] as string[][],
 }))
 
 function uniqueViolation(): Error {
@@ -46,8 +49,16 @@ vi.mock('@/lib/prisma', () => {
         const r = db.rosters.find((x) => x.id === where.id)
         if (!r) throw new Error('record not found')
         if (data.platformUserId !== undefined) checkUnique(r.leagueId, data.platformUserId, r.id)
+        if (data.playerData !== undefined) db.rosterUpdates += 1
         Object.assign(r, data)
         return { ...r }
+      }),
+    updateMany: ({ where, data }: any) =>
+      lazy(() => {
+        const ids: string[] = where.id.in
+        db.rosterTouches.push([...ids])
+        for (const r of db.rosters) if (ids.includes(r.id)) Object.assign(r, data)
+        return { count: ids.length }
       }),
     create: ({ data }: any) =>
       lazy(() => {
@@ -138,6 +149,31 @@ beforeEach(() => {
   db.linked = new Map()
 })
 
+describe('🛑 a provider that reports no commissioner cannot clear one', () => {
+  it('keeps a stored commissioner flag when the provider left it undefined (Fantrax, MFL, Fleaflicker)', async () => {
+    await run([team('1', 'mgr-1', ['a'])])
+    const stored = db.teams.find((t) => t.externalId === '1') as any
+    stored.isCommissioner = true // set by an accepted import attestation
+
+    await run([team('1', 'mgr-1', ['a'], { is_commissioner: undefined, is_co_commissioner: undefined })])
+
+    expect((db.teams.find((t) => t.externalId === '1') as any).isCommissioner).toBe(true)
+  })
+
+  it('still lets a provider that DOES report it (Sleeper, ESPN, Yahoo) change it', async () => {
+    await run([team('1', 'mgr-1', ['a'], { is_commissioner: true })])
+    expect((db.teams.find((t) => t.externalId === '1') as any).isCommissioner).toBe(true)
+
+    await run([team('1', 'mgr-1', ['a'], { is_commissioner: false })])
+    expect((db.teams.find((t) => t.externalId === '1') as any).isCommissioner).toBe(false)
+  })
+
+  it('a brand-new team from such a provider is created non-commissioner', async () => {
+    await run([team('2', 'mgr-2', ['b'], { is_commissioner: undefined })])
+    expect((db.teams.find((t) => t.externalId === '2') as any).isCommissioner).toBe(false)
+  })
+})
+
 describe('🛑 every orphan team keeps its own roster', () => {
   const league = [
     team('1', 'mgr-1', ['a']),
@@ -159,9 +195,42 @@ describe('🛑 every orphan team keeps its own roster', () => {
   it('is stable on the next sync', async () => {
     await run(league)
     const ids = db.rosters.map((r) => r.id).sort()
+    const before = db.rosters.map((r) => JSON.stringify(r.playerData)).sort()
+    db.rosterUpdates = 0
+    db.rosterTouches = []
     const second = await run(league)
     expect(db.rosters.map((r) => r.id).sort()).toEqual(ids)
     expect(second.rostersRekeyed).toBe(0)
+    // An identical sync rewrites no roster, and confirms all four in ONE timestamp-only statement.
+    expect(db.rosterUpdates).toBe(0)
+    expect(db.rosterTouches).toHaveLength(1)
+    expect(db.rosterTouches[0].sort()).toEqual(ids)
+    expect(db.rosters.map((r) => JSON.stringify(r.playerData)).sort()).toEqual(before)
+  })
+
+  it('kill switch "rosters" restores the always-rewrite behaviour', async () => {
+    await run(league)
+    db.rosterUpdates = 0
+    db.rosterTouches = []
+    process.env.AF_CHANGE_AWARE_WRITES_OFF = 'rosters'
+    try {
+      await run(league)
+    } finally {
+      delete process.env.AF_CHANGE_AWARE_WRITES_OFF
+    }
+    expect(db.rosterUpdates).toBe(4)
+    expect(db.rosterTouches).toHaveLength(0)
+  })
+
+  it('rewrites only the roster whose players changed', async () => {
+    await run(league)
+    db.rosterUpdates = 0
+    db.rosterTouches = []
+    await run([team('1', 'mgr-1', ['a', 'b']), ...league.slice(1)])
+    expect(db.rosterUpdates).toBe(1)
+    expect(rowsOf('1')[0].playerData.players).toEqual(['a', 'b'])
+    expect(db.rosterTouches).toHaveLength(1)
+    expect(db.rosterTouches[0]).toHaveLength(3)
   })
 
   it('moves the one row a league kept under \'\' onto its team\'s key', async () => {

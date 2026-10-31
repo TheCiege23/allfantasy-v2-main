@@ -7,6 +7,7 @@ import { getDraftPreparationData, unavailablePreparation, type DraftPreparationD
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { getDraftReport, type DraftGradeLetter } from '@/lib/draft-intel/draftReportService'
 import { buildImportedDraftReport } from '@/lib/draft-intel/importedDraftReport'
+import { normalizeIdentitySport, resolveFantraxIdentities } from '@/lib/player-identity/resolveRosterPlayerIdentities'
 import { checkDynastyLotteryEligibility, isDynastyLeagueRow } from '@/lib/draft-lottery/dynastyYearGuard'
 import { readDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
 import { previewLotteryOdds } from '@/lib/draft-lottery/WeightedDraftLotteryEngine'
@@ -240,10 +241,12 @@ const PLATFORM_LABEL: Record<string, string> = {
 /** How many queued players the screen lists; the count says how many more there are. */
 const QUEUE_SHOWN = 10
 
+/** What the engine does with each fallback (lib/draft-lottery/WeightedDraftLotteryEngine.ts `buildFullSlotOrder`). */
 const FALLBACK_ORDER_TEXT: Record<string, string> = {
   reverse_standings: 'reverse order of finish',
-  reverse_max_pf: 'reverse order of max points for',
-  manual: 'an order the commissioner sets',
+  reverse_max_pf: 'reverse order of max points for outside the playoffs, then the playoff teams in reverse order of finish',
+  // The engine has no commissioner order to read, so a `manual` fallback seats by finish.
+  manual: 'reverse order of finish',
 }
 
 /**
@@ -440,6 +443,7 @@ async function loadImportedKeepers(
   const names = await resolvePlayerNames(
     kept.map((k) => k.playerId),
     platform,
+    (await lc.league().catch(() => null))?.sport,
   )
   return {
     available: true,
@@ -579,6 +583,40 @@ export async function resolvePlayerNames(
       imageUrl: p.imageUrl,
     })
   }
+  /*
+   * ⚠ FANTRAX IDS LIVE ON `PlayerIdentityMap.fantraxId`, NOT IN `PlayerProviderIdentity` — which
+   * nothing fills for Fantrax, so every Fantrax pick read "(not yet mapped)". Same registry, same
+   * one-to-one guard as the Fantrax roster (`resolveFantraxIdentities`); scoped to the sport when
+   * the caller passes one, and refusing an id two sports share when it does not.
+   */
+  if (scoped === 'fantrax') {
+    const fantraxSport = sport ? normalizeIdentitySport(sport) : null
+    const fantrax = await resolveFantraxIdentities(fantraxSport, playerIds).catch(() => new Map())
+    /*
+     * NFL identity rows are Sleeper-keyed, so an NFL pick's face is on `SportsPlayer.sleeperId` —
+     * composed exactly like the Sleeper board above. Only when the sport is KNOWN to be NFL: a
+     * baseball or hockey row carries no Sleeper id, and an unknown sport is not guessed at.
+     */
+    const linkedSleeperIds = fantraxSport === 'NFL'
+      ? [...new Set([...fantrax.values()].map((p) => p.sleeperId).filter((id): id is string => Boolean(id)))]
+      : []
+    const portraits = linkedSleeperIds.length
+      ? composePlayerIdentities(await prisma.sportsPlayer
+          .findMany({
+            where: { sport: 'NFL', sleeperId: { in: linkedSleeperIds } },
+            select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
+          })
+          .catch(() => []))
+      : new Map()
+    for (const [id, p] of fantrax) {
+      if (p.name && !out.has(id)) {
+        out.set(id, {
+          name: p.name, position: p.position, team: p.team,
+          imageUrl: (p.sleeperId ? portraits.get(p.sleeperId)?.imageUrl : null) ?? null,
+        })
+      }
+    }
+  }
   for (const i of identities) {
     if (i.displayName && !out.has(i.providerPlayerId)) {
       // Name only — see `ResolvedDraftPlayer.imageUrl` for why there is no face.
@@ -714,7 +752,7 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
       .findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } })
       .catch(() => []),
     lc.claimedTeams().catch(() => []),
-    resolvePlayerNames([...new Set(rows.map((r) => r.playerId))], boardLeague?.platform ?? ''),
+    resolvePlayerNames([...new Set(rows.map((r) => r.playerId))], boardLeague?.platform ?? '', boardLeague?.sport),
   ])
 
   /* AllFantasy's own projection for every player on the board — one read. */
@@ -854,6 +892,7 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
   const byPlayerId = await resolvePlayerNames(
     rows.map((r) => r.playerId),
     league?.platform ?? '',
+    league?.sport,
   )
   const afs = await loadDraftAfProjections({
     platform: league?.platform,
@@ -1096,6 +1135,7 @@ export async function getDraftHqData(
   const madeFaces = await resolvePlayerNames(
     [...new Set(made.map((p) => p.playerId).filter((id): id is string => Boolean(id)))],
     String(league.platform ?? '').toLowerCase(),
+    league.sport,
   ).catch(() => new Map<string, ResolvedDraftPlayer>())
   const madeAfs = await loadDraftAfProjections({
     platform: league.platform,

@@ -29,6 +29,7 @@ import {
   type NcaabScoringCategory,
   type NcaabScoringRow,
 } from '@/lib/ncaab-scoring/NcaabScoringCategories'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,6 +92,7 @@ interface Props {
 
 export function NcaabScoringSettingsPanel({ leagueId, isCommissioner = false }: Props) {
   const { t, language } = useOptionalLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const st = (s: string) => translateStat(s, language, BASKETBALL_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<NcaabScoringPreset[]>([])
@@ -176,7 +178,7 @@ export function NcaabScoringSettingsPanel({ leagueId, isCommissioner = false }: 
     if (!leagueId) return
     setSaving(true); setError(null); setSuccess(false)
     try {
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/ncaab-scoring`, {
+      const res = await confirmFetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/ncaab-scoring`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         // Rules only for a custom table. The route treats any `rules` in the body as a premium
@@ -196,7 +198,7 @@ export function NcaabScoringSettingsPanel({ leagueId, isCommissioner = false }: 
       setTimeout(() => setSuccess(false), 3000)
     } catch { setError(t('lsScore.err.request')) }
     finally { setSaving(false) }
-  }, [leagueId, selectedPreset, editedRules])
+  }, [leagueId, selectedPreset, editedRules, confirmFetch])
 
   const resetToSaved = useCallback(() => {
     if (config) {
@@ -216,6 +218,8 @@ export function NcaabScoringSettingsPanel({ leagueId, isCommissioner = false }: 
 
   // ----- render -----
   return (
+    <>
+      {midSeasonDialog}
     <div className="space-y-5">
       {/* Header */}
       <div>
@@ -417,5 +421,6 @@ export function NcaabScoringSettingsPanel({ leagueId, isCommissioner = false }: 
         featureLabel={t('lsScore.gateLabel').replace('{{sport}}', 'NCAAB')}
       />
     </div>
+    </>
   )
 }

@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { assertDraftSessionBelongsToLeague } from '@/lib/engine-testing/hardening/engineInvariants'
 import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invariantRuntime'
 import { computeTimerEndAt } from './DraftTimerService'
+import { absentClockSeconds, normalizeAbsentManagerRule } from '@/lib/draft-day/absentManager'
 import { validatePickSubmission, validateDevyEligibilityAsync, validateC2CEligibilityAsync } from './PickValidation'
 import { validateSpecialtyDraftPools } from './SpecialtyDraftPoolValidation'
 import { isRookieRestrictedPlayerPool, resolveServerRookieStatus } from './serverRookieStatus'
@@ -40,6 +41,7 @@ import { recordEngineTelemetrySample } from '@/lib/analytics/recordAnalyticsEven
 import { ENGINE } from '@/lib/analytics/eventNames'
 import { withPickLock } from '@/lib/draft/draftLock'
 import { resolveAdpAtPick } from '@/lib/draft-room/adpAtPick'
+import { resolveStoredPickHeadshot } from '@/lib/draft-room/storedPickHeadshot'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 
@@ -312,6 +314,23 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
 
   const timerSeconds = session.timerSeconds ?? 90
   const nextTimerEndAt = computeTimerEndAt(timerSeconds)
+  const absentRule = normalizeAbsentManagerRule(uiSettings?.absentManagerRule)
+  /** The short clock for the team on the clock AFTER this pick, or null for the normal timer. */
+  const absentClockForNextTeam = (picksAfter: Array<{ overall: number; rosterId: string; source?: string | null; playerName: string; position: string; pickMetadata?: unknown }>): number | null => {
+    if (!absentRule.enabled) return null
+    const next = resolveCurrentOnTheClock({
+      totalPicks,
+      picks: picksAfter.map((p) => ({ overall: p.overall, playerName: p.playerName, position: p.position, pickMetadata: p.pickMetadata ?? null })),
+      teamCount,
+      draftType: session.draftType as 'snake' | 'linear' | 'auction',
+      thirdRoundReversal: session.thirdRoundReversal,
+      slotOrder,
+    })
+    if (!next) return null
+    const nextRound = Math.ceil(next.overall / teamCount)
+    const nextRosterId = resolvePickOwner(nextRound, next.slot, slotOrder, tradedPicks)?.rosterId ?? next.rosterId
+    return absentClockSeconds({ rule: absentRule, timerMode: uiSettings?.timerMode, timerSeconds, picks: picksAfter, nextRosterId })
+  }
 
   /*
    * A COMMISSIONER CORRECTION MUST NOT RESUME A PAUSED DRAFT.
@@ -344,6 +363,22 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
           position: input.position,
         })
       : null
+  // Auto / AI / expired-clock picks arrive without the card's photo; look up the stored one so the
+  // board shows a face instead of initials (non-NFL only - see storedPickHeadshot.ts).
+  const clientImageUrl = /^https?:\/\//i.test(String(input.playerImageUrl ?? '').trim())
+    ? String(input.playerImageUrl).trim()
+    : null
+  const playerImageUrl =
+    clientImageUrl ??
+    (assetType === 'player'
+      ? await resolveStoredPickHeadshot({
+          sport: (session as any).sportType ?? null,
+          leagueId: input.leagueId,
+          playerId: input.playerId ?? null,
+          playerName: input.playerName,
+          team: input.team ?? null,
+        })
+      : null)
 
   let pick: any
   try {
@@ -386,9 +421,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
           // The pool resolved this face for the card that was picked; the insert used to drop it,
           // so the board rebuilt one from the id — an NFL Sleeper URL for every sport. Only a real
           // URL is kept: the pool's "AF" placeholder is a data: URI, not a photo.
-          playerImageUrl: /^https?:\/\//i.test(String(input.playerImageUrl ?? '').trim())
-            ? String(input.playerImageUrl).trim()
-            : null,
+          playerImageUrl,
           tradedPickMeta: tradedPickMeta ? (tradedPickMeta as any) : undefined,
           source: input.source ?? 'user',
           assetType,
@@ -398,6 +431,8 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
           ownerUserId: input.madeByUserId ?? null,
         },
       })
+      // Draft-day kit: a team whose last picks were all auto-picked gets the short clock.
+      const absentSeconds = absentClockForNextTeam([...locked.picks, created])
       const sessionMutation = {
         where: { id: session.id },
         data: keepPaused
@@ -414,7 +449,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
               updatedAt: new Date(),
             }
           : {
-              timerEndAt: nextTimerEndAt,
+              timerEndAt: absentSeconds != null ? computeTimerEndAt(absentSeconds) : nextTimerEndAt,
               pausedRemainingSeconds: null,
               status: 'in_progress',
               version: { increment: 1 },
@@ -719,6 +754,13 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
       error: 'Draft state changed; please retry',
       code: DRAFT_PICK_RACE_RETRY,
     }
+  }
+  // A pick forfeited as a penalty is skipped the moment the board reaches it (./forfeitedPickSkips.ts).
+  // Not after a forfeit skip itself: the helper loops on its own.
+  if (lockResult.value.success && (input.pickMetadata as { forfeited?: unknown } | null | undefined)?.forfeited !== true) {
+    await import('./forfeitedPickSkips')
+      .then(({ skipForfeitedPicksOnClock }) => skipForfeitedPicksOnClock(input.leagueId, submitPick))
+      .catch((err) => console.error('[draft] forfeited pick skip failed', err))
   }
   return lockResult.value
 }

@@ -25,6 +25,9 @@ export type RedraftSeasonClient = {
   sport: string
   season: number
   currentWeek: number
+  /** RedraftSeason.totalWeeks — the route returns the whole row, so these two are always present. */
+  totalWeeks?: number
+  playoffStartWeek?: number
   status: string
   rosters: RedraftRosterRow[]
 }
@@ -129,11 +132,18 @@ export type RedraftTradeProposal = {
   seasonId: string
   proposerRosterId: string
   receiverRosterId: string
+  /** Multi-team trades: the teams beyond proposer and receiver. Empty or absent for two teams. */
+  additionalRosterIds?: string[]
+  /** Multi-team trades: the non-proposer teams that have accepted so far. */
+  acceptedRosterIds?: string[]
   status: string
   vetoMode: string
   vetoThreshold: number | null
   reason: string | null
+  /** Before acceptance: the offer's deadline. After it: the end of the review window. */
   expiresAt: string | null
+  /** Set when the receiver accepted; the trade is then in review (lib/redraft/tradeReviewWindow.ts). */
+  acceptedAt?: string | null
   createdAt: string
   assets: Array<{
     id: string
@@ -453,6 +463,36 @@ export async function runRedraftScheduleAction(payload: {
   return (await res.json()) as RedraftScheduleActionResult
 }
 
+/**
+ * Commissioner schedule regeneration. Rebuilds only the weeks that have not started; once a week
+ * has started the route answers 409 `mid_season_confirmation_required` until the call is re-sent
+ * with `confirmMidSeasonChange: true`. Refusals (live draft, archived league, nothing left to
+ * rebuild) come back as 409 with a `code` and the reason in `error`.
+ */
+export type RedraftScheduleRegenerateResult = {
+  ok?: boolean
+  seasonId?: string
+  created?: number
+  regenerated?: boolean
+  regeneratedFromWeek?: number
+  warnings?: string[]
+  code?: string
+  error?: string
+}
+
+export async function regenerateRedraftSchedule(payload: {
+  seasonId: string
+  confirmMidSeasonChange?: boolean
+}): Promise<RedraftScheduleRegenerateResult> {
+  const res = await fetch('/api/redraft/schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ ...payload, action: 'regenerate' }),
+  })
+  return (await res.json().catch(() => ({ error: 'Unexpected response' }))) as RedraftScheduleRegenerateResult
+}
+
 export async function fetchRedraftLiveScoring(params: {
   leagueId: string
   seasonId?: string | null
@@ -581,6 +621,8 @@ export async function createTradeProposal(payload: {
   seasonId: string
   proposerRosterId: string
   receiverRosterId: string
+  /** Multi-team trades: up to two more teams. Omit (or leave empty) for a two-team trade. */
+  additionalRosterIds?: string[]
   reason?: string
   assets?: RedraftTradeAssetInput[]
 }) {
@@ -600,6 +642,7 @@ export async function createTradeProposal(payload: {
     seasonId: payload.seasonId,
     proposerRosterId: payload.proposerRosterId,
     receiverRosterId: payload.receiverRosterId,
+    ...(payload.additionalRosterIds?.length ? { additionalRosterIds: payload.additionalRosterIds } : {}),
     reason: payload.reason,
   }
   const res = await fetch('/api/redraft/trade-proposals', {
@@ -634,7 +677,12 @@ export async function submitTradeVote(payload: {
     headers: jsonHeaders,
     body: JSON.stringify(payload),
   })
-  return parseJson<{ proposal: RedraftTradeProposal; resolved: boolean }>(res)
+  return parseJson<{
+    proposal: RedraftTradeProposal
+    resolved: boolean
+    /** Multi-team trades: the teams still to accept after this one did. */
+    awaitingAcceptance?: string[]
+  }>(res)
 }
 
 export async function vetoRedraftTradeProposal(payload: { proposalId: string; reason?: string; reviewId?: string | null }) {

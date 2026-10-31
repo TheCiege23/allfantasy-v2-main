@@ -172,14 +172,37 @@ export async function buildRosterIndex(userId: string, leagueIds: string[]): Pro
   }
   const samples = new Map<string, string[]>()
   for (const [id, rs] of rostersByLeague) samples.set(id, sampleRosterIds(rs.map((r) => r.playerData), 60))
-  const all = [...new Set([...samples.values()].flat())]
+  /*
+   * Each league's sample is checked against its OWN sport's players: Sleeper reuses ids across its
+   * sports, so an NBA roster's ids "resolving" to NFL rows would vouch for a vocabulary it is not in.
+   */
+  const sportOf = new Map(leagues.map((l) => [l.id, String(l.sport ?? 'NFL').toUpperCase()]))
+  const sampleBySport = new Map<string, Set<string>>()
+  for (const [id, sample] of samples) {
+    const sport = sportOf.get(id) ?? 'NFL'
+    const bucket = sampleBySport.get(sport) ?? new Set<string>()
+    for (const s of sample) bucket.add(s)
+    sampleBySport.set(sport, bucket)
+  }
+  const sampled = [...sampleBySport].filter(([, ids]) => ids.size > 0)
   const knownRows =
-    all.length > 0
+    sampled.length > 0
       ? await prisma.sportsPlayer
-          .findMany({ where: { sleeperId: { in: all } }, select: { sleeperId: true }, distinct: ['sleeperId'] })
-          .catch(() => [] as Array<{ sleeperId: string | null }>)
+          .findMany({
+            where: { OR: sampled.map(([sport, ids]) => ({ sport, sleeperId: { in: [...ids] } })) },
+            select: { sleeperId: true, sport: true },
+            distinct: ['sport', 'sleeperId'],
+          })
+          .catch(() => [] as Array<{ sleeperId: string | null; sport: string }>)
       : []
-  const known = new Set(knownRows.map((r) => r.sleeperId).filter((x): x is string => Boolean(x)))
+  const knownBySport = new Map<string, Set<string>>()
+  for (const r of knownRows) {
+    if (!r.sleeperId) continue
+    const sport = String(r.sport ?? '').toUpperCase()
+    const set = knownBySport.get(sport) ?? new Set<string>()
+    set.add(r.sleeperId)
+    knownBySport.set(sport, set)
+  }
 
   const nameById = new Map(leagues.map((l) => [l.id, l.name?.trim() || 'Untitled league']))
   const out: IndexedLeague[] = []
@@ -200,7 +223,7 @@ export async function buildRosterIndex(userId: string, leagueIds: string[]): Pro
     out.push({
       id,
       name: nameById.get(id) ?? 'Untitled league',
-      usable: sample.length > 0 && rosterIdCoverage(sample, known).usable,
+      usable: sample.length > 0 && rosterIdCoverage(sample, knownBySport.get(sportOf.get(id) ?? 'NFL') ?? new Set()).usable,
       yoursIds,
       rosters: rs.map((r) => ({ platformUserId: r.platformUserId, ids: allIds((r.playerData ?? {}) as Record<string, unknown>) })),
       ownerByRoster,

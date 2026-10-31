@@ -52,6 +52,10 @@ export type RawDraftPlayerLike = {
   imageUrl?: string | null
   fantasyPointsPerGame?: number | null
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
+  /** MLB / NHL season line, spread into `display.stats` for the pool's stat columns. */
+  seasonStatLine?: Partial<Record<string, number>> | null
+  /** MLB / NHL: AF projection per game, exposed as `display.stats.projectedPointsPerGame`. */
+  afProjectionPerGame?: number | null
   lifetimeValue?: number | null
   rollingInsightsSupplemental?: {
     fantasyPointsPerGame?: number | null
@@ -64,6 +68,8 @@ export type RawDraftPlayerLike = {
   yearsExp?: number | null
   /** D.7 — explicit rookie marker (e.g. devy promoted to NFL). Falsy when unknown. */
   isRookie?: boolean | null
+  /** MLB/NBA/NHL: stored-season-stats rookie verdict (see `NormalizedDraftEntry.rookieVerdict`). */
+  rookieVerdict?: 'rookie' | 'not_rookie' | 'unknown' | null
   /** NFL: pool resolver provenance for Sleeper/import-backed yearsExp (diagnostics). */
   rookieYearsExpSource?: NflRookieYearsExpProvenance | null
   /** Block B.2-C — rookie inference inputs surfaced from the resolver for
@@ -195,6 +201,13 @@ export function normalizeDraftPlayer(
     byeWeek: bye ?? null,
     fantasyPointsPerGame: fppg,
     ...(sportNorm === 'NBA' && raw.nbaDraftStats ? raw.nbaDraftStats : {}),
+    ...((sportNorm === 'MLB' || sportNorm === 'NHL') && raw.seasonStatLine ? raw.seasonStatLine : {}),
+    ...((sportNorm === 'MLB' || sportNorm === 'NHL') &&
+    typeof raw.afProjectionPerGame === 'number' &&
+    Number.isFinite(raw.afProjectionPerGame) &&
+    raw.afProjectionPerGame > 0
+      ? { projectedPointsPerGame: Math.round(raw.afProjectionPerGame * 100) / 100 }
+      : {}),
     lifetimeValue: ltv,
   }
 
@@ -234,6 +247,11 @@ export function normalizeDraftPlayer(
       (raw.yearsExp != null && Number.isFinite(Number(raw.yearsExp)) && Number(raw.yearsExp) === 0)
         ? true
         : undefined,
+    rookieVerdict:
+      raw.rookieVerdict === 'rookie' || raw.rookieVerdict === 'not_rookie' || raw.rookieVerdict === 'unknown'
+        ? raw.rookieVerdict
+        : undefined,
+    ...(raw.prospectSource === 'fantrax' ? { prospectSource: 'fantrax' as const } : {}),
     // Block B.2-C — surface rookie inference inputs at the top level of the
     // normalized entry so isRookieEligibleForFilter can branch per-sport without
     // needing display.metadata. age is intentionally lifted to the top level

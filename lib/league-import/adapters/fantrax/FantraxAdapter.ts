@@ -36,6 +36,14 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
     const history = FantraxHistoryMapper.map(raw)
     const playerMapCount = Object.keys(raw.playerMap ?? {}).length
     const rosterWithPlayersCount = rosters.filter((roster) => roster.player_ids.length > 0).length
+    const preDraftEmptyRosters = league.status === 'pre_draft' && rosterWithPlayersCount === 0
+    const publishedLineup = raw.settings?.raw?.rosterInfo
+    const hasPublishedLineup = Boolean(
+      publishedLineup && typeof publishedLineup === 'object' &&
+      Object.keys((publishedLineup as { positionConstraints?: Record<string, unknown> }).positionConstraints ?? {}).length > 0,
+    )
+    const mappedPositions = (league as Record<string, unknown>).roster_positions
+    const lineupNotMapped = hasPublishedLineup && (!Array.isArray(mappedPositions) || mappedPositions.length === 0)
 
     const viewerTeam = raw.teams.find((t) => t.managerId.startsWith('fantrax-user:'))
 
@@ -56,8 +64,11 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
       })),
       coverage: {
         leagueSettings: {
-          state: 'full',
+          state: lineupNotMapped ? 'partial' : 'full',
           count: 1,
+          note: lineupNotMapped
+            ? 'Fantrax published lineup positions, but this import could not map them to an exact AllFantasy lineup. Review roster settings before using lineup advice.'
+            : null,
         },
         currentRosters: {
           state:
@@ -68,8 +79,10 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
                 : 'partial',
           count: rosters.length,
           note:
-            rosters.length > 0 && rosterWithPlayersCount !== rosters.length
-              ? 'Fantrax roster exports include full player details only for teams included in uploaded CSV history.'
+            preDraftEmptyRosters
+              ? 'All teams were imported; their player rosters are empty because this league has not drafted.'
+              : rosters.length > 0 && rosterWithPlayersCount !== rosters.length
+              ? 'Some Fantrax team rosters have no player details in this import.'
               : null,
         },
         historicalRosterSnapshots: {
@@ -162,26 +175,49 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
                   : 'Fixtures come from the league schedule. No week has been played yet, so no scores are on file.',
           }
         })(),
-        draftHistory: {
-          state: history.draft_picks.length > 0 ? 'partial' : 'missing',
-          count: history.draft_picks.length,
-          note:
-            history.draft_picks.length > 0
-              ? 'Fantrax draft history currently reflects traded draft-pick events when available.'
-              : 'No Fantrax draft pick history was available from uploaded data.',
-        },
-        tradeHistory: {
-          /* Same ambiguity as Yahoo and MFL: a required array, so `[]` proves nothing. */
-          state:
-            history.transactions.length > 0
-              ? 'partial'
-              : emptyableHistoryCoverage({ fetched: null, unit: 'trades' }).state,
-          count: history.transactions.length,
-          note:
-            history.transactions.length > 0
-              ? 'Fantrax transaction history is normalized from claims, drops, trades, and lineup change exports.'
-              : 'No Fantrax transaction history was available from uploaded data.',
-        },
+        /*
+         * ⚠ BOTH NOTES MUST HOLD FOR A LIVE (league-id) IMPORT AS WELL AS A CSV ONE. A live import
+         * now STORES the draft board (`fantraxDraft` in the snapshot's `transactions` column, see
+         * `fantraxSnapshotHistory.ts`), so its picks arrive here with real Fantrax player ids and
+         * reach `DraftFact`. Fantrax publishes no transactions endpoint: a live import can only
+         * INFER moves by comparing each refresh's rosters with the previous one, and those rows
+         * carry `status: inferred` / `suspected`. An uploaded export supplies recorded transactions.
+         */
+        draftHistory: (() => {
+          const fromBoard = raw.historySources?.draftBoard === true
+          return {
+            state: history.draft_picks.length > 0 ? ('partial' as const) : ('missing' as const),
+            count: history.draft_picks.length,
+            note: fromBoard
+              ? `The Fantrax draft board is stored on import and refresh: ${history.draft_picks.length} picks made this season. Earlier seasons' drafts are not imported.`
+              : history.draft_picks.length > 0
+                ? 'Fantrax draft history currently reflects traded draft-pick events from an uploaded export.'
+                : 'No Fantrax draft picks are on file: a league-id import stores the draft board once the league has drafted (none was readable yet), and an uploaded export carries only traded-pick events.',
+          }
+        })(),
+        tradeHistory: (() => {
+          const derived = raw.historySources?.derivedTransactions ?? 0
+          const exported = raw.historySources?.exportTransactions ?? history.transactions.length - derived
+          const parts: string[] = []
+          if (exported > 0) parts.push('Fantrax transaction history is normalized from claims, drops, trades, and lineup change exports.')
+          if (derived > 0) {
+            parts.push(
+              `${derived} roster moves were inferred by comparing this league's rosters between refreshes (Fantrax publishes no transactions feed); a move made and reversed between two refreshes is not seen, and a two-way exchange is only marked as a suspected trade.`,
+            )
+          }
+          return {
+            /* Same ambiguity as Yahoo and MFL: a required array, so `[]` proves nothing. */
+            state:
+              history.transactions.length > 0
+                ? ('partial' as const)
+                : emptyableHistoryCoverage({ fetched: null, unit: 'trades' }).state,
+            count: history.transactions.length,
+            note:
+              parts.length > 0
+                ? parts.join(' ')
+                : 'No Fantrax transaction history is on file yet: Fantrax publishes no transactions feed, so a league-id import only infers moves by comparing rosters between refreshes (none observed so far), and an uploaded transaction export supplies recorded ones.',
+          }
+        })(),
         previousSeasons: {
           state: raw.previousSeasons.length > 0 ? 'partial' : 'missing',
           count: raw.previousSeasons.length,

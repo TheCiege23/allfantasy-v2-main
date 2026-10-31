@@ -55,19 +55,20 @@ describe('Prompt 2 slot/flex behavior by sport', () => {
     expect(validRoster.valid).toBe(true)
   })
 
-  it('NCAAF: FLEX and SUPERFLEX enforce college football eligibility boundaries', () => {
+  it('NCAAF: FLEX enforces college football eligibility boundaries; SUPERFLEX is opt-in', () => {
     expect(getAllowedPositionsForSlot('NCAAF', 'FLEX')).toEqual(
       expect.arrayContaining(['RB', 'WR', 'TE'])
     )
-    expect(getAllowedPositionsForSlot('NCAAF', 'SUPERFLEX')).toEqual(
-      expect.arrayContaining(['QB', 'RB', 'WR', 'TE'])
-    )
-
     expect(isPositionEligibleForSlot('NCAAF', 'FLEX', 'QB')).toBe(false)
-    expect(isPositionEligibleForSlot('NCAAF', 'SUPERFLEX', 'QB')).toBe(true)
+    expect(isPositionEligibleForSlot('NCAAF', 'FLEX', 'RB')).toBe(true)
 
-    const canAddQbToSuperFlex = canAddPlayerToSlot('NCAAF', 'SUPERFLEX', 'QB', [])
-    expect(canAddQbToSuperFlex.allowed).toBe(true)
+    const canAddRbToFlex = canAddPlayerToSlot('NCAAF', 'FLEX', 'RB', [])
+    expect(canAddRbToFlex.allowed).toBe(true)
+
+    // The default NCAAF template has carried no SUPERFLEX starter since 595959f64 (a commissioner adds
+    // one), so the default template offers no superflex slot to place a QB in.
+    expect(getAllowedPositionsForSlot('NCAAF', 'SUPERFLEX')).toEqual([])
+    expect(canAddPlayerToSlot('NCAAF', 'SUPERFLEX', 'QB', []).allowed).toBe(false)
 
     const invalidRoster = validateRoster('NCAAF', [
       { playerId: 'ncaaf-1', position: 'QB', slotName: 'FLEX' },

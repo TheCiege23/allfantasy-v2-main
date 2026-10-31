@@ -18,6 +18,7 @@ import {
 import { DraftClock } from '@/components/core-app/boards/DraftClock'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-core-boards.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * `/core/draft-hq` with no league held — every draft, ranked by clock.
@@ -399,7 +400,7 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
       ) : (
         <p className="af-bd-note">
           {data.withoutDraft > 0
-            ? `No draft is set up in any of your ${data.withoutDraft.toLocaleString()} leagues yet.`
+            ? `No draft is set up in any of your ${data.withoutDraft.toLocaleString(getAppIntlLocale())} leagues yet.`
             : 'No draft to show yet.'}
         </p>
       )}
@@ -411,7 +412,7 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
       */}
       {data.withoutDraft > 0 ? (
         <p className="af-bd-note af-bd-note--plain">
-          {data.withoutDraft.toLocaleString()} of your leagues carry no draft we can read — either
+          {data.withoutDraft.toLocaleString(getAppIntlLocale())} of your leagues carry no draft we can read — either
           it never ran through AllFantasy, or the platform has not published one.
         </p>
       ) : null}

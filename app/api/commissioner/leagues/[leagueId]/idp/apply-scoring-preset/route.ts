@@ -10,6 +10,7 @@ import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { isIdpLeague, getIdpLeagueConfig, upsertIdpLeagueConfig } from '@/lib/idp'
 import { writeIdpSettingsAudit } from '@/lib/idp/IdpSettingsAudit'
 import type { IdpScoringPreset } from '@/lib/idp/types'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 export async function POST(
   req: Request,
@@ -26,6 +27,9 @@ export async function POST(
   const isIdp = await isIdpLeague(leagueId)
   if (!isIdp) return NextResponse.json({ error: 'Not an IDP league' }, { status: 404 })
 
+  const locked = await settingsLockedResponse(leagueId, 'scoring')
+
+  if (locked) return locked
   const body = (await req.json().catch(() => ({}))) as { preset?: string; clearOverrides?: boolean }
   const preset = (body.preset ?? 'balanced') as IdpScoringPreset
   if (!['balanced', 'tackle_heavy', 'big_play_heavy'].includes(preset)) {

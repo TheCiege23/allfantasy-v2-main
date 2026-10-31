@@ -25,6 +25,10 @@ import {
 } from '@/lib/schedule-defaults/ScheduleConfigResolver'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import { deriveLeagueFormat } from '@/lib/league-runtime/leagueFormat'
+import { readTiebreakerOrder } from '@/lib/standings/tiebreakerOrder'
+import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { readSavedRosterLayout } from '@/lib/redraft-core-contract/savedRosterLayout'
+import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 
 type JsonRecord = Record<string, unknown>
 
@@ -232,12 +236,18 @@ export type CanonicalLeagueRules = {
     thirdPlaceGameEnabled: boolean
     toiletBowlEnabled: boolean
     championshipLength: number | null
+    /** Best-of-N series per round (`settings.playoff_series`, lib/playoff-runtime/playoffSeries.ts); null = cumulative. */
+    seriesLengths?: number[] | null
     consolationPlaysFor: string | null
     seedingRules: string | null
     tiebreakerRules: string[]
     byeRules: string | null
     reseedBehavior: string | null
     standingsTiebreakers: string[]
+    /** Commissioner bye plan, `League.settings.playoff_bye_plan` (see lib/playoff-brackets/byePlan.ts). */
+    byePlan: number[] | null
+    /** The commissioner's tiebreaker order (lib/standings/tiebreakerOrder.ts), or null for the default. */
+    customTiebreakers: string[] | null
   }
   schedule: {
     unit: string | null
@@ -391,6 +401,37 @@ async function resolveOptional<T>(name: string, work: () => Promise<T | null>): 
   }
 }
 
+/**
+ * 🛑 A NATIVE NFL / NCAAF REDRAFT LEAGUE'S SAVED LAYOUT (owner, 2026-10-20). `League.starters` is the
+ * imported-platform column and is null for a native league, so the roster runtime fell back to its own
+ * DEFAULT_NFL_STARTERS (QB, RB, RB, WR, WR, TE, FLEX, K, DEF) even when the league had saved a different
+ * layout in `settings` — a league saved with QB, RB, WR, WR, TE, DEF got empty FLEX / K slots. Hand the
+ * runtime the saved layout instead; null (and so the runtime default) only when there is none.
+ */
+function savedFootballRedraftStarters(
+  sport: string,
+  settings: Record<string, unknown>,
+  league: CanonicalLeagueRow,
+): string[] | null {
+  const sportUpper = sport.toUpperCase()
+  if (sportUpper !== 'NFL' && sportUpper !== 'NCAAF') return null
+  if (
+    !isNflRedraftCoreDashboardLeague({
+      sport: sportUpper,
+      leagueType: league.leagueType,
+      isDynasty: league.isDynasty,
+      leagueVariant: league.leagueVariant,
+      bestBallMode: league.bestBallMode,
+      guillotineMode: league.guillotineMode,
+      keeperPhaseActive: (league as { keeperPhaseActive?: boolean | null }).keeperPhaseActive,
+    })
+  ) {
+    return null
+  }
+  const saved = readSavedRosterLayout(sportUpper, settings)
+  return saved && saved.starterOrder.length > 0 ? saved.starterOrder : null
+}
+
 export function buildCanonicalLeagueRulesFromResolved({
   league,
   draftConfig = null,
@@ -478,7 +519,7 @@ export function buildCanonicalLeagueRulesFromResolved({
     },
     roster: {
       size: rosterSize,
-      starters: league.starters ?? null,
+      starters: league.starters ?? savedFootballRedraftStarters(sport, settings, league) ?? null,
       irSlots: numberOrNull(league.irSlots) ?? 0,
       eligibleReserveStatuses: buildReserveStatuses(league),
       allowPreDraftMoves: booleanOr(league.allowPreDraftMoves, true),
@@ -523,12 +564,15 @@ export function buildCanonicalLeagueRulesFromResolved({
       thirdPlaceGameEnabled: Boolean(playoffConfig?.third_place_game_enabled),
       toiletBowlEnabled: Boolean(playoffConfig?.toilet_bowl_enabled),
       championshipLength: playoffConfig?.championship_length ?? null,
+      seriesLengths: readPlayoffSeriesLengths(settings),
       consolationPlaysFor: playoffConfig?.consolation_plays_for ?? stringOrNull(league.playoffLowerBracket),
       seedingRules: playoffConfig?.seeding_rules ?? stringOrNull(league.playoffSeedingRule),
       tiebreakerRules: playoffConfig?.tiebreaker_rules ?? [],
       byeRules: playoffConfig?.bye_rules ?? null,
       reseedBehavior: playoffConfig?.reseed_behavior ?? null,
       standingsTiebreakers: playoffConfig?.standings_tiebreakers ?? [],
+      byePlan: Array.isArray(settings.playoff_bye_plan) ? settings.playoff_bye_plan.map((v) => Number(v)) : null,
+      customTiebreakers: readTiebreakerOrder(settings),
     },
     schedule: {
       unit: scheduleConfig?.schedule_unit ?? null,

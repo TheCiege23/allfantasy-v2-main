@@ -33,6 +33,8 @@ import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/locks'
 import { finishGuillotineSeason, rosterIdForOwner } from '@/lib/guillotine/finishGuillotineSeason'
+import { recordChoppedReleases } from '@/lib/guillotine/choppedReleases'
+import { firstChopWeekAfterDraft } from '@/lib/guillotine/draftWeekFloor'
 
 export type NativeGuillotineOutcome =
   | 'not_guillotine'
@@ -59,12 +61,23 @@ export type NativeGuillotineDeps = {
   now?: () => Date
   /** Refills a past week's stats when the finalizer refuses it for coverage (same as the sweep). */
   syncWeekStats?: (args: { seasonId: string; week: number }) => Promise<unknown>
+  /** The week after the league's draft (./draftWeekFloor.ts); injectable for tests. */
+  firstChopWeekAfterDraft?: typeof firstChopWeekAfterDraft
 }
 
 const LOCK_TTL_MS = 5 * 60 * 1000
 
 export async function runNativeGuillotineWeek(
-  input: { seasonId: string; currentFantasyWeek: number },
+  input: {
+    seasonId: string
+    currentFantasyWeek: number
+    /**
+     * Every game of `currentFantasyWeek` is final. Without it the last week of a season could never
+     * close: a week is otherwise only chopped once the NEXT week has started, and NFL week 19 never
+     * starts (the week signal reads the regular season only).
+     */
+    currentWeekComplete?: boolean
+  },
   deps: NativeGuillotineDeps = {},
 ): Promise<NativeGuillotineResult> {
   const now = deps.now?.() ?? new Date()
@@ -106,11 +119,30 @@ export async function runNativeGuillotineWeek(
   if (gSeason.ok && finalSeason?.status === 'final_stage' && await determineFinalChampion(gSeason.seasonId)) return completeSeason(season.id, gSeason, base)
   const recoveryWeek = gSeason.ok && (lastChop?.choppedInPeriod ?? 0) > (finalSeason?.currentScoringPeriod ?? 0) ? lastChop!.choppedInPeriod : null
   if (active.length <= 1 && lastTeamStanding && recoveryWeek == null) return completeSeason(season.id, gSeason, base)
-  const week = Math.max(recoveryWeek ?? Math.max(lastChop?.choppedInPeriod ?? 0, finalSeason?.currentScoringPeriod ?? 0) + 1, config.eliminationStartWeek)
-  if (config.eliminationEndWeek != null && week > config.eliminationEndWeek) {
-    return { ...base, outcome: 'past_elimination_window', week }
+  // Before the first chop, never a week the league had not drafted for (./draftWeekFloor.ts). Saved
+  // as the first chop week, so the engine, the settings page and the rules page all say the same.
+  let startWeek = config.eliminationStartWeek
+  if (lastChop?.choppedInPeriod == null && (finalSeason?.currentScoringPeriod ?? 0) === 0) {
+    const afterDraft = await (deps.firstChopWeekAfterDraft ?? firstChopWeekAfterDraft)({ leagueId: season.leagueId, sport: season.sport, season: season.season }).catch(() => null)
+    if (afterDraft != null && afterDraft > startWeek) {
+      startWeek = afterDraft
+      await prisma.guillotineLeagueConfig.updateMany({ where: { leagueId: season.leagueId, eliminationStartWeek: { lt: afterDraft } }, data: { eliminationStartWeek: afterDraft } })
+    }
   }
-  if (week >= input.currentFantasyWeek) return { ...base, outcome: 'waiting', week, reason: 'week_in_progress' }
+  const week = Math.max(recoveryWeek ?? Math.max(lastChop?.choppedInPeriod ?? 0, finalSeason?.currentScoringPeriod ?? 0) + 1, startWeek)
+  /*
+   * 🛑 PAST THE LAST CHOP WEEK WITH TEAMS STILL STANDING WAS A DEAD END: no chop, no champion, no
+   * archive, forever. It happens to a league with more teams than chop weeks, to no-chop weeks that
+   * push the last chop past the end, and to a final stage that runs out of season. Nothing more can
+   * be scored, so the season ends here, ranked by survival (finishGuillotineSeason.ts).
+   */
+  if (config.eliminationEndWeek != null && week > config.eliminationEndWeek) {
+    if (recoveryWeek != null) return { ...base, outcome: 'past_elimination_window', week }
+    const done = await completeSeason(season.id, gSeason, base)
+    return { ...done, week, reason: done.reason ?? 'elimination_window_ended' }
+  }
+  const weekStillOpen = week > input.currentFantasyWeek || (week === input.currentFantasyWeek && input.currentWeekComplete !== true)
+  if (weekStillOpen) return { ...base, outcome: 'waiting', week, reason: 'week_in_progress' }
 
   // Seal the week: every game final, the grace period passed, stat coverage clears the floor.
   let sealed = await finalizeRedraftWeek({ seasonId: season.id, week })
@@ -149,6 +181,29 @@ export async function runNativeGuillotineWeek(
       if (!repairedIds.length) return { ...base, outcome: 'refused', week, reason: repair?.reason ?? 'audit recovery required' }
       await prisma.redraftRosterPlayer.updateMany({ where: { rosterId: { in: repairedIds }, droppedAt: null }, data: { droppedAt: now } })
       return { ...base, outcome: 'chopped', week, choppedRedraftRosterIds: repairedIds, reason: 'recovered previously selected chop' }
+    }
+
+    /*
+     * ⚠ THE CORRECTION WINDOW WAITED FOR NOTHING. The chop is held until the stat-correction cutoff so
+     * a late correction can still decide who goes — but score-sync only pulls the CURRENT week, so the
+     * sealed week's stats were never fetched again and every chop ran on the numbers as they stood at
+     * the seal. Pull the week once more now, past the cutoff, and re-seal it from the corrected stats.
+     * The stat sync writes `isFinalized: false`, so the re-seal is what makes the week chop-ready again;
+     * a re-seal that refuses (a refresh that came back short) waits rather than chop on half a week.
+     * A refresh that throws chops on the sealed stats, exactly as before, rather than stall the season.
+     */
+    if (config.correctionWindow !== 'immediate' && deps.syncWeekStats) {
+      let refreshed = false
+      try {
+        await deps.syncWeekStats({ seasonId: season.id, week })
+        refreshed = true
+      } catch (error) {
+        console.error('[native-guillotine] pre-chop stat refresh failed; chopping on the sealed stats', { seasonId: season.id, week, error })
+      }
+      if (refreshed) {
+        const resealed = await finalizeRedraftWeek({ seasonId: season.id, week })
+        if (resealed.refusal) return { ...base, outcome: 'waiting', week, reason: `pre_chop_refresh:${resealed.refusal}` }
+      }
     }
 
     // Every surviving team, scored from the sealed week. Bench/IR never count; best ball starts its best.
@@ -238,6 +293,18 @@ export async function runNativeGuillotineWeek(
 
     // Release: the chopped team's players become free agents for the next waiver run.
     if (choppedRedraft.length > 0) {
+      /*
+       * Listed first, while the roster still holds them: the home's chop moment and the war room show
+       * these players with a Bid button (lib/guillotine/choppedReleases.ts). Best-effort — the chop has
+       * happened, and a failed list must not stop the players reaching waivers.
+       */
+      if (gSeason.ok) {
+        try {
+          await recordChoppedReleases({ leagueId: season.leagueId, guillotineSeasonId: gSeason.seasonId, week, redraftRosterIds: choppedRedraft, availableAt: now })
+        } catch (error) {
+          console.warn('[native-guillotine] released players not listed; the chop stands', { seasonId: season.id, week, error: error instanceof Error ? error.message : String(error) })
+        }
+      }
       await prisma.redraftRosterPlayer.updateMany({
         where: { rosterId: { in: choppedRedraft }, droppedAt: null },
         data: { droppedAt: now },
