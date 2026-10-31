@@ -15,7 +15,8 @@
  *   - otherwise a dark literal, for the rare host with no /core palette at all (the old look).
  * Text colours sit on --text/--text2/--muted/--faint, which /core already measures per mode.
  *
- * ⚠ ONLY ONE TOP-LEVEL @media BLOCK, AT THE END, NOT NESTED (CLAUDE.md: af-matchup.css 2026-08-30).
+ * ⚠ @media BLOCKS ARE TOP-LEVEL, AT THE END, NEVER NESTED (CLAUDE.md: af-matchup.css 2026-08-30): one
+ * phone block and one reduced-motion block (the live dot is the only animation).
  * ⚠ NO SIZE BELOW 11px (__tests__/core-app/type-floor.test.ts). */
 
 .rdt{
@@ -171,4 +172,8 @@ html[data-mode='light'] .rdt-bridge :is(input,select,textarea){background-color:
   .rdt-cal{grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:5px}
   .rdt-cal-cell{min-height:54px;padding:6px}
   .rdt-cal-tag{letter-spacing:0}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .rdt-bug-dot{animation:none}
 }
