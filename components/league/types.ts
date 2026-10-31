@@ -172,6 +172,12 @@ export type LeagueTradeAsset = {
   team?: string | null
   teamLogoUrl?: string | null
   accent: 'teal' | 'blue' | 'orange' | 'slate'
+  /**
+   * A draft pick's year, round and original team, read from the pick's own id
+   * (`lib/dynasty-core/dynastyDetails.ts`). Absent on every non-pick asset, and on a pick whose row
+   * names no round. The dynasty trade screen draws it as a pick chip; `label` is unchanged.
+   */
+  pick?: { season: number | null; round: number; originalRosterId: string | null; fromRosterId: string | null }
 }
 
 export type LeagueTradeHistoryItem = {

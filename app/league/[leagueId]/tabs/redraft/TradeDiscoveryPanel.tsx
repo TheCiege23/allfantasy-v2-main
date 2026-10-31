@@ -9,6 +9,7 @@ import {
 } from '@/lib/redraft/client'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { tOr } from '@/lib/i18n/tInterpolate'
+import { matchReasonsText, serverErrorText } from '@/lib/i18n/trade-center-server-text'
 
 function flag(f: string) {
   return f.toLowerCase().replace(/_/g, ' ')
@@ -28,7 +29,7 @@ export function TradeDiscoveryPanel({
   myRosterId: string
   onBuildProposal: (partnerRosterId: string) => void
 }) {
-  const { t, tInterpolate } = useOptionalLanguage()
+  const { t, tInterpolate, language } = useOptionalLanguage()
   // Codes with copy translate; an unknown one keeps its old readable form rather than a raw key.
   const flagLabel = (f: string) => tOr(t, `tradeCenter.discovery.flag.${f}`, flag(f))
   const fairnessLabel = (band: string) => tOr(t, `tradeCenter.discovery.fairness.${band.replace(/ /g, '_')}`, band)
@@ -47,11 +48,11 @@ export function TradeDiscoveryPanel({
       const res = await fetchTradeDiscovery({ leagueId, rosterId: myRosterId })
       setPartners(res.partners)
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('tradeCenter.discovery.loadFailed'))
+      setError(e instanceof Error ? serverErrorText(e as Error & { code?: string | null }, e.message, t, language) : t('tradeCenter.discovery.loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [leagueId, myRosterId, t])
+  }, [leagueId, myRosterId, t, language])
 
   const loadPackages = useCallback(
     async (partnerRosterId: string) => {
@@ -107,7 +108,7 @@ export function TradeDiscoveryPanel({
                   ))}
                 </div>
                 <ul className="mt-1 space-y-0.5 text-[11px] text-white/60">
-                  {p.matchReasons.slice(0, 2).map((r, i) => (
+                  {matchReasonsText(p, t, language).slice(0, 2).map((r, i) => (
                     <li key={i}>• {r}</li>
                   ))}
                 </ul>

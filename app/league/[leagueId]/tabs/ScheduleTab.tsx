@@ -15,5 +15,12 @@ export function ScheduleTab({
   isCommissioner?: boolean
 }) {
   if (normalizeBigBrotherShellLeague(league).leagueVariant === 'big_brother') return <BigBrotherSchedule key={league.id} leagueId={league.id} />
-  return <CanonicalRedraftScheduleTab key={league.id} leagueId={league.id} isCommissioner={isCommissioner} />
+  return (
+    <CanonicalRedraftScheduleTab
+      key={league.id}
+      leagueId={league.id}
+      isCommissioner={isCommissioner}
+      tradeDeadlineWeek={league.tradeDeadlineWeek ?? null}
+    />
+  )
 }

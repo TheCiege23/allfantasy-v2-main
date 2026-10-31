@@ -1,6 +1,8 @@
 'use client'
 
+import { leagueAudience } from '@/lib/league-privacy/leagueAudience'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
 
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
@@ -72,6 +74,9 @@ import {
   Brain,
   Swords,
   Wallet,
+  Landmark,
+  CarTaxiFront,
+  Ticket,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
@@ -586,7 +591,8 @@ export function LeagueShell({
     if (league.leagueType === 'keeper' && league.keeperPhaseActive) {
       base = [{ id: 'keeper', label: 'Keepers' }, ...base]
     }
-    if (league.leagueType === 'dynasty' || league.leagueType === 'devy' || league.leagueType === 'c2c') {
+    // One shared predicate (lib/league/isDynastyLeague.ts): this used to read `leagueType` only, exact case.
+    if (isDynastyLeague(league)) {
       const idx = base.findIndex((t) => t.id === 'redraft')
       const dynastyTabs: TabDef[] = [
         { id: 'dynasty', label: 'Dynasty' },
@@ -616,6 +622,7 @@ export function LeagueShell({
     nflRedraftCore,
     league.sport,
     league.leagueType,
+    league.isDynasty,
     league.keeperPhaseActive,
     league.bestBallMode,
     league.guillotineMode,
@@ -1298,7 +1305,6 @@ export function LeagueShell({
       guillotineMode: league.guillotineMode,
       bestBallMode: league.bestBallMode,
     })
-    const visibility = settings.league_privacy_visibility
     return {
       id: league.id,
       name: league.name ?? 'Your league',
@@ -1310,7 +1316,7 @@ export function LeagueShell({
       tePremiumPoints: typeof settings.te_premium_points === 'number' ? settings.te_premium_points : null,
       draftDateIso,
       timezone: league.timezone ?? null,
-      privacy: visibility === 'public' ? 'public' : visibility === 'private' ? 'private' : null,
+      privacy: leagueAudience(settings),
     }
   }, [league, draftDateIso])
 
@@ -2679,6 +2685,9 @@ const LEAGUE_TAB_NAV_ICONS: Record<string, LucideIcon> = {
   leaderboard: Trophy,
   'my-picks': Crosshair,
   schedule: CalendarRange,
+  dynasty: Landmark,
+  dynasty_taxi: CarTaxiFront,
+  dynasty_picks: Ticket,
   bestball: Sparkles,
   guillotine: Scissors,
   survivor: TreePalm,

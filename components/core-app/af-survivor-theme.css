@@ -100,3 +100,106 @@ html[data-mode='light'] .af-core[data-league-theme='survivor'] {
     background-size: 100% 100%, auto 300px;
   }
 }
+
+/* ── The island banner and tribe board (components/core-app/survivor/SurvivorIslandBanner.tsx) ── */
+
+.af-core .sv-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--line2);
+  background-color: #05060a;
+  background-size: cover;
+  /* The art sits right of centre so the title reads on the left (as the Zombie scenes do). */
+  background-position: 62% 60%;
+  margin-bottom: 18px;
+  color: #f1ece4;
+}
+.af-core .sv-banner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(5, 6, 10, 0.92) 0%, rgba(5, 6, 10, 0.7) 36%, rgba(5, 6, 10, 0.12) 66%, rgba(5, 6, 10, 0) 82%),
+    linear-gradient(180deg, rgba(5, 6, 10, 0) 58%, rgba(5, 6, 10, 0.8) 100%);
+}
+.af-core .sv-banner-in {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 26px;
+  align-items: center;
+  padding: 30px 32px;
+  min-height: 300px;
+}
+.af-core .sv-banner[data-variant='compact'] .sv-banner-in { grid-template-columns: minmax(0, 1fr) auto; min-height: 170px; padding: 22px 26px; }
+.af-core .sv-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.af-core .sv-chips span {
+  padding: 3px 10px; border-radius: 8px; font-size: 12.5px; color: #e4ddd2;
+  border: 1px solid rgba(255, 236, 214, 0.16); background: rgba(10, 12, 18, 0.6);
+}
+.af-core .sv-title {
+  margin: 0;
+  font: 900 46px/1.04 'Cinzel', 'Trajan Pro', Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.03em;
+  color: #f0a35e;
+  text-shadow: 0 2px 22px rgba(0, 0, 0, 0.6);
+  overflow-wrap: anywhere;
+}
+.af-core .sv-banner[data-scene='finale'] .sv-title { color: #f2c46b; }
+.af-core .sv-banner[data-scene='merge'] .sv-title { color: #e9b04f; }
+.af-core .sv-banner[data-variant='compact'] .sv-title { font-size: 32px; }
+.af-core .sv-sub { margin: 8px 0 0; font-weight: 600; font-size: 16.5px; color: #f1e3cf; }
+.af-core .sv-desc { margin: 6px 0 0; max-width: 600px; color: #c3bdb2; font-size: 14.5px; }
+.af-core .sv-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.af-core .sv-btn {
+  padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: 14px; text-decoration: none; color: #f1ece4;
+  border: 1px solid rgba(255, 236, 214, 0.18); background: rgba(14, 16, 24, 0.82);
+}
+.af-core .sv-btn:hover { border-color: rgba(240, 163, 94, 0.55); }
+.af-core .sv-btn-primary { background: #f0a35e; border-color: transparent; color: #1a0f05; }
+.af-core .sv-clock {
+  min-width: 230px; padding: 16px 20px; border-radius: 14px; text-align: center;
+  border: 1px solid rgba(255, 236, 214, 0.16); background: rgba(8, 9, 14, 0.78); backdrop-filter: blur(4px);
+}
+.af-core .sv-clock-label { font: 600 11px/1.2 Inter, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: #f0a35e; }
+.af-core .sv-clock-time { font: 700 40px/1.1 'JetBrains Mono', ui-monospace, monospace; margin: 8px 0 4px; font-variant-numeric: tabular-nums; }
+.af-core .sv-clock-at { font-size: 12.5px; color: #b9b2a6; }
+.af-core .sv-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: sv-flick 1.3s ease-in-out infinite alternate; }
+.af-core .sv-flame-2 { animation-duration: 1.7s; animation-delay: -0.4s; }
+@keyframes sv-flick { 0% { transform: scale(1, 1); } 40% { transform: scale(0.94, 1.06) skewX(2deg); } 100% { transform: scale(1.03, 0.96) skewX(-2deg); } }
+
+.af-core .sv-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; margin-bottom: 18px; }
+.af-core .sv-panel-h { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.af-core .sv-eyebrow { font: 600 11px/1.2 Inter, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+.af-core .sv-tribes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.af-core .sv-tribe { background: var(--surface2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.af-core .sv-tribe[data-mine='true'] { border-color: var(--accent-line); }
+.af-core .sv-tribe-h { display: flex; justify-content: space-between; align-items: baseline; }
+.af-core .sv-tribe-h strong { font: 700 15px 'Cinzel', Georgia, serif; letter-spacing: 0.12em; text-transform: uppercase; }
+.af-core .sv-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.af-core .sv-strip { display: flex; gap: 4px; margin: 10px 0 8px; }
+.af-core .sv-strip i, .af-core .sv-legend i { flex: 1; height: 16px; border-radius: 3px; display: block; }
+.af-core .sv-strip i[data-out='true'], .af-core .sv-legend i[data-out='true'] { background: repeating-linear-gradient(135deg, #3a3f50 0 4px, #141720 4px 8px) !important; }
+.af-core .sv-strip i[data-immune='true'], .af-core .sv-legend i[data-immune='true'] { box-shadow: 0 0 0 2px #f2c46b inset, 0 0 10px rgba(242, 196, 107, 0.5); }
+.af-core .sv-strip i[data-me='true'], .af-core .sv-legend i[data-me='true'] { outline: 2px solid var(--text); outline-offset: 1px; }
+.af-core .sv-note { font-size: 12.5px; color: var(--muted); }
+.af-core .sv-danger { color: #f08a72; }
+.af-core .sv-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
+.af-core .sv-legend span { display: inline-flex; gap: 6px; align-items: center; }
+.af-core .sv-legend i { flex: none; width: 14px; height: 10px; background: var(--faint); }
+
+@media (max-width: 720px) {
+  .af-core .sv-banner { background-position: 66% 60%; }
+  .af-core .sv-banner-in, .af-core .sv-banner[data-variant='compact'] .sv-banner-in { grid-template-columns: 1fr; padding: 20px 18px; gap: 14px; min-height: 0; }
+  .af-core .sv-emblem { display: none; }
+  .af-core .sv-title { font-size: 32px; }
+  .af-core .sv-banner[data-variant='compact'] .sv-title { font-size: 26px; }
+  .af-core .sv-clock { min-width: 0; }
+  .af-core .sv-clock-time { font-size: 30px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core .sv-flame { animation: none; }
+}

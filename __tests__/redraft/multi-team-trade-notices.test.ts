@@ -16,6 +16,7 @@ const m = vi.hoisted(() => ({
   session: vi.fn(),
   commissioner: vi.fn(async () => true),
   notify: vi.fn(),
+  dispatch: vi.fn(async (_input: unknown) => undefined),
   dm: vi.fn(),
   market: vi.fn(async () => ({})),
   learning: vi.fn(async () => undefined),
@@ -43,6 +44,9 @@ vi.mock('@/lib/redraft/multiTeamTradeNotices', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/redraft/multiTeamTradeNotices')>()),
   notifyMultiTeamTradeParties: m.notify,
 }))
+// The veto route now goes through notifyMultiTeamTradeOutcome, whose call to notifyMultiTeamTradeParties
+// stays inside the module and so never reaches the `m.notify` mock above: what it sends is read here.
+vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: m.dispatch }))
 vi.mock('@/lib/redraft/tradeMoveLock', () => ({ isRedraftLeagueMovesLocked: vi.fn(async () => false) }))
 vi.mock('@/lib/redraft/finalizeRedraftTrade', () => ({ finalizeRedraftTrade: m.finalize, upsertRedraftTradeDecision: m.decision }))
 vi.mock('@/lib/integrity/holdFlaggedTrades', () => ({ heldTradeIds: vi.fn(async () => []) }))
@@ -56,14 +60,22 @@ import {
   TRADE_REVERSED_MULTI_TEAM_MESSAGE,
   publishTradeReversalNotice,
 } from '@/lib/trade-reversal/notice'
-import { MULTI_TEAM_TRADE_VETOED_BODY } from '@/lib/redraft/multiTeamTradeNotices'
+import { multiTeamTradeVetoedBody } from '@/lib/redraft/multiTeamTradeNotices'
 
 const OWNERS = [
-  { id: 'rA', ownerId: 'uA' },
-  { id: 'rB', ownerId: 'uB' },
-  { id: 'rC', ownerId: 'uC' },
-  { id: 'rD', ownerId: 'uD' },
+  { id: 'rA', ownerId: 'uA', teamName: 'Alpha', ownerName: 'Ann' },
+  { id: 'rB', ownerId: 'uB', teamName: 'Bravo', ownerName: 'Ben' },
+  { id: 'rC', ownerId: 'uC', teamName: null, ownerName: 'Cat' },
+  { id: 'rD', ownerId: 'uD', teamName: 'Delta', ownerName: 'Dan' },
 ]
+
+/** The dispatcher is reached through a dynamic import; let it settle before reading or ruling it out. */
+const flush = () => new Promise((r) => setTimeout(r, 25))
+type Sent = { userIds: string[]; title: string; body: string; dedupePrefix: string; category: string }
+async function sent(): Promise<Sent[]> {
+  await flush()
+  return m.dispatch.mock.calls.map((c) => c[0] as Sent)
+}
 
 const proposal = (extra: string[]) => ({
   id: 'p-1', leagueId: 'L', seasonId: 'S', proposerRosterId: 'rA', receiverRosterId: 'rB', additionalRosterIds: extra,
@@ -85,20 +97,51 @@ const veto = () =>
   vetoPOST(new Request('http://localhost/api/redraft/trades/veto', { method: 'POST', body: JSON.stringify({ proposalId: 'p-1' }) }) as never)
 
 describe('commissioner veto (app/api/redraft/trades/veto)', () => {
-  it('a multi-team trade: every team in it is told, the commissioner is not', async () => {
+  /*
+   * Was: `body: MULTI_TEAM_TRADE_VETOED_BODY` ("The commissioner vetoed the multi-team trade, so it will
+   * not go through."), read off the `notifyMultiTeamTradeParties` mock. That generic text named no team,
+   * while trade-votes' commissioner_veto named every team under the same `vetoed` key — so one ruling read
+   * differently depending on which route made it. Both now send notifyMultiTeamTradeCommissionerVeto.
+   */
+  it('a multi-team trade: every team in it is told, by name, with the same text and key as trade-votes', async () => {
     m.prisma.redraftTradeProposal.findUnique.mockResolvedValue(proposal(['rC', 'rD']))
     const res = await veto()
     expect(res.status).toBe(200)
-    expect(m.notify).toHaveBeenCalledTimes(1)
-    expect(m.notify.mock.calls[0]![0]).toMatchObject({
-      proposalId: 'p-1',
+    const all = await sent()
+    expect(all).toHaveLength(1)
+    expect(all[0]).toMatchObject({
       leagueId: 'L',
       userIds: ['uA', 'uB', 'uC', 'uD'],
-      actorUserId: 'commish',
-      key: 'vetoed',
+      category: 'trade_proposals',
       title: 'Trade vetoed',
-      body: MULTI_TEAM_TRADE_VETOED_BODY,
+      body: 'The commissioner vetoed the multi-team trade between Alpha, Bravo, Cat and Delta, so it will not go through.',
+      dedupePrefix: 'redraft_trade:p-1:vetoed',
     })
+    expect(all[0]!.body).toBe(multiTeamTradeVetoedBody('Alpha, Bravo, Cat and Delta'))
+  })
+
+  it('a commissioner who also manages a team in the trade is not told about their own veto', async () => {
+    m.session.mockResolvedValue({ user: { id: 'uC' } })
+    m.prisma.redraftTradeProposal.findUnique.mockResolvedValue(proposal(['rC', 'rD']))
+    const res = await veto()
+    expect(res.status).toBe(200)
+    const all = await sent()
+    expect(all[0]!.userIds).toEqual(['uA', 'uB', 'uD'])
+  })
+
+  it('a failed notice does not fail the veto: the roster read throws, the route still answers 200', async () => {
+    m.prisma.redraftTradeProposal.findUnique.mockResolvedValue(proposal(['rC', 'rD']))
+    m.prisma.redraftRoster.findMany.mockImplementation(async (args: { where: { id?: unknown } }) => {
+      if (args.where.id) throw new Error('roster read failed')
+      return OWNERS
+    })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await veto()
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({ status: 'vetoed' })
+    expect(await sent()).toEqual([])
+    expect(err).toHaveBeenCalled()
+    err.mockRestore()
   })
 
   it('two teams: no multi-team notice; the DM status and the two-party learning event exactly as before', async () => {
@@ -106,6 +149,9 @@ describe('commissioner veto (app/api/redraft/trades/veto)', () => {
     const res = await veto()
     expect(res.status).toBe(200)
     expect(m.notify).not.toHaveBeenCalled()
+    expect(await sent()).toEqual([])
+    // No notice means no extra by-id roster read either: only the route's own season read.
+    expect(m.prisma.redraftRoster.findMany.mock.calls.filter((c) => (c[0] as { where: { id?: unknown } }).where.id)).toEqual([])
     expect(m.dm).toHaveBeenCalledWith({ source: 'redraft', tradeId: 'p-1', status: 'vetoed', detail: 'The commissioner made the call.' })
     expect(m.learning).toHaveBeenCalledWith(expect.objectContaining({ proposerUserId: 'uA', receiverUserId: 'uB', eventType: 'trade_vetoed' }))
   })
