@@ -19,12 +19,14 @@ const h = vi.hoisted(() => ({
   assertImportCommissioner: vi.fn(),
   runPipeline: vi.fn(),
   persist: vi.fn(),
+  applyAttestedCommissioner: vi.fn(async () => ({ teamsUpdated: 1 })),
 }))
 
 vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser }))
 vi.mock('@/lib/league-import/commissionerGate', () => ({
   assertImportCommissioner: h.assertImportCommissioner,
   recordImportAttestation: vi.fn(async () => {}),
+  applyAttestedCommissioner: h.applyAttestedCommissioner,
   OPEN_READ_PROVIDERS: ['fantrax', 'fleaflicker'],
 }))
 vi.mock('@/lib/league-import/ImportedLeagueNormalizationPipeline', () => ({
@@ -192,5 +194,42 @@ describe('🛑 the importer’s chosen team (claimSourceTeamId)', () => {
     expect(res.status).toBe(403)
     expect(await res.json()).toMatchObject({ code: 'ATTESTATION_REQUIRED' })
     expect(h.persist).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * 🛑 AN ACCEPTED ATTESTATION USED TO BE AN AUDIT NOTE AND NOTHING ELSE. Fantrax reports no
+ * commissioner, so a Fantrax commissioner who confirmed it got no C and no hub (production
+ * 2026-10-31). The attestation must reach the flags those surfaces read.
+ */
+describe('🛑 an accepted attestation makes the importer commissioner', () => {
+  const ATTEST = { accepted: true, statement: 'I am the commissioner' }
+
+  it('marks the importer commissioner on their own new league', async () => {
+    const res = await commit({ provider: 'fantrax', sourceId: 'fantrax-league:abc', attestation: ATTEST })
+
+    expect(res.status).toBe(200)
+    expect(h.applyAttestedCommissioner).toHaveBeenCalledWith({ leagueId: 'lg-1', appUserId: 'af-user-1' })
+  })
+
+  it('not on a cross-account join — that league row belongs to someone else', async () => {
+    h.persist.mockResolvedValue({ ...PERSISTED, persisted: { ...PERSISTED.persisted, joinedExisting: true } })
+
+    await commit({ provider: 'fantrax', sourceId: 'fantrax-league:abc', attestation: ATTEST })
+
+    expect(h.applyAttestedCommissioner).not.toHaveBeenCalled()
+  })
+
+  it('not without an accepted attestation in the body', async () => {
+    await commit({ provider: 'fantrax', sourceId: 'fantrax-league:abc' })
+    expect(h.applyAttestedCommissioner).not.toHaveBeenCalled()
+  })
+
+  it('not when the gate proved membership only (verification: member)', async () => {
+    h.assertImportCommissioner.mockResolvedValue({ ok: true, verification: 'member' })
+
+    await commit({ provider: 'sleeper', sourceId: '123', attestation: ATTEST })
+
+    expect(h.applyAttestedCommissioner).not.toHaveBeenCalled()
   })
 })

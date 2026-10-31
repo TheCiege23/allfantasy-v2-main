@@ -21,6 +21,7 @@ import { ImportRunInFlightError, persistImportWithCanonicalAudit } from '@/lib/l
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import {
+  applyAttestedCommissioner,
   assertImportCommissioner,
   OPEN_READ_PROVIDERS,
   recordImportAttestation,
@@ -234,6 +235,11 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
         sourceLeagueId: sourceId,
         attestation: { accepted: true, statement: body.attestation.statement },
       }).catch(() => {})
+      // Awaited: the response's league is what the client opens next, and it must already show
+      // the C. Not for a cross-account join — that league row belongs to someone else.
+      if (persisted.joinedExisting !== true) {
+        await applyAttestedCommissioner({ leagueId: persisted.league.id, appUserId: auth.userId })
+      }
     }
 
     /*
