@@ -3987,6 +3987,7 @@ model AppUser {
   communityReplies                         CommunityReply[]                       @relation("CommunityReplyAuthor")
   communityReactions                       CommunityReaction[]                    @relation("CommunityReactionUser")
   communityReports                         CommunityReport[]                      @relation("CommunityReportReporter")
+  communityIdeaVotes                       CommunityIdeaVote[]                    @relation("CommunityIdeaVoter")
   platformNotifications                    PlatformNotification[]
   platformUserReportsAgainst               PlatformUserReport[]                   @relation("PlatformUserReportReported")
   platformUserReportsCreated               PlatformUserReport[]                   @relation("PlatformUserReportReporter")
@@ -19886,15 +19887,40 @@ model CommunityPost {
   editedAt        DateTime?
   removedAt       DateTime?
   removedByUserId String?
+  /// "post", or "idea" for a League Lab idea (the idea* columns below apply only to those).
+  kind            String           @default("post") @db.VarChar(16)
+  /// Null while an idea is open; then "under_review" | "building" | "shipped", set by staff.
+  ideaStatus      String?          @db.VarChar(16)
+  ideaStatusAt    DateTime?
+  /// { hook, sport, teamSize, draftType } from the short idea form.
+  ideaDetails     Json?
+  /// Denormalised count of CommunityIdeaVote rows, so the board can sort by it.
+  upvoteCount     Int              @default(0)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   author          AppUser          @relation("CommunityPostAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
   replies         CommunityReply[]
+  ideaVotes       CommunityIdeaVote[]
 
   @@index([channel, isPinned, lastActivityAt])
   @@index([lastActivityAt])
   @@index([authorUserId, createdAt])
+  @@index([kind, upvoteCount])
   @@map("community_posts")
+}
+
+/// One upvote per (person, idea).
+model CommunityIdeaVote {
+  id        String        @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime      @default(now())
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      AppUser       @relation("CommunityIdeaVoter", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@map("community_idea_votes")
 }
 
 model CommunityReply {

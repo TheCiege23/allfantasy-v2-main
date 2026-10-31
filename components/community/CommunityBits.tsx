@@ -49,6 +49,11 @@ const BADGE_COPY: Record<AuthorBadge, { label: string; title: string; className:
     title: 'Runs a league on AllFantasy',
     className: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30',
   },
+  shipped: {
+    label: 'Idea Shipped',
+    title: 'Pitched a League Lab idea that AllFantasy built',
+    className: 'bg-fuchsia-500/15 text-fuchsia-500 border-fuchsia-500/30',
+  },
   new: {
     label: 'New',
     title: 'Joined in the last week. Say hi!',
@@ -175,6 +180,11 @@ export function PostCard({ post, now, showChannel }: { post: PostSummary; now: n
             {post.isLocked && (
               <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
                 🔒 Locked
+              </span>
+            )}
+            {post.idea && (
+              <span className="text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>
+                💡 Idea · ▲ {post.idea.upvotes}
               </span>
             )}
             {showChannel && <ChannelPill slug={post.channel} />}

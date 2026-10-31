@@ -13,6 +13,8 @@ import {
   loginHref,
 } from '@/components/community/CommunityBits'
 import { PostActions, ReactionBar, ReplyActions, ReplyComposer } from '@/components/community/ClubhouseClient'
+import { IdeaCredit, IdeaFacts, IdeaStatusPill } from '@/components/community/IdeaBits'
+import { IdeaStatusControl, UpvoteButton } from '@/components/community/IdeaClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,9 +69,42 @@ export default async function ClubhousePostPage({ params }: Props) {
             </span>
           )}
         </div>
-        <h1 className="mb-3 text-xl font-bold leading-snug sm:text-2xl" style={{ color: 'var(--text)' }}>
-          {censorProfanity(post.title)}
-        </h1>
+        <div className="mb-3 flex items-start gap-3">
+          {post.idea && !post.removed && (
+            <UpvoteButton
+              postId={post.id}
+              initialUpvotes={post.idea.upvotes}
+              initialVoted={post.idea.votedByMe}
+              signedIn={signedIn}
+              isAuthor={viewer.userId === post.author.id}
+              loginHref={login}
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            {post.idea && (
+              <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--accent)' }}>
+                  💡 League idea
+                </span>
+                <IdeaStatusPill status={post.idea.status} />
+                <IdeaFacts idea={post.idea} />
+              </div>
+            )}
+            <h1 className="text-xl font-bold leading-snug sm:text-2xl" style={{ color: 'var(--text)' }}>
+              {censorProfanity(post.title)}
+            </h1>
+            {post.idea?.hook && (
+              <p className="mt-1 text-[15px]" style={{ color: 'var(--muted)' }}>
+                {censorProfanity(post.idea.hook)}
+              </p>
+            )}
+          </div>
+        </div>
+        {post.idea && (
+          <div className="mb-4">
+            <IdeaCredit idea={post.idea} author={post.author} now={now} />
+          </div>
+        )}
         <div className="mb-4 flex items-center gap-2.5">
           <Avatar author={post.author} size={36} />
           <AuthorLine author={post.author} at={post.createdAt} edited={Boolean(post.editedAt)} now={now} />
@@ -78,6 +113,11 @@ export default async function ClubhousePostPage({ params }: Props) {
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           <ReactionBar targetType="post" targetId={post.id} initial={post.reactions} signedIn={signedIn} loginHref={login} />
         </div>
+        {post.idea && viewer.isModerator && !post.removed && (
+          <div className="mt-4">
+            <IdeaStatusControl postId={post.id} status={post.idea.status} />
+          </div>
+        )}
         <div className="mt-2">
           <PostActions
             postId={post.id}

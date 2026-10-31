@@ -4,6 +4,7 @@ import { parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
 import { getBlockedEitherWayUserIds } from '@/lib/moderation'
 import { createPlatformNotification } from '@/lib/platform/notification-service'
 import { clubhousePostHref } from './channels'
+import { IDEA_STATUS_COPY, type IdeaStatus } from './ideas'
 
 /**
  * Clubhouse notifications: "someone replied to your post" and "someone mentioned you".
@@ -91,4 +92,20 @@ export async function notifyCommunityMentions(args: {
     if (ok) sent += 1
   }
   return sent
+}
+
+/** "Your League Lab idea is now Building." One per (idea, status), so a flip-flop never re-pings. */
+export async function notifyIdeaAuthorOfStatus(args: {
+  post: { id: string; authorUserId: string; title: string }
+  status: IdeaStatus
+}): Promise<boolean> {
+  const copy = IDEA_STATUS_COPY[args.status]
+  return createPlatformNotification({
+    userId: args.post.authorUserId,
+    type: 'community_idea_status',
+    title: `${copy.emoji} Your idea “${snippet(args.post.title, 60)}” is now ${copy.label}`,
+    body: copy.blurb,
+    meta: { actionHref: clubhousePostHref(args.post.id), postId: args.post.id, ideaStatus: args.status },
+    sourceKey: `community:idea-status:${args.post.id}:${args.status}`,
+  })
 }
