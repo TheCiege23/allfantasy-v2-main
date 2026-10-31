@@ -16,10 +16,10 @@
  * route in `app/` reads — so the failure was unobservable from inside the
  * product at every layer.
  *
- * ⚠ `unknown` IS A REAL OUTCOME, NOT A PLACEHOLDER. Only the Sleeper service
- * returns the `{ backfill: { success, seasonsImported, … } }` shape; Yahoo, ESPN,
- * MFL and Fantrax return their own. Reporting those as `failed` would replace one
- * false claim with another, so a shape we cannot read says so.
+ * ⚠ `unknown` IS A REAL OUTCOME, NOT A PLACEHOLDER. Sleeper returns the
+ * `{ backfill: { success, seasonsImported, … } }` shape and Fantrax returns a
+ * flat counted summary. Other shapes remain unknown until they are mapped;
+ * reporting an unreadable result as `failed` would invent a failure.
  *
  * The counts are the load-bearing part. `complete` alone cannot distinguish "this
  * league has no prior seasons" from "three seasons exist and none imported";
@@ -67,6 +67,21 @@ export function readBackfillOutcome(result: unknown): BackfillOutcome {
   // The service can decline to run at all — that is neither success nor failure.
   if (summary.skipped === true) {
     return { ...unreadable, status: 'skipped', failureMessage: str(summary.reason) }
+  }
+
+  // Fantrax returns a flat summary rather than the Sleeper `backfill` wrapper.
+  // A completed warehouse write reports both counts; an error reports `error`.
+  if (summary.attempted === true && typeof summary.skipped === 'boolean') {
+    const failureMessage = str(summary.error)
+    if (failureMessage) {
+      return { ...unreadable, status: 'failed', failureMessage }
+    }
+    const seasonsDiscovered = num(summary.seasonsDiscovered)
+    const seasonsImported = num(summary.seasonsImported)
+    if (seasonsDiscovered !== null && seasonsImported !== null) {
+      return { status: 'complete', seasonsDiscovered, seasonsImported,
+        seasonsSkipped: 0, failureMessage: null }
+    }
   }
 
   const backfill = rec(summary.backfill)

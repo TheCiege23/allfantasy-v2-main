@@ -30,6 +30,7 @@ import {
   FantraxImportConnectionError,
   FantraxImportLeagueNotFoundError,
   FantraxImportUnavailableError,
+  FantraxImportUnsupportedSportError,
 } from './fantrax/FantraxLeagueFetchService'
 import {
   fetchFleaflickerLeagueForImport,
@@ -289,6 +290,9 @@ export async function runImportedLeagueNormalizationPipeline(
     /* A throttle or 5xx is retryable; it must not be reported as a missing league. */
     if (e instanceof FantraxImportUnavailableError) {
       return { success: false, error: e.message, code: 'PROVIDER_UNAVAILABLE' }
+    }
+    if (e instanceof FantraxImportUnsupportedSportError) {
+      return { success: false, error: e.message, code: 'NORMALIZATION_FAILED' }
     }
     if (e instanceof FantraxImportLeagueNotFoundError) {
       return { success: false, error: e.message, code: 'LEAGUE_NOT_FOUND' }

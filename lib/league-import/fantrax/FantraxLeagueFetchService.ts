@@ -80,6 +80,7 @@ type LegacyTransaction = {
 
 export class FantraxImportConnectionError extends Error {}
 export class FantraxImportLeagueNotFoundError extends Error {}
+export class FantraxImportUnsupportedSportError extends Error {}
 
 /**
  * Fantrax was reachable in principle but did not answer with data — a throttle, a 5xx, a
@@ -519,6 +520,9 @@ export async function fetchFantraxLeagueForImport(
        */
       if (outcome.kind === 'unavailable' || outcome.kind === 'network') {
         throw new FantraxImportUnavailableError(outcome.error)
+      }
+      if (outcome.kind === 'unsupported') {
+        throw new FantraxImportUnsupportedSportError(outcome.error)
       }
       throw new FantraxImportLeagueNotFoundError(outcome.error)
     }

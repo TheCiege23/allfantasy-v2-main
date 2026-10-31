@@ -54,6 +54,7 @@ describe('captured Fantrax NBA points league', () => {
   it('keeps all six source weights, including the negative turnover rule', () => {
     expect(fantraxScoringMode(captured)).toBe('h2h_points')
     expect(fantraxScoringRules(captured, 'nba')).toEqual({ rules: expected, gaps: [] })
+    expect(fantraxScoringRules(captured, 'ncaab')).toEqual({ rules: expected, gaps: [] })
     expect(expected.every((rule) => NBA_CONFIG.scoringCategories.some((category) => category.key === rule.stat_key)))
       .toBe(true)
     const source = {

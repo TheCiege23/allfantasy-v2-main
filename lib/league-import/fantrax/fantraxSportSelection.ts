@@ -1,7 +1,7 @@
 import { resolveRosters, type FantraxPlayerRef, type FantraxTeamRoster, type ResolvedRoster } from './fantraxApi'
 
-type SourceSport = 'CFB' | 'NFL' | 'NBA'
-type Candidate = { sport: 'cfb' | 'nfl' | 'nba'; isDevy: boolean; resolved: ResolvedRoster[]; named: number }
+type SourceSport = 'CFB' | 'NFL' | 'NBA' | 'NCAAB'
+type Candidate = { sport: 'cfb' | 'nfl' | 'nba' | 'ncaab'; isDevy: boolean; resolved: ResolvedRoster[]; named: number }
 
 /** Select the only provider directory that names the most roster players. */
 export function selectFantraxSportMap(
@@ -12,6 +12,7 @@ export function selectFantraxSportMap(
     { source: 'CFB', sport: 'cfb', isDevy: true },
     { source: 'NFL', sport: 'nfl', isDevy: false },
     { source: 'NBA', sport: 'nba', isDevy: false },
+    { source: 'NCAAB', sport: 'ncaab', isDevy: false },
   ] as const
   const ranked = definitions.flatMap(({ source, sport, isDevy }) => {
     const map = maps[source]

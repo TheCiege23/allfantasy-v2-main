@@ -99,9 +99,9 @@ function readConfigs(info: FantraxLeagueInfo): Config[] {
  * tight ends 2.5 a catch. The default is subtracted to get the 0.5 that is
  * actually the premium.
  */
-export function fantraxScoringRules(info: FantraxLeagueInfo, sport: 'cfb' | 'nfl' | 'nba' = 'nfl'): FantraxScoringResult {
+export function fantraxScoringRules(info: FantraxLeagueInfo, sport: 'cfb' | 'nfl' | 'nba' | 'ncaab' = 'nfl'): FantraxScoringResult {
   const configs = readConfigs(info)
-  const categoryKeys = sport === 'nba' ? NBA_CATEGORY_KEYS : FOOTBALL_CATEGORY_KEYS
+  const categoryKeys = sport === 'nba' || sport === 'ncaab' ? NBA_CATEGORY_KEYS : FOOTBALL_CATEGORY_KEYS
   const rules: FantraxScoringRule[] = []
   const gaps: string[] = []
 

@@ -16,6 +16,13 @@ describe('Fantrax player-directory sport selection', () => {
     })).toMatchObject({ sport: 'nba', isDevy: false, named: 2 })
   })
 
+  it('selects NCAAB from its separate player ID space', () => {
+    expect(selectFantraxSportMap(rosters, {
+      NBA: { 'nba-a': ref('nba-a') },
+      NCAAB: { 'nba-a': ref('nba-a'), 'nba-b': ref('nba-b') },
+    })).toMatchObject({ sport: 'ncaab', isDevy: false, named: 2 })
+  })
+
   it('refuses a tie or a roster with no named players', () => {
     expect(selectFantraxSportMap(rosters, {
       NFL: { 'nba-a': ref('nba-a') }, NBA: { 'nba-a': ref('nba-a') },

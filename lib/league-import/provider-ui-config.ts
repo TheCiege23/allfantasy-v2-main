@@ -59,11 +59,10 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
    * because the import UI can populate a pickable list from an identifier,
    * which is exactly what that flag gates.
    *
-   * NFL as well as NCAAF: the sport is measured by resolving the rosters
-   * against both player maps and keeping whichever names more, because
-   * getLeagueInfo does not report a sport and the two id spaces do not overlap.
+   * Sport is measured by matching roster IDs to provider player directories;
+   * getLeagueInfo does not report it. Only sports with verified mappings appear.
    */
-  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF'] },
+  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF', 'NBA', 'NCAAB'] },
   /*
    * mfl: FLIPPED 2026-08-27 with the missing piece built. The adapter, the fetch
    * service, the pipeline entry and the storage column all existed; what did not

@@ -96,7 +96,7 @@ export type FantraxImportOutcome =
        * including a 503. Absent for the failures this module raises itself (an unknown
        * team name, a sport we do not handle), which are genuinely about the league.
        */
-      kind?: FantraxFailure['kind']
+      kind?: FantraxFailure['kind'] | 'unsupported'
     }
 
 /**
@@ -143,19 +143,22 @@ export async function importFantraxLeague(args: {
    * drafted, or whose draft could not be read, is still worth importing. The
    * coverage note reports which of those happened.
    */
-  const [rosters, standings, cfb, nfl, nba, schedule, draft] = await Promise.all([
+  const [rosters, standings, cfb, nfl, nba, ncaab, schedule, draft] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     getFantraxPlayerIds('CFB'),
     getFantraxPlayerIds('NFL'),
     getFantraxPlayerIds('NBA'),
+    getFantraxPlayerIds('NCAAB'),
     fetchFantraxScheduleWithScores(args.leagueId, info.data),
     getFantraxDraftResults(args.leagueId).catch(() => null),
   ])
   if (!rosters.ok) return { ok: false, error: rosters.failure.message, kind: rosters.failure.kind }
   /* Only one map has to load. A league is one sport, so failing the whole
      import because the OTHER sport's map was unavailable would be wrong. */
-  if (!cfb.ok && !nfl.ok && !nba.ok) return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
+  if (!cfb.ok && !nfl.ok && !nba.ok && !ncaab.ok) {
+    return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
+  }
 
   /*
    * ⚠ THE SPORT IS NOT IN THE LEAGUE INFO, SO IT IS MEASURED RATHER THAN
@@ -169,8 +172,12 @@ export async function importFantraxLeague(args: {
     ...(cfb.ok ? { CFB: cfb.data } : {}),
     ...(nfl.ok ? { NFL: nfl.data } : {}),
     ...(nba.ok ? { NBA: nba.data } : {}),
+    ...(ncaab.ok ? { NCAAB: ncaab.data } : {}),
   })
-  if (!best) return { ok: false, error: 'Fantrax roster IDs did not uniquely identify a supported sport.' }
+  if (!best) return {
+    ok: false, kind: 'unsupported',
+    error: 'This Fantrax league exists, but its player sport is not yet supported for import.',
+  }
   const resolved = best.resolved
   const total = resolved.reduce((a, r) => a + r.total, 0)
   const named = best.named
@@ -184,7 +191,8 @@ export async function importFantraxLeague(args: {
   if (total > 0 && named / total < 0.5) {
     return {
       ok: false,
-      error: `only ${named} of ${total} players could be named against the college football, NFL, or NBA player map, which is the signature of a sport we do not handle rather than a real league. Nothing was imported.`,
+      kind: 'unsupported',
+      error: `only ${named} of ${total} players could be named against the college football, NFL, NBA, or NCAAB player map, which is the signature of a sport we do not handle rather than a real league. Nothing was imported.`,
     }
   }
 
