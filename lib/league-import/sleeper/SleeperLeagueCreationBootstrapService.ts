@@ -286,8 +286,16 @@ export async function bootstrapLeagueFromNormalizedImport(
         // Idempotent reimport: only (re)set the claim when the manager resolves;
         // never overwrite an existing claim with null.
         ...(resolvedClaim ? { claimedByUserId: resolvedClaim } : {}),
-        isCommissioner: Boolean(r.is_commissioner),
-        isCoCommissioner: Boolean(r.is_co_commissioner),
+        /*
+         * 🛑 ONLY A PROVIDER THAT REPORTED A FLAG MAY CHANGE ONE. Sleeper, ESPN and Yahoo set
+         * `is_commissioner` to a real boolean. Fantrax, MFL and Fleaflicker have no commissioner
+         * field at all and leave it undefined — and `Boolean(undefined)` used to write `false` on
+         * every refresh, wiping the flag an accepted import attestation had set
+         * (`applyAttestedCommissioner`). Measured 2026-10-31: a Fantrax commissioner's attestation
+         * was on file and no team in the league was commissioner, so no C and no hub.
+         */
+        ...(typeof r.is_commissioner === 'boolean' ? { isCommissioner: r.is_commissioner } : {}),
+        ...(typeof r.is_co_commissioner === 'boolean' ? { isCoCommissioner: r.is_co_commissioner } : {}),
         /*
          * 🛑 RESURRECTION. THIS IS THE HALF THAT IS EASY TO OMIT AND SILENT WHEN OMITTED.
          *
