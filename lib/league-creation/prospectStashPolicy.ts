@@ -22,10 +22,10 @@
  * redraft slot that holds players already in our MLB pool.
  *
  * ⚠ 2026-10-31: NHL ROOKIE DRAFTS NOW OFFER FANTRAX PROSPECTS (`lib/player-identity/nhlFantraxProspects.ts`),
- * and this gate was deliberately LEFT CLOSED. That layer exists only on a rookie-draft board: it is not
- * in the free-agent pool, nothing reads it for taxi eligibility, and it carries no age or draft year to
- * tell a 19-year-old from an unsigned veteran. Offering a taxi squad would promise a stash nobody can
- * fill outside the draft. Open it here, for NHL only, when those exist.
+ * and this gate was deliberately LEFT CLOSED. Since the same day the layer is also in NHL dynasty free
+ * agency (`lib/waiver-wire/nhlProspectFreeAgency.ts`), but nothing reads it for taxi eligibility, and it
+ * carries no age or draft year to tell a 19-year-old from an unsigned veteran, so a taxi rule could not
+ * say who belongs on one. Open it here, for NHL only, when real age or draft data exists.
  */
 
 /** Sports with no committed prospect / minor-league player pool. */
