@@ -7,6 +7,7 @@ import type { RedraftSportTheme } from '@/lib/league-media/redraftIdentity'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
 import { navLabel } from '@/lib/core-app/navLabels'
+import { themeNavItems, themeSectionHeading, type LeagueTheme } from '@/lib/core-app/survivorTheme'
 import { CoreLanguageChip } from '@/components/core-app/CoreLanguageChip'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
@@ -89,6 +90,7 @@ import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
 import '@/components/league/native/redraft-identity.css'
 import '@/components/core-app/af-core-redraft.css'
+import '@/components/core-app/af-survivor-theme.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
@@ -413,6 +415,11 @@ export type AfCoreShellProps = {
   } | null
   /** Keeps league-scoped nav links pointed at the league in context. */
   selectedLeagueId?: string | null
+  /**
+   * The selected league's look. 'survivor' renames its tabs after the show, hides Defense Hub and
+   * dresses the shell as the island (lib/core-app/survivorTheme.ts, af-survivor-theme.css).
+   */
+  leagueTheme?: LeagueTheme | null
   /** Your record and place per league — the "6-3 · 2nd" line on the list (lib/core-app/railRecords.ts). */
   railRecords?: Record<string, RailRecord> | null
   /** Unread league-chat messages per league — the chat bubble's own count (getChatBadge `byLeague`). */
@@ -567,7 +574,12 @@ const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
 ]
 
 
+/** The nav items as the selected league shows them: a Survivor league renames and hides some. */
 function navItems(props: AfCoreShellProps): NavItem[] {
+  return themeNavItems(baseNavItems(props), props.leagueTheme)
+}
+
+function baseNavItems(props: AfCoreShellProps): NavItem[] {
   /*
    * ⚠ A CROSS-LEAGUE SCREEN STILL CARRIES THE LEAGUE. Home, Portfolio, Rankings
    * and Tools each read across every league, and each used to link without
@@ -969,7 +981,7 @@ function navSections(props: AfCoreShellProps): NavSection[] {
       placed.add(k)
       return [item]
     })
-    return { id: s.id, heading: s.heading, items: picked }
+    return { id: s.id, heading: themeSectionHeading(s.id, s.heading, props.leagueTheme), items: picked }
   }).filter((s) => s.items.length > 0)
 
   const leftover = items.filter((i) => !placed.has(i.key))
@@ -1861,6 +1873,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       className="af-core af-shell"
       data-format={props.redraftSport ? 'redraft' : undefined}
       data-sport={props.redraftSport ?? undefined}
+      data-league-theme={props.leagueTheme ?? undefined}
       data-league-first={props.leagueFirst ? 'true' : undefined}
       data-nav-pending={navPending ? 'true' : undefined}
       onClickCapture={markNavigation}

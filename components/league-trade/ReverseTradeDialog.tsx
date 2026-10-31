@@ -18,12 +18,8 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
-import {
-  describeBlocker,
-  type ReversalOutcome,
-  type ReversalPreflight,
-  type ReversalReadiness,
-} from '@/lib/trade-reversal/client'
+import { type ReversalOutcome, type ReversalPreflight, type ReversalReadiness } from '@/lib/trade-reversal/client'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 type Phase =
   | { kind: 'checking' }
@@ -46,6 +42,16 @@ export function ReverseTradeDialog(props: {
   onReversed: () => void
 }) {
   const { preflight, reverse, onClose, onReversed } = props
+  const { t, tInterpolate } = useOptionalLanguage()
+  /*
+   * Blocker copy lives in the dictionary as `tradeCenter.reverseDialog.blocker.<CODE>`; its English is
+   * `describeBlocker`'s, word for word (pinned by a test). An unknown code still renders, with the code.
+   */
+  const blockerText = (code: string) => {
+    const key = `tradeCenter.reverseDialog.blocker.${code}`
+    const text = t(key)
+    return text !== key ? text : tInterpolate('tradeCenter.reverseDialog.blocker.unknown', { code })
+  }
   const [phase, setPhase] = useState<Phase>({ kind: 'checking' })
   const [reason, setReason] = useState('')
   const titleId = useId()
@@ -117,13 +123,13 @@ export function ReverseTradeDialog(props: {
         onClick={(e) => e.stopPropagation()}
       >
         <p id={titleId} className="text-[14px] font-semibold text-white">
-          Reverse trade
+          {t('tradeCenter.reverseDialog.title')}
         </p>
         <p className="mt-0.5 text-white/55">{props.title}</p>
 
         {phase.kind === 'checking' ? (
           <p className="mt-3 text-white/55" data-testid="reverse-trade-checking">
-            Checking whether this trade can still be reversed…
+            {t('tradeCenter.reverseDialog.checking')}
           </p>
         ) : null}
 
@@ -136,11 +142,11 @@ export function ReverseTradeDialog(props: {
         {phase.kind === 'blocked' ? (
           <div className="mt-3 space-y-2" role="alert">
             {phase.message ? <p className="text-rose-300">{phase.message}</p> : null}
-            <p className="font-semibold text-white/80">This trade can’t be reversed:</p>
+            <p className="font-semibold text-white/80">{t('tradeCenter.reverseDialog.blockedTitle')}</p>
             <ul className="list-disc space-y-1 pl-4 text-white/65">
               {phase.readiness.blockers.map((b) => (
                 <li key={b} data-testid="reverse-trade-blocker">
-                  {describeBlocker(b)}
+                  {blockerText(b)}
                 </li>
               ))}
             </ul>
@@ -149,13 +155,10 @@ export function ReverseTradeDialog(props: {
 
         {phase.kind === 'ready' || phase.kind === 'reversing' ? (
           <div className="mt-3 space-y-2">
-            <p className="text-white/70">
-              Both rosters go back to how they were before this trade, including FAAB. Only use this to undo
-              a trade that should not have gone through.
-            </p>
+            <p className="text-white/70">{t('tradeCenter.reverseDialog.body')}</p>
             {props.note ? <p className="text-amber-200/90">{props.note}</p> : null}
             <label className="block">
-              <span className="text-white/70">Reason (recorded with the reversal)</span>
+              <span className="text-white/70">{t('tradeCenter.reverseDialog.reasonLabel')}</span>
               <textarea
                 ref={reasonRef}
                 value={reason}
@@ -165,7 +168,7 @@ export function ReverseTradeDialog(props: {
                 maxLength={REASON_MAX}
                 data-testid="reverse-trade-reason"
                 className="mt-1 w-full rounded-lg border border-white/15 bg-black/30 p-2 text-[12px] text-white placeholder:text-white/30"
-                placeholder="e.g. Commissioner review found collusion"
+                placeholder={t('tradeCenter.reverseDialog.reasonPlaceholder')}
               />
             </label>
             {phase.kind === 'ready' && phase.error ? (
@@ -184,7 +187,9 @@ export function ReverseTradeDialog(props: {
             data-testid="reverse-trade-cancel"
             className="min-h-[44px] rounded-lg border border-white/15 px-4 text-[12px] font-semibold text-white/80 disabled:opacity-50"
           >
-            {phase.kind === 'blocked' || phase.kind === 'unavailable' ? 'Close' : 'Cancel'}
+            {phase.kind === 'blocked' || phase.kind === 'unavailable'
+              ? t('tradeCenter.reverseDialog.close')
+              : t('tradeCenter.reverseDialog.cancel')}
           </button>
           {phase.kind === 'ready' || phase.kind === 'reversing' ? (
             <button
@@ -194,7 +199,7 @@ export function ReverseTradeDialog(props: {
               data-testid="reverse-trade-confirm"
               className="min-h-[44px] rounded-lg border border-rose-400/50 bg-rose-500/10 px-4 text-[12px] font-semibold text-rose-200 disabled:opacity-50"
             >
-              {busy ? 'Reversing…' : 'Reverse trade'}
+              {busy ? t('tradeCenter.reverseDialog.reversing') : t('tradeCenter.reverseDialog.title')}
             </button>
           ) : null}
         </div>

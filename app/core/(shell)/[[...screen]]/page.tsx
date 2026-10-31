@@ -37,6 +37,7 @@ import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNav
 import ConnectedDecisionScopeBar from '@/components/core-app/ConnectedDecisionScopeBar'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
+import { leagueThemeForTypeKey } from '@/lib/core-app/survivorTheme'
 import { navLabel } from '@/lib/core-app/navLabels'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
@@ -1669,6 +1670,7 @@ export default async function AfCorePage({
       syncEligibleCount={syncEligibleCount}
       leagueHasScoredWeek={leagueHasScoredWeek}
       selectedLeagueId={selectedLeagueId}
+      leagueTheme={leagueThemeForTypeKey(tradeLeagueTypeKey)}
       lineupHandoff={lineupHandoff}
       scope={shellScope}
       hasIdpDefense={hasIdpDefense}
