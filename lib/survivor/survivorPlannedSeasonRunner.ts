@@ -212,6 +212,9 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
     await sendChimmyWeeklyReport(leagueId, week).catch(error => {
       console.warn('[survivor] Chimmy weekly report failed', error instanceof Error ? error.message : error)
     })
+    // Chimmy's castaways that made it through the week say so in their huddle (never throws).
+    const { postChimmyWeekLines } = await import('./chimmyCastawayChat')
+    await postChimmyWeekLines(leagueId, week)
   }
   await dissolveSurpriseTribes(leagueId, week)
   await advanceWeek(leagueId)
