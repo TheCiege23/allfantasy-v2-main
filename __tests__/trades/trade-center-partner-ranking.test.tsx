@@ -75,10 +75,10 @@ describe('Trade Center partner ranking', () => {
     expect(document.querySelector('.af-tc-fits')).toBeNull()
   })
 
-  it('renders the suggestions inside the "You get" step block, with the gaps', () => {
+  it('renders the suggestions inside the folded "Trade ideas" section, with the gaps', () => {
     render(<TradeCenter league={LEAGUE} />)
     const fits = document.querySelector('.af-tc-fits')!
-    expect(fits.closest('[data-mstep]')?.getAttribute('data-mstep')).toBe('get')
+    expect(fits.closest('details.af-tc-ideas')).not.toBeNull()
     expect(fits.textContent).toContain('Charlie')
     expect(fits.textContent).toContain('Trade history is not on file')
   })
@@ -90,16 +90,15 @@ describe('Trade Center partner ranking', () => {
     expect(on?.textContent).toBe('Charlie')
   })
 
-  it('🛑 "Start with this deal" loads BOTH sides from the right rosters, sets the partner, and opens Review', () => {
+  it('🛑 "Start with this deal" loads BOTH sides from the right rosters and sets the partner', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
     fireEvent.click(screen.getByText('Start with this deal'))
 
     // Deal rows only (`div.af-tc-row[data-kind]`): the roster list below uses the same name class.
     const names = (side: string) =>
-      [...container.querySelectorAll(`.af-tc-team[data-mstep='${side}'] div.af-tc-row[data-kind] .af-tc-row-name`)].map((n) => n.textContent)
+      [...container.querySelectorAll(`.af-tc-team[data-side='${side}'] div.af-tc-row[data-kind] .af-tc-row-name`)].map((n) => n.textContent)
     expect(names('give')).toEqual(['Receiver'])
     expect(names('get')).toEqual(['Runner'])
-    expect(container.querySelector('.af-tc')?.getAttribute('data-mobile-step')).toBe('review')
     const on = [...document.querySelectorAll('.af-tc-partner-chip')].find((c) => c.getAttribute('data-on') === 'true')
     expect(on?.textContent).toBe('Charlie')
     expect(document.body.textContent).toContain('Started from a suggested deal with Charlie')

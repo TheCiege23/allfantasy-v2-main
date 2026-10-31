@@ -103,7 +103,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
       fireEvent.click(container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!)
     })
 
-    const review = container.querySelector('.af-tc-review')!.textContent ?? ''
+    const review = container.querySelector('.af-tc-builder')!.textContent ?? ''
     expect(review).toContain('5,928')
     expect(review).toContain('mkt 4,500')
     // The totals add up to the grade's totals, not to the market prices.
