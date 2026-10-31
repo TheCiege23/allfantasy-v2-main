@@ -622,7 +622,7 @@ function AssetPanel({
   const pickCount = side.picks.length
 
   return (
-    <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-5 sm:p-6" data-testid={`trade-side-${label.toLowerCase().includes("sender") ? "sender" : "receiver"}`}>
+    <div className="min-w-0 rounded-3xl border border-white/8 bg-[#0c0c1e] p-4 sm:p-6" data-testid={`trade-side-${label.toLowerCase().includes("sender") ? "sender" : "receiver"}`}>
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-bold uppercase tracking-[0.28em]" style={{ color: accent }}>
@@ -635,7 +635,7 @@ function AssetPanel({
         <button
           type="button"
           onClick={onClear}
-          className="touch-manipulation rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-white/45 hover:border-white/20 hover:text-white/75 min-h-[40px] sm:min-h-0 sm:py-1.5"
+          className="min-h-[44px] touch-manipulation rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-white/60 hover:border-white/20 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300"
         >
           Clear
         </button>
@@ -643,6 +643,7 @@ function AssetPanel({
 
       <div className="space-y-4">
         <input
+          aria-label={`${label} team name`}
           value={side.teamName}
           onChange={(event) => onChange({ ...side, teamName: event.target.value })}
           placeholder="Manager / Team name"
@@ -650,18 +651,19 @@ function AssetPanel({
         />
 
         <input
+          aria-label={`${label} record or rank`}
           value={side.record}
           onChange={(event) => onChange({ ...side, record: event.target.value })}
           placeholder="Record / rank (optional)"
           className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:text-sm"
         />
 
-        <label className="flex items-center gap-2 text-sm text-white/70">
+        <label className="flex min-h-[44px] touch-manipulation items-center gap-3 text-sm text-white/70">
           <input
             type="checkbox"
             checked={side.isProMember}
             onChange={(event) => onChange({ ...side, isProMember: event.target.checked })}
-            className="h-4 w-4 rounded border-white/20 bg-transparent"
+            className="h-5 w-5 rounded border-white/20 bg-transparent"
           />
           AF Pro member
         </label>
@@ -673,7 +675,7 @@ function AssetPanel({
               type="button"
               onClick={() => onChange({ ...side, players: [...side.players, emptyPlayer()] })}
               data-testid={`trade-add-player-${label.toLowerCase().includes("sender") ? "sender" : "receiver"}`}
-              className="touch-manipulation text-xs font-semibold min-h-[40px] px-1 sm:min-h-0"
+              className="min-h-[44px] touch-manipulation rounded-lg border border-white/10 px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300"
               style={{ color: accent }}
             >
               + Add Player
@@ -683,9 +685,10 @@ function AssetPanel({
           {side.players.map((player, index) => (
             <div
               key={player.id}
-              className="flex flex-col gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2 sm:grid sm:grid-cols-12 sm:items-center sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0"
+              className="grid grid-cols-2 gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2 sm:grid-cols-12 sm:items-center sm:border-0 sm:bg-transparent sm:p-0"
             >
               <input
+                aria-label={`${label} player ${index + 1} name`}
                 value={player.name}
                 onChange={(event) => {
                   const players = [...side.players]
@@ -693,16 +696,17 @@ function AssetPanel({
                   onChange({ ...side, players })
                 }}
                 placeholder="Player name"
-                className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:col-span-5 sm:text-sm"
+                className="col-span-2 min-h-[44px] w-full min-w-0 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:col-span-5 sm:text-sm"
               />
               <select
+                aria-label={`${label} player ${index + 1} position`}
                 value={player.position}
                 onChange={(event) => {
                   const players = [...side.players]
                   players[index] = { ...players[index], position: event.target.value }
                   onChange({ ...side, players })
                 }}
-                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-2 sm:min-h-0 sm:text-sm"
+                className="min-h-[44px] w-full min-w-0 rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-2 sm:text-sm"
               >
                 {POSITION_OPTIONS.map((position) => (
                   <option key={position || "blank"} value={position}>
@@ -711,6 +715,7 @@ function AssetPanel({
                 ))}
               </select>
               <input
+                aria-label={`${label} player ${index + 1} team`}
                 value={player.team}
                 onChange={(event) => {
                   const players = [...side.players]
@@ -718,10 +723,11 @@ function AssetPanel({
                   onChange({ ...side, players })
                 }}
                 placeholder="Team"
-                className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:col-span-2 sm:text-sm"
+                className="min-h-[44px] w-full min-w-0 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:col-span-2 sm:text-sm"
               />
-              <div className="flex items-center gap-2 sm:contents">
+              <div className="col-span-2 flex min-w-0 items-center gap-2 sm:contents">
                 <input
+                  aria-label={`${label} player ${index + 1} age`}
                   type="number"
                   min={0}
                   value={player.age}
@@ -731,13 +737,13 @@ function AssetPanel({
                     onChange({ ...side, players })
                   }}
                   placeholder="Age"
-                  className="min-h-[44px] w-full min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:col-span-2 sm:min-h-0 sm:text-sm"
+                  className="min-h-[44px] w-full min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:col-span-2 sm:text-sm"
                 />
                 <button
                   type="button"
                   onClick={() => onChange({ ...side, players: side.players.filter((_, rowIndex) => rowIndex !== index) })}
                   className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-xl text-lg text-red-300/70 hover:bg-red-500/10 hover:text-red-300 sm:col-span-1"
-                  aria-label="Remove player"
+                  aria-label={`Remove ${label} player ${index + 1}`}
                 >
                   ×
                 </button>
@@ -753,7 +759,7 @@ function AssetPanel({
               type="button"
               onClick={() => onChange({ ...side, picks: [...side.picks, emptyPick()] })}
               data-testid={`trade-add-pick-${label.toLowerCase().includes("sender") ? "sender" : "receiver"}`}
-              className="touch-manipulation text-xs font-semibold min-h-[40px] px-1 sm:min-h-0"
+              className="min-h-[44px] touch-manipulation rounded-lg border border-white/10 px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300"
               style={{ color: accent }}
             >
               + Add Pick
@@ -765,16 +771,17 @@ function AssetPanel({
           {side.picks.map((pick, index) => (
             <div
               key={pick.id}
-              className="flex flex-col gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2 sm:grid sm:grid-cols-12 sm:items-center sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0"
+              className="grid grid-cols-2 gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2 sm:grid-cols-12 sm:items-center sm:border-0 sm:bg-transparent sm:p-0"
             >
               <select
+                aria-label={`${label} pick ${index + 1} year`}
                 value={pick.year}
                 onChange={(event) => {
                   const picks = [...side.picks]
                   picks[index] = { ...picks[index], year: event.target.value }
                   onChange({ ...side, picks })
                 }}
-                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-4 sm:min-h-0 sm:text-sm"
+                className="min-h-[44px] w-full min-w-0 rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-4 sm:text-sm"
               >
                 {PICK_YEAR_OPTIONS.map((year) => (
                   <option key={year} value={year}>
@@ -783,13 +790,14 @@ function AssetPanel({
                 ))}
               </select>
               <select
+                aria-label={`${label} pick ${index + 1} round`}
                 value={pick.round}
                 onChange={(event) => {
                   const picks = [...side.picks]
                   picks[index] = { ...picks[index], round: event.target.value }
                   onChange({ ...side, picks })
                 }}
-                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-3 sm:min-h-0 sm:text-sm"
+                className="min-h-[44px] w-full min-w-0 rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-3 sm:text-sm"
               >
                 {PICK_ROUND_OPTIONS.map((round) => (
                   <option key={round} value={round}>
@@ -798,13 +806,14 @@ function AssetPanel({
                 ))}
               </select>
               <select
+                aria-label={`${label} pick ${index + 1} projected range`}
                 value={pick.projectedRange}
                 onChange={(event) => {
                   const picks = [...side.picks]
                   picks[index] = { ...picks[index], projectedRange: event.target.value as TradePick["projectedRange"] }
                   onChange({ ...side, picks })
                 }}
-                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-4 sm:min-h-0 sm:text-sm"
+                className="min-h-[44px] w-full min-w-0 rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-4 sm:text-sm"
               >
                 <option value="early">Early</option>
                 <option value="mid">Mid</option>
@@ -814,8 +823,8 @@ function AssetPanel({
               <button
                 type="button"
                 onClick={() => onChange({ ...side, picks: side.picks.filter((_, rowIndex) => rowIndex !== index) })}
-                className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center self-end rounded-xl text-lg text-red-300/70 hover:bg-red-500/10 hover:text-red-300 sm:col-span-1 sm:self-center"
-                aria-label="Remove pick"
+                className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center justify-self-end rounded-xl text-lg text-red-300/70 hover:bg-red-500/10 hover:text-red-300 sm:col-span-1 sm:self-center"
+                aria-label={`Remove ${label} pick ${index + 1}`}
               >
                 ×
               </button>
@@ -823,8 +832,8 @@ function AssetPanel({
           ))}
         </div>
 
-        <div>
-          <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.24em] text-white/45">FAAB Included</label>
+        <label className="block">
+          <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.24em] text-white/45">FAAB Included</span>
           <input
             type="number"
             min={0}
@@ -832,7 +841,7 @@ function AssetPanel({
             onChange={(event) => onChange({ ...side, faab: Number(event.target.value) || 0 })}
             className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:text-sm"
           />
-        </div>
+        </label>
       </div>
     </div>
   )
@@ -1096,14 +1105,14 @@ function TradeHubInner() {
           <span>Back to Home</span>
         </Link>
 
-        <div className="mt-6 rounded-3xl border border-white/8 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.18),transparent_45%),#0a0d1a] p-4 sm:p-8">
+        <div className="mt-3 rounded-2xl border border-white/8 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.18),transparent_45%),#0a0d1a] p-4 sm:mt-6 sm:rounded-3xl sm:p-8">
           <div className="max-w-3xl">
-            <div className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300/80">Premium Analysis</div>
-            <h2 className="mt-3 text-2xl font-black leading-tight sm:text-4xl">
-              Run the same backend trade engine through a modern visual workspace.
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-300/80 sm:text-xs sm:tracking-[0.3em]">Trade analysis</div>
+            <h2 className="mt-2 text-xl font-black leading-tight sm:mt-3 sm:text-4xl">
+              Build a trade. See how each side compares.
             </h2>
-            <p className="mt-4 text-sm leading-6 text-white/60 sm:text-base">
-              Planning, pricing, engine reasoning, AI synthesis, and output checks flow into one premium trade review.
+            <p className="mt-2 text-sm leading-5 text-white/60 sm:mt-4 sm:text-base sm:leading-6">
+              Add players, picks, and league settings to review the deal.
             </p>
           </div>
         </div>
@@ -1116,7 +1125,7 @@ function TradeHubInner() {
           testIdPrefix="trade-monetization"
         />
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="mt-4 grid min-w-0 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-2">
           <AssetPanel label="Sender · Giving" accent="#06b6d4" side={sender} onChange={setSender} onClear={() => setSender(emptySide("Sender Team"))} />
           <AssetPanel label="Receiver · Giving" accent="#a78bfa" side={receiver} onChange={setReceiver} onClear={() => setReceiver(emptySide("Receiver Team"))} />
         </div>
@@ -1187,7 +1196,7 @@ function TradeHubInner() {
           </div>
         ) : null}
 
-        <div className="mt-6 rounded-3xl border border-white/8 bg-[#0c0c1e] p-5 sm:p-6">
+        <div className="mt-6 min-w-0 rounded-3xl border border-white/8 bg-[#0c0c1e] p-4 sm:p-6">
           <div className="mb-4 text-xs font-bold uppercase tracking-[0.28em] text-white/45">League Settings</div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <label className="block">
@@ -1356,19 +1365,19 @@ function TradeHubInner() {
 
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Score Cards</div>
-                  <div className="mt-4 grid grid-cols-3 gap-3">
-                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+                    <div className="col-span-2 min-w-0 rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center sm:col-span-1">
                       <div className="text-2xl font-black text-white">{result.fairnessScore}</div>
                       <div className="mt-1 text-[10px] text-white/35">{result.rawPayload.model === 'nba_points_production_v1' ? 'Production Balance' : 'Fairness'}</div>
                     </div>
-                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                    <div className="min-w-0 rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                       <div className={`text-2xl font-black ${result.valueDelta >= 0 ? "text-emerald-300" : "text-red-300"}`}>
                         {result.valueDelta > 0 ? "+" : ""}
                         {result.rawPayload.model?.startsWith('nba_') ? result.valueDelta.toFixed(2) : Math.round(result.valueDelta)}
                       </div>
                       <div className="mt-1 text-[10px] text-white/35">{result.rawPayload.model === 'nba_verified_lineup_v1' ? 'Starter PPG Delta' : result.rawPayload.model === 'nba_points_production_v1' ? 'Fantasy PPG Delta' : 'Value Delta'}</div>
                     </div>
-                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                    <div className="min-w-0 rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                       <div className="text-2xl font-black text-white">{result.confidencePct}%</div>
                       <div className="mt-1 text-[10px] text-white/35">{result.rawPayload.model?.startsWith('nba_') ? 'Data Coverage' : 'Confidence'}</div>
                     </div>
