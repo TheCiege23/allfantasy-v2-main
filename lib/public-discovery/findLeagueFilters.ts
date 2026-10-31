@@ -319,7 +319,21 @@ export function parseLeagueSearch(raw: string | null | undefined): ParsedLeagueS
 
   // Filler that carries no meaning once the facets are gone.
   rest = rest.replace(/\b(league|leagues|draft|drafts|with|a|an|the|in|for|and|time|zone|looking|need|want)\b/g, " ")
-  out.text = rest.replace(/\s+/g, " ").trim()
+  /*
+   * And the words of ASKING for a league. Leftover text must match a league's NAME, so a sentence
+   * like "find me an open NBA league I can join" — which Chimmy's find_open_leagues passes through
+   * whole, and people type into the box — found nothing: "open … to join" is in no league's name.
+   * Every listed league has an open seat anyway, so "open" narrows nothing. Measured 2026-10-31.
+   */
+  rest = rest.replace(
+    /\b(find|finding|show|get|search|searching|trying|me|my|i|m|im|can|could|would|like|to|join|joining|open|available|any|some|spot|spots|seat|seats|slot|slots|there|is|are|of|on|please|play|playing|that|which|where|has|have|got)\b/g,
+    " "
+  )
+  // A piece with no letter or digit left — the apostrophe of "I'm" — would match no name.
+  out.text = rest
+    .split(/\s+/)
+    .filter((piece) => /[\p{L}\p{N}]/u.test(piece))
+    .join(" ")
 
   for (const key of Object.keys(out) as Array<keyof ParsedLeagueSearch>) {
     if (out[key] === undefined) delete out[key]

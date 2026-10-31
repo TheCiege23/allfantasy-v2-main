@@ -8,6 +8,7 @@ import { getLeagueRole } from "@/lib/league/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
 import { buildIntegrityCoverage } from "@/lib/integrity/coverage"
+import { resolveFlagManagers } from "@/lib/integrity/flagManagers"
 import { resolveWriteAuthority } from "@/lib/league/write-authority"
 import { readTradeAlertsEnabled, TRADE_ALERTS_KEY } from "@/lib/integrity/tradeAlerts"
 import { HOLD_FLAGGED_TRADES_KEY, parseHoldFlaggedTradesMode, readHoldFlaggedTradesMode } from "@/lib/integrity/holdFlaggedTrades"
@@ -64,6 +65,10 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     lastTankingScanAt: settings.lastTankingScanAt,
   })
 
+  // Resolved at read time, so flags raised before the scan recorded manager names still say who.
+  const managers = await resolveFlagManagers([...openFlags, ...recentDismissed]).catch(() => new Map())
+  const withManagers = <T extends { id: string }>(flag: T) => ({ ...flag, affectedManagers: managers.get(flag.id) ?? [] })
+
   return NextResponse.json({
     // `tradeAlertsEnabled` lives in League.settings (lib/integrity/tradeAlerts.ts), shown beside these.
     settings: {
@@ -77,8 +82,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
       // control is not offered there (lib/integrity/tankingPenaltyService.ts refuses it too).
       ...(resolveWriteAuthority(league.platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(league.settings) } : {}),
     },
-    openFlags,
-    recentDismissed,
+    openFlags: openFlags.map(withManagers),
+    recentDismissed: recentDismissed.map(withManagers),
     canReview: league.userId === userId,
     coverage,
     stats: {

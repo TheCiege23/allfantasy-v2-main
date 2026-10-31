@@ -167,19 +167,33 @@ function requireModerator(viewer: CommunityViewer): string {
 // ─── shaping ─────────────────────────────────────────────────────────────────
 
 /**
- * League owners only. `lib/commissioner/permissions.ts` also counts a claimed team marked
- * `isCommissioner`, which would cover imported leagues — but `league_teams` has no index on
- * `claimedByUserId`, and this runs on every Clubhouse render. Add that index before
- * widening this.
+ * Commissioner by the same two rules `lib/commissioner/permissions.ts` uses: the league's
+ * owner, or the claimed team the source platform marked as head commissioner. The second is
+ * what makes the badge true for an imported Sleeper/ESPN/Yahoo league, whose AllFantasy row
+ * is often owned by whoever ran the import. `league_teams_claimedByUserId_idx` keeps it an
+ * index lookup — this runs on every Clubhouse render.
  */
 async function commissionerIds(userIds: string[]): Promise<Set<string>> {
   if (userIds.length === 0) return new Set()
-  const rows = await prisma.league.findMany({
-    where: { userId: { in: userIds } },
-    select: { userId: true },
-    distinct: ['userId'],
-  })
-  return new Set(rows.map((r) => r.userId))
+  const [owners, claimed] = await Promise.all([
+    prisma.league.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }),
+    prisma.leagueTeam.findMany({
+      where: { claimedByUserId: { in: userIds }, isCommissioner: true, role: { not: 'viewer' } },
+      select: { claimedByUserId: true, isCommissioner: true, role: true },
+      distinct: ['claimedByUserId'],
+    }),
+  ])
+  const ids = new Set(owners.map((r) => r.userId))
+  // Re-checked, not only filtered: a badge that says "runs a league" must fail closed if a
+  // query or a stub ever loses the where clause.
+  for (const t of claimed) {
+    if (t.claimedByUserId && t.isCommissioner === true && t.role !== 'viewer') ids.add(t.claimedByUserId)
+  }
+  return ids
 }
 
 export function badgesFor(
@@ -1090,4 +1104,74 @@ export async function listRepliesSince(
     author: shape(r.author),
     mine: r.author.id === viewer.userId,
   }))
+}
+
+// ─── home overview ───────────────────────────────────────────────────────────
+
+export type ActiveMember = { author: CommunityAuthor; contributions: number }
+
+export type ClubhouseOverview = {
+  stats: { activeMembers: number; postsThisWeek: number; ideas: number; shippedIdeas: number }
+  weeklyPrompt: { id: string; title: string; replyCount: number; channel: string } | null
+  topIdeas: PostSummary[]
+  activeMembers: ActiveMember[]
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Everything the Clubhouse home shows around the feed: the headline numbers, this week's
+ * pinned prompt, the top League Lab ideas and the most active members over 30 days.
+ * Counts are of live content only; blocked members are left out of the member list.
+ */
+export async function getClubhouseOverview(viewer: CommunityViewer, now = Date.now()): Promise<ClubhouseOverview> {
+  const weekAgo = new Date(now - 7 * DAY_MS)
+  const monthAgo = new Date(now - 30 * DAY_MS)
+  const [blocked, postsThisWeek, ideas, shippedIdeas, postAuthors, replyAuthors, prompt, board] = await Promise.all([
+    blockedFor(viewer),
+    prisma.communityPost.count({ where: { removedAt: null, createdAt: { gte: weekAgo } } }),
+    prisma.communityPost.count({ where: { removedAt: null, kind: IDEA_KIND } }),
+    prisma.communityPost.count({ where: { removedAt: null, kind: IDEA_KIND, ideaStatus: 'shipped' } }),
+    prisma.communityPost.groupBy({
+      by: ['authorUserId'],
+      where: { removedAt: null, createdAt: { gte: monthAgo } },
+      _count: { _all: true },
+    }),
+    prisma.communityReply.groupBy({
+      by: ['authorUserId'],
+      where: { removedAt: null, createdAt: { gte: monthAgo } },
+      _count: { _all: true },
+    }),
+    prisma.communityPost.findFirst({
+      where: { systemKey: { startsWith: 'prompt:' }, isPinned: true, removedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, title: true, replyCount: true, channel: true },
+    }),
+    listIdeas({ viewer, sort: 'top', filter: 'all' }),
+  ])
+
+  const tally = new Map<string, number>()
+  for (const g of [...postAuthors, ...replyAuthors]) {
+    tally.set(g.authorUserId, (tally.get(g.authorUserId) ?? 0) + g._count._all)
+  }
+  const topIds = Array.from(tally.entries())
+    .filter(([id]) => !blocked.has(id))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([id]) => id)
+  const memberRows = topIds.length
+    ? await prisma.appUser.findMany({ where: { id: { in: topIds } }, select: AUTHOR_SELECT })
+    : []
+  const shape = await authorShaper(memberRows)
+  const byId = new Map(memberRows.map((r) => [r.id, r]))
+
+  return {
+    stats: { activeMembers: tally.size, postsThisWeek, ideas, shippedIdeas },
+    weeklyPrompt: prompt,
+    topIdeas: board.ideas.slice(0, 3),
+    activeMembers: topIds.flatMap((id) => {
+      const row = byId.get(id)
+      return row ? [{ author: shape(row), contributions: tally.get(id) ?? 0 }] : []
+    }),
+  }
 }

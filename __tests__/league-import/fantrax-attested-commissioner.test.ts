@@ -30,7 +30,12 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/league-sync-core', () => ({ getDecryptedAuth: h.getDecryptedAuth }))
 vi.mock('@/lib/league-import/fantrax/fantraxApi', () => ({ getFantraxLeagues: h.getFantraxLeagues }))
 
-import { applyAttestedCommissioner, assertImportCommissioner } from '@/lib/league-import/commissionerGate'
+import {
+  applyAttestedCommissioner,
+  assertImportCommissioner,
+  attestationFromRequestBody,
+  gateAllowsCommissionerConfirm,
+} from '@/lib/league-import/commissionerGate'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -117,5 +122,46 @@ describe('🛑 a Secret-ID-verified Fantrax member can still attest', () => {
     })
 
     expect(gate).toMatchObject({ ok: true, verification: 'member' })
+  })
+})
+
+describe('the import screen is told when it can offer "I am the commissioner"', () => {
+  it('offers it to a proven Fantrax member whose commissioner status is unknown', () => {
+    expect(gateAllowsCommissionerConfirm({ ok: true, verification: 'member' }, 'fantrax')).toBe(true)
+    expect(gateAllowsCommissionerConfirm({ ok: true, verification: 'member' }, 'fleaflicker')).toBe(true)
+  })
+
+  it('does not offer it when status is already known, the gate failed, or the provider reports it', () => {
+    expect(gateAllowsCommissionerConfirm({ ok: true, verification: 'api' }, 'fantrax')).toBe(false)
+    expect(
+      gateAllowsCommissionerConfirm({ ok: true, verification: 'member', isCommissioner: false }, 'fantrax'),
+    ).toBe(false)
+    expect(gateAllowsCommissionerConfirm({ ok: false, verification: 'member' }, 'fantrax')).toBe(false)
+    expect(gateAllowsCommissionerConfirm({ ok: true, verification: 'member' }, 'sleeper')).toBe(false)
+  })
+})
+
+describe('a route keeps the league an attestation was made for', () => {
+  it('passes confirmedProvider and confirmedSourceLeagueId through to the gate', () => {
+    expect(
+      attestationFromRequestBody({
+        accepted: true,
+        statement: 's',
+        confirmedProvider: 'fantrax',
+        confirmedSourceLeagueId: ' fantrax-league:abc|T ',
+      }),
+    ).toEqual({
+      accepted: true,
+      statement: 's',
+      confirmedProvider: 'fantrax',
+      confirmedSourceLeagueId: 'fantrax-league:abc|T',
+    })
+  })
+
+  it('reads nothing unaccepted or malformed as an attestation', () => {
+    expect(attestationFromRequestBody(undefined)).toBeUndefined()
+    expect(attestationFromRequestBody({ accepted: false })).toBeUndefined()
+    expect(attestationFromRequestBody({ accepted: 'true' })).toBeUndefined()
+    expect(attestationFromRequestBody({ accepted: true, confirmedProvider: 7 })).toEqual({ accepted: true })
   })
 })

@@ -8685,6 +8685,8 @@ model LeagueTeam {
   @@index([leagueId, pointsFor])
   @@index([divisionId])
   @@index([aiPowerScore])
+  /// The Clubhouse Commish badge looks claimed commissioner teams up by user, on every render.
+  @@index([claimedByUserId])
   @@map("league_teams")
 }
 
@@ -14968,6 +14970,10 @@ model RedraftTradeProposal {
   seasonId          String
   proposerRosterId  String
   receiverRosterId  String
+  /// Teams in the trade beyond proposer + receiver (3- and 4-team trades). Empty for a two-team trade.
+  additionalRosterIds String[]                 @default([])
+  /// Non-proposer teams that have accepted. The trade is agreed only once every one of them has.
+  acceptedRosterIds String[]                   @default([])
   status            String                     @default("pending")
   vetoMode          String                     @default("commissioner")
   vetoThreshold     Int?

@@ -10,6 +10,7 @@ const h = vi.hoisted(() => {
   const prisma = {
     appUser: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(async () => []) },
     league: { findMany: vi.fn(async () => []) },
+    leagueTeam: { findMany: vi.fn(async () => []) },
     communityPost: {
       findUnique: vi.fn(),
       findMany: vi.fn(async () => []),
@@ -17,8 +18,10 @@ const h = vi.hoisted(() => {
       updateMany: vi.fn(async () => ({ count: 0 })),
       count: vi.fn(async () => 0),
       aggregate: vi.fn(async () => ({ _sum: { upvoteCount: 0 } })),
+      groupBy: vi.fn(async () => []),
+      findFirst: vi.fn(async () => null),
     },
-    communityReply: { findMany: vi.fn(async () => []), count: vi.fn(async () => 0) },
+    communityReply: { findMany: vi.fn(async () => []), count: vi.fn(async () => 0), groupBy: vi.fn(async () => []) },
     communityIdeaVote: { findMany: vi.fn(async () => []) },
     communityReaction: { groupBy: vi.fn(async () => []), findMany: vi.fn(async () => []) },
     playerNewsRecord: { findMany: vi.fn(async () => []) },
@@ -51,7 +54,9 @@ import {
   ensureNewsDesk,
   ensureSystemPost,
   ensureWeeklyPrompt,
+  getGameDaySummary,
   mergeSlate,
+  slatePhase,
   newsDeskBody,
   pickNewsDeskItems,
   resolveSystemAuthorId,
@@ -59,8 +64,9 @@ import {
   summarizeSchedule,
   type NewsDeskItem,
 } from '@/lib/community/scheduled'
-import { CommunityError, createPost, getMemberProfile, listRepliesSince } from '@/lib/community/service'
+import { CommunityError, createPost, getClubhouseOverview, getMemberProfile, listRepliesSince } from '@/lib/community/service'
 import { mergeMessages } from '@/components/community/GameDayChat'
+import { avatarHue } from '@/components/community/CommunityBits'
 import { COMMUNITY_CHANNELS } from '@/lib/community/channels'
 
 const ORIGINAL_ADMINS = process.env.ADMIN_EMAILS
@@ -347,5 +353,120 @@ describe('chat polling', () => {
     })
     const merged = mergeMessages([m('1', 1), m('2', 2)], [m('2', 2), m('3', 2)])
     expect(merged.map((x) => x.id)).toEqual(['1', '2', '3'])
+  })
+})
+
+describe('the Commish badge', () => {
+  const user = { id: 'm1', username: 'rae', displayName: 'Rae', avatarUrl: null, email: null, createdAt: new Date('2026-01-01') }
+  const viewer = { userId: null, isModerator: false }
+
+  async function badgesWith(teams: unknown[], owned: unknown[] = []) {
+    h.prisma.appUser.findFirst.mockResolvedValueOnce(user)
+    h.prisma.league.findMany.mockResolvedValueOnce(owned as never)
+    h.prisma.leagueTeam.findMany.mockResolvedValueOnce(teams as never)
+    return (await getMemberProfile('rae', viewer))!.author.badges
+  }
+
+  it('goes to whoever claimed the commissioner team of an imported league', async () => {
+    expect(await badgesWith([{ claimedByUserId: 'm1', isCommissioner: true, role: 'member' }])).toContain('commish')
+    expect(h.prisma.leagueTeam.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { claimedByUserId: { in: ['m1'] }, isCommissioner: true, role: { not: 'viewer' } },
+      }),
+    )
+  })
+
+  it('still goes to league owners', async () => {
+    expect(await badgesWith([], [{ userId: 'm1' }])).toContain('commish')
+  })
+
+  it('fails closed when a row comes back that is not a commissioner team', async () => {
+    expect(await badgesWith([{ claimedByUserId: 'm1', isCommissioner: false, role: 'member' }])).not.toContain('commish')
+    expect(await badgesWith([{ claimedByUserId: 'm1', isCommissioner: true, role: 'viewer' }])).not.toContain('commish')
+    expect(await badgesWith([])).not.toContain('commish')
+  })
+})
+
+describe('the home overview', () => {
+  const user = (id: string) => ({ id, username: id, displayName: null, avatarUrl: null, email: null, createdAt: new Date('2026-01-01') })
+
+  it('ranks members by posts plus replies over 30 days and leaves blocked members out', async () => {
+    h.prisma.communityPost.groupBy.mockResolvedValueOnce([
+      { authorUserId: 'a', _count: { _all: 2 } },
+      { authorUserId: 'b', _count: { _all: 1 } },
+      { authorUserId: 'x', _count: { _all: 9 } },
+    ] as never)
+    h.prisma.communityReply.groupBy.mockResolvedValueOnce([
+      { authorUserId: 'b', _count: { _all: 4 } },
+      { authorUserId: 'c', _count: { _all: 1 } },
+    ] as never)
+    // The store returns the blocked member too, so only the filter can keep them off the list.
+    h.prisma.appUser.findMany.mockResolvedValueOnce([user('a'), user('b'), user('c'), user('x')] as never)
+    h.blocked = new Set(['x'])
+    const o = await getClubhouseOverview({ userId: 'v', isModerator: false })
+    expect(o.activeMembers.map((m) => [m.author.id, m.contributions])).toEqual([
+      ['b', 5],
+      ['a', 2],
+      ['c', 1],
+    ])
+    expect((h.prisma.appUser.findMany.mock.calls.at(-1)![0] as { where: { id: { in: string[] } } }).where.id.in).not.toContain('x')
+    // The headline count is everyone who took part, including people this viewer has blocked.
+    expect(o.stats.activeMembers).toBe(4)
+  })
+
+  it('reads the pinned weekly prompt and counts only live posts', async () => {
+    h.prisma.communityPost.findFirst.mockResolvedValueOnce({ id: 'pr', title: 'Weekly prompt: X', replyCount: 2, channel: 'ask-the-founder' } as never)
+    const o = await getClubhouseOverview({ userId: null, isModerator: false })
+    expect(o.weeklyPrompt?.id).toBe('pr')
+    expect(h.prisma.communityPost.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { systemKey: { startsWith: 'prompt:' }, isPinned: true, removedAt: null } }),
+    )
+    for (const call of h.prisma.communityPost.count.mock.calls) {
+      expect((call[0] as { where: { removedAt: unknown } }).where.removedAt).toBeNull()
+    }
+  })
+})
+
+describe('game-day summary', () => {
+  const g = (o: Partial<Parameters<typeof slatePhase>[0]>) => ({
+    key: 'k',
+    sport: 'NBA',
+    homeTeam: 'H',
+    awayTeam: 'A',
+    homeScore: null,
+    awayScore: null,
+    status: null,
+    startTime: '2026-11-02T18:00:00.000Z',
+    ...o,
+  })
+
+  it('reads the phase from the status, falling back to scores once a game has started', () => {
+    const now = Date.parse('2026-11-02T19:00:00Z')
+    expect(slatePhase(g({ status: 'Final' }), now)).toBe('final')
+    expect(slatePhase(g({ status: 'In Progress - Q3' }), now)).toBe('live')
+    expect(slatePhase(g({ status: 'Scheduled', homeScore: 3, awayScore: 1 }), now)).toBe('live')
+    expect(slatePhase(g({ status: 'Scheduled' }), now)).toBe('upcoming')
+    expect(slatePhase(g({ status: 'Scheduled', startTime: '2026-11-02T22:00:00.000Z', homeScore: 0, awayScore: 0 }), now)).toBe('upcoming')
+  })
+
+  it('never creates the room — a home-page view is not a visit', async () => {
+    h.prisma.communityPost.findUnique.mockResolvedValueOnce(null)
+    const s = await getGameDaySummary(new Date('2026-11-02T19:00:00Z'))
+    expect(s).toMatchObject({ roomId: null, messages: 0, games: 0, live: 0 })
+    expect(h.prisma.communityPost.create).not.toHaveBeenCalled()
+  })
+
+  it('hides a removed room', async () => {
+    h.prisma.communityPost.findUnique.mockResolvedValueOnce({ id: 'r', replyCount: 5, removedAt: new Date() } as never)
+    expect(await getGameDaySummary(new Date('2026-11-02T19:00:00Z'))).toMatchObject({ roomId: null, messages: 0 })
+  })
+})
+
+describe('avatar colours', () => {
+  it('give a person the same colour everywhere, and different people different colours', () => {
+    expect(avatarHue('rae_commish')).toBe(avatarHue('rae_commish'))
+    expect(new Set(['rae', 'sam', 'mia', 'jj', 'tia'].map(avatarHue)).size).toBeGreaterThan(3)
+    expect(avatarHue('x')).toBeGreaterThanOrEqual(0)
+    expect(avatarHue('x')).toBeLessThan(360)
   })
 })

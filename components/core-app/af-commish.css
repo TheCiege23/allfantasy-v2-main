@@ -951,6 +951,31 @@
   color: var(--text);
 }
 
+/* Who the flag is about — the managers, not just the assets. */
+.af-core .af-cm-flagcard-who {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* The flag an alert linked to. Outline, not border, so the card does not shift. */
+.af-core .af-cm-flagcard[data-highlight='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  scroll-margin-top: 80px;
+}
+
+/* The commissioner's own Low / Medium / High rating on a flag card. */
+.af-core .af-cm-flaglevel {
+  margin-top: 14px;
+  max-width: 320px;
+}
+.af-core .af-cm-seg-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 /* Segmented Low / Medium / High. */
 .af-core .af-cm-seg {
   display: grid;
@@ -1428,4 +1453,250 @@
   z-index: 1;
   background: var(--surface);
   box-shadow: inset -1px 0 0 var(--line);
+}
+
+/* ── Integrity page on phones and tablets ────────────────────────────── */
+/*
+ * Scoped to `.af-cm-integrity` (the integrity page's shell) because the rail and body classes are
+ * shared with the commissioner console, which keeps its own layout.
+ *
+ * ⚠ THE DISCLOSURE BANNER STILL NEVER FOLDS. On a phone it only gets tighter. The coverage box
+ * beneath it is the part that folds — it is detail, not the privacy claim.
+ */
+
+/* Controls that exist only below a breakpoint. */
+.af-core .af-cm-flagcard-toggle,
+.af-core.af-cm-integrity .af-cm-settings-btn,
+.af-core.af-cm-integrity .af-cm-sheet-head,
+.af-core.af-cm-integrity .af-cm-sheet-backdrop {
+  display: none;
+}
+
+/* On desktop the coverage toggle is just its heading. */
+.af-core.af-cm-integrity .af-cm-coverage-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  pointer-events: none;
+}
+.af-core.af-cm-integrity .af-cm-coverage-toggle > span {
+  display: none;
+}
+
+.af-core .af-cm-gap {
+  color: var(--warn);
+}
+
+/* Tablet and phone: settings open as a bottom sheet instead of falling under every flag. */
+@media (max-width: 1100px) {
+  .af-core.af-cm-integrity .af-cm-settings-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--line2);
+    border-radius: 10px;
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .af-core.af-cm-integrity .af-cm-rail {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 70;
+    width: min(100%, 720px);
+    margin: 0 auto;
+    max-height: 85vh;
+    max-height: 85dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--bg);
+    border: 1px solid var(--line2);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    padding: 0 16px calc(20px + env(safe-area-inset-bottom));
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.35);
+    transform: translateY(100%);
+    visibility: hidden;
+    transition: transform 0.22s ease, visibility 0s linear 0.22s;
+  }
+  .af-core.af-cm-integrity .af-cm-rail[data-open='true'] {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.22s ease;
+  }
+
+  .af-core.af-cm-integrity .af-cm-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 14px 0 10px;
+    background: var(--bg);
+  }
+  .af-core.af-cm-integrity .af-cm-sheet-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text);
+  }
+  .af-core.af-cm-integrity .af-cm-sheet-close {
+    min-height: 40px;
+    padding: 0 16px;
+    border: 1px solid var(--accent-line);
+    border-radius: 10px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .af-core.af-cm-integrity .af-cm-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 69;
+    background: rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Phone: flags first, compact cards, thumb-sized controls. */
+@media (max-width: 640px) {
+  .af-core.af-cm-integrity.af-cm-shell {
+    padding: 14px 14px 48px;
+  }
+  .af-core.af-cm-integrity .af-cm-title {
+    font-size: 22px;
+  }
+
+  .af-core.af-cm-integrity .af-cm-disclosure {
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    gap: 8px;
+    font-size: 12.5px;
+  }
+
+  .af-core.af-cm-integrity .af-cm-coverage-toggle {
+    min-height: 32px;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .af-core.af-cm-integrity .af-cm-coverage-toggle > span {
+    display: inline;
+  }
+  .af-core.af-cm-integrity .af-cm-coverage-body[data-open='false'] {
+    display: none;
+  }
+
+  .af-core.af-cm-integrity .af-cm-tabs {
+    flex-wrap: nowrap;
+  }
+  .af-core.af-cm-integrity .af-cm-tabs .af-cm-seg-btn {
+    flex: 1 1 0;
+    min-height: 44px;
+  }
+
+  .af-core .af-cm-flagcard {
+    padding: 14px 14px 16px;
+  }
+  .af-core .af-cm-flagcard-top {
+    margin-bottom: 8px;
+  }
+  .af-core .af-cm-flagcard-lead {
+    font-size: 16px;
+  }
+
+  /* A card is one compact row until tapped. */
+  .af-core .af-cm-flagcard-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 44px;
+    margin-top: 12px;
+    border: 1px solid var(--line2);
+    border-radius: 10px;
+    background: var(--surface2);
+    color: var(--text2);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .af-core .af-cm-flagcard-detail {
+    margin-top: 12px;
+  }
+  .af-core .af-cm-flagcard[data-expanded='false'] .af-cm-flagcard-detail {
+    display: none;
+  }
+
+  /* The decision stays under the thumb while the evidence scrolls past. */
+  .af-core .af-cm-flagcard .af-cm-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 16px -14px -16px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    border-radius: 0 0 14px 14px;
+  }
+  /* Two rows at most: the primary decision on its own, then message and dismiss side by side. */
+  .af-core .af-cm-flagcard .af-cm-actions {
+    gap: 8px;
+  }
+  .af-core .af-cm-flagcard .af-cm-actions .af-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    /* Block, not inline-flex: a centred flex label clips both ends instead of ending in "…". */
+    display: block;
+    padding: 0 12px;
+    line-height: 44px;
+    text-align: center;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .af-core .af-cm-flagcard .af-cm-actions .af-btn:first-child {
+    flex-basis: 100%;
+  }
+  .af-core .af-cm-flagcard .af-cm-actions .af-btn:last-of-type:not(:first-child) {
+    flex: 0 0 auto;
+  }
+  .af-core .af-cm-flagcard .af-cm-actions-note {
+    order: 10;
+    flex-basis: 100%;
+    margin-left: 0;
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .af-core .af-cm-flaglevel {
+    max-width: none;
+  }
+  .af-core .af-cm-flaglevel .af-cm-seg-btn {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-core.af-cm-integrity .af-cm-rail,
+  .af-core.af-cm-integrity .af-cm-rail[data-open='true'] {
+    transition: none;
+  }
 }

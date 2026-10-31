@@ -17,6 +17,8 @@ import { finalizeRedraftTrade, upsertRedraftTradeDecision } from '@/lib/redraft/
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
 import { heldTradeIds } from '@/lib/integrity/holdFlaggedTrades'
+import { MULTI_TEAM_TRADE_CLOSED_TITLE, notifyMultiTeamTradeParties } from '@/lib/redraft/multiTeamTradeNotices'
+import { isMultiTeamTrade, tradeParticipantRosterIds } from '@/lib/redraft/tradeParticipants'
 
 /**
  * Per run. A settlement costs far more than an expiry, and the host cron has a 60s budget with its own
@@ -64,7 +66,8 @@ export async function processDueTradeReviews(opts?: { limit?: number; now?: Date
         continue
       }
       const owners = await prisma.redraftRoster.findMany({
-        where: { id: { in: [proposal.proposerRosterId, proposal.receiverRosterId] } },
+        // Every team in the trade; for two teams this is the proposer and the receiver, as before.
+        where: { id: { in: tradeParticipantRosterIds(proposal) } },
         select: { id: true, ownerId: true },
       })
       const ownerOf = (id: string) => owners.find((o) => o.id === id)?.ownerId ?? undefined
@@ -104,6 +107,17 @@ export async function processDueTradeReviews(opts?: { limit?: number; now?: Date
         actorUserId: null,
       })
       queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'expired', detail: reason })
+      // A multi-team trade has no DM card, so every team in it hears it here instead.
+      if (isMultiTeamTrade(proposal)) {
+        notifyMultiTeamTradeParties({
+          proposalId: proposal.id,
+          leagueId: proposal.leagueId,
+          userIds: tradeParticipantRosterIds(proposal).map(ownerOf),
+          key: 'closed',
+          title: MULTI_TEAM_TRADE_CLOSED_TITLE,
+          body: reason,
+        })
+      }
       result.closed += 1
     } catch (e) {
       result.failures.push({ proposalId: proposal.id, error: e instanceof Error ? e.message : String(e) })

@@ -610,17 +610,17 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'idp_cap' ? (
             <IDPCapPanel leagueId={leagueId} />
           ) : activeTab === 'devy_format' ? (
-            <DevyFormatPanel config={devyConfig} />
+            <DevyFormatPanel config={devyConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setDevyConfig} />
           ) : activeTab === 'devy_roster' ? (
-            <DevyRosterPanel config={devyConfig} />
+            <DevyRosterPanel config={devyConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setDevyConfig} />
           ) : activeTab === 'devy_rules' ? (
-            <DevyRulesPanel config={devyConfig} />
+            <DevyRulesPanel config={devyConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setDevyConfig} />
           ) : activeTab === 'devy_taxi' ? (
-            <DevyTaxiPanel config={devyConfig} />
+            <DevyTaxiPanel config={devyConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setDevyConfig} />
           ) : activeTab === 'devy_drafts' ? (
-            <DevyDraftsPanel config={devyConfig} />
+            <DevyDraftsPanel config={devyConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setDevyConfig} />
           ) : activeTab === 'devy_import' ? (
-            <DevyImportPanel />
+            <DevyImportPanel leagueId={leagueId} />
           ) : activeTab === 'devy_ai' ? (
             <DevyAIPanel leagueId={leagueId} hasAfSub={hasSub} isCommissioner={canEdit} />
           ) : activeTab === 'native_devy' ? (
@@ -636,17 +636,17 @@ export function CommissionerSettingsModal({
               )}
             </div>
           ) : activeTab === 'c2c_format' ? (
-            <C2CFormatPanel config={c2cConfig} canEdit={canEdit} />
+            <C2CFormatPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_rosters' ? (
-            <C2CRostersPanel config={c2cConfig} canEdit={canEdit} />
+            <C2CRostersPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_scoring' ? (
-            <C2CScoringPanel config={c2cConfig} />
+            <C2CScoringPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_taxi' ? (
-            <C2CTaxiPanel />
+            <C2CTaxiPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_devy' ? (
-            <C2CDevyPanel config={c2cConfig} />
+            <C2CDevyPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_drafts' ? (
-            <C2CDraftsPanel config={c2cConfig} />
+            <C2CDraftsPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_ai' ? (
             <C2CAIPanel leagueId={leagueId} hasAfSub={hasSub} c2cConfig={c2cConfig} isCommissioner={canEdit} />
           ) : (

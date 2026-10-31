@@ -5,7 +5,7 @@ import { REPORT_REASON_LABELS, type ReportReason } from '@/lib/moderation/shared
 import { CLUBHOUSE_NAME } from '@/lib/community/channels'
 import { timeAgo } from '@/lib/community/format'
 import { getCommunityViewer, listPendingReports } from '@/lib/community/service'
-import { ClubhouseFrame, EmptyState } from '@/components/community/CommunityBits'
+import { ClubhouseFrame, EmptyState, PageHeader } from '@/components/community/CommunityBits'
 import { ResolveReportButtons } from '@/components/community/ClubhouseClient'
 
 export const dynamic = 'force-dynamic'
@@ -24,20 +24,15 @@ export default async function ClubhouseModerationPage() {
   const now = Date.now()
 
   return (
-    <ClubhouseFrame crumbs={[{ href: '/clubhouse', label: CLUBHOUSE_NAME }]}>
-      <h1 className="mb-1 text-2xl font-bold" style={{ color: 'var(--text)' }}>
-        Moderation queue
-      </h1>
-      <p className="mb-6 text-sm" style={{ color: 'var(--muted)' }}>
-        Pending reports, oldest first. Removing content closes every report on it.
-      </p>
+    <ClubhouseFrame narrow crumbs={[{ href: '/clubhouse', label: CLUBHOUSE_NAME }]}>
+      <PageHeader icon="🛡️" eyebrow="Staff only" title="Moderation queue" sub="Pending reports, oldest first. Removing content closes every report on it." />
 
       {reports.length === 0 ? (
-        <EmptyState title="Nothing to review" body="No pending reports. The Clubhouse is behaving." />
+        <EmptyState icon="✅" title="Nothing to review" body="No pending reports. The Clubhouse is behaving." />
       ) : (
-        <ul className="space-y-3">
+        <ul className="ch-stack">
           {reports.map((r) => (
-            <li key={r.id} className="mode-panel rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
+            <li key={r.id} className="ch-card ch-card-pad">
               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
                 <span className="rounded-full bg-red-500/15 px-2 py-0.5 font-semibold text-red-500">
                   {REPORT_REASON_LABELS[r.reason as ReportReason] ?? r.reason}

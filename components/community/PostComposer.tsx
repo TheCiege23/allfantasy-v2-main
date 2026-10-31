@@ -44,8 +44,7 @@ export function PostComposer({ initialChannel }: { initialChannel: string }) {
 
   return (
     <form
-      className="mode-panel space-y-4 rounded-xl border p-4 sm:p-5"
-      style={{ borderColor: 'var(--border)' }}
+      className="ch-card space-y-5 p-5 sm:p-7"
       onSubmit={async (e) => {
         e.preventDefault()
         setSending(true)
@@ -81,12 +80,8 @@ export function PostComposer({ initialChannel }: { initialChannel: string }) {
               role="radio"
               aria-checked={channel === c.slug}
               onClick={() => switchChannel(c.slug)}
-              className="rounded-full border px-3 py-1 text-sm"
-              style={{
-                borderColor: channel === c.slug ? 'var(--accent)' : 'var(--border)',
-                background: channel === c.slug ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
-                color: 'var(--text)',
-              }}
+              data-channel={c.slug}
+              className="ch-filter ch-choice"
             >
               {c.emoji} {c.label}
             </button>
@@ -166,8 +161,7 @@ export function PostComposer({ initialChannel }: { initialChannel: string }) {
         <button
           type="submit"
           disabled={sending}
-          className="rounded-lg px-5 py-2 text-sm font-semibold disabled:opacity-50"
-          style={{ background: 'var(--accent)', color: '#fff' }}
+          className="ch-btn ch-btn-primary disabled:opacity-50"
         >
           {sending ? 'Posting…' : 'Post'}
         </button>

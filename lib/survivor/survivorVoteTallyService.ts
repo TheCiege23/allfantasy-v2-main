@@ -13,7 +13,8 @@ import { hasIndependentSurvivorHost } from './survivorHostIndependence'
 import { drawSurvivorStones } from './survivorStones'
 import { notifySurvivorCommissionerOnce } from './survivorCommissionerAlerts'
 import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
-import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+import { isChimmyRunning } from '@/lib/inactive-manager/inactiveManagerMode'
+import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
 import { chimmyVoteTarget, councilIsMerged } from './chimmyCastawayStrategy'
 
 /**
@@ -316,8 +317,9 @@ type CastRow = { id: string; voterRosterId: string; targetRosterId: string; targ
  */
 async function chimmyCastaways(leagueId: string, userToRoster: Record<string, string>): Promise<Set<string>> {
   try {
-    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-    const managed = readManagedLineups(league?.settings)
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, userId: true } })
+    if (!league) return new Set()
+    const managed = await readPlayableChimmyLineups(league)
     return new Set(Object.entries(userToRoster).filter(([userId, rosterId]) => isSeatPlaceholderUserId(userId) && isChimmyRunning(managed, rosterId, userId)).map(([userId]) => userId))
   } catch {
     return new Set()

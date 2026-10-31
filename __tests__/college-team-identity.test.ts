@@ -122,6 +122,46 @@ describe('buildCollegeTeamIndex', () => {
     expect(resolveCollegeTeam('Miami', ix)).toBeNull()
   })
 
+  it('🛑 an unclassified club row does not take the name of an FBS school', () => {
+    /*
+     * Production, 2026-10-31: these three unclassified rows (junior college / club) shared a
+     * name with an FBS program, the alias was dropped, and South Florida, Charlotte and Troy
+     * resolved to nothing — so a USF starter had no game, no kickoff and no lock. Records
+     * below are the directory rows verbatim, logos aside.
+     */
+    const usf = team({ id: 58, school: 'South Florida', mascot: 'Bulls', abbreviation: 'USF', alternateNames: ['USF', 'South Florida'], classification: 'fbs' })
+    const stars = team({ id: 3198, school: 'SOUTH FLORIDA STARS', mascot: 'STARS', abbreviation: 'SFX', alternateNames: ['SFX', 'SOUTH FLORIDA'], logo: null })
+    const charlotte = team({ id: 2429, school: 'Charlotte', mascot: '49ers', abbreviation: 'CLT', alternateNames: ['CLT', 'Charlotte'], classification: 'fbs' })
+    const faith = team({ id: 3253, school: 'Charlotte', mascot: 'Saints', abbreviation: 'COLLE', alternateNames: ['COLLE', 'Faith NC'], logo: null })
+    const troy = team({ id: 2653, school: 'Troy', mascot: 'Trojans', abbreviation: 'TROY', alternateNames: ['TROY', 'Troy'], classification: 'fbs' })
+    const hvcc = team({ id: 3237, school: 'Troy', mascot: 'Vikings', abbreviation: 'HVCC', alternateNames: ['HVCC', 'Hudson'], logo: null })
+    const ix = buildCollegeTeamIndex([usf, stars, charlotte, faith, troy, hvcc])
+
+    expect(resolveCollegeTeam('South Florida', ix)?.id).toBe(58)
+    expect(resolveCollegeTeam('SOUTH FLORIDA', ix)?.id).toBe(58)
+    expect(resolveCollegeTeam('University of South Florida', ix)?.id).toBe(58)
+    expect(resolveCollegeTeam('Charlotte', ix)?.id).toBe(2429)
+    expect(resolveCollegeTeam('CHARLOTTE', ix)?.id).toBe(2429)
+    expect(resolveCollegeTeam('Troy', ix)?.id).toBe(2653)
+
+    // The club rows keep everything that is uniquely theirs.
+    expect(resolveCollegeTeam('SOUTH FLORIDA STARS', ix)?.id).toBe(3198)
+    expect(resolveCollegeTeam('Charlotte Saints', ix)?.id).toBe(3253)
+    expect(resolveCollegeTeam('HVCC', ix)?.id).toBe(3237)
+  })
+
+  it('still drops an alias two CLASSIFIED programs claim, and one no claimant classifies', () => {
+    const a = team({ id: 1, school: 'Union', classification: 'iii' })
+    const b = team({ id: 2, school: 'Union', classification: 'ii' })
+    expect(resolveCollegeTeam('Union', buildCollegeTeamIndex([a, b]))).toBeNull()
+
+    const c = team({ id: 3, school: 'Austin' })
+    const d = team({ id: 4, school: 'Austin' })
+    const ix = buildCollegeTeamIndex([c, d])
+    expect(resolveCollegeTeam('Austin', ix)).toBeNull()
+    expect(ix.ambiguous.get('austin')).toBe(2)
+  })
+
   it('handles empty and junk input without throwing', () => {
     expect(resolveCollegeTeam('', index)).toBeNull()
     expect(resolveCollegeTeam(null, index)).toBeNull()
