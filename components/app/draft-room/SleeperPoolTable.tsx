@@ -512,7 +512,7 @@ function SleeperRow(props: SleeperRowProps) {
               disabled={drafted}
               aria-pressed={queued}
               // The name stays the same queued or not (e2e and screen readers find it by name); aria-pressed carries the state.
-              aria-label={t('draftRoom.queue.addPlayer').replace('{{name}}', p.name)}
+              aria-label={t('draftRoom.queue.queuePlayer').replace('{{name}}', p.name)}
               data-testid={`${testIdBase}-queue`}
               data-queued={queued ? 'true' : 'false'}
               className={`draft-live-action-btn inline-flex h-[22px] w-[22px] items-center justify-center rounded-md border transition ${

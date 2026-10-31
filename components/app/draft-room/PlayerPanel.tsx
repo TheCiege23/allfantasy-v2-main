@@ -358,7 +358,8 @@ function PlayerListCards({
                   data-queued={queued ? 'true' : 'false'}
                   aria-pressed={queued}
                   className={`inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg border transition duration-150 active:scale-95 ${SKIN_FOCUS} ${queued ? SKIN_PILL_ACTIVE : SKIN_PILL_IDLE}`}
-                  aria-label={t('draftRoom.queue.queuePlayer').replace('{{name}}', p.name)}
+                  // The name stays the same queued or not; aria-pressed carries the state.
+                  aria-label={t('draftRoom.queue.addPlayer').replace('{{name}}', p.name)}
                 >
                   {/* This button used to look identical before and after a tap. */}
                   {queued ? <Check className="h-4 w-4" strokeWidth={3} aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}

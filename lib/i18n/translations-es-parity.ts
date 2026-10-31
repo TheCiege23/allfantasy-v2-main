@@ -4826,8 +4826,6 @@ export const translationsEsParity: Record<string, string> = {
   "taxiPanel.overOffOne": "1 equipo todavía tiene jugadores en el taxi: {{teams}}.",
   "taxiPanel.overOff": "{{count}} equipos todavía tienen jugadores en el taxi: {{teams}}.",
   "taxiPanel.overHint": "Baja el número cuando asciendan o liberen a un jugador, o déjalo como está.",
-  "draftRoom.queue.addPlayer": "Añadir a {{name}} a tu cola",
-  "draftRoom.queue.inQueue": "{{name}} ya está en tu cola",
   "draftRoom.queue.addPlayer": "Añadir a {{name}} a la cola",
   "draftRoom.queue.queuePlayer": "Poner a {{name}} en la cola",
 }
