@@ -7,6 +7,7 @@ import type { DiscoveryCard } from "@/lib/public-discovery/types"
 const db = vi.hoisted(() => ({
   league: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), groupBy: vi.fn() },
   roster: { findMany: vi.fn() },
+  leagueTeam: { findMany: vi.fn() },
   appUser: { findMany: vi.fn() },
   savedLeagueSearch: {
     findMany: vi.fn(),
@@ -87,6 +88,7 @@ beforeEach(() => {
   session.value = { user: { id: "u1" } }
   lock.value = null
   db.roster.findMany.mockResolvedValue([])
+  db.leagueTeam.findMany.mockResolvedValue([])
   db.appUser.findMany.mockResolvedValue([])
   db.league.groupBy.mockResolvedValue([])
 })
