@@ -1,5 +1,7 @@
 'use client'
 
+import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
 import type { LeagueTradeAsset, LeagueTradeBlockPanelItem, LeagueTradeHistoryItem } from '@/components/league/types'
@@ -156,7 +158,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
         <div><span>On the block</span><strong>{block.length}</strong></div>
         <div><span>Recent trades</span><strong>{recent.length}</strong></div>
       </section> : null}
-      {String(league.leagueVariant ?? league.leagueType ?? '').toLowerCase() === 'zombie' ? <p className="nls-zombie-trade-note">Whisperers cannot trade players. Zombie trading follows your league rules.</p> : null}
+      {isZombieLeagueLike(league) ? <p className="nls-zombie-trade-note">Whisperers cannot trade players. Zombie trading follows your league rules.</p> : null}
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {actionErr ? <p className="nls-error" role="alert">{actionErr}</p> : null}
       {loading && !panel ? <p className="nls-empty" role="status">Loading trades…</p> : null}

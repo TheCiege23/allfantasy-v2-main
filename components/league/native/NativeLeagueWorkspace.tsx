@@ -1,5 +1,7 @@
 'use client'
 
+import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
+
 import Link from 'next/link'
 import { CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import { useEffect, useRef, useState } from 'react'
@@ -169,7 +171,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   })
   const leagueTile = (row: UserLeague, expanded = false, onClick?: () => void, view: LeagueRailRowView = railView(row)) => <LeagueRailRow key={row.id} view={view} href={leagueSectionHref(row, activeTab)} active={row.id === league.id} expanded={expanded} isCommissioner={row.isCommissioner} onClick={onClick} unread={unread[row.id] ?? 0} />
   const chatBadge = unreadBadgeText(activeTab === 'league_chat' ? 0 : unread[league.id])
-  const zombieBanner = String(league.leagueVariant ?? '').toLowerCase() === 'zombie' || String(league.leagueType ?? '').toLowerCase() === 'zombie'
+  const zombieBanner = isZombieLeagueLike(league)
   const navGroup = (title: string, items: typeof primary) => <section key={title} className="nl-nav-group"><h2>{title}</h2>{items.map(item => {
     const Icon = (zombieBanner && item.id === 'zombie' ? Skull : zombieBanner && item.id === 'schedule' ? CalendarDays : zombieBanner && item.id === 'players' ? Users : zombieBanner && item.id === 'commissioner' ? Settings : zombieBanner && item.id === 'legacy' ? BookOpen : zombieBanner && item.id === 'draft_intel' ? Radio : icons[item.icon as keyof typeof icons]) ?? CircleHelp
     const count = item.id === 'league_chat' ? chatBadge : null

@@ -1,5 +1,7 @@
 'use client'
 
+import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
+
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
 import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
@@ -345,6 +347,7 @@ export function LeagueShell({
   embedMode = false,
 }: LeagueShellProps) {
   const league = useMemo(() => normalizeBigBrotherShellLeague(storedLeague), [storedLeague])
+  const zombieLeague = isZombieLeagueLike(league)
   const router = useRouter()
   const pathname = usePathname()
   // Server props own the league name, format and joined seats. Refresh after saves and when
@@ -527,7 +530,7 @@ export function LeagueShell({
       const block = [...core, ...command]
       base = idx >= 0 ? [...base.slice(0, idx + 1), ...block, ...base.slice(idx + 1)] : [...block, ...base]
     }
-    if (league.leagueVariant === 'zombie') {
+    if (zombieLeague) {
       const idx = base.findIndex((t) => t.id === 'redraft')
       const z = { id: 'zombie', label: 'Zombie' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), z, ...base.slice(idx + 1)] : [z, ...base]
@@ -594,6 +597,7 @@ export function LeagueShell({
     nflRedraftCore,
     league.sport,
     league.leagueType,
+    zombieLeague,
     league.keeperPhaseActive,
     league.bestBallMode,
     league.guillotineMode,
@@ -728,12 +732,12 @@ export function LeagueShell({
     if (tabDefs[0]?.id === 'native_home') return
     if (shouldUseMatchupPrimary) return
     if (league.guillotineMode) return
-    if (league.leagueVariant !== 'zombie' || zombieLandingApplied.current) return
+    if (!zombieLeague || zombieLandingApplied.current) return
     const ids = new Set(tabDefs.map((t) => t.id))
     if (!ids.has('zombie')) return
     setActiveTab('zombie')
     zombieLandingApplied.current = true
-  }, [league.id, league.leagueVariant, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary])
+  }, [league.id, league.leagueVariant, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary, zombieLeague])
 
   /** Big Brother leagues default to the Big Brother hub. */
   useEffect(() => {
@@ -1568,7 +1572,7 @@ export function LeagueShell({
               ? specialtyImmersive
                 ? 'border-x border-emerald-500/12 bg-gradient-to-b from-black/50 via-emerald-950/15 to-black/55'
                 : 'border-x border-amber-500/10 bg-gradient-to-b from-[#081018] via-[#07071a] to-[#07071a]'
-              : league.leagueVariant === 'zombie'
+              : zombieLeague
                 ? 'border-x border-violet-500/15 bg-gradient-to-b from-[#120818] via-[#07071a] to-[#07071a]'
                 : league.leagueVariant === 'big_brother'
                   ? specialtyImmersive
@@ -1584,7 +1588,7 @@ export function LeagueShell({
           data-league-variant={
             league.leagueVariant === 'survivor'
               ? 'survivor'
-              : league.leagueVariant === 'zombie'
+              : zombieLeague
                 ? 'zombie'
                 : league.leagueVariant === 'big_brother'
                   ? 'big_brother'
@@ -1693,7 +1697,7 @@ export function LeagueShell({
                   : setCommissionerSettingsOpen(true)
               }
               survivorLeagueActive={league.leagueVariant === 'survivor'}
-              zombieLeagueActive={league.leagueVariant === 'zombie'}
+              zombieLeagueActive={zombieLeague}
               idpCapEnabled={idpCapEnabled}
               capSummary={capSummary}
               capRosterId={capRosterId}
@@ -2009,11 +2013,11 @@ export function LeagueShell({
           )
         : null}
 
-      {portalMounted && (league.leagueVariant === 'zombie' || league.leagueVariant === 'survivor')
+      {portalMounted && (zombieLeague || league.leagueVariant === 'survivor')
         ? createPortal(
             <LeagueClipOverlayHost
               leagueId={league.id}
-              variant={league.leagueVariant === 'zombie' ? 'zombie' : 'survivor'}
+              variant={zombieLeague ? 'zombie' : 'survivor'}
               enabled
             />,
             document.body,
@@ -2157,7 +2161,7 @@ function LeagueTabRouter({
   const tab = tabDefs.find((t) => t.id === activeTab)
   const tabLabel = tab?.label ?? activeTab
   const sport = selectedLeague.sport
-  const isZombieLeague = [selectedLeague.leagueVariant, selectedLeague.leagueType].some(value => String(value ?? '').toLowerCase() === 'zombie')
+  const isZombieLeague = isZombieLeagueLike(selectedLeague)
 
   const renderPredraftDraftSetup = () => {
     const teamCount = selectedLeague.teamCount ?? teamSlots.length
