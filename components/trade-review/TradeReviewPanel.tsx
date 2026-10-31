@@ -3,6 +3,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReviewCheck, TradeReview } from '@/lib/decision-os/trade/tradeReview'
 import { rememberReviewId } from '@/lib/trade-review/reviewIdStore'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { tOr } from '@/lib/i18n/tInterpolate'
+import {
+  actOnNoteText,
+  commissionerNoteText,
+  localizeTradeReason,
+  reviewCheckExplanation,
+  serverErrorText,
+} from '@/lib/i18n/trade-center-server-text'
 
 /**
  * COMMISSIONER REVIEW MODE (design build-order step 6): the review a commissioner sees before deciding.
@@ -24,21 +33,11 @@ type ReviewResponse = {
   actOn: { platform: string; deepLink: string | null; note: string } | null
 }
 
-const RECOMMENDATION: Record<TradeReview['recommendation'], { label: string; tone: string }> = {
-  approve: { label: 'No flags — fine to approve', tone: 'border-emerald-400/40 text-emerald-200' },
-  review_with_managers: { label: 'Review with the managers', tone: 'border-amber-400/40 text-amber-200' },
-  consider_veto: { label: 'Consider a veto', tone: 'border-rose-400/40 text-rose-200' },
-}
-
-const LABEL: Record<ReviewCheck['code'], string> = {
-  heavily_lopsided: 'Heavily lopsided',
-  tanking_signal: 'Tanking signal',
-  rebuild_signal: 'Rebuild',
-  repeat_partners: 'Repeat partners',
-  inactive_manager: 'Inactive manager',
-  eliminated_team_dumping: 'Eliminated team dumping',
-  deadline_rush: 'Deadline rush',
-  class_gap: 'Class gap',
+/** Copy is `tradeCenter.review.recommendation.<code>` and `tradeCenter.review.check.<code>`. */
+const RECOMMENDATION_TONE: Record<TradeReview['recommendation'], string> = {
+  approve: 'border-emerald-400/40 text-emerald-200',
+  review_with_managers: 'border-amber-400/40 text-amber-200',
+  consider_veto: 'border-rose-400/40 text-rose-200',
 }
 
 const SEVERITY_TONE: Record<ReviewCheck['severity'], string> = {
@@ -54,6 +53,11 @@ export function TradeReviewPanel(props: {
   defaultOpen?: boolean
 }) {
   const { leagueId, tradeId, kind } = props
+  const { t, tInterpolate, language } = useOptionalLanguage()
+  // The server's text, in the reader's language; outside Spanish it is the server's English unchanged.
+  const explain = (c: ReviewCheck) => reviewCheckExplanation(c, t, language)
+  // A check code with no copy shows the code rather than a raw key.
+  const checkLabel = (code: ReviewCheck['code']) => tOr(t, `tradeCenter.review.check.${code}`, code)
   const [open, setOpen] = useState(Boolean(props.defaultOpen))
   const [data, setData] = useState<ReviewResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -67,25 +71,34 @@ export function TradeReviewPanel(props: {
         `/api/leagues/${encodeURIComponent(leagueId)}/trades/${encodeURIComponent(tradeId)}/review?kind=${kind}&explain=1`,
         { credentials: 'include', cache: 'no-store' },
       )
-      const body = (await res.json().catch(() => null)) as (ReviewResponse & { error?: string }) | null
+      const body = (await res.json().catch(() => null)) as (ReviewResponse & { error?: string; code?: string }) | null
       if (!res.ok || !body || !body.review) {
-        setError(body?.error ?? 'This trade could not be reviewed just now.')
+        setError(
+          body?.error
+            ? serverErrorText({ message: body.error, code: body.code }, body.error, t, language, 'review')
+            : t('tradeCenter.review.loadFailed'),
+        )
         return
       }
       setData(body)
       rememberReviewId(tradeId, body.reviewId)
     } catch {
-      setError('This trade could not be reviewed just now.')
+      setError(t('tradeCenter.review.loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [leagueId, tradeId, kind])
+  }, [leagueId, tradeId, kind, t, language])
 
   useEffect(() => {
     if (open && !data && !loading && !error) void load()
   }, [open, data, loading, error, load])
 
-  const rec = data ? RECOMMENDATION[data.review.recommendation] : null
+  const rec = data
+    ? {
+        label: tOr(t, `tradeCenter.review.recommendation.${data.review.recommendation}`, data.review.recommendation),
+        tone: RECOMMENDATION_TONE[data.review.recommendation],
+      }
+    : null
   const raised = data?.review.checks.filter((c) => c.status === 'raised') ?? []
   const clear = data?.review.checks.filter((c) => c.status === 'clear') ?? []
   const notChecked = data?.review.checks.filter((c) => c.status === 'not_computed') ?? []
@@ -98,13 +111,13 @@ export function TradeReviewPanel(props: {
         className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-semibold text-indigo-100"
         data-testid="trade-review-toggle"
       >
-        <span>Commissioner review</span>
+        <span>{t('tradeCenter.review.toggle')}</span>
         <span className="text-indigo-200/70">{open ? '▾' : '▸'}</span>
       </button>
 
       {open ? (
         <div className="space-y-2 border-t border-indigo-300/15 px-3 py-2 text-[11px]">
-          {loading ? <p className="text-white/50">Reviewing…</p> : null}
+          {loading ? <p className="text-white/50">{t('tradeCenter.review.loading')}</p> : null}
           {error ? <p className="text-rose-300">{error}</p> : null}
           {data && rec ? (
             <>
@@ -119,13 +132,21 @@ export function TradeReviewPanel(props: {
                   </span>
                 ) : (
                   <span className="rounded border border-white/15 px-2 py-0.5 text-white/60">
-                    Not graded{data.tradeGrade.gradeWithheld ? `: ${data.tradeGrade.gradeWithheld}` : ''}
+                    {data.tradeGrade.gradeWithheld
+                      ? tInterpolate('tradeCenter.review.notGradedReason', { reason: localizeTradeReason(data.tradeGrade.gradeWithheld, language) })
+                      : t('tradeCenter.review.notGraded')}
                   </span>
                 )}
               </div>
 
               {data.explanation.noteToLeague ? (
-                <p className="text-white/75" data-testid="trade-review-note">{data.explanation.noteToLeague}</p>
+                <p className="text-white/75" data-testid="trade-review-note">
+                  {commissionerNoteText(
+                    { note: data.explanation.noteToLeague, source: data.explanation.source, review: data.review },
+                    t,
+                    language,
+                  )}
+                </p>
               ) : null}
 
               {raised.length ? (
@@ -133,9 +154,9 @@ export function TradeReviewPanel(props: {
                   {raised.map((c) => (
                     <li key={c.code} className="flex gap-2">
                       <span className={`h-fit rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${SEVERITY_TONE[c.severity]}`}>
-                        {LABEL[c.code]}
+                        {checkLabel(c.code)}
                       </span>
-                      <span className="text-white/75">{c.explanation}</span>
+                      <span className="text-white/75">{explain(c)}</span>
                     </li>
                   ))}
                 </ul>
@@ -143,11 +164,11 @@ export function TradeReviewPanel(props: {
 
               {notChecked.length ? (
                 <div className="text-[11px] text-white/50" data-testid="trade-review-not-checked">
-                  <p className="font-semibold text-white/60">Not checked</p>
+                  <p className="font-semibold text-white/60">{t('tradeCenter.review.notChecked')}</p>
                   <ul className="mt-0.5 space-y-0.5">
                     {notChecked.map((c) => (
                       <li key={c.code}>
-                        {LABEL[c.code]}: {c.explanation}
+                        {checkLabel(c.code)}: {explain(c)}
                       </li>
                     ))}
                   </ul>
@@ -156,27 +177,25 @@ export function TradeReviewPanel(props: {
 
               {clear.length ? (
                 <p className="text-[11px] text-white/40" data-testid="trade-review-clear">
-                  Clear: {clear.map((c) => LABEL[c.code]).join(' · ')}
+                  {tInterpolate('tradeCenter.review.clear', { checks: clear.map((c) => checkLabel(c.code)).join(' · ') })}
                 </p>
               ) : null}
 
               {data.actOn ? (
                 <p className="text-[11px] text-amber-200/80" data-testid="trade-review-act-on">
-                  {data.actOn.note}
+                  {actOnNoteText(data.actOn, t, language)}
                   {data.actOn.deepLink ? (
                     <>
                       {' '}
                       <a href={data.actOn.deepLink} target="_blank" rel="noreferrer" className="underline">
-                        Open {data.actOn.platform}
+                        {tInterpolate('tradeCenter.review.openPlatform', { platform: data.actOn.platform })}
                       </a>
                     </>
                   ) : null}
                 </p>
               ) : null}
 
-              <p className="text-[11px] text-white/35">
-                Advice only — AllFantasy never approves or vetoes a trade on its own.
-              </p>
+              <p className="text-[11px] text-white/35">{t('tradeCenter.review.adviceOnly')}</p>
             </>
           ) : null}
         </div>

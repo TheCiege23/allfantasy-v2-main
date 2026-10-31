@@ -23,6 +23,7 @@ import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
 import { getPausedSyncKeys } from '@/lib/core-app/syncPreferences'
 import { getLeagueDataSignals } from '@/lib/core-app/leagueDataSignals'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
+import { coreShellRedraftSport } from '@/lib/core-app/coreShellRedraftIdentity'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
 import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSignals'
@@ -1661,6 +1662,8 @@ export default async function AfCorePage({
   return (
     <AfCoreShell
       nativeLeague={!!selectedLeagueId && !!selectedLeaguePlatform && !isImportedPlatform(selectedLeaguePlatform)}
+      /* Redraft identity for a native redraft ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
+      redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform)}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}

@@ -20,9 +20,12 @@ import {
   type RedraftTradeParticipantsShape,
 } from '@/lib/redraft/tradeParticipants'
 
-/** A commissioner vetoed a multi-team trade (app/api/redraft/trades/veto). English, like every notice here. */
+/**
+ * A commissioner vetoed a multi-team trade. English, like every notice here. Both veto routes send it
+ * through `notifyMultiTeamTradeCommissionerVeto` below, which names every team; the generic body that
+ * named none is gone, so it cannot come back on one route alone.
+ */
 export const MULTI_TEAM_TRADE_VETOED_TITLE = 'Trade vetoed'
-export const MULTI_TEAM_TRADE_VETOED_BODY = 'The commissioner vetoed the multi-team trade, so it will not go through.'
 
 /** An agreed multi-team trade could not be processed when its review window ended (lib/redraft/tradeReviewWindowSweep.ts). */
 export const MULTI_TEAM_TRADE_CLOSED_TITLE = 'Trade could not go through'
@@ -178,4 +181,25 @@ export async function notifyMultiTeamTradeOutcome(input: {
   } catch (e) {
     console.error('[redraft] multi-team trade notice failed', input.proposal?.id, input.key, e)
   }
+}
+
+/**
+ * 🛑 THE ONE COMMISSIONER-VETO NOTICE, SENT BY BOTH VETO ROUTES — app/api/redraft/trades/veto and the
+ * `commissioner_veto` action of app/api/redraft/trade-votes — so their text, title and dedupe key
+ * (`redraft_trade:<id>:vetoed`) cannot drift apart. One ruling is one notice whichever route made it.
+ *
+ * Every team is named; the commissioner who vetoed is never told. A two-team trade is never told here
+ * (it keeps its DM status line). Never rejects, like `notifyMultiTeamTradeOutcome`.
+ */
+export function notifyMultiTeamTradeCommissionerVeto(input: {
+  proposal: Parameters<typeof notifyMultiTeamTradeOutcome>[0]['proposal']
+  actorUserId: string | null | undefined
+}): Promise<void> {
+  return notifyMultiTeamTradeOutcome({
+    proposal: input.proposal,
+    actorUserId: input.actorUserId,
+    key: 'vetoed',
+    title: MULTI_TEAM_TRADE_VETOED_TITLE,
+    body: ({ teams }) => multiTeamTradeVetoedBody(teams),
+  })
 }

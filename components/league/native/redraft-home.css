@@ -1,0 +1,171 @@
+/* Redraft League home — batch A1 of the redraft visual upgrade (2026-10-31). League home's score bug,
+ * playoff race and last-week recap, the "What changed" rules card, the football Home and Draft HQ, in
+ * the season-race identity. Built ONLY on the foundation's tokens (redraft-identity.css: --rd-accent,
+ * --rd-accent-text, --rd-accent-ink, --rd-accent-soft, --rd-accent-line, --rd-surface-elev) and /core's
+ * palette (--surface, --surface2, --text, --text2, --muted, --line, --line2). No sport colour here.
+ *
+ * ⚠ EVERY OVERRIDE OF AN EXISTING SURFACE IS SCOPED TO `.nl-workspace[data-format=redraft]`. That
+ * attribute is stamped only for a native redraft league with a sport theme (lib/league-media/
+ * redraftIdentity.ts), so dynasty, guillotine, imported leagues and every other format keep exactly
+ * the look they had. The `rdh-*` components are only mounted for those leagues, but their var()s still
+ * carry /core fallbacks so a stray mount degrades to the default accent rather than to nothing.
+ *
+ * ⚠ TYPE FLOOR: nothing below 11px (CLAUDE.md / the rail-type-floor test). Mono labels are 11–12px.
+ *
+ * ⚠ ONE TOP-LEVEL @media BLOCK, AT THE END, NOT NESTED IN ANYTHING (CLAUDE.md, af-matchup.css
+ * 2026-08-30: a 560px block inserted inside a 780px one moved four rules out of their band). */
+
+/* ── Shared card ─────────────────────────────────────────────────────── */
+.rdh-card{display:flex;flex-direction:column;gap:14px;min-width:0;padding:22px 24px;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--text)}
+.rdh-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.rdh-label,.rdh-card .rdh-label{margin:0;letter-spacing:.12em;color:var(--muted);font:700 12px/1.3 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.12em;text-transform:uppercase}
+.rdh-card-note{color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap}
+.rdh-accent-text{color:var(--rd-accent-text,var(--accent))}
+.rdh-mono{font-family:var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace)}
+.rdh-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.rdh-tag{flex:none;padding:3px 8px;border-radius:6px;font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.06em;text-transform:uppercase}
+.rdh-tag-you{background:var(--rd-accent,var(--accent));color:var(--rd-accent-ink,var(--accent-ink))}
+
+/* ── Score bug ───────────────────────────────────────────────────────── */
+.rdh-bug{border-color:var(--rd-accent-line,var(--line))}
+.rdh-bug-status{display:inline-flex;align-items:center;gap:7px;color:var(--text2);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.rdh-bug-dot{width:8px;height:8px;border-radius:50%;background:var(--line2)}
+.rdh-bug-status[data-status=live]{color:var(--rd-accent-text,var(--accent))}
+.rdh-bug-status[data-status=live] .rdh-bug-dot{background:var(--rd-accent,var(--accent));box-shadow:0 0 0 4px var(--rd-accent-soft,var(--accent-soft))}
+.rdh-bug-status[data-status=final]{color:var(--muted)}
+.rdh-bug-board{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:16px;padding:18px;border-radius:14px;background:linear-gradient(90deg,var(--rd-accent-soft,var(--accent-soft)),transparent 78%),var(--surface2)}
+.rdh-bug-side{display:flex;flex-direction:column;gap:4px;min-width:0}
+.rdh-bug-them{align-items:flex-end;text-align:right}
+.rdh-bug-team{overflow:hidden;color:var(--text);font-size:15px;font-weight:800;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.rdh-bug-meta{color:var(--muted);font-size:12px;font-weight:600}
+.rdh-bug-score{color:var(--text);font-size:52px;font-weight:900;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.rdh-bug-them .rdh-bug-score{color:var(--text2)}
+.rdh-bug-mid{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
+.rdh-bug-mid-label,.rdh-bug-mid-note{color:var(--muted);font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.08em;text-transform:uppercase}
+.rdh-bug-mid-note{font-weight:500;letter-spacing:.02em;text-transform:none;font-family:inherit}
+.rdh-bug-odds{color:var(--rd-accent-text,var(--accent));font-size:24px;font-weight:900;font-variant-numeric:tabular-nums}
+.rdh-bug-vs{color:var(--muted);font:800 13px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);text-transform:uppercase}
+.rdh-bug-headline{margin:0;color:var(--text2);font-size:14px;font-weight:700}
+.rdh-bug-period{color:var(--muted);font-weight:600}
+.rdh-bug-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:0}
+.rdh-bug-stats>div{min-width:0;padding:12px;border-radius:12px;background:var(--surface2)}
+.rdh-bug-stats dt{color:var(--muted);font-size:12px;font-weight:600}
+.rdh-bug-stats dd{margin:2px 0 0;color:var(--text);font-size:16px;font-weight:800;line-height:1.3;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+
+/* ── Playoff race ────────────────────────────────────────────────────── */
+.rdh-race-list{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.rdh-race-row{display:flex;align-items:center;gap:10px;min-height:36px;padding:6px 10px;border-radius:10px}
+.rdh-race-row[data-own-team=true]{background:var(--rd-accent-soft,var(--accent-soft))}
+.rdh-race-rank{flex:none;width:22px;color:var(--muted);font:700 12px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums}
+.rdh-race-team{flex:1;min-width:0;display:-webkit-box;overflow:hidden;color:var(--text);font-size:14px;font-weight:700;line-height:1.25;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere}
+.rdh-race-row[data-in-field=false] .rdh-race-team{color:var(--text2);font-weight:600}
+.rdh-race-record{flex:none;color:var(--text2);font-size:13px;font-variant-numeric:tabular-nums}
+.rdh-race-line{display:flex;align-items:center;gap:8px;margin:4px 0}
+.rdh-race-line>span{flex:1;height:2px;border-radius:2px;background:var(--rd-accent,var(--accent))}
+.rdh-race-line>em{color:var(--rd-accent-text,var(--accent));font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-style:normal;letter-spacing:.1em;text-transform:uppercase}
+.rdh-race-gap{padding-left:12px;color:var(--muted);font-size:12px}
+.rdh-race .nl-text-link{align-self:flex-start}
+
+/* ── Last week's recap ───────────────────────────────────────────────── */
+.rdh-recap-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.rdh-recap-grid>div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.rdh-recap-label{color:var(--muted);font-size:12px;font-weight:600}
+.rdh-recap-value{color:var(--text);font-size:22px;font-weight:900;font-variant-numeric:tabular-nums}
+.rdh-recap-team{color:var(--text2);font-size:13px;line-height:1.4}
+
+/* ── Draft grades ────────────────────────────────────────────────────── */
+.rdh-grade-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin:0;padding:0;list-style:none}
+.rdh-grade-list li{display:flex;align-items:center;gap:12px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface2)}
+.rdh-grade-list li[data-own-team=true]{border-color:var(--rd-accent-line,var(--accent-line));background:var(--rd-accent-soft,var(--accent-soft))}
+.rdh-grade-list strong{flex:1;min-width:0;overflow:hidden;color:var(--text);font-size:14px;text-overflow:ellipsis;white-space:nowrap}
+.rdh-grade-letter{display:inline-flex;flex:none;align-items:center;justify-content:center;width:40px;height:36px;border-radius:10px;background:var(--surface);border:1px solid var(--rd-accent-line,var(--accent-line));color:var(--rd-accent-text,var(--accent));font-size:16px;font-weight:900}
+.rdh-grade-score{flex:none;color:var(--muted);font:600 12px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace)}
+
+/* ── Draft HQ draftboard ─────────────────────────────────────────────── */
+.rdh-draftboard{gap:18px;border-color:var(--rd-accent-line,var(--line));background:var(--rd-surface-elev,var(--surface))}
+.rdh-draftboard-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.rdh-draftboard-title{display:flex;flex-direction:column;gap:6px;min-width:0}
+.rdh-draftboard-title h2{margin:0;color:var(--text);font-size:28px;font-weight:900;letter-spacing:-.02em;line-height:1.1}
+.rdh-draftboard-title p{margin:0;color:var(--text2);font-size:14px}
+.rdh-draftboard-icons{display:flex;flex:none;gap:8px}
+.rdh-icon-button{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:1px solid var(--line2);border-radius:999px;background:var(--surface);color:var(--text2)}
+.rdh-icon-button:hover{border-color:var(--rd-accent-line,var(--accent-line));color:var(--rd-accent-text,var(--accent))}
+.rdh-countdown{display:flex;flex-wrap:wrap;gap:10px}
+.rdh-countdown-unit{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:76px;padding:10px 14px;border:1px solid var(--rd-accent-line,var(--accent-line));border-radius:12px;background:var(--surface)}
+.rdh-countdown-unit strong{color:var(--rd-accent-text,var(--accent));font-size:28px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.rdh-countdown-unit span{color:var(--muted);font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.1em;text-transform:uppercase}
+.rdh-draftboard-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0}
+.rdh-draftboard-facts>div{min-width:0;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.rdh-draftboard-facts dt{color:var(--muted);font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.1em;text-transform:uppercase}
+.rdh-draftboard-facts dd{margin:6px 0 0;color:var(--text);font-size:15px;font-weight:800;overflow-wrap:anywhere}
+.rdh-draftboard-facts p{margin:4px 0 0;color:var(--muted);font-size:12px;line-height:1.4}
+.rdh-draftboard-note{margin:0;color:var(--muted);font-size:12px}
+.rdh-draftboard .nl-button:disabled{cursor:not-allowed;opacity:.6}
+
+/* ── League home: next-up draft countdown ────────────────────────────── */
+.nl-workspace[data-format=redraft] .rdh-next-countdown{display:inline-flex;align-items:baseline;gap:8px;margin:0 0 12px;padding:6px 12px;border:1px solid var(--rd-accent-line);border-radius:999px;background:var(--rd-accent-soft);color:var(--rd-accent-text);font:700 12px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.08em;text-transform:uppercase}
+.nl-workspace[data-format=redraft] .rdh-next-countdown strong{font-size:14px;font-variant-numeric:tabular-nums}
+
+/* ── League home cards in the identity ───────────────────────────────── */
+.nl-workspace[data-format=redraft] .nl-home .nl-next{border-color:var(--rd-accent-line);background:var(--rd-surface-elev)}
+.nl-workspace[data-format=redraft] .nl-home .nl-yourweek .nl-yw-tile:hover{border-color:var(--rd-accent-line)}
+.nl-workspace[data-format=redraft] .nl-home .nl-yourweek .nl-card-label>span:first-child{color:var(--rd-accent-text)}
+
+/* "What changed" (LeagueRulesHomeHost): the sport's line, the identity's label, token text. */
+.nl-workspace[data-format=redraft] [data-testid=league-rules-changes-card]{border-color:var(--rd-accent-line);background:var(--rd-surface-elev)}
+.nl-workspace[data-format=redraft] [data-testid=league-rules-changes-card] .nl-card-label>span:first-child{color:var(--rd-accent-text)}
+.nl-workspace[data-format=redraft] .nl-rules-sub{color:var(--text2)}
+
+/* ── Football Home (NflRedraftLeagueHomeDashboard) ───────────────────── */
+/* The dashboard root is its own `.af-core`, which re-declares /core's accent and would undo the
+ * foundation's re-pointing; point it back at the sport for everything inside. */
+.nl-workspace[data-format=redraft] .rdh-football-home{--accent:var(--rd-accent-text);--accent-ink:var(--rd-accent-ink);--accent-soft:var(--rd-accent-soft);--accent-line:var(--rd-accent-line)}
+.nl-workspace[data-format=redraft] .rdh-football-home .af-overview-header{border-color:var(--rd-accent-line);background:var(--rd-surface-elev);background-image:none;box-shadow:none}
+.nl-workspace[data-format=redraft] .rdh-football-home .af-overview-header>div>div:first-child>p:first-child{color:var(--rd-accent-text)}
+.nl-workspace[data-format=redraft] .rdh-football-home :is([class~='text-violet-200'],[class~='text-violet-300'],[class~='text-violet-200/75'],[class~='text-violet-200/80'],[class~='text-[#ffb8d1]'],[class~='text-[#ffd7e5]']){color:var(--rd-accent-text)}
+.nl-workspace[data-format=redraft] .rdh-football-home .af-overview-metric{background:var(--surface)}
+.nl-workspace[data-format=redraft] .rdh-football-home :is(button,a):hover>.af-overview-card{border-color:var(--rd-accent-line);background:var(--surface2)}
+.nl-workspace[data-format=redraft] .rdh-football-home [class~='border-[#ff3d81]/30']{border-color:var(--rd-accent-line);background:var(--rd-accent-soft)}
+.nl-workspace[data-format=redraft] .rdh-football-home [class~='rounded-full'][class~='bg-white/30']{background:var(--rd-accent)}
+.nl-workspace[data-format=redraft] .rdh-football-home [class~='text-amber-300']{color:var(--warn)}
+.rdh-football-home .rdh-bug{margin-top:20px}
+
+/* ── Draft HQ (DraftTab) around the draftboard ───────────────────────── */
+.nl-workspace[data-format=redraft] .rdh-draft :is([class~='bg-[#0c0c1e]'],[class~='bg-[#121826]']){border-color:var(--line);background:var(--surface)}
+.nl-workspace[data-format=redraft] .rdh-draft :is([class~='text-white'],[class~='text-white/75'],[class~='text-white/80'],[class~='text-white/85'],[class~='text-white/90']){color:var(--text)}
+.nl-workspace[data-format=redraft] .rdh-draft :is([class~='text-white/35'],[class~='text-white/40'],[class~='text-white/45'],[class~='text-white/50'],[class~='text-white/55'],[class~='text-white/60'],[class~='text-white/65'],[class~='text-white/70']){color:var(--muted)}
+.nl-workspace[data-format=redraft] .rdh-draft :is([class~='text-[#ff3d81]'],[class~='text-[#ffb8d1]'],[class~='text-[#ff3d81]/90'],[class~='text-[#ff3d81]/95']){color:var(--rd-accent-text)}
+.nl-workspace[data-format=redraft] .rdh-draft :is([class~='border-white/[0.08]'],[class~='border-white/[0.07]'],[class~='border-white/10'],[class~='border-white/20']){border-color:var(--line2)}
+.nl-workspace[data-format=redraft] .rdh-draft :is([class~='bg-white/[0.08]'],[class~='bg-white/[0.04]'],[class~='bg-black/20']){background:var(--surface2)}
+.nl-workspace[data-format=redraft] .rdh-draft [class~='border-[#ff3d81]/40']{border-color:var(--rd-accent-line);background:var(--rd-accent-soft);color:var(--rd-accent-text)}
+
+/* Pre-draft Draft HQ (LeagueShell's renderPredraftDraftSetup — markup is not this batch's, so the
+ * identity reaches it by class): the pink gradient card becomes the identity's lifted surface. */
+.nl-workspace[data-format=redraft] .af-league-draft-card{border-color:var(--rd-accent-line);background:var(--rd-surface-elev);background-image:none;box-shadow:none}
+.nl-workspace[data-format=redraft] .af-league-draft-glow{display:none}
+.nl-workspace[data-format=redraft] .af-league-draft-card .af-league-eyebrow{color:var(--rd-accent-text)}
+.nl-workspace[data-format=redraft] .af-league-draft-card :is(h2,[class~='text-white']){color:var(--text)}
+.nl-workspace[data-format=redraft] .af-league-draft-card :is([class~='text-white/45'],[class~='text-white/55']){color:var(--muted)}
+.nl-workspace[data-format=redraft] .af-league-draft-fill{border-color:var(--rd-accent-line);background:var(--rd-accent-soft);background-image:none;box-shadow:none}
+.nl-workspace[data-format=redraft] .af-league-draft-fill :is(p,[class~='text-[#ffb8d1]/70']){color:var(--rd-accent-text)}
+.nl-workspace[data-format=redraft] .af-league-draft-facts>div{border-color:var(--line);background:var(--surface)}
+
+@media(max-width:767px){
+  .rdh-card{padding:16px;border-radius:14px;gap:12px}
+  .rdh-bug-board{gap:10px;padding:14px}
+  .rdh-bug-score{font-size:36px}
+  .rdh-bug-team{font-size:14px}
+  .rdh-bug-odds{font-size:20px}
+  .rdh-bug-mid-note{display:none}
+  .rdh-bug-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .rdh-bug-stats>div:last-child:nth-child(odd){grid-column:1/-1}
+  .rdh-recap-grid{grid-template-columns:minmax(0,1fr)}
+  .rdh-grade-list{grid-template-columns:minmax(0,1fr)}
+  .rdh-draftboard-title h2{font-size:22px}
+  .rdh-countdown{gap:6px}
+  .rdh-countdown-unit{flex:1;min-width:0;padding:8px 6px}
+  .rdh-countdown-unit strong{font-size:22px}
+  .rdh-draftboard-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rdh-draftboard-facts>div:last-child:nth-child(odd){grid-column:1/-1}
+  .rdh-actions>.nl-button{flex:1}
+}
