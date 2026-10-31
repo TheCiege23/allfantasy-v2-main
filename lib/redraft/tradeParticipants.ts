@@ -97,3 +97,51 @@ export function uninvolvedTradeParticipants(
   }
   return participants.filter((id) => !touched.has(id))
 }
+
+/**
+ * 🛑 THE NOT-GRADED STATE FOR A MULTI-TEAM TRADE, IN THE TRADE CENTER'S OWN WORDS.
+ * Every grade, value delta and "who won" reading in this app compares two sides. A 3- or 4-team trade
+ * has no "other side", so it is not graded, and never graded as if it were two teams. Readers that
+ * would otherwise show a grade say this instead (app/api/redraft/trade-proposals returns the same
+ * sentence as `gradeWithheld`).
+ */
+export const MULTI_TEAM_GRADE_WITHHELD = 'Grades are shown for two-team trades.'
+
+/** What one team in the trade sends and receives. */
+export type TradeTeamMoves<A> = { rosterId: string; gives: A[]; gets: A[] }
+
+/**
+ * Every team in the trade, in participant order, with the assets it sends (`gives`) and receives
+ * (`gets`). Read off each asset's own `fromRosterId` / `toRosterId`, so it is right for any number of
+ * teams; for a two-team trade it is the proposer's and the receiver's halves, in that order.
+ */
+export function tradeTeamMoves<A extends { fromRosterId: string; toRosterId: string }>(
+  p: RedraftTradeParticipantsShape,
+  assets: readonly A[],
+): Array<TradeTeamMoves<A>> {
+  return tradeParticipantRosterIds(p).map((rosterId) => ({
+    rosterId,
+    gives: assets.filter((a) => a.fromRosterId === rosterId),
+    gets: assets.filter((a) => a.toRosterId === rosterId),
+  }))
+}
+
+/** "A and B", "A, B and C": the plain English list the server and Chimmy copy uses. */
+export function joinTeamNames(names: readonly string[]): string {
+  if (names.length === 0) return ''
+  if (names.length === 1) return names[0]!
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+/**
+ * One line per team: "A gives X, Y and gets Z". English, for server notices and Chimmy grounding (the
+ * model answers in the user's language). `label` renders one asset; an empty side reads "nothing".
+ */
+export function describeTradeTeamMoves<A>(
+  moves: ReadonlyArray<TradeTeamMoves<A>>,
+  nameOf: (rosterId: string) => string,
+  label: (asset: A) => string,
+): string[] {
+  const list = (xs: A[]) => (xs.length ? xs.map(label).join(', ') : 'nothing')
+  return moves.map((m) => `${nameOf(m.rosterId)} gives ${list(m.gives)} and gets ${list(m.gets)}`)
+}
