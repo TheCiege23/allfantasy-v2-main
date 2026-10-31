@@ -209,7 +209,6 @@ import { recordChimmyQualityEvent } from '@/lib/chimmy-quality/ChimmyQualityAnal
 import { getAiMemory } from '@/lib/ai-memory/ai-memory-store'
 import { COACHING_PROFILE_KEY, mergeCoachingProfiles } from '@/lib/chimmy-personalization/remembered'
 import {
-  appendOrchestrationFooterIfMissing,
   buildOrchestrationMeta,
   buildOrchestrationPromptSection,
   buildMemorySummaryLine,
@@ -1658,10 +1657,16 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     return NextResponse.json(buildLeagueGroundingErrorPayload(), { status: 412 })
   }
 
-  const staleness = buildChimmyStalenessWarning({
+  /*
+   * ⚠ NO LEAGUE IN SCOPE, NO LEAGUE DATA TO BE STALE. A null `lastSyncedAt` reads as "timestamp
+   * unavailable", and the prompt says to always repeat the warning — so "Explain PPR scoring" with no
+   * league selected (2026-10-31) was told twice that its league data might be stale.
+   */
+  const freshness = buildChimmyStalenessWarning({
     lastSyncedAt: leagueSnapshot?.lastSyncedAt ?? null,
     intent: initialIntent,
   })
+  const staleness = leagueSnapshot ? freshness : { ...freshness, warning: null }
   const sourceReferences = buildChimmySourceReferences({
     leagueId: leagueId ?? null,
     intent: initialIntent,
@@ -4332,10 +4337,12 @@ ${describedTradeCtx}`
     if (chimmySportDigestFreshness) {
       dataSources.push('sports_digest_db')
     }
-    const displayExplanation = appendOrchestrationFooterIfMissing(
-      pecrOutput.sanitizedAiExplanation || '',
-      chimmyOrchestrationMeta
-    )
+    /*
+     * No routing footer. One was appended to every reply that skipped the five required headings —
+     * "Intent: … (~62% route match)", "Routing note: …" — so dropping the headings from the prompt
+     * would have put the classifier's score under every answer instead of inside some of them.
+     */
+    const displayExplanation = (pecrOutput.sanitizedAiExplanation || '').trim()
     const displayWithStaleness = staleness.warning
       ? `${displayExplanation}\n\nData freshness: ${staleness.warning}`
       : displayExplanation

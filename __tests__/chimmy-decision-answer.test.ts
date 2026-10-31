@@ -110,18 +110,37 @@ describe('shared consequential-answer contract', () => {
     const out = await prepareChimmyDecisionAnswer({ question: 'Should I pick up Jaylen Warren?', leagueId: 'l1', userId: 'u1' })
     expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'add_rostered' } })
   })
-  it('still asks a trade question to name its sides', async () => {
-    const out = await prepareChimmyDecisionAnswer({ question: 'Should I make a trade?', leagueId: 'l1', userId: 'u1' })
-    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'decision_inputs_required' } })
-    expect(out?.answer).toContain('Name what you give and receive')
+  /*
+   * It used to refuse ("Name what you give and receive"), and so did every follow-up that said
+   * "trade" — including the owner's critique of the ideas Chimmy had just given (2026-10-31). The
+   * engine resolved no move, so the full answer path, which reads the conversation, takes it.
+   */
+  it.each([
+    'Should I make a trade?',
+    'in these trade I am giving up scoring players for potential players, Javonte is rated higher than Bucky right now. plus, u didnt consider a 2 or 3 for my 1st round pick',
+  ])('hands a trade message that names no move to the full answer: %s', async question => {
+    const out = await prepareChimmyDecisionAnswer({ question, leagueId: 'l1', userId: 'u1' })
+    expect(out).toBeNull()
+    expect(h.trade).toHaveBeenCalled()
   })
   it('keeps trade discovery available with engine-generated offers and explicit limits', async () => {
-    h.finder.mockResolvedValue({ status: 'ready', you: { teamName: 'My team' }, ideas: [{ partnerTeam: 'Partner', give: [{ name: 'Chase' }], get: [{ name: 'Jefferson' }], giveTotal: 100, getTotal: 101, fairness: 'balanced', why: ['Fits a WR need.'], sendable: true }] })
+    h.finder.mockResolvedValue({ status: 'ready', you: { teamName: 'My team' }, pickNote: null, ideas: [{ partnerTeam: 'Partner', give: [{ name: 'Chase' }], get: [{ name: 'Jefferson' }], giveTotal: 100, getTotal: 101, fairness: 'balanced', why: ['Fits a WR need.'], sendable: true }] })
     const out = await prepareChimmyDecisionAnswer({ question: 'Find trade ideas for WR', leagueId: 'l1', userId: 'u1' })
-    expect(h.finder).toHaveBeenCalledWith({ leagueId: 'authorized-league', userId: 'u1', position: 'WR' })
+    expect(h.finder).toHaveBeenCalledWith({ leagueId: 'authorized-league', userId: 'u1', position: 'WR', goal: null, includePicks: false })
     expect(out?.answer).toContain('give Chase, receive Jefferson')
     expect(out?.answer).toContain('not completed trade verdicts')
     expect(out?.status).toBe('ready')
+  })
+  it('passes a win-now, pick-using ask to the finder and shows this season and the pick caveat', async () => {
+    h.finder.mockResolvedValue({ status: 'ready', you: { teamName: 'Fitty SF' }, pickNote: 'each package assumes you still own that pick',
+      ideas: [{ partnerTeam: 'OTFBackpack', give: [{ name: 'Tyjae Spears' }, { name: '2027 2nd' }], get: [{ name: 'Mike Evans' }], giveTotal: 3100, getTotal: 3150,
+        fairness: 'balanced', why: [], sendable: true, nowGive: 1200, nowGet: 3900 }] })
+    const out = await prepareChimmyDecisionAnswer({ question: 'find me 3 win now trades using my draft picks and a lesser player in versuz', leagueId: 'l1', userId: 'u1' })
+    expect(h.finder).toHaveBeenCalledWith({ leagueId: 'authorized-league', userId: 'u1', position: null, goal: 'win_now', includePicks: true })
+    expect(out?.answer).toContain('Win-now trade ideas for Fitty SF')
+    expect(out?.answer).toContain('give Tyjae Spears, 2027 2nd, receive Mike Evans')
+    expect(out?.answer).toContain('This season: 1200.0 given vs 3900.0 received')
+    expect(out?.answer).toContain('Draft picks: each package assumes you still own that pick.')
   })
 })
 

@@ -561,7 +561,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'find_trade_ideas',
       description:
-        "Searches EVERY roster in the league in scope for trades that make sense for both sides, and returns up to three concrete offers: the partner, what the user gives, what they get, AllFantasy market value each way with a fairness read, and why the partner would say yes (their needs, your depth, team direction, trade-block listings). Use for 'find me a trade', 'who should I trade with', 'I need a running back — who has one', 'what can I get for X', 'shop X'. NFL leagues only. Not for grading a trade the user already described (evaluate_trade).",
+        "Searches EVERY roster in the league in scope for trades that make sense for both sides, and returns up to three concrete offers: the partner, what the user gives, what they get, AllFantasy market value each way with a fairness read, and why the partner would say yes (their needs, your depth, team direction, trade-block listings). Use for 'find me a trade', 'who should I trade with', 'I need a running back — who has one', 'what can I get for X', 'shop X'. Set goal and include_picks whenever the user says so — 'win now', 'contend', 'using my picks', 'a 2nd instead of my 1st' are search terms, not flavour. NFL leagues only. Not for grading a trade the user already described (evaluate_trade).",
       parameters: {
         type: 'object',
         properties: {
@@ -573,6 +573,15 @@ export const CHIMMY_TOOL_SPECS = [
           trade_away: {
             type: 'string',
             description: 'Full name of a player on the USER\'s roster they want to move, when they named one.',
+          },
+          goal: {
+            type: 'string',
+            enum: ['win_now'],
+            description: "'win_now' when the user wants to improve THIS season (win now, contend, playoff push): only packages that raise their current-season value come back.",
+          },
+          include_picks: {
+            type: 'boolean',
+            description: 'True when the user offers their own draft picks as part of the package.',
           },
         },
         required: [],
@@ -1155,6 +1164,8 @@ export async function executeChimmyTool(
           userId: ctx.userId,
           position: readTradeFinderPosition(args.position),
           tradeAway: typeof args.trade_away === 'string' && args.trade_away.trim() ? args.trade_away.trim().slice(0, 80) : null,
+          goal: args.goal === 'win_now' ? 'win_now' : null,
+          includePicks: args.include_picks === true,
         })
       }
 
