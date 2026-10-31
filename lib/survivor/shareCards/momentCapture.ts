@@ -188,6 +188,10 @@ export async function captureCouncilShareMoments(leagueId: string, councilId: st
     }
   }
 
+  if (!council.isTie && (council.eliminatedUserId || council.eliminatedRosterId)) {
+    if (await captureWeekRecapMoment(leagueId, council, facts)) created++
+  }
+
   for (const play of playsOf(council.idolsPlayed)) {
     const ownerUserId = play.playerUserId ?? play.userId
     if (!ownerUserId || !play.idolId) continue
@@ -217,6 +221,56 @@ export async function captureCouncilShareMoments(leagueId: string, councilId: st
     if (result.created) created++
   }
   return created
+}
+
+/** A recap belongs to the league, not a manager; this marks its subject column. */
+export const RECAP_SUBJECT = 'league'
+
+/**
+ * The week's league recap after a council read: the tribe that went to Tribal Council and the
+ * counts left on the island and on Exile. Deliberately names nobody, so any member may share it
+ * without sharing someone else's exit (the `out` card stays opt-in for the manager voted out).
+ * Counts treat the voted-out manager as gone even if their state has not flipped yet.
+ */
+export function weekRecapCounts(
+  players: Array<{ userId: string; playerState: string }>,
+  eliminatedUserId: string | null,
+  toExile: boolean,
+): { remaining: number; onExile: number } {
+  let remaining = 0
+  let onExile = 0
+  for (const player of players) {
+    if (player.userId === eliminatedUserId) {
+      if (toExile || player.playerState === 'exile') onExile++
+      continue
+    }
+    if (player.playerState === 'active') remaining++
+    else if (player.playerState === 'exile') onExile++
+  }
+  return { remaining, onExile }
+}
+
+async function captureWeekRecapMoment(
+  leagueId: string,
+  council: { id: string; week: number; phase: string; attendingTribeId: string | null; eliminatedUserId: string | null },
+  facts: LeagueFacts,
+): Promise<boolean> {
+  const players = await prisma.survivorPlayer.findMany({ where: { leagueId }, select: { userId: true, playerState: true } })
+  const exileOn = facts.settings.exileIslandEnabled && facts.settings.eliminationOutcome === 'exile_island'
+  const counts = weekRecapCounts(players, council.eliminatedUserId, exileOn)
+  const merged = JURY_PHASES.has(council.phase) || JURY_PHASES.has(facts.phase ?? '')
+  const tribe = merged ? { tribeName: null, crestPath: null } : await tribeFacts(council.attendingTribeId, facts.sport)
+  const result = await createShareMomentOnce({
+    leagueId, type: 'recap', week: council.week, subjectUserId: RECAP_SUBJECT, subjectRosterId: null,
+    dedupeKey: `recap:${council.id}`,
+    payload: {
+      ...basePayload(facts, facts.leagueName, tribe),
+      remaining: counts.remaining,
+      onExile: exileOn ? counts.onExile : null,
+      merged,
+    },
+  })
+  return result.created
 }
 
 type NecklaceScore = { userId: string; finalScore: number; tribeId: string | null }
@@ -388,7 +442,7 @@ export async function syncLeagueShareMoments(leagueId: string): Promise<void> {
   const have = new Set(existing.map(row => row.dedupeKey))
   for (const council of councils) {
     const wants = [
-      ...(!council.isTie && (council.eliminatedUserId || council.eliminatedRosterId) ? [`out:${council.id}`] : []),
+      ...(!council.isTie && (council.eliminatedUserId || council.eliminatedRosterId) ? [`out:${council.id}`, `recap:${council.id}`] : []),
       ...playsOf(council.idolsPlayed).map(play => `idol:${council.id}:${play.idolId}`),
     ]
     if (wants.some(key => !have.has(key))) await captureCouncilShareMoments(leagueId, council.id, LATE)
