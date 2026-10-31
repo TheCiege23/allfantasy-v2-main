@@ -2,15 +2,19 @@
  * The Sync screen's Guilly card for an imported league (lib/guillotine/importedGuillyHealthLoad.ts →
  * lib/core-app/leagueSync.ts → components/core-app/screens/LeagueSync.tsx): the loader joins the
  * provider's roster ids to team names and roster sizes, and the card says what we read and what is in
- * doubt. The checks themselves are in __tests__/guillotine/imported-guilly-health.test.ts.
+ * doubt. The checks themselves are in __tests__/guillotine/imported-guilly-health.test.ts. While the format
+ * is only a guess, the commissioner can confirm it from the card (components/core-app/ConfirmGuillyButton.tsx).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 const h = vi.hoisted(() => ({
   league: {} as Record<string, unknown>,
   rows: [] as Array<{ week: number; rosterId: string; pointsFor: number; matchupId: number | null }>,
   weeklyWhere: null as unknown,
+  commissioner: true,
+  refresh: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -44,11 +48,14 @@ vi.mock('@/lib/prisma', () => ({
     syncJobRun: { findFirst: vi.fn(async () => null) },
   },
 }))
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }) }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: h.refresh, push: vi.fn(), replace: vi.fn() }) }))
+const isCommissioner = vi.hoisted(() => vi.fn(async () => h.commissioner))
+vi.mock('@/lib/commissioner/permissions', () => ({ isCommissioner }))
 vi.mock('@/lib/core-app/syncPreferences', () => ({ getPausedSyncKeys: vi.fn(async () => new Set<string>()) }))
 
 import { getLeagueSync } from '@/lib/core-app/leagueSync'
 import { LeagueSync } from '@/components/core-app/screens/LeagueSync'
+import ConfirmGuillyButton from '@/components/core-app/ConfirmGuillyButton'
 import type { LeagueContext } from '@/lib/core-app/leagueContext'
 
 const NOW = new Date('2026-10-30T12:00:00Z')
@@ -69,6 +76,9 @@ async function load() {
 }
 
 beforeEach(() => {
+  h.commissioner = true
+  isCommissioner.mockClear()
+  h.refresh.mockClear()
   h.league = {
     platform: 'sleeper', leagueType: 'guillotine', guillotineMode: null, status: 'in_season', lifecycleState: 'in_season',
     settings: { leagueTypeConfirmation: { type: 'guillotine' } }, lastSyncedAt: new Date('2026-10-30T11:30:00Z'),
@@ -123,5 +133,62 @@ describe('the card', () => {
   it('a league without the card renders none', async () => {
     h.league = { ...h.league, leagueType: 'redraft', settings: {} }
     expect(renderToStaticMarkup(<LeagueSync data={await load()} manageHref="/connections" />)).not.toContain('league-sync-guilly')
+  })
+})
+
+describe('confirming the format from the card', () => {
+  const guessed = () => {
+    h.league = { ...h.league, settings: {} } // leagueType 'guillotine' alone: an importer's guess
+  }
+
+  it('the commissioner of a guessed league gets the button; the loader asks only then', async () => {
+    guessed()
+    const r = await load()
+    expect(r.guilly!.format).toBe('detected')
+    expect(r.guillyCanConfirm).toBe(true)
+    expect(isCommissioner).toHaveBeenCalledWith('L', 'U')
+    const html = renderToStaticMarkup(<LeagueSync data={r} manageHref="/connections" />)
+    expect(html).toMatch(/league-sync-guilly-unconfirmed_format"[^]*league-sync-guilly-confirm"[^]*Yes, this is a Guilly league/)
+    expect(html).not.toContain('league-sync-guilly-ask-commissioner')
+  })
+
+  it('a member who is not the commissioner is told who can confirm, with no button', async () => {
+    guessed()
+    h.commissioner = false
+    const r = await load()
+    expect(r.guillyCanConfirm).toBe(false)
+    const html = renderToStaticMarkup(<LeagueSync data={r} manageHref="/connections" />)
+    expect(html).toContain('Only the commissioner can confirm the league type.')
+    expect(html).not.toContain('league-sync-guilly-confirm')
+  })
+
+  it('a confirmed league offers nothing, and the commissioner lookup is skipped', async () => {
+    const r = await load()
+    expect(r.guillyCanConfirm).toBe(false)
+    expect(isCommissioner).not.toHaveBeenCalled()
+    const html = renderToStaticMarkup(<LeagueSync data={r} manageHref="/connections" />)
+    expect(html).not.toContain('league-sync-guilly-confirm')
+    expect(html).not.toContain('league-sync-guilly-ask-commissioner')
+  })
+
+  it('the button records the league as Guilly and refreshes the screen', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ rankableType: 'guillotine' }) }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<ConfirmGuillyButton leagueId="L 1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, this is a Guilly league' }))
+    expect((await screen.findByRole('status')).textContent).toBe('Confirmed as a Guilly league.')
+    expect(fetchMock).toHaveBeenCalledWith('/api/leagues/L%201/league-type', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ type: 'guillotine' }) }))
+    expect(h.refresh).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
+
+  it('a refusal shows the server’s reason and keeps the button', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => ({ error: 'Only the commissioner can confirm a league format' }) })))
+    render(<ConfirmGuillyButton leagueId="L" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, this is a Guilly league' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Only the commissioner can confirm a league format')
+    expect(screen.getByRole('button', { name: 'Yes, this is a Guilly league' })).toBeTruthy()
+    expect(h.refresh).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 })
