@@ -22,6 +22,12 @@ import {
 import { ReverseTradeDialog } from '@/components/league-trade/ReverseTradeDialog'
 import { previewNativeTradeReversal, requestNativeTradeReversal } from '@/lib/trade-reversal/client'
 import { explainTradeReview } from '@/lib/redraft/tradeReviewWindow'
+import {
+  isMultiTeamTrade,
+  tradeParticipantRosterIds,
+  tradePartiesPendingAcceptance,
+  tradePartiesToAccept,
+} from '@/lib/redraft/tradeParticipants'
 
 function rosterName(row: RedraftRosterRow | undefined, fallbackId: string): string {
   return row?.teamName ?? row?.ownerName ?? fallbackId.slice(0, 6)
@@ -248,13 +254,29 @@ export function TradeCenter({
             const proposerAssets = p.assets.filter((a) => a.fromRosterId === p.proposerRosterId)
             const receiverAssets = p.assets.filter((a) => a.fromRosterId === p.receiverRosterId)
             const tone = STATUS_TONE[p.status] ?? 'border-white/15 text-white/60'
+            // Multi-team trades: every team, each team's gives and gets, and who has accepted so far.
+            const multiTeam = isMultiTeamTrade(p)
+            const teamIds = tradeParticipantRosterIds(p)
+            const teamName = (id: string, i: number) => rosterNameById.get(id) ?? `Team ${String.fromCharCode(65 + i)}`
+            const partiesToAccept = tradePartiesToAccept(p)
+            const stillPending = tradePartiesPendingAcceptance(p)
+            const acceptedCount = partiesToAccept.length - stillPending.length
             return (
               <div key={p.id} className="rounded-lg border border-white/10 bg-black/20 p-3 text-[11px] text-white/80" data-testid="trade-proposal-row">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold text-white">
-                    {rosterNameById.get(p.proposerRosterId) ?? 'Team A'}
-                    {' ⇄ '}
-                    {rosterNameById.get(p.receiverRosterId) ?? 'Team B'}
+                    {multiTeam ? (
+                      <>
+                        {teamIds.map((id, i) => teamName(id, i)).join(' · ')}
+                        <span className="ml-1.5 text-[11px] font-normal text-white/50">{teamIds.length}-team trade</span>
+                      </>
+                    ) : (
+                      <>
+                        {rosterNameById.get(p.proposerRosterId) ?? 'Team A'}
+                        {' ⇄ '}
+                        {rosterNameById.get(p.receiverRosterId) ?? 'Team B'}
+                      </>
+                    )}
                   </p>
                   <div className="flex items-center gap-1.5">
                     {/* The one grade, from the proposer's side — not the proposal-time snapshot's own scale. */}
@@ -267,9 +289,40 @@ export function TradeCenter({
                         {p.tradeGrade.grade}
                       </span>
                     ) : null}
+                    {multiTeam && p.status === 'pending' && !p.acceptedAt ? (
+                      <span className="rounded border border-white/15 px-2 py-0.5 text-[11px] text-white/70" data-testid="trade-proposal-accept-count">
+                        accepted {acceptedCount} of {partiesToAccept.length}
+                      </span>
+                    ) : null}
                     <span className={`rounded border px-2 py-0.5 text-[11px] uppercase ${tone}`}>{p.status}</span>
                   </div>
                 </div>
+                {multiTeam ? (
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2" data-testid="trade-proposal-multi-team">
+                    {teamIds.map((id, i) => {
+                      const gets = p.assets.filter((a) => a.toRosterId === id)
+                      const gives = p.assets.filter((a) => a.fromRosterId === id)
+                      const accepted = id !== p.proposerRosterId && !stillPending.includes(id)
+                      return (
+                        <div key={id} className="rounded border border-white/10 bg-white/[0.03] p-2">
+                          <p className="font-semibold text-white/70">
+                            {teamName(id, i)}
+                            {id === p.proposerRosterId ? <span className="ml-1 font-normal text-white/40">(proposed)</span> : null}
+                            {accepted ? <span className="ml-1 font-normal text-emerald-300/80">✓ accepted</span> : null}
+                          </p>
+                          <p className="mt-1 text-white/55">
+                            <span className="text-white/40">Gets:</span>{' '}
+                            {gets.length ? gets.map(formatProposalAsset).join(', ') : '—'}
+                          </p>
+                          <p className="text-white/55">
+                            <span className="text-white/40">Gives:</span>{' '}
+                            {gives.length ? gives.map(formatProposalAsset).join(', ') : '—'}
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   <div className="rounded border border-white/10 bg-white/[0.03] p-2">
                     {/* Each team over what it GETS — the proposer's grade above is for this column. */}
@@ -285,10 +338,18 @@ export function TradeCenter({
                     </p>
                   </div>
                 </div>
+                )}
+                {multiTeam && p.tradeGrade?.gradeWithheld ? (
+                  <p className="mt-2 text-white/45" data-testid="trade-proposal-grade-note">{p.tradeGrade.gradeWithheld}</p>
+                ) : null}
                 {p.reason ? <p className="mt-2 text-white/55">“{p.reason}”</p> : null}
                 {p.status === 'pending' ? (
                   <p className="mt-2 rounded border border-cyan-300/20 bg-cyan-400/[0.06] px-2 py-1.5 text-cyan-50/85" data-testid="trade-review-explainer">
-                    {explainTradeReview({ ...p, acceptedAt: p.acceptedAt ?? null, votes: p.votes }, Date.now()).en}
+                    {multiTeam && !p.acceptedAt
+                      ? `Every team has to accept before it goes through. Waiting on ${stillPending
+                          .map((id) => teamName(id, teamIds.indexOf(id)))
+                          .join(', ')}.`
+                      : explainTradeReview({ ...p, acceptedAt: p.acceptedAt ?? null, votes: p.votes }, Date.now()).en}
                   </p>
                 ) : null}
                 {p.status === 'pending' ? (
@@ -335,7 +396,11 @@ export function TradeCenter({
                 ) : null}
                 {reversingId === p.id ? (
                   <ReverseTradeDialog
-                    title={`${rosterNameById.get(p.proposerRosterId) ?? 'Team A'} ⇄ ${rosterNameById.get(p.receiverRosterId) ?? 'Team B'}`}
+                    title={
+                      multiTeam
+                        ? teamIds.map((id, i) => teamName(id, i)).join(' · ')
+                        : `${rosterNameById.get(p.proposerRosterId) ?? 'Team A'} ⇄ ${rosterNameById.get(p.receiverRosterId) ?? 'Team B'}`
+                    }
                     preflight={() => previewNativeTradeReversal(p.id)}
                     reverse={(reason) => requestNativeTradeReversal(p.id, reason)}
                     onClose={() => setReversingId(null)}

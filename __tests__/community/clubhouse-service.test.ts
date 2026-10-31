@@ -10,6 +10,7 @@ const h = vi.hoisted(() => {
   const prisma = {
     appUser: { findUnique: vi.fn(), findMany: vi.fn() },
     league: { findMany: vi.fn() },
+    leagueTeam: { findMany: vi.fn(async () => []) },
     communityPost: {
       findUnique: vi.fn(),
       findMany: vi.fn(),

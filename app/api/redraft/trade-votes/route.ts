@@ -30,6 +30,13 @@ import {
 } from '@/lib/redraft/finalizeRedraftTrade'
 import { reviewWindowEndsAt, reviewWindowEnded, tradeReviewWindowHours } from '@/lib/redraft/tradeReviewWindow'
 import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
+import {
+  isMultiTeamTrade,
+  tradeParticipantRosterIds,
+  tradePartiesPendingAcceptance,
+  tradePartiesToAccept,
+} from '@/lib/redraft/tradeParticipants'
+import { notifyMultiTeamTradeParties } from '@/lib/redraft/multiTeamTradeNotices'
 
 export const dynamic = 'force-dynamic'
 
@@ -250,6 +257,20 @@ export async function POST(req: NextRequest) {
   const isReceiverOwner = receiverOwnerId === userId || proposal.receiverRosterId === coOwnerRedraftId
   const isCommissioner = await isCommissionerOrCo(proposal.leagueId, userId)
 
+  /*
+   * MULTI-TEAM TRADES (lib/redraft/tradeParticipants.ts). Every team but the proposer must accept, so
+   * "the receiver" becomes "any team in the trade that has not accepted yet". For a two-team trade
+   * `multiTeam` is false and every branch below is exactly what it was — the receiver alone accepts or
+   * rejects, and `acceptedRosterIds` is never written.
+   */
+  const multiTeam = isMultiTeamTrade(proposal)
+  const participantRosterIds = tradeParticipantRosterIds(proposal)
+  const controlsRoster = (rosterId: string) => rosterById.get(rosterId)?.ownerId === userId || rosterId === coOwnerRedraftId
+  /** The non-proposer teams in this trade that this user runs (multi-team only). */
+  const actingPartyRosterIds = multiTeam ? tradePartiesToAccept(proposal).filter(controlsRoster) : []
+  const isTradePartyOwner = participantRosterIds.some(controlsRoster)
+  const participantOwnerIds = participantRosterIds.map((id) => rosterById.get(id)?.ownerId)
+
   if (action === 'cancel') {
     if (!isProposerOwner) {
       return NextResponse.json({ error: 'Only proposer can cancel' }, { status: 403 })
@@ -280,8 +301,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'accept' || action === 'reject') {
-    if (!isReceiverOwner) {
-      return NextResponse.json({ error: 'Only receiver can accept/reject' }, { status: 403 })
+    if (multiTeam ? actingPartyRosterIds.length === 0 : !isReceiverOwner) {
+      return NextResponse.json(
+        { error: multiTeam ? 'Only a team in this trade can accept or reject it' : 'Only receiver can accept/reject' },
+        { status: 403 },
+      )
     }
     if (action === 'accept') {
       /*
@@ -337,6 +361,62 @@ export async function POST(req: NextRequest) {
           { error: postDraftLock.error, code: postDraftLock.code, unlocksAt: postDraftLock.unlocksAt },
           { status: postDraftLock.status },
         )
+      }
+
+      /*
+       * 🛑 A MULTI-TEAM TRADE IS AGREED ONLY WHEN EVERY TEAM HAS ACCEPTED IT.
+       *
+       * Each acceptance is recorded on its own, conditionally: still `pending`, still not agreed
+       * (`acceptedAt` null — the field the whole review flow reads as "the trade is agreed"), and this
+       * team not already in the list. Until the last team accepts, nothing below runs — no hold check,
+       * no settlement, no review window — and `acceptedAt` stays unset, so neither a commissioner nor
+       * a league vote nor the review sweep can act on it. The LAST acceptance falls through to exactly
+       * the flow a two-team trade's receiver gets.
+       *
+       * ⚠ Two last teams accepting at once both see "all accepted" and both reach that flow. Its own
+       * claims decide: settlement claims `status = 'pending'`, the review window claims
+       * `acceptedAt: null`, so one of them proceeds and the other gets a 409.
+       */
+      if (multiTeam) {
+        const already = new Set(proposal.acceptedRosterIds ?? [])
+        const mine = actingPartyRosterIds.filter((id) => !already.has(id))
+        if (mine.length === 0) {
+          return NextResponse.json(
+            { error: 'You have already accepted this trade. It is waiting on the other teams.' },
+            { status: 409 },
+          )
+        }
+        for (const rosterId of mine) {
+          await prisma.redraftTradeProposal.updateMany({
+            where: { id: proposal.id, status: 'pending', acceptedAt: null, NOT: { acceptedRosterIds: { has: rosterId } } },
+            data: { acceptedRosterIds: { push: rosterId } },
+          })
+        }
+        const afterAccept = await prisma.redraftTradeProposal.findUnique({ where: { id: proposal.id } })
+        if (!afterAccept || afterAccept.status !== 'pending' || afterAccept.acceptedAt) {
+          return NextResponse.json({ error: 'This trade is no longer awaiting your acceptance.' }, { status: 409 })
+        }
+        proposal.acceptedRosterIds = afterAccept.acceptedRosterIds ?? []
+        const stillPending = tradePartiesPendingAcceptance(proposal)
+        if (stillPending.length > 0) {
+          return NextResponse.json({
+            proposal: afterAccept,
+            resolved: false,
+            awaitingAcceptance: stillPending,
+            acceptedRosterIds: proposal.acceptedRosterIds,
+          })
+        }
+        // Every team has accepted: from here on this is the agreed trade, exactly as for two teams.
+        notifyMultiTeamTradeParties({
+          proposalId: proposal.id,
+          leagueId: proposal.leagueId,
+          userIds: participantOwnerIds,
+          actorUserId: userId,
+          key: 'all_accepted',
+          title: 'Trade accepted by every team',
+          // Neutral on purpose: settlement or review is decided below, and either can still refuse.
+          body: 'Every team accepted the multi-team trade. Open it to see where it stands.',
+        })
       }
 
       /*
@@ -422,6 +502,18 @@ export async function POST(req: NextRequest) {
       data: { status: 'rejected', rejectedAt: new Date(), processedAt: new Date() },
     })
     await upsertDecision(proposal.id, 'rejected', userId, body.reason)
+    // Any one team declining ends a multi-team trade for all of them; they hear it here (no DM card).
+    if (multiTeam) {
+      notifyMultiTeamTradeParties({
+        proposalId: proposal.id,
+        leagueId: proposal.leagueId,
+        userIds: participantOwnerIds,
+        actorUserId: userId,
+        key: 'rejected',
+        title: 'Trade declined',
+        body: 'A team declined the multi-team trade, so it will not go through.',
+      })
+    }
     await recordRedraftTradeMarketEvent({
       leagueId: proposal.leagueId, seasonId: proposal.seasonId, tradeProposalId: proposal.id,
       eventType: 'proposal_rejected', actorUserId: userId,
@@ -451,7 +543,11 @@ export async function POST(req: NextRequest) {
        */
       if (!proposal.acceptedAt) {
         return NextResponse.json(
-          { error: 'The receiving manager has not accepted this trade yet — there is nothing to approve.' },
+          {
+            error: multiTeam
+              ? 'Not every team in this trade has accepted it yet — there is nothing to approve.'
+              : 'The receiving manager has not accepted this trade yet — there is nothing to approve.',
+          },
           { status: 409 },
         )
       }
@@ -509,11 +605,16 @@ export async function POST(req: NextRequest) {
      */
     if (!proposal.acceptedAt) {
       return NextResponse.json(
-        { error: 'Voting opens once the receiving manager accepts this trade.' },
+        {
+          error: multiTeam
+            ? 'Voting opens once every team in this trade accepts it.'
+            : 'Voting opens once the receiving manager accepts this trade.',
+        },
         { status: 409 },
       )
     }
-    if (isProposerOwner || isReceiverOwner) {
+    // Every team in a multi-team trade is a party to it, not just the first two.
+    if (isProposerOwner || isReceiverOwner || isTradePartyOwner) {
       return NextResponse.json({ error: 'Trade parties cannot vote on their own proposal' }, { status: 403 })
     }
 

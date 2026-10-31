@@ -3989,6 +3989,7 @@ model AppUser {
   communityReports                         CommunityReport[]                      @relation("CommunityReportReporter")
   communityIdeaVotes                       CommunityIdeaVote[]                    @relation("CommunityIdeaVoter")
   findLeagueSpotRequests                   FindLeagueSpotRequest[]                @relation("FindLeagueSpotRequester")
+  savedLeagueSearches                      SavedLeagueSearch[]                    @relation("SavedLeagueSearchOwner")
   platformNotifications                    PlatformNotification[]
   platformUserReportsAgainst               PlatformUserReport[]                   @relation("PlatformUserReportReported")
   platformUserReportsCreated               PlatformUserReport[]                   @relation("PlatformUserReportReporter")
@@ -8263,6 +8264,28 @@ model FindLeagueSpotRequest {
   @@map("find_league_spot_requests")
 }
 
+/// A Find a League search a player asked to be alerted about. Once a day the morning-briefing
+/// cron re-runs it (lib/public-discovery/savedSearchAlerts.ts) and sends one in-app notification
+/// when leagues appear that it hasn't shown them before. Up to 5 per player.
+model SavedLeagueSearch {
+  id             String    @id @default(cuid())
+  userId         String
+  /// What the person sees: "NFL · dynasty · 12 teams".
+  label          String    @db.VarChar(160)
+  /// The discovery query string, exactly what /api/discover/leagues receives (no page).
+  query          String    @db.VarChar(1000)
+  /// League ids already shown for this search, so an alert only ever names new ones. Capped.
+  seenLeagueIds  String[]  @default([])
+  lastCheckedAt  DateTime?
+  lastAlertedAt  DateTime?
+  createdAt      DateTime  @default(now())
+  user           AppUser   @relation("SavedLeagueSearchOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, query])
+  @@index([lastCheckedAt])
+  @@map("saved_league_searches")
+}
+
 model Roster {
   id                   String                     @id @default(uuid())
   leagueId             String
@@ -8662,6 +8685,8 @@ model LeagueTeam {
   @@index([leagueId, pointsFor])
   @@index([divisionId])
   @@index([aiPowerScore])
+  /// The Clubhouse Commish badge looks claimed commissioner teams up by user, on every render.
+  @@index([claimedByUserId])
   @@map("league_teams")
 }
 
@@ -14945,6 +14970,10 @@ model RedraftTradeProposal {
   seasonId          String
   proposerRosterId  String
   receiverRosterId  String
+  /// Teams in the trade beyond proposer + receiver (3- and 4-team trades). Empty for a two-team trade.
+  additionalRosterIds String[]                 @default([])
+  /// Non-proposer teams that have accepted. The trade is agreed only once every one of them has.
+  acceptedRosterIds String[]                   @default([])
   status            String                     @default("pending")
   vetoMode          String                     @default("commissioner")
   vetoThreshold     Int?

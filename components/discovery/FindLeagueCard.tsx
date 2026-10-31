@@ -9,6 +9,7 @@ import { getFanCredBoundaryDisclosureShort } from "@/lib/legal/FanCredBoundaryDi
 import type { DiscoveryCard, RankBand } from "@/lib/public-discovery/types"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 import { platformLabel, verificationLabel } from "@/lib/public-discovery/externalListing"
+import { vibeLabel } from "@/lib/public-discovery/vibes"
 import {
   RANK_BAND_HINTS,
   RANK_BAND_LABELS,
@@ -87,6 +88,15 @@ function getSourceBadgeStyle(source: DiscoveryCard["source"]): {
     return { background: "rgba(168, 85, 247, 0.15)", color: "rgb(216, 180, 254)" }
   }
   return { background: "rgba(59, 130, 246, 0.15)", color: "rgb(96, 165, 250)" }
+}
+
+/** "Runs 3 AllFantasy leagues · since 2025" — who you'd be playing for, before you ask to join. */
+function commishLine(league: DiscoveryCard): string | null {
+  const parts: string[] = []
+  const run = league.commissionerLeaguesRun ?? 0
+  if (run > 0) parts.push(run === 1 ? "Runs 1 AllFantasy league" : `Runs ${run} AllFantasy leagues`)
+  if (league.commissionerSinceYear) parts.push(`since ${league.commissionerSinceYear}`)
+  return parts.length > 0 ? parts.join(" · ") : null
 }
 
 export function FindLeagueCard({ league }: FindLeagueCardProps) {
@@ -222,6 +232,20 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           </p>
         ) : null}
 
+        {league.vibes && league.vibes.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5" data-testid={`find-league-vibes-${league.id}`}>
+            {league.vibes.map((vibe) => (
+              <span
+                key={vibe}
+                className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                style={{ background: "rgba(251, 191, 36, 0.12)", color: "rgb(252, 211, 77)" }}
+              >
+                {vibeLabel(vibe)}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
         <p className="text-xs sm:text-sm truncate" style={{ color: "var(--muted)" }}>
           {league.sport}
           {league.tournamentName ? ` · ${league.tournamentName}` : ""}
@@ -257,10 +281,17 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           {leagueRegion ? (
             <span>League runs on {TIME_ZONE_REGION_LABELS[leagueRegion]} time</span>
           ) : null}
-          <span className="flex items-center gap-1">
+          <span className="flex min-w-0 flex-wrap items-center gap-1" data-testid={`find-league-commish-${league.id}`}>
             <User className="h-3.5 w-3.5 shrink-0" />
-            {league.commissionerName || "Commissioner"}
+            {league.commissionerUsername ? (
+              <Link href={`/profile/${encodeURIComponent(league.commissionerUsername)}`} className="underline-offset-2 hover:underline">
+                {league.commissionerName || league.commissionerUsername}
+              </Link>
+            ) : (
+              league.commissionerName || "Commissioner"
+            )}
             <CommishReputationBadge reputation={league.commissionerReputation} className="ml-1" />
+            {commishLine(league) ? <span className="opacity-80">· {commishLine(league)}</span> : null}
           </span>
         </div>
         {league.joinMode === "request" && league.listingVerification ? (

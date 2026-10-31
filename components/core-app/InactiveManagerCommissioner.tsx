@@ -7,6 +7,7 @@ import { inactiveManagerCommissionerMessages } from '@/lib/core-app/messages/ina
 
 type AutopilotStyle = 'dynasty_owner' | 'win_now' | 'rebuild'
 type AutoHandover = { days: 7 | 14 | 21; to: 'lineups' | 'autopilot' } | null
+type ChimmyReport = { title: string; body: string; sentAt: string }
 
 type Team = {
   rosterId: string
@@ -32,6 +33,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
   const [draftAsMe, setDraftAsMeState] = useState(true)
   const [autoHandover, setAutoHandoverState] = useState<AutoHandover>(null)
   const [chimmyLimit, setChimmyLimit] = useState(4)
+  const [chimmyReports, setChimmyReports] = useState<ChimmyReport[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState('')
 
@@ -39,9 +41,10 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
     try {
       const r = await fetch(url, { cache: 'no-store' })
       if (!r.ok) throw new Error(String(r.status))
-      const body = (await r.json()) as { native: boolean; autopilotEntitled?: boolean; draftAsMe?: boolean; autoHandover?: AutoHandover; chimmyLimit?: number; teams: Team[] }
+      const body = (await r.json()) as { native: boolean; autopilotEntitled?: boolean; draftAsMe?: boolean; autoHandover?: AutoHandover; chimmyLimit?: number; chimmyReports?: ChimmyReport[]; teams: Team[] }
       setNative(body.native)
       if (typeof body.chimmyLimit === 'number') setChimmyLimit(body.chimmyLimit)
+      setChimmyReports(Array.isArray(body.chimmyReports) ? body.chimmyReports : [])
       setEntitled(Boolean(body.autopilotEntitled))
       setDraftAsMeState(body.draftAsMe !== false)
       setAutoHandoverState(body.autoHandover ? { days: body.autoHandover.days, to: body.autoHandover.to } : null)
@@ -198,6 +201,19 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
           ) : (
             <a href="/commissioner-upgrade?highlight=chimmy_autopilot">{m.autopilotUpsell}</a>
           )}
+          {chimmyReports.length > 0 ? (
+            <div data-testid="chimmy-reports">
+              <h4>{m.chimmyReportsTitle}</h4>
+              <ul>
+                {chimmyReports.map((report) => (
+                  <li key={`${report.sentAt}-${report.title}`} data-testid="chimmy-report">
+                    <strong>{report.title}</strong>
+                    {report.body.split('\n').map((line, i) => <p key={i}>{line}</p>)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <p data-testid="draft-as-me-toggle">

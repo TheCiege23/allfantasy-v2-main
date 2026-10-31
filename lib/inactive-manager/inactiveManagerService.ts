@@ -92,9 +92,9 @@ export type InactiveManagerTeam = {
 
 export async function readInactiveManagerView(
   leagueId: string,
-): Promise<{ native: boolean; autopilotEntitled: boolean; draftAsMe: boolean; autoHandover: AutoHandoverRule | null; chimmyLimit: number; teams: InactiveManagerTeam[] }> {
+): Promise<{ native: boolean; autopilotEntitled: boolean; draftAsMe: boolean; autoHandover: AutoHandoverRule | null; chimmyLimit: number; chimmyReports: ChimmyReportEntry[]; teams: InactiveManagerTeam[] }> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true, userId: true } })
-  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return { native: false, autopilotEntitled: false, draftAsMe: false, autoHandover: null, chimmyLimit: CHIMMY_MANAGER_LIMIT, teams: [] }
+  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return { native: false, autopilotEntitled: false, draftAsMe: false, autoHandover: null, chimmyLimit: CHIMMY_MANAGER_LIMIT, chimmyReports: [], teams: [] }
   const managed = readManagedLineups(league.settings)
   const health = await getLeagueManagerHealth(leagueId)
   const owners = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
@@ -106,6 +106,7 @@ export async function readInactiveManagerView(
     draftAsMe: settingsObject(league.settings)[DRAFT_AS_ME_SETTING] !== false,
     autoHandover: readAutoHandover(league.settings),
     chimmyLimit: CHIMMY_MANAGER_LIMIT,
+    chimmyReports: await readChimmyReports(leagueId),
     teams: health.rows.map((r) => ({
       rosterId: r.rosterId,
       teamName: r.teamName,
@@ -116,6 +117,29 @@ export async function readInactiveManagerView(
       suggested: suggested.has(r.rosterId),
       emptySeat: emptySeats.has(r.rosterId),
     })),
+  }
+}
+
+export type ChimmyReportEntry = { title: string; body: string; sentAt: string }
+
+/**
+ * The Survivor weekly Chimmy reports (lib/survivor/chimmyWeeklyReport.ts) already sent to this
+ * league's commissioner, newest first, so the Chimmy section can show them as a history. Read from
+ * the notices themselves; a league that never had one shows none. Never fails the view.
+ */
+export const CHIMMY_REPORT_HISTORY = 8
+
+async function readChimmyReports(leagueId: string): Promise<ChimmyReportEntry[]> {
+  try {
+    const rows = await prisma.survivorNotification.findMany({
+      where: { leagueId, type: 'commissioner_chimmy_weekly_report' },
+      orderBy: { createdAt: 'desc' },
+      take: CHIMMY_REPORT_HISTORY,
+      select: { title: true, body: true, createdAt: true },
+    })
+    return rows.map((r) => ({ title: r.title, body: r.body, sentAt: r.createdAt.toISOString() }))
+  } catch {
+    return []
   }
 }
 

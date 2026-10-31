@@ -13,7 +13,9 @@ const h = vi.hoisted(() => ({
   idol: null as { id: string } | null,
   submitted: [] as Array<[string, string]>,
   played: [] as string[],
+  lines: [] as Array<[string, unknown]>,
 }))
+vi.mock('@/lib/survivor/chimmyCastawayChat', () => ({ postChimmyCastawayLine: vi.fn(async (_l: string, userId: string, line: unknown) => { h.lines.push([userId, line]); return true }) }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: vi.fn(async () => ({ settings: h.settings })) },
@@ -26,7 +28,7 @@ vi.mock('@/lib/survivor/survivorCouncilService', () => ({ loadCouncilContext: vi
 vi.mock('@/lib/survivor/survivorVoteService', () => ({ submitVote: vi.fn(async (_l: string, voter: string, target: string) => { h.submitted.push([voter, target]); return { ok: true } }) }))
 vi.mock('@/lib/survivor/idolEngine', () => ({ playIdol: vi.fn(async (idolId: string) => { h.played.push(idolId); return { ok: true, message: 'played' } }) }))
 
-import { chimmyAtRisk, chimmyVoteTarget, councilIsMerged } from '@/lib/survivor/chimmyCastawayStrategy'
+import { CHIMMY_PROTECTIVE_POWERS, chimmyAtRisk, chimmyVoteTarget, councilIsMerged } from '@/lib/survivor/chimmyCastawayStrategy'
 import { runChimmyCouncilTurn } from '@/lib/survivor/chimmyCastaway'
 
 const t = (userId: string, seasonPoints: number, weekPoints = 0) => ({ userId, seasonPoints, weekPoints })
@@ -80,6 +82,7 @@ beforeEach(() => {
   h.idol = null
   h.submitted = []
   h.played = []
+  h.lines = []
 })
 
 describe('Chimmy\'s turn at an open council', () => {
@@ -87,12 +90,19 @@ describe('Chimmy\'s turn at an open council', () => {
     const turn = await runChimmyCouncilTurn('L', 'c1')
     expect(h.submitted).toEqual([['orphan-r9', 'u2']])
     expect(turn.voted).toEqual(['orphan-r9'])
+    // One in-character line to its tribe, which names nobody.
+    expect(h.lines).toEqual([['orphan-r9', { kind: 'vote', week: 4 }]])
   })
 
   it('does not vote again once its ballot is in', async () => {
     h.votes = [{ voterUserId: 'orphan-r9' }]
     await runChimmyCouncilTurn('L', 'c1')
     expect(h.submitted).toEqual([])
+    expect(h.lines).toEqual([])
+  })
+
+  it('counts only real vote-cancelling idols as protective', () => {
+    expect([...CHIMMY_PROTECTIVE_POWERS].sort()).toEqual(['protect_self', 'protect_self_plus_one'])
   })
 
   it('plays a protective idol when it is the likely target', async () => {

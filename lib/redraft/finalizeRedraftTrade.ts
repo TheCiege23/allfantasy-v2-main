@@ -22,6 +22,7 @@ import { recordRedraftTradeMarketEvent, type RedraftMarketEventType } from '@/li
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
+import { MULTI_TEAM_CAP_LEAGUE_REFUSAL, isMultiTeamTrade, tradeParticipantRosterIds } from '@/lib/redraft/tradeParticipants'
 
 export type TradeAssetRow = {
   fromRosterId: string
@@ -41,6 +42,9 @@ export type ProposalWithAssets = {
   seasonId: string
   proposerRosterId: string
   receiverRosterId: string
+  /** Multi-team trades only (lib/redraft/tradeParticipants.ts). Absent or empty = two-team. */
+  additionalRosterIds?: string[] | null
+  acceptedRosterIds?: string[] | null
   status: string
   vetoMode?: string | null
   vetoThreshold: number | null
@@ -85,6 +89,20 @@ export type FinalizeRedraftTradeResult =
 /** The actor recorded when no person decided: the review window ended with no veto. */
 export const REVIEW_WINDOW_ACTOR = 'system:trade-review-window'
 
+// A multi-team trade in an IDP salary-cap league is refused here too: see MULTI_TEAM_CAP_LEAGUE_REFUSAL.
+
+/** Every directed pair that moves something, for the evidence of a multi-team trade. */
+function multiTeamOffers(assets: TradeAssetRow[]) {
+  const pairs = new Map<string, { fromRosterId: string; toRosterId: string; offers: ReturnType<typeof mapLegacyOffers> }>()
+  for (const a of assets) {
+    const key = `${a.fromRosterId}->${a.toRosterId}`
+    if (!pairs.has(key)) {
+      pairs.set(key, { fromRosterId: a.fromRosterId, toRosterId: a.toRosterId, offers: mapLegacyOffers(assets, a.fromRosterId, a.toRosterId) })
+    }
+  }
+  return [...pairs.values()]
+}
+
 export async function finalizeRedraftTrade(
   proposal: ProposalWithAssets,
   proposerOwnerId: string | undefined,
@@ -105,16 +123,23 @@ export async function finalizeRedraftTrade(
     })
   const proposerOffers = mapLegacyOffers(proposal.assets ?? [], proposal.proposerRosterId, proposal.receiverRosterId)
   const receiverOffers = mapLegacyOffers(proposal.assets ?? [], proposal.receiverRosterId, proposal.proposerRosterId)
+  // Multi-team: every team in the trade, for the roster evidence, the integrity scan and settlement.
+  // For a two-team trade this is exactly [proposer, receiver] and nothing below changes.
+  const multiTeam = isMultiTeamTrade(proposal)
+  const participantRosterIds = tradeParticipantRosterIds(proposal)
 
   // A cheap early refusal, NOT the verdict that decides. The cap numbers it reads can change before
   // the transaction below opens, so the check is repeated on `tx` after the claim — see there.
-  const cap = await validateRedraftTradeCap(
-    proposal.leagueId,
-    proposal.proposerRosterId,
-    proposal.receiverRosterId,
-    proposerOffers,
-    receiverOffers,
-  )
+  // (A multi-team trade never runs the pairwise cap check: see MULTI_TEAM_CAP_LEAGUE_REFUSAL.)
+  const cap = multiTeam
+    ? { ok: true as const }
+    : await validateRedraftTradeCap(
+        proposal.leagueId,
+        proposal.proposerRosterId,
+        proposal.receiverRosterId,
+        proposerOffers,
+        receiverOffers,
+      )
   if (!cap.ok) {
     await failEvent()
     return { ok: false, status: 409, error: cap.message }
@@ -157,36 +182,42 @@ export async function finalizeRedraftTrade(
       // After the claim (only the race winner pays for the reads), before the transfer (so what it
       // approves is exactly what then moves). A refusal throws, the transaction rolls back including
       // the claim, and the catch below answers 409 with the message — the same shape as the early one.
-      const capInTx = await validateRedraftTradeCapInTransaction(
-        tx,
-        proposal.leagueId,
-        proposal.proposerRosterId,
-        proposal.receiverRosterId,
-        proposerOffers,
-        receiverOffers,
-      )
-      if (!capInTx.ok) {
-        throw new Error(capInTx.message)
+      if (multiTeam) {
+        if (await tx.iDPCapConfig.findUnique({ where: { leagueId: proposal.leagueId } })) {
+          throw new Error(MULTI_TEAM_CAP_LEAGUE_REFUSAL)
+        }
+      } else {
+        const capInTx = await validateRedraftTradeCapInTransaction(
+          tx,
+          proposal.leagueId,
+          proposal.proposerRosterId,
+          proposal.receiverRosterId,
+          proposerOffers,
+          receiverOffers,
+        )
+        if (!capInTx.ok) {
+          throw new Error(capInTx.message)
+        }
       }
       // ⚠ BEFORE-STATE IS READ HERE AND NOWHERE LATER. Inside one transaction these rows stop
       // being "before" the moment the settlement writes them, so the evidence has to be taken
       // after the claim (only the race winner gets this far) and before anything moves.
-      const beforeState = await captureRedraftRosterState(tx, [
-        proposal.proposerRosterId,
-        proposal.receiverRosterId,
-      ])
-      capTransfer = await applyRedraftTradeCapTransfersInTransaction(
-        tx,
-        proposal.leagueId,
-        proposal.proposerRosterId,
-        proposal.receiverRosterId,
-        proposerOffers,
-        receiverOffers,
-      )
+      const beforeState = await captureRedraftRosterState(tx, participantRosterIds)
+      if (!multiTeam) {
+        capTransfer = await applyRedraftTradeCapTransfersInTransaction(
+          tx,
+          proposal.leagueId,
+          proposal.proposerRosterId,
+          proposal.receiverRosterId,
+          proposerOffers,
+          receiverOffers,
+        )
+      }
       const settlement = await settleRedraftTradeAssets(tx, {
         leagueId: proposal.leagueId,
         proposerRosterId: proposal.proposerRosterId,
         receiverRosterId: proposal.receiverRosterId,
+        ...(multiTeam ? { additionalRosterIds: participantRosterIds.slice(2) } : {}),
         assets: proposal.assets ?? [],
       })
 
@@ -218,16 +249,16 @@ export async function finalizeRedraftTrade(
         assetSummary: {
           proposerOffers,
           receiverOffers,
+          // Multi-team only: proposer/receiver offers above cover just that pair, so the evidence
+          // carries every team and every directed transfer as well.
+          ...(multiTeam ? { participantRosterIds, offersByDirection: multiTeamOffers(proposal.assets ?? []) } : {}),
           playersMoved: settlement.playersMoved,
           faabTransferred: settlement.faabTransferred,
           picksRecorded: settlement.picksRecorded,
         },
         sourceTransactionIds: capTransfer.transactionIds,
         beforeState,
-        afterState: await captureRedraftRosterState(tx, [
-          proposal.proposerRosterId,
-          proposal.receiverRosterId,
-        ]),
+        afterState: await captureRedraftRosterState(tx, participantRosterIds),
         executedAt: new Date(),
       })
 
@@ -253,7 +284,7 @@ export async function finalizeRedraftTrade(
   // Best-effort: the trade is already committed and a stale projection must not turn a settled trade
   // into an error response.
   if (capTransfer.moved > 0) {
-    for (const rosterId of new Set([proposal.proposerRosterId, proposal.receiverRosterId])) {
+    for (const rosterId of new Set(participantRosterIds)) {
       await refreshCapProjections(proposal.leagueId, rosterId).catch((e) =>
         console.error('[redraft/trade-votes] cap projection refresh failed', rosterId, e),
       )
@@ -289,7 +320,9 @@ export async function finalizeRedraftTrade(
     })
   }
 
-  if (proposerOwnerId && receiverOwnerId) {
+  // The legacy mirror is a two-party record (proposer offers / receiver offers). A multi-team trade has
+  // no truthful shape in it, so it is not mirrored; its evidence is the execution snapshot above.
+  if (proposerOwnerId && receiverOwnerId && !multiTeam) {
     await prisma.redraftLeagueTrade.create({
       data: {
         leagueId: proposal.leagueId,
@@ -310,7 +343,7 @@ export async function finalizeRedraftTrade(
   // The integrity scan reviews the proposal itself — the real trade, through the one trade engine.
   // Wrapped so neither a sync throw nor a rejection can reach a trade that has already settled.
   void Promise.resolve()
-    .then(() => enqueueCollusionScan(proposal.leagueId, { kind: 'redraft', proposalId: proposal.id }, [proposal.proposerRosterId, proposal.receiverRosterId]))
+    .then(() => enqueueCollusionScan(proposal.leagueId, { kind: 'redraft', proposalId: proposal.id }, participantRosterIds))
     .catch((e) => console.error('[redraft/trade-votes] enqueueCollusionScan failed', e))
 
   // Market ledger: terminal acceptance event + processed event (best-effort, idempotent).

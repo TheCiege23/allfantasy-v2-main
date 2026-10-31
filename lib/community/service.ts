@@ -167,19 +167,33 @@ function requireModerator(viewer: CommunityViewer): string {
 // ─── shaping ─────────────────────────────────────────────────────────────────
 
 /**
- * League owners only. `lib/commissioner/permissions.ts` also counts a claimed team marked
- * `isCommissioner`, which would cover imported leagues — but `league_teams` has no index on
- * `claimedByUserId`, and this runs on every Clubhouse render. Add that index before
- * widening this.
+ * Commissioner by the same two rules `lib/commissioner/permissions.ts` uses: the league's
+ * owner, or the claimed team the source platform marked as head commissioner. The second is
+ * what makes the badge true for an imported Sleeper/ESPN/Yahoo league, whose AllFantasy row
+ * is often owned by whoever ran the import. `league_teams_claimedByUserId_idx` keeps it an
+ * index lookup — this runs on every Clubhouse render.
  */
 async function commissionerIds(userIds: string[]): Promise<Set<string>> {
   if (userIds.length === 0) return new Set()
-  const rows = await prisma.league.findMany({
-    where: { userId: { in: userIds } },
-    select: { userId: true },
-    distinct: ['userId'],
-  })
-  return new Set(rows.map((r) => r.userId))
+  const [owners, claimed] = await Promise.all([
+    prisma.league.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }),
+    prisma.leagueTeam.findMany({
+      where: { claimedByUserId: { in: userIds }, isCommissioner: true, role: { not: 'viewer' } },
+      select: { claimedByUserId: true, isCommissioner: true, role: true },
+      distinct: ['claimedByUserId'],
+    }),
+  ])
+  const ids = new Set(owners.map((r) => r.userId))
+  // Re-checked, not only filtered: a badge that says "runs a league" must fail closed if a
+  // query or a stub ever loses the where clause.
+  for (const t of claimed) {
+    if (t.claimedByUserId && t.isCommissioner === true && t.role !== 'viewer') ids.add(t.claimedByUserId)
+  }
+  return ids
 }
 
 export function badgesFor(

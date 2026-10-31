@@ -17,6 +17,7 @@ import type {
   RankBand,
   TimeZoneRegionFilter,
 } from "./types"
+import type { LeagueVibe } from "./vibes"
 
 // ── Rank bands ──────────────────────────────────────────────────────────────
 
@@ -221,6 +222,7 @@ export type ParsedLeagueSearch = {
   entryFee?: Exclude<EntryFeeFilter, "all">
   draftWhen?: Exclude<DraftWhenFilter, "any">
   tzRegion?: Exclude<TimeZoneRegionFilter, "any">
+  vibe?: LeagueVibe
   /** What is left over once the recognised words are taken out: matched against names. */
   text: string
 }
@@ -259,6 +261,17 @@ const WHEN_WORDS: Array<[RegExp, Exclude<DraftWhenFilter, "any">]> = [
   [/\bweeknights?\b|\bweekday\s+(evening|night)s?\b/, "weeknight"],
   [/\bweekends?\b|\bsaturday\b|\bsunday\b/, "weekend"],
   [/\bthis\s+week\b|\bnext\s+7\s+days\b|\bsoon\b/, "next_7_days"],
+]
+
+// "chill" is deliberately absent: it is a rank band ("Chill"), and one word must not mean two filters.
+const VIBE_WORDS: Array<[RegExp, LeagueVibe]> = [
+  [/\bbeginners?\b|\bnewbies?\b|\bnew\s+players?\b|\bfirst\s+league\b/, "beginner_friendly"],
+  [/\bcompetitive\b|\bsweaty\b|\bsharks?\b/, "competitive"],
+  [/\bcasual\b|\bfor\s+fun\b/, "casual"],
+  [/\btrash\s*-?\s*talk\b/, "trash_talk"],
+  [/\bactive\s+chat\b|\bactive\b/, "active_chat"],
+  [/\btrade\s+happy\b|\blots\s+of\s+trades\b|\btraders?\b/, "trade_happy"],
+  [/\blow\s*-?\s*key\b|\bquiet\b/, "low_key"],
 ]
 
 const ZONE_WORDS: Array<[RegExp, Exclude<TimeZoneRegionFilter, "any">]> = [
@@ -302,6 +315,7 @@ export function parseLeagueSearch(raw: string | null | undefined): ParsedLeagueS
   out.entryFee = take(FEE_WORDS)
   out.draftWhen = take(WHEN_WORDS)
   out.tzRegion = take(ZONE_WORDS)
+  out.vibe = take(VIBE_WORDS)
 
   // Filler that carries no meaning once the facets are gone.
   rest = rest.replace(/\b(league|leagues|draft|drafts|with|a|an|the|in|for|and|time|zone|looking|need|want)\b/g, " ")

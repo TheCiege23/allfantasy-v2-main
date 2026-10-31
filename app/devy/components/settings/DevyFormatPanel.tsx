@@ -6,8 +6,8 @@ export function DevyFormatPanel({ config }: { config: Record<string, unknown> | 
   return (
     <div className="space-y-5 px-4 py-5 text-[13px] text-white/85 md:px-6">
       <p className="text-[11px] text-sky-200/70">
-        League format is stored on the Devy league record. Persistence for edits ships in a follow-up; values below
-        reflect the server.
+        Read-only: these values come from this league&apos;s older Devy record. A Devy league made on AllFantasy is
+        edited under Devy Settings.
       </p>
       <section className="rounded-xl border border-white/[0.08] bg-[#0a1228] p-4">
         <h3 className="text-[12px] font-bold uppercase tracking-wide text-white/90">Dynasty mode</h3>

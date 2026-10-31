@@ -59,6 +59,8 @@ export type RedraftProposalValidationInput = {
   seasonId: string
   proposerRosterId: string
   receiverRosterId: string
+  /** Multi-team trades: the teams beyond proposer and receiver. Omitted or empty = two-team, unchanged. */
+  additionalRosterIds?: string[]
   assets: NflRedraftTradeAssetInput[]
 }
 
@@ -74,6 +76,7 @@ export async function validateRedraftTradeProposalAtCreation(
       state: runtime.state,
       proposerRosterId: input.proposerRosterId,
       receiverRosterId: input.receiverRosterId,
+      ...(input.additionalRosterIds?.length ? { additionalRosterIds: input.additionalRosterIds } : {}),
       assets: input.assets,
     })
     if (!result.ok) return { ok: false, code: result.code, message: result.message, source: 'nfl_runtime' }
@@ -109,6 +112,7 @@ export async function validateRedraftTradeProposalAtCreation(
       state,
       proposerRosterId: input.proposerRosterId,
       receiverRosterId: input.receiverRosterId,
+      ...(input.additionalRosterIds?.length ? { additionalRosterIds: input.additionalRosterIds } : {}),
       assets: input.assets,
     })
     return result.ok
@@ -172,7 +176,7 @@ async function validateOwnershipFallback(
   if (playerAssets.length > 0) {
     const rows = await db.redraftRosterPlayer.findMany({
       where: {
-        rosterId: { in: [input.proposerRosterId, input.receiverRosterId] },
+        rosterId: { in: [input.proposerRosterId, input.receiverRosterId, ...(input.additionalRosterIds ?? [])] },
         playerId: { in: playerAssets.map((asset) => asset.playerId) },
         droppedAt: null,
       },
