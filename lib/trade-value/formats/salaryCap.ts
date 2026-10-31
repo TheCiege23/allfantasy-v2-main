@@ -28,7 +28,7 @@ export const salaryCapModel: FormatValueModel = {
   canTrade(input) {
     const acquiring = object(input.acquiringTeamState)
     const asset = object(input.assetState)
-    if (!acquiring || !asset) return { ok: false, reason: 'Cap legality is unverified because the receiving team ledger or contract salary is missing.' }
+    if (!acquiring || !asset) return { ok: false, reason: 'Cap legality is unverified because the receiving team ledger or contract salary is missing.', reasonCode: 'salaryCap.missing' }
     const result = capLegality({
       capSpace: num(acquiring.capSpace),
       salaryIn: num(asset.salary) ?? 0,
@@ -38,6 +38,6 @@ export const salaryCapModel: FormatValueModel = {
     })
     return result
       ? { ok: result.legal, reason: result.legal ? undefined : result.basis }
-      : { ok: false, reason: 'Cap legality is unverified; the deal cannot be approved until the current ledger is available.' }
+      : { ok: false, reason: 'Cap legality is unverified; the deal cannot be approved until the current ledger is available.', reasonCode: 'salaryCap.unverified' }
   },
 }

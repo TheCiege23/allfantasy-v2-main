@@ -28,6 +28,7 @@
 
 import type { AssetValueSnapshot, TradeValueSnapshot } from '@/lib/trade-value/types'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { formatLabelText, formatReasonText } from '@/lib/i18n/trade-center-server-text'
 
 type Translate = (key: string) => string
 type TranslateVars = (key: string, vars?: Record<string, string | number | undefined>) => string
@@ -51,7 +52,7 @@ function assetLabel(a: AssetValueSnapshot, t: Translate, tInterpolate: Translate
 }
 
 function AssetRow({ a }: { a: AssetValueSnapshot }) {
-  const { t, tInterpolate } = useOptionalLanguage()
+  const { t, tInterpolate, language } = useOptionalLanguage()
   const basis = a.valuationBasis ?? null
   const info =
     basis && KNOWN_BASES.has(basis)
@@ -101,7 +102,7 @@ function AssetRow({ a }: { a: AssetValueSnapshot }) {
       {fit ? (
         <div className="mt-1.5 flex items-baseline justify-between gap-2 rounded border border-sky-400/20 bg-sky-400/5 px-1.5 py-1">
           <p className="text-[11px] text-sky-200/80" data-testid="tv-asset-fit-reason">
-            <span className="font-semibold">{a.formatFit?.label ?? t('tradeCenter.value.format')}</span> · {fit.reason}
+            <span className="font-semibold">{formatLabelText(a.formatFit?.formatId, a.formatFit?.label, t, language) ?? t('tradeCenter.value.format')}</span> · {formatReasonText(fit, t, language)}
           </p>
           <span className="shrink-0 text-[12px] font-bold tabular-nums text-sky-200" data-testid="tv-asset-fit">
             {fit.multiplier === 1
@@ -116,7 +117,7 @@ function AssetRow({ a }: { a: AssetValueSnapshot }) {
           className="mt-1 rounded border border-amber-400/25 bg-amber-400/5 px-1.5 py-1 text-[11px] text-amber-200/85"
           data-testid="tv-asset-legality"
         >
-          ⚠ {legality.reason ?? t('tradeCenter.value.notTradable')}
+          ⚠ {formatReasonText(legality, t, language) ?? t('tradeCenter.value.notTradable')}
         </p>
       ) : null}
     </li>

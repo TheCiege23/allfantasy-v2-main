@@ -72,8 +72,10 @@ export function listingVerification(league: {
   userId: string
   isCommissioner?: boolean | null
   settings: unknown
+  /** The owner holds the team the platform marked as commissioner (ownerCommissionerTeams.ts). */
+  ownerCommissionsTeam?: boolean
 }): ListingVerification | null {
-  if (league.isCommissioner === true) return "provider"
+  if (league.isCommissioner === true || league.ownerCommissionsTeam === true) return "provider"
   const record = toRecord(toRecord(league.settings).commissionerVerification)
   if (record.appUserId !== league.userId) return null
   if (record.method === "api") return "provider"

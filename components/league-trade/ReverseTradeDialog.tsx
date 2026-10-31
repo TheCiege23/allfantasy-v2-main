@@ -20,6 +20,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
 import { type ReversalOutcome, type ReversalPreflight, type ReversalReadiness } from '@/lib/trade-reversal/client'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { reversalMessageText } from '@/lib/i18n/trade-center-server-text'
 
 type Phase =
   | { kind: 'checking' }
@@ -42,7 +43,7 @@ export function ReverseTradeDialog(props: {
   onReversed: () => void
 }) {
   const { preflight, reverse, onClose, onReversed } = props
-  const { t, tInterpolate } = useOptionalLanguage()
+  const { t, tInterpolate, language } = useOptionalLanguage()
   /*
    * Blocker copy lives in the dictionary as `tradeCenter.reverseDialog.blocker.<CODE>`; its English is
    * `describeBlocker`'s, word for word (pinned by a test). An unknown code still renders, with the code.
@@ -63,14 +64,14 @@ export function ReverseTradeDialog(props: {
     void (async () => {
       const result = await preflight()
       if (!alive.current) return
-      if (!result.ok) setPhase({ kind: 'unavailable', message: result.message })
+      if (!result.ok) setPhase({ kind: 'unavailable', message: reversalMessageText(result, 'preflight', t, language) })
       else if (!result.readiness.ok) setPhase({ kind: 'blocked', readiness: result.readiness })
       else setPhase({ kind: 'ready' })
     })()
     return () => {
       alive.current = false
     }
-  }, [preflight])
+  }, [preflight]) // eslint-disable-line react-hooks/exhaustive-deps -- re-running the preflight on a language change would re-ask the server
 
   useEffect(() => {
     if (phase.kind === 'ready') reasonRef.current?.focus()
@@ -103,10 +104,10 @@ export function ReverseTradeDialog(props: {
       return
     }
     if (outcome.readiness && !outcome.readiness.ok) {
-      setPhase({ kind: 'blocked', readiness: outcome.readiness, message: outcome.message })
+      setPhase({ kind: 'blocked', readiness: outcome.readiness, message: reversalMessageText(outcome, 'outcome', t, language) })
       return
     }
-    setPhase({ kind: 'ready', error: outcome.message })
+    setPhase({ kind: 'ready', error: reversalMessageText(outcome, 'outcome', t, language) })
   }
 
   return (
