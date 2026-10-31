@@ -52,6 +52,10 @@ import {
   type QueuedLineupEdit,
 } from '@/lib/pwa/offlineLineupQueue'
 import { OfflineLineupSnapshotView } from './OfflineLineupSnapshotView'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import { isRookieByExperience, taxiSeasonOf } from '@/lib/dynasty-core/dynastyDetails'
+import '@/components/dynasty/dynasty-details.css'
 
 /**
  * My team / Lineup — handoff §3, `Lineup.png` / `MobileLineup.png`.
@@ -88,6 +92,11 @@ type DbRoster = {
   /** Per-player locks from the server's lock context (kickoff, daily-lineup schedule locks). */
   lineupLock?: { lockedPlayerIds?: string[] | null; perPlayerReasons?: Record<string, string> | null } | null
   irRules?: IrRules | null
+  /**
+   * Dynasty taxi tenure (lib/taxi/taxiMaxYears.ts): the league's max seasons on the squad (null is no
+   * limit) and each taxi player's completed seasons on one. Absent outside a native dynasty league.
+   */
+  taxiTenure?: { maxYears: number | null; seasonsUsed: Record<string, number> } | null
 }
 /** Absent `irRules` (older server): only explicit IR designations qualify, never a league option. */
 const STRICT_IR_RULES: IrRules = { irAllowOut: false, irAllowCovid: false, irAllowSuspended: false, irAllowNA: false, irAllowDNR: false, irAllowDoubtful: false }
@@ -211,6 +220,8 @@ function untilLabel(ms: number): string {
 export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: UserLeague; userTeam: LeagueTeam | null; onSelectTab: (id: string) => void }) {
   const [data, setData] = useState<DbRoster | null>(null)
   const [lists, setLists] = useState<RosterLineupLists | null>(null)
+  const { t, tInterpolate } = useOptionalLanguage()
+  const dynasty = usesDynastyBackground(league)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -660,6 +671,22 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   }
 
   type RowKind = 'starter' | 'bench' | 'ir' | 'taxi'
+  /** Dynasty taxi rows only: a Rookie badge (no completed pro seasons) and which taxi season this is. */
+  const renderTaxiBadges = (id: string) => {
+    const rookie = isRookieByExperience(players[id]?.years_exp)
+    const tenure = data?.taxiTenure ? taxiSeasonOf(data.taxiTenure.seasonsUsed[id] ?? 0, data.taxiTenure.maxYears) : null
+    if (!rookie && !tenure) return null
+    return (
+      <>
+        {rookie ? <span className="dyd-badge" data-kind="rookie" data-testid="taxi-rookie-badge">{t('dynasty.badge.rookie')}</span> : null}
+        {tenure ? (
+          <span className="dyd-badge" data-kind="taxi" data-testid="taxi-season-badge" title={tInterpolate('dynasty.badge.taxiSeasonTitle', { season: tenure.season, of: tenure.of })}>
+            {tInterpolate('dynasty.badge.taxiSeason', { season: tenure.season, of: tenure.of })}
+          </span>
+        ) : null}
+      </>
+    )
+  }
   const renderRow = (id: string, slot: { label: string; index?: number } | null, kind: RowKind, slotIndex?: number) => {
     const p = id ? players[id] : undefined
     const isLocked = id ? locked(id) : false
@@ -691,7 +718,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
             <RankTag p={p} />
             <InjuryFlag status={p?.injuryStatus} />
           </strong>
-          <small>{isPicked ? 'Selected · tap where he goes' : gameLine(p) || (id ? '—' : 'Open slot')}</small>
+          {/* On the second line, so a long name truncating on a phone never hides them. */}
+          <small>{kind === 'taxi' && dynasty && id ? renderTaxiBadges(id) : null}{isPicked ? 'Selected · tap where he goes' : gameLine(p) || (id ? '—' : 'Open slot')}</small>
         </PlayerCell>
         <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
         <span className="nls-lrow-action">
@@ -759,7 +787,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         ) : null}
         {taxi ? (
           <button type="button" className="nls-btn" data-size="sm" disabled={!taxi.ok || saving} title={taxi.ok ? `Move ${name} to the taxi squad` : taxi.reason} onClick={() => doMove(id, { kind: 'taxi' })}>
-            Move to taxi
+            {t('dynasty.lineup.moveToTaxi')}
           </button>
         ) : null}
       </div>
@@ -923,8 +951,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                     </DropZone>
                   ) : null}
                   {hasTaxi ? (
-                    <DropZone as="section" id="taxi" className="nls-card nls-card-flush nls-dropzone" label="Taxi squad" state={dragId ? dropState({ kind: 'taxi' }) : tapState({ kind: 'section', section: 'taxi' })}>
-                      <h3 className="nls-label nls-card-head"><span>Taxi squad</span>{sectionTap('taxi', 'taxi') ?? <span>{taxiCapacity != null && taxiCapacity > 0 ? `${lists.taxi.filter(Boolean).length} / ${taxiCapacity}` : ''}</span>}</h3>
+                    <DropZone as="section" id="taxi" className="nls-card nls-card-flush nls-dropzone" label={t('dynasty.lineup.taxiSquad')} state={dragId ? dropState({ kind: 'taxi' }) : tapState({ kind: 'section', section: 'taxi' })}>
+                      <h3 className="nls-label nls-card-head"><span>{t('dynasty.lineup.taxiSquad')}</span>{sectionTap('taxi', 'taxi') ?? <span>{taxiCapacity != null && taxiCapacity > 0 ? `${lists.taxi.filter(Boolean).length} / ${taxiCapacity}` : ''}</span>}</h3>
                       <ul className="nls-rows">
                         {lists.taxi.filter(Boolean).map((id) => renderRow(id, null, 'taxi'))}
                         {!lists.taxi.some(Boolean) ? (
