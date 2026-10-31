@@ -31,6 +31,9 @@ const MAX_STEPS = Number(arg('max-steps', '4000'))
 // Teams handed to Chimmy before the draft ("Chimmy as a manager"): it drafts them, then plays them
 // all season, votes and idols included. 0 runs the all-human season the rehearsal always ran.
 const CHIMMY = Number(arg('chimmy', '0'))
+// Hand each Chimmy castaway a protective idol at setup, so a season exercises "play it when at risk"
+// (the seeded draw rarely lands on two particular teams). 0 leaves the draw alone.
+const CHIMMY_IDOLS = Number(arg('chimmy-idols', '1'))
 
 function log(line: string) {
   const out = `[${rehearsalNow().toISOString()}] ${line}`
@@ -370,6 +373,18 @@ async function main() {
     for (const c of cast) {
       assert.match(c.displayName, /\(Chimmy\)$|^Chimmy \d+$/, `Chimmy castaway named ${c.displayName}`)
       assert.ok(c.tribeId, `${c.displayName} has no tribe`)
+    }
+    if (CHIMMY_IDOLS > 0) {
+      const config = await prisma.survivorLeagueConfig.findUniqueOrThrow({ where: { leagueId }, select: { id: true } })
+      for (const c of cast) {
+        const rosterId = chimmyRosterIds.find(id => c.userId === `orphan-${id}`) ?? chimmyRosterIds[0]
+        const held = await prisma.redraftRosterPlayer.findFirst({ where: { roster: { leagueId }, droppedAt: null }, select: { playerId: true } })
+        await prisma.survivorIdol.create({ data: {
+          leagueId, configId: config.id, rosterId, playerId: held?.playerId ?? 'rehearsal', powerType: 'protect_self',
+          status: 'hidden', currentOwnerUserId: c.userId, originalOwnerUserId: c.userId, powerLabel: 'Hidden Immunity Idol',
+        } })
+      }
+      log(`gave each Chimmy castaway a hidden protect_self idol (${cast.length})`)
     }
     const picks = await prisma.draftPick.groupBy({ by: ['rosterId'], where: { sessionId: draft.id, rosterId: { in: chimmyRosterIds } }, _count: { _all: true } })
     log(`Chimmy drafted: ${picks.map(p => p._count._all).join(', ')} picks (rounds ${draft.rounds})`)
