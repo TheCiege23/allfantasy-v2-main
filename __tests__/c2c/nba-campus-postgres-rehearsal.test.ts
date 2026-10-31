@@ -66,8 +66,18 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
       expect((await nbaCampusPointsForMatchup(db as never, input))?.home).toEqual({ points: 25, missingPlayerIds: [], allFinal: true })
       await prisma.sportsDataCache.update({ where: { cacheKey: localBoxKey }, data: { data: box(22) } })
       expect((await nbaCampusPointsForMatchup(db as never, input))?.home).toEqual({ points: 27, missingPlayerIds: [], allFinal: true })
+      await persistNbaCampusWeekSnapshot(prisma, { leagueId: id, rosterId: homeRoster, snapshot: { ...built.snapshot!, players: built.snapshot!.players.map(player => ({ ...player, selectedAt: '2026-11-01T19:00:00.000Z' })) }, now: savedAt })
+      expect((await nbaCampusPointsForMatchup(db as never, input))?.home).toMatchObject({ missingPlayerIds: [playerId], allFinal: false })
+
+      // A published regular-season schedule cannot establish an empty postseason week.
+      await prisma.$transaction(async tx => {
+        await tx.afRosterLineupAssignment.create({ data: { leagueId: id, rosterId: homeRoster, season: 2026, week: 21, section: 'campus', playerId } })
+        await persistNbaCampusWeekSnapshot(tx, { leagueId: id, rosterId: homeRoster, snapshot: { ...built.snapshot!, week: 21 }, now: savedAt })
+        await persistNbaCampusWeekSnapshot(tx, { leagueId: id, rosterId: awayRoster, snapshot: { season: 2026, week: 21, savedAt: savedAt.toISOString(), players: [] }, now: savedAt })
+      })
+      expect((await nbaCampusPointsForMatchup(db as never, { ...input, week: 21, now: new Date('2027-03-18T12:00:00Z') }))?.home).toMatchObject({ missingPlayerIds: [playerId], allFinal: false })
     } finally {
-      await prisma.sportsDataCache.deleteMany({ where: { cacheKey: { in: [localMappingKey, localBoxKey, nbaCampusWeekCacheKey(id, homeRoster, 2026, 2), nbaCampusWeekCacheKey(id, awayRoster, 2026, 2)] } } })
+      await prisma.sportsDataCache.deleteMany({ where: { cacheKey: { in: [localMappingKey, localBoxKey, ...[2, 21].flatMap(week => [nbaCampusWeekCacheKey(id, homeRoster, 2026, week), nbaCampusWeekCacheKey(id, awayRoster, 2026, week)])] } } })
       await prisma.league.deleteMany({ where: { id } })
       await prisma.appUser.deleteMany({ where: { id: ownerId } })
     }
