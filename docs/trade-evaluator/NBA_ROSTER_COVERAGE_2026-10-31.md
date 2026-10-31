@@ -19,9 +19,29 @@ The live Fantrax import preserves `scoringSystem.type` and selects among CFB, NF
 
 The six imported rules are `pts: 1`, `reb: 1.25`, `ast: 1.5`, `stl: 2`, `blk: 2`, and `to: -1`. These are NBA's canonical stat keys and the NBA trade evaluator accepts them. A deterministic two-team points comparison using all six weights passes. This verifies the scoring translation and evaluator calculation; a live league trade grade remains unverified until the league is refreshed in a nonproduction environment and its unresolved player identities are reviewed. Other Fantrax NBA categories still produce named scoring gaps rather than guessed rules.
 
+## Supplied league readiness, 2026-10-31
+
+The read-only [league readiness audit](../../scripts/audits/fantrax-nba-league-readiness.cjs) checks the live Fantrax roster against each named database. The source league has 10 teams and 140 roster player IDs; Fantrax's NBA directory resolves all 140.
+
+| Check | Staging | Production |
+| --- | ---: | ---: |
+| Connected Fantrax accounts | 0 | 1 |
+| Stored snapshot for this source league | 0 | 1 |
+| Imported league row through legacy snapshot ID | 0 | 1 |
+| NBA identity rows in database | 1,856 | 1,868 |
+| Roster IDs with a unique NBA identity | 0/140 | 133/140 |
+| Matched IDs with a complete latest season stat row for all six rules | 0 | 133 |
+| Regular-season NBA stat rows with games played | 0 | 2,740 |
+
+The production import uses its legacy snapshot ID as `platformLeagueId`, so a lookup by the Fantrax source ID alone misses it. Seven roster IDs have no unique NBA identity. Even after normalizing Fantrax's `last, first` names, none of those seven has a unique name-and-position registry match. Staging has 49 unique name-and-position candidates, but none also agrees on team; those are leads for review, not verified links. The audit made no database changes.
+
+A staging refresh cannot yet prove a real grade: the account owner must connect Fantrax in the staging app, and staging needs source-backed NBA identity links and season stats. The league URL proves the league exists, but does not prove which team the app user owns. Keep the Fantrax Secret ID inside the app. After those prerequisites are present, import the owner's selected team, rerun the audit, and grade a real trade with all selected players resolved.
+
 Commands:
 
 ```text
 node scripts/audits/nba-trade-coverage.cjs .env.staging
 node scripts/audits/nba-trade-coverage.cjs .env --production-readonly
+node scripts/audits/fantrax-nba-league-readiness.cjs .env.staging 51isdapqmt6atvdz
+node scripts/audits/fantrax-nba-league-readiness.cjs .env 51isdapqmt6atvdz --production-readonly
 ```
