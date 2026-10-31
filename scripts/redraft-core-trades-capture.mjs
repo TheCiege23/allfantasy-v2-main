@@ -4,7 +4,7 @@
  *   screen (trades, war-room) × sport (the seven redraft-engine sports) × mode (light, dark) × width (1440, 390).
  *
  *   node scripts/redraft-core-trades-capture.mjs --base-url http://localhost:3104 --out <dir> --state before|after
- *     [--screens trades,war-room] [--modes light,dark] [--sports nfl,nba] [--extras] [--chromium <path>]
+ *     [--screens trades,war-room] [--modes light,dark] [--sports nfl,nba] [--extras] [--resume] [--chromium <path>]
  *
  * Renders /e2e/redraft-core/trades/<screen> (real AfCoreShell + the real TradeCenter / Trades / Scout /
  * ConnectedFranchiseWarRoom components on fixture props) against a `next dev` you started yourself.
@@ -70,6 +70,12 @@ for (const s of screens) if (!SCREENS.includes(s)) { console.error(`unknown scre
 
 const apiFixture = JSON.parse(fs.readFileSync(new URL('../app/e2e/redraft-core/trades/trades-api-fixture.json', import.meta.url), 'utf8'))
 
+/** page.evaluate has no timeout of its own; a starved renderer can leave it pending forever. */
+function withTimeout(promise, ms, what) {
+  let t
+  return Promise.race([promise, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`${what} timed out after ${ms}ms`)), ms) })]).finally(() => clearTimeout(t))
+}
+
 async function answerApi(route) {
   const url = new URL(route.request().url())
   const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
@@ -106,7 +112,13 @@ try {
     const context = await browser.newContext({ deviceScaleFactor: 1 })
     await context.addCookies([{ name: 'af_mode', value: mode, url: baseUrl }])
     await context.route('**/api/**', answerApi)
-    const page = await context.newPage()
+    let page = await context.newPage()
+    // A shared box runs out of memory and Chromium kills the tab ("Target crashed"). A crashed page
+    // is replaced rather than ending the run; the frame is retried on the fresh page.
+    const freshPage = async () => {
+      await page.close().catch(() => {})
+      page = await context.newPage()
+    }
     const frames = []
     for (const screen of screens) for (const sport of sports) frames.push({ screen, sport, leagueType: 'redraft' })
     if (process.argv.includes('--extras')) for (const x of EXTRAS) if (screens.includes(x.screen)) frames.push({ ...x, sport: 'nfl', leagueType: 'redraft' })
@@ -116,16 +128,20 @@ try {
       if (f.deadline) q.set('deadline', f.deadline)
       if (f.franchise) q.set('franchise', '1')
       for (const [, viewport] of Object.entries(WIDTHS)) {
-        await page.setViewportSize(viewport)
+        const tag0 = f.control ? 'control-dynasty' : f.deadline ? `deadline-${f.deadline}` : f.franchise ? 'franchise' : f.sport
+        // --resume: a long run on a shared box gets interrupted; keep the frames already shot.
+        if (process.argv.includes('--resume') && fs.existsSync(path.join(out, `${f.screen}-${tag0}-${mode}-${viewport.width}.png`))) continue
         let read = null
-        for (let attempt = 0; attempt < 3 && !read; attempt++) {
+        for (let attempt = 0; attempt < 4 && !read; attempt++) {
           try {
+            if (attempt > 0) await freshPage()
+            await page.setViewportSize(viewport)
             // Not `networkidle`: `next dev` keeps an HMR socket open, so it never idles.
             await page.goto(`${baseUrl}/e2e/redraft-core/trades/${f.screen}?${q}`, { waitUntil: 'load', timeout: 240_000 })
             await page.locator('[data-testid=redraft-core-trades-fixture]').waitFor({ state: 'visible', timeout: 90_000 })
-            await page.evaluate(() => document.fonts?.ready)
+            await withTimeout(page.evaluate(() => document.fonts?.ready), 20_000, 'fonts')
             await page.waitForTimeout(f.screen === 'trades' ? 1500 : 400)
-            read = await readFrame(page)
+            read = await withTimeout(readFrame(page), 20_000, 'read')
           } catch (e) {
             console.error(`  retry ${attempt + 1}: ${e.message.split('\n')[0]}`)
           }
@@ -160,7 +176,14 @@ try {
           await page.screenshot({ path: path.join(out, 'refused', file), fullPage: true }).catch(() => {})
           continue
         }
-        await page.screenshot({ path: path.join(out, file), fullPage: true })
+        try {
+          await withTimeout(page.screenshot({ path: path.join(out, file), fullPage: true, timeout: 60_000 }), 90_000, 'screenshot')
+        } catch (e) {
+          failures++
+          console.error(`✗ ${file}: screenshot failed — ${e.message.split('\n')[0]}`)
+          await freshPage()
+          continue
+        }
         console.log(`✓ ${file}  accent=${read.accent}  b4=${read.b4 || '-'}  deadline=${read.deadlineBar ?? '-'}`)
       }
     }
@@ -168,7 +191,7 @@ try {
   }
 } finally {
   await browser.close()
-  fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 2))
+  fs.writeFileSync(path.join(out, process.argv.includes('--resume') ? `report-${Date.now()}.json` : 'report.json'), JSON.stringify(report, null, 2))
 }
 console.log(`${report.length - failures} captured, ${failures} refused → ${out}`)
 process.exit(failures ? 1 : 0)
