@@ -92,6 +92,35 @@ describe('league chat follows the scroll', () => {
     expect(m.db.survivorChatMessage.create).toHaveBeenCalledTimes(2)
   })
 
+  it('the one Torch Ceremony message carries the week recap card; the opening never does', async () => {
+    m.db.league.findUnique.mockResolvedValue({ survivorRevealMode: 'simultaneous', settings: {} })
+    await revealCouncil('l1', 'c1', 'host')
+    const [opening, verdict] = m.db.survivorChatMessage.create.mock.calls.map(([args]) => args.data)
+    expect(opening.cardData).toBeUndefined()
+    expect(verdict.contentType).toBe('host_announcement')
+    expect(verdict.cardData).toEqual({ type: 'share_card', momentId: 'recap-c1', momentType: 'recap', week: 6 })
+  })
+
+  it('no recap card when the vote is tied or the league has share cards off', async () => {
+    m.db.league.findUnique.mockResolvedValue({ survivorRevealMode: 'simultaneous', settings: { shareCardsEnabled: false } })
+    await revealCouncil('l1', 'c1', 'host')
+    expect(m.db.survivorChatMessage.create.mock.calls[1][0].data.cardData).toBeUndefined()
+    vi.clearAllMocks()
+    verdictPosted = false
+    m.db.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(m.db))
+    m.db.survivorTribalCouncil.findFirst.mockImplementation(async () => council)
+    m.db.survivorChatChannel.findFirst.mockResolvedValue({ id: 'chat' })
+    m.db.survivorGameState.findUnique.mockResolvedValue({ pausedSnapshot: null })
+    m.db.survivorTribalCouncil.aggregate.mockResolvedValue({ _max: { councilNumber: 1 } })
+    m.db.survivorTribalCouncil.create.mockResolvedValue({ id: 'revote' })
+    m.db.league.findUnique.mockResolvedValue({ survivorRevealMode: 'simultaneous', settings: {} })
+    council = { ...council, status: 'tie_pending', isRevealed: false, revealStartsAt: null, isTie: true, tiePhase: 'revote_required', eliminatedUserId: null, eliminatedName: null }
+    await revealCouncil('l1', 'c1', 'host')
+    const posts = m.db.survivorChatMessage.create.mock.calls.map(([args]) => args.data)
+    expect(posts.length).toBeGreaterThan(0)
+    expect(posts.every(post => post.cardData === undefined)).toBe(true)
+  })
+
   it('commissioner pacing never runs on the clock — only reveal_next completes it', async () => {
     m.db.league.findUnique.mockResolvedValue({ survivorRevealMode: 'commissioner' })
     await revealCouncil('l1', 'c1', 'host')

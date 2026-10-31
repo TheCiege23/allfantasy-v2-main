@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { loadCouncilContext } from './survivorCouncilService'
 import { getCouncilShots } from './survivorShotInTheDark'
 import { afterCouncilRevealed } from './shareCards/hooks'
+import { recapMomentId } from './shareCards/types'
+import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { isCouncilReadComplete } from './survivorRevealGate'
 import { createSurvivorChatMessage } from './survivorChatBridge'
 import { hasIndependentSurvivorHost } from './survivorHostIndependence'
@@ -379,8 +381,18 @@ async function publishVerdictInTx(tx: Prisma.TransactionClient, leagueId: string
   const opensRevote = council.isTie && council.tiePhase === 'revote_required' && council.phase !== 'revote'
   const outcome = council.isTie ? opensRevote ? 'The vote is tied. Eligible managers have two hours to revote for the tied managers. Nobody leaves yet.' : 'The vote remains tied. An independent commissioner must decide the exact season-points tie.' : `${council.eliminatedName ?? 'The selected manager'} has been voted off the main island.${council.tiePhase === 'season_points_decided' ? ' The tiebreak used finalized season points.' : council.tiePhase === 'stones_decided' ? ' The revote and finalized season points were tied, so the stones decided.' : council.tiePhase === 'rocks_decided' ? ' The vote was tied, so the tied managers drew rocks.' : ''}`
   if (channel) {
+    // One message for the whole league: when someone leaves, the verdict carries the week recap card
+    // (who was voted out, the tally, who is left) as its picture. The recap's id is fixed by this
+    // council, and the card route captures it on first view if the hook has not run yet.
+    const votedOff = !council.isTie && Boolean(council.eliminatedUserId || council.eliminatedRosterId)
+    const leagueRow = votedOff ? await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } }) : null
+    const rawSettings = leagueRow?.settings && typeof leagueRow.settings === 'object' && !Array.isArray(leagueRow.settings) ? (leagueRow.settings as Record<string, unknown>) : null
+    const recapCard = votedOff && leagueRow && normalizeSurvivorFoundationSettings(rawSettings).shareCardsEnabled
+      ? { type: 'share_card', momentId: recapMomentId(council.id), momentType: 'recap', week: council.week }
+      : null
     await createSurvivorChatMessage(tx, { data: { leagueId, channelId: channel.id, channelType: 'league', senderUserId: 'survivor-host-chimmy', senderName: 'Chimmy', senderIsHost: true, isSystemMessage: true,
-      contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${shotAnnouncement ? `${shotAnnouncement}\n` : ''}${ballots}\n${outcome}` } })
+      contentType: 'host_announcement', content: `Torch Ceremony · Week ${council.week}\n${shotAnnouncement ? `${shotAnnouncement}\n` : ''}${ballots}\n${outcome}`,
+      ...(recapCard ? { cardData: recapCard } : {}) } })
   }
   if (opensRevote) {
     const deadline = new Date(now.getTime() + 2 * 60 * 60 * 1000)
