@@ -245,7 +245,7 @@ export function ImportWizard({ leagueId, initialSessionId }: { leagueId: string;
           ))}
         </div>
         {sessionId ? (
-          <p className="mt-1 text-[10px] text-white/35" data-testid="import-session-id">
+          <p className="mt-1 text-[11px] text-white/35" data-testid="import-session-id">
             {tr('devyImport.sessionLabel', { id: sessionId })}
             {session ? ` · ${tr(`devyImport.status.${session.status}`)}` : ''}
           </p>
