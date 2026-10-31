@@ -25,6 +25,8 @@ export type DraftRoundOneAnnouncementOverlayProps = {
   /** Queue: first item is visible */
   queue: RoundOneAnnouncementItem[]
   onDismissFront: () => void
+  /** Dynasty rooms: vault ground and trophy-gold accents instead of the default violet. */
+  dynastySkin?: boolean
 }
 
 export function DraftRoundOneAnnouncementOverlay({
@@ -34,8 +36,10 @@ export function DraftRoundOneAnnouncementOverlay({
   formatType,
   queue,
   onDismissFront,
+  dynastySkin = false,
 }: DraftRoundOneAnnouncementOverlayProps) {
   const rs = presentationVariant === 'redraft_snake'
+  const dyn = dynastySkin && !rs
   const current = queue[0]
   const [entered, setEntered] = useState(false)
   const { t: tl, tInterpolate } = useOptionalLanguage()
@@ -100,6 +104,7 @@ export function DraftRoundOneAnnouncementOverlay({
       aria-modal="true"
       aria-label={tl('draftRoom.roundOne.dialogAria')}
       data-testid="draft-round-one-announcement"
+      data-dynasty-skin={dyn ? 'true' : undefined}
       onClick={onDismissFront}
     >
       <div
@@ -110,12 +115,14 @@ export function DraftRoundOneAnnouncementOverlay({
           className={`absolute inset-0 ${
             rs
               ? 'bg-[linear-gradient(135deg,rgba(8,47,73,0.94),rgba(15,23,42,0.96))]'
-              : 'bg-[linear-gradient(135deg,rgba(13,24,41,0.94),rgba(7,15,28,0.96))]'
+              : dyn
+                ? 'bg-[linear-gradient(135deg,var(--dyn-vault,#121826),var(--dyn-ink,#0B0F17))]'
+                : 'bg-[linear-gradient(135deg,rgba(13,24,41,0.94),rgba(7,15,28,0.96))]'
           }`}
         />
         <div
           className={`pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full blur-3xl ${
-            rs ? 'bg-cyan-400/25' : 'bg-violet-500/20'
+            rs ? 'bg-cyan-400/25' : dyn ? 'bg-[rgba(212,162,76,0.22)]' : 'bg-violet-500/20'
           }`}
         />
         <div className="relative flex flex-col gap-4 p-4 sm:flex-row sm:items-start">
@@ -150,7 +157,7 @@ export function DraftRoundOneAnnouncementOverlay({
           <div className="min-w-0 flex-1 pt-0.5">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
-                <Sparkles className={`h-4 w-4 shrink-0 ${rs ? 'text-cyan-300' : 'text-violet-300'}`} />
+                <Sparkles className={`h-4 w-4 shrink-0 ${rs ? 'text-cyan-300' : dyn ? 'text-[var(--dyn-gold,#D4A24C)]' : 'text-violet-300'}`} />
                 <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">{tl('draftRoom.roundOne.selection')}</span>
               </div>
               <div className="flex items-center gap-1.5">

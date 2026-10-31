@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowLeft,
@@ -126,6 +126,15 @@ export type DraftTopBarProps = {
     syncedAt: string | null
   } | null
   startDraftDisabled?: boolean
+  /**
+   * Dynasty leagues only: the room's dynasty skin (ink/vault ground, trophy-gold hairline) and
+   * the draft-kind chip. Redraft rooms leave this false and render exactly as before.
+   */
+  dynastySkin?: boolean
+  /** "Rookie draft · 2027" / "Startup draft" — from `formatDynastyDraftKindLabel`. */
+  dynastyDraftKindLabel?: string | null
+  /** One line on how a rookie auction converted traded rookie picks; null hides it. */
+  rookieAuctionNote?: string | null
 }
 
 const TIMER_COLORS = {
@@ -157,39 +166,62 @@ function translateTimerMode(mode: TimerMode, t: (key: string) => string): string
   return mode.replace(/_/g, ' ')
 }
 
-function resolveDraftFormatLabel(
+export function resolveDraftFormatLabel(
   draftType: string,
   thirdRoundReversal: boolean,
+  t: (key: string) => string,
 ): string {
   const norm = draftType.trim().toLowerCase()
-  if (norm === 'auction') return 'Auction'
-  if (norm === 'linear') return 'Linear'
-  if (norm === 'snake') return thirdRoundReversal ? 'Snake + 3RR' : 'Snake'
+  if (norm === 'auction') return t('draftRoom.draftType.auction')
+  if (norm === 'linear') return t('draftRoom.draftType.linear')
+  if (norm === 'snake') return thirdRoundReversal ? t('draftRoom.topBar.format.snake3rr') : t('draftRoom.draftType.snake')
   return draftType
 }
 
-function formatTimerSummary(timerSeconds: number | null | undefined): string {
-  if (!timerSeconds || timerSeconds <= 0) return 'Untimed picks'
-  if (timerSeconds < 60) return `${timerSeconds} Seconds Per Pick`
+function withCount(template: string, count: number): string {
+  return template.replace('{{count}}', String(count))
+}
+
+export function formatTimerSummary(timerSeconds: number | null | undefined, t: (key: string) => string): string {
+  if (!timerSeconds || timerSeconds <= 0) return t('draftRoom.topBar.timer.untimed')
+  if (timerSeconds < 60) return withCount(t('draftRoom.topBar.timer.seconds'), timerSeconds)
   if (timerSeconds < 3600) {
     const minutes = Math.round(timerSeconds / 60)
-    return `${minutes} Minute${minutes === 1 ? '' : 's'} Per Pick`
+    return withCount(t(minutes === 1 ? 'draftRoom.topBar.timer.minuteOne' : 'draftRoom.topBar.timer.minutes'), minutes)
   }
   if (timerSeconds < 86400) {
     const hours = Math.round(timerSeconds / 3600)
-    return `${hours} Hour${hours === 1 ? '' : 's'} Per Pick`
+    return withCount(t(hours === 1 ? 'draftRoom.topBar.timer.hourOne' : 'draftRoom.topBar.timer.hours'), hours)
   }
   const days = Math.round(timerSeconds / 86400)
-  return `${days} Day${days === 1 ? '' : 's'} Per Pick`
+  return withCount(t(days === 1 ? 'draftRoom.topBar.timer.dayOne' : 'draftRoom.topBar.timer.days'), days)
 }
 
 function formatPoolReadinessLabel(
   sport: string,
   poolReadiness: DraftTopBarProps['poolReadiness'],
+  t: (key: string) => string,
 ): string | null {
   if (!poolReadiness) return null
-  if (poolReadiness.ready) return `Draft pool ready: ${poolReadiness.entryCount} players`
-  return `Preparing ${sport} draft pool...`
+  if (poolReadiness.ready) return withCount(t('draftRoom.topBar.poolReady'), poolReadiness.entryCount)
+  return t('draftRoom.topBar.poolPreparing').replace('{{sport}}', sport)
+}
+
+/** Dynasty skin tokens, always with the fallback so the room works before the token sheet lands. */
+const DYN = {
+  ink: 'var(--dyn-ink,#0B0F17)',
+  vault: 'var(--dyn-vault,#121826)',
+  line: 'var(--dyn-line,#2A3345)',
+  gold: 'var(--dyn-gold,#D4A24C)',
+  goldSoft: 'var(--dyn-gold-soft,#F3D79F)',
+  faint: 'var(--dyn-faint,#9AA4B2)',
+} as const
+
+/** Archivo condensed 700 uppercase — the dynasty pick-label face. */
+const DYN_CONDENSED_STYLE: CSSProperties = {
+  fontFamily: "'Archivo', ui-sans-serif, system-ui, sans-serif",
+  fontStretch: '75%',
+  fontWeight: 700,
 }
 
 export function DraftTopBar({
@@ -251,6 +283,9 @@ export function DraftTopBar({
   showAiOverlays = true,
   poolReadiness = null,
   startDraftDisabled = false,
+  dynastySkin = false,
+  dynastyDraftKindLabel = null,
+  rookieAuctionNote = null,
 }: DraftTopBarProps) {
   const { t, tInterpolate } = useLanguage()
   const liveRemaining = useDraftCountdownSeconds(
@@ -379,7 +414,7 @@ export function DraftTopBar({
           ? formatTimerRemaining(0)
           : formatTimerRemaining(effectiveRemaining ?? 0)
 
-  const timerSummary = useMemo(() => formatTimerSummary(timerSeconds), [timerSeconds])
+  const timerSummary = useMemo(() => formatTimerSummary(timerSeconds, t), [timerSeconds, t])
   const urgentLowTimer =
     timerStatus === 'running' &&
     timerEndAtIso != null &&
@@ -409,9 +444,9 @@ export function DraftTopBar({
     isCurrentUserOnClock
   const statusLabel = translateDraftStatus(draftStatus, t)
   const draftTypeLabel = translateDraftType(draftType, t)
-  const draftFormatLabel = resolveDraftFormatLabel(draftType, thirdRoundReversal)
+  const draftFormatLabel = resolveDraftFormatLabel(draftType, thirdRoundReversal, t)
   const timerModeLabel = translateTimerMode(timerMode, t)
-  const poolReadinessLabel = formatPoolReadinessLabel(sport, poolReadiness)
+  const poolReadinessLabel = formatPoolReadinessLabel(sport, poolReadiness, t)
 
   const centerCta = (() => {
     /** Completed state: show a clear broadcast "Draft Complete" badge. */
@@ -419,7 +454,7 @@ export function DraftTopBar({
       return (
         <div className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-emerald-400/35 bg-gradient-to-br from-emerald-500/18 via-[#0a1228] to-[#070d18] px-4 py-2 text-sm font-bold text-emerald-50 shadow-[0_8px_28px_rgba(16,185,129,0.18)]">
           <Sparkles className="h-4 w-4 shrink-0 text-emerald-300" />
-          <span>Draft Complete</span>
+          <span>{t('draftRoom.topBar.draftComplete')}</span>
         </div>
       )
     }
@@ -432,10 +467,10 @@ export function DraftTopBar({
           disabled={commissionerLoading || startDraftDisabled}
           data-testid="draft-topbar-start-draft"
           className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-[#aeb7ff]/40 bg-gradient-to-r from-[#9ca9ff] to-[#8b7fd8] px-5 py-2 text-sm font-semibold text-[#0a1030] shadow-[0_12px_36px_rgba(139,127,216,0.35)] transition duration-150 hover:brightness-110 hover:shadow-[0_14px_40px_rgba(156,169,255,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 active:scale-[0.98] disabled:opacity-55"
-          title={startDraftDisabled ? (poolReadinessLabel ?? 'Preparing draft pool...') : 'Start draft'}
+          title={startDraftDisabled ? (poolReadinessLabel ?? t('draftRoom.topBar.poolPreparingGeneric')) : t('draftRoom.topBar.startDraftTitle')}
         >
           <Grid2x2 className="h-4 w-4" />
-          START DRAFT
+          {t('draftRoom.topBar.startDraftCta')}
         </button>
       )
     }
@@ -470,11 +505,11 @@ export function DraftTopBar({
           <span className="sr-only" data-testid="draft-topbar-clock-time">{timerDisplay}</span>
           {isPausedCommissioner ? (
             <span className="hidden sm:inline rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-50">
-              Resume
+              {t('draftRoom.topBar.resumeBadge')}
             </span>
           ) : draftStatus === 'paused' ? (
             <span className="rounded border border-white/15 bg-white/[0.08] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">
-              Paused
+              {t('draftRoom.topBar.timerPaused')}
             </span>
           ) : null}
         </>
@@ -567,17 +602,34 @@ export function DraftTopBar({
         : t('draftRoom.topBar.cpuManager')
 
   const rs = draftRoomPresentation === 'redraft_snake'
+  // The dynasty skin never stacks on the redraft look: page.tsx keeps dynasty out of
+  // `redraft_snake`, and this guard keeps it that way if a caller ever passes both.
+  const dyn = dynastySkin && !rs
 
   return (
     <header
       className={`relative z-30 border-b px-3 pb-0.5 pt-0.5 backdrop-blur-xl sm:px-4 ${
         rs
           ? 'border-cyan-400/25 bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgba(34,211,238,0.14),transparent),linear-gradient(180deg,#0b1829_0%,#060f1e_45%,#050814_100%)] shadow-[0_16px_56px_rgba(8,145,178,0.14)]'
-          : 'border-white/[0.07] bg-gradient-to-b from-[#070d1c]/95 via-[#060b19]/98 to-[#050814]'
+          : dyn
+            ? ''
+            : 'border-white/[0.07] bg-gradient-to-b from-[#070d1c]/95 via-[#060b19]/98 to-[#050814]'
       }`}
+      data-dynasty-skin={dyn ? 'true' : undefined}
+      style={
+        dyn
+          ? {
+              borderColor: DYN.line,
+              background: `radial-gradient(ellipse 120% 80% at 50% -20%, rgba(212,162,76,0.10), transparent), linear-gradient(180deg, ${DYN.vault} 0%, ${DYN.ink} 100%)`,
+            }
+          : undefined
+      }
     >
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/25 to-transparent"
+        className={`pointer-events-none absolute inset-x-0 top-0 h-px ${
+          dyn ? '' : 'bg-gradient-to-r from-transparent via-cyan-400/25 to-transparent'
+        }`}
+        style={dyn ? { background: `linear-gradient(90deg, transparent, ${DYN.gold}, transparent)`, opacity: 0.55 } : undefined}
         aria-hidden
       />
       {/*
@@ -622,6 +674,15 @@ export function DraftTopBar({
                 <h1 className="truncate text-sm font-bold tracking-tight text-white drop-shadow-sm sm:text-base">
                   {leagueName}
                 </h1>
+                {dyn && dynastyDraftKindLabel ? (
+                  <span
+                    data-testid="draft-topbar-dynasty-kind"
+                    className="hidden shrink-0 items-center sm:inline-flex rounded-md border px-1.5 py-0.5 text-[11px] uppercase leading-none tracking-[0.08em]"
+                    style={{ ...DYN_CONDENSED_STYLE, borderColor: DYN.gold, color: DYN.goldSoft, background: 'rgba(212,162,76,0.10)' }}
+                  >
+                    {dynastyDraftKindLabel}
+                  </span>
+                ) : null}
                 {onlineCount != null && onlineCount > 0 && (
                   <span
                     className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/12 px-2 py-0.5 text-[11px] font-semibold text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
@@ -641,6 +702,17 @@ export function DraftTopBar({
                   inline meta line below (`{teamCount} Teams · {rounds} Rounds ·
                   {sport} · {draftTypeLabel}`). Removing them de-clutters the
                   draft-room header without losing any information. */}
+              {dyn && dynastyDraftKindLabel ? (
+                // Phones: the chip beside the name would squeeze the name to nothing, so the
+                // draft kind gets its own line under it instead.
+                <p
+                  className="mt-0 truncate text-[11px] uppercase tracking-[0.08em] sm:hidden"
+                  style={{ ...DYN_CONDENSED_STYLE, color: DYN.goldSoft }}
+                  data-testid="draft-topbar-dynasty-kind-mobile"
+                >
+                  {dynastyDraftKindLabel}
+                </p>
+              ) : null}
               {poolReadinessLabel && !poolReadiness?.ready ? (
                 <p className="mt-0 truncate text-[11px] text-amber-200 md:hidden" data-testid="draft-topbar-pool-readiness-mobile">
                   {poolReadinessLabel}
@@ -649,13 +721,13 @@ export function DraftTopBar({
           <div className="mt-0 hidden flex-wrap items-center gap-x-1 gap-y-0 text-[11px] text-[#97a8d7] md:flex">
                 <span>{timerSummary}</span>
                 <span className="text-white/24">·</span>
-                <span>{teamCount} Teams</span>
+                <span>{withCount(t('draftRoom.topBar.teamsCount'), teamCount)}</span>
                 <span className="text-white/24">·</span>
-                <span>{rounds} Rounds</span>
+                <span>{withCount(t('draftRoom.topBar.roundsCount'), rounds)}</span>
                 <span className="text-white/24">·</span>
                 <span className="text-white/55">{sport}</span>
                 <span className="text-white/24">·</span>
-                <span title={`Draft type: ${draftTypeLabel}`}>{draftFormatLabel}</span>
+                <span title={t('draftRoom.topBar.draftTypeTitle').replace('{{type}}', draftTypeLabel)}>{draftFormatLabel}</span>
                 {poolReadinessLabel ? (
                   <>
                     <span className="text-white/24">·</span>
@@ -672,10 +744,10 @@ export function DraftTopBar({
                     <span className="text-white/24">·</span>
                     <span
                       data-testid="draft-topbar-third-round-reversal-badge"
-                      title="Third Round Reversal: rounds 2 and 3 go in the same direction."
+                      title={t('draftRoom.topBar.thirdRoundReversalTitle')}
                       className="inline-flex items-center rounded-md border border-cyan-300/35 bg-cyan-500/14 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-100"
                     >
-                      3RR On
+                      {t('draftRoom.topBar.thirdRoundReversalOn')}
                     </span>
                   </>
                 ) : null}
@@ -688,11 +760,21 @@ export function DraftTopBar({
                   data-testid="draft-copy-invite-inline"
                   className="inline-flex items-center gap-1 text-[#c6d0ff] transition duration-150 hover:text-white"
                 >
-                  Invite Leaguemates
+                  {t('draftRoom.topBar.inviteLeaguemates')}
                   <Copy className="h-3.5 w-3.5" />
                 </button>
-                {copyFeedback === 'copied' ? <span className="text-cyan-300">Copied</span> : null}
+                {copyFeedback === 'copied' ? <span className="text-cyan-300">{t('draftRoom.topBar.copied')}</span> : null}
               </div>
+              {dyn && rookieAuctionNote ? (
+                <p
+                  data-testid="draft-topbar-rookie-auction-note"
+                  className="mt-0.5 truncate text-[11px]"
+                  style={{ color: DYN.faint }}
+                  title={rookieAuctionNote}
+                >
+                  {rookieAuctionNote}
+                </p>
+              ) : null}
             </div>
           </div>
 

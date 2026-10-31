@@ -209,6 +209,11 @@ export type PlayerPanelProps = {
   rookieFilterState?: RookieFilterState
   /** Dynasty leagues: the pool table shows the Rookie / Prospect chip. Redraft pools are unchanged. */
   isDynasty?: boolean
+  /**
+   * A rookie draft (`draftModeLabel === 'rookie'`) opens with "Rookies only" on. The manager can
+   * still turn it off, and "Clear all" still clears it.
+   */
+  defaultRookiesOnly?: boolean
 }
 
 /** D.3 — re-exposed from SleeperPoolSort. Kept as `SortKey` for legacy call sites. */
@@ -414,6 +419,7 @@ function PlayerPanelInner({
   poolError = false,
   rookieFilterState,
   isDynasty = false,
+  defaultRookiesOnly = false,
 }: PlayerPanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const draftedIdsForRows = draftedPlayerIds?.size ? draftedPlayerIds : undefined
@@ -435,7 +441,19 @@ function PlayerPanelInner({
   const [watchlistOnly, setWatchlistOnly] = useState(false)
   const [showAiOverlaysLocal, setShowAiOverlaysLocal] = useState(true)
   const aiOverlaysEnabled = showAiOverlays ?? showAiOverlaysLocal
-  const [rookiesOnly, setRookiesOnly] = useState(false)
+  const [rookiesOnly, setRookiesOnly] = useState(defaultRookiesOnly)
+  /*
+   * The session snapshot can arrive after the panel mounts, so the default may flip from false
+   * to true once. Apply it on that transition only — never re-assert it after the manager has
+   * turned the filter off.
+   */
+  const appliedRookieDefaultRef = useRef(defaultRookiesOnly)
+  useEffect(() => {
+    if (!defaultRookiesOnly || appliedRookieDefaultRef.current) return
+    appliedRookieDefaultRef.current = true
+    setRookiesOnly(true)
+    setVetsOnly(false)
+  }, [defaultRookiesOnly])
   /** Commit N — companion to `rookiesOnly`. Mutually exclusive with rookies-only;
    *  toggling one turns the other off so the user can't accidentally produce an
    *  empty intersection. */
