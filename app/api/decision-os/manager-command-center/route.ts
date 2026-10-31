@@ -22,6 +22,7 @@ import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedIntelligenceIntegrationService } from '@/lib/sports-evidence/intelligenceIntegration'
 import { resolveManagerCommandCenterSnapshot } from '@/lib/decision-os/managerCommandCenter'
 import { loadCareerDecisionInput } from '@/lib/core-app/careerDecisionInput'
+import { loadSurvivorFinaleSignals } from '@/lib/survivor/survivorFinaleSignalsLoader'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,8 +86,12 @@ export async function GET() {
   // Started, not awaited: the snapshot awaits it only after its own per-league reads.
   const career = loadCareerDecisionInput({ userId, leagueRows, now })
 
+  // Survivor finale and Tribal deadlines ("votes due in X", "write your closing speech"). Read-only,
+  // Survivor leagues only; an empty list (never a throw) when the read fails.
+  const survivorSignals = loadSurvivorFinaleSignals(userId, leagueIds, now).catch(() => [])
+
   const [snapshot, draftsApproachingCount] = await Promise.all([
-    resolveManagerCommandCenterSnapshot(userId, leagueIds, now, career),
+    resolveManagerCommandCenterSnapshot(userId, leagueIds, now, career, survivorSignals),
     countDraftsApproaching(leagueIds, now),
   ])
 

@@ -3,6 +3,8 @@
  * Returns 404 when league is not a survivor league.
  */
 
+import { loadImmunitySealed } from '@/lib/survivor/survivorSealedImmunityState'
+import { redactImmunityList } from '@/lib/survivor/survivorSealedImmunity'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -122,8 +124,10 @@ export async function GET(
 
   // Only councils whose read has finished name a voted-out manager (see survivorRevealGate).
   const votedOutHistory = audit.filter(row => isCouncilReadComplete(row, leagueMeta?.survivorRevealMode)).map(row => ({ rosterId: row.eliminatedRosterId!, week: row.week }))
-  // Weekly necklaces still being worn (until the next lineup lock). Public by design.
-  const activeNecklaces = await getActiveTribeImmunity(leagueId)
+  // Weekly necklaces still being worn (until the next lineup lock). Public by design, unless the
+  // commissioner sealed immunity, in which case only the winner sees theirs until votes are in.
+  const immunitySealed = await loadImmunitySealed(leagueId, currentWeek)
+  const activeNecklaces = redactImmunityList(await getActiveTribeImmunity(leagueId), immunitySealed, (row) => row.immunityWinnerUserId === userId)
 
   const tribes = merged
     ? [
@@ -346,7 +350,7 @@ export async function GET(
     immunityRosterIds: [...new Set([
       ...activeNecklaces.map(row => mainRosterByPlatformUserId.get(row.immunityWinnerUserId) ?? row.immunityWinnerRosterId),
       ...weeklyScoreRows.flatMap(row => {
-        const rosterId = row.wonIndividualImmunity ? mainRosterByPlatformUserId.get(row.userId) : undefined
+        const rosterId = row.wonIndividualImmunity && (!immunitySealed || row.userId === userId) ? mainRosterByPlatformUserId.get(row.userId) : undefined
         return rosterId ? [rosterId] : []
       }),
     ])],

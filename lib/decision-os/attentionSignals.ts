@@ -54,6 +54,12 @@ export type AttentionSignalType =
   /** Live-career plan, phase 4: what winning a live league would mean for the career — read off
    * the Career screen's own stakes (`careerMilestones.ts`), never re-derived. */
   | 'career_title_stake'
+  /** Survivor finale (`survivorFinaleSignals.ts`): a jury question window closing, an answer or a
+   * closing speech owed, or a Tribal ballot due — read off the league's own Survivor state. */
+  | 'survivor_jury_question_window'
+  | 'survivor_finalist_answer_due'
+  | 'survivor_closing_speech'
+  | 'survivor_votes_due'
 
 export type AttentionSignalSource =
   | 'league_health_engine'
@@ -64,6 +70,8 @@ export type AttentionSignalSource =
   | 'user_os'
   /** Live-career plan, phase 4: the Career Wire's sync read and the Career screen's stakes. */
   | 'career'
+  /** The Survivor format's own persisted state (jury Q&A, closing speeches, council ballots). */
+  | 'survivor'
 
 export interface DecisionOsAttentionSignal {
   /** Stable and deterministic — the same underlying condition always produces the same id, so a

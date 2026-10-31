@@ -3,6 +3,7 @@ import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings
 import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import type { SurvivorRulesContext } from './survivorRulesAnswers'
 import { survivorIdolConfigFallback } from './survivorIdolConfigService'
+import { readSurvivorFinaleSettings, readSurvivorFinaleWindows } from './survivorFinaleSettings'
 
 /** The settings, plan and live cast count the rules answers are built from. Null for an unknown league. */
 export async function loadSurvivorRulesContext(leagueId: string): Promise<SurvivorRulesContext | null> {
@@ -16,5 +17,5 @@ export async function loadSurvivorRulesContext(leagueId: string): Promise<Surviv
   const raw = row.settings && typeof row.settings === 'object' && !Array.isArray(row.settings) ? row.settings as Record<string, unknown> : {}
   // The idols actually hidden come from the idol setup, not the foundation's idolCount.
   const idolCount = idolRow?.count ?? survivorIdolConfigFallback(row).count
-  return { sport: String(row.sport ?? 'NFL'), settings: { ...normalizeSurvivorFoundationSettings(raw), idolCount }, plan: readSurvivorFullSeasonPlan(raw), activeCount }
+  return { sport: String(row.sport ?? 'NFL'), settings: { ...normalizeSurvivorFoundationSettings(raw), idolCount }, plan: readSurvivorFullSeasonPlan(raw), activeCount, finale: readSurvivorFinaleSettings(raw), finaleWindows: readSurvivorFinaleWindows(raw) }
 }

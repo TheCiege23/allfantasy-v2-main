@@ -6,6 +6,7 @@
 
 import type { SurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 import type { SurvivorFoundationSettings } from './survivorSettings'
+import { SURVIVOR_FINALE_DEFAULTS, type SurvivorFinaleSettings, type SurvivorFinaleWindows } from './survivorFinaleSettings'
 
 export type SurvivorRulesTopic =
   | 'voting' | 'ties' | 'idols' | 'merge' | 'exile' | 'jury' | 'immunity' | 'challenges' | 'schedule' | 'overview'
@@ -16,6 +17,24 @@ export type SurvivorRulesContext = {
   plan: SurvivorFullSeasonPlan | null
   /** Active managers right now, when known. */
   activeCount?: number | null
+  /** Jury, finale and reunion rules (survivorFinaleSettings.ts). Defaults when absent. */
+  finale?: SurvivorFinaleSettings
+  /** This season's finale windows, when set. */
+  finaleWindows?: SurvivorFinaleWindows | null
+}
+
+function windowWhen(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return `${d.toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} ET`
+}
+
+function votesDueLine(ctx: SurvivorRulesContext): string {
+  const hours = (ctx.finale ?? SURVIVOR_FINALE_DEFAULTS).votesDueHoursBeforeCeremony
+  return hours > 0
+    ? `Ballots are due ${hours} hour${hours === 1 ? '' : 's'} before the Torch Ceremony (${DAY_TIME(ctx.settings)}).`
+    : `Votes close at the Torch Ceremony, ${DAY_TIME(ctx.settings)}.`
 }
 
 // Survivor words only: a league chat full of fantasy questions ("when does he play?", "who won the
@@ -24,12 +43,12 @@ const TOPIC_PATTERNS: Array<[SurvivorRulesTopic, RegExp]> = [
   ['ties', /\b(tie|tied|ties|rocks|deadlock(?:ed)?)\b/],
   ['idols', /\b(idols?|shot in the dark)\b/],
   ['exile', /\b(exile|return(?:ing)? to the island)\b/],
-  ['jury', /\b(jury|jurors?|finale|final tribal|finalists?)\b/],
+  ['jury', /\b(jury|jurors?|finale|final tribal|finalists?|closing speech(?:es)?|reunion|who voted for whom)\b/],
   ['merge', /\b(merge|merged|merging)\b/],
   ['immunity', /\b(immunity|immune)\b/],
   ['challenges', /\b(challenges?|mini[- ]?games?)\b/],
   ['voting', /\b(vote|votes|voting|ballot|tribal council|tribal|council|voted out)\b/],
-  ['schedule', /\b(torch ceremony|elimination weeks?|vote deadline|voting deadline)\b/],
+  ['schedule', /\b(torch ceremony|elimination weeks?|vote deadline|voting deadline|votes due)\b/],
 ]
 
 const QUESTION = /\b(how|what|when|why|rules?|explain|does|do|can|is|are|which|who)\b|\?/
@@ -93,10 +112,10 @@ function idolExpiryLine(s: SurvivorFoundationSettings): string {
 
 function scheduleLine(ctx: SurvivorRulesContext): string {
   const plan = ctx.plan
-  if (!plan) return `Tribal Council votes close at the Torch Ceremony, ${DAY_TIME(ctx.settings)}.`
+  if (!plan) return votesDueLine(ctx)
   const doubles = [...new Set(plan.eliminationWeeks.filter((week, index, all) => all.indexOf(week) !== index))]
   return [
-    `Tribal Council votes close at the Torch Ceremony, ${DAY_TIME(ctx.settings)}.`,
+    votesDueLine(ctx),
     `The season runs weeks ${plan.startWeek}–${plan.endWeek}, with the finale in week ${plan.finaleWeek}.`,
     plan.noEliminationWeeks.length ? `Nobody goes home in week${plan.noEliminationWeeks.length > 1 ? 's' : ''} ${plan.noEliminationWeeks.join(', ')}.` : '',
     doubles.length ? `Week${doubles.length > 1 ? 's' : ''} ${doubles.join(', ')} send${doubles.length > 1 ? '' : 's'} two managers home.` : '',
@@ -111,7 +130,7 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
       return [
         '**Voting**',
         `• Vote privately: send @Chimmy vote @manager, or use the ballot on the Chimmy page. Nobody sees your vote until the read.`,
-        `• Votes close at the Torch Ceremony, ${DAY_TIME(s)}.${s.lateVotesAllowed ? ' Late votes are accepted.' : ' Late votes do not count.'}`,
+        `• ${votesDueLine(ctx)}${s.lateVotesAllowed ? ' Late votes are accepted.' : ' Late votes do not count.'}`,
         `• ${s.voteChangePolicy === 'allow_until_close' ? 'You can change your vote until voting closes.' : 'Your first valid vote locks in.'}`,
         `• Voting for yourself is ${s.selfVotesAllowed ? 'allowed' : 'not allowed'}.`,
         `• ${s.nonVoterAutoCast ? 'If you do not vote, a vote is cast for you against the lowest scorer you could have voted for.' : 'If you do not vote, you have no vote that council.'}`,
@@ -146,20 +165,32 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
         `• At the end of week ${s.exileReturnWeek}, the Exile manager with the most tokens (and at least ${s.exileReturnTokens}) returns to the island and rebuilds through waivers.`,
         '• Token balances are private. You can see yours on the Token Pool screen; nobody sees anyone else\'s.',
       ].join('\n')
-    case 'jury':
+    case 'jury': {
+      const f = ctx.finale ?? SURVIVOR_FINALE_DEFAULTS
+      const w = ctx.finaleWindows ?? null
+      const qClose = windowWhen(w?.questionsDeadline)
+      const qOpen = windowWhen(w?.questionsOpenAt)
+      const aClose = windowWhen(w?.answersDeadline)
+      const sClose = windowWhen(w?.speechesDeadline)
       return [
         '**Jury and finale**',
         s.juryEnabled ? '• Managers voted out after the merge join the jury.' : '• There is no jury in this league.',
         ctx.plan ? `• Final Tribal Council is in week ${ctx.plan.finaleWeek} with ${ctx.plan.finalistCount} finalists.` : '• The last managers standing go to Final Tribal Council.',
+        s.juryEnabled && f.juryQuestionsEnabled ? `• Each juror may ask each finalist one question${qOpen || qClose ? ` (${qOpen ? `from ${qOpen}` : ''}${qOpen && qClose ? ' ' : ''}${qClose ? `until ${qClose}` : ''})` : ' while the finale is open'}. Finalists answer${aClose ? ` by ${aClose}` : ''}, and the juror marks the answer as seen.` : '',
+        f.closingSpeechesEnabled ? `• Each finalist posts one closing speech, editable${sClose ? ` until ${sClose}` : ' until the jury vote is complete'}.${sClose ? ' Jury voting opens when the speeches close.' : ''} The jury sees them first; everyone sees them after the finale.` : '',
         s.juryEnabled && s.finaleVotingEnabled ? '• The jury votes privately for the winner.' : '',
+        f.endOfSeasonBallotReveal ? '• After the season, every council\'s ballots are revealed: who voted for whom. Never before the champion is crowned.' : '• Ballots stay secret, even after the season.',
+        f.reunionChatEnabled ? '• After the finale, Island Chat reopens to everyone for the reunion.' : '',
       ].filter(Boolean).join('\n')
+    }
     case 'immunity':
       return [
         '**Immunity**',
         `• Before the merge, the top-scoring tribe each ${period} is safe${s.twoHighestTribesImmune ? ' (the top two with three or more tribes)' : ''}. The lowest-scoring tribe goes to Tribal Council.`,
         '• After the merge, the top individual scorer is safe.',
         '• Winning a challenge can also earn immunity.',
-      ].join('\n')
+        (ctx.finale ?? SURVIVOR_FINALE_DEFAULTS).sealedImmunity ? '• Immunity is sealed: who holds individual immunity stays hidden until every vote is in, then it is read with the votes. Votes against them do not count.' : '',
+      ].filter(Boolean).join('\n')
     case 'challenges':
       return '**Challenges**\n• Weekly challenges are posted in the league. Lock your pick before the challenge locks.\n• Rewards can include immunity, tokens or an advantage, and are settled from real game results.'
     case 'schedule':

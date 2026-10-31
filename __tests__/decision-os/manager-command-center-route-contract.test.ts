@@ -24,6 +24,9 @@ vi.mock('@/lib/decision-os/managerCommandCenter', async () => {
 vi.mock('@/lib/core-app/careerDecisionInput', () => ({
   loadCareerDecisionInput: mocks.loadCareerDecisionInput,
 }))
+vi.mock('@/lib/survivor/survivorFinaleSignalsLoader', () => ({
+  loadSurvivorFinaleSignals: vi.fn(async () => []),
+}))
 vi.mock('@/lib/prisma', () => ({
   prisma: { leagueSettings: { count: mocks.leagueSettingsCount } },
 }))
@@ -82,6 +85,8 @@ describe('GET /api/decision-os/manager-command-center', () => {
       'user-1',
       ['league-1', 'league-2', 'league-3'],
       expect.any(Date),
+      expect.any(Promise),
+      // Survivor finale / Tribal signals, started beside the snapshot like the career read.
       expect.any(Promise),
     )
     // The career read gets the SAME rows the league ids came from — no second list read.
@@ -142,6 +147,6 @@ describe('GET /api/decision-os/manager-command-center', () => {
     expect(res.status).toBe(200)
     expect(body.totalLeagues).toBe(0)
     expect(body.draftsApproachingCount).toBe(0)
-    expect(mocks.resolveManagerCommandCenterSnapshot).toHaveBeenCalledWith('user-1', [], expect.any(Date), expect.any(Promise))
+    expect(mocks.resolveManagerCommandCenterSnapshot).toHaveBeenCalledWith('user-1', [], expect.any(Date), expect.any(Promise), expect.any(Promise))
   })
 })

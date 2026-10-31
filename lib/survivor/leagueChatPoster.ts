@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { readSurvivorFinaleSettings } from './survivorFinaleSettings'
 import { createSurvivorChatMessage, upsertSurvivorChatMessage } from './survivorChatBridge'
 import { survivorEpisodeText, type SurvivorEpisode } from './survivorEpisode'
 
@@ -263,7 +264,10 @@ export async function postImmunityWinLine(
   leagueId: string,
   winner: { tribeId: string; userId: string; displayName: string; score: number },
   week: number,
+  opts: { ignoreSeal?: boolean } = {},
 ): Promise<void> {
+  // Sealed immunity: the line waits for the council close (postDeferredImmunityLines).
+  if (!opts.ignoreSeal && await immunityAnnouncementDeferred(leagueId, week)) return
   const content = `${winner.displayName} won immunity`
   const cardData = { type: 'immunity_won', userId: winner.userId, displayName: winner.displayName, tribeId: winner.tribeId, score: winner.score, week }
   const baseId = `survivor-immunity:${leagueId}:${week}:${winner.tribeId}:${winner.userId}`
@@ -310,4 +314,26 @@ export async function postIdolTransferLog(
     action: 'idol_transferred',
     data: { fromManager, toManager, powerType, reason },
   })
+}
+
+async function immunityAnnouncementDeferred(leagueId: string, week: number): Promise<boolean> {
+  const { loadImmunitySealed } = await import('./survivorSealedImmunityState')
+  return loadImmunitySealed(leagueId, week)
+}
+
+/**
+ * Sealed immunity: post the week's "won immunity" lines once the council closes. Deterministic ids
+ * (see postImmunityWinLine) make a repeat a no-op. Best-effort; never throws.
+ */
+export async function postDeferredImmunityLines(leagueId: string, week: number): Promise<void> {
+  try {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    if (!readSurvivorFinaleSettings(league?.settings).sealedImmunity) return
+    const rows = await prisma.survivorTribeImmunity.findMany({ where: { leagueId, week, clearedAt: null }, select: { tribeId: true, immunityWinnerUserId: true, winnerName: true, score: true } })
+    for (const row of rows) {
+      await postImmunityWinLine(leagueId, { tribeId: row.tribeId, userId: row.immunityWinnerUserId, displayName: row.winnerName ?? 'A castaway', score: row.score }, week, { ignoreSeal: true })
+    }
+  } catch (error) {
+    console.warn('[survivor] deferred immunity lines failed', error instanceof Error ? error.message : error)
+  }
 }
