@@ -38,6 +38,7 @@ import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
 import { leagueThemeForTypeKey } from '@/lib/core-app/survivorTheme'
 import { SurvivorIslandBanner } from '@/components/core-app/survivor/SurvivorIslandBanner'
+import { SurvivorIslandControl } from '@/components/core-app/survivor/SurvivorIslandControl'
 import { navLabel } from '@/lib/core-app/navLabels'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
@@ -2018,6 +2019,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const survivorBanner = (variant: 'full' | 'compact') =>
     leagueThemeForTypeKey(tradeLeagueTypeKey) === 'survivor' && selectedLeagueId ? (
       <SurvivorIslandBanner leagueId={selectedLeagueId} leagueName={tradeLeagueRow?.name ?? ''} variant={variant} />
+    ) : null
+  /* …and its Commissioner screen (Island control) with league health and the weekly to-do. */
+  const survivorControl =
+    leagueThemeForTypeKey(tradeLeagueTypeKey) === 'survivor' && selectedLeagueId ? (
+      <>
+        {survivorBanner('compact')}
+        <SurvivorIslandControl leagueId={selectedLeagueId} />
+      </>
     ) : null
   /*
    * The reader's language for server-rendered copy on this screen. Read from the `af_lang` cookie,
@@ -5115,7 +5124,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * role check to bypass because there is no client-side role check.
          */
         commissionerHub ? (
+          <>
+          {survivorControl}
           <CommissionerHub data={commissionerHub} lineups={hubLineups} language={hubLanguage} />
+          </>
         ) : /*
            * ⚠ TWO DIFFERENT FACTS, TWO DIFFERENT RENDERINGS. "A league is
            * selected and we failed to read it" is a read failure on our side.
