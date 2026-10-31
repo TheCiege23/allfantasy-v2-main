@@ -3,13 +3,15 @@
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-transactions.css'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { Heart } from 'lucide-react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import '@/components/dynasty/dynasty-details.css'
 import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
 import PlayerHeadshot from '@/components/league/PlayerHeadshot'
@@ -257,6 +259,14 @@ const STATUS_TONE: Record<LogRow['status']['tone'], string> = {
 }
 
 const EYEBROW = 'font-mono font-bold uppercase tracking-[0.14em]'
+
+/**
+ * True inside a dynasty league's Trades tab: the violet review tones become the Dynasty Era gold.
+ * Defaults to false, so a card rendered anywhere else keeps its violet exactly as before.
+ */
+const DynastyEraContext = createContext(false)
+/** The violet tone, on a dynasty league. */
+const DYNASTY_STATUS_TONE = 'dyd-review-chip'
 
 /**
  * Reads a numeric league setting out of the ingested settings snapshot —
@@ -530,8 +540,10 @@ function GradeWhy({ lines }: { lines: string[] | null | undefined }) {
 }
 
 function StatusChip({ status }: { status: LogRow['status'] }) {
+  const dynastyEra = useContext(DynastyEraContext)
+  const tone = dynastyEra && status.tone === 'violet' ? DYNASTY_STATUS_TONE : STATUS_TONE[status.tone]
   return (
-    <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.06em] ${STATUS_TONE[status.tone]}`}>
+    <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.06em] ${tone}`}>
       {status.label}
     </span>
   )
@@ -839,6 +851,7 @@ export function PendingTradeCard(props: {
   const onSleeper = t.status?.startsWith('pending_on_') === true
   const providerName = t.status === 'pending_on_yahoo' ? 'Yahoo' : 'Sleeper'
   const review = t.status === 'awaiting_commissioner'
+  const dynastyEra = useContext(DynastyEraContext)
   const commissionerView = t.direction === 'complete'
   const receiptParticipantLabel = (index: number) => {
     if (commissionerView) return index === 0 ? 'Proposer' : `Team ${index + 1}`
@@ -904,11 +917,11 @@ export function PendingTradeCard(props: {
   const role = onSleeper
     ? { label: `On ${providerName} · read-only`, cls: 'bg-[#1f2a4d] text-[#9fd4ff]' }
     : review
-      ? { label: 'Commissioner review', cls: 'bg-violet-400/15 text-violet-200' }
+      ? { label: 'Commissioner review', cls: dynastyEra ? 'dyd-review-chip' : 'bg-violet-400/15 text-violet-200' }
       : t.direction === 'outgoing'
         ? { label: 'Your offer', cls: 'bg-[var(--surface2)] text-[var(--text2)]' }
         : { label: 'Offer to you', cls: 'bg-amber-400/15 text-amber-200' }
-  const border = onSleeper ? 'border-[var(--line2)]' : review ? 'border-violet-400/35' : t.direction === 'outgoing' ? 'border-[var(--line2)]' : 'border-amber-400/40'
+  const border = onSleeper ? 'border-[var(--line2)]' : review ? (dynastyEra ? 'dyd-review-border' : 'border-violet-400/35') : t.direction === 'outgoing' ? 'border-[var(--line2)]' : 'border-amber-400/40'
 
   return (
     <article className={`flex flex-col gap-3 rounded-2xl border bg-[var(--surface)] p-3.5 ${border}`} data-testid="pending-trade-card">
@@ -1092,6 +1105,7 @@ export function PendingTradeCard(props: {
 
 export function TradesTab({ league, teams }: TradesTabProps) {
   const sport = normalizeToSupportedSport(league.sport) ?? 'NFL'
+  const dynastyEra = usesDynastyBackground(league)
   // Non-null only for imported (SHADOW) leagues, where a trade built here never reaches the
   // partner on their own platform. Drives every "Propose"→"Build a shadow trade" relabel.
   const tradeShadowNotice = useMemo(() => shadowDisclosure(league.platform), [league.platform])
@@ -1374,6 +1388,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   )
 
   return (
+    <DynastyEraContext.Provider value={dynastyEra}>
     <div className="af-core af-league-transactions flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-5">
       {/* ── Header ───────────────────────────────────────────────────── */}
       <div className="af-transaction-heading flex flex-wrap items-start justify-between gap-3">
@@ -2005,5 +2020,6 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         }}
       />
     </div>
+    </DynastyEraContext.Provider>
   )
 }
