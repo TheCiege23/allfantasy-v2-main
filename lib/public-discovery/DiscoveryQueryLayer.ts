@@ -13,6 +13,7 @@ import {
   readExternalListing,
 } from "./externalListing"
 import { readLeagueVibes } from "./vibes"
+import { leaguesWhoseOwnerCommissions } from "./ownerCommissionerTeams"
 import type { DiscoveryCard, DiscoveryLeagueStyle } from "./types"
 
 const DEFAULT_BASE_URL =
@@ -270,6 +271,9 @@ export async function queryPublicFantasyLeagueCards(options: {
     leagues.map((l) => l.id)
   )
   const leaguesRun = await countLeaguesRunByCommissioner(leagues.map((l) => l.userId))
+  const ownerCommissioned = await leaguesWhoseOwnerCommissions(
+    leagues.filter((l) => !isNativePlatform(l.platform)).map((l) => ({ id: l.id, userId: l.userId }))
+  )
 
   return leagues
     .map((league): DiscoveryCard | null => {
@@ -278,7 +282,9 @@ export async function queryPublicFantasyLeagueCards(options: {
       // A native league is joined here with its code; an imported one is listed by its verified
       // commissioner and joined by request, because its seats live on the other platform.
       const external = native ? null : readExternalListing(settings)
-      const verification = native ? null : listingVerification(league)
+      const verification = native
+        ? null
+        : listingVerification({ ...league, ownerCommissionsTeam: ownerCommissioned.has(league.id) })
       if (native ? !isFantasyLeagueDiscoverable(settings) : !external?.listed || !verification) return null
 
       const inviteCode = String(settings[LEAGUE_INVITE_CODE_KEY] ?? "").trim()
