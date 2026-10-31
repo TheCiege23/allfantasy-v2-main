@@ -67,6 +67,43 @@ describe("FindLeagueCard", () => {
     expect(screen.getByText("League runs on Central time")).toBeTruthy()
   })
 
+  it("a league on another platform asks for a spot instead of joining here", async () => {
+    const posts: string[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        posts.push(`${init?.method} ${url} ${init?.body}`)
+        return new Response(JSON.stringify({ ok: true, status: "pending" }))
+      })
+    )
+    render(
+      <FindLeagueCard
+        league={card({
+          joinMode: "request",
+          externalPlatform: "sleeper",
+          listingVerification: "provider",
+          listingNote: "Active chat",
+          joinUrl: "",
+        })}
+      />
+    )
+    expect(screen.getByText("Plays on Sleeper")).toBeTruthy()
+    expect(screen.getByTestId("find-league-verified-lg1").textContent).toContain("Commissioner verified by Sleeper")
+    expect(screen.queryByTestId("find-league-join-lg1")).toBeNull()
+    fireEvent.click(screen.getByTestId("find-league-request-lg1"))
+    fireEvent.change(screen.getByTestId("find-league-request-message-lg1"), { target: { value: "hi" } })
+    fireEvent.click(screen.getByTestId("find-league-request-send-lg1"))
+    expect(await screen.findByTestId("find-league-request-sent-lg1")).toBeTruthy()
+    expect(posts).toEqual(['POST /api/find-league/leagues/lg1/request {"message":"hi"}'])
+  })
+
+  it("a paid league says what it costs and who holds the money", () => {
+    render(<FindLeagueCard league={card({ isPaid: true, entryFee: 50 })} />)
+    const line = screen.getByTestId("find-league-paid-lg1").textContent ?? ""
+    expect(line).toContain("Entry $50.")
+    expect(line).toContain("AllFantasy never holds the money")
+  })
+
   it("says the draft is unscheduled rather than printing a dash", () => {
     render(<FindLeagueCard league={card()} />)
     expect(screen.getByTestId("find-league-draft-time-lg1").textContent).toContain("Draft not scheduled")

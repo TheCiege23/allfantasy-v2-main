@@ -62,6 +62,7 @@ describe("queryPublicFantasyLeagueCards", () => {
     expect(where.OR).toEqual([
       { settings: { path: ["league_privacy_visibility"], equals: "public" } },
       { settings: { path: ["publicDashboard"], equals: true } },
+      { settings: { path: ["findLeagueExternal", "listed"], equals: true } },
     ])
   })
 

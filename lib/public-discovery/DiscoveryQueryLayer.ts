@@ -5,6 +5,13 @@ import { isSupportedSport, normalizeToSupportedSport } from "@/lib/sport-scope"
 import { CURRENT_DRAFT_SESSION_ORDER } from "@/lib/draft-room/currentDraftSession"
 import { countSeatsHeldByPeopleByLeague } from "@/lib/league/leagueSeats"
 import { matchesSearchText } from "./findLeagueFilters"
+import { isPaidLeagueSettings, leagueEntryFee } from "@/lib/league/paidLeague"
+import {
+  EXTERNAL_LISTING_KEY,
+  isNativePlatform,
+  listingVerification,
+  readExternalListing,
+} from "./externalListing"
 import type { DiscoveryCard, DiscoveryLeagueStyle } from "./types"
 
 const DEFAULT_BASE_URL =
@@ -83,13 +90,7 @@ function resolveCreatorLeagueStyle(input: {
 }
 
 function resolvePaidFlag(raw: Record<string, unknown>): boolean {
-  if (typeof raw.isPaidLeague === "boolean") return raw.isPaidLeague
-  if (typeof raw.paid === "boolean") return raw.paid
-  if (typeof raw.entryFee === "number") return raw.entryFee > 0
-  if (typeof raw.entryFee === "string") return Number(raw.entryFee) > 0
-  if (typeof raw.buyIn === "number") return raw.buyIn > 0
-  if (typeof raw.buyIn === "string") return Number(raw.buyIn) > 0
-  return false
+  return isPaidLeagueSettings(raw)
 }
 
 function readString(raw: Record<string, unknown>, key: string): string | null {
@@ -208,6 +209,8 @@ export async function queryPublicFantasyLeagueCards(options: {
     OR: [
       { settings: { path: [LEAGUE_VISIBILITY_KEY], equals: "public" } },
       { settings: { path: [LEAGUE_PUBLIC_DASHBOARD_KEY], equals: true } },
+      // A league that plays on another platform, listed by its commissioner (externalListing.ts).
+      { settings: { path: [EXTERNAL_LISTING_KEY, "listed"], equals: true } },
     ],
   }
 
@@ -216,6 +219,8 @@ export async function queryPublicFantasyLeagueCards(options: {
     select: {
       id: true,
       userId: true,
+      platform: true,
+      isCommissioner: true,
       name: true,
       sport: true,
       season: true,
@@ -264,7 +269,12 @@ export async function queryPublicFantasyLeagueCards(options: {
   return leagues
     .map((league): DiscoveryCard | null => {
       const settings = toRecord(league.settings)
-      if (!isFantasyLeagueDiscoverable(settings)) return null
+      const native = isNativePlatform(league.platform)
+      // A native league is joined here with its code; an imported one is listed by its verified
+      // commissioner and joined by request, because its seats live on the other platform.
+      const external = native ? null : readExternalListing(settings)
+      const verification = native ? null : listingVerification(league)
+      if (native ? !isFantasyLeagueDiscoverable(settings) : !external?.listed || !verification) return null
 
       const inviteCode = String(settings[LEAGUE_INVITE_CODE_KEY] ?? "").trim()
       const name = league.name?.trim() || "Public league"
@@ -285,7 +295,11 @@ export async function queryPublicFantasyLeagueCards(options: {
       }
 
       const maxMembers = Math.max(2, Number(league.leagueSize ?? 12) || 12)
-      const memberCount = heldSeats.get(league.id) ?? 0
+      // The other platform's roster isn't readable here, so an imported league's seats are the
+      // ones its commissioner says are open.
+      const memberCount = external
+        ? Math.max(0, maxMembers - Math.min(external.openSpots, maxMembers))
+        : heldSeats.get(league.id) ?? 0
       const leagueStyle = resolveFantasyLeagueStyle({
         leagueVariant: league.leagueVariant,
         isDynasty: league.isDynasty,
@@ -312,7 +326,12 @@ export async function queryPublicFantasyLeagueCards(options: {
         sport: String(league.sport ?? "NFL"),
         memberCount,
         maxMembers,
-        joinUrl: `${baseUrl}/join?code=${encodeURIComponent(inviteCode)}`,
+        joinUrl: external ? "" : `${baseUrl}/join?code=${encodeURIComponent(inviteCode)}`,
+        joinMode: external ? "request" : "invite",
+        externalPlatform: external ? String(league.platform) : null,
+        listingVerification: verification,
+        listingNote: external?.note ?? null,
+        entryFee: leagueEntryFee(settings),
         detailUrl: `${baseUrl}/leagues/${league.id}`,
         ownerName: league.user?.displayName ?? league.user?.username ?? "Commissioner",
         ownerAvatar: league.user?.avatarUrl ?? null,

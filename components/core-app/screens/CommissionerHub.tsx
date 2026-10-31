@@ -44,6 +44,7 @@ import { OffseasonCalendar } from '@/components/core-app/commissioner/OffseasonC
 import { IrAutoMove } from '@/components/core-app/commissioner/IrAutoMove'
 import { OrphanAuction } from '@/components/core-app/commissioner/OrphanAuction'
 import { FindLeagueListingCard } from '@/components/core-app/commissioner/FindLeagueListingCard'
+import { ExternalListingCard } from '@/components/core-app/commissioner/ExternalListingCard'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { StorylineStudio } from '@/components/core-app/commissioner/StorylineStudio'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
@@ -263,6 +264,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
       {/* Open seats → Find a League. Native only: an imported league's seats are filled on its own platform. */}
       {league.native && data.role === 'commissioner' ? <FindLeagueListingCard leagueId={league.id} /> : null}
+      {!league.native && data.role === 'commissioner' ? <ExternalListingCard leagueId={league.id} /> : null}
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />
