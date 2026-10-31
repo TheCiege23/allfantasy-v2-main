@@ -49,7 +49,8 @@ vi.mock('@/lib/survivor/exileRosterService', () => ({
 }))
 
 import { chimmyExilePlan, type ExileCandidate } from '@/lib/survivor/chimmyExileStrategy'
-import { playerScoreAliases, runChimmyExileTurn } from '@/lib/survivor/chimmyExile'
+import { CHIMMY_EXILE_RETRY_MS, playerScoreAliases, resetChimmyExileRetries, runChimmyExileTurn } from '@/lib/survivor/chimmyExile'
+import { prisma } from '@/lib/prisma'
 
 const c = (id: string, position: string, team: string, recentPoints: number): ExileCandidate => ({ id, name: id, position, team, recentPoints })
 
@@ -100,6 +101,7 @@ const chimmyEntry = { since: 's', byUserId: 'c', ownerUserId: 'orphan-r9', autop
 describe('runChimmyExileTurn', () => {
   const now = new Date('2026-10-14T12:00:00Z')
   beforeEach(() => {
+    resetChimmyExileRetries()
     h.exiled = [{ userId: 'orphan-r9', redraftRosterId: 'r9' }]
     h.settings = { af_managed_lineups: { r9: chimmyEntry } }
     h.waivers = { week: 6, roster: { team: null }, takenTeamIds: [], locked: false }
@@ -173,5 +175,49 @@ describe('runChimmyExileTurn', () => {
   it('says why when Exile is not open', async () => {
     h.waivers = null
     expect((await runChimmyExileTurn('L1', now)).skipped['orphan-r9']).toBe('Exile is not active.')
+  })
+})
+
+describe('the pause after an Exile turn that came to nothing', () => {
+  const at = (iso: string) => new Date(iso)
+  beforeEach(() => {
+    resetChimmyExileRetries()
+    h.exiled = [{ userId: 'orphan-r9', redraftRosterId: 'r9' }]
+    h.settings = { af_managed_lineups: { r9: { since: 's', byUserId: 'c', ownerUserId: 'orphan-r9', autopilot: { style: 'win_now', since: 's', byUserId: 'c' } } } }
+    h.waivers = { week: 6, roster: { team: null }, takenTeamIds: [], locked: false }
+    // Every team has already kicked off: nothing to claim this period.
+    h.games = [{ homeTeam: 'KC', awayTeam: 'BUF', startTime: at('2026-10-13T12:00:00Z') }]
+    h.players = [{ id: 'kc-qb', name: 'KC QB', position: 'QB', team: 'KC' }]
+    h.scores = []
+    h.claims = []
+    vi.mocked(prisma.player.findMany).mockClear()
+  })
+
+  it('does not repeat the full read every tick, and tries again once the pause is over', async () => {
+    const t0 = at('2026-10-14T12:00:00Z')
+    expect((await runChimmyExileTurn('L1', t0)).skipped['orphan-r9']).toBe('no_open_team')
+    // Ticks inside the pause: nothing is read again.
+    expect((await runChimmyExileTurn('L1', new Date(t0.getTime() + 5 * 60_000))).skipped['orphan-r9']).toBe('cooling_down')
+    expect((await runChimmyExileTurn('L1', new Date(t0.getTime() + CHIMMY_EXILE_RETRY_MS - 1))).skipped['orphan-r9']).toBe('cooling_down')
+    // A team opens up; after the pause Chimmy takes it.
+    h.games = [{ homeTeam: 'KC', awayTeam: 'BUF', startTime: at('2026-10-18T17:00:00Z') }]
+    expect((await runChimmyExileTurn('L1', new Date(t0.getTime() + CHIMMY_EXILE_RETRY_MS))).claimed['orphan-r9']?.team).toBe('KC')
+  })
+
+  it('never pauses on a cheap answer: a roster that is locked, or already set', async () => {
+    h.waivers = { week: 6, roster: { team: null }, takenTeamIds: [], locked: true }
+    const t0 = at('2026-10-14T12:00:00Z')
+    expect((await runChimmyExileTurn('L1', t0)).skipped['orphan-r9']).toBe('locked')
+    h.waivers = { week: 6, roster: { team: null }, takenTeamIds: [], locked: false }
+    h.games = [{ homeTeam: 'KC', awayTeam: 'BUF', startTime: at('2026-10-18T17:00:00Z') }]
+    expect((await runChimmyExileTurn('L1', new Date(t0.getTime() + 60_000))).claimed['orphan-r9']?.team).toBe('KC')
+  })
+
+  it('a pause is per castaway, not per league', async () => {
+    const t0 = at('2026-10-14T12:00:00Z')
+    await runChimmyExileTurn('L1', t0)
+    h.exiled = [{ userId: 'orphan-r8', redraftRosterId: 'r8' }]
+    h.settings = { af_managed_lineups: { r8: { since: 's', byUserId: 'c', ownerUserId: 'orphan-r8', autopilot: { style: 'win_now', since: 's', byUserId: 'c' } } } }
+    expect((await runChimmyExileTurn('L1', new Date(t0.getTime() + 60_000))).skipped['orphan-r8']).toBe('no_open_team')
   })
 })

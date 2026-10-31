@@ -13,7 +13,8 @@ import { prisma } from '@/lib/prisma'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { getOrphanRosterIdsForLeague } from '@/lib/orphan-ai-manager/orphanRosterResolver'
-import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+import { isChimmyRunning } from '@/lib/inactive-manager/inactiveManagerMode'
+import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
 import { canPlaceAuctionBid } from '@/lib/mock-draft/draft-engine'
 import { getLiveADP } from '@/lib/adp-data'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
@@ -142,11 +143,11 @@ async function appendLatestAuctionPickToRoster(
 /** Whether Chimmy runs this roster for its current owner (an empty seat or an absent manager's team). */
 async function chimmyRunsRoster(leagueId: string, rosterId: string): Promise<boolean> {
   const [league, roster] = await Promise.all([
-    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, userId: true } }),
     prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { platformUserId: true } }),
   ])
   if (!league || !roster) return false
-  return isChimmyRunning(readManagedLineups(league.settings), rosterId, roster.platformUserId ?? null)
+  return isChimmyRunning(await readPlayableChimmyLineups(league), rosterId, roster.platformUserId ?? null)
 }
 
 export async function runAuctionAutomationTick(leagueId: string): Promise<AuctionAutomationTickResult> {

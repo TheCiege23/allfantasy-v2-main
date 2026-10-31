@@ -206,26 +206,30 @@ export function ReplyComposer({
 
   if (locked && !canReplyWhenLocked) {
     return (
-      <p className="rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}>
+      <p className="ch-card ch-card-pad text-sm" style={{ color: 'var(--muted)' }}>
         🔒 This thread is locked, so no new replies.
       </p>
     )
   }
   if (!signedIn) {
     return (
-      <div className="mode-panel rounded-xl border p-4 text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}>
-        <Link href={loginHref} className="font-semibold underline" style={{ color: 'var(--accent)' }}>
-          Sign in
-        </Link>{' '}
-        to join the conversation.
+      <div className="ch-nudge text-sm" style={{ color: 'var(--muted)' }}>
+        <span className="text-2xl" aria-hidden>
+          💬
+        </span>
+        <span>
+          <Link href={loginHref} className="font-bold underline" style={{ color: 'var(--accent)' }}>
+            Sign in
+          </Link>{' '}
+          to join the conversation.
+        </span>
       </div>
     )
   }
 
   return (
     <form
-      className="mode-panel rounded-xl border p-3"
-      style={{ borderColor: 'var(--border)' }}
+      className="ch-card p-3 sm:p-4"
       onSubmit={async (e) => {
         e.preventDefault()
         if (!body.trim()) return
@@ -250,8 +254,7 @@ export function ReplyComposer({
         onChange={(e) => setBody(e.target.value.slice(0, REPLY_BODY_MAX))}
         rows={3}
         placeholder="Add to the conversation… (@username to mention someone)"
-        className="block w-full resize-y rounded-lg border px-3 py-2 text-[15px]"
-        style={{ borderColor: 'var(--border)', background: 'var(--panel)', color: 'var(--text)' }}
+        className="block w-full resize-y px-3 py-2.5 text-[15px]"
       />
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-xs" style={{ color: 'var(--muted2)' }}>
@@ -260,8 +263,7 @@ export function ReplyComposer({
         <button
           type="submit"
           disabled={sending || pending || !body.trim()}
-          className="rounded-lg px-4 py-1.5 text-sm font-semibold disabled:opacity-50"
-          style={{ background: 'var(--accent)', color: '#fff' }}
+          className="ch-btn ch-btn-primary ch-btn-sm disabled:opacity-50"
         >
           {sending ? 'Posting…' : 'Reply'}
         </button>
@@ -353,7 +355,7 @@ export function PostActions({
             type="submit"
             disabled={busy}
             className="rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-ink, #fff)' }}
           >
             Save
           </button>
@@ -444,7 +446,7 @@ export function ReplyActions({
             type="submit"
             disabled={busy}
             className="rounded-lg px-3 py-1 text-xs font-semibold disabled:opacity-50"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-ink, #fff)' }}
           >
             Save
           </button>

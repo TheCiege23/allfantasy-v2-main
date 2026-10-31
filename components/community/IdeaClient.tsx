@@ -73,17 +73,15 @@ export function UpvoteButton({
         aria-pressed={voted}
         aria-label={label}
         title={isAuthor ? "You can't upvote your own idea" : label}
-        className={`flex flex-col items-center rounded-lg border font-semibold tabular-nums transition disabled:cursor-default ${
-          size === 'sm' ? 'min-w-[44px] px-2 py-1 text-xs' : 'min-w-[56px] px-3 py-2 text-sm'
-        }`}
-        style={{
-          borderColor: voted ? 'var(--accent)' : 'var(--border)',
-          background: voted ? 'color-mix(in srgb, var(--accent) 14%, transparent)' : 'transparent',
-          color: voted ? 'var(--accent)' : 'var(--text)',
-        }}
+        className="ch-vote disabled:cursor-default"
+        style={size === 'sm' ? { minWidth: 50 } : { minWidth: 62, padding: '10px 8px' }}
       >
-        <span aria-hidden>▲</span>
-        <span>{upvotes}</span>
+        <span className="ch-vote-arrow" aria-hidden>
+          ▲
+        </span>
+        <span className="ch-vote-num" style={size === 'sm' ? undefined : { fontSize: 20 }}>
+          {upvotes}
+        </span>
       </button>
       {error && (
         <p role="alert" className="mt-1 max-w-[10rem] text-center text-xs text-red-500">
@@ -184,8 +182,7 @@ export function IdeaForm() {
 
   return (
     <form
-      className="mode-panel space-y-4 rounded-xl border p-4 sm:p-5"
-      style={{ borderColor: 'var(--border)' }}
+      className="ch-card space-y-5 p-5 sm:p-7"
       onSubmit={async (e) => {
         e.preventDefault()
         setSending(true)
@@ -320,8 +317,7 @@ export function IdeaForm() {
         <button
           type="submit"
           disabled={sending}
-          className="rounded-lg px-5 py-2 text-sm font-semibold disabled:opacity-50"
-          style={{ background: 'var(--accent)', color: '#fff' }}
+          className="ch-btn ch-btn-primary disabled:opacity-50"
         >
           {sending ? 'Posting…' : 'Post idea'}
         </button>
