@@ -28,6 +28,28 @@ export async function exileWeekWindow(db: Db, sport: string, season: number, wee
   return { start: easternMidnight(day), end: easternMidnight(new Date(day.getTime() + 7 * 86400000)) }
 }
 
+/**
+ * The Exile scoring period that holds `now`: the one whose Eastern-calendar window contains it.
+ *
+ * ⚠ NOT `dailySportWeekForInstant` ON ITS OWN. That reads a daily sport's gameweek on UTC-midnight
+ * date keys (it labels a schedule's game dates), while an Exile period runs Eastern midnight to Eastern
+ * midnight. Between 8 PM and midnight Eastern on a period's last night the two disagree: the UTC read
+ * already names the NEXT period, whose Eastern window has not opened, so every castaway (Chimmy too)
+ * saw a "locked" period instead of the one still running. Measured on the MLB rehearsal: Chimmy's turn
+ * at 03:37 UTC on 9 June 2027 (11:37 PM Eastern, 8 June) read week 12 while week 11 was still live.
+ * So the UTC answer is only a guess, checked against the real windows either side of it.
+ */
+export async function exileWeekForInstant(db: Db, sport: string, season: number, now: Date): Promise<number | null> {
+  const guess = dailySportWeekForInstant(sport, season, now)
+  if (guess == null) return null
+  for (const week of [guess, guess - 1, guess + 1]) {
+    if (week < 1) continue
+    const window = await exileWeekWindow(db, sport, season, week)
+    if (window && now >= window.start && now < window.end) return week
+  }
+  return guess
+}
+
 async function context(db: Db, leagueId: string, now: Date) {
   const league = await db.league.findUnique({ where: { id: leagueId }, select: { platform: true, sport: true, season: true, settings: true, survivorMode: true, leagueVariant: true } })
   if (!league || !isNativePlatform(league.platform) || (!league.survivorMode && league.leagueVariant !== 'survivor')) throw new Error('A native Survivor league is required.')
@@ -37,7 +59,7 @@ async function context(db: Db, leagueId: string, now: Date) {
   if (!game || ['pre_draft', 'drafting', 'complete'].includes(game.phase)) throw new Error('Exile waivers are not open.')
   const day = easternCalendarDay(now)
   if (!day) throw new Error('Invalid scoring date.')
-  const week = dailySportWeekForInstant(league.sport, league.season, now) ?? Math.max(1, game.currentWeek)
+  const week = (await exileWeekForInstant(db, league.sport, league.season, now)) ?? Math.max(1, game.currentWeek)
   const window = await exileWeekWindow(db, league.sport, league.season, week)
   if (!window) throw new Error('The verified scoring calendar is not available yet.')
   return { league, island, week, window }
