@@ -148,9 +148,18 @@ export type RookieOrderInput =
   /** A native league; `rollover` is null when it has no finished season on file. */
   | { kind: 'native'; rollover: Pick<DynastyRolloverInput, 'season' | 'nextSeason' | 'seasonOver' | 'started' | 'rookieDraft' | 'draftOrder'> | null }
 
+/**
+ * `rookieOrderWords` (the rollover wizard's own copy) speaks English and Spanish only; any other
+ * language reads its English. This picks the language, it holds no copy of its own.
+ */
+const ROOKIE_WORDS_LANGUAGES: ReadonlySet<string> = new Set(['en', 'es'])
+function rookieWordsLanguage(language: string | undefined): 'en' | 'es' {
+  return ROOKIE_WORDS_LANGUAGES.has(language ?? '') ? (language as 'en' | 'es') : 'en'
+}
+
 export function rookieOrderFlag(input: RookieOrderInput, action: HealthFlagAction | null, language?: string): HealthFlag {
   const label = dynText(language, 'order.label')
-  const lang = language === 'es' ? 'es' : 'en'
+  const lang = rookieWordsLanguage(language)
   if (input.kind === 'imported') {
     return { key: 'rookie_order', label, measured: false, reason: dynText(language, 'order.imported', { platform: input.platformLabel }), action: null }
   }
