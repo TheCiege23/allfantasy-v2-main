@@ -10,6 +10,13 @@
  * Fire-and-forget through a dynamic import, like the proposal notice: the trade has already been
  * decided when this runs, and a notification failure must never fail or slow the response.
  */
+/** A commissioner vetoed a multi-team trade (app/api/redraft/trades/veto). English, like every notice here. */
+export const MULTI_TEAM_TRADE_VETOED_TITLE = 'Trade vetoed'
+export const MULTI_TEAM_TRADE_VETOED_BODY = 'The commissioner vetoed the multi-team trade, so it will not go through.'
+
+/** An agreed multi-team trade could not be processed when its review window ended (lib/redraft/tradeReviewWindowSweep.ts). */
+export const MULTI_TEAM_TRADE_CLOSED_TITLE = 'Trade could not go through'
+
 export function notifyMultiTeamTradeParties(input: {
   proposalId: string
   leagueId: string
