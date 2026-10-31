@@ -18,6 +18,7 @@ import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import { closeExpiredExileRosters, finalizeExileRosterResults } from './exileRosterService'
 import { ensureVerifiedSlateChallenges, settleVerifiedSlateChallenges } from './survivorVerifiedSlateChallenges'
 import { ensureWeeklyCall, settleWeeklyCall } from './survivorWeeklyCall'
+import { ensureRealGameChallenges, settleRealGameChallenges } from './survivorRealGameChallenges'
 import { generateAndPostWeeklyRecap } from './weeklyRecapGenerator'
 import { settleNbaTribeSitOutDeadline } from './SurvivorSitOutEngine'
 import { notifySurvivorCommissionerOnce, SURVIVOR_JURY_OVERDUE_MS, SURVIVOR_SCORES_OVERDUE_MS } from './survivorCommissionerAlerts'
@@ -73,6 +74,15 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   await ensureVerifiedSlateChallenges(leagueId, week, plan.sport, ['pre_merge', 'post_swap'].includes(game.phase))
   // The weekly mini-game is bragging rights only: a failure here never holds up the season.
   await ensureWeeklyCall(leagueId, week, { sport: plan.sport, season: plan.season, merged: !['pre_merge', 'post_swap'].includes(game.phase), now }).catch(() => {})
+  // Real-game challenges: pick the winner of a featured real game, settled from its stored final with a
+  // small real prize (FAAB). Opened once a week, settled every tick as games go final. Best-effort: a
+  // failure never holds up the island.
+  await ensureRealGameChallenges(leagueId, week, { sport: plan.sport, season: plan.season, merged: !['pre_merge', 'post_swap'].includes(game.phase), now }).catch(error => {
+    console.warn('[survivor] real-game challenge setup failed', error instanceof Error ? error.message : error)
+  })
+  await settleRealGameChallenges(leagueId, now).catch(error => {
+    console.warn('[survivor] real-game challenge settlement failed', error instanceof Error ? error.message : error)
+  })
   // Exiled castaways Chimmy runs reserve a team and set their Exile lineup, once a period. Best-effort,
   // like its council turn: a failure never holds up the island.
   {
