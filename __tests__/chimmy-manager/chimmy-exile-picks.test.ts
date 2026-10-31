@@ -13,7 +13,9 @@ const h = vi.hoisted(() => ({
   players: [] as Array<{ id: string; name: string; position: string; team: string; providerIds?: unknown }>,
   scores: [] as Array<{ playerId: string; week?: number; stats: Record<string, number> }>,
   claims: [] as Array<{ userId: string; playerId: string; slot?: string; week: number }>,
+  lines: [] as Array<[string, unknown]>,
 }))
+vi.mock('@/lib/survivor/chimmyCastawayChat', () => ({ postChimmyCastawayLine: vi.fn(async (_l: string, userId: string, line: unknown) => { h.lines.push([userId, line]); return true }) }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     survivorPlayer: { findMany: vi.fn(async () => h.exiled) },
@@ -108,6 +110,7 @@ describe('runChimmyExileTurn', () => {
       { playerId: 'dal-qb', stats: { pts: 99 } },
     ]
     h.claims = []
+    h.lines = []
   })
 
   it('reserves the best open team and claims its lineup, anchor first, for the current period', async () => {
@@ -118,6 +121,7 @@ describe('runChimmyExileTurn', () => {
       { userId: 'orphan-r9', playerId: 'kc-qb', slot: 'QB', week: 6 },
       { userId: 'orphan-r9', playerId: 'kc-rb', slot: 'RB', week: 6 },
     ])
+    expect(h.lines).toEqual([['orphan-r9', { kind: 'exile', team: 'KC' }]])
   })
 
   it('leaves a castaway alone once it has a team this period, and while locked', async () => {
@@ -126,6 +130,7 @@ describe('runChimmyExileTurn', () => {
     h.waivers = { week: 6, roster: { team: null }, takenTeamIds: [], locked: true }
     expect((await runChimmyExileTurn('L1', now)).skipped['orphan-r9']).toBe('locked')
     expect(h.claims).toEqual([])
+    expect(h.lines).toEqual([])
   })
 
   it('reads form under the id the league\'s rosters score a player by', async () => {

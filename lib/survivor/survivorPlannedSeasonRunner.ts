@@ -206,6 +206,13 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   }
   if (calendarWeek <= week) return 'awaiting_next_week'
   await generateAndPostWeeklyRecap(leagueId, week)
+  // The commissioner's weekly line per Chimmy team. Once per week; never holds the island up.
+  {
+    const { sendChimmyWeeklyReport } = await import('./chimmyWeeklyReport')
+    await sendChimmyWeeklyReport(leagueId, week).catch(error => {
+      console.warn('[survivor] Chimmy weekly report failed', error instanceof Error ? error.message : error)
+    })
+  }
   await dissolveSurpriseTribes(leagueId, week)
   await advanceWeek(leagueId)
   return 'week_advanced'
