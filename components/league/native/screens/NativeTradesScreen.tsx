@@ -10,6 +10,8 @@ import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
 import { Card, ScreenHead } from './NativeScreenParts'
 import { tradeCardState, tradeDeadlineState } from '@/lib/league-media/redraftScreens'
 import { RedraftDeadlineBar, RedraftScreen, useRedraftScreen } from './RedraftScreenParts'
+import { DynastyPickChip } from '@/components/dynasty/DynastyPickChip'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 
 /**
  * Trades — handoff §3, `Trades.png` / `MobileTrades.png`.
@@ -33,14 +35,15 @@ function gradeTone(letter: string | null | undefined): 'good' | 'warn' | 'bad' {
   return 'bad'
 }
 
-function AssetList({ assets }: { assets: LeagueTradeAsset[] }) {
+function AssetList({ assets, dynasty = false, teamName }: { assets: LeagueTradeAsset[]; dynasty?: boolean; teamName?: (rosterId: string) => string | null }) {
   if (!assets.length) return <p className="nls-muted">Nothing</p>
   return (
     <ul>
       {assets.map((a) => (
         <li key={a.id}>
-          {a.label}
-          {a.sublabel ? <small>{a.sublabel}</small> : null}
+          {/* Dynasty only: a pick is drawn as its chip; everything else, and every other league, as before. */}
+          {dynasty && a.pick ? <DynastyPickChip pick={a.pick} teamName={teamName} /> : a.label}
+          {a.sublabel && !(dynasty && a.pick) ? <small>{a.sublabel}</small> : null}
         </li>
       ))}
     </ul>
@@ -65,6 +68,9 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
   const [builderOpen, setBuilderOpen] = useState(false)
   // Redraft (lib/league-media/redraftIdentity.ts): deadline bar from settings, proposal cards with their state.
   const rd = useRedraftScreen(league)
+  const dynasty = usesDynastyBackground(league)
+  // A pick's original team, by roster id. A native team's `externalId` is its roster id.
+  const teamName = useCallback((rosterId: string) => teams.find((t) => t.externalId === rosterId || t.id === rosterId)?.teamName ?? null, [teams])
 
   const load = useCallback(
     async (background = false) => {
@@ -184,11 +190,11 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
             <div className="nls-givegets">
               <div>
                 <h4 className="nls-label">{isReview ? `${t.proposerName ?? 'Proposer'} gives` : 'You give'}</h4>
-                <AssetList assets={t.sent} />
+                <AssetList assets={t.sent} dynasty={dynasty} teamName={teamName} />
               </div>
               <div>
                 <h4 className="nls-label">{isReview ? `${t.receiverName ?? 'Receiver'} gives` : 'You get'}</h4>
-                <AssetList assets={t.received} />
+                <AssetList assets={t.received} dynasty={dynasty} teamName={teamName} />
               </div>
             </div>
             {g && !isReview && g.recommendation ? <p className="nls-muted nls-offer-note">{g.recommendation}</p> : null}

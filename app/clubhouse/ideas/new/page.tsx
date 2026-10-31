@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { CLUBHOUSE_NAME, clubhouseChannelHref, getChannel } from '@/lib/community/channels'
 import { IDEA_CHANNEL, NEW_IDEA_HREF } from '@/lib/community/ideas'
 import { getCommunityViewer } from '@/lib/community/service'
-import { ClubhouseFrame, loginHref } from '@/components/community/CommunityBits'
+import { ClubhouseFrame, PageHeader, loginHref } from '@/components/community/CommunityBits'
 import { IdeaForm } from '@/components/community/IdeaClient'
 
 export const dynamic = 'force-dynamic'
@@ -21,17 +21,20 @@ export default async function NewIdeaPage() {
 
   return (
     <ClubhouseFrame
+      narrow
+      active={clubhouseChannelHref(IDEA_CHANNEL)}
       crumbs={[
         { href: '/clubhouse', label: CLUBHOUSE_NAME },
         { href: clubhouseChannelHref(IDEA_CHANNEL), label: lab?.label ?? 'League Lab' },
       ]}
     >
-      <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>
-        🧪 Pitch a league idea
-      </h1>
-      <p className="mb-5 mt-1 text-sm" style={{ color: 'var(--muted)' }}>
-        Three boxes and you are done. The best-upvoted ideas get a look from the AllFantasy team.
-      </p>
+      <PageHeader
+        channel={IDEA_CHANNEL}
+        icon="💡"
+        eyebrow="League Lab"
+        title="Pitch a league idea"
+        sub="Three boxes and you are done. The best-upvoted ideas get a look from the AllFantasy team."
+      />
       <IdeaForm />
       <p className="mt-4 text-xs" style={{ color: 'var(--muted)' }}>
         Have the whole format worked out, with edge cases and rules, and want to send it privately?{' '}

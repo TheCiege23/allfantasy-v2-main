@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Search, SlidersHorizontal } from 'lucide-react'
+import { ClipboardList, Search, SlidersHorizontal } from 'lucide-react'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import type { UserLeague } from '@/app/dashboard/types'
 import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
 import { TeamLogo } from '@/app/components/TeamLogo'
@@ -439,7 +440,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
           className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center"
           data-testid="player-pool-pending-state"
         >
-          <p className="text-[28px]">📋</p>
+          {usesDynastyBackground(league) ? (
+            <ClipboardList className="h-7 w-7 text-[var(--dyn-faint,#9AA4B2)]" aria-hidden />
+          ) : (
+            <p className="text-[28px]">📋</p>
+          )}
           <p className="text-[14px] font-semibold text-white/80">Draft player pool pending</p>
           <p className="max-w-xs text-[12px] leading-relaxed text-white/40">
             Player data import is not connected yet for this league format. Roster shells, scoring

@@ -10,6 +10,8 @@ import { groupStandingsByDivision } from '@/lib/league/divisions/leagueDivisions
 import { fetchRedraftPlayoffRuntime, type RedraftPlayoffRuntimeClient } from '@/lib/redraft/client'
 import { PLAYOFF_RACE_LABEL, bracketColumns, playoffRaceStatus } from '@/lib/league-media/redraftScreens'
 import { RedraftBracket, RedraftScreen, useRedraftScreen } from './RedraftScreenParts'
+import { DynastyLotteryCard } from '@/components/dynasty/DynastyLotteryCard'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 
 /**
  * Standings & playoffs — handoff §3, `Standings.png` / `MobileStandings.png`.
@@ -48,6 +50,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const season = Number(league.season) || new Date().getFullYear()
+  const dynasty = usesDynastyBackground(league)
   const week = typeof league.currentWeek === 'number' ? league.currentWeek : null
   // Redraft (lib/league-media/redraftIdentity.ts): the playoff runtime's bracket and its clinched /
   // eliminated split — read only, and only claimed once the bracket is generated (playoffRaceStatus).
@@ -399,6 +402,8 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
               </dl>
               {isCommissioner ? <button type="button" className="nl-text-link" onClick={() => onSelectTab('settings')}>Edit in Commissioner</button> : null}
             </Card>
+            {/* Dynasty only: the upcoming rookie draft's lottery odds, Draft HQ's own numbers. */}
+            {dynasty ? <DynastyLotteryCard leagueId={league.id} leagueName={league.name} /> : null}
             <SideContestsCard leagueId={league.id} />
             <PayoutsCard leagueId={league.id} />
           </aside>

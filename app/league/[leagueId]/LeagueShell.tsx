@@ -1,5 +1,6 @@
 'use client'
 
+import { leagueAudience } from '@/lib/league-privacy/leagueAudience'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 
 import '@/components/core-app/af-core.css'
@@ -1298,7 +1299,6 @@ export function LeagueShell({
       guillotineMode: league.guillotineMode,
       bestBallMode: league.bestBallMode,
     })
-    const visibility = settings.league_privacy_visibility
     return {
       id: league.id,
       name: league.name ?? 'Your league',
@@ -1310,7 +1310,7 @@ export function LeagueShell({
       tePremiumPoints: typeof settings.te_premium_points === 'number' ? settings.te_premium_points : null,
       draftDateIso,
       timezone: league.timezone ?? null,
-      privacy: visibility === 'public' ? 'public' : visibility === 'private' ? 'private' : null,
+      privacy: leagueAudience(settings),
     }
   }, [league, draftDateIso])
 
