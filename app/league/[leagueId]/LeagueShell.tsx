@@ -2,6 +2,7 @@
 
 import { leagueAudience } from '@/lib/league-privacy/leagueAudience'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
 
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
@@ -73,6 +74,9 @@ import {
   Brain,
   Swords,
   Wallet,
+  Landmark,
+  CarTaxiFront,
+  Ticket,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
@@ -587,7 +591,8 @@ export function LeagueShell({
     if (league.leagueType === 'keeper' && league.keeperPhaseActive) {
       base = [{ id: 'keeper', label: 'Keepers' }, ...base]
     }
-    if (league.leagueType === 'dynasty' || league.leagueType === 'devy' || league.leagueType === 'c2c') {
+    // One shared predicate (lib/league/isDynastyLeague.ts): this used to read `leagueType` only, exact case.
+    if (isDynastyLeague(league)) {
       const idx = base.findIndex((t) => t.id === 'redraft')
       const dynastyTabs: TabDef[] = [
         { id: 'dynasty', label: 'Dynasty' },
@@ -617,6 +622,7 @@ export function LeagueShell({
     nflRedraftCore,
     league.sport,
     league.leagueType,
+    league.isDynasty,
     league.keeperPhaseActive,
     league.bestBallMode,
     league.guillotineMode,
@@ -2679,6 +2685,9 @@ const LEAGUE_TAB_NAV_ICONS: Record<string, LucideIcon> = {
   leaderboard: Trophy,
   'my-picks': Crosshair,
   schedule: CalendarRange,
+  dynasty: Landmark,
+  dynasty_taxi: CarTaxiFront,
+  dynasty_picks: Ticket,
   bestball: Sparkles,
   guillotine: Scissors,
   survivor: TreePalm,
