@@ -7,6 +7,7 @@ import type {
   FantraxImportTransaction,
 } from '@/lib/league-import/adapters/fantrax/types'
 import { assignFantraxTeamIds } from './fantraxTeamIds'
+import { ownedFantraxTeamName, parseFantraxTeamSourceId } from './fantraxTeamSelection'
 
 type LegacyStanding = {
   rank?: unknown
@@ -107,7 +108,7 @@ interface FantraxSourceLookup {
    * `fantrax-league:` form, which fetches from Fantrax rather than reading a
    * previously uploaded snapshot.
    */
-  nativeLeague?: { leagueId: string; teamName: string }
+  nativeLeague?: { leagueId: string; teamId?: string; teamName?: string }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -166,13 +167,10 @@ function parseFantraxSourceInput(sourceInput: string): FantraxSourceLookup {
 
   /*
    * A live league, chosen from the team list the import screen shows. Carries
-   * the team because Fantrax will not tell us which one is the caller's, and
-   * guessing attributes a stranger's players to them.
+   * the selected team ID because one linked account can own several teams.
    */
-  const native = trimmed.match(/^fantrax-league:([^|]+)\|(.+)$/i)
-  if (native?.[1] && native[2]) {
-    return { nativeLeague: { leagueId: native[1].trim(), teamName: native[2].trim() } }
-  }
+  const native = parseFantraxTeamSourceId(trimmed)
+  if (native) return { nativeLeague: native }
 
   const idPrefixed = trimmed.match(/^id:(.+)$/i)
   if (idPrefixed?.[1]) {
@@ -458,8 +456,7 @@ function resolveTeamId(teamLabel: string, teamMap: Map<string, string>): string 
  */
 async function callerOwnsFantraxTeam(
   userId: string,
-  leagueId: string,
-  teamName: string,
+  selection: { leagueId: string; teamId?: string; teamName?: string },
 ): Promise<boolean> {
   try {
     const { getDecryptedAuth } = await import('@/lib/league-sync-core')
@@ -471,12 +468,7 @@ async function callerOwnsFantraxTeam(
     const res = await getFantraxLeagues(secretId)
     if (!res.ok) return false
 
-    const wanted = teamName.trim().toLowerCase()
-    return res.data.some(
-      (league) =>
-        league.leagueId === leagueId &&
-        league.teamNames.some((name) => name.trim().toLowerCase() === wanted),
-    )
+    return ownedFantraxTeamName(res.data, selection) !== null
   } catch {
     return false
   }
@@ -507,12 +499,12 @@ export async function fetchFantraxLeagueForImport(
   if (lookup.nativeLeague) {
     const ownershipVerified = await callerOwnsFantraxTeam(
       userId,
-      lookup.nativeLeague.leagueId,
-      lookup.nativeLeague.teamName,
+      lookup.nativeLeague,
     )
     const { importFantraxLeague } = await import('./importFantraxLeague')
     const outcome = await importFantraxLeague({
       leagueId: lookup.nativeLeague.leagueId,
+      teamId: lookup.nativeLeague.teamId,
       teamName: lookup.nativeLeague.teamName,
       appUserId: userId,
       ownershipVerified,

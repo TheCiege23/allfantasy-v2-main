@@ -303,7 +303,7 @@ async function fxeaGet<T>(path: string): Promise<FantraxResult<T>> {
       const timer = setTimeout(() => controller.abort(), FXEA_TIMEOUT_MS)
       try {
         res = await fetch(`${FANTRAX_FXEA_BASE}${path}`, {
-          headers: { Accept: 'application/json' },
+          headers: { Accept: 'application/json', 'User-Agent': 'AllFantasy/1.0 (allfantasy.ai)' },
           signal: controller.signal,
         })
       } finally {

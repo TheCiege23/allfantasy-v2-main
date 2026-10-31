@@ -260,6 +260,17 @@ describe('joining rosters to the player map', () => {
 })
 
 describe('league discovery from a Secret ID', () => {
+  it('identifies AllFantasy in the User-Agent for Fantrax API requests', async () => {
+    const fetch = vi.fn().mockResolvedValue(resp(200, JSON.stringify({ leagues: [{
+      leagueId: 'abc123', leagueName: 'Cream Bowl', teamIds: ['t1'], teamNames: ['Team 1'],
+    }] })))
+    vi.stubGlobal('fetch', fetch)
+    await getFantraxLeagues('secret')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/getLeagues?'),
+      expect.objectContaining({ headers: expect.objectContaining({ 'User-Agent': expect.stringContaining('AllFantasy') }) }),
+    )
+  })
   /**
    * ⚠ THE THIRD FAILURE SHAPE. getLeagueInfo answers 200-with-error for a bad
    * league id and 400-with-HTML for a miscased one. getLeagues answers

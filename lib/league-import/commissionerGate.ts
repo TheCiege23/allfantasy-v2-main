@@ -10,6 +10,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { ownedFantraxTeamName, parseFantraxTeamSourceId } from './fantrax/fantraxTeamSelection'
 import { getDecryptedAuth } from '@/lib/league-sync-core'
 import type { ImportProvider } from './types'
 import { fetchEspnLeagueForImport, EspnImportLeagueNotFoundError } from './espn/EspnLeagueFetchService'
@@ -591,10 +592,8 @@ async function checkFantrax(
   /* What an OPEN_READ provider resolves to today — the fallback for every path below. */
   const openRead: CommissionerGateResult = { ok: true, verification: 'api' }
   try {
-    const native = sourceLeagueId.trim().match(/^fantrax-league:([^|]+)\|(.+)$/i)
-    if (!native?.[1] || !native[2]) return openRead
-    const leagueId = native[1].trim()
-    const teamName = native[2].trim()
+    const selection = parseFantraxTeamSourceId(sourceLeagueId)
+    if (!selection) return openRead
 
     const auth = await getDecryptedAuth(appUserId, 'fantrax')
     const secretId = auth?.apiKey?.trim()
@@ -604,13 +603,8 @@ async function checkFantrax(
     const res = await getFantraxLeagues(secretId)
     if (!res.ok) return openRead
 
-    const wanted = teamName.toLowerCase()
-    const owns = res.data.some(
-      (league) =>
-        league.leagueId === leagueId &&
-        league.teamNames.some((name) => name.trim().toLowerCase() === wanted),
-    )
-    if (!owns) return openRead
+    const teamName = ownedFantraxTeamName(res.data, selection)
+    if (!teamName) return openRead
 
     return { ok: true, sourceManagerId: teamName, verification: 'member' }
   } catch {

@@ -10,6 +10,7 @@ import {
   getFantraxLeagueInfo,
   parseFantraxLeagueId,
 } from '@/lib/league-import/fantrax/fantraxApi'
+import { fantraxTeamSourceId, listFantraxOwnedTeams } from '@/lib/league-import/fantrax/fantraxTeamSelection'
 import { lookupSleeperUser } from '@/lib/sleeper/user-lookup'
 import { getUserLeagues } from '@/lib/sleeper-client'
 import {
@@ -28,7 +29,7 @@ import {
  * confirmation instead of silently re-importing something they threw away.
  *
  * ⚠ `platformLeagueId` IS NOT ALWAYS `sourceId`. Fantrax's sourceId is
- * `fantrax-league:<leagueId>|<teamName>` — matching a tombstone against that
+ * `fantrax-league:<leagueId>|team-id:<teamId>` — matching a tombstone against that
  * whole string would never hit, and the flag would silently never appear for
  * Fantrax. Every caller therefore passes an explicit accessor for the
  * provider's own league id rather than letting this reach for `sourceId`.
@@ -52,9 +53,8 @@ async function markPreviouslyDeleted<T>(
   try {
     const suppressed = await getTombstonedLookupKeys(
       userId,
-      withIds
-        .filter((entry) => entry.platformLeagueId.length > 0)
-        .map((entry) => ({ platform, platformLeagueId: entry.platformLeagueId })),
+      [...new Set(withIds.map((entry) => entry.platformLeagueId).filter(Boolean))]
+        .map((platformLeagueId) => ({ platform, platformLeagueId })),
     )
 
     return withIds.map(({ league, platformLeagueId }) => ({
@@ -277,24 +277,19 @@ export async function POST(req: NextRequest) {
           accountIdentifier: 'connected-fantrax-account',
           displayName: 'Your Fantrax account',
         },
-        /* Same `fantrax-league:<id>|<team>` contract the league-id path emits, so preview,
-           commit and importFantraxLeague need no changes -- the difference is only that the
-           team came from Fantrax instead of from a person clicking. */
         leagues: await markPreviouslyDeleted(
           auth.userId,
           'fantrax',
-          mine.data.map((league) => ({
-            sourceId: league.teamNames[0]
-              ? `fantrax-league:${league.leagueId}|${league.teamNames[0]}`
-              : `fantrax-league:${league.leagueId}`,
-            name: league.leagueName,
-            sport: null,
-            season: null,
-            totalTeams: null,
-            /* Carried separately from `sourceId` on purpose: the sourceId embeds the
-               team name, so it is not the id a tombstone is keyed on. */
-            fantraxLeagueId: league.leagueId,
-          })),
+          mine.data.flatMap((league) =>
+            listFantraxOwnedTeams(league).map((team) => ({
+              sourceId: team.sourceId,
+              name: `${league.leagueName} — ${team.teamName}`,
+              sport: null,
+              season: null,
+              totalTeams: null,
+              fantraxLeagueId: league.leagueId,
+            })),
+          ),
           (league) => league.fantraxLeagueId,
         ),
       })
@@ -340,11 +335,8 @@ export async function POST(req: NextRequest) {
         accountIdentifier: leagueId,
         displayName: info.data.leagueName,
       },
-      /*
-       * The team name round-trips in the sourceId because preview and commit are
-       * stateless — `fantrax-league:<leagueId>|<teamName>` is the only place the
-       * choice is carried, and FantraxLeagueFetchService parses it back out.
-       */
+      /* Carry the Fantrax team ID through preview and commit so renames cannot
+         change which team is imported. */
       /* Every entry here is a TEAM in one league, so they all carry the same
          `leagueId` and therefore the same deletion flag — correct, because
          picking any of them imports that one league. */
@@ -352,7 +344,7 @@ export async function POST(req: NextRequest) {
         auth.userId,
         'fantrax',
         teams.map((team) => ({
-          sourceId: `fantrax-league:${leagueId}|${team.name}`,
+          sourceId: fantraxTeamSourceId(leagueId, team.id),
           name: team.name,
           sport: null,
           season,

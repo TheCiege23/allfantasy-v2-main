@@ -10,6 +10,7 @@
  */
 
 import 'server-only'
+import { selectFantraxRoster } from './fantraxTeamSelection'
 
 import { getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
 import { mapFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxDraft'
@@ -100,14 +101,15 @@ export type FantraxImportOutcome =
 /**
  * Fetch, resolve and store one Fantrax league.
  *
- * ⚠ REFUSES TO GUESS WHICH TEAM IS THE USER'S. `teamName` must name a team the
- * league actually contains; the caller shows the list and the user picks.
+ * ⚠ REFUSES TO GUESS WHICH TEAM IS THE USER'S. The selected team ID (or a
+ * legacy team name) must identify a team the league actually contains.
  * Defaulting to the first roster attributes a stranger's players to them and
  * then grades trades against those players.
  */
 export async function importFantraxLeague(args: {
   leagueId: string
-  teamName: string
+  teamId?: string
+  teamName?: string
   appUserId: string
   /**
    * The caller's Fantrax Secret ID confirmed, via `getFantraxLeagues`, that this
@@ -188,13 +190,13 @@ export async function importFantraxLeague(args: {
     }
   }
 
-  const mine = resolved.find(
-    (r) => r.teamName.toLowerCase() === args.teamName.trim().toLowerCase(),
-  )
+  const mine = selectFantraxRoster(resolved, args)
   if (!mine) {
     return {
       ok: false,
-      error: `no team named "${args.teamName}" in that league`,
+      error: args.teamId
+        ? `no team with ID "${args.teamId}" in that league`
+        : `no team named "${args.teamName}" in that league`,
       teams: resolved.map((r) => r.teamName),
     }
   }
