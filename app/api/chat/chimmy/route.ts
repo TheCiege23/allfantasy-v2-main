@@ -1195,6 +1195,19 @@ function readStoredDisplay(meta: unknown): Record<string, unknown> {
  * of the handler's thirty-odd returns, so a return added later cannot escape the count. The handler
  * fills in what only it knows as it learns it.
  */
+/**
+ * Which providers a tool-loop answer touched: the one that answered `ok`, any that could not start
+ * before it `failed` (so a dead key shows in the answer's provider status, not only in logs), the
+ * rest `skipped`.
+ */
+function toolLoopProviderStatus(loop: { provider?: string; failedOver?: string[] }): Record<string, string> {
+  const name = (p: string) => (p === 'claude' ? 'anthropic' : p)
+  const status: Record<string, string> = { anthropic: 'skipped', openai: 'skipped', deepseek: 'skipped', grok: 'skipped' }
+  for (const p of loop.failedOver ?? []) status[name(p)] = 'failed'
+  status[name(loop.provider ?? 'grok')] = 'ok'
+  return status
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const execute = async (requestReceipt?: import('@/lib/chimmy/requestReceipts').ReceiptContext, parsedRequest?: NextRequest) => {
     const question = newQuestionTelemetry()
@@ -3377,10 +3390,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
                   ...(settlement.refund ? { refunded: true, refundReason: settlement.refund.reason } : {}),
                 }
               : undefined,
-          providerStatus:
-            loop.provider === 'claude'
-              ? { anthropic: 'ok', openai: 'skipped', deepseek: 'skipped', grok: 'skipped' }
-              : { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+          providerStatus: toolLoopProviderStatus(loop),
           /* The model that actually answered — the one thing a quality complaint needs first. */
           ...(loop.model ? { model: loop.model } : {}),
           /*
