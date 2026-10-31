@@ -4564,4 +4564,7 @@ export const translationsEsParity: Record<string, string> = {
   "tradeCenter.value.emptySide": "Nada en este lado.",
   "tradeCenter.value.unpriced.one": "⚠ No se pudo valorar {{count}} jugador de este intercambio, así que los totales de arriba están incompletos. Faltan datos por nuestra parte; no significa que no valga nada.",
   "tradeCenter.value.unpriced.many": "⚠ No se pudieron valorar {{count}} jugadores de este intercambio, así que los totales de arriba están incompletos. Faltan datos por nuestra parte; no significa que no valgan nada.",
+  "dynastyEra.seasonClock.label": "Reloj de la temporada dynasty",
+  "dynastyEra.seasonClock.yearSeason": "Año {{year}} · {{season}}",
+  "dynastyEra.seasonClock.seasonOnly": "Temporada {{season}}",
 }

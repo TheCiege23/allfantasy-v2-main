@@ -6612,6 +6612,9 @@ export const translations: Record<string, Record<string, string>> = {
     "tradeCenter.value.emptySide": "Nothing on this side.",
     "tradeCenter.value.unpriced.one": "⚠ {{count}} player in this trade could not be priced, so the totals above are incomplete. That is missing data on our side, not a judgement that he is worthless.",
     "tradeCenter.value.unpriced.many": "⚠ {{count}} players in this trade could not be priced, so the totals above are incomplete. That is missing data on our side, not a judgement that they are worthless.",
+    "dynastyEra.seasonClock.label": "Dynasty season clock",
+    "dynastyEra.seasonClock.yearSeason": "Year {{year}} · {{season}}",
+    "dynastyEra.seasonClock.seasonOnly": "{{season}} season",
   },
   es: {
     ...translationsEsParity,
