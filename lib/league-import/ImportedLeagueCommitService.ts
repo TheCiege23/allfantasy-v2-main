@@ -414,11 +414,19 @@ export function republishCanonicalSettingsForRefresh(
 ): Record<string, unknown> {
   const snap = bundle.settingsSnapshot
   const merged: Record<string, unknown> = { ...existingSettings, ...freshSettings }
+  const keepStoredScoring = refreshKeepsStoredScoring(existingSettings, bundle)
 
   /* Source-derived: the host league owns these, so a refresh must reflect what it now says. */
   merged.snapshotVersion = SETTINGS_SNAPSHOT_VERSION
   if (snap.rosterSettings !== undefined) merged.rosterSettings = snap.rosterSettings
-  if (snap.scoringSettings !== undefined) merged.scoringSettings = snap.scoringSettings
+  if (keepStoredScoring) {
+    merged.scoringSettings = existingSettings.scoringSettings
+    if (merged.scoring_settings === undefined && existingSettings.scoring_settings !== undefined) {
+      merged.scoring_settings = existingSettings.scoring_settings
+    }
+  } else if (snap.scoringSettings !== undefined) {
+    merged.scoringSettings = snap.scoringSettings
+  }
   if (snap.draftSettings !== undefined) merged.draftSettings = snap.draftSettings
   if (snap.waiverSettings !== undefined) merged.waiverSettings = snap.waiverSettings
   if (snap.playoffSettings !== undefined) merged.playoffSettings = snap.playoffSettings
@@ -426,7 +434,10 @@ export function republishCanonicalSettingsForRefresh(
 
   merged.importCanonical = {
     presetKey: bundle.presetKey,
-    scoringPresetId: bundle.scoringPresetId,
+    scoringPresetId: keepStoredScoring
+      ? ((asSettingsRecord(existingSettings.importCanonical).scoringPresetId as string | undefined) ??
+        bundle.scoringPresetId)
+      : bundle.scoringPresetId,
     draftType: bundle.draftType,
     inferredConcept: bundle.inferredConcept,
     /*
@@ -439,6 +450,32 @@ export function republishCanonicalSettingsForRefresh(
   }
 
   return merged
+}
+
+function asSettingsRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function scoringRuleCount(scoringSettings: unknown): number {
+  const detail = asSettingsRecord(scoringSettings).rulesDetail
+  return Array.isArray(detail) ? detail.length : 0
+}
+
+/**
+ * A refresh whose source returned NO scoring rules must not replace stored rules with an
+ * empty list. The snapshot always carries a `scoringSettings` object, so "the source said
+ * nothing" (a Fantrax read whose scoring did not parse, a snapshot-only refresh) looked
+ * identical to "the source has no rules" and erased the league's scoring. A refresh that
+ * does carry rules still replaces them, so a real scoring change is still picked up.
+ */
+export function refreshKeepsStoredScoring(
+  existingSettings: Record<string, unknown>,
+  bundle: CanonicalImportBundle,
+): boolean {
+  return (
+    scoringRuleCount(bundle.settingsSnapshot.scoringSettings) === 0 &&
+    scoringRuleCount(existingSettings.scoringSettings) > 0
+  )
 }
 
 function mergeCanonicalBundleIntoSettings(

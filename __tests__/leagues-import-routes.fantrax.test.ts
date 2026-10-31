@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { assertImportCommissioner } from '@/lib/league-import/commissionerGate'
 
 const requireVerifiedUserMock = vi.fn()
 const runImportedLeagueNormalizationPipelineMock = vi.fn()
@@ -386,6 +387,86 @@ describe('Fantrax import API routes', () => {
         error: 'This league already exists in your account',
         code: 'LEAGUE_ALREADY_IMPORTED',
       })
+    })
+  })
+})
+
+describe('Fantrax preview offers the commissioner confirm', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    requireVerifiedUserMock.mockResolvedValue({ ok: true, userId: 'u1' })
+  })
+
+  async function preview(attestation?: unknown) {
+      runImportedLeagueNormalizationPipelineMock.mockResolvedValue({
+        success: true,
+        normalized: {
+          source: {
+            source_provider: 'fantrax',
+            source_league_id: 'fantrax-league-1',
+            imported_at: new Date().toISOString(),
+          },
+          league: {
+            name: 'Fantrax League',
+            sport: 'NCAAF',
+            season: 2025,
+            leagueSize: 12,
+            rosterSize: 20,
+            scoring: 'devy',
+            isDynasty: true,
+          },
+          rosters: [],
+          scoring: null,
+          schedule: [],
+          draft_picks: [],
+          transactions: [],
+          standings: [],
+          player_map: {},
+          coverage: {
+            leagueSettings: { state: 'full' },
+            currentRosters: { state: 'partial' },
+            historicalRosterSnapshots: { state: 'partial' },
+            scoringSettings: { state: 'partial' },
+            playoffSettings: { state: 'partial' },
+            currentStandings: { state: 'partial' },
+            currentSchedule: { state: 'partial' },
+            draftHistory: { state: 'partial' },
+            tradeHistory: { state: 'partial' },
+            previousSeasons: { state: 'partial' },
+            playerIdentityMap: { state: 'partial' },
+          },
+        },
+      })
+      buildImportedLeaguePreviewMock.mockReturnValue({ league: { id: 'fantrax-league-1', name: 'Fantrax League' } })
+    const { POST } = await import('@/app/api/leagues/import/preview/route')
+    const req = new Request('http://localhost/api/leagues/import/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'fantrax', sourceId: 'fantrax-league:abc|T', attestation }),
+    })
+    return POST(req as any)
+  }
+
+  it('says so for a Secret-ID member whose commissioner status Fantrax does not report', async () => {
+    vi.mocked(assertImportCommissioner).mockResolvedValueOnce({ ok: true, verification: 'member' })
+    const res = await preview()
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ commissionerConfirmable: true })
+  })
+
+  it('does not for a caller the gate passed without proving membership', async () => {
+    vi.mocked(assertImportCommissioner).mockResolvedValueOnce({ ok: true, verification: 'api' })
+    const res = await preview()
+    expect((await res.json()).commissionerConfirmable).toBeUndefined()
+  })
+
+  it('hands the gate the league the attestation was made for', async () => {
+    vi.mocked(assertImportCommissioner).mockResolvedValueOnce({ ok: true, verification: 'member' })
+    await preview({ accepted: true, confirmedProvider: 'fantrax', confirmedSourceLeagueId: 'fantrax-league:other|X' })
+    expect(vi.mocked(assertImportCommissioner).mock.calls[0][0].attestation).toEqual({
+      accepted: true,
+      confirmedProvider: 'fantrax',
+      confirmedSourceLeagueId: 'fantrax-league:other|X',
     })
   })
 })

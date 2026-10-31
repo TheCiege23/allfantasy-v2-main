@@ -222,6 +222,11 @@ type Phase =
       claimTeamId: string | null
       /* `dataQuality.coverageSummary` — every bucket, for the compact "what comes across" list. */
       coverageRows: PreviewCoverageRow[]
+      /*
+       * The server proved membership but the provider reports no commissioner (Fantrax with a
+       * Secret ID). Ticking "I'm the commissioner" sets `attested`, and the commit then records it.
+       */
+      canConfirmCommissioner: boolean
     }
   | { k: 'committing'; sourceId: string }
   | {
@@ -1181,6 +1186,7 @@ export function ImportV4({
         importable?: boolean
         importBlockedReason?: unknown
         managers?: unknown
+        commissionerConfirmable?: unknown
       }
       trackImportGateResult({
         provider,
@@ -1198,6 +1204,7 @@ export function ImportV4({
         teams: teams.length > 0 ? teams : null,
         claimTeamId: null,
         coverageRows: readPreviewCoverageRows(payload?.dataQuality?.coverageSummary),
+        canConfirmCommissioner: payload?.commissionerConfirmable === true,
         // Only an explicit `false` blocks. A missing field is an ordinary, importable preview.
         importBlockedReason:
           payload?.importable === false
@@ -3014,6 +3021,25 @@ export function ImportV4({
             <p className="af-im-field-help" role="status" data-testid="import-preview-blocked">
               {phase.importBlockedReason}
             </p>
+          ) : null}
+          {/*
+            ── Are you the commissioner? ───────────────────────────────────────────
+            Only when the server says it cannot tell (Fantrax reports no commissioner). Unticked by
+            default: most people importing are members, and a member is never asked to claim more.
+          */}
+          {phase.canConfirmCommissioner && !phase.importBlockedReason ? (
+            <label className="af-im-field-help" data-testid="import-preview-commissioner">
+              <input
+                type="checkbox"
+                checked={phase.attested}
+                onChange={(e) => {
+                  const attested = e.target.checked
+                  setPhase((prev) => (prev.k === 'preview' ? { ...prev, attested } : prev))
+                }}
+              />{' '}
+              I&rsquo;m the commissioner of this league on {providerLabel}. You&rsquo;ll get the
+              commissioner tools here.
+            </label>
           ) : null}
           <div className="af-im-actions">
             <button

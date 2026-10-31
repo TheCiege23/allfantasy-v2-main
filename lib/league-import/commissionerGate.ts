@@ -585,6 +585,46 @@ export async function assertImportCommissioner(args: {
 }
 
 /**
+ * The attestation an import route passes to the gate, read from its request body. It keeps the
+ * client's `confirmedProvider` / `confirmedSourceLeagueId`: the routes used to rebuild the object
+ * from `accepted` and `statement` only, so `attestationMatchesThisRequest` never had anything to
+ * compare and a confirmation made for one league was accepted for any other.
+ */
+export function attestationFromRequestBody(raw: unknown): AttestationInput | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const a = raw as Record<string, unknown>
+  if (a.accepted !== true) return undefined
+  return {
+    accepted: true,
+    ...(typeof a.statement === 'string' ? { statement: a.statement } : {}),
+    ...(typeof a.confirmedProvider === 'string'
+      ? { confirmedProvider: a.confirmedProvider as ImportProvider }
+      : {}),
+    ...(typeof a.confirmedSourceLeagueId === 'string'
+      ? { confirmedSourceLeagueId: a.confirmedSourceLeagueId.trim() }
+      : {}),
+  }
+}
+
+/**
+ * True when a passed gate leaves commissioner status UNKNOWN and an attestation would settle it:
+ * a proven member (Fantrax Secret ID) of a provider that reports no commissioner. The preview
+ * tells the import screen so it can offer "I'm the commissioner" — without it the user is never
+ * asked, the commit never carries an attestation, and the role can never be recorded.
+ */
+export function gateAllowsCommissionerConfirm(
+  gate: CommissionerGateResult,
+  provider: ImportProvider,
+): boolean {
+  return (
+    gate.ok &&
+    gate.verification === 'member' &&
+    gate.isCommissioner === undefined &&
+    OPEN_READ_PROVIDERS.includes(provider)
+  )
+}
+
+/**
  * Commissioner Import Attestation UI phase — Part 4 server enforcement.
  * An attestation that echoes a `confirmedProvider`/`confirmedSourceLeagueId`
  * not matching THIS request's own server-derived `provider`/`sourceLeagueId`
