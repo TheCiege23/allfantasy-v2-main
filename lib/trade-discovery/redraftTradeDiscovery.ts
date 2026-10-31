@@ -260,7 +260,8 @@ export function findPartners(input: {
     .sort((a, b) => b.matchScore - a.matchScore)
 }
 
-function fairnessFor(valueDelta: number, scale: number, lowConfidence: boolean): FairnessBand {
+/** Exported so Chimmy's pick / win-now packages band on the same thresholds as these. */
+export function fairnessFor(valueDelta: number, scale: number, lowConfidence: boolean): FairnessBand {
   if (lowConfidence) return 'low confidence'
   const pct = scale > 0 ? Math.abs(valueDelta) / scale : 0
   if (pct <= 0.08) return 'balanced'
