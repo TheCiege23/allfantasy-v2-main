@@ -1,0 +1,102 @@
+/*
+ * The island theme for a Survivor league (lib/core-app/survivorTheme.ts).
+ *
+ * Applied only while the shell holds a Survivor league: AfCoreShell sets
+ * `data-league-theme="survivor"` on its root. It re-points the shell's own tokens rather than
+ * restyling screens one by one, so every screen inside the shell picks up the island palette, and a
+ * screen that has not been themed yet still reads correctly.
+ *
+ * ⚠ SPECIFICITY. af-core.css switches modes with `html[data-mode='light'] .af-core` (0,2,1). The
+ * dark block below matches that weight and loads after it, so it wins in the dark modes; the light
+ * block adds the mode attribute and wins in light mode. Do not drop the leading `html`.
+ */
+
+html .af-core[data-league-theme='survivor'] {
+  --bg: #07080d;
+  --surface: #0f1118;
+  --surface2: #0b0d13;
+  --rail: #0a0b10;
+  --line: rgba(255, 236, 214, 0.08);
+  --line2: rgba(255, 236, 214, 0.14);
+  --text: #f1ece4;
+  --text2: #d6cfc3;
+  --muted: #a8a196;
+  --faint: #857e73;
+  --accent: #f0a35e;
+  --accent-ink: #1a0f05;
+  --accent-soft: rgba(240, 163, 94, 0.13);
+  --accent-line: rgba(240, 163, 94, 0.34);
+  --chip: rgba(255, 236, 214, 0.05);
+  --chip-line: rgba(255, 236, 214, 0.11);
+  --chimmy: linear-gradient(160deg, #241a12, #0f1118 58%);
+  --hero: none;
+  --sv-scene: url('/survivor/scenes/tribal.svg');
+  --sv-scene-fade: linear-gradient(180deg, rgba(7, 8, 13, 0.1) 0, rgba(7, 8, 13, 0.7) 300px, #07080d 480px);
+  --sv-heading: #e8c98e;
+}
+
+html[data-mode='light'] .af-core[data-league-theme='survivor'] {
+  --bg: #f6efe4;
+  --surface: #fffaf2;
+  --surface2: #f1e7d7;
+  --rail: #fbf4e8;
+  --line: rgba(60, 38, 16, 0.1);
+  --line2: rgba(60, 38, 16, 0.18);
+  --text: #20160c;
+  --text2: #463523;
+  --muted: #6b5a45;
+  --faint: #7d6a52;
+  --accent: #a3501a;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(163, 80, 26, 0.1);
+  --accent-line: rgba(163, 80, 26, 0.32);
+  --chip: rgba(60, 38, 16, 0.05);
+  --chip-line: rgba(60, 38, 16, 0.12);
+  --chimmy: linear-gradient(160deg, #fbe9d4, #fffaf2 58%);
+  --sv-scene: url('/survivor/scenes/beach.svg');
+  --sv-scene-fade: linear-gradient(180deg, rgba(246, 239, 228, 0.15) 0, rgba(246, 239, 228, 0.85) 300px, #f6efe4 480px);
+  --sv-heading: #7a3d12;
+}
+
+/* The scene sits behind the top of the page and fades into the background before the content gets busy. */
+.af-shell[data-league-theme='survivor'] {
+  background-color: var(--bg);
+  background-image: var(--sv-scene-fade), var(--sv-scene);
+  /* The fade layer spans the whole shell; its stops are in px, so it is solid page colour well before
+     the bottom of the scene at any width (the scene is 3:8, 540px tall at 1440px). */
+  background-size: 100% 100%, max(100%, 1280px) auto;
+  background-position: 0 0, center top;
+  background-repeat: no-repeat;
+}
+
+/* The section rail reads as carved wood rather than glass. */
+.af-shell[data-league-theme='survivor'] .af-nav {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--rail) 82%, transparent), var(--rail) 240px);
+  backdrop-filter: blur(6px);
+}
+.af-shell[data-league-theme='survivor'] .af-nav-heading {
+  color: var(--sv-heading);
+  font-family: 'Cinzel', 'Trajan Pro', Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.16em;
+}
+
+/* The active tab carries a torch-coloured bar and a warm glow. */
+.af-shell[data-league-theme='survivor'] .af-nav-item[data-active='true'] {
+  background: linear-gradient(90deg, var(--accent-soft), transparent 90%);
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--text);
+}
+.af-shell[data-league-theme='survivor'] .af-nav-item[data-active='true'] .af-nav-glyph {
+  color: var(--accent);
+  text-shadow: 0 0 10px var(--accent-line);
+}
+
+.af-shell[data-league-theme='survivor'] .af-rail {
+  background: color-mix(in srgb, var(--rail) 88%, transparent);
+}
+
+@media (max-width: 720px) {
+  .af-shell[data-league-theme='survivor'] {
+    background-size: 100% 100%, auto 300px;
+  }
+}
