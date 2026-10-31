@@ -15,13 +15,14 @@ import { resolveDefaultPlayoffConfig } from './DefaultPlayoffConfigResolver'
 import { resolveDefaultScheduleConfig } from './DefaultScheduleConfigResolver'
 import { toSportType } from './sport-type-utils'
 import { resolveLeagueVariant } from './LeagueVariantResolver'
+import { CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY } from '@/lib/playoff-runtime/consolationPlaysFor'
 
 /** Per-sport default tiebreakers (order of application). */
 const DEFAULT_TIEBREAKERS: Record<SportType, string[]> = {
-  NFL: ['points_for', 'head_to_head', 'points_against'],
-  NBA: ['points_for', 'head_to_head', 'points_against'],
-  MLB: ['points_for', 'head_to_head', 'points_against'],
-  NHL: ['points_for', 'head_to_head', 'points_against'],
+  NFL: ['win_pct', 'points_for', 'head_to_head', 'points_against'],
+  NBA: ['win_pct', 'points_for', 'head_to_head', 'points_against'],
+  MLB: ['win_pct', 'points_for', 'head_to_head', 'points_against'],
+  NHL: ['win_pct', 'points_for', 'head_to_head', 'points_against'],
   NCAAF: ['points_for', 'head_to_head', 'points_against'],
   NCAAB: ['points_for', 'head_to_head', 'points_against'],
   SOCCER: ['points_for', 'head_to_head', 'points_against'],
@@ -149,7 +150,11 @@ export function buildInitialLeagueSettings(
     default_team_count: def.default_team_count,
     regular_season_length: def.regular_season_length,
     playoff_team_count: def.playoff_team_count,
-    playoff_structure: def.playoff_structure,
+    // A league created from here on plays for the pick in its draft order too; one created before does
+    // not until its commissioner saves the setting (lib/playoff-runtime/consolationPlaysFor.ts). Stamped
+    // here and in `bootstrapLeaguePlayoffConfig` when it fills the setting — creation only, never on
+    // an existing league's defaults.
+    playoff_structure: { ...def.playoff_structure, [CONSOLATION_PLAYS_FOR_DRAFT_ORDER_KEY]: true },
     matchup_frequency: def.matchup_frequency,
     season_labeling: def.season_labeling,
     scoring_mode: def.scoring_mode,

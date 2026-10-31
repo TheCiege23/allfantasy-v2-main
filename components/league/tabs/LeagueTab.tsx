@@ -52,6 +52,12 @@ export default function LeagueTab({
         week={currentWeek ?? 1}
       />
       <WeeklyStoryline item={constitution} />
+      <Link href={`/league/${encodeURIComponent(leagueId)}/constitution`} className="inline-flex text-[13px] font-semibold text-[#00D4AA] underline">
+        Open the league constitution →
+      </Link>
+      <Link href={`/league/${encodeURIComponent(leagueId)}/log`} className="inline-flex text-[13px] font-semibold text-[#00D4AA] underline">
+        Open the league log →
+      </Link>
       <WeeklyStoryline item={storyline} />
       <HypeWeekPreview item={matchupPreview} />
       <PowerRankings items={powerRankings} />

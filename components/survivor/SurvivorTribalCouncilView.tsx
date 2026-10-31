@@ -17,7 +17,7 @@ export interface SurvivorTribalCouncilViewProps {
 /**
  * Elimination Council View: countdown, voting instructions, @Chimmy usage examples, immunity markers, scroll reveal history, vote result recap.
  */
-type ShotStatus = { available: boolean; used: boolean; success: boolean | null; councilId: string | null }
+type ShotStatus = { available: boolean; used: boolean; success: boolean | null; councilId: string | null; odds?: number }
 
 export function SurvivorTribalCouncilView({ leagueId, summary, names }: SurvivorTribalCouncilViewProps) {
   const { votedOutHistory, currentWeek } = summary
@@ -36,6 +36,7 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
   const [shotConfirm, setShotConfirm] = useState(false)
   const [shotError, setShotError] = useState<string | null>(null)
   const [outCardOpen, setOutCardOpen] = useState(false)
+  const [recapOpen, setRecapOpen] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -59,7 +60,7 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
       if (!response.ok || !result.ok) {
         setShotError(result.error ?? 'The draw could not be played.')
       } else {
-        setShot({ available: false, used: true, success: result.success === true, councilId: result.councilId })
+        setShot(current => ({ available: false, used: true, success: result.success === true, councilId: result.councilId, odds: current?.odds }))
         setShotConfirm(false)
       }
     } catch {
@@ -86,6 +87,7 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
           <p className="text-sm text-white/50">No council scheduled for this week.</p>
         ) : (
           <div className="space-y-3">
+            {council.weekLabel && <p className="text-xs font-semibold uppercase tracking-wide text-amber-300" data-testid="survivor-council-week-label">{council.weekLabel}</p>}
             <p className="text-sm text-white/70">
               Phase: <span className="font-medium text-amber-300">{council.phase}</span>
               {council.attendingTribeId && ' · One tribe attending'}
@@ -122,7 +124,7 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
 
       <section className="rounded-2xl border border-amber-500/25 bg-amber-950/10 p-4 sm:p-6">
         <h2 className="mb-2 text-lg font-semibold text-amber-100">Shot in the Dark</h2>
-        <p className="text-sm text-white/70">You may use this once per league during your original council vote window. You give up your vote for a 1-in-6 chance of immunity. Your result stays private until the Torch Ceremony.</p>
+        <p className="text-sm text-white/70">You may use this once per league during your original council vote window. You give up your vote for a 1-in-{shot?.odds ?? 6} chance of immunity. Your result stays private until the Torch Ceremony.</p>
         {shot?.used ? (
           <p role="status" className="mt-3 text-sm text-amber-100">Your draw: {shot.success ? 'Safe — immune at that council' : 'Not Safe'}. Your vote was forfeited.</p>
         ) : shot?.available ? (
@@ -178,6 +180,16 @@ export function SurvivorTribalCouncilView({ leagueId, summary, names }: Survivor
             <p className="text-sm text-white/70">Want to share your exit? Only you can see this.</p>
             <button type="button" onClick={() => setOutCardOpen(true)} className="min-h-[44px] rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-200">Make a share card</button>
           </section>)}
+
+      {/* The league's week recap: names nobody, so every member may share it once the read is done.
+          Opt-in like the out card: nothing about share cards is fetched until the button is pressed. */}
+      {council?.isRevealed && council.revealComplete !== false && (
+        <div data-testid="survivor-council-recap-share">
+          {recapOpen
+            ? <SurvivorShareCardsButton leagueId={leagueId} type="recap" week={council.week} label="Share this week’s recap" autoOpen />
+            : <button type="button" onClick={() => setRecapOpen(true)} className="min-h-[44px] rounded-lg border border-amber-300/30 px-3 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-300/10">Share this week’s recap</button>}
+        </div>
+      )}
 
       {/* Weekly necklace: top score in each tribe headed to Tribal Council */}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">

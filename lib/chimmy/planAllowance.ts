@@ -8,6 +8,7 @@ import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getDisplayPlanName } from '@/lib/subscription/feature-access'
 import { CHIMMY_PLAN_DAILY_INCLUDED, type ChimmyPlanAllowanceView } from './planAllowanceView'
 import type { ReceiptContext } from './requestReceipts'
+import { dailyChimmyQuestionsFor } from '@/lib/tokens/dailyFreeTokens'
 
 /**
  * Chimmy answers INCLUDED in a subscription, before tokens apply.
@@ -46,8 +47,8 @@ import type { ReceiptContext } from './requestReceipts'
 const PROVIDER = 'ai_daily'
 const FEATURE = 'chimmy_plan'
 
-function endpointFor(userId: string): string {
-  return `${FEATURE}:${createHash('sha256').update(userId).digest('hex').slice(0, 20)}`
+function endpointFor(userId: string, kind?: 'free' | 'plan'): string {
+  return `${kind === 'free' ? 'chimmy_free' : FEATURE}:${createHash('sha256').update(userId).digest('hex').slice(0, 20)}`
 }
 
 function utcDayWindow(now: Date): { windowStart: Date; windowEnd: Date } {
@@ -56,6 +57,7 @@ function utcDayWindow(now: Date): { windowStart: Date; windowEnd: Date } {
 }
 
 export type ChimmyPlanAllowanceState = {
+  kind?: 'free' | 'plan'
   /** The plan that includes Chimmy, for display ("AF Pro"). */
   planName: string
   limit: number
@@ -79,7 +81,7 @@ const resolver = new EntitlementResolver()
 
 const defaultDeps: PlanAllowanceDeps = {
   hasChimmyPlan: async (userId, email) => {
-    const result = await resolver.resolveForUser(userId, 'ai_chat', email)
+    const result = await resolver.resolveForUser(userId, 'ai_chat', email, { strictReads: true })
     const plans = result.entitlement.plans
     return {
       included: result.hasAccess,
@@ -116,7 +118,7 @@ const defaultDeps: PlanAllowanceDeps = {
     const row = await prisma.apiRateLimitRecord.findFirst({
       where: { provider: PROVIDER, endpoint, windowStart, windowEnd },
       select: { callsMade: true },
-    })
+    }).catch(() => null)
     return row?.callsMade ?? limit
   },
   giveBack: async (endpoint, { windowStart, windowEnd }) => {
@@ -134,12 +136,40 @@ const defaultDeps: PlanAllowanceDeps = {
 // Keep the original UTC window: a slow answer can finish after midnight.
 type AllowanceReservation = {
   userId: string
+  endpoint: string
   window: { windowStart: Date; windowEnd: Date }
   counted: boolean
   durable?: ReceiptContext
   release?: Promise<boolean>
 }
 const reservations = new WeakMap<ChimmyPlanAllowanceState, AllowanceReservation>()
+
+export class ChimmyAllowanceUnavailableError extends Error {
+  constructor() {
+    super('Unable to check your included Chimmy answers. Please try again.')
+    this.name = 'ChimmyAllowanceUnavailableError'
+  }
+}
+
+/** Every account gets its own daily answers, independent of its purchased token balance. */
+export async function readChimmyAnswerAllowance(
+  args: { userId: string; email?: string | null },
+  deps: PlanAllowanceDeps = defaultDeps,
+): Promise<ChimmyPlanAllowanceState> {
+  const window = utcDayWindow(deps.now())
+  try {
+    const plan = await deps.hasChimmyPlan(args.userId, args.email ?? null)
+    const kind = plan.included ? 'plan' : 'free'
+    const limit = plan.included ? Math.max(1, deps.limit()) : dailyChimmyQuestionsFor(args.userId)
+    const used = Math.max(0, await deps.readUsed(endpointFor(args.userId, kind), window))
+    return { ...(plan.included ? {} : { kind: 'free' as const }), planName: plan.included ? plan.planName : 'Free Chimmy',
+      limit, used: Math.min(used, limit),
+      remaining: Math.max(0, limit - used), resetsAt: window.windowEnd.toISOString() }
+  } catch {
+    // Unknown plan or allowance status must never turn into a charge against purchased tokens.
+    throw new ChimmyAllowanceUnavailableError()
+  }
+}
 
 /**
  * Whether the caller's plan includes Chimmy, and how much of today's allowance is left. Reads only.
@@ -188,17 +218,19 @@ export async function takeChimmyPlanAllowance(
   deps: PlanAllowanceDeps = defaultDeps,
 ): Promise<ChimmyPlanAllowanceState | null> {
   const window = utcDayWindow(deps.now())
+  const endpoint = endpointFor(args.userId, args.state.kind)
   const receipt = (state: ChimmyPlanAllowanceState, counted: boolean) => {
-    reservations.set(state, { userId: args.userId, window, counted, durable: args.requestReceipt })
+    reservations.set(state, { userId: args.userId, endpoint, window, counted, durable: args.requestReceipt })
     return state
   }
   let used: number | null
   try {
     used = args.requestReceipt
-      ? await (await import('./requestReceipts')).takeReceiptAllowance(args.requestReceipt, endpointFor(args.userId), window, args.state.limit)
-      : await deps.take(endpointFor(args.userId), window, args.state.limit)
+      ? await (await import('./requestReceipts')).takeReceiptAllowance(args.requestReceipt, endpoint, window, args.state.limit)
+      : await deps.take(endpoint, window, args.state.limit)
   } catch (error) {
     if (args.requestReceipt) throw error
+    if (args.state.kind === 'free') throw new ChimmyAllowanceUnavailableError()
     // No successful take was observed. Cleanup must never subtract another turn's answer.
     const used = args.state.resetsAt === window.windowEnd.toISOString()
       ? args.state.used : await deps.readUsed(endpointFor(args.userId), window).catch(() => 0)
@@ -223,7 +255,7 @@ export async function releaseChimmyPlanAllowance(
   if (reservation.release) return reservation.release
   const release = Promise.resolve().then(async () => {
     try {
-      return (await deps.giveBack(endpointFor(args.userId), reservation.window)) !== false
+      return (await deps.giveBack(reservation.endpoint, reservation.window)) !== false
     } catch {
       return false
     }
@@ -238,5 +270,5 @@ export async function releaseChimmyPlanAllowance(
 export type ChimmyPlanAllowanceMeta = ChimmyPlanAllowanceView
 
 export function planAllowanceMeta(state: ChimmyPlanAllowanceState, included: boolean): ChimmyPlanAllowanceMeta {
-  return { included, planName: state.planName, used: state.used, limit: state.limit, resetsAt: state.resetsAt }
+  return { ...(state.kind ? { kind: state.kind } : {}), included, planName: state.planName, used: state.used, limit: state.limit, resetsAt: state.resetsAt }
 }

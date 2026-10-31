@@ -1,0 +1,96 @@
+/* Redraft identity — "the season race" (2026-10-31). Foundation layer only: tokens, background art,
+ * the Redraft chip, the season track and the nav's active accent. Later phases restyle each tab on
+ * top of the `--rd-*` tokens below; docs/design/redraft-identity.md is the token table.
+ *
+ * Applied by NativeLeagueWorkspace when lib/league-media/redraftIdentity.ts says the league is a
+ * native redraft league with a sport theme: `data-format="redraft"` + `data-sport="<theme>"`, the
+ * same attribute mechanism as Dynasty (`data-dynasty-background`) and Guillotine
+ * (`data-format=guillotine`) in native-league.css.
+ *
+ * ⚠ SPECIFICITY IS THE MODE SWITCH, SO READ IT BEFORE REORDERING ANYTHING. /core's palettes are
+ * `.af-core` (0,1,0, dark) and `html[data-mode=light|af|legacy] .af-core` (0,2,1). Every block here
+ * is at least `.af-core.nl-workspace[data-format=redraft][data-sport=x]` (0,4,0), so it beats all of
+ * them regardless of load order. The bare sport block is the DARK palette and therefore also the
+ * AF/legacy palette (both are dark grounds; __tests__/league-media/redraftIdentityContrast.test.ts
+ * measures every accent on the AF grounds too). Only light mode gets its own block, at (0,5,1).
+ *
+ * ⚠ LIGHT IS NOT DARK INVERTED. The vivid accents read at 4.9–9.1:1 on the dark grounds and at
+ * 1.4–2.3:1 on white, so light mode uses a separate value per sport: same hue and saturation, only
+ * lightness lowered until it clears 5.1:1 on --surface, --surface2, --bg, on its own -soft tint over
+ * each of them, and with white text on it as a fill. 5.1 rather than 4.5 on purpose: the headroom is
+ * what lets the background art exist at all without taking the accent text under 4.5 on the page
+ * ground. Those values double as the light art's ink.
+ *
+ * ⚠ THE ART IS FAINT BECAUSE /core's --faint IS. --faint clears only ~5.0:1 on --bg in dark and
+ * ~5.4:1 in light, so any ink under it spends that margin; each art file's opacity sits just under
+ * the measured ceiling (docs/design/redraft-identity.md). Raising it is a contrast regression the
+ * contrast test reports, not a taste call. --rd-glow is the hero wash, kept separate from
+ * --rd-accent-soft (a tint for fills) so the wash can be fainter than a selected row.
+ *
+ * ⚠ ONE TOP-LEVEL @media BLOCK, AT THE END, NOT NESTED IN ANYTHING. CLAUDE.md records a 560px block
+ * inserted inside a 780px one carrying four rules out of their band with braces still balanced. */
+
+.af-core.nl-workspace[data-format=redraft][data-sport=nfl]{--rd-accent:#3ddc84;--rd-accent-text:#3ddc84;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(61,220,132,.16);--rd-accent-line:rgba(61,220,132,.4);--rd-glow:rgba(61,220,132,.08);--rd-art:url('/artwork/redraft/nfl/background-dark.svg')}
+.af-core.nl-workspace[data-format=redraft][data-sport=nba]{--rd-accent:#ff9a3c;--rd-accent-text:#ff9a3c;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,154,60,.16);--rd-accent-line:rgba(255,154,60,.4);--rd-glow:rgba(255,154,60,.08);--rd-art:url('/artwork/redraft/nba/background-dark.svg')}
+.af-core.nl-workspace[data-format=redraft][data-sport=nhl]{--rd-accent:#7cc7ff;--rd-accent-text:#7cc7ff;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(124,199,255,.16);--rd-accent-line:rgba(124,199,255,.4);--rd-glow:rgba(124,199,255,.08);--rd-art:url('/artwork/redraft/nhl/background-dark.svg')}
+.af-core.nl-workspace[data-format=redraft][data-sport=mlb]{--rd-accent:#ff5a5f;--rd-accent-text:#ff5a5f;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,90,95,.16);--rd-accent-line:rgba(255,90,95,.4);--rd-glow:rgba(255,90,95,.08);--rd-art:url('/artwork/redraft/mlb/background-dark.svg')}
+.af-core.nl-workspace[data-format=redraft][data-sport=ncaaf]{--rd-accent:#ffcf4a;--rd-accent-text:#ffcf4a;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,207,74,.16);--rd-accent-line:rgba(255,207,74,.4);--rd-glow:rgba(255,207,74,.08);--rd-art:url('/artwork/redraft/ncaaf/background-dark.svg')}
+.af-core.nl-workspace[data-format=redraft][data-sport=ncaab]{--rd-accent:#ff7ac6;--rd-accent-text:#ff7ac6;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(255,122,198,.16);--rd-accent-line:rgba(255,122,198,.4);--rd-glow:rgba(255,122,198,.08);--rd-art:url('/artwork/redraft/ncaab/background-dark.svg')}
+.af-core.nl-workspace[data-format=redraft][data-sport=soccer]{--rd-accent:#b5e655;--rd-accent-text:#b5e655;--rd-accent-ink:#06070f;--rd-accent-soft:rgba(181,230,85,.16);--rd-accent-line:rgba(181,230,85,.4);--rd-glow:rgba(181,230,85,.08);--rd-art:url('/artwork/redraft/soccer/background-dark.svg')}
+
+html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=nfl]{--rd-accent:#136a3a;--rd-accent-text:#136a3a;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(19,106,58,.1);--rd-accent-line:rgba(19,106,58,.32);--rd-glow:rgba(19,106,58,.06);--rd-art:url('/artwork/redraft/nfl/background-light.svg')}
+html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=nba]{--rd-accent:#934700;--rd-accent-text:#934700;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(147,71,0,.1);--rd-accent-line:rgba(147,71,0,.32);--rd-glow:rgba(147,71,0,.06);--rd-art:url('/artwork/redraft/nba/background-light.svg')}
+html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=nhl]{--rd-accent:#005ea5;--rd-accent-text:#005ea5;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(0,94,165,.1);--rd-accent-line:rgba(0,94,165,.32);--rd-glow:rgba(0,94,165,.06);--rd-art:url('/artwork/redraft/nhl/background-light.svg')}
+html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=mlb]{--rd-accent:#b70006;--rd-accent-text:#b70006;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(183,0,6,.1);--rd-accent-line:rgba(183,0,6,.32);--rd-glow:rgba(183,0,6,.06);--rd-art:url('/artwork/redraft/mlb/background-light.svg')}
+html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=ncaaf]{--rd-accent:#775700;--rd-accent-text:#775700;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(119,87,0,.1);--rd-accent-line:rgba(119,87,0,.32);--rd-glow:rgba(119,87,0,.06);--rd-art:url('/artwork/redraft/ncaaf/background-light.svg')}
+html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=ncaab]{--rd-accent:#b00064;--rd-accent-text:#b00064;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(176,0,100,.1);--rd-accent-line:rgba(176,0,100,.32);--rd-glow:rgba(176,0,100,.06);--rd-art:url('/artwork/redraft/ncaab/background-light.svg')}
+html[data-mode='light'] .af-core.nl-workspace[data-format=redraft][data-sport=soccer]{--rd-accent:#48650f;--rd-accent-text:#48650f;--rd-accent-ink:#ffffff;--rd-accent-soft:rgba(72,101,15,.1);--rd-accent-line:rgba(72,101,15,.32);--rd-glow:rgba(72,101,15,.06);--rd-art:url('/artwork/redraft/soccer/background-light.svg')}
+
+/* /core's own accent names follow the sport, so every existing accent use on the page (nav active
+ * state, bottom-nav, rail tile, primary buttons, focus rings, links) picks it up with no per-tab
+ * edit. --rd-surface-elev is a card ground lifted 5% toward the accent. */
+.af-core.nl-workspace[data-format=redraft][data-sport]{
+  --accent:var(--rd-accent-text);--accent-ink:var(--rd-accent-ink);--accent-soft:var(--rd-accent-soft);--accent-line:var(--rd-accent-line);
+  --rd-surface-elev:color-mix(in srgb,var(--rd-accent) 5%,var(--surface));
+  --rd-track:var(--line2);
+  --hero:radial-gradient(760px 420px at 18% 10%,var(--rd-glow),transparent 68%);
+  background-image:var(--hero),var(--rd-art);background-size:auto,cover;background-position:0 0,center;background-repeat:no-repeat
+}
+
+/* Header: the frame takes the sport line, the chip says what kind of league this is. */
+.nl-workspace[data-format=redraft] .nl-league-heading{border-color:var(--rd-accent-line);background-color:var(--rd-surface-elev)}
+.nl-workspace[data-format=redraft] .nl-heading-avatar{border-color:var(--rd-accent-line);background:var(--rd-accent-soft);color:var(--rd-accent-text)}
+.nl-workspace .nl-rd-chip{background:var(--rd-accent);border-color:var(--rd-accent);color:var(--rd-accent-ink);font-family:var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.08em;text-transform:uppercase}
+.nl-workspace .nl-rd-sport-chip{background:transparent;border-color:var(--rd-accent-line);color:var(--rd-accent-text);font-family:var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.08em;text-transform:uppercase}
+
+/* Season track. The bar carries dots only; the labels are a wrapping list beneath it, so two markers
+ * in the same week (deadline in the current week) never overprint each other at any width. */
+.nl-rd-track{display:flex;flex-direction:column;gap:10px;width:100%;margin:4px 0 0}
+.nl-rd-track-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;color:var(--faint);font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.1em;text-transform:uppercase}
+.nl-rd-track-head strong{color:var(--rd-accent-text);font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.nl-rd-track-bar{position:relative;height:8px;border-radius:999px;background:var(--rd-track);margin:6px 0}
+.nl-rd-track-fill{position:absolute;inset:0 auto 0 0;width:var(--rd-at,0%);border-radius:inherit;background:var(--rd-accent)}
+.nl-rd-track-dot{position:absolute;top:50%;left:var(--rd-at,0%);width:14px;height:14px;border-radius:50%;transform:translate(-50%,-50%);background:var(--surface);border:3px solid var(--rd-track)}
+.nl-rd-track-dot[data-marker=draft]{transform:translate(0,-50%)}
+.nl-rd-track-dot[data-marker=championship]{transform:translate(-100%,-50%)}
+.nl-rd-track-dot[data-state=done]{background:var(--rd-accent);border-color:var(--rd-accent)}
+.nl-rd-track-dot[data-state=now]{width:20px;height:20px;background:var(--rd-accent);border-color:var(--surface);box-shadow:0 0 0 4px var(--rd-accent-soft)}
+.nl-rd-track-marks{display:flex;flex-wrap:wrap;gap:6px 18px;list-style:none;margin:0;padding:0}
+.nl-rd-track-marks li{display:inline-flex;align-items:center;gap:7px;color:var(--text2);font-size:12px;font-weight:700;white-space:nowrap}
+.nl-rd-track-marks li::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;border:2px solid var(--line2);background:transparent}
+.nl-rd-track-marks li[data-state=done]::before{background:var(--rd-accent);border-color:var(--rd-accent)}
+.nl-rd-track-marks li[data-state=now]{color:var(--rd-accent-text)}
+.nl-rd-track-marks li[data-state=now]::before{background:var(--rd-accent);border-color:var(--rd-accent);box-shadow:0 0 0 3px var(--rd-accent-soft)}
+
+/* Navigation: /core's active state already reads --accent (re-pointed above); the sport adds a rail
+ * mark beside the active sidebar item and a cap on the active phone tab. */
+.nl-workspace[data-format=redraft] .nl-nav-group button[aria-current=page]{box-shadow:inset 3px 0 0 var(--rd-accent)}
+.nl-workspace[data-format=redraft] .nl-bottom-nav [aria-current=page]{box-shadow:inset 0 2px 0 var(--rd-accent)}
+.nl-workspace[data-format=redraft] .nl-mobile-crest{background:var(--rd-accent-soft);color:var(--rd-accent-text)}
+
+@media(max-width:767px){
+  .nl-workspace[data-format=redraft] .nl-league-heading{background-color:transparent}
+  .nl-workspace .nl-rd-track{gap:8px}
+  .nl-workspace .nl-rd-track-marks{gap:4px 12px}
+  .nl-workspace .nl-rd-track-marks li[data-marker=draft]{display:none}
+}

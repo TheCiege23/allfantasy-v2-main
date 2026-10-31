@@ -165,6 +165,25 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'find_open_leagues',
+      description:
+        "Search Find a League for leagues with open seats the user could JOIN — not leagues they are already in. Use when they ask to find, join or look for a new league (\"find me a 12 team dynasty league\", \"any casual leagues drafting this weekend?\"). Pass their words as the query; it understands sport, league type, team count, draft type, draft time, time zone and vibe. Returns real listings with a link to the page. Free leagues only — paid ones are on the link.",
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: "What they are looking for, in their own words, e.g. '12 team dynasty snake weeknights casual'.",
+          },
+        },
+        required: ['query'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_my_roster',
       description:
         "The user's OWN team in the league in scope: starters, bench, injured reserve and taxi, with each player's position, team and injury status, in any of the seven sports. Use for 'who should I start', 'where am I weak', 'who should I drop', or any question about their players. Returns roster FACTS only — no projections or points. Says so plainly if their team is unclaimed or unsynced.",
@@ -590,7 +609,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_my_matchup',
       description:
-        "This week's head-to-head: opponent, win probability and projected margin from each team's fitted weekly scoring, records, all-time rivalry, and the league's other games (or the cut line in a guillotine league). With NO league selected: every one of their matchups this week, sorted into coin flips, favoured and underdog. Use for 'how does my matchup look', 'am I favoured', 'who am I playing', 'which of my games are close'.",
+        "This week's head-to-head: opponent, win probability and projected margin from each team's fitted weekly scoring, records, all-time rivalry, and the league's other games (or the cut line in a Guilly league). With NO league selected: every one of their matchups this week, sorted into coin flips, favoured and underdog. Use for 'how does my matchup look', 'am I favoured', 'who am I playing', 'which of my games are close'.",
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -679,6 +698,23 @@ export const CHIMMY_TOOL_SPECS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'propose_automation_change',
+      description:
+        "COMMISSIONERS ONLY. Prepares a change to the league's automations and shows a CONFIRM CARD — nothing is saved unless the commissioner taps Confirm. Use when a commissioner asks to turn on the recommended setup, let AllFantasy run the league, go hands-on, or hand quiet / inactive teams over after N days (or stop doing that). Pass EXACTLY ONE of: preset ('recommended' = the fair-play automations; 'run_it' = recommended plus handing quiet teams over after 14 days; 'hands_on' = nothing runs on its own), or handover_days (7, 14 or 21; 0 turns it off) with optional handover_to ('lineups' free, or 'autopilot' which needs AF Commissioner). For anyone who is not the commissioner it refuses and says so.",
+      parameters: {
+        type: 'object',
+        properties: {
+          preset: { type: 'string', enum: ['recommended', 'run_it', 'hands_on'], description: 'A whole setup to switch to.' },
+          handover_days: { type: 'number', enum: [0, 7, 14, 21], description: 'Hand a team over after this many days with no activity from its owner; 0 turns it off.' },
+          handover_to: { type: 'string', enum: ['lineups', 'autopilot'], description: 'What happens to a handed-over team. Omit to use the best the league has.' },
+        },
+        required: [],
+      },
+    },
+  },
 ] as const
 
 /*
@@ -756,6 +792,15 @@ export async function executeChimmyTool(
        * model — `findLeagueByName` only ever returns a league this user is
        * demonstrably a member of.
        */
+      /*
+       * Reads PUBLIC listings only — never the user's own leagues — so it needs no league in scope
+       * and binds none. The asker is used for their rank bands, nothing else.
+       */
+      case 'find_open_leagues': {
+        const { findOpenLeaguesForChimmy } = await import('@/lib/public-discovery/chimmyLeagueSearch')
+        return await findOpenLeaguesForChimmy(ctx.userId, typeof args.query === 'string' ? args.query.slice(0, 200) : '')
+      }
+
       case 'find_league_by_name': {
         if (!ctx.userId) {
           return 'I cannot tell who is signed in, so I cannot look up their leagues. Say that; do not name a league.'
@@ -1187,6 +1232,26 @@ export async function executeChimmyTool(
                 give: args.give,
                 get: args.get,
               })
+        if (outcome.ok) ctx.actionCards.push(outcome.card)
+        return outcome.text
+      }
+
+      // Same rule as the two above: a card, never a write. The commissioner check is inside.
+      case 'propose_automation_change': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        if (!ctx.actionCards) {
+          return "This chat surface cannot show a confirm card, so nothing was prepared. Tell the commissioner to change it in the Commissioner Hub's \"What runs itself\" card. Do not say it was done."
+        }
+        if (ctx.actionCards.length >= MAX_ACTION_CARDS_PER_ANSWER) {
+          return `There are already ${MAX_ACTION_CARDS_PER_ANSWER} confirm cards in this answer; no more were made. Ask the user to confirm or dismiss those first.`
+        }
+        const outcome = await (await import('@/lib/chimmy/actions/automationAction')).proposeAutomationChange({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          preset: args.preset,
+          handoverDays: args.handover_days,
+          handoverTo: args.handover_to,
+        })
         if (outcome.ok) ctx.actionCards.push(outcome.card)
         return outcome.text
       }

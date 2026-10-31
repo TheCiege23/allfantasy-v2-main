@@ -173,7 +173,7 @@ describe('your matchups strip', () => {
       <LiveScores
         data={page([game('1')])}
         selectedLeagueId="L1"
-        matchupStrip={{ kind: 'unavailable', reason: 'a guillotine league is scored against the whole field each week, so there is no single opponent' }}
+        matchupStrip={{ kind: 'unavailable', reason: 'a Guilly league is scored against the whole field each week, so there is no single opponent' }}
         leagueWeek={{ byLeague: { L1: elim }, leagues }}
       />,
     )

@@ -31,7 +31,7 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 | `E-03` | Does the teams list ever include non-D1 or inactive programs? | UNVERIFIED — 362/362 were `isActive` on 2026-10-01 |
 | `E-04` | Rate limits. ESPN documents none. A full roster sweep is 362 requests. | UNVERIFIED — spread the sweep across cron ticks; do not burst |
 | `E-05` | Image rights for hotlinking ESPN headshots. Precedent exists (college football devy headshots already use this CDN), but TheSportsDB's contract restricts headshots to CC-licensed images. | **RESOLVED 2026-10-01 — owner decision:** use them for NCAAB on the same basis as college football. |
-| `E-06` | Scope of phase 2 given `M-02` (current players with no RI row). | **RESOLVED 2026-10-01 — owner decision:** photos only for ESPN athletes that match an existing RI row (same school, name + jersey). No ESPN-sourced player rows; newcomers fill in if RI later loads them. |
+| `E-06` | Scope of ESPN roster use given `M-02` (current players with no RI row). | **Updated 2026-10-30:** owner confirmed permission to investigate and use ESPN rosters for college eligibility. The earlier photos-only scope is superseded; roster snapshots retain unmatched athletes, but do not themselves create draftable players or enable scoring. |
 
 ## Probe protocol
 
@@ -47,3 +47,38 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 - UNVERIFIED: private connected-account league response. Synthetic cookie tests are not a live private-provider verification.
 - UNVERIFIED: MLB communication/activity endpoint and earlier-season response variants. Import reports unavailable coverage and never uses the NFL endpoint for MLB.
 - OPEN: custom category and roster pitching-limit fidelity. Native conversion must reject unrepresentable rules while retaining the source archive.
+
+## NFL game summary, 2026-10-25
+
+- RESOLVED: `summary?event=401873011` (PIT at NO, final) captured via probe.sh, committed untrimmed; counts in ENDPOINTS.yaml. Do not re-probe for shape.
+- `S-01` FOUND BY THE FIXTURE: a play erased by a penalty keeps its original wording ("field goal is GOOD, NULLIFIED by Penalty … - No Play") under type `Penalty`. `footballPlayKind` read it as a made field goal and sent a scoring alert; fixed in the same commit, pinned by `__tests__/engagement-alerts/espn-nfl-summary-fixture.test.ts`.
+- UNVERIFIED: an IN-PROGRESS summary (`drives.current`, `situation`, live `winprobability`). This capture is a final. Capture one live game, once, the next time a probe is justified.
+- UNVERIFIED: college football (`football/college-football`) summaries — not probed.
+
+## Fantasy activity (trades), 2026-10-27 — recorded without probing
+
+- `T-01` UNVERIFIED: the shape of `view=kona_league_communication`, the feed
+  `EspnLeagueFetchService` reads for transactions. It is not in `ENDPOINTS.yaml` and has no
+  fixture. Production code already parses it (`parseEspnTransactions`).
+- `T-02` SUSPECTED DEFECT, from reading the code: each trade message becomes its own
+  transaction, keyed on that message's id. A multi-player ESPN trade is therefore stored as
+  several one-player "trades" in `LeagueTrade`, not as one trade with two sides. The messages
+  appear to share a topic id, which is probably the key to group them on. Confirm it against a
+  capture before changing the parser.
+- Blocks the collusion check for imported ESPN leagues
+  (docs/integrity/IMPORTED_LEAGUE_INTEGRITY.md). **Needed:** one capture of a league with a
+  completed multi-player trade, via `scripts/probe.sh`, from a league the owner chooses (cookies
+  if private), committed with the grouping fix.
+
+## NFL fantasy lineup slots, 2026-10-30 — recorded without probing
+
+- `L-01` UNVERIFIED: ESPN lineup slot `24` (`EDR`, `ESPN_SLOT_LABELS` in
+  `lib/league-import/espn/EspnLeagueFetchService.ts`) — which positions it accepts, and whether it is
+  an IDP slot at all. No NFL fantasy-league fixture is committed, so nothing in the repo shows a
+  league that uses it. It is therefore NOT counted as an IDP signal (`lib/league-import/idpRosterSlots.ts`)
+  and not mapped in `lib/league/importedLineupTemplate.ts`. **Needed:** one capture of an NFL league
+  with an EDR slot (its `rosterSettings.lineupSlotCounts`, as `EspnLeagueFetchService` reads it, plus a roster using it), via `scripts/probe.sh`.
+- `L-02` INFERRED, not captured: slot `15` (`DP`) is the defensive-player flex — it is the last slot of
+  ESPN's defensive block (8 DT · 9 DE · 10 LB · 11 DL · 12 CB · 13 S · 14 DB · 15 DP) and
+  `lib/lineup-actions/sleeperSlotUtils.ts` already treats `DP` as IDP. It now counts as an IDP signal on
+  import. A capture of a league using it would confirm which positions it accepts.

@@ -14,6 +14,9 @@ import { GuillotineChopAnimation } from './GuillotineChopAnimation'
 import { GuillotineAIPanel } from './GuillotineAIPanel'
 import { shareCardImage } from '@/components/decide/shareCard'
 import { GuillotineSpecialtyHome } from './GuillotineSpecialtyHome'
+import { GuillotineSurvivalHistory } from './GuillotineSurvivalHistory'
+import { GuillotineNextChopPick } from './GuillotineNextChopPick'
+import type { NextChopPickState } from '@/lib/guillotine/nextChopPickStore'
 import type { GuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 
 function leagueQueryPath(leagueId: string, params: Record<string, string>) {
@@ -42,6 +45,8 @@ type Summary = {
   myRosterId?: string | null
   /** Specialty-home extras (counts, chopped chips, next chop time, last chop). Null when unavailable. */
   home?: GuillotineHomeExtras | null
+  /** "Who's next?" for chopped managers (lib/guillotine/nextChopPick.ts). */
+  nextChopPick?: NextChopPickState | null
   config?: {
     eliminationStartWeek: number
     eliminationEndWeek: number | null
@@ -85,7 +90,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
       const data = await res.json()
       setSummary(data)
     } catch {
-      setError('Failed to load guillotine summary')
+      setError('Failed to load Guilly summary')
       setSummary(null)
     } finally {
       setLoading(false)
@@ -101,7 +106,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
   if (loading && !summary) {
     return (
       <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] p-8">
-        <p className="text-sm text-white/60">Loading Guillotine League…</p>
+        <p className="text-sm text-white/60">Loading Guilly League…</p>
       </div>
     )
   }
@@ -209,13 +214,20 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         </section>
       ) : null}
 
-      {/* Chopped History */}
+      {/* Survival history: each chop and every team's path (lib/guillotine/survivalHistory.ts). */}
       <section id="guillotine-history" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
           <Skull className="h-5 w-5 text-rose-400" />
-          Chopped History
+          Survival history
         </h2>
-        {!summary?.recentChopEvents?.length ? (
+        {summary?.home?.history ? (
+          <GuillotineSurvivalHistory
+            history={summary.home.history}
+            myRosterId={summary.myRosterId}
+            closeCallMargin={summary.config?.dangerMarginPoints ?? 10}
+            onReplay={(week) => setReplayChop({ play: true, name: `Week ${week}` })}
+          />
+        ) : !summary?.recentChopEvents?.length ? (
           <p className="text-sm text-white/50">No eliminations yet.</p>
         ) : (
           <ul className="space-y-2">
@@ -240,6 +252,8 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
           </ul>
         )}
       </section>
+
+      {summary?.nextChopPick ? <GuillotineNextChopPick leagueId={leagueId} state={summary.nextChopPick} /> : null}
 
       {/* Waiver Fallout / Next release */}
       <section id="guillotine-waivers" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">

@@ -155,7 +155,12 @@ export function CommissionerControlPanel({ leagueId }: Props) {
     setError(null)
     setSuccess(null)
     try {
-      for (const team of teams) {
+      // Removals first: a league holds at most two co-commissioners, so a swap must free the seat
+      // before the add is accepted.
+      const ordered = [...teams].sort(
+        (a, b) => Number(commissionerSelections[a.id] ?? false) - Number(commissionerSelections[b.id] ?? false),
+      )
+      for (const team of ordered) {
         const shouldBeCo = commissionerSelections[team.id] ?? false
         if (!team.isCommissioner && shouldBeCo !== team.isCoCommissioner) {
           const res = await fetch('/api/league/settings/co-commissioners', {

@@ -11,6 +11,7 @@ import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek }
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 import { enqueueTankingScan } from '@/lib/integrity/enqueueTankingScan'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { dailySlotFor, daysInWindow, daysOnRoster, droppedInWindow, isDailyLineupScoringEnabled, loadDailyLineups } from './dailyLineups'
 import { isSealedWeek } from './weekSealed'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
@@ -158,6 +159,8 @@ export type WeekFinalizerDeps = {
    * Loaded on first use by default: the dispatcher's import graph is not this module's to carry.
    */
   notifyResults?: (args: { prisma: PrismaClient; seasonId: string; week: number }) => Promise<unknown>
+  /** Settles the league chat's prediction polls once the week is final. Loaded on first use. */
+  resolvePredictions?: (args: { prisma: PrismaClient; leagueId: string }) => Promise<unknown>
   prisma?: PrismaClient
   now?: () => Date
   recalculateMatchups?: typeof recalculateMatchupsForSeasonWeek
@@ -480,7 +483,7 @@ export async function finalizeRedraftWeek(
    */
   const league = await prisma.league.findFirst({
       where: { id: season.leagueId },
-      select: { bestBallMode: true, leagueVariant: true, leagueType: true, survivorMode: true, platform: true },
+      select: { bestBallMode: true, leagueVariant: true, leagueType: true, survivorMode: true, platform: true, guillotineMode: true, settings: true },
     })
   const bestBall = leagueIsBestBall(league)
 
@@ -490,9 +493,34 @@ export async function finalizeRedraftWeek(
    */
   const starters = new Map<string, { playerId: string; sport: string }>()
   const exileStarterKeys = new Set<string>()
-  for (const p of rosterPlayers) {
-    if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
-    starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
+  /*
+   * 🛑 A DAILY-LINEUP LEAGUE'S STARTERS ARE EVERYONE WHO STARTED ON ANY DAY OF THE WEEK. The daily
+   * scorer (`scoreRosterDaily`) needs a sealed weekly row for each of them, so sealing only whoever
+   * holds a starter slot now left a player started on Tuesday and benched on Wednesday unsealed — and
+   * the matchup never went final. A player dropped this week counts for the days he was here.
+   */
+  const dailySettings =
+    !bestBall && dateWindow && rosterIds.length
+      ? await prisma.league.findUnique?.({ where: { id: season.leagueId }, select: { settings: true } })
+      : null
+  if (dateWindow && dailySettings && isDailyLineupScoringEnabled(dailySettings.settings, sport)) {
+    const days = daysInWindow(dateWindow)
+    const dailyLineups = await loadDailyLineups(prisma, { redraftRosterIds: rosterIds, window: dateWindow })
+    const weekPlayers = await prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: { in: rosterIds }, ...droppedInWindow(dateWindow) },
+      select: { rosterId: true, playerId: true, position: true, sport: true, slotType: true, addedAt: true, droppedAt: true },
+    })
+    for (const p of weekPlayers) {
+      const started = daysOnRoster(p, days).some((day) =>
+        countsTowardScore(dailySlotFor(dailyLineups, p.rosterId, p.playerId, day) ?? weekSlotType(p, weekLineups), false),
+      )
+      if (started) starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
+    }
+  } else {
+    for (const p of rosterPlayers) {
+      if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
+      starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
+    }
   }
   // Closed Exile lineups are separate from the main league roster. They must
   // participate in the same slate and coverage proof before their score can
@@ -637,8 +665,8 @@ export async function finalizeRedraftWeek(
     try {
       await (deps.enqueueTankingScan ?? enqueueTankingScan)(season.leagueId, params.week, season.id)
     } catch (error) {
-      // A queue outage must not undo a completed scoring week; coverage remains unscanned.
-      console.error('[weekFinalizer] Unable to queue tanking scan', { leagueId: season.leagueId, week: params.week, error })
+      // A failed scan must not undo a completed scoring week; it releases its marker and the next run retries.
+      console.error('[weekFinalizer] Tanking scan failed', { leagueId: season.leagueId, week: params.week, error })
     }
     /*
      * The result push, on the same gate: every game final, so a week this function refused (or
@@ -651,6 +679,22 @@ export async function finalizeRedraftWeek(
       await notify({ prisma, seasonId: season.id, week: params.week })
     } catch (error) {
       console.error('[weekFinalizer] Unable to send result push', {
+        leagueId: season.leagueId,
+        week: params.week,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    /*
+     * Settle the league chat's prediction polls on this week's matchups (lib/league-chat/
+     * predictionPolls.ts). Idempotent and never throws; the leaderboard read re-runs it anyway.
+     */
+    try {
+      const resolve =
+        deps.resolvePredictions ??
+        (await import('@/lib/league-chat/predictionPolls')).resolvePredictionPollsForLeague
+      await resolve({ prisma, leagueId: season.leagueId })
+    } catch (error) {
+      console.error('[weekFinalizer] Unable to resolve prediction polls', {
         leagueId: season.leagueId,
         week: params.week,
         error: error instanceof Error ? error.message : String(error),
@@ -793,6 +837,22 @@ export async function finalizeCompletedWeeksForSeason(
     },
     select: { week: true },
   })
+
+  /*
+   * 🛑 PLUS THE OLDEST OPEN WEEK BEHIND THE WINDOW — ONE, NOT ALL. A week that was still refusing when
+   * it aged out of the lookback was never looked at again, and one open week blocks `advance_week` for
+   * the rest of the season. Measured 2026-10-25: the live NHL season's week 1 had refused for coverage
+   * every tick since it ended, and would leave the window on 27 Oct with `currentWeek` still 1. Taking
+   * the single oldest keeps the bound: a long-dead league costs one extra week per tick, never a replay.
+   */
+  if (earliest > 1) {
+    const stale = await prisma.redraftMatchup.findFirst({
+      where: { seasonId: params.seasonId, week: { lt: earliest }, status: { not: 'final' }, awayRosterId: { not: null } },
+      orderBy: { week: 'asc' },
+      select: { week: true },
+    })
+    if (stale) open.push(stale)
+  }
 
   const weeks = [...new Set(open.map((m) => m.week))].sort((a, b) => a - b)
 

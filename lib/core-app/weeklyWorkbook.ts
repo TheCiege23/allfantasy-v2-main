@@ -4,6 +4,9 @@ import { rivalryNarrative } from './weeklyShare'
 import type { WeeklyPlayoffPath } from './weeklyPlayoffPath'
 import { formatPct1, pct1 } from './weeklyPercent'
 import { weeklyCalendarTitle } from './weeklyCalendar'
+import { weeklyShareTextMessages } from './messages/weeklyShareText'
+import { langFromFlag } from './messages/coreLocale'
+import { messagesFor } from '@/lib/i18n/messages'
 
 const xml = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;')
 /** Real editable Excel data and embedded OOXML charts; no invented earlier odds. */
@@ -16,7 +19,7 @@ export function buildWeeklyWorkbook(data: WeeklyBlueprint, path?: WeeklyPlayoffP
     XLSX.utils.book_append_sheet(wb,sheet,name)
     return sheet
   }
-  append('Brief', [['AllFantasy · Your Week'],[es ? 'Resumen' : 'Brief',weeklyBrief(data,es)],['Rivalry',rivalryNarrative(data,es)],['Scope',data.focusLeagueId ? 'League' : 'Portfolio'],['Sports',data.sports.join(', ')],['Disclosure','Estimates are not guarantees. Only imported history and available forecasts are exported.'],['History',path?.historyUnavailable ? 'Snapshot storage unavailable' : 'Saved observed periods; missing periods are not interpolated.']])
+  append('Brief', [['AllFantasy · Your Week'],[messagesFor(weeklyShareTextMessages, langFromFlag(es)).workbookBriefLabel,weeklyBrief(data,es)],['Rivalry',rivalryNarrative(data,es)],['Scope',data.focusLeagueId ? 'League' : 'Portfolio'],['Sports',data.sports.join(', ')],['Disclosure','Estimates are not guarantees. Only imported history and available forecasts are exported.'],['History',path?.historyUnavailable ? 'Snapshot storage unavailable' : 'Saved observed periods; missing periods are not interpolated.']])
   append('Actions', [['League','Priority','Next game (not confirmed lock)','Source'],...data.actions.map(a=>[a.leagueName,weeklyActionText(a,es),a.gameAt ?? '',a.source])])
   const you = path?.league?.you
   const valid = !!you?.modelled && path?.league?.season === path?.season && path?.league?.period === path?.period && Number.isFinite(you.playoffPct) && you.playoffPct >= 0 && you.playoffPct <= 100

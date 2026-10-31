@@ -11,7 +11,7 @@ describe('mobile trade access', () => {
   const tradesTab = read('app/league/[leagueId]/tabs/TradesTab.tsx')
 
   it('pins Trades in the Core phone bottom bar', () => {
-    expect(coreShell).toContain("const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'trades', 'week', 'live']")
+    expect(coreShell).toContain("const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'matchup', 'trades']")
   })
 
   it('keeps the selected league in scope when moving between mobile tabs', () => {

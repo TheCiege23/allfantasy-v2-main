@@ -11,6 +11,7 @@ import { computeOptimalLineup, type LineupSlotSpec } from '@/lib/lineup-optimize
 import { normalizePositionForStarterEligibility } from '@/lib/roster/LineupTemplateValidation'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import type { RosterLineupLists } from '@/lib/league/lineup-swap'
+import { detectPlayIn } from '@/lib/playoff-brackets/playIn'
 
 /* ── Shared formatting ───────────────────────────────────────────────── */
 
@@ -136,9 +137,18 @@ export type PlayoffFormat = {
   startWeek: number | null
   weeks: number | null
   consolation: 'toilet_bowl' | 'consolation' | 'none' | null
+  /** A play-in week (lib/playoff-brackets/playIn.ts): `teams` counts the play-in seeds too. */
+  playIn?: { qualifiers: number; games: Array<[number, number]> } | null
+  /**
+   * Re-pair highest remaining seed vs lowest after each round. True for `reseed_behavior` naming a
+   * reseed or `seeding_rules: 'reseed'` (what the in-app panel saves), the two the playoff runtime
+   * reads; null when neither key was set.
+   */
+  reseed: boolean | null
 }
 
 function finiteInt(v: unknown): number | null {
+  if ((typeof v !== 'number' && typeof v !== 'string') || (typeof v === 'string' && !v.trim())) return null
   const n = Number(v)
   return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : null
 }
@@ -148,8 +158,13 @@ function finiteInt(v: unknown): number | null {
  * `lib/playoff-defaults/PlayoffBracketConfigResolver.ts` does — `settings.playoff_structure.<key>`
  * first, then `settings.<key>` — plus the `League.playoffStartWeek` column. A key the league never
  * set comes back null so the card can say "League default" instead of inventing a number.
+ *
+ * ⚠ THE LOWER BRACKET COMES FROM THE `League.playoffLowerBracket` COLUMN when it is set — the column
+ * the bracket is built from (`getBracketConfigForLeague`) and the one the playoff settings panel
+ * writes. The JSON flags beside it go stale when the commissioner changes the column, so the card
+ * used to name a bracket the league would not play. The flags are read only when the column is unset.
  */
-export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number | null): PlayoffFormat {
+export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number | null, playoffLowerBracket?: string | null): PlayoffFormat {
   const s = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {}
   const structure =
     s.playoff_structure && typeof s.playoff_structure === 'object' ? (s.playoff_structure as Record<string, unknown>) : {}
@@ -162,17 +177,44 @@ export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number |
   }
   const teams = finiteInt(read('playoff_team_count', 'playoffTeams', 'playoff_teams'))
   const byes = finiteInt(read('first_round_byes', 'playoffByes'))
-  const startWeek = finiteInt(playoffStartWeek) ?? finiteInt(read('playoff_start_week', 'playoffStartWeek', 'playoff_week_start'))
+  const columnStart = finiteInt(playoffStartWeek)
+  const settingsStart = finiteInt(read('playoff_start_week', 'playoffStartWeek', 'playoff_week_start'))
+  const startWeek = columnStart != null && columnStart > 0 ? columnStart : settingsStart != null && settingsStart > 0 ? settingsStart : null
   const explicitWeeks = finiteInt(read('playoff_weeks'))
-  const weeks = explicitWeeks ?? (teams != null && byes != null ? playoffRoundsFor(teams) : null)
+  const storedPlan = Array.isArray(s.playoff_bye_plan) ? (s.playoff_bye_plan as unknown[]).map((v) => Number(v)) : null
+  const playIn = teams != null ? detectPlayIn(teams, storedPlan) : null
+  const weeks = explicitWeeks ?? (playIn ? (playoffRoundsFor(playIn.qualifiers) ?? 0) + 1 : teams != null && byes != null ? playoffRoundsFor(teams) : null)
   const toilet = read('toilet_bowl_enabled')
   const consolation = read('consolation_bracket_enabled')
+  const column = String(playoffLowerBracket ?? '').trim().toLowerCase()
+  // Exactly the bracket config's reading of the column: any other set value plays no lower bracket.
+  const fromColumn: PlayoffFormat['consolation'] = !column
+    ? null
+    : column === 'toilet'
+      ? 'toilet_bowl'
+      : column === 'consolation' || column === 'consolation_bracket'
+        ? 'consolation'
+        : 'none'
+  const reseedBehavior = read('reseed_behavior')
+  const seedingRule = read('seeding_rules')
+  const reseed =
+    (typeof reseedBehavior === 'string' && reseedBehavior.toLowerCase().includes('reseed')) ||
+    (typeof seedingRule === 'string' && seedingRule.trim().toLowerCase() === 'reseed')
+      ? true
+      : reseedBehavior != null || seedingRule != null
+        ? false
+        : null
   return {
     teams,
     byes,
     startWeek,
     weeks,
-    consolation: toilet === true ? 'toilet_bowl' : consolation === true ? 'consolation' : toilet === false && consolation === false ? 'none' : null,
+    // Only present for a play-in, so a league without one reads exactly as before.
+    ...(playIn ? { playIn: { qualifiers: playIn.qualifiers, games: playIn.games } } : {}),
+    reseed,
+    consolation:
+      fromColumn ??
+      (toilet === true ? 'toilet_bowl' : consolation === true ? 'consolation' : toilet === false && consolation === false ? 'none' : null),
   }
 }
 

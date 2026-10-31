@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { matchupPulseRefreshMessages } from '@/lib/core-app/messages/matchupPulseRefresh'
 
 /**
  * Keeps "Where you stand" current while games are being played.
@@ -57,9 +58,8 @@ const KICKOFF_TIMER_MAX_MS = 6 * 60 * 60 * 1000
 export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: MatchupPulseRefreshProps) {
   const router = useRouter()
   /* Status words in the reader's language — this sits on both matchup screens (2026-10-03). */
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
-  const buttonLabel = label ?? (es ? 'Actualizar tu posición' : 'Refresh where you stand')
+  const m = useMessages(matchupPulseRefreshMessages)
+  const buttonLabel = label ?? m.refreshLabel
   const [pending, startTransition] = useTransition()
 
   /*
@@ -194,14 +194,14 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
       <span className="af-mp-live-dot" aria-hidden />
       <span className="af-mp-live-text af-num">
         {pending
-          ? es ? 'actualizando' : 'updating'
+          ? m.updating
           : age == null
             ? inPlay
-              ? es ? 'en vivo' : 'live'
-              : es ? 'sin comenzar' : 'not started'
+              ? m.live
+              : m.notStarted
             : age < 60
-              ? es ? `hace ${age} s` : `${age}s ago`
-              : es ? `hace ${Math.floor(age / 60)} min` : `${Math.floor(age / 60)}m ago`}
+              ? m.secondsAgo(age)
+              : m.minutesAgo(Math.floor(age / 60))}
       </span>
       {/*
         The manual control is not decoration. The automatic cadence is two

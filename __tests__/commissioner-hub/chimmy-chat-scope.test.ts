@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  session: vi.fn(), role: vi.fn(), gate: vi.fn(), answer: vi.fn(), network: vi.fn(),
+  session: vi.fn(), role: vi.fn(), gate: vi.fn(), answer: vi.fn(), network: vi.fn(), desk: vi.fn(),
 }))
 vi.mock('next-auth', () => ({ getServerSession: mocks.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -10,6 +10,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: { commissionerNetworkMember: { findFirs
 vi.mock('@/lib/ai-commissioner', () => ({ answerAICommissionerQuestion: mocks.answer }))
 vi.mock('@/lib/subscription/entitlement-middleware', () => ({ requireFeatureEntitlement: mocks.gate }))
 vi.mock('@/lib/tokens/TokenSpendService', () => ({ TokenSpendService: class {} }))
+vi.mock('@/lib/ai-commissioner/commissionerDesk', () => ({ readCommissionerDesk: mocks.desk }))
 
 import { POST } from '@/app/api/leagues/[leagueId]/ai-commissioner/chat/route'
 
@@ -19,6 +20,7 @@ beforeEach(() => {
   mocks.role.mockResolvedValue('co_commissioner')
   mocks.gate.mockResolvedValue({ ok: true, tokenSpend: null, tokenPreview: null })
   mocks.network.mockResolvedValue(null)
+  mocks.desk.mockResolvedValue({ office: null, tasks: [] })
   mocks.answer.mockResolvedValue({ answer: 'Review the trade evidence.', source: 'template', insights: {} })
 })
 
@@ -32,6 +34,22 @@ describe('commissioner Chimmy scope', () => {
     expect(response.status).toBe(403)
     expect(mocks.gate).not.toHaveBeenCalled()
     expect(mocks.answer).not.toHaveBeenCalled()
+    expect(mocks.desk).not.toHaveBeenCalled()
+  })
+
+  it('answers as commissioner: the desk is read for this league and viewer and handed to the answer', async () => {
+    const desk = { office: 'Trade between A and B: under commissioner review.', tasks: [] }
+    mocks.desk.mockResolvedValue(desk)
+    await POST(request(), context)
+    expect(mocks.desk).toHaveBeenCalledWith('league-1', 'user-1')
+    expect(mocks.answer).toHaveBeenCalledWith(expect.objectContaining({ desk }))
+  })
+
+  it('a failed desk read still answers, without it', async () => {
+    mocks.desk.mockRejectedValue(new Error('db down'))
+    const response = await POST(request(), context)
+    expect(response.status).toBe(200)
+    expect(mocks.answer).toHaveBeenCalledWith(expect.objectContaining({ desk: null }))
   })
 
   it('allows read-only guidance for a co-commissioner in the selected league', async () => {

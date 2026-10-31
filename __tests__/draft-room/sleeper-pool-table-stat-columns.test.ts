@@ -30,7 +30,7 @@ describe('sleeper pool table layout — headers by sport', () => {
         'rk',
         'player',
         'adp',
-        'aiAdp',
+        'afAdp',
         'bye',
         'pts',
         'avg',
@@ -106,11 +106,12 @@ describe('cells — missing stats render em dash, not zero', () => {
   })
 })
 
-describe('ADP vs AI ADP remain distinct columns in layout', () => {
-  it('both adp and aiAdp precede stat section', () => {
+describe('market ADP and AF ADP remain distinct columns in layout', () => {
+  it('both adp and afAdp precede stat section, and AI ADP is no longer a column', () => {
     const keys = layoutKeys('NFL')
+    expect(keys).not.toContain('aiAdp')
     const iAdp = keys.indexOf('adp')
-    const iAi = keys.indexOf('aiAdp')
+    const iAi = keys.indexOf('afAdp')
     const iPts = keys.indexOf('pts')
     expect(iAdp).toBeGreaterThan(-1)
     expect(iAi).toBeGreaterThan(-1)
@@ -158,11 +159,11 @@ describe('buildSleeperPoolTableLayout — LEFT @ column', () => {
     expect(buildSleeperPoolTableLayout('NBA', undefined, { leftAtPickLabel: null }).columns.map((c) => c.key)).not.toContain('leftAt')
   })
 
-  it('follows AI ADP, carries the pick label, and widens the table', () => {
+  it('follows AF ADP, carries the pick label, and widens the table', () => {
     const plain = buildSleeperPoolTableLayout('NFL')
     const withLeft = buildSleeperPoolTableLayout('NFL', undefined, { leftAtPickLabel: '4.16' })
     const keys = withLeft.columns.map((c) => c.key)
-    expect(keys.indexOf('leftAt')).toBe(keys.indexOf('aiAdp') + 1)
+    expect(keys.indexOf('leftAt')).toBe(keys.indexOf('afAdp') + 1)
     expect(withLeft.columns.find((c) => c.key === 'leftAt')?.label).toBe('LEFT @ 4.16')
     expect(withLeft.minWidth).toBe(plain.minWidth + 76)
   })

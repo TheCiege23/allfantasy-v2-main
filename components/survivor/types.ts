@@ -2,6 +2,8 @@
  * Frontend types for Survivor league summary (PROMPT 347).
  */
 
+import type { SurvivorAdvice } from '@/lib/survivor/survivorWeekAdvice'
+
 export type SurvivorView =
   | 'tribe-board'
   | 'challenge'
@@ -75,6 +77,10 @@ export interface SurvivorSummaryTribe {
 export interface SurvivorSummaryCouncil {
   id: string
   week: number
+  /** Which of the week's votes this is, on a double-elimination week (see councilWeekLabel). */
+  weekPosition?: { ordinal: number; planned: number } | null
+  /** "Vote 2 of 2 this week" on a double-elimination week; null otherwise. */
+  weekLabel?: string | null
   phase: string
   attendingTribeId: string | null
   voteDeadlineAt: string
@@ -137,6 +143,10 @@ export interface SurvivorSummary {
   myTribeId?: string
   myTribeSource?: string | null
   myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[]
+  /** The league's idol expiry rule, as the holder reads it (survivorIdolExpiry). */
+  idolExpiryText?: string | null
+  /** This week's strategy for the viewer: at risk, idol play, lineup (survivorWeekAdvice). */
+  weekAdvice?: SurvivorAdvice[]
   myActiveEffects?: {
     rewardType: string
     week: number

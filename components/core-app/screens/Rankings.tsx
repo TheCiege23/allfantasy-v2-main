@@ -29,6 +29,7 @@ import { RankingsFilterBar } from '@/components/core-app/rankings/RankingsFilter
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
 import PowerRankingsPanel from '@/components/core-app/rankings/power/PowerRankingsPanel'
 import AfRankingsPage from '@/components/rankings/AfRankingsClient'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Rankings — handoff 14a, rebuilt around three separate scopes.
@@ -309,7 +310,7 @@ function ExplainPanel({ g, data }: { g: GlobalView; data: RankingsData }) {
         </Link>
       </div>
       <p className="af-rk-a">
-        Scored over {s.sample.resultSeasons} league-seasons with results ({s.sample.games.toLocaleString()} games,{' '}
+        Scored over {s.sample.resultSeasons} league-seasons with results ({s.sample.games.toLocaleString(getAppIntlLocale())} games,{' '}
         {s.sample.completedSeasons} completed) across {s.sample.seasons} {s.sample.seasons === 1 ? 'year' : 'years'}
         {data.filtersLabel !== 'All leagues' ? `, filtered to ${data.filtersLabel}` : ''}. Average field{' '}
         {s.field.avgSize == null ? 'unknown' : `${s.field.avgSize} teams`}
@@ -453,7 +454,7 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
             : ' Movement is shown on the unfiltered Overall board only.'}
         </p>
         <p className="af-rk-fresh">
-          <b>Freshness</b> Built from {g.freshness.ledgerRows.toLocaleString()} league-seasons · newest import{' '}
+          <b>Freshness</b> Built from {g.freshness.ledgerRows.toLocaleString(getAppIntlLocale())} league-seasons · newest import{' '}
           {fmtDate(g.freshness.newestImport)} · least recently updated manager {fmtDate(g.freshness.stalestManager)} ·
           calculated {fmtStamp(data.computedAt)}
         </p>
@@ -584,7 +585,7 @@ function YourRankCard({ data }: { data: RankingsData }) {
         </div>
       </div>
       <p className="af-rk-xp">
-        {you.xp.toLocaleString()}
+        {you.xp.toLocaleString(getAppIntlLocale())}
         <small>XP</small>
       </p>
       <div
@@ -600,7 +601,7 @@ function YourRankCard({ data }: { data: RankingsData }) {
       <p className="af-rk-next">
         {you.xpToNext != null && you.nextLevelName ? (
           <>
-            {you.xpToNext.toLocaleString()} XP to <b>{you.nextLevelName}</b>.
+            {you.xpToNext.toLocaleString(getAppIntlLocale())} XP to <b>{you.nextLevelName}</b>.
           </>
         ) : (
           <>
@@ -630,7 +631,7 @@ function XpBreakdownCard({ data }: { data: RankingsData }) {
         <div className="af-rk-xprow" key={r.key}>
           <div className="af-rk-xpline">
             <span className="af-rk-xplabel">{r.detail}</span>
-            <span className="af-rk-xpval">{r.xp.toLocaleString()}</span>
+            <span className="af-rk-xpval">{r.xp.toLocaleString(getAppIntlLocale())}</span>
           </div>
           {r.hasBar ? (
             <div className={`af-rk-xpbar ${XP_BAR_TONE[r.key]}`} aria-hidden="true">
@@ -641,12 +642,12 @@ function XpBreakdownCard({ data }: { data: RankingsData }) {
       ))}
       <div className="af-rk-total">
         <b>Total</b>
-        <span>{data.you.xp.toLocaleString()}</span>
+        <span>{data.you.xp.toLocaleString(getAppIntlLocale())}</span>
       </div>
       {rec && !rec.matches ? (
         <p className="af-rk-note af-rk-note--warn">
-          Your saved total is {rec.stored?.toLocaleString()} XP, written {fmtDate(rec.storedAt)}. The published rules over
-          the leagues on file today give {rec.computed.toLocaleString()}, which is the figure shown here. They will agree
+          Your saved total is {rec.stored?.toLocaleString(getAppIntlLocale())} XP, written {fmtDate(rec.storedAt)}. The published rules over
+          the leagues on file today give {rec.computed.toLocaleString(getAppIntlLocale())}, which is the figure shown here. They will agree
           after your next import recalculates your rank.
         </p>
       ) : null}
@@ -687,7 +688,7 @@ function Ladder({ tiers }: { tiers: LadderTier[] }) {
               <p className="af-rk-rung-subs">{t.subRanks.join(' · ')}</p>
             </div>
             <span className="af-rk-rung-xp">
-              {t.maxXp == null ? `${t.minXp.toLocaleString()}+` : `${t.minXp.toLocaleString()} – ${t.maxXp.toLocaleString()}`}
+              {t.maxXp == null ? `${t.minXp.toLocaleString(getAppIntlLocale())}+` : `${t.minXp.toLocaleString(getAppIntlLocale())} – ${t.maxXp.toLocaleString(getAppIntlLocale())}`}
             </span>
           </li>
         ))}
@@ -744,7 +745,7 @@ function PortfolioBody({ data, p }: { data: RankingsData; p: PortfolioView }) {
               {p.globalRank
                 ? `#${p.globalRank.rank} of ${p.globalRank.of} on the unfiltered community board.`
                 : 'Not on the community board yet.'}{' '}
-              {s.sample.resultSeasons} league-seasons with results, {s.sample.games.toLocaleString()} games,{' '}
+              {s.sample.resultSeasons} league-seasons with results, {s.sample.games.toLocaleString(getAppIntlLocale())} games,{' '}
               {s.sample.leagueSeasons - s.sample.resultSeasons} not yet played or draft-only.
             </p>
             <MovementChips m={p.movement} tracked />
@@ -804,7 +805,7 @@ function PortfolioBody({ data, p }: { data: RankingsData; p: PortfolioView }) {
         <p className="af-rk-eyebrow">
           My league-seasons <TopicTip topic="scoringIndex" />
           <span className="af-rk-spacer" />
-          <span>{p.rows.length.toLocaleString()} rows</span>
+          <span>{p.rows.length.toLocaleString(getAppIntlLocale())} rows</span>
         </p>
         <RankTable
           caption={`My league-seasons — ${data.filtersLabel}`}
@@ -830,7 +831,7 @@ function PortfolioBody({ data, p }: { data: RankingsData; p: PortfolioView }) {
           emptyText={`You have no league-seasons in ${data.filtersLabel}.`}
         />
         <p className="af-rk-fresh">
-          <b>Freshness</b> {p.freshness.ledgerRows.toLocaleString()} league-seasons · newest import{' '}
+          <b>Freshness</b> {p.freshness.ledgerRows.toLocaleString(getAppIntlLocale())} league-seasons · newest import{' '}
           {fmtDate(p.freshness.newestImport)} · rank last saved {fmtDate(p.freshness.rankCalculatedAt)} · calculated{' '}
           {fmtStamp(data.computedAt)}
         </p>
@@ -916,7 +917,7 @@ function LeagueBody({ league }: { league: LeagueView }) {
                   { text: String(r.rank) },
                   { text: `${r.name}${r.isYou ? ' (you)' : ''}` },
                   { text: r.record },
-                  { text: Math.round(r.pointsFor).toLocaleString() },
+                  { text: Math.round(r.pointsFor).toLocaleString(getAppIntlLocale()) },
                   { text: r.average == null ? '—' : r.average.toFixed(1) },
                   { text: m.text, tone: m.tone, title: m.label },
                 ],
@@ -934,7 +935,7 @@ function LeagueBody({ league }: { league: LeagueView }) {
                 key: row.rosterId,
                 label: row.name,
                 value: row.pointsFor,
-                displayValue: Math.round(row.pointsFor).toLocaleString(),
+                displayValue: Math.round(row.pointsFor).toLocaleString(getAppIntlLocale()),
                 tone: row.isYou ? 'good' : 'accent',
               }))}
             />
@@ -1016,7 +1017,7 @@ function ClassBody({ view, signedIn }: { view: ClassView; signedIn: boolean }) {
                   {you.percentile != null ? (
                     <>
                       {' '}
-                      · <b>{topShare(you.percentile)}</b> of {view.established.toLocaleString()} established managers
+                      · <b>{topShare(you.percentile)}</b> of {view.established.toLocaleString(getAppIntlLocale())} established managers
                     </>
                   ) : null}
                 </p>
@@ -1214,8 +1215,8 @@ function ClassBody({ view, signedIn }: { view: ClassView; signedIn: boolean }) {
           }
         />
         <p className="af-rk-fresh">
-          <b>Freshness</b> {view.rated.toLocaleString()} managers rated, on AllFantasy or not ·{' '}
-          {view.established.toLocaleString()} established · calculated {fmtStamp(view.computedAt)}
+          <b>Freshness</b> {view.rated.toLocaleString(getAppIntlLocale())} managers rated, on AllFantasy or not ·{' '}
+          {view.established.toLocaleString(getAppIntlLocale())} established · calculated {fmtStamp(view.computedAt)}
         </p>
         {you ? (
           <YouBar

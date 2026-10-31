@@ -74,7 +74,9 @@ describe('syncCommissionerDerivedLeagueState scopes the mirror to the columns th
 
   it('a playoff team-count save updates the count but keeps the start week the playoffs panel saved', async () => {
     await syncCommissionerDerivedLeagueState('L', ['playoffTeams'])
-    expect(settingsInDb.playoff_structure).toMatchObject({ playoff_team_count: 4, playoff_start_week: 15, first_round_byes: 2 })
+    // A 4-team field has no byes and two rounds: the 6-team bracket's 2 byes / 3 rounds no longer stand
+    // beside it (PlayoffBracketConfigResolver and the standings read them).
+    expect(settingsInDb.playoff_structure).toMatchObject({ playoff_team_count: 4, playoff_start_week: 15, first_round_byes: 0, total_rounds: 2 })
   })
 
   it('a waiver save mirrors only the changed waiver column onto an existing row', async () => {

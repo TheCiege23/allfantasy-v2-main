@@ -75,3 +75,7 @@ describe("fingerprint covers quiet hours and league overrides (2026-10-02)", () 
     expect(fp(a)).toBe(fp(b))
   })
 })
+
+it("preserves global opt-out before any category is customized", () => {
+ expect(resolveNotificationPreferences({globalEnabled:false}).globalEnabled).toBe(false)
+})

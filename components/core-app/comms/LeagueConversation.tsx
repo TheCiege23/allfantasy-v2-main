@@ -263,6 +263,7 @@ export function LeagueConversation({
         if (tribe) {
           const res = await fetch(
             `/api/shared/chat/threads/${encodeURIComponent(room)}/messages?limit=40&source=${encodeURIComponent(tribe)}`,
+            { cache: 'no-store', signal: AbortSignal.timeout(15000) },
           )
           if (!res.ok) throw new Error(`Chat returned ${res.status}`)
           const data = (await res.json()) as { messages?: unknown[] }
@@ -284,6 +285,7 @@ export function LeagueConversation({
         const channelParam = channel ? `&leagueChannel=${encodeURIComponent(channel)}` : ''
         const res = await fetch(
           `/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40${draftParam}${channelParam}${seen ? '&markRead=1' : ''}`,
+          { cache: 'no-store', signal: AbortSignal.timeout(15000) },
         )
         if (!res.ok) throw new Error(`Chat returned ${res.status}`)
         /*
@@ -675,7 +677,8 @@ export function LeagueConversation({
             text: t,
             votes: [] as string[],
           })),
-          closeAt: payload.poll.closeAt.toISOString(),
+          ...(payload.poll.closeAt ? { closeAt: payload.poll.closeAt.toISOString() } : {}),
+          ...(payload.poll.resultsVisibility === 'after_close' ? { resultsVisibility: 'after_close' } : {}),
           allowMultiple: payload.poll.allowMultiple,
           anonymous: Boolean(payload.poll.anonymous),
         }
@@ -986,6 +989,8 @@ export function LeagueConversation({
         commissionerLeagues={commissionerLeagues}
         dropZoneRef={convoRef}
         onTypingChange={signalTyping}
+        /* A prediction poll is posted by the server from the matchup row, then shows up on reload. */
+        predictions={!tribe && leagueId ? { leagueId, onPosted: () => void load(true) } : null}
       />
     </div>
   )

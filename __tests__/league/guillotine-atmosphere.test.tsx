@@ -90,7 +90,7 @@ describe('deriveGuillotineAtmosphere', () => {
 })
 
 describe('isGuillotineAtmosphereLeague', () => {
-  it('guillotine variant or guillotine mode', () => {
+  it('guillotine variant or Guilly mode', () => {
     expect(isGuillotineAtmosphereLeague({ leagueVariant: 'guillotine' })).toBe(true)
     expect(isGuillotineAtmosphereLeague({ leagueVariant: 'redraft', guillotineMode: true })).toBe(true)
   })
@@ -144,7 +144,7 @@ describe('SpecialtyLeagueAtmosphere guillotine variant', () => {
 })
 
 const nativeLeague = (over: Record<string, unknown> = {}) => ({
-  id: 'g1', name: 'Blade Runners', platform: 'allfantasy', sport: 'NFL', season: 2026, teamCount: 16, format: 'Guillotine',
+  id: 'g1', name: 'Blade Runners', platform: 'allfantasy', sport: 'NFL', season: 2026, teamCount: 16, format: 'Guilly',
   scoring: 'PPR', currentWeek: 12, lifecycleState: 'in_season', leagueVariant: 'guillotine', guillotineMode: true, ...over,
 }) as never
 
@@ -178,7 +178,7 @@ describe('native league header banner', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('a guillotine league gets the banner, its status line and mood, and keeps League settings', () => {
+  it('a Guilly league gets the banner, its status line and mood, and keeps League settings', () => {
     const { container } = renderWorkspace({ line: 'Chop week 12 · 9 alive', mood: 'chop_week' })
     const banner = screen.getByTestId('guillotine-league-banner')
     expect(banner.getAttribute('data-format')).toBe('guillotine')
@@ -206,7 +206,7 @@ describe('native league header banner', () => {
 describe('LeagueShell wiring', () => {
   const src = readFileSync(join(process.cwd(), 'app/league/[leagueId]/LeagueShell.tsx'), 'utf8')
 
-  it('enables the guillotine atmosphere only for native guillotine leagues', () => {
+  it('enables the guillotine atmosphere only for native Guilly leagues', () => {
     expect(src).toMatch(/^\s*const guillotineAtmosphereEnabled = nativeWorkspace && isGuillotineAtmosphereLeague\(league\)$/m)
     expect(src).toMatch(/^\s*\) : guillotineAtmosphere \? \($/m)
     expect(src).toMatch(/^\s*<SpecialtyLeagueAtmosphere variant="guillotine" mood=\{guillotineAtmosphere\.mood\} \/>$/m)

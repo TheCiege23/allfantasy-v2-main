@@ -67,6 +67,8 @@ export type SettingsNavTabId =
   | 'c2c_devy'
   | 'c2c_drafts'
   | 'c2c_ai'
+  | 'native_devy'
+  | 'native_c2c'
 
 const BASE_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'league', label: 'General' },
@@ -136,6 +138,15 @@ const C2C_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'c2c_ai', label: '🤖 League Guide' },
 ]
 
+/**
+ * The editors for a Devy or C2C league that plays on AllFantasy. Its settings live in
+ * `DevyLeagueConfig` / `C2CLeagueConfig` (written at league creation), not in the legacy
+ * `DevyLeague` / `C2CLeague` records the DEVY_NAV / C2C_NAV tabs read, so those tabs never showed for
+ * such a league. Prefixed `native_` so the legacy tabs' guards (`isDevySettingsTab`) leave them alone.
+ */
+const NATIVE_DEVY_NAV: { id: SettingsNavTabId; label: string }[] = [{ id: 'native_devy', label: '🎓 Devy Settings' }]
+const NATIVE_C2C_NAV: { id: SettingsNavTabId; label: string }[] = [{ id: 'native_c2c', label: '🏆 C2C Settings' }]
+
 const SURVIVOR_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'survivor_setup', label: '🏝 Survivor Setup' },
   { id: 'survivor_tribes', label: '🔥 Tribes' },
@@ -190,6 +201,8 @@ export function SettingsNav({
   showIdpTabs,
   showDevyTabs,
   showC2cTabs,
+  showNativeDevyTab,
+  showNativeC2cTab,
   className,
 }: {
   activeTab: SettingsNavTabId
@@ -202,6 +215,10 @@ export function SettingsNav({
   showIdpTabs?: boolean
   showDevyTabs?: boolean
   showC2cTabs?: boolean
+  /** A Devy league on AllFantasy: the editable Devy settings (`/api/leagues/[id]/devy/config`). */
+  showNativeDevyTab?: boolean
+  /** A C2C league on AllFantasy: the editable C2C settings (`/api/leagues/[id]/merged-devy-c2c/config`). */
+  showNativeC2cTab?: boolean
   className?: string
 }) {
   const hint = statusLabel(saveStatus, savedLabel)
@@ -212,6 +229,8 @@ export function SettingsNav({
     ...(showIdpTabs ? IDP_NAV : []),
     ...(showDevyTabs ? DEVY_NAV : []),
     ...(showC2cTabs ? C2C_NAV : []),
+    ...(showNativeDevyTab ? NATIVE_DEVY_NAV : []),
+    ...(showNativeC2cTab ? NATIVE_C2C_NAV : []),
   ]
 
   return (

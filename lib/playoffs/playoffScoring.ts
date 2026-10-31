@@ -19,7 +19,7 @@ export type PlayoffPickResult = {
 /**
  * What a correct pick is worth, per round.
  *
- * 🛑 MLB ONLY, AND THE NARROWNESS IS THE POINT. Every pick in every sport used
+ * 🛑 WEIGHTS ARE SPORT-SCOPED. Every pick in every sport used
  * to score a flat 1, so calling the World Series counted the same as calling a
  * Wild Card game. The MLB bracket UI puts 5 / 10 / 18 / 30 on the screen, and a
  * tile that states a number the scorer does not honour is worse than no tile.
@@ -28,13 +28,25 @@ export type PlayoffPickResult = {
  * are live with 123 picks already made; weighting them now would silently
  * restate standings under people who are mid-competition. A sport joins this
  * map when someone decides its existing pools can be re-scored — never as a
- * side effect of adding a bracket.
+ * side effect of adding a bracket. CFP and NBA Cup start with explicit
+ * single-game round weights.
  *
  * ⚠ AND AN UNKNOWN ROUND SCORES 1, NOT 0. A round key that is not listed means
  * this table is out of date, and the honest failure there is "scored like it
  * always was", not "your correct pick was worth nothing".
  */
 const ROUND_POINTS_BY_SPORT: Partial<Record<PlayoffSport, Partial<Record<PlayoffRoundKey, number>>>> = {
+  ncaaf: {
+    cfp_first_round: 1,
+    cfp_quarterfinals: 2,
+    cfp_semifinals: 4,
+    cfp_championship: 8,
+  },
+  nba_cup: {
+    cup_quarterfinals: 1,
+    cup_semifinals: 2,
+    cup_championship: 4,
+  },
   mlb: {
     wild_card: 5,
     division_series: 10,

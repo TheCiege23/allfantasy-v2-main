@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { HighlightAction } from '@/lib/analytics/highlights'
 import type { XPost } from '@/lib/highlights/x-types'
+import { messagesFor } from '@/lib/i18n/messages'
+import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
+import { langFromFlag } from '@/lib/core-app/messages/coreLocale'
 
 type Widgets = { createTweet(id: string, target: HTMLElement, options: Record<string, unknown>): Promise<HTMLElement | undefined> }
 let loader: Promise<Widgets> | null = null
@@ -29,6 +32,7 @@ function loadWidgets(): Promise<Widgets> {
 }
 
 export default function XPostEmbed({ post, es = false, onEvent }: { post: XPost; es?: boolean; onEvent?: (action: HighlightAction, post: XPost) => void }) {
+  const m = messagesFor(coreWidgetsMessages, langFromFlag(es))
   const [requested, setRequested] = useState(false)
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const target = useRef<HTMLDivElement>(null)
@@ -55,13 +59,13 @@ export default function XPostEmbed({ post, es = false, onEvent }: { post: XPost;
   }, [requested, post.id])
   const url = 'https://x.com/' + encodeURIComponent(post.account) + '/status/' + post.id
   return <div className="af-x-embed">
-    {!requested ? <button type="button" onClick={() => { onEvent?.('load_requested', post); setRequested(true) }}>{es ? 'Cargar publicación de X' : 'Load X post'}</button> : null}
+    {!requested ? <button type="button" onClick={() => { onEvent?.('load_requested', post); setRequested(true) }}>{m.xPostLoad}</button> : null}
     <div ref={target} />
     <div role="status" aria-live="polite">
-      {state === 'loading' ? <p>{es ? 'Cargando publicación…' : 'Loading post…'}</p> : null}
-      {state === 'error' ? <p>{es ? 'Esta publicación no se puede mostrar aquí.' : 'This post could not be displayed here.'}</p> : null}
+      {state === 'loading' ? <p>{m.xPostLoading}</p> : null}
+      {state === 'error' ? <p>{m.xPostError}</p> : null}
     </div>
-    <a href={url} onClick={() => onEvent?.('source_open', post)} target="_blank" rel="noopener noreferrer">{es ? 'Ver en X' : 'Watch on X'} ↗</a>
+    <a href={url} onClick={() => onEvent?.('source_open', post)} target="_blank" rel="noopener noreferrer">{m.xPostWatch} ↗</a>
   </div>
 }
 

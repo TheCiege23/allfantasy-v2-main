@@ -1,3 +1,5 @@
+import { parseRookieAuctionSettings, ROOKIE_AUCTION_SETTINGS_KEY } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 /**
  * GET: Effective dynasty settings + presets (roster, scoring, playoff).
  * PUT: Update dynasty config and optional League.settings (roster_format_type, scoring_format_type, playoff, regular_season_weeks).
@@ -32,8 +34,34 @@ import {
   isDynastyFootballSport,
 } from '@/lib/dynasty-core/constants'
 import { TAXI_ELIGIBILITY_YEARS_OPTIONS, TAXI_LOCK_BEHAVIOR_OPTIONS } from '@/lib/taxi/constants'
+import {
+  ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY,
+  normalizeAutoStartDays,
+  normalizeCustomOpenDate,
+  readRookieDraftCalendarSettings,
+} from '@/lib/dynasty-core/rookieDraftCalendar'
+import { effectiveDynastyRules, taxiRulesFromEffective } from '@/lib/league-rules-explainer/snapshot'
+import { getEffectiveTaxiSettings } from '@/lib/taxi/TaxiSettingsService'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
+import { NATIVE_PICK_YEARS_MAX, NATIVE_PICK_YEARS_MIN } from '@/lib/league-trade-engine/nativePickYears'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
+import { getDynastySportPresets } from '@/lib/dynasty-core/DynastySportPresets'
+import { applyDynastySportPresetToLeague, isLeagueBeforeDraft } from '@/lib/dynasty-core/applyDynastySportPreset'
+import {
+  PROSPECT_STASH_UNAVAILABLE_CODE,
+  PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+  isTaxiIncreaseRefused,
+  sportSupportsProspectStash,
+} from '@/lib/league-creation/prospectStashPolicy'
 
 export const dynamic = 'force-dynamic'
+
+/** The taxi fields the rules popup shows (lib/league-rules-explainer/load.ts). */
+const TAXI_CARD_FIELDS = ['taxiSlots', 'taxiEligibilityYears', 'taxiDeadlineWeek'] as const
+
+function isPickYearsValue(v: unknown): boolean {
+  return typeof v === 'number' && Number.isInteger(v) && v >= NATIVE_PICK_YEARS_MIN && v <= NATIVE_PICK_YEARS_MAX
+}
 
 export async function GET(
   _req: NextRequest,
@@ -51,7 +79,7 @@ export async function GET(
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, isDynasty: true, leagueVariant: true },
+    select: { sport: true, isDynasty: true, leagueVariant: true, status: true, lifecycleState: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
@@ -71,9 +99,7 @@ export async function GET(
 
   const rookiePickOrderMethods = [
     ...ROOKIE_PICK_ORDER_METHODS,
-    ...(lotteryEligibility.eligible
-      ? [{ value: 'weighted_lottery', label: '🎱 Weighted Lottery (NBA-style, year 2+)' }]
-      : []),
+    ...(isDynasty ? [{ value: 'weighted_lottery', label: 'Weighted lottery (future rookie drafts)' }] : []),
   ]
 
   return NextResponse.json({
@@ -84,6 +110,12 @@ export async function GET(
       roster: footballFormats ? getDynastyRosterPresets() : [],
       scoring: footballFormats ? getDynastyScoringPresets() : [],
       playoff: getDynastyPlayoffPresets(sport),
+      // NBA/NHL/MLB roster + points-scoring formats (lib/dynasty-core/DynastySportPresets). Empty otherwise.
+      sportFormats: getDynastySportPresets(sport),
+    },
+    sportFormatPreset: {
+      current: ((league.settings as Record<string, unknown> | null)?.dynasty_sport_preset_id as string | undefined) ?? null,
+      editable: isDynasty && isLeagueBeforeDraft(league),
     },
     constants: {
       supportedTeamSizes: [...DYNASTY_SUPPORTED_TEAM_SIZES],
@@ -91,6 +123,8 @@ export async function GET(
       vetoRecommendationCopy: VETO_RECOMMENDATION_COPY,
       taxiEligibilityYearsOptions: [...TAXI_ELIGIBILITY_YEARS_OPTIONS],
       taxiLockBehaviorOptions: [...TAXI_LOCK_BEHAVIOR_OPTIONS],
+      // NHL / MLB: taxi may be kept or lowered, never grown (PUT refuses an increase).
+      taxiSlotsMax: sportSupportsProspectStash(sport) ? 20 : (effective?.taxiSlots ?? 4),
     },
     draftOrderAuditLog: auditLog,
     isDynasty,
@@ -144,15 +178,76 @@ export async function PUT(
     }
   }
 
+  // A dynasty format preset (NBA/NHL/MLB) is applied on its own, before the draft only.
+  if (body.sportPresetId != null) {
+    const applied = await applyDynastySportPresetToLeague(leagueId, String(body.sportPresetId), userId)
+    if (!applied.ok) return NextResponse.json({ error: applied.error }, { status: applied.status })
+    return NextResponse.json({ ok: true, sportPresetId: applied.presetId, slots: applied.slots })
+  }
+
   const priorDynasty = await prisma.dynastyLeagueConfig.findUnique({ where: { leagueId } })
 
+  // NHL / MLB have no prospect pool: a commissioner may keep or lower an existing taxi squad, never
+  // grow one. The baseline with no config row is 4, the value GET reports for such a league.
+  if (body.taxiSlots != null && isTaxiIncreaseRefused(String(leagueSport), Number(body.taxiSlots), priorDynasty?.taxiSlots ?? 4)) {
+    return NextResponse.json(
+      { error: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE },
+      { status: 400 },
+    )
+  }
+
+  // Seasons ahead a pick can be traded: the trade engine clamps to 1-5, so anything else is refused
+  // rather than stored as a number the league never runs.
+  if (body.futurePicksYearsOut != null && !isPickYearsValue(body.futurePicksYearsOut)) {
+    return NextResponse.json(
+      { error: `Future picks can be traded ${NATIVE_PICK_YEARS_MIN} to ${NATIVE_PICK_YEARS_MAX} seasons ahead.` },
+      { status: 400 },
+    )
+  }
+
   const settingsPatch: Record<string, unknown> = {}
+  if (body.rookieAuction !== undefined) {
+    const parsed = parseRookieAuctionSettings(body.rookieAuction)
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+    settingsPatch[ROOKIE_AUCTION_SETTINGS_KEY] = parsed.value
+  }
   if (body.roster_format_type != null) settingsPatch.roster_format_type = String(body.roster_format_type)
   if (body.scoring_format_type != null) settingsPatch.scoring_format_type = String(body.scoring_format_type)
   if (body.playoff_team_count != null) settingsPatch.playoff_team_count = Number(body.playoff_team_count)
   if (body.regular_season_weeks != null) settingsPatch.regular_season_weeks = Number(body.regular_season_weeks)
   if (body.playoff_structure != null && typeof body.playoff_structure === 'object')
     settingsPatch.playoff_structure = body.playoff_structure
+
+  // Rookie-draft calendar: auto-open on the sport's window, and an optional custom open date.
+  if (body.rookieDraftAutoOpen !== undefined || body.rookieDraftCustomOpenDate !== undefined || body.rookieDraftAutoStartDays !== undefined) {
+    // Only the keys sent are written, so an unset auto-open keeps following the platform default.
+    const stored = ((league.settings as Record<string, unknown> | null)?.[ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY] ?? {}) as Record<string, unknown>
+    const calendar: Record<string, unknown> = { ...(typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) }
+    if (body.rookieDraftAutoOpen !== undefined) {
+      if (typeof body.rookieDraftAutoOpen !== 'boolean') {
+        return NextResponse.json({ error: 'rookieDraftAutoOpen must be true or false.' }, { status: 400 })
+      }
+      calendar.autoOpen = body.rookieDraftAutoOpen
+    }
+    if (body.rookieDraftCustomOpenDate !== undefined) {
+      const raw = body.rookieDraftCustomOpenDate
+      const date = raw === null || raw === '' ? null : normalizeCustomOpenDate(raw)
+      if (raw !== null && raw !== '' && !date) {
+        return NextResponse.json({ error: 'rookieDraftCustomOpenDate must be a date (YYYY-MM-DD) or empty.' }, { status: 400 })
+      }
+      calendar.customOpenDate = date
+    }
+    // Start an automatically opened draft by itself N days later (null: the commissioner presses Start).
+    if (body.rookieDraftAutoStartDays !== undefined) {
+      const raw = body.rookieDraftAutoStartDays
+      const days = raw === null || raw === 0 ? null : normalizeAutoStartDays(raw)
+      if (raw !== null && raw !== 0 && days == null) {
+        return NextResponse.json({ error: 'rookieDraftAutoStartDays must be 3, 7, 14 or empty.' }, { status: 400 })
+      }
+      calendar.autoStartDays = days
+    }
+    settingsPatch[ROOKIE_DRAFT_CALENDAR_SETTINGS_KEY] = calendar
+  }
 
   // When only playoff_team_count is updated, merge matching dynasty preset (first_round_byes, playoff_weeks) so bracket stays consistent
   const newCount = body.playoff_team_count != null ? Number(body.playoff_team_count) : null
@@ -202,19 +297,40 @@ export async function PUT(
     const method = String(body.rookiePickOrderMethod)
     if (method === 'weighted_lottery') {
       const el = await checkDynastyLotteryEligibility(leagueId)
-      if (!el.eligible) {
+      if (!el.eligible && !el.isStartupLeague) {
         return NextResponse.json({ error: el.reason }, { status: 400 })
       }
       await setDraftOrderModeAndLotteryConfig(leagueId, {
-        draftOrderMode: 'weighted_lottery',
+        ...(el.eligible ? { draftOrderMode: 'weighted_lottery' as const } : {}),
         lotteryConfig: { enabled: true },
       })
-    } else if (priorDynasty?.rookiePickOrderMethod === 'weighted_lottery' && method !== 'weighted_lottery') {
+    } else if (isWeightedRookieLottery(priorDynasty?.rookiePickOrderMethod) && method !== 'weighted_lottery') {
       await setDraftOrderModeAndLotteryConfig(leagueId, { draftOrderMode: 'randomize' })
     }
   }
 
+  // The taxi squad members read comes from the effective settings (Devy / C2C override the slot
+  // count), so it is read before and after rather than diffed from the config row. Only when the save
+  // sends a taxi field the popup shows; a failed read drops those lines from the card, never the save.
+  const touchesTaxi = TAXI_CARD_FIELDS.some((k) => dynastyPayload[k] !== undefined)
+  const taxiBefore = touchesTaxi ? await getEffectiveTaxiSettings(leagueId).catch(() => null) : null
+
   const config = await upsertDynastyConfig(leagueId, dynastyPayload)
+
+  const taxiAfter = taxiBefore ? await getEffectiveTaxiSettings(leagueId).catch(() => null) : null
+  const taxiChange = taxiBefore && taxiAfter ? [taxiRulesFromEffective(taxiBefore), taxiRulesFromEffective(taxiAfter)] : [{}, {}]
+
+  // The league home's "What changed" card (lib/league-rules-explainer): the dynasty rules members read.
+  const settingsAfter = { ...((league.settings as Record<string, unknown>) ?? {}), ...settingsPatch }
+  await publishRuleChangesEvent({
+    leagueId,
+    actorUserId: userId,
+    section: 'dynasty',
+    changes: diffRuleSnapshots(
+      { ...effectiveDynastyRules(priorDynasty, league.settings), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(league.settings).autoStartDays, ...taxiChange[0] },
+      { ...effectiveDynastyRules(config, settingsAfter), rookieDraftAutoStartDays: readRookieDraftCalendarSettings(settingsAfter).autoStartDays, ...taxiChange[1] },
+    ),
+  })
 
   return NextResponse.json({ ok: true, config })
 }

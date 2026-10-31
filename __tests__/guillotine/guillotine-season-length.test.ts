@@ -26,7 +26,7 @@ const nbaLeague = {
   playoffTeams: 4, playoffWeeksPerRound: 1, dynastyConfig: null, bbContestId: null, bestBallMode: false, settings: {},
 }
 
-describe('season length for a native guillotine league', () => {
+describe('season length for a native Guilly league', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     m.redraftSeason.findFirst.mockResolvedValue(null)

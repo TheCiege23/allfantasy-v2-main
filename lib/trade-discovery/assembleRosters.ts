@@ -5,6 +5,7 @@
  * never fabricated).
  */
 
+import { tradeParticipantRosterIds } from '@/lib/redraft/tradeParticipants'
 import { prisma } from '@/lib/prisma'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import { normalizedPlayerValue } from '@/lib/trade-value/valueEngine'
@@ -124,12 +125,12 @@ export async function assembleDiscoveryLeague(leagueId: string): Promise<Assembl
   const cutoff = new Date(Date.now() - RECENT_DAYS * 24 * 60 * 60 * 1000)
   const recent = await prisma.redraftTradeProposal.findMany({
     where: { seasonId: season.id, createdAt: { gte: cutoff } },
-    select: { proposerRosterId: true, receiverRosterId: true },
+    select: { proposerRosterId: true, receiverRosterId: true, additionalRosterIds: true },
   })
   const recentByRoster = new Map<string, number>()
+  // Every team in the trade counts, so a multi-team trade's third and fourth teams are not left out.
   for (const t of recent) {
-    recentByRoster.set(t.proposerRosterId, (recentByRoster.get(t.proposerRosterId) ?? 0) + 1)
-    recentByRoster.set(t.receiverRosterId, (recentByRoster.get(t.receiverRosterId) ?? 0) + 1)
+    for (const id of tradeParticipantRosterIds(t)) recentByRoster.set(id, (recentByRoster.get(id) ?? 0) + 1)
   }
 
   const ownerByRoster = new Map<string, string>()

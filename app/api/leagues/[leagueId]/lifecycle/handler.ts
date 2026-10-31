@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import {
   getAllowedActions,
   loadLeagueForLifecycle,
+  loadLifecycleLeagueContext,
   transitionLeagueState,
   normalizeLifecycleState,
 } from '@/server/services/leagueLifecycleService'
@@ -38,11 +39,15 @@ export async function GET(
   const row = await loadLeagueForLifecycle(params.leagueId)
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const snap = getAllowedActions({
-    lifecycleState: row.lifecycleState,
-    locked: row.locked,
-    emergencyPaused: row.emergencyPaused,
-  })
+  // A dynasty league's offseason player actions depend on the league, not only its phase.
+  const snap = getAllowedActions(
+    {
+      lifecycleState: row.lifecycleState,
+      locked: row.locked,
+      emergencyPaused: row.emergencyPaused,
+    },
+    await loadLifecycleLeagueContext(params.leagueId, row),
+  )
 
   const [elevated, head] = await Promise.all([
     isElevatedCommissioner(params.leagueId, userId),

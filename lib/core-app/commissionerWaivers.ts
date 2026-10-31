@@ -3,7 +3,9 @@ import { prisma } from '@/lib/prisma'
 import { ourIdOrSleeperIdWhere, playerRowKeys } from '@/lib/player-identity/externalIdNamespace'
 import { computeNextWaiverRunAtUtc } from '@/lib/waiver-wire/next-waiver-run'
 import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from '@/lib/waiver-wire/waiver-outcome-labels'
-import { pickLanguage } from './commissioner/pickLanguage'
+import { commissionerWaiversMessages } from '@/lib/core-app/messages/commissionerWaivers'
+import { messagesFor } from '@/lib/i18n/messages'
+import { importedWaiverSettings } from './waiverRowMeta'
 
 /**
  * Waiver Oversight — the section added to the Commissioner Hub in the 2026-09-13
@@ -85,38 +87,16 @@ export const FAAB_BAD_SHARE = 0.2
 const STUCK_AFTER_MS = 30 * 60 * 1000
 const RUN_ROW_CAP = 12
 
-const WAIVER_TYPE_LABEL: Record<string, string> = {
-  faab: 'FAAB',
-  rolling: 'Rolling priority',
-  reverse_standings: 'Reverse standings priority',
-  fcfs: 'First come, first served',
-  standard: 'Standard priority',
-  off: 'No waivers',
-}
-const WAIVER_TYPE_LABEL_ES: Record<string, string> = {
-  faab: 'FAAB',
-  rolling: 'Prioridad rotativa',
-  reverse_standings: 'Prioridad por clasificación inversa',
-  fcfs: 'Por orden de llegada',
-  standard: 'Prioridad estándar',
-  off: 'Sin agentes libres en espera',
-}
-
-/*
- * The shared outcome labels (`waiver-outcome-labels`) serve the waivers history, notifications and
- * exports in English. The hub's panel words the same codes in the reader's language here, so that
- * module's other callers are untouched. A code with no entry keeps the shared English label.
- */
-const OUTCOME_LABEL_ES: Record<string, string> = {
-  won: 'Concedida',
-  lost_priority: 'Perdida: prioridad',
-  lost_tiebreaker: 'Perdida: desempate',
-  insufficient_faab: 'No concedida: FAAB',
-  invalid_due_to_roster: 'Bloqueada: plantilla',
-  player_no_longer_available: 'No concedida: jugador ya fichado',
-  blocked_by_lineup_lock: 'Bloqueada: alineación cerrada',
-  blocked_by_ir_taxi_devy_violation: 'Bloqueada: IR / taxi / devy',
-  failed: 'No concedida',
+/** The waiver-type labels, in the reader's language (catalog `waiverType*`). */
+function waiverTypeLabels(m: (typeof commissionerWaiversMessages)['en']): Record<string, string> {
+  return {
+    faab: m.waiverTypeFaab,
+    rolling: m.waiverTypeRolling,
+    reverse_standings: m.waiverTypeReverseStandings,
+    fcfs: m.waiverTypeFcfs,
+    standard: m.waiverTypeStandard,
+    off: m.waiverTypeOff,
+  }
 }
 
 function initialsOf(name: string): string {
@@ -144,17 +124,16 @@ export function classifyResult(
   fallbackMessage: string | null,
   language = 'en',
 ): { result: WaiverRunResult; label: string } {
-  const L = pickLanguage(language)
+  const m = messagesFor(commissionerWaiversMessages, language)
   // In Spanish a known code gets its own label; the claim's free-text message is English server prose.
-  const outcome = (c: string | undefined) =>
-    language === 'es' && c && OUTCOME_LABEL_ES[c] ? OUTCOME_LABEL_ES[c]! : formatWaiverOutcomeLabel(c, fallbackMessage)
-  if (resultType === 'awarded') return { result: 'won', label: L('Won', 'Ganada') }
+  const outcome = (c: string | undefined) => m.outcomeLabel(c ?? '', formatWaiverOutcomeLabel(c, fallbackMessage))
+  if (resultType === 'awarded') return { result: 'won', label: m.resultWon }
   const code = outcomeCodeFromMetadata(metadata)
   const meta = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : {}
   if (code === 'lost_priority' || code === 'lost_tiebreaker' || (code === 'player_no_longer_available' && typeof meta.competingRosterId === 'string')) {
-    return { result: 'outbid', label: L('Outbid', 'Superada') }
+    return { result: 'outbid', label: m.resultOutbid }
   }
-  if (code === 'insufficient_faab') return { result: 'short', label: L('Short on FAAB', 'Sin FAAB suficiente') }
+  if (code === 'insufficient_faab') return { result: 'short', label: m.resultShort }
   if (code === 'invalid_due_to_roster' || (code ?? '').startsWith('blocked_')) {
     return { result: 'blocked', label: outcome(code) }
   }
@@ -163,7 +142,7 @@ export function classifyResult(
 
 function formatRunSlot(iso: string, language = 'en'): string {
   const d = new Date(iso)
-  const parts = new Intl.DateTimeFormat(language === 'es' ? 'es-US' : 'en-US', {
+  const parts = new Intl.DateTimeFormat(messagesFor(commissionerWaiversMessages, language).runSlotLocale, {
     weekday: 'short',
     hour: 'numeric',
     minute: '2-digit',
@@ -182,12 +161,12 @@ export async function getCommissionerWaiverOversight(input: {
 }): Promise<WaiverOversight> {
   const { leagueId, role } = input
   const language = input.language ?? 'en'
-  const L = pickLanguage(language)
-  const A_MANAGER = L('A manager', 'Un mánager')
+  const m = messagesFor(commissionerWaiversMessages, language)
+  const A_MANAGER = m.aManager
   const now = input.now ?? new Date()
   const platform = String(input.platform ?? '').toLowerCase()
 
-  const [settings, lastRun, pendingCount] = await Promise.all([
+  const [storedSettings, lastRun, pendingCount] = await Promise.all([
     prisma.leagueWaiverSettings.findUnique({
       where: { leagueId },
       select: {
@@ -223,19 +202,16 @@ export async function getCommissionerWaiverOversight(input: {
     prisma.waiverClaim.count({ where: { leagueId, status: 'pending' } }),
   ])
 
+  /* A Fantrax row is AllFantasy's bootstrap defaults, never the league's rules (waiverRowMeta.ts). */
+  const settings = importedWaiverSettings(storedSettings, platform)
+
   if (!settings && !lastRun && pendingCount === 0) {
     const imported = platform && platform !== 'manual' && platform !== 'allfantasy'
     return {
       available: false,
       reason: imported
-        ? L(
-            `This league's waivers run on ${platform.charAt(0).toUpperCase()}${platform.slice(1)}. Bids and claim results aren't shared with AllFantasy, so there is nothing to oversee here — manage them on the platform.`,
-            `Los reclamos de esta liga se procesan en ${platform.charAt(0).toUpperCase()}${platform.slice(1)}. Las ofertas y los resultados de los reclamos no se comparten con AllFantasy, así que aquí no hay nada que supervisar: gestiónalos en la plataforma.`,
-          )
-        : L(
-            'No waiver settings or runs yet. Once the first run processes, budgets and results appear here.',
-            'Aún no hay configuración ni procesamientos de reclamos. Cuando se procese el primero, aquí aparecerán los presupuestos y los resultados.',
-          ),
+        ? m.unavailableImported(`${platform.charAt(0).toUpperCase()}${platform.slice(1)}`)
+        : m.unavailableNoRunsYet,
     }
   }
 
@@ -267,9 +243,9 @@ export async function getCommissionerWaiverOversight(input: {
   let budgets: WaiverBudgetRow[] = []
   let budgetsReason: string | null = null
   if (waiverType !== 'faab') {
-    budgetsReason = L('This league does not use FAAB, so there are no budgets to track.', 'Esta liga no usa FAAB, así que no hay presupuestos que seguir.')
+    budgetsReason = m.budgetsNotFaab
   } else if (faabBudget == null || faabBudget <= 0) {
-    budgetsReason = L('No season FAAB budget is set for this league.', 'Esta liga no tiene un presupuesto FAAB de temporada.')
+    budgetsReason = m.budgetsNoSeasonBudget
   } else {
     budgets = rosters
       .filter((r) => typeof r.faabRemaining === 'number')
@@ -287,7 +263,7 @@ export async function getCommissionerWaiverOversight(input: {
         }
       })
       .sort((a, b) => b.remaining - a.remaining)
-    if (budgets.length === 0) budgetsReason = L('No roster has a FAAB balance recorded yet.', 'Ninguna plantilla tiene todavía un saldo de FAAB registrado.')
+    if (budgets.length === 0) budgetsReason = m.budgetsNoBalances
   }
 
   let runOut: Extract<WaiverOversight, { available: true }>['lastRun'] = null
@@ -322,7 +298,7 @@ export async function getCommissionerWaiverOversight(input: {
         const { result, label } = classifyResult(r.resultType, r.metadata, r.claim?.resultMessage ?? null, language)
         return {
           id: r.id,
-          player: playerName.get(r.addPlayerId) ?? L('Unrecognised player', 'Jugador no reconocido'),
+          player: playerName.get(r.addPlayerId) ?? m.unrecognisedPlayer,
           manager: handleByRoster.get(r.rosterId) ?? A_MANAGER,
           bid: r.claim?.faabBid ?? null,
           result,
@@ -344,7 +320,7 @@ export async function getCommissionerWaiverOversight(input: {
   return {
     available: true,
     leagueId,
-    waiverTypeLabel: (language === 'es' ? WAIVER_TYPE_LABEL_ES : WAIVER_TYPE_LABEL)[waiverType] ?? (waiverType || L('Waivers', 'Agentes libres')),
+    waiverTypeLabel: waiverTypeLabels(m)[waiverType] ?? (waiverType || m.waiverTypeFallback),
     faabBudget,
     budgets,
     budgetsReason,

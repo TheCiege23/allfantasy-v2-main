@@ -19,7 +19,10 @@ export function readExileRoster(value: unknown): ExileWeeklyRoster | null {
 }
 
 export function isExileAnchor(sport: string, position: string): boolean {
-  return position.toUpperCase().split(/[\s,;/|-]+/).includes(keyPositionForSport(sport).code)
+  const code = keyPositionForSport(sport).code
+  // An MLB anchor is any pitcher, however the feed labels the role.
+  const codes = sport.toUpperCase() === 'MLB' ? [code, 'SP', 'RP'] : [code]
+  return position.toUpperCase().split(/[\s,;/|-]+/).some(pos => codes.includes(pos))
 }
 
 /** Shared pure rules, applied while the league transaction lock is held. */

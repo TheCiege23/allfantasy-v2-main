@@ -185,7 +185,7 @@ export function GuillotineSetupStep({ state, setState }: LeagueCreateStepProps) 
               onChange={(e) => setState((c) => ({ ...c, guillotineTradesEnabled: e.target.checked }))}
               className="rounded border-white/20"
             />
-            Enable trades (OFF by default for guillotine)
+            Enable trades (OFF by default for Guilly)
           </label>
         </div>
       </div>

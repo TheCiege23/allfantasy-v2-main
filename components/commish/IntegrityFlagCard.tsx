@@ -25,15 +25,15 @@
  * than passed in, so a caller cannot accidentally promote one.
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 // ── Contract mirrors ────────────────────────────────────────────────────────
 type TradeAsset = { name: string; position: string; estimatedValue: number }
 
 export type CollusionEvidenceLike = {
   tradeTransactionId?: string
-  team1?: { rosterId?: string; teamName?: string; wins?: number; losses?: number }
-  team2?: { rosterId?: string; teamName?: string; wins?: number; losses?: number }
+  team1?: { rosterId?: string; teamName?: string; managerName?: string; wins?: number; losses?: number }
+  team2?: { rosterId?: string; teamName?: string; managerName?: string; wins?: number; losses?: number }
   assetsTeam1Gave?: TradeAsset[]
   assetsTeam2Gave?: TradeAsset[]
   team1TotalValue?: number
@@ -77,6 +77,8 @@ export type IntegrityFlagRow = {
   aiConfidence: number
   tradeTransactionId: string | null
   affectedTeamNames?: string[]
+  /** Resolved by the GET handler (lib/integrity/flagManagers.ts), so older flags carry it too. */
+  affectedManagers?: { rosterId: string; managerName: string; teamName: string | null }[]
   createdAt: string
   evidenceJson: unknown
 }
@@ -118,6 +120,32 @@ function assetLine(assets: TradeAsset[] | undefined): string | null {
   return names.length > 0 ? names.join(', ') : null
 }
 
+type Manager = { name: string; team: string | null }
+
+/**
+ * Who is behind one side of the flag. Prefers the handler's lookup, then the name the scan stored in
+ * the evidence. A team name that merely repeats the manager's name is dropped so it is not said twice.
+ */
+function managerFor(
+  flag: IntegrityFlagRow,
+  side: { rosterId?: string; teamName?: string; managerName?: string } | undefined,
+  index: number,
+): Manager | null {
+  const managers = Array.isArray(flag.affectedManagers) ? flag.affectedManagers : []
+  const hit = side?.rosterId ? managers.find((m) => m.rosterId === side.rosterId) : managers[index]
+  const name = (hit?.managerName ?? side?.managerName ?? '').trim()
+  const team = (hit?.teamName ?? side?.teamName ?? '').trim()
+  if (!name && !team) return null
+  if (!name) return { name: team, team: null }
+  return { name, team: team && team.toLowerCase() !== name.toLowerCase() ? team : null }
+}
+
+function managerLabel(m: Manager): string {
+  return m.team ? `${m.name} (${m.team})` : m.name
+}
+
+const LEVELS = ['low', 'medium', 'high'] as const
+
 function fmtValue(n: unknown): string | null {
   return typeof n === 'number' && Number.isFinite(n) ? n.toFixed(1) : null
 }
@@ -129,9 +157,9 @@ function fmtValue(n: unknown): string | null {
  * assets — a one-sided render would read as "this manager gave nothing away",
  * which is a much stronger accusation than "we could not price one side".
  */
-function TradeSides({ ev }: { ev: CollusionEvidenceLike }) {
-  const aName = ev.team1?.teamName?.trim()
-  const bName = ev.team2?.teamName?.trim()
+function TradeSides({ ev, a, b }: { ev: CollusionEvidenceLike; a: Manager | null; b: Manager | null }) {
+  const aName = a ? managerLabel(a) : null
+  const bName = b ? managerLabel(b) : null
   const aAssets = assetLine(ev.assetsTeam1Gave)
   const bAssets = assetLine(ev.assetsTeam2Gave)
   if (!aAssets || !bAssets) return null
@@ -207,17 +235,27 @@ export function IntegrityFlagCard({
   onDismiss,
   onEscalate,
   onMessage,
+  onSetSeverity,
   busy = false,
+  highlighted = false,
 }: {
   flag: IntegrityFlagRow
   onDismiss?: (flag: IntegrityFlagRow) => void
   onEscalate?: (flag: IntegrityFlagRow) => void
   onMessage?: (flag: IntegrityFlagRow) => void
+  onSetSeverity?: (flag: IntegrityFlagRow, severity: 'low' | 'medium' | 'high') => void
   busy?: boolean
+  /** The flag an alert linked to — outlined so it is found at a glance. */
+  highlighted?: boolean
 }) {
   const severity = normalizeSeverity(flag.severity)
   const isCollusion = flag.flagType.trim().toLowerCase() === 'collusion'
   const ev = asRecord(flag.evidenceJson)
+
+  const managerA = isCollusion
+    ? managerFor(flag, (ev as CollusionEvidenceLike).team1, 0)
+    : managerFor(flag, { teamName: (ev as TankingEvidenceLike).teamName }, 0)
+  const managerB = isCollusion ? managerFor(flag, (ev as CollusionEvidenceLike).team2, 1) : null
 
   const { context, hasDecidableEvidence } = useMemo(() => {
     const bullets: string[] = []
@@ -294,16 +332,50 @@ export function IntegrityFlagCard({
   const actionable = flag.status === 'open' && hasDecidableEvidence
 
   const messageLabel = (() => {
+    /*
+     * Name people only when the handler actually resolved them. Falling back to a team name here
+     * would put a team, not a person, on the button.
+     */
+    const known = Array.isArray(flag.affectedManagers) && flag.affectedManagers.length > 0
+    if (isCollusion) return known && managerA && managerB ? `Message ${managerA.name} & ${managerB.name}` : 'Message both'
+    if (known && managerA) return `Message ${managerA.name}`
     const names = Array.isArray(flag.affectedTeamNames) ? flag.affectedTeamNames.filter(Boolean) : []
-    if (isCollusion) return 'Message both'
     return names.length === 1 ? `Message ${names[0]}` : 'Message manager'
   })()
+
+  const whoLine = isCollusion
+    ? managerA && managerB
+      ? `Trade between ${managerLabel(managerA)} and ${managerLabel(managerB)}`
+      : null
+    : managerA
+      ? `Manager: ${managerLabel(managerA)}`
+      : null
+
+  /*
+   * On a phone a card starts as one compact row — severity, who, gap, age — and expands on tap, so a
+   * queue of flags fits on a screen. Wider screens ignore this (CSS shows the detail regardless).
+   * The flag an alert linked to opens expanded.
+   */
+  const [expanded, setExpanded] = useState(highlighted)
+  useEffect(() => {
+    if (highlighted) setExpanded(true)
+  }, [highlighted])
+  const detailId = `integrity-flag-detail-${flag.id}`
+
+  const gapPct = isCollusion ? (ev as CollusionEvidenceLike).valueDifferentialPct : undefined
+  const gapLabel =
+    typeof gapPct === 'number' && Number.isFinite(gapPct) && Math.round(Math.abs(gapPct)) > 0
+      ? `${Math.round(Math.abs(gapPct))}% value gap`
+      : null
 
   return (
     <article
       className="af-cm-flagcard"
+      data-expanded={expanded ? 'true' : 'false'}
       data-sev={actionable ? severity : 'medium'}
+      id={`integrity-flag-${flag.id}`}
       data-testid={`integrity-flag-${flag.id}`}
+      data-highlight={highlighted ? 'true' : undefined}
     >
       <div className="af-cm-flagcard-top">
         <div className="af-cm-flagcard-tags">
@@ -311,6 +383,7 @@ export function IntegrityFlagCard({
             {isCollusion ? 'Collusion' : 'Tanking'} &middot; {severity}
           </span>
           <span className="af-cm-state af-num">{flag.status}</span>
+          {gapLabel ? <span className="af-cm-state af-num af-cm-gap">{gapLabel}</span> : null}
         </div>
         <div className="af-cm-flagcard-meta af-num">
           {[fromReview ? 'Found by the trade review' : confidencePct != null ? `Confidence ${confidencePct}%` : null, age]
@@ -319,60 +392,108 @@ export function IntegrityFlagCard({
         </div>
       </div>
 
-      <h3 className="af-cm-flagcard-lead">{flag.summary}</h3>
-
-      {isCollusion ? <TradeSides ev={ev as CollusionEvidenceLike} /> : <TankingStats ev={ev as TankingEvidenceLike} />}
-
-      {context.length > 0 ? (
-        <ul className="af-cm-evidence">
-          {context.map((line, i) => (
-            <li key={i}>{line}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      {actionable ? (
-        <div className="af-cm-actions">
-          {/*
-            Build rule 2: an escalation path, a communication path, and Dismiss.
-            Never a lone Dismiss — a commissioner given only "make this go away"
-            will make it go away.
-          */}
-          {onEscalate ? (
-            <button
-              type="button"
-              className={`af-btn ${severity === 'high' || severity === 'critical' ? 'af-cm-btn-warn' : ''}`}
-              onClick={() => onEscalate(flag)}
-              disabled={busy}
-            >
-              {isCollusion ? 'Open review' : 'Escalate'}
-            </button>
-          ) : null}
-          {onMessage ? (
-            <button type="button" className="af-btn af-btn--ghost" onClick={() => onMessage(flag)} disabled={busy}>
-              {messageLabel}
-            </button>
-          ) : null}
-          {onDismiss ? (
-            <button type="button" className="af-btn af-btn--ghost" onClick={() => onDismiss(flag)} disabled={busy}>
-              Dismiss
-            </button>
-          ) : null}
-          {/*
-            Says where the actual power lives. Integrity flags are a review
-            surface; reversing a trade is a league-settings action, and a
-            commissioner who expects "Open review" to undo the trade will be
-            surprised at the worst possible moment.
-          */}
-          {isCollusion ? (
-            <span className="af-cm-actions-note">Reversing a trade happens in league settings, not here.</span>
-          ) : null}
+      {whoLine ? (
+        <div className="af-cm-flagcard-who" data-testid="integrity-flag-managers">
+          {whoLine}
         </div>
-      ) : flag.status === 'open' ? (
-        <p className="af-cm-actions-note" style={{ marginLeft: 0, marginTop: 14 }}>
-          Frequency alone is not proof &mdash; it raises the review priority of each individual trade.
-        </p>
       ) : null}
+
+      <button
+        type="button"
+        className="af-cm-flagcard-toggle"
+        aria-expanded={expanded}
+        aria-controls={detailId}
+        onClick={() => setExpanded((x) => !x)}
+      >
+        {expanded ? 'Hide details' : 'Show details'}
+      </button>
+
+      <div className="af-cm-flagcard-detail" id={detailId}>
+        <h3 className="af-cm-flagcard-lead">{flag.summary}</h3>
+
+        {isCollusion ? (
+          <TradeSides ev={ev as CollusionEvidenceLike} a={managerA} b={managerB} />
+        ) : (
+          <TankingStats ev={ev as TankingEvidenceLike} />
+        )}
+
+        {context.length > 0 ? (
+          <ul className="af-cm-evidence">
+            {context.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        ) : null}
+
+        {/*
+          The commissioner's own rating of how serious this is. The scan's level is a first guess;
+          changing it re-sorts the queue. Offered on every open flag the viewer can review.
+        */}
+        {flag.status === 'open' && onSetSeverity ? (
+          <div className="af-cm-flaglevel">
+            <div className="af-label">Your rating</div>
+            <div className="af-cm-seg" role="group" aria-label="Flag level">
+              {LEVELS.map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  className="af-cm-seg-btn"
+                  aria-pressed={severity === level}
+                  disabled={busy}
+                  onClick={() => {
+                    if (level !== severity) onSetSeverity(flag, level)
+                  }}
+                >
+                  {level === 'low' ? 'Low' : level === 'high' ? 'High' : 'Medium'}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {actionable ? (
+          <div className="af-cm-actions">
+            {/*
+              Build rule 2: an escalation path, a communication path, and Dismiss.
+              Never a lone Dismiss — a commissioner given only "make this go away"
+              will make it go away.
+            */}
+            {onEscalate ? (
+              <button
+                type="button"
+                className={`af-btn ${severity === 'high' || severity === 'critical' ? 'af-cm-btn-warn' : ''}`}
+                onClick={() => onEscalate(flag)}
+                disabled={busy}
+              >
+                {isCollusion ? 'Open review' : 'Escalate'}
+              </button>
+            ) : null}
+            {onMessage ? (
+              <button type="button" className="af-btn af-btn--ghost" onClick={() => onMessage(flag)} disabled={busy}>
+                {messageLabel}
+              </button>
+            ) : null}
+            {onDismiss ? (
+              <button type="button" className="af-btn af-btn--ghost" onClick={() => onDismiss(flag)} disabled={busy}>
+                Dismiss
+              </button>
+            ) : null}
+            {/*
+              Says where the actual power lives. Integrity flags are a review
+              surface; reversing a trade is a league-settings action, and a
+              commissioner who expects "Open review" to undo the trade will be
+              surprised at the worst possible moment.
+            */}
+            {isCollusion ? (
+              <span className="af-cm-actions-note">Reversing a trade happens in league settings, not here.</span>
+            ) : null}
+          </div>
+        ) : flag.status === 'open' ? (
+          <p className="af-cm-actions-note" style={{ marginLeft: 0, marginTop: 14 }}>
+            Frequency alone is not proof &mdash; it raises the review priority of each individual trade.
+          </p>
+        ) : null}
+      </div>
     </article>
   )
 }

@@ -143,12 +143,11 @@ describe('dynasty minors', () => {
     { fantraxId: 'ir', status: 'INJURED_RESERVE' },
     { fantraxId: 'bn', status: 'RESERVE' },
   ]
-  it.each(['NBA', 'NHL'])('files %s minor-leaguers on the taxi squad, not the bench or IR', (sport) => {
+  it.each(['NBA', 'NHL', 'MLB'])('files %s minor-leaguers on the taxi squad, not the bench or IR', (sport) => {
     expect(splitLineup(players, sport)).toEqual({ starters: ['a'], bench: ['bn'], reserve: ['ir'], taxi: ['min'] })
   })
-  it('leaves the MLB/NFL split exactly as it was', () => {
+  it('leaves the NFL split exactly as it was', () => {
     expect(splitLineup(players)).toEqual({ starters: ['a'], bench: ['min', 'bn'], reserve: ['ir'] })
-    expect(splitLineup(players, 'MLB')).toEqual({ starters: ['a'], bench: ['min', 'bn'], reserve: ['ir'] })
   })
 })
 
@@ -189,5 +188,28 @@ describe('import UI', () => {
   it('offers Fantrax for NBA and NHL alongside the sports it already had', () => {
     const fantrax = IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === 'fantrax')
     expect(fantrax?.supportedSports).toEqual(['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL'])
+  })
+})
+
+describe('a college-football Fantrax league is not a devy league by sport alone', () => {
+  /*
+   * Fantrax's league info carries no devy/dynasty flag (contracts/fantrax/GAPS.md F-06), and the
+   * import used to stamp `isDevy: true` on every league whose players matched the CFB map — so a plain
+   * college redraft league was filed, scored and labelled as devy.
+   */
+  it('stores isDevy false for a league detected as cfb', async () => {
+    const cfbMap: Record<string, FantraxPlayerRef> = {
+      c1: { fantraxId: 'c1', name: 'Prospect, A', team: 'BAMA', position: 'QB' },
+      c2: { fantraxId: 'c2', name: 'Prospect, B', team: 'UGA', position: 'RB' },
+    }
+    serve({
+      info: { leagueName: 'College redraft', seasonYear: 2026 },
+      playerMap: cfbMap,
+      roster: { teamName: 'Fixture team', rosterItems: [{ id: 'c1', position: 'QB', status: 'ACTIVE' }, { id: 'c2', position: 'RB', status: 'RESERVE' }] },
+    }, 'CFB')
+    const outcome = await importFantraxLeague({ leagueId: 'college', teamName: 'Fixture team', appUserId: 'owner' })
+    expect(outcome).toMatchObject({ ok: true })
+    expect(h.upsert.mock.calls[0]![0].create).toMatchObject({ sport: 'cfb', isDevy: false })
+    expect(h.upsert.mock.calls[0]![0].update).toMatchObject({ sport: 'cfb', isDevy: false })
   })
 })

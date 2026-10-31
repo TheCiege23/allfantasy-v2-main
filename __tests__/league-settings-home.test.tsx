@@ -38,7 +38,7 @@ function input(overrides: Partial<BuildSettingsHomeInput> = {}, league: Partial<
     },
     teams,
     canEdit: true,
-    formatLabel: 'Guillotine',
+    formatLabel: 'Guilly',
     scoringLabel: null,
     rosterSlots: { UTIL: 4, SUPER_UTIL: 1, BN: 4, IL: 1 },
     draft: { dateIso: '2026-10-20T00:00:00.000Z', type: 'snake', rounds: 9, timerSeconds: 90, autostart: true },
@@ -76,7 +76,7 @@ describe('LeagueSettingsHome — list', () => {
     }
     expect(rowValue('name')).toBe('The Ciege NBA Guilly')
     expect(rowValue('teams')).toBe('16')
-    expect(rowValue('format')).toBe('Guillotine · Points')
+    expect(rowValue('format')).toBe('Guilly · Points')
     expect(rowValue('roster')).toBe('UTIL ×4, SUPER_UTIL, 4 BN, 1 IL')
     expect(rowValue('draft-date')).toBe('Mon Oct 19, 8:00 PM ET')
     expect(rowValue('draft-shape')).toBe('Snake · 9 rounds · 90s')
@@ -90,7 +90,7 @@ describe('LeagueSettingsHome — list', () => {
     expect(screen.getByTestId('lsh-copy-invite')).toBeTruthy()
   })
 
-  it('🛑 guillotine section only for guillotine leagues; playoffs hidden for guillotine', () => {
+  it('🛑 guillotine section only for Guilly leagues; playoffs hidden for guillotine', () => {
     renderHome(input())
     expect(screen.queryByTestId('lsh-section-guillotine')).toBeTruthy()
     expect(screen.queryByTestId('lsh-section-playoffs')).toBeNull()
@@ -113,7 +113,17 @@ describe('LeagueSettingsHome — list', () => {
       expect(row.tagName).toBe('DIV')
       expect(row.getAttribute('data-readonly')).toBe('true')
     }
-    expect(screen.queryAllByRole('button').map((b) => b.getAttribute('data-testid'))).toEqual(['lsh-copy-invite'])
+    expect(screen.queryAllByRole('button').map((b) => b.getAttribute('data-testid'))).toEqual(['lsh-row-previous-leagues', 'lsh-copy-invite'])
+    fireEvent.click(screen.getByTestId('lsh-row-previous-leagues'))
+    expect(screen.getByTestId('league-settings-subpage').getAttribute('data-subpage')).toBe('previous-leagues')
+  })
+
+  it('offers team settings and lets the commissioner enable divisions when currently off', () => {
+    renderHome(input())
+    expect(screen.getByTestId('lsh-row-team-settings').tagName).toBe('BUTTON')
+    expect(rowValue('divisions')).toBe('Off')
+    fireEvent.click(screen.getByTestId('lsh-row-divisions'))
+    expect(screen.getByTestId('league-settings-subpage').getAttribute('data-subpage')).toBe('divisions')
   })
 
   it('a locked first chop week is display-only even for the commissioner', () => {

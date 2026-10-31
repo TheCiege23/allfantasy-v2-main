@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowDown, ArrowUp, Eye, EyeOff, Star } from "lucide-react"
+import { ArrowDown, ArrowUp, Eye, EyeOff, Star, Trash2 } from "lucide-react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { toPlayedLeagues } from "@/lib/core-app/playedLeagues"
 import { platformLabel } from "@/lib/core-app/platformLinks"
@@ -17,9 +17,16 @@ import { applyLeagueOrder, type LeaguePreferences } from "@/lib/core-app/leagueP
  *
  * Every change saves at once (one list per POST, merged atomically on the server), like the other
  * Preferences cards that save on change. A failed save reverts the row and says so.
+ *
+ * Remove is offered here too, because this is where people manage their list — before it lived
+ * only on a league's Overview tab, which league-first navigation skips, so users hid leagues they
+ * meant to remove. It is `DELETE /api/league/[id]`: the viewer's own copy and a tombstone, nothing
+ * on the provider; for an imported league someone else imported, only the viewer's tombstone, which
+ * takes it off their list (`memberLeagues`). Rows the route can remove carry `viewerCanRemove`; for
+ * any other row it answers 200 with nothing removed, so a zero count is treated as a failure here.
  */
 
-type Row = { id: string; name: string; platform: string }
+type Row = { id: string; name: string; platform: string; removable: boolean }
 
 function readFavoritesCookie(playedIds: string[]): string[] {
   try {
@@ -42,6 +49,8 @@ export default function LeagueListPreferencesCard() {
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
   const [query, setQuery] = useState("")
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [removeError, setRemoveError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoadError(false)
@@ -59,6 +68,7 @@ export default function LeagueListPreferencesCard() {
           id: String(l.id),
           name: typeof l.name === "string" && l.name ? l.name : "League",
           platform: String(l.platform ?? ""),
+          removable: l.viewerCanRemove === true,
         }))
       const ids = played.map((r) => r.id)
       setRows(played)
@@ -76,6 +86,18 @@ export default function LeagueListPreferencesCard() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /*
+   * The /core rail's "Show N hidden leagues" row links to `#your-leagues`. This card sits at the
+   * bottom of Preferences and fills in after a fetch, so the browser's own hash scroll has already
+   * run against a shorter page — scroll once the rows are in.
+   */
+  const sectionRef = useRef<HTMLElement>(null)
+  const loaded = rows !== null && prefs !== null
+  useEffect(() => {
+    if (!loaded || typeof window === "undefined" || window.location.hash !== "#your-leagues") return
+    sectionRef.current?.scrollIntoView?.({ block: "start" })
+  }, [loaded])
 
   const ordered = useMemo(() => (rows && prefs ? applyLeagueOrder(rows, prefs.order) : []), [rows, prefs])
   const q = query.trim().toLowerCase()
@@ -123,6 +145,47 @@ export default function LeagueListPreferencesCard() {
     void save("order", ids, () => setPrefs(before))
   }
 
+  const remove = async (id: string) => {
+    if (savingRef.current) return
+    savingRef.current = true
+    setSaving(true)
+    setRemoveError(null)
+    try {
+      const res = await fetch(`/api/league/${encodeURIComponent(id)}`, { method: "DELETE" })
+      if (!res.ok) throw new Error(String(res.status))
+      const data = (await res.json().catch(() => ({}))) as {
+        removed?: { leagueRows?: number; sleeperLeagueRows?: number; tournamentRows?: number; memberLeagues?: number }
+      }
+      const removed =
+        (data.removed?.leagueRows ?? 0) +
+        (data.removed?.sleeperLeagueRows ?? 0) +
+        (data.removed?.tournamentRows ?? 0) +
+        (data.removed?.memberLeagues ?? 0)
+      // 200 with nothing removed means the row was not this account's copy — not a success.
+      if (removed === 0) {
+        setRemoveError(t("settings.leagues.removeNotOwned"))
+        return
+      }
+      setRows((prev) => (prev ? prev.filter((r) => r.id !== id) : prev))
+      // Local only: the saved lists may keep the id, and every reader already ignores unknown ids.
+      setPrefs((prev) =>
+        prev
+          ? {
+              favorites: prev.favorites.filter((x) => x !== id),
+              hidden: prev.hidden.filter((x) => x !== id),
+              order: prev.order.filter((x) => x !== id),
+            }
+          : prev,
+      )
+      setConfirmId(null)
+    } catch {
+      setRemoveError(t("settings.leagues.removeError"))
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+  }
+
   const resetOrder = () => {
     if (!prefs || savingRef.current) return
     const before = prefs
@@ -132,6 +195,8 @@ export default function LeagueListPreferencesCard() {
 
   return (
     <section
+      ref={sectionRef}
+      id="your-leagues"
       className="space-y-3 rounded-xl border p-4"
       style={{ borderColor: "var(--border)", background: "var(--panel2)" }}
       aria-labelledby="league-list-prefs-title"
@@ -198,7 +263,7 @@ export default function LeagueListPreferencesCard() {
               return (
                 <li
                   key={r.id}
-                  className="flex items-center gap-2 py-1"
+                  className="flex flex-wrap items-center gap-2 py-1"
                   data-testid={`league-list-row-${r.id}`}
                   style={{ opacity: hidden ? 0.6 : 1 }}
                 >
@@ -235,6 +300,23 @@ export default function LeagueListPreferencesCard() {
                   >
                     {hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
+                  {r.removable ? (
+                    <button
+                      type="button"
+                      aria-label={`${t("settings.leagues.remove")}: ${r.name}`}
+                      aria-expanded={confirmId === r.id}
+                      onClick={() => {
+                        setRemoveError(null)
+                        setConfirmId(confirmId === r.id ? null : r.id)
+                      }}
+                      disabled={saving}
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-lg"
+                      style={{ color: "var(--muted)" }}
+                      data-testid={`league-remove-${r.id}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  ) : null}
                   {/* Reorder only on the full list: a search-filtered view has no stable neighbours. */}
                   {!q ? (
                     <>
@@ -261,6 +343,45 @@ export default function LeagueListPreferencesCard() {
                         <ArrowDown className="h-4 w-4" />
                       </button>
                     </>
+                  ) : null}
+                  {confirmId === r.id ? (
+                    <div
+                      role="group"
+                      aria-label={`${t("settings.leagues.remove")}: ${r.name}`}
+                      className="basis-full space-y-2 rounded-lg border p-3"
+                      style={{ borderColor: "var(--border)" }}
+                      data-testid={`league-remove-confirm-${r.id}`}
+                    >
+                      <p className="text-xs" style={{ color: "var(--muted)" }}>
+                        {t("settings.leagues.removeConfirmBody")}
+                      </p>
+                      {removeError ? (
+                        <p role="alert" className="text-xs" style={{ color: "var(--accent-red-strong, #fb7185)" }}>
+                          {removeError}
+                        </p>
+                      ) : null}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmId(null)}
+                          disabled={saving}
+                          className="min-h-11 flex-1 rounded-lg border px-3 text-xs font-medium"
+                          style={{ borderColor: "var(--border)", color: "var(--text)" }}
+                        >
+                          {t("settings.leagues.removeCancel")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void remove(r.id)}
+                          disabled={saving}
+                          className="min-h-11 flex-1 rounded-lg px-3 text-xs font-semibold text-white disabled:opacity-50"
+                          style={{ background: "var(--accent-red-strong, #e11d48)" }}
+                          data-testid={`league-remove-go-${r.id}`}
+                        >
+                          {t("settings.leagues.removeConfirm")}
+                        </button>
+                      </div>
+                    </div>
                   ) : null}
                 </li>
               )

@@ -3,16 +3,23 @@
 import type { ReactNode } from 'react'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { railRowMessages } from '@/lib/core-app/messages/railRow'
+import { platformLabel } from '@/lib/core-app/platformLinks'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { RailMatchupSummary, RailSideProjectionSummary, RailStandingSummary } from './AfCoreShell'
 import type { LiveRailScore } from './useLiveRailScores'
+import type { ExileRailStatus } from '@/lib/core-app/survivorExileStatus'
+import { mostHavePlayed } from '@/lib/core-app/liveRailScores'
 import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
+import type { RailRecord } from '@/lib/core-app/railRecordRank'
 
 /**
- * The expanded body of one league row in the league rail: name, freshness, the
- * live-score status, and this week's head-to-head (both teams, score, SLPR and AF
- * projections) or, with no opponent, where you sit against the field.
+ * The expanded body of one league row in the league rail: name, platform, the
+ * live-score status, and this week's head-to-head (both managers, VS between them,
+ * each with their score and projection) or, with no opponent, where you sit
+ * against the field.
  *
  * ⚠ ONE IMPLEMENTATION, TWO SHELLS. This lived inline in `AfCoreShell`'s rail, and
  * the /league/[leagueId] workspace drew its own rail of two-letter chips with none
@@ -35,7 +42,20 @@ export function mergeRailMatchup(
   if (!live) return saved
   const sameWeek = saved?.season === live.season && saved?.week === live.week
   const fieldRace = saved?.standing?.elimination === true
-  const standing = fieldRace ? live.fieldStanding : live.standing
+  /*
+   * ⚠ THE LIVE POLL CARRIES POINTS, NEVER PROJECTIONS. Until most of the field has played, a team that has
+   * not kicked off sits at 0, so a points rank puts it at the cut line; the server row ranked that window
+   * on projections (`standingIn`). Keep it until the live field says most have played.
+   */
+  const liveField = live.fieldStanding
+  const keepProjected = fieldRace && sameWeek && (
+    /* A best-ball rank is projected finals all week: a live best-ball score is only a floor (bestBallField.ts). */
+    saved?.standing?.basis === 'best_ball' ||
+    (saved?.standing?.basis === 'projected' && !(liveField && mostHavePlayed(liveField.played ?? liveField.outOf, liveField.outOf)))
+  )
+  const standing = keepProjected
+    ? { ...saved!.standing!, weeksLeft: saved!.standing!.weeksLeft ?? liveField?.weeksLeft ?? null }
+    : fieldRace ? live.fieldStanding : live.standing
   /* A native row is read from the database with its own projection and its own data stamp. */
   if (live.native) {
     return { ...live, freshAt: live.freshAt ?? null, source: 'live_cache' as const }
@@ -52,19 +72,25 @@ export function mergeRailMatchup(
 }
 
 /**
- * One team in a rail row: their platform avatar, their name, their score, and
- * the two projected totals under it.
+ * One team in a rail row, laid out the way Sleeper's league list reads: the manager's avatar,
+ * their team name, and their points underneath — the score once the week is played, and this
+ * league's projected total either way. The opponent mirrors it on the other side of the "VS".
  *
- * ⚠ THE AVATAR IS THE MANAGER'S, NOT THE LEAGUE'S. The league crest is already
- * the 42px mark at the head of the row; repeating it here would say nothing. The
- * loader resolves both sides' `avatarUrl` through `managerArtUrl` — Sleeper
- * stores an avatar *id* where other platforms store a link, and 85 of this
- * account's 94 claimed teams have one.
+ * ⚠ ONE PROJECTION, NOT TWO (user call, 2026-10-30). The row used to carry the provider line and
+ * AllFantasy's engine side by side under SCORE / SLPR / AF headers. The list is a glance surface;
+ * the engine's number still lives on the matchup screen, where it has room to be explained.
+ * The projection kept is the provider's line re-scored under THIS league's rules when that could
+ * be done (`afProjected`), else the provider's own — the same number the SLPR column showed.
  *
- * ⚠ AND THE INITIAL IS `Array.from`, NOT `slice`. A team name starting with an
- * emoji sliced mid-surrogate serialises differently on server and client and
- * takes hydration down — the same trap the profile mark in the rail foot
- * carries a note about, and half this account's league names begin with 🪓.
+ * ⚠ THE AVATAR IS THE MANAGER'S, NOT THE LEAGUE'S. The league crest is already the 42px mark at
+ * the head of the row; repeating it here would say nothing. The loader resolves both sides'
+ * `avatarUrl` through `managerArtUrl` — Sleeper stores an avatar *id* where other platforms
+ * store a link.
+ *
+ * ⚠ AND THE INITIAL IS `Array.from`, NOT `slice`. A team name starting with an emoji sliced
+ * mid-surrogate serialises differently on server and client and takes hydration down — the same
+ * trap the profile mark in the rail foot carries a note about, and half this account's league
+ * names begin with 🪓.
  */
 function RailSide({
   name,
@@ -72,70 +98,62 @@ function RailSide({
   score,
   projection,
   them,
+  leading,
 }: {
   name: string
   avatarUrl: string | null
-  /** Null while the fixture is unplayed, which draws a dash rather than 0.0. */
+  /** Null while the fixture is unplayed, which draws no score rather than 0.0. */
   score: number | null
   projection: RailSideProjectionSummary | null
   them?: boolean
+  /** Ahead on the scoreboard right now — the score is drawn in the winning colour. */
+  leading?: boolean
 }) {
-  const { language } = useOptionalLanguage()
-  const initial = (Array.from(name.trim() || '•')[0] ?? '•').toUpperCase()
+  const msg = useMessages(railRowMessages)
+  // The first letter or digit, so "(F) SF TEXANS" reads F rather than "(".
+  const chars = Array.from(name.trim() || '•')
+  const initial = (chars.find((c) => /[\p{L}\p{N}]/u.test(c)) ?? chars[0] ?? '•').toUpperCase()
   /*
-   * ⚠ `pricedFrom > 0` MATTERS: a side where NOTHING priced already draws a dash,
-   * and marking that dash as partial rendered it as a dotted "⋯" that read like a
-   * third state. Partial means "some of the lineup", which is the only case the
-   * mark has anything to add.
+   * ⚠ `pricedFrom > 0` MATTERS: a side where NOTHING priced already draws a dash, and marking
+   * that dash as partial read like a third state. Partial means "some of the lineup", which is
+   * the only case the mark has anything to add.
    */
   const partial =
     projection != null &&
     projection.pricedFrom > 0 &&
     projection.pricedFrom < projection.starterCount
-  /* Two projections, side by side: the provider's (Sleeper) line under this league's rules, and
-     AllFantasy's own engine. Neither replaces the other — the user asked to see both. */
   const projected = projection?.afProjected ?? projection?.projected ?? null
-  const afEngine = projection?.afEngine ?? null
 
   return (
     <span
       className="af-rail-row-side"
       data-side={them ? 'them' : undefined}
       data-partial={partial ? 'true' : undefined}
+      data-leading={leading ? 'true' : undefined}
       title={projection
-        ? language === 'es'
-          ? `Proyección base semanal — ${PROJECTION_PROVIDER_LABEL} (SLPR): proyección de ${PROJECTION_PROVIDER_LABEL} con ${projection.pricedFrom} de ${projection.starterCount} titulares${
-              projection.afProjected == null
-                ? ', PPR genérico porque no se pudo recalcular con la puntuación de esta liga'
-                : ', recalculada con la configuración de esta liga'
-            } · AF: motor de AllFantasy con ${projection.afEngineFrom ?? 0} de ${projection.starterCount} titulares · el marcador en vivo se muestra aparte`
-          : `Weekly baseline projection — ${PROJECTION_PROVIDER_LABEL} (SLPR): ${PROJECTION_PROVIDER_LABEL}’s projection from ${projection.pricedFrom} of ${projection.starterCount} starters${
-              projection.afProjected == null
-                ? ', generic PPR because this league’s scoring could not be re-scored'
-                : ', re-scored with this league’s settings'
-            } · AF: AllFantasy engine from ${projection.afEngineFrom ?? 0} of ${projection.starterCount} starters · live score is shown separately`
+        ? msg.sideTitle(
+            PROJECTION_PROVIDER_LABEL,
+            projection.pricedFrom,
+            projection.starterCount,
+            projection.afProjected == null,
+          )
         : undefined}
     >
       <span className="af-rail-row-av" aria-hidden>
         <LeagueMark src={avatarUrl} letter={initial} />
       </span>
-      <span className="af-rail-row-team">{name}</span>
-      <span className="af-rail-row-score">{score == null ? '—' : score.toFixed(1)}</span>
-      <span className="af-rail-row-projected">{projected == null ? '—' : projected.toFixed(1)}</span>
-      <span className="af-rail-row-projected" data-kind="af">{afEngine == null ? '—' : afEngine.toFixed(1)}</span>
+      <span className="af-rail-row-who">
+        <span className="af-rail-row-team">{name}</span>
+        <span className="af-rail-row-pts">
+          {score != null ? <span className="af-rail-row-score">{score.toFixed(1)}</span> : null}
+          <span className="af-rail-row-projected">
+            <span className="af-rail-row-proj-label">{msg.projShort}</span>
+            {projected == null ? '—' : projected.toFixed(1)}
+          </span>
+        </span>
+      </span>
     </span>
   )
-}
-
-/** 1st, 2nd, 3rd, 4th … and 11th/12th/13th, which are the ones a naive rule gets wrong. */
-function ordinal(n: number): string {
-  const teens = n % 100
-  if (teens >= 11 && teens <= 13) return `${n}th`
-  const unit = n % 10
-  if (unit === 1) return `${n}st`
-  if (unit === 2) return `${n}nd`
-  if (unit === 3) return `${n}rd`
-  return `${n}th`
 }
 
 /**
@@ -147,12 +165,12 @@ function ordinal(n: number): string {
  * saying so would present a projected ordering as a played one.
  */
 function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
-  const es = useOptionalLanguage().language === 'es'
+  const msg = useMessages(railRowMessages)
   if (!standing) {
     return (
       <span className="af-rail-row-side" data-side="them">
         <span className="af-rail-row-team">
-          {es ? 'sin enfrentamiento directo: posición aún no medible' : 'no head-to-head — rank not yet measurable'}
+          {msg.noHeadToHead}
         </span>
       </span>
     )
@@ -164,43 +182,49 @@ function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
   return (
     <span className="af-rail-row-rank" data-tone={tone}>
       <span className="af-rail-row-rank-pos">
-        {standing.tied ? (es ? 'E-' : 'T-') : ''}{es ? `#${standing.rank}` : ordinal(standing.rank)}
-        <span className="af-rail-row-rank-of">{es ? ' de ' : ' of '}{standing.outOf}</span>
+        {standing.tied ? msg.tiedPrefix : ''}{msg.rank(standing.rank)}
+        <span className="af-rail-row-rank-of">{standing.elimination ? msg.ofAlive(standing.outOf) : `${msg.of}${standing.outOf}`}</span>
       </span>
       <span className="af-rail-row-rank-cut">
-        {es
-          ? standing.overCut == null
-            ? standing.tied ? 'empatado en el último lugar' : standing.elimination
-              ? 'en la línea de corte'
-              : 'último de la liga'
-            : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'sobre el corte' : 'sobre el último'}`
-          : standing.overCut == null
-            ? standing.tied ? 'tied lowest' : standing.elimination
-              ? 'on the block'
-              : 'bottom of the league'
-            : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'over the cut' : 'over last'}`}
+        {standing.overCut == null
+          ? standing.tied ? msg.tiedLowest : standing.elimination
+            ? msg.onTheBlock
+            : msg.bottomOfLeague
+          : standing.elimination
+            ? msg.overTheCut(standing.overCut.toFixed(1))
+            : msg.overLast(standing.overCut.toFixed(1))}
       </span>
       <span className="af-rail-row-rank-space">
-        {standing.placesAboveCut === 0
-          ? es ? 'posición de corte' : 'cut position'
-          : es
-            ? `${standing.placesAboveCut} ${standing.placesAboveCut === 1 ? 'puesto' : 'puestos'} de margen`
-            : `${standing.placesAboveCut} ${standing.placesAboveCut === 1 ? 'place' : 'places'} clear`}
+        {standing.placesAboveCut === 0 ? msg.cutPosition : msg.placesClear(standing.placesAboveCut)}
       </span>
+      {/*
+        WHO THE CUT FALLS ON (owner's ask, 2026-10-30): the lowest team other than you and their number on
+        the same basis — the team you need to stay above, or the one you need to pass when it is you.
+      */}
+      {standing.elimination && standing.cutTeam && standing.cutTeamValue != null ? (
+        <span className="af-rail-row-rank-low">
+          {standing.overCut == null
+            ? msg.toPass(standing.cutTeam, standing.cutTeamValue.toFixed(1))
+            : msg.chopLine(standing.cutTeam, standing.cutTeamValue.toFixed(1))}
+        </span>
+      ) : null}
       <span className="af-rail-row-rank-basis">
-        {standing.basis === 'points' ? (es ? 'por puntos' : 'on points') : es ? 'por proyección' : 'on projection'}
+        {standing.basis === 'best_ball'
+          ? standing.provisional ? msg.onBestBallProvisional : msg.onBestBallFinal
+          : standing.basis === 'points' ? msg.onPoints : msg.onProjection}
+        {standing.elimination && standing.weeksLeft != null ? ` · ${msg.weeksLeft(standing.weeksLeft)}` : ''}
       </span>
     </span>
   )
 }
 
 /** "Mon 8pm" in the viewer's own zone. */
-function draftWhen(iso: string, es: boolean): string {
+function draftWhen(iso: string, msg: { dateLocale: string; shortTime: (time: string) => string }): string {
   const at = new Date(iso)
   if (!Number.isFinite(at.getTime())) return ''
-  const day = at.toLocaleDateString(es ? 'es' : 'en-US', { weekday: 'short' })
-  const time = at.toLocaleTimeString(es ? 'es' : 'en-US', { hour: 'numeric', minute: at.getMinutes() ? '2-digit' : undefined })
-  return `${day} ${es ? time : time.replace(/\s?([AP])M$/i, (_, h: string) => `${h.toLowerCase()}m`)}`
+  const day = at.toLocaleDateString(msg.dateLocale, { weekday: 'short' })
+  const time = at.toLocaleTimeString(msg.dateLocale, { hour: 'numeric', minute: at.getMinutes() ? '2-digit' : undefined })
+  return `${day} ${msg.shortTime(time)}`
 }
 
 /**
@@ -211,51 +235,51 @@ function draftWhen(iso: string, es: boolean): string {
  * the shell, and the line is the same shape — a position, the distance to the cut, the space, the basis.
  */
 function RailGuillotine({ line }: { line: RailGuillotineLine }) {
-  const es = useOptionalLanguage().language === 'es'
+  const msg = useMessages(railRowMessages)
   const chopWeek = line.firstChopWeek
   let pos: ReactNode
   let cut: string
   let space: string | null = null
   let tone: 'bad' | 'warn' | undefined
-  const basis = line.basis == null ? null : line.basis === 'points' ? (es ? 'por puntos' : 'on points') : es ? 'por proyección' : 'on projection'
+  const basis = line.basis == null ? null : line.basis === 'points' ? msg.onPoints : msg.onProjection
   const aliveRank = line.rank != null ? (
     <>
-      {es ? `#${line.rank}` : ordinal(line.rank)}
-      <span className="af-rail-row-rank-of">{es ? ` de ${line.aliveCount} vivos` : ` of ${line.aliveCount} alive`}</span>
+      {msg.rank(line.rank)}
+      <span className="af-rail-row-rank-of">{msg.ofAlive(line.aliveCount)}</span>
     </>
   ) : null
   switch (line.state) {
     case 'eliminated':
       tone = 'bad'
-      pos = line.choppedWeek != null ? (es ? `Eliminado sem ${line.choppedWeek}` : `Chopped wk ${line.choppedWeek}`) : es ? 'Eliminado' : 'Chopped'
-      cut = es ? 'fuera de la liga' : 'eliminated'
+      pos = line.choppedWeek != null ? msg.choppedWeek(line.choppedWeek) : msg.chopped
+      cut = msg.eliminated
       break
     case 'preseason':
-      pos = line.draftAt ? `${es ? 'Draft' : 'Draft'} ${draftWhen(line.draftAt, es)}` : es ? 'Temporada sin empezar' : 'Season not started'
-      cut = chopWeek != null ? (es ? `primer corte sem ${chopWeek}` : `first chop wk ${chopWeek}`) : es ? 'guillotina' : 'guillotine'
+      pos = line.draftAt ? `${msg.draft} ${draftWhen(line.draftAt, msg)}` : msg.seasonNotStarted
+      cut = chopWeek != null ? msg.firstChopWeekLower(chopWeek) : 'Guilly'
       break
     case 'before_first_chop':
-      pos = aliveRank ?? (es ? `${line.aliveCount} vivos` : `${line.aliveCount} alive`)
-      cut = chopWeek != null ? (es ? `Primer corte sem ${chopWeek}` : `First chop wk ${chopWeek}`) : es ? 'sin cortes aún' : 'no chops yet'
+      pos = aliveRank ?? msg.aliveCount(line.aliveCount)
+      cut = chopWeek != null ? msg.firstChopWeek(chopWeek) : msg.noChopsYet
       break
     case 'no_scores':
-      pos = es ? `${line.aliveCount} vivos` : `${line.aliveCount} alive`
-      cut = es ? 'sin puntos todavía' : 'no scores yet'
+      pos = msg.aliveCount(line.aliveCount)
+      cut = msg.noScoresYet
       break
     case 'chop_zone':
       tone = 'bad'
       pos = aliveRank
-      cut = es ? 'en zona de corte' : 'in the chop zone'
+      cut = msg.inChopZone
       space = line.chopMargin != null && line.chopMargin < 0
-        ? es ? `${line.chopMargin.toFixed(1)} para salvarse` : `${line.chopMargin.toFixed(1)} to safety`
-        : es ? 'empatado en la línea' : 'tied at the line'
+        ? msg.toSafety(line.chopMargin.toFixed(1))
+        : msg.tiedAtLine
       break
     default:
       tone = line.rank != null && line.rank > line.aliveCount * 0.75 ? 'warn' : undefined
       pos = aliveRank
       cut = line.chopMargin != null
-        ? es ? `+${line.chopMargin.toFixed(1)} sobre el corte` : `+${line.chopMargin.toFixed(1)} above chop`
-        : es ? 'vivo' : 'alive'
+        ? msg.aboveChop(line.chopMargin.toFixed(1))
+        : msg.alive
   }
   return (
     <span className="af-rail-row-rank" data-tone={tone} data-guillotine={line.state}>
@@ -280,13 +304,42 @@ export type RailRowBodyProps = {
   syncPaused?: boolean
   delayed?: boolean
   /** Minutes since `m.freshAt` by the client clock; null before mount or with no stamp. */
-  freshMinutes: number | null
+  freshMinutes?: number | null
   /** Drawn only while the rail is expanded — a collapsed rail has nowhere to put it. */
   showScoreStatus: boolean
   swing?: number | null
   careerLine?: string | null
   /** Extra headline badges (platform chip, live dot) for shells that want them. */
   badges?: ReactNode
+  /** Scores are moving right now (a fresh live poll on a played week). Draws the LIVE pill. */
+  isLive?: boolean
+  /** Your win probability this week, strictly between 0 and 1 — the odds bar. Absent draws none. */
+  pWin?: number | null
+  /** What needs you in this league (urgencyBadges.ts): an empty or ruled-out starter, an offer waiting. */
+  attention?: ReadonlyArray<RailAttention>
+  /**
+   * Where a tap on the head-to-head goes — the league's Matchup screen. The row stays ONE link (a
+   * link inside a link is invalid HTML and two tab stops per league); the shell reads this off the
+   * tapped element with `railTapTarget` and routes there instead of the league.
+   */
+  matchupHref?: string | null
+  /** Your record and place in this league ("6-3 · 2nd"). Absent or null draws no record. */
+  record?: RailRecord | null
+  /** An Exile Island row: drawn in place of "Matchup not available yet" when there is no matchup. */
+  exileStatus?: ExileRailStatus | null
+}
+
+export type RailAttention = 'lineup' | 'offer'
+
+/**
+ * The href a tap on a league row should open: the Matchup screen when the tap landed on the
+ * head-to-head, else null (open the league). A modified click (new tab, new window) is left to the
+ * browser, which opens the row's own link.
+ */
+export function railTapTarget(event: { target: EventTarget | null; metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; button?: number }): string | null {
+  if (event.metaKey || event.ctrlKey || event.shiftKey || (event.button ?? 0) !== 0) return null
+  const el = event.target instanceof Element ? event.target.closest('[data-matchup-href]') : null
+  return el?.getAttribute('data-matchup-href') || null
 }
 
 export function RailRowBody({
@@ -297,99 +350,133 @@ export function RailRowBody({
   isCommissioner,
   syncPaused,
   delayed,
-  freshMinutes,
   showScoreStatus,
   swing,
   careerLine,
   badges,
+  isLive,
+  pWin,
+  attention,
+  matchupHref,
+  record,
+  exileStatus,
 }: RailRowBodyProps) {
-  const { language } = useOptionalLanguage()
+  const msg = useMessages(railRowMessages)
+  const headToHead = Boolean(m && !m.guillotine && !m.unpaired)
+  /* Only a played week has a leader; a level score has none. */
+  const lead = headToHead && m?.scored ? Math.sign((m.yourScore ?? 0) - (m.opponentScore ?? 0)) : 0
+  const odds = headToHead && pWin != null && pWin > 0 && pWin < 1 ? Math.round(pWin * 100) : null
   return (
     <span className="af-rail-row">
       <span className="af-rail-row-headline">
         <span className="af-rail-row-name">{name}</span>
         {isCommissioner ? <CommissionerBadge /> : null}
         {badges}
+        {!badges && isLive ? <span className="af-rail-live-state">{msg.live}</span> : null}
         {swing != null ? (
           <span className="af-rail-swing">
             {swing > 0 ? '+' : ''}{swing.toFixed(1)} swing
           </span>
         ) : null}
-        {m ? (
-          <span className="af-rail-row-fresh" data-stale={m.source === 'history_fallback' || (freshMinutes != null && freshMinutes > 10) ? 'true' : undefined}>
-            {m.source === 'history_fallback'
-              ? language === 'es' ? 'última importación' : 'last import'
-              : freshMinutes == null
-                ? language === 'es' ? 'antigüedad desconocida' : 'sync age unknown'
-                : freshMinutes < 1 ? (language === 'es' ? 'ahora' : 'now') : `${freshMinutes}m`}
-          </span>
-        ) : null}
       </span>
       {/* On the Career screen only: your finished-season record and titles in this league. */}
       {careerLine ? <span className="af-rail-row-career">{careerLine}</span> : null}
-      {platform.toLowerCase() === 'sleeper' && showScoreStatus ? (
-        <span className="af-rail-score-status" data-delayed={!syncPaused && delayed || undefined}>
-          {language === 'es'
-            ? syncPaused ? 'Sincronización de la cuenta en pausa' : delayed ? 'Actualización de marcadores con retraso' : live ? `Marcadores S${live.week} actualizados ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Actualizando marcadores...'
-            : syncPaused ? 'Account sync paused' : delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
-        </span>
+      <span className="af-rail-row-meta">
+        {/*
+          The platform in its own colour (`.af-platform` in af-core.css), AllFantasy in AF blue, so a
+          Sleeper league and a Fantrax one read apart before the name does. No week: every row in the
+          list is the same week, so it said nothing per row (user call, 2026-10-30).
+        */}
+        {!badges ? (
+          <span
+            className="af-platform af-platform-chip af-rail-row-plat"
+            data-platform={isNativePlatform(platform) ? 'native' : platform.toLowerCase()}
+          >
+            {platformLabel(isNativePlatform(platform) ? null : platform)}
+          </span>
+        ) : null}
+        {record ? (
+          <span className="af-rail-row-record af-num">
+            {record.wins}-{record.losses}{record.ties ? `-${record.ties}` : ''}
+            {record.rank != null ? ` · ${msg.rank(record.rank)}` : ''}
+          </span>
+        ) : null}
+        {showScoreStatus && (syncPaused || delayed) ? <span className="af-rail-delayed">{syncPaused ? msg.syncPaused : msg.updatesDelayed}</span> : null}
+        {!delayed && m?.source === 'history_fallback' ? <span>{msg.lastResult}</span> : null}
+        {attention?.includes('lineup') ? (
+          <span className="af-rail-row-flag" data-tone="bad">{msg.fixLineup}</span>
+        ) : null}
+        {attention?.includes('offer') ? (
+          <span className="af-rail-row-flag" data-tone="warn">{msg.tradeOffer}</span>
+        ) : null}
+      </span>
+      {/* An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts). */}
+      {m?.extraMatchup ? (
+        <span className="af-rail-row-career" data-testid="rail-extra-matchup">{m.extraMatchup.line}</span>
       ) : null}
       {m ? (
-        <span className="af-rail-row-line">
-          <span className="af-rail-row-labels" aria-hidden>
-            <span />
-            <span>{m.source === 'history_fallback' ? (language === 'es' ? 'ÚLT' : 'LAST') : language === 'es' ? 'PTS' : 'SCORE'}</span>
-            {/*
-              "SLPR", not "API" (2026-10-03) and not "SLEEPER": the column is 38px of
-              11px monospace, where the full word measures ~52px. The tooltip spells it.
-            */}
-            <span title={language === 'es' ? `Proyección de ${PROJECTION_PROVIDER_LABEL}` : `${PROJECTION_PROVIDER_LABEL} projection`}>SLPR</span>
-            <span title={language === 'es' ? 'Proyección del motor de AllFantasy' : 'AllFantasy engine projection'}>AF</span>
-          </span>
+        <span
+          className="af-rail-row-line"
+          data-vs={headToHead ? 'true' : undefined}
+          data-matchup-href={headToHead && matchupHref ? matchupHref : undefined}
+          title={headToHead && matchupHref ? msg.openMatchup : undefined}
+        >
           <RailSide
-            name={m.yourTeam ?? (language === 'es' ? 'Tu equipo' : 'Your team')}
+            name={m.yourTeam ?? msg.yourTeam}
             avatarUrl={m.yourAvatarUrl}
             /*
-              ⚠ A DASH, NOT 0.00, ON AN UNPLAYED FIXTURE. A scheduled
-              row carries zeroes as soon as the schedule exists;
-              printing them says the game was played and finished
-              nil-all.
+              ⚠ NO SCORE, NOT 0.0, ON AN UNPLAYED FIXTURE. A scheduled row carries zeroes as soon
+              as the schedule exists; printing them says the game was played and finished nil-all.
             */
             score={m.guillotine ? (m.guillotine.state === 'eliminated' ? null : m.guillotine.points) : m.scored ? m.yourScore : null}
             projection={m.yourProjection ?? null}
+            leading={lead > 0}
           />
 
           {/*
-            An elimination league has no opponent BY DESIGN — every
-            roster writes its own matchupId — so "v opponent not
-            named" was an honest answer to a question the league does
-            not ask. What its manager wants is the distance between
-            them and the cut.
+            An elimination league has no opponent BY DESIGN — every roster writes its own
+            matchupId — so "v opponent not named" was an honest answer to a question the league
+            does not ask. What its manager wants is the distance between them and the cut.
           */}
           {m.guillotine ? (
             <RailGuillotine line={m.guillotine} />
           ) : m.unpaired ? (
             <RailStanding standing={m.standing ?? null} />
           ) : (
-            <RailSide
-              them
-              name={m.opponentTeam ?? (language === 'es' ? 'rival sin nombre' : 'opponent not named')}
-              avatarUrl={m.opponentAvatarUrl}
-              score={m.scored ? m.opponentScore : null}
-              projection={m.opponentProjection ?? null}
-            />
+            <>
+              <span className="af-rail-row-vs" aria-hidden>{msg.vs}</span>
+              <RailSide
+                them
+                name={m.opponentTeam ?? msg.opponentNotNamed}
+                avatarUrl={m.opponentAvatarUrl}
+                score={m.scored ? m.opponentScore : null}
+                projection={m.opponentProjection ?? null}
+                leading={lead < 0}
+              />
+              {/*
+                Your chance this week, from the same model the Matchup screen prints (rail-odds route).
+                A finished game has no odds, only a result, so it draws no bar.
+              */}
+              {odds != null ? (
+                <span className="af-rail-row-odds" role="img" aria-label={msg.winOdds(odds)}>
+                  <span className="af-rail-row-odds-pct">{odds}%</span>
+                  <span className="af-rail-row-odds-bar" aria-hidden>
+                    <span className="af-rail-row-odds-fill" style={{ width: `${odds}%` }} />
+                  </span>
+                  <span className="af-rail-row-odds-pct" data-side="them">{100 - odds}%</span>
+                </span>
+              ) : null}
+            </>
           )}
         </span>
       ) : (
         <span className="af-rail-row-line">
           <span className="af-rail-row-team">
-            {String(platform).toLowerCase() === 'espn'
-              ? language === 'es'
-                ? 'ESPN no devolvió un calendario de enfrentamientos para esta liga'
-                : 'ESPN did not return a matchup schedule for this league'
-              : language === 'es'
-                ? 'sin enfrentamiento directo registrado esta semana'
-                : 'no head-to-head on file this week'}
+            {exileStatus
+              ? <span data-testid="rail-exile-status">{exileStatus.kind === 'island'
+                  ? msg.exileTokens(exileStatus.tokens, exileStatus.tokensToReturn, exileStatus.returnWeek)
+                  : msg.exileOnIsland(exileStatus.onIsland)}</span>
+              : String(platform).toLowerCase() === 'espn' ? msg.espnUnavailable : msg.matchupNotAvailable}
           </span>
         </span>
       )}

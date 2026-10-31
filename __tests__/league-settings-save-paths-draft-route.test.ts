@@ -48,7 +48,7 @@ vi.mock('@/lib/subscription/EntitlementResolver', () => ({
     this.resolveForUser = vi.fn().mockResolvedValue({ hasAccess: true })
   }),
 }))
-vi.mock('@/lib/draft/computedDraftRounds', () => ({ getComputedDraftRounds: vi.fn() }))
+vi.mock('@/lib/draft/computedDraftRounds', () => ({ getComputedDraftRounds: vi.fn().mockResolvedValue(null) }))
 vi.mock('@/lib/league/league-settings-draft-sync', () => ({ syncDraftSessionFromLeagueSettings: vi.fn() }))
 vi.mock('@/lib/tournament/divisions/leagueDraftTimeToTournament', () => ({ copyLeagueDraftTimeToTournament: m.copyBack }))
 

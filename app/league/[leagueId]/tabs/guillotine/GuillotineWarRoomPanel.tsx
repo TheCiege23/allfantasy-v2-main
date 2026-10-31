@@ -152,14 +152,14 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
   if (loading) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-[#07071a] p-4 text-[12px] text-white/50" data-testid="guillotine-war-room-loading">
-        <Loader2 className="h-4 w-4 animate-spin text-violet-300" /> Loading AF Legacy — Guillotine…
+        <Loader2 className="h-4 w-4 animate-spin text-violet-300" /> Loading AF Legacy — Guilly…
       </div>
     )
   }
   if (error || !context) {
     return (
       <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100/90" data-testid="guillotine-war-room-error">
-        {error ?? 'AF Legacy — Guillotine is unavailable for this league.'}
+        {error ?? 'AF Legacy — Guilly is unavailable for this league.'}
       </div>
     )
   }
@@ -171,7 +171,7 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
     <section className="space-y-3 rounded-xl border border-violet-400/20 bg-[#0a0820] p-4" data-testid="guillotine-war-room-panel">
       <div className="flex items-center gap-2">
         <Skull className="h-4 w-4 text-rose-300/80" />
-        <h2 className="text-sm font-bold text-white">AF Legacy — Guillotine</h2>
+        <h2 className="text-sm font-bold text-white">AF Legacy — Guilly</h2>
         <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-200">
           {context.sport} · W{context.currentWeek}
         </span>
@@ -238,14 +238,17 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
 
       {/* Tools */}
       <div className="flex flex-wrap gap-2">
-        {(['roster-risk', 'lineup-safety', 'faab-plan', 'waivers', 'dropped-players'] as const).map((t) => (
+        {/* No "Lineup safety" in a best ball Guilly league: lineups set themselves (featureAvailability). */}
+        {(['roster-risk', 'lineup-safety', 'faab-plan', 'waivers', 'dropped-players'] as const)
+          .filter((t) => t !== 'lineup-safety' || context?.featureAvailability?.lineupSafety !== false)
+          .map((t) => (
           <button key={t} type="button" onClick={() => void runTool(t)} disabled={toolBusy} data-testid={`guillotine-war-room-tool-${t}`}
             className="rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold text-white/80 transition hover:border-violet-400/30 hover:bg-violet-500/10 disabled:opacity-50">
             {t === 'roster-risk' ? 'Roster risk' : t === 'lineup-safety' ? 'Lineup safety' : t === 'faab-plan' ? 'FAAB plan' : t === 'waivers' ? 'Waivers' : 'Dropped pool'}
           </button>
         ))}
         <button type="button" onClick={() => void runTool('trade-analyze')} disabled={toolBusy || !tradesEnabled}
-          title={tradesEnabled ? undefined : 'Trades are disabled in this guillotine league'} data-testid="guillotine-war-room-tool-trade-analyze"
+          title={tradesEnabled ? undefined : 'Trades are disabled in this Guilly league'} data-testid="guillotine-war-room-tool-trade-analyze"
           className="rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold text-white/80 transition hover:border-violet-400/30 hover:bg-violet-500/10 disabled:opacity-40">Trade analyzer</button>
       </div>
 
@@ -297,7 +300,7 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
 
       {tool === 'trade-analyze' && !toolBusy && (
         <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3 text-[11px] text-white/70">
-          {!tradesEnabled ? <p className="text-amber-200/80">Trades are disabled in this guillotine league.</p> : (
+          {!tradesEnabled ? <p className="text-amber-200/80">Trades are disabled in this Guilly league.</p> : (
             <>
               <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                 <select value={tradeOutgoingId} onChange={(e) => setTradeOutgoingId(e.target.value)} data-testid="guillotine-war-room-trade-outgoing-select"

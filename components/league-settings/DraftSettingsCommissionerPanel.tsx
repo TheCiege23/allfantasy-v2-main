@@ -16,6 +16,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { Calendar, Clock, Shuffle, Sparkles, Info, ChevronDown, Trophy, TrendingDown, X } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SettingsSwitch } from '@/components/league-settings/SettingsSwitch'
+import { DraftDayKit } from '@/components/draft-day/DraftDayKit'
 import { LiveRookieOrderPanel } from '@/components/league-settings/LiveRookieOrderPanel'
 import {
   LEGACY_TIMER_SECONDS,
@@ -29,6 +30,8 @@ import {
   type CustomTimerUnit,
   type DraftPace,
 } from '@/lib/draft/draftSettingsPolicy'
+import { DEFAULT_LEAGUE_TIMEZONE, timeZoneShortName, utcToWallClock, wallClockToUtc } from '@/lib/timezone'
+import { startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,17 +72,6 @@ function formatTimer(seconds: number, t: T): string {
   return fill(t('lsEd.dr.v2.customValue'), { value: short })
 }
 
-const pad = (n: number) => String(n).padStart(2, '0')
-
-/** ISO instant → local `YYYY-MM-DD` and `HH:MM` (both in the viewer's own timezone). */
-function splitLocal(iso: string): { date: string; time: string } | null {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return null
-  return {
-    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -107,6 +99,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   const [computedRounds, setComputedRounds] = useState<ComputedRounds | null>(null)
   const [timerSeconds, setTimerSeconds] = useState<number>(28800)
   const [autostartEnabled, setAutostartEnabled] = useState(false)
+  // Native redraft drafts start at their time whatever Autostart says, so the toggle is hidden for them.
+  // The saved value is still sent back unchanged on save.
+  const [startsAtScheduledTime, setStartsAtScheduledTime] = useState(false)
   const [cpuAutoPickEnabled, setCpuAutoPickEnabled] = useState(true)
   const [slowDraftPauseEnabled, setSlowDraftPauseEnabled] = useState(false)
   const [slowDraftPauseFrom, setSlowDraftPauseFrom] = useState('21:00')
@@ -121,6 +116,8 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   // Draft date/time — empty until the commissioner picks one.
   const [draftDate, setDraftDate] = useState<string>('')
   const [draftTime, setDraftTime] = useState<string>('')
+  // Both are wall-clock in the LEAGUE's timezone, whatever the viewer's browser zone is.
+  const [leagueTimezone, setLeagueTimezone] = useState<string>(DEFAULT_LEAGUE_TIMEZONE)
 
   // Draft order
   const [teams, setTeams] = useState<DraftTeamSlot[]>([])
@@ -134,6 +131,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   const [isDynastyLike, setIsDynastyLike] = useState(false)
   const [rookieMode, setRookieMode] = useState<'worst_to_first' | 'reverse_max_pf'>('worst_to_first')
   const [rookieEnabled, setRookieEnabled] = useState(false)
+  // What is saved, and whether the owner's plan lets it be switched on (the route's `canAutomate`).
+  const [rookieEnabledSaved, setRookieEnabledSaved] = useState(false)
+  const [rookieCanAutomate, setRookieCanAutomate] = useState(false)
   const [rookieSlots, setRookieSlots] = useState<Array<{
     slot: number; teamName: string; ownerName: string; avatarUrl: string | null
     orderLabel: string; isPlayoffTeam: boolean; playoffFinish: string | null
@@ -160,11 +160,14 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
     setRounds(typeof cfg.rounds === 'number' ? cfg.rounds : 15)
     if (typeof cfg.timer_seconds === 'number' && cfg.timer_seconds > 0) setTimerSeconds(cfg.timer_seconds)
     setAutostartEnabled(Boolean(data.autostartEnabled ?? cfg.autostart))
+    setStartsAtScheduledTime(startsAtScheduledTimeRegardlessOfAutostart(data.scheduledStartLeague))
     setCpuAutoPickEnabled(data.cpuAutoPickEnabled ?? cfg.autopick_behavior !== 'skip')
     setSlowDraftPauseEnabled(Boolean(data.slowDraftPauseEnabled))
     if (data.slowDraftPauseFrom) setSlowDraftPauseFrom(data.slowDraftPauseFrom)
     if (data.slowDraftPauseTo) setSlowDraftPauseTo(data.slowDraftPauseTo)
-    const local = data.draftDate ? splitLocal(data.draftDate) : null
+    const tz = typeof data.timezone === 'string' && data.timezone ? data.timezone : DEFAULT_LEAGUE_TIMEZONE
+    setLeagueTimezone(tz)
+    const local = data.draftDate ? utcToWallClock(data.draftDate, tz) : null
     if (local) { setDraftDate(local.date); setDraftTime(local.time) }
     if (Array.isArray(data.teams)) setTeams(data.teams)
     setOrderLocked(Boolean(data.draftOrderLocked))
@@ -202,6 +205,8 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
       setIsDynastyLike(true)
       setRookieMode(data.savedMode ?? data.mode ?? 'worst_to_first')
       setRookieEnabled(data.enabled ?? false)
+      setRookieEnabledSaved(data.enabled ?? false)
+      setRookieCanAutomate(data.canAutomate === true)
       setRookieSlots(data.slots ?? [])
       setRookieNextSeason(data.season ?? 0)
       setRookieWarning(data.warning ?? null)
@@ -210,7 +215,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
 
   useEffect(() => { loadRookieOrder() }, [loadRookieOrder])
 
-  // Save rookie draft order config. Free: both modes are a deterministic sort.
+  // Save rookie draft order config. Switching auto-ordering on is AF Commissioner; off is free.
   const saveRookieConfig = useCallback(async () => {
     setRookieSaving(true); setError(null)
     try {
@@ -223,7 +228,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
         }
       )
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? t('lsEd.saveFailed')); return }
+      if (!res.ok) { setError(data.errorCode === 'AF_COMMISSIONER_REQUIRED' ? t('lsEd.dr.rookieAutoPlan') : data.error ?? t('lsEd.saveFailed')); return }
       flash(t('lsEd.dr.saved'))
       await loadRookieOrder(rookieMode)
     } catch { setError(t('lsEd.requestFailed')) }
@@ -252,8 +257,8 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
         slowDraftPauseTo,
       }
       if (draftDate) {
-        const local = new Date(`${draftDate}T${draftTime || '19:30'}:00`)
-        if (!Number.isNaN(local.getTime())) payload.draftDate = local.toISOString()
+        const instant = wallClockToUtc(draftDate, draftTime || '19:30', leagueTimezone)
+        if (instant) payload.draftDate = instant.toISOString()
         if (!draftTime) setDraftTime('19:30')
       }
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/settings`, {
@@ -268,7 +273,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
     } catch { setError(t('lsEd.requestFailed')) }
     finally { setSaving(false) }
   }, [leagueId, draftType, effectiveRounds, timerSeconds, cpuAutoPickEnabled, autostartEnabled, slowDraftPauseEnabled, pauseAllowed,
-    slowDraftPauseFrom, slowDraftPauseTo, draftDate, draftTime, flash, t])
+    slowDraftPauseFrom, slowDraftPauseTo, draftDate, draftTime, leagueTimezone, flash, t])
 
   // Randomize draft order — once for everyone, 1–100 times for AF Commissioner (posted to chat).
   const runRandomize = useCallback(async (times: number) => {
@@ -357,6 +362,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('lsEd.dr.loading')}</div>
 
   const ro = !isCommissioner
+  // Abbreviation at the chosen draft instant, so a November draft reads "EST" even when viewed in summer.
+  const scheduleInstant = draftDate ? wallClockToUtc(draftDate, draftTime || '19:30', leagueTimezone) : null
+  const scheduleTzLabel = `${timeZoneShortName(leagueTimezone, scheduleInstant ?? new Date())} · ${leagueTimezone}`
 
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden" data-testid="draft-settings-panel">
@@ -379,12 +387,20 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
             value={draftTime} onChange={setDraftTime} disabled={ro} language={language}
           />
         </div>
-        <p className="text-[11px] text-white/40">{t('lsEd.dr.localTz')}</p>
+        <p className="text-[11px] text-white/40" data-testid="draft-schedule-tz">
+          {fill(t('lsEd.dr.v2.leagueTz'), { tz: scheduleTzLabel })}
+        </p>
         <div className="border-t border-white/10 pt-1">
-          <ToggleRow
-            id={ids.autostart} label={t('draft.autostart')} description={t('draft.autostartDesc')}
-            enabled={autostartEnabled} onChange={setAutostartEnabled} disabled={ro}
-          />
+          {startsAtScheduledTime ? (
+            <p className="text-[12px] text-white/60" data-testid="draft-autostart-scheduled-note">
+              {t('draft.autostartScheduledNote')}
+            </p>
+          ) : (
+            <ToggleRow
+              id={ids.autostart} label={t('draft.autostart')} description={t('draft.autostartDesc')}
+              enabled={autostartEnabled} onChange={setAutostartEnabled} disabled={ro}
+            />
+          )}
         </div>
       </section>
 
@@ -642,10 +658,20 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
           </div>
 
           {isCommissioner && (
-            <ToggleRow
-              id={ids.rookieAuto} label={t('draft.autoSetOrder')} description={t('draft.autoSetOrderDesc')}
-              enabled={rookieEnabled} onChange={setRookieEnabled}
-            />
+            <>
+              <ToggleRow
+                id={ids.rookieAuto} label={t('draft.autoSetOrder')} description={t('draft.autoSetOrderDesc')}
+                enabled={rookieEnabled} onChange={setRookieEnabled}
+                // Off can always be saved; on needs the owner's plan.
+                disabled={!rookieCanAutomate && !rookieEnabledSaved}
+              />
+              {!rookieCanAutomate ? (
+                <p className="text-[11px] leading-snug text-white/45" data-testid="rookie-auto-plan">
+                  {t('lsEd.dr.rookieAutoPlan')}{' '}
+                  <a href="/upgrade?plan=commissioner" className="font-semibold text-violet-300 underline">{t('lsEd.dr.rookieAutoUpgrade')}</a>
+                </p>
+              ) : null}
+            </>
           )}
 
           {rookieSlots.length > 0 && (
@@ -691,6 +717,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
         </section>
       )}
 
+      <DraftDayKit leagueId={leagueId} isCommissioner={isCommissioner} />
       {/* ===== LIVE ROOKIE ORDER (Dynasty/C2C/Devy, commissioner only) ===== */}
       {isDynastyLike && isCommissioner && <LiveRookieOrderPanel leagueId={leagueId} />}
 

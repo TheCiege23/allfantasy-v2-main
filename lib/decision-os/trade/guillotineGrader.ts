@@ -37,7 +37,7 @@ export function createGuillotineGrader(
   const ctxOnce = () =>
     (ctx ??= deps
       .loadContext({ ...args.league, sport: args.sport ?? null })
-      .catch((): GuillotineContextResult => ({ ok: false, reason: 'This guillotine league’s values could not be loaded just now.' })))
+      .catch((): GuillotineContextResult => ({ ok: false, reason: 'This Guilly league’s values could not be loaded just now.' })))
 
   return {
     async grade(give, get) {

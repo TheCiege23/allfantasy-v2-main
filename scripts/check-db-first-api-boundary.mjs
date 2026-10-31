@@ -218,15 +218,20 @@ const DATA_API_HOST_PATTERNS = [
    * DOCBLOCKS (fantraxApi.ts:484, scripts/import-fantrax-league.ts:12). Once those stopped
    * being reported, the conflict was one line, not three.
    *
-   * A deep-link HELPER was investigated as the fix and rejected: nothing in lib/, app/ or
-   * server/ constructs a Fantrax league URL. Fantrax is not even in the "Open in <platform>"
-   * switch in lib/core-app/outstandingIssues.ts that Sleeper, ESPN and Yahoo use. The
-   * helper would have had zero consumers — infrastructure built to satisfy a linter.
+   * A deep-link HELPER was investigated as the fix and rejected while nothing built a
+   * Fantrax league URL. ⚠ THAT IS NO LONGER TRUE: lib/league-links/sourceLinkResolver.ts now
+   * builds the "Open in Fantrax" league page (`/fantasy/league/<id>/home`) from its approved
+   * `homepage: 'https://www.fantrax.com'` — one literal, deliberately reused rather than a
+   * second. It is an <a href> the USER's browser follows, not a call this server makes, so it
+   * is not a DB-first violation; it is reported because a hostname pattern cannot tell a link
+   * from a feed, which is exactly the point above.
    *
-   * 2 hits:
+   * Hits on this host (re-run rather than trusting the list; it drifts):
    *   lib/league-import/fantrax/fantraxApi.ts:29  the FXEA base. The genuine finding, and
    *                                               the reason to add this host at all.
+   *   lib/league-links/sourceLinkResolver.ts      the link-builder's homepage. A link, ACCEPTED.
    *   __tests__/fantrax-live-import-wiring.test.ts:30  one test literal, ACCEPTED.
+   *   __tests__/league-links/sourceLinkResolver.test.ts  the resolver's own test, ACCEPTED.
    *
    * ⚠ DO NOT "FIX" THAT TEST LINE. It asserts parseFantraxLeagueId handles the URL a user
    * copies out of their address bar — its own docblock says nothing on Fantrax ever shows

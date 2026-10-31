@@ -24,7 +24,7 @@ export async function GET(_req: NextRequest, context: Context) {
   const access = await resolveLeagueAccess(leagueId, userId)
   if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const season = await prisma.survivorGuillotineLeague.findUnique({ where: { leagueId } })
-  if (!season) return NextResponse.json({ error: 'Survivor Guillotine is not configured' }, { status: 404 })
+  if (!season) return NextResponse.json({ error: 'Survivor Guilly is not configured' }, { status: 404 })
   const powers = await readSGLivePowers(leagueId, userId)
   const fullPeriodState = readSGPeriodState(season.periodState)
   const periodState = fullPeriodState ? (({ chopSnapshot: _private, commissionerTie: _decision,

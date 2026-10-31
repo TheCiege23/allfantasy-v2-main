@@ -43,10 +43,29 @@ describe('divisions rules (scoring + roster labels)', () => {
   })
 
   it('rejects unknown ids, the other sport\'s ids and labels with no live preset', () => {
-    for (const rules of [{ scoringId: 'nope' }, { scoringId: 'cat9' }, { rosterId: 'nba-std' }, { scoringId: 'six' }, { scoringId: 'custom' }, { rosterId: 'nfl-2qb' }, 'half']) {
+    for (const rules of [{ scoringId: 'nope' }, { scoringId: 'cat9' }, { rosterId: 'nba-std' }, { scoringId: 'six' }, { scoringId: 'custom', rosterId: 'nba-std' }, { rosterId: 'nfl-2qb' }, 'half']) {
       expect(() => buildDivisionsBlueprint(plan({ rules }))).toThrow(DivisionsBlueprintError)
     }
     expect(parseDivisionsRules('NBA', { scoringId: 'cat9', rosterId: 'nba-std' })).toEqual({ ok: true, rules: { scoringId: 'cat9', rosterId: 'nba-std' } })
+  })
+
+  it('accepts Custom with the commissioner\'s values, storing only what differs from the starting point', () => {
+    const { config } = buildDivisionsBlueprint(plan({ rules: { scoringId: 'custom', rosterId: 'nfl-sf', overrides: { rec: 0.75, pass_td: 4 } } }))
+    expect(config.rules).toEqual({ scoringId: 'custom', rosterId: 'nfl-sf', overrides: { rec: 0.75 } })
+    expect(buildDivisionsBlueprint(plan({ rules: { scoringId: 'custom' } })).config.rules).toEqual({ scoringId: 'custom', rosterId: 'nfl-std', overrides: {} })
+    expect(buildDivisionsBlueprint(plan({ rules: { scoringId: 'custom', overrides: { stl: 4 } } }, 'NBA')).config.rules)
+      .toEqual({ scoringId: 'custom', rosterId: 'nba-std', overrides: { stl: 4 } })
+  })
+
+  it('refuses custom values on any scoring other than Custom', () => {
+    expect(() => buildDivisionsBlueprint(plan({ rules: { scoringId: 'half', overrides: { rec: 1 } } }))).toThrow('Custom values can only be set with Custom scoring.')
+    expect(parseDivisionsRules('NBA', { scoringId: 'cat9', overrides: {} })).toMatchObject({ ok: false })
+  })
+
+  it('refuses invalid custom values', () => {
+    for (const overrides of [{ rec: 'x' }, { rec: 99 }, { int: 2 }, { pass_yd: 0.041 }, { pts: 1 }, { rec: Number.NaN }, [1], 'rec']) {
+      expect(parseDivisionsRules('NFL', { scoringId: 'custom', overrides }).ok, JSON.stringify(overrides)).toBe(false)
+    }
   })
 
   it('reads an old tournament (no saved rules) as the sport default, and a saved one as saved', () => {
@@ -72,5 +91,14 @@ describe('divisions rules (scoring + roster labels)', () => {
     db.shell = { ...db.shell, status: 'registering' }
     await expect(updateDivisionsBlueprint('owner', 't1', plan({ rules: { scoringId: 'ppr', rosterId: 'nfl-std' } }))).rejects.toMatchObject({ status: 409 })
     expect(db.updated).toHaveLength(1)
+  })
+
+  it('keeps Custom values on the saved tournament and locks them with the rest once registration opens', async () => {
+    await saveDivisionsBlueprint('owner', plan({ rules: { scoringId: 'custom', rosterId: 'nfl-std', overrides: { rec: 1.25 } } }))
+    expect((db.created[0]!.formatSettings as { rules: unknown }).rules).toEqual({ scoringId: 'custom', rosterId: 'nfl-std', overrides: { rec: 1.25 } })
+    expect(divisionsRulesLabels('NFL', db.created[0]!.formatSettings)).toEqual({ scoringId: 'custom', rosterId: 'nfl-std', overrides: { rec: 1.25 } })
+    db.shell = { id: 't1', format: 'divisions', status: 'registering', commissionerId: 'owner', updatedAt: new Date(1) }
+    await expect(updateDivisionsBlueprint('owner', 't1', plan({ rules: { scoringId: 'custom', rosterId: 'nfl-std', overrides: { rec: 2 } } }))).rejects.toMatchObject({ status: 409 })
+    expect(db.updated).toHaveLength(0)
   })
 })

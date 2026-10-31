@@ -19,7 +19,8 @@ import { resolveWriteAuthority } from '@/lib/league/write-authority'
  *   3. It CLEARS on its own when the situation resolves, so the store can close the task and the
  *      list shrinks without anybody tidying it.
  *
- * Four detectors clear that bar today. Adding a fifth is a deliberate edit here, not a config flag.
+ * Four detectors clear that bar today, plus the native-league ones in ./operationalTasks.ts and
+ * ./commissionerFeatureTasks.ts. Adding another is a deliberate edit, not a config flag.
  *
  * 🛑 THESE ARE PURE FUNCTIONS OF READS. They decide nothing about persistence — `taskStore.ts`
  * owns that — which is what lets the whole detection layer be tested without a database.
@@ -312,7 +313,37 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
   if (platform !== undefined && resolveWriteAuthority(platform) === 'NATIVE') {
     const roster = await readOrphanTeamCounts(leagueId)
     const orphans = detectOrphanTeams(roster.orphanCount, roster.totalTeams)
-    return [...(orphans ? [orphans] : []), ...await readOperationalTasks(leagueId, now)]
+    const { readLineupIntegrityTasks } = await import('@/lib/lineup-integrity/lineupIntegrityService')
+    // The native commissioner tools (./commissionerFeatureTasks.ts): an unapplied stat correction, a
+    // trade in commissioner review, inactive teams nobody is setting lineups for, payouts that
+    // overcommit the pot, and a finished season to roll over (redraft renew or dynasty start).
+    const { readCommissionerFeatureTasks } = await import('./commissionerFeatureTasks')
+    // Eliminated teams short of the league's lineup minimum (lib/eliminated-lineups); nothing unless
+    // the AF Commissioner rule is on.
+    const { readEliminatedLineupTasks } = await import('@/lib/eliminated-lineups/eliminatedLineupService')
+    // Activated players IR auto-move could not take off IR (lib/ir-activation); nothing unless the
+    // AF Commissioner rule is on.
+    const { readIrAutoMoveTasks } = await import('@/lib/ir-activation/irAutoMoveService')
+    // An open orphan auction, or one past its closing time (lib/orphan-auction).
+    const { readOrphanAuctionTasks } = await import('@/lib/orphan-auction/orphanAuctionService')
+    // Picks whose terms the next rookie draft settles (lib/league-trade-engine/pickTerms.ts).
+    const { readPickTermsTasks } = await import('@/lib/league-trade-engine/pickTermsService')
+    // Open taxi steal claims (lib/taxi/taxiStealing.ts).
+    const { readTaxiStealTasks } = await import('@/lib/taxi/taxiStealingService')
+    // Managers who have not seen the newest rule change (lib/league-rules-explainer/awareness.ts).
+    const { readUnseenRuleChangeTasks } = await import('@/lib/league-rules-explainer/awarenessService')
+    return [
+      ...(orphans ? [orphans] : []),
+      ...await readOperationalTasks(leagueId, now),
+      ...await readLineupIntegrityTasks(leagueId),
+      ...await readCommissionerFeatureTasks(leagueId, now),
+      ...await readEliminatedLineupTasks(leagueId),
+      ...await readIrAutoMoveTasks(leagueId),
+      ...await readOrphanAuctionTasks(leagueId, now),
+      ...await readPickTermsTasks(leagueId),
+      ...await readTaxiStealTasks(leagueId, now),
+      ...await readUnseenRuleChangeTasks(leagueId, now),
+    ]
   }
 
   const window = await readActivityWindow(leagueId)
@@ -343,5 +374,15 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
   const managers = withSilentManagers(moved, roster.ownedTeamNames)
   const inactive = detectInactiveManagers(managers, window.lastActivityAt, now)
 
-  return [...[neverImported, stale, inactive, orphans].filter((c): c is WorkspaceTaskCandidate => c !== null), ...await readOperationalTasks(leagueId, now)]
+  /*
+   * Lineup integrity (lib/lineup-integrity): teams whose finished-week lineup could not score — an
+   * empty slot or a starter on bye. NFL leagues on AllFantasy or Sleeper; nothing for the rest.
+   * Imported dynamically so the native path above never loads it.
+   */
+  const { readLineupIntegrityTasks } = await import('@/lib/lineup-integrity/lineupIntegrityService')
+  return [
+    ...[neverImported, stale, inactive, orphans].filter((c): c is WorkspaceTaskCandidate => c !== null),
+    ...await readOperationalTasks(leagueId, now),
+    ...await readLineupIntegrityTasks(leagueId),
+  ]
 }

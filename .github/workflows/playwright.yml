@@ -326,6 +326,8 @@ jobs:
         NEXTAUTH_URL: http://localhost:3000
         # 8192MB heap: see the note on the retention-engagement step above.
         NODE_OPTIONS: --max-old-space-size=8192
+        # The server uses a separate override so react-server conditions stay out.
+        PLAYWRIGHT_SERVER_NODE_OPTIONS: --max-old-space-size=8192
       run: npm run test:e2e:mobile
     # ⚠ THE AUTHENTICATED PHONE LANE. Separate from mobile-smoke on purpose: it
     # seeds leagues and users and signs in, which is exactly what phone-smoke.spec.ts
@@ -426,9 +428,57 @@ jobs:
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         NEXTAUTH_SECRET: ci-nextauth-secret
         NEXTAUTH_URL: http://localhost:3000
-        # 8192MB heap: see the note on the retention-engagement step above.
+        # 8192MB heap: see the note on the retention-engagement step above. ⚠ From 2026-10-15
+        # until playwright.config.ts's serverNodeOptions() this never reached the dev server --
+        # the config blanked NODE_OPTIONS for it, so it ran on the 4096MB default and restarted
+        # up to three times a run.
         NODE_OPTIONS: --max-old-space-size=8192
-      run: npm run test:e2e:draft-room:chromium
+        # Separate playwright runs, so each gets its own `next dev`. One server for all five specs grew
+        # past Next's restart line (80% of the heap limit) late in the run: on 2026-10-27 the lane
+        # failed on #2798, #2804 and #2813 with "Server is approaching the used memory threshold,
+        # restarting..." and ECONNRESET, a different test timing out each time, while the same
+        # NBA player-card test passed alone in 43s. The retention note above names the lever:
+        # fewer specs per server, not more memory. Splitting inside one step keeps the required
+        # check's name. Each run warms only what its specs visit (`/` is the readiness probe
+        # gotoDraftRoomHarness polls); if you add a @draft-room or @mock-draft-room spec, put it
+        # in a run and add its route. Each run writes its own HTML report so neither overwrites
+        # the other in the artifact below.
+      run: |
+        # Refuse if a tagged spec exists that neither run below lists -- it would silently not run.
+        tagged=$(grep -rlE "@draft-room|@mock-draft-room" e2e | sort | tr '\n' ' ')
+        listed="e2e/draft-board-coverage.spec.ts e2e/draft-room-click-audit.spec.ts e2e/draft-room-commissioner-regression.spec.ts e2e/draft-roster-configuration-gate.spec.ts e2e/mobile-draft-production.spec.ts e2e/mock-draft-room-click-audit.spec.ts "
+        if [ "$tagged" != "$listed" ]; then
+          echo "::error::@draft-room specs changed. Tagged: $tagged -- add new ones to a run in this step."
+          exit 1
+        fi
+        rc=0
+        # Each run also warms the API routes its specs reach the server on. The specs leave these
+        # unmocked (signed out they answer 401, and nothing asserts on them), and the FIRST request
+        # to any new route makes `next dev` rebuild every server entry it has compiled. Measured
+        # 2026-10-29: one late rebuild stalled the server for ~4 minutes, the next test's readiness
+        # probe failed at 120s, and memory stayed near the heap limit for the rest of the run, so
+        # every serial retry failed the same way. Warmed here, the rebuilds land before any test
+        # clock starts. The lists are every route.js under .next-playwright-3101/server/app after a
+        # full local run. A route missing from them costs one mid-run rebuild, so add new ones.
+        CLICK_AUDIT_API=/api/i18n/translations,/api/analytics/beacon,/api/leagues/e2e-warm/draft/manager-history,/api/leagues/e2e-warm/draft/trade-builder/inventory,/api/leagues/e2e-warm/draft-day,/api/leagues/e2e-warm/ai-adp,/api/leagues/e2e-warm/draft/decision,/api/ai/providers/status,/api/monetization/context,/api/config/features,/api/guest-mode/status,/api/league/list,/api/tts
+        OTHER_SPECS_API=/api/i18n/translations,/api/leagues/e2e-warm/ai-adp,/api/leagues/e2e-warm/draft/e2e-warm/intro-status,/api/leagues/e2e-warm/draft/trade-proposals,/api/leagues/e2e-warm/settings/draft,/api/mock-draft/e2e-warm,/api/mock-draft/e2e-warm/events,/api/subscription/entitlements,/api/tokens/balance,/api/user/profile,/api/user/settings
+        E2E_WARM_ROUTES=/,/e2e/draft-room,/e2e/draft-player-measurement,$CLICK_AUDIT_API \
+        PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/click-audit \
+          npx playwright test e2e/draft-room-click-audit.spec.ts \
+            --grep "@draft-room|@mock-draft-room" --project=chromium || rc=1
+        E2E_WARM_ROUTES=/,/e2e/draft-room,/e2e/draft-settings,/e2e/draft-queue,/e2e/mock-draft-room,/e2e/mock-draft-production,$OTHER_SPECS_API \
+        PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/other-specs \
+          npx playwright test \
+            e2e/draft-room-commissioner-regression.spec.ts \
+            e2e/draft-roster-configuration-gate.spec.ts \
+            e2e/mobile-draft-production.spec.ts \
+            e2e/mock-draft-room-click-audit.spec.ts \
+            --grep "@draft-room|@mock-draft-room" --project=chromium || rc=1
+        E2E_WARM_ROUTES=/,/e2e/draft-board-coverage \
+        PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/board-coverage \
+          npx playwright test e2e/draft-board-coverage.spec.ts \
+            --grep "@draft-room|@mock-draft-room" --project=chromium || rc=1
+        exit $rc
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
       with:

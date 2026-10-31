@@ -16,8 +16,9 @@
  *      writes an ESPN player identity, `PlayerIdentityMap.espnId`, and — only when the CDN
  *      actually serves it — the headshot onto the RI row and the canonical player.
  *
- * SCOPE, BY OWNER DECISION (contracts/espn GAPS E-06): photos only for players RI already has.
- * No ESPN-sourced player rows are created; newcomers RI has not loaded stay photo-less.
+ * ESPN roster use is authorized by the owner (2026-10-30). Alongside the existing photo work,
+ * retain valid, season-qualified school roster snapshots, including athletes RI does not yet have.
+ * Snapshots are evidence only; they do not create draftable players or activate campus scoring.
  *
  * 🛑 A 403 FROM ESPN STOPS THE PASS. It is reported, never worked around (see the adapter).
  */
@@ -32,6 +33,7 @@ import {
   type EspnNcaabAthlete,
 } from '@/lib/espn/espnNcaabFetch'
 import { matchRoster, matchSchools, type SchoolMatch } from '@/lib/espn/ncaabEspnMatch'
+import { makeEspnNcaabRosterSnapshot, storeEspnNcaabRosterSnapshot } from '@/lib/espn/ncaabRosterSnapshot'
 import { writeCanonicalHeadshot } from '@/lib/player-assets/canonicalHeadshotWrite'
 import { isApiSportsImageUrl } from '@/lib/player-assets/imageUrlHygiene'
 import { isServedImage } from '@/lib/player-assets/servedImage'
@@ -209,6 +211,8 @@ export type EspnNcaabRosterResult = {
   noCandidate: number
   refused: number
   identitiesCreated: number
+  rosterSnapshotsStored: number
+  rosterSnapshotsRejected: number
   /** An ESPN athlete already linked to a DIFFERENT canonical player. Never overwritten. */
   identityConflicts: number
   headshotsWritten: number
@@ -234,6 +238,8 @@ export async function syncEspnNcaabRosters(opts: {
     noCandidate: 0,
     refused: 0,
     identitiesCreated: 0,
+    rosterSnapshotsStored: 0,
+    rosterSnapshotsRejected: 0,
     identityConflicts: 0,
     headshotsWritten: 0,
     headshotsMissing: 0,
@@ -247,7 +253,7 @@ export async function syncEspnNcaabRosters(opts: {
     // so the oldest-fetched school is always next and every school comes round.
     orderBy: [{ fetchedAt: { sort: 'asc', nulls: 'first' } }],
     take: opts.maxSchools ?? 40,
-    select: { id: true, providerTeamId: true, teamId: true },
+    select: { id: true, providerTeamId: true, teamId: true, displayName: true },
   })
   if (schools.length === 0) return { ...result, skipped: 'no schools mapped' }
 
@@ -267,7 +273,22 @@ export async function syncEspnNcaabRosters(opts: {
 
     let athletes: EspnNcaabAthlete[] = []
     try {
-      athletes = (await fetchEspnNcaabRoster(school.providerTeamId, { fetchImpl: opts.fetchImpl })).athletes
+      const roster = await fetchEspnNcaabRoster(school.providerTeamId, { fetchImpl: opts.fetchImpl })
+      athletes = roster.athletes
+      const snapshot = makeEspnNcaabRosterSnapshot({
+        seasonYear: roster.seasonYear, teamId: school.providerTeamId, school: school.displayName,
+        athletes, rejectedCount: roster.rejectedCount, now,
+      })
+      if (snapshot) {
+        try {
+          await storeEspnNcaabRosterSnapshot(prisma, snapshot)
+          result.rosterSnapshotsStored += 1
+        } catch {
+          result.errors += 1
+        }
+      } else {
+        result.rosterSnapshotsRejected += 1
+      }
     } catch (err) {
       if (err instanceof EspnBlockedError) {
         result.blocked = true

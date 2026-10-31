@@ -8,7 +8,7 @@ import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import { getLeagueRole } from '@/lib/league/permissions'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
-import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,9 +41,8 @@ export async function GET(req: NextRequest) {
       },
     }),
     getLeagueRole(leagueId, userId),
-    new EntitlementResolver()
-      .resolveForUser(userId, 'commissioner_ai_tools')
-      .catch(() => ({ hasAccess: false })),
+    // The one shared AF Commissioner check (lib/entitlements/afCommissionerPlan.ts).
+    hasAfCommissionerPlan(session?.user ?? { id: userId }).then((hasAccess) => ({ hasAccess })),
     getLeagueScoringConfig(leagueId),
   ])
 
@@ -86,6 +85,16 @@ export async function GET(req: NextRequest) {
       teamCount: league.leagueSize ?? league.teams.length,
       isDynasty: league.isDynasty,
       leagueVariant: league.leagueVariant ?? null,
+      // With sport, isDynasty and leagueType (from `comm`), what the draft panels need to hide
+      // the Autostart toggle where it does nothing (lib/draft/redraftScheduledStart.ts).
+      platform: league.platform ?? null,
+      // The Import / Sync tab: where an imported league came from and when it was last read. The
+      // stored sync error is never sent — it can carry provider text.
+      importedAt: league.importedAt?.toISOString() ?? null,
+      lastSyncedAt: league.lastSyncedAt?.toISOString() ?? null,
+      syncStatus: league.syncStatus ?? null,
+      survivorMode: league.survivorMode ?? null,
+      guillotineMode: league.guillotineMode ?? null,
       bestBallMode: league.bestBallMode ?? null,
       autoCoachEnabled: league.autoCoachEnabled ?? true,
       rosterSize: league.rosterSize,

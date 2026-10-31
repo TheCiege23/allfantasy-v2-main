@@ -1088,9 +1088,10 @@ export function parseEspnTransactions(
    *
    * That makes two very different states indistinguishable: "these leagues had no
    * trades" and "ESPN sent trades under a code we do not know". This tally
-   * separates them. It deliberately does NOT guess additional codes -- there is no
-   * ESPN contract in `contracts/`, so any code added from memory would silently
-   * MISLABEL real transactions, which is worse than dropping them.
+   * separates them. It deliberately does NOT guess additional codes -- `contracts/espn/`
+   * does not cover this activity feed (no ENDPOINTS.yaml entry, no fixture), so any code
+   * added from memory would silently MISLABEL real transactions, which is worse than
+   * dropping them.
    */
   const unmappedTypeCounts = new Map<number, number>()
 

@@ -29,6 +29,7 @@ import {
   type RookiePickOrderMethod,
 } from '@/lib/draft-types/draftTypeRegistry'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 
 export const dynamic = 'force-dynamic'
 
@@ -211,6 +212,11 @@ export async function PATCH(
     return NextResponse.json({ error: 'No updatable fields in body' }, { status: 400 })
   }
 
+  // The draft rules as members read them, before the writes — for the "What changed" card. Loaded
+  // lazily and best-effort (lib/league-rules-explainer/loadDraftRules.ts): it never fails the save.
+  const draftRules = await import('@/lib/league-rules-explainer/loadDraftRules').catch(() => null)
+  const draftRulesBefore = draftRules ? await draftRules.loadDraftRulesSafe(leagueId) : null
+
   if (Object.keys(draftUpdates).length > 0) {
     await prisma.leagueSettings.update({
       where: { leagueId },
@@ -282,6 +288,14 @@ export async function PATCH(
       data: { settings: merged as never },
     })
   }
+
+  // Silent (no push / email): the league home's "What changed" card is how members hear about it.
+  await publishRuleChangesEvent({
+    leagueId,
+    actorUserId: userId,
+    section: 'draft',
+    changes: draftRules ? draftRules.draftRuleChanges(draftRulesBefore, await draftRules.loadDraftRulesSafe(leagueId)) : [],
+  })
 
   return NextResponse.json({ ok: true })
 }

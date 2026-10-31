@@ -1,6 +1,17 @@
 /**
  * Shared lineup payload builder for `/api/leagues/roster/save` and AI apply-lineup.
+ *
+ * A STARTER row may carry `slotIndex` — the expanded starter slot he holds (QB, RB1, …, FLEX), so a
+ * lineup saved with an empty slot reloads with the hole where it was. Kept only when it is a
+ * non-negative integer, and only on starters. See lib/league/lineupSlotPositions.ts.
+ *
+ * A C2C team's CAMPUS starters (lib/c2c/campusLineup.ts) are marked in `lineup_sections.campus`. A save
+ * that sends no `campus` list (every lineup screen but the campus one) keeps them, so a pro lineup change
+ * never wipes them.
  */
+import { starterSlotIndexOf } from '@/lib/league/lineupSlotPositions'
+import { CAMPUS_SECTION, campusStartersAfterSave } from '@/lib/c2c/campusLineup'
+
 export type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 
 function toPlayerId(raw: unknown): string | null {
@@ -13,7 +24,7 @@ function toPlayerId(raw: unknown): string | null {
   return null
 }
 
-function normalizeLineupSection(section: unknown): Array<Record<string, unknown>> {
+function normalizeLineupSection(section: unknown, keepSlotIndex = false): Array<Record<string, unknown>> {
   if (!Array.isArray(section)) return []
   const out: Array<Record<string, unknown>> = []
   const seen = new Set<string>()
@@ -33,6 +44,8 @@ function normalizeLineupSection(section: unknown): Array<Record<string, unknown>
       actual: obj.actual == null ? null : Number(obj.actual),
       status: String(obj.status ?? obj.injury_status ?? 'healthy').toLowerCase(),
     })
+    const slotIndex = keepSlotIndex ? starterSlotIndexOf(obj) : null
+    if (slotIndex != null) out[out.length - 1].slotIndex = slotIndex
   }
   return out
 }
@@ -51,7 +64,7 @@ export function buildPersistedRosterDataFromRosterState(
       : {}
 
   const lineupSections: Record<RosterSectionKey, Array<Record<string, unknown>>> = {
-    starters: normalizeLineupSection(rawObj.starters),
+    starters: normalizeLineupSection(rawObj.starters, true),
     bench: normalizeLineupSection(rawObj.bench),
     ir: normalizeLineupSection(rawObj.ir),
     taxi: normalizeLineupSection(rawObj.taxi),
@@ -65,6 +78,11 @@ export function buildPersistedRosterDataFromRosterState(
     ...lineupSections.devy.map((p) => String(p.id)),
   ]
   const players = [...new Set(allIds)]
+  const campus = campusStartersAfterSave({
+    saved: base,
+    sent: Array.isArray(rawObj[CAMPUS_SECTION]) ? rawObj[CAMPUS_SECTION] : undefined,
+    devyIds: lineupSections.devy.map((p) => String(p.id)),
+  })
 
   return {
     ...base,
@@ -73,7 +91,7 @@ export function buildPersistedRosterDataFromRosterState(
     reserve: lineupSections.ir.map((p) => p.id),
     taxi: lineupSections.taxi.map((p) => p.id),
     devy: lineupSections.devy.map((p) => p.id),
-    lineup_sections: lineupSections,
+    lineup_sections: campus.length ? { ...lineupSections, [CAMPUS_SECTION]: campus } : lineupSections,
     lineup_updated_at: new Date().toISOString(),
   }
 }

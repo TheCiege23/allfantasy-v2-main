@@ -5,13 +5,15 @@ import type { SeasonOutlook as SeasonOutlookData } from '@/lib/core-app/seasonOu
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import { kickoffText } from '@/lib/core-app/kickoffText'
-import { band, ordinal, pct, rangeLabel } from '@/lib/core-app/outlookCopy'
+import { band, pct, rangeLabel } from '@/lib/core-app/outlookCopy'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import { StatusPill } from '@/components/core-app/outlook/OutlookParts'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-season-outlook.css'
 import '@/components/core-app/af-outlook.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { seasonOutlookMessages } from '@/lib/core-app/messages/seasonOutlook'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { seasonOutlookSentence } from '@/lib/core-app/outlookSpanish'
 
@@ -53,7 +55,7 @@ export { seasonOutlookSentence }
 
 export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(seasonOutlookMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const hasLeagues = data.leagues.length > 0
   const preseasonKickoffLabel =
@@ -91,7 +93,7 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
           <section className="af-so-tiles" aria-label={copy('Your odds across leagues')}>
             <Tile
               value={String(data.summary.makingPlayoffs)}
-              label={es ? `de ${data.leagues.length} con opciones de playoffs` : `of ${data.leagues.length} on track for the playoffs`}
+              label={m.onTrack(data.leagues.length)}
               tone="accent"
             />
             <Tile value={String(data.summary.clinched)} label={copy('already clinched')} tone="good" />
@@ -101,7 +103,7 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
               value={data.summary.bestTitle ? `${pct(data.summary.bestTitle.pct)}%` : '—'}
               label={
                 data.summary.bestTitle
-                  ? es ? `mejor probabilidad de título · ${data.summary.bestTitle.leagueName}` : `best title odds · ${data.summary.bestTitle.leagueName}`
+                  ? m.bestTitleOdds(data.summary.bestTitle.leagueName)
                   : copy('no title odds yet')
               }
             />
@@ -115,7 +117,7 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
                   <p className="af-olk-next-t">{next.leagueName}</p>
                   <p className="af-olk-next-d">{seasonOutlookSentence(next.reason, language)}</p>
                   <Link className="af-btn af-olk-next-cta" href={next.href}>
-                    {es ? 'Abrir' : 'Open'} {next.leagueName}
+                    {m.open} {next.leagueName}
                   </Link>
                 </>
               ) : (
@@ -144,8 +146,8 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
                         <span className="af-olk-diverge-bar" data-side="right" style={{ width: `${Math.min(50, s.swing / 2)}%` }} />
                       </span>
                       <p className="af-olk-driver-d">
-                        {s.opponentName ? es ? `Contra ${s.opponentName}: ` : `Against ${s.opponentName}: ` : ''}
-                        {es ? `${pct(s.ifWin)}% si ganas; ${pct(s.ifLose)}% si pierdes.` : `${pct(s.ifWin)}% with a win, ${pct(s.ifLose)}% with a loss.`}
+                        {s.opponentName ? m.against(s.opponentName) : ''}
+                        {m.winLose(pct(s.ifWin), pct(s.ifLose))}
                       </p>
                     </li>
                   ))}
@@ -158,7 +160,7 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
           <p className="af-so-basis">
             {seasonOutlookSentence(data.basis, language)}{' '}
             {data.runs.reused > 0
-              ? es ? `Se reutilizaron ${data.runs.reused} de ${data.runs.reused + data.runs.computed} simulaciones porque sus datos no cambiaron.` : `${data.runs.reused} of ${data.runs.reused + data.runs.computed} league runs were reused because nothing they read had changed.`
+              ? m.runsReused(data.runs.reused, data.runs.reused + data.runs.computed)
               : ''}
           </p>
 
@@ -193,10 +195,10 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
                           {l.leagueName}
                         </Link>
                         <span className="af-so-leaguemeta af-num">
-                          {l.season} · {es ? `primeros ${l.playoffTeams} de ${l.assumptions.teams}` : `top ${l.playoffTeams} of ${l.assumptions.teams}`}
-                          {l.byeTeams > 0 ? es ? `, ${l.byeTeams} descansos` : `, ${l.byeTeams} bye${l.byeTeams === 1 ? '' : 's'}` : ''} ·{' '}
-                          {l.weeksRemaining === 0 ? copy('season over') : es ? `${l.weeksRemaining} por jugar` : `${l.weeksRemaining} to play`}
-                          {rest != null && l.weeksRemaining > 0 ? es ? ` · ${rest}.º calendario más difícil restante` : ` · ${ordinal(rest)} hardest schedule left` : ''}
+                          {l.season} · {m.topOf(l.playoffTeams, l.assumptions.teams)}
+                          {l.byeTeams > 0 ? m.byes(l.byeTeams) : ''} ·{' '}
+                          {l.weeksRemaining === 0 ? copy('season over') : m.toPlay(l.weeksRemaining)}
+                          {rest != null && l.weeksRemaining > 0 ? m.hardestLeft(rest) : ''}
                         </span>
                         {l.you?.status ? <StatusPill status={l.you.status} /> : null}
                       </th>
@@ -244,7 +246,7 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
         <div className="af-so-empty">
           <p className="af-so-empty-t">{copy('The season has not started yet.')}</p>
           <p className="af-so-empty-b">
-            {es ? `Las probabilidades se simulan a partir de las semanas completas de cada equipo. Aún no se ha jugado ninguna esta temporada. Empezarán a aparecer tras el primer partido: ${preseasonKickoffLabel}.` : `Odds are simulated from each team's completed weeks, and none have been played this season. They start filling in as weeks are scored — first kickoff ${preseasonKickoffLabel}.`}
+            {m.preseason(preseasonKickoffLabel)}
           </p>
         </div>
       ) : (
@@ -263,7 +265,7 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
       {data.withheld.length > 0 ? (
         <section className="af-so-withheld">
           <h2 className="af-so-withheld-t">
-            {es ? `${data.withheld.length} ${data.withheld.length === 1 ? 'liga no aparece' : 'ligas no aparecen'} en esta página` : `${data.withheld.length} ${data.withheld.length === 1 ? 'league is' : 'leagues are'} not on this page`}
+            {m.withheld(data.withheld.length)}
           </h2>
           <ul>
             {/* Keyed by position too: two withheld leagues can share a name (one per season). */}

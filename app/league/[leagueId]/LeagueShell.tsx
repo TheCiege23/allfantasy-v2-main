@@ -1,16 +1,23 @@
 'use client'
 
+import { leagueAudience } from '@/lib/league-privacy/leagueAudience'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
 import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
+import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
+import { usesNativeLineupScreen } from '@/lib/league/native/lineupScreenRouting'
+import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { KickerValuePanel } from '@/components/league/KickerValuePanel'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
 import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
+import { readChosenPlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { shouldApplyIncomingView } from '@/lib/league/leagueTabSync'
 import { LeagueLiveStrip } from '@/components/sports/LeagueLiveStrip'
 import { LeagueStoryCard } from '@/components/sports/LeagueStoryCard'
@@ -147,11 +154,14 @@ import { CanonicalRedraftScheduleTab } from './tabs/redraft/CanonicalRedraftSche
 import { KeeperSelectionTab } from './tabs/KeeperSelectionTab'
 import { BestBallTab } from './tabs/BestBallTab'
 import { GuillotineTab } from './tabs/GuillotineTab'
+import { ImportedGuillyTab } from './tabs/ImportedGuillyTab'
+import { guillyTabKind } from '@/lib/guillotine/importedGuillyView'
 import { DynastyHome } from './tabs/DynastyHome'
 import { SurvivorHome } from '@/components/survivor/SurvivorHome'
 import { SurvivorNativeHome } from '@/components/survivor/SurvivorNativeHome'
 import { SurvivorLeagueDeepLinkPanel } from '@/components/survivor/SurvivorLeagueDeepLinkPanel'
 import { SurvivorFirstEntryModal } from '@/components/survivor/SurvivorFirstEntryModal'
+import { SurvivorIdolRevealModal } from '@/components/survivor/SurvivorIdolRevealModal'
 import { BigBrotherFirstEntryModal } from '@/components/big-brother/BigBrotherFirstEntryModal'
 import { IDPFirstEntryModal } from '@/components/idp/IDPFirstEntryModal'
 import { BigBrotherHome } from '@/components/big-brother/BigBrotherHome'
@@ -261,6 +271,8 @@ function prismaLeagueToUserLeague(
     bestBallMode: l.bestBallMode ?? undefined,
     guillotineMode: l.guillotineMode ?? undefined,
     keeperPhaseActive: l.keeperPhaseActive ?? undefined,
+    // The lower bracket the bracket is built from; the standings "Playoff format" card reads it.
+    playoffLowerBracket: l.playoffLowerBracket ?? null,
     isCommissioner: Boolean(l.isCommissioner),
   }
 }
@@ -276,6 +288,12 @@ export type LeagueShellProps = {
   allLeagues: League[]
   /** /core's rail data (this week's matchup + crest) per league in `allLeagues`. Null draws names only. */
   leagueRail?: LeagueRailData | null
+  /**
+   * The id the header's "Open in <platform>" link is built from, resolved on the server
+   * (`linkableSourceLeagueId`). Differs from `league.platformLeagueId` only for Fantrax, where that is
+   * our snapshot uuid. Omitted (undefined) → `league.platformLeagueId`, as before.
+   */
+  sourceLinkLeagueId?: string | null
   userId: string
   userName: string
   userImage?: string | null
@@ -313,6 +331,7 @@ export function LeagueShell({
   isHeadCommissioner,
   allLeagues,
   leagueRail = null,
+  sourceLinkLeagueId,
   userId,
   userName,
   userImage = null,
@@ -335,6 +354,40 @@ export function LeagueShell({
   const league = useMemo(() => normalizeBigBrotherShellLeague(storedLeague), [storedLeague])
   const router = useRouter()
   const pathname = usePathname()
+  // Server props own the league name, format and joined seats. Refresh after saves and when
+  // returning from an invite, rather than leaving the original page snapshot on screen.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let pendingSave = false
+    const refresh = () => {
+      if (document.visibilityState === 'hidden') return
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        if (document.querySelector('input:focus, textarea:focus, select:focus')) return
+        pendingSave = false
+        router.refresh()
+      }, 600)
+    }
+    const saved = (event: Event) => {
+      if ((event as CustomEvent<{ leagueId?: string }>).detail?.leagueId === league.id) { pendingSave = true; refresh() }
+    }
+    const onBlur = () => { if (pendingSave) refresh() }
+    document.addEventListener('focusout', onBlur)
+    window.addEventListener('af:league-settings-saved', saved)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    const interval = setInterval(() => {
+      if (isNativePlatform(league.platform) && !document.querySelector('input:focus, textarea:focus, select:focus')) refresh()
+    }, 30000)
+    return () => {
+      clearTimeout(timer)
+      clearInterval(interval)
+      window.removeEventListener('af:league-settings-saved', saved)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+      document.removeEventListener('focusout', onBlur)
+    }
+  }, [league.id, league.platform, router])
   // Use a league-specific storage key so league and dashboard have independent collapse states.
   // Start with room for league controls; the league switcher remains one click away.
   const myLeaguesRail = useMyLeaguesRailCollapse({
@@ -411,8 +464,24 @@ export function LeagueShell({
   }, [nflRedraftCore, league.id])
   const redraftCurrentWeek = redraftSeason?.currentWeek ?? null
   const hasActiveRedraftSeason = redraftSeason != null
+  // The redraft header's season track (NativeLeagueWorkspace → RedraftSeasonTrack). Only the league's
+  // own numbers: the RedraftSeason row when one is loaded, else the commissioner's chosen playoff week
+  // (never the sport default) and the trade-deadline column. A missing value drops its marker.
+  const redraftSeasonFacts = useMemo(
+    () => ({
+      totalWeeks: redraftSeason?.totalWeeks ?? null,
+      playoffStartWeek: redraftSeason?.playoffStartWeek ?? readChosenPlayoffStartWeek(league),
+      tradeDeadlineWeek: league.tradeDeadlineWeek ?? null,
+      // A RedraftSeason row is only created once the draft finalizes (see the note above).
+      ...(redraftSeason ? { draftComplete: true } : {}),
+    }),
+    [redraftSeason, league],
+  )
 
   const nativeWorkspace = isNativePlatform(league.platform)
+  // An imported Guilly league (lib/guillotine/importedGuillyView.ts): its tab reads the provider's scores, not
+  // our chop engine. Most imports carry only `leagueType: 'guillotine'`, which the native gate below never read.
+  const guillyTab = guillyTabKind(league, nativeWorkspace)
   const [nativeChimmyOpen, setNativeChimmyOpen] = useState(false)
   const tabDefs = useMemo(() => {
     if (nflRedraftCore) {
@@ -460,9 +529,9 @@ export function LeagueShell({
       const bb = { id: 'bestball', label: 'Best Ball' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), bb, ...base.slice(idx + 1)] : [bb, ...base]
     }
-    if (league.guillotineMode) {
+    if (guillyTab) {
       const idx = base.findIndex((t) => t.id === 'redraft')
-      const g = { id: 'guillotine', label: 'Guillotine' }
+      const g = { id: 'guillotine', label: 'Guilly' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), g, ...base.slice(idx + 1)] : [g, ...base]
     }
     if (league.leagueVariant === 'survivor') {
@@ -552,6 +621,7 @@ export function LeagueShell({
     league.bestBallMode,
     league.guillotineMode,
     league.leagueVariant,
+    guillyTab,
     isCommissioner,
     shouldUseMatchupPrimary,
     t,
@@ -1229,7 +1299,6 @@ export function LeagueShell({
       guillotineMode: league.guillotineMode,
       bestBallMode: league.bestBallMode,
     })
-    const visibility = settings.league_privacy_visibility
     return {
       id: league.id,
       name: league.name ?? 'Your league',
@@ -1241,7 +1310,7 @@ export function LeagueShell({
       tePremiumPoints: typeof settings.te_premium_points === 'number' ? settings.te_premium_points : null,
       draftDateIso,
       timezone: league.timezone ?? null,
-      privacy: visibility === 'public' ? 'public' : visibility === 'private' ? 'private' : null,
+      privacy: leagueAudience(settings),
     }
   }, [league, draftDateIso])
 
@@ -1477,6 +1546,7 @@ export function LeagueShell({
           onOpenChimmy={() => { setNativeChimmyOpen(true); setMobileLeftOpen(true) }}
           rail={leagueRail}
           guillotineBanner={guillotineAtmosphere ? { line: guillotineAtmosphere.line, mood: guillotineAtmosphere.mood } : null}
+          seasonFacts={redraftSeasonFacts}
           layoutMode="balanced-three-panel"
           embedCenterOnly={embedMode}
           immersive={specialtyImmersive}
@@ -1551,7 +1621,7 @@ export function LeagueShell({
                 leagueId={league.id}
                 leagueName={selectedLeague.name ?? 'League'}
                 platform={league.platform}
-                sourceLeagueId={league.platformLeagueId}
+                sourceLeagueId={sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId}
                 season={league.season}
               />
             ) : null}
@@ -1652,6 +1722,14 @@ export function LeagueShell({
               capSummary={capSummary}
               capRosterId={capRosterId}
             />}
+            {!embedMode && !nativeWorkspace && !isAfHostedPlatform(league.platform) ? (
+              <ImportedLeagueQuickActions
+                leagueId={league.id}
+                leagueName={selectedLeague.name ?? 'League'}
+                platform={league.platform}
+                canRemove={isOwner}
+              />
+            ) : null}
 
             {dispersalDraftInProgress ? (
               <div className="shrink-0 border-b border-[#ff3d81]/20 bg-[#081226] px-4 py-2.5">
@@ -1890,6 +1968,10 @@ export function LeagueShell({
             <SurvivorFirstEntryModal leagueId={league.id} userId={userId} enabled={firstEntryIntroEnabled('survivor')} onClose={advanceWelcomeFromIntro} />,
             document.body,
           )
+        : null}
+
+      {portalMounted && league.leagueVariant === 'survivor' && userId
+        ? createPortal(<SurvivorIdolRevealModal leagueId={league.id} />, document.body)
         : null}
 
       {portalMounted && league.leagueVariant === 'big_brother'
@@ -2266,7 +2348,8 @@ function LeagueTabRouter({
             : id === 'settings' ? firstTab('settings', 'commissioner', 'league')
               : id,
       )
-    const bestBall = isBestBallLeague(selectedLeague.leagueVariant ?? null, selectedLeague.bestBallMode ?? null)
+    // A best ball Guilly league keeps the classic tab like a Best Ball league: its lineup sets itself.
+    const bestBall = isBestBallLeague(selectedLeague.leagueVariant ?? null, selectedLeague.bestBallMode ?? null) || isBestBallGuillotine(selectedLeague)
     switch (activeTab) {
       case 'matchups':
       case 'matchup':
@@ -2274,8 +2357,9 @@ function LeagueTabRouter({
       case 'team':
       case 'roster':
       case 'squad':
-        // Dynasty keeps the classic Team tab for now: taxi, devy and college-rights moves live there.
-        if (!idpLeagueActive && !bestBall && !selectedLeague.isDynasty) return <NativeLineupScreen league={selectedLeague} userTeam={userTeam} onSelectTab={goTo} />
+        // Dynasty uses the lineup screen too (taxi and IR live there, with tap to swap). Devy and C2C keep the
+        // classic Team tab: their devy squad and college-rights moves live only there.
+        if (usesNativeLineupScreen({ leagueVariant: selectedLeague.leagueVariant, idp: idpLeagueActive, bestBall })) return <NativeLineupScreen league={selectedLeague} userTeam={userTeam} onSelectTab={goTo} />
         break
       case 'waivers':
         return <NativeWaiversScreen league={selectedLeague} />
@@ -2315,7 +2399,7 @@ function LeagueTabRouter({
       if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {
         return <CanonicalRedraftScheduleTab leagueId={leagueId} isCommissioner={isCommissioner} />
       }
-      return <ScheduleTab league={selectedLeague} tabLabel={tabLabel} />
+      return <ScheduleTab league={selectedLeague} tabLabel={tabLabel} isCommissioner={isCommissioner} />
     case 'draft':
       if (isPredraftLifecycle) return renderPredraftDraftSetup()
       return (
@@ -2336,6 +2420,8 @@ function LeagueTabRouter({
     case 'bestball':
       return <BestBallTab leagueId={leagueId} sport={sport} />
     case 'guillotine':
+      // An imported league is chopped by its provider: its tab reads the provider's scores, not our engine.
+      if (guillyTabKind(selectedLeague, isNativePlatform(selectedLeague.platform)) === 'imported') return <ImportedGuillyTab leagueId={leagueId} />
       return (
         <GuillotineTab leagueId={leagueId} sport={sport} leagueName={selectedLeague.name} />
       )
@@ -2490,6 +2576,7 @@ function LeagueTabRouter({
           <LeagueChatSurface
             leagueId={leagueId}
             leagueName={selectedLeague.name ?? 'League'}
+            dynastyBackground={usesDynastyBackground(selectedLeague)}
             platform={selectedLeague.platform}
             isCommissioner={isCommissioner}
             teamCount={selectedLeague.teamCount ?? null}

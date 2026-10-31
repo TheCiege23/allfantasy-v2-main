@@ -2,6 +2,7 @@ import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSetting
 import { validateTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 /**
@@ -14,6 +15,7 @@ import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { TE_PREMIUM_POINT_OPTIONS, isValidTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import type { LeagueSport } from '@prisma/client'
 import { getSurvivorTribeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
+import { isImportedTeamCountAllowed } from '@/lib/league-creation/importedTeamCount'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import {
   isDraftTypeAllowedForFormat,
@@ -29,8 +31,7 @@ import { checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
 import {
   isSurvivorCreationSportAvailable,
   SURVIVOR_CREATION_UNAVAILABLE_MESSAGE,
-  SURVIVOR_PAID_CREATION_ENABLED,
-  SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE,
+  readSurvivorEntryFee,
 } from '@/lib/survivor/survivorCreationAvailability'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import type { ValidationIssue } from '@/lib/league-creation/canonical/types'
@@ -40,6 +41,11 @@ import {
 } from '@/lib/bestball/rules'
 import { isSupportedDevyCreateDraftType } from '@/lib/league-concepts/devyDefaults'
 import { receptionPointsForScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
+import {
+  PROSPECT_STASH_UNAVAILABLE_CODE,
+  PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+  sportSupportsProspectStash,
+} from '@/lib/league-creation/prospectStashPolicy'
 
 /** Maps execution modes (offline/auto/team) to a core draft id for format-engine checks. */
 export function normalizeDraftTypeForEngine(draftType: string): string {
@@ -119,7 +125,17 @@ function issuesFromZod(err: z.ZodError): ValidationIssue[] {
 /**
  * Structural + business validation (format-engine allowlists, team counts).
  */
-export function validateCreatePayload(input: unknown): ValidateCreateLeagueResult {
+export function validateCreatePayload(
+  input: unknown,
+  options: {
+    /**
+     * Set only when the request carries over an imported league: that league's real team count.
+     * A request for exactly this count is accepted for the import-flexible league types even when
+     * the native list lacks it (see lib/league-creation/importedTeamCount.ts).
+     */
+    importedTeamCount?: number | null
+  } = {},
+): ValidateCreateLeagueResult {
   const stripped = stripForbiddenCreateLeagueFields(input)
   const parsed = createLeagueBodySchema.safeParse(stripped.body)
   if (!parsed.success) {
@@ -202,10 +218,26 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     return { ok: false, error: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE, status: 400,
       errors: [{ path: 'sport', message: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE }] }
   }
-  if (formatId === 'survivor' && !SURVIVOR_PAID_CREATION_ENABLED &&
-      (data.conceptSetup?.survivor_entry_fee_mode === 'paid' || data.conceptSetup?.survivorEntryFeeMode === 'paid')) {
-    return { ok: false, error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE, status: 400,
-      errors: [{ path: 'conceptSetup.survivor_entry_fee_mode', message: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }] }
+  if (formatId === 'survivor') {
+    const fee = readSurvivorEntryFee(
+      data.conceptSetup?.survivorEntryFeeMode ?? data.conceptSetup?.survivor_entry_fee_mode,
+      data.conceptSetup?.survivorEntryFeeAmountCents ?? data.conceptSetup?.survivor_entry_fee_amount_cents,
+    )
+    if ('error' in fee) {
+      return { ok: false, error: fee.error, status: 400,
+        errors: [{ path: 'conceptSetup.survivorEntryFeeAmountCents', message: fee.error }] }
+    }
+  }
+  // NHL / MLB have no prospect pool: refuse a taxi squad or devy rounds on any concept that carries them.
+  if (!sportSupportsProspectStash(sport)) {
+    const setup = data.conceptSetup ?? {}
+    const taxi = Number(setup.taxiSlots ?? setup.taxiSize ?? 0)
+    const path = Number.isFinite(taxi) && taxi > 0 ? 'conceptSetup.taxiSlots'
+      : setup.devyRoundsEnabled === true ? 'conceptSetup.devyRoundsEnabled' : null
+    if (path) {
+      return { ok: false, status: 400, error: PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+        errors: [{ path, message: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE }] }
+    }
   }
   if (formatId === 'dynasty') {
     const choices = dynastyCreationChoicesSchema.safeParse(data.conceptSetup ?? {})
@@ -314,7 +346,12 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
 
   const teamOpts = getTeamCountOptions(sport as SupportedSport, formatId as LeagueTypeId, data.soccerPipeline ?? null)
 
-  if (!teamOpts.includes(data.teamCount)) {
+  const importedCountAccepted =
+    options.importedTeamCount != null &&
+    options.importedTeamCount === data.teamCount &&
+    isImportedTeamCountAllowed(idpRequested ? 'idp' : formatId, data.teamCount, teamOpts)
+
+  if (!teamOpts.includes(data.teamCount) && !importedCountAccepted) {
     return {
       ok: false,
       error: 'Invalid team count for this concept and sport',
@@ -410,13 +447,13 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     const message = validateTribeSlots(schedule.survivorTribeSlots, data.teamCount, count)
     if (message) return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.survivorTribeSlots', message }] }
   }
-  if (formatId === 'survivor' && (sport === 'NBA' || sport === 'NHL')) {
+  if (formatId === 'survivor' && isSurvivorPlanSport(sport)) {
     try {
       if (schedule.survivorSeasonEndWeek !== undefined && typeof schedule.survivorSeasonEndWeek !== 'number') throw new Error('Survivor end week must be a number.')
       const draftAt = typeof date === 'string' && typeof time === 'string' ? toUtc(date, time, String(zone)) : undefined
       if (draftAt && draftAt.getTime() <= Date.now()) throw new Error('Choose a future Survivor draft date and time.')
       const exileSettings = normalizeSurvivorFoundationSettings(schedule)
-      buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, finalistCount: readSurvivorLateSeasonSettings(schedule).finalistCount, sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
+      buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: typeof schedule.exileReturnWeek === 'number' || typeof schedule.survivorExileReturnWeek === 'number' ? exileSettings.exileReturnWeek : undefined, finalistCount: readSurvivorLateSeasonSettings(schedule).finalistCount, sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
         endWeek: typeof schedule.survivorSeasonEndWeek === 'number' ? schedule.survivorSeasonEndWeek : undefined })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid Survivor season calendar'

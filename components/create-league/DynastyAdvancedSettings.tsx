@@ -3,6 +3,7 @@
 import type { AccentTone } from '@/lib/create-league-v2/theme'
 import type { CreateLeagueV2State, DynastySetupState } from '@/lib/create-league-v2/state'
 import { GlassCard, SectionHeader, Toggle } from '@/components/create-league-v2/primitives'
+import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 
 type Props = {
   state: CreateLeagueV2State
@@ -23,20 +24,32 @@ export function DynastyAdvancedSettings({ state, accent, onChange }: Props) {
   }
 
   const isOffline = d.draftMode === 'offline'
+  // NHL / MLB: no prospect pool, so no taxi squad (lib/league-creation/prospectStashPolicy.ts).
+  const taxiAvailable = sportSupportsProspectStash(state.sport)
 
   return (
     <GlassCard>
       <SectionHeader
         title="Dynasty Setup"
-        hint="Startup + rookie drafts, taxi, schedule/playoffs, AI gating, and media are persisted to the league snapshot."
+        hint={taxiAvailable
+          ? 'Startup + rookie drafts, taxi, schedule/playoffs, AI gating, and media are persisted to the league snapshot.'
+          : 'Startup + rookie drafts, schedule/playoffs, AI gating, and media are persisted to the league snapshot.'}
       />
+      {!taxiAvailable ? (
+        <p className="mb-3 text-[11px] text-white/50">
+          Taxi squads are not offered for {state.sport} leagues: we do not have a minor-league or prospect player pool for this sport.
+        </p>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="space-y-1 text-xs text-white/70">
           <span>Startup draft type</span>
           <select
-            value={d.startupDraftType}
-            onChange={(e) => updateDynasty({ startupDraftType: e.target.value as DynastySetupState['startupDraftType'] })}
+            value={state.draftType}
+            onChange={(e) => {
+              const draftType = e.target.value as DynastySetupState['startupDraftType']
+              onChange({ draftType, dynasty: { ...d, startupDraftType: draftType } })
+            }}
             className="w-full rounded-xl border border-white/[0.1] bg-black/35 px-3 py-2 text-sm text-white"
           >
             <option value="snake">Snake</option>
@@ -172,41 +185,45 @@ export function DynastyAdvancedSettings({ state, accent, onChange }: Props) {
           />
         </label>
 
-        <label className="space-y-1 text-xs text-white/70">
-          <span>Taxi slots</span>
-          <input
-            type="number"
-            min={0}
-            max={20}
-            value={d.taxiSlotCount}
-            onChange={(e) => updateDynasty({ taxiSlotCount: numberValue(e.target.value, d.taxiSlotCount) })}
-            className="w-full rounded-xl border border-white/[0.1] bg-black/35 px-3 py-2 text-sm text-white"
-          />
-        </label>
+        {taxiAvailable ? (
+          <>
+            <label className="space-y-1 text-xs text-white/70">
+              <span>Taxi slots</span>
+              <input
+                type="number"
+                min={0}
+                max={20}
+                value={d.taxiSlotCount}
+                onChange={(e) => updateDynasty({ taxiSlotCount: numberValue(e.target.value, d.taxiSlotCount) })}
+                className="w-full rounded-xl border border-white/[0.1] bg-black/35 px-3 py-2 text-sm text-white"
+              />
+            </label>
 
-        <label className="space-y-1 text-xs text-white/70">
-          <span>Taxi eligibility years</span>
-          <input
-            type="number"
-            min={1}
-            max={6}
-            value={d.taxiEligibilityYears}
-            onChange={(e) => updateDynasty({ taxiEligibilityYears: numberValue(e.target.value, d.taxiEligibilityYears) })}
-            className="w-full rounded-xl border border-white/[0.1] bg-black/35 px-3 py-2 text-sm text-white"
-          />
-        </label>
+            <label className="space-y-1 text-xs text-white/70">
+              <span>Taxi eligibility years</span>
+              <input
+                type="number"
+                min={1}
+                max={6}
+                value={d.taxiEligibilityYears}
+                onChange={(e) => updateDynasty({ taxiEligibilityYears: numberValue(e.target.value, d.taxiEligibilityYears) })}
+                className="w-full rounded-xl border border-white/[0.1] bg-black/35 px-3 py-2 text-sm text-white"
+              />
+            </label>
 
-        <label className="space-y-1 text-xs text-white/70">
-          <span>Taxi lock deadline (period/week)</span>
-          <input
-            type="number"
-            min={1}
-            max={40}
-            value={d.taxiLockDeadlineWeek}
-            onChange={(e) => updateDynasty({ taxiLockDeadlineWeek: numberValue(e.target.value, d.taxiLockDeadlineWeek) })}
-            className="w-full rounded-xl border border-white/[0.1] bg-black/35 px-3 py-2 text-sm text-white"
-          />
-        </label>
+            <label className="space-y-1 text-xs text-white/70">
+              <span>Taxi lock deadline (period/week)</span>
+              <input
+                type="number"
+                min={1}
+                max={40}
+                value={d.taxiLockDeadlineWeek}
+                onChange={(e) => updateDynasty({ taxiLockDeadlineWeek: numberValue(e.target.value, d.taxiLockDeadlineWeek) })}
+                className="w-full rounded-xl border border-white/[0.1] bg-black/35 px-3 py-2 text-sm text-white"
+              />
+            </label>
+          </>
+        ) : null}
 
         <label className="space-y-1 text-xs text-white/70">
           <span>Rookie draft rounds</span>
@@ -229,19 +246,20 @@ export function DynastyAdvancedSettings({ state, accent, onChange }: Props) {
           >
             <option value="linear">Linear</option>
             <option value="snake">Snake</option>
+            <option value="auction">Auction</option>
           </select>
         </label>
 
         <label className="space-y-1 text-xs text-white/70">
           <span>Rookie order method</span>
           <select
-            value={d.rookieDraftOrderMethod}
+            value={d.rookieDraftOrderMethod === 'lottery' ? 'weighted_lottery' : d.rookieDraftOrderMethod}
             onChange={(e) => updateDynasty({ rookieDraftOrderMethod: e.target.value as DynastySetupState['rookieDraftOrderMethod'] })}
             className="w-full rounded-xl border border-white/[0.1] bg-black/35 px-3 py-2 text-sm text-white"
           >
             <option value="max_pf">Max PF</option>
             <option value="reverse_standings">Reverse standings</option>
-            <option value="lottery">Lottery</option>
+            <option value="weighted_lottery">Weighted lottery (future rookie drafts)</option>
             <option value="commissioner">Commissioner</option>
           </select>
         </label>
@@ -317,22 +335,24 @@ export function DynastyAdvancedSettings({ state, accent, onChange }: Props) {
         </label>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Toggle
-          checked={d.taxiAllowNonRookies}
-          onChange={(v) => updateDynasty({ taxiAllowNonRookies: v })}
-          label="Allow non-rookies on taxi"
-          description="When off, only rookie-eligible players can be added to taxi."
-          accent={accent}
-        />
-        <Toggle
-          checked={d.taxiAllowMoveOutAfterDeadline}
-          onChange={(v) => updateDynasty({ taxiAllowMoveOutAfterDeadline: v })}
-          label="Allow move out after deadline"
-          description="Commissioner can permit promotions after taxi lock."
-          accent={accent}
-        />
-      </div>
+      {taxiAvailable ? (
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Toggle
+            checked={d.taxiAllowNonRookies}
+            onChange={(v) => updateDynasty({ taxiAllowNonRookies: v })}
+            label="Allow non-rookies on taxi"
+            description="When off, only rookie-eligible players can be added to taxi."
+            accent={accent}
+          />
+          <Toggle
+            checked={d.taxiAllowMoveOutAfterDeadline}
+            onChange={(v) => updateDynasty({ taxiAllowMoveOutAfterDeadline: v })}
+            label="Allow move out after deadline"
+            description="Commissioner can permit promotions after taxi lock."
+            accent={accent}
+          />
+        </div>
+      ) : null}
 
       <div className="mt-5 rounded-2xl border border-white/[0.08] bg-black/25 p-4">
         <h4 className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">AI entitlement toggles</h4>
@@ -341,7 +361,7 @@ export function DynastyAdvancedSettings({ state, accent, onChange }: Props) {
           <Toggle checked={d.commissionerAi.scoringRecommendations} onChange={(v) => updateDynasty({ commissionerAi: { ...d.commissionerAi, scoringRecommendations: v } })} label="Scoring recommendations" accent={accent} />
           <Toggle checked={d.commissionerAi.rosterBalanceRecommendations} onChange={(v) => updateDynasty({ commissionerAi: { ...d.commissionerAi, rosterBalanceRecommendations: v } })} label="Roster balance recommendations" accent={accent} />
           <Toggle checked={d.commissionerAi.playoffFormatRecommendations} onChange={(v) => updateDynasty({ commissionerAi: { ...d.commissionerAi, playoffFormatRecommendations: v } })} label="Playoff format recommendations" accent={accent} />
-          <Toggle checked={d.commissionerAi.taxiRuleRecommendations} onChange={(v) => updateDynasty({ commissionerAi: { ...d.commissionerAi, taxiRuleRecommendations: v } })} label="Taxi rule recommendations" accent={accent} />
+          {taxiAvailable ? <Toggle checked={d.commissionerAi.taxiRuleRecommendations} onChange={(v) => updateDynasty({ commissionerAi: { ...d.commissionerAi, taxiRuleRecommendations: v } })} label="Taxi rule recommendations" accent={accent} /> : null}
           <Toggle checked={d.commissionerAi.draftSetupRecommendations} onChange={(v) => updateDynasty({ commissionerAi: { ...d.commissionerAi, draftSetupRecommendations: v } })} label="Draft setup recommendations" accent={accent} />
           <Toggle checked={d.commissionerAi.antiTankingAlerts} onChange={(v) => updateDynasty({ commissionerAi: { ...d.commissionerAi, antiTankingAlerts: v } })} label="Anti-tanking alerts" accent={accent} />
           <Toggle checked={d.userAi.dynastyOutlook} onChange={(v) => updateDynasty({ userAi: { ...d.userAi, dynastyOutlook: v } })} label="Dynasty outlook" accent={accent} />

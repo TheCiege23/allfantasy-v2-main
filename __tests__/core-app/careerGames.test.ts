@@ -74,6 +74,37 @@ describe('loadCareerGames', () => {
     expect(book.rivals[0]).toMatchObject({ name: 'Rival Ron', meetings: 1, wins: 1 })
   })
 
+  /*
+   * 🛑 A LIVE WEEK'S RESULT COMES FROM THE PAIRED SCORES, NEVER FROM THE STORED `win` FLAG
+   * (headToHeadRecords.ts). Rows written before the Sleeper fix store a roster with no opponent as
+   * `win = 1, pointsAgainst = 0`; a flag can also disagree with the scores beside it.
+   */
+  const week = (rosterId: string, w: number, matchupId: number | null, pointsFor: number, pointsAgainst: number, win: number) => ({
+    leagueId: 'S1', rosterId, seasonYear: 2025, week: w, matchupId, pointsFor, pointsAgainst, win,
+  })
+
+  it('🛑 a week with no opponent is not a career game, even when its stored flag says win', async () => {
+    stub([])
+    db.weeklyMatchup.findMany.mockResolvedValue([
+      week('1', 1, 4, 110, 0, 1), // alone in matchup 4 — a stale "win"
+      week('1', 2, 5, 100, 90, 1), week('2', 2, 5, 90, 100, 0),
+    ])
+    const { games } = await loadCareerGames('me')
+    expect(games.map((g) => [g.week, g.result])).toEqual([[2, 'W']])
+  })
+
+  it('🛑 the higher paired score decides a live week, not the stored flag', async () => {
+    stub([])
+    db.weeklyMatchup.findMany.mockResolvedValue([
+      // Both rows flagged a win, and `pointsAgainst` never filled in: the paired scores say you lost.
+      week('1', 1, 5, 100, 0, 1), week('2', 1, 5, 120, 0, 1),
+      week('1', 2, 6, 95, 95, 0), week('2', 2, 6, 95, 95, 0),
+    ])
+    const { games } = await loadCareerGames('me')
+    expect(games.map((g) => [g.week, g.result, g.myScore, g.oppScore])).toEqual([[1, 'L', 100, 120], [2, 'T', 95, 95]])
+    expect(games[0]).toMatchObject({ oppKey: 'u:U2' })
+  })
+
   it('narrows by league name before reading any fact', async () => {
     db.leagueTeam.findMany.mockResolvedValueOnce([{ externalId: '1', league: league('A') }])
     const res = await loadCareerGames('me', { platform: null, sport: null, league: 'someone else', fromSeason: null, toSeason: null })

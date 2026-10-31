@@ -3,6 +3,7 @@ import { requireVerifiedUser } from '@/lib/auth-guard'
 import { prisma } from '@/lib/prisma'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import {
+  checkImportSportSupported,
   getImportProviderLabel,
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
@@ -120,15 +121,32 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  /*
+   * The sport asked for must be one this provider imports (`supportedSports`), or the list
+   * would offer leagues the import then refuses. Every caller today asks for `nfl`.
+   */
+  const requestedSportCheck = provider === 'yahoo' ? checkImportSportSupported(provider, sport) : { ok: true as const }
+  if (!requestedSportCheck.ok) {
+    return NextResponse.json({ error: requestedSportCheck.message }, { status: 400 })
+  }
+
   // ── Yahoo: discovery reads the CONNECTED Yahoo account (OAuth use_login=1).
   // No accountIdentifier is needed or used — Yahoo scopes the list to the
   // logged-in session, so we never enumerate someone else's account.
   if (provider === 'yahoo') {
     try {
       const leagues = await listYahooLeaguesForAccount(auth.userId)
+      /*
+       * ⚠ A LEAGUE WITH NO SPORT USED TO PASS THIS FILTER, so an unreadable sport was listed
+       * under whatever sport was asked for. It now has to name the requested sport AND be one
+       * Yahoo's import supports — the same check the import itself runs.
+       */
       const filtered = leagues
         .filter(
-          (league) => !league.sport || league.sport.toLowerCase() === sport,
+          (league) =>
+            !!league.sport &&
+            league.sport.toLowerCase() === sport &&
+            checkImportSportSupported('yahoo', league.sport).ok,
         )
         .sort((a, b) => (b.season ?? 0) - (a.season ?? 0))
       /*
@@ -283,18 +301,24 @@ export async function POST(req: NextRequest) {
         leagues: await markPreviouslyDeleted(
           auth.userId,
           'fantrax',
-          mine.data.map((league) => ({
-            sourceId: league.teamNames[0]
-              ? `fantrax-league:${league.leagueId}|${league.teamNames[0]}`
-              : `fantrax-league:${league.leagueId}`,
-            name: league.leagueName,
-            sport: null,
-            season: null,
-            totalTeams: null,
-            /* Carried separately from `sourceId` on purpose: the sourceId embeds the
-               team name, so it is not the id a tombstone is keyed on. */
-            fantraxLeagueId: league.leagueId,
-          })),
+          /* ⚠ ONE ENTRY PER TEAM, NOT PER LEAGUE. A manager can own two teams in one Fantrax
+             league, and `getLeagues` names both; taking `teamNames[0]` silently hid the second,
+             with no way to import it. Each team imports as its own copy of the league (the
+             import is keyed per team), so each is offered, named after its team. */
+          mine.data.flatMap((league) => {
+            const entry = (teamName: string | null) => ({
+              sourceId: teamName ? `fantrax-league:${league.leagueId}|${teamName}` : `fantrax-league:${league.leagueId}`,
+              name: teamName && league.teamNames.length > 1 ? `${league.leagueName} — ${teamName}` : league.leagueName,
+              sport: null,
+              season: null,
+              totalTeams: null,
+              /* Carried separately from `sourceId` on purpose: the sourceId embeds the
+                 team name, so it is not the id a tombstone is keyed on. */
+              fantraxLeagueId: league.leagueId,
+            })
+            const teams = [...new Set(league.teamNames.map((t) => t.trim()).filter(Boolean))]
+            return teams.length ? teams.map(entry) : [entry(null)]
+          }),
           (league) => league.fantraxLeagueId,
         ),
       })

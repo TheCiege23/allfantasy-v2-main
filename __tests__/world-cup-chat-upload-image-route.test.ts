@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { z } from "zod"
+import { POST } from "@/app/api/brackets/world-cup/[challengeId]/chat/route"
 
 const requireUserMock = vi.hoisted(() => vi.fn())
 const memberAccessMock = vi.hoisted(() => vi.fn())
@@ -25,6 +26,7 @@ function imageRequest(file: Blob) {
   formData.set("file", file, "goal.png")
   return {
     url: "http://localhost/api/brackets/world-cup/c1/chat?action=upload_image",
+    headers: new Headers({ "content-type": "multipart/form-data" }),
     formData: async () => formData,
   } as Request
 }
@@ -52,7 +54,6 @@ describe("World Cup chat image upload route", () => {
       ok: false,
       response: Response.json({ error: "Forbidden" }, { status: 403 }),
     })
-    const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
 
     const res = await POST(imageRequest(new File(["ok"], "goal.png", { type: "image/png" })), { params: { challengeId: "c1" } })
 
@@ -61,7 +62,6 @@ describe("World Cup chat image upload route", () => {
   })
 
   it("uploads valid member images with Cloudinary metadata only", async () => {
-    const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
 
     const res = await POST(imageRequest(new Blob(["ok"], { type: "image/png" })), { params: { challengeId: "c1" } })
     const json = await res.json()
@@ -79,7 +79,6 @@ describe("World Cup chat image upload route", () => {
   })
 
   it("rejects invalid image MIME types", async () => {
-    const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
 
     const res = await POST(imageRequest(new Blob(["nope"], { type: "text/plain" })), { params: { challengeId: "c1" } })
 
@@ -88,7 +87,6 @@ describe("World Cup chat image upload route", () => {
   })
 
   it("rejects oversized images", async () => {
-    const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
     const file = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "big.png", { type: "image/png" })
 
     const res = await POST(imageRequest(file), { params: { challengeId: "c1" } })
@@ -99,7 +97,6 @@ describe("World Cup chat image upload route", () => {
 
   it("returns setup requirements when Cloudinary is not configured", async () => {
     isConfiguredMock.mockReturnValue(false)
-    const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
 
     const res = await POST(imageRequest(new File(["ok"], "goal.png", { type: "image/png" })), { params: { challengeId: "c1" } })
     const json = await res.json()

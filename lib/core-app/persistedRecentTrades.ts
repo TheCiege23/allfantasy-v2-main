@@ -47,7 +47,8 @@ export async function persistedRecentTrades(leagues: RecentTradesLeague[], cutof
   })
   const ids = [...new Set(rows.filter(r => r.platform === 'sleeper' && String(r.sport).toLowerCase() === 'nfl').flatMap(r => Array.isArray(r.playersReceived) ? r.playersReceived.map(String) : []))]
   const [players, teams, media, foreign] = await Promise.all([
-    ids.length ? prisma.sportsPlayer.findMany({ where: { sleeperId: { in: ids } }, select: { sleeperId: true, name: true, position: true } }) : [],
+    // `ids` are Sleeper NFL ids only (filtered above); a Sleeper id names someone else in another sport.
+    ids.length ? prisma.sportsPlayer.findMany({ where: { sport: 'NFL', sleeperId: { in: ids } }, select: { sleeperId: true, name: true, position: true } }) : [],
     prisma.leagueTeam.findMany({ where: { leagueId: { in: leagues.map(l => l.id) } },
       select: { leagueId: true, externalId: true, platformUserId: true, ownerName: true, teamName: true, avatarUrl: true } }),
     attachPlayerMediaBatch(ids.map(playerId => ({ playerId, sport: 'nfl' }))).catch(() => new Map()),

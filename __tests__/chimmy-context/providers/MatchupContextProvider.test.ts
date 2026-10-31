@@ -13,6 +13,7 @@ const {
   teamWeekResultFindUniqueMock,
   teamWeekResultFindFirstMock,
   weeklyMatchupFindFirstMock,
+  weeklyMatchupFindManyMock,
   weeklyScoreFindManyMock,
 } = vi.hoisted(() => ({
   appUserFindUniqueMock: vi.fn(),
@@ -23,6 +24,7 @@ const {
   teamWeekResultFindUniqueMock: vi.fn(),
   teamWeekResultFindFirstMock: vi.fn(),
   weeklyMatchupFindFirstMock: vi.fn(),
+  weeklyMatchupFindManyMock: vi.fn(),
   weeklyScoreFindManyMock: vi.fn(),
 }))
 
@@ -37,7 +39,7 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: teamWeekResultFindUniqueMock,
       findFirst: teamWeekResultFindFirstMock,
     },
-    weeklyMatchup: { findFirst: weeklyMatchupFindFirstMock },
+    weeklyMatchup: { findFirst: weeklyMatchupFindFirstMock, findMany: weeklyMatchupFindManyMock },
     weeklyScore: { findMany: weeklyScoreFindManyMock },
   },
 }))
@@ -251,5 +253,63 @@ describe("MatchupContextProvider", () => {
     // → safe partial path. So this should still be ok:true with null opponent.
     expect(res.ok).toBe(true)
     expect(res.data?.opponentTeamId).toBeNull()
+  })
+})
+
+describe("MatchupContextProvider — imported leagues read the stored schedule", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    appUserFindUniqueMock.mockResolvedValue({ activeLeagueId: null })
+    // Fantrax: the viewer's team is claimed, and carries no platform user id.
+    leagueTeamFindFirstMock.mockImplementation(async (args: { where: Record<string, unknown> }) => {
+      if (args.where.OR) return { id: "team-self", teamName: "Self", platformUserId: null }
+      if (args.where.id === "team-self") return { externalId: "fx-self" }
+      if (args.where.externalId === "fx-opp") return { id: "team-opp", teamName: "Rival" }
+      return null
+    })
+    leagueFindUniqueMock.mockResolvedValue({
+      season: 2026,
+      playoffStartWeek: 14,
+      settings: null,
+      platform: "fantrax",
+      platformLeagueId: "fx-league",
+    })
+    redraftSeasonFindFirstMock.mockResolvedValue(null)
+    rosterFindUniqueMock.mockResolvedValue(null)
+    teamWeekResultFindFirstMock.mockResolvedValue(null)
+    teamWeekResultFindUniqueMock.mockResolvedValue(null)
+    weeklyMatchupFindFirstMock.mockResolvedValue(null)
+    weeklyScoreFindManyMock.mockResolvedValue([])
+  })
+
+  it("names the opponent and both scores from WeeklyMatchup", async () => {
+    weeklyMatchupFindManyMock.mockResolvedValue([
+      { rosterId: "fx-self", matchupId: 3, pointsFor: 101.256 },
+      { rosterId: "fx-opp", matchupId: 3, pointsFor: 88 },
+      { rosterId: "fx-other", matchupId: 4, pointsFor: 70 },
+    ])
+    const res = await new MatchupContextProvider().load(baseRequest({ week: 5 } as Partial<ChimmyContextRequest>))
+    expect(res.ok).toBe(true)
+    expect(res.data).toMatchObject({
+      yourTeamId: "team-self",
+      opponentTeamId: "team-opp",
+      opponentTeamName: "Rival",
+      yourActualPoints: 101.26,
+      opponentActualPoints: 88,
+      status: "unknown",
+    })
+    expect(weeklyMatchupFindManyMock.mock.calls[0][0].where).toMatchObject({ leagueId: "fx-league" })
+  })
+
+  it("an unpaired week is not an opponent", async () => {
+    weeklyMatchupFindManyMock.mockResolvedValue([{ rosterId: "fx-self", matchupId: 3, pointsFor: 50 }])
+    const res = await new MatchupContextProvider().load(baseRequest({ week: 5 } as Partial<ChimmyContextRequest>))
+    expect(res.data).toMatchObject({ opponentTeamId: null, opponentTeamName: null, yourActualPoints: null })
+  })
+
+  it("an AllFantasy-hosted league never reads it", async () => {
+    leagueFindUniqueMock.mockResolvedValue({ season: 2026, playoffStartWeek: 14, settings: null, platform: "allfantasy", platformLeagueId: null })
+    await new MatchupContextProvider().load(baseRequest({ week: 5 } as Partial<ChimmyContextRequest>))
+    expect(weeklyMatchupFindManyMock).not.toHaveBeenCalled()
   })
 })

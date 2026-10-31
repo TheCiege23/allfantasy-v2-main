@@ -189,6 +189,12 @@ export type WeekKickoffs = {
    * Read by the opt-in `daily` mode; every other mode ignores it. Absent for NFL/NCAAF.
    */
   byTeamDay?: Map<string, Map<string, Date>>
+  /**
+   * Daily sports only: normalized team → Eastern day → that day's opponent (the schedule's own team
+   * name) and whether the team is at home. Read by the AF projection to name a selected day's opponent
+   * (lib/projections/dailySportOutlook.ts); the lock itself ignores it. On a doubleheader, the first.
+   */
+  opponentsByTeamDay?: Map<string, Map<string, { opponent: string; home: boolean }>>
   warnings: string[]
 }
 
@@ -196,6 +202,19 @@ export type WeekKickoffs = {
 export function easternDayKey(instant: Date): string | null {
   const day = easternCalendarDay(instant)
   return day ? day.toISOString().slice(0, 10) : null
+}
+
+function setOpponentForDay(
+  opponents: Map<string, Map<string, { opponent: string; home: boolean }>>,
+  team: string,
+  day: string,
+  opponent: string | null | undefined,
+  home: boolean,
+): void {
+  if (!opponent) return
+  const days = opponents.get(team) ?? new Map<string, { opponent: string; home: boolean }>()
+  if (!days.has(day)) days.set(day, { opponent, home })
+  opponents.set(team, days)
 }
 
 function setEarliestForDay(byTeamDay: Map<string, Map<string, Date>>, team: string, day: string, kickoff: Date): void {
@@ -342,6 +361,7 @@ export async function buildWeekKickoffMap(
     }
     let teamless = 0
     const byTeamDay = new Map<string, Map<string, Date>>()
+    const opponentsByTeamDay = new Map<string, Map<string, { opponent: string; home: boolean }>>()
     for (const g of games) {
       // The finalizer's regular slate: labelled regular, or unlabelled. A replaced game's replacement is its own row.
       if (g.seasonType != null && g.seasonType !== 'regular') continue
@@ -362,7 +382,11 @@ export async function buildWeekKickoffMap(
         if (!existing || kickoff.getTime() < existing.getTime()) byTeam.set(key, kickoff)
         // `g.day` IS the Eastern day (the schedule is keyed on it), so a no-time game's placeholder
         // instant — which falls on the PREVIOUS Eastern day in winter — never decides the day.
-        if (g.day) setEarliestForDay(byTeamDay, key, g.day, kickoff)
+        if (g.day) {
+          setEarliestForDay(byTeamDay, key, g.day, kickoff)
+          const home = team === g.homeTeam
+          setOpponentForDay(opponentsByTeamDay, key, g.day, home ? g.awayTeam : g.homeTeam, home)
+        }
       }
     }
     if (teamless > 0) {
@@ -371,7 +395,7 @@ export async function buildWeekKickoffMap(
     if (games.length === 0) {
       warnings.push(`No ${sport} games in the schedule for season ${args.season} week ${args.week}; lineup locks fall open (no player locked).`)
     }
-    return { byTeam, firstKickoff, byTeamDay, warnings }
+    return { byTeam, firstKickoff, byTeamDay, opponentsByTeamDay, warnings }
   }
 
   if (
@@ -396,6 +420,7 @@ export async function buildWeekKickoffMap(
       dateWindow: { start: new Date(window.start), end: new Date(window.end) },
     })
     const byTeamDay = new Map<string, Map<string, Date>>()
+    const opponentsByTeamDay = new Map<string, Map<string, { opponent: string; home: boolean }>>()
     for (const g of games) {
       if (!g.startTime) continue
       const kickoff = g.startTime
@@ -407,13 +432,17 @@ export async function buildWeekKickoffMap(
         if (!key) continue
         const existing = byTeam.get(key)
         if (!existing || kickoff.getTime() < existing.getTime()) byTeam.set(key, kickoff)
-        if (day) setEarliestForDay(byTeamDay, key, day, kickoff)
+        if (day) {
+          setEarliestForDay(byTeamDay, key, day, kickoff)
+          const home = team === g.homeTeam
+          setOpponentForDay(opponentsByTeamDay, key, day, home ? g.awayTeam : g.homeTeam, home)
+        }
       }
     }
     if (games.length === 0) {
       warnings.push(`No ${sport} games found for season ${args.season} week ${args.week}; lineup locks fall open (no player locked).`)
     }
-    return { byTeam, firstKickoff, byTeamDay, warnings }
+    return { byTeam, firstKickoff, byTeamDay, opponentsByTeamDay, warnings }
   }
 
   if (sport !== 'NFL') {
@@ -485,9 +514,8 @@ export function readLineupLockSettings(
     } else {
       mode = 'daily'
       warnings.push(
-        'Daily lineup lock is active: players lock at their own game start each day and unlock the next day, ' +
-          'but matchup scoring is still a weekly aggregate for whoever holds a starter slot when the week is scored. ' +
-          'See docs/DAILY_LINEUPS_DESIGN.md.',
+        'Daily lineup lock is active: players lock at their own game start each day and unlock the next day; ' +
+          'each day is scored on that day\'s starters (lib/redraft/dailyLineups.ts). See docs/DAILY_LINEUPS_DESIGN.md.',
       )
     }
   }

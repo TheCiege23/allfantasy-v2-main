@@ -12,10 +12,12 @@
  *  - share cards and public moment pages stay editable all season (privacy switches).
  */
 import { defaultTribeSlots, validateTribeSlots } from './survivorTribeIdentity'
+import { SURVIVOR_TIE_RULES, type SurvivorTieRule } from './survivorSettings'
 import type { SurvivorExileBossMode } from './lateSeasonSettings'
 
 export type SurvivorTribeFormation = 'random' | 'commissioner_manual' | 'draft_pattern'
-export type SurvivorTieRuleChoice = 'revote_then_season_points' | 'season_points_only'
+/** The council tie rule: the owner's rocks rules, plus the two season-points rules older leagues carry. */
+export type SurvivorTieRuleChoice = SurvivorTieRule
 export type SurvivorMergeTriggerChoice = 'week' | 'active_player_count'
 
 export interface SurvivorSettingsForm {
@@ -40,6 +42,8 @@ export interface SurvivorSettingsForm {
   finalistCount: 2 | 3
   shareCardsEnabled: boolean
   publicMomentPages: boolean
+  /** The public watch page for fans of the show (off by default). */
+  spectatorPageEnabled: boolean
 }
 
 export type SurvivorSettingsKey = keyof SurvivorSettingsForm
@@ -47,6 +51,7 @@ export type SurvivorSettingsKey = keyof SurvivorSettingsForm
 /** Everything else locks when the draft starts. */
 export const SURVIVOR_SETTINGS_EDITABLE_ALL_SEASON: readonly SurvivorSettingsKey[] = [
   'voteDay', 'voteTime', 'exileBossMode', 'exileBossFixedScore', 'exileBossTopN', 'shareCardsEnabled', 'publicMomentPages',
+  'spectatorPageEnabled',
 ]
 
 export const SURVIVOR_VOTE_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
@@ -196,7 +201,7 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
   const bools = ['selfVotesAllowed', 'hideIdolsFromCommissioner', 'exileEnabled', 'swapEnabled', 'shareCardsEnabled', 'publicMomentPages'].map(bool)
   if (bools.some(b => b == null)) return null
   if (formation !== 'random' && formation !== 'commissioner_manual' && formation !== 'draft_pattern') return null
-  if (tie !== 'revote_then_season_points' && tie !== 'season_points_only') return null
+  if (!tie || !(SURVIVOR_TIE_RULES as readonly string[]).includes(tie)) return null
   if (boss !== 'median' && boss !== 'fixed' && boss !== 'topN' && boss !== 'chimmy_roster') return null
   if (trigger !== 'week' && trigger !== 'active_player_count') return null
   const finalist = num('finalistCount')
@@ -209,7 +214,7 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
     voteDay: str('voteDay') ?? '',
     voteTime: str('voteTime') ?? '',
     selfVotesAllowed: bools[0]!,
-    tieRule: tie,
+    tieRule: tie as SurvivorTieRule,
     idolCount: num('idolCount'),
     hideIdolsFromCommissioner: bools[1]!,
     exileEnabled: bools[2]!,
@@ -225,6 +230,8 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
     finalistCount: finalist,
     shareCardsEnabled: bools[4]!,
     publicMomentPages: bools[5]!,
+    // Added later than the others, so a form without it reads as off rather than invalid.
+    spectatorPageEnabled: bool('spectatorPageEnabled') ?? false,
   }
   const numeric: SurvivorSettingsKey[] = ['tribeCount', 'idolCount', 'exileReturnTokens', 'exileBossTopN', 'swapWeek', 'mergeWeek', 'mergeActivePlayerCount']
   if (numeric.some(k => Number.isNaN(form[k] as number)) || Number.isNaN(fixed as number)) return null

@@ -5,6 +5,8 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { kickoffText } from '@/lib/core-app/kickoffText'
 import { lockState } from '@/lib/core-app/lineupLock'
+import { coreTriageMessages } from '@/lib/core-app/messages/coreTriage'
+import { messagesFor } from '@/lib/i18n/messages'
 
 /**
  * A lineup-lock countdown that ticks. Paints from the server's clock (`nowIso`)
@@ -17,7 +19,7 @@ import { lockState } from '@/lib/core-app/lineupLock'
  */
 export function LockClock({ kickoffIso, nowIso, big = false }: { kickoffIso: string; nowIso: string; big?: boolean }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = messagesFor(coreTriageMessages, language)
   const [now, setNow] = useState(nowIso)
   useEffect(() => {
     const t = setInterval(() => setNow(new Date().toISOString()), 30_000)
@@ -26,15 +28,8 @@ export function LockClock({ kickoffIso, nowIso, big = false }: { kickoffIso: str
   const s = lockState(kickoffIso, now)
   const clock = kickoffText(s.clock, language)
   // The row chip stays short once locked — the kickoff is in the tooltip and on the banner; a long chip pushed the table past the card.
-  const text = !big && s.state === 'locked' ? (es ? 'bloqueado' : 'locked') : coreUiCopy(s.label, language)
-  const title =
-    s.state === 'locked'
-      ? es
-        ? `Bloqueado · empezó ${clock}`
-        : `Locked · kicked off ${s.clock}`
-      : es
-        ? `La alineación se bloquea en su inicio · ${clock}`
-        : `Lineup locks at his kickoff · ${s.clock}`
+  const text = !big && s.state === 'locked' ? m.lockClockLocked : coreUiCopy(s.label, language)
+  const title = s.state === 'locked' ? m.lockClockLockedTitle(clock, s.clock) : m.lockClockLocksTitle(clock, s.clock)
   return (
     <span className={big ? 'af-num af-pf-lock-big' : 'af-chip af-num af-pf-lock'} data-lock={s.state} title={title}>
       {text}

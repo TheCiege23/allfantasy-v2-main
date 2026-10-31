@@ -13,6 +13,7 @@ import { getIdpPresetScoring } from '@/lib/idp/IDPScoringPresets'
 import { mergeScoringForValidation, validateScoringOutliers } from '@/lib/idp/IdpValidationService'
 import type { IdpScoringOverrides } from '@/lib/idp/types'
 import { prisma } from '@/lib/prisma'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 export async function PATCH(
   req: Request,
@@ -29,6 +30,9 @@ export async function PATCH(
   const isIdp = await isIdpLeague(leagueId)
   if (!isIdp) return NextResponse.json({ error: 'Not an IDP league' }, { status: 404 })
 
+  const locked = await settingsLockedResponse(leagueId, 'scoring')
+
+  if (locked) return locked
   const body = (await req.json().catch(() => ({}))) as { scoringOverrides?: IdpScoringOverrides | null }
   const scoringOverrides = body.scoringOverrides === null ? null : body.scoringOverrides
 

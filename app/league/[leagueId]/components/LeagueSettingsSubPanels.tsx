@@ -1,5 +1,7 @@
 'use client'
 
+import { TeamCoOwnerPanel } from './settings/TeamCoOwnerPanel'
+
 import {
   ArrowLeft,
   CalendarDays,
@@ -59,6 +61,8 @@ import { NbaScoringSettingsPanel } from '@/components/league-settings/NbaScoring
 import { NcaabScoringSettingsPanel } from '@/components/league-settings/NcaabScoringSettingsPanel'
 import { MlbScoringSettingsPanel } from '@/components/league-settings/MlbScoringSettingsPanel'
 import { NhlScoringSettingsPanel } from '@/components/league-settings/NhlScoringSettingsPanel'
+import ScoringSettingsPanel from '@/components/app/settings/ScoringSettingsPanel'
+import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
 import { NcaafScoringSettingsPanel } from '@/components/league-settings/NcaafScoringSettingsPanel'
 import { SoccerScoringSettingsPanel } from '@/components/league-settings/SoccerScoringSettingsPanel'
 import { DraftSettingsCommissionerPanel } from '@/components/league-settings/DraftSettingsCommissionerPanel'
@@ -740,7 +744,7 @@ export function SettingsSubPanelBody({
 
   switch (panelId) {
     case 'discord-sync':
-      return <DiscordLeagueSyncPanel ctx={ctx} />
+      return <DiscordLeagueSyncPanel leagueId={ctx.league.id} isLeagueOwner={ctx.league.userId === ctx.userId} />
     case 'my-team':
       return <MyTeamPanel ctx={ctx} />
     case 'general-info':
@@ -829,7 +833,11 @@ export function SettingsSubPanelBody({
               isCommissioner={ctx.isCommissioner}
             />
           )}
-          {ctx.league.sport === 'NHL' && (
+          {/* NHL category leagues have no point weights: show the stored categories, as NBA's panel does. */}
+          {ctx.league.sport === 'NHL' && nativeCategoryScoringContext(ctx.league.settings, 'NHL') && (
+            <ScoringSettingsPanel leagueId={ctx.league.id} />
+          )}
+          {ctx.league.sport === 'NHL' && !nativeCategoryScoringContext(ctx.league.settings, 'NHL') && (
             <NhlScoringSettingsPanel
               leagueId={ctx.league.id}
               isCommissioner={ctx.isCommissioner}
@@ -1057,6 +1065,8 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
             : t('lsPanel.team.importedHint').replace('{{platform}}', importedPlatformLabel(ctx.league.platform) ?? t('lsPanel.team.itsPlatform'))}
         </p>
       </div>
+
+      {native && ctx.userTeam.claimedByUserId === ctx.userId && ctx.userTeam.externalId && <TeamCoOwnerPanel leagueId={ctx.league.id} rosterId={ctx.userTeam.externalId} />}
 
       {error ? (
         <p role="alert" className="text-[12px] text-[#fda4af]">
@@ -1803,6 +1813,8 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
               leagueId={ctx.league.id}
               currentUserId={ctx.userId}
               leagueOwnerUserId={ctx.league.userId}
+          platform={ctx.league.platform}
+          leagueName={ctx.league.name}
             />
           </div>
         </div>

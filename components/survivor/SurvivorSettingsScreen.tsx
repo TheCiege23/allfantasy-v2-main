@@ -187,7 +187,12 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
           </SvkField>
           <SvkField title="Tied vote" hint="What happens when two or more managers get the most votes.">
             {lockNote('tieRule')}
-            <SvkSegmented label="Tied vote" value={draft.tieRule} onChange={v => set('tieRule', v)} disabled={disabled('tieRule')} options={[{ value: 'revote_then_season_points', label: 'Revote, then season points' }, { value: 'season_points_only', label: 'Season points' }]} />
+            <SvkSegmented label="Tied vote" value={draft.tieRule} onChange={v => set('tieRule', v as SurvivorSettingsForm['tieRule'])} disabled={disabled('tieRule')} options={[
+              { value: 'revote_then_rocks', label: 'Revote, then rocks' },
+              { value: 'rocks_immediately', label: 'Rocks immediately' },
+              ...(draft.tieRule === 'revote_then_season_points' ? [{ value: 'revote_then_season_points', label: 'Revote, then season points (legacy)' }] : []),
+              ...(draft.tieRule === 'season_points_only' ? [{ value: 'season_points_only', label: 'Season points (legacy)' }] : []),
+            ]} />
           </SvkField>
           <SvkField title="Immunity" hint="Top score in each tribe going to Tribal Council. After the merge, top score overall.">
             <span className="svk-pill svk-pill-warn">Always on</span>
@@ -263,6 +268,10 @@ export function SurvivorSettingsScreen({ leagueId, backHref }: { leagueId: strin
           <SvkField title="Public moment pages" hint="Read-only pages with display names only. Off makes shared links show a sign-in page.">
             {lockNote('publicMomentPages')}
             <SvkToggle label="Public moment pages" checked={draft.publicMomentPages} onChange={v => set('publicMomentPages', v)} disabled={disabled('publicMomentPages') || !draft.shareCardsEnabled} testId="survivor-settings-public-pages" />
+          </SvkField>
+          <SvkField title="Watch page for fans" hint={<>Anyone with the link can follow the season: episodes, the tribe race and each Tribal Council as it is read. Display names only; never chats, idols or who voted for whom.{draft.spectatorPageEnabled ? <> <a href={`/l/${encodeURIComponent(leagueId)}/watch`} target="_blank" rel="noreferrer">Open the watch page</a></> : null}</>} testId="survivor-settings-spectator">
+            {lockNote('spectatorPageEnabled')}
+            <SvkToggle label="Watch page for fans" checked={draft.spectatorPageEnabled} onChange={v => set('spectatorPageEnabled', v)} disabled={disabled('spectatorPageEnabled')} testId="survivor-settings-spectator-toggle" />
           </SvkField>
         </section>
       </div>

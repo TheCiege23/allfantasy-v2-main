@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { allPlayShare, fmt1, initialsOf, oddsTone, ordinal, powerOrder, readPlayoffFormat, streakTone } from '@/lib/league/native/nativeScreenModels'
 import { Card, ScreenHead, Segmented } from './NativeScreenParts'
+import { SideContestsCard } from './SideContestsCard'
+import { PayoutsCard } from './PayoutsCard'
+import { groupStandingsByDivision } from '@/lib/league/divisions/leagueDivisions'
 
 /**
  * Standings & playoffs — handoff §3, `Standings.png` / `MobileStandings.png`.
@@ -11,11 +14,22 @@ import { Card, ScreenHead, Segmented } from './NativeScreenParts'
  * Order and tiebreaks come from `/api/leagues/[id]/scoring/standings` (finalized AF results; the
  * server ranks). Playoff odds are the stored `SeasonForecastSnapshot` for this week
  * (`/api/leagues/[id]/season-forecast`, GET only — this screen never triggers a simulation).
- * Seeds are `fantasyStanding.playoffSeed` from `/scoring/playoff-seeds`. "Power" is an all-play
+ * Seeds come from `/scoring/playoff-seeds`: for an AllFantasy season, the playoff runtime's own seeding
+ * (divisions included), live until the bracket is generated; otherwise `fantasyStanding.playoffSeed`. "Power" is an all-play
  * ranking from the same standings read. All DB reads; no provider call.
  */
 type Row = { rosterId: string; teamName: string; wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number | null; rank: number | null; streak?: string | null; allPlay?: string | null }
-type StandingsData = { season: number; standings: Row[]; viewerRosterId: string | null; scoredWeeks: number | null; scoringMode?: string }
+type DivisionRow = { key: string; name: string; rosterIds: string[] }
+type StandingsData = {
+  season: number
+  standings: Row[]
+  viewerRosterId: string | null
+  scoredWeeks: number | null
+  scoringMode?: string
+  /** The commissioner's divisions; absent or null when the league has none. */
+  divisions?: DivisionRow[] | null
+  divisionPlayoffRule?: 'top_seeds' | 'guaranteed' | 'none' | null
+}
 type Forecast = { teamId: string; teamName?: string; playoffProbability: number; byeProbability: number }
 type Seed = { rosterId: string; seed: number | null; teamName: string }
 type View = 'standings' | 'playoffs' | 'power'
@@ -27,6 +41,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   const [data, setData] = useState<StandingsData | null>(null)
   const [forecast, setForecast] = useState<Forecast[] | null>(null)
   const [seeds, setSeeds] = useState<Seed[]>([])
+  const [seedsProjected, setSeedsProjected] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const season = Number(league.season) || new Date().getFullYear()
@@ -48,8 +63,9 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
         setData((await s.json()) as StandingsData)
         const fj = f && f.ok ? ((await f.json().catch(() => null)) as { teamForecasts?: Forecast[] | null } | null) : null
         setForecast(Array.isArray(fj?.teamForecasts) ? fj!.teamForecasts! : null)
-        const pj = p && p.ok ? ((await p.json().catch(() => null)) as { seeds?: Seed[] } | null) : null
+        const pj = p && p.ok ? ((await p.json().catch(() => null)) as { seeds?: Seed[]; projected?: boolean } | null) : null
         setSeeds(Array.isArray(pj?.seeds) ? pj!.seeds! : [])
+        setSeedsProjected(pj?.projected === true)
       } catch {
         if (!ac.signal.aborted) setError('We could not load standings. Please retry.')
       } finally {
@@ -59,7 +75,10 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
     return () => ac.abort()
   }, [league.id, season, week])
 
-  const format = useMemo(() => readPlayoffFormat(league.settings, league.playoffStartWeek ?? null), [league.settings, league.playoffStartWeek])
+  const format = useMemo(
+    () => readPlayoffFormat(league.settings, league.playoffStartWeek ?? null, league.playoffLowerBracket ?? null),
+    [league.settings, league.playoffStartWeek, league.playoffLowerBracket],
+  )
   const rows = useMemo(() => [...(data?.standings ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999)), [data])
   const oddsFor = useMemo(() => {
     const byId = new Map((forecast ?? []).map((f) => [f.teamId, f]))
@@ -72,6 +91,18 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   const viewerOdds = viewer ? oddsFor(viewer) : null
   const power = useMemo(() => powerOrder(rows), [rows])
   const anyOdds = rows.some((r) => oddsFor(r) != null)
+  const divisionTables = useMemo(() => {
+    const list = data?.divisions ?? []
+    if (!list.length) return []
+    const divisionByRoster = new Map(list.flatMap((d) => d.rosterIds.map((id) => [id, d.key] as const)))
+    return groupStandingsByDivision(rows, list.map((d, index) => ({ key: d.key, name: d.name, index })), (id) => divisionByRoster.get(id) ?? null)
+  }, [data?.divisions, rows])
+  const divisionRuleNote =
+    data?.divisionPlayoffRule === 'top_seeds'
+      ? 'Division winners make the playoffs and take the top seeds.'
+      : data?.divisionPlayoffRule === 'guaranteed'
+        ? 'Division winners are guaranteed a playoff spot; seeds follow record.'
+        : null
 
   const teamCell = (r: Row, i: number) => (
     <div className="nls-team">
@@ -95,6 +126,60 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   }
 
   const scored = data?.scoredWeeks ?? null
+
+  /*
+   * Rotisserie: the server's `pointsFor` is the team's summed category-rank points
+   * (`rankRotisserieTeams`) and W–L, PA, streaks, all-play and playoff odds do not exist — there is
+   * no opponent and no bracket. Show the one number roto has rather than a table of zeros.
+   */
+  if (data?.scoringMode === 'roto') {
+    return (
+      <div className="nls" data-testid="native-standings-screen">
+        <ScreenHead eyebrow={`${league.name} · ${scored ? `After week ${scored}` : `${season} season`}`} title="Rotisserie standings" />
+        <div className="nls-cols">
+          <section className="nls-card nls-card-flush" aria-label="Standings">
+            {!rows.length ? (
+              <p className="nls-empty">Standings appear once the first week is scored.</p>
+            ) : (
+              <>
+                <table className="nls-table">
+                  <caption className="nls-sr">{season} rotisserie standings</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" data-align="left">#</th>
+                      <th scope="col" data-align="left">Team</th>
+                      <th scope="col">Roto pts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={r.rosterId} data-viewer={r.rosterId === data.viewerRosterId || undefined}>
+                        <td data-align="left" className="nls-mono nls-muted">{r.rank ?? i + 1}</td>
+                        <td data-align="left">{teamCell(r, Number.POSITIVE_INFINITY)}</td>
+                        <td>{fmt1(r.pointsFor)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="nls-table-note">
+                  Each category ranks every team on season totals: first place earns as many points as there are teams, last earns 1, and tied teams share the average. Rate stats such as FG% come from season totals, not averages, and lower-is-better stats such as turnovers rank fewest first.
+                </p>
+              </>
+            )}
+          </section>
+          <aside className="nls-aside" aria-label="Your standing">
+            <Card label="Your standing" tone="accent">
+              {viewer ? (
+                <p>You are {ordinal(viewer.rank) ?? 'in the race'} with {fmt1(viewer.pointsFor)} rotisserie points. There are no playoffs: the season-long leader wins the league.</p>
+              ) : (
+                <p>Your standing appears here once you have a team in this league.</p>
+              )}
+            </Card>
+          </aside>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="nls" data-testid="native-standings-screen">
@@ -143,6 +228,42 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
                   {cut ? `Cyan line = playoff cut (top ${cut}). ` : ''}Order and tiebreaks follow your league&apos;s settings.
                   {!anyOdds ? ' Playoff odds appear after AF runs this week’s forecast.' : ''}
                 </p>
+                {divisionTables.length ? (
+                  <div data-testid="native-standings-divisions">
+                    {divisionTables.map((group) => (
+                      <table key={group.key} className="nls-table" data-testid={`native-standings-division-${group.key}`}>
+                        <caption className="nls-division-head">{group.name}</caption>
+                        <thead>
+                          <tr>
+                            <th scope="col" data-align="left">#</th>
+                            <th scope="col" data-align="left">Team</th>
+                            <th scope="col">W–L</th>
+                            <th scope="col">PF</th>
+                            <th scope="col" data-hide="phone">Overall</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.rows.map((r) => (
+                            <tr key={r.rosterId} data-viewer={r.rosterId === data.viewerRosterId || undefined}>
+                              <td data-align="left" className="nls-mono nls-muted">{r.divisionRank}</td>
+                              <td data-align="left">
+                                <div className="nls-team">
+                                  <span className="nls-avatar" aria-hidden>{initialsOf(r.teamName)}</span>
+                                  <strong>{r.teamName}</strong>
+                                  {r.divisionRank === 1 ? <span className="nls-chip" data-tone="good">Leader</span> : null}
+                                </div>
+                              </td>
+                              <td>{record(r)}</td>
+                              <td>{fmt1(r.pointsFor)}</td>
+                              <td data-hide="phone" className="nls-muted">{ordinal(r.rank) ?? '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ))}
+                    {divisionRuleNote ? <p className="nls-table-note">{divisionRuleNote}</p> : null}
+                  </div>
+                ) : null}
               </>
             ) : view === 'playoffs' ? (
               <>
@@ -170,7 +291,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
                     ))}
                   </tbody>
                 </table>
-                <p className="nls-table-note">{seeds.length ? 'Seeds as set by the league.' : 'If the season ended today. Seeds lock when the commissioner sets them.'}</p>
+                <p className="nls-table-note">{seeds.length && !seedsProjected ? 'Seeds as set by the league.' : 'If the season ended today. Seeds lock when the commissioner sets them.'}</p>
               </>
             ) : (
               <>
@@ -225,12 +346,15 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
             </Card>
             <Card label="Playoff format">
               <dl className="nls-dl">
-                <div><dt>Teams</dt><dd className="nls-mono">{format.teams != null ? `${format.teams}${format.byes ? ` · ${format.byes} byes` : ''}` : 'League default'}</dd></div>
+                <div><dt>Teams</dt><dd className="nls-mono">{format.playIn ? `${format.playIn.qualifiers} + play-in · ${format.playIn.games.map(([a, b]) => `#${a} v #${b}`).join(', ')}` : format.teams != null ? `${format.teams}${format.byes ? ` · ${format.byes} byes` : ''}` : 'League default'}</dd></div>
                 <div><dt>Weeks</dt><dd className="nls-mono">{format.startWeek != null ? (format.weeks ? `${format.startWeek} – ${format.startWeek + format.weeks - 1}` : `From ${format.startWeek}`) : 'League default'}</dd></div>
+                <div><dt>Reseeding</dt><dd>{format.reseed === true ? 'Each round' : format.reseed === false ? 'Fixed bracket' : 'League default'}</dd></div>
                 <div><dt>Consolation</dt><dd>{format.consolation === 'toilet_bowl' ? 'Toilet bowl' : format.consolation === 'consolation' ? 'Consolation bracket' : format.consolation === 'none' ? 'None' : 'League default'}</dd></div>
               </dl>
               {isCommissioner ? <button type="button" className="nl-text-link" onClick={() => onSelectTab('settings')}>Edit in Commissioner</button> : null}
             </Card>
+            <SideContestsCard leagueId={league.id} />
+            <PayoutsCard leagueId={league.id} />
           </aside>
         </div>
       ) : null}

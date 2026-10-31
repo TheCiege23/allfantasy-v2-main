@@ -1,11 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
+import { TaxiSquadSettingsSection } from './TaxiSquadSettingsSection'
+import { DynastyFormatPresetSection } from './DynastyFormatPresetSection'
+import { useDynastySettingsSnapshot } from './useDynastySettingsSnapshot'
 import {
   SettingsPanelHeading,
   SettingsSectionLabel,
-  SettingsHelper,
   SettingsToggleRow,
   controlClassSm,
 } from './settings-ui'
@@ -85,10 +88,6 @@ export function RosterComplianceSettingsPanel({
   const disabled = !canEdit
   const [rosterSize, setRosterSize] = useState(initialData.rosterSize ?? 16)
   const [irSlots, setIrSlots] = useState(initialData.irSlots ?? 1)
-  const [taxiSlots, setTaxiSlots] = useState(initialData.taxiSlots ?? 0)
-  const [taxiNonRookies, setTaxiNonRookies] = useState(Boolean(initialData.taxiAllowNonRookies))
-  const [taxiYears, setTaxiYears] = useState(initialData.taxiYearsLimit ?? 2)
-  const [taxiDeadline, setTaxiDeadline] = useState(initialData.taxiDeadlineWeek ?? 4)
   const [irOut, setIrOut] = useState(Boolean(initialData.irAllowOut))
   const [irCovid, setIrCovid] = useState(Boolean(initialData.irAllowCovid))
   const [irSus, setIrSus] = useState(Boolean(initialData.irAllowSuspended))
@@ -100,10 +99,6 @@ export function RosterComplianceSettingsPanel({
   useEffect(() => {
     setRosterSize(initialData.rosterSize ?? 16)
     setIrSlots(initialData.irSlots ?? 1)
-    setTaxiSlots(initialData.taxiSlots ?? 0)
-    setTaxiNonRookies(Boolean(initialData.taxiAllowNonRookies))
-    setTaxiYears(initialData.taxiYearsLimit ?? 2)
-    setTaxiDeadline(initialData.taxiDeadlineWeek ?? 4)
     setIrOut(Boolean(initialData.irAllowOut))
     setIrCovid(Boolean(initialData.irAllowCovid))
     setIrSus(Boolean(initialData.irAllowSuspended))
@@ -112,6 +107,10 @@ export function RosterComplianceSettingsPanel({
     setIrDoub(Boolean(initialData.irAllowDoubtful))
     setSlotCounts(slotCountsFromData(initialData))
   }, [initialData])
+
+  // Dynasty leagues: the taxi section's lock / promotion rules and the NBA/NHL/MLB format presets.
+  const params = useParams() as { leagueId?: string } | null
+  const dynastySettings = useDynastySettingsSnapshot(params?.leagueId, Boolean(initialData.isDynasty))
 
   const adjustSlot = (key: SlotKey, delta: number) => {
     if (disabled) return
@@ -133,6 +132,13 @@ export function RosterComplianceSettingsPanel({
       <SettingsPanelHeading
         title="Roster settings"
         subtitle="Set lineup slots and reserves. These values feed lineup legality, draft needs, and roster locks."
+      />
+
+      <DynastyFormatPresetSection
+        canEdit={canEdit}
+        dynasty={dynastySettings.snapshot}
+        saveDynasty={dynastySettings.put}
+        onApplied={dynastySettings.reload}
       />
 
       <section
@@ -269,78 +275,17 @@ export function RosterComplianceSettingsPanel({
               <SettingsToggleRow label="Allow doubtful players on IR" checked={irDoub} disabled={disabled} onChange={(v) => { setIrDoub(v); debouncedSave({ irAllowDoubtful: v }) }} />
             </div>
           </div>
-
-          <div>
-            <SettingsSectionLabel>Taxi squad slots</SettingsSectionLabel>
-            <select
-              className={controlClassSm}
-              disabled={disabled}
-              value={taxiSlots}
-              onChange={(e) => {
-                const n = Number(e.target.value)
-                setTaxiSlots(n)
-                debouncedSave({ taxiSlots: n })
-              }}
-            >
-              {Array.from({ length: 7 }, (_, i) => i).map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <SettingsToggleRow
-            label="Allow non-rookies on taxi"
-            checked={taxiNonRookies}
-            disabled={disabled}
-            onChange={(v) => {
-              setTaxiNonRookies(v)
-              debouncedSave({ taxiAllowNonRookies: v })
-            }}
-          />
-
-          <div>
-            <SettingsSectionLabel>Taxi years experience limit</SettingsSectionLabel>
-            <select
-              className={controlClassSm}
-              disabled={disabled}
-              value={taxiYears}
-              onChange={(e) => {
-                const n = Number(e.target.value)
-                setTaxiYears(n)
-                debouncedSave({ taxiYearsLimit: n })
-              }}
-            >
-              <option value={0}>No max</option>
-              <option value={1}>1 year</option>
-              <option value={2}>2 years</option>
-              <option value={3}>3 years</option>
-            </select>
-          </div>
-
-          <div>
-            <SettingsSectionLabel>Taxi deadline (week)</SettingsSectionLabel>
-            <select
-              className={controlClassSm}
-              disabled={disabled}
-              value={taxiDeadline}
-              onChange={(e) => {
-                const n = Number(e.target.value)
-                setTaxiDeadline(n)
-                debouncedSave({ taxiDeadlineWeek: n })
-              }}
-            >
-              {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
-                <option key={w} value={w}>
-                  Week {w}
-                </option>
-              ))}
-            </select>
-            <SettingsHelper>After this week, taxi promotions follow your league&apos;s promotion rules.</SettingsHelper>
-          </div>
         </div>
       </details>
+
+      {/* Every taxi option lives here; the advanced reserve block above no longer repeats them. */}
+      <TaxiSquadSettingsSection
+        initialData={initialData}
+        canEdit={canEdit}
+        debouncedSave={debouncedSave}
+        dynasty={dynastySettings.snapshot}
+        saveDynasty={dynastySettings.put}
+      />
     </div>
   )
 }

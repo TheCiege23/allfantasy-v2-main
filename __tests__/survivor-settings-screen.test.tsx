@@ -50,7 +50,7 @@ function form(over: Partial<SurvivorSettingsForm> = {}): SurvivorSettingsForm {
   return {
     tribeCount: 2, tribeFormation: 'random', voteDay: 'Tuesday', voteTime: '20:00', selfVotesAllowed: false, tieRule: 'revote_then_season_points',
     idolCount: 7, hideIdolsFromCommissioner: false, exileEnabled: true, exileReturnTokens: 3, exileBossMode: 'median', exileBossFixedScore: null, exileBossTopN: 3,
-    swapEnabled: true, swapWeek: 5, mergeTrigger: 'week', mergeWeek: 8, mergeActivePlayerCount: 7, finalistCount: 3, shareCardsEnabled: true, publicMomentPages: true,
+    swapEnabled: true, swapWeek: 5, mergeTrigger: 'week', mergeWeek: 8, mergeActivePlayerCount: 7, finalistCount: 3, shareCardsEnabled: true, publicMomentPages: true, spectatorPageEnabled: false,
     ...over,
   }
 }
@@ -75,7 +75,7 @@ beforeEach(() => {
   m.tx.league.findUnique.mockReset().mockImplementation(async () => ({ settings: storedSettings() }))
   m.tx.league.update.mockReset()
   m.tx.survivorCommissionerAction.create.mockReset()
-  m.db.league.findUnique.mockReset().mockImplementation(async () => ({ name: 'Blah Survivor', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true }))
+  m.db.league.findUnique.mockReset().mockImplementation(async () => ({ name: 'Blah Survivor', sport: 'NBA', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true }))
   m.db.survivorTribeMember.count.mockReset().mockResolvedValue(0)
   m.db.$transaction.mockReset().mockImplementation(async (fn: (tx: typeof m.tx) => unknown) => fn(m.tx))
 })
@@ -87,7 +87,7 @@ describe('settings model', () => {
 
   it('locks everything after the draft except the vote deadline, the boss and sharing', () => {
     const locks = { draftStarted: true, finalistLocked: true, tribesLocked: true }
-    expect(lockedChanges(['voteDay', 'voteTime', 'exileBossMode', 'exileBossTopN', 'shareCardsEnabled', 'publicMomentPages'], locks)).toEqual([])
+    expect(lockedChanges(['voteDay', 'voteTime', 'exileBossMode', 'exileBossTopN', 'shareCardsEnabled', 'publicMomentPages', 'spectatorPageEnabled'], locks)).toEqual([])
     expect(lockedChanges(['tribeCount', 'idolCount', 'swapWeek', 'mergeWeek', 'exileReturnTokens'], locks)).toEqual(['tribeCount', 'idolCount', 'swapWeek', 'mergeWeek', 'exileReturnTokens'])
   })
 

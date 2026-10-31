@@ -8,6 +8,8 @@ import { loadSportAwareDraftPlayerPool, toSyntheticAdpEntries } from '@/lib/mock
 import { buildManagerDNAFromLeague, type ManagerDNA } from '@/lib/mock-draft/manager-dna'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { resolveSleeperIdsBatch } from '@/lib/sleeper/players-cache'
+import { resolveLeagueMockTeamCount, MAX_LEAGUE_MOCK_TEAMS, mockRoundOrder } from '@/lib/mock-draft/mockTeamCount'
+import { resolveLeagueMockDraftOrder } from '@/lib/mock-draft/leagueMockDraftOrder'
 
 type ScenarioPreset = {
   id: string
@@ -129,10 +131,6 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-function snakeOrder(teamCount: number, round: number): number[] {
-  const arr = Array.from({ length: teamCount }, (_, i) => i)
-  return round % 2 === 1 ? arr : arr.reverse()
-}
 
 type ScenarioMultipliers = {
   adpMul: number
@@ -273,9 +271,9 @@ export async function POST(req: NextRequest) {
         teams: {
           include: { performances: { orderBy: { week: 'desc' }, take: 8 } },
           orderBy: { currentRank: 'asc' },
-          take: 20,
+          take: MAX_LEAGUE_MOCK_TEAMS,
         },
-        rosters: { select: { platformUserId: true, playerData: true }, take: 20 },
+        rosters: { select: { platformUserId: true, playerData: true }, take: MAX_LEAGUE_MOCK_TEAMS },
       },
     })
 
@@ -299,7 +297,10 @@ export async function POST(req: NextRequest) {
       .filter((player) => (isNfl ? ['QB', 'RB', 'WR', 'TE'].includes(player.position) : Boolean(player.position)))
       .slice(0, 180)
 
-    const teamCount = Math.max(league.leagueSize || 0, league.teams.length || 0, 12)
+    // The league's real size: a 4- or 20-team league is not a 12-team draft.
+    const teamCount = resolveLeagueMockTeamCount(league.leagueSize, league.teams.length)
+    // The league's own pick order: linear, snake, or snake with third-round reversal.
+    const draftOrder = await resolveLeagueMockDraftOrder(league.id)
 
     const dnaCards: ManagerDNA[] = league.teams.length
       ? buildManagerDNAFromLeague(
@@ -404,7 +405,7 @@ export async function POST(req: NextRequest) {
 
       let overall = 1
       for (let round = 1; round <= rounds; round++) {
-        const order = snakeOrder(teamCount, round)
+        const order = mockRoundOrder(teamCount, round, draftOrder)
         for (let pick = 1; pick <= teamCount; pick++) {
           const managerIdx = order[pick - 1]
           const profile = counts[managerIdx]
@@ -461,7 +462,7 @@ export async function POST(req: NextRequest) {
     const forecasts: PickForecast[] = []
     let overall = 1
     for (let round = 1; round <= rounds; round++) {
-      const order = snakeOrder(teamCount, round)
+      const order = mockRoundOrder(teamCount, round, draftOrder)
       for (let pick = 1; pick <= teamCount; pick++) {
         const manager = teamNames[order[pick - 1]] || `Manager ${order[pick - 1] + 1}`
         const bdMap = pickBreakdowns.get(overall) || new Map()
@@ -638,7 +639,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       simulations,
       rounds,
-      league: { id: league.id, name: league.name, size: teamCount },
+      league: { id: league.id, name: league.name, size: teamCount, draftType: draftOrder.draftType, thirdRoundReversal: draftOrder.thirdRoundReversal },
       forecasts,
       userGuidance,
       adpAdjustments: adjusted.adjustments.slice(0, 20),

@@ -17,12 +17,17 @@ import { leagueJoinUrl, nativeLeagueInviteCode } from '@/lib/league/league-invit
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { LeagueSettingsHome, type SettingsSubPageRender } from './LeagueSettingsHome'
 import { GuillotineFirstChopEditor, patchFirstChopWeek } from './GuillotineFirstChopEditor'
+import { GuillotineRulesEditor } from './GuillotineRulesEditor'
 import { GuillotineChopRulesEditor, patchChopRules } from './GuillotineChopRulesEditor'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { SUB_PAGE_TITLES } from './LeagueSettingsSubPageTitles'
 import { CommissionerCenter } from './CommissionerCenter'
+import { SettingsLockPanel } from './SettingsLockPanel'
+import { ScoreAdjustmentsWithCorrections } from './StatCorrectionsCard'
 import { SurvivorTribesPanel } from '@/app/league/[leagueId]/components/settings/survivor/SurvivorTribesPanel'
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
+import { buildSetupDecisions } from '@/lib/league-settings-home/setupDecisions'
+import { SetupDecisionsCard } from './SetupDecisionsCard'
 
 /** The Commissioner center needs room for its two columns; phones keep the list → sub-page flow. */
 function useWideLayout(): boolean {
@@ -114,6 +119,7 @@ export function LeagueSettingsHomeContainer({
           scheduleLines: Array.isArray(cfg.scheduleLines) ? (cfg.scheduleLines as unknown[]).filter((l): l is string => typeof l === 'string') : [],
           advanced: cfg.advanced && typeof cfg.advanced === 'object' ? (cfg.advanced as GuillotineAdvanced) : null,
           teamsPerChop: num(cfg.teamsPerChop) ?? 1,
+          canEditPaidRules: typeof cfg.canEditPaidRules === 'boolean' ? cfg.canEditPaidRules : null,
         })
       })
     }
@@ -154,11 +160,20 @@ export function LeagueSettingsHomeContainer({
 
   const renderSubPage = useCallback(
     (id: SettingsSubPageId): SettingsSubPageRender | null => {
-      if (!ctx.isCommissioner) return null
+      if (!ctx.isCommissioner && id !== 'previous-leagues') return null
       if (id === 'survivor-tribes') {
         return {
           title: SUB_PAGE_TITLES[id],
           content: <SurvivorTribesPanel leagueId={leagueId} canEdit={ctx.isCommissioner} hasAfCommissionerSub={hasAfCommissionerSub} />,
+        }
+      }
+      if (id === 'settings-lock') {
+        return { title: SUB_PAGE_TITLES[id], content: <SettingsLockPanel leagueId={leagueId} /> }
+      }
+      if (id === 'score-adjustments') {
+        return {
+          title: SUB_PAGE_TITLES[id],
+          content: <ScoreAdjustmentsWithCorrections leagueId={leagueId} />,
         }
       }
       if (id === 'guillotine-first-chop') {
@@ -189,9 +204,20 @@ export function LeagueSettingsHomeContainer({
               baseChops={guillotineState.teamsPerChop ?? 1}
               startWeek={guillotineState.firstChopWeek}
               endWeek={guillotineState.endWeek ?? profile?.regularSeasonWeeks ?? 18}
-              hasAfCommissionerSub={hasAfCommissionerSub}
+              hasAfCommissionerSub={guillotineState.canEditPaidRules ?? hasAfCommissionerSub}
               save={patchChopRules(leagueId)}
               onSaved={(advanced, lines) => setGuillotineState((s) => (s ? { ...s, advanced, scheduleLines: lines } : s))}
+            />
+          ),
+        }
+      }
+      if (id === 'guillotine-rules') {
+        return {
+          title: SUB_PAGE_TITLES[id],
+          content: (
+            <GuillotineRulesEditor
+              leagueId={leagueId}
+              onSaved={(rules) => setGuillotineState((s) => (s ? { ...s, teamsPerChop: rules.teamsPerChop, endWeek: rules.eliminationEndWeek } : s))}
             />
           ),
         }
@@ -205,10 +231,17 @@ export function LeagueSettingsHomeContainer({
   )
 
   const wide = useWideLayout()
+  const phase = nativeLeaguePhase(ctx.displayLeague)
+  // Before the draft, the commissioner is walked through the five settings that matter most.
+  const setupDecisions = useMemo(() => buildSetupDecisions(sections), [sections])
+  const header =
+    ctx.isCommissioner && phase === 'Setup'
+      ? (open: (id: SettingsSubPageId) => void) => <SetupDecisionsCard leagueId={leagueId} decisions={setupDecisions} onOpen={open} />
+      : undefined
+
   if (wide && ctx.isCommissioner) {
     const teams = effectiveLeague.teams ?? []
     const inviteRow = sections.flatMap((section) => section.rows).find((row) => row.id === 'invite')
-    const phase = nativeLeaguePhase(ctx.displayLeague)
     return (
       <CommissionerCenter
         leagueName={effectiveLeague.name}
@@ -223,6 +256,7 @@ export function LeagueSettingsHomeContainer({
           inviteUrl: inviteRow?.copyText ?? null,
         }}
         onSubPageClosed={() => setReloadKey((k) => k + 1)}
+        header={header}
       />
     )
   }
@@ -236,6 +270,7 @@ export function LeagueSettingsHomeContainer({
       onExit={onExit}
       onSubPageClosed={() => setReloadKey((k) => k + 1)}
       initialSubPage={ctx.isCommissioner ? initialSubPage : null}
+      header={header}
     />
   )
 }

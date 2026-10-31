@@ -99,7 +99,7 @@ export function MergedDevyC2CCommissionerSettings({ leagueId }: MergedDevyC2CCom
     return (
       <div className="rounded-xl border border-white/10 bg-white/5 p-4">
         <h3 className="text-sm font-medium text-white">C2C commissioner settings</h3>
-        <p className="mt-1 text-xs text-white/50">Loading…</p>
+        <p className="mt-1 text-xs text-white/50">{loading ? 'Loading…' : 'Unable to load C2C settings. Please try again.'}</p>
       </div>
     )
   }
@@ -122,6 +122,7 @@ export function MergedDevyC2CCommissionerSettings({ leagueId }: MergedDevyC2CCom
             onChange={(e) => {
               const v = e.target.value
               patch({
+                startupFormat: v,
                 mergedStartupDraft: v === 'merged',
                 separateStartupCollegeDraft: v === 'separate',
               })
@@ -147,13 +148,42 @@ export function MergedDevyC2CCommissionerSettings({ leagueId }: MergedDevyC2CCom
         </label>
       </div>
 
-      {config.collegeActiveLineupSlots && Object.keys(config.collegeActiveLineupSlots).length > 0 && (
-        <p className="text-xs text-white/55">
-          College active slots: {Object.entries(config.collegeActiveLineupSlots)
-            .map(([k, v]) => `${k.toUpperCase()} ${v}`)
-            .join(', ')}
-        </p>
-      )}
+      <fieldset className="rounded-lg border border-white/10 p-3" disabled={saving}>
+        <legend className="px-1 text-sm text-white/80">College best-ball lineup slots</legend>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {(config.sport === 'NFL' || config.sport === 'NCAAF' ? ['QB', 'RB', 'WR', 'TE', 'FLEX'] : ['G', 'F', 'C', 'FLEX']).map((slot) => (
+            <label key={slot} className="block text-sm text-white/70">
+              {slot}
+              <input
+                type="number" min={0} max={20} step={1}
+                className="mt-1 w-full rounded border border-white/20 bg-white/5 px-2 py-1.5 text-white"
+                value={config.collegeActiveLineupSlots?.[slot] ?? 0}
+                onChange={(e) => {
+                  const value = Math.max(0, Math.min(20, Math.trunc(Number(e.target.value) || 0)))
+                  setConfig((c) => c ? { ...c, collegeActiveLineupSlots: { ...c.collegeActiveLineupSlots, [slot]: value } } : null)
+                }}
+              />
+            </label>
+          ))}
+        </div>
+        <button type="button" className="mt-3 rounded border border-white/20 px-3 py-2 text-sm text-white" onClick={() => patch({ collegeActiveLineupSlots: config.collegeActiveLineupSlots })}>
+          Save college lineup
+        </button>
+      </fieldset>
+      <label className="block text-sm text-white/80">
+        <span className="block text-white/50">Maximum promotions per team per year (blank for unlimited)</span>
+        <input
+          type="number" min={0} max={100} step={1}
+          className="mt-1 w-full rounded border border-white/20 bg-white/5 px-2 py-1.5 text-white"
+          value={config.maxPromotionsPerYear ?? ''}
+          onChange={(e) => {
+            const value = e.target.value === '' ? null : Math.max(0, Math.min(100, Math.trunc(Number(e.target.value) || 0)))
+            setConfig((c) => c ? { ...c, maxPromotionsPerYear: value } : null)
+          }}
+          onBlur={() => patch({ maxPromotionsPerYear: config.maxPromotionsPerYear })}
+          disabled={saving}
+        />
+      </label>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block text-sm text-white/80">
           <span className="block text-white/50">College roster size</span>
