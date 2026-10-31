@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { CLUBHOUSE_NAME } from '@/lib/community/channels'
 import { getCommunityViewer } from '@/lib/community/service'
-import { ClubhouseFrame, loginHref } from '@/components/community/CommunityBits'
+import { ClubhouseFrame, PageHeader, loginHref } from '@/components/community/CommunityBits'
 import { PostComposer } from '@/components/community/PostComposer'
 
 export const dynamic = 'force-dynamic'
@@ -22,10 +22,8 @@ export default async function ClubhouseNewPostPage({ searchParams }: Props) {
   }
 
   return (
-    <ClubhouseFrame crumbs={[{ href: '/clubhouse', label: CLUBHOUSE_NAME }]}>
-      <h1 className="mb-4 text-2xl font-bold" style={{ color: 'var(--text)' }}>
-        Start a post
-      </h1>
+    <ClubhouseFrame narrow crumbs={[{ href: '/clubhouse', label: CLUBHOUSE_NAME }]}>
+      <PageHeader icon="✍️" eyebrow="New thread" title="Start a post" sub="Pick a channel, say your piece. Links work, and @username mentions someone." />
       <PostComposer initialChannel={channel ?? 'commish-corner'} />
     </ClubhouseFrame>
   )

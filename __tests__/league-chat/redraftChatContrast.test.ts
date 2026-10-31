@@ -58,7 +58,7 @@ const CORE_LIGHT = { ...CORE_DARK, ...block(CORE, /html\[data-mode='light'\] \.a
 const RD = stripComments(read('components/league/native/redraft-identity.css'))
 function sportBlock(sport: string, light: boolean): Record<string, string> {
   const prefix = light ? String.raw`html\[data-mode='light'\] ` : String.raw`(?:^|\n)`
-  return block(RD, new RegExp(`${prefix}\\.af-core\\.nl-workspace\\[data-format=redraft\\]\\[data-sport=${sport}\\]\\{([^}]*)\\}`), `${sport} ${light ? 'light' : 'dark'} sport block`)
+  return block(RD, new RegExp(`${prefix}\\.af-core:is\\(\\.nl-workspace,\\.af-shell\\)\\[data-format=redraft\\]\\[data-sport=${sport}\\]\\{([^}]*)\\}`), `${sport} ${light ? 'light' : 'dark'} sport block`)
 }
 const CHAT_CSS_RAW = read('components/chat/redraft-chat.css')
 const CHAT_CSS = stripComments(CHAT_CSS_RAW)

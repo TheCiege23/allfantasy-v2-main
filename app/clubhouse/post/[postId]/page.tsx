@@ -43,31 +43,25 @@ export default async function ClubhousePostPage({ params }: Props) {
 
   return (
     <ClubhouseFrame
+      narrow
+      active={channel ? clubhouseChannelHref(channel.slug) : undefined}
       crumbs={[
         { href: '/clubhouse', label: CLUBHOUSE_NAME },
         ...(channel ? [{ href: clubhouseChannelHref(channel.slug), label: channel.label }] : []),
       ]}
     >
       {post.removed && (
-        <p className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-500">
+        <p className="mb-4 rounded-2xl border border-red-500/40 bg-red-500/10 p-3 text-sm font-semibold text-red-500">
           This post is removed. Only moderators can see it.
         </p>
       )}
 
-      <article className="mode-panel rounded-xl border p-4 sm:p-5" style={{ borderColor: 'var(--border)' }}>
-        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+      <article data-channel={post.channel} className="ch-card ch-article">
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
           <ChannelPill slug={post.channel} />
           <TagPills tags={post.tags} />
-          {post.isPinned && (
-            <span className="text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>
-              📌 Pinned
-            </span>
-          )}
-          {post.isLocked && (
-            <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
-              🔒 Locked
-            </span>
-          )}
+          {post.isPinned && <span className="ch-pill ch-pill-accent">📌 Pinned</span>}
+          {post.isLocked && <span className="ch-pill">🔒 Locked</span>}
         </div>
         <div className="mb-3 flex items-start gap-3">
           {post.idea && !post.removed && (
@@ -82,19 +76,19 @@ export default async function ClubhousePostPage({ params }: Props) {
           )}
           <div className="min-w-0 flex-1">
             {post.idea && (
-              <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--accent)' }}>
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                <span className="ch-eyebrow" style={{ color: 'var(--tone)' }}>
                   💡 League idea
                 </span>
                 <IdeaStatusPill status={post.idea.status} />
                 <IdeaFacts idea={post.idea} />
               </div>
             )}
-            <h1 className="text-xl font-bold leading-snug sm:text-2xl" style={{ color: 'var(--text)' }}>
+            <h1 className="ch-article-title">
               {censorProfanity(post.title)}
             </h1>
             {post.idea?.hook && (
-              <p className="mt-1 text-[15px]" style={{ color: 'var(--muted)' }}>
+              <p className="mt-2 text-[16px] leading-relaxed" style={{ color: 'var(--text2)' }}>
                 {censorProfanity(post.idea.hook)}
               </p>
             )}
@@ -105,12 +99,12 @@ export default async function ClubhousePostPage({ params }: Props) {
             <IdeaCredit idea={post.idea} author={post.author} now={now} />
           </div>
         )}
-        <div className="mb-4 flex items-center gap-2.5">
-          <Avatar author={post.author} size={36} />
+        <div className="ch-byline">
+          <Avatar author={post.author} size={42} />
           <AuthorLine author={post.author} at={post.createdAt} edited={Boolean(post.editedAt)} now={now} />
         </div>
         <PostBody text={post.body} />
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
           <ReactionBar targetType="post" targetId={post.id} initial={post.reactions} signedIn={signedIn} loginHref={login} />
         </div>
         {post.idea && viewer.isModerator && !post.removed && (
@@ -134,10 +128,12 @@ export default async function ClubhousePostPage({ params }: Props) {
         </div>
       </article>
 
-      <section aria-labelledby="replies-heading" className="mt-6">
-        <h2 id="replies-heading" className="mb-3 text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-          {post.replyCount} {post.replyCount === 1 ? 'reply' : 'replies'}
-        </h2>
+      <section aria-labelledby="replies-heading" className="mt-8">
+        <div className="ch-section-label">
+          <h2 id="replies-heading" className="ch-h2">
+            {post.replyCount} {post.replyCount === 1 ? 'reply' : 'replies'}
+          </h2>
+        </div>
 
         {post.replies.length === 0 && (
           <p className="mb-4 text-sm" style={{ color: 'var(--muted)' }}>
@@ -145,13 +141,12 @@ export default async function ClubhousePostPage({ params }: Props) {
           </p>
         )}
 
-        <ol className="mb-5 space-y-3">
+        <ol className="ch-thread mb-6">
           {post.replies.map((r) => (
             <li
               key={r.id}
               id={`reply-${r.id}`}
-              className="mode-panel scroll-mt-20 rounded-xl border p-3 sm:p-4 target:ring-2 target:ring-[color:var(--accent)]"
-              style={{ borderColor: 'var(--border)' }}
+              className="ch-reply scroll-mt-24"
             >
               {r.removed ? (
                 <p className="text-sm italic" style={{ color: 'var(--muted2)' }}>
@@ -159,8 +154,8 @@ export default async function ClubhousePostPage({ params }: Props) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-2 flex items-center gap-2">
-                    <Avatar author={r.author} size={28} />
+                  <div className="mb-2 flex items-center gap-2.5">
+                    <Avatar author={r.author} size={32} />
                     <AuthorLine author={r.author} at={r.createdAt} edited={Boolean(r.editedAt)} now={now} />
                   </div>
                   <PostBody text={r.body} />

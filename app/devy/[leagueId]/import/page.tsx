@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import Link from 'next/link'
 import { ImportWizard } from '@/app/devy/components/ImportWizard'
+import { resolveServerRenderPreferences } from '@/lib/preferences/ServerRenderPreferenceResolver'
+import { translations } from '@/lib/i18n/translations'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,14 +24,19 @@ export default async function DevyImportPage(
     redirect(`/login?callbackUrl=${encodeURIComponent(`/devy/${leagueId}/import`)}`)
   }
 
+  // A server component cannot read the client language provider: resolve the reader's language
+  // the way other server pages do (af_lang cookie, then the saved profile preference).
+  const language = (await resolveServerRenderPreferences().catch(() => null))?.language ?? 'en'
+  const t = (key: string) => translations[language]?.[key] ?? translations.en[key] ?? key
+
   return (
     <div className="min-h-screen bg-[#040915] text-white">
       <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#0c0c1e]/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-2">
           <Link href={`/league/${leagueId}`} className="text-[12px] font-semibold text-cyan-300/90">
-            ← League
+            {t('devyImport.page.backToLeague')}
           </Link>
-          <span className="text-[13px] font-bold">Import</span>
+          <span className="text-[13px] font-bold">{t('devyImport.page.title')}</span>
           <span className="w-12" />
         </div>
       </header>
