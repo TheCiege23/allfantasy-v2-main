@@ -8,7 +8,7 @@ import { stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { safeIdolId } from './cardContent'
 import { countImmunityMoments, createShareMomentOnce } from './momentStore'
-import type { ShareMomentPayload } from './types'
+import { recapMomentId, type ShareMomentPayload } from './types'
 
 /**
  * Turns engine events into share moments. Each capture reads only state the league has already
@@ -189,7 +189,7 @@ export async function captureCouncilShareMoments(leagueId: string, councilId: st
   }
 
   if (!council.isTie && (council.eliminatedUserId || council.eliminatedRosterId)) {
-    if (await captureWeekRecapMoment(leagueId, council, facts)) created++
+    if (await captureWeekRecapMoment(leagueId, council, facts, scrolls)) created++
   }
 
   for (const play of playsOf(council.idolsPlayed)) {
@@ -227,10 +227,11 @@ export async function captureCouncilShareMoments(leagueId: string, councilId: st
 export const RECAP_SUBJECT = 'league'
 
 /**
- * The week's league recap after a council read: the tribe that went to Tribal Council and the
- * counts left on the island and on Exile. Deliberately names nobody, so any member may share it
- * without sharing someone else's exit (the `out` card stays opt-in for the manager voted out).
- * Counts treat the voted-out manager as gone even if their state has not flipped yet.
+ * The week's league recap after a council read: who was voted out (public tally, where they go next),
+ * the tribe that went to Tribal Council, and the counts left on the island and on Exile. It has no chat
+ * post of its own: its id is fixed by the council (`recapMomentId`), so the Torch Ceremony verdict in
+ * league chat carries this card as its picture — one message for the whole league. Counts treat the
+ * voted-out manager as gone even if their state has not flipped yet.
  */
 export function weekRecapCounts(
   players: Array<{ userId: string; playerState: string }>,
@@ -252,19 +253,26 @@ export function weekRecapCounts(
 
 async function captureWeekRecapMoment(
   leagueId: string,
-  council: { id: string; week: number; phase: string; attendingTribeId: string | null; eliminatedUserId: string | null },
+  council: { id: string; week: number; phase: string; attendingTribeId: string | null; eliminatedUserId: string | null; eliminatedRosterId: string | null; eliminatedName: string | null },
   facts: LeagueFacts,
+  scrolls: Scroll[],
 ): Promise<boolean> {
   const players = await prisma.survivorPlayer.findMany({ where: { leagueId }, select: { userId: true, playerState: true } })
   const exileOn = facts.settings.exileIslandEnabled && facts.settings.eliminationOutcome === 'exile_island'
   const counts = weekRecapCounts(players, council.eliminatedUserId, exileOn)
   const merged = JURY_PHASES.has(council.phase) || JURY_PHASES.has(facts.phase ?? '')
   const tribe = merged ? { tribeName: null, crestPath: null } : await tribeFacts(council.attendingTribeId, facts.sport)
+  const subject = await resolveSubject(leagueId, council.eliminatedUserId, council.eliminatedRosterId)
+  const next = facts.settings.eliminationOutcome === 'exile_island'
+    ? 'exile'
+    : facts.settings.juryEnabled && merged ? 'jury' : null
   const result = await createShareMomentOnce({
-    leagueId, type: 'recap', week: council.week, subjectUserId: RECAP_SUBJECT, subjectRosterId: null,
+    id: recapMomentId(council.id), leagueId, type: 'recap', week: council.week, subjectUserId: RECAP_SUBJECT, subjectRosterId: null,
     dedupeKey: `recap:${council.id}`,
     payload: {
-      ...basePayload(facts, facts.leagueName, tribe),
+      ...basePayload(facts, subject?.displayName || council.eliminatedName || 'A manager', tribe),
+      tally: countedTallyFromScrolls(scrolls),
+      next,
       remaining: counts.remaining,
       onExile: exileOn ? counts.onExile : null,
       merged,

@@ -100,6 +100,8 @@ export async function loadPublicShareMoment(leagueSlug: string, momentId: string
 }
 
 export interface NewShareMoment {
+  /** A fixed id (the week recap's is derived from its council); otherwise the database picks one. */
+  id?: string
   leagueId: string
   type: ShareMomentType
   week: number
@@ -119,6 +121,7 @@ export async function createShareMomentOnce(input: NewShareMoment): Promise<{ cr
     if (existing) return { created: false, id: existing.id }
     const row = await prisma.survivorShareMoment.create({
       data: {
+        ...(input.id ? { id: input.id } : {}),
         leagueId: input.leagueId,
         type: input.type,
         week: input.week,

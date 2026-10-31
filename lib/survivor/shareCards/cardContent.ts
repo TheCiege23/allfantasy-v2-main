@@ -129,7 +129,7 @@ export const SHARE_MOMENT_OFFERED: Record<ShareMomentType, string> = {
   idol: 'To the manager who played an idol, once the scroll reveal shows it.',
   exile: 'To a manager who returns from Exile Island with enough tokens.',
   champ: 'To the champion after the final jury vote, and to the whole league as a recap.',
-  recap: 'To the whole league after each Tribal Council read. Names no manager, only the tribe and the counts.',
+  recap: 'To the whole league after each Tribal Council read, and posted in league chat. Names who was voted out, with the public tally.',
 }
 
 /** Copy for the phone sheet heading, e.g. "Share your immunity win". */
@@ -216,18 +216,17 @@ export function buildShareCardContent(type: ShareMomentType, week: number, paylo
     }
     case 'recap': {
       kicker = `Week ${week} · Tribal Council`
+      headline = `${name} is voted out`
       const remaining = finite(payload.remaining) ? payload.remaining : null
-      headline = remaining != null
-        ? `${remaining} ${remaining === 1 ? 'castaway remains' : 'castaways remain'}`
-        : 'One more torch goes out'
-      const who = payload.merged ? 'The merged tribe' : tribe ?? 'A tribe'
-      const exile = finite(payload.onExile) && payload.onExile > 0
-        ? ` ${payload.onExile === 1 ? 'One castaway is' : `${payload.onExile} are`} on Exile Island.`
-        : ''
-      sub = `${who} went to Tribal Council, and one more torch went out.${exile}`
+      const from = payload.merged ? '' : tribe ? ` from ${tribe}` : ''
+      const how = payload.tally ? `Voted out ${payload.tally}${from}.` : `Voted out${from} at Tribal Council.`
+      const next = payload.next === 'exile' ? ' Heading to Exile Island.' : payload.next === 'jury' ? ' Takes a seat on the jury.' : ''
+      const left = remaining != null ? ` ${remaining} ${remaining === 1 ? 'castaway remains' : 'castaways remain'}.` : ''
+      sub = `${how}${next}${left}`
+      if (payload.tally) stats.push({ value: payload.tally, label: 'Vote' })
       if (remaining != null) stats.push({ value: String(remaining), label: 'Remaining' })
       if (finite(payload.onExile)) stats.push({ value: String(payload.onExile), label: 'On Exile' })
-      stats.push({ value: String(week), label: 'Week' })
+      else stats.push({ value: String(week), label: 'Week' })
       break
     }
   }

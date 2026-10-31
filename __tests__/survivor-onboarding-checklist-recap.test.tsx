@@ -3,7 +3,8 @@
  * Three Survivor additions, 2026-10-31:
  *  - a "how Survivor works" guide on the league home through the first week, from this league's rules;
  *  - a commissioner checklist on the league home (before the draft) and this week's to-do (in season);
- *  - a week recap share card any member may share, which names no manager.
+ *  - a week recap share card any member may share. Since 2026-10-31 it names the manager voted out
+ *    and rides the Torch Ceremony post in league chat as its picture — one message for the league.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -13,6 +14,10 @@ const h = vi.hoisted(() => ({
   council: null as Record<string, unknown> | null,
   created: [] as Array<Record<string, unknown>>,
   players: [] as Array<{ userId: string; playerState: string }>,
+  posted: [] as Array<Record<string, unknown>>,
+}))
+vi.mock('@/lib/survivor/survivorChatBridge', () => ({
+  createSurvivorChatMessage: vi.fn(async (_db: unknown, args: { data: Record<string, unknown> }) => { h.posted.push(args.data); return { id: 'msg-1' } }),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -27,8 +32,13 @@ vi.mock('@/lib/prisma', () => ({
     survivorTribe: { findUnique: vi.fn(async () => ({ name: 'Vela', logoUrl: null, isMerged: false })) },
     survivorWeeklyScore: { findMany: vi.fn(async () => [{ finalScore: 50 }]), count: vi.fn(async () => 3) },
     survivorIdol: { findUnique: vi.fn(async () => null) },
+    survivorChatChannel: { findFirst: vi.fn(async () => ({ id: 'league-chat' })) },
     survivorShareMoment: {
-      findUnique: vi.fn(async () => null),
+      findUnique: vi.fn(async ({ where }: { where: { id?: string } }) => {
+        if (!where.id) return null
+        const row = h.created.find((_, i) => `id-${i + 1}` === where.id)
+        return row ? { id: where.id, final: true, publishedAt: null, createdAt: new Date(), subjectRosterId: null, ...row } : null
+      }),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { h.created.push(data); return { id: `id-${h.created.length}` } }),
       count: vi.fn(async () => 0),
     },
@@ -47,20 +57,19 @@ import { SurvivorCommissionerChecklist } from '@/components/survivor/SurvivorCom
 const payload = { v: 1 as const, displayName: 'Blah Survivor', leagueName: 'Blah Survivor', sport: 'NFL', season: 2026, tribeName: 'Vela', crestPath: null }
 
 describe('week recap share card', () => {
-  it('says the week, the tribe that went to council and the counts, and names no manager', () => {
-    const card = buildShareCardContent('recap', 7, { ...payload, remaining: 11, onExile: 4, merged: false })
+  it('names who was voted out, the public tally, where they go next and who is left', () => {
+    const card = buildShareCardContent('recap', 7, { ...payload, displayName: 'Maya', tally: '2–1', next: 'exile', remaining: 11, onExile: 4, merged: false })
     expect(card.kicker).toBe('Week 7 · Tribal Council')
-    expect(card.headline).toBe('11 castaways remain')
-    expect(card.sub).toBe('Tribe Vela went to Tribal Council, and one more torch went out. 4 are on Exile Island.')
-    expect(card.stats).toEqual([{ value: '11', label: 'Remaining' }, { value: '4', label: 'On Exile' }, { value: '7', label: 'Week' }])
+    expect(card.headline).toBe('Maya is voted out')
+    expect(card.sub).toBe('Voted out 2–1 from Tribe Vela. Heading to Exile Island. 11 castaways remain.')
+    expect(card.stats).toEqual([{ value: '2–1', label: 'Vote' }, { value: '11', label: 'Remaining' }, { value: '4', label: 'On Exile' }])
     expect(shareSheetHeading('recap', false)).toBe('Share this week’s recap')
   })
 
-  it('after the merge it speaks of the merged tribe, and leaves out Exile when the league has none', () => {
-    const card = buildShareCardContent('recap', 12, { ...payload, tribeName: null, remaining: 1, onExile: null, merged: true })
-    expect(card.headline).toBe('1 castaway remains')
-    expect(card.sub).toBe('The merged tribe went to Tribal Council, and one more torch went out.')
-    expect(card.stats.map(stat => stat.label)).toEqual(['Remaining', 'Week'])
+  it('after the merge it names no tribe, and a league without Exile shows the week instead', () => {
+    const card = buildShareCardContent('recap', 12, { ...payload, displayName: 'Jo', tribeName: null, tally: '3–1', next: 'jury', remaining: 1, onExile: null, merged: true })
+    expect(card.sub).toBe('Voted out 3–1. Takes a seat on the jury. 1 castaway remains.')
+    expect(card.stats.map(stat => stat.label)).toEqual(['Vote', 'Remaining', 'Week'])
   })
 
   it('is offered to every league member, and to nobody outside the league', () => {
@@ -82,8 +91,9 @@ describe('week recap share card', () => {
     expect(weekRecapCounts(players, 'out', false)).toEqual({ remaining: 2, onExile: 1 })
   })
 
-  it('is captured once per council read, with no manager in it', async () => {
+  it('is captured once per council read under its council-fixed id, names the manager, and posts nothing itself', async () => {
     h.created = []
+    h.posted = []
     h.players = [{ userId: 'a', playerState: 'active' }, { userId: 'b', playerState: 'active' }, { userId: 'out-user', playerState: 'active' }]
     h.council = {
       id: 'c-9', leagueId: 'league-1', week: 5, phase: 'pre_merge', attendingTribeId: 'tribe-1', isRevealed: true, isTie: false,
@@ -92,10 +102,16 @@ describe('week recap share card', () => {
     await captureCouncilShareMoments('league-1', 'c-9')
     const recap = h.created.find(row => row.type === 'recap')!
     expect(recap.dedupeKey).toBe('recap:c-9')
+    expect(recap.id).toBe('recap-c-9')
     expect(recap.subjectUserId).toBe(RECAP_SUBJECT)
     const body = recap.payload as Record<string, unknown>
-    expect(body).toMatchObject({ remaining: 2, onExile: 1, merged: false, tribeName: 'Vela', displayName: 'Blah Survivor' })
-    expect(JSON.stringify(body)).not.toMatch(/Out Team|out-user/)
+    expect(body).toMatchObject({ remaining: 2, onExile: 1, merged: false, tribeName: 'Vela', displayName: 'Out Team', next: 'exile' })
+    // The public tally only: no voter, no ballot.
+    expect(JSON.stringify(body)).not.toMatch(/voter|ballot|targetUserId/i)
+    // The Torch Ceremony post carries this card (survivorVoteTallyService); the recap posts nothing.
+    expect(h.posted).toHaveLength(0)
+    const card = buildShareCardContent('recap', 5, body as never)
+    expect(`${card.headline}. ${card.sub}`).toBe('Out Team is voted out. Voted out from Tribe Vela at Tribal Council. Heading to Exile Island. 2 castaways remain.')
   })
 
   it('is not captured for a tie', async () => {
