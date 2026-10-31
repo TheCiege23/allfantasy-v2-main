@@ -188,3 +188,129 @@ export async function assertNhlProspectFreeAgencyAdd(
   const linked = await linkedRosteredProspectIds(db, rostered).catch(() => new Set<string>())
   if (linked.has(addId)) throw new Error(LINKED_PROSPECT_ROSTERED_MESSAGE)
 }
+
+/*
+ * ── AWARD TIME ────────────────────────────────────────────────────────────────────────────────────
+ * The gate above runs when a claim is SUBMITTED. A claim then waits for the run, and the weekly
+ * Fantrax link can attach the prospect to an NHL identity in between — after which another team may
+ * hold the same man under his pro id. So the processor (`lib/waiver-wire/process-engine.ts`) re-runs
+ * the rule for every `fantrax:` claim when it is about to award it:
+ *
+ *  - still a free prospect in the stored universe → award `fantrax:X`, as before;
+ *  - linked to exactly one NHL identity, and none of that man's ids is on a roster in the league →
+ *    award him under his pro roster id (`rollingInsightsId`, the id the NHL draft pool hands out and
+ *    `rosterGameLogIdBridge` scores; the identity id when he has none), so no roster keeps a stale
+ *    `fantrax:` id;
+ *  - any of his ids rostered, or refused by the rule (outside NHL dynasty, not on the list, a Fantrax
+ *    id two identities carry) → the claim fails as an unavailable player does;
+ *  - the league row, the identity registry, the pool rows or the universe cannot be read → the claim
+ *    fails (closed), as the submit gate does.
+ *
+ * The reasons are English, like every other reason the processor writes. Their outcome code comes
+ * from the processor's own wording rule ("no longer available" → `player_no_longer_available`), so
+ * the claim and the manager's "not awarded" notice read like any taken player. No FAAB is held
+ * between submit and run (the processor debits only on an award), so a failed claim spends nothing.
+ */
+
+export const PROSPECT_AWARD_NOT_IN_LEAGUE_MESSAGE =
+  'Player no longer available: Fantrax prospects can only be claimed in NHL dynasty leagues.'
+export const PROSPECT_AWARD_NOT_ON_LIST_MESSAGE =
+  'Player no longer available: he is not a current NHL prospect on the stored Fantrax player list.'
+export const PROSPECT_AWARD_AMBIGUOUS_LINK_MESSAGE =
+  'Player no longer available: his Fantrax id is linked to more than one NHL player.'
+export const PROSPECT_AWARD_UNREADABLE_MESSAGE =
+  'This prospect could not be checked: the stored Fantrax NHL player list could not be read.'
+/** The processor's own words for a player already on a roster (process-engine.ts). */
+export const AWARD_TAKEN_BY_OTHER_MESSAGE = 'Player no longer available (awarded to another team in this run).'
+export const AWARD_TAKEN_BY_SELF_MESSAGE = 'Player no longer available.'
+
+export type NhlProspectAwardDecision =
+  | {
+      kind: 'award'
+      /** The id to put on the roster: the claimed `fantrax:X`, or his pro roster id once linked. */
+      playerId: string
+      /** Every id the awarded man is known by in this league, so later claims in the run see him taken. */
+      aliases: string[]
+      /** Set when the award is under a different id than the one claimed. */
+      claimedPlayerId?: string
+    }
+  | { kind: 'fail'; message: string; extra?: Record<string, unknown> }
+
+export type NhlProspectAwardDb = NhlProspectDb &
+  LinkDb & {
+    sportsPlayer: {
+      findMany(args: {
+        where: { sport: string; OR: Array<{ externalId: { in: string[] } } | { sleeperId: { in: string[] } }> }
+        select: { id: true }
+      }): Promise<Array<{ id: string }>>
+    }
+  }
+
+/**
+ * The award-time rule above, for one `fantrax:` claim. `rosteredByPlayer` is the processor's live
+ * id → roster map (it includes awards made earlier in the same run). `league` null means the league
+ * row could not be read.
+ */
+export async function resolveNhlProspectClaimAward(
+  db: NhlProspectAwardDb,
+  league: ProspectFreeAgencyLeague | null,
+  claimedPlayerId: string,
+  claimingRosterId: string,
+  rosteredByPlayer: ReadonlyMap<string, string>,
+): Promise<NhlProspectAwardDecision> {
+  const addId = String(claimedPlayerId).trim()
+  if (!league) return { kind: 'fail', message: PROSPECT_AWARD_UNREADABLE_MESSAGE }
+  if (!offersNhlProspectFreeAgency(league)) return { kind: 'fail', message: PROSPECT_AWARD_NOT_IN_LEAGUE_MESSAGE }
+  const taken = (ids: Iterable<string>): NhlProspectAwardDecision | null => {
+    for (const id of ids) {
+      const owner = rosteredByPlayer.get(id)
+      if (!owner) continue
+      return {
+        kind: 'fail',
+        message: owner !== claimingRosterId ? AWARD_TAKEN_BY_OTHER_MESSAGE : AWARD_TAKEN_BY_SELF_MESSAGE,
+        extra: { competingRosterId: owner },
+      }
+    }
+    return null
+  }
+  const takenAsClaimed = taken([addId])
+  if (takenAsClaimed) return takenAsClaimed
+
+  const fantraxId = addId.slice(FANTRAX_PROSPECT_ID_PREFIX.length)
+  const identities = await db.playerIdentityMap
+    .findMany({
+      where: { sport: 'NHL', fantraxId: { in: [fantraxId] } },
+      select: { id: true, rollingInsightsId: true, sleeperId: true },
+    })
+    .catch(() => null)
+  if (!identities) return { kind: 'fail', message: PROSPECT_AWARD_UNREADABLE_MESSAGE }
+  const people = [...new Map(identities.map((r) => [r.id, r])).values()]
+  // Two identities carrying one Fantrax id: refused, never guessed (the #3051 bridge's rule too).
+  if (people.length > 1) return { kind: 'fail', message: PROSPECT_AWARD_AMBIGUOUS_LINK_MESSAGE }
+
+  if (people.length === 1) {
+    const person = people[0]
+    const providerIds = [person.rollingInsightsId, person.sleeperId].filter((v): v is string => Boolean(v))
+    // A free-agent add stores the pool row's own id (`SportsPlayer.id`), a draft its provider id: both count.
+    const poolRows =
+      providerIds.length === 0
+        ? []
+        : await db.sportsPlayer
+            .findMany({
+              where: { sport: 'NHL', OR: [{ externalId: { in: providerIds } }, { sleeperId: { in: providerIds } }] },
+              select: { id: true },
+            })
+            .catch(() => null)
+    if (!poolRows) return { kind: 'fail', message: PROSPECT_AWARD_UNREADABLE_MESSAGE }
+    const proId = person.rollingInsightsId || person.id
+    const aliases = [...new Set([proId, person.id, ...providerIds, ...poolRows.map((r) => r.id), addId].map(String))]
+    const takenAsPro = taken(aliases)
+    if (takenAsPro) return takenAsPro
+    return { kind: 'award', playerId: proId, aliases, claimedPlayerId: addId }
+  }
+
+  const loaded = await loadNhlFantraxProspects(db, { limit: Number.MAX_SAFE_INTEGER }).catch(() => null)
+  if (!loaded) return { kind: 'fail', message: PROSPECT_AWARD_UNREADABLE_MESSAGE }
+  if (!loaded.prospects.some((p) => p.playerId === addId)) return { kind: 'fail', message: PROSPECT_AWARD_NOT_ON_LIST_MESSAGE }
+  return { kind: 'award', playerId: addId, aliases: [addId] }
+}
