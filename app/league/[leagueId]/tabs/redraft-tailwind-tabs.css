@@ -1,0 +1,174 @@
+/* Batch A6 (2026-10-31) — War Room, Live scores, Chimmy Coaching, Schedule.
+ *
+ * These four tabs were styled with inline Tailwind and hardcoded DARK colours (`text-white/45`,
+ * `bg-[#07071a]`, pink `#ff3d81`, violet/cyan utilities). The native workspace has no light-mode
+ * clamp (`.mode-readable` is not on it), so in light mode they rendered near-white text on a white
+ * ground. Every colour here is now a /core token, so light, dark and AF follow the active palette.
+ *
+ * ── Tokens ─────────────────────────────────────────────────────────────────────────────────────
+ * `.rdt` is the scope class every tab root carries (and any component of these tabs that can render
+ * on its own, e.g. ScheduleView inside the legacy Season Hub). It defines `--rdt-*` from:
+ *   - the redraft identity (`--rd-*`, components/league/native/redraft-identity.css), when the
+ *     workspace stamped `data-format=redraft` — so the sport accent arrives with no per-tab logic;
+ *   - otherwise /core's defaults (`--accent`, `--surface`…) — dynasty, guillotine and every other
+ *     format get the default tokens;
+ *   - otherwise a dark literal, for the rare host with no /core palette at all (the old look).
+ * Text colours sit on --text/--text2/--muted/--faint, which /core already measures per mode.
+ *
+ * ⚠ ONLY ONE TOP-LEVEL @media BLOCK, AT THE END, NOT NESTED (CLAUDE.md: af-matchup.css 2026-08-30).
+ * ⚠ NO SIZE BELOW 11px (__tests__/core-app/type-floor.test.ts). */
+
+.rdt{
+  --rdt-text:var(--text,#eef0fa);--rdt-text2:var(--text2,#c3c9e6);--rdt-muted:var(--muted,#989fc2);--rdt-faint:var(--faint,#7d84a8);
+  --rdt-surface:var(--rd-surface-elev,var(--surface,#0d1020));--rdt-surface2:var(--surface2,#0a0c1a);--rdt-bg:var(--bg,#06070f);
+  --rdt-line:var(--line,rgba(255,255,255,.07));--rdt-line2:var(--line2,rgba(255,255,255,.13));
+  --rdt-accent:var(--rd-accent,var(--accent,#22d3ee));--rdt-accent-text:var(--rd-accent-text,var(--accent,#22d3ee));
+  --rdt-accent-ink:var(--rd-accent-ink,var(--accent-ink,#04050c));--rdt-accent-soft:var(--rd-accent-soft,var(--accent-soft,rgba(34,211,238,.12)));
+  --rdt-accent-line:var(--rd-accent-line,var(--accent-line,rgba(34,211,238,.28)));--rdt-track:var(--rd-track,var(--line2,rgba(255,255,255,.13)));
+  --rdt-good:var(--good,#34d399);--rdt-warn:var(--warn,#fbbf24);--rdt-bad:var(--bad,#fb5b78);
+  --rdt-good-soft:var(--good-soft,rgba(52,211,153,.12));--rdt-warn-soft:var(--warn-soft,rgba(251,191,36,.12));--rdt-bad-soft:var(--bad-soft,rgba(251,91,120,.12));
+  /* Text on a --bad fill: dark ink on the vivid dark-mode red, white on light mode's deep red. */
+  --rdt-on-bad:#06070f;
+  --rdt-mono:var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);
+  color:var(--rdt-text)
+}
+html[data-mode='light'] .rdt{--rdt-on-bad:#ffffff}
+
+/* ── Colour utilities (replace the Tailwind white/hex utilities one for one) ─────────────────── */
+.rdt-text{color:var(--rdt-text)}
+.rdt-text2{color:var(--rdt-text2)}
+.rdt-muted{color:var(--rdt-muted)}
+.rdt-faint{color:var(--rdt-faint)}
+.rdt-accent{color:var(--rdt-accent-text)}
+.rdt-good{color:var(--rdt-good)}
+.rdt-warn{color:var(--rdt-warn)}
+.rdt-bad{color:var(--rdt-bad)}
+.rdt-accent-ink{color:var(--rdt-accent-ink)}
+.rdt-surface{background-color:var(--rdt-surface)}
+.rdt-well{background-color:var(--rdt-surface2)}
+.rdt-skel{background-color:var(--rdt-line2)}
+.rdt-accent-soft{background-color:var(--rdt-accent-soft)}
+.rdt-good-soft{background-color:var(--rdt-good-soft)}
+.rdt-warn-soft{background-color:var(--rdt-warn-soft)}
+.rdt-bad-soft{background-color:var(--rdt-bad-soft)}
+.rdt-line{border-color:var(--rdt-line)}
+.rdt-line2{border-color:var(--rdt-line2)}
+.rdt-accent-line{border-color:var(--rdt-accent-line)}
+.rdt-good-line{border-color:color-mix(in srgb,var(--rdt-good) 32%,transparent)}
+.rdt-warn-line{border-color:color-mix(in srgb,var(--rdt-warn) 34%,transparent)}
+.rdt-bad-line{border-color:color-mix(in srgb,var(--rdt-bad) 34%,transparent)}
+.rdt-fill{background-color:var(--rdt-accent);color:var(--rdt-accent-ink)}
+.rdt-fill:hover{filter:brightness(1.08)}
+
+/* ── Building blocks ────────────────────────────────────────────────────────────────────────── */
+.rdt-card{border:1px solid var(--rdt-line2);border-radius:14px;background-color:var(--rdt-surface)}
+.rdt-eyebrow{color:var(--rdt-faint);font:700 11px/1.3 var(--rdt-mono);letter-spacing:.12em;text-transform:uppercase}
+.rdt-eyebrow-accent{color:var(--rdt-accent-text)}
+.rdt-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px}
+.rdt-head h1{margin:2px 0 0;color:var(--rdt-text);font-size:22px;font-weight:800;letter-spacing:-.01em;line-height:1.15}
+.rdt-head-sub{margin:4px 0 0;color:var(--rdt-muted);font-size:12px}
+/* A season framing chip; filled with the sport colour on a redraft league. */
+.rdt-season-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rdt-accent-line);border-radius:999px;padding:3px 10px;background:var(--rdt-accent-soft);color:var(--rdt-accent-text);font:700 11px/1.3 var(--rdt-mono);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.rdt-btn{border:1px solid var(--rdt-line2);background-color:var(--rdt-surface2);color:var(--rdt-text2);transition:border-color .15s,background-color .15s,color .15s}
+.rdt-btn:hover:not(:disabled){border-color:var(--rdt-accent-line);background-color:var(--rdt-accent-soft);color:var(--rdt-text)}
+.rdt-btn[aria-pressed=true],.rdt-btn[data-active=true]{border-color:var(--rdt-accent);background-color:var(--rdt-accent-soft);color:var(--rdt-accent-text)}
+.rdt-link{color:var(--rdt-accent-text);font-weight:600}
+.rdt-link:hover{text-decoration:underline}
+.rdt-input{border:1px solid var(--rdt-line2);background-color:var(--rdt-surface2);color:var(--rdt-text)}
+.rdt-input::placeholder{color:var(--rdt-faint)}
+.rdt-input:focus{border-color:var(--rdt-accent);outline:none;box-shadow:0 0 0 3px var(--rdt-accent-soft)}
+.rdt-input option{background-color:var(--rdt-surface);color:var(--rdt-text)}
+.rdt-tile{display:flex;flex-direction:column;border:1px solid var(--rdt-line2);border-radius:12px;background-color:var(--rdt-surface);transition:border-color .15s,box-shadow .15s}
+.rdt-tile:hover{border-color:var(--rdt-accent-line);box-shadow:inset 3px 0 0 var(--rdt-accent)}
+.rdt-tile:hover .rdt-tile-arrow{color:var(--rdt-accent-text)}
+.rdt-tile-arrow{color:var(--rdt-faint)}
+.rdt-seg{display:inline-flex;gap:2px;border:1px solid var(--rdt-line2);border-radius:10px;padding:2px;background-color:var(--rdt-surface2)}
+.rdt-seg button{border-radius:8px;padding:4px 9px;color:var(--rdt-muted);font-size:11px;font-weight:700}
+.rdt-seg button:hover{color:var(--rdt-text)}
+.rdt-seg button[aria-pressed=true]{background-color:var(--rdt-accent);color:var(--rdt-accent-ink)}
+
+/* ── Live scores: broadcast score bugs ──────────────────────────────────────────────────────── */
+.rdt-bugs{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));list-style:none;margin:0;padding:0}
+.rdt-bug{overflow:hidden;border:1px solid var(--rdt-line2);border-radius:12px;background-color:var(--rdt-surface)}
+.rdt-bug[data-tone=live]{border-color:color-mix(in srgb,var(--rdt-bad) 45%,transparent)}
+.rdt-bug-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 12px;background-color:var(--rdt-surface2);border-bottom:1px solid var(--rdt-line);color:var(--rdt-muted);font:700 11px/1.3 var(--rdt-mono);letter-spacing:.08em;text-transform:uppercase}
+.rdt-bug[data-tone=live] .rdt-bug-bar{background-color:var(--rdt-bad);border-bottom-color:transparent;color:var(--rdt-on-bad)}
+.rdt-bug[data-tone=upcoming] .rdt-bug-bar{background-color:var(--rdt-accent-soft);color:var(--rdt-accent-text)}
+.rdt-bug-status{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.rdt-bug-dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:rdt-pulse 1.4s ease-in-out infinite}
+.rdt-bug-net{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.85;letter-spacing:.04em}
+.rdt-bug-rows{display:grid;padding:4px 0}
+.rdt-bug-row{display:grid;grid-template-columns:4px 24px minmax(0,1fr) auto;align-items:center;gap:10px;padding:7px 12px 7px 0;color:var(--rdt-muted)}
+.rdt-bug-stripe{align-self:stretch;border-radius:0 3px 3px 0;background:transparent}
+.rdt-bug-row[data-win=true]{color:var(--rdt-text)}
+.rdt-bug-row[data-win=true] .rdt-bug-stripe{background:var(--rdt-accent)}
+.rdt-bug-team{display:flex;min-width:0;align-items:baseline;gap:8px}
+.rdt-bug-abbr{font:800 15px/1.1 var(--rdt-mono);letter-spacing:.02em}
+.rdt-bug-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--rdt-faint);font-size:12px;font-weight:600}
+.rdt-bug-score{min-width:2.4ch;text-align:right;font:800 24px/1 var(--rdt-mono);font-variant-numeric:tabular-nums}
+.rdt-bug-row[data-win=false] .rdt-bug-score{font-weight:600}
+.rdt-bug-foot{padding:6px 12px 8px;border-top:1px solid var(--rdt-line);color:var(--rdt-faint);font-size:11px}
+@keyframes rdt-pulse{50%{opacity:.35}}
+.rdt-pills button{border:1px solid var(--rdt-line2);background-color:var(--rdt-surface2);color:var(--rdt-muted)}
+.rdt-pills button:hover{color:var(--rdt-text)}
+.rdt-pills button[aria-pressed=true]{border-color:var(--rdt-accent);background-color:var(--rdt-accent);color:var(--rdt-accent-ink)}
+.rdt-side button{color:var(--rdt-muted)}
+.rdt-side button:hover{background-color:var(--rdt-surface2);color:var(--rdt-text)}
+.rdt-side button[aria-current=true]{background-color:var(--rdt-accent-soft);color:var(--rdt-accent-text);box-shadow:inset 3px 0 0 var(--rdt-accent)}
+.rdt-sticky{background-color:color-mix(in srgb,var(--rdt-bg) 92%,transparent)}
+.rdt-select{min-width:180px;appearance:none;border:1px solid var(--rdt-line2);border-radius:999px;padding:8px 40px 8px 16px;background-color:var(--rdt-surface);color:var(--rdt-text);font-size:13px;font-weight:600}
+.rdt-select:focus{border-color:var(--rdt-accent);outline:none;box-shadow:0 0 0 3px var(--rdt-accent-soft)}
+.rdt-select option{background-color:var(--rdt-surface);color:var(--rdt-text)}
+
+/* ── Schedule: the season calendar ──────────────────────────────────────────────────────────── */
+.rdt-cal{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.rdt-cal-cell{position:relative;display:flex;min-height:64px;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:4px;border:1px solid var(--rdt-line2);border-radius:10px;padding:7px 8px;background-color:var(--rdt-surface2);color:var(--rdt-muted);text-align:left}
+.rdt-cal-cell:disabled{cursor:default}
+.rdt-cal-cell:not(:disabled):hover{border-color:var(--rdt-accent-line)}
+.rdt-cal-wk{font:800 15px/1 var(--rdt-mono);font-variant-numeric:tabular-nums;color:var(--rdt-text2)}
+.rdt-cal-tag{font:700 11px/1.1 var(--rdt-mono);letter-spacing:.04em;text-transform:uppercase}
+.rdt-cal-cell[data-state=done]{background-color:var(--rdt-surface);color:var(--rdt-faint)}
+.rdt-cal-cell[data-state=done] .rdt-cal-wk{color:var(--rdt-muted)}
+.rdt-cal-cell[data-state=done]::after{content:'';position:absolute;inset:auto 8px 6px auto;width:6px;height:6px;border-radius:50%;background:var(--rdt-accent)}
+.rdt-cal-cell[data-kind=playoff]{border-style:dashed;border-color:var(--rdt-accent-line);background-color:var(--rdt-accent-soft)}
+.rdt-cal-cell[data-kind=playoff] .rdt-cal-tag{color:var(--rdt-accent-text)}
+.rdt-cal-cell[data-championship=true]{border-style:solid;border-color:var(--rdt-accent)}
+.rdt-cal-cell[data-deadline=true]{box-shadow:inset 0 -3px 0 var(--rdt-warn)}
+.rdt-cal-cell[data-deadline=true] .rdt-cal-tag{color:var(--rdt-warn)}
+.rdt-cal-cell[data-state=now]{border-color:var(--rdt-accent);background-color:var(--rdt-accent);color:var(--rdt-accent-ink)}
+.rdt-cal-cell[data-state=now] .rdt-cal-wk,.rdt-cal-cell[data-state=now] .rdt-cal-tag{color:var(--rdt-accent-ink)}
+.rdt-cal-cell[aria-pressed=true]{outline:2px solid var(--rdt-accent-text);outline-offset:2px}
+.rdt-cal-legend{display:flex;flex-wrap:wrap;gap:6px 16px;list-style:none;margin:0;padding:0;color:var(--rdt-muted);font-size:12px;font-weight:600}
+.rdt-cal-legend li{display:inline-flex;align-items:center;gap:7px}
+.rdt-cal-legend i{display:inline-block;width:14px;height:10px;border-radius:3px;border:1px solid var(--rdt-line2);background:var(--rdt-surface2)}
+.rdt-cal-legend i[data-k=now]{border-color:var(--rdt-accent);background:var(--rdt-accent)}
+.rdt-cal-legend i[data-k=deadline]{box-shadow:inset 0 -3px 0 var(--rdt-warn)}
+.rdt-cal-legend i[data-k=playoff]{border-style:dashed;border-color:var(--rdt-accent-line);background:var(--rdt-accent-soft)}
+.rdt-cal-legend i[data-k=done]{background:var(--rdt-surface)}
+.rdt-match-score{font:800 16px/1 var(--rdt-mono);font-variant-numeric:tabular-nums;color:var(--rdt-text)}
+
+/* ── Shared children these tabs render but do not own ───────────────────────────────────────────
+ * WarRoomPanel (also the draft room), WarRoomMetaWidget, AFWarRoomPlanSpotlight, FeatureGate /
+ * LockedFeatureCard, StartVsComparisonLauncher and SimulationPanel are shared, so they keep their own
+ * Tailwind. In DARK and AF that Tailwind is the design. In LIGHT it is white-on-white, so inside a
+ * `.rdt-bridge` wrapper — and only there, and only in light mode — their dark utilities are re-pointed
+ * at the tokens. The same targeted shape af-comms.css uses for the chat composer (2026-09). Their own
+ * restyle belongs to the batch that owns them; this only makes them legible meanwhile. */
+html[data-mode='light'] .rdt-bridge [class*='text-white']{color:var(--rdt-text2)}
+html[data-mode='light'] .rdt-bridge :is([class*='text-violet-'],[class*='text-cyan-'],[class*='text-sky-'],[class*='text-[#ff'],[class*='text-fuchsia-'],[class*='text-pink-'],[class*='text-indigo-']){color:var(--rdt-accent-text)}
+html[data-mode='light'] .rdt-bridge :is([class*='text-amber-'],[class*='text-yellow-'],[class*='text-orange-']){color:var(--rdt-warn)}
+html[data-mode='light'] .rdt-bridge :is([class*='text-rose-'],[class*='text-red-']){color:var(--rdt-bad)}
+html[data-mode='light'] .rdt-bridge :is([class*='text-emerald-'],[class*='text-green-'],[class*='text-teal-']){color:var(--rdt-good)}
+html[data-mode='light'] .rdt-bridge :is([class*='text-slate-'],[class*='text-gray-'],[class*='text-zinc-']){color:var(--rdt-muted)}
+html[data-mode='light'] .rdt-bridge :is([class*='bg-[#0'],[class*='bg-[#1'],[class*='bg-black'],[class*='bg-slate-9'],[class*='bg-slate-8'],[class*='bg-gray-9'],[class*='from-[#0']){background-color:var(--rdt-surface);background-image:none}
+html[data-mode='light'] .rdt-bridge :is([class*='bg-white/'],[class*='bg-white\/']){background-color:var(--rdt-surface2)}
+html[data-mode='light'] .rdt-bridge :is([class*='border-white'],[class*='border-slate-'],[class*='border-gray-']){border-color:var(--rdt-line2)}
+html[data-mode='light'] .rdt-bridge :is(input,select,textarea){background-color:var(--rdt-surface2);color:var(--rdt-text)}
+
+@media (max-width:767px){
+  .rdt-head h1{font-size:19px}
+  .rdt-bugs{grid-template-columns:minmax(0,1fr)}
+  .rdt-cal{grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:5px}
+  .rdt-cal-cell{min-height:54px;padding:6px}
+  .rdt-cal-tag{letter-spacing:0}
+}

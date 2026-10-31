@@ -25,6 +25,8 @@ import { GuillotineWarRoomPanel } from './guillotine/GuillotineWarRoomPanel'
 import { FeatureGate } from '@/components/subscription/FeatureGate'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
+import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
+import './redraft-tailwind-tabs.css'
 
 export type WarRoomTabProps = {
   league: UserLeague
@@ -51,16 +53,16 @@ function ToolLinkCard({
   return (
     <Link
       href={href}
-      className="group flex flex-col rounded-xl border border-white/[0.08] bg-[#07071a] p-3 transition hover:border-[#ff3d81]/20 hover:bg-white/[0.03]"
+      className="rdt-tile group p-3"
       data-testid={`war-room-quick-${title.toLowerCase().replace(/\s+/g, '-')}`}
     >
       <div className="flex items-start gap-2">
-        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#ff3d81]/80" strokeWidth={2} />
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 rdt-accent" strokeWidth={2} />
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-white">{title}</p>
-          <p className="mt-1 text-[11px] leading-snug text-white/45">{description}</p>
+          <p className="text-xs font-semibold rdt-text">{title}</p>
+          <p className="mt-1 text-[11px] leading-snug rdt-faint">{description}</p>
         </div>
-        <ArrowRight className="h-4 w-4 shrink-0 text-white/25 transition group-hover:text-[#ff3d81]/70" />
+        <ArrowRight className="rdt-tile-arrow h-4 w-4 shrink-0 transition" />
       </div>
     </Link>
   )
@@ -69,12 +71,12 @@ function ToolLinkCard({
 function GatedToolCard({ tool }: { tool: GatedTool }) {
   return (
     <FeatureGate featureId={tool.featureId} featureNameOverride={tool.title}>
-      <div className="rounded-xl border border-white/[0.08] bg-[#07071a] p-3">
-        <p className="text-xs font-semibold text-white">{tool.title}</p>
-        <p className="mt-1 text-[11px] text-white/45">{tool.description}</p>
+      <div className="rdt-tile p-3">
+        <p className="text-xs font-semibold rdt-text">{tool.title}</p>
+        <p className="mt-1 text-[11px] rdt-faint">{tool.description}</p>
         <Link
           href={tool.href}
-          className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-[#ff3d81]/90 hover:text-[#ff9ec0]"
+          className="rdt-link mt-2 inline-flex items-center gap-1 text-[11px]"
         >
           {tool.cta}
           <ArrowRight className="h-3.5 w-3.5" />
@@ -107,6 +109,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
     !isBestBallLeague &&
     (String(league.format ?? '').toLowerCase() === 'redraft' ||
       String(league.leagueType ?? '').toLowerCase() === 'redraft')
+  const identity = resolveRedraftIdentity(league)
   const [metaFrame, setMetaFrame] = useState<'24h' | '7d' | '30d'>('7d')
   const liveDraftCompanion = league.status === 'drafting'
   const leagueDraftCompanion = useLeagueWarRoomCompanion({
@@ -237,33 +240,41 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
 
   return (
     <div
-      className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 md:px-5 md:py-5"
+      className="rdt min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 md:px-5 md:py-5"
+      data-redraft={identity ? 'true' : undefined}
       data-testid="league-war-room-tab"
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-violet-400/25 bg-violet-500/15">
-              <Telescope className="h-4 w-4 text-violet-200" strokeWidth={2} />
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl border rdt-accent-line rdt-accent-soft">
+              <Telescope className="h-4 w-4 rdt-accent" strokeWidth={2} />
             </span>
             <div>
-              <h1 className="text-lg font-bold tracking-tight text-white md:text-xl">AF Legacy</h1>
-              <p className="text-[12px] text-white/45">
+              <p className={`rdt-eyebrow ${identity ? 'rdt-eyebrow-accent' : ''}`}>
+                {identity
+                  ? `Redraft war room · ${identity.sportLabel}${typeof league.currentWeek === 'number' ? ` · Week ${league.currentWeek}` : ''}`
+                  : 'War room'}
+              </p>
+              <h1 className="text-lg font-bold tracking-tight rdt-text md:text-xl">AF Legacy</h1>
+              <p className="text-[12px] rdt-faint">
                 Strategy, draft prep, and meta — scoped for{' '}
-                <span className="text-white/65">{league.name}</span> · {sportU}
+                <span className="rdt-muted">{league.name}</span> · {sportU}
               </p>
             </div>
           </div>
         </div>
         <Link
           href="/war-room"
-          className="shrink-0 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1.5 text-[11px] font-semibold text-violet-100 transition hover:bg-violet-500/20"
+          className="rdt-season-chip shrink-0 transition hover:brightness-110"
         >
           Plans & pricing
         </Link>
       </header>
 
-      <AFWarRoomPlanSpotlight className="border-white/[0.06]" />
+      <div className="rdt-bridge">
+        <AFWarRoomPlanSpotlight className="border-white/[0.06]" />
+      </div>
 
       {/* Redraft leagues get a data-grounded War Room scoped to THIS league. */}
       {isRedraftLeague ? <RedraftWarRoomPanel leagueId={league.id} /> : null}
@@ -282,53 +293,55 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
 
       {liveDraftCompanion && leagueDraftCompanion.error ? (
         <p
-          className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90"
+          className="rounded-lg border rdt-warn-line rdt-warn-soft px-3 py-2 text-[11px] rdt-warn"
           data-testid="war-room-companion-error"
         >
           {leagueDraftCompanion.error}
         </p>
       ) : null}
 
-      <WarRoomPanel
-        leagueId={league.id}
-        sport={resolved}
-        companionDraft={
-          liveDraftCompanion
-            ? { active: true, draftRoomHref: `/league/${league.id}/draft` }
-            : { active: false }
-        }
-        draftCompanionCopilot={liveDraftCompanion ? leagueDraftCompanion.copilot : null}
-        draftCompanionIntelligence={liveDraftCompanion ? leagueDraftCompanion.intelligence : null}
-        draftCopilotEmptyMessage={liveDraftCompanion ? leagueDraftCompanion.copilotEmptyMessage : null}
-        draftCompanionDataLoading={liveDraftCompanion ? leagueDraftCompanion.loading : false}
-        onDraftCompanionRefresh={liveDraftCompanion ? () => void leagueDraftCompanion.refresh() : undefined}
-        dashboardEmbed={dashboardEmbed}
-      />
+      <div className="rdt-bridge">
+        <WarRoomPanel
+          leagueId={league.id}
+          sport={resolved}
+          companionDraft={
+            liveDraftCompanion
+              ? { active: true, draftRoomHref: `/league/${league.id}/draft` }
+              : { active: false }
+          }
+          draftCompanionCopilot={liveDraftCompanion ? leagueDraftCompanion.copilot : null}
+          draftCompanionIntelligence={liveDraftCompanion ? leagueDraftCompanion.intelligence : null}
+          draftCopilotEmptyMessage={liveDraftCompanion ? leagueDraftCompanion.copilotEmptyMessage : null}
+          draftCompanionDataLoading={liveDraftCompanion ? leagueDraftCompanion.loading : false}
+          onDraftCompanionRefresh={liveDraftCompanion ? () => void leagueDraftCompanion.refresh() : undefined}
+          dashboardEmbed={dashboardEmbed}
+        />
+      </div>
 
       <section className="space-y-2">
         <div className="flex flex-wrap items-end justify-between gap-2">
-          <h2 className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">Live meta snapshot</h2>
-          <div className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-[#07071a] p-0.5">
+          <h2 className="rdt-eyebrow">Live meta snapshot</h2>
+          <div className="rdt-seg" role="group" aria-label="Meta timeframe">
             {(['24h', '7d', '30d'] as const).map((f) => (
               <button
                 key={f}
                 type="button"
                 onClick={() => setMetaFrame(f)}
-                className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
-                  metaFrame === f ? 'bg-[#ff3d81]/20 text-[#ffd7e5]' : 'text-white/45 hover:text-white/70'
-                }`}
+                aria-pressed={metaFrame === f}
               >
                 {f}
               </button>
             ))}
           </div>
         </div>
-        <WarRoomMetaWidget sport={resolved} timeframe={metaFrame} variant="embed" />
+        <div className="rdt-bridge">
+          <WarRoomMetaWidget sport={resolved} timeframe={metaFrame} variant="embed" />
+        </div>
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">Always-on tools</h2>
-        <p className="text-[11px] text-white/35">
+        <h2 className="rdt-eyebrow">Always-on tools</h2>
+        <p className="text-[11px] rdt-faint">
           Open meta, strategy, mock draft, and trade tools. Some flows may prompt for AF Legacy or tokens where
           policy requires.
         </p>
@@ -340,11 +353,11 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">AF Legacy premium</h2>
-        <p className="text-[11px] text-white/35">
+        <h2 className="rdt-eyebrow">AF Legacy premium</h2>
+        <p className="text-[11px] rdt-faint">
           Gated capabilities — unlock with AF Legacy or eligible token spend. Upgrade from the spotlight above.
         </p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rdt-bridge grid gap-3 sm:grid-cols-2">
           {gatedTools.map((t) => (
             <GatedToolCard key={t.featureId} tool={t} />
           ))}
