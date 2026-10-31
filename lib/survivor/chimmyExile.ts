@@ -6,6 +6,7 @@ import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inac
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { exileWeekWindow, getExileWaivers, mutateExileRoster } from './exileRosterService'
 import { chimmyExilePlan, type ExileCandidate } from './chimmyExileStrategy'
+import { postChimmyCastawayLine } from './chimmyCastawayChat'
 
 export { chimmyExilePlan, type ChimmyExilePlan, type ExileCandidate } from './chimmyExileStrategy'
 
@@ -143,7 +144,10 @@ export async function runChimmyExileTurn(leagueId: string, now = new Date()): Pr
         if (claimed === 0) { turn.skipped[castaway.userId] = error instanceof Error ? error.message : 'claim_failed'; break }
       }
     }
-    if (claimed > 0) turn.claimed[castaway.userId] = { team: plan.team, expected: plan.expected, players: claimed }
+    if (claimed > 0) {
+      turn.claimed[castaway.userId] = { team: plan.team, expected: plan.expected, players: claimed }
+      await postChimmyCastawayLine(leagueId, castaway.userId, { kind: 'exile', team: plan.team })
+    }
   }
   return turn
 }

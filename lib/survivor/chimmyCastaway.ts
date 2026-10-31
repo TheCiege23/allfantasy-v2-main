@@ -6,6 +6,7 @@ import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform
 import { loadCouncilContext } from './survivorCouncilService'
 import { submitVote } from './survivorVoteService'
 import { playIdol } from './idolEngine'
+import { postChimmyCastawayLine } from './chimmyCastawayChat'
 import { CHIMMY_PROTECTIVE_POWERS, chimmyAtRisk, chimmyVoteTarget, councilIsMerged, type ChimmyTarget } from './chimmyCastawayStrategy'
 
 export { CHIMMY_PROTECTIVE_POWERS, chimmyAtRisk, chimmyVoteTarget, councilIsMerged, type ChimmyTarget } from './chimmyCastawayStrategy'
@@ -81,7 +82,10 @@ export async function runChimmyCouncilTurn(leagueId: string, councilId: string):
       continue
     }
     const result = await submitVote(leagueId, userId, target)
-    if (result.ok) turn.voted.push(userId)
+    if (result.ok) {
+      turn.voted.push(userId)
+      await postChimmyCastawayLine(leagueId, userId, { kind: 'vote', week: ctx.council.week })
+    }
     else turn.skipped[userId] = 'code' in result ? String(result.code) : 'refused'
   }
   return turn

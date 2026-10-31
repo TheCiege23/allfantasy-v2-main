@@ -36,4 +36,5 @@ export function chimmyAtRisk(selfUserId: string, field: ReadonlyArray<ChimmyTarg
 }
 
 /** Powers that keep the player who plays them safe at this council. */
-export const CHIMMY_PROTECTIVE_POWERS = new Set(['vote_shield', 'protect_self', 'immunity'])
+/** The idol powers that cancel votes against their holder (lib/survivor/constants IDOL_POWER_TYPES). */
+export const CHIMMY_PROTECTIVE_POWERS = new Set(['protect_self', 'protect_self_plus_one'])
