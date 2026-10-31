@@ -264,6 +264,8 @@ export type TradePartnerMatch = {
   mySurpluses: string[]
   matchScore: number
   matchReasons: string[]
+  /** `matchReasons` as codes, in the same order (`MatchReasonCode`); absent from an older server. */
+  matchReasonCodes?: Array<{ code: string; params?: Record<string, string> }>
   warningFlags: string[]
 }
 export type TradePackageAsset = { kind: 'player' | 'faab'; playerId?: string; playerName?: string; position?: string; faabAmount?: number; value: number | null }
@@ -376,6 +378,13 @@ const jsonHeaders: JsonHeaders = {
   'Content-Type': 'application/json',
 }
 
+/**
+ * The error a failed request throws: the server's English `message`, plus the stable `code` it sent
+ * (null when it sent none) and the HTTP `status`, so a panel can say it in the reader's language
+ * (`lib/trade-center/serverTextI18n.ts`). Still an `Error`; every existing `e.message` reads the same.
+ */
+export type RedraftRequestError = Error & { code: string | null; status: number }
+
 async function parseJson<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => null)) as T | null
   if (!res.ok) {
@@ -383,7 +392,9 @@ async function parseJson<T>(res: Response): Promise<T> {
       body && typeof body === 'object' && 'error' in body
         ? String((body as { error?: unknown }).error ?? `Request failed (${res.status})`)
         : `Request failed (${res.status})`
-    throw new Error(msg)
+    const sent = body && typeof body === 'object' ? (body as { code?: unknown }).code : null
+    const code = typeof sent === 'string' ? sent : null
+    throw Object.assign(new Error(msg), { code, status: res.status }) as RedraftRequestError
   }
   return (body ?? {}) as T
 }

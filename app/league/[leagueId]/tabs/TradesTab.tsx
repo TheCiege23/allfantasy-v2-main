@@ -31,6 +31,7 @@ import { shadowDisclosure } from '@/lib/league/write-authority'
 import { ProposeTradeModal } from './ProposeTradeModal'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 import { ReverseTradeDialog } from '@/components/league-trade/ReverseTradeDialog'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { TradeReviewPanel } from '@/components/trade-review/TradeReviewPanel'
 import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { previewGenericTradeReversal, requestGenericTradeReversal } from '@/lib/trade-reversal/client'
@@ -1104,6 +1105,8 @@ export function PendingTradeCard(props: {
 
 
 export function TradesTab({ league, teams }: TradesTabProps) {
+  // Only the reverse dialog's fallback team names read the language here; the tab's own copy is English.
+  const { t: tLang } = useOptionalLanguage()
   const sport = normalizeToSupportedSport(league.sport) ?? 'NFL'
   const dynastyEra = usesDynastyBackground(league)
   // Non-null only for imported (SHADOW) leagues, where a trade built here never reaches the
@@ -1604,7 +1607,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       ) : null}
       {reversing ? (
         <ReverseTradeDialog
-          title={`${reversing.proposerName ?? 'Team A'} ⇄ ${reversing.receiverName ?? 'Team B'}`}
+          title={`${reversing.proposerName ?? tLang('tradeCenter.reverseDialog.teamA')} ⇄ ${reversing.receiverName ?? tLang('tradeCenter.reverseDialog.teamB')}`}
           preflight={() => previewGenericTradeReversal(league.id, reversing.id)}
           reverse={(reason) => requestGenericTradeReversal(league.id, reversing.id, reason)}
           onClose={() => setReversing(null)}

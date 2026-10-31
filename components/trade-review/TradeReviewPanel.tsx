@@ -5,6 +5,13 @@ import type { ReviewCheck, TradeReview } from '@/lib/decision-os/trade/tradeRevi
 import { rememberReviewId } from '@/lib/trade-review/reviewIdStore'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { tOr } from '@/lib/i18n/tInterpolate'
+import {
+  actOnNoteText,
+  commissionerNoteText,
+  localizeTradeReason,
+  reviewCheckExplanation,
+  serverErrorText,
+} from '@/lib/i18n/trade-center-server-text'
 
 /**
  * COMMISSIONER REVIEW MODE (design build-order step 6): the review a commissioner sees before deciding.
@@ -46,7 +53,9 @@ export function TradeReviewPanel(props: {
   defaultOpen?: boolean
 }) {
   const { leagueId, tradeId, kind } = props
-  const { t, tInterpolate } = useOptionalLanguage()
+  const { t, tInterpolate, language } = useOptionalLanguage()
+  // The server's text, in the reader's language; outside Spanish it is the server's English unchanged.
+  const explain = (c: ReviewCheck) => reviewCheckExplanation(c, t, language)
   // A check code with no copy shows the code rather than a raw key.
   const checkLabel = (code: ReviewCheck['code']) => tOr(t, `tradeCenter.review.check.${code}`, code)
   const [open, setOpen] = useState(Boolean(props.defaultOpen))
@@ -62,9 +71,13 @@ export function TradeReviewPanel(props: {
         `/api/leagues/${encodeURIComponent(leagueId)}/trades/${encodeURIComponent(tradeId)}/review?kind=${kind}&explain=1`,
         { credentials: 'include', cache: 'no-store' },
       )
-      const body = (await res.json().catch(() => null)) as (ReviewResponse & { error?: string }) | null
+      const body = (await res.json().catch(() => null)) as (ReviewResponse & { error?: string; code?: string }) | null
       if (!res.ok || !body || !body.review) {
-        setError(body?.error ?? t('tradeCenter.review.loadFailed'))
+        setError(
+          body?.error
+            ? serverErrorText({ message: body.error, code: body.code }, body.error, t, language, 'review')
+            : t('tradeCenter.review.loadFailed'),
+        )
         return
       }
       setData(body)
@@ -74,7 +87,7 @@ export function TradeReviewPanel(props: {
     } finally {
       setLoading(false)
     }
-  }, [leagueId, tradeId, kind, t])
+  }, [leagueId, tradeId, kind, t, language])
 
   useEffect(() => {
     if (open && !data && !loading && !error) void load()
@@ -120,14 +133,20 @@ export function TradeReviewPanel(props: {
                 ) : (
                   <span className="rounded border border-white/15 px-2 py-0.5 text-white/60">
                     {data.tradeGrade.gradeWithheld
-                      ? tInterpolate('tradeCenter.review.notGradedReason', { reason: data.tradeGrade.gradeWithheld })
+                      ? tInterpolate('tradeCenter.review.notGradedReason', { reason: localizeTradeReason(data.tradeGrade.gradeWithheld, language) })
                       : t('tradeCenter.review.notGraded')}
                   </span>
                 )}
               </div>
 
               {data.explanation.noteToLeague ? (
-                <p className="text-white/75" data-testid="trade-review-note">{data.explanation.noteToLeague}</p>
+                <p className="text-white/75" data-testid="trade-review-note">
+                  {commissionerNoteText(
+                    { note: data.explanation.noteToLeague, source: data.explanation.source, review: data.review },
+                    t,
+                    language,
+                  )}
+                </p>
               ) : null}
 
               {raised.length ? (
@@ -137,7 +156,7 @@ export function TradeReviewPanel(props: {
                       <span className={`h-fit rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${SEVERITY_TONE[c.severity]}`}>
                         {checkLabel(c.code)}
                       </span>
-                      <span className="text-white/75">{c.explanation}</span>
+                      <span className="text-white/75">{explain(c)}</span>
                     </li>
                   ))}
                 </ul>
@@ -149,7 +168,7 @@ export function TradeReviewPanel(props: {
                   <ul className="mt-0.5 space-y-0.5">
                     {notChecked.map((c) => (
                       <li key={c.code}>
-                        {checkLabel(c.code)}: {c.explanation}
+                        {checkLabel(c.code)}: {explain(c)}
                       </li>
                     ))}
                   </ul>
@@ -164,7 +183,7 @@ export function TradeReviewPanel(props: {
 
               {data.actOn ? (
                 <p className="text-[11px] text-amber-200/80" data-testid="trade-review-act-on">
-                  {data.actOn.note}
+                  {actOnNoteText(data.actOn, t, language)}
                   {data.actOn.deepLink ? (
                     <>
                       {' '}
