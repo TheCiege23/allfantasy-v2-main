@@ -138,7 +138,10 @@ function findLeagueTeamForRoster(
   }) ?? null
 }
 
-async function buildTeamsForRedraftRosters(leagueId: string, rosters: RedraftRosterRow[]): Promise<ScheduleRuntimeTeamInput[]> {
+async function buildTeamsForRedraftRosters(
+  leagueId: string,
+  rosters: RedraftRosterRow[],
+): Promise<{ teams: ScheduleRuntimeTeamInput[]; divisionRivalsTwice: boolean }> {
   const leagueTeams = await prisma.leagueTeam.findMany({
     where: { leagueId },
     select: {
@@ -155,7 +158,7 @@ async function buildTeamsForRedraftRosters(leagueId: string, rosters: RedraftRos
   // The commissioner's divisions (`settings.division_config`) win over the promotion tier column.
   const commissionerDivisions = await loadSeasonRosterDivisions(leagueId, rosters)
 
-  return rosters.map((roster) => {
+  const teams = rosters.map((roster) => {
     const team = findLeagueTeamForRoster(roster, leagueTeams)
     const division = commissionerDivisions?.byRoster.get(roster.id)
     return {
@@ -170,6 +173,8 @@ async function buildTeamsForRedraftRosters(leagueId: string, rosters: RedraftRos
           : team?.division?.name ?? (team?.division ? `Division ${team.division.tierLevel}` : null),
     }
   })
+  // The rematch setting belongs to the commissioner's divisions only, never to the promotion tiers.
+  return { teams, divisionRivalsTwice: commissionerDivisions?.rivalsTwice === true }
 }
 
 function toScheduleMatchupInput(row: {
@@ -243,7 +248,7 @@ export async function resolveNflRedraftScheduleRuntime(input: {
   }
   if (!season.rosters.length) return { ok: false, reason: 'rosters_unavailable' }
 
-  const teams = await buildTeamsForRedraftRosters(season.leagueId, season.rosters as RedraftRosterRow[])
+  const { teams, divisionRivalsTwice } = await buildTeamsForRedraftRosters(season.leagueId, season.rosters as RedraftRosterRow[])
   const imported = await loadFantraxNativePresentation(season, input.now)
   const state = buildCanonicalScheduleRuntimeState({
     rules,
@@ -258,6 +263,7 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     // The same flags `updateStandings` reads: the league's current median setting over the season's copy.
     medianGame: !imported && Boolean(season.league?.medianGame ?? season.medianGame),
     medianInPlayoffs: readMedianGameInPlayoffs(season.league?.settings),
+    divisionRivalsTwice,
   })
 
   return {
@@ -361,10 +367,11 @@ export async function generateNflRedraftScheduleForSeason(input: {
     if (refusal) return { ok: false, code: refusal.code, message: refusal.message }
   }
 
-  const teams = await buildTeamsForRedraftRosters(season.leagueId, season.rosters as RedraftRosterRow[])
+  const { teams, divisionRivalsTwice } = await buildTeamsForRedraftRosters(season.leagueId, season.rosters as RedraftRosterRow[])
   const generated = generateCanonicalRegularSeasonSchedule({
     rules,
     teams,
+    divisionRivalsTwice,
     totalWeeks: season.totalWeeks,
     playoffStartWeek: season.playoffStartWeek,
   })
