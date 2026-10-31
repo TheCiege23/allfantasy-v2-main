@@ -14,6 +14,30 @@ export const CHIMMY_EXILE_FORM_WEEKS = 3
 
 const SEAT_PREFIX = 'orphan-'
 
+/**
+ * Every id a player's weekly scores may be stored under. Exile claims a `Player` row, but a league's
+ * roster — and so the score sync — keys a player by its draft pool's provider id (Sleeper's `12527`
+ * for NFL, held on the row as `providerIds.sleeper = "sleeper:12527"`). Reading only `Player.id` saw
+ * no form for anyone, and every team tied. Measured on the season rehearsal: 0 of 192 drafted ids
+ * matched a `Player.id`.
+ */
+export function playerScoreAliases(player: { id: string; providerIds?: unknown }): string[] {
+  const ids = new Set([player.id])
+  const provider = player.providerIds
+  if (provider && typeof provider === 'object' && !Array.isArray(provider)) {
+    for (const value of Object.values(provider as Record<string, unknown>)) {
+      if (typeof value !== 'string' && typeof value !== 'number') continue
+      const raw = String(value).trim()
+      if (!raw) continue
+      ids.add(raw)
+      // "sleeper:12527" → "12527"; a multi-part key ("name:Ashton Jeanty:RB:LV") is not an id.
+      const prefixed = /^[a-z_]+:([^:]+)$/i.exec(raw)
+      if (prefixed) ids.add(prefixed[1])
+    }
+  }
+  return [...ids]
+}
+
 export type ChimmyExileTurn = { claimed: Record<string, { team: string; expected: number; players: number }>; skipped: Record<string, string> }
 
 /**
@@ -76,24 +100,30 @@ export async function runChimmyExileTurn(leagueId: string, now = new Date()): Pr
 
     const players = await prisma.player.findMany({
       where: { sport: { equals: league.sport, mode: 'insensitive' }, active: true, team: { in: openTeams, mode: 'insensitive' } },
-      select: { id: true, name: true, position: true, team: true },
+      select: { id: true, name: true, position: true, team: true, providerIds: true },
     })
+    const ownerOf = new Map<string, string>()
+    for (const p of players) for (const alias of playerScoreAliases(p)) if (!ownerOf.has(alias)) ownerOf.set(alias, p.id)
     const scores = await prisma.playerWeeklyScore.findMany({
       where: {
-        playerId: { in: players.map((p) => p.id) }, sport: league.sport, season: league.season, isFinalized: true,
+        playerId: { in: [...ownerOf.keys()] }, sport: league.sport, season: league.season, isFinalized: true,
         week: { gte: waivers.week - CHIMMY_EXILE_FORM_WEEKS, lt: waivers.week },
       },
-      select: { playerId: true, stats: true },
+      select: { playerId: true, week: true, stats: true },
     })
-    const totals = new Map<string, { sum: number; weeks: number }>()
+    // One reading per player per week: the same week can sit under two of a player's ids.
+    const weekly = new Map<string, Map<number, number>>()
     const positionOf = new Map(players.map((p) => [p.id, p.position]))
     for (const row of scores) {
-      if (!row.stats || typeof row.stats !== 'object' || Array.isArray(row.stats)) continue
-      const points = scorer(row.stats as Record<string, number>, positionOf.get(row.playerId) ?? null)
+      const owner = ownerOf.get(row.playerId)
+      if (!owner || !row.stats || typeof row.stats !== 'object' || Array.isArray(row.stats)) continue
+      const points = scorer(row.stats as Record<string, number>, positionOf.get(owner) ?? null)
       if (!Number.isFinite(points)) continue
-      const t = totals.get(row.playerId) ?? { sum: 0, weeks: 0 }
-      totals.set(row.playerId, { sum: t.sum + points, weeks: t.weeks + 1 })
+      const weeks = weekly.get(owner) ?? new Map<number, number>()
+      weeks.set(row.week, Math.max(weeks.get(row.week) ?? -Infinity, points))
+      weekly.set(owner, weeks)
     }
+    const totals = new Map([...weekly].map(([id, weeks]) => [id, { sum: [...weeks.values()].reduce((a, b) => a + b, 0), weeks: weeks.size }]))
     const candidates: ExileCandidate[] = players
       .filter((p): p is typeof p & { team: string } => Boolean(p.team))
       .map((p) => {

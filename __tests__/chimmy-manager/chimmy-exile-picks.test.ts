@@ -10,8 +10,8 @@ const h = vi.hoisted(() => ({
   settings: {} as Record<string, unknown>,
   waivers: null as null | { week: number; roster: { team: string | null }; takenTeamIds: string[]; locked: boolean },
   games: [] as Array<{ homeTeam: string; awayTeam: string; startTime: Date }>,
-  players: [] as Array<{ id: string; name: string; position: string; team: string }>,
-  scores: [] as Array<{ playerId: string; stats: Record<string, number> }>,
+  players: [] as Array<{ id: string; name: string; position: string; team: string; providerIds?: unknown }>,
+  scores: [] as Array<{ playerId: string; week?: number; stats: Record<string, number> }>,
   claims: [] as Array<{ userId: string; playerId: string; slot?: string; week: number }>,
 }))
 vi.mock('@/lib/prisma', () => ({
@@ -20,7 +20,8 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: vi.fn(async () => ({ sport: 'NFL', season: 2026, settings: h.settings })) },
     gameSchedule: { findMany: vi.fn(async () => h.games) },
     player: { findMany: vi.fn(async () => h.players) },
-    playerWeeklyScore: { findMany: vi.fn(async () => h.scores) },
+    playerWeeklyScore: { findMany: vi.fn(async (q: { where: { playerId: { in: string[] } } }) =>
+      h.scores.filter((r) => q.where.playerId.in.includes(r.playerId)).map((r, i) => ({ week: i, ...r }))) },
   },
 }))
 vi.mock('@/lib/redraft/scoringEngine', () => ({ buildLeagueStatScorer: () => (stats: Record<string, number>) => stats.pts ?? 0 }))
@@ -37,7 +38,7 @@ vi.mock('@/lib/survivor/exileRosterService', () => ({
 }))
 
 import { chimmyExilePlan, type ExileCandidate } from '@/lib/survivor/chimmyExileStrategy'
-import { runChimmyExileTurn } from '@/lib/survivor/chimmyExile'
+import { playerScoreAliases, runChimmyExileTurn } from '@/lib/survivor/chimmyExile'
 
 const c = (id: string, position: string, team: string, recentPoints: number): ExileCandidate => ({ id, name: id, position, team, recentPoints })
 
@@ -125,6 +126,21 @@ describe('runChimmyExileTurn', () => {
     h.waivers = { week: 6, roster: { team: null }, takenTeamIds: [], locked: true }
     expect((await runChimmyExileTurn('L1', now)).skipped['orphan-r9']).toBe('locked')
     expect(h.claims).toEqual([])
+  })
+
+  it('reads form under the id the league\'s rosters score a player by', async () => {
+    // Scores sit under the draft pool's Sleeper id, not the Player row's id. Before, BUF and KC tied at 0
+    // and the pick fell to the team code; now BUF's 40-point QB wins.
+    h.players = [
+      { id: 'kc-qb', name: 'KC QB', position: 'QB', team: 'KC', providerIds: { sleeper: 'sleeper:111' } },
+      { id: 'buf-qb', name: 'BUF QB', position: 'QB', team: 'BUF', providerIds: { sleeper: 'sleeper:222', backfill: 'name:BUF QB:QB:BUF' } },
+    ]
+    h.scores = [{ playerId: '111', week: 4, stats: { pts: 10 } }, { playerId: '222', week: 4, stats: { pts: 40 } }]
+    expect((await runChimmyExileTurn('L1', now)).claimed['orphan-r9']).toEqual({ team: 'BUF', expected: 40, players: 1 })
+    // The same week under two ids counts once.
+    h.scores = [{ playerId: 'buf-qb', week: 4, stats: { pts: 40 } }, { playerId: '222', week: 4, stats: { pts: 40 } }, { playerId: '111', week: 4, stats: { pts: 30 } }]
+    expect((await runChimmyExileTurn('L1', now)).claimed['orphan-r9']).toEqual({ team: 'BUF', expected: 40, players: 1 })
+    expect(playerScoreAliases(h.players[1])).toEqual(['buf-qb', 'sleeper:222', '222', 'name:BUF QB:QB:BUF'])
   })
 
   it('respects a team another exile reserved', async () => {
