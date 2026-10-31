@@ -12,6 +12,7 @@ import { nbaCampusWeekCacheKey, persistNbaCampusWeekSnapshot } from '@/lib/c2c/s
 import { nbaCampusGameMappingKey } from '@/lib/c2c/refreshNbaCampusWeek'
 import { nbaCampusPointsForMatchup } from '@/lib/c2c/nbaCampusMatchupScoring'
 import { refreshEspnCollegeGameBoxes } from '@/lib/espn/refreshNcaabCollegeGameBoxes'
+import { mergeNbaCollegeDraftPlayers } from '@/lib/live-draft-engine/RosterAssignmentService'
 
 const pilot = process.env.NBA_CAMPUS_POSTGRES_PILOT === '1' ? describe : describe.skip
 pilot('NBA campus snapshot and correction on isolated Postgres', () => {
@@ -26,7 +27,9 @@ pilot('NBA campus snapshot and correction on isolated Postgres', () => {
     const playerId = `espn:ncaab:${espnId}`, eventId = String(BigInt(`0x${randomUUID().replaceAll('-', '').slice(0, 12)}`))
     const boxKey = `espn:ncaab:box:${eventId}`, mappingKey = nbaCampusGameMappingKey(2026, 2)
     const savedAt = new Date('2026-10-31T12:00:00Z'), now = new Date('2026-11-05T12:00:00Z')
-    const playerData = { lineup_sections: { devy: [playerId], campus: [playerId] } }
+    const drafted = mergeNbaCollegeDraftPlayers({}, [{ playerId, playerName: 'Synthetic College Player', position: 'G', team: 'School', assetType: 'c2c_college' }])
+    expect(drafted.lineup_sections).toMatchObject({ devy: [expect.objectContaining({ id: playerId })] })
+    const playerData = { ...drafted, lineup_sections: { ...(drafted.lineup_sections as Record<string, unknown>), campus: [playerId] } }
     const evidence = [{ id: playerId, espnId, teamId: '10', name: 'Synthetic College Player', school: 'Synthetic School', position: 'G', jersey: null, observedAt: savedAt }]
     const built = buildNbaCampusWeekSnapshot({ playerData, season: 2026, week: 2, now: savedAt, evidence })
     expect(built.snapshot).not.toBeNull()
