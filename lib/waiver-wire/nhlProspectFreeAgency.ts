@@ -240,7 +240,10 @@ export type NhlProspectAwardDb = NhlProspectDb &
   LinkDb & {
     sportsPlayer: {
       findMany(args: {
-        where: { sport: string; OR: Array<{ externalId: { in: string[] } } | { sleeperId: { in: string[] } }> }
+        where: {
+          sport: string
+          OR: Array<{ source: string; externalId: { in: string[] } } | { sleeperId: { in: string[] } } | { externalId: { in: string[] } }>
+        }
         select: { id: true }
       }): Promise<Array<{ id: string }>>
     }
@@ -292,12 +295,23 @@ export async function resolveNhlProspectClaimAward(
     const person = people[0]
     const providerIds = [person.rollingInsightsId, person.sleeperId].filter((v): v is string => Boolean(v))
     // A free-agent add stores the pool row's own id (`SportsPlayer.id`), a draft its provider id: both count.
+    // Each id is asked only of the column that speaks it: a bare `externalId` is a different player in
+    // every provider's space, so the Rolling Insights id is scoped by source and the Sleeper id goes to
+    // `sleeperId` (or Sleeper's own `sleeper:<id>` rows) — never one id against all of them.
+    const riId = person.rollingInsightsId ? String(person.rollingInsightsId) : null
+    const slId = person.sleeperId ? String(person.sleeperId) : null
     const poolRows =
-      providerIds.length === 0
+      !riId && !slId
         ? []
         : await db.sportsPlayer
             .findMany({
-              where: { sport: 'NHL', OR: [{ externalId: { in: providerIds } }, { sleeperId: { in: providerIds } }] },
+              where: {
+                sport: 'NHL',
+                OR: [
+                  ...(riId ? [{ source: 'rolling_insights', externalId: { in: [riId] } }] : []),
+                  ...(slId ? [{ sleeperId: { in: [slId] } }, { source: 'sleeper', externalId: { in: [`sleeper:${slId}`] } }] : []),
+                ],
+              },
               select: { id: true },
             })
             .catch(() => null)

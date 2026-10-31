@@ -33,7 +33,7 @@ const h = vi.hoisted(() => ({
   rosters: [] as Array<{ id: string; playerData: unknown; waiverPriority: number; faabRemaining: number }>,
   league: {} as Record<string, unknown>,
   identities: null as null | Array<Record<string, unknown>>,
-  sportsPlayers: [] as Array<{ id: string; externalId: string }>,
+  sportsPlayers: [] as Array<{ id: string; externalId: string; source: string; sleeperId?: string | null }>,
   sportsPlayerThrows: false,
   db: null as null | ReturnType<typeof import('./nhl-prospect-fixture').prospectDb>,
   leagueFindUnique: vi.fn(),
@@ -122,13 +122,23 @@ beforeEach(() => {
   h.tx.mockResolvedValue([])
   h.moves.mockResolvedValue([])
   h.hook.mockResolvedValue(undefined)
-  h.sportsPlayers = [{ id: 'sp-uuid-5001', externalId: '5001' }]
+  h.sportsPlayers = [{ id: 'sp-uuid-5001', externalId: '5001', source: 'rolling_insights' }]
   h.sportsPlayerThrows = false
-  h.sportsPlayerFindMany.mockImplementation(async (args: { where: { OR: Array<{ externalId?: { in: string[] } }> } }) => {
-    if (h.sportsPlayerThrows) throw new Error('db down')
-    const ids = args.where.OR.flatMap((o) => o.externalId?.in ?? [])
-    return h.sportsPlayers.filter((p) => ids.includes(p.externalId)).map((p) => ({ id: p.id }))
-  })
+  // Matches the way Postgres would: an OR element's `source`, when present, has to match the row too.
+  h.sportsPlayerFindMany.mockImplementation(
+    async (args: { where: { OR: Array<{ source?: string; externalId?: { in: string[] }; sleeperId?: { in: string[] } }> } }) => {
+      if (h.sportsPlayerThrows) throw new Error('db down')
+      return h.sportsPlayers
+        .filter((p) =>
+          args.where.OR.some(
+            (o) =>
+              (o.source === undefined || o.source === p.source) &&
+              ((o.externalId?.in ?? []).includes(p.externalId) || (!!p.sleeperId && (o.sleeperId?.in ?? []).includes(p.sleeperId))),
+          ),
+        )
+        .map((p) => ({ id: p.id }))
+    },
+  )
   setRosters()
 })
 
@@ -155,6 +165,20 @@ describe('award-time re-check of a fantrax: prospect claim', () => {
     expect(h.moves.mock.calls[0][1].moves[0]).toEqual({ playerId: '5001', fromRosterId: null, toRosterId: 'A' })
     const rows = h.resultCreateMany.mock.calls[0][0].data
     expect(rows[0]).toMatchObject({ addPlayerId: '5001', resultType: 'awarded', metadata: { claimedPlayerId: 'fantrax:04lnk' } })
+  })
+
+  it('a different provider\'s row with the same bare number is not him: its holder does not block the award', async () => {
+    // externalId means something different in every provider's space; only the Rolling Insights row is his.
+    h.sportsPlayers = [
+      { id: 'sp-uuid-5001', externalId: '5001', source: 'rolling_insights' },
+      { id: 'sp-impostor', externalId: '5001', source: 'api_sports' },
+    ]
+    setRosters({ B: ['sp-impostor'] })
+    h.claims = [claim('A', 'fantrax:04lnk', 9)]
+    const [r] = await run()
+    expect(r).toMatchObject({ success: true, addPlayerId: '5001', faabSpent: 9 })
+    const where = h.sportsPlayerFindMany.mock.calls[0][0].where
+    expect(where.OR).toEqual([{ source: 'rolling_insights', externalId: { in: ['5001'] } }])
   })
 
   it.each([
