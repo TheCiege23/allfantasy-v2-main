@@ -19,6 +19,7 @@ import { normalizeWaiverTypeForEngine, parseWaiverEngineConfig } from './waiver-
 import { assertWeeklyDropLimit } from './waiver-validation'
 import { commissionerOverrideAllowed, getCommissionerOverrides } from './commissioner-claim-override'
 import { assertCurrentNbaWaiverPlayer } from './current-nba-player-pool'
+import { assertNhlProspectFreeAgencyAdd } from './nhlProspectFreeAgency'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 
@@ -111,6 +112,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
         platform: true,
         irSlots: true,
         isDynasty: true,
+        leagueType: true,
         leagueVariant: true,
         lockAllMoves: true,
         lifecycleState: true,
@@ -154,6 +156,14 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   if (takenBy) {
     throw new Error('This player is already on another roster in this league.')
   }
+  // NHL dynasty: a `fantrax:<id>` prospect must be on the stored Fantrax universe; elsewhere it is
+  // refused. Every other id in every other league returns untouched (lib/waiver-wire/nhlProspectFreeAgency.ts).
+  await assertNhlProspectFreeAgencyAdd(
+    prisma as never,
+    league,
+    addId,
+    rosteredElsewhere.map((r) => r.playerData),
+  )
 
   // The same limit trades and the draft use (lib/league/rosterLimit.ts): active spots, IR / taxi aside.
   const rosterLimit = leagueRosterLimit(league, 20)

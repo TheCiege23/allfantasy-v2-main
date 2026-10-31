@@ -6,6 +6,8 @@ import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolve
 import type { PoolPlayerRecord } from '@/lib/sport-teams/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { BASELINE_BASIS, baselineAvailable, baselineFor, loadBaselineIndex, type BaselineIndex } from '@/lib/chimmy/afBaselineIndex'
+import { prisma } from '@/lib/prisma'
+import { loadNhlProspectFreeAgents } from '@/lib/waiver-wire/nhlProspectFreeAgency'
 
 /**
  * "Who can I pick up?" in an NBA, NHL, MLB, college or soccer league.
@@ -26,20 +28,51 @@ const MAX_SHOWN = 15
 export type OtherSportAvailableDeps = {
   pool: (leagueId: string, sport: string) => Promise<PoolPlayerRecord[]>
   baseline: (sport: string) => Promise<BaselineIndex>
+  /** NHL dynasty: how many Fantrax prospects are on no roster (lib/waiver-wire/nhlProspectFreeAgency.ts). */
+  prospectCount?: (rostered: Set<string>) => Promise<number>
 }
 
 const defaultDeps: OtherSportAvailableDeps = {
   pool: (leagueId, sport) => getPlayerPoolForLeague(leagueId, normalizeToSupportedSport(sport) as LeagueSport, { limit: 5000 }),
   baseline: loadBaselineIndex,
+  prospectCount: async (rostered) => (await loadNhlProspectFreeAgents(prisma as never, { rosteredIds: rostered, limit: 0 })).total,
 }
 
 function isRostered(p: PoolPlayerRecord, rostered: Set<string>): boolean {
   return [p.player_id, p.external_source_id, p.sleeper_id].some((id) => id != null && rostered.has(String(id)))
 }
 
+/**
+ * NHL dynasty leagues also hold Fantrax-only prospects in free agency. They have no projection, so
+ * they are never ranked or recommended here: Chimmy is told they exist, what they are, and where to
+ * find them. A failed read says nothing about them rather than guessing.
+ */
+async function nhlProspectNote(
+  args: { sport: string; dynasty?: boolean; rostered: Set<string> },
+  deps: OtherSportAvailableDeps,
+): Promise<string | null> {
+  if (String(args.sport).toUpperCase() !== 'NHL' || args.dynasty !== true || args.rostered.size === 0) return null
+  const count = await (deps.prospectCount ?? defaultDeps.prospectCount!)(args.rostered).catch(() => null)
+  if (!count) return null
+  return [
+    `Also free in this dynasty league: ${count} NHL prospects from Fantrax (AHL, junior or unsigned players who are on no NHL roster in our data).`,
+    'They have no projection, age or draft year, so they are NOT ranked above and you must give no projection-based advice about them.',
+    'If the user asks about prospects, say they can be found by name in the free-agent list, where each one is marked "Prospect", and that he scores zero until he plays NHL games.',
+  ].join(' ')
+}
+
 export async function buildOtherSportAvailableContext(
-  args: { leagueName: string; sport: string; leagueId: string; rostered: Set<string> },
+  args: { leagueName: string; sport: string; leagueId: string; rostered: Set<string>; dynasty?: boolean },
   deps: OtherSportAvailableDeps = defaultDeps,
+): Promise<string> {
+  const base = await buildPoolContext(args, deps)
+  const note = await nhlProspectNote(args, deps)
+  return note ? `${base}\n${note}` : base
+}
+
+async function buildPoolContext(
+  args: { leagueName: string; sport: string; leagueId: string; rostered: Set<string> },
+  deps: OtherSportAvailableDeps,
 ): Promise<string> {
   const sport = String(args.sport).toUpperCase()
   const head = `Player VALUES are only published for NFL, so "${args.leagueName}" (${sport}) is ranked a different way below.`
