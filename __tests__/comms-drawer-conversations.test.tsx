@@ -32,7 +32,11 @@ function json(body: unknown, status = 200) {
   return { ok: status < 400, status, json: async () => body } as Response
 }
 
+/* Whether `/pinned` says this viewer runs the league's chat (commissioner or co-commissioner). */
+let canPin = true
+
 beforeEach(() => {
+  canPin = true
   sessionStorage.clear()
   Element.prototype.scrollIntoView = vi.fn()
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -48,7 +52,7 @@ beforeEach(() => {
         ],
       })
     }
-    if (u.includes('/pinned')) return json({ pinned: [] })
+    if (u.includes('/pinned')) return json({ pinned: [], canPin })
     if (u.includes('league%3Al0/typing') && (!init || init.method !== 'POST')) {
       return json({ typing: [{ userId: 'jo', name: 'Jo' }] })
     }
@@ -130,11 +134,23 @@ describe('League tab', () => {
     expect(calls((u) => u.includes('league%3Al0/search?q=RB1')).length).toBeGreaterThan(0)
   })
 
-  it('keeps pin in league chat', async () => {
+  it('keeps pin in league chat, for whoever runs the league', async () => {
     openLeague()
     await screen.findByText('who wants my RB1')
+    // Pin waits for /pinned to say this viewer may pin; it is not offered on a guess.
+    await waitFor(() => expect(calls((u) => u.includes('/pinned')).length).toBeGreaterThan(0))
     fireEvent.keyDown(screen.getAllByRole('article')[0]!, { key: 'Enter' })
-    expect(screen.getByRole('button', { name: /Pin for the league/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /Pin for the league/ })).toBeTruthy()
+  })
+
+  /* Only the commissioner and co-commissioners pin (2026-10-31); a member is not offered it. */
+  it('does not offer a member Pin', async () => {
+    canPin = false
+    openLeague()
+    await screen.findByText('who wants my RB1')
+    await waitFor(() => expect(calls((u) => u.includes('/pinned')).length).toBeGreaterThan(0))
+    fireEvent.keyDown(screen.getAllByRole('article')[0]!, { key: 'Enter' })
+    expect(screen.queryByRole('button', { name: /Pin for the league/ })).toBeNull()
   })
 })
 

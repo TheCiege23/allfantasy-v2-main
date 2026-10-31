@@ -216,6 +216,11 @@ export function LeagueConversation({
   const [pins, setPins] = useState<PinnedRef[]>([])
   const [pinBusy, setPinBusy] = useState(false)
   /*
+   * Only the commissioner and co-commissioners pin or unpin (the pin route decides; `/pinned` says
+   * which this viewer is). False until it answers, so a member never sees a Pin that would 403.
+   */
+  const [canPin, setCanPin] = useState(false)
+  /*
    * Whether the draft room's messages are folded in. `null` means the reader has not chosen,
    * and the server decides: in while a draft is live, out otherwise. Inside the draft room
    * it is always out — its own view already shows them.
@@ -342,8 +347,9 @@ export function LeagueConversation({
     try {
       const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(room)}/pinned`)
       if (!res.ok) return
-      const data = (await res.json().catch(() => ({}))) as { pinned?: unknown }
+      const data = (await res.json().catch(() => ({}))) as { pinned?: unknown; canPin?: unknown }
       setPins(readPinnedRefs(data.pinned))
+      setCanPin(data.canPin === true)
     } catch {
       /* A board that failed to load is not worth an error over a working chat. */
     }
@@ -361,6 +367,7 @@ export function LeagueConversation({
     setReactionOverride({})
     setReplyTo(null)
     setPins([])
+    setCanPin(false)
     setTyping([])
     setLoadedOnce(false)
     setSearching(false)
@@ -842,7 +849,7 @@ export function LeagueConversation({
         <PinnedBoard
           pins={pins}
           busy={pinBusy}
-          onUnpin={(pinId) => void unpinMessage(pinId)}
+          onUnpin={canPin ? (pinId) => void unpinMessage(pinId) : undefined}
           onJump={(messageId) => setFocusRequest({ id: messageId, nonce: Date.now() })}
         />
       ) : null}
@@ -878,7 +885,7 @@ export function LeagueConversation({
             void toggleReaction(m.id, emoji, reactionOverride[m.id] ?? readReactions(m.metadata, viewer))
           }
           onReply={(m) => setReplyTo(byId.get(m.id) ?? null)}
-          onPin={tribe ? undefined : (m) => void pinMessage(m.id)}
+          onPin={tribe || !canPin ? undefined : (m) => void pinMessage(m.id)}
           pinBusy={pinBusy}
           onEdit={editMessage}
           onDelete={deleteMessage}
