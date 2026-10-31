@@ -45,6 +45,9 @@
  * Insights identity once he reaches an NHL roster, and from then on this maps him to that identity's
  * game logs. Same refusals as above: an identity another roster id already reaches is not shared, and
  * a Fantrax id carried by two identities in the sport is refused.
+ *
+ * MLB rookie drafts offer Fantrax prospects too (`mlbFantraxProspects.ts`); the same lookup, scoped to
+ * the MLB sport keys the caller passes, covers them with no MLB-specific code.
  */
 import { normalizePlayerName } from '@/lib/team-abbrev'
 
