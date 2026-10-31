@@ -4,6 +4,8 @@ const h = vi.hoisted(() => ({
   importRunFindUnique: vi.fn(),
   importRunCreate: vi.fn(),
   importRunUpdate: vi.fn(),
+  leagueFindUnique: vi.fn(),
+  persistImported: vi.fn(),
   warningDeleteMany: vi.fn(),
   warningCreateMany: vi.fn(),
   reviewDeleteMany: vi.fn(),
@@ -21,6 +23,7 @@ vi.mock('@/lib/prisma', () => ({
       create: h.importRunCreate,
       update: h.importRunUpdate,
     },
+    league: { findUnique: h.leagueFindUnique },
     importReviewTask: {
       deleteMany: h.reviewDeleteMany,
       create: h.reviewCreate,
@@ -36,10 +39,10 @@ vi.mock('@/lib/league-import/importRunAttempts', () => ({
 }))
 
 vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
-  persistImportedLeagueFromNormalization: vi.fn(),
+  persistImportedLeagueFromNormalization: h.persistImported,
 }))
 
-import { recordCanonicalImportAuditForExistingLeague } from '@/lib/league-import/importPersistenceService'
+import { persistImportWithCanonicalAudit, recordCanonicalImportAuditForExistingLeague } from '@/lib/league-import/importPersistenceService'
 
 describe('import persistence batching', () => {
   beforeEach(() => {
@@ -47,6 +50,11 @@ describe('import persistence batching', () => {
     h.importRunFindUnique.mockResolvedValue(null)
     h.importRunCreate.mockResolvedValue({ id: 'run-1', rawPayloadHash: 'hash-1' })
     h.importRunUpdate.mockResolvedValue({})
+    h.leagueFindUnique.mockResolvedValue({ id: 'league-1', name: 'Scale league', sport: 'NBA' })
+    h.persistImported.mockResolvedValue({
+      league: { id: 'league-1', name: 'Scale league', sport: 'NBA' },
+      incompleteSteps: [], joinedExisting: true,
+    })
     h.startAttempt.mockResolvedValue('attempt-1')
     h.finishAttempt.mockResolvedValue(undefined)
     h.warningDeleteMany.mockResolvedValue({ count: 0 })
@@ -111,5 +119,39 @@ describe('import persistence batching', () => {
     expect(JSON.stringify(h.executeRaw.mock.calls)).toContain('af-0-new')
     expect(h.reviewDeleteMany).toHaveBeenCalledTimes(1)
     expect(h.finishAttempt).toHaveBeenCalledWith('attempt-1', { status: 'completed' })
+  })
+
+  it('uses a different audit key for each team owned by one Fantrax account', async () => {
+    const normalized = (teamId: string) => ({
+      source: { source_league_id: 'fantrax-league' },
+      league: { season: 2026 },
+      viewer_source_team_id: teamId,
+      identity_mappings: [],
+    }) as never
+    const canonical = { warnings: [], reviewRequired: false, reviewReasons: [] } as never
+    let completedKey = ''
+    h.importRunFindUnique.mockImplementation(async ({ where }: { where: { idempotencyKey: string } }) =>
+      where.idempotencyKey === completedKey
+        ? { id: 'run-1', leagueId: 'league-1', status: 'completed' }
+        : null)
+
+    await persistImportWithCanonicalAudit({
+      userId: 'owner', provider: 'fantrax', normalized: normalized('team-1'), canonical,
+    })
+    completedKey = h.importRunCreate.mock.calls[0]?.[0].data.idempotencyKey
+    expect(completedKey).toContain(':team:')
+
+    const retry = await persistImportWithCanonicalAudit({
+      userId: 'owner', provider: 'fantrax', normalized: normalized('team-1'), canonical,
+    })
+    expect(retry.skipped).toBe(true)
+
+    const otherTeam = await persistImportWithCanonicalAudit({
+      userId: 'owner', provider: 'fantrax', normalized: normalized('team-2'), canonical,
+    })
+    expect(otherTeam.skipped).toBe(false)
+    expect(h.persistImported).toHaveBeenCalledTimes(2)
+    expect(h.importRunCreate).toHaveBeenCalledTimes(2)
+    expect(h.importRunCreate.mock.calls[1]?.[0].data.idempotencyKey).not.toBe(completedKey)
   })
 })

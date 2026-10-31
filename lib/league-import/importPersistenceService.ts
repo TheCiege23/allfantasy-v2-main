@@ -107,8 +107,15 @@ function buildImportIdempotencyKey(input: {
   provider: ImportProvider
   sourceLeagueId: string
   season: number
+  sourceTeamId?: string | null
 }): string {
-  return `${input.userId}:${input.provider}:${input.sourceLeagueId}:${input.season}`
+  const leagueKey = `${input.userId}:${input.provider}:${input.sourceLeagueId}:${input.season}`
+  // A Fantrax login can own several teams in one league. Each selected team needs
+  // its own completed run, or the second import short-circuits before claiming it.
+  // Hash the provider ID to keep the key within ImportRun's 256-character limit.
+  return input.provider === 'fantrax' && input.sourceTeamId
+    ? `${leagueKey}:team:${createHash('sha256').update(input.sourceTeamId).digest('hex').slice(0, 16)}`
+    : leagueKey
 }
 
 function buildExistingLeagueImportIdempotencyKey(input: {
@@ -193,6 +200,7 @@ export async function persistImportWithCanonicalAudit(input: {
     provider: input.provider,
     sourceLeagueId: input.normalized.source.source_league_id,
     season: seasonYear,
+    sourceTeamId: input.normalized.viewer_source_team_id,
   })
 
   await deleteFailedImportRunIfPresent(idempotencyKey)
@@ -398,7 +406,7 @@ export async function persistImportWithCanonicalAudit(input: {
      * league. Fixed in the same change; ESPN, Yahoo, MFL and Fantrax were already safe
      * because their unknown-rank fallback is LAST place.
      */
-    {
+    if (!persisted.joinedExisting) {
       try {
         const { deriveEvidenceRowsFromImport } = await import(
           '@/lib/legacy-score-engine/importedFactsToEvidence'

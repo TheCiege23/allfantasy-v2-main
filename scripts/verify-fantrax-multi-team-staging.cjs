@@ -1,4 +1,4 @@
-/** Rollback-only schema probe, or read-only verification of two real Fantrax imports. */
+/** Rollback-only 128-team schema probe, or read-only verification of two real Fantrax imports. */
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
@@ -88,16 +88,29 @@ async function main() {
       [leagueId, ownerId, 'fantrax', sourceId, 'Rollback-only Fantrax probe', 2026, settings],
     )
 
-    for (const teamId of ['team-a', 'team-b']) {
-      await db.query(
-        'INSERT INTO league_teams (id, "leagueId", "externalId", "ownerName", "teamName", "claimedByUserId", "lastUpdatedAt") VALUES ($1,$2,$3,$4,$5,$6,NOW())',
-        [crypto.randomUUID(), leagueId, teamId, 'One account', 'Same team name', ownerId],
-      )
+    const teamIds = Array.from({ length: 128 }, (_, index) => `team-${String(index + 1).padStart(3, '0')}`)
+    const teamRowIds = teamIds.map(() => crypto.randomUUID())
+    await db.query(
+      `INSERT INTO league_teams (id, "leagueId", "externalId", "ownerName", "teamName", "claimedByUserId", "lastUpdatedAt")
+       SELECT ids.id, $1, ids.external_id, 'Shared display name', 'Same team name',
+              CASE WHEN ids.external_id = ANY($4::text[]) THEN $2 ELSE NULL END, NOW()
+       FROM unnest($3::text[], $5::text[]) AS ids(external_id, id)`,
+      [leagueId, ownerId, teamIds, teamIds.slice(0, 2), teamRowIds],
+    )
+    for (const teamId of teamIds.slice(0, 2)) {
       await db.query(
         'INSERT INTO "LeagueManagerClaim" (id, "leagueId", "afUserId", "teamExternalId", "isConfirmed") VALUES ($1,$2,$3,$4,$5)',
         [crypto.randomUUID(), leagueId, ownerId, teamId, true],
       )
     }
+    const teams = await db.query(
+      `SELECT COUNT(*)::int AS total, COUNT(DISTINCT "externalId")::int AS distinct_ids,
+              COUNT(DISTINCT "teamName")::int AS distinct_names,
+              COUNT(*) FILTER (WHERE "claimedByUserId"=$2)::int AS owned
+       FROM league_teams WHERE "leagueId"=$1`,
+      [leagueId, ownerId],
+    )
+    assert.deepEqual(teams.rows[0], { total: 128, distinct_ids: 128, distinct_names: 1, owned: 2 })
     const claims = await db.query(
       'SELECT COUNT(*)::int AS total, COUNT(DISTINCT "teamExternalId")::int AS distinct_teams FROM "LeagueManagerClaim" WHERE "leagueId"=$1 AND "afUserId"=$2',
       [leagueId, ownerId],
@@ -108,7 +121,7 @@ async function main() {
     try {
       await db.query(
         'INSERT INTO "LeagueManagerClaim" (id, "leagueId", "afUserId", "teamExternalId") VALUES ($1,$2,$3,$4)',
-        [crypto.randomUUID(), leagueId, otherId, 'team-a'],
+        [crypto.randomUUID(), leagueId, otherId, teamIds[0]],
       )
       throw new Error('A second account claimed the same team')
     } catch (error) {
@@ -130,7 +143,7 @@ async function main() {
       await db.query('ROLLBACK TO SAVEPOINT duplicate_league')
     }
 
-    console.log('PASS: one account claims two distinct teams, duplicate claims are rejected, and live league identity is unique.')
+    console.log('PASS: 128 distinct teams with duplicate names, two teams claimed by one account, duplicate claims rejected, and one live league identity.')
   } finally {
     await db.query('ROLLBACK').catch(() => {})
     const remaining = await db.query('SELECT COUNT(*)::int AS n FROM leagues WHERE "platformLeagueId"=$1', [sourceId])
