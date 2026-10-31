@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { REPLY_BODY_MAX } from '@/lib/community/validation'
 import type { ChatMessage } from '@/lib/community/service'
-import { AuthorBadges } from './CommunityBits'
+import { AuthorBadges, Avatar } from './CommunityBits'
 
 /**
  * The game-day room's chat: replies on today's room thread, polled. No websocket on
@@ -130,15 +130,20 @@ export function GameDayChat({
   }
 
   return (
-    <section aria-labelledby="chat-heading" className="mode-panel flex flex-col rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-      <div className="flex items-center justify-between border-b px-4 py-2" style={{ borderColor: 'var(--border)' }}>
-        <h2 id="chat-heading" className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+    <section aria-labelledby="chat-heading" className="ch-card flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--line)' }}>
+        <h2 id="chat-heading" className="ch-h2" style={{ fontSize: 16 }}>
           💬 Live chat
         </h2>
-        <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--muted)' }} aria-live="polite">
-          <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${stale ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-          {stale ? 'Reconnecting…' : 'Live'}
-        </span>
+        {stale ? (
+          <span className="ch-pill" style={{ color: '#fbbf24' }} aria-live="polite">
+            Reconnecting…
+          </span>
+        ) : (
+          <span className="ch-live" aria-live="polite">
+            Live
+          </span>
+        )}
       </div>
 
       <ol
@@ -148,32 +153,38 @@ export function GameDayChat({
           const el = e.currentTarget
           stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
         }}
-        className="h-[55vh] min-h-[280px] space-y-2 overflow-y-auto px-4 py-3"
+        className="h-[58vh] min-h-[300px] overflow-y-auto px-3 py-3"
       >
         {messages.length === 0 && (
-          <li className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
-            Nobody has said anything yet. Start the conversation.
+          <li className="grid h-full place-items-center py-10 text-center text-sm" style={{ color: 'var(--muted)' }}>
+            <span>
+              <span className="mb-2 block text-3xl" aria-hidden>
+                🏟️
+              </span>
+              Nobody has said anything yet. Start the conversation.
+            </span>
           </li>
         )}
         {messages.map((m) => (
-          <li key={m.id} className="text-sm">
-            <div className="flex flex-wrap items-baseline gap-1.5">
-              <span className="font-semibold" style={{ color: m.mine ? 'var(--accent)' : 'var(--text)' }}>
-                {m.author.displayName || m.author.username}
-              </span>
-              <AuthorBadges badges={m.author.badges} />
-              <time dateTime={m.createdAt} className="text-xs" style={{ color: 'var(--muted2)' }}>
-                {clock(m.createdAt)}
-              </time>
+          <li key={m.id} className="ch-chat-msg text-sm" data-mine={m.mine}>
+            <Avatar author={m.author} size={32} />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline gap-1.5">
+                <span className="ch-chat-name">{m.author.displayName || m.author.username}</span>
+                <AuthorBadges badges={m.author.badges} />
+                <time dateTime={m.createdAt} className="ch-mono text-[11px]" style={{ color: 'var(--faint)' }}>
+                  {clock(m.createdAt)}
+                </time>
+              </div>
+              <p className="whitespace-pre-wrap break-words" style={{ color: 'var(--text)' }}>
+                {censorProfanity(m.body)}
+              </p>
             </div>
-            <p className="whitespace-pre-wrap break-words" style={{ color: 'var(--text)' }}>
-              {censorProfanity(m.body)}
-            </p>
           </li>
         ))}
       </ol>
 
-      <div className="border-t p-3" style={{ borderColor: 'var(--border)' }}>
+      <div className="border-t p-3" style={{ borderColor: 'var(--line)', background: 'var(--surface2)' }}>
         {signedIn ? (
           <form
             className="flex gap-2"
@@ -187,20 +198,18 @@ export function GameDayChat({
               onChange={(e) => setDraft(e.target.value.slice(0, REPLY_BODY_MAX))}
               placeholder="Say something about the games…"
               aria-label="Chat message"
-              className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"
-              style={{ borderColor: 'var(--border)', background: 'var(--panel)', color: 'var(--text)' }}
+              className="min-w-0 flex-1 px-3 py-2.5 text-sm"
             />
             <button
               type="submit"
               disabled={sending || !draft.trim()}
-              className="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
-              style={{ background: 'var(--accent)', color: '#fff' }}
+              className="ch-btn ch-btn-primary disabled:opacity-50"
             >
               Send
             </button>
           </form>
         ) : (
-          <a href={loginHref} className="block text-center text-sm font-semibold underline" style={{ color: 'var(--accent)' }}>
+          <a href={loginHref} className="ch-btn ch-btn-primary w-full">
             Sign in to chat
           </a>
         )}
