@@ -100,7 +100,15 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
 
   if (kind === 'elimination') {
     if (game.activeCouncilId) {
-      if (!game.tribalDeadline || game.tribalDeadline > now) return 'voting_open'
+      if (!game.tribalDeadline || game.tribalDeadline > now) {
+        // Castaways Chimmy runs vote (and play an idol when at risk) while the window is open.
+        // Idempotent, best-effort: a failure never holds up the council.
+        const { runChimmyCouncilTurn } = await import('./chimmyCastaway')
+        await runChimmyCouncilTurn(leagueId, game.activeCouncilId).catch(error => {
+          console.warn('[survivor] Chimmy council turn failed', error instanceof Error ? error.message : error)
+        })
+        return 'voting_open'
+      }
       await processTribalDeadline(leagueId)
       return 'ceremony_processed'
     }
