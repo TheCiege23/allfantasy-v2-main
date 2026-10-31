@@ -8,6 +8,7 @@ import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagu
 import { loadNbaSurvivorRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 import { lockSurvivorIdolDraw } from './survivorIdolConfigService'
 import { placeSurvivorIdolsInPool } from './survivorIdolProvisioning'
+import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 
 type DraftSeat = { id: string; platformUserId: string }
 
@@ -18,7 +19,8 @@ export type SurvivorDraftStartReadiness =
 /**
  * The post-draft cast initializer requires one real, unique manager per drafted
  * roster. Check that invariant before the first pick, when fixing an open seat
- * is still possible without undoing a completed draft.
+ * is still possible without undoing a completed draft. A seat Chimmy runs ("Chimmy as a manager")
+ * is filled: Chimmy drafts it and plays it as a castaway all season.
  */
 export function evaluateSurvivorDraftCast(input: {
   teamCount: number
@@ -27,6 +29,8 @@ export function evaluateSurvivorDraftCast(input: {
   existingUserIds: string[]
   commissionerUserId: string
   commissionerPlays: boolean
+  /** Rosters Chimmy runs for their current (placeholder) owner. */
+  chimmyRosterIds?: readonly string[]
 }): SurvivorDraftStartReadiness {
   const { rosters, teamCount } = input
   const rosterIds = new Set(rosters.map((roster) => roster.id))
@@ -40,7 +44,9 @@ export function evaluateSurvivorDraftCast(input: {
   }
   const owners = rosters.map((roster) => roster.platformUserId)
   const existing = new Set(input.existingUserIds)
-  const unclaimed = owners.filter((id) => !id || id.startsWith('open-slot-') || !existing.has(id))
+  const chimmy = new Set(input.chimmyRosterIds ?? [])
+  const unclaimed = rosters.filter((roster) => !chimmy.has(roster.id)).map((roster) => roster.platformUserId)
+    .filter((id) => !id || id.startsWith('open-slot-') || !existing.has(id))
   if (unclaimed.length > 0) {
     return { ready: false, error: `Claim all ${unclaimed.length} open Survivor cast seat${unclaimed.length === 1 ? '' : 's'} before starting the draft.` }
   }
@@ -72,6 +78,7 @@ export async function getSurvivorDraftStartReadiness(
   const users = await prisma.appUser.findMany({
     where: { id: { in: ownerIds } }, select: { id: true },
   })
+  const managed = readManagedLineups(league.settings)
   const cast = evaluateSurvivorDraftCast({
     teamCount: session.teamCount,
     slotOrder: session.slotOrder,
@@ -80,6 +87,7 @@ export async function getSurvivorDraftStartReadiness(
     commissionerUserId: league.userId,
     commissionerPlays: normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown> | null)
       .commissionerParticipationMode === 'participating_player',
+    chimmyRosterIds: rosters.filter((roster) => isChimmyRunning(managed, roster.id, roster.platformUserId)).map((roster) => roster.id),
   })
   if (!cast.ready) return cast
 

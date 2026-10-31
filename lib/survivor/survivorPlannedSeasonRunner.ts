@@ -73,6 +73,14 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
   await ensureVerifiedSlateChallenges(leagueId, week, plan.sport, ['pre_merge', 'post_swap'].includes(game.phase))
   // The weekly mini-game is bragging rights only: a failure here never holds up the season.
   await ensureWeeklyCall(leagueId, week, { sport: plan.sport, season: plan.season, merged: !['pre_merge', 'post_swap'].includes(game.phase), now }).catch(() => {})
+  // Exiled castaways Chimmy runs reserve a team and set their Exile lineup, once a period. Best-effort,
+  // like its council turn: a failure never holds up the island.
+  {
+    const { runChimmyExileTurn } = await import('./chimmyExile')
+    await runChimmyExileTurn(leagueId, now).catch(error => {
+      console.warn('[survivor] Chimmy Exile turn failed', error instanceof Error ? error.message : error)
+    })
+  }
 
   // Finalized player rows only exist after the common NBA/NHL slate, window,
   // grace and coverage checks. A missing or late feed simply keeps this pending.
