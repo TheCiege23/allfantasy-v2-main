@@ -951,6 +951,13 @@ async function zeroByeWeekPlayers(
     for (const id of byes.byWeek.get(sportsWeek.week) ?? []) {
       const p = players.get(id)
       if (!p) continue
+      /*
+       * 🛑 A PLAYER WITH THIS WEEK'S KICKOFF ON FILE HAS A GAME. `kickoff` comes from this week's
+       * fixture join, so when the bye read and the fixture read disagree, the fixture is the
+       * evidence and the bye is an inference from absence. Seen 2026-10-30 as "Bench Keshaun
+       * Singleton — On bye" for a USF receiver whose team played the next day.
+       */
+      if (p.kickoff) continue
       p.onBye = true
       /*
        * A player on bye scores nothing, and unlike "no projection on file" that
