@@ -50,7 +50,7 @@ describe('no locale-less formatting left in /core', () => {
     // ChimmyTrades writes grounding text for the assistant; it is deliberately left as it was.
     const allowed = new Set(['comms/ChimmyTrades.tsx'])
     const offenders = files
-      .filter((p) => !allowed.has(relative(ROOT, p)))
+      .filter((p) => !allowed.has(relative(ROOT, p).replace(/\\/g, '/')))
       .flatMap((p) =>
         readFileSync(p, 'utf8')
           .split('\n')
