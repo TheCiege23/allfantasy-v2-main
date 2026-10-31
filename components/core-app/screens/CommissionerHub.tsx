@@ -3,9 +3,10 @@ import CommissionerWeeklyPlan from '@/components/core-app/CommissionerWeeklyPlan
 import { NativeAutoSubsCommissioner } from '@/components/core-app/NativeAutoSubsControls'
 import { InactiveManagerCommissioner } from '@/components/core-app/InactiveManagerCommissioner'
 import Link from 'next/link'
-import { Suspense, type ReactNode } from 'react'
+import { Suspense, type CSSProperties, type ReactNode } from 'react'
 import '@/components/core-app/af-commish-hub.css'
 import '@/components/core-app/af-format-hubs.css'
+import '@/components/core-app/af-core-redraft-standings.css'
 import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
 import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
 import { CommissionerOsActionsSummary } from '@/components/league-hub/CommissionerOsActionsSummary'
@@ -59,6 +60,7 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { WeekLineupsBody } from '@/components/core-app/standings/WeekLineupsTable'
 import { hubCopy, hubDateLocale } from '@/lib/core-app/commissionerHubCopy'
+import { healthRingPct } from '@/lib/core-app/redraftCoreRace'
 
 /**
  * Screen 38a·9 — Commissioner Hub, the per-league commissioner cockpit.
@@ -160,6 +162,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
   const activity = depthOpen ? loadActivityCharts(data.grant, now, language) : null
   const platformName = platformLabel(league.platform)
   const quiet = data.quietManagers
+  const healthRing = healthRingPct(data.health.score)
 
   return (
     <div className="af-ch afh" data-format="all" data-testid="commissioner-league-hub">
@@ -375,7 +378,18 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       </div>
 
       {/* ── 3 · Health (item 7) ───────────────────────────────────────── */}
-      <HealthPanel data={data} language={language} />
+      {/*
+        The health panel inside a `display: contents` wrapper: it changes no layout anywhere, and carries the
+        engine score as `--rdc-health` for the redraft identity's score ring (af-core-redraft-standings.css).
+        No score, no variable and no ring — lib/core-app/redraftCoreRace.ts healthRingPct.
+      */}
+      <div
+        className="af-rdc-health"
+        style={healthRing == null ? { display: 'contents' } : ({ display: 'contents', '--rdc-health': healthRing } as CSSProperties)}
+        data-ring={healthRing == null ? undefined : 'true'}
+      >
+        <HealthPanel data={data} language={language} />
+      </div>
 
       {/* ── 4 · Calendar (item 3) ─────────────────────────────────────── */}
       <HubCalendar data={data} language={language} />
