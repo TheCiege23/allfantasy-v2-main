@@ -180,6 +180,27 @@ export function localizeMergeMessage(msg: string, tr: Translate): string {
   return msg
 }
 
+/** A conflict's description is free English text written by `detectMergeConflicts`
+ *  (lib/devy/identityMatchingEngine.ts); the row stores no name beside it. Render the three sentences
+ *  that engine writes in the viewer's language, keyed on the conflict type as well as the wording so a
+ *  sentence is never read as another type's. Anything else passes through untouched. */
+export function localizeConflictDescription(conflictType: string, description: string, tr: Translate): string {
+  let m: RegExpMatchArray | null
+  if (conflictType === 'duplicate_player' && (m = description.match(/^Player (.+) matched from multiple external rows\.$/))) {
+    return tr('devyImport.conflictDesc.duplicate_player', { player: m[1]! })
+  }
+  if (
+    conflictType === 'graduated_devy_on_nfl_roster' &&
+    (m = description.match(/^Player (.+) appears as devy and on NFL roster across sources\.$/))
+  ) {
+    return tr('devyImport.conflictDesc.graduated_devy_on_nfl_roster', { player: m[1]! })
+  }
+  if (conflictType === 'username_mismatch' && (m = description.match(/^Manager (.+) could not be matched to an AllFantasy user\.$/))) {
+    return tr('devyImport.conflictDesc.username_mismatch', { manager: m[1]! })
+  }
+  return description
+}
+
 const KNOWN_CONFLICT_TYPES = [
   'duplicate_player',
   'graduated_devy_on_nfl_roster',
