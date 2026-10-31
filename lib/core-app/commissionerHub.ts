@@ -63,6 +63,8 @@ import { resolveCommissionerLeagueProfile } from '@/lib/commissioner-os/profile/
 import { commissionerFormatCards, type CommissionerFormatCard } from './commissioner/formatCards'
 import { applicableTemplates } from '@/lib/commissioner-os/profile/templateOffers'
 import { loadCommissionerHistory, type CommissionerHistory } from './commissioner/history'
+import { loadDynastyFormatFacts } from './commissioner/dynastyFormatFacts'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { messagesFor } from '@/lib/i18n/messages'
 import { commissionerHubMessages } from './messages/commissionerHub'
 import { pickTradeDeadlineFor } from '@/lib/trade-deadline/pickTradeDeadline'
@@ -530,6 +532,8 @@ export async function getCommissionerHub(input: {
       bestBallMode: true,
       isDynasty: true,
       lifecycleState: true,
+      rosterSize: true,
+      taxiSlots: true,
     },
   })
 
@@ -688,6 +692,17 @@ export async function getCommissionerHub(input: {
       ? { networkId: networkMember.network.id, role: networkMember.role === 'host' ? 'host' : 'member', label: networkMember.network.name }
       : null,
   })
+
+  // The dynasty format card (formatCards.ts) — read only for a dynasty league, so every other
+  // league's hub is unchanged.
+  const dynastyFacts = usesDynastyBackground(league)
+    ? await loadDynastyFormatFacts({
+        leagueId,
+        native,
+        variant: profile.canonicalFormatId === 'devy' ? 'devy' : profile.canonicalFormatId === 'c2c' ? 'c2c' : null,
+        league: { rosterSize: league.rosterSize, taxiSlots: league.taxiSlots },
+      }).catch(() => null)
+    : null
 
   const teamCount = teams.length || rosters.length
   const settingsJson = league.settings
@@ -1089,7 +1104,7 @@ export async function getCommissionerHub(input: {
 
   return {
     allowed: true,
-    formatCards: commissionerFormatCards(profile, league.leagueType, language),
+    formatCards: commissionerFormatCards(profile, league.leagueType, language, dynastyFacts),
     formatTemplate: {
       applied: profile.template
         ? {
