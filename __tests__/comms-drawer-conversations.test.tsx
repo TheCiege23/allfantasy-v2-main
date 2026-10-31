@@ -34,13 +34,17 @@ function json(body: unknown, status = 200) {
 
 /* Whether `/pinned` says this viewer runs the league's chat (commissioner or co-commissioner). */
 let canPin = true
+/* What `/chat/moves` returns: the league's recent transactions, drawn as cards between messages. */
+let moves: unknown[] = []
 
 beforeEach(() => {
   canPin = true
+  moves = []
   sessionStorage.clear()
   Element.prototype.scrollIntoView = vi.fn()
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const u = String(url)
+    if (u.startsWith('/api/app/leagues/l0/chat/moves')) return json({ moves })
     if (u.startsWith('/api/app/leagues/l0/chat')) {
       return json({
         viewerUserId: 'me',
@@ -141,6 +145,25 @@ describe('League tab', () => {
     await waitFor(() => expect(calls((u) => u.includes('/pinned')).length).toBeGreaterThan(0))
     fireEvent.keyDown(screen.getAllByRole('article')[0]!, { key: 'Enter' })
     expect(await screen.findByRole('button', { name: /Pin for the league/ })).toBeTruthy()
+  })
+
+  /*
+   * League transactions as cards between messages (2026-10-31): read once per league, drawn with no
+   * actions, and not counted among the messages a viewer can act on.
+   */
+  it('draws the league’s recent moves as cards in the conversation', async () => {
+    moves = [{
+      id: 'mv1', kind: 'waiver', occurredAt: new Date(Date.now() - 3600_000).toISOString(), teamName: 'Sam’s Squad', managerName: 'Sam',
+      avatarUrl: null, involvedTeams: ['Sam’s Squad'], bid: 7, picks: [],
+      adds: [{ id: 'p1', name: 'Bucky Irving', position: 'RB', team: 'TB', imageUrl: null, to: null }], drops: [],
+    }]
+    openLeague()
+    const card = await screen.findByRole('group', { name: /Sam’s Squad made a waiver claim/ })
+    expect(within(card).getByText('Bucky Irving')).toBeTruthy()
+    expect(within(card).getByText('$7')).toBeTruthy()
+    // Still three messages to act on; the card is not one of them.
+    expect(screen.getAllByRole('article')).toHaveLength(3)
+    expect(calls((u) => u.includes('/chat/moves'))).toHaveLength(1)
   })
 
   /* Only the commissioner and co-commissioners pin (2026-10-31); a member is not offered it. */
