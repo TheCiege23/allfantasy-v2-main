@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useId, useState } from 'react'
 import type { SurvivorSummary } from '@/components/survivor/types'
 import { useMessages } from '@/components/i18n/useMessages'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { survivorIslandMessages } from '@/lib/core-app/messages/survivorIsland'
 import { clockText, islandView, sportBall, tribeColor, type SportBall } from '@/lib/core-app/survivorIsland'
 
@@ -98,7 +99,7 @@ export function SurvivorIslandBanner({
             <div className="sv-clock" role="timer" aria-live="off">
               <div className="sv-clock-label">{v.clock.label === 'council' ? m.clockCouncil : v.clock.label === 'challenge' ? m.clockChallenge : m.clockJury}</div>
               <div className="sv-clock-time">{clock}</div>
-              <div className="sv-clock-at">{new Date(v.clock.at).toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' })}</div>
+              <div className="sv-clock-at">{new Date(v.clock.at).toLocaleString(getAppIntlLocale(), { weekday: 'long', hour: 'numeric', minute: '2-digit' })}</div>
             </div>
           ) : null}
         </div>
