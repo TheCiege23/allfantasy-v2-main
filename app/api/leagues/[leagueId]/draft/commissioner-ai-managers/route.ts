@@ -20,6 +20,9 @@ import {
 } from '@/lib/commissioner-ai-draft-manager/types'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { applyChimmyAutopilot } from '@/lib/inactive-manager/inactiveManagerService'
+import { autopilotRosterIds, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+import { draftAssignmentChimmyChanges } from '@/lib/commissioner-ai-draft-manager/chimmySeason'
 
 export const dynamic = 'force-dynamic'
 
@@ -130,6 +133,22 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
     return NextResponse.json({ error: 'Failed to save draft session' }, { status: 500 })
   }
 
+  /*
+   * A team Chimmy drafts is a team Chimmy runs (owner decision 2026-10-31): each active assignment is
+   * also handed to Chimmy for the season, and one switched off here takes Chimmy off. A team that could
+   * not be handed over (the 4-team limit, the plan) still drafts; the reason comes back to the room.
+   */
+  const leagueRow = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const alreadyChimmy = new Set(autopilotRosterIds(readManagedLineups(leagueRow?.settings)))
+  // A team Chimmy already runs keeps the style the commissioner chose for it.
+  const changes = draftAssignmentChimmyChanges(existing?.assignments ?? [], validated.blob.assignments)
+    .filter((change) => change.style === null || !alreadyChimmy.has(change.rosterId))
+  const chimmySeason: Array<{ rosterId: string; ok: boolean; error?: string }> = []
+  for (const change of changes) {
+    const res = await applyChimmyAutopilot(leagueId, userId, change.rosterId, change.style)
+    chimmySeason.push(res.ok ? { rosterId: change.rosterId, ok: true } : { rosterId: change.rosterId, ok: false, error: res.error })
+  }
+
   const row = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
@@ -137,5 +156,5 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
   })
   const slotOrder = parseSlotOrder(row?.slotOrder)
   const payload = buildApiResponse(parseCommissionerAiManagers(row?.commissionerAiManagers), slotOrder)
-  return NextResponse.json({ ok: true, ...payload })
+  return NextResponse.json({ ok: true, ...payload, chimmySeason })
 }

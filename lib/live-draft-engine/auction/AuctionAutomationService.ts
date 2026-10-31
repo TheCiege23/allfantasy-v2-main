@@ -13,6 +13,7 @@ import { prisma } from '@/lib/prisma'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { getOrphanRosterIdsForLeague } from '@/lib/orphan-ai-manager/orphanRosterResolver'
+import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { canPlaceAuctionBid } from '@/lib/mock-draft/draft-engine'
 import { getLiveADP } from '@/lib/adp-data'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
@@ -138,6 +139,16 @@ async function appendLatestAuctionPickToRoster(
  * Run one deterministic automation pass for auction drafts.
  * Safe to call on every poll/reconnect; when no condition is met it is a no-op.
  */
+/** Whether Chimmy runs this roster for its current owner (an empty seat or an absent manager's team). */
+async function chimmyRunsRoster(leagueId: string, rosterId: string): Promise<boolean> {
+  const [league, roster] = await Promise.all([
+    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
+    prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { platformUserId: true } }),
+  ])
+  if (!league || !roster) return false
+  return isChimmyRunning(readManagedLineups(league.settings), rosterId, roster.platformUserId ?? null)
+}
+
 export async function runAuctionAutomationTick(leagueId: string): Promise<AuctionAutomationTickResult> {
   const actions: AuctionAutomationAction[] = []
   const now = new Date()
@@ -169,10 +180,16 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
     ? await getOrphanRosterIdsForLeague(leagueId)
     : []
   const nominatorIsOrphan = currentNominator != null && orphanRosterIds.includes(currentNominator.rosterId)
+  /*
+   * A team Chimmy manages (lib/inactive-manager, up to 4 per league) acts in an auction whatever the
+   * orphan-AI setting says: nobody else will nominate or bid for it. It nominates as soon as it is its
+   * turn, like a snake-draft Chimmy pick, rather than letting the nomination clock run down.
+   */
+  const nominatorIsChimmy = currentNominator != null && await chimmyRunsRoster(leagueId, currentNominator.rosterId)
 
   // Tournament expiry preserves the winning bid; no synthetic late bids.
   if (state.currentNomination && isExpired(session.timerEndAt, now)) {
-    if (!season && state.currentBid <= 0 && currentNominator && uiSettings.autoPickEnabled) {
+    if (!season && state.currentBid <= 0 && currentNominator && (uiSettings.autoPickEnabled || nominatorIsChimmy)) {
       const nominatorBudget = budgets[currentNominator.rosterId] ?? 0
       const nominatorPicks = session.picks.filter((pick) => pick.rosterId === currentNominator.rosterId).length
       const rosterSlotsRemaining = Math.max(0, session.rounds - nominatorPicks)
@@ -212,9 +229,10 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
 
   // No active nomination: optional auto-nomination when nomination clock expires.
   const autoNominationAllowed =
-    Boolean(season) || uiSettings.auctionAutoNominationEnabled ||
+    Boolean(season) || uiSettings.auctionAutoNominationEnabled || nominatorIsChimmy ||
     (uiSettings.orphanTeamAiManagerEnabled && nominatorIsOrphan)
-  if (!state.currentNomination && autoNominationAllowed && isExpired(session.timerEndAt, now) && currentNominator) {
+  const nominateNow = isExpired(session.timerEndAt, now) || nominatorIsChimmy
+  if (!state.currentNomination && autoNominationAllowed && nominateNow && currentNominator) {
     const normalizedSport = normalizeToSupportedSport(
       (session.league?.sport as string | null | undefined) ?? session.sportType ?? DEFAULT_SPORT
     ) as LeagueSport

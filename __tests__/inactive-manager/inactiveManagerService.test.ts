@@ -18,7 +18,7 @@ const m = vi.hoisted(() => {
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
       $queryRaw: vi.fn(async () => [{ id: 'L' }]),
       league: { findUnique: vi.fn(async (args: { select?: unknown }) => (args.select ? { platform: state.platform, settings: state.settings } : { ...state.league, settings: state.settings, platform: state.platform })) },
-      roster: { findFirst: vi.fn() },
+      roster: { findFirst: vi.fn(), findMany: vi.fn(async () => [] as Array<{ id: string; platformUserId: string | null }>) },
     },
     elevated: vi.fn(async () => true),
     log: vi.fn(async () => ({ id: 'a' })),
@@ -153,8 +153,12 @@ describe('the view', () => {
       { rosterId: 'r2', teamName: 'B', managerName: 'b', status: 'inactive', lastActionAt: null },
       { rosterId: 'r3', teamName: 'C', managerName: 'c', status: 'active', lastActionAt: null },
     ] })
+    m.prisma.roster.findMany.mockResolvedValueOnce([{ id: 'r1', platformUserId: 'u1' }, { id: 'r2', platformUserId: 'u2' }, { id: 'r3', platformUserId: 'orphan-r3' }])
     const view = await readInactiveManagerView('L')
     expect(view.teams.map((t) => [t.rosterId, t.suggested, Boolean(t.managed)])).toEqual([['r1', true, false], ['r2', false, true], ['r3', false, false]])
+    // Chimmy as a manager: empty seats are marked, and the commissioner sees the limit.
+    expect(view.teams.map((t) => t.emptySeat)).toEqual([false, false, true])
+    expect(view.chimmyLimit).toBe(4)
   })
 })
 
