@@ -93,6 +93,13 @@ describe('shared consequential-answer contract', () => {
     expect(h.otherSport).toHaveBeenCalledWith({ leagueId: 'authorized-league', userId: 'u1', players: ['Home Star', 'Away Star'] })
     expect(out).toMatchObject({ status: 'ready', sources: ['league_rosters', 'league_scoring', 'current_season_game_logs', 'game_schedule'] })
   })
+  it('tries verified imported game logs when the ordinary roster ID space is unreadable', async () => {
+    h.start.mockResolvedValue({ kind: 'start_sit', status: 'unresolved', reason: 'roster_ids_unreadable', detail: 'Foreign player IDs' })
+    h.otherSport.mockResolvedValue({ ready: true, text: 'Lean Home Star on verified imported game logs.' })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I start Home Star or Away Star?', leagueId: 'l1', userId: 'u1' })
+    expect(h.otherSport).toHaveBeenCalledWith({ leagueId: 'authorized-league', userId: 'u1', players: ['Home Star', 'Away Star'] })
+    expect(out).toMatchObject({ status: 'ready', sources: ['league_rosters', 'league_scoring', 'current_season_game_logs', 'game_schedule'] })
+  })
   it('keeps a non-NFL whole-lineup baseline free and labelled when weekly league projections are absent', async () => {
     h.lineup.mockResolvedValue({ status: 'unresolved', reason: 'sport_not_supported', detail: 'NFL-only weekly feed' })
     h.baseline.mockResolvedValue('NBA standard per-game baseline for this roster.')

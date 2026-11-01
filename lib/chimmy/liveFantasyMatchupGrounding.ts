@@ -8,6 +8,10 @@ import { importedCategoryCacheKey, parseImportedCategoryPairs, verifiedCategoryP
   type ImportedCategoryPair } from '@/lib/import-os/collector/importedCategorySnapshots'
 import { fetchYahooCategoryMatchupForWeek } from '@/lib/league-import/yahoo/YahooLeagueFetchService'
 import { fetchEspnScheduleForSync } from '@/lib/league-import/espn/EspnLeagueFetchService'
+import { fetchMflScheduleForSync } from '@/lib/league-import/mfl/MflLeagueFetchService'
+import { fetchFleaflickerScoreboard } from '@/lib/league-import/fleaflicker/FleaflickerLeagueFetchService'
+import { getFantraxMatchupScores } from '@/lib/league-import/fantrax/fantraxApi'
+import { normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
 
 function yahooCategoryLabels(settings: unknown): Map<string, string> {
   const obj = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
@@ -26,6 +30,72 @@ function yahooCategoryLabels(settings: unknown): Map<string, string> {
     }
   }
   return labels
+}
+
+/** A member-authorized provider read can be newer than the collector's week board. */
+async function freshImportedPointScore(args: { provider: string; userId: string; leagueId: string;
+  internalLeagueId: string; sport: string; season: number; week: number; ownRosterId: string; opponentRosterId: string | null }): Promise<{
+    you: number; them: number; fetchedAt: Date; source: string } | null> {
+  const { provider, userId, leagueId, season, week, ownRosterId, opponentRosterId } = args
+  if (!opponentRosterId || !['yahoo', 'espn', 'mfl', 'fleaflicker', 'fantrax'].includes(provider)) return null
+  try {
+    type Pair = { teamId1: string | null; teamId2: string | null;
+      points1?: number | null; points2?: number | null }
+    let rows: Pair[] = []
+    if (provider === 'yahoo') {
+      const yahoo = await fetchYahooCategoryMatchupForWeek(userId, leagueId, season, week)
+      rows = (yahoo?.season === season && yahoo.week === week ? yahoo.matchups : []).map((m) => ({
+          teamId1: yahooRosterId(m.teamKey1), teamId2: m.teamKey2 ? yahooRosterId(m.teamKey2) : null,
+          points1: m.points1, points2: m.points2,
+        }))
+    } else if (provider === 'espn') {
+      rows = (await fetchEspnScheduleForSync(userId, leagueId, season))
+          .filter((entry) => entry.season === season && entry.week === week)
+          .flatMap((entry) => entry.matchups)
+    } else if (provider === 'mfl') {
+      rows = (await fetchMflScheduleForSync(userId, leagueId, season)).schedule
+        .filter((entry) => entry.season === season && entry.week === week)
+        .flatMap((entry) => entry.matchups.map((m) => ({ teamId1: m.franchiseId1,
+          teamId2: m.franchiseId2, points1: m.points1, points2: m.points2 })))
+    } else if (provider === 'fleaflicker' && args.sport.toUpperCase() === 'NFL' && /^\d+$/.test(leagueId)) {
+      const scoreboard = await fetchFleaflickerScoreboard('NFL', Number(leagueId), season, week)
+      rows = scoreboard.week?.season === season && scoreboard.week.week === week
+        ? scoreboard.week.games.map((game) => ({ teamId1: String(game.home.id), teamId2: String(game.away.id),
+          points1: game.homeScore?.score?.value, points2: game.awayScore?.score?.value })) : []
+    } else if (provider === 'fantrax') {
+      const snapshot = await prisma.fantraxLeague.findUnique({ where: { id: leagueId },
+        select: { sourceLeagueId: true } })
+      if (!snapshot?.sourceLeagueId) return null
+      const teams = await prisma.leagueTeam.findMany({ where: { leagueId: args.internalLeagueId },
+        select: { externalId: true, teamName: true, ownerName: true }, take: 100 })
+      const byName = new Map<string, string>()
+      const duplicate = new Set<string>()
+      for (const team of teams) {
+        const name = normalizeFantraxTeamName(team.teamName || team.ownerName || '')
+        if (!name) continue
+        if (byName.has(name)) duplicate.add(name)
+        else byName.set(name, team.externalId)
+      }
+      const response = await getFantraxMatchupScores(snapshot.sourceLeagueId, week)
+      if (!response.ok || response.data.period !== week) return null
+      rows = response.data.matchups.filter((m) => m.home.gamesPlayed > 0 || m.away.gamesPlayed > 0)
+        .map((m) => {
+          const home = normalizeFantraxTeamName(m.home.teamName)
+          const away = normalizeFantraxTeamName(m.away.teamName)
+          return { teamId1: duplicate.has(home) ? null : byName.get(home) ?? null,
+            teamId2: duplicate.has(away) ? null : byName.get(away) ?? null,
+            points1: m.home.score, points2: m.away.score }
+        })
+    }
+    const pair = rows.find((m) => (m.teamId1 === ownRosterId && m.teamId2 === opponentRosterId) ||
+      (m.teamId2 === ownRosterId && m.teamId1 === opponentRosterId))
+    if (!pair || typeof pair.points1 !== 'number' || typeof pair.points2 !== 'number' ||
+      !Number.isFinite(pair.points1) || !Number.isFinite(pair.points2)) return null
+    const ownFirst = pair.teamId1 === ownRosterId
+    return { you: ownFirst ? pair.points1 : pair.points2,
+      them: ownFirst ? pair.points2 : pair.points1, fetchedAt: new Date(),
+      source: `${provider.toUpperCase()} authorized current-week scoreboard` }
+  } catch { return null }
 }
 
 async function importedCategoryMatchup(league: { id: string; name: string | null; sport: string; season: number;
@@ -120,6 +190,34 @@ async function nativeRotoStandings(league: { id: string; name: string | null; sp
   return lines.join('\n')
 }
 
+async function importedRotoStandings(league: { id: string; name: string | null; sport: string; season: number;
+  platform: string | null }, userId: string): Promise<string> {
+  const rows = await prisma.leagueTeam.findMany({ where: { leagueId: league.id },
+    select: { externalId: true, teamName: true, ownerName: true, claimedByUserId: true,
+      currentRank: true, pointsFor: true, wins: true, losses: true, ties: true, lastUpdatedAt: true },
+    take: 100 })
+  const mine = rows.filter((row) => row.claimedByUserId === userId)
+  if (mine.length !== 1) return `Your team is not uniquely claimed in ${league.name}; a rotisserie rank cannot be attributed.`
+  const ranked = rows.filter((row) => Number.isInteger(row.currentRank) && row.currentRank! > 0)
+  if (ranked.length < 2 || !ranked.some((row) => row.pointsFor !== 0 || row.wins || row.losses || row.ties)) {
+    return `No played provider standings with verified ranks are stored for ${league.name}; no preseason rotisserie rank is asserted.`
+  }
+  if (mine[0]!.currentRank == null || mine[0]!.currentRank! < 1) {
+    return `Your provider standings rank is not stored for ${league.name}.`
+  }
+  ranked.sort((a, b) => a.currentRank! - b.currentRank!)
+  const asOf = ranked.reduce<Date | null>((oldest, row) => !oldest || row.lastUpdatedAt < oldest ? row.lastUpdatedAt : oldest, null)
+  const lines = [`IMPORTED ROTISSERIE STANDINGS — ${league.name} (${league.sport}), season ${league.season}.`,
+    `Your stored rank: ${mine[0]!.currentRank} of ${ranked.length} ranked teams.`,
+    asOf ? `League standings last updated ${asOf.toISOString()}.` : 'No standings refresh time is recorded.']
+  if (asOf && Date.now() - asOf.getTime() > 15 * 60_000) lines.push('These standings may be stale; they are not a live category update.')
+  for (const row of ranked.slice(0, 20)) {
+    lines.push(`${row.currentRank}. ${row.teamName || row.ownerName || 'Unnamed team'}${row.claimedByUserId === userId ? ' (you)' : ''}.`)
+  }
+  lines.push(`Source: stored ${String(league.platform ?? 'provider').toUpperCase()} imported league standings. Category totals and rank points are not on file here; only the imported placement is shown.`)
+  return lines.join('\n')
+}
+
 async function nativeCategoryMatchup(league: { id: string; name: string | null; sport: string; season: number }, userId: string): Promise<string> {
   const roster = await prisma.redraftRoster.findFirst({ where: { leagueId: league.id, ownerId: userId }, select: { id: true } })
   if (!roster) return `No claimed native roster is on file for you in ${league.name}; category matchup data cannot be shown.`
@@ -179,7 +277,7 @@ export async function buildLiveFantasyMatchupContext(args: { leagueId: string; u
     : importedCategoryMatchup(league, args.userId)
   if (format === 'roto') return nativeWeeklyLeague(league)
     ? nativeRotoStandings(league, args.userId)
-    : `${league.name} uses rotisserie scoring. Provider category standings have not been imported; no rank is asserted.`
+    : importedRotoStandings(league, args.userId)
   const native = nativeWeeklyLeague(league)
   const board = await getWeekBoard(args.userId, [{ ...league, platform: String(league.platform ?? '') }], league.id)
   const match = board.leagueBoard?.yours
@@ -189,6 +287,13 @@ export async function buildLiveFantasyMatchupContext(args: { leagueId: string; u
   const week = match?.week ?? elimination!.week
   const ownRosterId = board.leagueBoard?.yourRosterId ?? elimination?.yourRosterId ?? null
   const opponentRosterId = match?.opponent.rosterId ?? null
+  const provider = String(league.platform ?? '').toLowerCase()
+  const freshCandidate = !native && ownRosterId && match && league.platformLeagueId
+    ? await freshImportedPointScore({ provider, userId: args.userId, leagueId: league.platformLeagueId,
+        internalLeagueId: league.id, sport: league.sport, season, week, ownRosterId, opponentRosterId }) : null
+  // A provider's unplayed 0-0 fixture is not evidence that scoring has begun.
+  const fresh = freshCandidate && (freshCandidate.you !== 0 || freshCandidate.them !== 0 || match?.live)
+    ? freshCandidate : null
   const source = native ? NATIVE_PLAYER_SCORE_SOURCE : String(league.platform ?? '').toLowerCase()
   const scoreLeagueId = native ? league.id : league.platformLeagueId
   const seats = [ownRosterId, opponentRosterId].filter((id): id is string => Boolean(id))
@@ -230,20 +335,21 @@ export async function buildLiveFantasyMatchupContext(args: { leagueId: string; u
   }).catch(() => null) : null
   const newestPlayerUpdate = rows.reduce<Date | null>((latest, row) => !latest || row.updatedAt > latest ? row.updatedAt : latest, null)
   // The board owns the team score. A newer player row must not make an older team score appear fresh.
-  const asOf = matchupUpdated?.updatedAt ?? newestPlayerUpdate
+  const asOf = fresh?.fetchedAt ?? matchupUpdated?.updatedAt ?? newestPlayerUpdate
   const stamp = asOf ? `Score data last updated ${asOf.toISOString()}.` : 'No score refresh time is on file; do not call this real-time.'
   const lines = [`FANTASY MATCHUP SCOREBOARD — ${league.name} (${league.sport}), season ${season}, week ${week}.`, stamp]
   if (asOf && Date.now() - asOf.getTime() > 15 * 60_000 && !match?.live?.final) {
     lines.push('This score has not refreshed in over 15 minutes. Treat it as stale, not a live update.')
   }
-  if (match?.live) {
-    lines.push(`${match.live.final ? 'FINAL' : 'CURRENT SCORE ON FILE'}: your team ${match.live.you.toFixed(2)}, ${match.opponent.name ?? 'opponent'} ${match.live.them.toFixed(2)}. ${match.live.margin >= 0 ? 'Ahead' : 'Behind'} by ${Math.abs(match.live.margin).toFixed(2)}.`)
+  if (fresh || match?.live) {
+    const live = fresh ? { ...fresh, margin: fresh.you - fresh.them, final: match?.live?.final ?? false } : match!.live!
+    lines.push(`${live.final ? 'FINAL' : 'CURRENT SCORE ON FILE'}: your team ${live.you.toFixed(2)}, ${match?.opponent.name ?? 'opponent'} ${live.them.toFixed(2)}. ${live.margin >= 0 ? 'Ahead' : 'Behind'} by ${Math.abs(live.margin).toFixed(2)}.`)
   } else if (elimination?.yourScore != null) {
     lines.push(`Elimination league: your score ${elimination.yourScore.toFixed(2)}; cut line ${elimination.cutLine?.toFixed(2) ?? 'unavailable'}; rank ${elimination.rank ?? 'unavailable'} of ${elimination.fieldSize}.`)
   } else {
     lines.push('No fantasy points are on the board for your team yet. Do not call this 0–0 or claim the games have started.')
   }
-  const scoreStarted = Boolean(match?.live || elimination?.yourScore != null)
+  const scoreStarted = Boolean(fresh || match?.live || elimination?.yourScore != null)
   const named = scoreStarted ? rows.filter((r) => names.has(r.playerId)) : []
   for (const [label, id] of [['Your starters', ownRosterId], ['Opponent starters', opponentRosterId]] as const) {
     if (!id) continue
@@ -253,9 +359,12 @@ export async function buildLiveFantasyMatchupContext(args: { leagueId: string; u
   }
   if (!scoreStarted) lines.push('Player contributions are withheld until the matchup board reports points.')
   else if (!rows.length) lines.push('Individual player contributions are not on file for this matchup. Team scores above remain the board source of truth.')
+  else if (fresh && newestPlayerUpdate && fresh.fetchedAt.getTime() - newestPlayerUpdate.getTime() > 15 * 60_000) {
+    lines.push(`Player contribution rows last updated ${newestPlayerUpdate.toISOString()}; they may lag the provider team score.`)
+  }
   if (!seatsUnambiguous) lines.push('Player contributions are omitted because roster identities collided; team scores remain on file.')
   else if (named.length < rows.length) lines.push(`${rows.length - named.length} reported player lines could not be identified safely; they are omitted, not scored as zero.`)
-  lines.push(`Source: AllFantasy week board${rows.length ? ` and ${source} per-player fantasy scores` : ''}.`)
+  lines.push(`Source: ${fresh?.source ?? 'AllFantasy week board'}${rows.length ? ` and ${source} per-player fantasy scores` : ''}.`)
   lines.push('These are points already reported under this league\'s scoring, not remaining-game projections. A score in progress can change through live plays and stat corrections.')
   return lines.join('\n')
 }

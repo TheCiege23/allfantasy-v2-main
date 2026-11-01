@@ -21,6 +21,7 @@ import ChimmyMessageBubble, { type ChimmyMessageMeta } from './ChimmyMessageBubb
 import ChimmyConversationThread from './ChimmyConversationThread'
 import ChimmyIntentChips from './ChimmyIntentChips'
 import ChimmyStrategyCard from './ChimmyStrategyCard'
+import ChimmyLiveMatchupCard from './ChimmyLiveMatchupCard'
 import ChimmyToolContext from './ChimmyToolContext'
 import ChimmyProviderIndicator from './ChimmyProviderIndicator'
 import ChimmyVoiceReadyControls from './ChimmyVoiceReadyControls'
@@ -1193,6 +1194,7 @@ export default function ChimmyChatShell({
         )}
 
         {requestContext.leagueId && <ChimmyStrategyCard leagueId={requestContext.leagueId} />}
+        {requestContext.leagueId && <ChimmyLiveMatchupCard key={requestContext.leagueId} leagueId={requestContext.leagueId} />}
         <ChimmyIntentChips
           enabled={chimmyFeatureFlags.intentChips}
           hasUserMessage={hasUserMessage}
