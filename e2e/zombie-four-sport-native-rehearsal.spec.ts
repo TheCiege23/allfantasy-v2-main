@@ -1,4 +1,5 @@
 import { separateFixtureWhisperers, seedFinalNflFixtureTotals, fixtureNflDraftPositions } from './helpers/zombie-current-policy-fixture'
+import { finalizeRosterAssignments } from '../lib/live-draft-engine/RosterAssignmentService'
 import { startDraftSession } from '../lib/live-draft-engine/DraftSessionService'
 import { createZombieLeague } from '../lib/zombie/setupEngine'
 import { zombieRenewalDraftReadiness } from '../lib/zombie/zombieRenewalDraftReadiness'
@@ -156,6 +157,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
         }
       }) })
       await prisma.draftSession.update({ where: { id: draft.id }, data: { status: 'completed' } })
+      await finalizeRosterAssignments(leagueId)
       const synced = await syncCompletedDraftToRedraftSeason(leagueId)
       expect(synced.skipped, `${sport}: ${synced.reason}`).toBe(false)
       const season = await prisma.redraftSeason.findFirstOrThrow({ where: { leagueId } })

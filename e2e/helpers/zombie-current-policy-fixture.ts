@@ -5,6 +5,7 @@ import { resolveLineupStarterSlots } from '../../lib/league/lineupStarterSlots'
 import { computeOptimalLineup } from '../../lib/lineup-optimizer/optimalLineup'
 import { buildPlayerDataFromSections } from '../../lib/roster/LineupTemplateValidation'
 import { persistRosterLineupWithEngine } from '../../lib/roster-lineup-engine/lineupService'
+import { reconcileRosterRedraftLinks } from '../../lib/league-runtime/reconcileRosterRedraftLinks'
 import { prisma } from '../../lib/prisma'
 import { calculateScoreFromSportConfig, isScoringStarterSlot, recalculateMatchupsForSeasonWeek } from '../../lib/redraft/scoringEngine'
 import { loadWeekLineups, weekSlotType } from '../../lib/redraft/weekLineupSlots'
@@ -41,6 +42,8 @@ export async function fixtureNflDraftPositions(leagueId: string): Promise<string
 /** Actual finalized synthetic player stats feed the native NFL scorer and item-score receipt. */
 export async function seedFinalNflFixtureTotals(leagueId: string, seasonId: string, season: number, week: number, targets: Map<string, number>) {
   localOnly()
+  const links = await reconcileRosterRedraftLinks(leagueId)
+  if (links.unlinked) throw new Error(`Synthetic roster links remain missing: ${links.unlinked}`)
   const rosterIds = [...targets.keys()]
   const players = await prisma.redraftRosterPlayer.findMany({ where: { rosterId: { in: rosterIds }, droppedAt: null } })
   const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId } })
