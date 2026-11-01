@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 const MAX = 280
 type Confessional = { id: string; text: string; createdAt: string }
@@ -39,16 +40,16 @@ export function ConfessionalCard({ leagueId }: { leagueId: string }) {
   }
 
   return (
-    <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4" data-testid="confessional-card">
-      <h2 className="text-[13px] font-bold uppercase tracking-wider text-amber-100">Confessional</h2>
+    <section className="sv-chimmy-card rounded-xl border p-4" data-testid="confessional-card">
+      <h2 className="sv-kicker text-[13px]">Confessional</h2>
       <p className="mt-1 text-[12px] text-white/60">
         Say what you really think. Nobody sees it while you play. If you&apos;re voted out, Chimmy quotes your latest one in that week&apos;s episode, and every confessional is revealed after the finale.
       </p>
       <textarea aria-label="Your confessional" value={text} onChange={event => setText(event.target.value.slice(0, MAX))} rows={3}
-        placeholder="I trust my tribe… for now." className="mt-3 w-full rounded-lg border border-white/15 bg-black/30 p-3 text-[13px] text-white" />
+        placeholder="I trust my tribe… for now." className="mt-3 w-full rounded-lg border border-white/15 bg-black/30 p-3 text-[13px] text-white placeholder:text-white/40 focus:border-[rgba(240,163,94,0.55)] focus:outline-none" />
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-[11px] text-white/45">{text.length} / {MAX}</span>
-        <button type="button" disabled={busy || !text.trim()} onClick={() => void save()} className="min-h-[44px] rounded-lg bg-amber-400 px-4 text-[13px] font-semibold text-black disabled:opacity-40">
+        <button type="button" disabled={busy || !text.trim()} onClick={() => void save()} className="min-h-[44px] rounded-lg bg-[var(--survivor-torch,#f0a35e)] px-4 text-[13px] font-semibold text-[#1a0f05] disabled:opacity-40">
           {busy ? 'Saving…' : 'Record'}
         </button>
       </div>
@@ -59,7 +60,7 @@ export function ConfessionalCard({ leagueId }: { leagueId: string }) {
           <ul className="mt-2 space-y-2">
             {mine.map(row => (
               <li key={row.id} className="rounded-lg border border-white/10 bg-black/20 p-2 text-[12px] text-white/75">
-                <time className="block text-[11px] text-white/40" dateTime={row.createdAt}>{new Date(row.createdAt).toLocaleString()}</time>
+                <time className="block text-[11px] text-white/40" dateTime={row.createdAt}>{new Date(row.createdAt).toLocaleString(getAppIntlLocale())}</time>
                 {row.text}
               </li>
             ))}

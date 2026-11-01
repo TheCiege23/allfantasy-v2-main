@@ -33,6 +33,8 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 import { fmt1, signed, waiverTrendByPlayer } from '@/lib/league/native/nativeScreenModels'
 import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
+import { claimStatusLabel, faabMeter, waiverClaimTypeLabel } from '@/lib/league-media/redraftScreens'
+import { RedraftScreen, RedraftWaiverHeader, useRedraftScreen } from './RedraftScreenParts'
 
 /**
  * Players & waivers — handoff §3, `Waivers.png` / `MobileWaivers.png`.
@@ -168,10 +170,12 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   }, [load])
 
   const faabMode = String(settings?.waiverType ?? '').toLowerCase() === 'faab'
+  // Redraft (lib/league-media/redraftIdentity.ts): claim type + FAAB budget header and claim states.
+  const rd = useRedraftScreen(league)
   const immediate = isImmediateAddAllowedToday(settings)
   // The season phase (offseason / playoffs rules): why moves are limited, and whether none are open.
   const phaseReason = phaseMoveBlockReason(settings)
-  const movesClosed = Boolean(settings?.phasePolicy?.code && !settings.phasePolicy.claimsAllowed && !settings.phasePolicy.immediateAddsAllowed)
+  const movesClosed = !settings || Boolean(settings.phasePolicy?.code && !settings.phasePolicy.claimsAllowed && !settings.phasePolicy.immediateAddsAllowed)
   const trend = useMemo(() => waiverTrendByPlayer(history, claims), [history, claims])
   const claimedIds = useMemo(() => new Set(claims.map((c) => c.addPlayerId)), [claims])
   const positions = useMemo(() => {
@@ -335,12 +339,25 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const lastRunOthers = history.filter((t) => !(roster.id && t.roster?.id === roster.id)).length
 
   return (
-    <div className="nls" data-testid="native-waivers-screen">
+    <RedraftScreen identity={rd}>
+    <div className="nls" data-testid="native-waivers-screen" data-rd-screen={rd ? 'waivers' : undefined}>
       <ScreenHead eyebrow={`${league.name} · Players`} title="Players & waivers">
-        {runLabel ? <span className="nls-chip">Waivers run {runLabel}</span> : null}
-        {faabMode && roster.faab != null ? <span className="nls-chip" data-tone="accent">FAAB ${roster.faab} left</span> : null}
-        {roster.priority != null ? <span className="nls-chip">Priority {roster.priority} of {league.teamCount}</span> : null}
+        {/* Redraft carries these in the header strip below instead. */}
+        {!rd && runLabel ? <span className="nls-chip">Waivers run {runLabel}</span> : null}
+        {!rd && faabMode && roster.faab != null ? <span className="nls-chip" data-tone="accent">FAAB ${roster.faab} left</span> : null}
+        {!rd && roster.priority != null ? <span className="nls-chip">Priority {roster.priority} of {league.teamCount}</span> : null}
       </ScreenHead>
+
+      {rd && settings ? (
+        <RedraftWaiverHeader
+          claimType={waiverClaimTypeLabel(settings.waiverType)}
+          faab={faabMode ? faabMeter(roster.faab, settings.faabBudget) : null}
+          faabRemaining={faabMode ? roster.faab : null}
+          runLabel={runLabel}
+          priority={roster.priority}
+          teamCount={league.teamCount}
+        />
+      ) : null}
 
       <div className="nls-toolbar">
         <Segmented label="Player list" value={tab} onChange={setTab} options={[{ id: 'available', label: 'Available' }, { id: 'watchlist', label: 'Watchlist' }, { id: 'trending', label: 'Trending' }, { id: 'claims', label: 'My claims' }]} />
@@ -444,12 +461,14 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                   // A claim on a player still on waivers after a drop runs at the first waiver run after he clears.
                   const holdUntil = playerWaiverHoldUntil(players.find((p) => p.id === c.addPlayerId), settings)
                   const draft = bidDrafts[c.id] ?? (c.faabBid != null ? String(c.faabBid) : '')
+                  const state = rd ? claimStatusLabel(c.status) : null
                   return (
                     <li key={c.id} className="nls-claim">
                       <span className="nls-claim-order">{i + 1}</span>
                       <div>
                         <strong>Add {addName}</strong>
                         <small>{dropName ? `Drop ${dropName}` : c.dropPlayerId ? 'Drop a rostered player' : 'No drop'}</small>
+                        {state ? <span className="nls-chip" data-tone={state.tone === 'neutral' ? undefined : state.tone} data-testid={`native-waivers-claim-state-${c.id}`}>{state.label}</span> : null}
                         {holdUntil ? (
                           <small data-hold data-testid={`native-waivers-claim-hold-${c.id}`}>
                             {tInterpolate('waiverClaim.processesAfter', { date: claimProcessesAfterDate(holdUntil, language) })}
@@ -518,5 +537,6 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
         }}
       />
     </div>
+    </RedraftScreen>
   )
 }

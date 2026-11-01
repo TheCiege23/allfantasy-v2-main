@@ -192,7 +192,9 @@ export async function GET(req: NextRequest) {
       }
       const give = gradeInputsFromRedraftAssets(assets.filter((a) => a.fromRosterId === p.proposerRosterId))
       const get = gradeInputsFromRedraftAssets(assets.filter((a) => a.toRosterId === p.proposerRosterId))
-      const grade = assets.length === 0
+      const grade = assets.some(a => a.assetType === 'zombie_item')
+        ? { graded: false as const, reason: 'Zombie items require a rules-based review; player-only grades do not price them.', basis: null }
+        : assets.length === 0
         ? { graded: false as const, reason: 'This proposal has no assets on record.', basis: null }
         : await Promise.resolve()
             .then(async () => gradeDeal(await grader(), { give, get, viewerSide: false }))
@@ -328,7 +330,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'At least one valid asset is required' }, { status: 400 })
   }
 
-  const allowedAssetTypes = new Set(['player', 'draft_pick', 'faab', 'future_consideration'])
+  const allowedAssetTypes = new Set(['player', 'draft_pick', 'faab', 'future_consideration', 'zombie_item'])
   // Proposer and receiver for a two-team trade — exactly the pair this always checked.
   const participantRosterIds = tradeParticipantRosterIds({ proposerRosterId, receiverRosterId, additionalRosterIds })
   for (const asset of assets) {
@@ -433,7 +435,7 @@ export async function POST(req: NextRequest) {
   // ⚠ Two-team only: the snapshot prices a proposer side against a receiver side, and a multi-team
   // trade has no single other side, so a snapshot of it would be a confident wrong number. The
   // Decision OS evaluation below reads the snapshot, so it is skipped with it.
-  if (created?.id && !multiTeam) {
+  if (created?.id && !multiTeam && !assets.some(a => a.assetType === 'zombie_item')) {
     try {
       await captureRedraftTradeValueSnapshot({
         proposalId: created.id,

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { pickEnEs } from '@/lib/i18n/bilingual'
 import type { MyTeamAutomationsView } from '@/lib/lineup-automation/myTeamAutomationsService'
 
 /**
@@ -10,8 +11,7 @@ import type { MyTeamAutomationsView } from '@/lib/lineup-automation/myTeamAutoma
  * Collapsed by default, open while AllFantasy is running the team. Hidden when nothing applies.
  */
 export function MyTeamAutomations({ leagueId }: { leagueId: string }) {
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const { language, t } = useOptionalLanguage()
   const [view, setView] = useState<MyTeamAutomationsView | null>(null)
 
   useEffect(() => {
@@ -29,15 +29,15 @@ export function MyTeamAutomations({ leagueId }: { leagueId: string }) {
   const managedNow = view.items.some((i) => i.key === 'managed')
   return (
     <details className="nls-card" open={managedNow} data-testid="my-team-automations">
-      <summary className="nls-label">{es ? 'Lo que AllFantasy puede hacer por tu equipo' : 'What AllFantasy may do for your team'}</summary>
+      <summary className="nls-label">{t('league.myAutomations.title')}</summary>
       <ul>
         {view.items.map((i) => (
           <li key={i.key} data-testid={`my-automation-${i.key}`}>
-            {es ? i.es : i.en}
+            {pickEnEs(i, language)}
           </li>
         ))}
       </ul>
-      <p className="nls-muted">{es ? view.takeBack.es : view.takeBack.en}</p>
+      <p className="nls-muted">{pickEnEs(view.takeBack, language)}</p>
     </details>
   )
 }

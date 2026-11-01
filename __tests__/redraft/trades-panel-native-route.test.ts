@@ -11,6 +11,8 @@ const findFirstLeague = vi.fn()
 const findFirstRoster = vi.fn()
 const findManyRoster = vi.fn()
 const findManyAppUser = vi.fn()
+const countRoster = vi.fn()
+const findManySurvivorIdol = vi.fn()
 const listAfLeagueTrades = vi.fn()
 const isElevatedCommissioner = vi.fn()
 /*
@@ -48,6 +50,8 @@ vi.mock('@/lib/prisma', () => ({
     roster: {
       findFirst: (...args: unknown[]) => findFirstRoster(...args),
       findMany: (...args: unknown[]) => findManyRoster(...args),
+      // The veto threshold counts the league's rosters (only read for a trade in its veto window).
+      count: (...args: unknown[]) => countRoster(...args),
     },
     appUser: { findMany: (...args: unknown[]) => findManyAppUser(...args) },
     tradeBlockEntry: { findMany: vi.fn().mockResolvedValue([]) },
@@ -75,6 +79,8 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn().mockResolvedValue([]),
     },
     tradeOfferEvent: { findMany: (...args: unknown[]) => findManyTradeOfferEvent(...args) },
+    // Survivor player-bound idols for the "Idol rides along" chip. Default: none, as in any other league.
+    survivorIdol: { findMany: (...args: unknown[]) => findManySurvivorIdol(...args) },
   },
 }))
 vi.mock('@/lib/league-trade-engine/tradeService', () => ({
@@ -161,6 +167,7 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
     resolveCanonicalWorld.mockResolvedValue(null)
     evaluateCanonicalTrade.mockResolvedValue(null)
     getStoredTeamLogoResolver.mockResolvedValue(() => null)
+    findManySurvivorIdol.mockResolvedValue([])
   })
 
   describe('lineup effect (item #6)', () => {
@@ -319,6 +326,103 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
     expect(body.source).toBe('native')
     expect(body.activeTrades).toEqual([])
     expect(body.activeCount).toBe(0)
+  })
+
+  describe('trade center fields (expiry, per-team acceptance, the league veto vote)', () => {
+    const VOTING = {
+      id: 'trade-vote',
+      status: 'awaiting_votes',
+      proposerRosterId: 'roster-a',
+      receiverRosterId: 'roster-b',
+      createdAt: new Date('2026-10-30T00:00:00.000Z'),
+      expiresAt: null,
+      vetoThresholdPercent: 50,
+      metadata: {},
+      votes: [
+        { voterRosterId: 'roster-c', vote: 'veto' },
+        { voterRosterId: 'roster-receiver', vote: 'allow' },
+      ],
+      items: [
+        { id: 'v1', itemType: 'player', fromRosterId: 'roster-a', toRosterId: 'roster-b', itemReference: 'p1', metadata: { playerName: 'X' } },
+        { id: 'v2', itemType: 'player', fromRosterId: 'roster-b', toRosterId: 'roster-a', itemReference: 'p2', metadata: { playerName: 'Y' } },
+      ],
+    }
+    const OPEN = {
+      id: 'trade-open',
+      status: 'pending',
+      proposerRosterId: 'roster-a',
+      receiverRosterId: 'roster-receiver',
+      createdAt: new Date('2026-10-30T00:00:00.000Z'),
+      expiresAt: new Date('2026-11-02T00:00:00.000Z'),
+      metadata: { acceptedRosterIds: ['roster-x'] },
+      votes: [],
+      items: [
+        { id: 'o1', itemType: 'player', fromRosterId: 'roster-a', toRosterId: 'roster-receiver', itemReference: 'p3', metadata: { playerName: 'Z' } },
+      ],
+    }
+    const PRIVATE = { ...OPEN, id: 'trade-private', receiverRosterId: 'roster-b', items: [
+      { id: 'q1', itemType: 'player', fromRosterId: 'roster-a', toRosterId: 'roster-b', itemReference: 'p4', metadata: { playerName: 'Q' } },
+    ] }
+
+    beforeEach(() => {
+      findManyRoster.mockResolvedValue([
+        { id: 'roster-a', platformUserId: 'user-a' },
+        { id: 'roster-b', platformUserId: 'user-b' },
+        { id: 'roster-receiver', platformUserId: 'user-receiver' },
+      ])
+      findManyAppUser.mockResolvedValue([])
+      countRoster.mockResolvedValue(12)
+    })
+
+    it('a member who is not in a trade sees it in its veto window, with the tally and their own vote', async () => {
+      listAfLeagueTrades.mockResolvedValue([VOTING, PRIVATE])
+      const res = await GET(makeRequest('league-1'))
+      const body = (await res.json()) as { activeTrades: Array<Record<string, unknown>> }
+      // The veto window is league business; an open offer between two other teams stays private.
+      expect(body.activeTrades.map((t) => t.id)).toEqual(['trade-vote'])
+      const t = body.activeTrades[0]!
+      const { vetoVotesNeeded } = await import('@/lib/league-trade-engine/vetoRule')
+      expect(t.votes).toEqual({
+        veto: 1,
+        allow: 1,
+        needed: vetoVotesNeeded({ mode: 'percent', value: 50 }, { teamCount: 12, tradingTeams: 2 }),
+        viewerVote: 'allow',
+      })
+      expect(t.viewerCanVote).toBe(true)
+      expect(t.viewerRosterId).toBe('roster-receiver')
+      expect(t.proposerRosterId).toBe('roster-a')
+    })
+
+    it('a trading party cannot vote on its own trade', async () => {
+      findFirstRoster.mockResolvedValue({ id: 'roster-a' })
+      listAfLeagueTrades.mockResolvedValue([VOTING])
+      const body = (await (await GET(makeRequest('league-1'))).json()) as { activeTrades: Array<Record<string, unknown>> }
+      expect(body.activeTrades[0]!.viewerCanVote).toBe(false)
+    })
+
+    it('Survivor: a traded player holding a visible idol is marked; the read only asks for idols the viewer may see', async () => {
+      listAfLeagueTrades.mockResolvedValue([OPEN])
+      findManySurvivorIdol.mockResolvedValue([{ playerId: 'p3' }])
+      const body = (await (await GET(makeRequest('league-1'))).json()) as { activeTrades: Array<Record<string, unknown>> }
+      const sides = body.activeTrades[0]!.participantSides as Array<{ assets: Array<{ label: string; idol?: boolean }> }>
+      expect(sides.flatMap((s) => s.assets).find((a) => a.label === 'Z')?.idol).toBe(true)
+      const where = (findManySurvivorIdol.mock.calls[0]![0] as { where: Record<string, unknown> }).where
+      expect(where).toMatchObject({ leagueId: 'league-1', playerId: { in: ['p3'] }, isUsed: false })
+      // 🛑 a secret idol must never reach the other side: only revealed, public, or the viewer's own.
+      expect(where.OR).toEqual([{ status: 'revealed' }, { isPubliclyKnown: true }, { currentOwnerUserId: 'user-receiver' }])
+    })
+
+    it('an open offer carries its expiry and who has accepted, and no vote', async () => {
+      listAfLeagueTrades.mockResolvedValue([OPEN])
+      const body = (await (await GET(makeRequest('league-1'))).json()) as { activeTrades: Array<Record<string, unknown>> }
+      const t = body.activeTrades[0]!
+      expect(t.expiresAt).toBe('2026-11-02T00:00:00.000Z')
+      expect(t.acceptedRosterIds).toEqual(['roster-x'])
+      expect(t.votes).toBeNull()
+      expect(t.viewerCanVote).toBe(false)
+      // No veto window, no roster count.
+      expect(countRoster).not.toHaveBeenCalled()
+    })
   })
 
   it('excludes terminal-status trades (processed/rejected/cancelled) from the active list', async () => {

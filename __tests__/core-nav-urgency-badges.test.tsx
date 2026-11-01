@@ -48,20 +48,24 @@ function badgeFor(label: string): string | null {
 
 describe('Core tab urgency badges', () => {
   it('puts each league count on its own tab', () => {
-    render(shell({ urgencyBadges: { myTeam: 2, trades: 1, draftHq: 3, sync: 4 } }))
+    render(shell({ urgencyBadges: { myTeam: 2, trades: 1, draftHq: 3 } }))
     expect(badgeFor('My team')).toBe('2')
     expect(badgeFor('Trades')).toBe('1')
     expect(badgeFor('Draft HQ')).toBe('3')
-    expect(badgeFor('Sync')).toBe('4')
+  })
+
+  /* Sync left the rail for every league on 2026-10-31; a stale count must not bring it back. */
+  it('has no Sync tab, even with a stale-league count', () => {
+    render(shell({ selectedLeagueId: 'lg1', urgencyBadges: { sync: 4 } }))
+    const labels = screen.getAllByRole('link').map((a) => a.textContent?.replace(/\s+/g, ' ').trim())
+    expect(labels.some((t) => t === 'Sync' || t?.startsWith('↻'))).toBe(false)
+    expect(screen.queryAllByRole('link').some((a) => a.getAttribute('href')?.startsWith('/core/sync'))).toBe(false)
   })
 
   it('draws nothing for a zero, a null, or an absent prop', () => {
-    const { unmount } = render(shell({ urgencyBadges: { myTeam: 0, trades: null } }))
+    render(shell({ urgencyBadges: { myTeam: 0, trades: null } }))
     expect(badgeFor('My team')).toBeNull()
     expect(badgeFor('Trades')).toBeNull()
-    unmount()
-    render(shell())
-    expect(badgeFor('Sync')).toBeNull()
   })
 
   /* A running draft is the more urgent fact; a number would bury it. */

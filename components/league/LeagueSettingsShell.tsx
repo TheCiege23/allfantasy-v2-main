@@ -66,7 +66,7 @@ export function LeagueSettingsShell({
               onClick={() => setTab(t.id)}
               className={`flex items-center gap-2 px-5 py-3 text-sm font-medium transition border-b-2 ${
                 tab === t.id
-                  ? 'border-cyan-400 text-cyan-100 bg-cyan-400/5'
+                  ? 'border-cyan-400 text-[var(--badge-text-cyan)] bg-cyan-400/5'
                   : 'border-transparent text-white/50 hover:text-white/70'
               }`}
             >

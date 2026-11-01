@@ -6,8 +6,10 @@ import { resolvePlayoffSeedField } from "./playoffSeeding"
 import { readSingleGameSchedule } from "./singleGameSchedule"
 import type { PlayoffChallengeConfig, PlayoffChallengeListItem, PlayoffChallengeView, PlayoffCreateResponse, PlayoffSport } from "./types"
 import { getDependentPlayoffSeriesIds, isOfficialTeamName } from "./playoffBracketProjection"
+import { nflDivisionalMatchups } from "./nflPlayoffs"
+import { nflSeriesRows, readNflPlayoffsSnapshot } from "./syncNflPlayoffs"
 import { allowsPlayoffLatePicks, canUsePlayoffLatePicks, getPlayoffSeriesLockedReason } from "./playoffLocking"
-import { assertBracketOpen, firstGameDeadline, isSingleGameBracketSport, rankBrackets, scoreAndPotential, championshipTotal, FREE_BRACKETS_PER_TOURNAMENT, PAID_BRACKETS_PER_TOURNAMENT } from "./playoffCompetition"
+import { assertBracketOpen, defaultPlayoffSeasonYear, firstGameDeadline, isSingleGameBracketSport, rankBrackets, scoreAndPotential, championshipTotal, FREE_BRACKETS_PER_TOURNAMENT, PAID_BRACKETS_PER_TOURNAMENT } from "./playoffCompetition"
 import { EntitlementResolver } from "@/lib/subscription/EntitlementResolver"
 import { planFlagsFromSnapshot } from "@/lib/subscription/livePlanFlags"
 import { loadBracketTeamProfiles } from "./teamIntelligence"
@@ -15,6 +17,8 @@ import { getStoredTeamLogoResolver } from "@/lib/sport-teams/storedTeamLogos"
 import { defaultPlayoffChallengeConfig, sanitizePlayoffChallengeConfig } from "./playoffChallengeConfig"
 import { hasAfCommissionerPlan } from "@/lib/entitlements/afCommissionerPlan"
 import { getPlayoffCompletionSummary } from "./playoffCompletion"
+import { eligibleNbaCupPicks, nbaCupLockedReason } from "./nbaCupTournament"
+import { nbaCupSeriesRows, readNbaCupSnapshot } from "./nbaCupCache"
 
 type SessionUser = {
   id?: string | null
@@ -54,6 +58,7 @@ export function getPlayoffSportTitle(sport: PlayoffSport | "fifa"): string {
   if (sport === "mlb") return "MLB Postseason Pool"
   if (sport === "ncaaf") return "College Football Playoff Pool"
   if (sport === "nba_cup") return "NBA Cup Bracket League"
+  if (sport === "nfl") return "NFL Playoffs Pool"
   return "FIFA World Cup Pool"
 }
 
@@ -99,12 +104,12 @@ export async function createPlayoffBracketChallenge(input: {
     afCommissionerEnabled: await hasAfCommissionerPlan(input.user),
   })
   // Live single-game pools use one fair lock and scoring rule, even for direct API requests.
-  if (!input.isTestMode && (input.sport === "ncaaf" || input.sport === "nba_cup")) {
+  if (!input.isTestMode && (input.sport === "ncaaf" || input.sport === "nba_cup" || input.sport === "nfl")) {
     config.lockRule = "series_start"
     config.scoringStyle = "round_points"
   }
 
-  const seasonYear = input.seasonYear ?? new Date().getUTCFullYear()
+  const seasonYear = input.seasonYear ?? defaultPlayoffSeasonYear(input.sport)
   const baseTemplate = buildPlayoffTemplate({
     sport: input.sport,
     seasonYear,
@@ -112,36 +117,52 @@ export async function createPlayoffBracketChallenge(input: {
   })
   // A pool created after the official field is published must begin with real
   // teams. Earlier pools are migrated when the admin publishes the field.
-  const field = !input.isTestMode && (input.sport === "ncaaf" || input.sport === "nba_cup")
+  const field = !input.isTestMode && (input.sport === "ncaaf" || input.sport === "nfl")
     ? await resolvePlayoffSeedField(input.sport, seasonYear)
     : null
-  const schedule = !input.isTestMode && (input.sport === "ncaaf" || input.sport === "nba_cup")
+  /*
+   * NFL: games the scheduled writer has already placed (times, and later the
+   * reseeded divisional matchups and results), so a pool made mid-postseason
+   * starts current instead of waiting fifteen minutes for the next sync.
+   */
+  const nflPlaced = !input.isTestMode && input.sport === "nfl" && field?.isFinal
+    ? nflSeriesRows((await readNflPlayoffsSnapshot(seasonYear))?.games ?? [], field.seeds).rows
+    : []
+  const schedule = !input.isTestMode && input.sport === "ncaaf"
     ? await readSingleGameSchedule(input.sport, seasonYear)
     : null
   const scheduledTemplate = baseTemplate.map((row) => ({
     ...row,
     startsAt: schedule?.games.find((game) => game.seriesNumber === row.seriesNumber)?.startsAt ?? row.startsAt,
   }))
-  if (!input.isTestMode && isSingleGameBracketSport(input.sport) && schedule &&
+  // NFL: like the CFP, a bracket league cannot be created once the first game has kicked off.
+  const nflWildCardTimes = nflPlaced.filter((row) => row.seriesNumber <= 6).map((row) => ({ startsAt: row.startsAt?.toISOString() ?? null }))
+  const nflDeadline = nflWildCardTimes.length === 6 ? firstGameDeadline(nflWildCardTimes) : null
+  if (nflDeadline != null && Date.now() >= nflDeadline) {
+    throw new Error("The NFL playoffs have started. New bracket leagues are closed.")
+  }
+  if (!input.isTestMode && input.sport === "ncaaf" && schedule &&
       firstGameDeadline(scheduledTemplate) != null && Date.now() >= firstGameDeadline(scheduledTemplate)!) {
     throw new Error("This tournament has started. New bracket leagues are closed.")
   }
   const template = field?.isFinal
     ? scheduledTemplate.map((row) => {
         const seededName = (name: string) => {
-          const hit = /^(?:CFP|EAST|WEST)(\d+)$/i.exec(name)
+          const hit = /^(?:CFP|EAST|WEST|AFC|NFC)(\d+)$/i.exec(name)
           return hit ? field.seeds.get(row.conference)?.get(Number(hit[1])) ?? name : name
         }
         return { ...row, homeTeamName: seededName(row.homeTeamName), awayTeamName: seededName(row.awayTeamName) }
       })
     : scheduledTemplate
 
+  const automaticCup = !input.isTestMode && input.sport === "nba_cup"
+    ? nbaCupSeriesRows((await readNbaCupSnapshot(seasonYear))?.games ?? []) : []
   const result = await prisma.$transaction(async (tx) => {
     const challengeData: Record<string, unknown> = {
       ownerUserId: input.user.id,
       name: challengeName,
       sport: input.sport,
-      seasonYear: input.seasonYear ?? new Date().getUTCFullYear(),
+      seasonYear,
       status: "open",
       isTestMode: Boolean(input.isTestMode),
     }
@@ -188,6 +209,19 @@ export async function createPlayoffBracketChallenge(input: {
             }),
       })),
     })
+
+    for (const game of nflPlaced) {
+      await (tx as any).playoffBracketSeries.update({ where: { challengeId_seriesNumber: { challengeId: challenge.id, seriesNumber: game.seriesNumber } }, data: { ...game, lastSyncedAt: new Date() } })
+    }
+
+    if (automaticCup.length) {
+      await (tx as any).playoffBracketSeries.createMany({
+        data: automaticCup.filter((game) => game.round === "cup_group_play").map((game) => ({ ...game, challengeId: challenge.id, lastSyncedAt: new Date() })),
+      })
+      for (const game of automaticCup.filter((game) => game.round !== "cup_group_play")) {
+        await (tx as any).playoffBracketSeries.update({ where: { challengeId_seriesNumber: { challengeId: challenge.id, seriesNumber: game.seriesNumber } }, data: { ...game, lastSyncedAt: new Date() } })
+      }
+    }
 
     return {
       challengeId: challenge.id as string,
@@ -281,7 +315,7 @@ export async function getPlayoffBracketView(input: {
   if (!challenge) return null
 
   const singleGameSport = !challenge.isTestMode && isSingleGameBracketSport(challenge.sport)
-  const seasonSchedule = singleGameSport ? await readSingleGameSchedule(challenge.sport, challenge.seasonYear) : null
+  const seasonSchedule = singleGameSport && challenge.sport === "ncaaf" ? await readSingleGameSchedule(challenge.sport, challenge.seasonYear) : null
   const scheduleByNumber = new Map(seasonSchedule?.games.map((game) => [game.seriesNumber, game]) ?? [])
   const firstStart = singleGameSport ? firstGameDeadline(challenge.series) : null
   const userId = input.user?.id ?? null
@@ -350,7 +384,7 @@ export async function getPlayoffBracketView(input: {
     ? await Promise.all([
         loadBracketTeamProfiles(challenge.sport, challenge.seasonYear, teamNames),
         (async (): Promise<Record<string, string>> => {
-          const resolveLogo = await getStoredTeamLogoResolver(challenge.sport === "nba_cup" ? "NBA" : "NCAAF")
+          const resolveLogo = await getStoredTeamLogoResolver(challenge.sport === "nba_cup" ? "NBA" : challenge.sport === "nfl" ? "NFL" : "NCAAF")
           const logos: Record<string, string> = {}
           for (const name of new Set(teamNames)) {
             // A seed slot or projected winner is not a team identity.
@@ -371,6 +405,7 @@ export async function getPlayoffBracketView(input: {
       })
     : []
   const completion = getPlayoffCompletionSummary(challengeSeries, picks, {
+    sport: challenge.sport,
     lockRule,
     isPoolOwner,
     isTestMode: challenge.isTestMode === true,
@@ -399,7 +434,9 @@ export async function getPlayoffBracketView(input: {
        */
       scoreAndPotential(
         challengeSeries,
-        allEntryPicks.filter((pick: any) => pick.entryId === entry.id),
+        challenge.sport === "nba_cup" && !challenge.isTestMode
+          ? eligibleNbaCupPicks(challengeSeries, allEntryPicks.filter((pick: any) => pick.entryId === entry.id), entry.finalizedAt)
+          : allEntryPicks.filter((pick: any) => pick.entryId === entry.id),
         challenge.sport as PlayoffSport
       )
     )
@@ -512,13 +549,13 @@ export async function getPlayoffBracketView(input: {
       bestOf: series.bestOf,
       status: series.status,
       startsAt: toIso(series.startsAt),
-      gameLabel: scheduleByNumber.get(series.seriesNumber)?.label || null,
-      location: scheduleByNumber.get(series.seriesNumber)?.location || null,
+      gameLabel: series.providerGamesJson?.gameLabel || scheduleByNumber.get(series.seriesNumber)?.label || null,
+      location: series.providerGamesJson?.location || scheduleByNumber.get(series.seriesNumber)?.location || null,
       homeTeamWins: series.homeTeamWins ?? 0,
       awayTeamWins: series.awayTeamWins ?? 0,
       seriesSummary: series.seriesSummary ?? null,
       nextGameAt: toIso(series.nextGameAt),
-      venue: scheduleByNumber.get(series.seriesNumber)?.venue || series.venue || null,
+      venue: challenge.sport === "nba_cup" ? series.venue || null : scheduleByNumber.get(series.seriesNumber)?.venue || series.venue || null,
       broadcastNetwork: series.broadcastNetwork ?? null,
       liveHomeScore: series.liveHomeScore ?? null,
       liveAwayScore: series.liveAwayScore ?? null,
@@ -533,6 +570,7 @@ export async function getPlayoffBracketView(input: {
     })),
     teamProfiles,
     teamLogos,
+    nbaCupLastSyncedAt: challenge.sport === "nba_cup" ? (await readNbaCupSnapshot(challenge.seasonYear).catch(() => null))?.syncedAt || null : null,
     picks: picks.map((pick: any) => ({
       id: pick.id,
       entryId: pick.entryId,
@@ -583,7 +621,7 @@ export async function createPlayoffBracketEntry(input: {
     throw new Error("Challenge not found")
   }
   if (!challenge.isTestMode && isSingleGameBracketSport(challenge.sport)) {
-    assertBracketOpen(challenge.series)
+    if (challenge.sport !== "nba_cup") assertBracketOpen(challenge.series)
     const snapshot = await new EntitlementResolver().resolveSnapshot(input.user.id, input.user.email).catch(() => null)
     const paid = Boolean(snapshot && planFlagsFromSnapshot(snapshot).pro)
     const limit = paid ? PAID_BRACKETS_PER_TOURNAMENT : FREE_BRACKETS_PER_TOURNAMENT
@@ -677,6 +715,8 @@ export async function submitPlayoffBracketEntry(input: {
       id: true,
       userId: true,
       challengeId: true,
+      finalizedAt: true,
+      tiebreakerTotalScore: true,
       challenge: {
         select: {
           config: true,
@@ -713,6 +753,7 @@ export async function submitPlayoffBracketEntry(input: {
   // lockRule is on the base config, not an AF Commissioner option, so no plan check is needed.
   const lockRule = sanitizePlayoffChallengeConfig(entry.challenge?.config ?? null).lockRule
   const completion = getPlayoffCompletionSummary(series, picks, {
+    sport: entry.challenge?.sport,
     lockRule,
     isPoolOwner: entry.challenge?.ownerUserId === input.userId,
     isTestMode: entry.challenge?.isTestMode === true,
@@ -723,15 +764,24 @@ export async function submitPlayoffBracketEntry(input: {
     throw new Error(completion.message)
   }
   if (!entry.challenge?.isTestMode && isSingleGameBracketSport(entry.challenge?.sport)) {
-    assertBracketOpen(series)
+    const rollingCup = entry.challenge.sport === "nba_cup"
+    if (!rollingCup) assertBracketOpen(series)
     const guess = input.tiebreakerTotalScore
     if (!Number.isInteger(guess) || Number(guess) < 0 || Number(guess) > 500) {
       throw new Error("Enter a final-game combined score from 0 to 500 to finalize.")
     }
-    await (prisma as any).playoffBracketEntry.update({
-      where: { id: entry.id },
-      data: { finalizedAt: new Date(), tiebreakerTotalScore: Number(guess) },
-    })
+    const championship = series.find((game: any) => game.round === "cup_championship")
+    const finalLocked = rollingCup && championship && (championship.status !== "scheduled" || (championship.startsAt && new Date(championship.startsAt).getTime() <= Date.now()))
+    if (finalLocked && Number(guess) !== entry.tiebreakerTotalScore) throw new Error("The championship tiebreaker locked at tipoff.")
+    // Keep the first Cup submission timestamp: subsequent edits must not invalidate earlier earned picks.
+    if (rollingCup) {
+      await prisma.$transaction(async (tx) => {
+        await (tx as any).playoffBracketEntry.updateMany({ where: { id: entry.id, finalizedAt: null }, data: { finalizedAt: new Date() } })
+        await (tx as any).playoffBracketEntry.update({ where: { id: entry.id }, data: { tiebreakerTotalScore: Number(guess) } })
+      })
+    } else {
+      await (prisma as any).playoffBracketEntry.update({ where: { id: entry.id }, data: { finalizedAt: new Date(), tiebreakerTotalScore: Number(guess) } })
+    }
   }
 
   return {
@@ -786,23 +836,30 @@ export async function savePlayoffBracketPick(input: {
   if (!series || series.challengeId !== input.challengeId) {
     throw new Error("Series not found")
   }
-  if (!series.challenge?.isTestMode && isSingleGameBracketSport(series.challenge?.sport)) {
+  const rollingCup = !series.challenge?.isTestMode && series.challenge?.sport === "nba_cup"
+  if (rollingCup) {
+    const reason = nbaCupLockedReason({ ...series, startsAt: toIso(series.startsAt) })
+    if (reason) throw new Error(reason)
+  }
+  const fixedLockPool = !series.challenge?.isTestMode && (series.challenge?.sport === "ncaaf" || series.challenge?.sport === "nfl")
+  if (fixedLockPool) {
     const starts = await (prisma as any).playoffBracketSeries.findMany({
-      where: { challengeId: input.challengeId }, select: { startsAt: true },
+      where: { challengeId: input.challengeId }, select: { startsAt: true, round: true },
     })
     assertBracketOpen(starts)
   }
 
-  if (!series.challenge?.isTestMode &&
-      (series.challenge?.sport === "ncaaf" || series.challenge?.sport === "nba_cup")) {
+  if (fixedLockPool) {
     const field = await resolvePlayoffSeedField(series.challenge.sport, series.challenge.seasonYear)
     if (!field.isFinal) throw new Error("Official tournament field is pending.")
-    if (!series.startsAt) throw new Error("Official game schedule is pending.")
+    // NFL rounds after the Wild Card are scheduled only as the round before ends; the
+    // bracket's lock is the Wild Card kickoff (assertBracketOpen), not each game's own time.
+    if (series.challenge?.sport === "ncaaf" && !series.startsAt) throw new Error("Official game schedule is pending.")
   }
 
   // lockRule is on the base config, not an AF Commissioner option, so no plan check is needed.
   const singleGameLivePool = !series.challenge?.isTestMode &&
-    (series.challenge?.sport === "ncaaf" || series.challenge?.sport === "nba_cup")
+    (series.challenge?.sport === "ncaaf" || series.challenge?.sport === "nba_cup" || series.challenge?.sport === "nfl")
   const lockRule = singleGameLivePool
     ? "series_start"
     : sanitizePlayoffChallengeConfig(series.challenge?.config ?? null).lockRule
@@ -827,7 +884,7 @@ export async function savePlayoffBracketPick(input: {
     where: { entryId: input.entryId },
   })
 
-  const dependentSeriesIds = getDependentPlayoffSeriesIds(input.seriesId, allSeries)
+  const dependentSeriesIds = rollingCup ? new Set<string>() : getDependentPlayoffSeriesIds(input.seriesId, allSeries)
   const projectedPickBySeriesNumber = new Map<number, string>()
   for (const item of allSeries) {
     const pick = picks.find((candidate: any) => candidate.seriesId === item.id)
@@ -839,12 +896,22 @@ export async function savePlayoffBracketPick(input: {
   }
 
   const selectedSeries = allSeries.find((item: any) => item.id === input.seriesId) ?? series
-  const homeName = selectedSeries.sourceSeriesHome && !isOfficialTeamName(selectedSeries.homeTeamName)
+  let homeName = selectedSeries.sourceSeriesHome && !isOfficialTeamName(selectedSeries.homeTeamName)
     ? projectedPickBySeriesNumber.get(selectedSeries.sourceSeriesHome) ?? selectedSeries.homeTeamName
     : selectedSeries.homeTeamName
-  const awayName = selectedSeries.sourceSeriesAway && !isOfficialTeamName(selectedSeries.awayTeamName)
+  let awayName = selectedSeries.sourceSeriesAway && !isOfficialTeamName(selectedSeries.awayTeamName)
     ? projectedPickBySeriesNumber.get(selectedSeries.sourceSeriesAway) ?? selectedSeries.awayTeamName
     : selectedSeries.awayTeamName
+  /*
+   * NFL divisional games are reseeded from the entry's own Wild Card picks — the same
+   * matchup `buildProjectedPlayoffSeries` shows. Until all three of the conference's Wild
+   * Card picks exist, the slots keep their placeholder names and the pick is refused below.
+   */
+  if (selectedSeries.round === "nfl_divisional") {
+    const matchup = nflDivisionalMatchups(allSeries, projectedPickBySeriesNumber).get(selectedSeries.seriesNumber)
+    if (matchup) { homeName = matchup.homeTeamName; awayName = matchup.awayTeamName }
+    else if (!isOfficialTeamName(homeName) || !isOfficialTeamName(awayName)) throw new Error("Pick every Wild Card game in this conference first.")
+  }
 
   if (selectedSeries.sourceSeriesHome && !isOfficialTeamName(selectedSeries.homeTeamName) && !projectedPickBySeriesNumber.has(selectedSeries.sourceSeriesHome)) {
     throw new Error("Pick earlier round winners first.")
@@ -859,7 +926,13 @@ export async function savePlayoffBracketPick(input: {
   }
 
   const pick = await prisma.$transaction(async (tx) => {
-    if (singleGameLivePool) assertBracketOpen(allSeries)
+    if (rollingCup) {
+      const fresh = await (tx as any).playoffBracketSeries.findUnique({ where: { id: input.seriesId } })
+      if (!fresh || fresh.challengeId !== input.challengeId) throw new Error("Game not found")
+      const reason = nbaCupLockedReason({ ...fresh, startsAt: toIso(fresh.startsAt) })
+      if (reason) throw new Error(reason)
+      if (![fresh.homeTeamName, fresh.awayTeamName].includes(input.pickTeamName)) throw new Error("The confirmed matchup changed. Refresh before picking.")
+    } else if (singleGameLivePool) assertBracketOpen(allSeries)
     if (dependentSeriesIds.size > 0) {
       await (tx as any).playoffBracketPick.deleteMany({
         where: {
@@ -869,7 +942,7 @@ export async function savePlayoffBracketPick(input: {
       })
     }
 
-    if (singleGameLivePool) {
+    if (singleGameLivePool && !rollingCup) {
       await (tx as any).playoffBracketEntry.update({ where: { id: input.entryId }, data: { finalizedAt: null } })
     }
     return (tx as any).playoffBracketPick.upsert({

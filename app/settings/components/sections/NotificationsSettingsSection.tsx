@@ -435,8 +435,8 @@ export function NotificationsSettingsSection({
           <p className="mt-1 text-xs text-[var(--muted)]">{t("settings.notifications.playerNews.hint")}</p>
         </div>
         <div role="radiogroup" aria-label={t("settings.notifications.playerNews.title")} className="space-y-2">
-          {PLAYER_NEWS_LEVELS.map((level) => {
-            const selected = readPlayerNewsLevel(prefs) === level
+          {PLAYER_NEWS_LEVELS.filter((level) => level !== 'starters').map((level) => {
+            const selected = level === 'roster' ? readPlayerNewsLevel(prefs) !== 'off' : readPlayerNewsLevel(prefs) === 'off'
             return (
               <label
                 key={level}

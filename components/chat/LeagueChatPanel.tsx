@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { castawayNameWithTribeEmoji } from "@/lib/survivor/survivorTribeEmoji"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
@@ -18,6 +19,13 @@ import { useAIAssistantAvailability } from "@/hooks/useAIAssistantAvailability"
 import "@/components/core-app/af-comms.css"
 import "./league-chat-channels.css"
 import { LEAGUE_CHAT_CHANNELS, type LeagueChatChannelId } from "@/lib/league-chat/leagueChatChannels"
+import type { ChatListMessage } from "@/components/core-app/comms/ChatMessageList"
+import type { RedraftSportTheme } from "@/lib/league-media/redraftIdentity"
+import { readRedraftChatEvent, type PinnedMatchupInput } from "@/lib/league-chat/redraftChatEvents"
+import { RedraftChatEventCard, RedraftChatPinnedScore } from "./RedraftChatEventCard"
+import type { DynastySeasonClock } from "@/lib/league-chat/dynastyChatSkin"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import { DynastySeasonClockLine } from "./DynastyChatParts"
 
 /**
  * The league page's chat: League chat · Messages · Chimmy.
@@ -42,6 +50,11 @@ type Props = {
   leagueId: string
   leagueName?: string
   dynastyBackground?: boolean
+  /**
+   * "Year N · YYYY" under the league name, dynasty leagues only (`dynastySeasonClock`). Omitted —
+   * not guessed — when the league's first season cannot be read.
+   */
+  dynastyClock?: DynastySeasonClock | null
   isCommissioner?: boolean
   /** Kept for callers; the panel is always open where it is mounted. */
   defaultOpen?: boolean
@@ -52,6 +65,25 @@ type Props = {
    * gold #chimmy that opens the Chimmy thread). Opt-in so the dock and harnesses are unchanged.
    */
   channels?: boolean
+  /**
+   * A native redraft league's sport theme (lib/league-media/redraftIdentity.ts). Set, the league's
+   * events — trades, claims, scores, recaps — draw as event cards and the tab row follows the sport;
+   * absent (every other league, the dock, the harnesses) nothing changes. Styling is
+   * components/chat/redraft-chat.css, scoped under the workspace's redraft attributes.
+   */
+  redraftSport?: RedraftSportTheme | null
+  /** Redraft only: the viewer's matchup from the rail snapshot the page already loaded, pinned under the header. */
+  pinnedMatchup?: PinnedMatchupInput | null
+}
+
+/** Redraft league events (lib/league-chat/redraftChatEvents.ts): authorless notices → cards, Chimmy's → framed bubbles. */
+function renderRedraftEvent(m: ChatListMessage) {
+  const event = readRedraftChatEvent(m)
+  return event && event.presentation === "card" ? <RedraftChatEventCard event={event} createdAt={m.createdAt} /> : null
+}
+function redraftEventKind(m: ChatListMessage): string | null {
+  const event = readRedraftChatEvent(m)
+  return event && event.presentation === "bubble" ? event.kind : null
 }
 
 function buildDmChimmyPrompt(ask: ThreadAskChimmy): string {
@@ -73,12 +105,16 @@ export default function LeagueChatPanel({
   leagueId,
   leagueName = "League",
   dynastyBackground = false,
+  dynastyClock = null,
   isCommissioner = false,
   onClose,
   className = "",
   channels = false,
+  redraftSport = null,
+  pinnedMatchup = null,
 }: Props) {
   const { data: session } = useSession()
+  const { t } = useOptionalLanguage()
   const { enabled: aiAssistantEnabled, loading: aiAvailabilityLoading } = useAIAssistantAvailability()
   const currentUserId = (session?.user as { id?: string } | undefined)?.id ?? null
   const searchParams = useSearchParams()
@@ -107,9 +143,11 @@ export default function LeagueChatPanel({
     let cancelled = false
     fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/summary`, { cache: "no-store" })
       .then(res => (res.ok ? res.json() : null))
-      .then((data: { tribes?: Array<{ id: string; name: string; markUrl?: string | null }> } | null) => {
+      .then((data: { tribes?: Array<{ id: string; name: string; markUrl?: string | null; tribeEmoji?: string | null }>; tribeEmojiInNames?: boolean } | null) => {
         const tribe = data?.tribes?.find(t => t.id === tribeId)
-        if (!cancelled) setTribeIcon(tribe?.markUrl ? { name: tribe.name, markUrl: tribe.markUrl } : null)
+        // "Tribe emoji in names" (display only): the header shows the tribe's emoji beside its name.
+        const name = tribe ? castawayNameWithTribeEmoji(tribe.name, tribe.tribeEmoji, Boolean(data?.tribeEmojiInNames)) : ""
+        if (!cancelled) setTribeIcon(tribe?.markUrl ? { name, markUrl: tribe.markUrl } : null)
       })
       .catch(() => { if (!cancelled) setTribeIcon(null) })
     return () => { cancelled = true }
@@ -154,7 +192,16 @@ export default function LeagueChatPanel({
   return (
     <section
       className={`flex min-h-0 flex-col rounded-2xl border shadow-xl ${className}`}
-      style={{ borderColor: "var(--border)", background: "var(--panel)" }}
+      style={
+        dynastyBackground
+          ? {
+              /* Dynasty Era: ink, with the gold glow at the top (Chat.dc.html). */
+              borderColor: "var(--dyn-rail,#1C2333)",
+              background:
+                "radial-gradient(120% 60% at 50% 0%, rgba(212,162,76,0.10), transparent 60%), var(--dyn-ink,#0B0F17)",
+            }
+          : { borderColor: "var(--border)", background: "var(--panel)" }
+      }
       aria-label="League chat"
       data-testid="league-chat-panel"
       data-dynasty-background={dynastyBackground ? "true" : undefined}
@@ -164,9 +211,21 @@ export default function LeagueChatPanel({
           {tribeIcon ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={tribeIcon.markUrl} alt="" width={28} height={28} className="h-7 w-7 shrink-0 rounded-full" data-testid="tribe-chat-channel-icon" />
-          ) : (
-            <MessageCircle className="h-5 w-5 shrink-0" style={{ color: "var(--accent-cyan-strong)" }} />
+          ) : dynastyBackground ? null : (
+            <MessageCircle className="h-5 w-5 shrink-0" style={{ color: redraftSport ? "var(--rd-accent-text)" : "var(--accent-cyan-strong)" }} />
           )}
+          {dynastyBackground && !tribeSource ? (
+            <div className="min-w-0" data-testid="dynasty-chat-header">
+              <p className="lcc-dyn-title truncate">{leagueName}</p>
+              {dynastyClock ? (
+                <DynastySeasonClockLine clock={dynastyClock} />
+              ) : (
+                <p className="text-[11px]" style={{ color: "var(--dyn-faint,#9AA4B2)" }}>
+                  League chat · Messages · Chimmy
+                </p>
+              )}
+            </div>
+          ) : (
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold" style={{ color: "var(--text)" }}>
               {leagueName}
@@ -175,6 +234,7 @@ export default function LeagueChatPanel({
               {tribeSource ? `${tribeIcon ? `${tribeIcon.name} tribe chat` : "Tribe chat"} · Messages · Chimmy` : "League chat · Messages · Chimmy"}
             </p>
           </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {/*
@@ -209,6 +269,9 @@ export default function LeagueChatPanel({
         </div>
       </header>
 
+      {/* Redraft: the viewer's matchup, pinned. Not in a tribe channel — that is not the league's room. */}
+      {redraftSport && !tribeSource ? <RedraftChatPinnedScore matchup={pinnedMatchup} /> : null}
+
       <div className="flex border-b px-2 py-1" style={{ borderColor: "var(--border)" }}>
         {tabs.map((tab) => (
           <button
@@ -218,8 +281,13 @@ export default function LeagueChatPanel({
             onClick={() => setActiveTab(tab.id)}
             className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[11px] font-medium transition-colors"
             style={{
-              background: activeTab === tab.id ? "color-mix(in srgb, var(--accent-cyan-strong) 12%, transparent)" : "transparent",
-              color: activeTab === tab.id ? "var(--accent-cyan-strong)" : "var(--muted2)",
+              background:
+                activeTab === tab.id
+                  ? redraftSport
+                    ? "var(--rd-accent-soft)"
+                    : "color-mix(in srgb, var(--accent-cyan-strong) 12%, transparent)"
+                  : "transparent",
+              color: activeTab === tab.id ? (redraftSport ? "var(--rd-accent-text)" : "var(--accent-cyan-strong)") : "var(--muted2)",
             }}
           >
             {tab.icon}
@@ -243,7 +311,13 @@ export default function LeagueChatPanel({
               }}
               data-testid={`league-chat-channel-${c.id}`}
             >
-              <span aria-hidden>#</span> {c.id}
+              {dynastyBackground ? (
+                t(`dynastyChat.channel.${c.id}`)
+              ) : (
+                <>
+                  <span aria-hidden>#</span> {c.id}
+                </>
+              )}
             </button>
           ))}
           <button
@@ -270,6 +344,9 @@ export default function LeagueChatPanel({
             surface="page"
             source={tribeSource}
             channel={channels && !tribeSource ? channel : null}
+            renderEvent={redraftSport && !tribeSource ? renderRedraftEvent : undefined}
+            eventKindFor={redraftSport && !tribeSource ? redraftEventKind : undefined}
+            dynasty={dynastyBackground}
           />
         </div>
       ) : null}

@@ -8,9 +8,12 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/core',
   useSearchParams: () => new URLSearchParams(),
 }))
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({
-  useOptionalLanguage: () => ({ language: 'es' }),
-}))
+vi.mock('@/components/i18n/LanguageProviderClient', async () => {
+  // The real catalog: CustomizeLeagueLink reads its label through `t`.
+  const { translations: dict } = await import('@/lib/i18n/translations')
+  const t = (k: string) => dict.es?.[k] ?? dict.en[k] ?? k
+  return { useOptionalLanguage: () => ({ language: 'es', t }) }
+})
 
 import { LeagueHome } from '@/components/core-app/screens/LeagueHome'
 import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'

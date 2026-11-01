@@ -1,4 +1,5 @@
 import "server-only"
+import { createHash } from 'node:crypto'
 import { recordSportsDelivery } from "./sportsDeliveryAudit"
 import { deliverDurably } from "./durableTransport"
 import { allowsLeagueSms } from "./channelPolicy"
@@ -77,6 +78,21 @@ async function recordSmsSent(input: { userId: string; leagueId: string | null; t
     } })
   } catch {
     console.warn("[NotificationDispatcher] SMS log write failed", { type: input.type })
+  }
+}
+
+/** Claim an event before texting so retries and concurrent requests cannot charge twice. */
+async function claimSmsEvent(userId: string, eventKey: string): Promise<string | null> {
+  const key = `notification-sms:${createHash('sha256').update(`${eventKey}:${userId}`).digest('hex')}`
+  try {
+    await prisma.sportsDataCache.create({ data: {
+      cacheKey: key, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), data: { sentAt: new Date().toISOString() },
+    } })
+    return key
+  } catch (error) {
+    if ((error as { code?: string }).code === 'P2002') return null
+    console.error('[NotificationDispatcher] SMS event claim failed', { userId, eventKey, error })
+    return null
   }
 }
 
@@ -301,9 +317,14 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       } else set('email',{status:'suppressed',reason:!catPrefs.email?'channel_off':quiet.push?'quiet_hours':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
 
       if (allowsLeagueSms(category, effectiveLeagueId) && catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms && !quiet.sms) {
+        const smsClaim = dedupePrefix ? await claimSmsEvent(userId, dedupePrefix) : undefined
+        if (smsClaim === null) {
+          set('sms',{status:'suppressed',reason:'duplicate_event'})
+        } else {
         // A Twilio charge per text, previously uncapped. Over the daily cap the text is
         // skipped; the in-app row, email and push above/below still go out.
-        if (!(await reserveSmsToday(userId))) {
+        if (!(await reserveSmsToday(userId, category === 'draft_alerts' ? 'draft_alerts' : undefined))) {
+          if (smsClaim) await prisma.sportsDataCache.delete({ where: { cacheKey: smsClaim } }).catch(() => {})
           set('sms',{status:'suppressed',reason:'daily_cap'})
           console.warn("[NotificationDispatcher] SMS daily cap reached; text skipped", { userId, category, type })
         } else {
@@ -315,12 +336,14 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           // `sent` row — inert to the relay, which only claims `pending` — and never fail the send on it.
           if (smsSent) await recordSmsSent({ userId, leagueId: effectiveLeagueId, type, title, category })
           if (!smsSent) {
+            if (smsClaim) await prisma.sportsDataCache.delete({ where: { cacheKey: smsClaim } }).catch(() => {})
             console.error("[NotificationDispatcher] SMS send returned false", {
               userId,
               category,
               type,
             })
           }
+        }
         }
       } else set('sms',{status:'suppressed',reason:!catPrefs.sms?'channel_off':skipChannels?.sms?'caller_excluded':quiet.sms?'quiet_hours':'contact_or_consent_unavailable'})
 
@@ -333,7 +356,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       if (transportFailed || channels.inApp.status === "failed" || Object.values(channels).some(c => c.reason === "dispatch_interrupted")) tally.failed++
       else if (Object.values(channels).every(c => c.status === "suppressed")) tally.suppressed++
       else tally.delivered++
-      if (dedupePrefix && typeof meta?.sport === 'string' && /^(game_|postseason_|breaking_news$)/.test(type)) {
+      if (dedupePrefix && typeof meta?.sport === 'string' && /^(game_|postseason_|breaking_news$|sports_news$)/.test(type)) {
         try { await recordSportsDelivery({ eventKey: dedupePrefix, type, sport: meta.sport, detectedAt,
           occurredAt: typeof meta.occurredAt === 'string' ? meta.occurredAt : undefined }, { userId, completedAt: new Date().toISOString(), channels }) }
         catch { tally.failed++; console.error('[sports-alerts] receipt persistence failed', { eventKey: dedupePrefix }) }

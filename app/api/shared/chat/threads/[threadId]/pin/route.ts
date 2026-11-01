@@ -5,6 +5,7 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from '@/lib/chat-core'
 import { prisma } from '@/lib/prisma'
+import { leagueChatModerator } from '@/lib/commissioner/broadcastAccess'
 
 const PIN_SNIPPET_MAX = 120
 
@@ -61,6 +62,15 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
     const canAccessMainLeague = (await resolveLeagueAccess(leagueId, user.appUserId)) != null
     if (!canAccessMainLeague) {
       return NextResponse.json({ error: 'Not a member' }, { status: 403 })
+    }
+
+    /*
+     * 🛑 ONLY WHOEVER RUNS THE LEAGUE'S CHAT PINS (user's decision, 2026-10-31): the commissioner and
+     * co-commissioners with the chat permission — the same rule as an @everyone announcement
+     * (`leagueChatModerator`). Before this, any member could pin.
+     */
+    if (!(await leagueChatModerator(leagueId, user.appUserId))) {
+      return NextResponse.json({ error: 'Only the commissioner and co-commissioners can pin in league chat.' }, { status: 403 })
     }
 
     const mainRef = await (prisma as any).leagueChatMessage.findFirst({

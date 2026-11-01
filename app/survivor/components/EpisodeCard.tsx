@@ -25,15 +25,15 @@ export function EpisodeCard({
     <article className="survivor-panel rounded-xl p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-text-dim)]">
+          <p className="sv-kicker text-[11px]">
             Episode {week}
           </p>
-          <h3 className="mt-1 text-[15px] font-bold text-white">{title}</h3>
+          <h3 className="sv-h mt-1 text-[15px]">{title}</h3>
         </div>
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="min-h-[44px] min-w-[44px] rounded-lg border border-white/10 px-3 text-[11px] text-sky-200"
+          className="min-h-[44px] min-w-[44px] rounded-lg border border-white/10 px-3 text-[11px] font-semibold text-[var(--survivor-torch)] hover:border-[rgba(240,163,94,0.55)]"
         >
           {open ? 'Less' : 'More'}
         </button>

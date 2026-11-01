@@ -9,6 +9,10 @@ import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { Fragment, useEffect, useId, useState } from 'react'
 import '@/components/core-app/af-my-team.css'
+/* After af-my-team.css: the redraft batch's rules apply only under the shell's redraft stamp. */
+import '@/components/core-app/af-core-redraft-myteam.css'
+import { statusShorthand } from '@/lib/core-app/myTeamStatusShorthand'
+import { lineupPeriodLabel, noGameBadge, redraftCorePosTone } from '@/lib/core-app/redraftCoreMyTeam'
 import { lineupDecision } from '@/lib/core-app/lineupDecision'
 import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
 import { summariseLineupCheck, type LineupCheck, type LineupCheckItem } from '@/lib/core-app/lineupCheck'
@@ -676,6 +680,26 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
             >
               {m.byeTag}
             </span>
+          ) : noGameBadge(player.noGamePeriod) ? (
+            /*
+             * NBA / NHL / MLB: his team's slate for the period was read and holds no game — an off day in
+             * a daily-lineup league, an idle week in a weekly one. A bye's class, because it is the same
+             * fact for the period (a starter here scores nothing); `data-kind` lets the redraft sheet tell
+             * the two apart. Never shown when the slate was not read (myTeamDailySport.ts).
+             */
+            <span
+              className="af-mt-bye"
+              data-kind={noGameBadge(player.noGamePeriod)}
+              data-testid="my-team-no-game"
+              title={coreUiCopy(
+                player.noGamePeriod === 'day'
+                  ? 'His team has no game today. A starter with no game scores nothing for the day.'
+                  : 'His team has no games this week. A starter with no games scores nothing this week.',
+                language,
+              )}
+            >
+              {coreUiCopy(player.noGamePeriod === 'day' ? 'Off day' : 'No games', language)}
+            </span>
           ) : null}
         </div>
         <div className="af-mt-player-meta">
@@ -700,34 +724,7 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
   )
 }
 
-/**
- * The designation, in the shorthand managers actually use.
- *
- * THE FULL WORDS WERE THE WIDEST THING ON THE ROW. "NO DESIGNATION" is fourteen
- * characters carrying one bit of information, and it sat mid-row pushing every
- * number around it. Nobody says "questionable" out loud.
- *
- * The full word survives as the title and the aria-label, so nothing is lost
- * for anyone who does not know the shorthand or is using a screen reader.
- */
-function abbreviate(status: string): { short: string; tone: string; full: string } {
-  const t = status.trim().toLowerCase()
-  if (t.includes('did not practice') || t === 'dnp') return { short: 'DNP', tone: 'warn', full: status }
-  if (t.includes('injured reserve') || t === 'ir') return { short: 'IR', tone: 'bad', full: status }
-  if (t.includes('suspend')) return { short: 'SUS', tone: 'bad', full: status }
-  if (t.includes('pup')) return { short: 'PUP', tone: 'bad', full: status }
-  if (t.includes('doubt')) return { short: 'D', tone: 'bad', full: status }
-  if (t.includes('question')) return { short: 'Q', tone: 'warn', full: status }
-  if (t.includes('out')) return { short: 'O', tone: 'bad', full: status }
-  if (t.includes('probable')) return { short: 'P', tone: 'ok', full: status }
-  /* ⚠ BEFORE 'active', WHICH IT CONTAINS. "Inactive" used to fall through to the
-     line below and render as a green H for Healthy. */
-  if (t.includes('inactive')) return { short: 'INA', tone: 'bad', full: status }
-  if (t.includes('active') || t.includes('healthy')) return { short: 'H', tone: 'ok', full: 'Healthy' }
-  /* An unfamiliar designation is shown as-is rather than given an invented
-     letter, because a wrong abbreviation is worse than a long one. */
-  return { short: status.slice(0, 3).toUpperCase(), tone: 'none', full: status }
-}
+/* The designation's shorthand moved to lib/core-app/myTeamStatusShorthand.ts (tested there). */
 
 function StatusChip({ status }: { status: string | null }) {
   const { language } = useOptionalLanguage()
@@ -743,7 +740,7 @@ function StatusChip({ status }: { status: string | null }) {
       </span>
     )
   }
-  const { short, tone, full: provider } = abbreviate(status)
+  const { short, tone, full: provider } = statusShorthand(status)
   const full = messagesFor(myTeamScreenMessages, language).statusFull(short, provider)
   return (
     <span className="af-mt-status" data-tone={tone} title={full} aria-label={full}>
@@ -1241,8 +1238,11 @@ function SlotRow({
   anchor,
   automatic,
   sourceHref,
+  sport,
 }: {
   slot: LineupSlot
+  /** The league's sport, for the redraft position chip (an empty slot has no player to read it from). */
+  sport?: string | null
   automatic?: boolean
   sourceHref?: string
   anchor?: string
@@ -1260,7 +1260,11 @@ function SlotRow({
       wearing a name.
     */
     <li id={anchor} className="af-mt-row" data-empty={slot.empty} data-bye={slot.player?.onBye === true} data-game={slot.player?.gameDay?.state}>
-      <span className="af-mt-slot af-num" data-pos={posGroup(slot.slotLabel)}>
+      <span
+        className="af-mt-slot af-num"
+        data-pos={posGroup(slot.slotLabel)}
+        data-rd-pos={redraftCorePosTone(slot.player?.sport ?? sport, slot.slotLabel) ?? undefined}
+      >
         {slot.slotLabel}
       </span>
 
@@ -1335,6 +1339,7 @@ function BenchRow({
       <span
         className="af-mt-slot af-num"
         data-pos={posGroup(player.position ?? slotLabel)}
+        data-rd-pos={redraftCorePosTone(player.sport, player.position ?? slotLabel) ?? undefined}
       >
         {slotLabel}
       </span>
@@ -1484,6 +1489,30 @@ const COMPARE_KEY = 'af-mt-compare'
  * time — and read after mount, because the server cannot see it and first paint must match.
  * No button at all when there is nothing to compare against.
  */
+/**
+ * The period this lineup was priced for, when the daily-sport outlook priced one: "Today · Thu, Oct 30"
+ * in a daily-lineup league, "Week 5 slate" in a weekly NBA / NHL / MLB one. One day, not a picker —
+ * the loader prices one period and no other day reaches this page (redraftCoreMyTeam.ts).
+ */
+function LineupPeriodChip({ period }: { period: MyTeamData['lineupPeriod'] }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const label = lineupPeriodLabel(period, getAppIntlLocale())
+  if (!period || !label) return null
+  return (
+    <span className="af-mt-period" data-kind={period.kind} data-testid="my-team-lineup-period">
+      {period.kind === 'day' ? (
+        <>
+          <span className="af-mt-period-tag">{copy('Today')}</span>
+          <time dateTime={period.day ?? undefined}>{label}</time>
+        </>
+      ) : (
+        <span className="af-mt-period-tag">{copy('Week')} {label}</span>
+      )}
+    </span>
+  )
+}
+
 function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; bestBall: boolean }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -2011,6 +2040,7 @@ export function MyTeam({ data }: MyTeamProps) {
       <section id="af-mt-starters" className="af-frame af-mt-section">
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Starters')}</h2>
+          <LineupPeriodChip period={data.lineupPeriod} />
           <span className="af-mt-section-note">
             {data.nativeLineup ? m.startersNoteNative : bestBall
               ? m.startersNoteBestBall(platform)
@@ -2034,6 +2064,7 @@ export function MyTeam({ data }: MyTeamProps) {
                 platform={platform}
                 leagueId={data.league.id}
                 sourceLink={data.league.sourceLink}
+                sport={data.league.sport}
               />
             ))}
           </ul>

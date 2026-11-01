@@ -26,7 +26,7 @@ export const runtime = "nodejs"
  */
 const createPlayoffChallengeSchema = z.object({
   name: z.string().trim().min(2).max(80).optional(),
-  sport: z.enum(["nba", "nhl", "mlb", "ncaaf", "nba_cup"]),
+  sport: z.enum(["nba", "nhl", "mlb", "ncaaf", "nba_cup", "nfl"]),
   seasonYear: z.coerce.number().int().min(2024).max(2100).optional(),
   isTestMode: z.boolean().optional(),
   visibility: z.enum(["private", "public"]).optional(),
@@ -73,7 +73,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const sportParam = searchParams.get("sport")
   const sport =
-    sportParam === "nba" || sportParam === "nhl" || sportParam === "mlb" || sportParam === "ncaaf" || sportParam === "nba_cup" ? sportParam : null
+    sportParam === "nba" || sportParam === "nhl" || sportParam === "mlb" || sportParam === "ncaaf" || sportParam === "nba_cup" || sportParam === "nfl" ? sportParam : null
 
   try {
     const challenges = await listUserPlayoffChallenges(auth.user.id)

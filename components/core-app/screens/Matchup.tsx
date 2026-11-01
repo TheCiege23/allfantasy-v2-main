@@ -3,6 +3,8 @@
 import '@/components/core-app/af-matchup.css'
 // The refresh control's own styles (`.af-mp-live*`) live with the all-leagues board it came from.
 import '@/components/core-app/af-matchup-pulse.css'
+// Redraft batch B3: the broadcast score bug, scoped to the /core shell's data-format="redraft".
+import '@/components/core-app/af-core-redraft-matchup.css'
 import { MatchupPulseRefresh } from '@/components/core-app/MatchupPulseRefresh'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
 import Link from 'next/link'
@@ -25,6 +27,8 @@ import type {
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { useMessages } from '@/components/i18n/useMessages'
 import { matchupScreenMessages } from '@/lib/core-app/messages/matchupScreen'
+import { playerGameMark } from '@/lib/core-app/redraftCoreScoreBug'
+import { lineupHoles, slotFamily, swingGame, toWin, type WeekState } from '@/lib/core-app/matchupInsights'
 
 /**
  * Screen 5 — Matchup.
@@ -142,6 +146,8 @@ function TeamCard({
   projected,
   afProjected = null,
   leftToPlay = null,
+  liveNow = null,
+  scoreProjected = null,
   align,
 }: {
   team: MatchupTeam
@@ -154,9 +160,17 @@ function TeamCard({
    * starter: a count that silently skipped the ones we could not place would read as "fewer left".
    */
   leftToPlay?: number | null
+  /** Starters whose game is on right now — live weeks only, and only when it is known for every one. */
+  liveNow?: number | null
+  /**
+   * The projected final UNDER a scored total — live weeks only. Labelled "proj" and never in the big
+   * number, which is the score.
+   */
+  scoreProjected?: number | null
   align: 'left' | 'right'
 }) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(matchupScreenMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null)
   const showing = points ?? projected
@@ -189,10 +203,21 @@ function TeamCard({
             AF {afProjected.toFixed(1)}
           </span>
         ) : null}
-        {leftToPlay != null ? (
-          <span className="af-mu-left af-num" data-none={leftToPlay === 0 || undefined}>
-            {leftToPlay === 0 ? copy('All played') : `${leftToPlay} ${copy('left to play')}`}
-          </span>
+        {/* The live line under the score: proj · N left to play · N live, as the scoreboard reads it. */}
+        {(points != null && scoreProjected != null) || leftToPlay != null || (liveNow ?? 0) > 0 ? (
+          <div className="af-mu-score-line">
+            {points != null && scoreProjected != null ? (
+              <span className="af-mu-score-proj af-num">{m.scoreProj(copy('proj'), scoreProjected)}</span>
+            ) : null}
+            {leftToPlay != null ? (
+              <span className="af-mu-left af-num" data-none={leftToPlay === 0 || undefined}>
+                {leftToPlay === 0 ? copy('All played') : `${leftToPlay} ${copy('left to play')}`}
+              </span>
+            ) : null}
+            {liveNow != null && liveNow > 0 ? (
+              <span className="af-mu-live-n af-num">{m.liveCount(liveNow)}</span>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>
@@ -363,6 +388,7 @@ function PlayerHalf({
   edge?: SlotEdge | null
 }) {
   const { language } = useOptionalLanguage()
+  const m = useMessages(matchupScreenMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
   const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null)
@@ -398,7 +424,14 @@ function PlayerHalf({
   const value = live ? (notYetPlayed ? null : cell.actual) : cell.projected
 
   return (
-    <div className="af-mu-half" data-align={align} data-state="player" data-edge={edge ?? undefined}>
+    <div
+      className="af-mu-half"
+      data-align={align}
+      data-state="player"
+      data-edge={edge ?? undefined}
+      /* Live boards only: whose game is on, still to come, or over (the redraft bug tints by it). */
+      data-gs={playerGameMark(cell, live) ?? undefined}
+    >
       <span className="af-mu-portrait">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -450,12 +483,26 @@ function PlayerHalf({
             : `id ${cell.playerId}`}
         </div>
         {/*
+          His game's state as a chip — live boards only. A starter ruled out or on bye is `final` in
+          the game-state read, but he never played; the BYE / OUT flag beside his number says so, and a
+          FINAL chip over it would say the opposite. A kickoff is the game line below, styled the same.
+        */}
+        {live && !cell.unavailable && (cell.gameState === 'live' || cell.gameState === 'final') ? (
+          <div className="af-mu-half-state">
+            <span className="af-mu-chip af-num" data-state={cell.gameState}>
+              {cell.gameState === 'live' ? m.chipLive : m.chipFinal}
+            </span>
+          </div>
+        ) : null}
+        {/*
           When and against whom — for a starter whose game is still to come. Once he has played, the
           number beside him is the story; before, "Sun 1:00 PM @ BUF" is what a manager checks.
         */}
         {(cell.gameState === 'upcoming' || (!live && cell.gameState !== 'final')) && (cell.kickoff || cell.opponentClub) && !cell.unavailable ? (
           <div className="af-mu-half-game">
-            {cell.kickoff ? <Kickoff iso={cell.kickoff} /> : null}
+            {/* The kickoff is the "upcoming" state chip (af-matchup.css styles the <time>), so it only
+              paints once the browser has named it — no empty pill before hydration. */}
+          {cell.kickoff ? <Kickoff iso={cell.kickoff} /> : null}
             {cell.opponentClub ? (
               <span>
                 {cell.kickoff ? ' ' : ''}
@@ -489,6 +536,16 @@ function PlayerHalf({
             aria-label={copy(cell.gameState === 'live' ? 'Playing now' : 'Yet to play')}
             title={copy(cell.gameState === 'live' ? 'Playing now' : 'Yet to play')}
           />
+        ) : null}
+        {/*
+          A starter whose game is over, on a live board — the third state beside the two markers
+          above. Redraft only: af-core-redraft-matchup.css hides it everywhere else, so no other
+          league's board changes.
+        */}
+        {playerGameMark(cell, live) === 'final' ? (
+          <span className="af-mu-rd-final af-num" role="img" aria-label={copy('Final')} title={copy('Final')}>
+            F
+          </span>
         ) : null}
         {cell.unavailable ? (
           <span
@@ -651,6 +708,11 @@ function LineupBoard({ data }: { data: MatchupData }) {
         <p className="af-mu-gs-key">
           <span><span className="af-mu-gs" data-state="live" aria-hidden /> {copy('playing now')}</span>
           <span><span className="af-mu-gs" data-state="upcoming" aria-hidden /> {copy('yet to play')}</span>
+          {slots.some((s) => [s.you, s.opponent].some((c) => playerGameMark(c, live) === 'final')) ? (
+            <span className="af-mu-rd-only">
+              <span className="af-mu-rd-final af-num" aria-hidden>F</span> {copy('final')}
+            </span>
+          ) : null}
         </p>
       ) : null}
       {data.league.bestBall ? <p className="af-mu-note">{copy('Best Ball scores your eligible full roster automatically. This board shows provider-listed starters; eligible bench players can also contribute.')}</p> : null}
@@ -687,7 +749,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
           return (
             <div className="af-mu-board-row" role="row" key={`${slot.slotLabel}-${i}`} data-edge={edge?.you}>
               <PlayerHalf cell={slot.you} align="left" live={live} edge={edge?.you ?? null} />
-              <span className="af-mu-slot" role="cell">
+              <span className="af-mu-slot" role="cell" data-pos={slotFamily(data.league.sport, slot.slotLabel) ?? undefined}>
                 {slot.slotLabel}
               </span>
               <PlayerHalf cell={slot.opponent} align="right" live={live} edge={edge?.opponent ?? null} />
@@ -727,6 +789,70 @@ function LineupBoard({ data }: { data: MatchupData }) {
         </p>
       ) : null}
     </>
+  )
+}
+
+/**
+ * Swing game · lineup check · to win — the redesign's three cards under the scoreboard.
+ *
+ * 🛑 EACH CARD IS DRAWN ONLY WHEN THE STORED DATA ANSWERS IT, and the row is absent when none is
+ * (`lib/core-app/matchupInsights.ts` owns the rules). The design's third card, "left on the bench",
+ * is not here at all: the matchup loader carries no bench, and a bench total we did not measure is
+ * the one number this screen must not print. The lineup check stands in its slot because the
+ * starters CAN answer it — who in your lineup is certain to score nothing.
+ */
+function InsightCards({
+  data,
+  weekState,
+  scored,
+}: {
+  data: MatchupData
+  weekState: WeekState
+  scored: { you: number; opponent: number } | null
+}) {
+  const m = useMessages(matchupScreenMessages)
+  const swing = swingGame(data, weekState)
+  const holes = lineupHoles(data, weekState)
+  const win = toWin(data, weekState, scored)
+  if (!swing && holes.length === 0 && !win) return null
+  return (
+    <section className="af-mu-insights" aria-label={m.insightsLabel}>
+      {swing ? (
+        <div className="af-mu-insight" data-kind="swing">
+          <h2 className="af-mu-insight-label">{m.swingLabel}</h2>
+          <p className="af-mu-insight-title af-num">
+            {swing.label}
+            {swing.live ? (
+              <> · {m.swingOnNow}</>
+            ) : swing.kickoff ? (
+              <>
+                {' · '}
+                <Kickoff iso={swing.kickoff} />
+              </>
+            ) : null}
+          </p>
+          <p className="af-mu-insight-body">{m.swingBody(swing.yours, swing.theirs, swing.inGame, swing.remaining)}</p>
+        </div>
+      ) : null}
+      {holes.length > 0 ? (
+        <div className="af-mu-insight" data-kind="lineup">
+          <h2 className="af-mu-insight-label">{m.lineupLabel}</h2>
+          <p className="af-mu-insight-title">{m.lineupTitle(holes.length, holes[0].name, holes[0].slot)}</p>
+          <p className="af-mu-insight-body">
+            {holes.map((h) => m.lineupItem(h.name, h.slot, h.reason)).join(' · ')}. {m.lineupFix(holes.length)}
+          </p>
+        </div>
+      ) : null}
+      {win ? (
+        <div className="af-mu-insight" data-kind="to-win">
+          <h2 className="af-mu-insight-label">{m.toWinLabel}</h2>
+          <p className="af-mu-insight-title af-num">{win.needed > 0 ? m.toWinNeed(win.needed) : m.toWinAhead}</p>
+          <p className="af-mu-insight-body">
+            {m.toWinBody(win.needed, win.theirProjected, win.yourScore, win.yourLeft, win.yourLeftProjected)}
+          </p>
+        </div>
+      ) : null}
+    </section>
   )
 }
 
@@ -772,7 +898,7 @@ export function Matchup({ data }: MatchupProps) {
   const afTotals = data.lineups.available
     ? { you: afEngineColumnTotal(data.lineups.data, 'you'), opponent: afEngineColumnTotal(data.lineups.data, 'opponent') }
     : null
-  const weekState: 'final' | 'live' | 'upcoming' = !data.week.available
+  const weekState: WeekState = !data.week.available
     ? 'upcoming'
     : data.week.data.isFinal
       ? 'final'
@@ -784,6 +910,9 @@ export function Matchup({ data }: MatchupProps) {
   const bySide = data.starterCountsBySide ?? null
   const yourLeft = weekState === 'live' ? leftFor(bySide?.you) : null
   const theirLeft = weekState === 'live' ? leftFor(bySide?.opponent) : null
+  /* …and how many of them are on the field right now, under the same "known for every starter" rule. */
+  const liveFor = (side: { live: number; unknown: number } | undefined) =>
+    weekState === 'live' && side && side.unknown === 0 ? side.live : null
   /*
    * Can anything on this page move within seconds? A starter's game in progress — the same test the
    * all-leagues board applies (`MatchupPulse.liveNow`).
@@ -825,7 +954,7 @@ export function Matchup({ data }: MatchupProps) {
       through LineupBoard and both PlayerHalf columns.
     */
     <PlayerCardLeagueScope leagueId={data.league.id}>
-    <div className="af-mu">
+    <div className="af-mu" data-week={weekState}>
       {data.teams.available ? (
         <StickyScore
           target={bannerRef}
@@ -1012,6 +1141,8 @@ export function Matchup({ data }: MatchupProps) {
               projected={projected?.you ?? null}
               afProjected={afTotals?.you ?? null}
               leftToPlay={yourLeft}
+              liveNow={liveFor(bySide?.you)}
+              scoreProjected={weekState === 'live' ? projected?.you ?? null : null}
               align="left"
             />
 
@@ -1102,6 +1233,8 @@ export function Matchup({ data }: MatchupProps) {
               projected={projected?.opponent ?? null}
               afProjected={afTotals?.opponent ?? null}
               leftToPlay={theirLeft}
+              liveNow={liveFor(bySide?.opponent)}
+              scoreProjected={weekState === 'live' ? projected?.opponent ?? null : null}
               align="right"
             />
 
@@ -1123,6 +1256,9 @@ export function Matchup({ data }: MatchupProps) {
           <p className="af-mu-basis" data-testid="matchup-extra-matchup">{data.extraMatchup.line}</p>
         ) : null}
       </section>
+
+      {/* ── What the week turns on: three cards, each only when the data answers it ── */}
+      <InsightCards data={data} weekState={weekState} scored={scored} />
 
       {/* ── Per-player scoring ──────────────────────────────────────── */}
       <section className="af-frame af-mu-section">

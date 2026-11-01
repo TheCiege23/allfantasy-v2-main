@@ -81,6 +81,8 @@ export interface YahooImportScheduleWeek {
     teamKey2: string
     points1?: number
     points2?: number
+    categories1?: Record<string, number>
+    categories2?: Record<string, number>
   }>
 }
 

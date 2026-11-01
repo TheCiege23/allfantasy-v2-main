@@ -51,6 +51,7 @@ import {
 } from '@/lib/decision-os/recommendations'
 import type { ManagerIntelligencePayload } from '@/lib/decision-os/dashboard-intelligence'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { rdDeckAttrs, useRedraftDeck } from '@/components/decide/redraftDeck'
 import './broadcast-deck.css'
 
 // ── Local wire types (structural match for /api/league/trades-panel JSON) ────
@@ -145,6 +146,7 @@ export function DecideHome({
   onOpenTab,
 }: DecideHomeProps) {
   const { t, language } = useOptionalLanguage()
+  const rd = useRedraftDeck(league)
   const [trades, setTrades] = useState<PanelTrade[] | null>(null)
   const [verdictContext, setVerdictContext] = useState<VerdictContext | null>(null)
   const [tradesLoading, setTradesLoading] = useState(true)
@@ -276,7 +278,7 @@ export function DecideHome({
   const isLoading = tradesLoading || intelLoading
 
   return (
-    <div className="bdx bdx-home" data-testid="decide-home">
+    <div className="bdx bdx-home" data-testid="decide-home" {...rdDeckAttrs(rd)}>
       {/* ── This week: the clocks the week runs on, first because they are the ones that move ── */}
       <ThisWeekStrip leagueId={league.id} currentWeek={league.currentWeek ?? null} onOpenTab={onOpenTab} />
 

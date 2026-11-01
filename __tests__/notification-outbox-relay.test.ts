@@ -103,6 +103,33 @@ beforeEach(() => {
 })
 
 describe('notification outbox relay', () => {
+  it('drops a queued bracket alert after its pool opt-in is withdrawn', async () => {
+    settingsProfile.mockResolvedValue({ notificationPreferences: { bracketCoach: { pool: { enabled: false } } } })
+    stageRows([row({ channel: 'push', eventType: 'bracket_personal_update', metadata: { notificationCategory: 'bracket_updates', challengeId: 'pool', bracketAlertKinds: ['missing'], spoilerSafe: true } })])
+    const result = await relayNotificationOutbox()
+    expect(result.skipped).toBe(1)
+    expect(sendPushToUser).not.toHaveBeenCalled()
+    expect(writeback().lastError).toContain('bracket alerts muted')
+  })
+
+  it('drops a queued result when the user later hides spoilers', async () => {
+    settingsProfile.mockResolvedValue({ notificationPreferences: { bracketCoach: { pool: { enabled: true, spoilerSafe: true } } } })
+    stageRows([row({ eventType: 'bracket_personal_update', metadata: { notificationCategory: 'bracket_updates', challengeId: 'pool', bracketAlertKinds: ['result'], spoilerSafe: false } })])
+    const result = await relayNotificationOutbox()
+    expect(result.skipped).toBe(1)
+    expect(sendNotificationEmail).not.toHaveBeenCalled()
+    expect(writeback().lastError).toContain('spoiler preference changed')
+  })
+
+  it('keeps the global bracket channel gate after the pool opts in', async () => {
+    settingsProfile.mockResolvedValue({ notificationPreferences: { globalEnabled: false, bracketCoach: { pool: { enabled: true } } } })
+    stageRows([row({ channel: 'push', eventType: 'bracket_personal_update', metadata: { notificationCategory: 'bracket_updates', challengeId: 'pool', bracketAlertKinds: ['rank'], spoilerSafe: true } })])
+    const result = await relayNotificationOutbox()
+    expect(result.skipped).toBe(1)
+    expect(sendPushToUser).not.toHaveBeenCalled()
+    expect(writeback().lastError).toContain('notifications muted')
+  })
+
   it('retries a partial device failure instead of losing the failed phone', async () => {
     stageRows([row({ channel: 'push' })])
     sendPushToUser.mockResolvedValue([{ ok: true }, { ok: false, error: '503' }])

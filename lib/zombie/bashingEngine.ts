@@ -121,11 +121,18 @@ export async function detectAndProcessBashings(
 
     if (bt === 'survivor_bashes_whisperer') {
       const wr = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId } })
-      if (wr) {
-        const left = Math.max(0, (wr.ambushesRemaining ?? 0) - 1)
+      if (wr?.userId === loseOwner) {
         await prisma.whispererRecord.update({
           where: { id: wr.id },
-          data: { ambushesRemaining: left },
+          data: { ambushesRemaining: Math.max(0, wr.ambushesRemaining - 1) },
+        })
+      } else {
+        const co = await prisma.zombieCoWhisperer.findUnique({
+          where: { zombieLeagueId_userId: { zombieLeagueId, userId: loseOwner } },
+        })
+        if (co) await prisma.zombieCoWhisperer.update({
+          where: { id: co.id },
+          data: { ambushesRemaining: Math.max(0, co.ambushesRemaining - 1) },
         })
       }
       await notifyCommissioner(leagueId, 'bashing_occurred', 'Survivor bashed Whisperer', 'High-impact bash', {

@@ -9,6 +9,7 @@ vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotificat
  * swap cases set their own answer.
  */
 vi.mock('@/lib/notifications/lineupImpact', () => ({ resolveLineupImpacts: h.impacts }))
+vi.mock('@/lib/roster/LineupTemplateValidation', () => ({ getNormalizedLineupSections: (data: { lineup_sections?: { starters?: unknown[] } }) => ({ starters: data?.lineup_sections?.starters ?? [] }) }))
 import { lineupImpactKind } from '@/lib/notifications/lineupImpactCopy'
 import { notifySyncedInjuries, importedPlayerIsStarting } from '@/lib/engagement-alerts/injuryAlerts'
 beforeEach(() => {
@@ -132,7 +133,7 @@ it('names the player and says they are still in the starting lineup', async () =
 })
 
 describe('only lineup changes are pushed and emailed (owner, 2026-10-25)', () => {
- it('a starter ruled out gets push + email with the options; a bench player hurt is the bell only and never in the digest', async () => {
+ it('a starter ruled out gets lineup options; a bench injury gets push and bell', async () => {
   h.impacts.mockResolvedValueOnce([{ leagueId: 'league', leagueName: 'Dynasty', kind: 'starter_out', startName: 'Backup Guy', benchName: null, delta: null, freeAgent: null, fixHref: '/fix' }])
   h.injuries.mockResolvedValue([{ playerName: 'Player', team: 'Team', status: 'Out', source: 'espn', date: new Date() }])
   await notifySyncedInjuries('NFL')
@@ -144,7 +145,7 @@ describe('only lineup changes are pushed and emailed (owner, 2026-10-25)', () =>
   h.dispatch.mockClear(); h.native.mockResolvedValue([])
   h.injuries.mockResolvedValue([{ playerName: 'Bench Guy', team: 'Team', status: 'Out', source: 'espn', date: new Date() }])
   await notifySyncedInjuries('NFL')
-  expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ sms: true, email: true, push: true })
+  expect(h.dispatch.mock.calls[0][0].skipChannels).toEqual({ sms: true, email: true })
   expect(h.dispatch.mock.calls[0][0].meta.playerNews).toMatchObject({ delivery: 'bell', digest: false, starter: false })
  })
  it('a bench player back healthy who out-projects a starter is told who to swap', async () => {

@@ -299,7 +299,8 @@ describe('⚠ loading an offer into the builder analyses THAT offer', () => {
      * receives a handler, and the propose panel knows how to send to the counter
      * route. Either one alone can go green while the feature is unreachable.
      */
-    expect(CENTER).toMatch(/<TradeInbox[\s\S]{0,240}?onCounter=\{startCounter\}/)
+    // The trade center panel (TradeCenterPanel) now holds the counter control the timeline used to.
+    expect(CENTER).toMatch(/<(?:TradeInbox|TradeCenterPanel)[\s\S]{0,240}?onCounter=\{startCounter\}/)
     expect(CENTER).toContain('counteringTradeId={countering?.tradeId ?? null}')
     expect(PROPOSE).toContain('/counter')
   })

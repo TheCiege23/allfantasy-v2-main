@@ -2,7 +2,7 @@ import type { SupportedSport } from "@/lib/sport-scope"
 
 type PlayoffChallengeRef = {
   challengeId: string
-  sport: "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup"
+  sport: "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup" | "nfl"
 }
 
 type MyPoolCardInput = {
@@ -21,7 +21,7 @@ export function resolvePlayoffCardHref(input: {
     const normalizedSport = String(input?.sport ?? "").toLowerCase()
     if (!normalizedSport) return "/brackets"
 
-    if (["nba", "nhl", "mlb", "ncaaf", "nba_cup"].includes(normalizedSport)) {
+    if (["nba", "nhl", "mlb", "ncaaf", "nba_cup", "nfl"].includes(normalizedSport)) {
       return `/brackets/leagues/new?sport=${normalizedSport}&challengeType=playoff_challenge`
     }
 

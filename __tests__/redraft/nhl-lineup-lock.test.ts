@@ -170,10 +170,10 @@ describe('NBA lineup lock', () => {
   })
 
   it('[control] a sport with no week window names the sports that DO lock, NBA among them', async () => {
-    // Was MLB until MLB joined DATE_WINDOWED_SPORTS (2026-09-28). Soccer is date-windowed too, but it is
-    // in LOCK_NOT_WIRED_SPORTS: its gameweeks are not the lock's seven-day windows, so it stays unlocked.
+    // Soccer now uses its verified gameweek schedule and has its own lock coverage.
+    // An unsupported sport still fails open and names the sports with lock support.
     const { warnings } = await hydrateRedraftLineupLocks(schedule(NBA_GAMES), {
-      sport: 'SOCCER',
+      sport: 'PGA',
       season: 2026,
       week: 1,
       rosterId: 'r1',
@@ -183,9 +183,7 @@ describe('NBA lineup lock', () => {
     })
     expect(warnings[0]).toContain('not locked')
     expect(warnings[0]).toContain('NBA')
-    // It must not name soccer among the sports it locks while refusing to lock soccer.
-    expect(warnings[0]).not.toMatch(/SOCCER only/)
-    expect(warnings[0]).not.toMatch(/, SOCCER/)
+    expect(warnings[0]).toContain('PGA')
   })
 })
 

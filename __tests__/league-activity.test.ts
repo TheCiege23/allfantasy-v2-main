@@ -220,8 +220,33 @@ describe('getLeagueActivity', () => {
     // still reaches the screen as `player zz` rather than vanishing from the
     // sentence, and every other field is an honest null rather than a guess.
     expect(out!.items[0].adds).toEqual([
-      { id: 'zz', label: 'player zz', name: null, position: null, team: null, imageUrl: null },
+      { id: 'zz', label: 'player zz', name: null, position: null, team: null, imageUrl: null, to: null },
     ])
+  })
+
+  /*
+   * A trade card says who got whom (league chat, 2026-10-31). Sleeper's `adds` maps each player to the
+   * roster that received him; that roster is a team here by `externalId`. Anything else is unknown.
+   */
+  it('names the team each added player went to, and says nothing when it cannot', async () => {
+    activityFindMany.mockResolvedValue([
+      { id: 't1', activityType: 'trade', occurredAt: T('2026-10-30T10:00:00Z'), rosterId: null,
+        payload: { source: 'sleeper_transaction', adds: { p1: 1, p2: 2, zz: 9 }, drops: { p1: 2, p2: 1 } },
+        normalized: { managerKeys: ['sleeperU1', 'sleeperU2'] } },
+      { id: 'w1', activityType: 'waiver', occurredAt: T('2026-10-29T10:00:00Z'), rosterId: null,
+        payload: { adds: ['p1'] }, normalized: { managerKeys: ['sleeperU1'] } },
+    ])
+    const out = await getLeagueActivity(ARGS)
+    const trade = out!.items.find((i) => i.id === 't1')!
+    expect(trade.adds.map((a) => [a.label.split(' (')[0], a.to])).toEqual([
+      ['Darren Waller', 'Yours'],
+      ['Tyjae Spears', 'Theirs'],
+      // Roster 9 is no team in this league: unknown, not the row's first manager.
+      ['player zz', null],
+    ])
+    expect(trade.involvedTeams).toEqual(['Yours', 'Theirs'])
+    // An array of adds carries no roster: unknown.
+    expect(out!.items.find((i) => i.id === 'w1')!.adds[0].to).toBeNull()
   })
 
   it('⚠ never resolves an ESPN or Yahoo id as a Sleeper id — the numbers collide', async () => {
@@ -240,7 +265,7 @@ describe('getLeagueActivity', () => {
     ])
     const out = await getLeagueActivity(ARGS)
     const by = (id: string) => out!.items.find((i) => i.id === id)!
-    expect(by('e1').adds).toEqual([{ id: '4046', label: 'ESPN player 4046', name: null, position: null, team: null, imageUrl: null }])
+    expect(by('e1').adds).toEqual([{ id: '4046', label: 'ESPN player 4046', name: null, position: null, team: null, imageUrl: null, to: 'Yours' }])
     expect(by('y1').adds[0].label).toBe('Yahoo player 461.p.100')
     expect(by('s1').adds[0].label).toContain('Tyjae Spears')
     expect(by('legacy').adds[0].label).toContain('Darren Waller')

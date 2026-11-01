@@ -43,21 +43,21 @@ export function AskChimmyCard({ leagueId }: { leagueId: string }) {
   }
 
   return (
-    <section className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-4" data-testid="ask-chimmy-card">
-      <h2 className="text-[13px] font-bold uppercase tracking-wider text-violet-100">Ask Chimmy</h2>
+    <section className="sv-chimmy-card rounded-xl border p-4" data-testid="ask-chimmy-card">
+      <h2 className="sv-kicker text-[13px]">Ask Chimmy</h2>
       <p className="mt-1 text-[12px] text-white/60">Rules for this league, answered privately.</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {ASK_CHIMMY_STARTERS.map(starter => (
           <button key={starter} type="button" disabled={busy} onClick={() => void ask(starter)}
-            className="min-h-[36px] rounded-full border border-violet-300/30 px-3 text-[12px] text-violet-100 disabled:opacity-40">
+            className="min-h-[36px] rounded-full border border-[rgba(240,163,94,0.34)] px-3 text-[12px] text-[#f6d3ae] hover:bg-[rgba(240,163,94,0.13)] disabled:opacity-40">
             {starter}
           </button>
         ))}
       </div>
       <form className="mt-3 flex gap-2" onSubmit={event => { event.preventDefault(); void ask(question) }}>
         <input aria-label="Ask Chimmy a question" value={question} onChange={event => setQuestion(event.target.value)} maxLength={500}
-          placeholder="Ask about voting, idols, the merge…" className="min-h-[44px] flex-1 rounded-lg border border-white/15 bg-black/30 px-3 text-[13px] text-white" />
-        <button type="submit" disabled={busy || !question.trim()} className="min-h-[44px] rounded-lg bg-violet-500 px-4 text-[13px] font-semibold text-white disabled:opacity-40">
+          placeholder="Ask about voting, idols, the merge…" className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-white/15 bg-black/30 px-3 text-[13px] text-white placeholder:text-white/40 focus:border-[rgba(240,163,94,0.55)] focus:outline-none" />
+        <button type="submit" disabled={busy || !question.trim()} className="min-h-[44px] rounded-lg bg-[var(--survivor-torch,#f0a35e)] px-4 text-[13px] font-semibold text-[#1a0f05] disabled:opacity-40">
           {busy ? '…' : 'Ask'}
         </button>
       </form>

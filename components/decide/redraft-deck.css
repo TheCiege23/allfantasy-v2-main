@@ -1,0 +1,225 @@
+/* Redraft broadcast deck (batch A3, 2026-10-31): Decision OS, Live Intel, Legacy and the Commissioner
+ * tab, in the season-race identity (docs/design/redraft-identity.md). Imported by
+ * components/decide/redraftDeck.tsx, which every one of those screens loads.
+ *
+ * ⚠ EVERY RULE IS SCOPED TO THE REDRAFT WORKSPACE: `.nl-workspace[data-format=redraft][data-sport]`.
+ * broadcast-deck.css is shared with /core (WaiverIntel's `.bdx-embed-core` on the Waivers screen) and
+ * with every non-redraft league; none of them carries those attributes, so none of them sees a rule
+ * here. The TSX gate (`useRedraftDeck`) and this scope agree on purpose.
+ *
+ * ⚠ TOKENS ONLY. The deck's own palette is a set of `--bdx-*` custom properties (dark navy, fixed);
+ * here they are re-pointed at /core's palette (which switches with light / dark / AF) and the sport's
+ * `--rd-*` tokens, exactly as `.bdx-embed-core` already does for /core. Hardcoded colours that the
+ * deck wrote outside its tokens (severity washes, the gradient call text, the "me" row) are restated
+ * from tokens below. No sport hex lives in this file.
+ *
+ * ⚠ THE COMMISSIONER TAB NESTS ITS OWN `.af-core`. CommissionerOperationsWorkspace's root is
+ * `.af-core.af-league-admin`, and `.af-core` (re)declares /core's default `--accent`, so inside it the
+ * sport re-pointing from redraft-identity.css was lost and every accent read the default cyan. The
+ * block below restates the accent names on that root.
+ *
+ * ⚠ NO NESTED @media. One container block and one phone block, both top-level, at the end
+ * (CLAUDE.md: a 560px block inserted inside a 780px one carried four rules out of their band). */
+
+/* ── Deck tokens → /core palette + sport ──────────────────────────────────────────────────────────── */
+.nl-workspace[data-format=redraft][data-sport] .bdx {
+  --bdx-ground: var(--bg);
+  --bdx-panel: var(--surface);
+  --bdx-panel-deep: var(--surface2);
+  --bdx-border: var(--line2);
+  --bdx-border-soft: var(--line);
+  --bdx-ink: var(--text);
+  --bdx-ink-mid: var(--text2);
+  --bdx-ink-dim: var(--muted);
+  --bdx-ink-faint: var(--faint);
+  --bdx-ink-ghost: var(--faint);
+  --bdx-grad: var(--rd-accent);
+  --bdx-ok: var(--good);
+  --bdx-warn: var(--warn);
+  --bdx-crit: var(--bad);
+  --bdx-info: var(--rd-accent-text);
+  --bdx-me: var(--rd-accent-text);
+  /* The workspace already paints the ground, the glow and the sport art; the deck sits on it. */
+  background: transparent;
+  border-radius: 0;
+  padding: 0 0 28px;
+  min-height: 0;
+  color: var(--text);
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+
+/* Display voice: the identity's heavy upright sans, mono labels — not the broadcast italic. */
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-disp { font-style: normal; text-transform: none; font-weight: 850; letter-spacing: -0.015em; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-kick { margin: 0 0 12px; gap: 10px 14px; flex-wrap: wrap; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-kick h2 { font-size: 19px; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-kick h2::after { width: 30px; height: 4px; margin-left: 10px; background: var(--rd-accent); }
+.nl-workspace[data-format=redraft][data-sport] .bdx :is(.bdx-kick .bdx-sub, .bdx-kpi .l, .bdx-week-tile .l, .bdx-panelbox h3, .bdx-side .dir, .bdx-kind, .bdx-champ .yr, .bdx-rail-sec h3, .bdx-stand th) {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* Panels: one card language with the rest of the workspace. */
+.nl-workspace[data-format=redraft][data-sport] .bdx :is(.bdx-kpi, .bdx-card, .bdx-panelbox, .bdx-week-tile, .bdx-champ, .bdx-rail-sec, .bdx-skel) { border-radius: 14px; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-kpi { border-top: 3px solid var(--rd-accent); background: var(--rd-surface-elev, var(--surface)); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-kpi .v { font-style: normal; font-weight: 900; font-size: 30px; letter-spacing: -0.02em; color: var(--text); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-week-tile .v { font-style: normal; font-weight: 850; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-week-tile:hover { border-color: var(--rd-accent-line); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-week-tile:focus-visible { outline-color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-champ .nm { font-weight: 850; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-stand tr.me td { color: var(--text); background: var(--rd-accent-soft); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-pos { background: var(--rd-accent-soft); color: var(--rd-accent-text); }
+
+/* Severity chips: a tint of the chip's own colour, which reads on both grounds (the deck hardcoded a
+   dark wash per severity, which left dark text on a near-black chip in light mode). */
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-sev { font-style: normal; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-sev.ok { background: var(--good-soft); color: var(--good); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-sev.warn { background: var(--warn-soft); color: var(--warn); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-sev.crit { background: var(--bad-soft); color: var(--bad); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-sev.info { background: var(--rd-accent-soft); color: var(--rd-accent-text); }
+
+/* The verdict line: solid status colours instead of pale gradient text (which fell under 2:1 on white). */
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-call { font-style: normal; text-transform: none; font-weight: 850; background: none; -webkit-background-clip: border-box; background-clip: border-box; color: var(--good); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-call.watch { color: var(--warn); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-call.risk { color: var(--bad); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-call.na { color: var(--faint); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-conf .bar { background: var(--rd-track); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-conf .fill { background: var(--rd-accent); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-conf .pct { color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-why li::before { background: var(--rd-accent); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-ev { background: var(--surface2); }
+
+/* Buttons and chips. */
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; border-radius: 10px; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-btn.pri { background: var(--rd-accent); color: var(--rd-accent-ink); font-style: normal; text-transform: none; font-weight: 800; text-decoration: none; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-btn.pri:hover { filter: brightness(1.06); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-btn.sec { border-color: var(--line2); color: var(--text2); background: var(--surface); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-btn.sec:hover { border-color: var(--rd-accent-line); color: var(--text); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-btn:focus-visible { outline: 2px solid var(--rd-accent-text); outline-offset: 2px; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-chip { background: var(--surface2); border-color: var(--line2); color: var(--muted); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-chip.grad { background: var(--rd-accent); color: var(--rd-accent-ink); font-style: normal; }
+
+/* Empty and loading states sit on the card ground, never straight on the art. */
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-empty { background: var(--surface); border-color: var(--line2); border-radius: 14px; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-card .bdx-empty,
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-panelbox .bdx-empty { background: transparent; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-empty .t { color: var(--text); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-empty .m { color: var(--muted); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-empty .missing span { background: var(--surface2); color: var(--muted); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-skel { background: var(--surface); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-skel::after { background: linear-gradient(90deg, transparent, var(--rd-accent-soft), transparent); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .bdx-foot { color: var(--muted); }
+
+/* The redraft empty state for Live Intel / Legacy: a card with the sport line and one way forward. */
+.nl-workspace[data-format=redraft][data-sport] .bdx .rdk-deck-empty {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  max-width: 640px; padding: 22px 24px; border: 1px solid var(--rd-accent-line); border-left: 4px solid var(--rd-accent);
+  background: var(--rd-surface-elev, var(--surface));
+}
+.nl-workspace[data-format=redraft][data-sport] .bdx .rdk-deck-empty .t { font-size: 17px; font-weight: 850; }
+.nl-workspace[data-format=redraft][data-sport] .bdx .rdk-deck-empty .m { font-size: 14px; line-height: 1.55; color: var(--text2); }
+.nl-workspace[data-format=redraft][data-sport] .bdx .rdk-deck-cta { margin-top: 10px; min-height: 44px; padding: 10px 18px; font-size: 14px; }
+
+/* ── Commissioner tab ─────────────────────────────────────────────────────────────────────────────── */
+.nl-workspace[data-format=redraft][data-sport] .af-core.af-league-admin {
+  --accent: var(--rd-accent-text);
+  --accent-ink: var(--rd-accent-ink);
+  --accent-soft: var(--rd-accent-soft);
+  --accent-line: var(--rd-accent-line);
+  background: transparent;
+}
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-header { background: var(--rd-surface-elev, var(--surface)); border-color: var(--rd-accent-line); border-radius: 18px; }
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-header h2 { font-style: normal; font-weight: 900; font-size: 28px; letter-spacing: -0.02em; }
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-eyebrow {
+  display: inline-flex; align-items: center; padding: 5px 11px; border-radius: 999px;
+  background: var(--rd-accent); color: var(--rd-accent-ink);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 11px; font-weight: 700; font-style: normal; letter-spacing: 0.1em;
+}
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin [data-testid='commissioner-league-state'] {
+  background: transparent; color: var(--rd-accent-text); border-color: var(--rd-accent-line);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-section-nav a { border-radius: 999px; justify-content: center; }
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-shortcuts a:hover { border-color: var(--rd-accent-line); color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-section-title { font-weight: 850; }
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-action { border-radius: 16px; }
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-action:enabled:hover { border-color: var(--rd-accent-line); background: var(--rd-surface-elev, var(--surface2)); }
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-action > div > span:first-child { background: var(--rd-accent-soft); color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-action-state { font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 11px; }
+
+/* League health (the approved Commish mock): score ring + bars | checklist + managers. */
+.nl-workspace[data-format=redraft][data-sport] .rdk-health { container: rdk-health / inline-size; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-health-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-health-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-card { min-width: 0; padding: 20px 22px; border-radius: 18px; border: 1px solid var(--line2); background: var(--surface); display: flex; flex-direction: column; gap: 14px; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-score { border-color: var(--rd-accent-line); gap: 18px; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-label { color: var(--faint); font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-card-sub { color: var(--muted); font-size: 13px; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-empty { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-skel { height: 96px; border-radius: 12px; background: var(--surface2); }
+
+.nl-workspace[data-format=redraft][data-sport] .rdk-score-head { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-ring { flex: none; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-ring-track { stroke: var(--rd-track); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-ring-value { stroke: var(--rd-accent); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-score[data-tone='warn'] .rdk-ring-value { stroke: var(--warn); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-score[data-tone='bad'] .rdk-ring-value { stroke: var(--bad); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-ring-num { fill: var(--text); font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif); font-size: 44px; font-weight: 900; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-ring-of { fill: var(--faint); font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 12px; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-score-words { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 160px; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-score-status { font-size: 22px; font-weight: 900; color: var(--text); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-score[data-tone='warn'] .rdk-score-status { color: var(--warn); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-score[data-tone='bad'] .rdk-score-status { color: var(--bad); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-score-line { color: var(--text2); font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-score-conf { color: var(--faint); font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-trend { display: flex; flex-direction: column; gap: 6px; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-trend-line { stroke: var(--rd-accent); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-trend-dot { fill: var(--rd-accent); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-bar-head { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--text); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-bar-head span { font-weight: 700; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-bar-head b { color: var(--text2); font-weight: 700; font-variant-numeric: tabular-nums; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-bar { height: 8px; margin-top: 6px; border-radius: 999px; background: var(--rd-track); overflow: hidden; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-bar span { display: block; height: 100%; border-radius: inherit; background: var(--rd-accent); }
+
+.nl-workspace[data-format=redraft][data-sport] .rdk-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-checks li { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 14px; border-radius: 12px; background: var(--surface2); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-check-mark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; font-weight: 900; font-size: 14px; background: var(--rd-accent-soft); color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-checks li[data-status='todo'] .rdk-check-mark { background: var(--warn-soft); color: var(--warn); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-checks li[data-status='heads_up'] .rdk-check-mark { background: transparent; border: 2px solid var(--rd-accent-line); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-check-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-check-title { font-size: 15px; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-check-detail { font-size: 13px; line-height: 1.45; color: var(--muted); overflow-wrap: anywhere; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-check-meta { flex: none; color: var(--muted); font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 12px; white-space: nowrap; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-check-go { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--rd-accent-line); color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-check-go:hover { background: var(--rd-accent-soft); }
+
+.nl-workspace[data-format=redraft][data-sport] .rdk-mgr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 12px; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-mgr { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface2); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-mgr-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-mgr-avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; background: var(--rd-accent-soft); color: var(--rd-accent-text); font-size: 13px; font-weight: 800; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-mgr-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-mgr-text strong { font-size: 15px; font-weight: 800; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-mgr-issue { font-size: 13px; color: var(--warn); overflow-wrap: anywhere; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-mgr[data-status='inactive'] .rdk-mgr-issue { color: var(--bad); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-mgr-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 0; border-radius: 12px; background: var(--rd-accent); color: var(--rd-accent-ink); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+.nl-workspace[data-format=redraft][data-sport] .rdk-mgr-btn:hover { filter: brightness(1.06); }
+.nl-workspace[data-format=redraft][data-sport] .rdk-mgr-btn:focus-visible { outline: 2px solid var(--rd-accent-text); outline-offset: 2px; }
+
+/* Two columns once the panel itself is wide enough, wherever the shell puts it (the mock's 420 | 1fr). */
+@container rdk-health (min-width: 820px) {
+  .nl-workspace[data-format=redraft][data-sport] .rdk-health-grid { grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); }
+}
+
+@media (max-width: 767px) {
+  .nl-workspace[data-format=redraft][data-sport] .bdx .bdx-kpi .v { font-size: 24px; }
+  .nl-workspace[data-format=redraft][data-sport] .rdk-card { padding: 16px; }
+  .nl-workspace[data-format=redraft][data-sport] .rdk-checks li { padding: 10px 12px; gap: 10px; align-items: flex-start; }
+  .nl-workspace[data-format=redraft][data-sport] .rdk-check-meta { display: none; }
+  .nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-header h2 { font-size: 22px; }
+}

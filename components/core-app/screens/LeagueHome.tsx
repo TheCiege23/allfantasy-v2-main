@@ -21,6 +21,7 @@ import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comm
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 import { ConnectedRoster } from './ConnectedRoster'
+import { RedraftHomeDeck } from './RedraftHomeDeck'
 import { PredictionLeaderboard } from '@/components/core-app/PredictionLeaderboard'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
@@ -29,13 +30,86 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { rivalLastText } from '@/lib/core-app/dashboard3aCopy'
 import { rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
-import { TradeDeadlineCountdownChip } from '@/components/core-app/TradeDeadlineCountdown'
+import { useTradeDeadlineCountdownText } from '@/components/core-app/TradeDeadlineCountdown'
+import { buildHomeKpis } from '@/lib/core-app/homeKpis'
 import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { useMessages } from '@/components/i18n/useMessages'
 import { leagueHomeMessages } from '@/lib/core-app/messages/leagueHome'
+
+/**
+ * "Your season at a glance": record and rank, points for, FAAB left, trade deadline (the redesign's KPI
+ * row). Every tile is built from what the loader already read (lib/core-app/homeKpis.ts) and is absent
+ * when its data is — the row itself is absent when every tile is. The deadline tile ticks with the same
+ * countdown the Trade Center shows.
+ */
+function HomeKpiRow({
+  data,
+  tradeDeadline,
+}: {
+  data: LeagueHomeData
+  tradeDeadline: TradeDeadlineCountdown | null
+}) {
+  const m = useMessages(leagueHomeMessages)
+  const kpis = buildHomeKpis(data)
+  const deadlineText = useTradeDeadlineCountdownText(tradeDeadline)
+  const deadline = tradeDeadline && tradeDeadline.state !== 'none' && deadlineText ? tradeDeadline : null
+  if (!kpis.record && !kpis.pointsFor && !kpis.faab && !deadline) return null
+  const deadlineWeek = deadline && 'deadlineWeek' in deadline ? deadline.deadlineWeek : null
+  return (
+    <section className="af-lh-kpis" aria-label={m.kpisLabel} data-testid="league-home-kpis">
+      {kpis.record ? (
+        <div className="af-card af-lh-kpi" data-kpi="record">
+          <span className="af-label">{m.kpiRecord}</span>
+          <strong className="af-num af-lh-kpi-value">{kpis.record.record}</strong>
+          {kpis.record.rank != null ? (
+            <span className="af-lh-kpi-sub">{m.kpiRankOf(kpis.record.rank, kpis.record.teams)}</span>
+          ) : null}
+        </div>
+      ) : null}
+      {kpis.pointsFor ? (
+        <div className="af-card af-lh-kpi" data-kpi="points-for">
+          <span className="af-label">{m.kpiPointsFor}</span>
+          <strong className="af-num af-lh-kpi-value">{kpis.pointsFor.points.toFixed(1)}</strong>
+          {kpis.pointsFor.vsAverage != null ? (
+            <span className="af-lh-kpi-sub" data-trend={kpis.pointsFor.vsAverage >= 0 ? 'up' : 'down'}>
+              {m.kpiVsAverage(kpis.pointsFor.vsAverage)}
+            </span>
+          ) : kpis.pointsFor.rank != null ? (
+            <span className="af-lh-kpi-sub">{m.kpiRankOf(kpis.pointsFor.rank, kpis.pointsFor.teams)}</span>
+          ) : null}
+        </div>
+      ) : null}
+      {kpis.faab ? (
+        <div className="af-card af-lh-kpi" data-kpi="faab">
+          <span className="af-label">{m.kpiFaab}</span>
+          <strong className="af-num af-lh-kpi-value">${kpis.faab.remaining}</strong>
+          <span className="af-lh-kpi-sub">{m.kpiFaabNote}</span>
+        </div>
+      ) : null}
+      {deadline ? (
+        <Link
+          href={`/core/trades?league=${encodeURIComponent(data.league.id)}`}
+          className="af-card af-lh-kpi af-lh-kpi--link"
+          data-kpi="trade-deadline"
+          data-deadline-state={deadline.state}
+        >
+          <span className="af-label">{m.kpiDeadline}</span>
+          <strong className="af-num af-lh-kpi-value">
+            {deadlineWeek != null ? m.kpiDeadlineWeek(deadlineWeek) : deadlineText}
+          </strong>
+          {deadlineWeek != null ? (
+            <span className="af-lh-kpi-sub" role="status">
+              {deadlineText}
+            </span>
+          ) : null}
+        </Link>
+      ) : null}
+    </section>
+  )
+}
 
 /**
  * Jump to another week.
@@ -487,14 +561,17 @@ export function LeagueHome({
   const platformLabel = league.platform === 'manual' ? copy('your platform') : league.platform
 
   /*
-   * ONE urgent action, not a list — the handoff is explicit. Anything that has
-   * dropped out of the top slot is still reachable from the nav counts, so
-   * nothing is hidden, it is just not competing for the same row.
+   * "Needs your attention": the top THREE issues, most urgent first (the redesign
+   * supersedes the old one-card rule). Three, not all — the rest stay reachable
+   * from the nav counts, so nothing is hidden, it just does not crowd the row.
+   * `urgent` is still the first one; the week summary leads with it.
    */
-  const urgent = issues[0] ?? null
+  const attention = issues.slice(0, 3)
+  const urgent = attention[0] ?? null
+  const kpis = buildHomeKpis(data)
 
   return (
-    <LeagueDisplayPreferences hidden={hiddenSections}><div className="af-lh">
+    <LeagueDisplayPreferences hidden={hiddenSections}><div className="af-lh" data-redraft={data.redraft ? 'true' : undefined}>
       {/* ── League identity ─────────────────────────────────────────── */}
       <header className="af-lh-head">
         <div className="af-lh-ident">
@@ -505,14 +582,11 @@ export function LeagueHome({
                 {league.platform}
               </span>
             )}
-            {league.format ? <span>{league.format}</span> : null}
-            {league.season ? <span className="af-num">{league.season}</span> : null}
-            {tradeDeadline && tradeDeadline.state !== 'none' ? (
-              <Link href={`/core/trades?league=${encodeURIComponent(league.id)}`} className="af-lh-deadline">
-                <TradeDeadlineCountdownChip countdown={tradeDeadline} />
-              </Link>
-            ) : null}
-            {data.yourTeam.available ? (
+            {/* A redraft deck names the format and season in its own chip ("Redraft · 2026"); saying it twice is noise. */}
+            {league.format && !data.redraft ? <span>{league.format}</span> : null}
+            {league.season && !data.redraft ? <span className="af-num">{league.season}</span> : null}
+            {/* Record, rank and the trade deadline live in the KPI row below; the header does not repeat them. */}
+            {data.yourTeam.available && !kpis.record ? (
               <>
                 <span className="af-num">{data.yourTeam.data.record}</span>
                 {data.yourTeam.data.rank != null ? (
@@ -544,6 +618,11 @@ export function LeagueHome({
           </Link>
         </div>
       </header>
+
+      {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
+      {data.redraft ? <RedraftHomeDeck deck={data.redraft} leagueId={league.id} season={league.season} /> : null}
+
+      <HomeKpiRow data={data} tradeDeadline={tradeDeadline} />
 
       {!isNativePlatform(league.platform) ? (
         <ImportedLeagueQuickActions
@@ -637,7 +716,8 @@ export function LeagueHome({
       <LeagueSection id="pairing"><PairedBand pairing={data.pairing} leagueId={league.id} leagueName={league.name} /></LeagueSection>
 
       {/* ── Season timeline ─────────────────────────────────────────── */}
-      <LeagueSection id="timeline"><StatePanel
+      {/* A redraft league's deck above carries the season track instead (same settings, same weeks). */}
+      {data.redraft ? null : <LeagueSection id="timeline"><StatePanel
         title={`${copy('Season timeline')} · ${league.name}`}
         help={
           league.currentWeek != null ? (
@@ -658,7 +738,7 @@ export function LeagueHome({
             ))}
           </ol>
         )}
-      </StatePanel></LeagueSection>
+      </StatePanel></LeagueSection>}
 
       {/* ── Every game in the league ────────────────────────────────── */}
       {/*
@@ -810,27 +890,38 @@ export function LeagueHome({
             than being lost with the panel.
           */}
 
-          {/* The one urgent action */}
-          {urgent ? (
-            <section className="af-card af-issue af-lh-urgent" data-severity={urgent.severity}>
-              <span className="af-lh-urgent-glyph" aria-hidden>
-                {urgent.glyph}
-              </span>
-              <div className="af-lh-urgent-body">
-                <h2 className="af-lh-urgent-title">{urgent.title}</h2>
-                <p className="af-lh-urgent-meta">{urgent.meta}</p>
-              </div>
-              {urgent.action ? (
-                <Link
-                  href={urgent.action.href}
-                  className="af-btn af-lh-urgent-cta"
-                  {...(urgent.action.external
-                    ? { target: '_blank', rel: 'noopener noreferrer' }
-                    : {})}
-                >
-                  {copy(urgent.action.label)}
-                </Link>
-              ) : null}
+          {/* Needs your attention — up to three, each with the verb that fixes it */}
+          {attention.length > 0 ? (
+            <section className="af-lh-attention" aria-labelledby="af-lh-attention-title" data-testid="league-home-attention">
+              <h2 id="af-lh-attention-title" className="af-label af-lh-attention-title">
+                {m.attentionTitle}
+              </h2>
+              <ul className="af-lh-attention-list">
+                {attention.map((issue, i) => (
+                  <li
+                    key={`${issue.title}-${i}`}
+                    className={`af-card af-issue af-lh-urgent${i > 0 ? ' af-lh-urgent--minor' : ''}`}
+                    data-severity={issue.severity}
+                  >
+                    <span className="af-lh-urgent-glyph" aria-hidden>
+                      {issue.glyph}
+                    </span>
+                    <div className="af-lh-urgent-body">
+                      <h3 className="af-lh-urgent-title">{issue.title}</h3>
+                      <p className="af-lh-urgent-meta">{issue.meta}</p>
+                    </div>
+                    {issue.action ? (
+                      <Link
+                        href={issue.action.href}
+                        className={i === 0 ? 'af-btn af-lh-urgent-cta' : 'af-btn af-btn--ghost af-lh-urgent-cta'}
+                        {...(issue.action.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                      >
+                        {copy(issue.action.label)}
+                      </Link>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
             </section>
           ) : null}
 
