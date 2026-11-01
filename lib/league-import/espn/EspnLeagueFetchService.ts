@@ -847,7 +847,9 @@ function upsertEspnMatchup(
   teamId1: string,
   teamId2: string,
   points1?: number,
-  points2?: number
+  points2?: number,
+  categories1?: Record<string, number>,
+  categories2?: Record<string, number>,
 ) {
   /*
    * 🛑 THIS LINE USED TO READ `if (!teamId1 || !teamId2) return`, AND IT DISCARDED THE
@@ -893,6 +895,10 @@ function upsertEspnMatchup(
   if (existing) {
     if (typeof points1 === 'number') existing.points1 = points1
     if (typeof points2 === 'number') existing.points2 = points2
+    if (categories1 && categories2) {
+      existing.categories1 = categories1
+      existing.categories2 = categories2
+    }
     return
   }
 
@@ -901,12 +907,33 @@ function upsertEspnMatchup(
     teamId2,
     points1,
     points2,
+    categories1,
+    categories2,
   })
+}
+
+function parseEspnCategoryTotals(side: Record<string, unknown>, statIds: readonly string[]): Record<string, number> | undefined {
+  if (statIds.length < 2 || statIds.length > 40) return undefined
+  const cumulative = isRecord(side.cumulativeScore) ? side.cumulativeScore : null
+  const byStat = cumulative && isRecord(cumulative.scoreByStat) ? cumulative.scoreByStat : null
+  if (!byStat) return undefined
+  const totals: Record<string, number> = {}
+  for (const id of statIds) {
+    const entry = byStat[id]
+    const score = isRecord(entry) ? parseNumber(entry.score, null) : null
+    if (score == null) return undefined
+    totals[id] = score
+  }
+  return totals
 }
 
 function parseEspnSchedule(raw: any, season: number, currentWeek: number | null): EspnImportScheduleWeek[] {
   const weeks = new Map<number, EspnImportScheduleWeek['matchups']>()
   const scheduleRaw = Array.isArray(raw?.schedule) ? raw.schedule : []
+  const scoring = raw?.settings?.scoringSettings
+  const categoryIds: string[] = String(scoring?.scoringType ?? '').toUpperCase().includes('CATEGOR') && Array.isArray(scoring?.scoringItems)
+    ? [...new Set<string>(scoring.scoringItems.map((item: any): string => String(item?.statId ?? '')).filter((id: string) => /^\d{1,4}$/.test(id)))]
+    : []
 
   for (const matchup of scheduleRaw) {
     if (!isRecord(matchup)) continue
@@ -922,7 +949,9 @@ function parseEspnSchedule(raw: any, season: number, currentWeek: number | null)
       teamId1,
       teamId2,
       parseNumber(home.totalPoints, null) ?? undefined,
-      parseNumber(away.totalPoints, null) ?? undefined
+      parseNumber(away.totalPoints, null) ?? undefined,
+      parseEspnCategoryTotals(home, categoryIds),
+      parseEspnCategoryTotals(away, categoryIds),
     )
   }
 
@@ -941,7 +970,9 @@ function parseEspnSchedule(raw: any, season: number, currentWeek: number | null)
         teamId1,
         teamId2,
         parseNumber(home.totalPoints, null) ?? undefined,
-        parseNumber(away.totalPoints, null) ?? undefined
+        parseNumber(away.totalPoints, null) ?? undefined,
+        parseEspnCategoryTotals(home, categoryIds),
+        parseEspnCategoryTotals(away, categoryIds),
       )
     }
   }
@@ -1383,7 +1414,7 @@ export async function fetchEspnLeagueForImport(
 
 /**
  * Lean per-league schedule read for the weekly-matchup parity sync: ONE league
- * request (mMatchup + mScoreboard views) instead of the full import fan-out
+ * request (mMatchup + mScoreboard + mSettings views) instead of the full import fan-out
  * (roster, draft, transactions, previous-season probes). Reuses the same
  * cookie fallback as the import — public leagues need no credentials at all;
  * a private league whose stored cookies don't unlock it throws
@@ -1403,7 +1434,7 @@ export async function fetchEspnScheduleForSync(
     leagueId,
     season,
     auth,
-    views: ['mMatchup', 'mScoreboard'],
+    views: ['mMatchup', 'mScoreboard', 'mSettings'],
   })
   const currentWeek =
     parseNumber(raw?.status?.currentMatchupPeriod, null) ??

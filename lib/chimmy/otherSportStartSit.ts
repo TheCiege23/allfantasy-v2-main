@@ -23,6 +23,7 @@ import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { aggregateWeeklyStats, getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { aggregateNcaafWeek } from '@/lib/scoring-runtime/ncaafStatNormalization'
 import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { loadOpponentScoreAdjustments } from './opponentStrength'
 
 type Result = { ready: boolean; text: string }
@@ -39,11 +40,14 @@ export async function buildOtherSportStartSit(args: {
   const world = await resolveCanonicalWorld(args.leagueId)
   if (!world) return missing('The selected league could not be read, so no start/sit call was made.')
   const sport = String(world.league.sport).toUpperCase()
-  if (!canRunSeasonForSport(sport)) return missing(`${sport} fantasy scoring is not operational for a full season yet. No league-specific start/sit call can be made.`)
   if (sport === 'NFL') return missing('Use the NFL weekly projection engine for this comparison.')
   const eligibility = ELIGIBILITY[sport]
   if (!eligibility) return missing(`Starting-slot eligibility for ${sport} is not on file.`)
   if (isForeignIdSpace(world.provenance?.provider)) return missing('This imported league uses player IDs we cannot safely match to stats yet. Compare these players on the league platform.')
+  const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { sport: true, settings: true, season: true, leagueType: true, bestBallMode: true } })
+  if (!league || league.bestBallMode) return missing('This league has no manual start/sit decision on file.')
+  if (sport === 'SOCCER') await ensureDailySportSeasonStart('SOCCER', league.season, { db: prisma }).catch(() => null)
+  if (!canRunSeasonForSport(sport, league.season)) return missing(`${sport} fantasy scoring is not operational for a full season yet. No league-specific start/sit call can be made.`)
   const roster = viewerRosterOf(world, args.userId)
   if (!roster) return missing('Your claimed roster is not on file for this league.')
   const activeIds = activePlayerIds(roster)
@@ -62,8 +66,6 @@ export async function buildOtherSportStartSit(args: {
   const shared = slots.some((slot) => positions.every((list) => list.some((p) => eligibility[slot]?.includes(p))))
   if (!shared) return missing('These players do not compete for a verified starting slot in this league. Ask for a whole-lineup check instead.')
 
-  const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { sport: true, settings: true, season: true, leagueType: true, bestBallMode: true } })
-  if (!league || league.bestBallMode) return missing('This league has no manual start/sit decision on file.')
   const format = weeklyFormat(league)
   const category = ['categories', 'roto'].includes(format) ? nativeCategoryScoringContext(league.settings, sport) : null
   if (['categories', 'roto'].includes(format) && !category) {
