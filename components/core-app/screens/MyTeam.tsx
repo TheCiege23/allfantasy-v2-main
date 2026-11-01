@@ -1151,7 +1151,16 @@ function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: Lineup
   const lockedNote = check.locked ? m.lockedNote(check.locked) : ''
   return (
     <section className="af-frame af-mt-check" aria-label={m.lineupCheck} data-clear={check.items.length === 0 && !check.unresolved}>
-      <h2 className="af-label">{m.lineupCheck}</h2>
+      <h2 className="af-label">
+        {/* Shown only under the redraft stamp (af-core-redraft-myteam.css); the words carry the meaning. */}
+        <span className="af-mt-check-icon" aria-hidden>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l9.5 17h-19z" />
+            <path d="M12 10v4M12 17.5v.01" />
+          </svg>
+        </span>
+        {m.lineupCheck}
+      </h2>
       {check.unresolved ? <p role="status">{m.unresolvedSlots(check.unresolved)}</p> : null}
       <p className="af-mt-footnote">{m.lineupCheckFootnote}</p>
       {check.items.length === 0 ? (
@@ -1945,6 +1954,9 @@ export function MyTeam({ data }: MyTeamProps) {
             </p>
           ) : null}
           {data.nextMatchup.data.forecast ? <WinForecast forecast={data.nextMatchup.data.forecast} /> : null}
+          <Link className="af-mt-mu-go" href={`/core/matchup?league=${encodeURIComponent(data.league.id)}`}>
+            {m.goToMatchup}
+          </Link>
         </section>
       ) : (
         <p className="af-mt-footnote">{myTeamCardReasonText(data.nextMatchup.reason, language)}</p>
@@ -2071,6 +2083,19 @@ export function MyTeam({ data }: MyTeamProps) {
         ) : (
           <Unavailable reason={data.starters.reason} />
         )}
+        {/*
+          The table's footer: the league-scored total of the rows above, and how many of them it was
+          built from — the same figure the lead tile shows, where the eye finishes the column. Only the
+          league-scored total: with no league scoring there is no row rather than a standard number
+          wearing its label. Shown under the redraft stamp only (af-core-redraft-myteam.css).
+        */}
+        {data.starters.available && proj?.afTotal != null ? (
+          <div className="af-mt-total" data-testid="my-team-starters-total">
+            <span className="af-mt-total-label">{m.startersTotal}</span>
+            <span className="af-mt-total-cov">{m.startersTotalCoverage(proj.afProjected, proj.projected + proj.unprojected)}</span>
+            <span className="af-mt-total-value af-num">{proj.afTotal.toFixed(1)}</span>
+          </div>
+        ) : null}
       </section>
 
       {/* ── Bench ───────────────────────────────────────────────────── */}
