@@ -119,6 +119,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ rewards: await listSurvivorRewards(leagueId) })
   }
 
+  if (type === 'reward_cast') {
+    // The Hub rewards panel's pickers: the cast (with tribes), the tribes, the week and the prize
+    // types this phase allows (lib/survivor/survivorRewardsHub.ts).
+    const { loadRewardHubCast } = await import('@/lib/survivor/survivorRewardsHub')
+    return NextResponse.json(await loadRewardHubCast(leagueId))
+  }
+
   if (type === 'challenges' || type === 'challenge_games' || type === 'challenge_players') {
     // The challenge builder (Mini Games tab): every commissioner challenge with its answers, and the
     // stored games / rostered players a new one can be about. DB only, never a provider.
@@ -419,6 +426,10 @@ export async function POST(req: NextRequest) {
       ? body.idempotencyKey.trim()
       : `commissioner:${userId}:${typeof body.requestId === 'string' ? body.requestId.trim() : ''}`
     if (key.endsWith(':')) return NextResponse.json({ error: 'requestId or idempotencyKey required' }, { status: 400 })
+    // The league's per-phase prize rules (penalties are never restricted).
+    const { grantRewardPhaseError } = await import('@/lib/survivor/survivorRewardsHub')
+    const phaseError = await grantRewardPhaseError(leagueId, (body.reward as { type?: unknown } | null)?.type)
+    if (phaseError) return NextResponse.json({ error: phaseError, code: 'phase_type' }, { status: 400 })
     const result = await applySurvivorReward({
       leagueId,
       idempotencyKey: key,

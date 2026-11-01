@@ -7,8 +7,14 @@ import {
   CHALLENGE_BUILDER_KINDS,
   CHALLENGE_PLAYER_STATS,
   CHALLENGE_PRIZE_TYPES,
+  challengeInputKind,
+  challengeSettlementSource,
+  challengeStatsForSport,
+  playerStatSupported,
   utcToEasternWallTime,
   validateChallengeDraft,
+  type SurvivorPrizePhase,
+  type SurvivorPrizePhaseRules,
   type ChallengeBuilderConfig,
   type ChallengeBuilderKind,
   type ChallengePrizeReward,
@@ -45,8 +51,10 @@ export const challengeBuilderMessages = defineMessages({
     status: (k: string): string => ({ scheduled: 'Scheduled', open: 'Open', locked: 'Locked', settling: 'Settling', complete: 'Settled', cancelled: 'Cancelled' } as Record<string, string>)[k] ?? k,
     kinds: (k: string): string => ({
       game_total_closest: 'Game total — closest guess', closest_without_going_over: 'Closest without going over', pick_winner: 'Pick the winner',
-      game_total_over_under: 'Game total over/under', player_stat_over_under: 'Player stat over/under', anytime_td: 'Anytime TD (NFL)',
+      game_total_over_under: 'Game total over/under', player_stat_over_under: 'Player stat over/under', anytime_td: 'Anytime scorer (TD · goal · home run)',
       custom_choice: 'Your own multiple choice', custom_number: 'Your own number (closest)',
+      first_td_scorer: 'First TD scorer', last_score_type: 'Last score type', position_leader: 'Position leader (top scorer at a position)',
+      sweep: 'Sweep (every prop must hit)', puzzle: 'Puzzle (first or fastest correct answer)',
     } as Record<string, string>)[k] ?? k,
     prizeTypes: (k: string): string => ({
       score_bonus: 'Points', faab_grant: 'FAAB', faab_transfer: 'FAAB from the other tribes', tribemate_points: 'Points on a tribemate',
@@ -54,6 +62,18 @@ export const challengeBuilderMessages = defineMessages({
     } as Record<string, string>)[k] ?? k,
     manualOnly: 'Settle this one by hand.', pending: (why: string): string => `Not final in our data yet (${why}). You can settle by hand.`,
     payouts: 'Payouts', nobody: 'Nobody is paid.', failed: 'That did not go through.',
+    settles: (how: string): string => ({
+      game: 'Settles itself from the stored final score.', player_stat: 'Settles itself from the stored player stats.',
+      position_leader: 'Settles itself from the stored weekly fantasy points.', exact_answer: 'Settles itself at the lock by exact match with your answer.',
+      manual: 'Settled by the commissioner: nothing we store answers this one, so you settle it by hand.',
+    } as Record<string, string>)[how] ?? how,
+    statManual: (stat: string): string => `${stat} (settled by the commissioner for this sport)`,
+    position: 'Position', positionPlayers: 'Players at that position (2 to 8)', addPlayer: 'Add player',
+    props: 'Props (all must hit)', prop: (n: number): string => `Prop ${n}`, propQuestion: 'Question', propOptions: 'Options (one per line)', addProp: 'Add a prop',
+    tiered: 'Tiered prizes: place 2 pays one miss, place 3 two misses…',
+    puzzleAnswer: 'The answer (hidden from managers until the result)', puzzleMode: 'Who wins', puzzleFirst: 'First correct answer', puzzleFastest: 'Fastest correct answers (up to 5 places)',
+    puzzleSettle: 'Settle', puzzleExact: 'By exact match at the lock', puzzleManual: 'By hand',
+    optionalGame: 'Game (optional)', noGame: 'No game',
   },
   es: {
     heading: 'Creador de retos',
@@ -77,8 +97,10 @@ export const challengeBuilderMessages = defineMessages({
     status: (k: string): string => ({ scheduled: 'Programado', open: 'Abierto', locked: 'Cerrado', settling: 'Resolviendo', complete: 'Resuelto', cancelled: 'Cancelado' } as Record<string, string>)[k] ?? k,
     kinds: (k: string): string => ({
       game_total_closest: 'Total del partido — el más cercano', closest_without_going_over: 'El más cercano sin pasarse', pick_winner: 'Elige al ganador',
-      game_total_over_under: 'Total del partido más/menos', player_stat_over_under: 'Estadística de jugador más/menos', anytime_td: 'Touchdown en cualquier momento (NFL)',
+      game_total_over_under: 'Total del partido más/menos', player_stat_over_under: 'Estadística de jugador más/menos', anytime_td: 'Anotador en cualquier momento (TD · gol · jonrón)',
       custom_choice: 'Tu propia opción múltiple', custom_number: 'Tu propio número (el más cercano)',
+      first_td_scorer: 'Primer anotador de touchdown', last_score_type: 'Tipo de la última anotación', position_leader: 'Líder de posición (máximo anotador de una posición)',
+      sweep: 'Pleno (hay que acertar todas)', puzzle: 'Acertijo (primera o más rápida respuesta correcta)',
     } as Record<string, string>)[k] ?? k,
     prizeTypes: (k: string): string => ({
       score_bonus: 'Puntos', faab_grant: 'FAAB', faab_transfer: 'FAAB de las otras tribus', tribemate_points: 'Puntos para un compañero',
@@ -86,10 +108,22 @@ export const challengeBuilderMessages = defineMessages({
     } as Record<string, string>)[k] ?? k,
     manualOnly: 'Resuelve este a mano.', pending: (why: string): string => `Aún no es definitivo en nuestros datos (${why}). Puedes resolverlo a mano.`,
     payouts: 'Pagos', nobody: 'No se paga a nadie.', failed: 'No se pudo completar.',
+    settles: (how: string): string => ({
+      game: 'Se resuelve solo con el marcador final guardado.', player_stat: 'Se resuelve solo con las estadísticas guardadas del jugador.',
+      position_leader: 'Se resuelve solo con los puntos de fantasía semanales guardados.', exact_answer: 'Se resuelve solo al cierre, por coincidencia exacta con tu respuesta.',
+      manual: 'Lo resuelve el comisionado: nada de lo que guardamos responde a esto, así que lo resuelves a mano.',
+    } as Record<string, string>)[how] ?? how,
+    statManual: (stat: string): string => `${stat} (lo resuelve el comisionado en este deporte)`,
+    position: 'Posición', positionPlayers: 'Jugadores de esa posición (de 2 a 8)', addPlayer: 'Añadir jugador',
+    props: 'Apuestas (hay que acertar todas)', prop: (n: number): string => `Apuesta ${n}`, propQuestion: 'Pregunta', propOptions: 'Opciones (una por línea)', addProp: 'Añadir apuesta',
+    tiered: 'Premios por niveles: el puesto 2 paga un fallo, el 3 dos fallos…',
+    puzzleAnswer: 'La respuesta (oculta a los mánagers hasta el resultado)', puzzleMode: 'Quién gana', puzzleFirst: 'La primera respuesta correcta', puzzleFastest: 'Las respuestas correctas más rápidas (hasta 5 puestos)',
+    puzzleSettle: 'Resolver', puzzleExact: 'Por coincidencia exacta al cierre', puzzleManual: 'A mano',
+    optionalGame: 'Partido (opcional)', noGame: 'Sin partido',
   },
 })
 
-type Meta = { currentWeek: number; season: number; sport: string; merged: boolean; lang: 'en' | 'es'; faabWeeklyCap: number }
+type Meta = { currentWeek: number; season: number; sport: string; merged: boolean; lang: 'en' | 'es'; faabWeeklyCap: number; prizePhase?: SurvivorPrizePhase; prizePhaseRules?: SurvivorPrizePhaseRules }
 type Row = { id: string; week: number; title: string; status: string; config: ChallengeBuilderConfig; answers: number; entrants: { id: string; name: string; answer: string }[]; resultSummary: string | null; autoSource: string }
 type Game = { sport: string; homeAbbr: string; awayAbbr: string; homeLabel: string; awayLabel: string; kickoff: string }
 type Player = { playerId: string; playerName: string; position: string; team: string | null; sport: string }
@@ -103,6 +137,10 @@ type Draft = {
   penalty: 'none' | 'score_penalty' | 'faab_penalty'; penaltyAmount: string
   wagerOn: boolean; wagerCurrency: 'points' | 'faab'; wagerMin: string; wagerMax: string; winX: string; lossX: string
   uniqueAnswers: boolean; sealed: boolean; allOverRule: 'closest_overall' | 'no_winner'
+  // The original league's kinds.
+  position: string; positionPlayers: { playerId: string; label: string }[]
+  props: { question: string; optionsText: string }[]; sweepTiered: boolean
+  puzzleAnswer: string; puzzleMode: 'first_correct' | 'fastest'; puzzleSettle: 'exact' | 'manual'
 }
 
 const NUMBER_KINDS = new Set(['game_total_closest', 'closest_without_going_over', 'custom_number'])
@@ -130,6 +168,9 @@ function blankDraft(meta: Meta): Draft {
     prizes: [{ place: 1, rewards: [defaultReward('faab_grant')] }], deferWeeks: 0,
     penalty: 'none', penaltyAmount: '10', wagerOn: false, wagerCurrency: 'points', wagerMin: '5', wagerMax: '50', winX: '1', lossX: '1',
     uniqueAnswers: false, sealed: false, allOverRule: 'closest_overall',
+    position: meta.sport === 'NFL' ? 'QB' : '', positionPlayers: [],
+    props: [{ question: '', optionsText: '' }, { question: '', optionsText: '' }], sweepTiered: false,
+    puzzleAnswer: '', puzzleMode: 'first_correct', puzzleSettle: 'exact',
   }
 }
 
@@ -138,7 +179,11 @@ function draftFromConfig(row: Row, meta: Meta): Draft {
   return {
     ...blankDraft(meta), title: row.title, question: c.question, kind: c.kind, scope: c.scope, week: row.week,
     opensAt: utcToEasternWallTime(c.opensAt), locksAt: utcToEasternWallTime(c.locksAt),
-    optionsText: c.kind === 'custom_choice' ? c.options.map((o) => o.label).join('\n') : '', game: c.game,
+    optionsText: c.kind === 'custom_choice' || c.kind === 'first_td_scorer' ? c.options.map((o) => o.label).join('\n') : '', game: c.game,
+    position: c.position?.position ?? '', positionPlayers: c.kind === 'position_leader' ? c.options.flatMap((o) => (o.playerId ? [{ playerId: o.playerId, label: o.label }] : [])) : [],
+    props: c.props?.length ? c.props.map((p) => ({ question: p.question, optionsText: p.options.map((o) => o.label).join('\n') })) : [{ question: '', optionsText: '' }, { question: '', optionsText: '' }],
+    sweepTiered: c.sweepTiered === true,
+    puzzleAnswer: c.puzzle?.answer ?? '', puzzleMode: c.puzzle?.mode ?? 'first_correct', puzzleSettle: c.puzzle?.settle ?? 'exact',
     player: c.player ? { playerId: c.player.playerId, playerName: c.player.playerName, sport: c.player.sport } : null,
     stat: c.player?.stat ?? 'fantasy_points', statWeek: c.player?.statWeek ?? row.week, line: c.line == null ? '' : String(c.line),
     prizes: c.prizes, deferWeeks: c.deferWeeks,
@@ -162,6 +207,12 @@ export function draftToInput(d: Draft, meta: Meta): Record<string, unknown> {
     missPenalty: d.penalty === 'none' ? null : d.penalty === 'score_penalty' ? { type: 'score_penalty', points: n(d.penaltyAmount) } : { type: 'faab_penalty', amount: n(d.penaltyAmount) },
     wager: d.wagerOn ? { currency: d.wagerCurrency, min: n(d.wagerMin), max: n(d.wagerMax), winMultiplier: n(d.winX), lossFraction: n(d.lossX) } : null,
     uniqueAnswers: d.uniqueAnswers, sealed: d.sealed, allOverRule: d.allOverRule,
+    ...(d.kind === 'position_leader' ? {
+      options: d.positionPlayers.map((p) => ({ playerId: p.playerId, label: p.label })),
+      position: { sport: meta.sport, season: meta.season, statWeek: d.statWeek, position: d.position },
+    } : {}),
+    ...(d.kind === 'sweep' ? { props: d.props.map((p) => ({ question: p.question, options: p.optionsText.split('\n').map((l) => l.trim()).filter(Boolean) })), sweepTiered: d.sweepTiered } : {}),
+    ...(d.kind === 'puzzle' ? { puzzle: { answer: d.puzzleAnswer, mode: d.puzzleMode, settle: d.puzzleSettle } } : {}),
   }
 }
 
@@ -194,8 +245,12 @@ function ChallengeForm({ leagueId, meta, initial, editingId, onSaved, onClose }:
   const [busy, setBusy] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((cur) => ({ ...cur, [k]: v }))
-  const needsGame = d.kind === 'game_total_closest' || d.kind === 'pick_winner' || d.kind === 'game_total_over_under' || d.kind === 'closest_without_going_over'
-  const needsPlayer = d.kind === 'player_stat_over_under' || d.kind === 'anytime_td'
+  const optionalGame = d.kind === 'closest_without_going_over' || d.kind === 'first_td_scorer' || d.kind === 'last_score_type'
+  const needsGame = d.kind === 'game_total_closest' || d.kind === 'pick_winner' || d.kind === 'game_total_over_under' || optionalGame
+  const needsPlayer = d.kind === 'player_stat_over_under' || d.kind === 'anytime_td' || d.kind === 'position_leader'
+  const playerSport = d.player?.sport ?? meta.sport
+  // The sport's own stored stats first; the football list stays pickable, marked "settled by the commissioner".
+  const statChoices = [...new Set([...challengeStatsForSport(playerSport), ...CHALLENGE_PLAYER_STATS])]
   useEffect(() => {
     if (!needsGame) return
     void fetch(`/api/survivor/commissioner?leagueId=${encodeURIComponent(leagueId)}&type=challenge_games&week=${d.week}`).then((r) => (r.ok ? r.json() : null)).then((j) => setGames(Array.isArray(j?.games) ? j.games : [])).catch(() => setGames([]))
@@ -208,7 +263,9 @@ function ChallengeForm({ leagueId, meta, initial, editingId, onSaved, onClose }:
     return () => clearTimeout(t)
   }, [leagueId, q, needsPlayer])
   const input = useMemo(() => draftToInput(d, meta), [d, meta])
-  const check = useMemo(() => validateChallengeDraft(input, { now: new Date(), currentWeek: Math.min(meta.currentWeek, d.week), merged: meta.merged, lang: meta.lang, faabWeeklyCap: meta.faabWeeklyCap, otherFaabThisWeek: 0 }), [input, meta, d.week])
+  const check = useMemo(() => validateChallengeDraft(input, { now: new Date(), currentWeek: Math.min(meta.currentWeek, d.week), merged: meta.merged, lang: meta.lang, faabWeeklyCap: meta.faabWeeklyCap, otherFaabThisWeek: 0, prizePhase: meta.prizePhase, prizePhaseRules: meta.prizePhaseRules }), [input, meta, d.week])
+  // How this challenge will settle (sport-aware), said plainly before it is saved.
+  const settlement = check.ok ? challengeSettlementSource(check.draft.config) : null
   async function save() {
     setBusy(true)
     setServerError(null)
@@ -235,9 +292,9 @@ function ChallengeForm({ leagueId, meta, initial, editingId, onSaved, onClose }:
         <label className="block text-xs text-white/70">{m.locks}<input className={inputCls} type="datetime-local" value={d.locksAt} onChange={(e) => set('locksAt', e.target.value)} /></label>
       </div>
       {needsGame ? (
-        <label className="block text-xs text-white/70">{m.game}
+        <label className="block text-xs text-white/70">{optionalGame ? m.optionalGame : m.game}
           <select className={inputCls} value={d.game ? `${d.game.awayAbbr}@${d.game.homeAbbr}@${d.game.kickoff}` : ''} onChange={(e) => set('game', games.find((g) => `${g.awayAbbr}@${g.homeAbbr}@${g.kickoff}` === e.target.value) ?? null)}>
-            <option value="">{m.pickGame}</option>
+            <option value="">{optionalGame ? m.noGame : m.pickGame}</option>
             {[...(d.game && !games.some((g) => g.kickoff === d.game!.kickoff && g.homeAbbr === d.game!.homeAbbr) ? [d.game] : []), ...games].map((g) => <option key={`${g.awayAbbr}@${g.homeAbbr}@${g.kickoff}`} value={`${g.awayAbbr}@${g.homeAbbr}@${g.kickoff}`}>{g.awayLabel} @ {g.homeLabel} · {formatLocalTime(g.kickoff)}</option>)}
           </select>
         </label>
@@ -245,18 +302,58 @@ function ChallengeForm({ leagueId, meta, initial, editingId, onSaved, onClose }:
       {needsPlayer ? (
         <div className="grid gap-2 sm:grid-cols-3">
           <label className="block text-xs text-white/70">{m.searchPlayer}<input className={inputCls} value={q} onChange={(e) => setQ(e.target.value)} /></label>
-          <label className="block text-xs text-white/70">{m.player}
-            <select className={inputCls} value={d.player?.playerId ?? ''} onChange={(e) => { const p = players.find((x) => x.playerId === e.target.value); set('player', p ? { playerId: p.playerId, playerName: p.playerName, sport: p.sport } : null) }}>
+          {d.kind === 'position_leader' ? (
+            <label className="block text-xs text-white/70">{m.position}<input className={inputCls} maxLength={4} value={d.position} onChange={(e) => set('position', e.target.value.toUpperCase())} data-testid="builder-position" /></label>
+          ) : null}
+          <label className="block text-xs text-white/70">{d.kind === 'position_leader' ? m.addPlayer : m.player}
+            <select className={inputCls} value={d.kind === 'position_leader' ? '' : d.player?.playerId ?? ''} data-testid="builder-player" onChange={(e) => {
+              const p = players.find((x) => x.playerId === e.target.value)
+              if (d.kind === 'position_leader') {
+                if (p && d.positionPlayers.length < 8 && !d.positionPlayers.some((x) => x.playerId === p.playerId)) set('positionPlayers', [...d.positionPlayers, { playerId: p.playerId, label: p.playerName }])
+                return
+              }
+              set('player', p ? { playerId: p.playerId, playerName: p.playerName, sport: p.sport } : null)
+            }}>
               <option value="">—</option>
-              {[...(d.player && !players.some((p) => p.playerId === d.player!.playerId) ? [{ ...d.player, position: '', team: null }] : []), ...players].map((p) => <option key={p.playerId} value={p.playerId}>{p.playerName}{p.position ? ` · ${p.position}` : ''}{p.team ? ` · ${p.team}` : ''}</option>)}
+              {[...(d.kind !== 'position_leader' && d.player && !players.some((p) => p.playerId === d.player!.playerId) ? [{ ...d.player, position: '', team: null }] : []), ...players]
+                .filter((p) => d.kind !== 'position_leader' || !d.position || !p.position || p.position.toUpperCase().split(/[\/,\s]+/).includes(d.position))
+                .map((p) => <option key={p.playerId} value={p.playerId}>{p.playerName}{p.position ? ` · ${p.position}` : ''}{p.team ? ` · ${p.team}` : ''}</option>)}
             </select>
           </label>
-          {d.kind === 'player_stat_over_under' ? <label className="block text-xs text-white/70">{m.stat}<select className={inputCls} value={d.stat} onChange={(e) => set('stat', e.target.value)}>{CHALLENGE_PLAYER_STATS.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</select></label> : null}
+          {d.kind === 'player_stat_over_under' ? <label className="block text-xs text-white/70">{m.stat}<select className={inputCls} value={d.stat} onChange={(e) => set('stat', e.target.value)} data-testid="builder-stat">{statChoices.map((s) => <option key={s} value={s}>{playerStatSupported(playerSport, s) ? s.replace(/_/g, ' ') : m.statManual(s.replace(/_/g, ' '))}</option>)}</select></label> : null}
           <label className="block text-xs text-white/70">{m.statWeek}<input className={inputCls} type="number" min={0} value={d.statWeek} onChange={(e) => set('statWeek', Number(e.target.value))} /></label>
         </div>
       ) : null}
       {d.kind === 'game_total_over_under' || d.kind === 'player_stat_over_under' ? <label className="block text-xs text-white/70">{m.line}<input className={inputCls} type="number" step={0.5} value={d.line} onChange={(e) => set('line', e.target.value)} /></label> : null}
-      {d.kind === 'custom_choice' ? <label className="block text-xs text-white/70">{m.options}<textarea className={inputCls} rows={4} value={d.optionsText} onChange={(e) => set('optionsText', e.target.value)} /></label> : null}
+      {d.kind === 'position_leader' && d.positionPlayers.length ? (
+        <div className="text-xs text-white/70" data-testid="builder-position-players">
+          <p>{m.positionPlayers}</p>
+          <ul className="mt-1 flex flex-wrap gap-2">{d.positionPlayers.map((p) => <li key={p.playerId} className="rounded border border-white/15 px-2 py-0.5">{p.label} <button type="button" className="text-red-300" onClick={() => set('positionPlayers', d.positionPlayers.filter((x) => x.playerId !== p.playerId))}>{m.remove}</button></li>)}</ul>
+        </div>
+      ) : null}
+      {d.kind === 'custom_choice' || d.kind === 'first_td_scorer' ? <label className="block text-xs text-white/70">{m.options}<textarea className={inputCls} rows={4} value={d.optionsText} onChange={(e) => set('optionsText', e.target.value)} /></label> : null}
+      {d.kind === 'sweep' ? (
+        <fieldset className="space-y-2" data-testid="builder-sweep">
+          <legend className="text-xs font-semibold text-white">{m.props}</legend>
+          {d.props.map((p, i) => (
+            <div key={i} className="space-y-1 rounded-lg border border-white/10 p-2">
+              <p className="text-xs text-white/60">{m.prop(i + 1)}</p>
+              <label className="block text-xs text-white/70">{m.propQuestion}<input className={inputCls} maxLength={300} value={p.question} onChange={(e) => set('props', d.props.map((x, j) => (j === i ? { ...x, question: e.target.value } : x)))} /></label>
+              <label className="block text-xs text-white/70">{m.propOptions}<textarea className={inputCls} rows={2} value={p.optionsText} onChange={(e) => set('props', d.props.map((x, j) => (j === i ? { ...x, optionsText: e.target.value } : x)))} /></label>
+              {d.props.length > 2 ? <button type="button" className="text-xs text-red-300" onClick={() => set('props', d.props.filter((_, j) => j !== i))}>{m.remove}</button> : null}
+            </div>
+          ))}
+          {d.props.length < 8 ? <button type="button" className="text-xs text-emerald-300" onClick={() => set('props', [...d.props, { question: '', optionsText: '' }])}>{m.addProp}</button> : null}
+          <label className="block text-xs text-white/70"><input type="checkbox" checked={d.sweepTiered} onChange={(e) => set('sweepTiered', e.target.checked)} /> {m.tiered}</label>
+        </fieldset>
+      ) : null}
+      {d.kind === 'puzzle' ? (
+        <div className="grid gap-2 sm:grid-cols-3" data-testid="builder-puzzle">
+          <label className="block text-xs text-white/70">{m.puzzleAnswer}<input className={inputCls} maxLength={200} value={d.puzzleAnswer} onChange={(e) => set('puzzleAnswer', e.target.value)} /></label>
+          <label className="block text-xs text-white/70">{m.puzzleMode}<select className={inputCls} value={d.puzzleMode} onChange={(e) => set('puzzleMode', e.target.value as Draft['puzzleMode'])}><option value="first_correct">{m.puzzleFirst}</option><option value="fastest">{m.puzzleFastest}</option></select></label>
+          <label className="block text-xs text-white/70">{m.puzzleSettle}<select className={inputCls} value={d.puzzleSettle} onChange={(e) => set('puzzleSettle', e.target.value as Draft['puzzleSettle'])}><option value="exact">{m.puzzleExact}</option><option value="manual">{m.puzzleManual}</option></select></label>
+        </div>
+      ) : null}
       {d.kind === 'closest_without_going_over' ? <label className="block text-xs text-white/70">{m.allOver}<select className={inputCls} value={d.allOverRule} onChange={(e) => set('allOverRule', e.target.value as Draft['allOverRule'])}><option value="closest_overall">{m.allOverClosest}</option><option value="no_winner">{m.allOverNone}</option></select></label> : null}
 
       <fieldset className="space-y-2">
@@ -272,11 +369,11 @@ function ChallengeForm({ leagueId, meta, initial, editingId, onSaved, onClose }:
             {p.rewards.length < 4 ? <button type="button" className="text-xs text-emerald-300" onClick={() => set('prizes', d.prizes.map((x, i) => (i === pi ? { ...x, rewards: [...x.rewards, defaultReward('score_bonus')] } : x)))}>{m.addReward}</button> : null}
           </div>
         ))}
-        {isNumber && d.prizes.length < 5 ? <button type="button" className="text-xs text-emerald-300" onClick={() => set('prizes', [...d.prizes, { place: d.prizes.length + 1, rewards: [defaultReward('score_bonus')] }])}>{m.addPlace}</button> : null}
+        {(isNumber || (d.kind === 'sweep' && d.sweepTiered) || (d.kind === 'puzzle' && d.puzzleMode === 'fastest')) && d.prizes.length < 5 ? <button type="button" className="text-xs text-emerald-300" onClick={() => set('prizes', [...d.prizes, { place: d.prizes.length + 1, rewards: [defaultReward('score_bonus')] }])}>{m.addPlace}</button> : null}
         <label className="block text-xs text-white/70">{m.defer}<input className={inputCls} type="number" min={0} max={4} value={d.deferWeeks} onChange={(e) => set('deferWeeks', Number(e.target.value))} /></label>
       </fieldset>
 
-      {!isNumber ? (
+      {!isNumber && d.kind !== 'puzzle' ? (
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="block text-xs text-white/70">{m.penalty}
             <select className={inputCls} value={d.penalty} onChange={(e) => set('penalty', e.target.value as Draft['penalty'])}><option value="none">{m.none}</option><option value="score_penalty">{m.penPoints}</option><option value="faab_penalty">{m.penFaab}</option></select>
@@ -296,6 +393,7 @@ function ChallengeForm({ leagueId, meta, initial, editingId, onSaved, onClose }:
       ) : null}
       <label className="block text-xs text-white/70"><input type="checkbox" checked={d.uniqueAnswers} onChange={(e) => set('uniqueAnswers', e.target.checked)} /> {m.unique}</label>
       <label className="block text-xs text-white/70"><input type="checkbox" checked={d.sealed} onChange={(e) => set('sealed', e.target.checked)} /> {m.sealed}</label>
+      {settlement ? <p className="text-xs text-white/60" data-testid="challenge-builder-settles">{m.settles(settlement)}</p> : null}
       {!check.ok ? <p role="status" className="text-xs text-amber-200" data-testid="challenge-builder-error">{check.error.message}</p> : null}
       {serverError ? <p role="alert" className="text-xs text-red-300">{serverError}</p> : null}
       <div className="flex gap-2">
@@ -313,7 +411,13 @@ function SettlePanel({ leagueId, row, onDone }: { leagueId: string; row: Row; on
   const [preview, setPreview] = useState<Preview | null>(null)
   const [pending, setPending] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const manual = mode === 'data' ? null : mode === 'void' ? { void: true } : NUMBER_KINDS.has(row.config.kind) ? { truth: { value: Number(truth) } } : { truth: { optionId: truth } }
+  const [picks, setPicks] = useState<Record<string, string>>({})
+  const inputKind = challengeInputKind(row.config.kind)
+  const manual = mode === 'data' ? null : mode === 'void' ? { void: true }
+    : inputKind === 'number' ? { truth: { value: Number(truth) } }
+      : inputKind === 'text' ? { truth: { text: truth } }
+        : inputKind === 'sweep' ? { truth: { picks } }
+          : { truth: { optionId: truth } }
   async function post(action: 'challenge_settle_preview' | 'challenge_settle') {
     setError(null)
     const res = await fetch('/api/survivor/commissioner', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ leagueId, action, challengeId: row.id, manual, confirm: action === 'challenge_settle' }) }).catch(() => null)
@@ -328,9 +432,17 @@ function SettlePanel({ leagueId, row, onDone }: { leagueId: string; row: Row; on
         <button type="button" aria-pressed={mode === 'manual'} onClick={() => { setMode('manual'); setPreview(null) }} className="rounded border border-white/15 px-2 py-1 text-white/80">{NUMBER_KINDS.has(row.config.kind) ? m.trueValue : m.trueAnswer}</button>
         <button type="button" aria-pressed={mode === 'void'} onClick={() => { setMode('void'); setPreview(null) }} className="rounded border border-white/15 px-2 py-1 text-white/80">{m.voidIt}</button>
       </div>
-      {mode === 'manual' ? (NUMBER_KINDS.has(row.config.kind)
+      {mode === 'manual' ? (inputKind === 'number'
         ? <input aria-label={m.trueValue} type="number" className={inputCls} value={truth} onChange={(e) => setTruth(e.target.value)} />
-        : <select aria-label={m.trueAnswer} className={inputCls} value={truth} onChange={(e) => setTruth(e.target.value)}><option value="">—</option>{row.config.options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select>) : null}
+        : inputKind === 'text'
+          ? <input aria-label={m.trueAnswer} className={inputCls} maxLength={200} value={truth} onChange={(e) => setTruth(e.target.value)} />
+          : inputKind === 'sweep'
+            ? <div className="space-y-1">{(row.config.props ?? []).map((p) => (
+              <label key={p.id} className="block text-xs text-white/70">{p.question}
+                <select aria-label={p.question} className={inputCls} value={picks[p.id] ?? ''} onChange={(e) => setPicks((cur) => ({ ...cur, [p.id]: e.target.value }))}><option value="">—</option>{p.options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select>
+              </label>
+            ))}</div>
+            : <select aria-label={m.trueAnswer} className={inputCls} value={truth} onChange={(e) => setTruth(e.target.value)}><option value="">—</option>{row.config.options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select>) : null}
       <button type="button" onClick={() => void post('challenge_settle_preview')} className="rounded-lg border border-amber-300/40 px-3 py-1 text-sm text-amber-100">{m.preview}</button>
       {pending ? <p className="text-xs text-white/60">{pending === 'manual_only' ? m.manualOnly : m.pending(pending)}</p> : null}
       {preview && !pending ? (
@@ -384,6 +496,7 @@ export function SurvivorChallengeBuilderPanel({ leagueId }: { leagueId: string }
               <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-white/70">{m.status(row.status)}</span>
               <span className="text-[11px] text-white/50">{m.kinds(row.config.kind)} · {m.answers(row.answers)} · {formatLocalTime(row.config.locksAt)}</span>
             </div>
+            {row.status !== 'complete' && row.status !== 'cancelled' ? <p className="mt-1 text-[11px] text-white/45" data-testid={`builder-row-settles-${row.id}`}>{m.settles(row.autoSource)}</p> : null}
             {row.resultSummary ? <p className="mt-1 text-xs text-white/70">{row.resultSummary}</p> : null}
             {row.entrants.length ? <details className="mt-1 text-xs text-white/60"><summary>{m.answers(row.entrants.length)}</summary><ul>{row.entrants.map((e) => <li key={e.id}>{e.name}: {e.answer}</li>)}</ul></details> : null}
             <div className="mt-2 flex flex-wrap gap-2 text-xs">

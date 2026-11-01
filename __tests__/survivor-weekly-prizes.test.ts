@@ -11,13 +11,16 @@ const m = vi.hoisted(() => ({
   tribes: [{ id: 'A' }, { id: 'B' }],
   players: [] as Array<Record<string, unknown>>,
   scores: [] as Array<Record<string, unknown>>,
+  mergedTribes: [] as Array<{ id: string }>,
+  surprise: null as { week: number; tribeIds: string[]; benchedUserId: string | null } | null,
 }))
+vi.mock('@/lib/survivor/survivorSurpriseTribes', () => ({ getActiveSurpriseTribeWeek: vi.fn(async () => m.surprise) }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: vi.fn(async () => ({ settings: m.settings })) },
     survivorGameState: { findUnique: vi.fn(async () => m.game) },
-    survivorTribe: { findMany: vi.fn(async () => m.tribes) },
+    survivorTribe: { findMany: vi.fn(async (args?: { where?: { isMerged?: boolean } }) => (args?.where?.isMerged ? m.mergedTribes : m.tribes)) },
     survivorPlayer: { findMany: vi.fn(async () => m.players) },
     survivorWeeklyScore: { findMany: vi.fn(async () => m.scores) },
   },
@@ -36,6 +39,7 @@ vi.mock('@/lib/survivor/survivorTribeTieBreak', () => ({
 }))
 
 import {
+  competingTribeIdsFromScores,
   planWeeklyTribePrizes,
   readSurvivorHouseRules,
   readSurvivorWeeklyPrizes,
@@ -113,6 +117,35 @@ describe('applyWeeklyTribePrizes (season runner step)', () => {
     m.settings = { survivorWeeklyPrizes: { winningTribeFaabPerPlayer: 10 } }
     m.game = { phase: 'merge', mergeTriggeredAt: new Date() }
     expect(await applyWeeklyTribePrizes('L1', 4)).toEqual({ paid: [], skipped: 'merged' })
+  })
+  it('post-merge: off by default, so a surprise two-tribe week still pays nothing (today’s behaviour)', async () => {
+    m.game = { phase: 'post_merge', mergeTriggeredAt: new Date() }
+    m.surprise = { week: 4, tribeIds: ['A', 'B'], benchedUserId: null }
+    expect(await applyWeeklyTribePrizes('L1', 4)).toEqual({ paid: [], skipped: 'merged' })
+    m.surprise = null
+  })
+  it('post-merge with payInTribeWeeksAfterMerge: pays the winning surprise tribe from that week’s tribe structure', async () => {
+    m.settings = { survivorWeeklyPrizes: { winningTribeFaabPerPlayer: 30, payInTribeWeeksAfterMerge: true } }
+    m.game = { phase: 'post_merge', mergeTriggeredAt: new Date() }
+    m.mergedTribes = [{ id: 'M' }]
+    // The surprise tribes are already dissolved: everyone is back on M, but the score rows remember.
+    m.players = m.players.map((p) => ({ ...p, tribeId: 'M' }))
+    const res = await applyWeeklyTribePrizes('L1', 4)
+    expect(res.paid).toEqual(['weekly_prize:tribe_faab:L1:4:a1', 'weekly_prize:tribe_faab:L1:4:a2'])
+    m.mergedTribes = []
+  })
+  it('post-merge with the setting on but one merged tribe competing: no tribe prize', async () => {
+    m.settings = { survivorWeeklyPrizes: { winningTribeFaabPerPlayer: 30, payInTribeWeeksAfterMerge: true } }
+    m.game = { phase: 'post_merge', mergeTriggeredAt: new Date() }
+    m.mergedTribes = [{ id: 'M' }]
+    m.scores = m.scores.map((s) => ({ ...s, tribeId: 'M' }))
+    expect(await applyWeeklyTribePrizes('L1', 4)).toEqual({ paid: [], skipped: 'no_tribes' })
+    m.mergedTribes = []
+  })
+  it('competingTribeIdsFromScores ignores the merged tribe and empty rows', () => {
+    expect(competingTribeIdsFromScores([{ tribeId: 'B' }, { tribeId: 'M' }, { tribeId: null }, { tribeId: 'A' }, { tribeId: 'B' }], ['M'])).toEqual(['A', 'B'])
+    expect(readSurvivorWeeklyPrizes({}).payInTribeWeeksAfterMerge).toBe(false)
+    expect(readSurvivorWeeklyPrizes({ survivorWeeklyPrizes: { payInTribeWeeksAfterMerge: true } }).payInTribeWeeksAfterMerge).toBe(true)
   })
   it('breaks a tied week with the key position (B has the better QB)', async () => {
     m.settings = { survivorWeeklyPrizes: { winningTribeFaabPerPlayer: 10, tribeTieBreakPosition: 'QB' } }

@@ -40,6 +40,8 @@ export const challengeBoardMessages = defineMessages({
     saved: 'Saved.',
     failed: 'That did not go through.',
     points: 'points',
+    textAnswer: 'Your answer',
+    sweepHint: (n: number): string => `Pick one answer on each of the ${n} props — every one must hit.`,
   },
   es: {
     heading: 'Retos de la isla',
@@ -68,6 +70,8 @@ export const challengeBoardMessages = defineMessages({
     saved: 'Guardado.',
     failed: 'No se pudo completar.',
     points: 'puntos',
+    textAnswer: 'Tu respuesta',
+    sweepHint: (n: number): string => `Elige una respuesta en cada una de las ${n} apuestas: hay que acertarlas todas.`,
   },
 })
 
@@ -80,9 +84,11 @@ export function formatLocalTime(iso: string): string {
 }
 
 function answerLabel(c: BuilderChallengeView, answer: unknown): string {
-  const a = answer as { optionId?: string; value?: number } | null
+  const a = answer as { optionId?: string; value?: number; text?: string; picks?: Record<string, string> } | null
   if (!a) return '—'
   if (typeof a.value === 'number') return String(a.value)
+  if (typeof a.text === 'string') return a.text
+  if (a.picks) return (c.props ?? []).map((p) => p.options.find((o) => o.id === a.picks![p.id])?.label ?? '—').join(' · ')
   return c.options.find((o) => o.id === a.optionId)?.label ?? String(a.optionId ?? '—')
 }
 
@@ -93,12 +99,20 @@ function ChallengeItem({ c, leagueId, onDone }: { c: BuilderChallengeView; leagu
   const [stake, setStake] = useState(c.wager ? String(c.wager.min) : '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [picks, setPicks] = useState<Record<string, string>>({})
   const canAnswer = c.status === 'open' && !c.mine
+  const props = c.props ?? []
+  const ready = c.inputKind === 'number' || c.inputKind === 'text' ? value.trim() !== ''
+    : c.inputKind === 'sweep' ? props.length > 0 && props.every((p) => picks[p.id])
+      : Boolean(optionId)
   async function submit() {
     setBusy(true)
     setError(null)
     try {
-      const answer: Record<string, unknown> = c.inputKind === 'number' ? { value: Number(value) } : { optionId }
+      const answer: Record<string, unknown> = c.inputKind === 'number' ? { value: Number(value) }
+        : c.inputKind === 'text' ? { text: value }
+          : c.inputKind === 'sweep' ? { picks }
+            : { optionId }
       if (c.wager) answer.wager = Number(stake)
       const res = await fetch('/api/survivor/challenge-board', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ leagueId, challengeId: c.id, answer }) })
       const j = await res.json().catch(() => ({}))
@@ -127,6 +141,22 @@ function ChallengeItem({ c, leagueId, onDone }: { c: BuilderChallengeView; leagu
         <div className="mt-2 flex flex-wrap items-end gap-2">
           {c.inputKind === 'number' ? (
             <input aria-label={m.number} type="number" min={0} step="0.5" value={value} onChange={(e) => setValue(e.target.value)} className="w-28 rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-sm text-white" />
+          ) : c.inputKind === 'text' ? (
+            <input aria-label={m.textAnswer} maxLength={200} value={value} onChange={(e) => setValue(e.target.value)} className="w-56 rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-sm text-white" />
+          ) : c.inputKind === 'sweep' ? (
+            <div className="w-full space-y-2" data-testid="challenge-sweep">
+              <p className="text-[11px] text-white/50">{m.sweepHint(props.length)}</p>
+              {props.map((p) => (
+                <div key={p.id} role="radiogroup" aria-label={p.question} className="space-y-1">
+                  <p className="text-[13px] text-white/80">{p.question}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {p.options.map((o) => (
+                      <button key={o.id} type="button" role="radio" aria-checked={picks[p.id] === o.id} onClick={() => setPicks((cur) => ({ ...cur, [p.id]: o.id }))} className={`rounded-lg border px-3 py-1 text-sm ${picks[p.id] === o.id ? 'border-emerald-400 bg-emerald-500/20 text-white' : 'border-white/15 text-white/80'}`}>{o.label}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <div role="radiogroup" aria-label={c.title} className="flex flex-wrap gap-2">
               {c.options.map((o) => (
@@ -137,7 +167,7 @@ function ChallengeItem({ c, leagueId, onDone }: { c: BuilderChallengeView; leagu
           {c.wager ? (
             <input aria-label={m.stake(c.wager.min, c.wager.max, c.wager.currency === 'faab' ? 'FAAB' : m.points)} type="number" min={c.wager.min} max={c.wager.max} value={stake} onChange={(e) => setStake(e.target.value)} className="w-24 rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-sm text-white" />
           ) : null}
-          <button type="button" disabled={busy || (c.inputKind === 'number' ? value === '' : !optionId)} onClick={() => void submit()} className="rounded-lg bg-emerald-500 px-3 py-1 text-sm font-semibold text-black disabled:opacity-40">{busy ? m.sending : m.submit}</button>
+          <button type="button" disabled={busy || !ready} onClick={() => void submit()} className="rounded-lg bg-emerald-500 px-3 py-1 text-sm font-semibold text-black disabled:opacity-40">{busy ? m.sending : m.submit}</button>
         </div>
       ) : null}
       {error ? <p role="alert" className="mt-1 text-[12px] text-red-300">{error}</p> : null}
