@@ -42,6 +42,9 @@ const ctx = vi.hoisted(() => {
 
   const store = {
     picks: [] as PickRow[],
+    nba: false,
+    rights: [] as Array<{ id: string; leagueId: string; rosterId: string; devyPlayerId: string; state: string }>,
+    failRightsWrite: false,
     /** When set, `tx.draftSession.findUnique` returns these picks (simulates race / inner lock view). */
     transactionLockedPicksOverride: null as PickRow[] | null,
     session: {
@@ -124,6 +127,10 @@ const ctx = vi.hoisted(() => {
           return { ...store.session }
         }),
       },
+      devyRights: {
+        findFirst: vi.fn(async ({ where }: any) => store.rights.find(r => r.leagueId === where.leagueId && r.devyPlayerId === where.devyPlayerId) ?? null),
+        create: vi.fn(async ({ data }: any) => { if (store.failRightsWrite) throw new Error('rights write failed'); const row = { ...data, id: 'right-1' }; store.rights.push(row); return row }),
+      },
       draftPick: {
         update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
           const row = store.picks.find(p => p.id === where.id)
@@ -161,7 +168,8 @@ const ctx = vi.hoisted(() => {
     league: {
       findUnique: vi.fn(async () => ({
         lifecycleState: 'drafting',
-        sport: 'NFL',
+        sport: store.nba ? 'NBA' : 'NFL',
+        leagueVariant: store.nba ? 'merged_devy_c2c' : null,
         userId: 'commissioner-1',
       })),
     },
@@ -169,14 +177,15 @@ const ctx = vi.hoisted(() => {
       findFirst: vi.fn(async () => null),
     },
     $transaction: vi.fn(async (fn: (tx: ReturnType<typeof buildTx>) => Promise<unknown>) => {
-      const snapshot = structuredClone({ picks: store.picks, session: store.session })
-      try { return await fn(buildTx()) } catch (e) { store.picks = snapshot.picks; store.session = snapshot.session; throw e }
+      const snapshot = structuredClone({ picks: store.picks, session: store.session, rights: store.rights })
+      try { return await fn(buildTx()) } catch (e) { store.picks = snapshot.picks; store.session = snapshot.session; store.rights = snapshot.rights; throw e }
     }),
   }
 
   function resetStore() {
     store.season = false; store.transactionVersionOverride = null; store.rejectVersionClaim = false
     store.picks = []
+    store.nba = false; store.rights = []; store.failRightsWrite = false; store.session.c2cConfig = null; store.session.devyConfig = null
     store.transactionLockedPicksOverride = null
     store.pickIdSeq = 0
     store.session.status = 'in_progress'
@@ -246,6 +255,11 @@ vi.mock('@/server/services/leagueLifecycleService', () => ({
   getLeagueLifecycleState: () => 'drafting',
 }))
 
+const verifyNbaPickMock = vi.hoisted(() => vi.fn(async () => true))
+vi.mock('@/lib/devy/verifyNcaabDraftPick', () => ({ verifyNcaabCollegeDraftPick: verifyNbaPickMock }))
+vi.mock('@/lib/merged-devy-c2c/C2CLeagueConfig', async (load) => ({ ...(await load<typeof import('@/lib/merged-devy-c2c/C2CLeagueConfig')>()), isC2CLeague: vi.fn(async () => ctx.store.nba) }))
+vi.mock('@/lib/devy/DevyLeagueConfig', async (load) => ({ ...(await load<typeof import('@/lib/devy/DevyLeagueConfig')>()), isDevyLeague: vi.fn(async () => false) }))
+
 const { submitPick } = await import('@/lib/live-draft-engine/PickSubmissionService')
 
 describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
@@ -253,6 +267,32 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
     ctx.resetStore()
     vi.clearAllMocks()
     completeDraftSessionMock.mockResolvedValue(true)
+  })
+
+  it.each(['user', 'auto', 'commissioner'] as const)('creates verified college ownership atomically for %s picks', async (source) => {
+    ctx.store.nba = true
+    const result = await submitPick({ leagueId: 'league-1', playerName: 'College Guard', position: 'G', playerId: 'espn:ncaab:1', rosterId: 'roster-a', source, expectedOverall: 1 })
+    expect(result.success).toBe(true)
+    expect(ctx.store.picks[0]).toMatchObject({ playerId: 'espn:ncaab:1', assetType: 'c2c_college', pickMetadata: { draftCollegeRightsId: 'right-1' } })
+    expect(ctx.store.rights).toMatchObject([{ leagueId: 'league-1', rosterId: 'roster-a', devyPlayerId: 'espn:ncaab:1', state: 'COLLEGE_ACTIVE' }])
+  })
+  it('rejects unverified college IDs and rolls back when rights cannot be created', async () => {
+    ctx.store.nba = true
+    verifyNbaPickMock.mockResolvedValueOnce(false)
+    const pick = { leagueId: 'league-1', playerName: 'College Guard', position: 'G', playerId: 'espn:ncaab:1', rosterId: 'roster-a', expectedOverall: 1 }
+    expect((await submitPick(pick)).success).toBe(false)
+    expect(ctx.store.picks).toHaveLength(0)
+    ctx.store.failRightsWrite = true
+    await expect(submitPick(pick)).rejects.toThrow('rights write failed')
+    expect(ctx.store.picks).toHaveLength(0)
+    expect(ctx.store.rights).toHaveLength(0)
+  })
+  it('does not allow college picks outside configured college rounds', async () => {
+    ctx.store.nba = true
+    ;(ctx.store.session as any).c2cConfig = { enabled: true, collegeRounds: [2] }
+    const result = await submitPick({ leagueId: 'league-1', playerName: 'College Guard', position: 'G', playerId: 'espn:ncaab:1', rosterId: 'roster-a', expectedOverall: 1 })
+    expect(result.success).toBe(false)
+    expect(ctx.store.picks).toHaveLength(0)
   })
 
   it('successful pick creates DraftPick and resets timerEndAt + increments version', async () => {

@@ -121,7 +121,7 @@ export async function POST(
   const { getAllowedPositionsAndRosterSize } = await import('@/lib/live-draft-engine/RosterFitValidation')
   const rosterRules = await getAllowedPositionsAndRosterSize(leagueId)
   const draftEligiblePositions = rosterRules?.draftEligiblePositions
-  const eligibleInQueue = filterEntriesByDraftEligiblePositions(availableInQueue, draftEligiblePositions)
+  const eligibleInQueue = filterEntriesByDraftEligiblePositions(availableInQueue, draftEligiblePositions, rosterRules?.sport)
   const firstAvailable = eligibleInQueue[0]
 
   const draftConfig = await getDraftConfigForLeague(leagueId)

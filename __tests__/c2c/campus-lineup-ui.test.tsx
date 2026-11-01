@@ -171,6 +171,11 @@ describe('loadCampusLineupView', () => {
     })
   })
 
+  it('loads a basketball C2C campus lineup without football week claims', async () => {
+    const result = await loadCampusLineupView(db as never, { league: { ...league, sport: 'NBA' }, playerData, redraftRosterId: 'R1' })
+    expect(result).toMatchObject({ sport: 'basketball', cfbWeeks: [], nflWeek: 1 })
+  })
+
   it('null for every other league', async () => {
     for (const over of [{ leagueVariant: 'devy_dynasty' }, { sport: 'NHL' }, { platform: 'sleeper' }]) {
       expect(await loadCampusLineupView(db as never, { league: { ...league, ...over }, playerData, redraftRosterId: 'R1' })).toBeNull()

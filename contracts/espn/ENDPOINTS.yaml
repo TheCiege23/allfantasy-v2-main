@@ -49,6 +49,10 @@ support_matrix:
     sport_path: basketball/mens-college-basketball
     teams: { status: probed, fixture: fixtures/teams.NCAAB.json }
     roster: { status: probed, fixtures: [fixtures/roster.NCAAB.team150.json, fixtures/roster.NCAAB.team2057.json, fixtures/roster.NCAAB.team2441.json] }
+    summary: { status: probed_shape_only, fixture: fixtures/summary.NCAAB.event401825532.json, captured: 2026-10-31 }
+    scoreboard: { status: probed_shape_only, fixture: fixtures/scoreboard.NCAAB.20260221.json, captured: 2026-10-31 }
+    # The key-union trimmer preserves field paths, not every team, stat label, or athlete.
+    # These captures cannot establish a complete slate or a complete two-team box score.
   NFL:
     sport_path: football/nfl
     summary: { status: probed, fixture: fixtures/summary.NFL.event401873011.json, captured: 2026-10-25 }
@@ -61,6 +65,23 @@ support_matrix:
 
 # ============================================================================
 endpoints:
+
+  ncaab_scoreboard:
+    method: GET
+    path: /basketball/mens-college-basketball/scoreboard
+    query: { dates: YYYYMMDD, groups: 50, limit: 1000 }
+    measured_2026_10_31: { requested_date: '20260221', http_status: 200, events_before_trim: 148, target_event: '401825532', full_body_bytes: 5819232 }
+    fixture: fixtures/scoreboard.NCAAB.20260221.json
+    caveat: Key-union trim keeps 3 events and may omit competitors; the provider does not declare completeness in this capture.
+
+  ncaab_summary:
+    method: GET
+    path: /basketball/mens-college-basketball/summary
+    query: { event: '401825532' }
+    measured_2026_10_31: { http_status: 200, teams_before_trim: 2, athlete_rows_before_trim: [14, 15], full_body_bytes: 690705 }
+    fixture: fixtures/summary.NCAAB.event401825532.json
+    caveat: Key-union trim retains only one team and one athlete and does not preserve every stat label or value.
+
 
   nba_scoreboard:
     method: GET
