@@ -14,7 +14,8 @@ import { prisma } from '@/lib/prisma'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runLiveScoringForActiveSeasons } from '@/server/services/liveScoring/liveScoreRunner'
 import { RollingInsightsLiveProvider } from '@/lib/live/rollingInsightsLiveProvider'
-import { runPollLoop, createCadenceGate, LIVE_POLL_INTERVAL_MS, PBP_POLL_INTERVAL_MS, POLL_BUDGET_MS } from '@/lib/live/gamedayPoller'
+import { anyGameInProgress, runPollLoop, createCadenceGate, LIVE_POLL_INTERVAL_MS, PBP_POLL_INTERVAL_MS, POLL_BUDGET_MS } from '@/lib/live/gamedayPoller'
+import { refreshNbaCupLive } from '@/lib/playoffs/nbaCupLiveTick'
 import { refreshPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { refreshLiveSleeperPoints, LIVE_POINTS_INTERVAL_MS } from '@/lib/live/liveSleeperPointsSync'
 import { runGrokTdClipPilot } from '@/lib/live/grokTdClipPilot'
@@ -154,6 +155,7 @@ export async function GET(request: NextRequest) {
     let points: Awaited<ReturnType<typeof refreshLiveSleeperPoints>> | null = null
     let clipPilot: Awaited<ReturnType<typeof runGrokTdClipPilot>> | null = null
     let daily: Awaited<ReturnType<typeof runDailySportLiveTick>> | null = null
+    let cup: Awaited<ReturnType<typeof refreshNbaCupLive>> | null = null
     /*
      * NBA / NHL / MLB in-game scoring (Phase 3.3d); the flag can narrow or disable it.
      * Folded into this route rather than a new cron slot (cron-budget-check caps the list at 60),
@@ -227,8 +229,11 @@ export async function GET(request: NextRequest) {
           return null
         })
         const dailyDue = createCadenceGate(DAILY_LIVE_CHECK_MS)
+        const cupDue = createCadenceGate(30_000)
         const tickOnce = async () => {
           const scored = await runLiveScoringForActiveSeasons(prisma, provider ? { provider } : {})
+          // At most two date-level scoreboard reads; no per-pool provider fan-out.
+          if (remainingMs() >= 20_000 && cupDue()) cup = await refreshNbaCupLive().catch(() => ({ activeGames: cup?.activeGames ?? 0, providerFailures: 1, skipped: "sync-failed" }))
           if (pbpDue()) pbp = await refreshPlayByPlayFeed().catch(() => pbp)
           if (remainingMs() >= POINTS_PASS_RESERVE_MS && pointsDue()) points = await refreshLiveSleeperPoints().catch(() => points)
           // ⚠ LIKE PLAYS, THE DAILY SPORTS MUST NEVER TAKE DOWN NFL SCORING.
@@ -247,7 +252,7 @@ export async function GET(request: NextRequest) {
         let last = await tickOnce()
         loop = await runPollLoop(async () => {
           last = await tickOnce()
-        }, { budgetMs: Math.max(0, remainingMs()) })
+        }, { budgetMs: Math.max(0, remainingMs()), isActive: async () => Boolean(cup?.activeGames) || await anyGameInProgress() })
         clipPilot = await clipPilotRun
         return last
       },
@@ -306,6 +311,7 @@ export async function GET(request: NextRequest) {
              is off; per-sport status tells a quiet night ('no-live-games') from a stuck feed. */
           dailyLiveEnabled: dailySports,
           dailyLive: summariseDailyLive(daily),
+          nbaCupLive: cup,
         },
       }),
     )

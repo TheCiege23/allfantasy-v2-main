@@ -9,6 +9,8 @@ import { getRoundPointsSummary } from "@/lib/bracket-challenge"
 import { CommissionerFanCredSetupNotice } from "@/components/legal/CommissionerFanCredSetupNotice"
 import { BracketChallengeHeroMedia } from "@/components/brackets/BracketChallengeHeroMedia"
 import { createPlayoffBracketChallengeClient } from "@/lib/playoffs/playoffClientApi"
+import { roundPointsTable } from "@/lib/playoffs/playoffScoring"
+import { roundLabel } from "@/lib/playoffs/playoffBracketGraph"
 import { useEntitlement } from "@/hooks/useEntitlement"
 import { indefiniteArticleFor } from "@/lib/text/indefiniteArticle"
 import { defaultPlayoffChallengeConfig, isAfCommissionerSubscriber, sanitizePlayoffChallengeConfig } from "@/lib/playoffs/playoffChallengeConfig"
@@ -127,7 +129,7 @@ export default function NewBracketLeaguePage() {
   const scoringSummary = useMemo(
     () => isSingleGamePool
       ? sport === "NCAAF" ? "First round 1 · Quarterfinals 2 · Semifinals 4 · Championship 8"
-        : "Quarterfinals 1 · Semifinals 2 · Championship 4"
+        : roundPointsTable("nba_cup").map(({ round, points }) => `${roundLabel("nba_cup", round)} ${points}`).join(" · ")
       : getRoundPointsSummary(challengeType === "playoff_challenge" ? { 1: 1, 2: 2, 3: 4, 4: 8, 5: 16, 6: 32 } : undefined),
     [challengeType, isSingleGamePool, sport],
   )

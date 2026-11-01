@@ -1,10 +1,15 @@
 import "server-only"
+import { isDeepStrictEqual } from "node:util"
 import { prisma } from "@/lib/prisma"
 import { ESPN_SITE_API_BASE } from "@/lib/providers/espnUrls"
 import { assignNbaCupSlots, parseNbaCupScoreboard, type NbaCupGame } from "./nbaCupTournament"
 import { nbaCupCacheKey, nbaCupSeriesRows, readNbaCupSnapshot } from "./nbaCupCache"
 
 const dayKey = (date: Date) => date.toISOString().slice(0, 10).replace(/-/g, "")
+/** NBA scoreboard dates follow the US game night, including games after midnight UTC. */
+const nbaGameDay = (startsAt: string) => new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+}).format(new Date(startsAt)).replace(/-/g, "")
 /** Published dates speed initial discovery; labels, never dates, establish Cup membership.
  * https://www.nba.com/news/emirates-nba-cup-key-dates-schedule
  * Other seasons are discovered by the rotating October–December scan below.
@@ -19,32 +24,30 @@ export function nbaCupDiscoveryDates(season: number, cursor: number, now = new D
   return [...new Set([...live, ...(season === 2026 ? PUBLISHED_2026 : []), ...rotating])]
 }
 
-/**
- * Scheduled writer for both schedule publication and verified finals. No admin publication gate.
- *
- * `liveOnly` is the minute-level tick: it re-reads only today's and yesterday's
- * scoreboards (UTC dates, which together cover a late-night Eastern tipoff), and
- * accepts a 45s-old read instead of the 4-minute floor the discovery scan uses.
- */
-export async function syncNbaCupTournament(input: { season: number; apply: boolean; liveOnly?: boolean }) {
+/** Scheduled writer for both schedule publication and verified finals. No admin publication gate. */
+export async function syncNbaCupTournament(input: { season: number; apply: boolean; mode?: "live"; liveOnly?: boolean }) {
   const now = new Date()
   const previous = await readNbaCupSnapshot(input.season)
   const checked = previous?.checkedDates ?? {}
   const today = dayKey(now), yesterday = dayKey(new Date(now.getTime() - 86400000))
-  const recentFloorMs = input.liveOnly ? 45_000 : 4 * 60_000
-  const candidates = input.liveOnly ? [today, yesterday] : nbaCupDiscoveryDates(input.season, previous?.cursor ?? 0, now)
+  // Both fast workers share the game-night selection, checked-date cache and advisory lock.
+  const live = input.mode === "live" || input.liveOnly === true
+  const liveGames = (previous?.games ?? []).filter((game) => !game.blocked && game.startsAt && game.status !== "final" &&
+    (game.status === "in_progress" || (Date.parse(game.startsAt) >= now.getTime() - 6 * 3600_000 && Date.parse(game.startsAt) <= now.getTime() + 10 * 60_000)))
+  const candidates = live ? [...new Set(liveGames.map((game) => game.scoreboardDate ?? nbaGameDay(game.startsAt!)))].slice(0, 2)
+    : nbaCupDiscoveryDates(input.season, previous?.cursor ?? 0, now)
   const dates = candidates.filter((date) => {
     const age = now.getTime() - Date.parse(checked[date] ?? "")
-    return !Number.isFinite(age) || age >= (date === today || date === yesterday ? recentFloorMs : 6 * 3600_000)
+    return !Number.isFinite(age) || age >= (live ? input.mode === "live" ? 30_000 : 45_000 : date === today || date === yesterday ? 4 * 60_000 : 6 * 3600_000)
   }).slice(0, 4)
-  if (input.liveOnly && dates.length === 0) return { applied: false, skipped: "recently_checked", gamesDiscovered: 0, failures: [] as Array<{ date: string; error: string | null }>, outcomes: [] }
+  if (live && !dates.length) return { applied: false, activeGames: liveGames.filter((game) => game.status === "in_progress").length, gamesPublished: previous?.games.length ?? 0, poolsUpdated: 0, failures: [], outcomes: [] }
   const responses = await Promise.all(dates.map(async (date) => {
     try {
       const response = await fetch(`${ESPN_SITE_API_BASE}/basketball/nba/scoreboard?dates=${date}&limit=1000`, {
         headers: { Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(8000),
       })
       if (!response.ok) throw new Error(`NBA scoreboard HTTP ${response.status}`)
-      return { date, games: parseNbaCupScoreboard(await response.json(), input.season), error: null }
+      return { date, games: parseNbaCupScoreboard(await response.json(), input.season).map((game) => ({ ...game, scoreboardDate: date })), error: null }
     } catch (error) {
       return { date, games: [] as NbaCupGame[], error: error instanceof Error ? error.message : "Scoreboard unavailable" }
     }
@@ -59,6 +62,7 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
     const row = await tx.sportsDataCache.findUnique({ where: { cacheKey: nbaCupCacheKey(input.season) }, select: { data: true } })
     const current = row?.data as typeof previous
     const merged = new Map((current?.games ?? previous?.games ?? []).map((game) => [game.eventId, game]))
+    const changed = new Set<string>()
     const checkedDates = { ...(current?.checkedDates ?? checked) }
     for (const response of responses) {
       if (response.error || Date.parse(checkedDates[response.date] ?? "") > now.getTime()) continue
@@ -67,18 +71,30 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
         const prior = merged.get(game.eventId)
         // Stale or incomplete pregame responses must not erase a verified final.
         if (prior?.winnerTeamName && !game.winnerTeamName) continue
-        merged.set(game.eventId, game)
+        const next = { ...game,
+          homeLeader: game.homeLeader ?? (prior?.status === "final" && game.status === "final" ? prior.homeLeader : null),
+          awayLeader: game.awayLeader ?? (prior?.status === "final" && game.status === "final" ? prior.awayLeader : null),
+          homeLines: game.homeLines?.length ? game.homeLines : prior?.status === "final" && game.status === "final" ? prior.homeLines ?? [] : [],
+          awayLines: game.awayLines?.length ? game.awayLines : prior?.status === "final" && game.status === "final" ? prior.awayLines ?? [] : [],
+          homeLeaders: game.homeLeaders?.length ? game.homeLeaders : prior?.status === "final" && game.status === "final" ? prior.homeLeaders ?? [] : [],
+          awayLeaders: game.awayLeaders?.length ? game.awayLeaders : prior?.status === "final" && game.status === "final" ? prior.awayLeaders ?? [] : [],
+        }
+        // Compare without the persisted slot, which the scoreboard does not own.
+        if (!isDeepStrictEqual({ ...prior, seriesNumber: undefined }, { ...next, seriesNumber: undefined })) changed.add(game.eventId)
+        merged.set(game.eventId, next)
       }
     }
     const games = assignNbaCupSlots([...merged.values()], current?.games ?? previous?.games)
-    // The live tick does not advance the discovery cursor; only the full scan walks the season.
-    const data = { games, checkedDates, cursor: input.liveOnly ? current?.cursor ?? 0 : ((current?.cursor ?? 0) + 4) % 92, syncedAt: now.toISOString() }
+    const priorSync = current?.syncedAt ?? previous?.syncedAt ?? ""
+    const acceptedResponse = responses.some((row) => !row.error && Date.parse(checkedDates[row.date]) === now.getTime())
+    const data = { games, checkedDates, cursor: live ? current?.cursor ?? previous?.cursor ?? 0 : ((current?.cursor ?? 0) + 4) % 92,
+      syncedAt: acceptedResponse && (!Number.isFinite(Date.parse(priorSync)) || Date.parse(priorSync) <= now.getTime()) ? now.toISOString() : priorSync }
     const expiresAt = new Date(Date.UTC(input.season + 2, 0, 1))
     await tx.sportsDataCache.upsert({ where: { cacheKey: nbaCupCacheKey(input.season) }, create: { cacheKey: nbaCupCacheKey(input.season), data: data as any, expiresAt }, update: { data: data as any, expiresAt } })
     // Rotate large populations through bounded batches, and never alter test pools.
     const pools = await tx.playoffBracketChallenge.findMany({ where: { sport: "nba_cup", seasonYear: input.season, isTestMode: false }, orderBy: { updatedAt: "asc" }, take: 100, select: { id: true } })
     const ids = pools.map((pool) => pool.id)
-    const rows = nbaCupSeriesRows(games)
+    const rows = nbaCupSeriesRows(live ? games.filter((game) => changed.has(game.eventId)) : games)
     if (ids.length && rows.length) {
       await tx.playoffBracketSeries.createMany({ data: pools.flatMap((pool) => rows.filter((game) => game.round === "cup_group_play").map((game) => ({ ...game, challengeId: pool.id, lastSyncedAt: now }))), skipDuplicates: true })
       for (const game of rows) {
@@ -86,6 +102,7 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
       }
       await tx.playoffBracketChallenge.updateMany({ where: { id: { in: ids } }, data: { updatedAt: now } })
     }
-    return { applied: true, gamesPublished: rows.length, poolsUpdated: ids.length, failures, outcomes: [] }
-  }, { timeout: 55000, maxWait: 5000 })
+    return { applied: true, gamesPublished: games.length, poolsUpdated: rows.length ? ids.length : 0, failures, outcomes: [],
+      activeGames: games.filter((game) => game.status === "in_progress").length }
+  }, { timeout: live ? 8000 : 55000, maxWait: live ? 1000 : 5000 })
 }
