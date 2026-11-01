@@ -7,6 +7,7 @@ import { extractChimmyGifMood, resolveChimmyGif } from '@/lib/chimmy/chimmyGif'
 import { parseScreenshotWithVision } from '@/lib/chimmy/screenshotVision'
 import { NextRequest, NextResponse } from 'next/server'
 import { CHIMMY_CURRENT_REQUEST_POLICY, markEarlierImageTurns } from '@/lib/chimmy/currentRequestFocus'
+import { priorConversationTurns } from '@/lib/chimmy-chat/conversation-context'
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
 import { leagueForbidsTrades } from '@/lib/chimmy/decisionFormatGate'
 import { compoundDecision } from '@/lib/chimmy/decisionClauses'
@@ -1413,7 +1414,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   const freeSummaryRequested = asksForFreeSummary(formData, selectedAssistantMode)
   let leagueId = requestedLeagueId ?? null
   let leagueNameHint = requestedLeagueNameHint ?? null
-  const conversation = markEarlierImageTurns(parsedConversation.slice(-MAX_CONVERSATION_CONTEXT_TURNS))
+  const conversation = markEarlierImageTurns(priorConversationTurns(parsedConversation, message, MAX_CONVERSATION_CONTEXT_TURNS))
   const imageFile = imageValidation.file
 
   const initialIntent = classifyPecrIntent(message)
@@ -2516,7 +2517,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   ]
     .concat(
       staleness.warning
-        ? [`## DATA FRESHNESS\n${staleness.warning}\nAlways include this warning when answering.`]
+        ? [`## DATA FRESHNESS\n${staleness.warning}\nThe route appends this warning once; do not repeat it in your prose.`]
         : [],
       sourceReferences.length > 0
         ? [
@@ -3167,7 +3168,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[] }
     const loopArgs = {
       /*
        * The screenshot read for THIS request rides with the question, fenced as evidence exactly as

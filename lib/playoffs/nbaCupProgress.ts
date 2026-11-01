@@ -24,7 +24,21 @@ export function cupPointsLeaders(competitor: any): CupScorer[] {
 
 export function cupGameDetails(game: Pick<PlayoffSeriesView, "providerGamesJson">): CupGameDetails {
   const data = game.providerGamesJson
-  return data && typeof data === "object" && !Array.isArray(data) ? data as CupGameDetails : {}
+  if (!data || typeof data !== "object" || Array.isArray(data)) return {}
+  const json = data as Record<string, unknown>
+  const live = json.live && typeof json.live === "object" && !Array.isArray(json.live) ? json.live as Record<string, unknown> : {}
+  const scorers = (value: unknown): CupScorer[] => (Array.isArray(value) ? value : []).flatMap((item) => {
+    const row = item as Partial<CupScorer> | null
+    return row && typeof row.name === "string" && row.name.trim() && typeof row.points === "number" && Number.isSafeInteger(row.points) && row.points >= 0
+      ? [{ name: row.name.trim(), points: row.points }] : []
+  })
+  const number = (value: unknown): number | null => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null
+  const text = (value: unknown): string | null => typeof value === "string" && value.trim() ? value.trim().slice(0, 80) : null
+  return {
+    period: number(json.period ?? live.period), clock: text(json.clock ?? live.clock), statusDetail: text(json.statusDetail ?? live.detail),
+    homeLeaders: scorers(json.homeLeaders ?? [live.homeLeader]), awayLeaders: scorers(json.awayLeaders ?? [live.awayLeader]),
+    homeRegulationPoints: number(json.homeRegulationPoints), awayRegulationPoints: number(json.awayRegulationPoints),
+  }
 }
 
 // Season-scoped published draw. Never reuse a previous year's draw for a future Cup.

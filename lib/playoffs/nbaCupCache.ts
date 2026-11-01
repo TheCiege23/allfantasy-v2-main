@@ -21,11 +21,19 @@ export function nbaCupSeriesRows(games: NbaCupGame[]) {
     startsAt: game.startsAt ? new Date(game.startsAt) : null, status: game.status,
     winnerTeamName: game.winnerTeamName, venue: game.venue,
     liveHomeScore: game.homeScore, liveAwayScore: game.awayScore,
-    liveStatus: game.blocked ? "Schedule pending" : game.statusDetail || game.status,
+    liveStatus: game.blocked ? "Schedule pending" : game.status === "in_progress" ? game.statusDetail ?? "In progress" : game.status,
     seriesSummary: game.winnerTeamName ? `${game.homeScore}–${game.awayScore}` : null,
-    providerGamesJson: { provider: "espn_nba_cup", eventId: game.eventId, gameLabel: game.label, location: game.location,
+    providerGamesJson: {
+      provider: "espn_nba_cup", eventId: game.eventId, gameLabel: game.label, location: game.location,
       period: game.period ?? null, clock: game.clock ?? null, statusDetail: game.statusDetail ?? null,
       homeLeaders: game.homeLeaders ?? [], awayLeaders: game.awayLeaders ?? [],
-      homeRegulationPoints: game.homeRegulationPoints ?? null, awayRegulationPoints: game.awayRegulationPoints ?? null },
+      homeRegulationPoints: game.homeRegulationPoints ?? null, awayRegulationPoints: game.awayRegulationPoints ?? null,
+      live: {
+        detail: game.statusDetail ?? null, period: game.period ?? null, clock: game.clock ?? null,
+        homeLeader: game.homeLeader ?? null, awayLeader: game.awayLeader ?? null,
+        homeLines: game.homeLines ?? [], awayLines: game.awayLines ?? [],
+      },
+      teams: { homeAbbr: game.homeAbbr ?? null, awayAbbr: game.awayAbbr ?? null, homeColor: game.homeColor ?? null, awayColor: game.awayColor ?? null },
+    },
   }))
 }

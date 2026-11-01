@@ -17,6 +17,22 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
 describe("scheduled NBA Cup publisher", () => {
+  it("supports the minute overlay on the same US game-night date and keeps its discovery cursor", async () => {
+    vi.setSystemTime(new Date("2026-11-07T00:10:00Z"))
+    const games = assignNbaCupSlots(parseNbaCupScoreboard(group, 2026))
+    db.sportsDataCache.findUnique.mockResolvedValue({ data: { games, checkedDates: {}, cursor: 12, syncedAt: "2026-11-07T00:00:00Z" } })
+    expect(await syncNbaCupTournament({ season: 2026, apply: true, liveOnly: true })).toMatchObject({ applied: true, failures: [] })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("dates=20261106"), expect.anything())
+    const written = db.sportsDataCache.upsert.mock.calls[0][0].update.data
+    expect(written.cursor).toBe(12)
+    db.sportsDataCache.findUnique.mockResolvedValue({ data: written })
+    vi.mocked(fetch).mockClear()
+    vi.setSystemTime(new Date("2026-11-07T00:10:44Z"))
+    expect(await syncNbaCupTournament({ season: 2026, apply: true, liveOnly: true })).toMatchObject({ applied: false })
+    expect(fetch).not.toHaveBeenCalled()
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 8000, maxWait: 1000 })
+  })
   it("updates live scores and clock on a bounded date-level poll, then respects the 30-second cadence", async () => {
     vi.setSystemTime(new Date("2026-11-07T00:10:00Z"))
     const games = assignNbaCupSlots(parseNbaCupScoreboard(group, 2026))

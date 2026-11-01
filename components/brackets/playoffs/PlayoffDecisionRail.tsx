@@ -73,7 +73,11 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
 
   return (
     <>
-      <section className="af-pb-card" data-testid="pb-decision-rail">
+      {/*
+        * NBA Cup has no seeds to read — every Cup matchup reads "seeded level, no
+        * edge", which is true and useless. The Cup rail's group standings replace it.
+        */}
+      {sport === "nba_cup" ? null : <section className="af-pb-card" data-testid="pb-decision-rail">
         <div className="af-pb-rail-head">Series read</div>
         {reads.length === 0 ? (
           <p className="af-pb-basis" style={{ borderTop: 0 }}>
@@ -94,7 +98,7 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
           Basis: seeding only. These lines compare two seed numbers on a fixed slope — they are not
           a scouting model, and they do not know about rotations, injuries or form.
         </p>
-      </section>
+      </section>}
 
       <section className="af-pb-card" data-testid="pb-leaderboard">
         <div className="af-pb-rail-head">Pool standings</div>

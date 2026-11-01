@@ -10,6 +10,47 @@ export type NbaCupGame = CupGameDetails & {
   homeScore: number | null; awayScore: number | null; winnerTeamName: string | null
   seriesNumber?: number
   scoreboardDate?: string
+  /**
+   * Live and box-score detail. Optional because snapshots written before these
+   * fields existed carry none of them, and a reader must treat "absent" as
+   * "unknown", never as zero.
+   */
+  statusDetail?: string | null
+  period?: number | null
+  clock?: string | null
+  homeLeader?: NbaCupLeader | null
+  awayLeader?: NbaCupLeader | null
+  homeLines?: number[]
+  awayLines?: number[]
+  homeAbbr?: string | null
+  awayAbbr?: string | null
+  homeColor?: string | null
+  awayColor?: string | null
+}
+
+/** A team's points leader for one game. */
+export type NbaCupLeader = { name: string; points: number }
+
+/**
+ * ⚠ ONLY ONCE THE GAME HAS STARTED. Before tipoff ESPN's competitor `leaders`
+ * are season averages, so reading them pregame would label a season leader as
+ * this game's top scorer with a number nobody scored.
+ */
+function pointsLeader(competitor: any): NbaCupLeader | null {
+  const category = Array.isArray(competitor?.leaders) ? competitor.leaders.find((row: any) => row?.name === "points") : null
+  const top = category?.leaders?.[0]
+  const name = top?.athlete?.displayName ?? top?.athlete?.shortName
+  const points = Number(top?.value)
+  return typeof name === "string" && name && Number.isFinite(points) && points >= 0 ? { name, points } : null
+}
+
+function lineScores(competitor: any): number[] {
+  if (!Array.isArray(competitor?.linescores)) return []
+  return competitor.linescores.map((row: any) => Number(row?.value)).filter((value: number) => Number.isFinite(value) && value >= 0)
+}
+
+function hexColor(value: unknown): string | null {
+  return typeof value === "string" && /^[0-9a-f]{6}$/i.test(value) ? `#${value.toLowerCase()}` : null
 }
 
 const EAST = new Set(["Atlanta Hawks", "Boston Celtics", "Brooklyn Nets", "Charlotte Hornets", "Chicago Bulls", "Cleveland Cavaliers", "Detroit Pistons", "Indiana Pacers", "Miami Heat", "Milwaukee Bucks", "New York Knicks", "Orlando Magic", "Philadelphia 76ers", "Toronto Raptors", "Washington Wizards"])
@@ -61,17 +102,29 @@ export function parseNbaCupScoreboard(payload: unknown, season: number): NbaCupG
       return Array.isArray(quarters) && quarters.length === 4 && quarters.every((row: any) => Number.isSafeInteger(row.value) && row.value >= 0)
         ? quarters.reduce((total: number, row: any) => total + row.value, 0) : null
     }
+    const started = status !== "scheduled"
+    const detail = typeof type?.shortDetail === "string" && type.shortDetail.trim() ? type.shortDetail.trim().slice(0, 40) : null
+    const clock = typeof event.status?.displayClock === "string" ? event.status.displayClock.slice(0, 12) : null
     games.set(event.id, {
       eventId: event.id, round, label, startsAt: blocked ? null : new Date(timestamp).toISOString(),
       homeTeamName: h, awayTeamName: a, conference, venue: venue?.fullName ?? null,
       location: [venue?.address?.city, venue?.address?.state].filter(Boolean).join(", ") || null,
       status, blocked, homeScore: hs, awayScore: as, winnerTeamName: winner,
-      period, clock: status === "in_progress" && typeof event.status?.displayClock === "string" ? event.status.displayClock : null,
-      statusDetail: blocked ? "Schedule pending" : typeof type?.shortDetail === "string" ? type.shortDetail : status,
       homeLeaders: status === "scheduled" ? [] : cupPointsLeaders(home),
       awayLeaders: status === "scheduled" ? [] : cupPointsLeaders(away),
       homeRegulationPoints: status === "final" ? regulationPoints(home) : null,
       awayRegulationPoints: status === "final" ? regulationPoints(away) : null,
+      statusDetail: started ? detail : null,
+      period: started ? period : null,
+      clock: status === "in_progress" ? clock : null,
+      homeLeader: started ? pointsLeader(home) : null,
+      awayLeader: started ? pointsLeader(away) : null,
+      homeLines: started ? lineScores(home) : [],
+      awayLines: started ? lineScores(away) : [],
+      homeAbbr: typeof home?.team?.abbreviation === "string" ? home.team.abbreviation.slice(0, 5) : null,
+      awayAbbr: typeof away?.team?.abbreviation === "string" ? away.team.abbreviation.slice(0, 5) : null,
+      homeColor: hexColor(home?.team?.color),
+      awayColor: hexColor(away?.team?.color),
     })
   }
   return [...games.values()]
@@ -113,4 +166,22 @@ export function eligibleNbaCupPicks<T extends { seriesId: string }>(
   if (!Number.isFinite(submitted)) return []
   const starts = new Map(games.map((game) => [game.id, game.startsAt ? new Date(game.startsAt).getTime() : Number.NaN]))
   return picks.filter((pick) => (starts.get(pick.seriesId) ?? Number.NaN) > submitted)
+}
+
+/**
+ * Whether any Cup game is on, or about to be, so the minute-level live tick is
+ * worth a provider call. Reads only the stored snapshot.
+ *
+ * ⚠ THE WINDOW RUNS 4H PAST TIPOFF, NOT TO A GUESSED END TIME. A game with
+ * overtime or a long delay is still live after a typical 2.5h, and a game the
+ * snapshot still calls scheduled after tipoff is exactly the one whose first
+ * live score has not been fetched yet.
+ */
+export function nbaCupLiveWindowOpen(games: NbaCupGame[], now = Date.now()): boolean {
+  return games.some((game) => {
+    if (game.blocked || game.status === "final") return false
+    if (game.status === "in_progress") return true
+    const start = Date.parse(game.startsAt ?? "")
+    return Number.isFinite(start) && start - 10 * 60_000 <= now && now <= start + 4 * 3600_000
+  })
 }

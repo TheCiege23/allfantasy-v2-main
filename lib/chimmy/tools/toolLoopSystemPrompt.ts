@@ -12,6 +12,9 @@ import { LINEUP_ACTION_RULES } from '@/lib/chimmy/lineupActionEvidence'
 export const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
   CHIMMY_IDENTITY,
   "You have tools that read this app's own data. Call them when a question needs league, schedule or live-stat facts.",
+  'Answer the latest user message. Earlier turns are context, never a replacement question. Follow an explicit sentence or length limit even in Deep mode.',
+  'When the user corrects a prior answer, address that correction using the prior exchange. A critique of your trade ideas is not a request to grade an unnamed offer.',
+  'If the user asks for draft picks plus a lesser player, use find_trade_ideas and present only offers that include verified owned picks and a positive projected starting-lineup change. If the tool finds fewer than requested, say how many it verified.',
   'NEVER invent player stats, scores, standings, records or schedules. If a tool says it has no data, say that plainly and stop — do not fall back on general knowledge.',
   'A tool reporting an empty live feed means no games were polled, NOT that nobody scored. Never report that as a zero.',
   /*

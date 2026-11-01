@@ -5,6 +5,8 @@ import scheduled from "../../contracts/espn/fixtures/scoreboard.NBA.20261106.jso
 import { cupPointsLeaders, nbaCupGroupStandings } from "@/lib/playoffs/nbaCupProgress"
 import { parseNbaCupScoreboard } from "@/lib/playoffs/nbaCupTournament"
 import { nbaCupPublicLive } from "@/lib/playoffs/nbaCupPublicLive"
+import { cupGameDetail } from "@/lib/playoffs/nbaCupBoard"
+import { nbaCupSeriesRows } from "@/lib/playoffs/nbaCupCache"
 import { mergeCupLiveView, useNbaCupLiveView } from "@/components/brackets/playoffs/useNbaCupLiveView"
 import NbaCupTournamentPanel from "@/components/brackets/playoffs/NbaCupTournamentPanel"
 import { buildPlayoffTemplate } from "@/lib/playoffs/playoffTemplate"
@@ -72,6 +74,33 @@ describe("group records and qualification", () => {
 })
 
 describe("public results and live refresh", () => {
+  it("keeps the merged card and modal details through refresh while stripping nested metadata", () => {
+    const current = view()
+    const parsed = parseNbaCupScoreboard(final, 2025)[0]
+    const row = nbaCupSeriesRows([{ ...parsed, seriesNumber: 7 }])[0]
+    current.series = [game(parsed.homeTeamName, parsed.awayTeamName, parsed.winnerTeamName, {
+      ...row, id: "g", startsAt: row.startsAt?.toISOString(), providerGamesJson: {
+        ...row.providerGamesJson,
+        live: { ...row.providerGamesJson.live, privateMarker: "NESTED-PRIVATE", homeLeader: { ...parsed.homeLeader, extra: "SCORER-PRIVATE" } },
+        teams: { ...row.providerGamesJson.teams, userId: "TEAM-PRIVATE" },
+      },
+    })]
+    const update = nbaCupPublicLive(current)
+    const refreshed = mergeCupLiveView(current, update)
+    expect(cupGameDetail(refreshed.series[0])).toMatchObject({
+      detail: "Final", period: 4, homeLeader: { name: "OG Anunoby", points: 28 },
+      homeLines: [28, 31, 30, 35], homeAbbr: "NY", homeColor: "#1d428a",
+    })
+    for (const value of ["NESTED-PRIVATE", "SCORER-PRIVATE", "TEAM-PRIVATE"]) expect(JSON.stringify(update)).not.toContain(value)
+    expect(refreshed.picks).toBe(current.picks)
+  })
+  it("reads main's older nested detail and keeps tied top scorers on the new cards", () => {
+    const current = view()
+    current.series[0].providerGamesJson = { live: { period: 2, clock: "4:12", homeLeader: { name: "Legacy scorer", points: 12 } } }
+    expect(cupGameDetail(nbaCupPublicLive(current).series[0])).toMatchObject({ period: 2, clock: "4:12", homeLeader: { name: "Legacy scorer", points: 12 } })
+    current.series[0].providerGamesJson = { homeLeaders: [{ name: "A", points: 30 }, { name: "B", points: 30 }] }
+    expect(cupGameDetail(nbaCupPublicLive(current).series[0]).homeLeader).toEqual({ name: "A / B", points: 30 })
+  })
   it("serves only the public projection from an anonymous read and rejects other sports", async () => {
     readView.mockResolvedValue(view())
     const request = new Request("https://example.test/api/brackets/playoffs/cup/live?entryId=someone-else")

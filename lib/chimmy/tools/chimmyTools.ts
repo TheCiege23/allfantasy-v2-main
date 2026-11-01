@@ -12,6 +12,7 @@ import { buildPlayerValueContext } from '@/lib/chimmy/tools/playerValueTool'
 import { buildPlayerProjectionContext } from '@/lib/chimmy/tools/playerProjectionTool'
 import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
 import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
+import { requestsPickTradePackage } from '@/lib/chimmy/tradeFinderIntent'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { lineupActionEvidence } from '@/lib/chimmy/lineupActionEvidence'
@@ -58,6 +59,7 @@ export type ChimmyToolContext = {
    */
   leagueId: string | null
   userId: string | null
+  currentQuestion?: string
   /**
    * "Start X over Y" calls the engines made during this answer, collected so the route can record
    * the ones the answer actually said (`lib/chimmy-advice/chatStartSitAdvice.ts`) and grade them later
@@ -1166,6 +1168,7 @@ export async function executeChimmyTool(
           tradeAway: typeof args.trade_away === 'string' && args.trade_away.trim() ? args.trade_away.trim().slice(0, 80) : null,
           goal: args.goal === 'win_now' ? 'win_now' : null,
           includePicks: args.include_picks === true,
+          ...(requestsPickTradePackage(ctx.currentQuestion ?? '') ? { requiresPicks: true } : {}),
         })
       }
 

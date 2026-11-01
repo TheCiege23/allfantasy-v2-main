@@ -25,19 +25,20 @@ export function nbaCupDiscoveryDates(season: number, cursor: number, now = new D
 }
 
 /** Scheduled writer for both schedule publication and verified finals. No admin publication gate. */
-export async function syncNbaCupTournament(input: { season: number; apply: boolean; mode?: "live" }) {
+export async function syncNbaCupTournament(input: { season: number; apply: boolean; mode?: "live"; liveOnly?: boolean }) {
   const now = new Date()
   const previous = await readNbaCupSnapshot(input.season)
   const checked = previous?.checkedDates ?? {}
   const today = dayKey(now), yesterday = dayKey(new Date(now.getTime() - 86400000))
-  const live = input.mode === "live"
+  // Both fast workers share the game-night selection, checked-date cache and advisory lock.
+  const live = input.mode === "live" || input.liveOnly === true
   const liveGames = (previous?.games ?? []).filter((game) => !game.blocked && game.startsAt && game.status !== "final" &&
-    Date.parse(game.startsAt) >= now.getTime() - 6 * 3600_000 && Date.parse(game.startsAt) <= now.getTime() + 60_000)
+    (game.status === "in_progress" || (Date.parse(game.startsAt) >= now.getTime() - 6 * 3600_000 && Date.parse(game.startsAt) <= now.getTime() + 10 * 60_000)))
   const candidates = live ? [...new Set(liveGames.map((game) => game.scoreboardDate ?? nbaGameDay(game.startsAt!)))].slice(0, 2)
     : nbaCupDiscoveryDates(input.season, previous?.cursor ?? 0, now)
   const dates = candidates.filter((date) => {
     const age = now.getTime() - Date.parse(checked[date] ?? "")
-    return !Number.isFinite(age) || age >= (live ? 30_000 : date === today || date === yesterday ? 4 * 60_000 : 6 * 3600_000)
+    return !Number.isFinite(age) || age >= (live ? input.mode === "live" ? 30_000 : 45_000 : date === today || date === yesterday ? 4 * 60_000 : 6 * 3600_000)
   }).slice(0, 4)
   if (live && !dates.length) return { applied: false, activeGames: liveGames.filter((game) => game.status === "in_progress").length, gamesPublished: previous?.games.length ?? 0, poolsUpdated: 0, failures: [], outcomes: [] }
   const responses = await Promise.all(dates.map(async (date) => {
@@ -71,6 +72,10 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
         // Stale or incomplete pregame responses must not erase a verified final.
         if (prior?.winnerTeamName && !game.winnerTeamName) continue
         const next = { ...game,
+          homeLeader: game.homeLeader ?? (prior?.status === "final" && game.status === "final" ? prior.homeLeader : null),
+          awayLeader: game.awayLeader ?? (prior?.status === "final" && game.status === "final" ? prior.awayLeader : null),
+          homeLines: game.homeLines?.length ? game.homeLines : prior?.status === "final" && game.status === "final" ? prior.homeLines ?? [] : [],
+          awayLines: game.awayLines?.length ? game.awayLines : prior?.status === "final" && game.status === "final" ? prior.awayLines ?? [] : [],
           homeLeaders: game.homeLeaders?.length ? game.homeLeaders : prior?.status === "final" && game.status === "final" ? prior.homeLeaders ?? [] : [],
           awayLeaders: game.awayLeaders?.length ? game.awayLeaders : prior?.status === "final" && game.status === "final" ? prior.awayLeaders ?? [] : [],
         }

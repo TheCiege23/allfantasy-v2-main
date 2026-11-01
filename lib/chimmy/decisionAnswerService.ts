@@ -15,6 +15,7 @@ import { buildTradeTargetVerdict } from './tradeTargetVerdict'
 import { renderTradeTargetVerdict } from './tradeTargetDecision'
 import { buildTradeFinder, readTradeFinderPosition } from './tradeFinderGrounding'
 import { mentionsDraftPicks, readTradeFinderGoal } from './tradeFinderAsk'
+import { requestsPickTradePackage } from './tradeFinderIntent'
 import type { ReadyChimmyScenario } from './tradeScenarioTypes'
 import type { ChatStartCall } from './tools/chimmyTools'
 import { scenarioVerdict, startSitCall, tradeTargetVerdict } from './answerPolishBuild'
@@ -145,16 +146,20 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
          */
         const goal = readTradeFinderGoal(args.question)
         const result = await buildTradeFinder({ leagueId: provenLeagueId, userId: args.userId, position: readTradeFinderPosition(positionWord),
-          goal, includePicks: mentionsDraftPicks(args.question) })
+          goal, includePicks: mentionsDraftPicks(args.question), requiresPicks: requestsPickTradePackage(args.question) })
         if (result.status === 'unavailable') return gap('trade_discovery_unavailable', result.reason, 'Sync league settings, rosters and values, then retry.')
         if (result.ideas.length === 0) return gap('no_trade_ideas', result.noIdeasReason ?? 'No supported offers were found.', 'Try a different position or name a specific trade to evaluate.')
         return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, sources: ['league_rosters', 'trade_discovery', 'market_values'],
           answer: [`${goal === 'win_now' ? 'Win-now trade ideas' : 'Trade ideas'} for ${result.you.teamName}:`, ...result.ideas.map(idea =>
             `${idea.partnerTeam}: give ${names(idea.give)}, receive ${names(idea.get)}. Market values ${points(idea.giveTotal)} vs ${points(idea.getTotal)}; fairness band: ${idea.fairness}.` +
             `${idea.nowGive !== undefined ? ` This season: ${points(idea.nowGive ?? null)} given vs ${points(idea.nowGet ?? null)} received.` : ''}` +
+            `${idea.projectedLineupDelta != null ? ` Week ${result.projectionWeek?.week} projected starters ${points(idea.projectedLineupBefore ?? null)} before, ${points(idea.projectedLineupAfter ?? null)} after (+${points(idea.projectedLineupDelta)}).` : ''}` +
             `${idea.why.length ? ` ${idea.why.join(' ')}` : ''}${!idea.sendable ? ' This package needs review before proposing.' : ''}`),
             ...(result.pickNote ? [`Draft picks: ${result.pickNote}.`] : []),
-            'These are engine-generated starting offers from market value and roster fit, not completed trade verdicts. Ask to grade a specific offer for lineup impact; acceptance and playoff effects are unknown.'].join('\n') })
+            ...(result.ideas.length < 3 && result.projectionWeek ? [`Only ${result.ideas.length} supported pick offer(s) passed the ownership, market-value and lineup checks.`] : []),
+            result.projectionWeek
+              ? 'These are opening offers using owned picks valued by round average. The lineup gain is for one projected week; acceptance and season outcomes are unknown.'
+              : 'These are engine-generated starting offers from market value and roster fit, not completed trade verdicts. Ask to grade a specific offer for lineup impact; acceptance and playoff effects are unknown.'].join('\n') })
       }
       const target = imageTrade.question ? null : parseTradeTargetQuestion(args.question)
       if (target) {

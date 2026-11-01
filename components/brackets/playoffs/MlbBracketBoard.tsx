@@ -27,8 +27,11 @@ import SingleGameMatchupModal from "./SingleGameMatchupModal"
 import PlayoffDecisionRail from "./PlayoffDecisionRail"
 import { TeamLogo } from "@/app/components/TeamLogo"
 import { nbaCupLockedReason } from "@/lib/playoffs/nbaCupTournament"
-import { nbaCupGroupStandings } from "@/lib/playoffs/nbaCupProgress"
 import NbaCupTournamentPanel from "./NbaCupTournamentPanel"
+import { buildNbaCupGroups, cupGameState, cupLiveClock } from "@/lib/playoffs/nbaCupBoard"
+import CupGroupPlaySection from "./cup/CupGroupPlaySection"
+import CupStandingsRail from "./cup/CupStandingsRail"
+import CupPhaseTrack from "./cup/CupPhaseTrack"
 
 /**
  * Shared mirrored bracket for MLB, CFP and NBA Cup.
@@ -90,6 +93,7 @@ function TeamRow({
   sport,
   teamLogos,
   openDetail = false,
+  score = null,
 }: {
   series: PlayoffSeriesView
   side: "home" | "away"
@@ -100,6 +104,8 @@ function TeamRow({
   sport: string
   teamLogos: Record<string, string>
   openDetail?: boolean
+  /** A single-game score to show in place of the matchup estimate once the game has started. */
+  score?: number | null
 }) {
   const name = side === "home" ? series.homeTeamName : series.awayTeamName
   const seed = side === "home" ? series.homeSeed : series.awaySeed
@@ -139,11 +145,12 @@ function TeamRow({
         </span>
       )}
       <span className="af-pb-team-name" title={official ? name : undefined}>{official ? tournamentLogoSport ? name : abbreviate(name) : "TBD"}</span>
-      {sport === "nba_cup" && (series.status === "in_progress" || series.status === "final") ? <strong className="af-pb-mono" aria-label={`${name} score`}>{(side === "home" ? series.liveHomeScore : series.liveAwayScore) ?? "—"}</strong> : null}
       {official && isPlaceholderName(name) ? (
         <span className="af-pb-team-slot">slot</span>
       ) : null}
-      {showProb && official && odds.basis !== "unknown" ? (
+      {score != null ? (
+        <span className="af-pb-team-prob af-pb-mono" style={{ color: "var(--pb-text)", fontWeight: 800 }}>{score}</span>
+      ) : showProb && official && odds.basis !== "unknown" ? (
         <span className="af-pb-team-prob af-pb-mono">{prob}%</span>
       ) : null}
     </button>
@@ -165,8 +172,6 @@ export default function MlbBracketBoard({
   const sport = String(view.challenge.sport ?? "").toLowerCase()
   const tournamentLogoSport = sport === "ncaaf" ? "NCAAF" : sport === "nba_cup" ? "NBA_CUP" : null
   const teamLogos = view.teamLogos ?? {}
-  const cupRecords = useMemo(() => Object.fromEntries(nbaCupGroupStandings(view.series, view.challenge.seasonYear)
-    .flatMap((group) => group.teams.map((team) => [team.team, `${team.wins}–${team.losses}`]))), [view.series, view.challenge.seasonYear])
   const singleGame = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup")
   const rollingCup = singleGame && sport === "nba_cup"
   const firstStart = view.challenge.firstGameStartsAt ? Date.parse(view.challenge.firstGameStartsAt) : null
@@ -181,10 +186,8 @@ export default function MlbBracketBoard({
     [view.series, view.picks, rollingCup],
   )
   const graph = useMemo(() => buildBracketGraph(projectedSeries.filter((game) => game.round !== "cup_group_play")), [projectedSeries])
-  const [groupFilter, setGroupFilter] = useState<"upcoming" | "all">("upcoming")
-  const groupGames = projectedSeries.filter((game) => game.round === "cup_group_play")
-    .filter((game) => groupFilter === "all" || game.status === "in_progress" || !nbaCupLockedReason(game))
-    .sort((a, b) => Date.parse(a.startsAt ?? "") - Date.parse(b.startsAt ?? ""))
+  const groupGames = useMemo(() => projectedSeries.filter((game) => game.round === "cup_group_play"), [projectedSeries])
+  const cupGroups = useMemo(() => rollingCup ? buildNbaCupGroups(groupGames) : [], [rollingCup, groupGames])
   const entryId = view.activeEntry?.id ?? null
   const picksBySeries = useMemo(() => {
     const m = new Map<string, string>()
@@ -297,9 +300,13 @@ export default function MlbBracketBoard({
     const resolved = isOfficial(s.homeTeamName) && isOfficial(s.awayTeamName)
     const kind = seriesStatusKind(s, resolved)
     const locked = lockedReasonFor(s)
+    // NBA Cup knockout cards carry the live clock and score, the same as Group Play.
+    const cupState = rollingCup ? cupGameState(s) : null
+    const showScore = cupState === "live" || cupState === "final"
+    const when = s.startsAt ? new Date(s.startsAt).toLocaleString(undefined, { weekday: rollingCup ? "short" : undefined, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Time TBA"
     return (
-      <div className="af-pb-match" key={s.id} data-testid={`pb-series-${s.seriesNumber}`}>
-        {singleGame ? <button type="button" className="af-pb-game-meta" onClick={() => setLiveNode(s.id)}>{s.gameLabel || (sport === "ncaaf" && s.roundIndex > 1 && s.roundIndex < 4 ? "Bowl TBA" : roundLabel(sport, s.round))}<span>{s.startsAt ? new Date(s.startsAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Time TBA"}</span></button> : null}
+      <div className="af-pb-match" key={s.id} data-testid={`pb-series-${s.seriesNumber}`} data-live={cupState === "live" ? "true" : undefined}>
+        {singleGame ? <button type="button" className="af-pb-game-meta" onClick={() => setLiveNode(s.id)}>{s.gameLabel?.replace(/^NBA Cup\s*-?\s*/i, "") || (sport === "ncaaf" && s.roundIndex > 1 && s.roundIndex < 4 ? "Bowl TBA" : roundLabel(sport, s.round))}<span style={cupState === "live" ? { color: "#ff9ca0", fontWeight: 800 } : undefined}>{cupState === "live" ? `LIVE · ${cupLiveClock(s)}` : cupState === "final" ? "Final" : when}</span></button> : null}
         <TeamRow
           series={s}
           side="home"
@@ -310,6 +317,7 @@ export default function MlbBracketBoard({
           sport={sport}
           teamLogos={teamLogos}
           openDetail={singleGame}
+          score={showScore ? s.liveHomeScore ?? null : null}
         />
         <TeamRow
           series={s}
@@ -321,6 +329,7 @@ export default function MlbBracketBoard({
           sport={sport}
           teamLogos={teamLogos}
           openDetail={singleGame}
+          score={showScore ? s.liveAwayScore ?? null : null}
         />
         {saving === s.id ? (
           <div className="af-pb-status-sub" style={{ padding: "4px 0 6px" }}>
@@ -423,7 +432,23 @@ export default function MlbBracketBoard({
 
   return (
     <div className="af-pb">
-      <header className="af-pb-hero">
+      <header className="af-pb-hero" data-cup={rollingCup ? "true" : undefined}>
+        {rollingCup ? (
+          <svg className="af-cup-court" viewBox="0 0 1440 320" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <g>
+              <rect x="1" y="22" width="1438" height="276" />
+              <line x1="720" y1="22" x2="720" y2="298" />
+              <circle cx="720" cy="160" r="88" />
+              <circle cx="720" cy="160" r="28" />
+              <rect x="0" y="100" width="190" height="120" />
+              <circle cx="190" cy="160" r="60" />
+              <path d="M0 40 H150 A150 150 0 0 1 150 280 H0" />
+              <rect x="1250" y="100" width="190" height="120" />
+              <circle cx="1250" cy="160" r="60" />
+              <path d="M1440 40 H1290 A150 150 0 0 0 1290 280 H1440" />
+            </g>
+          </svg>
+        ) : null}
         <div className="af-pb-hero-top">
           <div>
             {backHref ? (
@@ -448,6 +473,7 @@ export default function MlbBracketBoard({
           </div>
         </div>
 
+        {rollingCup ? <CupPhaseTrack series={view.series} sport={sport} /> : null}
         <div className="af-pb-actions">
           <div className="af-pb-progress af-pb-mono" data-testid="pb-progress">
             <span>
@@ -472,7 +498,7 @@ export default function MlbBracketBoard({
 
       <div className="af-pb-body">
         <div className="af-pb-main">
-          {rollingCup ? <NbaCupTournamentPanel series={view.series} season={view.challenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} /> : null}
+          {rollingCup ? <NbaCupTournamentPanel showGames={false} series={view.series} season={view.challenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} /> : null}
           {rollingCup ? <section className="af-pb-card" aria-label="NBA Cup scoring">
             <div className="af-pb-cup-group-heading"><div>
               <h2>NBA Cup scoring</h2>
@@ -480,22 +506,19 @@ export default function MlbBracketBoard({
             </div></div>
             {scoringTiles}
           </section> : null}
-          {rollingCup ? <section className="af-pb-card af-pb-cup-group" aria-label="NBA Cup Group Play">
-            <div className="af-pb-cup-group-heading">
-              <div><h2>Group Play</h2><p>{pointsForSeries({ round: "cup_group_play" }, sport)} point per correct winner pick · Tap a game for Chimmy Intelligence</p></div>
-              <div className="af-pb-cup-filters" aria-label="Group Play filter">
-                <button type="button" className="af-pb-btn" aria-pressed={groupFilter === "upcoming"} onClick={() => setGroupFilter("upcoming")}>Live &amp; upcoming</button>
-                <button type="button" className="af-pb-btn" aria-pressed={groupFilter === "all"} onClick={() => setGroupFilter("all")}>All games</button>
-              </div>
-            </div>
-            {groupGames.length ? <div className="af-pb-cup-games">{groupGames.map((game) => <div key={game.id}>
-              {renderMatch({ series: game, roundIndex: 0, side: "left", sourceHome: null, sourceAway: null })}
-              <p className="af-pb-cup-game-footer">{game.venue || "Venue pending"}{game.location ? ` · ${game.location}` : ""}<br />
-                {game.status === "in_progress" ? `Live · ${game.liveStatus || "In progress"} · ` : ""}
-                {game.winnerTeamName ? `${game.winnerTeamName} won` : nbaCupLockedReason(game) || (picksBySeries.has(game.id) ? "✓ Pick saved" : "Choose your winner")}
-              </p>
-            </div>)}</div> : <p className="af-pb-note" role="status">{projectedSeries.some((game) => game.round === "cup_group_play") ? "No upcoming group games right now. View all games or check the knockout bracket below." : "Confirmed Cup games will appear here automatically as the schedule syncs. You can create your bracket now."}</p>}
-          </section> : null}
+          {rollingCup ? (
+            <CupGroupPlaySection
+              games={groupGames}
+              groups={cupGroups}
+              sport={sport}
+              picks={picksBySeries}
+              teamLogos={teamLogos}
+              savingId={saving}
+              lockedReasonFor={(game) => lockedReasonFor(game)}
+              onPick={(game, team) => { void savePick(game, team) }}
+              onOpen={(game) => setLiveNode(game.id)}
+            />
+          ) : null}
           <section className="af-pb-card">
             {rollingCup ? <div className="af-pb-cup-group-heading"><div><h2>Knockout Bracket</h2><p>Quarterfinals → Semifinals → Championship. Matchups open as qualifiers are confirmed.</p></div></div> : null}
             {/* Seeding strip */}
@@ -589,6 +612,7 @@ export default function MlbBracketBoard({
         </div>
 
         <aside className="af-pb-rail">
+          {rollingCup ? <CupStandingsRail groups={cupGroups} series={view.series} sport={sport} teamLogos={teamLogos} /> : null}
           <PlayoffDecisionRail view={view} graph={graph} sport={sport} />
         </aside>
       </div>
@@ -597,7 +621,8 @@ export default function MlbBracketBoard({
         const modalSeries = projectedSeries.find((item) => item.id === liveNode)
         return modalSeries ? <SingleGameMatchupModal
           series={modalSeries} sport={sport} profiles={view.teamProfiles ?? {}} teamLogos={teamLogos}
-          cupRecords={cupRecords}
+          cupGroups={rollingCup ? cupGroups : undefined}
+          cupGames={rollingCup ? groupGames : undefined}
           picked={picksBySeries.get(liveNode) ?? null}
           locked={!bracketReady || Boolean(lockedReasonFor(modalSeries))}
           saving={saving === liveNode}
