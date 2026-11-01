@@ -1662,8 +1662,8 @@ export default async function AfCorePage({
   return (
     <AfCoreShell
       nativeLeague={!!selectedLeagueId && !!selectedLeaguePlatform && !isImportedPlatform(selectedLeaguePlatform)}
-      /* Redraft identity for a native redraft ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
-      redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform)}
+      /* Redraft identity for a native or positively-redraft imported ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
+      redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform, selectedLeagueRecord)}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}

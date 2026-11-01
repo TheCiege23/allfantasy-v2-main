@@ -5,12 +5,12 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
 /**
- * Item #9 — the phone trade builder: one team per step, sticky totals, a searchable asset sheet and
- * a persistent review control.
+ * The trade builder as a calculator (2026-10-31): both sides on one screen, each led by a labelled
+ * total and a search control, a sticky balance bar that grades the deal, and everything that is not
+ * the deal folded below it. Replaces the four-step phone flow (Offers / Send / Get / Review).
  *
- * Layout (what is hidden at which width) is CSS and was measured in real Chromium and WebKit at
- * 390px against a dev server; these pin the component contract that layout hangs off, plus the
- * stylesheet rules themselves.
+ * Layout (what is hidden at which width) is CSS; these pin the component contract that layout
+ * hangs off, plus the stylesheet rules themselves.
  */
 
 const rosterData = vi.hoisted(() => ({ current: null as unknown }))
@@ -71,76 +71,69 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const root = (c: HTMLElement) => c.querySelector('.af-tc') as HTMLElement
 const primary = () => document.querySelector('.af-tc-stepbar-primary') as HTMLButtonElement
 const chooseMatt = () =>
   fireEvent.click(
     [...document.querySelectorAll<HTMLButtonElement>('.af-tc-partner-chip')].find((b) => b.textContent === 'Matt Jones')!,
   )
-const step = (label: string) =>
-  [...document.querySelectorAll<HTMLButtonElement>('.af-tc-step')].find((b) => b.textContent?.includes(label))!
+const side = (c: HTMLElement, s: 'give' | 'get') => c.querySelector(`.af-tc-team[data-side='${s}']`) as HTMLElement
+const analyzeCalls = () => fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/trade-value/analyze'))
+/** True when `a` comes before `b` in document order. */
+const before = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
 
-/*
- * 2026-09-24: the step labels became Offers / Send / Get / Review (four tabs share 390px), and the
- * inbox, value alerts and league history moved onto their own Offers step instead of rendering on
- * every step. Assertions below that changed say so where they changed.
- */
-describe('steps', () => {
-  it('starts on "Send", with the step marked current', () => {
+describe('the calculator layout', () => {
+  it('shows both sides at once, each led by its label and total, with no step tabs', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
-    expect(root(container).getAttribute('data-mobile-step')).toBe('give')
-    expect(step('Send').getAttribute('aria-current')).toBe('step')
-    expect(step('Get').getAttribute('aria-current')).toBeNull()
+    expect(side(container, 'give').querySelector('.af-tc-side-bar')!.textContent).toBe('You send—')
+    expect(side(container, 'get').querySelector('.af-tc-side-bar')!.textContent).toBe('You get—')
+    expect(container.querySelector('.af-tc-step')).toBeNull()
+    expect(container.querySelector('[data-mobile-step]')).toBeNull()
+    expect(container.querySelector('[data-mstep]')).toBeNull()
   })
 
-  it('moves between steps from the step bar', () => {
+  it('each side adds through a search control, named for whose roster it searches', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(step('Get'))
-    expect(root(container).getAttribute('data-mobile-step')).toBe('get')
-    expect(step('Get').getAttribute('aria-current')).toBe('step')
-    fireEvent.click(step('Review'))
-    expect(root(container).getAttribute('data-mobile-step')).toBe('review')
-    fireEvent.click(step('Offers'))
-    expect(root(container).getAttribute('data-mobile-step')).toBe('offers')
+    chooseMatt()
+    expect(side(container, 'give').querySelector('.af-tc-add')!.textContent).toContain('Search your players, picks or FAAB')
+    expect(side(container, 'get').querySelector('.af-tc-add')!.textContent).toContain('Search their players or picks')
   })
 
-  it('🛑 a trade link (?trade=) lands on Offers, where that trade is', () => {
+  it('🛑 the deal comes first: trade ideas and offers fold BELOW the builder', () => {
+    const { container } = render(<TradeCenter league={LEAGUE} />)
+    const builder = container.querySelector('.af-tc-builder')!
+    const ideas = container.querySelector('details.af-tc-ideas')!
+    const offers = container.querySelector('details.af-tc-offers')!
+    expect(before(builder, ideas)).toBe(true)
+    expect(before(builder, offers)).toBe(true)
+    // Closed by default — one line each until opened.
+    expect(ideas.hasAttribute('open')).toBe(false)
+    expect(offers.hasAttribute('open')).toBe(false)
+    // What used to sit above the builder now lives inside the offers fold.
+    expect(offers.querySelector('.af-tc-inbox')).not.toBeNull()
+    expect(offers.querySelector('.af-tc-legend')).not.toBeNull()
+    // The partner chips stay above the builder: the "You get" side is empty until one is chosen.
+    expect(before(container.querySelector('.af-tc-partner')!, builder)).toBe(true)
+  })
+
+  it('🛑 a trade link (?trade=) opens the offers fold, where that trade is', async () => {
     window.history.replaceState(null, '', '/core/trades?league=l1&trade=tx-9')
     try {
       const { container } = render(<TradeCenter league={LEAGUE} />)
-      expect(root(container).getAttribute('data-mobile-step')).toBe('offers')
+      await waitFor(() => expect(container.querySelector('details.af-tc-offers')!.hasAttribute('open')).toBe(true))
     } finally {
       window.history.replaceState(null, '', '/')
     }
   })
 
-  it('tags every step-owned section, so the stylesheet can hide the rest', () => {
-    const { container } = render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-    const tag = (sel: string) => container.querySelector(sel)?.closest('[data-mstep]')?.getAttribute('data-mstep')
-
-    expect(container.querySelector('.af-tc-builder')?.getAttribute('data-mstep')).toBe('give get')
-    expect(container.querySelectorAll(".af-tc-team[data-mstep='give']")).toHaveLength(1)
-    expect(container.querySelectorAll(".af-tc-team[data-mstep='get']")).toHaveLength(1)
-    expect(tag('.af-tc-partner')).toBe('get')
-    expect(tag('.af-tc-review')).toBe('review')
-    expect(tag('.af-tc-actions')).toBe('review')
-    expect(tag('.af-tc-balance')).toBe('review')
-    // The finder's root reuses `.af-tc-dos`, so it is found through its wrapper, not its class.
-    expect(container.querySelector(".af-tc-mstep-wrap[data-mstep='get'] .af-tc-dos")).not.toBeNull()
-    // The inbox belongs to Offers. It used to be untagged and so rendered on every building step.
-    expect(tag('.af-tc-inbox')).toBe('offers')
-    expect(tag('.af-tc-draft')).toBe('offers review')
-  })
-
-  it('the league history follows the builder on Review', () => {
+  it('the league history follows the builder', () => {
     const { container } = render(<TradeCenter league={LEAGUE} history={<section className="history-probe">History</section>} />)
-    expect(container.querySelector('.history-probe')?.closest('[data-mstep]')?.getAttribute('data-mstep')).toBe('review')
+    const history = container.querySelector('.history-probe')!
+    expect(before(container.querySelector('.af-tc-builder')!, history)).toBe(true)
   })
 })
 
 describe('offers from the inbox', () => {
-  it('loading a pending offer lands on Review, where both sides of it are visible', async () => {
+  it('loading a pending offer puts both sides of it in the builder', async () => {
     /*
      * ⚠ A DIFFERENT LEAGUE ID ON PURPOSE. `fetchTradesPanel` shares one read per league for 5s at
      * module scope, so reusing 'l1' would hand this test a response another test already cached.
@@ -169,191 +162,12 @@ describe('offers from the inbox', () => {
         : { ok: false, status: 500, json: async () => ({}) },
     )
     const { container } = render(<TradeCenter league={{ ...LEAGUE, id: 'l2-inbox' }} />)
-    const load = await screen.findByText('Load into builder')
-    fireEvent.click(load)
-    expect(root(container).getAttribute('data-mobile-step')).toBe('review')
-    const review = container.querySelector('.af-tc-review')!.textContent
-    expect(review).toContain('DK Metcalf')
-    expect(review).toContain('Christian McCaffrey')
-  })
-})
-
-describe('the persistent control', () => {
-  /*
-   * 2026-09-24: on a building step it points at the side still missing, and analyses once neither
-   * is. It used to say "Review trade" on both building steps, which sent a manager to Review only
-   * to be told "Add what you get" and sent back — two wasted taps per deal.
-   */
-  it('on an empty deal it points at the other side, and is not a dead button', () => {
-    render(<TradeCenter league={LEAGUE} />)
-    expect(primary().textContent).toBe('Next: what you get')
-    expect(primary().disabled).toBe(false)
+    fireEvent.click(await screen.findByText('Load into builder'))
+    expect(side(container, 'give').textContent).toContain('DK Metcalf')
+    expect(side(container, 'get').textContent).toContain('Christian McCaffrey')
   })
 
-  it('🛑 after adding what you send, it goes to what you GET — not to a Review that sends you back', () => {
-    const { container } = render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-    expect(primary().textContent).toBe('Next: what you get')
-    fireEvent.click(primary())
-    expect(root(container).getAttribute('data-mobile-step')).toBe('get')
-  })
-
-  it('on the step whose side is empty while the other is filled, it says what to add and waits', () => {
-    render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(step('Get'))
-    chooseMatt()
-    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
-    fireEvent.click(step('Send'))
-    expect(primary().textContent).toBe('Add what you send')
-    expect(primary().disabled).toBe(true)
-  })
-
-  it('🛑 with both sides filled, one tap from a building step goes to Review AND starts the analysis', async () => {
-    const { container } = render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-    fireEvent.click(step('Get'))
-    chooseMatt()
-    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
-    expect(primary().textContent).toBe('Analyze trade')
-    await act(async () => {
-      fireEvent.click(primary())
-    })
-    expect(root(container).getAttribute('data-mobile-step')).toBe('review')
-    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/api/trade-value/analyze'))).toBe(true)
-  })
-
-  it('🛑 on Review with an empty side, sends you to that side instead of to an analysis that will refuse', () => {
-    const { container } = render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-    fireEvent.click(step('Review'))
-    expect(primary().textContent).toBe('Add what you get')
-    fireEvent.click(primary())
-    expect(root(container).getAttribute('data-mobile-step')).toBe('get')
-    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/api/trade-value/analyze'))).toBe(false)
-  })
-
-  it('🛑 …and the other way round: only what you GET added sends you to "Send"', () => {
-    const { container } = render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(step('Get'))
-    chooseMatt()
-    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
-    fireEvent.click(step('Review'))
-    expect(primary().textContent).toBe('Add what you send')
-    fireEvent.click(primary())
-    expect(root(container).getAttribute('data-mobile-step')).toBe('give')
-  })
-
-  it('on Offers it starts a deal, or returns to the one in progress', () => {
-    const { container } = render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(step('Offers'))
-    expect(primary().textContent).toBe('Build a trade')
-    fireEvent.click(primary())
-    expect(root(container).getAttribute('data-mobile-step')).toBe('give')
-    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-    fireEvent.click(step('Offers'))
-    expect(primary().textContent).toBe('Back to your trade')
-  })
-
-  it('analyses from Review once both sides hold something', async () => {
-    render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-    fireEvent.click(step('Get'))
-    chooseMatt()
-    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
-    fireEvent.click(step('Review'))
-    expect(primary().textContent).toBe('Analyze trade')
-    await act(async () => {
-      fireEvent.click(primary())
-    })
-    const call = fetchMock.mock.calls.find(([u]) => String(u).includes('/api/trade-value/analyze'))
-    expect(call).toBeTruthy()
-    const body = JSON.parse(String((call![1] as RequestInit).body))
-    expect(body.sideGive.map((a: { name: string }) => a.name)).toEqual(['DK Metcalf'])
-    expect(body.sideGet.map((a: { name: string }) => a.name)).toEqual(['Christian McCaffrey'])
-  })
-
-  it('🛑 never sends the AllFantasy projection to the verdict — it is display only', async () => {
-    rosterData.current = {
-      rosters: [
-        roster('r1', 'You', [{ ...player('p1', 'DK Metcalf', 5000), afProjection: 14.2 }]),
-        roster('r2', 'Matt Jones', [{ ...player('p9', 'Christian McCaffrey', 7000), afProjection: 19.8 }]),
-      ],
-      viewerRosterId: 'r1',
-      viewerTeamRosterId: 'r1',
-    }
-    render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-    fireEvent.click(step('Get'))
-    chooseMatt()
-    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
-    fireEvent.click(step('Review'))
-    await act(async () => {
-      fireEvent.click(primary())
-    })
-    const call = fetchMock.mock.calls.find(([u]) => String(u).includes('/api/trade-value/analyze'))
-    expect(call).toBeTruthy()
-    const raw = String((call![1] as RequestInit).body)
-    // The positive control: the players ARE in the request, so an absent key is a real absence.
-    expect(raw).toContain('DK Metcalf')
-    expect(raw).not.toContain('afProjection')
-    expect(raw).not.toContain('14.2')
-  })
-})
-
-/** Both sides filled, partner chosen, analysis answered with `answer`. */
-async function analyzedDeal(answer: () => Promise<unknown>) {
-  fetchMock.mockImplementation(async (url: string) =>
-    String(url).includes('/api/trade-value/analyze')
-      ? answer()
-      : { ok: false, status: 500, json: async () => ({}) },
-  )
-  const utils = render(<TradeCenter league={{ ...LEAGUE, id: `l-${Math.random()}` }} />)
-  fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-  fireEvent.click(step('Get'))
-  chooseMatt()
-  fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
-  await act(async () => {
-    fireEvent.click(primary())
-  })
-  return utils
-}
-
-const VERDICT = {
-  ok: true,
-  status: 200,
-  json: async () => ({ percentDiff: 12, fairnessScore: 60, labels: { fairnessLabel: 'Slight win', confidenceLabel: 'Medium' } }),
-}
-
-describe('🛑 the verdict always belongs to the deal on screen', () => {
-  it('adding an asset after analysing clears the verdict — it described the old deal', async () => {
-    // A second player on your roster, so there is something left to add after the analysis.
-    const data = rosterData.current as { rosters: Array<{ players: unknown[] }> }
-    data.rosters[0]!.players.push(player('p2', 'George Pickens', 4000))
-    const { container } = await analyzedDeal(async () => VERDICT)
-    expect(container.querySelector('.af-tc-verdict:not(.af-tc-verdict--pending)')).not.toBeNull()
-    fireEvent.click(step('Send'))
-    fireEvent.click(screen.getByLabelText('Add George Pickens'))
-    expect(container.querySelector('.af-tc-verdict:not(.af-tc-verdict--pending)')).toBeNull()
-  })
-
-  it('removing an asset clears it too', async () => {
-    const { container } = await analyzedDeal(async () => VERDICT)
-    fireEvent.click(step('Send'))
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".af-tc-team[data-mstep='give'] .af-tc-remove")!)
-    expect(container.querySelector('.af-tc-verdict:not(.af-tc-verdict--pending)')).toBeNull()
-  })
-
-  it('while the analysis runs, the verdict slot says so instead of sitting empty', async () => {
-    const { container } = await analyzedDeal(() => new Promise(() => {}))
-    const pending = container.querySelector('.af-tc-verdict--pending')
-    expect(pending).not.toBeNull()
-    expect(pending!.getAttribute('aria-busy')).toBe('true')
-    expect(pending!.getAttribute('data-mstep')).toBe('review')
-  })
-})
-
-describe('the Offers tab', () => {
-  it('badges the number of offers waiting on this manager', async () => {
+  it('badges the fold with the number of offers waiting on this manager', async () => {
     fetchMock.mockImplementation(async (url: string) =>
       String(url).includes('/api/league/trades-panel')
         ? {
@@ -371,38 +185,173 @@ describe('the Offers tab', () => {
           }
         : { ok: false, status: 500, json: async () => ({}) },
     )
-    render(<TradeCenter league={{ ...LEAGUE, id: 'l3-badge' }} />)
-    // One incoming offer; the outgoing one is not waiting on you.
-    await waitFor(() => expect(step('Offers').querySelector('.af-tc-step-count')?.textContent).toBe('1'))
+    const { container } = render(<TradeCenter league={{ ...LEAGUE, id: 'l3-badge' }} />)
+    // One incoming offer; the outgoing one is not waiting on you. Counted while the fold is closed.
+    await waitFor(() =>
+      expect(container.querySelector('.af-tc-offers > summary .af-tc-fold-badge')?.textContent).toBe('1 waiting on you'),
+    )
   })
 })
 
-describe('sticky totals', () => {
-  it('shows priced totals and the signed difference, and an em dash — never 0 — for an empty side', () => {
+describe('the balance bar button', () => {
+  it('on an empty deal it opens the "You get" search, and is not a dead button', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
-    const totals = () => container.querySelector('.af-tc-stepbar-totals')!.textContent
-    expect(totals()).toBe('Send —Get —')
+    expect(primary().textContent).toBe('Add what you get')
+    expect(primary().disabled).toBe(false)
+    fireEvent.click(primary())
+    expect(side(container, 'get').querySelector('.af-tc-picker')).not.toBeNull()
+  })
+
+  it('🛑 with only what you send added, it asks for what you get — never an analysis that will refuse', () => {
+    render(<TradeCenter league={LEAGUE} />)
     fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-    expect(totals()).toBe('Send 5,000Get —')
+    expect(primary().textContent).toBe('Add what you get')
+    fireEvent.click(primary())
+    expect(analyzeCalls()).toHaveLength(0)
+  })
+
+  it('🛑 …and the other way round: only what you GET added opens your own search', () => {
+    const { container } = render(<TradeCenter league={LEAGUE} />)
     chooseMatt()
     fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
-    expect(totals()).toBe('Send 5,000Get 7,000+2,000')
-    expect(container.querySelector('.af-tc-stepbar-delta')?.getAttribute('data-tone')).toBe('good')
+    expect(primary().textContent).toBe('Add what you send')
+    fireEvent.click(primary())
+    expect(side(container, 'give').querySelector('.af-tc-picker')).not.toBeNull()
+    expect(analyzeCalls()).toHaveLength(0)
+  })
+
+  it('grades once both sides hold something, sending each side to the right place', async () => {
+    render(<TradeCenter league={LEAGUE} />)
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    chooseMatt()
+    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+    expect(primary().textContent).toBe('Grade with AF')
+    await act(async () => {
+      fireEvent.click(primary())
+    })
+    expect(analyzeCalls()).toHaveLength(1)
+    const body = JSON.parse(String((analyzeCalls()[0]![1] as RequestInit).body))
+    expect(body.sideGive.map((a: { name: string }) => a.name)).toEqual(['DK Metcalf'])
+    expect(body.sideGet.map((a: { name: string }) => a.name)).toEqual(['Christian McCaffrey'])
   })
 })
 
-describe('review summary', () => {
-  it('restates both sides with an Edit control per side', () => {
+describe('what grading sends', () => {
+  it('🛑 never sends the AllFantasy projection to the verdict — it is display only', async () => {
+    rosterData.current = {
+      rosters: [
+        roster('r1', 'You', [{ ...player('p1', 'DK Metcalf', 5000), afProjection: 14.2 }]),
+        roster('r2', 'Matt Jones', [{ ...player('p9', 'Christian McCaffrey', 7000), afProjection: 19.8 }]),
+      ],
+      viewerRosterId: 'r1',
+      viewerTeamRosterId: 'r1',
+    }
+    render(<TradeCenter league={LEAGUE} />)
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    chooseMatt()
+    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+    await act(async () => {
+      fireEvent.click(primary())
+    })
+    const raw = String((analyzeCalls()[0]![1] as RequestInit).body)
+    // The positive control: the players ARE in the request, so an absent key is a real absence.
+    expect(raw).toContain('DK Metcalf')
+    expect(raw).not.toContain('afProjection')
+    expect(raw).not.toContain('14.2')
+  })
+})
+
+/** Both sides filled, partner chosen, analysis answered with `answer`. */
+async function analyzedDeal(answer: () => Promise<unknown>) {
+  fetchMock.mockImplementation(async (url: string) =>
+    String(url).includes('/api/trade-value/analyze')
+      ? answer()
+      : { ok: false, status: 500, json: async () => ({}) },
+  )
+  const utils = render(<TradeCenter league={{ ...LEAGUE, id: `l-${Math.random()}` }} />)
+  fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+  chooseMatt()
+  fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+  await act(async () => {
+    fireEvent.click(primary())
+  })
+  return utils
+}
+
+const VERDICT = {
+  ok: true,
+  status: 200,
+  json: async () => ({ percentDiff: 12, fairnessScore: 60, labels: { fairnessLabel: 'Slight win', confidenceLabel: 'Medium' } }),
+}
+
+describe('🛑 the verdict always belongs to the deal on screen', () => {
+  it('adding an asset after grading clears the verdict — it described the old deal', async () => {
+    // A second player on your roster, so there is something left to add after the analysis.
+    const data = rosterData.current as { rosters: Array<{ players: unknown[] }> }
+    data.rosters[0]!.players.push(player('p2', 'George Pickens', 4000))
+    const { container } = await analyzedDeal(async () => VERDICT)
+    expect(container.querySelector('.af-tc-verdict:not(.af-tc-verdict--pending)')).not.toBeNull()
+    expect(primary().textContent).toBe('Grade again')
+    fireEvent.click(screen.getByLabelText('Add George Pickens'))
+    expect(container.querySelector('.af-tc-verdict:not(.af-tc-verdict--pending)')).toBeNull()
+  })
+
+  it('removing an asset clears it too', async () => {
+    const { container } = await analyzedDeal(async () => VERDICT)
+    fireEvent.click(side(container, 'give').querySelector<HTMLButtonElement>('.af-tc-remove')!)
+    expect(container.querySelector('.af-tc-verdict:not(.af-tc-verdict--pending)')).toBeNull()
+  })
+
+  it('while grading runs, the verdict slot says so and the button cannot fire twice', async () => {
+    const { container } = await analyzedDeal(() => new Promise(() => {}))
+    const pending = container.querySelector('.af-tc-verdict--pending')
+    expect(pending).not.toBeNull()
+    expect(pending!.getAttribute('aria-busy')).toBe('true')
+    expect(primary().textContent).toBe('Grading…')
+    expect(primary().disabled).toBe(true)
+  })
+})
+
+describe('sticky totals and the meter', () => {
+  it('shows priced totals, "You get" first, and an em dash — never 0 — for an empty side', () => {
+    const { container } = render(<TradeCenter league={LEAGUE} />)
+    const totals = () => container.querySelector('.af-tc-stepbar-totals')!.textContent
+    expect(totals()).toBe('Get —Send —')
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    expect(totals()).toBe('Get —Send 5,000')
+    chooseMatt()
+    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+    expect(totals()).toBe('Get 7,000Send 5,000+2,000')
+    expect(container.querySelector('.af-tc-stepbar-delta')?.getAttribute('data-tone')).toBe('good')
+  })
+
+  it('draws no meter until both sides are priced — half a comparison is not a lean', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
     fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-    const review = container.querySelector('.af-tc-review')!
-    expect(review.textContent).toContain('DK Metcalf')
-    expect(review.textContent).toContain('5,000')
-    const edits = [...review.querySelectorAll<HTMLButtonElement>('.af-tc-review-edit')]
-    expect(edits).toHaveLength(2)
-    fireEvent.click(step('Review'))
-    fireEvent.click(edits[1]!)
-    expect(root(container).getAttribute('data-mobile-step')).toBe('get')
+    expect(container.querySelector('.af-tc-meter')).toBeNull()
+  })
+
+  it('fills with the GET share and says which way the deal leans', () => {
+    const { container } = render(<TradeCenter league={LEAGUE} />)
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    chooseMatt()
+    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+    const meter = container.querySelector('.af-tc-meter')!
+    // 7,000 of 12,000 is 58% — past the middle, so in your favour, and 29% apart is not "even".
+    expect((meter.querySelector('.af-tc-meter-fill') as HTMLElement).style.width).toBe('58%')
+    expect(meter.getAttribute('data-tone')).toBe('good')
+    expect(meter.querySelector('.af-tc-meter-label')!.textContent).toBe('Leans your way')
+  })
+
+  it('calls a deal within 5% even rather than naming a winner over rounding noise', () => {
+    const data = rosterData.current as { rosters: Array<{ players: unknown[] }> }
+    data.rosters[1]!.players = [player('p9', 'Christian McCaffrey', 5200)]
+    const { container } = render(<TradeCenter league={LEAGUE} />)
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    chooseMatt()
+    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+    expect(container.querySelector('.af-tc-meter')!.getAttribute('data-tone')).toBe('even')
+    expect(container.querySelector('.af-tc-meter-label')!.textContent).toBe('Even trade')
   })
 })
 
@@ -410,7 +359,7 @@ describe('the asset sheet', () => {
   it('on a phone, opens the picker as a modal sheet on <body>, not inside the card', () => {
     phone.matches = true
     const { container } = render(<TradeCenter league={LEAGUE} />)
-    const add = container.querySelector<HTMLButtonElement>(".af-tc-team[data-mstep='give'] .af-tc-add")!
+    const add = side(container, 'give').querySelector<HTMLButtonElement>('.af-tc-add')!
     expect(add.getAttribute('aria-haspopup')).toBe('dialog')
     fireEvent.click(add)
 
@@ -430,22 +379,36 @@ describe('the asset sheet', () => {
     expect(container.contains(add)).toBe(true)
   })
 
-  it('🛑 Escape closes it and focus returns to the button that opened it', () => {
+  it('🛑 the balance bar button opens the same sheet, and focus returns to it on close', () => {
+    vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(function (this: Element) {
+      return (this.isConnected ? [{}] : []) as unknown as DOMRectList
+    })
+    phone.matches = true
+    render(<TradeCenter league={LEAGUE} />)
+    const button = primary()
+    button.focus()
+    fireEvent.click(button)
+    expect(document.body.querySelector('.af-tc-sheet')).not.toBeNull()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(document.body.querySelector('.af-tc-sheet')).toBeNull()
+    expect(document.activeElement).toBe(button)
+  })
+
+  it('🛑 Escape closes it and focus returns to the control that opened it', () => {
     /*
      * jsdom lays nothing out, so `getClientRects()` is always empty and the containment hook would
-     * treat every element as unfocusable. Connected = visible here; real layout was covered in
-     * Chromium and WebKit at 390px, where this same sequence ended on `.af-tc-add`.
+     * treat every element as unfocusable. Connected = visible here.
      */
     vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(function (this: Element) {
       return (this.isConnected ? [{}] : []) as unknown as DOMRectList
     })
     phone.matches = true
     const { container } = render(<TradeCenter league={LEAGUE} />)
-    const add = container.querySelector<HTMLButtonElement>(".af-tc-team[data-mstep='give'] .af-tc-add")!
+    const add = side(container, 'give').querySelector<HTMLButtonElement>('.af-tc-add')!
     add.focus()
     fireEvent.click(add)
     expect(document.body.querySelector('.af-tc-sheet')).not.toBeNull()
-    // The picker's autoFocus moved focus into the sheet — the case the hook's own capture misses.
+    // The picker's autoFocus moved focus into the sheet's search.
     expect(document.activeElement?.classList.contains('af-tc-input')).toBe(true)
 
     fireEvent.keyDown(document, { key: 'Escape' })
@@ -456,22 +419,17 @@ describe('the asset sheet', () => {
   it('picking an asset closes the sheet and adds it to the right side', () => {
     phone.matches = true
     const { container } = render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".af-tc-team[data-mstep='give'] .af-tc-add")!)
+    fireEvent.click(side(container, 'give').querySelector<HTMLButtonElement>('.af-tc-add')!)
     const sheet = document.body.querySelector('.af-tc-sheet') as HTMLElement
     const row = [...sheet.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
       b.getAttribute('aria-label') === 'Add DK Metcalf',
     )!
     fireEvent.click(row)
     expect(document.body.querySelector('.af-tc-sheet')).toBeNull()
-    expect(container.querySelector(".af-tc-team[data-mstep='give'] .af-tc-row-name")?.textContent).toBe('DK Metcalf')
+    expect(side(container, 'give').querySelector('.af-tc-row-name')?.textContent).toBe('DK Metcalf')
   })
 
-  it("🛑 each side's picker offers its OWN roster's picks, in the sheet as inline", () => {
-    /*
-     * The picker props were extracted into one `renderPicker(side)` so the inline and sheet
-     * placements share them. A slip there offers a manager a pick they do not hold, which the
-     * engine only refuses at send — so this is asserted through the rendered picker, not source.
-     */
+  it("🛑 each side's picker offers its OWN roster's picks", () => {
     const pick = (pickId: string, label: string) => ({ pickId, season: 2027, round: 1, label, itemType: 'future_pick', value: 900 })
     const data = rosterData.current as { rosters: Array<{ picks: unknown[] }> }
     data.rosters[0]!.picks = [pick('mine', 'My 2027 1st')]
@@ -480,8 +438,8 @@ describe('the asset sheet', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
     chooseMatt()
 
-    const openPicks = (side: 'give' | 'get') => {
-      fireEvent.click(container.querySelector<HTMLButtonElement>(`.af-tc-team[data-mstep='${side}'] .af-tc-add`)!)
+    const openPicks = (s: 'give' | 'get') => {
+      fireEvent.click(side(container, s).querySelector<HTMLButtonElement>('.af-tc-add')!)
       const sheet = document.body.querySelector('.af-tc-sheet') as HTMLElement
       fireEvent.click([...sheet.querySelectorAll<HTMLButtonElement>('.af-tc-picker-tab')].find((b) => b.textContent === 'Pick')!)
       const text = sheet.textContent ?? ''
@@ -499,55 +457,53 @@ describe('the asset sheet', () => {
   it('on a desktop, keeps the picker inline and opens no sheet', () => {
     phone.matches = false
     const { container } = render(<TradeCenter league={LEAGUE} />)
-    const add = container.querySelector<HTMLButtonElement>(".af-tc-team[data-mstep='give'] .af-tc-add")!
+    const add = side(container, 'give').querySelector<HTMLButtonElement>('.af-tc-add')!
     expect(add.getAttribute('aria-haspopup')).toBeNull()
     fireEvent.click(add)
     expect(document.body.querySelector('.af-tc-sheet')).toBeNull()
-    expect(container.querySelector(".af-tc-team[data-mstep='give'] .af-tc-picker")).not.toBeNull()
+    expect(side(container, 'give').querySelector('.af-tc-picker')).not.toBeNull()
   })
 })
 
 describe('stylesheet', () => {
   const CSS = readFileSync(resolve(process.cwd(), 'components/core-app/af-trade-center.css'), 'utf8').replace(/\r\n/g, '\n')
-  const tail = CSS.slice(CSS.indexOf('Phone builder: step bar, review, asset sheet'))
+  const tail = CSS.slice(CSS.indexOf('Phone builder: balance bar, asset sheet'))
 
-  /**
-   * The top-level `@media (max-width: 720px)` block that carries the step bar, balanced on braces.
-   *
-   * ⚠ FOUND BY WHAT IT HOLDS, NOT BY BEING LAST. This used to take the LAST 720px block in the
-   * file, which held only while nobody followed the stylesheet's own convention of appending new
-   * phone rules as a sibling block at the end — the 2026-10-01 phone audit did, and all three
-   * stylesheet checks went red over a file whose step bar had not changed.
-   */
-  function lastPhoneBlock(src: string): string {
-    const opener = '@media (max-width: 720px) {'
-    let found = ''
-    for (let start = src.indexOf(opener); start !== -1; start = src.indexOf(opener, start + 1)) {
+  /** The body of the top-level `@media (max-width: 720px)` block that contains `needle`, balanced on braces. */
+  function phoneBlockWith(src: string, needle: string): string {
+    let from = src.length
+    for (;;) {
+      const start = src.lastIndexOf('@media (max-width: 720px) {', from)
+      if (start < 0) return ''
       let depth = 0
       for (let i = src.indexOf('{', start); i < src.length; i++) {
         if (src[i] === '{') depth++
         else if (src[i] === '}' && --depth === 0) {
           const block = src.slice(start, i + 1)
-          if (block.includes('.af-tc-stepbar {')) found = block
+          if (block.includes(needle)) return block
           break
         }
       }
+      from = start - 1
     }
-    return found
   }
 
-  it('[control] the scan found the new section and a balanced phone block', () => {
+  it('[control] the scan found the section and a balanced phone block holding the bar', () => {
     expect(tail.length).toBeGreaterThan(1000)
-    expect(lastPhoneBlock(CSS)).toContain('.af-tc-stepbar')
+    expect(phoneBlockWith(CSS, '.af-tc-stepbar {')).toContain('position: sticky')
   })
 
-  it('hides the step bar and summary at every width by default, and keeps the wrappers boxless', () => {
-    expect(tail).toMatch(/\.af-tc-stepbar,\n\.af-tc-review,\n\.af-tc-step-anchor \{\n  display: none;/)
+  it('hides the balance bar at every width by default, and keeps the wrappers boxless', () => {
+    expect(tail).toMatch(/\.af-tc-stepbar,\n\.af-tc-step-anchor \{\n  display: none;/)
     expect(tail).toMatch(/\.af-tc-mstep-wrap,\n\.af-tc-sheet-root \{\n  display: contents;/)
   })
 
-  it('🛑 the step bar sticks to the TOP inside the phone block — the bottom belongs to the shell', () => {
-    const block = lastPhoneBlock(CSS)
+  it('🛑 `.af-tc-review` is not hidden: it is the send panel\'s review box, not a phone summary', () => {
+    expect(CSS).not.toMatch(/\.af-tc-review,\n[^{]*\{\n  display: none;/)
+  })
+
+  it('🛑 the balance bar sticks to the TOP inside the phone block — the bottom belongs to the shell', () => {
+    const block = phoneBlockWith(CSS, '.af-tc-stepbar {')
     /*
      * Below the safe-area inset, not at a bare 6px: in the home-screen app the shell paints a fixed
      * strip over the status bar (z 70), and a bar stuck at 6px slid under it (2026-09-24).
@@ -556,16 +512,16 @@ describe('stylesheet', () => {
     expect(block).not.toMatch(/\.af-tc-stepbar \{[^}]*bottom:/)
   })
 
-  it('hides every section not tagged for the current step, inside the phone block only', () => {
-    const block = lastPhoneBlock(CSS)
-    for (const s of ['offers', 'give', 'get', 'review']) {
-      expect(block).toContain(`.af-tc[data-mobile-step='${s}'] [data-mstep]:not([data-mstep~='${s}'])`)
-    }
-    // Outside the block, no step hiding exists — so desktop can never lose a section.
-    expect(CSS.replace(block, '')).not.toContain('[data-mstep]:not(')
+  it('no per-step hiding survives the steps', () => {
+    expect(CSS).not.toContain('data-mobile-step')
+    expect(CSS).not.toContain('[data-mstep]')
   })
 
-  it('🛑 the action row is no longer sticky to the bottom', () => {
+  it('on a phone, "You get" is ordered above "You send"', () => {
+    expect(phoneBlockWith(CSS, "[data-side='get']")).toMatch(/\.af-tc-builder \.af-tc-team\[data-side='get'\] \{\n    order: -1;/)
+  })
+
+  it('🛑 the action row is not sticky to the bottom', () => {
     const rule = CSS.match(/  \.af-tc-actions \{\n([^}]*)\}/)
     expect(rule).not.toBeNull()
     expect(rule![1]).not.toContain('position: sticky')

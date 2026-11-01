@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { LeaguePickBoard } from '@/components/dynasty/LeaguePickBoard'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 export type DynastyHomeProps = {
   leagueId: string
@@ -80,18 +81,19 @@ function useDynastyData(leagueId: string) {
 export function DynastyHome({ leagueId, view = 'dynasty' }: DynastyHomeProps) {
   const [sub, setSub] = useState<Sub>(VIEW_TO_SUB[view] ?? 'overview')
   const { taxi, picks, standings, loading } = useDynastyData(leagueId)
+  const { t } = useOptionalLanguage()
 
   useEffect(() => {
     setSub(VIEW_TO_SUB[view] ?? 'overview')
   }, [view])
 
   const SUBS: [Sub, string][] = [
-    ['overview', 'Overview'],
-    ['taxi', '🚕 Taxi Squad'],
-    ['picks', '📋 Draft Picks'],
-    ['league_picks', '🗂 All Teams’ Picks'],
-    ['standings', '📊 Standings'],
-    ['schedule', '📅 Schedule'],
+    ['overview', t('dynastyHome.tab.overview')],
+    ['taxi', `🚕 ${t('dynastyHome.tab.taxiSquad')}`],
+    ['picks', `📋 ${t('dynastyHome.tab.draftPicks')}`],
+    ['league_picks', `🗂 ${t('dynastyHome.tab.allTeamsPicks')}`],
+    ['standings', `📊 ${t('dynastyHome.tab.standings')}`],
+    ['schedule', `📅 ${t('dynastyHome.tab.schedule')}`],
   ]
 
   return (
@@ -116,7 +118,7 @@ export function DynastyHome({ leagueId, view = 'dynasty' }: DynastyHomeProps) {
 
       {loading ? (
         <div className="flex flex-1 items-center justify-center py-16 text-sm text-white/35">
-          Loading dynasty data…
+          {t('dynastyHome.loading')}
         </div>
       ) : (
         <>
@@ -143,10 +145,11 @@ function DynastyOverview({
   pickCount: number
   standingCount: number
 }) {
+  const { t } = useOptionalLanguage()
   const stats = [
-    { label: 'Taxi Squad', value: taxiCount, icon: '🚕' },
-    { label: 'Future Picks', value: pickCount, icon: '📋' },
-    { label: 'Teams', value: standingCount, icon: '🏆' },
+    { label: t('dynastyHome.stat.taxiSquad'), value: taxiCount, icon: '🚕' },
+    { label: t('dynastyHome.stat.futurePicks'), value: pickCount, icon: '📋' },
+    { label: t('dynastyHome.stat.teams'), value: standingCount, icon: '🏆' },
   ]
   return (
     <div className="space-y-4">
@@ -163,17 +166,18 @@ function DynastyOverview({
         ))}
       </div>
       <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-4 text-sm text-white/50">
-        Dynasty league hub — manage your taxi squad, trade future picks, and track standings across the dynasty.
+        {t('dynastyHome.hubSentence')}
       </div>
     </div>
   )
 }
 
 function TaxiSquadView({ taxi }: { taxi: TaxiPlayer[] }) {
+  const { t, tInterpolate } = useOptionalLanguage()
   if (taxi.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center py-10 text-sm text-white/35">
-        No players on taxi squad.
+        {t('dynastyHome.taxi.empty')}
       </div>
     )
   }
@@ -190,7 +194,7 @@ function TaxiSquadView({ taxi }: { taxi: TaxiPlayer[] }) {
           </div>
           {p.eligibilityYearsLeft != null && (
             <span className="rounded-md bg-purple-500/15 px-2 py-0.5 text-[11px] font-medium text-purple-200">
-              {p.eligibilityYearsLeft} yr{p.eligibilityYearsLeft !== 1 ? 's' : ''} left
+              {tInterpolate(p.eligibilityYearsLeft !== 1 ? 'dynastyHome.taxi.yearsLeftMany' : 'dynastyHome.taxi.yearsLeftOne', { count: p.eligibilityYearsLeft })}
             </span>
           )}
         </div>
@@ -200,10 +204,11 @@ function TaxiSquadView({ taxi }: { taxi: TaxiPlayer[] }) {
 }
 
 function FuturePicksView({ picks }: { picks: FuturePick[] }) {
+  const { t, tInterpolate } = useOptionalLanguage()
   if (picks.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center py-10 text-sm text-white/35">
-        No future draft picks.
+        {t('dynastyHome.picks.empty')}
       </div>
     )
   }
@@ -216,14 +221,14 @@ function FuturePicksView({ picks }: { picks: FuturePick[] }) {
         >
           <div>
             <p className="text-sm font-semibold text-white">
-              {pick.year} Round {pick.round}
+              {tInterpolate('dynastyHome.picks.yearRound', { year: pick.year, round: pick.round })}
             </p>
             <p className="text-[11px] text-white/45">
               {pick.type === 'incoming'
-                ? `From ${pick.fromTeam ?? 'another team'}`
+                ? tInterpolate('dynastyHome.picks.from', { team: pick.fromTeam ?? t('dynastyHome.picks.anotherTeam') })
                 : pick.type === 'traded_away'
-                  ? `To ${pick.fromTeam ?? 'another team'}`
-                  : 'Own pick'}
+                  ? tInterpolate('dynastyHome.picks.to', { team: pick.fromTeam ?? t('dynastyHome.picks.anotherTeam') })
+                  : t('dynastyHome.picks.ownPick')}
             </p>
           </div>
           <span
@@ -235,7 +240,7 @@ function FuturePicksView({ picks }: { picks: FuturePick[] }) {
                   : 'bg-white/[0.08] text-white/55'
             }`}
           >
-            {pick.type === 'incoming' ? 'Incoming' : pick.type === 'traded_away' ? 'Traded away' : 'Own'}
+            {pick.type === 'incoming' ? t('dynastyHome.picks.incoming') : pick.type === 'traded_away' ? t('dynastyHome.picks.tradedAway') : t('dynastyHome.picks.own')}
           </span>
         </div>
       ))}
@@ -244,10 +249,11 @@ function FuturePicksView({ picks }: { picks: FuturePick[] }) {
 }
 
 function DynastyStandingsView({ standings }: { standings: StandingRow[] }) {
+  const { t } = useOptionalLanguage()
   if (standings.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center py-10 text-sm text-white/35">
-        No standings data yet.
+        {t('dynastyHome.standings.empty')}
       </div>
     )
   }
@@ -257,11 +263,11 @@ function DynastyStandingsView({ standings }: { standings: StandingRow[] }) {
         <thead>
           <tr className="border-b border-white/[0.08] text-left text-[11px] font-semibold uppercase tracking-wider text-white/35">
             <th className="pb-2 pr-4">#</th>
-            <th className="pb-2 pr-4">Team</th>
-            <th className="pb-2 pr-4 text-right">W</th>
-            <th className="pb-2 pr-4 text-right">L</th>
-            <th className="pb-2 pr-4 text-right">T</th>
-            <th className="pb-2 text-right">PF</th>
+            <th className="pb-2 pr-4">{t('dynastyHome.standings.team')}</th>
+            <th className="pb-2 pr-4 text-right">{t('dynastyHome.standings.w')}</th>
+            <th className="pb-2 pr-4 text-right">{t('dynastyHome.standings.l')}</th>
+            <th className="pb-2 pr-4 text-right">{t('dynastyHome.standings.t')}</th>
+            <th className="pb-2 text-right">{t('dynastyHome.standings.pf')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/[0.05]">
@@ -282,6 +288,7 @@ function DynastyStandingsView({ standings }: { standings: StandingRow[] }) {
 }
 
 function DynastyScheduleView({ leagueId }: { leagueId: string }) {
+  const { t, tInterpolate } = useOptionalLanguage()
   const [matchups, setMatchups] = useState<Array<{ week: number; home: string; away: string; homeScore: number | null; awayScore: number | null }>>([])
   const [scheduleLoading, setScheduleLoading] = useState(true)
 
@@ -305,7 +312,7 @@ function DynastyScheduleView({ leagueId }: { leagueId: string }) {
   if (scheduleLoading) {
     return (
       <div className="flex flex-1 items-center justify-center py-10 text-sm text-white/35">
-        Loading schedule…
+        {t('dynastyHome.schedule.loading')}
       </div>
     )
   }
@@ -313,7 +320,7 @@ function DynastyScheduleView({ leagueId }: { leagueId: string }) {
   if (matchups.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center py-10 text-sm text-white/35">
-        Schedule not yet generated.
+        {t('dynastyHome.schedule.empty')}
       </div>
     )
   }
@@ -329,7 +336,7 @@ function DynastyScheduleView({ leagueId }: { leagueId: string }) {
         .sort(([a], [b]) => Number(a) - Number(b))
         .map(([week, games]) => (
           <div key={week}>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-white/35">Week {week}</p>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-white/35">{tInterpolate('dynastyHome.schedule.week', { week })}</p>
             <div className="space-y-1.5">
               {games.map((g, i) => (
                 <div
@@ -340,7 +347,7 @@ function DynastyScheduleView({ leagueId }: { leagueId: string }) {
                   <span className="text-[12px] text-white/40">
                     {g.awayScore != null && g.homeScore != null
                       ? `${g.awayScore.toFixed(1)} – ${g.homeScore.toFixed(1)}`
-                      : 'vs'}
+                      : t('dynastyHome.schedule.vs')}
                   </span>
                   <span className="text-white">{g.home}</span>
                 </div>
