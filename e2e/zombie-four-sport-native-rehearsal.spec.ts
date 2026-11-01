@@ -1,3 +1,4 @@
+import { separateFixtureWhisperers, seedFinalNflFixtureTotals } from './helpers/zombie-current-policy-fixture'
 import { startDraftSession } from '../lib/live-draft-engine/DraftSessionService'
 import { createZombieLeague } from '../lib/zombie/setupEngine'
 import { zombieRenewalDraftReadiness } from '../lib/zombie/zombieRenewalDraftReadiness'
@@ -89,9 +90,10 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       const zombie = await prisma.zombieLeague.findUniqueOrThrow({ where: { leagueId } })
       expect(zombie.sport).toBe(sport)
       // Exercise the real commissioner API and persisted GET response before the draft.
+      const reviveCount = sport === 'NFL' ? 2 : 3
       const choices = {
         leagueId, whispererCount: whisperers, whispererAmbushCount: 5,
-        ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true,
+        ambushCountPerWeek: 2, serumReviveCount: reviveCount, autoSerumRevive: true,
         weeklyUpdateAutoPost: true, weeklyUpdateApproval: false,
       }
       const saved = await page.request.patch('/api/zombie/settings', { data: choices, timeout: 120_000 })
@@ -101,10 +103,10 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       const readback = await loaded.json()
       expect(readback.league).toMatchObject({
         whispererCount: whisperers, whispererAmbushCount: 5,
-        config: { ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true },
+        config: { ambushCountPerWeek: 2, serumReviveCount: reviveCount, autoSerumRevive: true },
       })
       expect(await prisma.zombieLeagueConfig.findUniqueOrThrow({ where: { leagueId } })).toMatchObject({
-        ambushCountPerWeek: 2, serumReviveCount: 3, autoSerumRevive: true,
+        ambushCountPerWeek: 2, serumReviveCount: reviveCount, autoSerumRevive: true,
       })
       await prisma.zombieLeague.update({ where: { id: zombie.id }, data: {
         weeklyUpdateDay: null, weeklyUpdateHour: null,
@@ -162,15 +164,16 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       const active = await prisma.zombieLeague.findUniqueOrThrow({ where: { leagueId } })
       expect(active.status).toBe('active')
       const lockedRules = await page.request.patch('/api/zombie/settings', {
-        data: { leagueId, serumReviveCount: 4 }, timeout: 120_000,
+        data: { leagueId, serumReviveCount: sport === 'NFL' ? 2 : 4 }, timeout: 120_000,
       })
       expect(lockedRules.status()).toBe(409)
-      expect((await prisma.zombieLeagueConfig.findUniqueOrThrow({ where: { leagueId } })).serumReviveCount).toBe(3)
+      expect((await prisma.zombieLeagueConfig.findUniqueOrThrow({ where: { leagueId } })).serumReviveCount).toBe(reviveCount)
       expect(active.season).toBe(season.season)
       expect(await prisma.zombieLeagueTeam.count({ where: { leagueId } })).toBe(8)
       const whisperer = await prisma.whispererRecord.findUniqueOrThrow({ where: { zombieLeagueId: active.id } })
       expect(await prisma.zombieCoWhisperer.count({ where: { zombieLeagueId: active.id } })).toBe(whisperers - 1)
       const week = active.currentWeek
+      await separateFixtureWhisperers(leagueId, season.id, week)
       const matchups = await prisma.redraftMatchup.findMany({ where: {
         seasonId: season.id, week, awayRosterId: { not: null },
       } })
@@ -200,15 +203,17 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       })
       const pending = await runWeeklyResolution(active.id, week)
       expect(pending.reason).toBe('matchups_incomplete')
+      const fixtureTotals = new Map<string, number>()
       for (const matchup of matchups) {
         const homeIsWhisperer = matchup.homeRosterId === whispererRoster.id
         const awayIsWhisperer = matchup.awayRosterId === whispererRoster.id
-        await prisma.redraftMatchup.update({ where: { id: matchup.id }, data: {
-          homeScore: homeIsWhisperer || matchup.id === hordeMatchup!.id ? 150 : awayIsWhisperer ? 50 : 105,
-          awayScore: awayIsWhisperer ? 150 : homeIsWhisperer || matchup.id === hordeMatchup!.id ? 50 : 95,
-          status: 'final',
-        } })
+        const homeScore = homeIsWhisperer || matchup.id === hordeMatchup!.id ? 150 : awayIsWhisperer ? 50 : 105
+        const awayScore = awayIsWhisperer ? 150 : homeIsWhisperer || matchup.id === hordeMatchup!.id ? 50 : 95
+        fixtureTotals.set(matchup.homeRosterId, homeScore)
+        fixtureTotals.set(matchup.awayRosterId!, awayScore)
+        await prisma.redraftMatchup.update({ where: { id: matchup.id }, data: { homeScore, awayScore, status: 'final' } })
       }
+      if (sport === 'NFL') await seedFinalNflFixtureTotals(leagueId, season.id, season.season, week, fixtureTotals)
       const settled = await runWeeklyResolution(active.id, week)
       expect(settled.resolution?.status, `${sport} week ${week}`).toBe('complete')
       expect(settled.resolution?.infectionCount).toBeGreaterThanOrEqual(1)
@@ -256,6 +261,7 @@ test('signed-in NFL, NBA, NHL, MLB Zombie leagues draft and settle one week @zom
       console.log(`${sport} native Zombie: draft, ${whisperers} Whisperer(s), week ${week}, infection, report, idempotency passed`)
     }
   } finally {
+    await prisma.playerWeeklyScore.deleteMany({ where: { playerId: { startsWith: marker + '-NFL-' } } })
     await prisma.analyticsEvent.deleteMany({ where: { userId: { in: userIds } } })
     for (const leagueId of leagueIds) await prisma.automationLock.deleteMany({ where: { lockKey: `draft:${leagueId}:pick` } })
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } })
