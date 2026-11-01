@@ -34,6 +34,8 @@ import {
   getFantraxLeagueInfo,
 } from '@/lib/league-import/fantrax/fantraxApi'
 import { normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
+import { fantraxCategoryPairs } from './fantraxCategorySnapshots'
+import { importedCategoryCacheKey } from './importedCategorySnapshots'
 
 const CACHE_KEY_PREFIX = 'fantrax_matchup_sync'
 /** Fantrax costs one request per played period, so refresh less often than Sleeper. */
@@ -265,6 +267,20 @@ export async function runFantraxMatchupParity(input?: {
 
       if (fetched.periodsFailed > 0) throw new Error('Fantrax period reads incomplete; preserving previous native presentation')
       const linked = await prisma.league.findMany({ where: { platform: { equals: 'fantrax', mode: 'insensitive' }, platformLeagueId: connection.platformLeagueId, season: connection.season }, select: { id: true } })
+      if (linked.length && fetched.periodScores?.length) {
+        const teams = await prisma.leagueTeam.findMany({ where: { leagueId: linked[0]!.id },
+          select: { externalId: true, teamName: true, ownerName: true }, take: 100 })
+        for (const period of fetched.periodScores) {
+          const pairs = fantraxCategoryPairs(period, teams)
+          if (!pairs.length) continue
+          const cacheKey = importedCategoryCacheKey('fantrax', connection.platformLeagueId, connection.season, period.period)
+          const data = { provider: 'fantrax', leagueId: connection.platformLeagueId,
+            season: connection.season, week: period.period, fetchedAt: now.toISOString(), pairs }
+          const expiresAt = new Date(now.getTime() + 10 * 365 * 86_400_000)
+          await prisma.sportsDataCache.upsert({ where: { cacheKey },
+            create: { cacheKey, data, expiresAt }, update: { data, expiresAt } })
+        }
+      }
       for (const league of linked) await syncFantraxNativePresentation(league.id, info.data, fetched.rows, now)
 
       const schedule = Array.from(byWeek.values()).sort((a, b) => a.week - b.week)

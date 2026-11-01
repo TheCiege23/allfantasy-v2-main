@@ -94,6 +94,25 @@ beforeEach(() => {
 })
 
 describe('writing a scored Fantrax week', () => {
+  it('retains verified per-category values from a played period for later history answers', async () => {
+    leagueFindMany.mockResolvedValue([{ id: 'internal-1', platformLeagueId: 'league-uuid', season: 2026 }])
+    fetchFantraxScheduleWithScores.mockResolvedValue({ rows: [fixture()],
+      position: { period: 1, state: 'in_progress', scoredThrough: 1 }, periodsRead: 1, periodsFailed: 0,
+      periodScores: [{ period: 1, matchups: [{
+        away: { teamId: 'a', teamName: 'Ciege82', score: 118.4, gamesPlayed: 1,
+          categories: { 'Passing Yards': 250, Touchdowns: 3 } },
+        home: { teamId: 'b', teamName: 'king gustov', score: 96.2, gamesPlayed: 1,
+          categories: { 'Passing Yards': 220, Touchdowns: 2 } },
+      }] }],
+    })
+    const out = await runFantraxMatchupParity({ now: NOW })
+    expect(out.synced).toBe(1)
+    const category = cacheUpsert.mock.calls.find(([arg]) => arg.where.cacheKey ===
+      'imported_category_matchup:fantrax:league-uuid:2026:1')
+    expect(category?.[0].create.data.pairs).toMatchObject([{ roster1: '1483920211',
+      roster2: '77120044', categories1: { 'Passing Yards': 250 } }])
+  })
+
   it('writes both sides of the pairing under the roster ids LeagueTeam holds', async () => {
     const out = await runFantraxMatchupParity({ now: NOW })
 
