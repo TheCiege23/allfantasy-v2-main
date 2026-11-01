@@ -4,6 +4,8 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import '@/components/core-app/af-scout.css'
+// Redraft /core shell only (batch B4): every rule is scoped under .af-shell[data-format=redraft].
+import '@/components/core-app/af-core-redraft-trades.css'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'

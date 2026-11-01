@@ -53,7 +53,7 @@ describe('G32 NFL redraft league home contracts', () => {
     expect(translations.en['lsHub.tab.commissioner']).toBe('Commissioner Intelligence')
     expect(translations.en['lsHub.tab.ai']).toBe('League Helper')
     expect(settingsNav).toContain("label: 'Commissioner Intelligence'")
-    expect(settingsNav).toContain("label: '🤖 League Guide'")
+    expect(settingsNav).toContain("label: 'League Guide'")
     expect(modalPanel).toContain('title="Commissioner Intelligence"')
     expect(compactTab).toContain("t('lsHub.ai.intro')")
     expect(translations.en['lsHub.ai.intro']).toContain('Control League Helper settings')

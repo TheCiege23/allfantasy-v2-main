@@ -204,6 +204,60 @@ html[data-mode='light'] .af-core[data-league-theme='survivor'] {
   .af-core .sv-flame { animation: none; }
 }
 
+/* ── Tribal Council vote reading (components/core-app/survivor/SurvivorVoteReading.tsx) ── */
+
+.af-core .sv-reading { border-color: var(--accent-line); background: linear-gradient(170deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface) 60%); }
+.af-core .sv-reading-sub { margin: -6px 0 14px; font: 700 15px/1.3 'Cinzel', Georgia, serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sv-heading); }
+.af-core .sv-reading-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.af-core .sv-ballot {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  padding: 22px 18px 20px; border-radius: 6px; color: #2b1a0c;
+  background:
+    radial-gradient(120% 90% at 50% 40%, rgba(255, 248, 228, 0.65), rgba(255, 248, 228, 0) 70%),
+    linear-gradient(175deg, #ecd9b0, #d9bd86 55%, #c9a66a);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45), inset 0 0 22px rgba(120, 76, 30, 0.35);
+  transform: rotate(-1.2deg);
+  animation: sv-ballot-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.af-core .sv-ballot-ord { font: 600 11px/1.2 Inter, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: #6b4a26; display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.af-core .sv-ballot-extra { padding: 1px 7px; border-radius: 6px; border: 1px solid #8a5a24; color: #7a3d12; letter-spacing: 0.08em; }
+.af-core .sv-ballot-name {
+  font-family: 'Caveat', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+  font-size: 40px; line-height: 1.1; font-weight: 700; color: #1d1208; overflow-wrap: anywhere;
+}
+.af-core .sv-ballot[data-void='true'] .sv-ballot-name { text-decoration: line-through; text-decoration-color: rgba(150, 40, 20, 0.75); text-decoration-thickness: 3px; opacity: 0.75; }
+.af-core .sv-ballot-stamp {
+  margin-top: 4px; padding: 3px 10px; border: 2px solid #a3311b; border-radius: 4px; transform: rotate(-3deg);
+  font: 700 12px/1.3 Inter, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: #a3311b;
+}
+.af-core .sv-ballot-wait { margin: 0; padding: 22px 12px; text-align: center; color: var(--muted); font-style: italic; }
+.af-core .sv-tally ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.af-core .sv-tally li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; font-size: 14px; color: var(--text2); }
+.af-core .sv-tally li[data-leading='true'] { color: var(--text); font-weight: 600; }
+.af-core .sv-tally-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-core .sv-pips { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 160px; justify-content: flex-end; }
+.af-core .sv-pips i { display: block; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent-line); }
+.af-core .sv-tally-count { min-width: 1.5em; text-align: right; }
+.af-core .sv-spoken {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center;
+  margin-top: 16px; padding: 16px 14px; border-radius: 12px; border: 1px solid var(--accent-line); background: var(--surface2);
+  animation: sv-ballot-in 0.9s ease-out both;
+}
+.af-core .sv-spoken-h { font: 900 22px/1.2 'Cinzel', Georgia, serif; letter-spacing: 0.08em; color: var(--accent); }
+.af-core .sv-spoken-name { font-size: 16px; font-weight: 600; color: var(--text); }
+.af-core .sv-spoken-margin, .af-core .sv-spoken-note { font-size: 13px; color: var(--muted); }
+@keyframes sv-ballot-in { from { opacity: 0; transform: translateY(10px) rotate(2deg) scale(0.96); } to { opacity: 1; transform: rotate(-1.2deg); } }
+.af-core .sv-spoken { animation-name: sv-fade-in; }
+@keyframes sv-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 720px) {
+  .af-core .sv-reading-grid { grid-template-columns: 1fr; }
+  .af-core .sv-ballot-name { font-size: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core .sv-ballot, .af-core .sv-spoken { animation: none; }
+}
+
 /* ── Island control (components/core-app/survivor/SurvivorIslandControl.tsx) ── */
 
 .af-core .sv-health { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px; }
@@ -288,7 +342,7 @@ html[data-mode='light'] .af-core[data-league-theme='survivor'] {
   border-radius: 999px;
   background: rgba(240, 163, 94, 0.13);
   color: #f0a35e;
-  font: 700 10.5px/1.5 'Cinzel', 'Trajan Pro', Georgia, 'Times New Roman', serif;
+  font: 700 11px/1.5 'Cinzel', 'Trajan Pro', Georgia, 'Times New Roman', serif;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }

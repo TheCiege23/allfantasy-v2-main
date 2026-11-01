@@ -497,7 +497,7 @@ export default function DispersalDraftSetupPage() {
                   type="button"
                   onClick={() => setPickTimeSeconds(sec)}
                   className={`rounded-lg border px-2 py-1 text-[11px] ${
-                    pickTimeSeconds === sec ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100' : 'border-white/15'
+                    pickTimeSeconds === sec ? 'border-cyan-400/50 bg-cyan-500/15 text-[var(--badge-text-cyan)]' : 'border-white/15'
                   }`}
                 >
                   {sec === 0 ? 'No limit' : `${sec}s`}
@@ -589,7 +589,7 @@ export default function DispersalDraftSetupPage() {
             }
             setStep((s) => (s < 5 ? ((s + 1) as 1 | 2 | 3 | 4 | 5) : s))
           }}
-          className="rounded-lg border border-cyan-400/35 bg-cyan-500/15 px-4 py-2 text-xs font-semibold text-cyan-100 disabled:opacity-30"
+          className="rounded-lg border border-cyan-400/35 bg-cyan-500/15 px-4 py-2 text-xs font-semibold text-[var(--badge-text-cyan)] disabled:opacity-30"
         >
           {step === 2 ? (previewLoading ? 'Working…' : 'Continue →') : 'Continue →'}
         </button>

@@ -18,7 +18,7 @@ export function AiManagedTeamBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-0.5 rounded-md border border-cyan-400/35 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-cyan-100/95',
+        'inline-flex items-center gap-0.5 rounded-md border border-cyan-400/35 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--badge-text-cyan)]',
         variant === 'compact' && 'px-1 py-0 text-[11px]',
         className,
       )}

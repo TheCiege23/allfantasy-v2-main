@@ -3,6 +3,8 @@
 import '@/components/core-app/af-matchup.css'
 // The refresh control's own styles (`.af-mp-live*`) live with the all-leagues board it came from.
 import '@/components/core-app/af-matchup-pulse.css'
+// Redraft batch B3: the broadcast score bug, scoped to the /core shell's data-format="redraft".
+import '@/components/core-app/af-core-redraft-matchup.css'
 import { MatchupPulseRefresh } from '@/components/core-app/MatchupPulseRefresh'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
 import Link from 'next/link'
@@ -25,6 +27,7 @@ import type {
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { useMessages } from '@/components/i18n/useMessages'
 import { matchupScreenMessages } from '@/lib/core-app/messages/matchupScreen'
+import { playerGameMark } from '@/lib/core-app/redraftCoreScoreBug'
 
 /**
  * Screen 5 — Matchup.
@@ -398,7 +401,14 @@ function PlayerHalf({
   const value = live ? (notYetPlayed ? null : cell.actual) : cell.projected
 
   return (
-    <div className="af-mu-half" data-align={align} data-state="player" data-edge={edge ?? undefined}>
+    <div
+      className="af-mu-half"
+      data-align={align}
+      data-state="player"
+      data-edge={edge ?? undefined}
+      /* Live boards only: whose game is on, still to come, or over (the redraft bug tints by it). */
+      data-gs={playerGameMark(cell, live) ?? undefined}
+    >
       <span className="af-mu-portrait">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -489,6 +499,16 @@ function PlayerHalf({
             aria-label={copy(cell.gameState === 'live' ? 'Playing now' : 'Yet to play')}
             title={copy(cell.gameState === 'live' ? 'Playing now' : 'Yet to play')}
           />
+        ) : null}
+        {/*
+          A starter whose game is over, on a live board — the third state beside the two markers
+          above. Redraft only: af-core-redraft-matchup.css hides it everywhere else, so no other
+          league's board changes.
+        */}
+        {playerGameMark(cell, live) === 'final' ? (
+          <span className="af-mu-rd-final af-num" role="img" aria-label={copy('Final')} title={copy('Final')}>
+            F
+          </span>
         ) : null}
         {cell.unavailable ? (
           <span
@@ -651,6 +671,11 @@ function LineupBoard({ data }: { data: MatchupData }) {
         <p className="af-mu-gs-key">
           <span><span className="af-mu-gs" data-state="live" aria-hidden /> {copy('playing now')}</span>
           <span><span className="af-mu-gs" data-state="upcoming" aria-hidden /> {copy('yet to play')}</span>
+          {slots.some((s) => [s.you, s.opponent].some((c) => playerGameMark(c, live) === 'final')) ? (
+            <span className="af-mu-rd-only">
+              <span className="af-mu-rd-final af-num" aria-hidden>F</span> {copy('final')}
+            </span>
+          ) : null}
         </p>
       ) : null}
       {data.league.bestBall ? <p className="af-mu-note">{copy('Best Ball scores your eligible full roster automatically. This board shows provider-listed starters; eligible bench players can also contribute.')}</p> : null}
@@ -825,7 +850,7 @@ export function Matchup({ data }: MatchupProps) {
       through LineupBoard and both PlayerHalf columns.
     */
     <PlayerCardLeagueScope leagueId={data.league.id}>
-    <div className="af-mu">
+    <div className="af-mu" data-week={weekState}>
       {data.teams.available ? (
         <StickyScore
           target={bannerRef}

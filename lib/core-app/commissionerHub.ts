@@ -713,7 +713,7 @@ export async function getCommissionerHub(input: {
       where: { leagueId, network: { ownerUserId: userId } },
       select: { role: true, network: { select: { id: true, name: true } } },
     })).catch(() => null),
-    loadCommissionerHistory(leagueId, native, { platform, sport }, language).catch((): CommissionerHistory => ({ tradeAvailable: false, draftAvailable: false, trades: [], drafts: [], tradeNote: m.tradeHistoryUnread, draftNote: m.draftHistoryUnread })),
+    loadCommissionerHistory(leagueId, native, { platform, sport, settings: league.settings }, language).catch((): CommissionerHistory => ({ tradeAvailable: false, draftAvailable: false, trades: [], drafts: [], tradeNote: m.tradeHistoryUnread, draftNote: m.draftHistoryUnread })),
     // The dynasty rollover wizard's own read (the card below renders it too): native dynasty only.
     dynastyLeague && native
       ? readDynastyRolloverView(leagueId, userId).catch((): DynastyRolloverView | null => null)
