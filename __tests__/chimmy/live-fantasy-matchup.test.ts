@@ -5,6 +5,9 @@ const h = vi.hoisted(() => ({
   league: vi.fn(), board: vi.fn(), scores: vi.fn(), matchup: vi.fn(), nativePlayers: vi.fn(), sportsPlayers: vi.fn(),
   roster: vi.fn(), season: vi.fn(), categoryMatchups: vi.fn(),
   standings: vi.fn(), rosters: vi.fn(), rotoPeriod: vi.fn(),
+  importedCategories: vi.fn(),
+  freshCategory: vi.fn(),
+  freshEspn: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   league: { findUnique: h.league }, leaguePlayerWeeklyScore: { findMany: h.scores },
@@ -14,8 +17,11 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
   redraftMatchup: { findMany: h.categoryMatchups },
   fantasyStanding: { findMany: h.standings },
   teamWeekResult: { findFirst: h.rotoPeriod },
+  sportsDataCache: { findUnique: h.importedCategories },
 } }))
 vi.mock('@/lib/core-app/weekBoard', () => ({ getWeekBoard: h.board }))
+vi.mock('@/lib/league-import/yahoo/YahooLeagueFetchService', () => ({ fetchYahooCategoryMatchupForWeek: h.freshCategory }))
+vi.mock('@/lib/league-import/espn/EspnLeagueFetchService', () => ({ fetchEspnScheduleForSync: h.freshEspn }))
 vi.mock('@/lib/core-app/weeklyCapabilities', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/core-app/weeklyCapabilities')>(),
   nativeWeeklyLeague: (league: { platform: string }) => league.platform === 'allfantasy',
@@ -40,6 +46,9 @@ beforeEach(() => {
   h.standings.mockResolvedValue([])
   h.rosters.mockResolvedValue([])
   h.rotoPeriod.mockResolvedValue(null)
+  h.importedCategories.mockResolvedValue(null)
+  h.freshCategory.mockResolvedValue(null)
+  h.freshEspn.mockResolvedValue([])
 })
 
 describe('selected league live fantasy matchup', () => {
@@ -82,6 +91,49 @@ describe('selected league live fantasy matchup', () => {
     const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
     expect(out).toMatch(/category scoring/)
     expect(h.board).not.toHaveBeenCalled()
+  })
+
+  it('reports a verified Yahoo category pairing with a source timestamp', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Yahoo Hoops', sport: 'NBA', season: 2026,
+      platform: 'yahoo', platformLeagueId: '466.l.12', leagueType: 'categories', settings: {
+        yahoo_settings: { stat_categories: { stats: { 0: { stat: [{ stat_id: '5' }, { display_name: 'PTS' }] } } } },
+      } })
+    h.board.mockResolvedValue({ leagueBoard: { yourRosterId: '1', yours: { week: 2 } }, eliminationWeeks: [] })
+    h.importedCategories.mockResolvedValue({ data: { provider: 'yahoo', leagueId: '466.l.12', season: 2026,
+      week: 2, fetchedAt: '2026-11-01T20:00:00Z', pairs: [
+        { roster1: '1', roster2: '2', categories1: { '5': 101, '6': 42 }, categories2: { '5': 95, '6': 40 } },
+      ] } })
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('PTS: you 101.00, opponent 95.00')
+    expect(out).toContain('Provider totals last fetched 2026-11-01T20:00:00.000Z')
+    expect(out).toContain('not a real-time update')
+    expect(out).not.toContain('your team 101.00')
+  })
+
+  it('prefers an authorized current-week Yahoo scoreboard over an older snapshot', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Yahoo Hoops', sport: 'NBA', season: 2026,
+      platform: 'yahoo', platformLeagueId: '466.l.12', leagueType: 'categories', settings: {} })
+    h.board.mockResolvedValue({ leagueBoard: { yourRosterId: '2', yours: { week: 2 } }, eliminationWeeks: [] })
+    h.freshCategory.mockResolvedValue({ week: 2, season: 2026, matchups: [{
+      teamKey1: '466.l.12.t.1', teamKey2: '466.l.12.t.2', categories1: { '5': 101, '6': 42 },
+      categories2: { '5': 95, '6': 40 },
+    }] })
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('Yahoo stat 5: you 95.00, opponent 101.00')
+    expect(out).toContain('Yahoo current-week scoreboard team_stats')
+    expect(h.importedCategories).not.toHaveBeenCalled()
+  })
+
+  it('reads verified ESPN category scores from the current matchup', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'ESPN Baseball', sport: 'MLB', season: 2026,
+      platform: 'espn', platformLeagueId: '123', leagueType: 'categories', settings: {} })
+    h.board.mockResolvedValue({ leagueBoard: { yourRosterId: '2', yours: { week: 2 } }, eliminationWeeks: [] })
+    h.freshEspn.mockResolvedValue([{ week: 2, season: 2026, matchups: [{ teamId1: '1', teamId2: '2',
+      categories1: { '5': 16, '8': 172 }, categories2: { '5': 12, '8': 165 } }] }])
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('ESPN stat 5: you 12.00, opponent 16.00')
+    expect(out).toContain('ESPN current-week matchup cumulativeScore.scoreByStat')
+    expect(out).not.toContain('fantasy points:')
   })
 
   it('reports a native category snapshot without calling it real-time', async () => {

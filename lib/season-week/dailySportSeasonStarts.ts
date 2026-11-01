@@ -100,6 +100,28 @@ const GAMEWEEK_STARTS: Readonly<Record<string, Readonly<Record<number, readonly 
   },
 }
 
+const VERIFIED_SOCCER_GAMEWEEKS = new Map<number, readonly string[]>()
+
+/** A complete three-league schedule may prime a future season; partial slates never do. */
+export function recordVerifiedSoccerGameweeks(season: number, starts: readonly string[] | null): boolean {
+  if (!Number.isInteger(season) || GAMEWEEK_STARTS.SOCCER?.[season]) return false
+  if (starts === null) {
+    VERIFIED_SOCCER_GAMEWEEKS.delete(season)
+    return true
+  }
+  if (starts.length !== 38 || starts.some((day, i) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return true
+    const date = new Date(`${day}T00:00:00.000Z`)
+    return !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== day ||
+      date.getUTCDay() !== 5 || i > 0 && date.getTime() - Date.parse(`${starts[i - 1]}T00:00:00.000Z`) < 7 * DAY_MS
+  }) || !starts[0]!.startsWith(`${season}-08-`) && !starts[0]!.startsWith(`${season}-09-`) ||
+    !starts[37]!.startsWith(`${season + 1}-05-`) && !starts[37]!.startsWith(`${season + 1}-06-`)) return false
+  VERIFIED_SOCCER_GAMEWEEKS.set(season, [...starts])
+  return true
+}
+
+export function clearVerifiedSoccerGameweeks(): void { VERIFIED_SOCCER_GAMEWEEKS.clear() }
+
 const DAY_MS = 86_400_000
 
 // NBA fantasy periods follow Eastern calendar days. A fixed seven-day UTC offset
@@ -122,7 +144,7 @@ function gameweekStarts(sport: string | null | undefined, season: number | null 
   const key = String(sport ?? '').trim().toUpperCase()
   const year = Number(season)
   if (!Number.isFinite(year)) return null
-  return GAMEWEEK_STARTS[key]?.[year] ?? null
+  return GAMEWEEK_STARTS[key]?.[year] ?? (key === 'SOCCER' ? VERIFIED_SOCCER_GAMEWEEKS.get(year) : null) ?? null
 }
 
 /**
@@ -304,6 +326,10 @@ export function resolveDailySportSeasonStart(
 
   const curated = REGULAR_SEASON_START_UTC[key]?.[year]
   if (curated) return curated
+  if (key === 'SOCCER') {
+    const first = VERIFIED_SOCCER_GAMEWEEKS.get(year)?.[0]
+    return first ? `${first}T00:00:00.000Z` : null
+  }
   return DERIVED_REGULAR_SEASON_START_UTC.get(derivedKey(key, year)) ?? null
 }
 

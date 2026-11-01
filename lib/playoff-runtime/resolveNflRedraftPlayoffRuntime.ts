@@ -15,6 +15,7 @@ import {
   type NflRedraftRegularSeasonMatchupInput,
 } from './canonicalNflRedraftPlayoffRuntime'
 import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { CONSOLATION_ROUND_OFFSET } from './playoffRoundWeeks'
 import { loadSeasonRosterDivisions, type SeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
 import { divisionRecords } from '@/lib/league/divisions/leagueDivisions'
@@ -352,6 +353,7 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
   const general = rules.general ?? {}
   const sport = String(general.sport ?? season.sport ?? 'NFL').toUpperCase()
   const format = 'format' in general ? String((general as { format?: unknown }).format ?? 'redraft') : 'redraft'
+  if (sport === 'SOCCER') await ensureDailySportSeasonStart('SOCCER', season.season, { db: prisma }).catch(() => null)
   // Same coverage as the schedule runtime: a season the roller can advance must be able to
   // reach its bracket and champion.
   if (!runsStandardWeeklySeason(sport, format, season.season)) {

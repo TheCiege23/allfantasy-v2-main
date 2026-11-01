@@ -3,6 +3,8 @@ import { classifyRiSeasonType } from '@/lib/sports-data/riSeasonType'
 import { easternCalendarDay, gameDayFromRiGameId } from '@/lib/sports-data/easternGameDay'
 import { isoDay, scheduleKeyPrefix, type ScheduleCacheDb, type ScheduleGame } from '@/lib/sports-data/riScheduleCache'
 import { RI_SOCCER_LEAGUES } from '@/lib/sports-data/rollingInsightsSupport'
+import { deriveVerifiedSoccerCalendar } from '@/lib/sports-data/verifiedSoccerCalendar'
+import { recordVerifiedSoccerGameweeks } from '@/lib/season-week/dailySportSeasonStarts'
 
 // The stored shape and the reader live in the pure leaf so client-reachable code (the lineup lock)
 // can read the schedule without pulling in this module's server-only RI client.
@@ -108,6 +110,7 @@ export async function syncRiSeasonSchedule(opts: {
    */
   const leagues: Array<string | undefined> = sport === 'SOCCER' ? [...RI_SOCCER_LEAGUES] : [undefined]
   const games: ScheduleGame[] = []
+  const soccerLeagues = new Map<string, ScheduleGame[]>()
   for (const league of leagues) {
     const { rows, notModified, unsupported, error } = await riFetchRows('schedule_season', {
       sport,
@@ -127,9 +130,15 @@ export async function syncRiSeasonSchedule(opts: {
       return result
     }
     games.push(...parsed)
+    if (league) soccerLeagues.set(league, parsed)
   }
   if (games.length === 0) {
     result.error = 'schedule-season returned 200 with no parseable games — refusing to replace a stored schedule with nothing'
+    return result
+  }
+  const soccerCalendar = sport === 'SOCCER' ? deriveVerifiedSoccerCalendar(opts.season, soccerLeagues) : null
+  if (sport === 'SOCCER' && !soccerCalendar) {
+    result.error = 'SOCCER schedule-season lacks three complete 380-game slates and 38 verified gameweek windows — refusing a partial calendar'
     return result
   }
   // MLB schedules 162 games for each of 30 clubs: 2,430 distinct regular-season games.
@@ -179,7 +188,7 @@ export async function syncRiSeasonSchedule(opts: {
   // A day that held games before and holds none now (a rescheduled slate) must not linger.
   const keep = [...byDay.keys()].map((d) => `${prefix}${d}`)
   const removed = await opts.db.sportsDataCache.deleteMany({
-    where: { cacheKey: { startsWith: prefix, notIn: [...keep, `${prefix}meta`] } },
+    where: { cacheKey: { startsWith: prefix, notIn: [...keep, `${prefix}meta`, `${prefix}calendar`] } },
   })
   result.staleDaysRemoved = removed.count
 
@@ -191,6 +200,10 @@ export async function syncRiSeasonSchedule(opts: {
     lastDay: daysSorted[daysSorted.length - 1],
     statusCounts: result.statusCounts,
   })
+  if (soccerCalendar) {
+    await put(`${prefix}calendar`, { season: opts.season, starts: soccerCalendar, source: 'rolling-insights:three-league-season-schedule', syncedAt: now.toISOString() })
+    recordVerifiedSoccerGameweeks(opts.season, soccerCalendar)
+  }
   return result
 }
 

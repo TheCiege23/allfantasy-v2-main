@@ -4,6 +4,87 @@ import { prisma } from '@/lib/prisma'
 import { getWeekBoard } from '@/lib/core-app/weekBoard'
 import { nativeWeeklyLeague, weeklyFormat } from '@/lib/core-app/weeklyCapabilities'
 import { nativeRosterSeat, NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
+import { importedCategoryCacheKey, parseImportedCategoryPairs, verifiedCategoryPairs, yahooRosterId,
+  type ImportedCategoryPair } from '@/lib/import-os/collector/importedCategorySnapshots'
+import { fetchYahooCategoryMatchupForWeek } from '@/lib/league-import/yahoo/YahooLeagueFetchService'
+import { fetchEspnScheduleForSync } from '@/lib/league-import/espn/EspnLeagueFetchService'
+
+function yahooCategoryLabels(settings: unknown): Map<string, string> {
+  const obj = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
+  const prop = (v: unknown, key: string): unknown => Array.isArray(v)
+    ? v.map((part) => obj(part)[key]).find((part) => part != null) : obj(v)[key]
+  // Yahoo's collection may be numeric-keyed; each value is a fragment array containing `stat`.
+  const rawStats = prop(prop(obj(settings).yahoo_settings, 'stat_categories'), 'stats')
+  const stats = Array.isArray(rawStats) ? rawStats : Object.values(obj(rawStats))
+  const labels = new Map<string, string>()
+  for (const wrapper of stats) {
+    const parts = prop(wrapper, 'stat') ?? wrapper
+    const id = prop(parts, 'stat_id')
+    const label = prop(parts, 'display_name') ?? prop(parts, 'name')
+    if (typeof id === 'string' || typeof id === 'number') {
+      if (typeof label === 'string' && label.trim()) labels.set(String(id), label.trim().slice(0, 60))
+    }
+  }
+  return labels
+}
+
+async function importedCategoryMatchup(league: { id: string; name: string | null; sport: string; season: number;
+  platform: string | null; platformLeagueId: string | null; settings?: unknown }, userId: string): Promise<string> {
+  const provider = String(league.platform ?? '').toLowerCase()
+  if (!['yahoo', 'espn'].includes(provider) || !league.platformLeagueId) {
+    return `${league.name} uses category scoring. Verified provider category totals are not available for this connection; no points score is asserted.`
+  }
+  const board = await getWeekBoard(userId, [{ ...league, platform: String(league.platform ?? '') }], league.id)
+  const week = board.leagueBoard?.yours?.week
+  const rosterId = board.leagueBoard?.yourRosterId
+  if (!week || !rosterId) return `No current ${provider.toUpperCase()} category pairing is verified for your roster in ${league.name}.`
+  let pair: ImportedCategoryPair | undefined
+  let fetchedAt: Date | null = null
+  let source = provider === 'yahoo' ? 'stored Yahoo matchup team_stats' : 'stored ESPN matchup cumulativeScore.scoreByStat'
+  try {
+    if (provider === 'yahoo') {
+      const fresh = await fetchYahooCategoryMatchupForWeek(userId, league.platformLeagueId, league.season, week)
+      if (fresh) pair = verifiedCategoryPairs(fresh.matchups.map((m) => ({
+        teamId1: m.teamKey1, teamId2: m.teamKey2, categories1: m.categories1, categories2: m.categories2,
+      })), yahooRosterId).find((p) => p.roster1 === rosterId || p.roster2 === rosterId)
+    } else {
+      const fresh = (await fetchEspnScheduleForSync(userId, league.platformLeagueId, league.season))
+        .find((entry) => entry.week === week)
+      if (fresh) pair = verifiedCategoryPairs(fresh.matchups, (id) => id)
+        .find((p) => p.roster1 === rosterId || p.roster2 === rosterId)
+    }
+    if (pair) {
+      fetchedAt = new Date()
+      source = provider === 'yahoo' ? 'Yahoo current-week scoreboard team_stats' : 'ESPN current-week matchup cumulativeScore.scoreByStat'
+    }
+  } catch { /* A member may lack provider credentials; retain the collector's last verified snapshot. */ }
+  if (!pair) {
+    const key = importedCategoryCacheKey(provider, league.platformLeagueId, league.season, week)
+    const row = await prisma.sportsDataCache.findUnique({ where: { cacheKey: key }, select: { data: true } })
+    const data = row?.data && typeof row.data === 'object' && !Array.isArray(row.data)
+      ? row.data as Record<string, unknown> : null
+    if (data?.provider !== provider || data.leagueId !== league.platformLeagueId || data.season !== league.season || data.week !== week) {
+      return `No verified ${provider.toUpperCase()} category totals are stored for your current matchup in ${league.name}; no 0–0 result is inferred.`
+    }
+    pair = parseImportedCategoryPairs(data.pairs).find((p) => p.roster1 === rosterId || p.roster2 === rosterId)
+    fetchedAt = typeof data.fetchedAt === 'string' && Number.isFinite(Date.parse(data.fetchedAt))
+      ? new Date(data.fetchedAt) : null
+  }
+  if (!pair) return `No verified ${provider.toUpperCase()} category totals are stored for your current pairing in ${league.name}.`
+  const own = pair.roster1 === rosterId ? pair.categories1 : pair.categories2
+  const other = pair.roster1 === rosterId ? pair.categories2 : pair.categories1
+  const lines = [`${provider.toUpperCase()} CATEGORY MATCHUP — ${league.name} (${league.sport}), season ${league.season}, week ${week}.`,
+    fetchedAt ? `Provider totals last fetched ${fetchedAt.toISOString()}.` : 'No provider refresh time is recorded.']
+  if (!fetchedAt || Date.now() - fetchedAt.getTime() > 15 * 60_000) {
+    lines.push('These category totals may be stale; they are not a real-time update.')
+  }
+  const labels = provider === 'yahoo' ? yahooCategoryLabels(league.settings) : new Map<string, string>()
+  for (const id of Object.keys(own).sort((a, b) => Number(a) - Number(b)).slice(0, 40)) {
+    lines.push(`${labels.get(id) ?? `${provider === 'yahoo' ? 'Yahoo' : 'ESPN'} stat ${id}`}: you ${own[id]!.toFixed(2)}, opponent ${other[id]!.toFixed(2)}.`)
+  }
+  lines.push(`Source: ${source}. Stat IDs are ${provider.toUpperCase()} category IDs; direction and category wins are not inferred from raw totals. These are not fantasy point totals.`)
+  return lines.join('\n')
+}
 
 async function nativeRotoStandings(league: { id: string; name: string | null; sport: string; season: number }, userId: string): Promise<string> {
   const mine = await prisma.redraftRoster.findFirst({ where: { leagueId: league.id, ownerId: userId }, select: { id: true } })
@@ -95,7 +176,7 @@ export async function buildLiveFantasyMatchupContext(args: { leagueId: string; u
   const format = weeklyFormat(league)
   if (format === 'categories') return nativeWeeklyLeague(league)
     ? nativeCategoryMatchup(league, args.userId)
-    : `${league.name} uses category scoring. Its provider category matchup has not been imported here; no points score is asserted.`
+    : importedCategoryMatchup(league, args.userId)
   if (format === 'roto') return nativeWeeklyLeague(league)
     ? nativeRotoStandings(league, args.userId)
     : `${league.name} uses rotisserie scoring. Provider category standings have not been imported; no rank is asserted.`
