@@ -5,6 +5,31 @@ import { getWeekBoard } from '@/lib/core-app/weekBoard'
 import { nativeWeeklyLeague, weeklyFormat } from '@/lib/core-app/weeklyCapabilities'
 import { nativeRosterSeat, NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
 
+async function nativeRotoStandings(league: { id: string; name: string | null; sport: string; season: number }, userId: string): Promise<string> {
+  const mine = await prisma.redraftRoster.findFirst({ where: { leagueId: league.id, ownerId: userId }, select: { id: true } })
+  if (!mine) return `No claimed native roster is on file for you in ${league.name}; rotisserie rank cannot be attributed safely.`
+  const rows = await prisma.fantasyStanding.findMany({ where: { leagueId: league.id, season: league.season },
+    select: { rosterId: true, rank: true, pointsFor: true, updatedAt: true,
+      roster: { select: { redraftRosterId: true } } }, orderBy: [{ rank: 'asc' }, { pointsFor: 'desc' }], take: 100 })
+  const own = rows.find((row) => row.roster.redraftRosterId === mine.id)
+  if (!own || own.rank == null) return `No verified season-to-date rotisserie rank is stored for your roster in ${league.name}. Do not infer a rank from head-to-head points.`
+  const asOf = rows.reduce<Date | null>((latest, row) => !latest || row.updatedAt > latest ? row.updatedAt : latest, null)
+  const ids = rows.map((row) => row.roster.redraftRosterId).filter((id): id is string => Boolean(id))
+  const rosters = await prisma.redraftRoster.findMany({ where: { id: { in: ids } }, select: { id: true, teamName: true, ownerName: true } })
+  const names = new Map(rosters.map((roster) => [roster.id, roster.teamName || roster.ownerName]))
+  const lines = [`ROTISSERIE STANDINGS — ${league.name} (${league.sport}), season ${league.season}.`,
+    `Your stored rank: ${own.rank}; ${rows.length} teams have stored standings; ${own.pointsFor.toFixed(2)} category rank points.`,
+    asOf ? `Standings last updated ${asOf.toISOString()}.` : 'No refresh time is recorded.']
+  if (asOf && Date.now() - asOf.getTime() > 15 * 60_000) lines.push('These standings may be stale; they are not a live category update.')
+  for (const row of rows.slice(0, 20)) {
+    if (row.rank == null) continue
+    const name = row.roster.redraftRosterId ? names.get(row.roster.redraftRosterId) : null
+    lines.push(`${row.rank}. ${name ?? 'Unnamed team'} — ${row.pointsFor.toFixed(2)} category rank points${row.roster.redraftRosterId === mine.id ? ' (you)' : ''}.`)
+  }
+  lines.push('Source: stored native fantasy standings. Rank points sum category placements across teams; they are not head-to-head fantasy points. Only finalized scoring periods are reflected.')
+  return lines.join('\n')
+}
+
 async function nativeCategoryMatchup(league: { id: string; name: string | null; sport: string; season: number }, userId: string): Promise<string> {
   const roster = await prisma.redraftRoster.findFirst({ where: { leagueId: league.id, ownerId: userId }, select: { id: true } })
   if (!roster) return `No claimed native roster is on file for you in ${league.name}; category matchup data cannot be shown.`
@@ -62,7 +87,9 @@ export async function buildLiveFantasyMatchupContext(args: { leagueId: string; u
   if (format === 'categories') return nativeWeeklyLeague(league)
     ? nativeCategoryMatchup(league, args.userId)
     : `${league.name} uses category scoring. Its provider category matchup has not been imported here; no points score is asserted.`
-  if (format === 'roto') return `${league.name} uses rotisserie scoring. It has season-long category ranks, not a head-to-head fantasy score; current ranks are not available in this tool.`
+  if (format === 'roto') return nativeWeeklyLeague(league)
+    ? nativeRotoStandings(league, args.userId)
+    : `${league.name} uses rotisserie scoring. Provider category standings have not been imported; no rank is asserted.`
   const native = nativeWeeklyLeague(league)
   const board = await getWeekBoard(args.userId, [{ ...league, platform: String(league.platform ?? '') }], league.id)
   const match = board.leagueBoard?.yours

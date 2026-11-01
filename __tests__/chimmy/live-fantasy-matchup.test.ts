@@ -4,13 +4,15 @@ vi.mock('server-only', () => ({}))
 const h = vi.hoisted(() => ({
   league: vi.fn(), board: vi.fn(), scores: vi.fn(), matchup: vi.fn(), nativePlayers: vi.fn(), sportsPlayers: vi.fn(),
   roster: vi.fn(), season: vi.fn(), categoryMatchups: vi.fn(),
+  standings: vi.fn(), rosters: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   league: { findUnique: h.league }, leaguePlayerWeeklyScore: { findMany: h.scores },
   weeklyMatchup: { findFirst: h.matchup }, redraftRosterPlayer: { findMany: h.nativePlayers },
   sportsPlayer: { findMany: h.sportsPlayers },
-  redraftRoster: { findFirst: h.roster }, redraftSeason: { findFirst: h.season },
+  redraftRoster: { findFirst: h.roster, findMany: h.rosters }, redraftSeason: { findFirst: h.season },
   redraftMatchup: { findMany: h.categoryMatchups },
+  fantasyStanding: { findMany: h.standings },
 } }))
 vi.mock('@/lib/core-app/weekBoard', () => ({ getWeekBoard: h.board }))
 vi.mock('@/lib/core-app/weeklyCapabilities', async (importOriginal) => ({
@@ -34,6 +36,8 @@ beforeEach(() => {
   h.roster.mockResolvedValue({ id: 'R1' })
   h.season.mockResolvedValue({ currentWeek: 2 })
   h.categoryMatchups.mockResolvedValue([])
+  h.standings.mockResolvedValue([])
+  h.rosters.mockResolvedValue([])
 })
 
 describe('selected league live fantasy matchup', () => {
@@ -99,5 +103,25 @@ describe('selected league live fantasy matchup', () => {
     const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
     expect(out).toContain('computed 2020-01-01T00:00:00.000Z')
     expect(out).toContain('Treat it as stale')
+  })
+
+  it('reports native roto rank points from stored standings, with freshness', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Roto Hoops', sport: 'NBA', season: 2026,
+      platform: 'allfantasy', leagueType: 'redraft', settings: { scoring_mode: 'roto' } })
+    h.standings.mockResolvedValue([
+      { rosterId: 'G1', roster: { redraftRosterId: 'R1' }, rank: 1, pointsFor: 21,
+        updatedAt: new Date('2026-11-01T20:00:00Z') },
+      { rosterId: 'G2', roster: { redraftRosterId: 'R2' }, rank: 2, pointsFor: 18,
+        updatedAt: new Date('2026-11-01T20:00:00Z') },
+    ])
+    h.rosters.mockResolvedValue([{ id: 'R1', teamName: 'Home', ownerName: 'U1' },
+      { id: 'R2', teamName: 'Rival', ownerName: 'U2' }])
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toContain('Your stored rank: 1')
+    expect(out).toContain('21.00 category rank points')
+    expect(out).toContain('Rival')
+    expect(out).toContain('2026-11-01T20:00:00.000Z')
+    expect(out).not.toContain('head-to-head fantasy score')
+    expect(h.board).not.toHaveBeenCalled()
   })
 })

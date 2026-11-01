@@ -23,7 +23,8 @@ export async function loadOtherSportPeriodSchedule(args: {
     : resolveDailySportWeekWindow(sport, args.season, args.week)
   if (!window || now.getTime() >= window.end.getTime() || now.getTime() < window.start.getTime() - 3 * 86_400_000) return null
 
-  type Fixture = { home: string | null; away: string | null; start: Date | null; day: string | null }
+  type Fixture = { home: string | null; away: string | null; homeLabel?: string | null; awayLabel?: string | null;
+    start: Date | null; day: string | null }
   let fixtures: Fixture[]
   let source: string
   if (RI_SCHEDULE_SLATE_SPORTS.includes(sport)) {
@@ -31,7 +32,9 @@ export async function loadOtherSportPeriodSchedule(args: {
     if (!rows) return null
     fixtures = rows.filter((r) => (r.seasonType == null || r.seasonType === 'regular') &&
       !r.replacedBy && !['replaced', 'postponed', 'cancelled'].includes(String(r.status ?? '').toLowerCase()))
-      .map((r) => ({ home: r.homeTeam ?? null, away: r.awayTeam ?? null,
+      .map((r) => ({ home: sport === 'SOCCER' ? r.homeTeamId ?? null : r.homeTeam ?? null,
+        away: sport === 'SOCCER' ? r.awayTeamId ?? null : r.awayTeam ?? null,
+        homeLabel: r.homeTeam ?? null, awayLabel: r.awayTeam ?? null,
         start: r.startTime && Number.isFinite(Date.parse(r.startTime)) ? new Date(r.startTime) : null, day: r.day }))
     source = 'Rolling Insights season schedule'
   } else if (sport === 'NCAAF') {
@@ -66,7 +69,7 @@ export async function loadOtherSportPeriodSchedule(args: {
     const remaining = related.filter((g) => g.start ? g.start > now : Boolean(g.day && g.day > today))
     const unknownToday = related.some((g) => !g.start && g.day === today)
     byTeam.set(team, { count: remaining.length,
-      opponents: remaining.map((g) => normalizeLockTeam(sport, g.home) === key ? g.away : g.home)
+      opponents: remaining.map((g) => normalizeLockTeam(sport, g.home) === key ? g.awayLabel ?? g.away : g.homeLabel ?? g.home)
         .filter((v): v is string => Boolean(v)).slice(0, 8),
       verified: related.length > 0 && !unknownToday && related.every((g) => Boolean(g.home && g.away)) })
   }

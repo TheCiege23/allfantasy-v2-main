@@ -23,6 +23,7 @@ import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { aggregateWeeklyStats, getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { aggregateNcaafWeek } from '@/lib/scoring-runtime/ncaafStatNormalization'
 import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+import { loadOpponentScoreAdjustments } from './opponentStrength'
 
 type Result = { ready: boolean; text: string }
 const missing = (text: string): Result => ({ ready: false, text })
@@ -149,6 +150,11 @@ export async function buildOtherSportStartSit(args: {
     players: perPlayer.map((p) => ({ playerId: p!.id, name: p!.name, team: p!.team, gameTime: null })) })
   if (ids.some((id) => locks.started.has(id))) return missing('At least one player has already started a game in the current scoring window. Verify lineup locks before changing a starter.')
   if (ids.some((id) => locks.unverified.includes(id))) return missing('A current game could not be verified for both players, so no start/sit call was made. Check the league schedule and ask again.')
+  const strength = !category && remaining.every((r) => r.count > 0 && r.opponents.length === r.count)
+    ? await loadOpponentScoreAdjustments({ sport, season: league.season, now,
+        players: perPlayer.map((p, i) => ({ position: metadata.get(p!.id)?.position ?? null,
+          opponents: remaining[i]!.opponents })) }).catch(() => [null, null])
+    : [null, null]
   const lines = [`${sport} start/sit in this league (${schedule.label}; ${schedule.source}):`]
   lines.push(`Injury check: ${injuryNotes.length ? injuryNotes.join('; ') : 'no current designation on file for these players; that does not establish they are healthy'}.`)
   for (const [i, p] of perPlayer.entries()) {
@@ -167,14 +173,16 @@ export async function buildOtherSportStartSit(args: {
     lines.push(`Estimated category contributions from recent per-game rates and remaining games: ${values.join('; ')}.`)
     lines.push('No overall category winner is claimed: team totals, category needs, rate denominators and other players decide the matchup or rotisserie rank.')
   } else {
-    const estimates = perPlayer.map((p, i) => p!.average! * remaining[i]!.count)
-    lines.push(`${a!.name}: ${a!.average!.toFixed(1)} league-scored points per recent game, ${estimates[0]!.toFixed(1)} schedule-adjusted baseline.`)
-    lines.push(`${b!.name}: ${b!.average!.toFixed(1)} league-scored points per recent game, ${estimates[1]!.toFixed(1)} schedule-adjusted baseline.`)
+    const strengthVerified = strength.length === 2 && strength.every(Boolean)
+    const estimates = perPlayer.map((p, i) => p!.average! * remaining[i]!.count * (strengthVerified ? strength[i]!.factor : 1))
+    lines.push(`${a!.name}: ${a!.average!.toFixed(1)} league-scored points per recent game, ${estimates[0]!.toFixed(1)} ${strengthVerified ? 'schedule- and opponent-adjusted' : 'schedule-adjusted'} baseline.`)
+    lines.push(`${b!.name}: ${b!.average!.toFixed(1)} league-scored points per recent game, ${estimates[1]!.toFixed(1)} ${strengthVerified ? 'schedule- and opponent-adjusted' : 'schedule-adjusted'} baseline.`)
+    if (strengthVerified) lines.push(`Opponent strength: ${a!.name} ${(strength[0]!.factor * 100 - 100).toFixed(1)}%, ${b!.name} ${(strength[1]!.factor * 100 - 100).toFixed(1)}% relative to league scoring average, capped at 10% per fixture. Source: ${strength[0]!.source}, at least five games per opponent. This uses real points/goals/runs scored or allowed as a proxy, not fantasy points allowed by position.`)
     const diff = estimates[0]! - estimates[1]!
     if (Math.abs(diff) < 1) lines.push('This is a close call on the current-period baseline; no clear start/sit edge.')
     else lines.push(`Lean ${diff > 0 ? a!.name : b!.name} on the schedule-adjusted baseline (${Math.abs(diff).toFixed(1)} points higher).`)
   }
-  lines.push('This baseline is an estimate from past games, not a certified projection. Opponents are listed but not strength-adjusted. Confirm late injuries and platform locks before changing a lineup.')
+  lines.push(`This baseline is an estimate from past games, not a certified projection. ${strength.every(Boolean) && !category ? 'Opponent strength is a bounded real-score proxy.' : 'Opponent strength could not be verified for both players and was not applied.'} Confirm late injuries and platform locks before changing a lineup.`)
   if (sport === 'SOCCER') lines.push('Soccer season finalization is not certified on AllFantasy; this is only a roster-and-fixture-verified gameweek comparison, not a claim that the league can complete a season.')
   return { ready: true, text: lines.join('\n') }
 }

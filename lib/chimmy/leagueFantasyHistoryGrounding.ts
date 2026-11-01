@@ -4,6 +4,49 @@ import { prisma } from '@/lib/prisma'
 import { loadCareerGames } from '@/lib/core-app/careerRecords'
 import { NO_CAREER_FILTER } from '@/lib/core-app/careerModel'
 import { nativeWeeklyLeague, weeklyFormat } from '@/lib/core-app/weeklyCapabilities'
+import { NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
+
+async function playerFantasyHistory(args: { league: { id: string; name: string | null; sport: string; platform: string | null;
+  platformLeagueId: string | null; leagueType: string | null; settings: unknown }; player: string;
+  season: number | null; week: number | null; limit: number }): Promise<string> {
+  const native = nativeWeeklyLeague(args.league)
+  const platform = String(args.league.platform ?? '').toLowerCase()
+  const name = args.player.trim()
+  if (!name) return 'Name the player whose league-scored fantasy history you want.'
+  let ids: string[] = []
+  if (native) {
+    const rows = await prisma.redraftRosterPlayer.findMany({ where: { roster: { leagueId: args.league.id },
+      playerName: { equals: name, mode: 'insensitive' } }, select: { playerId: true }, take: 100 })
+    ids = [...new Set(rows.map((row) => row.playerId))]
+  } else if (platform === 'sleeper') {
+    const rows = await prisma.sportsPlayer.findMany({ where: { sport: args.league.sport,
+      name: { equals: name, mode: 'insensitive' } }, select: { sleeperId: true }, take: 100 })
+    ids = [...new Set(rows.map((row) => row.sleeperId)
+      .filter((id): id is string => Boolean(id)))]
+  } else if (platform === 'fantrax') {
+    const rows = await prisma.playerIdentityMap.findMany({ where: { sport: args.league.sport,
+      canonicalName: { equals: name, mode: 'insensitive' }, fantraxId: { not: null } },
+    select: { fantraxId: true }, take: 100 })
+    ids = [...new Set(rows.map((row) => row.fantraxId).filter((id): id is string => Boolean(id)))]
+  } else return `Historical per-player fantasy scores for ${platform || 'this provider'} have no verified identity mapping here.`
+  if (!ids.length) return `${name} could not be matched to a player ID in ${args.league.name}; no fantasy points are asserted.`
+  if (ids.length !== 1) return `${name} matches multiple player IDs in ${args.league.name}. Use a more specific name; no fantasy points are attributed.`
+  const leagueId = native ? args.league.id : args.league.platformLeagueId
+  if (!leagueId) return `No provider league ID is stored for ${args.league.name}; player scores cannot be read safely.`
+  const rows = await prisma.leaguePlayerWeeklyScore.findMany({ where: { leagueId, playerId: ids[0],
+    source: native ? NATIVE_PLAYER_SCORE_SOURCE : platform,
+    ...(args.season == null ? {} : { seasonYear: args.season }),
+    ...(args.week == null ? {} : { week: args.week }) },
+  select: { seasonYear: true, week: true, points: true, isStarter: true, isFinalized: true, updatedAt: true },
+  orderBy: [{ seasonYear: 'desc' }, { week: 'desc' }], take: args.limit + 1 })
+  if (!rows.length) return `No league-scored weekly fantasy rows are stored for ${name} in ${args.league.name}${args.season ? ` in ${args.season}` : ''}${args.week ? ` week ${args.week}` : ''}. This is a data gap, not a zero-point result.`
+  const shown = rows.slice(0, args.limit)
+  const lines = [`PLAYER FANTASY HISTORY — ${name} in ${args.league.name} (${args.league.sport}).`]
+  for (const row of shown) lines.push(`${row.seasonYear} week ${row.week}: ${row.points.toFixed(2)} league-scored fantasy points (${row.isStarter ? 'starter' : 'bench'}, ${row.isFinalized ? 'finalized' : 'subject to correction'}; updated ${row.updatedAt.toISOString()}).`)
+  if (rows.length > args.limit) lines.push(`Showing ${args.limit} most recent stored weeks; narrow by season or week for more.`)
+  lines.push(`Source: ${native ? 'AllFantasy' : platform} per-player weekly fantasy scores for this league. These are this league's scoring results, not real-sports box scores.`)
+  return lines.join('\n')
+}
 
 async function nativeCategoryHistory(args: { leagueId: string; userId: string; leagueName: string;
   format: 'categories' | 'roto'; season: number | null; week: number | null; limit: number }): Promise<string> {
@@ -52,7 +95,7 @@ async function nativeCategoryHistory(args: { leagueId: string; userId: string; l
 
 /** Historical head-to-head results from the same fact/live merge as the Career record book. */
 export async function buildLeagueFantasyHistoryContext(args: {
-  leagueId: string; userId: string; season?: number | null; week?: number | null; limit?: number | null
+  leagueId: string; userId: string; season?: number | null; week?: number | null; limit?: number | null; player?: string | null
 }): Promise<string> {
   const league = await prisma.league.findUnique({ where: { id: args.leagueId },
     select: { id: true, name: true, sport: true, leagueType: true, settings: true, platform: true, platformLeagueId: true } })
@@ -62,6 +105,7 @@ export async function buildLeagueFantasyHistoryContext(args: {
   const season = Number.isInteger(args.season) && (args.season ?? 0) >= 2000 && (args.season ?? 0) <= 2100 ? args.season ?? null : null
   const week = Number.isInteger(args.week) && (args.week ?? 0) >= 1 && (args.week ?? 0) <= 60 ? args.week ?? null : null
   const limit = Math.min(20, Math.max(1, Number.isInteger(args.limit) ? args.limit! : 8))
+  if (args.player?.trim()) return playerFantasyHistory({ league, player: args.player, season, week, limit })
   const format = weeklyFormat(league)
   if (format === 'categories' || format === 'roto') {
     if (!nativeWeeklyLeague(league)) return `${leagueName} uses ${format} scoring, but provider category history has not been imported. No historical points result is asserted.`
