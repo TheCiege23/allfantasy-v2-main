@@ -8,12 +8,21 @@ import { nativeRosterSeat, NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nati
 async function nativeRotoStandings(league: { id: string; name: string | null; sport: string; season: number }, userId: string): Promise<string> {
   const mine = await prisma.redraftRoster.findFirst({ where: { leagueId: league.id, ownerId: userId }, select: { id: true } })
   if (!mine) return `No claimed native roster is on file for you in ${league.name}; rotisserie rank cannot be attributed safely.`
+  const finalized = await prisma.teamWeekResult.findFirst({ where: { leagueId: league.id, season: league.season,
+    status: 'final' }, select: { week: true, categoryBreakdown: true }, orderBy: { week: 'desc' } })
+  const breakdown = finalized?.categoryBreakdown
+  const stats = breakdown && typeof breakdown === 'object' && !Array.isArray(breakdown) && 'teamStats' in breakdown
+    ? breakdown.teamStats : null
+  if (!stats || typeof stats !== 'object' || Array.isArray(stats) || !Object.keys(stats).length) {
+    return `No finalized rotisserie category period is stored for ${league.name}; a pre-season or unscored rank is not asserted.`
+  }
   const rows = await prisma.fantasyStanding.findMany({ where: { leagueId: league.id, season: league.season },
     select: { rosterId: true, rank: true, pointsFor: true, updatedAt: true,
       roster: { select: { redraftRosterId: true } } }, orderBy: [{ rank: 'asc' }, { pointsFor: 'desc' }], take: 100 })
   const own = rows.find((row) => row.roster.redraftRosterId === mine.id)
   if (!own || own.rank == null) return `No verified season-to-date rotisserie rank is stored for your roster in ${league.name}. Do not infer a rank from head-to-head points.`
-  const asOf = rows.reduce<Date | null>((latest, row) => !latest || row.updatedAt > latest ? row.updatedAt : latest, null)
+  // A later update to one team must not make every team's table appear fresh.
+  const asOf = rows.reduce<Date | null>((oldest, row) => !oldest || row.updatedAt < oldest ? row.updatedAt : oldest, null)
   const ids = rows.map((row) => row.roster.redraftRosterId).filter((id): id is string => Boolean(id))
   const rosters = await prisma.redraftRoster.findMany({ where: { id: { in: ids } }, select: { id: true, teamName: true, ownerName: true } })
   const names = new Map(rosters.map((roster) => [roster.id, roster.teamName || roster.ownerName]))

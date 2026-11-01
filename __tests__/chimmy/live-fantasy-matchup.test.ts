@@ -4,7 +4,7 @@ vi.mock('server-only', () => ({}))
 const h = vi.hoisted(() => ({
   league: vi.fn(), board: vi.fn(), scores: vi.fn(), matchup: vi.fn(), nativePlayers: vi.fn(), sportsPlayers: vi.fn(),
   roster: vi.fn(), season: vi.fn(), categoryMatchups: vi.fn(),
-  standings: vi.fn(), rosters: vi.fn(),
+  standings: vi.fn(), rosters: vi.fn(), rotoPeriod: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   league: { findUnique: h.league }, leaguePlayerWeeklyScore: { findMany: h.scores },
@@ -13,6 +13,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
   redraftRoster: { findFirst: h.roster, findMany: h.rosters }, redraftSeason: { findFirst: h.season },
   redraftMatchup: { findMany: h.categoryMatchups },
   fantasyStanding: { findMany: h.standings },
+  teamWeekResult: { findFirst: h.rotoPeriod },
 } }))
 vi.mock('@/lib/core-app/weekBoard', () => ({ getWeekBoard: h.board }))
 vi.mock('@/lib/core-app/weeklyCapabilities', async (importOriginal) => ({
@@ -38,6 +39,7 @@ beforeEach(() => {
   h.categoryMatchups.mockResolvedValue([])
   h.standings.mockResolvedValue([])
   h.rosters.mockResolvedValue([])
+  h.rotoPeriod.mockResolvedValue(null)
 })
 
 describe('selected league live fantasy matchup', () => {
@@ -114,6 +116,7 @@ describe('selected league live fantasy matchup', () => {
       { rosterId: 'G2', roster: { redraftRosterId: 'R2' }, rank: 2, pointsFor: 18,
         updatedAt: new Date('2026-11-01T20:00:00Z') },
     ])
+    h.rotoPeriod.mockResolvedValue({ week: 3, categoryBreakdown: { teamStats: { pts: 180 } } })
     h.rosters.mockResolvedValue([{ id: 'R1', teamName: 'Home', ownerName: 'U1' },
       { id: 'R2', teamName: 'Rival', ownerName: 'U2' }])
     const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
@@ -123,5 +126,13 @@ describe('selected league live fantasy matchup', () => {
     expect(out).toContain('2026-11-01T20:00:00.000Z')
     expect(out).not.toContain('head-to-head fantasy score')
     expect(h.board).not.toHaveBeenCalled()
+  })
+
+  it('does not present a roto placement before a category period has finalized', async () => {
+    h.league.mockResolvedValue({ id: 'L1', name: 'Roto Hoops', sport: 'NBA', season: 2026,
+      platform: 'allfantasy', leagueType: 'redraft', settings: { scoring_mode: 'roto' } })
+    const out = await buildLiveFantasyMatchupContext({ leagueId: 'L1', userId: 'u1' })
+    expect(out).toMatch(/No finalized rotisserie category period/)
+    expect(h.standings).not.toHaveBeenCalled()
   })
 })
