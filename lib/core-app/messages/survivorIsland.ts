@@ -41,6 +41,31 @@ export const survivorIslandMessages = defineMessages({
     legendImmune: 'Immune',
     legendYou: 'You',
     loading: 'Loading the island…',
+    readingEyebrow: 'Tribal Council · the vote',
+    readingSub: (week: number, tribe: string | null): string => (tribe ? `Week ${week} · ${tribe}` : `Week ${week}`),
+    readingProgress: (released: number, total: number): string => `${released} of ${total} votes read`,
+    readingWaiting: 'The host is about to read the first vote…',
+    readingVoteOf: (n: number, total: number): string => `Vote ${n} of ${total}`,
+    readingNoTarget: 'No eligible name',
+    readingExtraVote: 'Extra vote',
+    readingStatus: (status: string): string => {
+      switch (status) {
+        case 'blocked_by_idol': return 'Blocked by an idol · this vote doesn’t count'
+        case 'late_does_not_count': return 'Cast late · this vote doesn’t count'
+        case 'taken_by_vote_steal': return 'Stolen vote · this vote doesn’t count'
+        case 'blocked_by_shot': return 'Shot in the Dark · this vote doesn’t count'
+        case 'forfeited_by_shot': return 'Forfeited for a Shot in the Dark · this vote doesn’t count'
+        case 'target_safe': return 'Safe tonight · this vote doesn’t count'
+        default: return ''
+      }
+    },
+    readingTally: 'Tally',
+    readingVotes: (n: number): string => (n === 1 ? '1 vote' : `${n} votes`),
+    readingSpoken: 'The tribe has spoken',
+    readingOut: (name: string): string => `${name} has been voted out`,
+    readingMargin: (votes: number, next: number): string => `${votes} ${votes === 1 ? 'vote' : 'votes'} to ${next}`,
+    readingTie: 'The vote is tied. Nobody leaves yet — the tie is broken next.',
+    readingNone: 'Nobody was voted out.',
   },
   es: {
     survivor: 'Survivor',
@@ -81,5 +106,30 @@ export const survivorIslandMessages = defineMessages({
     legendImmune: 'Inmune',
     legendYou: 'Tú',
     loading: 'Cargando la isla…',
+    readingEyebrow: 'Consejo Tribal · la votación',
+    readingSub: (week: number, tribe: string | null): string => (tribe ? `Semana ${week} · ${tribe}` : `Semana ${week}`),
+    readingProgress: (released: number, total: number): string => `${released} de ${total} votos leídos`,
+    readingWaiting: 'El presentador está por leer el primer voto…',
+    readingVoteOf: (n: number, total: number): string => `Voto ${n} de ${total}`,
+    readingNoTarget: 'Sin nombre válido',
+    readingExtraVote: 'Voto extra',
+    readingStatus: (status: string): string => {
+      switch (status) {
+        case 'blocked_by_idol': return 'Bloqueado por un ídolo · este voto no cuenta'
+        case 'late_does_not_count': return 'Emitido tarde · este voto no cuenta'
+        case 'taken_by_vote_steal': return 'Voto robado · este voto no cuenta'
+        case 'blocked_by_shot': return 'Disparo en la oscuridad · este voto no cuenta'
+        case 'forfeited_by_shot': return 'Cedido por un disparo en la oscuridad · este voto no cuenta'
+        case 'target_safe': return 'A salvo esta noche · este voto no cuenta'
+        default: return ''
+      }
+    },
+    readingTally: 'Recuento',
+    readingVotes: (n: number): string => (n === 1 ? '1 voto' : `${n} votos`),
+    readingSpoken: 'La tribu ha hablado',
+    readingOut: (name: string): string => `${name} ha sido expulsado`,
+    readingMargin: (votes: number, next: number): string => `${votes} ${votes === 1 ? 'voto' : 'votos'} a ${next}`,
+    readingTie: 'La votación está empatada. Nadie se va todavía: el empate se rompe a continuación.',
+    readingNone: 'Nadie fue expulsado.',
   },
 })

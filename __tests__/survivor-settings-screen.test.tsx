@@ -51,6 +51,9 @@ function form(over: Partial<SurvivorSettingsForm> = {}): SurvivorSettingsForm {
     tribeCount: 2, tribeFormation: 'random', voteDay: 'Tuesday', voteTime: '20:00', selfVotesAllowed: false, tieRule: 'revote_then_season_points',
     idolCount: 7, hideIdolsFromCommissioner: false, exileEnabled: true, exileReturnTokens: 3, exileBossMode: 'median', exileBossFixedScore: null, exileBossTopN: 3,
     swapEnabled: true, swapWeek: 5, mergeTrigger: 'week', mergeWeek: 8, mergeActivePlayerCount: 7, finalistCount: 3, shareCardsEnabled: true, publicMomentPages: true, spectatorPageEnabled: false,
+    coCommissionerMode: 'disabled', mergeNamingMode: 'commissioner', juryEnabled: true, tribeChatsEnabled: true, exileHarshTokenLoss: false, houseRules: '',
+    winningTribeFaabPerPlayer: 0, topScorerReward: 'none', topScorerAmount: 0, topScorerPowerType: 'extra_vote', tribeTieBreakPosition: 'none',
+    realGameEnabled: true, realGamePerWeek: 2, realGamePrizeType: 'faab', realGamePrizeAmount: 5, challengeFaabWeeklyCap: 40,
     ...over,
   }
 }
@@ -183,6 +186,92 @@ describe('settings screen UI', () => {
     expect(screen.getByTestId('survivor-settings-unsaved').textContent).toBe('1 unsaved change')
     expect(screen.getByTestId('survivor-settings-errors').textContent).toContain('The swap must come before the merge.')
     expect((screen.getByTestId('survivor-settings-save') as HTMLButtonElement).disabled).toBe(true)
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('weekly prizes, house rules and the newly exposed settings', () => {
+  it('reads them from their real storage', async () => {
+    m.db.league.findUnique.mockImplementation(async () => ({
+      name: 'Blah Survivor', sport: 'NFL', survivorSwapWeek: 5, survivorFinal3: true, survivorExileHarshTokenLoss: true,
+      settings: storedSettings({ coCommissionerMode: 'non_participating_host', juryEnabled: false, tribeChatsEnabled: false, mergeNamingMode: 'manager_vote', survivorHouseRules: 'No screenshots.', survivorWeeklyPrizes: { winningTribeFaabPerPlayer: 100, topScorerReward: 'faab', topScorerAmount: 50, tribeTieBreakPosition: 'QB' } }),
+    }))
+    const data = await (await GET(req({}), params)).json()
+    expect(data.form).toMatchObject({
+      coCommissionerMode: 'non_participating_host', juryEnabled: false, tribeChatsEnabled: false, mergeNamingMode: 'manager_vote', exileHarshTokenLoss: true,
+      houseRules: 'No screenshots.', winningTribeFaabPerPlayer: 100, topScorerReward: 'faab', topScorerAmount: 50, tribeTieBreakPosition: 'QB',
+    })
+    expect(data.context.sport).toBe('NFL')
+  })
+
+  it('saves prizes, house rules, harsh mode and merge naming mid-season, but the tie-break locks with the draft', async () => {
+    m.draftStarted = true
+    m.db.league.findUnique.mockImplementation(async () => ({ name: 'S', sport: 'NFL', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true }))
+    const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+    const res = await POST(req({ form: { ...before, winningTribeFaabPerPlayer: 100, topScorerReward: 'score_boost', topScorerAmount: 20, houseRules: '  Be kind.  ', exileHarshTokenLoss: true, mergeNamingMode: 'manager_vote' } }), params)
+    expect(res.status).toBe(200)
+    const update = m.tx.league.update.mock.calls[0][0].data
+    expect(update.settings).toMatchObject({
+      survivorHouseRules: 'Be kind.',
+      mergeNamingMode: 'manager_vote',
+      survivorWeeklyPrizes: { winningTribeFaabPerPlayer: 100, topScorerReward: 'score_boost', topScorerAmount: 20, topScorerPowerType: 'extra_vote', tribeTieBreakPosition: 'none' },
+    })
+    expect(update.survivorExileHarshTokenLoss).toBe(true)
+    m.tx.league.update.mockClear()
+    const locked = await POST(req({ form: { ...before, tribeTieBreakPosition: 'QB', juryEnabled: false } }), params)
+    expect(locked.status).toBe(409)
+    expect((await locked.json()).locked.sort()).toEqual(['juryEnabled', 'tribeTieBreakPosition'])
+    expect(m.tx.league.update).not.toHaveBeenCalled()
+  })
+
+  it('writes co-commissioner mode, jury and tribe chats into the foundation settings before the draft', async () => {
+    const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+    const res = await POST(req({ form: { ...before, coCommissionerMode: 'same_privacy_as_commissioner', juryEnabled: false, tribeChatsEnabled: false } }), params)
+    expect(res.status).toBe(200)
+    expect(m.tx.league.update.mock.calls[0][0].data.settings).toMatchObject({ coCommissionerMode: 'same_privacy_as_commissioner', juryEnabled: false, tribeChatsEnabled: false })
+  })
+
+  it('challenge settings: today’s behaviour by default, editable all season, written to their own keys', async () => {
+    m.draftStarted = true
+    m.db.league.findUnique.mockImplementation(async () => ({ name: 'S', sport: 'NFL', settings: storedSettings(), survivorSwapWeek: 5, survivorFinal3: true }))
+    const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+    expect(before).toMatchObject({ realGameEnabled: true, realGamePerWeek: 2, realGamePrizeType: 'faab', realGamePrizeAmount: 5, challengeFaabWeeklyCap: 40 })
+    const res = await POST(req({ form: { ...before, realGamePerWeek: 1, realGamePrizeType: 'score_bonus', realGamePrizeAmount: 10, challengeFaabWeeklyCap: 100 } }), params)
+    expect(res.status).toBe(200)
+    expect(m.tx.league.update.mock.calls[0][0].data.settings).toMatchObject({
+      survivorRealGameChallenges: { enabled: true, perWeek: 1, prizeType: 'score_bonus', pointsAmount: 10 },
+      survivorChallengeFaabWeeklyCap: 100,
+    })
+    m.tx.league.update.mockClear()
+    const bad = await POST(req({ form: { ...before, challengeFaabWeeklyCap: 0 } }), params)
+    expect(bad.status).toBe(422)
+    expect((await bad.json()).error).toMatch(/challenge FAAB cap/)
+    expect((await POST(req({ form: { ...before, realGamePrizeType: 'faab', realGamePrizeAmount: 99 } }), params)).status).toBe(422)
+    expect(m.tx.league.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid prize (422) and a junk co-commissioner mode (400)', async () => {
+    const before = (await (await GET(req({}), params)).json()).form as SurvivorSettingsForm
+    const bad = await POST(req({ form: { ...before, topScorerReward: 'faab', topScorerAmount: 0 } }), params)
+    expect(bad.status).toBe(422)
+    expect((await bad.json()).error).toMatch(/top scorer/)
+    expect((await POST(req({ form: { ...before, coCommissionerMode: 'king' } }), params)).status).toBe(400)
+    expect(m.tx.league.update).not.toHaveBeenCalled()
+  })
+
+  it('renders the prize and rules sections and counts a house-rules edit', async () => {
+    const state = { leagueName: 'Blah Survivor', form: form(), context: { ...ctx, sport: 'NFL' }, locks: { draftStarted: true, finalistLocked: true, tribesLocked: true }, chimmyBossAvailable: false, commissionerPlays: false }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(state), { status: 200 })))
+    render(<SurvivorSettingsScreen leagueId="L1" backHref="/league/L1" />)
+    await waitFor(() => expect(screen.getByTestId('survivor-settings-prizes')).toBeTruthy())
+    expect(screen.getByTestId('survivor-settings-rules')).toBeTruthy()
+    // After the draft: prizes and house rules stay editable, the tie-break and co-commissioner lock.
+    expect((screen.getByTestId('survivor-settings-house-rules') as HTMLTextAreaElement).disabled).toBe(false)
+    expect((screen.getByTestId('survivor-settings-tribe-faab') as HTMLInputElement).disabled).toBe(false)
+    expect((screen.getByTestId('survivor-settings-tiebreak') as HTMLSelectElement).disabled).toBe(true)
+    expect([...screen.getByTestId('survivor-settings-tiebreak').querySelectorAll('option')].map(o => o.value)).toContain('QB')
+    fireEvent.change(screen.getByTestId('survivor-settings-house-rules'), { target: { value: 'No screenshots.' } })
+    expect(screen.getByTestId('survivor-settings-unsaved').textContent).toBe('1 unsaved change')
     vi.unstubAllGlobals()
   })
 })

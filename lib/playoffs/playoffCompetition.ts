@@ -42,7 +42,7 @@ export function scoreAndPotential(
   const byId = new Map(series.map((game) => [game.id, game]))
   const eliminated = new Set<string>()
   for (const game of series) {
-    if (!game.winnerTeamName) continue
+    if (!game.winnerTeamName || game.round === "cup_group_play") continue
     const loser = game.winnerTeamName === game.homeTeamName ? game.awayTeamName
       : game.winnerTeamName === game.awayTeamName ? game.homeTeamName : null
     if (loser) eliminated.add(loser)
@@ -50,7 +50,8 @@ export function scoreAndPotential(
   let potentialTotal = scored.totalScore
   for (const pick of picks) {
     const game = byId.get(pick.seriesId)
-    if (!game || game.winnerTeamName || eliminated.has(pick.pickTeamName)) continue
+    if (!game || game.winnerTeamName || (game.round !== "cup_group_play" && eliminated.has(pick.pickTeamName))) continue
+    if (sport === "nba_cup" && ![game.homeTeamName, game.awayTeamName].includes(pick.pickTeamName) && !/^(?:Winner|East Champion|West Champion)/i.test(game.homeTeamName)) continue
     potentialTotal += pointsForSeries(game, sport)
   }
   return { ...scored, potentialTotal }
@@ -60,7 +61,7 @@ export function championshipTotal(
   series: ResultSeries[],
 ): number | null {
   const final = series.find((game) => game.round === "cfp_championship" || game.round === "cup_championship")
-  return final?.liveHomeScore != null && final.liveAwayScore != null
+  return final?.winnerTeamName && final.liveHomeScore != null && final.liveAwayScore != null
     ? final.liveHomeScore + final.liveAwayScore : null
 }
 

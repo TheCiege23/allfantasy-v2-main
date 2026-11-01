@@ -12,6 +12,10 @@
  *    assignment or a locked tribe plan;
  *  - the idol draw stays where IdolSetup put it: the idol count is saved through
  *    saveSurvivorIdolConfig, keeping its mode, picks and hide flag; the drawn types are never read.
+ *  - house rules → League.settings.survivorHouseRules; weekly tribe prizes →
+ *    League.settings.survivorWeeklyPrizes; harsh token loss → League.survivorExileHarshTokenLoss;
+ *    merge naming → League.settings.mergeNamingMode (the late-season reader); co-commissioner mode,
+ *    jury and tribe chats → the foundation settings.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -29,6 +33,14 @@ import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPla
 import { readStoredTribePlan } from '@/lib/survivor/survivorTribePlan'
 import { defaultTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
 import { upsertSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
+import {
+  readSurvivorHouseRules,
+  readSurvivorWeeklyPrizes,
+  SURVIVOR_HOUSE_RULES_KEY,
+  SURVIVOR_WEEKLY_PRIZES_KEY,
+} from '@/lib/survivor/survivorWeeklyPrizes'
+import { readRealGameSettings, REAL_GAME_SETTINGS_KEY } from '@/lib/survivor/survivorRealGameChallengeLogic'
+import { readChallengeFaabWeeklyCap, SURVIVOR_CHALLENGE_FAAB_CAP_KEY } from '@/lib/survivor/survivorChallengeBuilderModel'
 import { getSurvivorIdolSetupView, isSurvivorDraftStarted, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
 import {
   changedSettingsKeys,
@@ -38,6 +50,9 @@ import {
   type SurvivorSettingsContext,
   type SurvivorSettingsForm,
   type SurvivorSettingsLocks,
+  weeklyPrizesFromForm,
+  realGameSettingsFromForm,
+  SURVIVOR_CHALLENGE_SETTING_DEFAULTS,
 } from '@/lib/survivor/survivorSettingsScreen'
 
 export const dynamic = 'force-dynamic'
@@ -74,7 +89,7 @@ export interface SurvivorSettingsScreenState {
 async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Promise<SurvivorSettingsScreenState | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { name: true, settings: true, survivorSwapWeek: true, survivorFinal3: true, sport: true },
+    select: { name: true, settings: true, survivorSwapWeek: true, survivorFinal3: true, sport: true, survivorExileHarshTokenLoss: true },
   })
   if (!league) return null
   const settings = rec(league.settings)
@@ -83,6 +98,8 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
   // Show the boss the league really plays: outside the NBA a legacy Chimmy value is the median.
   const late = { ...stored, exileBossMode: effectiveExileBossMode(stored.exileBossMode, league.sport) }
   const plan = readSurvivorFullSeasonPlan(settings)
+  const prizes = readSurvivorWeeklyPrizes(settings)
+  const realGame = readRealGameSettings(settings)
   const [draftStarted, assigned, idolView] = await Promise.all([
     isSurvivorDraftStarted(leagueId),
     prisma.survivorTribeMember.count({ where: { tribe: { leagueId } } }),
@@ -115,8 +132,24 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
       shareCardsEnabled: foundation.shareCardsEnabled,
       publicMomentPages: foundation.publicMomentPages,
       spectatorPageEnabled: foundation.spectatorPageEnabled,
+      coCommissionerMode: foundation.coCommissionerMode,
+      mergeNamingMode: stored.mergeNamingMode,
+      juryEnabled: foundation.juryEnabled,
+      tribeChatsEnabled: foundation.tribeChatsEnabled,
+      exileHarshTokenLoss: league.survivorExileHarshTokenLoss === true,
+      houseRules: readSurvivorHouseRules(settings),
+      winningTribeFaabPerPlayer: prizes.winningTribeFaabPerPlayer,
+      topScorerReward: prizes.topScorerReward,
+      topScorerAmount: prizes.topScorerAmount,
+      topScorerPowerType: prizes.topScorerPowerType,
+      tribeTieBreakPosition: prizes.tribeTieBreakPosition,
+      realGameEnabled: realGame.enabled,
+      realGamePerWeek: realGame.perWeek,
+      realGamePrizeType: realGame.prize.type,
+      realGamePrizeAmount: realGame.prize.type === 'none' ? SURVIVOR_CHALLENGE_SETTING_DEFAULTS.realGamePrizeAmount : realGame.prize.amount,
+      challengeFaabWeeklyCap: readChallengeFaabWeeklyCap(settings),
     },
-    context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek },
+    context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek, sport: String(league.sport ?? 'NFL') },
     locks: { draftStarted, finalistLocked: Boolean(plan) || draftStarted, tribesLocked: assigned > 0 || Boolean(readStoredTribePlan(settings)?.lockedAt) },
     chimmyBossAvailable: late.exileBossMode === 'chimmy_roster',
     commissionerPlays: foundation.commissionerParticipationMode === 'participating_player',
@@ -147,7 +180,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   const locked = lockedChanges(changed, state.locks)
   if (locked.length) {
-    return NextResponse.json({ error: 'These settings locked when the draft started. Only the vote deadline, the Exile boss and sharing can change during the season.', locked }, { status: 409 })
+    return NextResponse.json({ error: 'These settings locked when the draft started. Only the settings marked "Editable all season" can change during the season.', locked }, { status: 409 })
   }
   if (next.exileBossMode === 'chimmy_roster' && !state.chimmyBossAvailable) {
     return NextResponse.json({ error: "Chimmy's roster boss is only kept for leagues that already use it." }, { status: 422 })
@@ -183,6 +216,9 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (has('shareCardsEnabled')) foundationPatch.shareCardsEnabled = next.shareCardsEnabled
     if (has('publicMomentPages')) foundationPatch.publicMomentPages = next.publicMomentPages
     if (has('spectatorPageEnabled')) foundationPatch.spectatorPageEnabled = next.spectatorPageEnabled
+    if (has('coCommissionerMode')) foundationPatch.coCommissionerMode = next.coCommissionerMode
+    if (has('juryEnabled')) foundationPatch.juryEnabled = next.juryEnabled
+    if (has('tribeChatsEnabled')) foundationPatch.tribeChatsEnabled = next.tribeChatsEnabled
     if (has('tribeCount')) {
       // Same reset the tribe panel does on a count change: default identities and capacities.
       foundationPatch.tribeCount = next.tribeCount
@@ -193,11 +229,22 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (has('exileBossMode')) latePatch.exileBossMode = next.exileBossMode
     if (has('exileBossFixedScore') || (has('exileBossMode') && next.exileBossMode === 'fixed')) latePatch.exileBossFixedScore = next.exileBossFixedScore
     if (has('exileBossTopN')) latePatch.exileBossTopN = next.exileBossTopN
+    if (has('mergeNamingMode')) latePatch.mergeNamingMode = next.mergeNamingMode
+    // League-rule extras that live beside the foundation settings, not in them.
+    if (has('houseRules')) latePatch[SURVIVOR_HOUSE_RULES_KEY] = next.houseRules.trim()
+    if ((['winningTribeFaabPerPlayer', 'topScorerReward', 'topScorerAmount', 'topScorerPowerType', 'tribeTieBreakPosition'] as const).some(has)) {
+      latePatch[SURVIVOR_WEEKLY_PRIZES_KEY] = weeklyPrizesFromForm(next)
+    }
+    if ((['realGameEnabled', 'realGamePerWeek', 'realGamePrizeType', 'realGamePrizeAmount'] as const).some(has)) {
+      latePatch[REAL_GAME_SETTINGS_KEY] = realGameSettingsFromForm(next, current[REAL_GAME_SETTINGS_KEY])
+    }
+    if (has('challengeFaabWeeklyCap')) latePatch[SURVIVOR_CHALLENGE_FAAB_CAP_KEY] = next.challengeFaabWeeklyCap
 
     const nextFoundation = normalizeSurvivorFoundationSettings({ ...current, ...foundationPatch })
     const columns: Rec = Object.keys(foundationPatch).length ? buildSurvivorLeagueColumnPatch(nextFoundation) : {}
     if (has('swapEnabled') || has('swapWeek')) columns.survivorSwapWeek = next.swapEnabled ? next.swapWeek : null
     if (has('finalistCount')) columns.survivorFinal3 = next.finalistCount === 3
+    if (has('exileHarshTokenLoss')) columns.survivorExileHarshTokenLoss = next.exileHarshTokenLoss
 
     if (has('idolCount')) {
       const idol = await getSurvivorIdolSetupView(leagueId, { isCommissioner: true }, tx)

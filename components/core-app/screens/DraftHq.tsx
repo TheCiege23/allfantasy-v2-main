@@ -1,6 +1,7 @@
 'use client'
 
 import '@/components/core-app/af-draft-hq.css'
+import '@/components/core-app/af-core-redraft-waivers-finder.css'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { DraftPreparation } from './DraftPreparation'
 import type { DraftHqData } from '@/lib/core-app/draftHq'

@@ -21,6 +21,7 @@ import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comm
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 import { ConnectedRoster } from './ConnectedRoster'
+import { RedraftHomeDeck } from './RedraftHomeDeck'
 import { PredictionLeaderboard } from '@/components/core-app/PredictionLeaderboard'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
@@ -494,7 +495,7 @@ export function LeagueHome({
   const urgent = issues[0] ?? null
 
   return (
-    <LeagueDisplayPreferences hidden={hiddenSections}><div className="af-lh">
+    <LeagueDisplayPreferences hidden={hiddenSections}><div className="af-lh" data-redraft={data.redraft ? 'true' : undefined}>
       {/* ── League identity ─────────────────────────────────────────── */}
       <header className="af-lh-head">
         <div className="af-lh-ident">
@@ -505,8 +506,9 @@ export function LeagueHome({
                 {league.platform}
               </span>
             )}
-            {league.format ? <span>{league.format}</span> : null}
-            {league.season ? <span className="af-num">{league.season}</span> : null}
+            {/* A redraft deck names the format and season in its own chip ("Redraft · 2026"); saying it twice is noise. */}
+            {league.format && !data.redraft ? <span>{league.format}</span> : null}
+            {league.season && !data.redraft ? <span className="af-num">{league.season}</span> : null}
             {tradeDeadline && tradeDeadline.state !== 'none' ? (
               <Link href={`/core/trades?league=${encodeURIComponent(league.id)}`} className="af-lh-deadline">
                 <TradeDeadlineCountdownChip countdown={tradeDeadline} />
@@ -544,6 +546,9 @@ export function LeagueHome({
           </Link>
         </div>
       </header>
+
+      {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
+      {data.redraft ? <RedraftHomeDeck deck={data.redraft} leagueId={league.id} season={league.season} /> : null}
 
       {!isNativePlatform(league.platform) ? (
         <ImportedLeagueQuickActions
@@ -637,7 +642,8 @@ export function LeagueHome({
       <LeagueSection id="pairing"><PairedBand pairing={data.pairing} leagueId={league.id} leagueName={league.name} /></LeagueSection>
 
       {/* ── Season timeline ─────────────────────────────────────────── */}
-      <LeagueSection id="timeline"><StatePanel
+      {/* A redraft league's deck above carries the season track instead (same settings, same weeks). */}
+      {data.redraft ? null : <LeagueSection id="timeline"><StatePanel
         title={`${copy('Season timeline')} · ${league.name}`}
         help={
           league.currentWeek != null ? (
@@ -658,7 +664,7 @@ export function LeagueHome({
             ))}
           </ol>
         )}
-      </StatePanel></LeagueSection>
+      </StatePanel></LeagueSection>}
 
       {/* ── Every game in the league ────────────────────────────────── */}
       {/*

@@ -14,6 +14,7 @@ import { getManagerColorBySlot, withAlpha } from '@/lib/draft-room'
 import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import { mergePoolPlayerIntoBoardPickDisplay } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * One board column. Sleeper-style: the board spans the full width with short, wide tiles; past
@@ -94,19 +95,19 @@ function isSnakeRoundReversed(round: number, draftType: 'snake' | 'linear' | 'au
   return round === 2 || round === 3 || (round >= 4 && round % 2 === 1)
 }
 
-function describeBoardMode(
+export function describeBoardMode(
   draftType: 'snake' | 'linear' | 'auction',
   thirdRoundReversal: boolean,
-  orderSourceLabel?: string | null,
+  orderSourceLabel: string | null | undefined,
+  t: (key: string) => string,
 ): string {
-  if (draftType === 'auction') return 'Auction purchase board'
-  if (thirdRoundReversal) {
-    return orderSourceLabel ? `3RR snake | ${orderSourceLabel}` : '3RR snake'
-  }
-  if (draftType === 'linear') {
-    return orderSourceLabel ? `Linear | ${orderSourceLabel}` : 'Linear'
-  }
-  return orderSourceLabel ? `Snake | ${orderSourceLabel}` : 'Snake'
+  if (draftType === 'auction') return t('draftRoom.board.mode.auction')
+  const mode = thirdRoundReversal
+    ? t('draftRoom.board.mode.thirdRoundReversal')
+    : draftType === 'linear'
+      ? t('draftRoom.board.mode.linear')
+      : t('draftRoom.board.mode.snake')
+  return orderSourceLabel ? `${mode} | ${orderSourceLabel}` : mode
 }
 
 function managerInitials(value: string): string {
@@ -177,6 +178,7 @@ function DraftBoardInner({
   teamMetaByRoster = null,
 }: DraftBoardProps) {
   const rs = presentationVariant === 'redraft_snake'
+  const { t } = useOptionalLanguage()
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
   const [selectedRound, setSelectedRound] = useState(1)
   const boardRef = useRef<HTMLElement | null>(null)
@@ -401,7 +403,7 @@ function DraftBoardInner({
     [auctionColumns],
   )
 
-  const boardModeLabel = describeBoardMode(draftType, thirdRoundReversal, orderSourceLabel)
+  const boardModeLabel = describeBoardMode(draftType, thirdRoundReversal, orderSourceLabel, t)
   const currentRoundDirection =
     draftType === 'auction'
       ? 'Budgets and sold players update live during bidding.'

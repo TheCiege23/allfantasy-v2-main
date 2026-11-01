@@ -14,8 +14,10 @@ import {
   tradeRosterPlayerIds,
 } from '@/lib/core-app/playerTradeVisual'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import type { TradeFinderGoal } from './tradeFinderAsk'
 import { readTradeBlock } from '@/lib/trade-block/importedTradeBlock'
 import {
+  fairnessFor,
   findPackages,
   findPartners,
   needsSurplus,
@@ -26,7 +28,13 @@ import {
   type TradePackage,
 } from '@/lib/trade-discovery/redraftTradeDiscovery'
 import { tradeBanReason } from '@/lib/league-rules/tradeLegality'
-import { getMarketValues, type MarketValuesPayload } from '@/lib/trade-intel/marketValueService'
+import {
+  getMarketValues,
+  pickValue,
+  playerValue,
+  playerValueForLeague,
+  type MarketValuesPayload,
+} from '@/lib/trade-intel/marketValueService'
 import type { TeamStance } from '@/lib/trade-value/types'
 
 /**
@@ -83,7 +91,9 @@ export function readTradeFinderPosition(raw: unknown): TradeFinderPosition | nul
   return POSITION_WORDS[key] ?? null
 }
 
+/** `position` is `PICK` for a draft pick, named the way `evaluate_trade` reads one ("2027 1st"). */
 export type TradeIdeaAsset = { name: string; position: string; value: number | null; onTradeBlock: boolean }
+
 
 export type TradeIdea = {
   partnerTeam: string
@@ -98,6 +108,9 @@ export type TradeIdea = {
   sendable: boolean
   fillsNeed: boolean
   why: string[]
+  /** Win-now searches only: each side on the league's redraft (current-season) chart. */
+  nowGive?: number | null
+  nowGet?: number | null
 }
 
 export type TradeFinderResult =
@@ -106,7 +119,9 @@ export type TradeFinderResult =
       leagueName: string
       valuesMode: MarketValuesPayload['mode']
       you: { teamName: string; stance: TeamStance; stanceSettled: boolean; needs: string[]; surpluses: string[] }
-      asked: { position: TradeFinderPosition | null; tradeAway: string | null }
+      asked: { position: TradeFinderPosition | null; tradeAway: string | null; goal: TradeFinderGoal | null; picks: boolean }
+      /** Said beside the ideas whenever picks were asked for: whether they could be used, and the assumption made. */
+      pickNote: string | null
       ideas: TradeIdea[]
       /** When `ideas` is empty: why, in a sentence the model can repeat. */
       noIdeasReason: string | null
@@ -119,6 +134,9 @@ export type TradeFinderInput = {
   position?: TradeFinderPosition | null
   /** A player the user wants to move, by name, as they said it. */
   tradeAway?: string | null
+  goal?: TradeFinderGoal | null
+  /** The user offered their own draft picks as part of the package. */
+  includePicks?: boolean
 }
 
 const BAND_RANK: Record<FairnessBand, number> = {
@@ -203,6 +221,139 @@ function rankIdeas(ideas: Array<{ idea: TradeIdea; matchScore: number }>): Trade
   return out
 }
 
+const ORDINAL = ['', '1st', '2nd', '3rd'] as const
+/** Seasons and rounds a "lesser player plus a pick" package reaches for. Later picks move nothing. */
+const PICK_SEASONS = 2
+const PICK_ROUNDS = [1, 2, 3] as const
+/** Their players priced per partner in a pick / win-now search, best first. */
+const NOW_TARGETS_PER_PARTNER = 5
+
+type OwnPick = { name: string; value: number }
+
+/**
+ * The user's next two seasons of 1st–3rd round picks, priced at the dynasty chart's round average.
+ *
+ * ⚠ OWNERSHIP IS ASSUMED, AND THE ANSWER SAYS SO. No reader here knows which picks a team has traded
+ * away — `evaluate_trade` makes the same assumption about "my 2027 1st" — so every pick package carries
+ * the caveat rather than a silent guess. Named the way `evaluate_trade` parses a pick, so a package can
+ * be graded exactly as written.
+ */
+function ownPicks(values: MarketValuesPayload, currentSeason: number): OwnPick[] {
+  const seasons = [...new Set(Object.keys(values.pickByRound).map((k) => Number(k.split(':')[0])))]
+    .filter((s) => Number.isInteger(s) && s > currentSeason)
+    .sort((a, b) => a - b)
+    .slice(0, PICK_SEASONS)
+  return seasons.flatMap((season) =>
+    PICK_ROUNDS.flatMap((round) => {
+      const value = pickValue(values, String(season), round)
+      return value == null ? [] : [{ name: `${season} ${ORDINAL[round]}`, value }]
+    }),
+  )
+}
+
+type ScoredIdea = { idea: TradeIdea; matchScore: number; nowGain: number; usesPick: boolean; gap: number }
+
+/**
+ * Packages the general finder cannot build: a player plus one of YOUR picks for one of theirs, and —
+ * for a win-now ask — only packages that raise your current-season value.
+ *
+ * Priced on the league's own chart (`value`), so the fairness band means what it means everywhere
+ * else in the finder. The win-now test is a SECOND chart (`nowOf`, redraft values): a package that is
+ * fair in dynasty value but hands you a lesser player THIS season is exactly the "giving up scoring
+ * players for potential players" a contender does not want, and it is dropped rather than ranked low.
+ */
+function pickAndNowIdeas(args: {
+  me: DiscoveryRoster
+  others: DiscoveryRoster[]
+  matchOf: Map<string, PartnerMatch>
+  myNeeds: string[]
+  mySurpluses: string[]
+  position: TradeFinderPosition | null
+  outgoing: DiscoveryPlayer | null
+  nowOf: ((playerId: string) => number | null) | null
+  picks: OwnPick[]
+}): TradeIdea[] {
+  const { nowOf, picks } = args
+  const now = (p: DiscoveryPlayer) => (nowOf ? nowOf(p.playerId) : null)
+  const gives = args.outgoing
+    ? [args.outgoing]
+    : args.me.players.filter(
+        (p) => !p.isLocked && p.value != null && (nowOf ? now(p) != null : args.mySurpluses.includes(p.position)),
+      )
+  const best: ScoredIdea[] = []
+  for (const partner of args.others) {
+    const block = new Set(partner.blockPlayerIds ?? [])
+    const match = args.matchOf.get(partner.rosterId)
+    const targets = partner.players
+      .filter(
+        (p) =>
+          !p.isLocked &&
+          p.value != null &&
+          (args.position ? p.position === args.position : nowOf || !args.myNeeds.length || args.myNeeds.includes(p.position)) &&
+          (!nowOf || now(p) != null),
+      )
+      .sort((a, b) => (nowOf ? (now(b) ?? 0) - (now(a) ?? 0) : (b.value ?? 0) - (a.value ?? 0)))
+      .slice(0, NOW_TARGETS_PER_PARTNER)
+    let top: ScoredIdea | null = null
+    for (const target of targets) {
+      for (const give of gives) {
+        const nowGain = nowOf ? (now(target) ?? 0) - (now(give) ?? 0) : 0
+        if (nowOf && nowGain <= 0) continue
+        for (const pick of [null, ...picks]) {
+          const giveTotal = (give.value ?? 0) + (pick?.value ?? 0)
+          const getTotal = target.value ?? 0
+          const fairness = fairnessFor(getTotal - giveTotal, Math.max(giveTotal, getTotal, 1), false)
+          if (fairness === 'lopsided') continue
+          const why = [...(match?.matchReasons ?? [])].filter((r) => !/exploratory/i.test(r))
+          if (block.has(target.playerId)) why.push('They have him on the trade block')
+          if (nowOf) why.push(`Raises your current-season value by ${Math.round(nowGain).toLocaleString('en-US')}`)
+          const scored: ScoredIdea = {
+            matchScore: match?.matchScore ?? 0,
+            nowGain,
+            usesPick: pick != null,
+            gap: Math.abs(getTotal - giveTotal),
+            idea: {
+              partnerTeam: partner.teamName,
+              partnerManager: partner.managerDisplayName ?? null,
+              partnerStance: partner.stance,
+              give: [
+                { name: give.playerName, position: give.position, value: give.value, onTradeBlock: false },
+                ...(pick ? [{ name: pick.name, position: 'PICK', value: pick.value, onTradeBlock: false }] : []),
+              ],
+              get: [{ name: target.playerName, position: target.position, value: target.value, onTradeBlock: block.has(target.playerId) }],
+              giveTotal: Math.round(giveTotal),
+              getTotal: Math.round(getTotal),
+              fairness,
+              sendable: true,
+              fillsNeed: args.myNeeds.includes(target.position),
+              why,
+              ...(nowOf ? { nowGive: now(give), nowGet: now(target) } : {}),
+            },
+          }
+          if (!top || compareScored(scored, top, picks.length > 0) < 0) top = scored
+        }
+      }
+    }
+    if (top) best.push(top)
+  }
+  return best
+    .sort((a, b) => compareScored(a, b, picks.length > 0))
+    .slice(0, MAX_TRADE_IDEAS)
+    .map((s) => s.idea)
+}
+
+/** Fairer first; then, when picks were offered, a package that uses one; then the bigger win-now gain. */
+function compareScored(a: ScoredIdea, b: ScoredIdea, preferPicks: boolean): number {
+  return (
+    BAND_RANK[a.idea.fairness] - BAND_RANK[b.idea.fairness] ||
+    (preferPicks ? Number(b.usesPick) - Number(a.usesPick) : 0) ||
+    b.nowGain - a.nowGain ||
+    Number(b.idea.fillsNeed) - Number(a.idea.fillsNeed) ||
+    b.matchScore - a.matchScore ||
+    a.gap - b.gap
+  )
+}
+
 export async function buildTradeFinder(input: TradeFinderInput): Promise<TradeFinderResult> {
   const league = await leagueContextFor(input.leagueId, input.userId)
     .league()
@@ -282,6 +433,68 @@ export async function buildTradeFinder(input: TradeFinderInput): Promise<TradeFi
     outgoing = found.player
   }
 
+  /*
+   * 🛑 "WIN NOW USING MY DRAFT PICKS" USED TO GET PLAYER-FOR-PLAYER SWAPS PRICED ON THE DYNASTY CHART
+   * (owner's Versuz league, 2026-10-31): Javonte Williams for Bucky Irving, Sam LaPorta for Bo Nix —
+   * "balanced" in dynasty value, and every one a step DOWN this season, with no pick in any of them.
+   * The general finder below takes neither a goal nor a pick, so both are handled here instead.
+   */
+  const goal = input.goal ?? null
+  let picks: OwnPick[] = []
+  let pickNote: string | null = null
+  if (input.includePicks) {
+    if (values.mode !== 'dynasty') {
+      pickNote = 'draft picks have no market price on this league’s chart, so these packages are players only'
+    } else {
+      const currentSeason = Number(league.season) || new Date().getUTCFullYear()
+      picks = ownPicks(values, currentSeason)
+      pickNote = picks.length
+        ? `pick values are round averages (exact draft slots unknown), and each package assumes you still own that pick yourself — check before sending`
+        : 'no future draft pick prices are loaded for this league’s format, so these packages are players only'
+    }
+  }
+  let nowOf: ((playerId: string) => number | null) | null = null
+  if (goal === 'win_now') {
+    // A redraft league's chart already IS the current-season chart.
+    const nowValues =
+      values.mode === 'redraft'
+        ? values
+        : await getMarketValues({ ...marketContext, variant: { ...marketContext.variant, dynasty: false, keeper: false } }).catch(() => null)
+    if (!nowValues || nowValues.mode !== 'redraft') {
+      return {
+        status: 'unavailable',
+        reason: 'no current-season values are loaded for this league’s format, so a win-now package cannot be told apart from a future one',
+      }
+    }
+    nowOf = (id) => playerValueForLeague(nowValues, id, leagueScoring)?.adjusted ?? playerValue(nowValues, id)
+  }
+  const asked = { position, tradeAway: outgoing?.playerName ?? null, goal, picks: Boolean(input.includePicks) }
+  const you = {
+    teamName: yours?.teamName ?? me.teamName,
+    stance: me.stance,
+    stanceSettled: me.stanceSettled ?? true,
+    needs: myNeeds,
+    surpluses: mySurpluses,
+  }
+
+  if (nowOf || picks.length) {
+    const ideas = pickAndNowIdeas({ me, others, matchOf, myNeeds, mySurpluses, position, outgoing, nowOf, picks })
+    return {
+      status: 'ready',
+      leagueName: leagueDisplayName(league.name),
+      valuesMode: values.mode,
+      you,
+      asked,
+      pickNote,
+      ideas,
+      noIdeasReason: ideas.length
+        ? null
+        : nowOf
+          ? `no team has a ${position ?? 'player'} who would raise your current-season value in a package inside the fairness band${picks.length ? ', even with one of your picks added' : ''}`
+          : 'no team has a player at a position you need that one of your depth players plus a pick reaches inside the fairness band',
+    }
+  }
+
   const candidates: Array<{ idea: TradeIdea; matchScore: number }> = []
   const add = (partner: DiscoveryRoster, pkgs: TradePackage[]) => {
     const match = matchOf.get(partner.rosterId)
@@ -344,14 +557,9 @@ export async function buildTradeFinder(input: TradeFinderInput): Promise<TradeFi
     status: 'ready',
     leagueName: leagueDisplayName(league.name),
     valuesMode: values.mode,
-    you: {
-      teamName: yours?.teamName ?? me.teamName,
-      stance: me.stance,
-      stanceSettled: me.stanceSettled ?? true,
-      needs: myNeeds,
-      surpluses: mySurpluses,
-    },
-    asked: { position, tradeAway: outgoing?.playerName ?? null },
+    you,
+    asked,
+    pickNote,
     ideas,
     noIdeasReason,
   }
@@ -395,6 +603,13 @@ export function renderTradeFinderBlock(result: TradeFinderResult): string {
   )
   if (result.asked.position) lines.push(`Asked for: a ${result.asked.position}.`)
   if (result.asked.tradeAway) lines.push(`Shopping: ${result.asked.tradeAway}.`)
+  if (result.asked.goal === 'win_now') {
+    lines.push(
+      'Asked for: WIN NOW. Every package below raises the current-season value of what the user holds, read off the ' +
+        'league’s redraft chart; packages that trade a better player this season for a younger one were dropped.',
+    )
+  }
+  if (result.asked.picks) lines.push(`Draft picks: offered by the user — ${result.pickNote ?? 'see each package'}.`)
 
   if (!result.ideas.length) {
     lines.push(`No trade ideas: ${result.noIdeasReason ?? 'nothing fit both sides'}. Say so plainly; do not invent a trade.`)
@@ -409,13 +624,17 @@ export function renderTradeFinderBlock(result: TradeFinderResult): string {
     lines.push(`   You give: ${listAssets(idea.give)}`)
     lines.push(`   You get: ${listAssets(idea.get)}`)
     lines.push(`   Value: you give ${fmt(idea.giveTotal)}, you get ${fmt(idea.getTotal)} — ${FAIRNESS_WORDS[idea.fairness]}`)
+    if (idea.nowGive !== undefined) {
+      lines.push(`   This season (redraft chart): you give ${fmt(idea.nowGive ?? null)}, you get ${fmt(idea.nowGet ?? null)}`)
+    }
     if (idea.why.length) lines.push(`   Why it works for both: ${idea.why.join('; ')}`)
   })
   lines.push('')
   lines.push(
     'Rules: present these ideas with the names and numbers above and no others. Lead with the first. ' +
       'Do not call any of them a win or a lock — offer to grade one with evaluate_trade, which shows the ' +
-      'lineup before and after under this league\'s scoring.',
+      'lineup before and after under this league\'s scoring. A pick is written as evaluate_trade reads it ("2027 1st"); ' +
+      'to try a different pick (a 2nd or 3rd instead of a 1st), grade that version with evaluate_trade rather than guessing its value.',
   )
   return lines.join('\n')
 }

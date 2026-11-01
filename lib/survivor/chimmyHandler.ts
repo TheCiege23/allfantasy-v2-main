@@ -17,6 +17,8 @@ import { IDOL_POWER_DESCRIPTIONS, EXILE_KEY_POSITION_BY_SPORT } from './constant
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
 import { loadSurvivorRulesContext } from './survivorRulesContext'
 import { answerSurvivorRules, survivorRulesTopic, type SurvivorRulesTopic } from './survivorRulesAnswers'
+import { readSurvivorGovernanceSettings } from './survivorGovernanceSettings'
+import { governanceLang } from './survivorGovernanceCopy'
 
 const FORBIDDEN =
   "I can't share that — information is currency out here."
@@ -51,6 +53,10 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
   if (lower.includes('vote count') || lower.includes('tally')) {
     return FORBIDDEN
   }
+
+  // ===== MY STRIKES =====
+  // Only the asker's own strikes, ever: nobody learns another castaway's conduct record from me.
+  if (MY_STRIKES.test(lower)) return answerMyStrikes(leagueId, userId)
 
   // ===== RULES QUESTIONS =====
   // A question is answered, never acted on: "how do I play my idol?" must not play it. Built from
@@ -184,6 +190,23 @@ export async function handleChimmyPrivateMessage(leagueId: string, userId: strin
 
 /** Asking how something works, as opposed to asking about (or for) your own idols. */
 const RULES_QUESTION = /^(?:@chimmy\s+)?(?:how|when|why|explain|rules?|tell me about|what happens|what is|what are|what's|who (?:decides|wins|votes|goes))\b/
+
+const MY_STRIKES = /\b(my (?:conduct )?strikes?|strikes? do i have|have i (?:got|been given) (?:a )?strikes?|cu[aá]ntas faltas tengo|mis faltas)\b/
+
+async function answerMyStrikes(leagueId: string, userId: string): Promise<string> {
+  const [{ listSurvivorConductStrikes }, league] = await Promise.all([
+    import('./survivorConductService'),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, language: true } }),
+  ])
+  const strikes = await listSurvivorConductStrikes(leagueId, userId)
+  const { strikeLimit } = readSurvivorGovernanceSettings(league?.settings)
+  const es = governanceLang(league?.language) === 'es'
+  if (strikes.length === 0) return es ? `No tienes faltas de conducta. El límite en esta liga es ${strikeLimit}.` : `You have no conduct strikes. This league's limit is ${strikeLimit}.`
+  const last = strikes[strikes.length - 1]!
+  return es
+    ? `Tienes ${strikes.length} de ${strikeLimit} ${strikeLimit === 1 ? 'falta' : 'faltas'}. La más reciente: ${last.reason}`
+    : `You have ${strikes.length} of ${strikeLimit} conduct ${strikeLimit === 1 ? 'strike' : 'strikes'}. The latest: ${last.reason}`
+}
 
 async function answerRulesForLeague(leagueId: string, topic: SurvivorRulesTopic, sport: string): Promise<string> {
   const ctx = await loadSurvivorRulesContext(leagueId)

@@ -224,14 +224,21 @@ describe('redraft Trade Center modal — Spanish, every step', () => {
     expect(screen.getByTestId('app-modal-close').getAttribute('aria-label')).toBe('Cerrar')
     fireEvent.click(screen.getByTestId('trade-partner-card-r2'))
     expect(document.body.textContent).toContain('agrega hasta 2 equipos más')
+    // The chosen partner draws a tick, not only a pink tint.
+    expect(screen.getByTestId('trade-partner-card-r2').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('trade-partner-check-r2').getAttribute('data-selection-check')).toBe('on')
+    expect(screen.getByTestId('trade-partner-check-r3').getAttribute('data-selection-check')).toBe('off')
     expectFullySpanish()
 
     // Step 2.
     fireEvent.click(screen.getByTestId('trade-step-next'))
     await waitFor(() => expect(screen.getByTestId('trade-asset-player-p2')).toBeTruthy())
     expect(document.body.textContent).toContain('Nada seleccionado')
+    expect(screen.getByTestId('trade-asset-check-p1').getAttribute('data-selection-check')).toBe('off')
     fireEvent.click(screen.getByTestId('trade-asset-player-p1'))
     fireEvent.click(screen.getByTestId('trade-asset-player-p2'))
+    expect(screen.getByTestId('trade-asset-player-p1').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('trade-asset-check-p1').getAttribute('data-selection-check')).toBe('on')
     fireEvent.change(screen.getByTestId('trade-faab-mine'), { target: { value: '90' } })
     const assetsText = expectFullySpanish()
     expect(assetsText).toContain('Los Halcones envía')

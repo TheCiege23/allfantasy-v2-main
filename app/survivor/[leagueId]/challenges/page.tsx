@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { WeeklyCallCard } from '@/app/survivor/components/WeeklyCallCard'
+import { RealGameChallengeCard } from '@/app/survivor/components/RealGameChallengeCard'
+import { SurvivorChallengeBoardCard } from '@/components/survivor/SurvivorChallengeBoardCard'
 
 type PastChallenge = { id: string; week: number; title: string; scope: string; status: string; challengeType: string; resultSummary: string | null }
 
@@ -43,8 +45,8 @@ export default function SurvivorChallengesPage() {
     fetch(`/api/survivor/challenge?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include', cache: 'no-store' })
       .then(res => (res.ok ? res.json() : Promise.reject(new Error('challenges'))))
       .then((json: { challenges?: PastChallenge[] }) => {
-        // The weekly call has its own card; settled slates and graded challenges are the history.
-        if (live) setPast((json.challenges ?? []).filter(row => row.challengeType !== 'weekly_call' && ['complete', 'graded', 'resolved'].includes(row.status)))
+        // The weekly call and the real-game picks have their own cards; settled slates and graded challenges are the history.
+        if (live) setPast((json.challenges ?? []).filter(row => row.challengeType !== 'weekly_call' && row.challengeType !== 'real_game_pick' && ['complete', 'graded', 'resolved'].includes(row.status)))
       })
       .catch(() => { if (live) setPast([]) })
     return () => { live = false }
@@ -126,6 +128,8 @@ export default function SurvivorChallengesPage() {
         )}
       </div>
 
+      {leagueId ? <SurvivorChallengeBoardCard leagueId={leagueId} /> : null}
+      {leagueId ? <RealGameChallengeCard leagueId={leagueId} /> : null}
       {leagueId ? <WeeklyCallCard leagueId={leagueId} /> : null}
 
       <section className="mt-8">

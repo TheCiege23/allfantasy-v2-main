@@ -46,6 +46,30 @@ import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
 import { storedVetoRule, vetoVotesNeeded } from './vetoRule'
+import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
+import { redeemSurvivorTradeBypass } from '@/lib/survivor/survivorTradeRuleBypass'
+
+/**
+ * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts) at proposal and at acceptance. One league
+ * read and out for every non-Survivor league; a commissioner's processing of a reviewed trade is the
+ * override, as it is for the deadline.
+ */
+async function assertSurvivorTradeRulesForAfTrade(
+  leagueId: string,
+  rosterIds: string[],
+  items: ReadonlyArray<{ itemType: string; itemReference?: string | null; fromRosterId: string; metadata?: unknown }>,
+): Promise<void> {
+  const check = await checkSurvivorTradeRules({
+    leagueId,
+    rosterIds,
+    rosterIdSpace: 'league',
+    players: items.filter((i) => i.itemType === 'player' && i.itemReference).map((i) => {
+      const meta = i.metadata && typeof i.metadata === 'object' ? (i.metadata as Record<string, unknown>) : {}
+      return { playerId: String(i.itemReference), playerName: typeof meta.playerName === 'string' ? meta.playerName : null, fromRosterId: i.fromRosterId }
+    }),
+  })
+  if (!check.ok) throw new CodedTradeError(check.code, check.message)
+}
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -533,6 +557,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     kind: 'trade',
   })
   if (!rosterTxGate.ok) throw new Error(rosterTxGate.error)
+  await assertSurvivorTradeRulesForAfTrade(input.leagueId, participantRosterIds, input.assets)
 
   const settings = resolveLeagueTradeSettings(league)
   /*
@@ -906,6 +931,7 @@ export async function acceptAfLeagueTrade(input: {
     kind: 'trade',
   })
   if (!rosterTxGateAccept.ok) throw new Error(rosterTxGateAccept.error)
+  await assertSurvivorTradeRulesForAfTrade(input.leagueId, participantRosterIds, trade.items)
 
   const life = await assertLifecycleActionAllowed(input.leagueId, 'trade_act', input.userId, {
     isElevatedCommissioner: await isElevatedCommissioner(input.leagueId, input.userId),
@@ -1067,6 +1093,16 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   }
 
   const league = await prisma.league.findUniqueOrThrow({ where: { id: trade.leagueId } })
+  // Survivor: a free-trade token this trade relies on is spent once the trade has executed (below).
+  // Read BEFORE the assets move, while the played-player facts still describe the trade. Survivor only.
+  const survivorBypass = league.survivorMode
+    ? await checkSurvivorTradeRules({
+      leagueId: trade.leagueId,
+      rosterIds: participantRosterIds,
+      rosterIdSpace: 'league',
+      players: trade.items.filter((i) => i.itemType === 'player' && i.itemReference).map((i) => ({ playerId: String(i.itemReference), fromRosterId: i.fromRosterId })),
+    }).catch(() => null)
+    : null
   const rosterTxGateFinalize = await assertRosterTransactionsAllowed({
     leagueId: trade.leagueId,
     league,
@@ -1205,6 +1241,9 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   // ADR's behavior-preservation strategy (a capture failure must never roll
   // back an already-successful trade). Fails safe, never throws.
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: trade.leagueId, status: 'processed' })
+  if (survivorBypass?.ok && survivorBypass.bypassRequired) {
+    await redeemSurvivorTradeBypass({ leagueId: trade.leagueId, week: survivorBypass.week ?? 0, tradeRef: `af:${trade.id}`, source: survivorBypass.bypassSource, actorUserId: input.actorUserId })
+  }
 
   // The integrity scan: the trade review, run once the trade has settled. Native trades were never
   // scanned before the scan read real trades (2026-09-27). Fire-and-forget; the worker checks entitlement.

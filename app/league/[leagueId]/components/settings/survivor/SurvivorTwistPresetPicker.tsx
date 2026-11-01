@@ -8,6 +8,7 @@ import {
   type SurvivorTwistPresetId,
 } from '@/lib/survivor/survivorTwistPresets'
 import type { SurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
+import { SelectionCheck } from '@/components/ui/selection-check'
 
 type IdolView = { config: { mode: string; count: number; pickedTypeIds: string[] }; saved: boolean; locked: boolean }
 
@@ -64,8 +65,12 @@ export function SurvivorTwistPresetPicker({ leagueId, canEdit, settings, onAppli
           const preset = SURVIVOR_TWIST_PRESETS[id]
           const active = current === id
           return (
-            <div key={id} className={`rounded-xl border p-3 ${active ? 'border-amber-300/60 bg-amber-400/10' : 'border-white/10 bg-white/[0.02]'}`} data-testid={`survivor-twist-${id}`}>
-              <p className="text-sm font-semibold text-white">{preset.label}{active ? ' · current' : ''}</p>
+            <div key={id} role="group" aria-labelledby={`survivor-twist-${id}-title`} aria-current={active ? 'true' : undefined}
+              className={`rounded-xl border p-3 ${active ? 'border-amber-300/60 bg-amber-400/10' : 'border-white/10 bg-white/[0.02]'}`} data-testid={`survivor-twist-${id}`}>
+              <p id={`survivor-twist-${id}-title`} className="flex items-center gap-2 text-sm font-semibold text-white">
+                <SelectionCheck selected={active} size="sm" testId={`survivor-twist-${id}-check`} />
+                <span>{preset.label}{active ? ' · current' : ''}</span>
+              </p>
               <p className="mt-1 text-[11px] text-white/55">{preset.tagline}</p>
               <ul className="mt-2 space-y-1 text-[11px] text-white/65">{preset.bullets.map(bullet => <li key={bullet}>• {bullet}</li>)}</ul>
               {!active && (

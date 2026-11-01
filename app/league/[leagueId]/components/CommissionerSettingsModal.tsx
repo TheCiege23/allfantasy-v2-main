@@ -17,6 +17,7 @@ import {
   PermissionsTab,
 } from './settings/CommissionerExtraTabs'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { TeamSettingsPanel } from './settings/TeamSettingsPanel'
 import { PlayoffSettingsPanel } from './settings/PlayoffSettingsPanel'
 import { GamesLimitsSettingsPanel } from './settings/GamesLimitsSettingsPanel'
@@ -53,6 +54,7 @@ import { SurvivorMergeJuryPanel } from './settings/survivor/SurvivorMergeJuryPan
 import { SurvivorChatPanel } from './settings/survivor/SurvivorChatPanel'
 import { SurvivorAIHostPanel } from './settings/survivor/SurvivorAIHostPanel'
 import { SurvivorAdvancedPanel } from './settings/survivor/SurvivorAdvancedPanel'
+import { SurvivorGovernancePanel } from './settings/survivor/SurvivorGovernancePanel'
 import { ZombieSetupPanel } from '@/app/zombie/components/commissioner/ZombieSetupPanel'
 import { ZombieWhispererPanel } from '@/app/zombie/components/commissioner/ZombieWhispererPanel'
 import { ZombieCombatPanel } from '@/app/zombie/components/commissioner/ZombieCombatPanel'
@@ -370,6 +372,7 @@ export function CommissionerSettingsModal({
           showC2cTabs={c2cMode}
           showNativeDevyTab={nativeDevy}
           showNativeC2cTab={nativeC2c}
+          dynasty={usesDynastyBackground(leagueRow as Parameters<typeof usesDynastyBackground>[0])}
         />
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/[0.06] bg-[#0c111c] md:border-l md:border-t-0">
@@ -577,6 +580,8 @@ export function CommissionerSettingsModal({
             <SurvivorChatPanel {...survivorProps} />
           ) : activeTab === 'survivor_ai' ? (
             <SurvivorAIHostPanel {...survivorProps} initialData={initialData} debouncedSave={debouncedSave} />
+          ) : activeTab === 'survivor_governance' ? (
+            <SurvivorGovernancePanel {...survivorProps} />
           ) : activeTab === 'survivor_advanced' ? (
             <SurvivorAdvancedPanel {...survivorProps} />
           ) : activeTab === 'zombie_setup' ? (

@@ -1,4 +1,6 @@
 import Link from "next/link"
+import BracketExperienceHub from "@/components/brackets/BracketExperienceHub"
+import { bracketExperienceCopy } from "@/lib/brackets/bracketExperienceCopy"
 import Image from "next/image"
 import {
   ArrowRight,
@@ -20,53 +22,9 @@ import LanguageToggle from "@/components/i18n/LanguageToggle"
 
 export const dynamic = "force-dynamic"
 
-/**
- * Premium AllFantasy Bracket Pools hub — v3 (AF Playoff Bracket Challenge
- * hero, 2026-10-01).
- *
- * v2 led with the World Cup: a hard-coded "2026 FIFA World Cup ·
- * Registration Open" badge, "Pick every game before kickoff", and Create /
- * Join buttons — still live in October, three months after the final, when
- * picks had been locked since the first kickoff. v3, per the owner's call:
- * the World Cup is switched off as a destination, MLB and NHL lead (pools are
- * creatable now, and picks lock per series, so mid-postseason is fine), and
- * the College Football Playoff and NBA Cup now link to their single-game
- * bracket league creation flow. NFL remains up next.
- *
- * Same stage as v2 (dark-teal wash, grid overlay, trophy lockup, two-line
- * gradient title); the badge, CTAs and the up-next row are what changed.
- *
- * Server component only (no `"use client"`, no useSession, no Prisma,
- * no useState). The original emergency hardening (commit `4bd1caf45`)
- * removed client islands because a BracketsAuthCTA `useSession`
- * hydration race produced React #418/#423 + a body wipe. This rebuild
- * stays on the safe side of that fence:
- *
- *   - Pure server component — only Next <Link> + <Image> client-bound
- *     primitives, both already battle-tested on the existing
- *     /brackets/world-cup routes.
- *   - Only static i18n preference read via the same
- *     `resolveServerRenderPreferences()` helper that ships on
- *     /brackets/world-cup/page.tsx today.
- *     ⚠ CORRECTED: this used to say "wrapped in try/catch, never throws",
- *     and the wrapping is NOT here — the call below is bare. The safety is
- *     real but it lives one level down, inside the resolver, which catches
- *     its own failures and returns defaults. Worth stating accurately
- *     because this is a public signed-out page: it stays up only while the
- *     resolver keeps swallowing. `__tests__/brackets-hub.test.tsx` pins that
- *     dependency so removing the resolver's catch fails loudly here.
- *   - No DB writes, no API calls at render time.
- *   - Mode-aware: `mode-readable` wrapper lets the globals.css light-
- *     mode rescue remap hardcoded dark colors to the light theme
- *     under html[data-mode="light"]; dark + AF (legacy) modes keep
- *     the original premium dark styling.
- *   - Hydration-safe: locale comes from the server preference resolver,
- *     so SSR HTML matches first CSR. No locale-formatted dates render
- *     here.
- *
- * Below the hero: Quick actions, How-it-works, the Sports grid (8 cards —
- * see SPORT_CARDS for which are open, up next, and ended), the AI features
- * strip, and the trust footer. The v2 World Cup spotlight card is removed.
+/** Public server shell with a deterministic preview. The client workspace reads only
+ * authenticated bracket APIs; no useSession participates in first-render hydration.
+ * Its scoped dark palette matches the approved bracket-experience concept.
  */
 type SportCard = {
   key:
@@ -186,33 +144,27 @@ const AF_WORDMARK_SRC = "/brand/allfantasy-wordmark-transparent.png"
 export default async function BracketsHomePage() {
   const { language } = await resolveServerRenderPreferences()
   const t = makeBracketsT(language)
+  const copy = bracketExperienceCopy(language)
 
   return (
-    // Base canvas uses `bg-[#05070b]` (same as other brackets surfaces
-    // and already covered by the globals.css mode-readable rescue layer)
-    // — the teal atmosphere reads as deep-teal because the gradient
-    // overlay below stacks a rgba(20,184,166,…) wash on top.
-    <main className="mode-readable relative min-h-screen overflow-hidden bg-[#05070b] text-white">
-      {/* Atmospheric stage background — dark teal radial wash + faint
-          grid overlay + a soft particle dust effect via stacked radial
-          gradients. All decorative, no client JS. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-0">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(20,184,166,0.16),transparent_55%),radial-gradient(ellipse_at_bottom,rgba(67,56,202,0.12),transparent_60%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(34,211,238,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.045)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
-        <div className="absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.05),transparent_70%)]" />
-      </div>
-
+    // Scoped colors preserve the approved dark canvas in light, dark and AF modes.
+    <main className="af-bracket-experience relative min-h-screen overflow-hidden">
       {/* Top brand strip — subtle wordmark + language toggle + Dashboard link */}
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-4 pt-6 sm:px-6">
+      <div className="af-bx-top relative z-10 mx-auto flex w-full items-center justify-between">
         <Image
           src={AF_WORDMARK_SRC}
           alt={t("brk.hub.logoAlt")}
           width={1198}
           height={306}
-          className="h-6 w-auto object-contain opacity-80"
+          className="h-8 w-auto object-contain"
           priority
         />
         <div className="flex items-center gap-2">
+          <nav className="af-bx-navigation" aria-label={copy.bracket}>
+            <Link href="/brackets/my">{copy.myBrackets}</Link>
+            <Link href="#bracket-leagues">{copy.myLeagues}</Link>
+            <Link href="/brackets/discover">{copy.discover}</Link>
+          </nav>
           <LanguageToggle variant="compact" />
           <Link
             href="/core"
@@ -224,106 +176,7 @@ export default async function BracketsHomePage() {
         </div>
       </div>
 
-      {/* ─────────────────────────────────────────────────────────────
-      {/* ─────────────────────────────────────────────────────────────
-          CENTERED HERO — AF Playoff Bracket Challenge
-          Owner call 2026-10-01: the World Cup is over and switched off as
-          a destination; CFP, NBA Cup, MLB and NHL brackets are available;
-          NFL playoffs (January) are up next. Every claim here is about TODAY — when the season moves,
-          move the copy with it, or it goes as stale as the World Cup
-          "Registration Open" badge this replaced (still live in October,
-          three months after the final).
-          ───────────────────────────────────────────────────────── */}
-      <section
-        data-testid="brackets-hub-hero"
-        className="relative z-10 mx-auto flex max-w-4xl flex-col items-center px-4 pb-12 pt-10 text-center sm:px-6 sm:pt-16 sm:pb-20"
-      >
-        {/* Open-now badge — only sports a pool can actually be created for. */}
-        <div
-          data-testid="brackets-hub-open-badge"
-          className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/[0.08] px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-300 sm:text-xs"
-        >
-          <span className="relative inline-flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-300" />
-          </span>
-          {t("brk.hub.v3.openBadge")}
-        </div>
-
-        {/* Trophy glow card — a sport-neutral mark, not the World Cup logo */}
-        <div className="relative mt-8 flex h-24 w-24 items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-300/[0.08] p-3 backdrop-blur shadow-[0_0_60px_-10px_rgba(34,211,238,0.55)] sm:h-28 sm:w-28">
-          <div
-            aria-hidden
-            className="absolute inset-0 -z-10 rounded-2xl bg-[radial-gradient(circle,rgba(34,211,238,0.35),transparent_70%)] blur-xl"
-          />
-          <Trophy className="h-12 w-12 text-cyan-200 drop-shadow-[0_6px_20px_rgba(34,211,238,0.45)] sm:h-14 sm:w-14" aria-hidden />
-        </div>
-
-        {/* Two-line title — white on top, cyan→purple gradient below */}
-        <h1 className="mt-8 max-w-3xl text-4xl font-black leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
-          <span className="block text-white">{t("brk.hub.v3.titleLine1")}</span>
-          <span className="mt-1 block bg-gradient-to-r from-cyan-300 via-cyan-200 to-purple-300 bg-clip-text text-transparent">
-            {t("brk.hub.v3.titleLine2")}
-          </span>
-        </h1>
-
-        {/* Subtitle */}
-        <p className="mt-6 max-w-xl text-sm leading-7 text-white/65 sm:text-base">
-          {t("brk.hub.v3.subtitle")}
-        </p>
-
-        {/* Open-now CTAs — one per creatable sport, plus the generic join */}
-        <div className="mt-10 flex flex-wrap justify-center gap-3">
-          <Link
-            href={playoffPoolHref("MLB")}
-            data-testid="brackets-hub-cta-mlb"
-            className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-cyan-300 to-cyan-400 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_10px_40px_-10px_rgba(34,211,238,0.65)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <Trophy className="h-4 w-4" />
-            {t("brk.hub.v3.cta.mlb")}
-          </Link>
-          <Link
-            href={playoffPoolHref("NHL")}
-            data-testid="brackets-hub-cta-nhl"
-            className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-cyan-300 to-cyan-400 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_10px_40px_-10px_rgba(34,211,238,0.65)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <Trophy className="h-4 w-4" />
-            {t("brk.hub.v3.cta.nhl")}
-          </Link>
-          <Link
-            href={playoffPoolHref("NCAAF")}
-            data-testid="brackets-hub-cta-cfp"
-            className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-cyan-300 to-cyan-400 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_10px_40px_-10px_rgba(34,211,238,0.65)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <Trophy className="h-4 w-4" />
-            {t("brk.hub.v3.cta.cfp")}
-          </Link>
-          <Link
-            href={playoffPoolHref("NBA_CUP")}
-            data-testid="brackets-hub-cta-nba-cup"
-            className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-cyan-300 to-cyan-400 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_10px_40px_-10px_rgba(34,211,238,0.65)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <Trophy className="h-4 w-4" />
-            {t("brk.hub.v3.cta.nbaCup")}
-          </Link>
-          <Link
-            href="/brackets/join"
-            className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-violet-400/35 bg-violet-500/[0.06] px-6 py-3 text-sm font-bold text-violet-200 transition-colors hover:border-violet-400/55 hover:bg-violet-500/[0.10] hover:text-violet-100"
-          >
-            <Users className="h-4 w-4" />
-            {t("brk.hub.v2.cta.joinWithCode")}
-          </Link>
-        </div>
-
-        {/* The NFL bracket is up next; its template is not published yet. */}
-        <div
-          data-testid="brackets-hub-up-next"
-          className="mt-10 inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/60 backdrop-blur sm:text-xs"
-        >
-          <span className="font-black uppercase tracking-wider text-white/75">{t("brk.hub.v3.upNext.title")}</span>
-          <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white/75">{t("brk.hub.v3.upNext.nfl")}</span>
-        </div>
-      </section>
+      <BracketExperienceHub language={language} season={new Date().getUTCFullYear()} />
 
       {/* ─────────────────────────────────────────────────────────────
           Supporting sections below the dramatic hero. Mobile-friendly,
@@ -331,7 +184,7 @@ export default async function BracketsHomePage() {
           how-it-works / sports grid / AI features / footer that
           earlier validation covered.
           ───────────────────────────────────────────────────────── */}
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 pb-12 sm:gap-14 sm:px-6 sm:pb-16">
+      <div className="relative z-10 mx-auto flex w-full max-w-[1400px] flex-col gap-10 px-4 pb-12 sm:gap-14 sm:px-6 sm:pb-16">
         {/* ── Quick Actions row ─────────────────────────────────── */}
         <section data-testid="brackets-hub-quick-actions" className="space-y-4">
           <h2 className="text-xl font-black tracking-tight text-white sm:text-2xl">

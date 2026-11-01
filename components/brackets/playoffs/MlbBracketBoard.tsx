@@ -26,6 +26,7 @@ import PlayoffLiveViewModal from "./PlayoffLiveViewModal"
 import SingleGameMatchupModal from "./SingleGameMatchupModal"
 import PlayoffDecisionRail from "./PlayoffDecisionRail"
 import { TeamLogo } from "@/app/components/TeamLogo"
+import { nbaCupLockedReason } from "@/lib/playoffs/nbaCupTournament"
 
 /**
  * Shared mirrored bracket for MLB, CFP and NBA Cup.
@@ -74,7 +75,7 @@ export type MlbBracketBoardProps = {
  * "do we have a club identity", and a seed slot correctly draws neutral.
  */
 function isOfficial(name: string | null | undefined): boolean {
-  return isOfficialTeamName(name)
+  return isOfficialTeamName(name) && !/^(?:CFP|EAST|WEST)\d+$/i.test(name ?? "")
 }
 
 function TeamRow({
@@ -162,18 +163,23 @@ export default function MlbBracketBoard({
   const tournamentLogoSport = sport === "ncaaf" ? "NCAAF" : sport === "nba_cup" ? "NBA_CUP" : null
   const teamLogos = view.teamLogos ?? {}
   const singleGame = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup")
+  const rollingCup = singleGame && sport === "nba_cup"
   const firstStart = view.challenge.firstGameStartsAt ? Date.parse(view.challenge.firstGameStartsAt) : null
-  const tournamentLocked = singleGame && firstStart != null && Date.now() >= firstStart
-  const requiresPublishedField = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup")
+  const tournamentLocked = singleGame && !rollingCup && firstStart != null && Date.now() >= firstStart
+  const requiresPublishedField = !view.challenge.isTestMode && sport === "ncaaf"
   const waitingForField = requiresPublishedField && view.series.some((row) =>
     /^(?:CFP|EAST|WEST)\d+$/i.test(row.homeTeamName) || /^(?:CFP|EAST|WEST)\d+$/i.test(row.awayTeamName))
   const waitingForSchedule = requiresPublishedField && view.series.some((row) => !row.startsAt)
   const bracketReady = !waitingForField && !waitingForSchedule
   const projectedSeries = useMemo(
-    () => buildProjectedPlayoffSeries(view.series, view.picks, { includeUserPicks: true }),
-    [view.series, view.picks],
+    () => rollingCup ? view.series : buildProjectedPlayoffSeries(view.series, view.picks, { includeUserPicks: true }),
+    [view.series, view.picks, rollingCup],
   )
-  const graph = useMemo(() => buildBracketGraph(projectedSeries), [projectedSeries])
+  const graph = useMemo(() => buildBracketGraph(projectedSeries.filter((game) => game.round !== "cup_group_play")), [projectedSeries])
+  const [groupFilter, setGroupFilter] = useState<"upcoming" | "all">("upcoming")
+  const groupGames = projectedSeries.filter((game) => game.round === "cup_group_play")
+    .filter((game) => groupFilter === "all" || !nbaCupLockedReason(game))
+    .sort((a, b) => Date.parse(a.startsAt ?? "") - Date.parse(b.startsAt ?? ""))
   const entryId = view.activeEntry?.id ?? null
   const picksBySeries = useMemo(() => {
     const m = new Map<string, string>()
@@ -192,6 +198,10 @@ export default function MlbBracketBoard({
 
   const savePick = useCallback(
     async (series: PlayoffSeriesView, teamName: string) => {
+      if (rollingCup) {
+        const reason = nbaCupLockedReason(series)
+        if (reason) { setError(reason); return false }
+      }
       if (!bracketReady) {
         setError("Official teams and game times must be published before picks open.")
         return false
@@ -234,7 +244,7 @@ export default function MlbBracketBoard({
         setSaving(null)
       }
     },
-    [bracketReady, entryId, onViewChange, tournamentLocked, view.challenge.id],
+    [bracketReady, entryId, onViewChange, tournamentLocked, view.challenge.id, rollingCup],
   )
 
   const totalSeries = view.series.length
@@ -260,9 +270,9 @@ export default function MlbBracketBoard({
   }, [view.series])
 
   const lockedReasonFor = useCallback(
-    (s: PlayoffSeriesView) => tournamentLocked ? "Tournament locked at the first game" :
+    (s: PlayoffSeriesView) => rollingCup ? nbaCupLockedReason(s) : tournamentLocked ? "Tournament locked at the first game" :
       getPlayoffSeriesLockedReason(s, lockRule, { hasPoolAdminAccess: singleGame ? false : canLatePick }),
-    [canLatePick, lockRule, singleGame, tournamentLocked],
+    [canLatePick, lockRule, singleGame, tournamentLocked, rollingCup],
   )
 
   const renderMatch = (node: BracketNode) => {
@@ -409,11 +419,11 @@ export default function MlbBracketBoard({
               <span className="af-pb-season af-pb-mono">{view.challenge.seasonYear}</span>
             </h1>
             <p className="af-pb-sub">
-              {sport === "nba_cup" ? 8 : 12} teams · {view.rounds.length} rounds · {singleGame ? "tap any matchup for Chimmy Intelligence and your pick" : "tap a matchup to pick a winner"}
+              {sport === "nba_cup" ? "30 teams · Group Play + 8-team knockout" : `12 teams · ${view.rounds.length} rounds`} · {singleGame ? "tap any matchup for Chimmy Intelligence and your pick" : "tap a matchup to pick a winner"}
             </p>
             {!bracketReady ? <p className="af-pb-sub" role="status">Official teams and game times are pending. Picks open when both are published.</p> : null}
-            {singleGame && bracketReady ? <p className="af-pb-sub" role="status">Changes are allowed until the first game starts{view.challenge.firstGameStartsAt ? `: ${new Date(view.challenge.firstGameStartsAt).toLocaleString()}` : ""}. Editing after finalizing returns this bracket to Draft.</p> : null}
-            {singleGame && view.activeEntry?.finalizedAt ? <p className="af-pb-sub">✓ Picks finalized. You can revise and finalize again before kickoff.</p> : null}
+            {rollingCup ? <p className="af-pb-sub" role="status">Join anytime. Each game locks at tipoff. Missed games earn 0 points. Teams, times, and knockout matchups update automatically.</p> : singleGame && bracketReady ? <p className="af-pb-sub" role="status">Changes are allowed until the first game starts{view.challenge.firstGameStartsAt ? `: ${new Date(view.challenge.firstGameStartsAt).toLocaleString()}` : ""}. Editing after finalizing returns this bracket to Draft.</p> : null}
+            {singleGame && view.activeEntry?.finalizedAt ? <p className="af-pb-sub">{rollingCup ? "✓ Picks finalized. Changes to upcoming games save automatically; locked picks and earned points stay in place." : "✓ Picks finalized. You can revise and finalize again before kickoff."}</p> : null}
           </div>
           <div className="af-pb-status">
             {!bracketReady ? "Field or schedule pending" : tournamentLocked ? "Brackets locked" : view.challenge.status === "open" ? "Picks open" : String(view.challenge.status)}
@@ -445,7 +455,23 @@ export default function MlbBracketBoard({
 
       <div className="af-pb-body">
         <div className="af-pb-main">
+          {rollingCup ? <section className="af-pb-card af-pb-cup-group" aria-label="NBA Cup Group Play">
+            <div className="af-pb-cup-group-heading">
+              <div><h2>Group Play</h2><p>1 point per correct pick · Tap a game for Chimmy Intelligence</p></div>
+              <div className="af-pb-cup-filters" aria-label="Group Play filter">
+                <button type="button" className="af-pb-btn" aria-pressed={groupFilter === "upcoming"} onClick={() => setGroupFilter("upcoming")}>Upcoming</button>
+                <button type="button" className="af-pb-btn" aria-pressed={groupFilter === "all"} onClick={() => setGroupFilter("all")}>All games</button>
+              </div>
+            </div>
+            {groupGames.length ? <div className="af-pb-cup-games">{groupGames.map((game) => <div key={game.id}>
+              {renderMatch({ series: game, roundIndex: 0, side: "left", sourceHome: null, sourceAway: null })}
+              <p className="af-pb-cup-game-footer">{game.venue || "Venue pending"}{game.location ? ` · ${game.location}` : ""}<br />
+                {game.winnerTeamName ? `${game.winnerTeamName} won` : nbaCupLockedReason(game) || (picksBySeries.has(game.id) ? "✓ Pick saved" : "Choose your winner")}
+              </p>
+            </div>)}</div> : <p className="af-pb-note" role="status">{projectedSeries.some((game) => game.round === "cup_group_play") ? "No upcoming group games right now. View all games or check the knockout bracket below." : "Confirmed Cup games will appear here automatically as the schedule syncs. You can create your bracket now."}</p>}
+          </section> : null}
           <section className="af-pb-card">
+            {rollingCup ? <div className="af-pb-cup-group-heading"><div><h2>Knockout Bracket</h2><p>Quarterfinals → Semifinals → Championship. Matchups open as qualifiers are confirmed.</p></div></div> : null}
             {/* Seeding strip */}
             <div className="af-pb-seeds">
               {[graph.sides.left, graph.sides.right].filter(Boolean).map((conf) => {
@@ -528,7 +554,7 @@ export default function MlbBracketBoard({
                       ) : abbreviate(champion)}
                     </span>
                   ) : (
-                    <div className="af-pb-champ-empty">{tournamentLogoSport ? "Pick both finalists to crown a champion" : "Pick both pennants to crown a champion"}</div>
+                    <div className="af-pb-champ-empty">{rollingCup ? "Championship picks open when the finalists are confirmed" : tournamentLogoSport ? "Pick both finalists to crown a champion" : "Pick both pennants to crown a champion"}</div>
                   )}
                   {finalNode ? renderMatch(finalNode) : null}
                 </div>
@@ -548,7 +574,7 @@ export default function MlbBracketBoard({
 
             <p className="af-pb-footnote">
               {singleGame
-                ? "Chimmy estimates disclose their source. Tap a matchup for verified season stats, game details, and picks. Brackets lock at the first game. AllFantasy offers no prizes or gambling."
+                ? rollingCup ? "Each NBA Cup game locks at tipoff. Finalize before your first selected game begins; later changes to upcoming games save automatically. AllFantasy offers no prizes or gambling." : "Chimmy estimates disclose their source. Tap a matchup for verified season stats, game details, and picks. Brackets lock at the first game. AllFantasy offers no prizes or gambling."
                 : "Percentages are a seed-and-record read, not a scouting model. Seeds 1 and 2 in each league hold a bye and enter at the Division round, so their opponent stays unknown until the Wild Card round resolves. The bracket scrolls sideways on a phone."}
             </p>
           </section>

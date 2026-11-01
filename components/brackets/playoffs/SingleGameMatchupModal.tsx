@@ -6,6 +6,7 @@ import { roundLabel, seriesOdds } from "@/lib/playoffs/playoffBracketGraph"
 import { isOfficialTeamName } from "@/lib/playoffs/playoffBracketProjection"
 import { pointsForSeries } from "@/lib/playoffs/playoffScoring"
 import { TeamLogo } from "@/app/components/TeamLogo"
+import { isNbaCupTeam } from "@/lib/playoffs/nbaCupTournament"
 
 type Props = {
   series: PlayoffSeriesView
@@ -43,7 +44,7 @@ export default function SingleGameMatchupModal({ series, sport, profiles, teamLo
   const home = profiles[series.homeTeamName]
   const away = profiles[series.awayTeamName]
   const estimate = chance(series, home, away)
-  const hasTeams = isOfficialTeamName(series.homeTeamName) && isOfficialTeamName(series.awayTeamName)
+  const hasTeams = sport === "nba_cup" ? isNbaCupTeam(series.homeTeamName) && isNbaCupTeam(series.awayTeamName) : isOfficialTeamName(series.homeTeamName) && isOfficialTeamName(series.awayTeamName)
   const choice = estimate ? estimate.home >= estimate.away ? series.homeTeamName : series.awayTeamName : null
   const canPick = hasTeams && !locked && !saving
   const dateLabel = series.startsAt && Number.isFinite(Date.parse(series.startsAt))

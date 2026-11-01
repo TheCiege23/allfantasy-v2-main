@@ -3,6 +3,8 @@
  * Returns 404 when league is not a survivor league.
  */
 
+import { loadImmunitySealed } from '@/lib/survivor/survivorSealedImmunityState'
+import { redactImmunityList } from '@/lib/survivor/survivorSealedImmunity'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -46,6 +48,9 @@ import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
 import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
+import { readSurvivorGovernanceSettings } from '@/lib/survivor/survivorGovernanceSettings'
+import { decorateNamesWithTribeEmoji } from '@/lib/survivor/survivorTribeEmoji'
+import { canSeeExileMembership, exileMembershipHidden } from '@/lib/survivor/survivorExileSecrecy'
 
 export const dynamic = 'force-dynamic'
 
@@ -122,8 +127,10 @@ export async function GET(
 
   // Only councils whose read has finished name a voted-out manager (see survivorRevealGate).
   const votedOutHistory = audit.filter(row => isCouncilReadComplete(row, leagueMeta?.survivorRevealMode)).map(row => ({ rosterId: row.eliminatedRosterId!, week: row.week }))
-  // Weekly necklaces still being worn (until the next lineup lock). Public by design.
-  const activeNecklaces = await getActiveTribeImmunity(leagueId)
+  // Weekly necklaces still being worn (until the next lineup lock). Public by design, unless the
+  // commissioner sealed immunity, in which case only the winner sees theirs until votes are in.
+  const immunitySealed = await loadImmunitySealed(leagueId, currentWeek)
+  const activeNecklaces = redactImmunityList(await getActiveTribeImmunity(leagueId), immunitySealed, (row) => row.immunityWinnerUserId === userId)
 
   const tribes = merged
     ? [
@@ -214,6 +221,13 @@ export async function GET(
   for (const r of rosters) {
     const teamId = map.rosterIdToTeamId.get(r.id)
     rosterDisplayNames[r.id] = teamId ? teamNameById[teamId] ?? r.id : r.id
+  }
+  // The commissioner's "tribe emoji in names" (display only; stored team names never change). Before
+  // the merge each castaway shows their current tribe's emoji; after it, nobody has a tribe to show.
+  if (readSurvivorGovernanceSettings(leagueSettingsRow?.settings).tribeEmojiInNames && !merged) {
+    const tribeByRoster = new Map<string, { name: string; catalogId: string | null }>()
+    for (const tribe of tribesRaw) for (const member of tribe.members) tribeByRoster.set(member.rosterId, { name: tribe.name, catalogId: tribe.catalogId ?? null })
+    Object.assign(rosterDisplayNames, decorateNamesWithTribeEmoji(rosterDisplayNames, tribeByRoster, true))
   }
 
   let myIdols: { id: string; playerId: string; powerType: string; playerName?: string | null; playerImageUrl?: string | null }[] = []
@@ -346,7 +360,7 @@ export async function GET(
     immunityRosterIds: [...new Set([
       ...activeNecklaces.map(row => mainRosterByPlatformUserId.get(row.immunityWinnerUserId) ?? row.immunityWinnerRosterId),
       ...weeklyScoreRows.flatMap(row => {
-        const rosterId = row.wonIndividualImmunity ? mainRosterByPlatformUserId.get(row.userId) : undefined
+        const rosterId = row.wonIndividualImmunity && (!immunitySealed || row.userId === userId) ? mainRosterByPlatformUserId.get(row.userId) : undefined
         return rosterId ? [rosterId] : []
       }),
     ])],
@@ -411,6 +425,13 @@ export async function GET(
     })),
     jury: jury.map((j) => ({ rosterId: j.rosterId, votedOutWeek: j.votedOutWeek })),
     exileLeagueId,
+    // Exile secrecy (League.settings.survivorSideGames.hideExileMembership): screens drop "on Exile"
+    // labels for a viewer who may not know. Token balances below are already the viewer's own only.
+    exileMembershipHidden: !canSeeExileMembership({
+      hidden: exileMembershipHidden(leagueSettingsRow?.settings),
+      viewerState: myExileStatus ? 'exile' : null,
+      nonPlayingCommissioner: privacy.decisions.canSeeHiddenIdolAssignments,
+    }),
     exileTokens: tokenStates.filter(token => privacy.decisions.canSeeHiddenIdolAssignments || token.rosterId === myExileRoster?.id).map((token) => {
       const mainRosterId = exileMainRosterIdByExileRosterId.get(token.rosterId) ?? null
       return {

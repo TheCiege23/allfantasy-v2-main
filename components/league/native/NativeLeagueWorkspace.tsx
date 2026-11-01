@@ -9,18 +9,21 @@ import AppShell, { type AppShellProps } from '@/app/components/AppShell'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import type { UserLeague } from '@/app/dashboard/types'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import { dynastySeasonClock } from '@/lib/league-media/dynastySeasonClock'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
 import type { RedraftSeasonFacts } from '@/lib/league-media/redraftSeasonTrack'
 import { RedraftSeasonTrack } from './RedraftSeasonTrack'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { ALL_LEAGUES_DASHBOARD_HREF, leagueDashboardHref } from '@/lib/league/league-workspace-navigation'
 import { buildNativeLeagueNavigation, leagueSectionHref, nativeLeaguePhase, nativeLeagueRecordLinks, nativeLeagueRecordTitle, type WorkspaceTab } from '@/lib/league/nativeLeagueNavigation'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { adjacentLeagueId, unreadBadgeText } from '@/lib/league/leagueRailStatus'
 import { LeagueRailRow, useLeagueRail, type LeagueRailData, type LeagueRailRowView } from './LeagueRail'
 import { hideLeagueForAccount, RailLeagueMenu, saveLeaguePreference, useRailDrag, useRailHold } from '@/components/core-app/RailLeagueMenu'
 import { useMessages } from '@/components/i18n/useMessages'
 import { railRowMessages } from '@/lib/core-app/messages/railRow'
+import { useOptionalLanguage as useNativeLeagueLanguage } from '@/components/i18n/LanguageProviderClient'
+import { tOr } from '@/lib/i18n/tInterpolate'
 import { applyLeagueOrder } from '@/lib/core-app/leaguePreferences'
 import { leagueSportIcon, leagueSportLabel } from '@/lib/core-app/leagueSports'
 import {
@@ -65,6 +68,10 @@ type Props = AppShellProps & {
 const icons = { career: Star, rankings: Award, home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, guillotine: Axe, war: Swords, scores: Zap, insight: Bot, dynasty: Landmark, taxi: CarTaxiFront, picks: Ticket, more: CircleHelp }
 const memoryKey = (id: string) => `af:league-section:${id}`
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase() || 'AF'
+/** Phase values stay English (they are compared below); only the text a reader sees is translated. */
+const PHASE_KEYS: Record<string, string> = { Setup: 'setup', Draft: 'draft', 'Regular season': 'regularSeason', Playoffs: 'playoffs', Offseason: 'offseason', Island: 'island', Finale: 'finale', Complete: 'complete' }
+const SWITCHER_FILTER_KEYS: Record<string, string> = { 'On AF': 'onAf', Synced: 'synced', Live: 'live' }
+const BOTTOM_NAV_KEYS = ['league', 'matchup', 'team', 'players', 'chat']
 
 /**
  * Unread league-chat counts per league, from the chat bubble's own route (`/api/chat/unread` →
@@ -99,6 +106,8 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
     return () => { desktop.removeEventListener('change', closeOnDesktop); window.removeEventListener('keydown', closeOnEscape) }
   }, [])
   const [query, setQuery] = useState('')
+  const { t: tNl, tInterpolate: tNlVars } = useNativeLeagueLanguage()
+  const phaseLabel = (value: string) => tOr(tNl, PHASE_KEYS[value] ? `nativeLeague.phase.${PHASE_KEYS[value]}` : null, value)
   const [filter, setFilter] = useState('All')
   const searchRef = useRef<HTMLInputElement>(null)
   const switcherRef = useRef<HTMLDialogElement>(null)
@@ -108,6 +117,14 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   const primary = groups[0]?.items ?? []
   const restoredLeague = useRef<string | null>(null)
   const phase = nativeLeaguePhase(league)
+  /* Dynasty Era: the token block, the glow and the season clock all key off this one flag, so a
+     non-dynasty league renders exactly what it did before. */
+  const dynastyEra = usesDynastyBackground(league) && !guillotineBanner
+  const { tInterpolate: tLangVars, t: tLang } = useOptionalLanguage()
+  const seasonClock = dynastyEra ? dynastySeasonClock(league) : null
+  const seasonClockText = !seasonClock ? '' : seasonClock.year != null
+    ? tLangVars('dynastyEra.seasonClock.yearSeason', { year: seasonClock.year, season: seasonClock.season })
+    : tLangVars('dynastyEra.seasonClock.seasonOnly', { season: seasonClock.season })
   // Redraft identity (lib/league-media/redraftIdentity.ts): null keeps the default look.
   const redraft = guillotineBanner ? null : resolveRedraftIdentity(league)
   const draftSlot = (phase === 'Setup' || phase === 'Draft') && primary.some(row => row.id === 'draft')
@@ -258,7 +275,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   const navGroup = (id: string, title: string, items: typeof primary) => <section key={id} className="nl-nav-group" data-nav-group={id}><h2>{title}</h2>{items.map(item => {
     const Icon = icons[item.icon as keyof typeof icons] ?? CircleHelp
     const count = item.id === 'league_chat' ? chatBadge : null
-    return <button key={item.id} type="button" onClick={() => choose(item.id)} aria-current={activeTab === item.id ? 'page' : undefined}><Icon size={16} aria-hidden /><span>{item.label}</span>{count ? <span className="nl-nav-count" aria-label={`${count} unread`}>{count}</span> : null}</button>
+    return <button key={item.id} type="button" onClick={() => choose(item.id)} aria-current={activeTab === item.id ? 'page' : undefined}><Icon size={16} aria-hidden /><span>{item.label}</span>{count ? <span className="nl-nav-count" aria-label={tNlVars('nativeLeague.unreadAria', { count })}>{count}</span> : null}</button>
   })}</section>
   const recordTitle = nativeLeagueRecordTitle(t)
   const recordGroup = <section className="nl-nav-group" aria-label={recordTitle}><h2>{recordTitle}</h2>{nativeLeagueRecordLinks(league.id, t).map(item => {
@@ -272,33 +289,33 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   const currentView = railView(league)
   const switcherRows = visibleLeagues.map(row => ({ row, view: railView(row) }))
   const liveWeek = switcherRows.find(item => item.view.status.group === 'live')?.view.weekLabel
-  const groupTitle = { needs: 'Needs you', live: liveWeek ? `Live now · ${liveWeek}` : 'Live now', other: 'Your other leagues' } as const
+  const groupTitle = { needs: tNl('nativeLeague.switcher.needsYou'), live: liveWeek ? tNlVars('nativeLeague.switcher.liveNowWeek', { week: liveWeek }) : tNl('nativeLeague.switcher.liveNow'), other: tNl('nativeLeague.switcher.otherLeagues') } as const
 
-  return <div className={`af-core nl-workspace ${shell.embedCenterOnly ? 'nl-embedded' : ''}`} data-testid="native-league-workspace" data-dynasty-background={usesDynastyBackground(league) && !guillotineBanner ? "true" : undefined} data-rail-collapsed={railCollapse.collapsed ? 'true' : undefined} data-format={guillotineBanner ? 'guillotine' : redraft ? 'redraft' : undefined} data-sport={redraft?.sport} data-guillotine-mood={guillotineBanner?.mood}>
+  return <div className={`af-core nl-workspace ${shell.embedCenterOnly ? 'nl-embedded' : ''}`} data-testid="native-league-workspace" data-dynasty-background={dynastyEra ? "true" : undefined} data-rail-collapsed={railCollapse.collapsed ? 'true' : undefined} data-format={guillotineBanner ? 'guillotine' : redraft ? 'redraft' : undefined} data-sport={redraft?.sport} data-guillotine-mood={guillotineBanner?.mood}>
     {!shell.embedCenterOnly && <>
-      <aside className="nl-rail" aria-label="Your leagues" data-expanded={railExpanded ? 'true' : undefined}>
-        <div className="nl-rail-head"><Link className="nl-brand" href={ALL_LEAGUES_DASHBOARD_HREF} aria-label="AllFantasy dashboard">AF</Link><button type="button" className="af-rail-toggle nl-rail-toggle" aria-expanded={railExpanded} aria-controls="nl-rail-leagues" onClick={railCollapse.toggle} title={railCollapse.collapsed ? 'Expand the league rail' : 'Collapse the league rail'}><span className="af-rail-toggle-icon" aria-hidden>{railCollapse.collapsed ? '»' : '«'}</span><span className="nl-rail-toggle-text">{leagues.length} {leagues.length === 1 ? 'league' : 'leagues'}</span></button></div>
+      <aside className="nl-rail" aria-label={tNl('nativeLeague.rail.yourLeagues')} data-expanded={railExpanded ? 'true' : undefined}>
+        <div className="nl-rail-head"><Link className="nl-brand" href={ALL_LEAGUES_DASHBOARD_HREF} aria-label={tNl('nativeLeague.rail.dashboardAria')}>AF</Link><button type="button" className="af-rail-toggle nl-rail-toggle" aria-expanded={railExpanded} aria-controls="nl-rail-leagues" onClick={railCollapse.toggle} title={railCollapse.collapsed ? tNl('nativeLeague.rail.expand') : tNl('nativeLeague.rail.collapse')}><span className="af-rail-toggle-icon" aria-hidden>{railCollapse.collapsed ? '»' : '«'}</span><span className="nl-rail-toggle-text">{tNlVars(leagues.length === 1 ? 'nativeLeague.rail.leagueCountOne' : 'nativeLeague.rail.leagueCountMany', { count: leagues.length })}</span></button></div>
         <div className="nl-rail-leagues" id="nl-rail-leagues" data-reorder={drag.reorderMode ? 'true' : undefined}>{railList}</div>
-        <Link className="nl-add" href="/create-league" aria-label="Create a league"><Plus aria-hidden /><span className="nl-rail-toggle-text">Create a league</span></Link>
+        <Link className="nl-add" href="/create-league" aria-label={tNl('nativeLeague.rail.createLeague')}><Plus aria-hidden /><span className="nl-rail-toggle-text">{tNl('nativeLeague.rail.createLeague')}</span></Link>
       </aside>
       {menuLeague ? <RailLeagueMenu name={menuLeague.name} pinned={favoriteSet.has(menuLeague.id)} canMoveUp={menuIds.indexOf(menuLeague.id) > 0} canMoveDown={menuIds.indexOf(menuLeague.id) < menuIds.length - 1} onPin={() => pinLeague(menuLeague.id)} onMove={direction => moveLeague(menuLeague.id, direction)} onHide={() => hideLeague(menuLeague.id)} onReorder={() => drag.setReorderMode(true)} onClose={() => setMenuLeagueId(null)} /> : null}
-      <aside className={`nl-sidebar ${menuOpen ? 'nl-menu-open' : ''}`} aria-label="League navigation">
-        <Link className="nl-back" href={ALL_LEAGUES_DASHBOARD_HREF}><ChevronLeft size={16} aria-hidden /> All leagues</Link>
-        <div className="nl-nav-league"><span className="nl-initial">{initials(league.name)}</span><div><strong>{league.name}</strong><span className="nl-eyebrow">{phase}</span></div></div>
+      <aside className={`nl-sidebar ${menuOpen ? 'nl-menu-open' : ''}`} aria-label={tNl('nativeLeague.sidebar.aria')}>
+        <Link className="nl-back" href={ALL_LEAGUES_DASHBOARD_HREF}><ChevronLeft size={16} aria-hidden /> {tNl('nativeLeague.sidebar.allLeagues')}</Link>
+        <div className="nl-nav-league"><span className="nl-initial">{initials(league.name)}</span><div><strong>{league.name}</strong><span className="nl-eyebrow">{phaseLabel(phase)}</span></div></div>
         {groups.map(group => navGroup(group.id, group.title, group.items))}
         {recordGroup}
-        {!native && <Link className="nl-back" href={leagueDashboardHref(league.id)}><BarChart3 size={16} aria-hidden /> League Dashboard</Link>}
+        {!native && <Link className="nl-back" href={leagueDashboardHref(league.id)}><BarChart3 size={16} aria-hidden /> {tNl('nativeLeague.sidebar.leagueDashboard')}</Link>}
         <CustomizeLeagueLink returnTo={`/league/${encodeURIComponent(league.id)}`} className="nl-back" />
-        <Link className="nl-back" href="/settings"><Settings size={16} aria-hidden /> Your settings</Link>
+        <Link className="nl-back" href="/settings"><Settings size={16} aria-hidden /> {tNl('nativeLeague.sidebar.yourSettings')}</Link>
       </aside>
-      <header className="nl-mobile-top"><button type="button" onClick={() => setMenuOpen(value => !value)} aria-expanded={menuOpen} aria-label={menuOpen ? 'Close league navigation' : 'Open league navigation'}>{menuOpen ? <X aria-hidden /> : <Menu aria-hidden />}</button><div className="nl-mobile-pill">{prevLeague ? <Link className="nl-mobile-step" href={leagueSectionHref(prevLeague, activeTab)} aria-label={`Previous league: ${prevLeague.name}`}><ChevronLeft size={18} aria-hidden /></Link> : null}<button type="button" className="nl-mobile-league" onClick={openSwitcher} aria-label={`${league.name}, switch league`} data-ring={currentView.status.tone ?? undefined}><span className="nl-mobile-crest" data-ring={currentView.status.tone ?? undefined}><LeagueMark src={currentView.imageUrl ?? league.logoUrl} letter={initials(league.name)} className="nl-heading-image" /></span><span className="nl-mobile-name">{league.name}</span><span className="nl-rail-tag nl-mobile-tag" data-platform={currentView.platform}>{currentView.platformLabel}</span><ChevronDown size={16} aria-hidden /></button>{nextLeague ? <Link className="nl-mobile-step" href={leagueSectionHref(nextLeague, activeTab)} aria-label={`Next league: ${nextLeague.name}`}><ChevronRight size={18} aria-hidden /></Link> : null}</div></header>
+      <header className="nl-mobile-top"><button type="button" onClick={() => setMenuOpen(value => !value)} aria-expanded={menuOpen} aria-label={menuOpen ? tNl('nativeLeague.mobile.closeNav') : tNl('nativeLeague.mobile.openNav')}>{menuOpen ? <X aria-hidden /> : <Menu aria-hidden />}</button><div className="nl-mobile-pill">{prevLeague ? <Link className="nl-mobile-step" href={leagueSectionHref(prevLeague, activeTab)} aria-label={tNlVars('nativeLeague.mobile.previousLeague', { name: prevLeague.name })}><ChevronLeft size={18} aria-hidden /></Link> : null}<button type="button" className="nl-mobile-league" onClick={openSwitcher} aria-label={tNlVars('nativeLeague.mobile.switchLeague', { name: league.name })} data-ring={currentView.status.tone ?? undefined}><span className="nl-mobile-crest" data-ring={currentView.status.tone ?? undefined}><LeagueMark src={currentView.imageUrl ?? league.logoUrl} letter={initials(league.name)} className="nl-heading-image" /></span><span className="nl-mobile-name">{league.name}</span><span className="nl-rail-tag nl-mobile-tag" data-platform={currentView.platform}>{currentView.platformLabel}</span><ChevronDown size={16} aria-hidden /></button>{nextLeague ? <Link className="nl-mobile-step" href={leagueSectionHref(nextLeague, activeTab)} aria-label={tNlVars('nativeLeague.mobile.nextLeague', { name: nextLeague.name })}><ChevronRight size={18} aria-hidden /></Link> : null}</div></header>
     </>}
     <div className="nl-main">
-      {!shell.embedCenterOnly && <header className="nl-topbar"><button type="button" className="nl-viewing" onClick={openSwitcher}><span>Viewing</span><strong>{league.name}</strong><ChevronDown size={14} aria-hidden /></button><button type="button" className="nl-search" onClick={openSwitcher}><Search size={16} aria-hidden /><span>Jump to a league</span><kbd>⌘K</kbd></button><span className="nl-chip nl-accent">Hosted on AF · Beta</span><span className="nl-sport-week">{league.sport}{league.currentWeek ? ` · Wk ${league.currentWeek}` : ` · ${league.season ?? ''}`}</span></header>}
+      {!shell.embedCenterOnly && <header className="nl-topbar"><button type="button" className="nl-viewing" onClick={openSwitcher}><span>{tNl('nativeLeague.topbar.viewing')}</span><strong>{league.name}</strong><ChevronDown size={14} aria-hidden /></button><button type="button" className="nl-search" onClick={openSwitcher}><Search size={16} aria-hidden /><span>{tNl('nativeLeague.topbar.jump')}</span><kbd>⌘K</kbd></button><span className="nl-chip nl-accent">{tNl('nativeLeague.topbar.hostedBeta')}</span><span className="nl-sport-week">{league.sport}{league.currentWeek ? ` · ${tNlVars('nativeLeague.topbar.week', { week: league.currentWeek })}` : ` · ${league.season ?? ''}`}</span></header>}
       <div className="nl-content">
-        <header className="nl-league-heading" data-format={guillotineBanner ? 'guillotine' : undefined} data-testid={guillotineBanner ? 'guillotine-league-banner' : undefined}>{guillotineBanner && <img className="nl-guillotine-art" src="/artwork/tournaments/specialty/guillotine/assets/banner.svg" alt="" aria-hidden />}<span className="nl-heading-avatar"><LeagueMark src={currentView.imageUrl ?? league.logoUrl} letter={initials(league.name)} className="nl-heading-image" /></span><div className="nl-heading-name"><div className="nl-badges">{redraft ? <><span className="nl-chip nl-rd-chip" data-testid="redraft-season-chip">Redraft{league.season ? ` · ${league.season}` : ''}</span><span className="nl-chip nl-rd-sport-chip">{redraft.sportLabel}</span></> : <span className="nl-chip nl-accent">Native on AllFantasy</span>}{guillotineBanner && <span className="nl-chip nl-guillotine-chip">Guilly</span>}{isCommissioner && <span className="nl-chip nl-gold">Commissioner</span>}</div><h1>{league.name}</h1>{guillotineBanner?.line && <p className="nl-guillotine-line" data-testid="guillotine-banner-line">{guillotineBanner.line}</p>}<p>{league.sport} · {league.season} · {league.teamCount} teams · {league.scoring || league.format}</p></div><button type="button" className="nl-button" aria-label="League settings" onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>League settings</span></button>{redraft ? <RedraftSeasonTrack phase={phase} facts={{ ...seasonFacts, currentWeek: seasonFacts?.currentWeek ?? league.currentWeek ?? null, tradeDeadlineWeek: seasonFacts?.tradeDeadlineWeek ?? league.tradeDeadlineWeek ?? null, draftComplete: seasonFacts?.draftComplete ?? ['Regular season', 'Playoffs', 'Offseason'].includes(phase), drafting: phase === 'Draft' }} /> : <ol className="nl-phase" aria-label="League progress">{(survivor ? ['Setup', 'Draft', 'Island', 'Finale', 'Complete'] : ['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason']).map(label => <li key={label} aria-current={(survivor ? ({ 'Regular season': 'Island', Playoffs: 'Finale', Offseason: 'Complete' } as Record<string, string>)[phase] ?? phase : phase) === label ? 'step' : undefined}>{label}</li>)}</ol>}</header>
-        <label className="nl-section-picker"><span>Section</span><select aria-label="League section" value={activeTab} onChange={event => choose(event.target.value)}>{!groups.some(group => group.items.some(item => item.id === activeTab)) && <option value={activeTab}>Current section</option>}{groups.map(group => <optgroup key={group.id} label={group.title}>{group.items.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>
-        <nav className="nl-mobile-tabs" aria-label="League sections">{primary.map(item => <button key={item.id} type="button" aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => choose(item.id)}>{item.label}</button>)}</nav>
+        <header className="nl-league-heading" data-format={guillotineBanner ? 'guillotine' : undefined} data-testid={guillotineBanner ? 'guillotine-league-banner' : undefined}>{guillotineBanner && <img className="nl-guillotine-art" src="/artwork/tournaments/specialty/guillotine/assets/banner.svg" alt="" aria-hidden />}<span className="nl-heading-avatar"><LeagueMark src={currentView.imageUrl ?? league.logoUrl} letter={initials(league.name)} className="nl-heading-image" /></span><div className="nl-heading-name"><div className="nl-badges">{redraft ? <><span className="nl-chip nl-rd-chip" data-testid="redraft-season-chip">{tNl('nativeLeague.heading.redraft')}{league.season ? ` · ${league.season}` : ''}</span><span className="nl-chip nl-rd-sport-chip">{redraft.sportLabel}</span></> : <span className="nl-chip nl-accent">{tNl('nativeLeague.heading.native')}</span>}{seasonClock && <span className="nl-chip nl-dyn-clock" data-testid="dynasty-season-clock" aria-label={`${tLang('dynastyEra.seasonClock.label')}: ${seasonClockText}`}>{seasonClockText}</span>}{guillotineBanner && <span className="nl-chip nl-guillotine-chip">Guilly</span>}{isCommissioner && <span className="nl-chip nl-gold">{tNl('nativeLeague.heading.commissioner')}</span>}</div><h1>{league.name}</h1>{guillotineBanner?.line && <p className="nl-guillotine-line" data-testid="guillotine-banner-line">{guillotineBanner.line}</p>}<p>{league.sport} · {league.season} · {tNlVars('nativeLeague.heading.teams', { count: league.teamCount })} · {league.scoring || league.format}</p></div><button type="button" className="nl-button" aria-label={tNl('nativeLeague.heading.leagueSettings')} onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>{tNl('nativeLeague.heading.leagueSettings')}</span></button>{redraft ? <RedraftSeasonTrack phase={phase} facts={{ ...seasonFacts, currentWeek: seasonFacts?.currentWeek ?? league.currentWeek ?? null, tradeDeadlineWeek: seasonFacts?.tradeDeadlineWeek ?? league.tradeDeadlineWeek ?? null, draftComplete: seasonFacts?.draftComplete ?? ['Regular season', 'Playoffs', 'Offseason'].includes(phase), drafting: phase === 'Draft' }} /> : <ol className="nl-phase" aria-label={tNl('nativeLeague.phase.aria')}>{(survivor ? ['Setup', 'Draft', 'Island', 'Finale', 'Complete'] : ['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason']).map(label => <li key={label} aria-current={(survivor ? ({ 'Regular season': 'Island', Playoffs: 'Finale', Offseason: 'Complete' } as Record<string, string>)[phase] ?? phase : phase) === label ? 'step' : undefined}>{phaseLabel(label)}</li>)}</ol>}</header>
+        <label className="nl-section-picker"><span>{tNl('nativeLeague.section.label')}</span><select aria-label={tNl('nativeLeague.section.aria')} value={activeTab} onChange={event => choose(event.target.value)}>{!groups.some(group => group.items.some(item => item.id === activeTab)) && <option value={activeTab}>{tNl('nativeLeague.section.current')}</option>}{groups.map(group => <optgroup key={group.id} label={group.title}>{group.items.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>
+        <nav className="nl-mobile-tabs" aria-label={tNl('nativeLeague.section.tabsAria')}>{primary.map(item => <button key={item.id} type="button" aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => choose(item.id)}>{item.label}</button>)}</nav>
         <div className="nl-tab-content">{children}</div>
       </div>
     </div>
@@ -311,24 +328,24 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
       tap from a bottom bar during Setup would do that before managers have joined. Setup opens
       Draft HQ instead, which says what is missing and carries the explicit "Enter" button.
     */}
-    {!shell.embedCenterOnly && <nav className="nl-bottom-nav" aria-label="Mobile league navigation">{['native_home', draftSlot ? 'draft' : 'matchups', 'roster', 'waivers', 'league_chat'].map((id, index) => {
+    {!shell.embedCenterOnly && <nav className="nl-bottom-nav" aria-label={tNl('nativeLeague.bottom.aria')}>{['native_home', draftSlot ? 'draft' : 'matchups', 'roster', 'waivers', 'league_chat'].map((id, index) => {
       const item = primary.find(row => row.id === id) ?? (index === 3 ? primary.find(row => row.id === 'players') : undefined)
       if (!item) return null
       const Icon = icons[item.icon as keyof typeof icons] ?? Home
-      const label = id === 'draft' ? 'Draft' : ['League', 'Matchup', 'Team', 'Players', 'Chat'][index]
+      const label = id === 'draft' ? tNl('nativeLeague.bottom.draft') : tNl(`nativeLeague.bottom.${BOTTOM_NAV_KEYS[index]}`)
       if (id === 'draft' && phase === 'Draft') return <Link key={id} href={`/league/${encodeURIComponent(league.id)}/draft`} data-testid="nl-bottom-nav-draft-room"><Icon size={22} aria-hidden /><span>{label}</span></Link>
       return <button key={id} type="button" aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => choose(item.id)} data-testid={id === 'draft' ? 'nl-bottom-nav-draft-hq' : undefined}><Icon size={22} aria-hidden /><span>{label}</span></button>
     })}</nav>}
-    <dialog ref={switcherRef} className="nl-switcher" onCancel={() => setSwitcherOpen(false)} onClose={() => setSwitcherOpen(false)} aria-label="Switch league">
-      <div className="nl-switcher-title"><span className="nl-switcher-brand" aria-hidden>AF</span><h2>Your leagues</h2><button type="button" onClick={() => setSwitcherOpen(false)} aria-label="Close league switcher"><X aria-hidden /></button></div>
-      <label className="nl-switcher-search"><Search size={18} aria-hidden /><input ref={searchRef} autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your leagues" aria-label="Search your leagues" /></label>
-      <div className="nl-switcher-filters" aria-label="League filters">{['All', 'On AF', 'Synced', 'Live'].map(value => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>{value === 'All' ? `All ${leagues.length}` : value}</button>)}</div>
+    <dialog ref={switcherRef} className="nl-switcher" onCancel={() => setSwitcherOpen(false)} onClose={() => setSwitcherOpen(false)} aria-label={tNl('nativeLeague.switcher.aria')}>
+      <div className="nl-switcher-title"><span className="nl-switcher-brand" aria-hidden>AF</span><h2>{tNl('nativeLeague.switcher.title')}</h2><button type="button" onClick={() => setSwitcherOpen(false)} aria-label={tNl('nativeLeague.switcher.close')}><X aria-hidden /></button></div>
+      <label className="nl-switcher-search"><Search size={18} aria-hidden /><input ref={searchRef} autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder={tNl('nativeLeague.switcher.search')} aria-label={tNl('nativeLeague.switcher.search')} /></label>
+      <div className="nl-switcher-filters" aria-label={tNl('nativeLeague.switcher.filtersAria')}>{['All', 'On AF', 'Synced', 'Live'].map(value => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>{value === 'All' ? tNlVars('nativeLeague.switcher.filterAll', { count: leagues.length }) : tOr(tNl, SWITCHER_FILTER_KEYS[value] ? `nativeLeague.switcher.filter.${SWITCHER_FILTER_KEYS[value]}` : null, value)}</button>)}</div>
       <div className="nl-switcher-list">{switcherRows.length ? SWITCHER_GROUP_ORDER.map(group => {
         const rows = switcherRows.filter(item => item.view.status.group === group)
         if (!rows.length) return null
         return <section key={group} className="nl-switcher-group" data-group={group} aria-label={groupTitle[group]}><h3>{groupTitle[group]}</h3>{rows.map(({ row, view }) => leagueTile(row, true, () => setSwitcherOpen(false), view))}</section>
-      }) : <p role="status">No leagues match your search.</p>}</div>
-      <footer><Link className="nl-button nl-primary" href="/create-league">Create league</Link><Link className="nl-button" href="/import">Import league</Link></footer>
+      }) : <p role="status">{tNl('nativeLeague.switcher.noMatch')}</p>}</div>
+      <footer><Link className="nl-button nl-primary" href="/create-league">{tNl('nativeLeague.switcher.createLeague')}</Link><Link className="nl-button" href="/import">{tNl('nativeLeague.switcher.importLeague')}</Link></footer>
     </dialog>
   </div>
 }
