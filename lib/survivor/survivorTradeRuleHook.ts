@@ -9,8 +9,14 @@
  * rules on, returns `ok` after one league read. Chimmy-run seats trade through the same paths, so they
  * are held to the same rules with no special case.
  *
- * FAILS OPEN, LOUDLY. A read error here allows the trade and logs a warning: the commissioner can
- * reverse a trade, but a database blip that refused every trade in the league could not be undone.
+ * FAILS OPEN, LOUDLY — BY DEFAULT. A read error here allows the trade and logs a warning: the
+ * commissioner can reverse a trade, but a database blip that refused every trade in the league could
+ * not be undone. A commissioner may choose `tradeCheckFailureMode: 'hold'` instead: the check then
+ * answers `ok` with `holdForCommissioner`, and the ACCEPTANCE paths send the trade to the existing
+ * commissioner approval (redraft: commissioner review, kept out of the review-window sweep by a
+ * `trade_check_held` audit row; AF trades: `awaiting_commissioner`). Never refused, never lost.
+ * A proposal is not held — it is checked again when it is accepted. If the league row itself cannot be
+ * read (after one retry) the setting is unknowable, so the default applies.
  * The exception is a roster whose tribe cannot be read while a tribe rule applies: that is refused
  * (SURVIVOR_TRIBE_UNKNOWN), because it is a fact about the league, not a transient failure.
  */
@@ -19,8 +25,10 @@ import { prisma } from '@/lib/prisma'
 import { buildWeekKickoffMap, lockTeamLookupKeys } from '@/lib/redraft/lineupLock'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
 import { readSurvivorGovernanceSettings } from './survivorGovernanceSettings'
-import { governanceCopy, dayTimeLabel } from './survivorGovernanceCopy'
-import { judgeSurvivorTrade, type SurvivorTradeRefusalCode } from './survivorTradeRules'
+import { governanceCopy, dayTimeLabel, crossTribeWindowsLabel } from './survivorGovernanceCopy'
+import { judgeSurvivorTrade, playedLockLifted, weekLastGameFinal, type SurvivorTradeRefusalCode } from './survivorTradeRules'
+import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
+import { isFinalStatus } from '@/lib/social-newsroom/scoreCheck'
 import { resolveSurvivorTradeBypass } from './survivorTradeRuleBypass'
 // Registers the free-trade-token bypass (A's reward ledger) with the registry above.
 import './survivorFreeTradeTokenBypass'
@@ -39,6 +47,11 @@ export type SurvivorTradeRuleCheck =
   | {
       ok: true
       skipped?: 'not_survivor' | 'rules_off' | 'error'
+      /**
+       * The check could not run and the commissioner chose "hold it": an acceptance path must send the
+       * trade to commissioner approval instead of settling it. Proposal paths may ignore it.
+       */
+      holdForCommissioner?: boolean
       bypassed?: boolean
       /** The trade passes ONLY because of the bypass: whatever settles it must redeem `bypassSource`. */
       bypassRequired?: boolean
@@ -55,8 +68,10 @@ type HookDb = PrismaClient
 export async function checkSurvivorTradeRules(input: SurvivorTradeRuleCheckInput, db: HookDb = prisma): Promise<SurvivorTradeRuleCheck> {
   const now = input.now ?? new Date()
   let league: { survivorMode: boolean | null; settings: unknown; sport: string | null; season: number | null; language: string | null } | null
+  const readLeague = () => db.league.findUnique({ where: { id: input.leagueId }, select: { survivorMode: true, settings: true, sport: true, season: true, language: true } })
   try {
-    league = await db.league.findUnique({ where: { id: input.leagueId }, select: { survivorMode: true, settings: true, sport: true, season: true, language: true } })
+    // One retry: the failure-mode setting lives on this row, so without it the default must apply.
+    league = await readLeague().catch(() => readLeague())
   } catch (error) {
     console.warn('[survivor-trade-rules] league read failed; trade allowed', { leagueId: input.leagueId, error: error instanceof Error ? error.message : String(error) })
     return { ok: true, skipped: 'error' }
@@ -64,6 +79,11 @@ export async function checkSurvivorTradeRules(input: SurvivorTradeRuleCheckInput
   if (!league?.survivorMode) return { ok: true, skipped: 'not_survivor' }
   const settings = readSurvivorGovernanceSettings(league.settings)
   if (!settings.tradeRulesEnabled) return { ok: true, skipped: 'rules_off' }
+  const failed = (error: unknown): SurvivorTradeRuleCheck => {
+    const hold = settings.tradeCheckFailureMode === 'hold'
+    console.warn(`[survivor-trade-rules] check failed; trade ${hold ? 'held for the commissioner' : 'allowed'}`, { leagueId: input.leagueId, error: error instanceof Error ? error.message : String(error) })
+    return hold ? { ok: true, skipped: 'error', holdForCommissioner: true } : { ok: true, skipped: 'error' }
+  }
 
   try {
     const ids = [...new Set(input.rosterIds.filter(Boolean))]
@@ -91,7 +111,19 @@ export async function checkSurvivorTradeRules(input: SurvivorTradeRuleCheckInput
         db.survivorTribalCouncil.findFirst({ where: { leagueId: input.leagueId, week, closedAt: null }, select: { id: true } }),
       ])
       : [null, null]
-    const tribalDoneThisWeek = Boolean(closedCouncil) && !openCouncil
+    const councilDone = Boolean(closedCouncil) && !openCouncil
+    // A week with no council (the season plan's no-elimination weeks): the played lock lifts at the
+    // week's last final instead of at a Tribal that never comes. Otherwise unchanged.
+    const plan = readSurvivorFullSeasonPlan(league.settings)
+    const noCouncilThisWeek = Boolean(plan) && week >= (plan?.startWeek ?? 0) && week <= (plan?.endWeek ?? 0) && !plan!.eliminationWeeks.includes(week) && !closedCouncil && !openCouncil
+    const weekGamesFinal = !councilDone && noCouncilThisWeek
+      ? weekLastGameFinal(
+        await db.sportsGame.findMany({ where: { sport: String(league.sport ?? 'NFL').toUpperCase(), season: league.season ?? now.getUTCFullYear(), week, seasonType: 'regular' }, select: { startTime: true, status: true } }),
+        now,
+        isFinalStatus,
+      )
+      : null
+    const tribalDoneThisWeek = playedLockLifted({ tribalDoneThisWeek: councilDone, noCouncilThisWeek, weekGamesFinal })
 
     const tradePlayers = await playedStatus(db, {
       players: input.players,
@@ -130,13 +162,15 @@ export async function checkSurvivorTradeRules(input: SurvivorTradeRuleCheckInput
     const m = governanceCopy(league.language)
     const message = verdict.code === 'SURVIVOR_TRADE_FROZEN' ? m.tradeFrozen
       : verdict.code === 'SURVIVOR_CROSS_TRIBE_BANNED' ? m.tradeCrossTribeBanned
-        : verdict.code === 'SURVIVOR_CROSS_TRIBE_CLOSED' ? m.tradeCrossTribeClosed(dayTimeLabel(league.language, settings.crossTribeCloseDay, settings.crossTribeCloseTime))
+        : verdict.code === 'SURVIVOR_CROSS_TRIBE_CLOSED'
+          ? (settings.crossTribeWindows.length > 1 || settings.crossTribeWindows[0]?.opensOn === 'time'
+            ? m.tradeCrossTribeClosedWindows(crossTribeWindowsLabel(league.language, settings.crossTribeWindows))
+            : m.tradeCrossTribeClosed(dayTimeLabel(league.language, settings.crossTribeCloseDay, settings.crossTribeCloseTime)))
           : verdict.code === 'SURVIVOR_PLAYED_LOCK' ? m.tradePlayed(verdict.playerName ?? '')
             : m.tradeTribeUnknown
     return { ok: false, code: verdict.code, message, status: 409 }
   } catch (error) {
-    console.warn('[survivor-trade-rules] check failed; trade allowed', { leagueId: input.leagueId, error: error instanceof Error ? error.message : String(error) })
-    return { ok: true, skipped: 'error' }
+    return failed(error)
   }
 }
 

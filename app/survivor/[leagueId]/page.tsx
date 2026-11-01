@@ -283,8 +283,9 @@ export default function SurvivorIslandHomePage() {
         <section className="mt-6 rounded-2xl border border-violet-500/25 bg-violet-950/20 p-4">
           <h2 className="sv-kicker text-[12px] !text-violet-200">Exile Island</h2>
           <p className="mt-2 text-[13px] text-white/70">
-            {(ctx.season.players ?? []).filter((p) => p.playerState === 'exile').length} players on Exile · Return path
-            follows commissioner rules.
+            {ctx.season.exileMembershipHidden === true && ctx.playerState !== 'exile'
+              ? 'Who is on Exile is secret in this league · Return path follows commissioner rules.'
+              : `${(ctx.season.players ?? []).filter((p) => p.playerState === 'exile').length} players on Exile · Return path follows commissioner rules.`}
           </p>
           <Link href={`${base}/exile`} className="mt-2 inline-block text-[12px] text-violet-300">
             Open Exile →

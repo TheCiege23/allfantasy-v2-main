@@ -4,13 +4,16 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useMessages } from '@/components/i18n/useMessages'
 import { survivorFinaleMessages } from '@/lib/survivor/survivorFinaleMessages'
-import { SURVIVOR_VOTES_DUE_MAX_HOURS, type SurvivorFinaleSettings, type SurvivorFinaleWindows } from '@/lib/survivor/survivorFinaleSettings'
+import { SURVIVOR_FINAL_JURY_STEP_MAX, SURVIVOR_VOTES_DUE_MAX_HOURS, type SurvivorFinaleSettings, type SurvivorFinaleWindows } from '@/lib/survivor/survivorFinaleSettings'
 
 type FinalePayload = {
   settings: SurvivorFinaleSettings
   windows: SurvivorFinaleWindows
   juryVoteDeadline: string | null
   councilOpen: boolean
+  /** The viewer's finale role (absent on an older server). */
+  viewer?: { role?: string; canSeePrivateFinale?: boolean } | null
+  jurySessionStatus?: string | null
 }
 
 type WindowKey = keyof SurvivorFinaleWindows | 'juryVoteDeadline'
@@ -75,7 +78,7 @@ export function SurvivorFinaleControls({ leagueId, canEdit = true }: { leagueId:
     try {
       const res = await fetch('/api/survivor/commissioner', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leagueId, ...body }) })
       const out = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
-      if (!res.ok) setMessage(out.code === 'council_open' ? m.councilOpenNote : out.error ?? m.errors_generic)
+      if (!res.ok) setMessage(out.code === 'council_open' ? m.councilOpenNote : out.code === 'finale_started' ? m.juryStepLockedNote : out.error ?? m.errors_generic)
       else { setMessage(m.saved); await load() }
     } catch {
       setMessage(m.errors_generic)
@@ -87,7 +90,9 @@ export function SurvivorFinaleControls({ leagueId, canEdit = true }: { leagueId:
   if (!data || !rules) return <p className="text-[13px] text-white/50">{message ?? m.loadingControls}</p>
   const disabled = !canEdit || busy
   const lockedNow = data.councilOpen
-  const ruleRow = (key: 'juryQuestionsEnabled' | 'closingSpeechesEnabled' | 'sealedImmunity' | 'endOfSeasonBallotReveal' | 'reunionChatEnabled', label: string, help: string, locked = false) => (
+  const finaleStarted = ['questions_open', 'voting_open', 'complete', 'winner_revealed'].includes(data.jurySessionStatus ?? '')
+  const ownRole = data.viewer?.role === 'juror' || data.viewer?.role === 'finalist' ? data.viewer.role : null
+  const ruleRow = (key: 'juryQuestionsEnabled' | 'closingSpeechesEnabled' | 'sealedImmunity' | 'endOfSeasonBallotReveal' | 'reunionChatEnabled' | 'finalJuryStepEnabled', label: string, help: string, locked = false) => (
     <div className="flex items-start justify-between gap-4 border-b border-white/5 py-3">
       <div className="min-w-0"><p className="text-[13px] font-semibold text-white">{label}</p><p className="text-[12px] text-white/50">{help}</p></div>
       <Toggle testId={`finale-rule-${key}`} label={label} checked={rules[key]} disabled={disabled || locked} onChange={(v) => setRules({ ...rules, [key]: v })} />
@@ -111,6 +116,7 @@ export function SurvivorFinaleControls({ leagueId, canEdit = true }: { leagueId:
         <h3 className="text-[15px] font-bold text-white">{m.controlsTitle}</h3>
         <p className="mt-1 text-[12px] text-white/50">{m.controlsIntro}</p>
         {lockedNow ? <p className="mt-2 text-[12px] text-amber-200/80">{m.councilOpenNote}</p> : null}
+        {ownRole ? <p className="mt-2 text-[12px] text-cyan-200/80" data-testid="finale-own-role-note">{ownRole === 'juror' ? m.ownRoleJuror : m.ownRoleFinalist}</p> : null}
         {ruleRow('juryQuestionsEnabled', m.ruleQuestions, m.ruleQuestionsHelp)}
         {ruleRow('closingSpeechesEnabled', m.ruleSpeeches, m.ruleSpeechesHelp)}
         {ruleRow('sealedImmunity', m.ruleSealed, m.ruleSealedHelp, lockedNow)}
@@ -122,6 +128,15 @@ export function SurvivorFinaleControls({ leagueId, canEdit = true }: { leagueId:
         </label>
         {ruleRow('endOfSeasonBallotReveal', m.ruleBallotReveal, m.ruleBallotRevealHelp)}
         {ruleRow('reunionChatEnabled', m.ruleReunion, m.ruleReunionHelp)}
+        {ruleRow('finalJuryStepEnabled', m.ruleJuryStep, m.ruleJuryStepHelp, finaleStarted)}
+        {rules.finalJuryStepEnabled ? (
+          <label className="flex items-start justify-between gap-4 border-b border-white/5 py-3">
+            <span className="min-w-0"><span className="block text-[13px] font-semibold text-white">{m.ruleJuryStepCount}</span><span className="block text-[12px] text-white/50">{m.ruleJuryStepCountHelp}</span></span>
+            <input type="number" min={1} max={SURVIVOR_FINAL_JURY_STEP_MAX} step={1} data-testid="finale-rule-juryStepCount" value={rules.finalJuryStepCount} disabled={disabled || finaleStarted}
+              onChange={(e) => setRules({ ...rules, finalJuryStepCount: Math.max(1, Math.min(SURVIVOR_FINAL_JURY_STEP_MAX, Math.floor(Number(e.target.value) || 1))) })}
+              className="min-h-[44px] w-20 rounded-xl border border-white/15 bg-black/30 px-2 text-center text-[13px] text-white" />
+          </label>
+        ) : null}
         <div className="mt-3 flex justify-end">
           <button type="button" data-testid="finale-save-rules" disabled={disabled} onClick={() => {
             const patch: Partial<SurvivorFinaleSettings> = {}

@@ -7120,6 +7120,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settingsNav.dynasty.picks": "Rookie draft & picks",
     "settingsNav.dynasty.trades": "Trades",
     "settingsNav.dynasty.offseason": "Offseason & rollover",
+    "settingsNav.survivor.governance": "Rules & Conduct",
     "taxiPanel.title": "What this changes",
     "taxiPanel.off": "The taxi squad is off: no team can stash players on it.",
     "taxiPanel.slotsOne": "Each team can stash 1 player on its taxi squad.",

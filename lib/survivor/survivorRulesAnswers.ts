@@ -10,8 +10,10 @@ import { weeklyPrizesActive, type SurvivorWeeklyPrizeSettings } from './survivor
 import { SURVIVOR_FINALE_DEFAULTS, type SurvivorFinaleSettings, type SurvivorFinaleWindows } from './survivorFinaleSettings'
 import { SURVIVOR_GOVERNANCE_DEFAULTS, type SurvivorGovernanceSettings } from './survivorGovernanceSettings'
 import { dayTimeLabel, governanceLang } from './survivorGovernanceCopy'
+import { crossTribeWindowsLabel } from './survivorGovernanceCopy'
 import type { SurvivorSideGameSettings } from './survivorSideGameSettings'
 import { answerSideGameRules, sideGameExileLines } from './survivorSideGameRulesAnswers'
+import { finalJuryStepRulesLine } from './survivorFinalJuryStep'
 
 export type SurvivorRulesTopic =
   | 'voting' | 'ties' | 'idols' | 'merge' | 'exile' | 'jury' | 'immunity' | 'challenges' | 'schedule' | 'overview'
@@ -45,11 +47,34 @@ export type SurvivorRulesContext = {
   rewardRules?: { thievesCannotStealFromEachOther: boolean } | null
 }
 
-function windowWhen(iso: string | null | undefined): string | null {
+function windowWhen(iso: string | null | undefined, locale = 'en-US'): string | null {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  return `${d.toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} ET`
+  return `${d.toLocaleString(locale, { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} ET`
+}
+
+/** The jury and finale answer in Spanish (League.language), the same facts as the English one. */
+function juryAnswerEs(ctx: SurvivorRulesContext): string {
+  const s = ctx.settings
+  const f = ctx.finale ?? SURVIVOR_FINALE_DEFAULTS
+  const w = ctx.finaleWindows ?? null
+  const when = (iso: string | null | undefined) => windowWhen(iso, 'es-ES')
+  const qClose = when(w?.questionsDeadline)
+  const qOpen = when(w?.questionsOpenAt)
+  const aClose = when(w?.answersDeadline)
+  const sClose = when(w?.speechesDeadline)
+  return [
+    '**Jurado y final**',
+    s.juryEnabled ? '• Quienes salen eliminados después de la fusión se unen al jurado.' : '• Esta liga no tiene jurado.',
+    s.juryEnabled ? finalJuryStepRulesLine(f, 'es') ?? '' : '',
+    ctx.plan ? `• El Consejo Tribal Final es en la semana ${ctx.plan.finaleWeek} con ${ctx.plan.finalistCount} finalistas.` : '• Los últimos que quedan en pie van al Consejo Tribal Final.',
+    s.juryEnabled && f.juryQuestionsEnabled ? `• Cada miembro del jurado puede hacer una pregunta a cada finalista${qOpen || qClose ? ` (${qOpen ? `desde ${qOpen}` : ''}${qOpen && qClose ? ' ' : ''}${qClose ? `hasta ${qClose}` : ''})` : ' mientras la final está abierta'}. Los finalistas responden${aClose ? ` antes de ${aClose}` : ''} y el jurado marca la respuesta como vista.` : '',
+    f.closingSpeechesEnabled ? `• Cada finalista publica un discurso final, editable${sClose ? ` hasta ${sClose}` : ' hasta que termine la votación del jurado'}.${sClose ? ' La votación del jurado abre cuando cierran los discursos.' : ''} El jurado los ve primero; todos los ven después de la final.` : '',
+    s.juryEnabled && s.finaleVotingEnabled ? '• El jurado vota en secreto por el ganador.' : '',
+    f.endOfSeasonBallotReveal ? '• Al terminar la temporada se revelan los votos de cada Consejo: quién votó por quién. Nunca antes de coronar al campeón.' : '• Los votos siguen siendo secretos, incluso después de la temporada.',
+    f.reunionChatEnabled ? '• Después de la final, el chat de la isla se reabre para todos en la reunión.' : '',
+  ].filter(Boolean).join('\n')
 }
 
 function votesDueLine(ctx: SurvivorRulesContext): string {
@@ -89,13 +114,36 @@ const TOPIC_PATTERNS: Array<[SurvivorRulesTopic, RegExp]> = [
 const QUESTION = /\b(how|what|when|why|rules?|explain|does|do|can|is|are|which|who)\b|\?/
 
 /**
+ * Spanish topic words. A topic matches when its English OR its Spanish pattern does, and topics keep
+ * the English list's priority, so "¿cómo funciona el consejo tribal final?" is a jury question (jury
+ * comes before voting) and a side-game question that mentions votes stays a side-game question.
+ * Unicode-aware word edges (JS \b treats "ó" as a non-word character). Only Spanish-specific forms:
+ * "la final" / "finalistas", never a bare "final", so an English "what was the final score?" is not
+ * read as a finale question. Its own list, so the English patterns above stay untouched.
+ */
+const esWords = (words: string) => new RegExp(`(?<![\\p{L}\\p{N}])(?:${words})(?![\\p{L}\\p{N}])`, 'u')
+const TOPIC_PATTERNS_ES: ReadonlyMap<SurvivorRulesTopic, RegExp> = new Map<SurvivorRulesTopic, RegExp>([
+  ['ties', esWords('empates?|empatad[oa]s?|piedras')],
+  ['idols', esWords('[íi]dolos?|disparo en la oscuridad')],
+  ['exile', esWords('exilio|isla del exilio|volver a la isla')],
+  ['jury', esWords('jurado|miembros? del jurado|la final|de la final|en la final|finalistas?|consejo tribal final|discursos? final(?:es)?|discurso de cierre|reuni[óo]n|qui[ée]n vot[óo] por qui[ée]n')],
+  ['merge', esWords('fusi[óo]n|fusionad[oa]s?')],
+  ['immunity', esWords('inmunidad|inmunes?')],
+  ['challenges', esWords('retos?|desaf[íi]os?|minijuegos?')],
+  ['schedule', esWords('hora l[íi]mite|ceremonia de la antorcha|semanas? de eliminaci[óo]n|cu[áa]ndo (?:se )?vota')],
+  ['voting', esWords('votos?|votar|votaci[óo]n(?:es)?|vot[ée]|consejo tribal|eliminad[oa]s?|papeletas?')],
+])
+
+const QUESTION_ES = new RegExp(`¿|(?<![\\p{L}])(?:c[óo]mo|qu[ée]|cu[áa]ndo|por qu[ée]|reglas?|expl[íi]ca(?:me)?|cu[áa]nt[oa]s?|qui[ée]n(?:es)?|d[óo]nde|puedo|se puede|funciona)(?![\\p{L}])`, 'u')
+
+/**
  * The rules topic a message asks about, or null when it is not a rules question. "How does Survivor
  * work" with no specific topic is the overview.
  */
 export function survivorRulesTopic(message: string): SurvivorRulesTopic | null {
   const text = message.toLowerCase().replace(/@chimmy\b/g, ' ').trim()
-  if (!text || !QUESTION.test(text)) return null
-  for (const [topic, pattern] of TOPIC_PATTERNS) if (pattern.test(text)) return topic
+  if (!text || !(QUESTION.test(text) || QUESTION_ES.test(text))) return null
+  for (const [topic, pattern] of TOPIC_PATTERNS) if (pattern.test(text) || TOPIC_PATTERNS_ES.get(topic)?.test(text)) return topic
   if (/\bsurvivor\b/.test(text) || /\b(rules|how (?:does|do) this league work)\b/.test(text)) return 'overview'
   return null
 }
@@ -194,6 +242,10 @@ function governanceAnswer(topic: 'trades' | 'strikes' | 'alliances' | 'swaps', c
   const tribal = dayTimeLabel(ctx.language, ctx.settings.tribalCouncilDay, ctx.settings.tribalCouncilTime)
   const close = dayTimeLabel(ctx.language, g.crossTribeCloseDay, g.crossTribeCloseTime)
   const freeze = dayTimeLabel(ctx.language, g.weeklyTradeFreezeDay, g.weeklyTradeFreezeTime)
+  // Several weekly windows (or one opened at a set time): name every one of them.
+  const crossWindows = g.crossTribeWindows ?? []
+  const multiWindow = crossWindows.length > 1 || crossWindows[0]?.opensOn === 'time'
+  const windowsText = multiWindow ? crossTribeWindowsLabel(ctx.language, crossWindows) : ''
   const lines = (title: string, items: Array<string | false>) => [`**${title}**`, ...items.filter((x): x is string => Boolean(x)).map((x) => `• ${x}`)].join('\n')
   if (topic === 'trades') {
     if (!g.tradeRulesEnabled) {
@@ -204,19 +256,25 @@ function governanceAnswer(topic: 'trades' | 'strikes' | 'alliances' | 'swaps', c
     return es
       ? lines('Cambios', [
         g.crossTribeTrades === 'banned' ? 'Antes de la fusión no se permiten cambios entre tribus.'
+          : g.crossTribeTrades === 'window' && multiWindow ? `Los cambios entre tribus abren cada semana ${windowsText}; fuera de esas ventanas están cerrados.`
           : g.crossTribeTrades === 'window' ? `Los cambios entre tribus abren después del Consejo Tribal (${tribal} ET) y cierran ${close} ET cada semana.`
             : 'Los cambios entre tribus se permiten en cualquier momento.',
         g.withinTribeUnplayedOnly && 'Dentro de tu tribu puedes cambiar en cualquier momento a jugadores que todavía no han jugado esta semana.',
         g.playedLockUntilTribal && 'Un jugador que ya jugó esta semana no se puede cambiar hasta después del Consejo Tribal.',
+        (g.playedLockUntilTribal || g.withinTribeUnplayedOnly) && 'En una semana sin Consejo Tribal, ese bloqueo se levanta cuando termina el último partido de la semana (o cuando avanza la semana, si no se puede leer el resultado final).',
+        g.tradeCheckFailureMode === 'hold' && 'Si la revisión de reglas no puede hacerse, el cambio queda retenido hasta que el comisionado lo apruebe o lo vete.',
         g.weeklyTradeFreezeEnabled && `Los cambios se congelan ${freeze} ET y vuelven después del Consejo Tribal.`,
         'Después de la fusión todos son una tribu, así que solo aplican las reglas de jugadores que ya jugaron y la congelación.',
       ])
       : lines('Trades', [
         g.crossTribeTrades === 'banned' ? 'Trades between tribes are not allowed before the merge.'
+          : g.crossTribeTrades === 'window' && multiWindow ? `Trades between tribes are open each week ${windowsText}; outside those windows they are closed.`
           : g.crossTribeTrades === 'window' ? `Trades between tribes open after Tribal Council (${tribal} ET) and close ${close} ET each week.`
             : 'Trades between tribes are allowed at any time.',
         g.withinTribeUnplayedOnly && 'Within your tribe, you can trade players who have not played yet this week at any time.',
         g.playedLockUntilTribal && 'A player who has already played this week cannot be traded until after Tribal Council.',
+        (g.playedLockUntilTribal || g.withinTribeUnplayedOnly) && "In a week with no Tribal Council, that lock lifts once the week's last game is final (or when the week advances, if the final score cannot be read).",
+        g.tradeCheckFailureMode === 'hold' && 'If the trade-rule check cannot run, the trade is held for the commissioner to approve or veto.',
         g.weeklyTradeFreezeEnabled && `Trades freeze ${freeze} ET and reopen after Tribal Council.`,
         'After the merge everyone is one tribe, so only the played-player rule and the freeze still apply.',
       ])
@@ -332,6 +390,7 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
         ...sideGameExileLines(ctx.sideGames, ctx.sport, ctx.language),
       ].join('\n')
     case 'jury': {
+      if (isEs(ctx)) return juryAnswerEs(ctx)
       const f = ctx.finale ?? SURVIVOR_FINALE_DEFAULTS
       const w = ctx.finaleWindows ?? null
       const qClose = windowWhen(w?.questionsDeadline)
@@ -341,6 +400,7 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
       return [
         '**Jury and finale**',
         s.juryEnabled ? '• Managers voted out after the merge join the jury.' : '• There is no jury in this league.',
+        s.juryEnabled ? finalJuryStepRulesLine(f, 'en') ?? '' : '',
         ctx.plan ? `• Final Tribal Council is in week ${ctx.plan.finaleWeek} with ${ctx.plan.finalistCount} finalists.` : '• The last managers standing go to Final Tribal Council.',
         s.juryEnabled && f.juryQuestionsEnabled ? `• Each juror may ask each finalist one question${qOpen || qClose ? ` (${qOpen ? `from ${qOpen}` : ''}${qOpen && qClose ? ' ' : ''}${qClose ? `until ${qClose}` : ''})` : ' while the finale is open'}. Finalists answer${aClose ? ` by ${aClose}` : ''}, and the juror marks the answer as seen.` : '',
         f.closingSpeechesEnabled ? `• Each finalist posts one closing speech, editable${sClose ? ` until ${sClose}` : ' until the jury vote is complete'}.${sClose ? ' Jury voting opens when the speeches close.' : ''} The jury sees them first; everyone sees them after the finale.` : '',

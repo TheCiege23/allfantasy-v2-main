@@ -20,7 +20,13 @@ export interface SurvivorAttentionInputs {
   /** The viewer is a castaway still in the game (trade and swap signals are for them only). */
   activeCastaway: boolean
   /** Trade rules on and the castaway still in the game; null otherwise. */
-  tradeWindow: { crossTribeClosesAt: Date | null; frozen: boolean; freezeStartsAt: Date | null } | null
+  tradeWindow: {
+    crossTribeClosesAt: Date | null
+    frozen: boolean
+    freezeStartsAt: Date | null
+    /** Which of the week's cross-tribe windows is open (1-based of `count`); absent on older callers. */
+    crossTribeWindow?: { index: number; count: number } | null
+  } | null
   /** Before the merge (a cross-tribe window means nothing after it). */
   preMerge: boolean
   myStrikeCount: number
@@ -34,6 +40,11 @@ const TONIGHT_HOURS = 12
 const URGENT_HOURS = 3
 
 const hoursUntil = (target: Date, now: Date) => (target.getTime() - now.getTime()) / 3_600_000
+
+/** "Thu 8:15 PM" / "jue 20:15" in US Eastern, the zone every Survivor deadline is set in. */
+function easternClose(close: Date, es: boolean): string {
+  return close.toLocaleString(es ? 'es-US' : 'en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
+}
 
 function signal(input: SurvivorAttentionInputs, type: DecisionOsAttentionSignal['type'], key: string, severity: AttentionSignalSeverity, title: string, explanation: string, recommendedAction: string | null, timestamp: Date): DecisionOsAttentionSignal {
   return {
@@ -60,8 +71,13 @@ export function deriveSurvivorAttentionSignals(input: SurvivorAttentionInputs): 
       const hours = hoursUntil(close, input.now)
       if (hours > 0 && hours <= TONIGHT_HOURS) {
         const severity: AttentionSignalSeverity = hours <= URGENT_HOURS ? 'high' : 'medium'
+        // With several windows a week, name the one closing ("before TNF" vs "before Sunday 1pm").
+        const which = input.tradeWindow.crossTribeWindow && input.tradeWindow.crossTribeWindow.count > 1 ? input.tradeWindow.crossTribeWindow : null
+        const at = which ? easternClose(close, es) : ''
         out.push(signal(input, 'survivor_trade_window', `cross:${close.toISOString()}`, severity,
-          es ? 'La ventana de cambios entre tribus cierra esta noche' : 'Cross-tribe trade window closes tonight',
+          which
+            ? (es ? `La ventana ${which.index} de ${which.count} de cambios entre tribus cierra esta noche (${at} ET)` : `Cross-tribe window ${which.index} of ${which.count} closes tonight (${at} ET)`)
+            : es ? 'La ventana de cambios entre tribus cierra esta noche' : 'Cross-tribe trade window closes tonight',
           es ? `Los cambios con otras tribus cierran en ${Math.max(1, Math.round(hours))} h y vuelven después del Consejo Tribal.` : `Trades with other tribes close in ${Math.max(1, Math.round(hours))}h and reopen after Tribal Council.`,
           es ? 'Envía ahora cualquier oferta a otra tribu.' : 'Send any offer to another tribe now.', close))
       }

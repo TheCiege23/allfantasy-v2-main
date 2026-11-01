@@ -193,6 +193,22 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
         return 'final_three_preserved'
       }
       if (active < 3) return 'cast_below_final_three'
+      // The final jury step (survivorFinalJuryStep.ts): once the merged cast is down to the finalists
+      // plus the castaways the step sends to the jury, the last immunity cuts it, not a Tribal. Closes
+      // the planned elimination the same way the final-three skip does. Best-effort: on a failed read
+      // the council opens as before.
+      {
+        const { finalJuryStepHoldsCouncil } = await import('./survivorFinalJuryStepService')
+        if (await finalJuryStepHoldsCouncil(leagueId).catch(() => false)) {
+          await withSurvivorSetupTransaction(leagueId, async tx => {
+            const existing = await tx.survivorAuditEntry.findFirst({ where: { leagueId, week, action: 'planned_elimination_skipped_final_three' }, select: { id: true } })
+            if (existing) return
+            await tx.survivorAuditEntry.create({ data: { leagueId, week, category: 'automation', action: 'planned_elimination_skipped_final_three', data: { reason: 'final_jury_step' }, isVisibleToPublic: true, isVisibleToCommissioner: true } })
+            await tx.survivorGameState.update({ where: { leagueId }, data: { needsTribalLock: false } })
+          })
+          return 'final_jury_step_holds_council'
+        }
+      }
       // A tribe-imbalance recommendation nobody answered gets its default, a random redraw, now:
       // the commissioner has had until this council to choose otherwise.
       await autoApplyPendingTribeRedraw(leagueId, week)
@@ -233,6 +249,16 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
 
   await tryAutomaticPhaseAdvance(leagueId)
   if (kind === 'finale') {
+    // The final jury step: after the last immunity is settled, the castaway(s) who did worst join the
+    // jury, so the finale opens with the finalists. Idempotent (audited once), best-effort.
+    {
+      const { applyFinalJuryStepIfDue } = await import('./survivorFinalJuryStepService')
+      const step = await applyFinalJuryStepIfDue(leagueId, week).catch(error => {
+        console.warn('[survivor] final jury step failed', error instanceof Error ? error.message : error)
+        return 'failed' as const
+      })
+      if (step === 'awaiting_immunity') return 'awaiting_final_immunity'
+    }
     let finale = await getFinaleState(leagueId, week)
     if (finale.open && !finale.closed) {
       // Nobody has to click "open voting": the jury votes until the ceremony, and the engine
@@ -244,6 +270,14 @@ export async function runPlannedSurvivorLeague(leagueId: string, now = new Date(
         const { runChimmyFinaleTurn } = await import('./chimmyJuryTurn')
         await runChimmyFinaleTurn(leagueId, now).catch(error => {
           console.warn('[survivor] Chimmy finale turn failed', error instanceof Error ? error.message : error)
+        })
+      }
+      // The commissioner's report gets a jury/finale line (questions, speeches, votes in), once a day
+      // while the finale is open. Counts only; never holds up the finale.
+      {
+        const { sendChimmyWeeklyReport } = await import('./chimmyWeeklyReport')
+        await sendChimmyWeeklyReport(leagueId, week, { finale: true, dedupeKey: `${week}:finale:${now.toISOString().slice(0, 10)}` }).catch(error => {
+          console.warn('[survivor] Chimmy finale report failed', error instanceof Error ? error.message : error)
         })
       }
       finale = await settleFinaleIfDue(leagueId, week)

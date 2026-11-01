@@ -431,7 +431,15 @@ export function prizePhaseError(type: ChallengePrizeType, phase: SurvivorPrizePh
 }
 
 /** The prize type a reward-API spec is, or null for a penalty (never restricted). */
+/**
+ * Reward types the per-phase prize rules never restrict: penalties and the disadvantages a winner
+ * aims at an opponent (side-game auctions and the token shop). They are not prizes, so a
+ * commissioner's phase rules cannot block them in any phase.
+ */
+export const PHASE_UNRESTRICTED_REWARD_TYPES = ['score_penalty', 'faab_penalty', 'opponent_penalty', 'vote_taken', 'forced_bench'] as const
+
 export function prizeTypeOfRewardSpecType(type: string): ChallengePrizeType | null {
+  if ((PHASE_UNRESTRICTED_REWARD_TYPES as readonly string[]).includes(type)) return null
   return (CHALLENGE_PRIZE_TYPES as readonly string[]).includes(type) ? (type as ChallengePrizeType) : null
 }
 

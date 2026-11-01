@@ -33,7 +33,9 @@ const h = vi.hoisted(() => ({
     grantSurvivorAuctionCash: vi.fn(),
   },
   loadSideGameLeague: vi.fn(),
+  exposure: vi.fn(),
 }))
+vi.mock('@/lib/survivor/survivorExileExposure', () => ({ applyExileExposurePenalty: h.exposure }))
 vi.mock('next-auth', () => ({ getServerSession: async () => h.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: h.db }))
@@ -163,5 +165,35 @@ describe('/api/survivor/commissioner side-game actions', () => {
     expect((await post(commishPOST, { action: 'auction_cash_grant', rosterId: 'r1', amount: 2.5 })).status).toBe(400)
     h.svc.grantSurvivorAuctionCash.mockResolvedValueOnce({ ok: true, balance: 20 })
     expect((await post(commishPOST, { action: 'auction_cash_grant', rosterId: 'r1', amount: 20 })).status).toBe(200)
+  })
+})
+
+describe('/api/survivor/commissioner exile_exposure_penalty ("removed if exposed")', () => {
+  it('commissioner: preview first (nothing logged), then the confirmed penalty is logged', async () => {
+    h.exposure.mockResolvedValueOnce({ ok: true, preview: true, penalty: 'remove', displayName: 'Ben', message: 'Ben will be removed from the season. Confirm to apply it.' })
+    const preview = await post(commishPOST, { action: 'exile_exposure_penalty', userId: 'u2' })
+    expect(preview.status).toBe(200)
+    expect(h.exposure).toHaveBeenLastCalledWith('L1', { targetUserId: 'u2', actorUserId: 'u1', confirm: false, note: null })
+    expect(h.db.survivorCommissionerAction.create).not.toHaveBeenCalled()
+    h.exposure.mockResolvedValueOnce({ ok: true, preview: false, penalty: 'remove', displayName: 'Ben', removed: true })
+    const done = await post(commishPOST, { action: 'exile_exposure_penalty', userId: 'u2', confirm: true })
+    expect(done.status).toBe(200)
+    expect(h.exposure).toHaveBeenLastCalledWith('L1', expect.objectContaining({ confirm: true }))
+    expect(h.db.survivorCommissionerAction.create.mock.calls[0][0].data).toMatchObject({ actionType: 'exile_exposure_penalty', targetUserId: 'u2' })
+  })
+
+  it('non-commissioner: 403 and nothing runs', async () => {
+    h.commissioner = false
+    expect((await post(commishPOST, { action: 'exile_exposure_penalty', userId: 'u2', confirm: true })).status).toBe(403)
+    expect(h.exposure).not.toHaveBeenCalled()
+  })
+
+  it('bad input: 400; the service’s refusal passes through', async () => {
+    expect((await post(commishPOST, { action: 'exile_exposure_penalty' })).status).toBe(400)
+    expect((await post(commishPOST, { action: 'exile_exposure_penalty', userId: 'u2', confirm: 'yes' })).status).toBe(400)
+    expect(h.exposure).not.toHaveBeenCalled()
+    h.exposure.mockResolvedValueOnce({ ok: false, status: 409, error: 'The rule is turned off.' })
+    const res = await post(commishPOST, { action: 'exile_exposure_penalty', userId: 'u2', confirm: true })
+    expect(res.status).toBe(409)
   })
 })

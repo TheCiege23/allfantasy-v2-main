@@ -11,6 +11,7 @@
 import { prisma } from '@/lib/prisma'
 import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 import { tribePositionLeaders } from './survivorWeeklyPrizes'
+import { loadForcedBench } from './survivorForcedBench'
 
 export async function loadTribePositionLeaderScores(
   leagueId: string,
@@ -32,7 +33,9 @@ export async function loadTribePositionLeaderScores(
     const bridge = await prisma.roster.findFirst({ where: { id: c.redraftRosterId, leagueId }, select: { redraftRosterId: true } })
     if (!bridge?.redraftRosterId) continue
     const score = await scoreRosterForWeek({ leagueId, rosterId: bridge.redraftRosterId, week, seasonYear: season.season, collectPlayerPoints: true })
-    const starters = (score.playerPoints ?? []).filter((p) => p.isStarter)
+    // A Survivor "forced bench" player's points do not count for Survivor that week, here either.
+    const benched = await loadForcedBench(leagueId, c.redraftRosterId, week).catch(() => new Set<string>())
+    const starters = (score.playerPoints ?? []).filter((p) => p.isStarter && !benched.has(p.playerId))
     if (!starters.length) continue
     const positions = await prisma.redraftRosterPlayer.findMany({
       where: { rosterId: bridge.redraftRosterId, playerId: { in: starters.map((p) => p.playerId) } },

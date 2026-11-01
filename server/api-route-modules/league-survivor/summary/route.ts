@@ -48,9 +48,11 @@ import { getActiveTribeImmunity } from '@/lib/survivor/survivorTribeImmunity'
 import { isCouncilReadComplete } from '@/lib/survivor/survivorRevealGate'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
-import { readSurvivorIslandScene } from '@/lib/survivor/survivorSettingsScreen'
+import { readSurvivorIslandScene, resolveSurvivorIslandScene } from '@/lib/survivor/survivorSettingsScreen'
+import { tribalVotesDueFromSettings } from '@/lib/survivor/survivorCeremonySchedule'
 import { readSurvivorGovernanceSettings } from '@/lib/survivor/survivorGovernanceSettings'
 import { decorateNamesWithTribeEmoji } from '@/lib/survivor/survivorTribeEmoji'
+import { tribeEmojiFor } from '@/lib/survivor/survivorTribeEmoji'
 import { canSeeExileMembership, exileMembershipHidden } from '@/lib/survivor/survivorExileSecrecy'
 
 export const dynamic = 'force-dynamic'
@@ -122,7 +124,7 @@ export async function GET(
 
   const leagueMeta = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, name: true, survivorRevealMode: true },
+    select: { sport: true, name: true, survivorRevealMode: true, season: true },
   })
   const seasonCalendar = seasonWeekBoundsForSport(leagueMeta?.sport, config.regularSeasonEndWeek ?? null)
 
@@ -340,6 +342,8 @@ export async function GET(
       tribeShuffleImbalanceThreshold: config.tribeShuffleImbalanceThreshold,
       voteDeadlineDayOfWeek: config.voteDeadlineDayOfWeek,
       voteDeadlineTimeUtc: config.voteDeadlineTimeUtc,
+      // When votes are really due (the settings screen's vote day/time, as the scheduler reads it).
+      tribalVotesDue: tribalVotesDueFromSettings(leagueSettingsJson),
       selfVoteDisallowed: config.selfVoteDisallowed,
       tribalCouncilDayOfWeek: config.tribalCouncilDayOfWeek,
       tribalCouncilTimeUtc: config.tribalCouncilTimeUtc,
@@ -347,7 +351,8 @@ export async function GET(
       seasonThemeLabel: config.seasonThemeLabel,
       visualThemeId: config.visualThemeId,
       // The commissioner's island banner scene ('auto' follows the season), from league settings.
-      islandScene: readSurvivorIslandScene(leagueSettingsJson),
+      // 'rotate' resolves here to this season's scene (deterministic per league and season).
+      islandScene: resolveSurvivorIslandScene(readSurvivorIslandScene(leagueSettingsJson), leagueId, leagueMeta?.season ?? null),
       challengesSystemRun: config.challengesSystemRun,
       regularSeasonEndWeek: config.regularSeasonEndWeek,
       faqSeededAt: config.faqSeededAt,
@@ -380,6 +385,8 @@ export async function GET(
       id: t.id,
       name: t.name,
       emoji: extractLeadingTribeIcon(t.name),
+      // The tribe's emoji (its name's leading icon, else the catalogue mascot's) for `tribeEmojiInNames`.
+      tribeEmoji: tribeEmojiFor({ name: t.name, catalogId: 'catalogId' in t ? t.catalogId ?? null : null }),
       slotIndex: t.slotIndex,
       ...summaryTribeEmblem(t, leagueMeta?.sport),
       colorHex: 'colorHex' in t ? t.colorHex ?? null : null,
@@ -433,7 +440,7 @@ export async function GET(
     exileMembershipHidden: !canSeeExileMembership({
       hidden: exileMembershipHidden(leagueSettingsRow?.settings),
       viewerState: myExileStatus ? 'exile' : null,
-      nonPlayingCommissioner: privacy.decisions.canSeeHiddenIdolAssignments,
+      nonPlayingCommissioner: privacy.isNonParticipatingCommissionerHost,
     }),
     exileTokens: tokenStates.filter(token => privacy.decisions.canSeeHiddenIdolAssignments || token.rosterId === myExileRoster?.id).map((token) => {
       const mainRosterId = exileMainRosterIdByExileRosterId.get(token.rosterId) ?? null
@@ -513,6 +520,8 @@ export async function GET(
       .then(game => Boolean(game?.pausedSnapshot) || Boolean(game?.lastError?.startsWith('PAUSED:')))
       .catch(() => false),
     rosterDisplayNames,
+    // Display only: the commissioner's "tribe emoji in names" (before the merge), for screens that draw tribe names.
+    tribeEmojiInNames: readSurvivorGovernanceSettings(leagueSettingsRow?.settings).tribeEmojiInNames && !merged,
   }
 
   // This week's strategy for the viewer, from facts already in the payload (only their own idols).

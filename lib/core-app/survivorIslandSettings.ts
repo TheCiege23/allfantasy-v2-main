@@ -21,12 +21,12 @@ export type IslandSettingsState = {
   context: { managers: number; firstWeek: number; lastWeek: number }
 }
 
-/** The picker's choices: follow the season first, then every scene in the art folder. */
-export const ISLAND_SCENE_CHOICES: readonly SurvivorIslandScenePreference[] = ['auto', ...SURVIVOR_ISLAND_SCENES]
+/** The picker's choices: follow the season first, a new scene every season, then every scene in the art folder. */
+export const ISLAND_SCENE_CHOICES: readonly SurvivorIslandScenePreference[] = ['auto', 'rotate', ...SURVIVOR_ISLAND_SCENES]
 
 /** The thumbnail for a choice; 'auto' shows the beach, where every season starts. */
 export function sceneArt(choice: SurvivorIslandScenePreference): string {
-  return `/survivor/scenes/${choice === 'auto' ? 'beach' : choice}.svg`
+  return `/survivor/scenes/${choice === 'auto' ? 'beach' : choice === 'rotate' ? 'lagoon' : choice}.svg`
 }
 
 /**
