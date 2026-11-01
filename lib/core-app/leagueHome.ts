@@ -24,6 +24,8 @@ import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manage
 import { memberActivityFromReads, staleActivityReason } from './commissioner/activity'
 import { readMemberActivityInputs } from './commissioner/memberActivityReads'
 import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
+import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
+import { buildRedraftHomeDeck, type RedraftHomeDeck } from './redraftLeagueHome'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { latestProjectionWeek } from './playerProjections'
 import { getRecentTrades, gradeProviderRecentTrade, liveCompletedTrade, type RecentTrade } from './recentTrades'
@@ -135,6 +137,11 @@ export type LeagueStanding = {
 export type SeasonStage = TimelinePhase
 
 export type LeagueHomeData = {
+  /**
+   * The redraft season-race deck for an imported league whose stored data positively says redraft
+   * (lib/core-app/redraftLeagueHome.ts). Absent or null: every other league — Home renders as before.
+   */
+  redraft?: RedraftHomeDeck | null
   /** Only a confirmed FAAB rule makes stored roster budgets meaningful. */
   faabEnabled?: boolean
   calendar?: LeagueCalendarEvent[]
@@ -882,6 +889,51 @@ export async function getLeagueHomeData(
         }).catch(() => null)
       : null
 
+  /*
+   * The redraft "season race" deck (lib/core-app/redraftLeagueHome.ts), for an imported league whose
+   * STORED data positively says redraft (lib/league-media/redraftIdentity.ts). Everything it shows is
+   * already read above except the recap's week, which is the same WeeklyMatchup read as `board` for
+   * the week before the current one — skipped when `board` already is that week. Null for every other
+   * league, which renders exactly as before.
+   */
+  const redraftIdentity = resolveRedraftIdentity({
+    platform: league.platform,
+    sport: league.sport,
+    leagueType: league.leagueType,
+    leagueVariant: league.leagueVariant,
+    isDynasty: league.isDynasty,
+    bestBallMode: league.bestBallMode,
+    guillotineMode: league.guillotineMode,
+    settings: league.settings,
+  })
+  const recapWeek = currentWeek != null && currentWeek > 1 ? currentWeek - 1 : null
+  const lastWeekBoard =
+    redraftIdentity && !preSeason && recapWeek != null && league.season != null
+      ? board?.week === recapWeek
+        ? board
+        : await getLeagueScoreboard({
+            leagueId: league.id,
+            platformLeagueId: league.platformLeagueId,
+            seasonYear: league.season,
+            week: recapWeek,
+            yourRosterId: yours?.externalId ?? null,
+            scoringSettings: extractScoringSettings(league.settings),
+            projectionWeek: null,
+          }).catch(() => null)
+      : null
+  const redraft = redraftIdentity
+    ? buildRedraftHomeDeck({
+        identity: redraftIdentity,
+        settings: league.settings,
+        currentWeek,
+        stage,
+        preSeason,
+        standings: standings.available ? standings.data : null,
+        board,
+        lastWeekBoard,
+      })
+    : null
+
 
   // One league through the shared aggregator — three set-based queries, and the
   // same status vocabulary handling (including `complete` vs `completed`).
@@ -959,6 +1011,7 @@ export async function getLeagueHomeData(
         }
 
   return {
+    redraft,
     stage,
     preSeason,
     teamDirectory: teams.map((team) => ({

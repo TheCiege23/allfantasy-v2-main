@@ -37,8 +37,9 @@ import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNav
 import ConnectedDecisionScopeBar from '@/components/core-app/ConnectedDecisionScopeBar'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
-import { leagueThemeForTypeKey } from '@/lib/core-app/survivorTheme'
+import { SURVIVOR_BANNER_TABS, leagueThemeForTypeKey } from '@/lib/core-app/survivorTheme'
 import { SurvivorIslandBanner } from '@/components/core-app/survivor/SurvivorIslandBanner'
+import { SurvivorIslandControl } from '@/components/core-app/survivor/SurvivorIslandControl'
 import { navLabel } from '@/lib/core-app/navLabels'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
@@ -1661,8 +1662,8 @@ export default async function AfCorePage({
   return (
     <AfCoreShell
       nativeLeague={!!selectedLeagueId && !!selectedLeaguePlatform && !isImportedPlatform(selectedLeaguePlatform)}
-      /* Redraft identity for a native redraft ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
-      redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform)}
+      /* Redraft identity for a native or positively-redraft imported ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
+      redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform, selectedLeagueRecord)}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
@@ -2021,6 +2022,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const survivorBanner = (variant: 'full' | 'compact') =>
     leagueThemeForTypeKey(tradeLeagueTypeKey) === 'survivor' && selectedLeagueId ? (
       <SurvivorIslandBanner leagueId={selectedLeagueId} leagueName={tradeLeagueRow?.name ?? ''} variant={variant} />
+    ) : null
+  /* …and its Commissioner screen (Island control) with league health and the weekly to-do. */
+  const survivorControl =
+    leagueThemeForTypeKey(tradeLeagueTypeKey) === 'survivor' && selectedLeagueId ? (
+      <>
+        {survivorBanner('compact')}
+        <SurvivorIslandControl leagueId={selectedLeagueId} />
+      </>
     ) : null
   /*
    * The reader's language for server-rendered copy on this screen. Read from the `af_lang` cookie,
@@ -4466,6 +4475,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         />
       ) : null}
 
+      {/* The island banner over every other league tab of a Survivor league (survivorTheme.ts). */}
+      {SURVIVOR_BANNER_TABS.has(activeKey) && segment !== 'bracket' && segment !== 'hubs' && segment !== 'discord' ? survivorBanner('compact') : null}
+
       {segment === 'bracket' ? (
         bracket ? (
           <BracketChallenge data={bracket} />
@@ -5118,7 +5130,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * role check to bypass because there is no client-side role check.
          */
         commissionerHub ? (
+          <>
+          {survivorControl}
           <CommissionerHub data={commissionerHub} lineups={hubLineups} language={hubLanguage} />
+          </>
         ) : /*
            * ⚠ TWO DIFFERENT FACTS, TWO DIFFERENT RENDERINGS. "A league is
            * selected and we failed to read it" is a read failure on our side.

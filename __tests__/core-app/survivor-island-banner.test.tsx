@@ -124,9 +124,10 @@ describe('SurvivorIslandBanner', () => {
 
 describe('the core page', () => {
   const page = readFileSync(resolve(process.cwd(), 'app/core/(shell)/[[...screen]]/page.tsx'), 'utf8')
-  it('opens Camp, Tribe standings and Immunity challenge with the banner, only in a Survivor league', () => {
+  it('opens Camp, Tribe standings, Immunity challenge and Island control with the banner, only in a Survivor league', () => {
     expect(page).toContain("leagueThemeForTypeKey(tradeLeagueTypeKey) === 'survivor' && selectedLeagueId ?")
     expect(page.match(/survivorBanner\('full'\)/g)?.length).toBe(1)
-    expect(page.match(/survivorBanner\('compact'\)/g)?.length).toBe(2)
+    // Tribe standings, Immunity challenge, Island control, and the shared slot over every other league tab.
+    expect(page.match(/survivorBanner\('compact'\)/g)?.length).toBe(4)
   })
 })

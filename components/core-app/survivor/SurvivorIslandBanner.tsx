@@ -7,6 +7,12 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { survivorIslandMessages } from '@/lib/core-app/messages/survivorIsland'
 import { clockText, islandView, sportBall, tribeColor, type SportBall } from '@/lib/core-app/survivorIsland'
+import { shouldPollReading } from '@/lib/core-app/survivorVoteReading'
+import { SurvivorRulebook } from './SurvivorRulebook'
+import { SurvivorVoteReading } from './SurvivorVoteReading'
+
+/** How often the banner refreshes the summary while a council's votes are being read. */
+export const READING_POLL_MS = 10_000
 
 /**
  * The island banner at the top of a Survivor league's Camp, Tribe standings and Immunity challenge
@@ -29,14 +35,26 @@ export function SurvivorIslandBanner({
   const [summary, setSummary] = useState<SurvivorSummary | null>(null)
   const [now, setNow] = useState<number | null>(null)
 
+  const [tick, setTick] = useState(0)
+  const polling = shouldPollReading(summary)
+
   useEffect(() => {
     let live = true
     fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/summary`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (live) setSummary(d) })
+      // A failed refresh mid-read keeps what is already on screen rather than blanking it.
+      .then((d) => { if (live && (d || tick === 0)) setSummary(d) })
       .catch(() => {})
     return () => { live = false }
-  }, [leagueId])
+  }, [leagueId, tick])
+
+  // While the votes are being read the server releases ballots on its own clock; refresh until the
+  // read is complete, then stop.
+  useEffect(() => {
+    if (!polling) return
+    const id = window.setInterval(() => setTick((n) => n + 1), READING_POLL_MS)
+    return () => window.clearInterval(id)
+  }, [polling])
 
   // The clock only runs on the client, so server and client render the same first frame.
   useEffect(() => {
@@ -105,6 +123,8 @@ export function SurvivorIslandBanner({
         </div>
       </section>
       {full && summary && summary.tribes.some((t) => t.members.length > 0) ? <TribeBoard summary={summary} /> : null}
+      {full && summary ? <SurvivorVoteReading summary={summary} /> : null}
+      {full && summary ? <SurvivorRulebook config={summary.config} collapsible /> : null}
     </>
   )
 }

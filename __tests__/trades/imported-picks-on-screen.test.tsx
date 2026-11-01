@@ -64,7 +64,7 @@ describe('the Trade Center hands the coverage to the picker', () => {
 
   it('🛑 the picker says the list holds traded picks only', () => {
     render(<TradeCenter league={{ id: 'l1', name: 'Dynasty 101', format: 'Dynasty', teamCount: 10 }} />)
-    fireEvent.click(screen.getAllByText('+ Add asset')[0]!)
+    fireEvent.click(document.querySelector<HTMLButtonElement>(".af-tc-team[data-side='give'] .af-tc-add")!)
     const picker = document.querySelector('.af-tc-picker') as HTMLElement
     fireEvent.click(within(picker).getByText('Pick'))
     const text = (picker.textContent ?? '').replace(/\s+/g, ' ')

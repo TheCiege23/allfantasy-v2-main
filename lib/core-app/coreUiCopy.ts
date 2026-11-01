@@ -1348,6 +1348,15 @@ const spanish: Record<string, string> = {
     "No pudimos leer tu historial en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguno.",
   "We could not load your leagues just now. This is a read failure on our side, not a sign that you have none.":
     "No pudimos cargar tus ligas en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguna.",
+  // My team's no-game badge and Your week's season-race strip (redraft /core batch B2).
+  'Off day': 'Día libre',
+  'No games': 'Sin partidos',
+  'His team has no game today. A starter with no game scores nothing for the day.':
+    'Su equipo no juega hoy. Un titular sin partido no suma nada en el día.',
+  'His team has no games this week. A starter with no games scores nothing this week.':
+    'Su equipo no juega esta semana. Un titular sin partidos no suma nada en la semana.',
+  'Season race': 'Carrera de la temporada',
+  'by record': 'por récord',
 }
 
 /** "3 min ago" / "2h 5m ago" / "4d ago" / "just now" (RefreshLineups `asOfLabel`) → Spanish. */

@@ -10,6 +10,8 @@ import { fmt1, formatRecord, initialsOf, pairScoreboard, rowPointTone, shortPlay
 import { isRotisserieLeagueSettings } from '@/lib/category-scoring/nativeCategoryScoringContext'
 import { Card, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
 import { TournamentBracketCard } from './TournamentBracketCard'
+import { slotGameState } from '@/lib/league-media/redraftScreens'
+import { RedraftScoreBug, RedraftScreen, useRedraftScreen, useRedraftScreenContext } from './RedraftScreenParts'
 
 /**
  * Matchup — handoff §3, `Matchup.png` / `MobileMatchup.png`.
@@ -31,6 +33,8 @@ function sideLine(rec: MatchupCenterPayload['left']['record'], remaining: number
 }
 
 function SlotCell({ p, side }: { p: MatchupPlayerSlot | null; side: 'left' | 'right' }) {
+  // Redraft: a live / final dot from the feed's own game state (none for an unknown state).
+  const rd = useRedraftScreenContext()
   if (!p) return <div className="nls-player" data-side={side}><strong className="nls-muted">Empty</strong></div>
   const status = p.gameLabel || (p.gameStatus === 'final' ? 'Final' : '—')
   const team = p.team ? <span data-long>{p.team} · </span> : null
@@ -40,7 +44,7 @@ function SlotCell({ p, side }: { p: MatchupPlayerSlot | null; side: 'left' | 'ri
         <span className="nls-long">{p.name}</span>
         <span className="nls-short">{shortPlayerName(p.name)}</span>
       </strong>
-      <small data-live={p.gameStatus === 'live' || undefined}>
+      <small data-live={p.gameStatus === 'live' || undefined} data-game={rd ? slotGameState(p.gameStatus) ?? undefined : undefined}>
         {side === 'left' ? <>{team}{status}</> : <>{status}{p.team ? <span data-long> · {p.team}</span> : null}</>}
       </small>
     </div>
@@ -50,7 +54,12 @@ function SlotCell({ p, side }: { p: MatchupPlayerSlot | null; side: 'left' | 'ri
 type ScreenProps = { league: UserLeague; onSelectTab: (id: string) => void }
 
 export function NativeMatchupScreen(props: ScreenProps) {
-  return isRotisserieLeagueSettings(props.league.settings) ? <RotisserieMatchupScreen {...props} /> : <HeadToHeadMatchupScreen {...props} />
+  const rd = useRedraftScreen(props.league)
+  return (
+    <RedraftScreen identity={rd}>
+      {isRotisserieLeagueSettings(props.league.settings) ? <RotisserieMatchupScreen {...props} /> : <HeadToHeadMatchupScreen {...props} />}
+    </RedraftScreen>
+  )
 }
 
 /**
@@ -59,8 +68,9 @@ export function NativeMatchupScreen(props: ScreenProps) {
  * 0.0 vs 0.0 "matchup" and a win probability for a game nobody plays. Point at the standings instead.
  */
 function RotisserieMatchupScreen({ league, onSelectTab }: ScreenProps) {
+  const rd = useRedraftScreenContext()
   return (
-    <div className="nls" data-testid="native-matchup-screen">
+    <div className="nls" data-testid="native-matchup-screen" data-rd-screen={rd ? 'matchup' : undefined}>
       <ScreenHead eyebrow={`${league.name} · Rotisserie`} title="No weekly matchup" />
       <Card label="How this league is decided" tone="accent">
         <p>
@@ -77,6 +87,7 @@ function RotisserieMatchupScreen({ league, onSelectTab }: ScreenProps) {
 }
 
 function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
+  const rd = useRedraftScreenContext()
   const season = useMemo(() => {
     const n = Number(league.season)
     return Number.isFinite(n) && n > 0 ? n : new Date().getFullYear()
@@ -194,7 +205,7 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
   )
 
   return (
-    <div className="nls" data-testid="native-matchup-screen">
+    <div className="nls" data-testid="native-matchup-screen" data-rd-screen={rd ? 'matchup' : undefined}>
       <ScreenHead eyebrow={`${league.name} · Matchup`} title={`Week ${week}`}>
         {weekControls}
       </ScreenHead>
@@ -202,7 +213,9 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {loading && !payload ? <p className="nls-empty" role="status">Loading matchup…</p> : null}
 
-      {payload && left && right ? (
+      {/* Redraft: the broadcast score bug (same payload, same numbers). Every other format: the score card. */}
+      {payload && left && right && rd ? <RedraftScoreBug payload={payload} week={week} /> : null}
+      {payload && left && right && !rd ? (
         <section className="nls-card nls-card-flush" aria-label="Score">
           {payload.conceptOverlay ? <p className="nls-overlay">{payload.conceptOverlay}</p> : null}
           <div className="nls-score">
