@@ -88,18 +88,20 @@ describe("approved bracket experience workspace", () => {
     expect(funnel.querySelectorAll('.af-fn-game[data-side="final"]')).toHaveLength(1)
     expect(screen.getByText("Live now")).toBeInTheDocument()
   })
-  it("previews the NFL playoffs without offering a pool the engine cannot run", async () => {
+  it("offers NFL playoff pools on the NFL tab, with the AFC and NFC halves meeting at the Super Bowl", async () => {
     render(<BracketExperienceHub language="en" tournaments={CUP_FIRST} />)
-    vi.mocked(fetch).mockClear()
     fireEvent.click(screen.getByRole("button", { name: "NFL Playoffs" }))
     expect(screen.getByText("14 teams · 13 games")).toBeInTheDocument()
-    expect(screen.getAllByText("NFL playoff pools open in January").length).toBeGreaterThan(0)
-    expect(screen.queryByRole("link", { name: /Create Bracket League/ })).not.toBeInTheDocument()
+    expect(screen.getByText("Picks open when the playoff field is set in January")).toBeInTheDocument()
+    expect(screen.getAllByRole("link", { name: /Create Bracket League/ })[0]).toHaveAttribute("href", "/brackets/leagues/new?sport=NFL&challengeType=playoff_challenge")
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/brackets/playoffs?sport=nfl", expect.anything()))
     const funnel = screen.getByTestId("bracket-funnel")
-    // 3 wild-card games, 2 divisional and 1 conference game a side, then the Super Bowl.
+    // 3 Wild Card games, 2 divisional and 1 conference game a side, then the Super Bowl.
     expect(funnel.querySelectorAll('.af-fn-game[data-side="left"]')).toHaveLength(6)
     expect(funnel.querySelectorAll('.af-fn-game[data-side="right"]')).toHaveLength(6)
-    expect(screen.getByText("Super Bowl")).toBeInTheDocument()
-    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining("sport=nfl"), expect.anything())
+    expect(funnel.querySelector(".af-fn-sides")?.textContent).toBe("AFCNFC")
+    expect(screen.getAllByText("Super Bowl").length).toBeGreaterThan(0)
+    // The 1 seed's opponent is decided by the reseeding — one such slot per conference.
+    expect(screen.getAllByText("Lowest seed").length).toBe(2)
   })
 })

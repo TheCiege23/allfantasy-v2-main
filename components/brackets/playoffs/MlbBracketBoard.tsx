@@ -82,7 +82,7 @@ export type MlbBracketBoardProps = {
  * "do we have a club identity", and a seed slot correctly draws neutral.
  */
 function isOfficial(name: string | null | undefined): boolean {
-  return isOfficialTeamName(name) && !/^(?:CFP|EAST|WEST)\d+$/i.test(name ?? "")
+  return isOfficialTeamName(name) && !/^(?:CFP|EAST|WEST|AFC|NFC)\d+$/i.test(name ?? "")
 }
 
 function TeamRow({
@@ -119,8 +119,8 @@ function TeamRow({
   const eliminated = decided && series.winnerTeamName !== name
   const colors = teamColors(abbreviate(name))
   const disabled = !openDetail && (!official || !!locked)
-  const tournamentLogoSport = sport === "ncaaf" ? "NCAAF" : sport === "nba_cup" ? "NBA_CUP" : null
-  const showTeamLogo = Boolean(tournamentLogoSport && official && !/^(?:CFP|EAST|WEST)\d+$/i.test(name))
+  const tournamentLogoSport = sport === "ncaaf" ? "NCAAF" : sport === "nba_cup" ? "NBA_CUP" : sport === "nfl" ? "NFL" : null
+  const showTeamLogo = Boolean(tournamentLogoSport && official && !/^(?:CFP|EAST|WEST|AFC|NFC)\d+$/i.test(name))
 
   return (
     <button
@@ -146,7 +146,8 @@ function TeamRow({
           {official ? abbreviate(name) : "?"}
         </span>
       )}
-      <span className="af-pb-team-name" title={official ? name : undefined}>{official ? tournamentLogoSport ? name : abbreviate(name) : "TBD"}</span>
+      {/* NFL names ("New England Patriots") do not fit a bracket cell; the nickname does, and the full name is the title. */}
+      <span className="af-pb-team-name" title={official ? name : undefined}>{official ? tournamentLogoSport ? (sport === "nfl" ? name.split(/\s+/).pop() : name) : abbreviate(name) : "TBD"}</span>
       {official && isPlaceholderName(name) ? (
         <span className="af-pb-team-slot">slot</span>
       ) : null}
@@ -172,16 +173,17 @@ export default function MlbBracketBoard({
   const [liveNode, setLiveNode] = useState<string | null>(null)
 
   const sport = String(view.challenge.sport ?? "").toLowerCase()
-  const tournamentLogoSport = sport === "ncaaf" ? "NCAAF" : sport === "nba_cup" ? "NBA_CUP" : null
+  const tournamentLogoSport = sport === "ncaaf" ? "NCAAF" : sport === "nba_cup" ? "NBA_CUP" : sport === "nfl" ? "NFL" : null
   const teamLogos = view.teamLogos ?? {}
-  const singleGame = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup")
+  const singleGame = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nba_cup" || sport === "nfl")
   const rollingCup = singleGame && sport === "nba_cup"
   const firstStart = view.challenge.firstGameStartsAt ? Date.parse(view.challenge.firstGameStartsAt) : null
   const tournamentLocked = singleGame && !rollingCup && firstStart != null && Date.now() >= firstStart
-  const requiresPublishedField = !view.challenge.isTestMode && sport === "ncaaf"
+  const requiresPublishedField = !view.challenge.isTestMode && (sport === "ncaaf" || sport === "nfl")
   const waitingForField = requiresPublishedField && view.series.some((row) =>
-    /^(?:CFP|EAST|WEST)\d+$/i.test(row.homeTeamName) || /^(?:CFP|EAST|WEST)\d+$/i.test(row.awayTeamName))
-  const waitingForSchedule = requiresPublishedField && view.series.some((row) => !row.startsAt)
+    /^(?:CFP|EAST|WEST|AFC|NFC)\d+$/i.test(row.homeTeamName) || /^(?:CFP|EAST|WEST|AFC|NFC)\d+$/i.test(row.awayTeamName))
+  // NFL rounds after the Wild Card are scheduled as they come; only its Wild Card times gate picks.
+  const waitingForSchedule = requiresPublishedField && view.series.some((row) => !row.startsAt && (sport !== "nfl" || row.round === "nfl_wild_card"))
   const bracketReady = !waitingForField && !waitingForSchedule
   const projectedSeries = useMemo(
     () => rollingCup ? view.series : buildProjectedPlayoffSeries(view.series, view.picks, { includeUserPicks: true }),
@@ -465,7 +467,7 @@ export default function MlbBracketBoard({
               <span className="af-pb-season af-pb-mono">{view.challenge.seasonYear}</span>
             </h1>
             <p className="af-pb-sub">
-              {sport === "nba_cup" ? "30 teams · Group Play + 8-team knockout" : `12 teams · ${view.rounds.length} rounds`} · {singleGame ? "tap any matchup for Chimmy Intelligence and your pick" : "tap a matchup to pick a winner"}
+              {sport === "nba_cup" ? "30 teams · Group Play + 8-team knockout" : sport === "nfl" ? "14 teams · AFC and NFC · the 1 seeds start on a bye" : `12 teams · ${view.rounds.length} rounds`} · {singleGame ? "tap any matchup for Chimmy Intelligence and your pick" : "tap a matchup to pick a winner"}
             </p>
             {!bracketReady ? <p className="af-pb-sub" role="status">Official teams and game times are pending. Picks open when both are published.</p> : null}
             {rollingCup ? <p className="af-pb-sub" role="status">Join anytime. Each game locks at tipoff. Missed games earn 0 points. Teams, times, and knockout matchups update automatically.</p> : singleGame && bracketReady ? <p className="af-pb-sub" role="status">Changes are allowed until the first game starts{view.challenge.firstGameStartsAt ? `: ${new Date(view.challenge.firstGameStartsAt).toLocaleString()}` : ""}. Editing after finalizing returns this bracket to Draft.</p> : null}
@@ -543,7 +545,7 @@ export default function MlbBracketBoard({
                       return (
                         <span className="af-pb-seed" key={seed}>
                           <span className="af-pb-seed-n af-pb-mono">{seed}</span>
-                          {tournamentLogoSport && name && !/^(?:CFP|EAST|WEST)\d+$/i.test(name) ? (
+                          {tournamentLogoSport && name && !/^(?:CFP|EAST|WEST|AFC|NFC)\d+$/i.test(name) ? (
                             <TeamLogo teamAbbr={name} sport={tournamentLogoSport} logoUrl={teamLogos[name] ?? null} size={22} />
                           ) : (
                             <span className="af-pb-badge af-pb-badge--sm" style={{ background: c.bg, color: c.fg }}>

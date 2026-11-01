@@ -4,6 +4,7 @@ import type {
   PlayoffSport,
   PlayoffTemplateSeries,
 } from "./types"
+import { buildNflTemplate } from "./nflPlayoffs"
 
 const CONFERENCE_ROUND_ORDER: PlayoffRoundKey[] = [
   "round_1",
@@ -28,12 +29,15 @@ const CFP_ROUND_ORDER: PlayoffRoundKey[] = [
   "cfp_championship",
 ]
 
+const NFL_ROUND_ORDER: PlayoffRoundKey[] = ["nfl_wild_card", "nfl_divisional", "nfl_conference", "nfl_super_bowl"]
+
 const ROUND_ORDER_BY_SPORT: Record<PlayoffSport, PlayoffRoundKey[]> = {
   nba: CONFERENCE_ROUND_ORDER,
   nhl: CONFERENCE_ROUND_ORDER,
   mlb: MLB_ROUND_ORDER,
   ncaaf: CFP_ROUND_ORDER,
   nba_cup: CUP_ROUND_ORDER,
+  nfl: NFL_ROUND_ORDER,
 }
 
 const NBA_TEAMS = {
@@ -73,6 +77,8 @@ const TEST_MODE_TEAMS: Record<PlayoffSport, Record<string, readonly string[]>> =
   mlb: MLB_TEAMS,
   ncaaf: CFP_TEAMS,
   nba_cup: { east: NBA_TEAMS.east.slice(0, 4), west: NBA_TEAMS.west.slice(0, 4) },
+  // NFL test teams live with the NFL template (nflPlayoffs.ts), which names its own slots.
+  nfl: {},
 }
 
 /**
@@ -409,6 +415,7 @@ export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffT
   if (input.sport === "mlb") return buildMlbTemplate(isTestMode)
   if (input.sport === "ncaaf") return buildCfpTemplate(isTestMode)
   if (input.sport === "nba_cup") return buildNbaCupTemplate(isTestMode)
+  if (input.sport === "nfl") return buildNflTemplate(isTestMode)
 
   return [
     createSeries({

@@ -73,8 +73,8 @@ describe("brackets hub restore: section coverage", () => {
   })
 
   it("workspace creation follows the selected tournament and keeps MLB, NHL and join destinations", () => {
-    expect(WORKSPACE_SRC).toContain('sport === "ncaaf" ? "NCAAF" : "NBA_CUP"')
-    expect(WORKSPACE_SRC).toContain("href={createHref(engineSport)}")
+    expect(WORKSPACE_SRC).toContain('{ ncaaf: "NCAAF", nba_cup: "NBA_CUP", nfl: "NFL" }')
+    expect(WORKSPACE_SRC).toContain("href={createHref(sport)}")
     expect(WORKSPACE_SRC).toContain('href="/brackets/leagues/new?sport=MLB&challengeType=playoff_challenge"')
     expect(WORKSPACE_SRC).toContain('href="/brackets/leagues/new?sport=NHL&challengeType=playoff_challenge"')
     expect(WORKSPACE_SRC).toContain('href="/brackets/join"')
@@ -138,12 +138,13 @@ describe("brackets hub restore: section coverage", () => {
     expect(HUB_SRC).toContain(`href: playoffPoolHref("NHL")`)
     expect(HUB_SRC).toContain(`href: playoffPoolHref("NCAAF")`)
     expect(HUB_SRC).toContain(`href: playoffPoolHref("NBA_CUP")`)
+    // NFL playoff pools are creatable (playoff engine sport "nfl"), no longer "January".
+    expect(HUB_SRC).toContain(`href: playoffPoolHref("NFL")`)
     expect(HUB_SRC).toContain(`<Link key={key} href={href}`)
     // Status labels: live / ended / a month for up-next / generic coming soon.
     expect(HUB_SRC).toContain(`t("brk.hub.sports.statusLive")`)
     expect(HUB_SRC).toContain(`t("brk.hub.sports.statusEnded")`)
     expect(HUB_SRC).toContain(`t(soonLabelKey ?? "brk.hub.sports.statusComingSoon")`)
-    expect(HUB_SRC).toContain(`soonLabelKey: "brk.hub.sports.statusJanuary"`)
   })
 
   it("AI features strip renders all 6 features", () => {

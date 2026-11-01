@@ -1,4 +1,5 @@
 import type { PlayoffPickView, PlayoffSeriesView } from "./types"
+import { NFL_PLACEHOLDER, nflDivisionalMatchups, nflImpliedSources } from "./nflPlayoffs"
 
 export const PLAYOFF_UNRESOLVED_SERIES_MESSAGE = "Pick earlier round winners first."
 export const PLAYOFF_OFFICIAL_MATCHUP_TBD_MESSAGE = "Official matchup TBD."
@@ -31,6 +32,8 @@ export function isOfficialTeamName(value: string | null | undefined): boolean {
   if (!name) return false
   // Seed slots remain pickable before official seeding; feeder winners do not.
   return !/^Winner\s+S\d+$/i.test(name) &&
+    // NFL divisional slots before the reseeding is decided (nflPlayoffs.ts).
+    !NFL_PLACEHOLDER.test(name) &&
     !/^(East|Eastern|West|Western)\s+Winner\s+[AB]$/i.test(name) &&
     !/Champion$/i.test(name) &&
     !/Winner\s+[AB]$/i.test(name)
@@ -44,11 +47,36 @@ export function buildProjectedPlayoffSeries(
   const includeUserPicks = options.includeUserPicks ?? true
   const bySeriesNumber = new Map(series.map((item) => [item.seriesNumber, item]))
 
-  return series.map((item) => ({
+  const projected = series.map((item) => ({
     ...item,
     homeTeamName: resolveProjectedTeamName(item, item.sourceSeriesHome, item.homeTeamName, bySeriesNumber, picks, includeUserPicks),
     awayTeamName: resolveProjectedTeamName(item, item.sourceSeriesAway, item.awayTeamName, bySeriesNumber, picks, includeUserPicks),
   }))
+  return projectNflDivisional(projected, picks, includeUserPicks)
+}
+
+/**
+ * NFL divisional games are RESEEDED from the three Wild Card results of their
+ * conference, so they have no feeder edges for `resolveProjectedTeamName` to
+ * follow. Fill them from the entry's Wild Card picks (projection) or the
+ * official Wild Card winners — unless the official matchup is already
+ * published, which in official mode always wins.
+ */
+function projectNflDivisional(series: PlayoffSeriesView[], picks: PlayoffPickView[], includeUserPicks: boolean): PlayoffSeriesView[] {
+  if (!series.some((item) => item.round === "nfl_divisional")) return series
+  const winners = new Map<number, string>()
+  for (const item of series) {
+    if (item.round !== "nfl_wild_card") continue
+    const name = includeUserPicks ? pickForSeries(picks, item.id)?.pickTeamName?.trim() : item.winnerTeamName?.trim()
+    if (name) winners.set(item.seriesNumber, name)
+  }
+  const matchups = nflDivisionalMatchups(series, winners)
+  return series.map((item) => {
+    if (item.round !== "nfl_divisional") return item
+    if (!includeUserPicks && isOfficialTeamName(item.homeTeamName) && isOfficialTeamName(item.awayTeamName)) return item
+    const matchup = matchups.get(item.seriesNumber)
+    return matchup ? { ...item, ...matchup } : item
+  })
 }
 
 export function isPlayoffSeriesResolved(series: PlayoffSeriesView): boolean {
@@ -79,7 +107,9 @@ export function getDependentPlayoffSeriesIds(
     const seriesNumber = queue.shift()
     if (!seriesNumber) continue
     for (const item of series) {
-      if (item.sourceSeriesHome !== seriesNumber && item.sourceSeriesAway !== seriesNumber) continue
+      const fed = item.sourceSeriesHome === seriesNumber || item.sourceSeriesAway === seriesNumber ||
+        nflImpliedSources(item, series).includes(seriesNumber)
+      if (!fed) continue
       if (dependentIds.has(item.id)) continue
       dependentIds.add(item.id)
       queue.push(item.seriesNumber)
