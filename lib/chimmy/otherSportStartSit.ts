@@ -3,12 +3,14 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
+import { resolveRosterPlayerIdentities } from '@/lib/player-identity/resolveRosterPlayerIdentities'
 import { normalizeToSupportedSport, canRunSeasonForSport } from '@/lib/sport-scope'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import { viewerRosterOf, activePlayerIds } from './leagueRosterIndex'
-import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { collectRosterIds, isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
+import { bridgeImportedGameLogIds } from '@/lib/redraft/importedGameLogIdBridge'
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { checkStartedGames } from './actions/gameLocks'
 import { unavailableForLineup } from './lineupAvailability'
@@ -43,15 +45,40 @@ export async function buildOtherSportStartSit(args: {
   if (sport === 'NFL') return missing('Use the NFL weekly projection engine for this comparison.')
   const eligibility = ELIGIBILITY[sport]
   if (!eligibility) return missing(`Starting-slot eligibility for ${sport} is not on file.`)
-  if (isForeignIdSpace(world.provenance?.provider)) return missing('This imported league uses player IDs we cannot safely match to stats yet. Compare these players on the league platform.')
+  const provider = String(world.provenance?.provider ?? '').toLowerCase()
+  const imported = provider === 'espn' || isForeignIdSpace(provider)
   const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { sport: true, settings: true, season: true, leagueType: true, bestBallMode: true } })
   if (!league || league.bestBallMode) return missing('This league has no manual start/sit decision on file.')
   if (sport === 'SOCCER') await ensureDailySportSeasonStart('SOCCER', league.season, { db: prisma }).catch(() => null)
   if (!canRunSeasonForSport(sport, league.season)) return missing(`${sport} fantasy scoring is not operational for a full season yet. No league-specific start/sit call can be made.`)
   const roster = viewerRosterOf(world, args.userId)
   if (!roster) return missing('Your claimed roster is not on file for this league.')
-  const activeIds = activePlayerIds(roster)
-  const metadata = await resolveNames(normalizeToSupportedSport(sport), activeIds, 120)
+  let activeIds = activePlayerIds(roster)
+  if (imported) {
+    // The canonical world deliberately strips or translates foreign IDs for Sleeper-keyed readers.
+    // Start/sit must read this member's original provider roster and bridge its exact IDs instead.
+    const raw = await prisma.roster.findFirst({ where: { id: roster.rosterId, leagueId: args.leagueId },
+      select: { playerData: true } })
+    const data = raw?.playerData && typeof raw.playerData === 'object' && !Array.isArray(raw.playerData)
+      ? raw.playerData as Record<string, unknown> : null
+    if (!data) return missing('Your original provider roster is not on file; no imported start/sit call was made.')
+    const inactive = new Set(['reserve', 'taxi', 'ir', 'devy'].flatMap((key) => {
+      const entries = data[key]
+      return Array.isArray(entries) ? entries.map(String) : []
+    }))
+    activeIds = collectRosterIds([data]).filter((id) => !inactive.has(id))
+    if (!activeIds.length) return missing('No active provider player IDs are stored for your roster.')
+  }
+  const importedBridge = imported ? await bridgeImportedGameLogIds({ provider, sport, rosterIds: activeIds }) : null
+  const metadata = imported
+    ? new Map([...await resolveRosterPlayerIdentities(provider, sport, activeIds)]
+      .map(([id, player]) => [id, { name: player.name ?? importedBridge?.metadata?.get(id)?.name ?? null,
+        position: player.position ?? importedBridge?.metadata?.get(id)?.position ?? null,
+        team: player.team ?? importedBridge?.metadata?.get(id)?.team ?? null, injury: null }] as const))
+    : await resolveNames(normalizeToSupportedSport(sport), activeIds, 120)
+  if (importedBridge) for (const [id, player] of importedBridge.metadata ?? []) {
+    if (!metadata.has(id)) metadata.set(id, { name: player.name, position: player.position, team: player.team, injury: null })
+  }
   const named = args.players.map((raw) => {
     const key = normalizePlayerName(raw)
     return activeIds.filter((id) => normalizePlayerName(metadata.get(id)?.name ?? '') === key)
@@ -79,15 +106,18 @@ export async function buildOtherSportStartSit(args: {
     week: world.league.currentWeek ?? 1, teams: ids.map((id) => metadata.get(id)?.team ?? ''), now })
   if (!schedule) return missing('No complete current scoring-period schedule is verified for this league season. An old season or partial slate cannot support a start/sit call.')
   const sportKeys = [...new Set(scheduleSports.flatMap((key) => [key, key.toLowerCase()]))]
-  const bridge = sport === 'NCAAF'
+  const bridge = imported
+    ? importedBridge!
+    : sport === 'NCAAF'
     ? await bridgeNcaafRosterIdsToCfbdIds(prisma as never, [...ids])
     : await bridgeRosterIdsToGameLogIds(prisma, sportKeys, [...ids],
       new Map(ids.map((id) => [id, metadata.get(id)?.name ?? null])))
-  if (ids.some((id) => bridge.ambiguous.includes(id) || ('nameRefused' in bridge && bridge.nameRefused.includes(id)) ||
+  if (ids.some((id) => bridge.ambiguous.includes(id) || ('unresolved' in bridge && bridge.unresolved.includes(id)) || ('nameRefused' in bridge && bridge.nameRefused.includes(id)) ||
     ('fantraxRefused' in bridge && bridge.fantraxRefused.includes(id)) || ('unresolved' in bridge && bridge.unresolved.includes(id)))) {
     return missing('A roster player ID could not be matched uniquely to a game-log identity. No start/sit call was made.')
   }
-  const gameLogIds = 'cfbdIds' in bridge ? bridge.cfbdIds : bridge.gameLogIds
+  const gameLogIds = ('cfbdIds' in bridge ? bridge.cfbdIds : bridge.gameLogIds)
+    .filter((gameLogId) => ids.includes(bridge.rosterIdFor(gameLogId) ?? ''))
   const daily = sport !== 'NCAAF'
   const seasonStart = daily ? resolveDailySportSeasonStart(sport, league.season) : null
   if (daily && !seasonStart) return missing('This sport has no verified regular-season opener, so recent game logs cannot be limited to this league season.')

@@ -105,7 +105,8 @@ export async function runStartSitScenarioTool(args: {
   if (!scenario) {
     return `Neither ${players.join(' nor ')} could be matched to their roster as a start/sit choice. Ask them to check the names; do not rank the two.`
   }
-  if (scenario.status === 'unresolved' && scenario.reason === 'sport_not_supported') {
+  if (scenario.status === 'unresolved' &&
+    (scenario.reason === 'sport_not_supported' || scenario.reason === 'roster_ids_unreadable')) {
     const { buildOtherSportStartSit } = await import('@/lib/chimmy/otherSportStartSit')
     const result = await buildOtherSportStartSit({ players, leagueId: args.leagueId, userId: args.userId })
     return result.text

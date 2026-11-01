@@ -1,16 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
-const h = vi.hoisted(() => ({ world: vi.fn(), names: vi.fn(), league: vi.fn(), logs: vi.fn(), locks: vi.fn(), scorer: vi.fn(), schedule: vi.fn(), bridge: vi.fn(), injuries: vi.fn() }))
-vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.league }, playerGameStat: { findMany: h.logs }, sportsGame: { findFirst: h.game } } }))
+const h = vi.hoisted(() => ({ world: vi.fn(), names: vi.fn(), importedNames: vi.fn(), importedBridge: vi.fn(), league: vi.fn(), rawRoster: vi.fn(), logs: vi.fn(), locks: vi.fn(), scorer: vi.fn(), schedule: vi.fn(), bridge: vi.fn(), injuries: vi.fn() }))
+vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.league }, roster: { findFirst: h.rawRoster }, playerGameStat: { findMany: h.logs }, sportsGame: { findFirst: h.game } } }))
 vi.mock('@/lib/decision-os/world', () => ({ resolveCanonicalWorld: h.world }))
 vi.mock('@/lib/ai-payload/resolveAiTeamContext', () => ({ resolveNames: h.names }))
+vi.mock('@/lib/player-identity/resolveRosterPlayerIdentities', () => ({ resolveRosterPlayerIdentities: h.importedNames }))
 vi.mock('@/lib/chimmy/leagueRosterIndex', () => ({
   viewerRosterOf: () => ({ playerIds: ['a', 'b'], starterIds: ['a'], reserveIds: [], taxiIds: [] }),
   activePlayerIds: () => ['a', 'b'],
 }))
 vi.mock('@/lib/redraft/scoringEngine', () => ({ buildLeagueStatScorer: h.scorer }))
 vi.mock('@/lib/redraft/rosterGameLogIdBridge', () => ({ bridgeRosterIdsToGameLogIds: h.bridge }))
+vi.mock('@/lib/redraft/importedGameLogIdBridge', () => ({ bridgeImportedGameLogIds: h.importedBridge }))
 vi.mock('@/lib/chimmy/actions/gameLocks', () => ({ checkStartedGames: h.locks }))
 vi.mock('@/lib/chimmy/otherSportPeriodSchedule', () => ({ loadOtherSportPeriodSchedule: h.schedule }))
 vi.mock('@/lib/injuries/injuryReadPort', () => ({ resolveInjuryFacts: h.injuries }))
@@ -32,6 +34,7 @@ beforeEach(() => {
     ['b', { name: 'Away Star', position: 'SG', team: 'NYK', injury: null }],
   ]))
   h.league.mockResolvedValue({ sport: 'NBA', season: 2026, settings: {}, bestBallMode: false })
+  h.rawRoster.mockResolvedValue({ playerData: { players: ['a', 'b'], reserve: [] } })
   h.scorer.mockReturnValue((stats: { pts?: number }) => stats.pts ?? 0)
   h.schedule.mockResolvedValue({ label: 'season 2026, scoring week 1', source: 'schedule', byTeam: new Map([
     ['BOS', { count: 2, opponents: ['NYK', 'CHI'], verified: true }],
@@ -41,6 +44,13 @@ beforeEach(() => {
     gameLogIds: ids, rosterIdFor: (id: string) => id,
     ambiguous: [], nameRefused: [], fantraxRefused: [],
   }))
+  h.importedNames.mockResolvedValue(new Map([
+    ['a', { name: 'Home Star', position: 'PG', team: 'BOS' }],
+    ['b', { name: 'Away Star', position: 'SG', team: 'NYK' }],
+  ]))
+  h.importedBridge.mockResolvedValue({ gameLogIds: ['identity-a', 'identity-b'],
+    rosterIdFor: (id: string) => ({ 'identity-a': 'a', 'identity-b': 'b' })[id],
+    ambiguous: [], unresolved: [] })
   h.logs.mockResolvedValue([row('a', 3, 25), row('b', 3, 15), row('a', 2, 24), row('b', 2, 14), row('a', 1, 23), row('b', 1, 13)])
   h.locks.mockResolvedValue({ started: new Map(), unverified: [], kickoffs: new Map() })
   h.injuries.mockResolvedValue({ byPlayer: new Map(), ambiguous: [], feedStale: false,
@@ -68,6 +78,48 @@ describe('other-sport league start/sit', () => {
     expect(out.ready).toBe(true)
     expect(out.text).toContain('Lean Home Star')
     expect(h.logs.mock.calls[0][0].where.playerId.in).toEqual(['identity-a', 'identity-b'])
+  })
+
+  it('compares imported players only after provider IDs resolve to game-log identities', async () => {
+    h.world.mockResolvedValue({ league: { sport: 'NBA', rosterSettings: { starterSlots: ['G'] } },
+      provenance: { provider: 'espn' } })
+    h.logs.mockResolvedValue([1, 2, 3].flatMap((game) => [
+      row('identity-a', game, 25), row('identity-b', game, 15),
+    ]))
+    const out = await buildOtherSportStartSit(inputs)
+    expect(out.ready).toBe(true)
+    expect(h.importedBridge).toHaveBeenCalledWith({ provider: 'espn', sport: 'NBA', rosterIds: ['a', 'b'] })
+    expect(h.logs.mock.calls[0][0].where.playerId.in).toEqual(['identity-a', 'identity-b'])
+    expect(h.names).not.toHaveBeenCalled()
+  })
+
+  it('reads original provider roster IDs when the canonical world stripped them', async () => {
+    h.world.mockResolvedValue({ league: { sport: 'NBA', rosterSettings: { starterSlots: ['G'] } },
+      provenance: { provider: 'espn' } })
+    h.rawRoster.mockResolvedValue({ playerData: { players: ['E1', 'E2'], reserve: [] } })
+    h.importedNames.mockResolvedValue(new Map([
+      ['E1', { name: 'Home Star', position: 'PG', team: 'BOS' }],
+      ['E2', { name: 'Away Star', position: 'SG', team: 'NYK' }],
+    ]))
+    h.importedBridge.mockResolvedValue({ gameLogIds: ['identity-a', 'identity-b'],
+      rosterIdFor: (id: string) => ({ 'identity-a': 'E1', 'identity-b': 'E2' })[id],
+      ambiguous: [], unresolved: [], metadata: new Map() })
+    h.logs.mockResolvedValue([1, 2, 3].flatMap((game) => [
+      row('identity-a', game, 25), row('identity-b', game, 15),
+    ]))
+    const out = await buildOtherSportStartSit(inputs)
+    expect(out.ready).toBe(true)
+    expect(h.importedBridge).toHaveBeenCalledWith({ provider: 'espn', sport: 'NBA', rosterIds: ['E1', 'E2'] })
+  })
+
+  it('refuses imported advice when either provider ID cannot be linked uniquely', async () => {
+    h.world.mockResolvedValue({ league: { sport: 'NBA', rosterSettings: { starterSlots: ['G'] } },
+      provenance: { provider: 'espn' } })
+    h.importedBridge.mockResolvedValue({ gameLogIds: ['identity-a'], rosterIdFor: () => 'a',
+      ambiguous: [], unresolved: ['b'] })
+    const out = await buildOtherSportStartSit(inputs)
+    expect(out.ready).toBe(false)
+    expect(h.logs).not.toHaveBeenCalled()
   })
 
   it('excludes preseason rows and combines multiple stat lines from one game', async () => {
