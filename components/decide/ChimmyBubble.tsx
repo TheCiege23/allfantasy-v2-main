@@ -26,7 +26,7 @@ export function ChimmyBubble(props: ChimmyBubbleProps) {
     ? props.leagues : [...(props.leagues ?? []), ...(props.selectedLeague ? [props.selectedLeague] : [])]
   const leagues = sourceLeagues.map(league => ({
     id: league.id, name: league.name, platform: league.platform ?? 'allfantasy',
-    platformLeagueId: league.platformLeagueId ?? null, isCommissioner: league.isCommissioner,
+    platformLeagueId: league.sleeperLeagueId ?? null, isCommissioner: league.isCommissioner,
     teamCount: league.teamCount ?? undefined,
   }))
   useEffect(() => {
