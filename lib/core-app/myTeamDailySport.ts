@@ -26,13 +26,13 @@ export async function applyDailySportToLineup(
   resolved: Map<string, LineupPlayer>,
   league: { sport: string; season: number | string | null; settings: unknown; platform: string | null },
   now: Date = new Date(),
-): Promise<void> {
+): Promise<DailyLineupPeriod | null> {
   const sport = String(league.sport ?? '').trim().toUpperCase()
-  if (!isDailyFormSport(sport) || resolved.size === 0) return
+  if (!isDailyFormSport(sport) || resolved.size === 0) return null
 
   // The same object can sit under a roster id and a Sleeper id; price each one once, under every key.
   const pending = [...resolved.entries()].filter(([, p]) => p.afProjectedPoints == null || p.gameContext == null)
-  if (pending.length === 0) return
+  if (pending.length === 0) return null
 
   const identityByFantraxId = new Map<string, string>()
   if (String(league.platform ?? '').trim().toLowerCase() === 'fantrax') {
@@ -57,27 +57,46 @@ export async function applyDailySportToLineup(
     players,
     now,
   }).catch(() => null)
-  if (!outlook) return
+  if (!outlook) return null
 
+  const kind = outlook.period?.kind ?? null
   for (const [id, p] of pending) {
     const o = outlook.byKey.get(id)
     if (!o) continue
     if (p.afProjectedPoints == null) p.afProjectedPoints = p.ruledOut ? 0 : o.projectedPoints
-    if (p.gameContext == null) p.gameContext = dailyGameContext(p.team, o)
+    if (p.gameContext == null) p.gameContext = dailyGameContext(p.team, o, kind)
+    /*
+     * The period's slate WAS read for him and holds no game for his team: an off day (daily lineup) or
+     * an idle week. `periodGames` is null when his team's slate is unknown, and that stays unmarked —
+     * an unread schedule is not a day off.
+     */
+    if (o.periodGames === 0 && kind && !o.opponent) p.noGamePeriod = kind
   }
+  return outlook.period
+    ? { kind: outlook.period.kind, day: outlook.period.day ?? null, week: outlook.period.week ?? null }
+    : null
 }
+
+/** The period the outlook priced — one day in a daily-lineup league, else the sport's week. */
+export type DailyLineupPeriod = { kind: 'day' | 'week'; day: string | null; week: number | null }
 
 /**
  * The row's game line. A daily-lineup league knows the day's opponent ("BOS vs NYR"); a weekly one knows
  * how many games the team plays this week, which is what a weekly lineup is actually deciding on.
  * Null — the row's "no game found" — only when the slate is unknown, never a guessed zero.
+ *
+ * ⚠ A DAY PERIOD COUNTS ONE DAY. In a daily-lineup league `periodGames` is 0 or 1 for TODAY
+ * (dailySportOutlook.ts), so "no games this week" beside a team that plays tomorrow was false. With the
+ * period's kind passed, a day reads "no game today"; without it (older callers) the weekly wording stands.
  */
 export function dailyGameContext(
   team: string | null,
   o: { opponent?: string | null; homeAway?: 'home' | 'away' | null; periodGames: number | null },
+  kind: 'day' | 'week' | null = null,
 ): string | null {
   if (o.opponent) return `${team ?? '—'} ${o.homeAway === 'away' ? '@' : 'vs'} ${o.opponent}`
   if (o.periodGames == null) return null
+  if (kind === 'day') return o.periodGames === 0 ? 'no game today' : 'game today'
   if (o.periodGames === 0) return 'no games this week'
   return `${o.periodGames} ${o.periodGames === 1 ? 'game' : 'games'} this week`
 }
