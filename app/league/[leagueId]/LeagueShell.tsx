@@ -5,6 +5,7 @@ import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
 import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
 import { dynastySeasonClock, type DynastySeasonClock } from '@/lib/league-chat/dynastyChatSkin'
+import { dynastySeasonClock as leagueSeasonClock } from '@/lib/league-media/dynastySeasonClock'
 
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
@@ -1134,6 +1135,12 @@ export function LeagueShell({
     () => (usesDynastyBackground(selectedLeague) ? dynastySeasonClock(league) : null),
     [league, selectedLeague],
   )
+  /* The header's clock, from the same raw row and the same rule (it shows the bare season when the
+     year cannot be read, where chat shows nothing). */
+  const dynastyHeaderClock = useMemo(
+    () => (usesDynastyBackground(selectedLeague) ? leagueSeasonClock(league) : null),
+    [league, selectedLeague],
+  )
 
   const rosterWalletByPlatformUserId = useMemo(() => {
     const m = new Map<string, { faabRemaining: number | null; waiverPriority: number | null }>()
@@ -1563,6 +1570,7 @@ export function LeagueShell({
           rail={leagueRail}
           guillotineBanner={guillotineAtmosphere ? { line: guillotineAtmosphere.line, mood: guillotineAtmosphere.mood } : null}
           seasonFacts={redraftSeasonFacts}
+          seasonClock={dynastyHeaderClock}
           layoutMode="balanced-three-panel"
           embedCenterOnly={embedMode}
           immersive={specialtyImmersive}

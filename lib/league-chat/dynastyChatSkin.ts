@@ -1,4 +1,4 @@
-import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
+import { dynastySeasonClock as leagueSeasonClock, type DynastySeasonClockSource } from '@/lib/league-media/dynastySeasonClock'
 
 /**
  * The dynasty league chat look (Dynasty Era, step 2): the pure parts — the season clock, the
@@ -14,37 +14,13 @@ import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSea
 export type DynastySeasonClock = { year: number; season: number }
 
 /**
- * "Year N · YYYY": seasons since the league's first season, counting the first as Year 1.
- *
- * The first season is the commissioner's `settings.startup_season` when set, else the season the
- * league was stamped with at creation — the same fallback `dynastyYearGuard` uses when it has no
- * RedraftSeason row. Null whenever either end cannot be read, or the arithmetic comes out below 1
- * (a startup season after the current one is a data problem, not Year 0).
+ * "Year N · YYYY" for the chat header. Same rule as the league header — see
+ * lib/league-media/dynastySeasonClock.ts, the one place the arithmetic lives. Chat draws nothing
+ * rather than a bare season, so a clock without a year is null here.
  */
-export function dynastySeasonClock(league: {
-  season?: number | string | null
-  sport?: string | null
-  createdAt?: Date | string | null
-  settings?: unknown
-}): DynastySeasonClock | null {
-  const season = toInt(league.season)
-  if (season == null) return null
-  const settings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
-    ? (league.settings as Record<string, unknown>)
-    : {}
-  let first = toInt(settings.startup_season)
-  if (first == null && league.createdAt) {
-    const created = league.createdAt instanceof Date ? league.createdAt : new Date(league.createdAt)
-    if (!Number.isNaN(created.getTime()) && league.sport) first = resolveLeagueCreationSeason(String(league.sport), created)
-  }
-  if (first == null) return null
-  const year = season - first + 1
-  return year >= 1 ? { year, season } : null
-}
-
-function toInt(v: unknown): number | null {
-  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN
-  return Number.isInteger(n) && n > 1900 && n < 3000 ? n : null
+export function dynastySeasonClock(league: DynastySeasonClockSource): DynastySeasonClock | null {
+  const clock = leagueSeasonClock(league)
+  return clock && clock.year != null ? { year: clock.year, season: clock.season } : null
 }
 
 /** R1 gold, later rounds the line outline, unknown the line outline too (never a guessed R1). */

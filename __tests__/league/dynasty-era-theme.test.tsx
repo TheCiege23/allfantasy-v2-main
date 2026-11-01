@@ -26,7 +26,8 @@ describe('dynastySeasonClock', () => {
   it('no startup season (imported leagues) → the season alone, never a guessed year', () => {
     expect(dynastySeasonClock({ season: 2026, settings: {} })).toEqual({ year: null, season: 2026 })
     expect(dynastySeasonClock({ season: 2026 })).toEqual({ year: null, season: 2026 })
-    expect(dynastySeasonClock({ season: 2026, settings: { startup_season: '2023' } })).toEqual({ year: null, season: 2026 })
+    // One rule with chat (lib/league-media/dynastySeasonClock.ts): a four-digit string startup season counts.
+    expect(dynastySeasonClock({ season: 2026, settings: { startup_season: '2023' } })).toEqual({ year: 4, season: 2026 })
   })
 
   it('an inconsistent pair (startup after the season) is not trusted', () => {
