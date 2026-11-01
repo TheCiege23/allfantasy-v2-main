@@ -35,6 +35,9 @@ import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
 import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePanel'
 import { GenericTradeAnalyzer } from '@/components/core-app/screens/GenericTradeAnalyzer'
 import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters'
+import { TradeCenterPanel } from '@/components/core-app/screens/TradeCenterPanel'
+import { useMessages } from '@/components/i18n/useMessages'
+import { tradePartnerSelectMessages } from '@/lib/core-app/messages/tradeCenterPanel'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
@@ -74,7 +77,6 @@ import type { ProposalCardInput } from '@/lib/share/proposalCard'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { useMessages } from '@/components/i18n/useMessages'
 import { tradeCenterMessages } from '@/lib/core-app/messages/tradeCenter'
 import { PickTradeDeadlineChip, TradeDeadlineCountdownChip } from '@/components/core-app/TradeDeadlineCountdown'
 import { RedraftTradeDeadlineBar } from '@/components/core-app/RedraftTradeDeadlineBar'
@@ -624,6 +626,9 @@ export function TradeCenter(props: {
   const [countering, setCountering] = useState<{ tradeId: string; label: string } | null>(null)
   /** Bumped after a send lands, so the inbox refetches what the write changed. */
   const [inboxReloadToken, setInboxReloadToken] = useState(0)
+  /* An action in the trade center changed a trade: the inbox above re-reads too. */
+  const bumpInboxReload = useCallback(() => setInboxReloadToken((n) => n + 1), [])
+  const partnerSelectCopy = useMessages(tradePartnerSelectMessages)
 
   const isPhone = usePhoneViewport()
   const verdictRef = useRef<HTMLElement | null>(null)
@@ -1711,6 +1716,30 @@ export function TradeCenter(props: {
       {otherRosters.length > 0 ? (
         <div className="af-tc-partner">
           <span className="af-label">{copy('Trading with')}</span>
+          {/*
+            Every other team in ONE control, in name order, as the owner asked for ("a list of managers
+            from that league"). The ranked chips below stay on wide screens; on a phone this is the picker.
+          */}
+          <label className="af-tc-partner-select">
+            <span className="sr-only">{partnerSelectCopy.allManagers}</span>
+            <select
+              value={partnerRosterId ?? ''}
+              onChange={(e) => {
+                setPartnerRosterId(e.target.value || null)
+                /* The verdict belonged to the previous counterparty. */
+                setResult(null)
+              }}
+            >
+              <option value="">{partnerSelectCopy.chooseManager}</option>
+              {[...otherRosters]
+                .sort((a, b) => (a.ownerName ?? '').localeCompare(b.ownerName ?? ''))
+                .map((r) => (
+                  <option key={r.rosterId} value={r.rosterId}>
+                    {r.ownerName ?? copy('Another manager')} ({partnerSelectCopy.record(r.wins, r.losses, r.ties)})
+                  </option>
+                ))}
+            </select>
+          </label>
           <div className="af-tc-partner-chips">
             {otherRosters.map((r) => (
               <button
@@ -2711,14 +2740,21 @@ export function TradeCenter(props: {
         </details>
       ) : null}
       <div className="af-tc-mstep-wrap">
-        <TradeInbox
-          view="timeline"
-          leagueId={props.league?.id ?? null}
-          onLoad={loadOffer}
-          onCounter={startCounter}
-          reloadToken={inboxReloadToken}
-          importedHistory={props.completedHistory}
-        />
+        {/*
+          The trade center: Active · Review · History, one card per trade and a per-team detail pane with
+          the engine's own accept / decline / counter / cancel and veto-vote routes. History is the
+          unified timeline this slot used to render on its own.
+        */}
+        {props.league?.id ? (
+          <TradeCenterPanel
+            leagueId={props.league.id}
+            onLoad={loadOffer}
+            onCounter={startCounter}
+            reloadToken={inboxReloadToken}
+            onChanged={bumpInboxReload}
+            importedHistory={props.completedHistory}
+          />
+        ) : null}
       </div>
       {props.history ? (
         <div className="af-tc-mstep-wrap">
