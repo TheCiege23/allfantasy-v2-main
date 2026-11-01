@@ -45,6 +45,8 @@ export type NotificationFilter =
 export type NotificationRow = {
   relatedIds?: string[]
   id: string
+  type?: string
+  meta?: unknown
   /** Which filter chip this falls under. */
   kind: NotificationFilter
   title: string
@@ -410,6 +412,11 @@ export async function getNotificationsCenter(input: {
 
   const rest: NotificationRow[] = stored.map((n) => {
     const kind = classifyStored(n.type, n.title, n.body, n.meta)
+    const metadata = n.meta && typeof n.meta === 'object' ? n.meta as Record<string, unknown> : null
+    const storedHref = metadata?.actionHref
+    const gameHref = n.type.startsWith('game_') || n.type === 'postgame_recap'
+      ? typeof storedHref === 'string' && /^\/core\/live(?:\?|$)/.test(storedHref) ? storedHref : '/core/live'
+      : null
     const survivorType = survivorNotificationKind(n.type)
     const handoff =
       n.leagueId && n.league
@@ -429,6 +436,8 @@ export async function getNotificationsCenter(input: {
       ...(handoff ? { handoff: { href: handoff.href, label: handoff.label, screen: handoff.screen } } : {}),
       ...(survivorType ? { survivorType } : {}),
       id: n.id,
+      type: n.type,
+      meta: n.meta,
       kind,
       title: n.title,
       /*
@@ -452,7 +461,7 @@ export async function getNotificationsCenter(input: {
               : `/core${kind === 'lineups' ? '/my-team' : kind === 'trades' ? '/trades' : kind === 'waivers' ? '/waivers' : kind === 'drafts' ? '/draft-hq' : ''}?league=${encodeURIComponent(n.leagueId)}`,
             external: false,
           }
-        : null,
+        : gameHref ? { label: 'Open game', href: gameHref, external: false } : null,
     }
   })
 
