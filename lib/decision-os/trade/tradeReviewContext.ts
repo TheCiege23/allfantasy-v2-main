@@ -438,6 +438,8 @@ export type StoredTradeReview =
       receipt: TradeEvaluationReceipt
       trade: LoadedTrade
       sideNames: [string, string]
+      /** The manager behind each side, in `sideNames` order — null when the team has no owner name. */
+      sideManagers?: [string | null, string | null]
       /** The two sides in the review's order — side A is the receipt's graded side. */
       sides: [TradeSide, TradeSide]
       /** The facts the review was built from, for a caller that files them as evidence. */
@@ -585,5 +587,6 @@ export async function reviewStoredTrade(
     leagueType: receipt.grade.leagueType ? { type: receipt.grade.leagueType.type, label: receipt.grade.leagueType.label } : null,
     managerDivisions,
   }
-  return { ok: true, review: buildTradeReview(facts), receipt, trade, sideNames, sides: [sideA, sideB], facts }
+  const sideManagers: [string | null, string | null] = [teamA?.ownerName?.trim() || null, teamB?.ownerName?.trim() || null]
+  return { ok: true, review: buildTradeReview(facts), receipt, trade, sideNames, sideManagers, sides: [sideA, sideB], facts }
 }

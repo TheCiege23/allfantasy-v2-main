@@ -23,6 +23,7 @@ import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
 import { getPausedSyncKeys } from '@/lib/core-app/syncPreferences'
 import { getLeagueDataSignals } from '@/lib/core-app/leagueDataSignals'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
+import { coreShellRedraftSport } from '@/lib/core-app/coreShellRedraftIdentity'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
 import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSignals'
@@ -36,6 +37,8 @@ import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNav
 import ConnectedDecisionScopeBar from '@/components/core-app/ConnectedDecisionScopeBar'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
+import { leagueThemeForTypeKey } from '@/lib/core-app/survivorTheme'
+import { SurvivorIslandBanner } from '@/components/core-app/survivor/SurvivorIslandBanner'
 import { navLabel } from '@/lib/core-app/navLabels'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
@@ -956,6 +959,8 @@ export default async function AfCorePage({
         isDynasty: tradeLeagueRow.isDynasty,
       })
     : null
+  /* A Survivor league dresses the shell as the island and opens its screens with the island banner. */
+  const leagueTheme = leagueThemeForTypeKey(tradeLeagueTypeKey)
   const tradeStripLeagues = playedLeagues.map((l) => ({
     id: l.id,
     name: l.name,
@@ -1656,6 +1661,8 @@ export default async function AfCorePage({
   return (
     <AfCoreShell
       nativeLeague={!!selectedLeagueId && !!selectedLeaguePlatform && !isImportedPlatform(selectedLeaguePlatform)}
+      /* Redraft identity for a native redraft ?league= (lib/core-app/coreShellRedraftIdentity.ts); null = default look. */
+      redraftSport={coreShellRedraftSport(selectedLeagueRow, selectedLeaguePlatform)}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
@@ -1666,6 +1673,7 @@ export default async function AfCorePage({
       syncEligibleCount={syncEligibleCount}
       leagueHasScoredWeek={leagueHasScoredWeek}
       selectedLeagueId={selectedLeagueId}
+      leagueTheme={leagueTheme}
       lineupHandoff={lineupHandoff}
       scope={shellScope}
       hasIdpDefense={hasIdpDefense}
@@ -2009,6 +2017,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     hiddenHomeSections,
     hiddenLeagueSections,
   } = ctx
+  /* A Survivor league opens Camp, Tribe standings and Immunity challenge with the island banner. */
+  const survivorBanner = (variant: 'full' | 'compact') =>
+    leagueThemeForTypeKey(tradeLeagueTypeKey) === 'survivor' && selectedLeagueId ? (
+      <SurvivorIslandBanner leagueId={selectedLeagueId} leagueName={tradeLeagueRow?.name ?? ''} variant={variant} />
+    ) : null
   /*
    * The reader's language for server-rendered copy on this screen. Read from the `af_lang` cookie,
    * as app/layout.tsx does for <html lang> — no session or profile read, so every screen can afford
@@ -4482,6 +4495,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : leagueHome ? (
         <>
+        {segment === 'schedule' || segment === 'moves' ? null : survivorBanner('full')}
         {chimmyMovesCard}
         {segment === 'schedule' ? <LeagueSchedule data={leagueHome} /> : segment === 'moves' ? <LeagueMoves data={leagueHome} /> :         <LeagueHome
           hiddenSections={hiddenLeagueSections}
@@ -4616,6 +4630,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'matchup' ? (
         matchup ? (
           <>
+            {survivorBanner('compact')}
             {chimmyMovesCard}
             <Matchup data={matchup} />
           </>
@@ -5143,6 +5158,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'standings' ? (
         standings ? (
+          <>
+          {survivorBanner('compact')}
           <Standings
             data={standings}
             freshness={standingsFreshness}
@@ -5160,6 +5177,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 : null
             }
           />
+          </>
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */
           selectedLeagueId ? (

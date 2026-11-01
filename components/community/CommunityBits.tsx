@@ -1,12 +1,22 @@
 import Link from 'next/link'
+import '@/components/core-app/af-core.css'
+import './clubhouse.css'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
-import { clubhouseChannelHref, clubhouseMemberHref, clubhousePostHref, getChannel } from '@/lib/community/channels'
+import {
+  CLUBHOUSE_NAME,
+  clubhouseChannelHref,
+  clubhouseMemberHref,
+  clubhousePostHref,
+  getChannel,
+} from '@/lib/community/channels'
+import { IDEA_CHANNEL } from '@/lib/community/ideas'
 import { displayNameOf, linkifySegments, timeAgo } from '@/lib/community/format'
 import type { AuthorBadge, CommunityAuthor, PostSummary } from '@/lib/community/service'
 
 /**
  * Display pieces for the Clubhouse. No hooks, no `'use client'`: they render on the
- * server and inside client components alike.
+ * server and inside client components alike. The look lives in ./clubhouse.css, on top of
+ * the af-core design system.
  */
 
 /**
@@ -38,27 +48,11 @@ export function PostBody({ text, className = '' }: { text: string; className?: s
   )
 }
 
-const BADGE_COPY: Record<AuthorBadge, { label: string; title: string; className: string }> = {
-  staff: {
-    label: 'AllFantasy',
-    title: 'Part of the AllFantasy team',
-    className: 'bg-amber-500/15 text-amber-500 border-amber-500/30',
-  },
-  commish: {
-    label: 'Commish',
-    title: 'Runs a league on AllFantasy',
-    className: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30',
-  },
-  shipped: {
-    label: 'Idea Shipped',
-    title: 'Pitched a League Lab idea that AllFantasy built',
-    className: 'bg-fuchsia-500/15 text-fuchsia-500 border-fuchsia-500/30',
-  },
-  new: {
-    label: 'New',
-    title: 'Joined in the last week. Say hi!',
-    className: 'bg-sky-500/15 text-sky-500 border-sky-500/30',
-  },
+const BADGE_COPY: Record<AuthorBadge, { label: string; title: string }> = {
+  staff: { label: 'AllFantasy', title: 'Part of the AllFantasy team' },
+  commish: { label: 'Commish', title: 'Runs a league on AllFantasy' },
+  shipped: { label: 'Idea Shipped', title: 'Pitched a League Lab idea that AllFantasy built' },
+  new: { label: 'New', title: 'Joined in the last week. Say hi!' },
 }
 
 export function AuthorBadges({ badges }: { badges: AuthorBadge[] }) {
@@ -66,11 +60,7 @@ export function AuthorBadges({ badges }: { badges: AuthorBadge[] }) {
   return (
     <>
       {badges.map((b) => (
-        <span
-          key={b}
-          title={BADGE_COPY[b].title}
-          className={`rounded-full border px-1.5 py-px text-[11px] font-semibold uppercase tracking-wide ${BADGE_COPY[b].className}`}
-        >
+        <span key={b} title={BADGE_COPY[b].title} data-badge={b} className="ch-badge">
           {BADGE_COPY[b].label}
         </span>
       ))}
@@ -78,26 +68,34 @@ export function AuthorBadges({ badges }: { badges: AuthorBadge[] }) {
   )
 }
 
-export function Avatar({ author, size = 32 }: { author: CommunityAuthor | null; size?: number }) {
+/** A stable hue per username, so a person keeps their colour everywhere. */
+export function avatarHue(seed: string): number {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return h % 360
+}
+
+export function Avatar({ author, size = 36 }: { author: CommunityAuthor | null; size?: number }) {
   const name = author ? displayNameOf(author) : '?'
   if (author?.avatarUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={author.avatarUrl}
-        alt=""
-        width={size}
-        height={size}
-        className="shrink-0 rounded-full object-cover"
-        style={{ width: size, height: size }}
-      />
+      <img src={author.avatarUrl} alt="" width={size} height={size} className="ch-avatar" style={{ width: size, height: size }} />
     )
   }
+  const hue = avatarHue(author?.username ?? '?')
   return (
     <span
       aria-hidden
-      className="flex shrink-0 items-center justify-center rounded-full text-xs font-bold"
-      style={{ width: size, height: size, background: 'var(--panel2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
+      className="ch-avatar"
+      style={{
+        width: size,
+        height: size,
+        fontSize: Math.max(11, Math.round(size * 0.42)),
+        background: author
+          ? `linear-gradient(140deg, hsl(${hue} 70% 52%), hsl(${(hue + 40) % 360} 65% 38%))`
+          : 'var(--surface2)',
+      }}
     >
       {name.slice(0, 1).toUpperCase()}
     </span>
@@ -118,11 +116,11 @@ export function AuthorLine({
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs" style={{ color: 'var(--muted)' }}>
       {author ? (
-        <Link href={clubhouseMemberHref(author.username)} className="font-semibold hover:underline" style={{ color: 'var(--text)' }}>
+        <Link href={clubhouseMemberHref(author.username)} className="font-bold hover:underline" style={{ color: 'var(--text)' }}>
           {displayNameOf(author)}
         </Link>
       ) : (
-        <span className="font-semibold" style={{ color: 'var(--text)' }}>
+        <span className="font-bold" style={{ color: 'var(--text)' }}>
           Removed
         </span>
       )}
@@ -139,11 +137,7 @@ export function ChannelPill({ slug }: { slug: string }) {
   const channel = getChannel(slug)
   if (!channel) return null
   return (
-    <Link
-      href={clubhouseChannelHref(channel.slug)}
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium hover:opacity-80"
-      style={{ background: 'var(--panel2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
-    >
+    <Link href={clubhouseChannelHref(channel.slug)} data-channel={channel.slug} className="ch-pill ch-pill-tone">
       <span aria-hidden>{channel.emoji}</span>
       {channel.label}
     </Link>
@@ -155,11 +149,7 @@ export function TagPills({ tags }: { tags: string[] }) {
   return (
     <>
       {tags.map((t) => (
-        <span
-          key={t}
-          className="rounded px-1.5 py-0.5 text-[11px] font-bold tracking-wide"
-          style={{ background: 'var(--panel2)', color: 'var(--muted)' }}
-        >
+        <span key={t} className="ch-pill ch-mono">
           {t}
         </span>
       ))}
@@ -169,51 +159,31 @@ export function TagPills({ tags }: { tags: string[] }) {
 
 export function PostCard({ post, now, showChannel }: { post: PostSummary; now: number; showChannel?: boolean }) {
   const reactionTotal = post.reactions.reduce((n, r) => n + r.count, 0)
+  const hot = post.replyCount >= 3 && now - Date.parse(post.lastActivityAt) < 24 * 60 * 60 * 1000
   return (
-    <article
-      className="mode-panel rounded-xl border p-4 transition hover:border-[color:var(--border-strong)]"
-      style={{ borderColor: 'var(--border)' }}
-    >
+    <article data-channel={post.channel} className="ch-card ch-card-link ch-post">
       <div className="flex items-start gap-3">
-        <Avatar author={post.author} />
+        <Avatar author={post.author} size={40} />
         <div className="min-w-0 flex-1">
-          <div className="mb-1 flex flex-wrap items-center gap-1.5">
-            {post.isPinned && (
-              <span className="text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>
-                📌 Pinned
-              </span>
-            )}
-            {post.isLocked && (
-              <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
-                🔒 Locked
-              </span>
-            )}
-            {post.idea && (
-              <span className="text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>
-                💡 Idea · ▲ {post.idea.upvotes}
-              </span>
-            )}
+          <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+            {post.isPinned && <span className="ch-pill ch-pill-accent">📌 Pinned</span>}
+            {hot && <span className="ch-pill" style={{ color: '#fb923c' }}>🔥 Hot</span>}
+            {post.isLocked && <span className="ch-pill">🔒 Locked</span>}
+            {post.idea && <span className="ch-pill ch-pill-accent">💡 Idea · ▲ {post.idea.upvotes}</span>}
             {showChannel && <ChannelPill slug={post.channel} />}
             <TagPills tags={post.tags} />
           </div>
           <Link href={clubhousePostHref(post.id)} className="block">
-            <h3 className="text-[15px] font-semibold leading-snug hover:underline" style={{ color: 'var(--text)' }}>
-              {censorProfanity(post.title)}
-            </h3>
-            {post.excerpt && (
-              <p className="mt-1 line-clamp-2 text-sm" style={{ color: 'var(--muted)' }}>
-                {censorProfanity(post.excerpt)}
-              </p>
-            )}
+            <h3 className="ch-post-title">{censorProfanity(post.title)}</h3>
+            {post.excerpt && <p className="ch-post-excerpt">{censorProfanity(post.excerpt)}</p>}
           </Link>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="ch-post-foot">
             <AuthorLine author={post.author} at={post.createdAt} now={now} />
-            <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>
-              {reactionTotal > 0 && <span>❤ {reactionTotal}</span>}
-              <span>
-                💬 {post.replyCount} {post.replyCount === 1 ? 'reply' : 'replies'}
+            <div className="ch-counts">
+              {reactionTotal > 0 && <span className="ch-count-chip">❤ {reactionTotal}</span>}
+              <span className="ch-count-chip" title={post.replyCount > 0 ? `active ${timeAgo(post.lastActivityAt, now)}` : undefined}>
+                💬 {post.replyCount}
               </span>
-              {post.replyCount > 0 && <span>active {timeAgo(post.lastActivityAt, now)}</span>}
             </div>
           </div>
         </div>
@@ -222,39 +192,131 @@ export function PostCard({ post, now, showChannel }: { post: PostSummary; now: n
   )
 }
 
-export function ClubhouseFrame({ children, crumbs }: { children: React.ReactNode; crumbs?: { href: string; label: string }[] }) {
+const TOP_NAV = [
+  { href: '/clubhouse', label: 'Home' },
+  { href: clubhouseChannelHref(IDEA_CHANNEL), label: 'League Lab' },
+  { href: '/clubhouse/game-day', label: 'Game Day' },
+  { href: clubhouseChannelHref('commish-corner'), label: 'Commish Corner' },
+  { href: clubhouseChannelHref('ask-the-founder'), label: 'Ask the Founder' },
+]
+
+/**
+ * Every Clubhouse page renders inside this: the af-core theme root, a sticky top bar with
+ * the main sections, and an optional breadcrumb. `active` marks the current section.
+ */
+export function ClubhouseFrame({
+  children,
+  crumbs,
+  active,
+  narrow,
+  cta,
+}: {
+  children: React.ReactNode
+  crumbs?: { href: string; label: string }[]
+  active?: string
+  narrow?: boolean
+  cta?: React.ReactNode
+}) {
   return (
-    <div className="min-h-screen mode-surface mode-readable">
-      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
-        <nav aria-label="Breadcrumb" className="mb-5 flex flex-wrap items-center gap-1.5 text-sm" style={{ color: 'var(--muted)' }}>
-          <Link href="/" className="hover:underline">
-            Home
-          </Link>
-          {(crumbs ?? []).map((c) => (
-            <span key={c.href} className="flex items-center gap-1.5">
-              <span aria-hidden>/</span>
-              <Link href={c.href} className="hover:underline">
-                {c.label}
-              </Link>
+    <div className="af-core ch">
+      <header className="ch-top">
+        <div className="ch-top-inner">
+          <Link href="/clubhouse" className="ch-brand" aria-label={`${CLUBHOUSE_NAME} home`}>
+            <span className="ch-brand-mark" aria-hidden>
+              🏟️
             </span>
-          ))}
-        </nav>
+            {CLUBHOUSE_NAME}
+          </Link>
+          <nav aria-label="Clubhouse sections" className="ch-nav">
+            {TOP_NAV.map((n) => (
+              <Link key={n.href} href={n.href} aria-current={active === n.href ? 'page' : undefined}>
+                {n.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="ch-top-cta">{cta}</div>
+        </div>
+      </header>
+      <div className={`ch-wrap ${narrow ? 'ch-narrow' : ''}`}>
+        {crumbs && crumbs.length > 0 && (
+          <nav aria-label="Breadcrumb" className="ch-crumbs">
+            <Link href="/">AllFantasy</Link>
+            {crumbs.map((c) => (
+              <span key={c.href} className="flex items-center gap-1.5">
+                <span aria-hidden>/</span>
+                <Link href={c.href}>{c.label}</Link>
+              </span>
+            ))}
+          </nav>
+        )}
         {children}
       </div>
     </div>
   )
 }
 
-export function EmptyState({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {
+/** The big title block at the top of a channel, profile or section page. */
+export function PageHeader({
+  eyebrow,
+  title,
+  sub,
+  icon,
+  channel,
+  actions,
+}: {
+  eyebrow?: string
+  title: React.ReactNode
+  sub?: React.ReactNode
+  icon?: string
+  channel?: string
+  actions?: React.ReactNode
+}) {
   return (
-    <div className="mode-panel rounded-xl border border-dashed p-8 text-center" style={{ borderColor: 'var(--border)' }}>
-      <p className="font-semibold" style={{ color: 'var(--text)' }}>
+    <header data-channel={channel} className="ch-hero mb-7">
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div className="flex min-w-0 items-center gap-4">
+          {icon && (
+            <span className="ch-icon ch-icon-lg" aria-hidden>
+              {icon}
+            </span>
+          )}
+          <div className="min-w-0">
+            {eyebrow && <p className="ch-eyebrow" style={channel ? { color: 'var(--tone)' } : undefined}>{eyebrow}</p>}
+            <h1 className="ch-h1 mt-1" style={{ fontSize: 'clamp(30px, 4.6vw, 46px)' }}>
+              {title}
+            </h1>
+            {sub && <p className="ch-hero-sub" style={{ marginTop: 10 }}>{sub}</p>}
+          </div>
+        </div>
+        {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      </div>
+    </header>
+  )
+}
+
+export function EmptyState({
+  title,
+  body,
+  action,
+  icon = '✨',
+}: {
+  title: string
+  body: string
+  action?: React.ReactNode
+  icon?: string
+}) {
+  return (
+    <div className="ch-empty">
+      <div className="ch-empty-icon" aria-hidden>
+        {icon}
+      </div>
+      <p className="mt-3 text-[17px] font-extrabold" style={{ color: 'var(--text)' }}>
         {title}
       </p>
-      <p className="mt-1 text-sm" style={{ color: 'var(--muted)' }}>
+      <p className="mx-auto mt-1 max-w-md text-sm" style={{ color: 'var(--muted)' }}>
         {body}
       </p>
-      {action && <div className="mt-4">{action}</div>}
+      {action && <div className="mt-5 flex justify-center">{action}</div>}
     </div>
   )
 }
@@ -263,15 +325,19 @@ export function loginHref(callbackPath: string): string {
   return `/login?callbackUrl=${encodeURIComponent(callbackPath)}`
 }
 
-export function PrimaryButtonLink({ href, children }: { href: string; children: React.ReactNode }) {
+export function PrimaryButtonLink({ href, children, small }: { href: string; children: React.ReactNode; small?: boolean }) {
   return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold shadow-sm hover:opacity-90"
-      // Inline colour, not `text-white`: light mode's `.mode-readable` rule rewrites text-white to dark.
-      style={{ background: 'var(--accent)', color: '#fff' }}
-    >
+    <Link href={href} className={`ch-btn ch-btn-primary ${small ? 'ch-btn-sm' : ''}`}>
       {children}
     </Link>
   )
 }
+
+export function GhostButtonLink({ href, children, small }: { href: string; children: React.ReactNode; small?: boolean }) {
+  return (
+    <Link href={href} className={`ch-btn ch-btn-ghost ${small ? 'ch-btn-sm' : ''}`}>
+      {children}
+    </Link>
+  )
+}
+

@@ -13,33 +13,49 @@ import { createSurvivorChatMessage, upsertSurvivorChatMessage } from './survivor
  * needs one for every author, so a line sent as the seat would never reach the league chat mirror.
  */
 
-const VOTE_LINES = [
-  'My vote is in. No hard feelings, whoever it is.',
-  'Vote cast. I go with the numbers.',
-  "I've written a name down. See you at the reading.",
-  'Ballot submitted. Nothing personal, just strategy.',
-] as const
+/** A league's own language (League.language): every line Chimmy says to it is in that language. */
+export type ChimmyLang = 'en' | 'es'
+export const chimmyLang = (language: string | null | undefined): ChimmyLang => (String(language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en')
+
+const VOTE_LINES = {
+  en: [
+    'My vote is in. No hard feelings, whoever it is.',
+    'Vote cast. I go with the numbers.',
+    "I've written a name down. See you at the reading.",
+    'Ballot submitted. Nothing personal, just strategy.',
+  ],
+  es: [
+    'Mi voto ya está. Sin rencores, sea quien sea.',
+    'Voto emitido. Voy con los números.',
+    'Ya escribí un nombre. Nos vemos en la lectura.',
+    'Papeleta enviada. Nada personal, solo estrategia.',
+  ],
+} as const
+
+const pickFor = (lines: readonly string[], week: number) => lines[((week % lines.length) + lines.length) % lines.length]
 
 /** A stable pick per week, so a retried tick never posts a different line. */
-export function chimmyVoteLine(week: number): string {
-  return VOTE_LINES[((week % VOTE_LINES.length) + VOTE_LINES.length) % VOTE_LINES.length]
+export function chimmyVoteLine(week: number, lang: ChimmyLang = 'en'): string {
+  return pickFor(VOTE_LINES[lang], week)
 }
 
-export function chimmyExileLine(team: string): string {
-  return `I'm taking ${team} this week. Their lineup has the best recent form on the board.`
+export function chimmyExileLine(team: string, lang: ChimmyLang = 'en'): string {
+  return lang === 'es'
+    ? `Esta semana me quedo con ${team}. Su alineación tiene la mejor forma reciente del tablero.`
+    : `I'm taking ${team} this week. Their lineup has the best recent form on the board.`
 }
 
-const SURVIVED_LINES = [
-  'Still standing. The numbers held.',
-  'Another Tribal survived. On to the next one.',
-  'Torch still lit. Back to work.',
-] as const
+const SURVIVED_LINES = {
+  en: ['Still standing. The numbers held.', 'Another Tribal survived. On to the next one.', 'Torch still lit. Back to work.'],
+  es: ['Sigo en pie. Los números aguantaron.', 'Otro Consejo Tribal superado. A por el siguiente.', 'La antorcha sigue encendida. De vuelta al trabajo.'],
+} as const
 
-export function chimmySurvivedLine(week: number): string {
-  return SURVIVED_LINES[((week % SURVIVED_LINES.length) + SURVIVED_LINES.length) % SURVIVED_LINES.length]
+export function chimmySurvivedLine(week: number, lang: ChimmyLang = 'en'): string {
+  return pickFor(SURVIVED_LINES[lang], week)
 }
 
 export const CHIMMY_MERGED_LINE = 'Down to one tribe. Every vote is personal now, and I came to play.'
+export const CHIMMY_MERGED_LINE_ES = 'Ya somos una sola tribu. Ahora cada voto es personal, y vine a jugar.'
 
 export type ChimmyChatLine =
   | { kind: 'vote'; week: number }
@@ -49,11 +65,11 @@ export type ChimmyChatLine =
   /** The first week the game is merged. Once per castaway. */
   | { kind: 'merged' }
 
-function lineText(line: ChimmyChatLine): string {
-  if (line.kind === 'vote') return chimmyVoteLine(line.week)
-  if (line.kind === 'exile') return chimmyExileLine(line.team)
-  if (line.kind === 'survived') return chimmySurvivedLine(line.week)
-  return CHIMMY_MERGED_LINE
+function lineText(line: ChimmyChatLine, lang: ChimmyLang): string {
+  if (line.kind === 'vote') return chimmyVoteLine(line.week, lang)
+  if (line.kind === 'exile') return chimmyExileLine(line.team, lang)
+  if (line.kind === 'survived') return chimmySurvivedLine(line.week, lang)
+  return lang === 'es' ? CHIMMY_MERGED_LINE_ES : CHIMMY_MERGED_LINE
 }
 
 /** A fixed id for a once-only line, so a retried week never posts it twice. */
@@ -75,6 +91,7 @@ export async function postChimmyCastawayLine(leagueId: string, userId: string, l
       select: { displayName: true, tribeId: true },
     })
     if (!castaway) return false
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { language: true } })
     const channel = line.kind !== 'exile'
       ? castaway.tribeId
         ? await prisma.survivorChatChannel.findFirst({
@@ -96,7 +113,7 @@ export async function postChimmyCastawayLine(leagueId: string, userId: string, l
       senderIsHost: true,
       isSystemMessage: false,
       contentType: 'text',
-      content: lineText(line),
+      content: lineText(line, chimmyLang(league?.language)),
     }
     const id = onceId(leagueId, userId, line)
     if (id) await upsertSurvivorChatMessage(prisma, { where: { id }, create: { id, ...data }, update: {} })

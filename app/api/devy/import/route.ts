@@ -29,6 +29,29 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const sessionId = req.nextUrl.searchParams?.get('sessionId')?.trim()
+  const leagueIdParam = req.nextUrl.searchParams?.get('leagueId')?.trim()
+  if (!sessionId && leagueIdParam) {
+    // Past import sessions for a league — the commissioner's history list. Commissioner-only,
+    // because sources name the external league each session pulled from.
+    const gate = await assertLeagueCommissioner(leagueIdParam, userId)
+    if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+    const sessions = await prisma.devyImportSession.findMany({
+      where: { leagueId: leagueIdParam },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        mergedAt: true,
+        sources: {
+          select: { id: true, sourceType: true, sourcePlatform: true, classification: true, connectionStatus: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    })
+    return NextResponse.json({ sessions })
+  }
   if (!sessionId) return NextResponse.json({ error: 'sessionId required' }, { status: 400 })
 
   const row = await prisma.devyImportSession.findFirst({ where: { id: sessionId } })

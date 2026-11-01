@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
   alerts: [] as Array<{ kind: string; input: { dedupeKey: string; title: string; body: string } }>,
   upserts: new Map<string, Record<string, unknown>>(),
   phase: 'pre_merge',
+  language: 'en' as string | null,
   revealed: [] as Array<{ id: string; eliminatedUserId: string | null }>,
 }))
 vi.mock('@/lib/prisma', () => ({
@@ -32,7 +33,7 @@ vi.mock('@/lib/prisma', () => ({
         return h.channels.find((c) => types.includes(c.channelType) && (q.where.tribeId === undefined || c.tribeId === q.where.tribeId)) ?? null
       }),
     },
-    league: { findUnique: vi.fn(async () => ({ settings: h.settings })) },
+    league: { findUnique: vi.fn(async () => ({ settings: h.settings, language: h.language })) },
     survivorTribalCouncil: { findMany: vi.fn(async (q: { where: { isRevealed?: boolean } }) => (q.where.isRevealed ? h.revealed : h.councils)) },
     survivorGameState: { findUnique: vi.fn(async () => ({ phase: h.phase })) },
     survivorVote: { findMany: vi.fn(async () => h.votes) },
@@ -56,7 +57,7 @@ vi.mock('@/lib/survivor/survivorCommissionerAlerts', () => ({
 }))
 
 import { CHIMMY_MERGED_LINE, chimmyExileLine, chimmySurvivedLine, chimmyVoteLine, postChimmyCastawayLine, postChimmyWeekLines } from '@/lib/survivor/chimmyCastawayChat'
-import { chimmyWeeklyReportBody, sendChimmyWeeklyReport } from '@/lib/survivor/chimmyWeeklyReport'
+import { chimmyWeeklyReportBody, chimmyWeeklyReportTitle, sendChimmyWeeklyReport } from '@/lib/survivor/chimmyWeeklyReport'
 
 const chimmyEntry = (seat: string) => ({ since: 's', byUserId: 'c', ownerUserId: seat, autopilot: { style: 'win_now', since: 's', byUserId: 'c' } })
 
@@ -75,6 +76,7 @@ beforeEach(() => {
   h.alerts = []
   h.upserts = new Map()
   h.phase = 'pre_merge'
+  h.language = 'en'
   h.revealed = [{ id: 'c1', eliminatedUserId: 'someone' }]
 })
 
@@ -183,5 +185,41 @@ describe('Chimmy\'s end-of-week lines', () => {
     h.phase = 'merge'
     expect(await postChimmyWeekLines('L', 7)).toBe(0)
     expect(h.upserts.size).toBe(0)
+  })
+})
+
+describe('Chimmy speaks the league\'s language', () => {
+  it('posts Spanish lines in a Spanish league, English otherwise', async () => {
+    h.language = 'es'
+    await postChimmyCastawayLine('L', 'orphan-r9', { kind: 'vote', week: 5 })
+    await postChimmyCastawayLine('L', 'orphan-r9', { kind: 'exile', team: 'KC' })
+    expect(h.posted.map((p) => p.content)).toEqual([chimmyVoteLine(5, 'es'), chimmyExileLine('KC', 'es')])
+    expect(chimmyVoteLine(5, 'es')).not.toBe(chimmyVoteLine(5, 'en'))
+    expect(chimmyExileLine('KC', 'es')).toContain('KC')
+    h.language = null
+    await postChimmyCastawayLine('L', 'orphan-r9', { kind: 'vote', week: 5 })
+    expect(h.posted[2].content).toBe(chimmyVoteLine(5))
+  })
+
+  it('every Spanish line exists and stays spoiler-safe', () => {
+    for (let w = 0; w < 6; w++) {
+      for (const line of [chimmyVoteLine(w, 'es'), chimmySurvivedLine(w, 'es')]) {
+        expect(line.length).toBeGreaterThan(10)
+        expect(line).not.toMatch(/ídolo|idol/i)
+      }
+    }
+  })
+
+  it('sends the commissioner a Spanish report in a Spanish league', async () => {
+    h.language = 'es'
+    expect(await sendChimmyWeeklyReport('L', 6)).toBe(true)
+    const { input } = h.alerts[0]
+    expect(input.title).toBe(chimmyWeeklyReportTitle(6, 'es'))
+    expect(input.body).toBe([
+      'Esto es lo que hizo Chimmy por sus 2 equipos en la semana 6.',
+      'Bay Raiders (Chimmy): sigue en el juego, votó en el Consejo Tribal.',
+      'Chimmy 2: en la Isla del Exilio, jugó con KC en el Exilio.',
+    ].join('\n'))
+    expect(chimmyWeeklyReportBody(6, [{ name: 'X', state: 'jury', voted: 2, exileTeam: null }], 'es')).toContain('votó en 2 Consejos Tribales')
   })
 })

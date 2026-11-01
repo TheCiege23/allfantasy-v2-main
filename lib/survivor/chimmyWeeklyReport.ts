@@ -16,12 +16,27 @@ export type ChimmyReportRow = {
   exileTeam: string | null
 }
 
-const STATE_LABEL: Record<string, string> = {
-  active: 'still in the game',
-  exile: 'on Exile Island',
-  eliminated: 'out of the game',
-  jury: 'on the jury',
-  survivor_winner: 'the Sole Survivor',
+type ReportLang = 'en' | 'es'
+
+const STATE_LABEL: Record<ReportLang, Record<string, string>> = {
+  en: {
+    active: 'still in the game',
+    exile: 'on Exile Island',
+    eliminated: 'out of the game',
+    jury: 'on the jury',
+    survivor_winner: 'the Sole Survivor',
+  },
+  es: {
+    active: 'sigue en el juego',
+    exile: 'en la Isla del Exilio',
+    eliminated: 'fuera del juego',
+    jury: 'en el jurado',
+    survivor_winner: 'el Único Superviviente',
+  },
+}
+
+export function chimmyWeeklyReportTitle(week: number, lang: ReportLang = 'en'): string {
+  return lang === 'es' ? `La semana ${week} de Chimmy` : `Chimmy's week ${week}`
 }
 
 /**
@@ -29,14 +44,22 @@ const STATE_LABEL: Record<string, string> = {
  * says whether Chimmy voted, never for whom, and never mentions an idol (the commissioner may be a
  * player, and who holds an idol is secret).
  */
-export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReportRow[]): string {
+export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReportRow[], lang: ReportLang = 'en'): string {
+  const es = lang === 'es'
   const lines = rows.map((r) => {
-    const parts = [STATE_LABEL[r.state] ?? r.state]
-    if (r.voted > 0) parts.push(r.voted === 1 ? 'voted at Tribal Council' : `voted at ${r.voted} Tribal Councils`)
-    if (r.exileTeam) parts.push(`played ${r.exileTeam} on Exile`)
+    const parts = [STATE_LABEL[lang][r.state] ?? r.state]
+    if (r.voted > 0) {
+      parts.push(es
+        ? (r.voted === 1 ? 'votó en el Consejo Tribal' : `votó en ${r.voted} Consejos Tribales`)
+        : (r.voted === 1 ? 'voted at Tribal Council' : `voted at ${r.voted} Tribal Councils`))
+    }
+    if (r.exileTeam) parts.push(es ? `jugó con ${r.exileTeam} en el Exilio` : `played ${r.exileTeam} on Exile`)
     return `${r.name}: ${parts.join(', ')}.`
   })
-  return [`Here is what Chimmy did for its ${rows.length === 1 ? 'team' : `${rows.length} teams`} in week ${week}.`, ...lines].join('\n')
+  const intro = es
+    ? `Esto es lo que hizo Chimmy por ${rows.length === 1 ? 'su equipo' : `sus ${rows.length} equipos`} en la semana ${week}.`
+    : `Here is what Chimmy did for its ${rows.length === 1 ? 'team' : `${rows.length} teams`} in week ${week}.`
+  return [intro, ...lines].join('\n')
 }
 
 /**
@@ -49,7 +72,8 @@ export async function sendChimmyWeeklyReport(leagueId: string, week: number): Pr
     select: { userId: true, displayName: true, playerState: true, redraftRosterId: true },
   })
   if (cast.length === 0) return false
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, language: true } })
+  const lang: ReportLang = String(league?.language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en'
   const managed = readManagedLineups(league?.settings)
   const chimmy = cast.filter((p) => isChimmyRunning(managed, p.redraftRosterId ?? p.userId.slice(SEAT_PREFIX.length), p.userId))
   if (chimmy.length === 0) return false
@@ -72,8 +96,8 @@ export async function sendChimmyWeeklyReport(leagueId: string, week: number): Pr
   const sent = await notifySurvivorCommissionerOnce(leagueId, 'chimmy_weekly_report', {
     dedupeKey: String(week),
     week,
-    title: `Chimmy's week ${week}`,
-    body: chimmyWeeklyReportBody(week, rows),
+    title: chimmyWeeklyReportTitle(week, lang),
+    body: chimmyWeeklyReportBody(week, rows, lang),
     deepLinkPath: `/survivor/${leagueId}`,
     urgency: 'medium',
   })

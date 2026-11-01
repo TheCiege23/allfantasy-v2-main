@@ -17,6 +17,7 @@ import {
   PermissionsTab,
 } from './settings/CommissionerExtraTabs'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { TeamSettingsPanel } from './settings/TeamSettingsPanel'
 import { PlayoffSettingsPanel } from './settings/PlayoffSettingsPanel'
 import { GamesLimitsSettingsPanel } from './settings/GamesLimitsSettingsPanel'
@@ -370,6 +371,7 @@ export function CommissionerSettingsModal({
           showC2cTabs={c2cMode}
           showNativeDevyTab={nativeDevy}
           showNativeC2cTab={nativeC2c}
+          dynasty={usesDynastyBackground(leagueRow as Parameters<typeof usesDynastyBackground>[0])}
         />
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/[0.06] bg-[#0c111c] md:border-l md:border-t-0">
@@ -620,7 +622,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'devy_drafts' ? (
             <DevyDraftsPanel config={devyConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setDevyConfig} />
           ) : activeTab === 'devy_import' ? (
-            <DevyImportPanel />
+            <DevyImportPanel leagueId={leagueId} />
           ) : activeTab === 'devy_ai' ? (
             <DevyAIPanel leagueId={leagueId} hasAfSub={hasSub} isCommissioner={canEdit} />
           ) : activeTab === 'native_devy' ? (

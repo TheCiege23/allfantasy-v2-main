@@ -10,7 +10,11 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const lang = vi.hoisted(() => ({ language: 'en' }))
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useLanguage: () => ({ t: (key: string) => key, language: lang.language }) }))
+vi.mock('@/components/i18n/LanguageProviderClient', () => ({
+  useLanguage: () => ({ t: (key: string) => key, language: lang.language }),
+  // The dynasty-only "What this changes" panel and nav labels read the dictionaries through this.
+  useOptionalLanguage: () => ({ t: (key: string) => key, tInterpolate: (key: string) => key, language: lang.language }),
+}))
 vi.mock('next/navigation', () => ({ useParams: () => ({ leagueId: 'L1' }) }))
 
 import { RosterComplianceSettingsPanel } from '@/app/league/[leagueId]/components/settings/RosterComplianceSettingsPanel'
@@ -128,7 +132,8 @@ describe('Taxi squad section — dynasty lock & promotion rules', () => {
     const calls = dynastyFetch({ taxiLockBehavior: 'once_promoted_no_return', taxiInSeasonMoves: true, taxiPostseasonMoves: false, taxiScoringOn: false, taxiPromotionDeadlineWeek: null })
     render(<RosterComplianceSettingsPanel initialData={{ ...base, isDynasty: true }} canEdit debouncedSave={vi.fn()} />)
     const rules = await screen.findByTestId('taxi-dynasty-rules')
-    expect(calls[0]).toMatchObject({ url: '/api/leagues/L1/dynasty-settings', method: 'GET' })
+    // The dynasty config, plus the taxi counts the over-the-limit warning reads (TaxiRulesExplainer).
+    expect(calls.filter((c) => c.method === 'GET').map((c) => c.url).sort()).toEqual(['/api/leagues/L1/dynasty-settings', '/api/leagues/L1/taxi-steals'])
 
     await act(async () => { fireEvent.change(screen.getByTestId('taxi-lock-behavior'), { target: { value: 'free_move' } }) })
     const toggles = within(rules).getAllByRole('switch')
