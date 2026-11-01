@@ -1,0 +1,98 @@
+/* Redraft season race on /core's league Home (batch B-ID, 2026-10-31) — components/core-app/screens/
+ * RedraftHomeDeck.tsx. Drawn only for an imported league whose stored data positively says redraft
+ * (lib/core-app/redraftLeagueHome.ts), inside a shell stamped `data-format="redraft"` + `data-sport`.
+ *
+ * ⚠ NO HEX HERE. Every colour is a /core token or a `--rd-*` token from the foundation
+ * (components/league/native/redraft-identity.css), whose light / dark / AF values are measured by
+ * __tests__/league-media/redraftIdentityContrast.test.ts. Accent TEXT uses --rd-accent-text (measured
+ * on --surface, --surface2 and --bg); accent FILLS carry --rd-accent-ink (measured as text on the fill).
+ * The deck's cards sit on --surface / --rd-surface-elev, the grounds that measurement covers.
+ *
+ * ⚠ 11px FLOOR (__tests__/core-app/type-floor.test.ts). Nothing below it.
+ *
+ * ⚠ ONE TOP-LEVEL @media BLOCK, AT THE END, NOT NESTED IN ANYTHING (CLAUDE.md: a 560px block inserted
+ * inside a 780px one in af-matchup.css carried four rules out of their band with braces balanced). */
+
+.af-core .af-lh-rd{display:flex;flex-direction:column;gap:14px}
+
+/* ── Hero: what kind of league, which sport, where the season is ───────── */
+.af-core .af-lh-rd-hero{display:flex;flex-direction:column;gap:12px;padding:16px 18px;border:1px solid var(--rd-accent-line);border-radius:16px;background:var(--rd-surface-elev);box-shadow:inset 4px 0 0 var(--rd-accent)}
+.af-core .af-lh-rd-chips{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.af-core .af-lh-rd-chip{display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border:1px solid var(--rd-accent);border-radius:999px;background:var(--rd-accent);color:var(--rd-accent-ink);font:800 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.08em;text-transform:uppercase}
+.af-core .af-lh-rd-chip--sport{background:transparent;border-color:var(--rd-accent-line);color:var(--rd-accent-text)}
+.af-core .af-lh-rd-reg{margin-left:auto;color:var(--text2);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.af-core .af-lh-rd-reg b{color:var(--rd-accent-text);font-weight:800}
+
+/* ── The deck grid: score bug | playoff race, recap underneath ───────────── */
+.af-core .af-lh-rd-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:14px;align-items:start}
+.af-core .af-lh-rd-grid:not([data-has-race]){grid-template-columns:minmax(0,1fr)}
+.af-core .af-lh-rd-bug,.af-core .af-lh-rd-race,.af-core .af-lh-rd-recap{border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.af-core .af-lh-rd-recap{grid-column:1/-1}
+.af-core .af-lh-rd-eyebrow{color:var(--muted);font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+.af-core .af-lh-rd-card-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 10px}
+.af-core .af-lh-rd-card-head h2{margin:0;color:var(--text);font-size:16px;font-weight:800;letter-spacing:-.01em}
+
+/* Score bug — a broadcast lower-third: two sides, the odds between them. */
+.af-core .af-lh-rd-bug{display:flex;flex-direction:column;gap:12px;padding:14px 16px;color:var(--text);text-decoration:none;border-color:var(--rd-accent-line);border-top:3px solid var(--rd-accent)}
+.af-core .af-lh-rd-bug:hover{border-color:var(--rd-accent)}
+.af-core .af-lh-rd-bug:focus-visible{outline:2px solid var(--rd-accent);outline-offset:2px}
+.af-core .af-lh-rd-bug-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.af-core .af-lh-rd-pill{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border:1px solid var(--line2);border-radius:999px;color:var(--text2);font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.06em;text-transform:uppercase}
+.af-core .af-lh-rd-bug-body{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:12px}
+.af-core .af-lh-rd-side{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:'av text' 'score score';align-items:center;gap:6px 10px;min-width:0}
+.af-core .af-lh-rd-side[data-align=end]{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'text av' 'score score';text-align:right}
+.af-core .af-lh-rd-avatar{grid-area:av;display:inline-grid;place-items:center;width:36px;height:36px;overflow:hidden;border:1px solid var(--line2);border-radius:50%;background:var(--surface2);color:var(--text2);font-size:12px;font-weight:800}
+.af-core .af-lh-rd-side[data-you] .af-lh-rd-avatar{border-color:var(--rd-accent);background:var(--rd-accent-soft);color:var(--rd-accent-text)}
+.af-core .af-lh-rd-avatar img{width:100%;height:100%;object-fit:cover}
+.af-core .af-lh-rd-side-text{grid-area:text;display:flex;flex-direction:column;gap:2px;min-width:0}
+.af-core .af-lh-rd-team{overflow:hidden;color:var(--text);font-size:14px;font-weight:800;text-overflow:ellipsis;white-space:nowrap}
+.af-core .af-lh-rd-rec{color:var(--muted);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.af-core .af-lh-rd-score{grid-area:score;color:var(--text);font:800 34px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.af-core .af-lh-rd-side[data-you] .af-lh-rd-score{color:var(--rd-accent-text)}
+.af-core .af-lh-rd-score[data-projected]{color:var(--text2);font-size:28px}
+.af-core .af-lh-rd-side[data-you] .af-lh-rd-score[data-projected]{color:var(--rd-accent-text)}
+.af-core .af-lh-rd-odds{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 10px;border-radius:12px;background:var(--rd-accent-soft);text-align:center}
+.af-core .af-lh-rd-odds strong{color:var(--rd-accent-text);font:800 20px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums}
+.af-core .af-lh-rd-odds-label{color:var(--text2);font:700 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.af-core .af-lh-rd-bug-foot{color:var(--rd-accent-text);font-size:13px;font-weight:700}
+
+/* Playoff race — the line is a labelled rule between the last team in and the first team out. */
+.af-core .af-lh-rd-race{padding:14px 16px}
+.af-core .af-lh-rd-race-list{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.af-core .af-lh-rd-race-row{display:grid;grid-template-columns:24px minmax(0,1fr) auto auto;align-items:center;gap:8px;min-height:32px;padding:4px 8px;border-radius:10px}
+.af-core .af-lh-rd-race-list li:not([data-in]) .af-lh-rd-race-row{color:var(--muted)}
+.af-core .af-lh-rd-race-list li[data-you] .af-lh-rd-race-row{background:var(--rd-accent-soft)}
+.af-core .af-lh-rd-rank{color:var(--muted);font:700 12px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums;text-align:right}
+.af-core .af-lh-rd-race-list li[data-in] .af-lh-rd-rank{color:var(--rd-accent-text)}
+.af-core .af-lh-rd-race-team{overflow:hidden;color:var(--text);font-size:14px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+.af-core .af-lh-rd-race-list li:not([data-in]) .af-lh-rd-race-team{color:var(--text2);font-weight:600}
+.af-core .af-lh-rd-you{padding:3px 7px;border-radius:6px;background:var(--rd-accent);color:var(--rd-accent-ink);font:800 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.06em;text-transform:uppercase}
+.af-core .af-lh-rd-race-rec{color:var(--text2);font:700 13px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums}
+.af-core .af-lh-rd-line{display:flex;align-items:center;gap:10px;margin:6px 0;color:var(--rd-accent-text);font:800 11px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.12em;text-transform:uppercase}
+.af-core .af-lh-rd-line::before,.af-core .af-lh-rd-line::after{content:'';flex:1;height:0;border-top:2px dashed var(--rd-accent-line)}
+.af-core .af-lh-rd-more{display:inline-block;margin-top:10px;color:var(--rd-accent-text);font-size:13px;font-weight:700;text-decoration:none}
+.af-core .af-lh-rd-more:hover{text-decoration:underline}
+
+/* Last week's recap — three facts, each from a finished week. */
+.af-core .af-lh-rd-recap{padding:14px 16px}
+.af-core .af-lh-rd-recap-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:0}
+.af-core .af-lh-rd-recap-grid>div{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface2)}
+.af-core .af-lh-rd-recap-grid dt{color:var(--muted);font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.1em;text-transform:uppercase}
+.af-core .af-lh-rd-recap-grid dd{display:flex;flex-direction:column;gap:3px;margin:0;min-width:0}
+.af-core .af-lh-rd-recap-grid dd strong{color:var(--text);font:800 20px/1.1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums}
+.af-core .af-lh-rd-recap-grid dd span{overflow:hidden;color:var(--text2);font-size:13px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+
+@media (max-width:860px){
+  .af-core .af-lh-rd-grid{grid-template-columns:minmax(0,1fr)}
+  .af-core .af-lh-rd-hero{padding:14px}
+  .af-core .af-lh-rd-reg{margin-left:0;flex-basis:100%}
+  .af-core .af-lh-rd-bug-body{gap:8px}
+  .af-core .af-lh-rd-score{font-size:28px}
+  .af-core .af-lh-rd-score[data-projected]{font-size:24px}
+  /* Phone: the names matter more than the avatars — drop the avatar and let a name take two lines. */
+  .af-core .af-lh-rd-avatar{display:none}
+  .af-core .af-lh-rd-side,.af-core .af-lh-rd-side[data-align=end]{grid-template-columns:minmax(0,1fr);grid-template-areas:'text' 'score'}
+  .af-core .af-lh-rd-team{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;white-space:normal;line-height:1.2}
+  .af-core .af-lh-rd-odds{padding:6px 8px}
+  .af-core .af-lh-rd-odds strong{font-size:17px}
+}

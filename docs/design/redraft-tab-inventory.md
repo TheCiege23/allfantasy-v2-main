@@ -115,7 +115,7 @@ Surface B (needs the AfCoreShell decision first):
 
 | batch | screens | owns |
 |---|---|---|
-| **B1** | Home | `LeagueHome.tsx`, `af-league-home.css` — ⚠ unreachable for native redraft today (the /core home redirects native leagues to `/league/[id]`; see the row above). Either lift that redirect for native redraft (a navigation decision) or fold B1 into **A1** |
+| **B1** | Home | `LeagueHome.tsx`, `af-league-home.css` — ⚠ unreachable for native redraft (the /core home redirects native leagues to `/league/[id]`; see the row above). **Done for IMPORTED redraft leagues in batch B-ID**: `screens/RedraftHomeDeck.tsx` + `af-league-home-redraft.css`, built by `lib/core-app/redraftLeagueHome.ts` (season track, score bug, playoff race with the league's own line, last week's recap from a finished week; each block drops without data). Harness `/e2e/redraft-core/home`, capture `scripts/redraft-core-home-capture.mjs` |
 | **B2** | My team + Your week | `MyTeam.tsx`, `YourWeekLeague.tsx`, `af-my-team.css`, `af-team-workspace.css`, `af-week-*.css` |
 | **B3** | Matchup + Live scores | `Matchup.tsx`, `LiveScores.tsx`, `af-matchup*.css`, `af-live.css` |
 | **B4** | Trades + War Room | `Trades.tsx`, `ConnectedFranchiseWarRoom.tsx`, `af-trades.css`, `af-connected-war-room.css` |
