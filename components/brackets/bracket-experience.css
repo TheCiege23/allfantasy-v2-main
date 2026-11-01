@@ -100,6 +100,39 @@
 .af-bx-workspace .af-pb-card { border: 0; border-radius: 0; box-shadow: none; }
 .af-bx-workspace .af-pb-tree { padding-left: 16px; padding-right: 16px; }
 
+/* Live tournament markers: the hub leads with whatever is being played now. */
+.af-bx-live-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #ff6b6b; box-shadow: 0 0 0 3px rgba(255, 107, 107, .18); animation: afBxPulse 1.6s ease-in-out infinite; vertical-align: 1px; }
+@keyframes afBxPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.af-bx-switch button { display: inline-flex; align-items: center; }
+.af-bx-stat > span { display: flex !important; justify-content: space-between; align-items: center; gap: 8px; }
+.af-bx-live-tag, .af-bx-soon-tag { font-style: normal; font-size: 10.5px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; border-radius: 99px; padding: 3px 8px; white-space: nowrap; }
+.af-bx-live-tag { display: inline-flex; align-items: center; color: #ffb1b1; background: rgba(255, 107, 107, .12); }
+.af-bx-live-tag .af-bx-live-dot { width: 6px; height: 6px; margin-right: 5px; box-shadow: none; }
+.af-bx-soon-tag { color: #ffdfad; background: #4c391d; }
+.af-bx-btn.af-bx-closed { cursor: default; background: #132f2c; border-style: dashed; color: #bed5c5; }
+.af-bx-btn.af-bx-closed:hover { background: #132f2c; border-color: #4d7770; }
+
+/*
+ * 🛑 LIGHT MODE MUST NOT RECOLOUR THIS CANVAS. app/globals.css maps every
+ * `[class*="text-white"]` under `.mode-readable` (the <body>) to the dark page
+ * text colour in light mode, so a light-page component stays readable. This
+ * canvas is dark in every mode by design, so that rule turned the hub's Quick
+ * Actions, How it works, Sports and AI sections dark-on-dark — measured
+ * rgba(2, 6, 23, .92) on #071519. Restore the Tailwind values, scoped to the
+ * canvas. Specificity (0,4,1) + !important beats the global (0,3,1).
+ */
+html[data-mode="light"] .mode-readable .af-bracket-experience [class*="text-white"] { color: #ffffff !important; }
+html[data-mode="light"] .mode-readable .af-bracket-experience .text-white\/35 { color: rgb(255 255 255 / .35) !important; }
+html[data-mode="light"] .mode-readable .af-bracket-experience .text-white\/40 { color: rgb(255 255 255 / .40) !important; }
+html[data-mode="light"] .mode-readable .af-bracket-experience .text-white\/45 { color: rgb(255 255 255 / .45) !important; }
+html[data-mode="light"] .mode-readable .af-bracket-experience .text-white\/50 { color: rgb(255 255 255 / .50) !important; }
+html[data-mode="light"] .mode-readable .af-bracket-experience .text-white\/55 { color: rgb(255 255 255 / .55) !important; }
+html[data-mode="light"] .mode-readable .af-bracket-experience .text-white\/60 { color: rgb(255 255 255 / .60) !important; }
+html[data-mode="light"] .mode-readable .af-bracket-experience .text-white\/65 { color: rgb(255 255 255 / .65) !important; }
+html[data-mode="light"] .mode-readable .af-bracket-experience .text-white\/70 { color: rgb(255 255 255 / .70) !important; }
+/* globals.css also darkens accent text in light mode; the one accent this canvas uses is the sports grid's "Live now" badge. */
+html[data-mode="light"] .af-bracket-experience .text-emerald-200 { color: #a7f3d0; }
+
 @media (max-width: 1100px) {
   .af-bx-layout { grid-template-columns: minmax(0, 1fr); }
   .af-bx-side { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
@@ -116,10 +149,13 @@
   .af-bx-stat { padding: 12px; }
   .af-bx-stat strong { font-size: 16px; }
   .af-bx-toolbar, .af-bx-switch { width: 100%; }
-  .af-bx-switch button { flex: 1; padding: 10px 8px; }
+  .af-bx-switch button { flex: 1; padding: 8px 6px; font-size: 12px; line-height: 1.25; justify-content: center; text-align: center; }
   .af-bx-actions { width: 100%; }
   .af-bx-actions .af-bx-btn { flex: 1; }
   .af-bx-panelhead { padding: 17px 15px; }
   .af-bx-board { padding: 15px; }
   .af-bx-badge { max-width: 45%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-bx-live-dot { animation: none; }
 }
