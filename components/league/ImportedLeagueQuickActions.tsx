@@ -83,7 +83,7 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event(supportEvent))}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 text-sm font-semibold text-[var(--badge-text-cyan)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
           >
             {es ? 'Contactar a soporte' : 'Contact support'}
           </button>

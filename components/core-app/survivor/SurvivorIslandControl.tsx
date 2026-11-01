@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useMessages } from '@/components/i18n/useMessages'
 import { survivorIslandControlMessages } from '@/lib/core-app/messages/survivorIslandControl'
 import { islandHealth, islandTodo, type HealthDetail, type IslandControlFacts, type TorchState } from '@/lib/core-app/survivorIslandControl'
+import { SurvivorRulebook } from './SurvivorRulebook'
 
 /**
  * Island control: the top of a Survivor league's Commissioner screen. League health as a row of
@@ -79,6 +80,7 @@ export function SurvivorIslandControl({ leagueId }: { leagueId: string }) {
         </div>
         {actions > 0 ? <span className="sv-sr">{m.open(actions)}</span> : null}
       </section>
+      <SurvivorRulebook config={facts.config} editHref={`/survivor/${encodeURIComponent(leagueId)}/settings`} />
     </div>
   )
 }

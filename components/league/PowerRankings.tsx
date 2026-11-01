@@ -19,7 +19,7 @@ export default function PowerRankings({
               </div>
               <div className="mt-1 text-xs text-white/60">{item.record}</div>
             </div>
-            <div className="text-sm font-semibold text-cyan-100">{item.pointsFor}</div>
+            <div className="text-sm font-semibold text-[var(--badge-text-cyan)]">{item.pointsFor}</div>
           </div>
         ))}
       </div>

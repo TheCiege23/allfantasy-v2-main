@@ -50,6 +50,9 @@ import {
   type TeamShooting,
 } from '@/lib/live/espnGamePresentation'
 import '@/components/core-app/af-live.css'
+// Redraft batch B3: broadcast score bugs, scoped to the /core shell's data-format="redraft".
+import '@/components/core-app/af-core-redraft-matchup.css'
+import { liveGameBug } from '@/lib/core-app/redraftCoreScoreBug'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
   countSuffix,
@@ -1086,6 +1089,8 @@ export function GameCard({
   const isBaseball =
     game.sport === 'MLB' || situation?.baseball != null || game.home.hits != null || game.away.hits != null
   const starters = scope === 'my' ? groupStartersByPlayer(game.tieIns) : []
+  /* The status bar's tone, lead word and period text (lib/core-app/redraftCoreScoreBug.ts). */
+  const bug = liveGameBug(game)
 
   /*
    * ⚠ `data-changed` IS THE ONLY THING THAT MOVES. The card is not re-mounted
@@ -1097,6 +1102,7 @@ export function GameCard({
     <article
       className="af-live-game"
       data-live={game.isLive}
+      data-state={bug.tone}
       data-changed={scoreChanged && !lowDataOn ? 'true' : undefined}
     >
       <div className="af-live-game-head">
@@ -1104,7 +1110,12 @@ export function GameCard({
         {game.isLive ? (
           <span className="af-live-clock">
             <span className="af-live-pulse" aria-hidden />
-            <span className="af-num">{game.clockLabel ?? game.statusDetail}</span>
+            {/* The bar's lead word. Redraft only — af-core-redraft-matchup.css hides it elsewhere. */}
+            <span className="af-live-bug-word af-label">{lsc('Live', language)}</span>
+            {/* Never "Q0": a period-zero placeholder is dropped, and nothing usable reads "Live". */}
+            <span className="af-num" data-fallback={bug.label == null || undefined}>
+              {bug.label ?? lsc('Live', language)}
+            </span>
           </span>
         ) : (
           <span className="af-live-clock" data-idle="true">

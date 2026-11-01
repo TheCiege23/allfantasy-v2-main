@@ -85,11 +85,11 @@ describe('league-gated analyst tools', () => {
     expect(fn.mock.calls[0][0]).not.toHaveProperty('onStartCall')
   })
 
-  it('passes a trade-idea search its position and player, and nothing it cannot use', async () => {
-    await executeChimmyTool('find_trade_ideas', { position: 'running backs', trade_away: '  Tony Pollard ' }, CTX)
-    expect(h.tradeIdeas).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'u1', position: 'RB', tradeAway: 'Tony Pollard' })
-    await executeChimmyTool('find_trade_ideas', { position: 'kicker', trade_away: 7 }, CTX)
-    expect(h.tradeIdeas).toHaveBeenLastCalledWith({ leagueId: 'L1', userId: 'u1', position: null, tradeAway: null })
+  it('passes a trade-idea search its position, player, goal and picks, and nothing it cannot use', async () => {
+    await executeChimmyTool('find_trade_ideas', { position: 'running backs', trade_away: '  Tony Pollard ', goal: 'win_now', include_picks: true }, CTX)
+    expect(h.tradeIdeas).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'u1', position: 'RB', tradeAway: 'Tony Pollard', goal: 'win_now', includePicks: true })
+    await executeChimmyTool('find_trade_ideas', { position: 'kicker', trade_away: 7, goal: 'rebuild', include_picks: 'yes' }, CTX)
+    expect(h.tradeIdeas).toHaveBeenLastCalledWith({ leagueId: 'L1', userId: 'u1', position: null, tradeAway: null, goal: null, includePicks: false })
   })
 })
 

@@ -142,6 +142,12 @@ export type TaxiStealView =
       /** Every open claim in the league, for the commissioner. */
       open: { player: string; owner: string; claimer: string; deadline: string }[]
       recent: { player: string; owner: string; claimer: string; status: TaxiStealClaim['status']; resolvedAt: string | null }[]
+      /**
+       * How many taxi players each team holds right now, for the commissioner only (empty otherwise) — the
+       * Roster settings page warns when a lower slot count would leave a team over. Read from the same
+       * rosters this view already loads; no extra query.
+       */
+      taxiHeld: { teamName: string; count: number }[]
     }
 
 export async function readTaxiStealView(leagueId: string, userId: string): Promise<{ ok: true; view: TaxiStealView } | { ok: false; status: 403 | 404 }> {
@@ -192,6 +198,7 @@ export async function readTaxiStealView(leagueId: string, userId: string): Promi
         .slice(-10)
         .reverse()
         .map((c) => ({ player: playerName(c), owner: team.get(c.fromRosterId) ?? 'A team', claimer: team.get(c.toRosterId) ?? 'A team', status: c.status, resolvedAt: c.resolvedAt ?? null })),
+      taxiHeld: commissioner ? teams.map((t) => ({ teamName: t.teamName, count: t.taxi.length })) : [],
     },
   }
 }

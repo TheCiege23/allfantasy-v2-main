@@ -1,0 +1,335 @@
+/* Redraft batch B3 (2026-10-31): /core Matchup + Live scores as broadcast score bugs.
+ *
+ * Applies only inside the /core shell when it carries the redraft identity — AfCoreShell stamps
+ * `data-format="redraft"` + `data-sport` for a native redraft `?league=`
+ * (lib/core-app/coreShellRedraftIdentity.ts) and components/league/native/redraft-identity.css
+ * defines every `--rd-*` token for that root. Every other league, and /core/live with no league held,
+ * renders exactly as before: the only unscoped rules here HIDE the three redraft-only elements the
+ * screens now render (the final-game "F" marker, its key entry, and the bug's LIVE word).
+ *
+ * The data rules are the screens' own and are not restated here: the period text comes from
+ * lib/core-app/redraftCoreScoreBug.ts (never "Q0"), and the win probability is drawn only when the
+ * model produced one. This file adds the one gate the screen does not apply: NO win probability on
+ * a FINAL week — a probability over a settled result is a result dressed as a forecast.
+ *
+ * ⚠ NO HEX, NO rgba(). Every colour is a /core palette token (--surface, --text, --bad …) or an
+ * `--rd-*` token, so light / dark / AF follow the measured palettes. The LIVE bar is --bad with
+ * --surface ink: 6.2:1 in light (#ba2c4b on #fff), 5.3:1 in dark (#fb5b78 on #0d1020). The FINAL bar
+ * is --text with --surface ink, the palette's own text pair.
+ *
+ * ⚠ SPECIFICITY. `.af-core.af-shell[data-format=redraft]` is (0,3,0); with one more class every rule
+ * is ≥ (0,4,0), above af-matchup.css's (0,1,0)–(0,3,0) and af-live.css's `.af-core .af-live-*`
+ * overrides (0,2,0)–(0,3,0), whatever the load order.
+ *
+ * ⚠ 11px IS THE FLOOR (__tests__/core-app/type-floor.test.ts). Nothing here is smaller.
+ *
+ * ⚠ WIDTH RULES ARE CONTAINER QUERIES ON THE SCREENS' OWN CONTAINERS (`af-mu`, as af-matchup.css
+ * does), ONE TOP-LEVEL BLOCK EACH, AT THE END, NOT NESTED IN ANYTHING (CLAUDE.md: a 560px block
+ * inserted inside a 780px one in af-matchup.css carried four rules out of their band). */
+
+/* ── Redraft-only elements: hidden everywhere else ───────────────────────────────────────────── */
+.af-mu-rd-final,
+.af-mu-rd-only,
+.af-live-bug-word {
+  display: none;
+}
+
+/* ══ Matchup ═════════════════════════════════════════════════════════════════════════════════ */
+
+/* The week chip is the bug's status bar: red LIVE, ink FINAL, sport-tinted UPCOMING. */
+.af-core.af-shell[data-format=redraft] .af-mu-week-state {
+  padding: 5px 11px;
+  border-radius: 6px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+.af-core.af-shell[data-format=redraft] .af-mu-week-state[data-state='live'] {
+  background: var(--bad);
+  color: var(--surface);
+}
+.af-core.af-shell[data-format=redraft] .af-mu-week-state[data-state='final'] {
+  background: var(--text);
+  color: var(--surface);
+}
+.af-core.af-shell[data-format=redraft] .af-mu-week-state[data-state='upcoming'] {
+  background: var(--rd-accent-soft);
+  color: var(--rd-accent-text);
+  box-shadow: inset 0 0 0 1px var(--rd-accent-line);
+}
+.af-core.af-shell[data-format=redraft] .af-mu-week-label {
+  color: var(--muted);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+}
+
+/* The head-to-head is the score bug: sport frame, a state band across the top, broadcast numbers. */
+.af-core.af-shell[data-format=redraft] .af-mu-h2h {
+  border: 1px solid var(--rd-accent-line);
+  border-radius: 20px;
+  background: linear-gradient(90deg, var(--rd-accent-soft), var(--surface) 46%, var(--surface) 54%, var(--rd-accent-soft));
+  box-shadow: inset 0 4px 0 var(--rd-accent);
+  padding-top: 22px;
+}
+.af-core.af-shell[data-format=redraft] .af-mu[data-week='live'] .af-mu-h2h {
+  box-shadow: inset 0 4px 0 var(--bad);
+}
+.af-core.af-shell[data-format=redraft] .af-mu[data-week='final'] .af-mu-h2h {
+  box-shadow: inset 0 4px 0 var(--text);
+}
+.af-core.af-shell[data-format=redraft] .af-mu-score {
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+.af-core.af-shell[data-format=redraft] .af-mu-team-name {
+  font-weight: 800;
+}
+.af-core.af-shell[data-format=redraft] .af-mu-crest {
+  border-color: var(--rd-accent-line);
+}
+.af-core.af-shell[data-format=redraft] .af-mu-team[data-you='true'] .af-mu-crest:not(.af-mu-crest--img) {
+  background: var(--rd-accent-soft);
+  color: var(--rd-accent-text);
+}
+.af-core.af-shell[data-format=redraft] .af-mu-score-tag,
+.af-core.af-shell[data-format=redraft] .af-mu-centre-label {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+}
+
+/* Win probability: the sport accent, as on every redraft score bug. */
+.af-core.af-shell[data-format=redraft] .af-mu-centre {
+  border: 1px solid var(--rd-accent-line);
+  background: var(--surface);
+}
+.af-core.af-shell[data-format=redraft] .af-mu-centre-value,
+.af-core.af-shell[data-format=redraft] .af-mu-centre-value[data-tone] {
+  color: var(--rd-accent-text);
+  font-size: 30px;
+  font-weight: 900;
+}
+.af-core.af-shell[data-format=redraft] .af-mu-wp {
+  background: var(--line2);
+  box-shadow: none;
+}
+.af-core.af-shell[data-format=redraft] .af-mu-wp-you {
+  background: var(--rd-accent);
+}
+
+/* 🛑 No win probability on a final week — the number, its bar, its sentence, its label, the sticky
+ * copy. The margin chip stays: on a final week it is the result. */
+.af-core.af-shell[data-format=redraft] .af-mu[data-week='final'] .af-mu-centre-label,
+.af-core.af-shell[data-format=redraft] .af-mu[data-week='final'] .af-mu-centre-value,
+.af-core.af-shell[data-format=redraft] .af-mu[data-week='final'] .af-mu-centre-dash,
+.af-core.af-shell[data-format=redraft] .af-mu[data-week='final'] .af-mu-wp,
+.af-core.af-shell[data-format=redraft] .af-mu[data-week='final'] .af-mu-centre-why,
+.af-core.af-shell[data-format=redraft] .af-mu[data-week='final'] .af-mu-sticky-wp {
+  display: none;
+}
+
+/* The slot board: a sport-framed slot pill between two player halves, each half marked by its game. */
+.af-core.af-shell[data-format=redraft] .af-mu-board-head .af-label {
+  color: var(--rd-accent-text);
+}
+.af-core.af-shell[data-format=redraft] .af-mu-slot {
+  justify-self: center;
+  min-width: 44px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--rd-accent-line);
+  background: var(--surface);
+  color: var(--rd-accent-text);
+}
+.af-core.af-shell[data-format=redraft] .af-mu-board-row {
+  background-color: var(--surface);
+}
+/* Playing now: a red edge on the player's side of the row, like a broadcast's live tick. */
+.af-core.af-shell[data-format=redraft] .af-mu-half[data-gs='live'][data-align='left'] {
+  box-shadow: inset 3px 0 0 var(--bad);
+  padding-left: 6px;
+}
+.af-core.af-shell[data-format=redraft] .af-mu-half[data-gs='live'][data-align='right'] {
+  box-shadow: inset -3px 0 0 var(--bad);
+  padding-right: 6px;
+}
+.af-core.af-shell[data-format=redraft] .af-mu-gs[data-state='live'] {
+  background: var(--bad);
+  box-shadow: 0 0 0 2px var(--bad-soft);
+}
+/* Done: a small ink "F", the third state beside the two dots. */
+.af-core.af-shell[data-format=redraft] .af-mu-rd-final {
+  display: inline-grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  margin-right: 5px;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: var(--text);
+  color: var(--surface);
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  vertical-align: 1px;
+}
+.af-core.af-shell[data-format=redraft] .af-mu-rd-only {
+  display: inline-flex;
+  align-items: center;
+}
+.af-core.af-shell[data-format=redraft] .af-mu-board-foot .af-mu-foot-total {
+  font-weight: 900;
+}
+.af-core.af-shell[data-format=redraft] .af-mu-tally[data-leader='you'] .af-mu-tally-n {
+  color: var(--rd-accent-text);
+}
+
+/* The sticky score repeats the bug, so it wears the same frame. */
+.af-core.af-shell[data-format=redraft] .af-mu-sticky {
+  border-color: var(--rd-accent-line);
+  box-shadow: inset 0 3px 0 var(--rd-accent), 0 6px 18px color-mix(in srgb, var(--text) 22%, transparent);
+}
+.af-core.af-shell[data-format=redraft] .af-mu[data-week='live'] .af-mu-sticky {
+  box-shadow: inset 0 3px 0 var(--bad), 0 6px 18px color-mix(in srgb, var(--text) 22%, transparent);
+}
+.af-core.af-shell[data-format=redraft] .af-mu-sticky-wp[data-tone] {
+  color: var(--rd-accent-text);
+}
+
+/* ══ Live scores ═════════════════════════════════════════════════════════════════════════════ */
+
+/* Each game is a score bug: the head becomes a full-width status bar across the card's top. */
+.af-core.af-shell[data-format=redraft] .af-live-game {
+  --rdm-pad: 18px;
+  overflow: hidden;
+  padding: 0 var(--rdm-pad) var(--rdm-pad);
+  border-color: var(--line2);
+  box-shadow: 0 3px 14px color-mix(in srgb, var(--text) 6%, transparent);
+}
+.af-core.af-shell[data-format=redraft] .af-live-game[data-live='true'] {
+  border-color: color-mix(in srgb, var(--bad) 45%, var(--line2));
+  box-shadow: 0 3px 14px color-mix(in srgb, var(--text) 6%, transparent);
+}
+.af-core.af-shell[data-format=redraft] .af-live-game-head {
+  margin: 0 calc(-1 * var(--rdm-pad));
+  padding: 8px var(--rdm-pad);
+  min-height: 38px;
+  background: var(--rd-accent-soft);
+  color: var(--rd-accent-text);
+  border-bottom: 1px solid var(--rd-accent-line);
+}
+.af-core.af-shell[data-format=redraft] .af-live-game[data-state='live'] .af-live-game-head {
+  background: var(--bad);
+  color: var(--surface);
+  border-bottom-color: transparent;
+}
+.af-core.af-shell[data-format=redraft] .af-live-game[data-state='final'] .af-live-game-head {
+  background: var(--text);
+  color: var(--surface);
+  border-bottom-color: transparent;
+}
+/* Inside the bar every chip drops its own ground and takes the bar's ink. */
+.af-core.af-shell[data-format=redraft] .af-live-game-head .af-live-tag,
+.af-core.af-shell[data-format=redraft] .af-live-game-head .af-live-clock,
+.af-core.af-shell[data-format=redraft] .af-live-game-head .af-live-clock[data-idle='true'],
+.af-core.af-shell[data-format=redraft] .af-live-game-head .af-live-broadcast,
+.af-core.af-shell[data-format=redraft] .af-live-game-head .af-live-detail-link {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  border-color: transparent;
+}
+.af-core.af-shell[data-format=redraft] .af-live-game-head .af-live-tag {
+  font: 700 11px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.af-core.af-shell[data-format=redraft] .af-live-game-head .af-live-clock {
+  font-size: 13px;
+  font-weight: 800;
+}
+.af-core.af-shell[data-format=redraft] .af-live-game-head .af-live-detail-link {
+  margin-left: auto;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 700;
+}
+.af-core.af-shell[data-format=redraft] .af-live-game-head .af-live-detail-link:focus-visible {
+  outline-color: currentColor;
+}
+.af-core.af-shell[data-format=redraft] .af-live-bug-word {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--bad);
+  font: 800 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+}
+/* With no usable period the word says it all; "LIVE Live" would say it twice. */
+.af-core.af-shell[data-format=redraft] .af-live-game-head .af-live-clock [data-fallback] {
+  display: none;
+}
+
+/* The scoreline: broadcast numbers, leader in full ink, trailer quieter, crest framed in the sport line. */
+.af-core.af-shell[data-format=redraft] .af-live-team-score {
+  font-weight: 900;
+}
+.af-core.af-shell[data-format=redraft] .af-live-team-crest,
+.af-core.af-shell[data-format=redraft] .af-live-team-mark {
+  box-shadow: inset 0 0 0 1px var(--rd-accent-line);
+}
+.af-core.af-shell[data-format=redraft] .af-live-at {
+  color: var(--rd-accent-text);
+}
+
+/* Win estimate: the sport accent for the away share, a neutral track for home. */
+.af-core.af-shell[data-format=redraft] .af-live-wp-away {
+  background: var(--rd-accent);
+}
+.af-core.af-shell[data-format=redraft] .af-live-wp-home {
+  background: var(--line2);
+}
+
+/* Finals: one line each, led by an ink FINAL tag. */
+.af-core.af-shell[data-format=redraft] .af-live-final {
+  border-color: var(--line2);
+}
+.af-core.af-shell[data-format=redraft] .af-live-final-status {
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--text);
+  color: var(--surface);
+  font: 800 11px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.af-core.af-shell[data-format=redraft] .af-live-final-team[data-won='true'] .af-live-final-score {
+  font-weight: 900;
+}
+.af-core.af-shell[data-format=redraft] .af-live-finals-head,
+.af-core.af-shell[data-format=redraft] .af-live-slate-head {
+  color: var(--rd-accent-text);
+}
+
+/* The sport tabs: the active tab is the sport's. */
+.af-core.af-shell[data-format=redraft] .af-live-sport[data-active='true'] {
+  border-color: var(--rd-accent-line);
+  background: var(--rd-accent-soft);
+  color: var(--rd-accent-text);
+}
+
+/* ── Width ─────────────────────────────────────────────────────────────────────────────────────── */
+
+/* Phone: af-live.css drops the card's padding to 14px at the same 720px viewport band; the bar's
+ * bleed follows it so the bar still meets both card edges. */
+@media (max-width: 720px) {
+  .af-core.af-shell[data-format=redraft] .af-live-game {
+    --rdm-pad: 14px;
+  }
+}
+
+/* The matchup's own container (af-matchup.css names it `af-mu`). */
+@container af-mu (max-width: 560px) {
+  .af-core.af-shell[data-format=redraft] .af-mu-score {
+    font-size: 32px;
+  }
+}
