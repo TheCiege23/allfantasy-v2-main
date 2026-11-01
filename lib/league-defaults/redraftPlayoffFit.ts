@@ -1,6 +1,6 @@
 /**
  * A redraft league's default playoff shape — field size, byes, rounds and start week — sized so the
- * final lands in the season's last week. NFL, NBA, NHL and MLB, every league size from 4 to 20.
+ * final lands in the season's last week. NFL, NBA, NHL, MLB and SOCCER, every league size from 4 to 20.
  *
  * 🛑 THREE THINGS USED TO DISAGREE AND THE SEASON PAID FOR ALL OF THEM.
  *  - The start week was the sport's 6-team default (NFL 15, NBA 23, NHL 25, MLB 24) whatever the
@@ -34,7 +34,7 @@ import {
 } from '@/lib/playoff-runtime/playoffFit'
 import { cappedSeasonWeeks, maxPlayoffStartWeekForSport, maxRegularSeasonWeeksForSport } from '@/lib/redraft/regularSeasonCap'
 
-export const REDRAFT_PLAYOFF_FIT_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA', 'NHL', 'MLB'])
+export const REDRAFT_PLAYOFF_FIT_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA', 'NHL', 'MLB', 'SOCCER'])
 /** League types whose default bracket is fitted to the season. */
 export const PLAYOFF_FIT_LEAGUE_TYPES: ReadonlySet<string> = new Set(['redraft', 'keeper'])
 
@@ -59,6 +59,8 @@ export type RedraftPlayoffShape = {
   /** Weeks the bracket is played over, the final included. */
   playoffWeeks: number
   seasonWeeks: number
+  /** Final round length used to fit the bracket; persisted with the shape. */
+  championshipLength?: number
 }
 
 function seasonWeeksFor(sport: string): number | null {
@@ -92,8 +94,12 @@ export function redraftPlayoffShapeFor(input: {
   const requested =
     input.playoffTeams != null && Number(input.playoffTeams) >= 2 ? Number(input.playoffTeams) : derivePlayoffTeams(input.leagueSize)
   const playoffTeams = fitTeams(requested, input.leagueSize)
-  const championshipLength =
-    input.championshipLength ?? resolveDefaultPlayoffConfig(sport as SportType).championship_length ?? null
+  // Soccer's 34-week regular season reserves gameweeks 35–38 for the bracket.
+  // With a 4-team field the final takes three weeks; with six teams it takes two.
+  // Persist that length with the fitted shape so scoring and the week roller agree.
+  const championshipLength = input.championshipLength ?? (sport === 'SOCCER'
+    ? Math.max(1, 5 - playoffRoundsForTeams(playoffTeams))
+    : resolveDefaultPlayoffConfig(sport as SportType).championship_length ?? null)
   const shape = { teams: playoffTeams, weeksPerRound: input.weeksPerRound, championshipLength }
   const fitted = fittedPlayoffStartWeek({ ...shape, seasonWeeks })
   if (fitted == null) return null
@@ -112,6 +118,7 @@ export function redraftPlayoffShapeFor(input: {
     championshipWeek: leagueSeasonWeeks,
     playoffWeeks,
     seasonWeeks: leagueSeasonWeeks,
+    ...(championshipLength != null ? { championshipLength } : {}),
   }
 }
 
@@ -172,6 +179,7 @@ export function applyPlayoffShapeToSettings(
     championship_week: shape.championshipWeek,
     playoffWeeks: shape.playoffWeeks,
     playoff_weeks: shape.playoffWeeks,
+    ...(shape.championshipLength != null ? { championshipLength: shape.championshipLength, championship_length: shape.championshipLength } : {}),
   }
   const next: Record<string, unknown> = { ...settings, playoff_team_count: shape.playoffTeams }
   next.playoffSettings = { ...(obj(settings.playoffSettings) ?? {}), ...both }
@@ -182,6 +190,7 @@ export function applyPlayoffShapeToSettings(
     total_rounds: shape.totalRounds,
     playoff_start_week: shape.playoffStartWeek,
     playoff_weeks: shape.playoffWeeks,
+    ...(shape.championshipLength != null ? { championship_length: shape.championshipLength } : {}),
   }
   const foundation = obj(settings.foundation_defaults)
   const foundationPlayoff = obj(foundation?.playoff)

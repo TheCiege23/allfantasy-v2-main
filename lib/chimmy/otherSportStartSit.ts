@@ -39,9 +39,7 @@ export async function buildOtherSportStartSit(args: {
   const world = await resolveCanonicalWorld(args.leagueId)
   if (!world) return missing('The selected league could not be read, so no start/sit call was made.')
   const sport = String(world.league.sport).toUpperCase()
-  // Soccer's full-season finalizer is gated, but a rostered league can still receive a
-  // bounded current-gameweek comparison when every identity, score and fixture verifies.
-  if (!canRunSeasonForSport(sport) && sport !== 'SOCCER') return missing(`${sport} fantasy scoring is not operational for a full season yet. No league-specific start/sit call can be made.`)
+  if (!canRunSeasonForSport(sport)) return missing(`${sport} fantasy scoring is not operational for a full season yet. No league-specific start/sit call can be made.`)
   if (sport === 'NFL') return missing('Use the NFL weekly projection engine for this comparison.')
   const eligibility = ELIGIBILITY[sport]
   if (!eligibility) return missing(`Starting-slot eligibility for ${sport} is not on file.`)
@@ -183,6 +181,6 @@ export async function buildOtherSportStartSit(args: {
     else lines.push(`Lean ${diff > 0 ? a!.name : b!.name} on the schedule-adjusted baseline (${Math.abs(diff).toFixed(1)} points higher).`)
   }
   lines.push(`This baseline is an estimate from past games, not a certified projection. ${strength.every(Boolean) && !category ? 'Opponent strength is a bounded real-score proxy.' : 'Opponent strength could not be verified for both players and was not applied.'} Confirm late injuries and platform locks before changing a lineup.`)
-  if (sport === 'SOCCER') lines.push('Soccer season finalization is not certified on AllFantasy; this is only a roster-and-fixture-verified gameweek comparison, not a claim that the league can complete a season.')
+  if (sport === 'SOCCER') lines.push('Soccer comparison uses the verified current gameweek; future seasons require a published gameweek calendar before scoring can advance.')
   return { ready: true, text: lines.join('\n') }
 }

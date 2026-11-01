@@ -243,7 +243,7 @@ export async function resolveNflRedraftScheduleRuntime(input: {
   // Any season-capable sport running a standard weekly season — not only NFL redraft, which
   // left every keeper, dynasty and best-ball league (and every NHL/NCAAB one) on week 1 forever.
   // The reason code keeps its name for its consumers; it now means "format not covered".
-  if (!runsStandardWeeklySeason(rules.general.sport, rules.general.format)) {
+  if (!runsStandardWeeklySeason(rules.general.sport, rules.general.format, season.season)) {
     return { ok: false, reason: 'not_nfl_redraft' }
   }
   if (!season.rosters.length) return { ok: false, reason: 'rosters_unavailable' }
@@ -347,7 +347,7 @@ export async function generateNflRedraftScheduleForSeason(input: {
 
   const rules = await resolveCanonicalLeagueRules(season.leagueId)
   if (!rules) return { ok: false, code: 'LEAGUE_NOT_FOUND', message: 'League rules could not be resolved.' }
-  if (!runsStandardWeeklySeason(rules.general.sport, rules.general.format)) {
+  if (!runsStandardWeeklySeason(rules.general.sport, rules.general.format, season.season)) {
     return { ok: false, code: 'NOT_NFL_REDRAFT', message: "This league's format schedules its own weeks; a head-to-head schedule can't be generated for it." }
   }
   if (season.rosters.length < 2) {
