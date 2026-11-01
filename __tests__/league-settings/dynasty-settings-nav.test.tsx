@@ -75,10 +75,11 @@ describe('a league that is not dynasty', () => {
   it('draws a lucide icon on every row, hidden from screen readers', () => {
     const { container } = nav({ showZombieTabs: true })
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(24 + 10)
+    expect(buttons).toHaveLength(24 + 13)
     for (const b of buttons) expect(b.querySelector('svg.lucide[aria-hidden="true"]')).not.toBeNull()
     expect(EMOJI.test(container.textContent ?? '')).toBe(false)
     expect(screen.getByRole('button', { name: 'Zombie Setup' })).toBeTruthy()
+    for (const name of ['Automation', 'Overrides', 'Audit Log']) expect(screen.getByRole('button', { name, exact: true })).toBeTruthy()
   })
 
   it('the source carries no emoji label at all', () => {

@@ -47,10 +47,10 @@ export function AutoBenchByeToggle({ leagueId }: { leagueId: string }) {
   }
 
   return (
-    <label className="nls-muted" data-testid="auto-bench-bye-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <input type="checkbox" checked={on} disabled={busy} onChange={(e) => void change(e.target.checked)} aria-describedby="auto-bench-bye-help" />
+    <label className="nls-muted" data-testid="auto-bench-bye-toggle" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, border: `1px solid ${on ? '#34d399' : '#475569'}`, background: on ? 'rgba(16,185,129,.12)' : 'rgba(255,255,255,.04)', cursor: busy ? 'wait' : 'pointer', minHeight: 48 }}>
+      <input type="checkbox" style={{ width: 22, height: 22, accentColor: '#10b981', flexShrink: 0 }} checked={on} disabled={busy} onChange={(e) => void change(e.target.checked)} aria-describedby="auto-bench-bye-help" />
       <span>
-        Bench my starters on bye automatically
+        Bench my starters on bye automatically <strong aria-live="polite">{busy ? 'Saving…' : on ? 'On' : 'Off'}</strong>
         <small id="auto-bench-bye-help" style={{ display: 'block' }}>
           Swaps each starter on bye for your best bench player who can play. Free; you can still set your lineup yourself.
         </small>

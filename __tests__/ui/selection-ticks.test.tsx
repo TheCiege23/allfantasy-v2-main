@@ -163,6 +163,11 @@ describe('draft room pool table: the queue button', () => {
 
 describe('draft room player cards: the queue button', () => {
   it('turns from + into a check, with aria-pressed, once the player is queued; the name stays Add X to queue', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((media: string) => ({
+      matches: false, media, onchange: null,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+    })))
     const players: PlayerEntry[] = [
       { id: 'a', name: 'Alpha Back', position: 'RB', team: 'MIA', adp: 10 },
       { id: 'b', name: 'Bravo Wide', position: 'WR', team: 'DAL', adp: 20 },

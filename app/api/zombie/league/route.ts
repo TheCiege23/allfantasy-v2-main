@@ -12,6 +12,7 @@ import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 import { redactWhispererRecord, redactZombieEvent, redactZombieTeam } from '@/lib/zombie/whispererRedaction'
 import { withWhispererDisplayName } from '@/lib/zombie/zombieTeamNames'
 import { loadNativeSeasonRecords } from '@/lib/zombie/ZombieInfectionEngine'
+import { isZombieExperienceMode } from '@/lib/zombie/zombieExperience'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,10 +47,21 @@ export async function POST(req: Request) {
   }
 
   const sportRaw = typeof body.sport === 'string' ? body.sport : 'NFL'
-  if (!isZombieEligibleLeagueSport(sportRaw.toUpperCase())) {
+  if (!isZombieEligibleLeagueSport(sportRaw.toUpperCase()) || !['NFL', 'NBA', 'NHL', 'MLB'].includes(sportRaw.toUpperCase())) {
     return NextResponse.json({ error: `Zombie leagues do not support sport "${sportRaw}".` }, { status: 400 })
   }
   const sport = normalizeToSupportedSport(sportRaw)
+  if (body.experienceMode !== undefined && !isZombieExperienceMode(body.experienceMode)) {
+    return NextResponse.json({ error: 'experienceMode must be simple or enhanced.' }, { status: 400 })
+  }
+
+  const whispererCount = body.whispererCount === undefined ? 1 : body.whispererCount
+  if (whispererCount !== 1 && whispererCount !== 2) {
+    return NextResponse.json({ error: 'whispererCount must be 1 or 2.' }, { status: 400 })
+  }
+  if (whispererCount === 2 && (!['NBA', 'NHL', 'MLB'].includes(sport) || body.experienceMode === 'simple')) {
+    return NextResponse.json({ error: 'Two Whisperers require Enhanced NBA, NHL, or MLB.' }, { status: 400 })
+  }
 
   const teamCountRaw = typeof body.teamCount === 'number' ? body.teamCount : null
   if (teamCountRaw == null || !(ZOMBIE_ALLOWED_TEAM_COUNTS as readonly number[]).includes(teamCountRaw)) {
@@ -130,6 +142,8 @@ export async function POST(req: Request) {
         typeof body.whispererSelectionMode === 'string' ? body.whispererSelectionMode : 'random',
       namingMode: typeof body.namingMode === 'string' ? body.namingMode : 'hybrid',
       backgroundTheme: getRandomZombieTheme(),
+      experienceMode: isZombieExperienceMode(body.experienceMode) ? body.experienceMode : 'enhanced',
+      whispererCount,
     },
     universeId ?? null,
     tierId ?? null,
@@ -157,6 +171,7 @@ export async function GET(req: Request) {
       teams: true,
       level: true,
       whispererRecord: true,
+      coWhisperers: true,
       paidConfig: true,
       freeRewardConfig: true,
       weeklyResolutions: { orderBy: { week: 'desc' }, take: 4 },
@@ -273,18 +288,41 @@ export async function GET(req: Request) {
 
   // Whisperer secrecy: every row that could name the Whisperer goes through the viewer's
   // permission. Counts stay real; they only say that a Whisperer exists.
-  const viewer = await resolveWhispererViewer(leagueId, session.user.id)
+  const viewerUserId = session.user?.id
+  if (!viewerUserId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const viewer = await resolveWhispererViewer(leagueId, viewerUserId)
   const team = <T extends { rosterId: string; status?: string | null }>(t: T): T =>
     viewer.canSee ? t : redactZombieTeam(t, viewer.identity)
   const event = <T extends object>(e: T): T => (viewer.canSee ? e : redactZombieEvent(e, viewer.identity))
+
+  const rawWinResults: unknown[] = Array.isArray(latestResolution?.matchupResults) ? latestResolution.matchupResults : []
+  const winCards = rawWinResults
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
+    .filter((entry) => entry.winnerStatus === 'Whisperer' || entry.winnerStatus === 'Zombie')
+    .slice(0, 8)
+    .map((entry) => {
+      const hidden = entry.winnerStatus === 'Whisperer' && !viewer.canSee
+      return {
+        role: entry.winnerStatus,
+        winnerName: hidden ? 'Hidden Whisperer' : String(entry.winnerName || 'Horde manager'),
+        opponentName: hidden ? 'Survivor opponent' : String(entry.loserName || 'Opponent'),
+        winnerScore: typeof entry.winnerScore === 'number' ? entry.winnerScore : null,
+        opponentScore: typeof entry.loserScore === 'number' ? entry.loserScore : null,
+        week: latestResolution?.week ?? null,
+      }
+    })
 
   return NextResponse.json({
     league: {
       ...z,
       teams: z.teams.map(team),
-      whispererRecord: viewer.canSee
+      whispererRecord: viewer.canSee || z.whispererRecord?.userId === viewerUserId
         ? await withWhispererDisplayName(z.whispererRecord)
         : redactWhispererRecord(z.whispererRecord),
+      coWhisperers: await Promise.all((z.coWhisperers ?? []).map((record) =>
+        viewer.canSee || record.userId === viewerUserId
+          ? withWhispererDisplayName(record)
+          : Promise.resolve(redactWhispererRecord(record)))),
       counts: {
         ...counts,
         horde: horde,
@@ -310,9 +348,10 @@ export async function GET(req: Request) {
       recentBashings: recentBashings.map(event),
       recentMaulings: recentMaulings.map(event),
     },
+    winCards,
     hordeSize: horde,
     survivorCount: surv,
-    myTeam: myTeam ? team(myTeam) : myTeam,
+    myTeam: myTeam?.status === 'Whisperer' ? myTeam : (myTeam ? team(myTeam) : myTeam),
     myActiveItemCount,
     myPendingItemCount,
     myResources: {

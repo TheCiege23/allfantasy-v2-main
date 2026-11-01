@@ -100,6 +100,9 @@ export type SettingsNavTabId =
   | 'zombie_paid'
   | 'zombie_universe'
   | 'zombie_updates'
+  | 'zombie_automation'
+  | 'zombie_overrides'
+  | 'zombie_audit'
   | 'zombie_animations'
   | 'zombie_advanced'
   | 'zombie_ai'
@@ -191,6 +194,9 @@ const ZOMBIE_NAV: NavEntry[] = [
   { id: 'zombie_animations', label: 'Animations', icon: Clapperboard },
   { id: 'zombie_advanced', label: 'Advanced Rules', icon: SlidersHorizontal },
   { id: 'zombie_ai', label: 'League Guide', icon: Bot },
+  { id: 'zombie_automation', label: 'Automation', icon: Settings },
+  { id: 'zombie_overrides', label: 'Overrides', icon: SlidersHorizontal },
+  { id: 'zombie_audit', label: 'Audit Log', icon: History },
 ]
 
 const IDP_NAV: NavEntry[] = [

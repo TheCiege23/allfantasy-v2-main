@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
-import { applyAmbush, selectWhisperer } from '@/lib/zombie/whispererEngine'
+import { selectWhisperer } from '@/lib/zombie/whispererEngine'
 import { canViewerSeeWhisperer } from '@/lib/zombie/whispererVisibility'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { withWhispererDisplayName } from '@/lib/zombie/zombieTeamNames'
@@ -25,6 +25,10 @@ export async function POST(req: Request) {
 
   if (action === 'select') {
     await requireCommissionerOnly(leagueId, userId)
+    const selected = await prisma.whispererRecord.findUnique({ where: { zombieLeagueId: z.id }, select: { id: true } })
+    if (selected || !['setup', 'registering'].includes(z.status)) {
+      return NextResponse.json({ error: 'Whisperer selection is locked after assignment.' }, { status: 409 })
+    }
     const mode = typeof body.mode === 'string' ? body.mode : 'random'
     const manualUserId = typeof body.manualUserId === 'string' ? body.manualUserId : undefined
     const out = await selectWhisperer(z.id, mode, manualUserId)
@@ -32,13 +36,9 @@ export async function POST(req: Request) {
   }
 
   if (action === 'ambush') {
-    const targetUserId = typeof body.targetUserId === 'string' ? body.targetUserId : null
-    const ambushType = typeof body.ambushType === 'string' ? body.ambushType : 'steal_winnings'
-    const week = typeof body.week === 'number' ? body.week : parseInt(String(body.week), 10)
-    if (!targetUserId || !Number.isFinite(week))
-      return NextResponse.json({ error: 'targetUserId and week required' }, { status: 400 })
-    const result = await applyAmbush(z.id, userId, targetUserId, week, ambushType)
-    return NextResponse.json(result)
+    return NextResponse.json({
+      error: 'Use @Chimmy ambush swap <exact Survivor team name> before the provider lineup lock.',
+    }, { status: 409 })
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
@@ -59,34 +59,25 @@ export async function GET(req: Request) {
 
   const z = await prisma.zombieLeague.findUnique({
     where: { leagueId },
-    include: { whispererRecord: true, league: { select: { userId: true } } },
+    include: { whispererRecord: true, coWhisperers: true, league: { select: { userId: true } } },
   })
-  if (!z?.whispererRecord) return NextResponse.json({ whisperer: null })
+  if (!z?.whispererRecord) return NextResponse.json({ whisperer: null, whisperers: [] })
 
   const isComm = z.league.userId === userId
-  const rec = (await withWhispererDisplayName(z.whispererRecord))!
-  if (isComm) return NextResponse.json({ whisperer: rec })
-
-  // The league's secrecy setting wins over the record. `isPubliclyRevealed` defaults to true and
-  // `selectWhisperer` never sets it, so on its own it revealed secret-league Whisperers.
-  if (
-    canViewerSeeWhisperer({
+  const records = [z.whispererRecord, ...(z.coWhisperers ?? [])]
+  const visible = await Promise.all(records.map(async (record) => {
+    const own = record.userId === userId
+    const canSee = canViewerSeeWhisperer({
       whispererIsPublic: z.whispererIsPublic,
-      isPubliclyRevealed: rec.isPubliclyRevealed,
-      viewerIsCommissioner: false,
-      viewerIsWhisperer: rec.userId === userId,
+      isPubliclyRevealed: record.isPubliclyRevealed,
+      viewerIsCommissioner: isComm,
+      viewerIsWhisperer: own,
     })
-  ) {
-    return NextResponse.json({
-      whisperer: {
-        displayName: rec.displayName,
-        ambushesRemaining: rec.ambushesRemaining,
-        wasDefeated: rec.wasDefeated,
-      },
-    })
-  }
-  return NextResponse.json({
-    whisperer: { message: 'Whisperer identity hidden this season.' },
-  })
+    if (!canSee) return { message: 'Whisperer identity hidden this season.' }
+    const named = (await withWhispererDisplayName(record))!
+    return isComm || own
+      ? named
+      : { displayName: named.displayName, ambushesRemaining: named.ambushesRemaining, wasDefeated: named.wasDefeated }
+  }))
+  return NextResponse.json({ whisperer: visible[0], whisperers: visible })
 }
-

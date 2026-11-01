@@ -4082,7 +4082,9 @@ export function DraftRoomPageClient({
         return acc
       }, {})
 
-      return <div className={`space-y-1.5 p-1 ${presentationVariant === 'redraft_snake' ? 'rounded-lg bg-[#0d1424] p-1.5' : ''}`}>
+      return <div className={`space-y-1.5 p-1 ${presentationVariant === 'redraft_snake' ? 'rounded-lg border border-white/[0.06] bg-[linear-gradient(180deg,rgba(13,20,40,0.95),rgba(8,14,28,0.95))] p-1.5' : ''}`}>
+        <details className="rounded-xl border border-white/10 bg-[#0a1425]" data-testid="draft-queue-intelligence">
+          <summary className="cursor-pointer px-3 py-3 text-sm font-medium text-cyan-100">Draft intelligence</summary>
         {hasDraftHelperData ? (
           <button
             type="button"
@@ -4114,6 +4116,7 @@ export function DraftRoomPageClient({
           presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
           onAddIntelSuggestion={presentationVariant === 'redraft_snake' ? handleAddIntelQueueSuggestion : undefined}
         />
+        </details>
         <QueuePanel
           queue={queueFiltered}
           playerMetaById={queuePlayerMetaById}
@@ -4819,6 +4822,7 @@ export function DraftRoomPageClient({
     ) : null}
     <DraftRoomShell
       layout="premium"
+      playerSpacePriority={session.draftType !== 'auction'}
       surfaceVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : isDynasty ? 'dynasty' : 'default'}
       // D.6 — War Room moved out of the left aside. teamPanel=null collapses the
       // aside; the WarRoomPopup below renders the same DraftTeamPanel content as
@@ -4907,7 +4911,7 @@ export function DraftRoomPageClient({
                 }
                 openTabRequest={rightDockOpenRequest}
                 chatBody={<div className="flex h-full min-h-0 flex-col overflow-hidden">{chatPanelNode}</div>}
-                queueCount={draftIntel?.queue?.length ?? 0}
+                queueCount={queueFiltered.length}
                 defaultTab="queue"
               />
             </div>

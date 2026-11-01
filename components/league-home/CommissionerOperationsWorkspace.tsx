@@ -203,12 +203,14 @@ export function CommissionerOperationsWorkspace({
         </div>
       </header>
 
+      <div className="af-admin-settings-layout">
       <nav aria-label="Commissioner sections" className="af-admin-shortcuts af-admin-section-nav">
         {groups.map((group) => (
           <a key={group.id} href={`#commissioner-group-${group.id}`}>{group.title}</a>
         ))}
       </nav>
 
+      <div className="af-admin-sections">
       {/* Decision OS commissioner lens — the same live CommissionerPulse engine
           the Decide tab renders: inactive/at-risk managers from counted signals
           (empty starters, transaction drought, scoring trend, orphan rosters). */}
@@ -234,6 +236,8 @@ export function CommissionerOperationsWorkspace({
           </div>
         </section>
       ))}
+      </div>
+      </div>
     </div>
   )
 }
