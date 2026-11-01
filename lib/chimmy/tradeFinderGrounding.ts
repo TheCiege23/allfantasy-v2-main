@@ -28,6 +28,12 @@ import {
   type TradePackage,
 } from '@/lib/trade-discovery/redraftTradeDiscovery'
 import { tradeBanReason } from '@/lib/league-rules/tradeLegality'
+import { loadImportedFuturePicks } from '@/lib/league-trade-engine/importedFuturePicks'
+import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
+import { leagueWeekBasis, isLeagueWeekRefusal, priceLeagueWeek } from '@/lib/decision-os/trade/leagueWeekPricing'
+import { findWinNowPickTrades, type OwnedTradePick } from './pickTradeDiscovery'
+import { prisma } from '@/lib/prisma'
 import {
   getMarketValues,
   pickValue,
@@ -111,6 +117,9 @@ export type TradeIdea = {
   /** Win-now searches only: each side on the league's redraft (current-season) chart. */
   nowGive?: number | null
   nowGet?: number | null
+  projectedLineupDelta?: number
+  projectedLineupBefore?: number
+  projectedLineupAfter?: number
 }
 
 export type TradeFinderResult =
@@ -125,6 +134,8 @@ export type TradeFinderResult =
       ideas: TradeIdea[]
       /** When `ideas` is empty: why, in a sentence the model can repeat. */
       noIdeasReason: string | null
+      projectionWeek?: { season: string; week: number }
+      pickCoverage?: 'complete' | 'traded_only' | 'none'
     }
   | { status: 'unavailable'; reason: string }
 
@@ -137,6 +148,7 @@ export type TradeFinderInput = {
   goal?: TradeFinderGoal | null
   /** The user offered their own draft picks as part of the package. */
   includePicks?: boolean
+  requiresPicks?: boolean
 }
 
 const BAND_RANK: Record<FairnessBand, number> = {
@@ -439,6 +451,77 @@ export async function buildTradeFinder(input: TradeFinderInput): Promise<TradeFi
    * "balanced" in dynasty value, and every one a step DOWN this season, with no pick in any of them.
    * The general finder below takes neither a goal nor a pick, so both are handled here instead.
    */
+  if (input.requiresPicks) {
+    if (values.mode !== 'dynasty' || !marketContext.variant.dynasty) {
+      return { status: 'unavailable', reason: 'future pick offers need a dynasty league with a dynasty market chart' }
+    }
+    const slots = rosterSlotsOf(league.settings)
+    if (!slots?.length) return { status: 'unavailable', reason: 'this league has no readable starting lineup slots, so a win-now gain cannot be checked' }
+    const native = isNativeFuturePickLeague(league)
+    const nativeSettings = native
+      ? await prisma.league.findUnique({ where: { id: input.leagueId }, select: { draftPickTrading: true } }).catch(() => null)
+      : null
+    if (native && (!nativeSettings || !isDraftPickTradingAllowed(nativeSettings))) {
+      return { status: 'unavailable', reason: 'this league does not allow future draft picks in trades' }
+    }
+    const status = (league.settings ?? {}) as Record<string, unknown>
+    const imported = native ? null : await loadImportedFuturePicks({
+      leagueId: input.leagueId, platform: league.platform, isDynasty: true, leagueSeason: league.season,
+      status: typeof status.status === 'string' ? status.status : null,
+      teams: rows.teams.map(t => ({ id: t.id, externalId: t.externalId,
+        platformUserId: t.platformUserId, claimedByUserId: t.claimedByUserId, teamName: t.teamName })),
+      rosters: rows.rosters,
+    }).catch(() => null)
+    if (imported?.readFailed) return { status: 'unavailable', reason: 'the owned-pick inventory could not be read' }
+    const nativeInventory = native ? await loadNativeFuturePicks(input.leagueId).catch(() => null) : null
+    const pickCoverage = native ? 'complete' as const : imported?.coverage ?? 'none' as const
+    if (pickCoverage === 'none') {
+      return { status: 'unavailable', reason: 'this platform has no verified future-pick ownership on file for this league' }
+    }
+    const rawPicks = native
+      ? (nativeInventory?.picks ?? []).filter(p => p.ownerTeamId === myRoster.id).map(p => ({
+          season: p.season, round: p.round,
+          originalTeamName: p.originalTeamId === myRoster.id ? null :
+            teamForTradeRoster(rows.teams, rows.rosters.find(r => r.id === p.originalTeamId) ?? myRoster)?.teamName ?? null,
+        }))
+      : (imported?.picksByRosterId.get(myRoster.id) ?? []).map(p => ({
+          season: p.season, round: p.round, originalTeamName: p.fromTeamName,
+        }))
+    const ownedPicks: OwnedTradePick[] = rawPicks.flatMap(p => {
+      const value = pickValue(values, String(p.season), p.round)
+      return value != null && value > 0 ? [{ ...p, value }] : []
+    })
+    if (!ownedPicks.length) return { status: 'unavailable', reason: 'your roster has no owned future pick with a value on this league’s market chart' }
+    const basis = await leagueWeekBasis({ sport: league.sport, scoringSettings: league.settings })
+    if (isLeagueWeekRefusal(basis)) return { status: 'unavailable', reason: basis.detail }
+    const projections = await priceLeagueWeek(basis, ids, new Map([...byId].map(([id, row]) => [id, row.position])))
+    const candidates = findWinNowPickTrades({ me, partners: others, ownedPicks, projections, slots,
+      position, outgoingPlayerId: outgoing?.playerId, max: MAX_TRADE_IDEAS })
+    const suffix = (round: number) => round === 1 ? 'st' : round === 2 ? 'nd' : round === 3 ? 'rd' : 'th'
+    const ideas: TradeIdea[] = candidates.map(c => ({
+      partnerTeam: c.partner.teamName, partnerManager: c.partner.managerDisplayName ?? null,
+      partnerStance: c.partner.stance,
+      give: [{ name: c.outgoing.playerName, position: c.outgoing.position, value: c.outgoing.value, onTradeBlock: false },
+        ...c.picks.map(p => ({ name: `${p.season} ${p.round}${suffix(p.round)}${p.originalTeamName ? ` (${p.originalTeamName})` : ''}`,
+          position: 'PICK', value: p.value, onTradeBlock: false }))],
+      get: [{ name: c.target.playerName, position: c.target.position, value: c.target.value,
+        onTradeBlock: Boolean(c.partner.blockPlayerIds?.includes(c.target.playerId)) }],
+      giveTotal: c.giveTotal, getTotal: c.getTotal, fairness: c.fairness,
+      sendable: native, fillsNeed: myNeeds.includes(c.target.position),
+      why: [`Your projected starters gain ${c.lineupDelta.toFixed(1)} points in Week ${basis.week.week}`,
+        ...(c.partner.stance === 'rebuilder' ? ['They are rebuilding and receive future draft capital'] : ['They receive future draft capital'])],
+      projectedLineupDelta: c.lineupDelta, projectedLineupBefore: c.lineupBefore, projectedLineupAfter: c.lineupAfter,
+    }))
+    return { status: 'ready', leagueName: leagueDisplayName(league.name), valuesMode: values.mode,
+      you: { teamName: yours?.teamName ?? me.teamName, stance: me.stance,
+        stanceSettled: me.stanceSettled ?? true, needs: myNeeds, surpluses: mySurpluses },
+      asked: { position, tradeAway: outgoing?.playerName ?? null, goal: input.goal ?? null, picks: true },
+      pickNote: 'only verified owned picks are included; values are round averages, and exact draft slots remain unknown',
+      ideas,
+      noIdeasReason: ideas.length ? null : `no verified player-plus-owned-pick offer improves your projected starters in Week ${basis.week.week} while staying near market value`,
+      projectionWeek: basis.week, pickCoverage }
+  }
+
   const goal = input.goal ?? null
   let picks: OwnPick[] = []
   let pickNote: string | null = null
@@ -592,8 +675,11 @@ export function renderTradeFinderBlock(result: TradeFinderResult): string {
   lines.push(`TRADE IDEAS — ${result.leagueName}`)
   lines.push(
     `Built from every roster in this league and AllFantasy market values for its format (${result.valuesMode}; values on a 0–10,000 scale). ` +
-      'These are opening offers from roster shape and value, not verdicts.',
+      (result.projectionWeek
+        ? `Owned picks are valued by round average; exact draft slots are unknown. Lineup gains use Week ${result.projectionWeek.week}, ${result.projectionWeek.season} projections under this league’s scoring. These are opening offers, not acceptance or season forecasts.`
+        : 'These are opening offers from roster shape and value, not verdicts.'),
   )
+  if (result.pickCoverage === 'traded_only') lines.push('Pick inventory is partial: only synced traded picks are verified, so other picks are excluded.')
   const you = result.you
   const stance = you.stanceSettled ? STANCE_WORDS[you.stance] : 'too early in the season to call contending or rebuilding'
   lines.push(
@@ -605,8 +691,10 @@ export function renderTradeFinderBlock(result: TradeFinderResult): string {
   if (result.asked.tradeAway) lines.push(`Shopping: ${result.asked.tradeAway}.`)
   if (result.asked.goal === 'win_now') {
     lines.push(
-      'Asked for: WIN NOW. Every package below raises the current-season value of what the user holds, read off the ' +
-        'league’s redraft chart; packages that trade a better player this season for a younger one were dropped.',
+      result.projectionWeek
+        ? `Asked for: WIN NOW. Every package below improves projected starters in Week ${result.projectionWeek.week} under this league’s scoring.`
+        : 'Asked for: WIN NOW. Every package below raises the current-season value of what the user holds, read off the ' +
+          'league’s redraft chart; packages that trade a better player this season for a younger one were dropped.',
     )
   }
   if (result.asked.picks) lines.push(`Draft picks: offered by the user — ${result.pickNote ?? 'see each package'}.`)
@@ -627,8 +715,10 @@ export function renderTradeFinderBlock(result: TradeFinderResult): string {
     if (idea.nowGive !== undefined) {
       lines.push(`   This season (redraft chart): you give ${fmt(idea.nowGive ?? null)}, you get ${fmt(idea.nowGet ?? null)}`)
     }
-    if (idea.why.length) lines.push(`   Why it works for both: ${idea.why.join('; ')}`)
+    if (idea.projectedLineupDelta != null) lines.push(`   Projected starters: ${idea.projectedLineupBefore?.toFixed(1)} before, ${idea.projectedLineupAfter?.toFixed(1)} after (+${idea.projectedLineupDelta.toFixed(1)} this week)`)
+    if (idea.why.length) lines.push(`   Why it could work: ${idea.why.join('; ')}`)
   })
+  if (result.projectionWeek && result.ideas.length < MAX_TRADE_IDEAS) lines.push(`Only ${result.ideas.length} supported pick offer(s) met the ownership, value and weekly lineup checks; do not invent the rest.`)
   lines.push('')
   lines.push(
     'Rules: present these ideas with the names and numbers above and no others. Lead with the first. ' +
