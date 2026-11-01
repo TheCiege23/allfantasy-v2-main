@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { getIntlLocale } from '@/lib/i18n/constants'
 import { LeagueDuesTrackerPanel } from '@/components/league-settings/LeagueDuesTrackerPanel'
 import { PickTermsPanel } from '@/components/league-settings/PickTermsPanel'
 import { SettingsLockPanel } from '@/components/league-settings/home/SettingsLockPanel'
@@ -84,7 +85,7 @@ function formatDate(iso: string | null, lang: TabsLang): string | null {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleDateString(lang === 'es' ? 'es' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return d.toLocaleDateString(getIntlLocale(lang), { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export function ImportSyncTab({

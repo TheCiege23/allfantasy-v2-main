@@ -17,8 +17,7 @@ type Props = {
 /** A visible, mobile-sized path to the existing per-user import removal API. */
 export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, canRemove, supportEvent = SUPPORT_WIDGET_OPEN_EVENT }: Props) {
   const router = useRouter()
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const { t, tInterpolate } = useOptionalLanguage()
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const cancelRef = useRef<HTMLButtonElement | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -43,12 +42,12 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
       })
       const result = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null
       if (!response.ok || result?.ok !== true) {
-        throw new Error(result?.error || (es ? 'No se pudo eliminar la liga.' : 'Could not delete this imported league.'))
+        throw new Error(result?.error || t('league.importedActions.deleteFailed'))
       }
       router.push('/core')
       router.refresh()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : (es ? 'No se pudo eliminar la liga.' : 'Could not delete this imported league.'))
+      setError(cause instanceof Error ? cause.message : t('league.importedActions.deleteFailed'))
       setRemoving(false)
       setConfirmOpen(false)
     }
@@ -56,7 +55,7 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
 
   return (
     <section
-      aria-label={es ? 'Liga importada' : 'Imported league'}
+      aria-label={t('league.importedActions.aria')}
       className="shrink-0 border-b border-white/10 bg-[#0b1328] px-4 py-3"
       data-testid="imported-league-quick-actions"
     >
@@ -67,7 +66,7 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
           hid them instead (2026-10-29). It states what the league is, and Remove comes first.
         */}
         <p className="text-xs leading-5 text-white/70">
-          {es ? `Liga importada de ${platform}` : `Imported from ${platform}`}
+          {tInterpolate('league.importedActions.importedFrom', { platform })}
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           {canRemove ? (
@@ -77,7 +76,7 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
               className="inline-flex min-h-11 items-center justify-center rounded-xl border border-rose-400/40 bg-rose-400/10 px-4 text-sm font-semibold text-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
               data-testid="delete-imported-league-open"
             >
-              {es ? 'Quitar de mis ligas' : 'Remove from my leagues'}
+              {t('league.importedActions.remove')}
             </button>
           ) : null}
           <button
@@ -85,7 +84,7 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
             onClick={() => window.dispatchEvent(new Event(supportEvent))}
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 text-sm font-semibold text-[var(--badge-text-cyan)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
           >
-            {es ? 'Contactar a soporte' : 'Contact support'}
+            {t('league.importedActions.contactSupport')}
           </button>
         </div>
       </div>
@@ -103,20 +102,18 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="delete-imported-league-title" className="text-lg font-bold">
-              {es ? '¿Eliminar esta liga importada?' : 'Delete this imported league?'}
+              {t('league.importedActions.confirmTitle')}
             </h2>
             <p className="mt-2 break-words text-sm font-semibold">{leagueName}</p>
             <p className="mt-3 text-sm leading-6 text-white/70">
-              {es
-                ? `Se eliminará tu copia en AllFantasy. La liga original en ${platform} y las copias de otros miembros no cambiarán.`
-                : `This removes your copy from AllFantasy. The original league on ${platform} and other members' copies are unaffected.`}
+              {tInterpolate('league.importedActions.confirmBody', { platform })}
             </p>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row">
               <button ref={cancelRef} type="button" disabled={removing} onClick={() => setConfirmOpen(false)} className="min-h-11 flex-1 rounded-xl border border-white/20 px-4 text-sm font-semibold disabled:opacity-50">
-                {es ? 'Cancelar' : 'Cancel'}
+                {t('league.common.cancel')}
               </button>
               <button type="button" disabled={removing} onClick={() => void remove()} className="min-h-11 flex-1 rounded-xl bg-rose-600 px-4 text-sm font-semibold disabled:opacity-50" data-testid="delete-imported-league-confirm">
-                {removing ? (es ? 'Eliminando…' : 'Deleting…') : (es ? 'Eliminar de AllFantasy' : 'Delete from AllFantasy')}
+                {removing ? t('league.importedActions.deleting') : t('league.importedActions.confirm')}
               </button>
             </div>
           </div>

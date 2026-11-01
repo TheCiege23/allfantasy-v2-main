@@ -29,6 +29,7 @@ import {
   tradePartiesToAccept,
 } from '@/lib/redraft/tradeParticipants'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { pickEnEs } from '@/lib/i18n/bilingual'
 
 type Translate = (key: string) => string
 type TranslateVars = (key: string, vars?: Record<string, string | number | undefined>) => string
@@ -391,9 +392,7 @@ export function TradeCenter({
                       ? tInterpolate('tradeCenter.list.waitingOn', {
                           teams: stillPending.map((id) => teamName(id, teamIds.indexOf(id))).join(', '),
                         })
-                      : explainTradeReview({ ...p, acceptedAt: p.acceptedAt ?? null, votes: p.votes }, Date.now())[
-                          language === 'es' ? 'es' : 'en'
-                        ]}
+                      : pickEnEs(explainTradeReview({ ...p, acceptedAt: p.acceptedAt ?? null, votes: p.votes }, Date.now()), language)}
                   </p>
                 ) : null}
                 {p.status === 'pending' ? (

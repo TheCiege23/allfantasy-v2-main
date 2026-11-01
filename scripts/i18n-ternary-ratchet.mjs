@@ -3,7 +3,8 @@
  * Ratchet for inline English/Spanish ternaries in /core.
  *
  * Counts `language === 'es'`, `lang === 'es'` and `es ? …` / `spanish ? …` per file under
- * components/core-app and lib/core-app. New code should put its strings in a message catalog
+ * components/core-app, lib/core-app, components/league and app/league (the league pages were
+ * migrated to the catalog on 2026-10-31 and start at zero). New code should put its strings in a message catalog
  * (lib/i18n/messages.ts) instead, so a third language is one block per catalog rather than an edit
  * to every ternary.
  *
@@ -19,7 +20,7 @@ import { fileURLToPath } from 'node:url'
 // A string, not `new URL(...)`: under jsdom tests the global URL is jsdom's, which fileURLToPath rejects.
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 export const BASELINE_PATH = join(ROOT, 'scripts', 'i18n-ternary-baseline.json')
-const DIRS = ['components/core-app', 'lib/core-app']
+export const DIRS = ['components/core-app', 'lib/core-app', 'components/league', 'app/league']
 export const TERNARY = /(?:\blanguage === 'es'|\blang === 'es'|\bes \?|\bspanish \?)/g
 
 export function countTernaries() {

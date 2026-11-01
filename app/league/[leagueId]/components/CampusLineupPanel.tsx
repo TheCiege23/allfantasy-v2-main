@@ -8,13 +8,14 @@
  */
 import { useMemo } from 'react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { getIntlLocale } from '@/lib/i18n/constants'
 import { campusToggles } from '@/lib/c2c/campusLineup'
 import type { CampusLineupView } from '@/lib/c2c/campusLineupView'
 import { campusCopy, campusLang } from '@/lib/i18n/c2c-campus-copy'
 
 /** A UTC-midnight date key as "Nov 3" / "3 nov" — the window's bounds are date keys, not instants. */
 function shortDate(iso: string, lang: 'en' | 'es'): string {
-  return new Date(iso).toLocaleDateString(lang === 'es' ? 'es' : 'en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  return new Date(iso).toLocaleDateString(getIntlLocale(lang), { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
 /** The window is `[start, end)`: the last day that counts is the day before `end`. */

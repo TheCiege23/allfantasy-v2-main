@@ -71,9 +71,9 @@ export function TradeBlockPanel({
   onBuildProposal: (partnerRosterId: string) => void
 }) {
   const { t, language } = useOptionalLanguage()
-  /** An interest with no player or position shows its type: the raw code in English, as before. */
+  /** An interest with no player or position shows its type: the catalog's label (English is the raw code, as before). */
   const interestLabel = (it: TradeInterestItem) =>
-    it.playerName ?? it.position ?? (language === 'es' ? tOr(t, `tradeCenter.block.interestType.${it.interestType}`, it.interestType) : it.interestType)
+    it.playerName ?? it.position ?? tOr(t, `tradeCenter.block.interestType.${it.interestType}`, it.interestType)
   const [open, setOpen] = useState(false)
   const [leagueBlock, setLeagueBlock] = useState<TradeBlockItem[]>([])
   const [myInterests, setMyInterests] = useState<TradeInterestItem[]>([])
