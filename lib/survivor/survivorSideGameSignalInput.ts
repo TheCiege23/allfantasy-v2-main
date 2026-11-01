@@ -30,7 +30,7 @@ export async function loadSurvivorSideGameSignals(args: { userId: string; league
         week: view.week,
         nextLockAt,
         tokenPool: { enabled: s.tokenPoolEnabled, open: s.tokenPoolOpen, picksLeft: Math.max(0, s.tokenPoolPicksPerWeek - view.tokenPool.picks.filter((p) => p.week === view.week).length), pot: view.tokenPool.pot, streak: s.tokenPoolMode === 'streak' },
-        pool: { enabled: s.survivorPoolEnabled, started: view.week >= s.survivorPoolStartWeek, alive: view.pool.entry.alive, banned: view.pool.banned, picked: Boolean(view.pool.pick), revivesLeft: view.pool.revivesLeft },
+        pool: { enabled: s.survivorPoolEnabled, started: view.week >= s.survivorPoolStartWeek, alive: view.pool.entry.alive, banned: view.pool.banned, picked: Boolean(view.pool.pick), revivesLeft: view.pool.revivesLeft, missedPick: s.survivorPoolMissedPick ?? 'none' },
         auctions: view.auctions.map((a) => ({ auctionId: a.auctionId, label: a.label, closesAt: a.closesAt, takingBids: a.takingBids, myBids: a.items.filter((i) => i.myBid != null).length })),
         shop: { open: s.tokenShopEnabled && view.shop.length > 0, tokens: view.tokens, cheapest: view.shop.length ? Math.min(...view.shop.map((i) => i.cost)) : null },
         exileBid: view.exileBid ? { week: view.exileBid.week, closesAt: view.exileBid.closesAt, hasBid: Boolean(view.exileBid.myBid) } : null,

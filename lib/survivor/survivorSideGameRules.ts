@@ -14,7 +14,9 @@ import { SURVIVOR_REWARD_LIMITS } from './survivorRewardModel'
 import type {
   ExileTokenFaabBasis,
   SurvivorPoolConference,
+  SurvivorPoolMissedPick,
   SurvivorPoolRule,
+  SurvivorPoolTieRule,
   TokenPoolMode,
   TokenPoolWrongPick,
   TokenShopItem,
@@ -86,6 +88,84 @@ export function sideGameTeamKey(sport: string, team: string | null | undefined):
 
 export function nflConference(teamKey: string): SurvivorPoolConference | null {
   return NFL_TEAMS[teamKey]?.conference ?? null
+}
+
+/** NFL divisions (facts, like the conferences above): the fallback when no stored team row says. */
+const NFL_DIVISIONS: Record<string, string> = {
+  BUF: 'AFC East', MIA: 'AFC East', NE: 'AFC East', NYJ: 'AFC East',
+  BAL: 'AFC North', CIN: 'AFC North', CLE: 'AFC North', PIT: 'AFC North',
+  HOU: 'AFC South', IND: 'AFC South', JAX: 'AFC South', TEN: 'AFC South',
+  DEN: 'AFC West', KC: 'AFC West', LV: 'AFC West', LAC: 'AFC West',
+  DAL: 'NFC East', NYG: 'NFC East', PHI: 'NFC East', WAS: 'NFC East',
+  CHI: 'NFC North', DET: 'NFC North', GB: 'NFC North', MIN: 'NFC North',
+  ATL: 'NFC South', CAR: 'NFC South', NO: 'NFC South', TB: 'NFC South',
+  ARI: 'NFC West', LAR: 'NFC West', SF: 'NFC West', SEA: 'NFC West',
+}
+
+/** A team's conference and division, as our stored team data (or the NFL table) has them. */
+export interface TeamGroup {
+  conference: string | null
+  division: string | null
+}
+
+/** teamKey → its groups, built from stored `SportsTeam` rows by `teamGroupsFromRows`. */
+export type TeamGroups = ReadonlyMap<string, TeamGroup>
+
+/**
+ * Index stored team rows (`SportsTeam`: name, shortName, city, conference, division) by every key a
+ * game row might fold to — the name, the short name, and "city name". Rows from several feeds merge:
+ * a feed that left conference blank never erases one another feed stored. Pure.
+ */
+export function teamGroupsFromRows(
+  sport: string,
+  rows: ReadonlyArray<{ name: string; shortName?: string | null; city?: string | null; conference?: string | null; division?: string | null }>,
+): Map<string, TeamGroup> {
+  const out = new Map<string, TeamGroup>()
+  const clean = (v: string | null | undefined) => (typeof v === 'string' && v.trim() ? v.trim().replace(/\s+/g, ' ') : null)
+  for (const row of rows) {
+    const conference = clean(row.conference)
+    const division = clean(row.division)
+    if (!conference && !division) continue
+    const names = [row.name, row.shortName, row.city && row.name && !row.name.startsWith(row.city) ? `${row.city} ${row.name}` : null]
+    for (const n of names) {
+      const key = sideGameTeamKey(sport, n)
+      if (!key) continue
+      const prev = out.get(key)
+      out.set(key, { conference: prev?.conference ?? conference, division: prev?.division ?? division })
+    }
+  }
+  return out
+}
+
+/** A team's groups: stored data first, then (NFL only) the built-in table. Null when nothing is known. */
+export function teamGroupOf(sport: string, teamKey: string, groups?: TeamGroups | null): TeamGroup | null {
+  const stored = groups?.get(teamKey)
+  const nfl = String(sport).toUpperCase() === 'NFL'
+  const conference = stored?.conference ?? (nfl ? nflConference(teamKey) : null)
+  const division = stored?.division ?? (nfl ? NFL_DIVISIONS[teamKey] ?? null : null)
+  return conference || division ? { conference, division } : null
+}
+
+/** Do two group names mean the same group? Case, spacing and punctuation never matter. */
+export function sameTeamGroup(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false
+  return simplify(a) === simplify(b)
+}
+
+/** The distinct conference and division names a sport's teams use — the commissioner's choices. */
+export function teamGroupChoices(sport: string, groups?: TeamGroups | null): { conferences: string[]; divisions: string[] } {
+  const conferences = new Set<string>()
+  const divisions = new Set<string>()
+  for (const g of groups?.values() ?? []) {
+    if (g.conference) conferences.add(g.conference)
+    if (g.division) divisions.add(g.division)
+  }
+  if (String(sport).toUpperCase() === 'NFL') {
+    for (const t of Object.values(NFL_TEAMS)) conferences.add(t.conference)
+    for (const d of Object.values(NFL_DIVISIONS)) divisions.add(d)
+  }
+  const dedupe = (set: Set<string>) => [...new Map([...set].map((v) => [simplify(v), v])).values()].sort((a, b) => a.localeCompare(b))
+  return { conferences: dedupe(conferences), divisions: dedupe(divisions) }
 }
 
 // ── Games ──────────────────────────────────────────────────────────────────────────────────────
@@ -209,14 +289,20 @@ export function settleTokenPoolPick(args: {
 
 // ── Survivor Pool ──────────────────────────────────────────────────────────────────────────────
 
-export type PoolPickRefusal = 'not_in_conference' | 'not_away' | 'not_allowed' | 'not_in_game' | 'conference_unknown'
+export type PoolPickRefusal = 'not_in_conference' | 'not_away' | 'not_allowed' | 'not_in_game' | 'conference_unknown' | 'not_in_division' | 'division_unknown' | 'team_used'
 
-/** Is picking `teamKey` in `game` allowed under this week's pool rule? Null when it is. */
+/**
+ * Is picking `teamKey` in `game` allowed under this week's pool rule? Null when it is. Conference
+ * and division rules work for every sport from our stored team data (`groups`, from `SportsTeam`);
+ * the NFL also has its conferences and divisions built in. A team whose group we do not know is
+ * refused (`*_unknown`) rather than guessed.
+ */
 export function poolPickRefusal(
   sport: string,
-  rule: { rule: SurvivorPoolRule; conference: SurvivorPoolConference; allowedTeams: readonly string[] },
+  rule: { rule: SurvivorPoolRule; conference: SurvivorPoolConference; allowedTeams: readonly string[]; division?: string },
   game: Pick<SideGameGame, 'homeKey' | 'awayKey'>,
   teamKey: string,
+  groups?: TeamGroups | null,
 ): PoolPickRefusal | null {
   if (teamKey !== game.homeKey && teamKey !== game.awayKey) return 'not_in_game'
   switch (rule.rule) {
@@ -225,14 +311,54 @@ export function poolPickRefusal(
     case 'away_only':
       return teamKey === game.awayKey ? null : 'not_away'
     case 'conference': {
-      if (String(sport).toUpperCase() !== 'NFL') return 'conference_unknown'
-      const conf = nflConference(teamKey)
+      const conf = teamGroupOf(sport, teamKey, groups)?.conference
       if (!conf) return 'conference_unknown'
-      return conf === rule.conference ? null : 'not_in_conference'
+      return sameTeamGroup(conf, rule.conference) ? null : 'not_in_conference'
+    }
+    case 'division': {
+      const div = teamGroupOf(sport, teamKey, groups)?.division
+      if (!div || !rule.division) return 'division_unknown'
+      return sameTeamGroup(div, rule.division) ? null : 'not_in_division'
     }
     case 'allowed_list':
       return rule.allowedTeams.some((t) => sideGameTeamKey(sport, t) === teamKey) ? null : 'not_allowed'
   }
+}
+
+/**
+ * "No reusing a team": the teams a manager has already used in OTHER weeks this season (a pick
+ * still waiting to settle counts — the team was spent the moment the game kicked off). The week's
+ * own pick is not in the list, so a manager may still change it before lock.
+ */
+export function poolUsedTeams(picks: ReadonlyArray<{ week: number; teamKey: string }>, week: number): string[] {
+  return [...new Set(picks.filter((p) => p.week !== week && p.teamKey).map((p) => p.teamKey))].sort()
+}
+
+export function poolReuseRefusal(noReuse: boolean, used: readonly string[], teamKey: string): 'team_used' | null {
+  return noReuse && used.includes(teamKey) ? 'team_used' : null
+}
+
+/** A tied game under the commissioner's tie rule: a push (today), a loss, or a win. */
+export function poolOutcomeWithTieRule(outcome: PickOutcome, tieRule: SurvivorPoolTieRule): PickOutcome {
+  if (outcome !== 'push') return outcome
+  return tieRule === 'loss' ? 'wrong' : tieRule === 'win' ? 'correct' : 'push'
+}
+
+/**
+ * A week with no pick, once every game of that week has kicked off. `none`: nothing (today).
+ * `loss`: out, exactly like a wrong pick. `revive`: one revive is spent and the manager stays in —
+ * or, with none left, is out. Null when nothing changes (already out, or the rule is off).
+ */
+export function applyMissedPoolPick(entry: PoolEntryState, rule: SurvivorPoolMissedPick, allowance: number, week: number): PoolEntryState | null {
+  if (rule === 'none' || !entry.alive) return null
+  if (rule === 'revive' && poolRevivesLeft(entry, allowance) > 0) return { ...entry, revivesUsed: entry.revivesUsed + 1 }
+  return { ...entry, alive: false, eliminatedWeek: week }
+}
+
+/** Has every game of the week kicked off (so a missing pick can no longer be made)? False with no games. */
+export function poolWeekLocked(games: ReadonlyArray<Pick<SideGameGame, 'startTime' | 'final'>>, now: Date): boolean {
+  if (!games.length) return false
+  return games.every((g) => g.final || (g.startTime != null && g.startTime.getTime() <= now.getTime()))
 }
 
 /** A Survivor Pool entry, folded from the ledger. */
@@ -508,4 +634,74 @@ export function chimmyAuctionBid(args: {
   if (high?.rosterId === args.rosterId) return null
   const amount = (high?.amount ?? 0) + 1
   return amount <= cap ? { itemId: target.itemId, amount } : null
+}
+
+/**
+ * Chimmy's sealed Exile team bid for a seat it runs (`exileClaimMode: 'faab_bid'`): the strongest
+ * team still open this period by OUR stored finals (`teamStrength`, the same record its picks use;
+ * the key breaks a tie), for its share of the weekly Exile budget — budget × strength, at least 1 and
+ * never above the budget. It never reads anyone else's bid: the only bid it is shown is its own, and
+ * it bids once per period. Deterministic, so a re-run makes the same bid. Null when nothing is open.
+ */
+export function chimmyExileTeamBid(args: {
+  sport: string
+  /** Exile team keys still open for bids this period (`exileBidWindow().openTeams`). */
+  openTeams: Iterable<string>
+  budget: number
+  records: ReadonlyMap<string, TeamRecord>
+  /** Chimmy's OWN bid this period, if any. */
+  myBid: { team: string; amount: number } | null
+}): { team: string; amount: number } | null {
+  if (args.myBid) return null
+  const budget = Math.floor(Math.max(0, args.budget))
+  if (budget < 1) return null
+  let best: { team: string; strength: number } | null = null
+  for (const team of [...args.openTeams].sort()) {
+    const strength = teamStrength(args.records.get(sideGameTeamKey(args.sport, team)))
+    if (!best || strength > best.strength) best = { team, strength }
+  }
+  if (!best) return null
+  return { team: best.team, amount: Math.min(budget, Math.max(1, Math.round(budget * best.strength))) }
+}
+
+// ── Auction refunds ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A charged auction winner whose prize then fails to pay is refunded — once. `permanentFailure` is a
+ * refusal from the reward API (the winner left the island before the close, the prize no longer
+ * applies); a transient error is retried by the runner instead and never refunded, so a prize cannot
+ * end up both refunded and paid. Nothing charged: nothing to refund.
+ */
+export function auctionRefundDue(args: { charged: number; paid: boolean; permanentFailure: boolean; alreadyRefunded: boolean }): number {
+  if (args.alreadyRefunded || args.paid || !args.permanentFailure) return 0
+  return Math.max(0, Math.floor(args.charged))
+}
+
+// ── Disadvantages ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The opponents a disadvantage may target: active castaways other than its holder; before the merge
+ * only those on another tribe ("an opponent"). Sorted for a stable list.
+ */
+export function disadvantageTargets(
+  holder: { rosterId: string; tribeId: string | null },
+  castaways: ReadonlyArray<{ rosterId: string | null; tribeId: string | null; playerState: string }>,
+  merged: boolean,
+): string[] {
+  return castaways
+    .filter((c): c is { rosterId: string; tribeId: string | null; playerState: string } => Boolean(c.rosterId) && c.playerState === 'active' && c.rosterId !== holder.rosterId)
+    .filter((c) => merged || !holder.tribeId || c.tribeId !== holder.tribeId)
+    .map((c) => c.rosterId)
+    .sort()
+}
+
+/**
+ * Chimmy's target for a disadvantage it holds for a seat it runs: the strongest eligible opponent by
+ * season points (it weakens the biggest threat). Ties break on roster id. Never consults anything
+ * private (blockers, idols, ballots).
+ */
+export function pickChimmyDisadvantageTarget(candidates: ReadonlyArray<{ rosterId: string; seasonPoints: number }>, eligible: readonly string[]): string | null {
+  const pool = candidates.filter((c) => eligible.includes(c.rosterId))
+  const sorted = [...pool].sort((a, b) => b.seasonPoints - a.seasonPoints || a.rosterId.localeCompare(b.rosterId))
+  return sorted[0]?.rosterId ?? eligible[0] ?? null
 }

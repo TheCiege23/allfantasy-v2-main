@@ -142,6 +142,38 @@ export const survivorSideGameMessages = defineMessages({
     awardedTeam: (t: string): string => `You won ${t}.`,
     balances: (faab: string, cash: number): string => `FAAB ${faab} · Auction cash ${cash}`,
     nothing: 'No side games are running right now.',
+    // gaps: pool rules, disadvantages, exposure, used teams
+    ruleDivision: 'One division',
+    poolDivision: 'Division',
+    poolGroupHint: 'Names come from our stored team data for this sport.',
+    poolTieRule: 'A tied game',
+    tiePush: 'Push (nothing happens)',
+    tieLoss: 'Counts as a loss',
+    tieWin: 'Counts as a win',
+    poolMissed: 'A week with no pick',
+    missedNone: 'Nothing happens',
+    missedLoss: 'Counts as a loss',
+    missedRevive: 'Uses a revive',
+    poolNoReuse: 'No reusing a team (each team once per season)',
+    usedTeams: (teams: string): string => `Teams you have used: ${teams}`,
+    usedTag: 'Used',
+    disadvantagesTitle: 'Disadvantages',
+    disadvantagesHelp: 'Items a winner aims at an opponent they choose. Each is off until you turn it on; then you can sell it in the shop or put it in an auction.',
+    disOpponentPenalty: 'Point penalty on a chosen opponent',
+    disVoteTaken: 'Take a chosen opponent’s vote at their next Tribal Council',
+    exposureRule: 'Removed if exposed (commissioner applies it from the Hub)',
+    exposureOff: 'Off',
+    exposureRemove: 'Remove the manager',
+    exposureStrike: 'A conduct strike',
+    exposureTitle: 'Exposed an exile',
+    exposureHelp: 'Mark a manager who revealed who is on Exile. You confirm before the penalty applies; Chimmy tells them privately.',
+    exposureCheck: 'Review penalty',
+    exposureApply: 'Confirm penalty',
+    refunded: 'Refunded',
+    prizeOpponentPenalty: 'Point penalty on an opponent',
+    prizeVoteTaken: 'Take an opponent’s vote',
+    screenHint: 'The key Exile Island and side-game settings. Everything else (shop prices, auctions, Exile lineup) is in league settings → Exile; both save through the same rules.',
+    screenLocked: 'Locked for the season',
   },
   es: {
     loading: 'Cargando…',
@@ -274,23 +306,61 @@ export const survivorSideGameMessages = defineMessages({
     awardedTeam: (t: string): string => `Ganaste ${t}.`,
     balances: (faab: string, cash: number): string => `FAAB ${faab} · Dinero de subasta ${cash}`,
     nothing: 'No hay juegos paralelos activos ahora.',
+    ruleDivision: 'Una división',
+    poolDivision: 'División',
+    poolGroupHint: 'Los nombres vienen de nuestros datos guardados de equipos de este deporte.',
+    poolTieRule: 'Un partido empatado',
+    tiePush: 'Empate (no pasa nada)',
+    tieLoss: 'Cuenta como derrota',
+    tieWin: 'Cuenta como victoria',
+    poolMissed: 'Una semana sin elegir',
+    missedNone: 'No pasa nada',
+    missedLoss: 'Cuenta como derrota',
+    missedRevive: 'Gasta una resurrección',
+    poolNoReuse: 'Sin repetir equipo (cada equipo una vez por temporada)',
+    usedTeams: (teams: string): string => `Equipos que ya usaste: ${teams}`,
+    usedTag: 'Usado',
+    disadvantagesTitle: 'Desventajas',
+    disadvantagesHelp: 'Artículos que el ganador lanza contra un rival que elige. Cada uno está apagado hasta que lo actives; luego puedes venderlo en la tienda o ponerlo en una subasta.',
+    disOpponentPenalty: 'Penalización de puntos a un rival elegido',
+    disVoteTaken: 'Quitarle el voto a un rival elegido en su próximo Consejo Tribal',
+    exposureRule: 'Expulsión por exponer (el comisionado la aplica desde el Hub)',
+    exposureOff: 'Apagado',
+    exposureRemove: 'Sacar al mánager',
+    exposureStrike: 'Un strike de conducta',
+    exposureTitle: 'Expuso a alguien del Exilio',
+    exposureHelp: 'Marca a un mánager que reveló quién está en el Exilio. Confirmas antes de aplicar la sanción; Chimmy se lo dice en privado.',
+    exposureCheck: 'Revisar sanción',
+    exposureApply: 'Confirmar sanción',
+    refunded: 'Reembolsado',
+    prizeOpponentPenalty: 'Penalización de puntos a un rival',
+    prizeVoteTaken: 'Quitarle el voto a un rival',
+    screenHint: 'Los ajustes clave de la Isla del Exilio y los juegos paralelos. Lo demás (precios de la tienda, subastas, alineación del Exilio) está en ajustes de la liga → Exilio; ambos guardan con las mismas reglas.',
+    screenLocked: 'Bloqueado para la temporada',
   },
 })
 
-/** "5:away_only 9:conference:NFC 12:list:KC,TB" ⇄ week rules. Unparseable parts are dropped. */
-export function parseWeekRulesText(text: string): Array<{ week: number; rule: string; conference?: string; allowedTeams?: string[] }> {
-  const out: Array<{ week: number; rule: string; conference?: string; allowedTeams?: string[] }> = []
+/**
+ * "5:away_only 9:conference:NFC 12:list:KC,TB 14:division:AFC_East" ⇄ week rules. An underscore in a
+ * conference or division name stands for a space. Unparseable parts are dropped.
+ */
+export function parseWeekRulesText(text: string): Array<{ week: number; rule: string; conference?: string; allowedTeams?: string[]; division?: string }> {
+  const out: Array<{ week: number; rule: string; conference?: string; allowedTeams?: string[]; division?: string }> = []
   for (const part of text.split(/\s+/).filter(Boolean)) {
     const [w, rule, arg] = part.split(':')
     const week = Number(w)
     if (!Number.isInteger(week) || week < 1) continue
     if (rule === 'any' || rule === 'away_only') out.push({ week, rule })
-    else if (rule === 'conference' && (arg === 'AFC' || arg === 'NFC')) out.push({ week, rule, conference: arg })
+    else if (rule === 'conference' && arg) out.push({ week, rule, conference: arg.replace(/_/g, ' ') })
+    else if (rule === 'division' && arg) out.push({ week, rule, division: arg.replace(/_/g, ' ') })
     else if (rule === 'list' && arg) out.push({ week, rule: 'allowed_list', allowedTeams: arg.split(',').map((t) => t.trim().toUpperCase()).filter(Boolean) })
   }
   return out
 }
 
-export function formatWeekRulesText(rules: ReadonlyArray<{ week: number; rule: string; conference?: string; allowedTeams?: string[] }>): string {
-  return rules.map((r) => r.rule === 'conference' ? `${r.week}:conference:${r.conference ?? 'AFC'}` : r.rule === 'allowed_list' ? `${r.week}:list:${(r.allowedTeams ?? []).join(',')}` : `${r.week}:${r.rule}`).join(' ')
+export function formatWeekRulesText(rules: ReadonlyArray<{ week: number; rule: string; conference?: string; allowedTeams?: string[]; division?: string }>): string {
+  const name = (v: string | undefined, fallback: string) => (v || fallback).replace(/\s+/g, '_')
+  return rules.map((r) => r.rule === 'conference' ? `${r.week}:conference:${name(r.conference, 'AFC')}`
+    : r.rule === 'division' ? `${r.week}:division:${name(r.division, '')}`
+      : r.rule === 'allowed_list' ? `${r.week}:list:${(r.allowedTeams ?? []).join(',')}` : `${r.week}:${r.rule}`).join(' ')
 }

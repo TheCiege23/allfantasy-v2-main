@@ -58,7 +58,16 @@ import {
   weeklyPrizesFromForm,
   realGameSettingsFromForm,
   SURVIVOR_CHALLENGE_SETTING_DEFAULTS,
+  changedSideGameScreenKeys,
+  sideGamesForScreen,
 } from '@/lib/survivor/survivorSettingsScreen'
+import {
+  lockedSideGameKeys,
+  readSurvivorSideGameSettings,
+  SURVIVOR_SIDE_GAMES_KEY,
+  validateSurvivorSideGamePatch,
+  type SurvivorSideGameKey,
+} from '@/lib/survivor/survivorSideGameSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,6 +98,8 @@ export interface SurvivorSettingsScreenState {
   /** Offer "Chimmy's roster" only to a league that already runs it (existing leagues keep it). */
   chimmyBossAvailable: boolean
   commissionerPlays: boolean
+  /** Side-game keys locked this season (the side games' own lock rule, shared with league settings → Exile). */
+  sideGameLocked?: SurvivorSideGameKey[]
 }
 
 async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Promise<SurvivorSettingsScreenState | null> {
@@ -105,11 +116,13 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
   const plan = readSurvivorFullSeasonPlan(settings)
   const prizes = readSurvivorWeeklyPrizes(settings)
   const realGame = readRealGameSettings(settings)
-  const [draftStarted, assigned, idolView] = await Promise.all([
+  const [draftStarted, assigned, idolView, sideGameLockCtx] = await Promise.all([
     isSurvivorDraftStarted(leagueId),
     prisma.survivorTribeMember.count({ where: { tribe: { leagueId } } }),
     getSurvivorIdolSetupView(leagueId, { isCommissioner: true, canSeeDraw: viewer.canSeeDraw }),
+    import('@/lib/survivor/survivorSideGameService').then((m) => m.sideGameLockContext(leagueId)).catch(() => ({ draftStarted: true, seasonStarted: true })), // fail closed: locks hold
   ])
+  const sideGames = readSurvivorSideGameSettings(settings, { harshTokenLoss: league.survivorExileHarshTokenLoss })
   const firstWeek = plan?.startWeek ?? 1
   const lastWeek = plan?.endWeek ?? 13
   return {
@@ -154,8 +167,10 @@ async function loadState(leagueId: string, viewer: { canSeeDraw: boolean }): Pro
       realGamePrizeType: realGame.prize.type,
       realGamePrizeAmount: realGame.prize.type === 'none' ? SURVIVOR_CHALLENGE_SETTING_DEFAULTS.realGamePrizeAmount : realGame.prize.amount,
       challengeFaabWeeklyCap: readChallengeFaabWeeklyCap(settings),
+      sideGames: sideGamesForScreen(sideGames),
     },
-    context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek, sport: String(league.sport ?? 'NFL') },
+    context: { managers: foundation.defaultTeamCount, firstWeek, lastWeek, sport: String(league.sport ?? 'NFL'), sideGames },
+    sideGameLocked: lockedSideGameKeys(sideGameLockCtx),
     locks: { draftStarted, finalistLocked: Boolean(plan) || draftStarted, tribesLocked: assigned > 0 || Boolean(readStoredTribePlan(settings)?.lockedAt) },
     chimmyBossAvailable: late.exileBossMode === 'chimmy_roster',
     commissionerPlays: foundation.commissionerParticipationMode === 'participating_player',
@@ -200,6 +215,17 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   }
   const errors = validateSettingsForm(next, state.context)
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
+
+  // The key side games: the SAME validator and season locks league settings → Exile saves with.
+  let sideGamePatchResult: Extract<ReturnType<typeof validateSurvivorSideGamePatch>, { ok: true }> | null = null
+  const sideKeys = changedSideGameScreenKeys(state.form.sideGames, next.sideGames)
+  if (sideKeys.length && next.sideGames && state.context.sideGames) {
+    const patch: Rec = {}
+    for (const k of sideKeys) patch[k] = next.sideGames[k]
+    const checked = validateSurvivorSideGamePatch(state.context.sideGames, patch, state.sideGameLocked ?? [])
+    if (!checked.ok) return NextResponse.json({ error: checked.error, code: checked.code }, { status: checked.code === 'locked' ? 409 : 422 })
+    sideGamePatchResult = checked
+  }
 
   const has = (key: keyof SurvivorSettingsForm) => changed.includes(key)
   const outcome = await prisma.$transaction(async tx => {
@@ -251,6 +277,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       latePatch[REAL_GAME_SETTINGS_KEY] = realGameSettingsFromForm(next, current[REAL_GAME_SETTINGS_KEY])
     }
     if (has('challengeFaabWeeklyCap')) latePatch[SURVIVOR_CHALLENGE_FAAB_CAP_KEY] = next.challengeFaabWeeklyCap
+    // Re-validated against the side games stored INSIDE this transaction, so a concurrent save from
+    // league settings → Exile is merged rather than overwritten.
+    if (sideGamePatchResult) {
+      const stored = readSurvivorSideGameSettings(current, { harshTokenLoss: state.form.exileHarshTokenLoss })
+      const merged = validateSurvivorSideGamePatch(stored, sideGamePatchResult.patch, state.sideGameLocked ?? [])
+      if (!merged.ok) return { ok: false as const, status: merged.code === 'locked' ? 409 : 422, error: merged.error }
+      latePatch[SURVIVOR_SIDE_GAMES_KEY] = merged.settings
+    }
 
     const nextFoundation = normalizeSurvivorFoundationSettings({ ...current, ...foundationPatch })
     const columns: Rec = Object.keys(foundationPatch).length ? buildSurvivorLeagueColumnPatch(nextFoundation) : {}

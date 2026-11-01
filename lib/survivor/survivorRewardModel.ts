@@ -26,6 +26,9 @@ export const SURVIVOR_REWARD_TYPES = [
   'steal_blocker',
   'steal',
   'advantage',
+  // Disadvantages the winner aims at an opponent (side-game auctions and the token shop).
+  'opponent_penalty',
+  'vote_taken',
 ] as const
 export type SurvivorRewardType = (typeof SURVIVOR_REWARD_TYPES)[number]
 
@@ -84,6 +87,18 @@ export type SurvivorRewardSpec =
   | { type: 'steal'; thiefRosterId: string; what: 'faab' | 'points'; amount: number; targetRosterId?: string | null; targetWeek?: number | null }
   /** A revealed advantage (an idol-table power) handed to one manager. */
   | { type: 'advantage'; rosterId: string; powerType: SurvivorRewardAdvantagePower }
+  /**
+   * A disadvantage: `points` off an opponent the winner chooses, on `targetWeek` (default: the week
+   * won). With no `targetRosterId` it waits for the winner's choice, like a steal; nothing is
+   * credited to the winner and a steal blocker does not stop it.
+   */
+  | { type: 'opponent_penalty'; chooserRosterId: string; points: number; targetRosterId?: string | null; targetWeek?: number | null }
+  /**
+   * A disadvantage: the chosen opponent's vote at their next Tribal Council does not count (it is
+   * read as a taken vote). Held `available` once chosen, and consumed onto the first council the
+   * target votes at (`applyPendingVoteTakenRewards`, run by the season runner).
+   */
+  | { type: 'vote_taken'; chooserRosterId: string; targetRosterId?: string | null }
 
 export interface SurvivorRewardSource {
   kind: SurvivorRewardSourceKind
@@ -128,6 +143,8 @@ export type SurvivorRewardChange =
   | { kind: 'faab'; rosterId: string; delta: number }
   | { kind: 'score'; rosterId: string; userId: string; week: number; boost: number; penalty: number }
   | { kind: 'advantage'; rosterId: string; idolId: string; powerType: string }
+  /** vote_taken: the taken-vote record placed on a council (removed again if reversed before it closes). */
+  | { kind: 'council_vote'; rosterId: string; councilId: string; playId: string }
 
 export const SURVIVOR_REWARD_ACTIONS = {
   granted: 'reward_granted',
@@ -223,6 +240,18 @@ export function validateSurvivorRewardSpec(spec: unknown): string | null {
       if (!isId(r.rosterId)) return 'Choose the manager.'
       if (!(SURVIVOR_REWARD_ADVANTAGE_POWERS as readonly string[]).includes(String(r.powerType))) return 'Choose an advantage.'
       return null
+    case 'opponent_penalty':
+      if (!isId(r.chooserRosterId)) return 'Choose the winner.'
+      if (!isPoints(r.points)) return `Points must be more than 0 and at most ${SURVIVOR_REWARD_LIMITS.points}.`
+      if (r.targetRosterId != null && !isId(r.targetRosterId)) return 'The opponent is not valid.'
+      if (r.targetRosterId != null && r.targetRosterId === r.chooserRosterId) return 'Choose an opponent, not yourself.'
+      if (!optWeek('targetWeek')) return 'The target week is not valid.'
+      return null
+    case 'vote_taken':
+      if (!isId(r.chooserRosterId)) return 'Choose the winner.'
+      if (r.targetRosterId != null && !isId(r.targetRosterId)) return 'The opponent is not valid.'
+      if (r.targetRosterId != null && r.targetRosterId === r.chooserRosterId) return 'Choose an opponent, not yourself.'
+      return null
   }
 }
 
@@ -242,6 +271,8 @@ export function validateApplySurvivorRewardInput(input: ApplySurvivorRewardInput
 export function rewardHolderRosterIds(spec: SurvivorRewardSpec): string[] {
   switch (spec.type) {
     case 'tribemate_points': return [spec.chooserRosterId]
+    case 'opponent_penalty':
+    case 'vote_taken': return [spec.chooserRosterId]
     case 'steal': return [spec.thiefRosterId]
     case 'faab_transfer': return []
     default: return [spec.rosterId]
@@ -256,7 +287,7 @@ export function rewardApplyWeek(input: Pick<ApplySurvivorRewardInput, 'week' | '
 
 /** Whether a reward needs its holder's choice before it can apply. */
 export function rewardNeedsChoice(spec: SurvivorRewardSpec): boolean {
-  return (spec.type === 'tribemate_points' || spec.type === 'steal') && !spec.targetRosterId
+  return (spec.type === 'tribemate_points' || spec.type === 'steal' || spec.type === 'opponent_penalty' || spec.type === 'vote_taken') && !spec.targetRosterId
 }
 
 export interface FaabTransferPlan {
@@ -432,6 +463,8 @@ export function describeSurvivorReward(record: Pick<SurvivorRewardRecord, 'spec'
     case 'steal_blocker': line = es ? 'Un bloqueador: cancela el próximo robo contra ti' : 'A blocker: cancels the next steal aimed at you'; break
     case 'steal': line = es ? `Robo de ${s.what === 'faab' ? `$${s.amount} de FAAB` : `${fmtPts(s.amount)} puntos`}` : `A steal of ${s.what === 'faab' ? `$${s.amount} FAAB` : `${fmtPts(s.amount)} points`}`; break
     case 'advantage': line = es ? `Ventaja: ${s.powerType.replace(/_/g, ' ')}` : `Advantage: ${s.powerType.replace(/_/g, ' ')}`; break
+    case 'opponent_penalty': line = es ? `Desventaja: −${fmtPts(s.points)} puntos para un rival que elijas (semana ${wk})` : `Disadvantage: −${fmtPts(s.points)} points on an opponent you choose (week ${wk})`; break
+    case 'vote_taken': line = es ? 'Desventaja: el voto de un rival que elijas no cuenta en su próximo Consejo Tribal' : 'Disadvantage: an opponent you choose loses their vote at their next Tribal Council'; break
   }
   return `${line}${statusSuffix}`
 }

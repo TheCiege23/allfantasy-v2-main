@@ -35,6 +35,10 @@ export const SIDE_GAME_ACTIONS = {
   shopDelivered: 'shop_delivered',
   exileBid: 'exile_bid',
   exileBidsResolved: 'exile_bids_resolved',
+  /** A FAAB charge given back because the auction prize could not be paid (auction cash refunds are a cash_credit carrying `refundOf`). */
+  auctionRefund: 'auction_refund',
+  /** A Survivor Pool week with no pick, judged by the missed-pick rule. */
+  poolMissed: 'pool_missed',
 } as const
 
 export const sideGameEntity = {
@@ -105,7 +109,7 @@ export interface AuctionRecord {
   items: AuctionItem[]
   status: AuctionStatus
   bids: AuctionBid[]
-  awards: Array<{ itemId: string; rosterId: string; amount: number; rewardId: string | null; paid: boolean }>
+  awards: Array<{ itemId: string; rosterId: string; amount: number; rewardId: string | null; paid: boolean; refunded?: boolean }>
   cashGranted: boolean
 }
 
@@ -142,6 +146,18 @@ const outcomeOf = (v: unknown): PickOutcome | null => (v === 'correct' || v === 
 
 export function emptySideGameState(): SideGameState {
   return { tokenPool: new Map(), pool: new Map(), auctions: new Map(), cash: new Map(), purchases: [], exileBids: new Map(), keys: new Set() }
+}
+
+/** `refundOf` is `<auctionId>:<itemId>`: that award's charge was given back. */
+function markRefunded(s: SideGameState, refundOf: string): void {
+  const at = refundOf.lastIndexOf(':')
+  const award = s.auctions.get(refundOf.slice(0, at))?.awards.find((w) => w.itemId === refundOf.slice(at + 1))
+  if (award) award.refunded = true
+}
+
+/** The key a refund is written under — one per award, ever. */
+export function auctionRefundKey(auctionId: string, itemId: string): string {
+  return `auctionrefund:${auctionId}:${itemId}`
 }
 
 function entityTail(id: string, prefix: string): string | null {
@@ -201,6 +217,7 @@ export function foldSideGameLedger(rows: readonly SideGameLedgerRow[]): SideGame
         break
       }
       case SIDE_GAME_ACTIONS.poolRevive:
+      case SIDE_GAME_ACTIONS.poolMissed:
       case SIDE_GAME_ACTIONS.poolReviveGranted: {
         const userId = entityTail(id, 'pool:')
         if (!userId) break
@@ -261,6 +278,11 @@ export function foldSideGameLedger(rows: readonly SideGameLedgerRow[]): SideGame
         if (!rosterId) break
         const sign = row.action === SIDE_GAME_ACTIONS.cashCredit ? 1 : -1
         s.cash.set(rosterId, Math.max(0, (s.cash.get(rosterId) ?? 0) + sign * Math.max(0, int(d.amount))))
+        if (typeof d.refundOf === 'string') markRefunded(s, d.refundOf)
+        break
+      }
+      case SIDE_GAME_ACTIONS.auctionRefund: {
+        if (typeof d.refundOf === 'string') markRefunded(s, d.refundOf)
         break
       }
       case SIDE_GAME_ACTIONS.shopPurchase: {

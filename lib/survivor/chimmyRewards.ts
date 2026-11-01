@@ -6,6 +6,7 @@ import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable
 import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { chooseSurvivorRewardTarget, listSurvivorRewards, readSurvivorFaabBalance } from './survivorRewardEngine'
 import { pickChimmyStealTarget, pickChimmyTribemate } from './survivorRewardModel'
+import { pickChimmyDisadvantageTarget } from './survivorSideGameRules'
 
 /**
  * Chimmy's reward choices for the castaways it runs (same seats as its council turn,
@@ -64,6 +65,18 @@ export async function runChimmyRewardChoices(leagueId: string): Promise<string[]
         points: weekByUser.get(r.userId) ?? 0,
       })))
       target = pickChimmyStealTarget(candidates, holderRosterId, what)
+    } else if (reward.spec.type === 'opponent_penalty' || reward.spec.type === 'vote_taken') {
+      // A disadvantage (side-game auction / shop): the strongest opponent by season points — before
+      // the merge only managers on OTHER tribes. Nothing private is read.
+      const rivals = cast.filter((c) => c.redraftRosterId && c.redraftRosterId !== holderRosterId && (!holder.tribeId || c.tribeId !== holder.tribeId))
+      const scores = await prisma.survivorWeeklyScore.findMany({
+        where: { leagueId, userId: { in: rivals.map((r) => r.userId) }, isFinalized: true },
+        select: { userId: true, finalScore: true },
+      })
+      const season = new Map<string, number>()
+      for (const s of scores) season.set(s.userId, (season.get(s.userId) ?? 0) + s.finalScore)
+      const candidates = rivals.map((r) => ({ rosterId: r.redraftRosterId!, seasonPoints: season.get(r.userId) ?? 0 }))
+      target = pickChimmyDisadvantageTarget(candidates, candidates.map((c) => c.rosterId))
     }
     if (!target) continue
     const result = await chooseSurvivorRewardTarget({ leagueId, rewardId: reward.rewardId, actorRosterId: holderRosterId, targetRosterId: target, chosenBy: 'chimmy' })

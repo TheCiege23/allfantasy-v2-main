@@ -21,7 +21,25 @@ function prizeText(p: SurvivorSideGameSettings['survivorPoolPrize'], es: boolean
     case 'steal_blocker': return es ? 'un bloqueador de robos' : 'a steal blocker'
     case 'auction_cash': return es ? `$${p.amount} de dinero de subasta` : `$${p.amount} auction cash`
     case 'tokens': return es ? `${p.amount} fichas del Exilio` : `${p.amount} Exile tokens`
+    case 'opponent_penalty': return es ? `−${p.amount} puntos para un rival que elijas` : `−${p.amount} points on an opponent you choose`
+    case 'vote_taken': return es ? 'quitarle el voto a un rival en su próximo Consejo Tribal' : 'taking an opponent’s vote at their next Tribal Council'
   }
+}
+
+/** The Survivor Pool's tie, missed-pick and no-reuse lines. */
+function poolExtraLines(s: SurvivorSideGameSettings, es: boolean): string[] {
+  const tie = s.survivorPoolTieRule === 'loss'
+    ? (es ? 'Un empate cuenta como derrota: quedas fuera.' : 'A tie counts as a loss: you are out.')
+    : s.survivorPoolTieRule === 'win'
+      ? (es ? 'Un empate cuenta como victoria.' : 'A tie counts as a win.')
+      : (es ? 'Un empate no gana ni elimina.' : 'A tie neither wins nor knocks you out.')
+  const miss = s.survivorPoolMissedPick === 'loss'
+    ? (es ? 'Si no eliges en una semana, cuenta como derrota.' : 'Miss a week’s pick and it counts as a loss.')
+    : s.survivorPoolMissedPick === 'revive'
+      ? (es ? 'Si no eliges en una semana, gastas una resurrección (sin resurrecciones, quedas fuera).' : 'Miss a week’s pick and it uses a revive (with none left, you are out).')
+      : null
+  const reuse = s.survivorPoolNoReuse ? (es ? 'Cada equipo se puede elegir una sola vez en la temporada.' : 'You can pick each team only once all season.') : null
+  return [tie, miss, reuse].filter((x): x is string => Boolean(x))
 }
 
 export function answerSideGameRules(topic: SideGameRulesTopic, settings: SurvivorSideGameSettings | null | undefined, language?: string | null): string {
@@ -58,7 +76,8 @@ export function answerSideGameRules(topic: SideGameRulesTopic, settings: Survivo
       const rule = s.survivorPoolRule === 'conference' ? (es ? `de la ${s.survivorPoolConference}` : `from the ${s.survivorPoolConference}`)
         : s.survivorPoolRule === 'away_only' ? (es ? 'que juegue de visitante' : 'playing away')
           : s.survivorPoolRule === 'allowed_list' ? (es ? `de esta lista: ${s.survivorPoolAllowedTeams.join(', ') || 'ninguno'}` : `from this list: ${s.survivorPoolAllowedTeams.join(', ') || 'none'}`)
-            : ''
+            : s.survivorPoolRule === 'division' ? (es ? `de la división ${s.survivorPoolDivision}` : `from the ${s.survivorPoolDivision} division`)
+              : ''
       const variants = s.survivorPoolWeekRules.length ? (es ? `Hay reglas especiales en la${s.survivorPoolWeekRules.length > 1 ? 's semanas' : ' semana'} ${s.survivorPoolWeekRules.map((w) => w.week).join(', ')}.` : `Special rules apply in week${s.survivorPoolWeekRules.length > 1 ? 's' : ''} ${s.survivorPoolWeekRules.map((w) => w.week).join(', ')}.`) : null
       return es
         ? block('Pozo Survivor', [
@@ -66,14 +85,16 @@ export function answerSideGameRules(topic: SideGameRulesTopic, settings: Survivo
           variants,
           `Si aciertas, ganas ${prizeText(s.survivorPoolPrize, true)}. Si fallas, quedas fuera del pozo.`,
           `Puedes volver ${s.survivorPoolRevives} ${s.survivorPoolRevives === 1 ? 'vez' : 'veces'} con una resurrección; después quedas fuera para siempre.`,
-          'Un empate no gana ni elimina. Se liquida con el marcador final.',
+          ...poolExtraLines(s, true),
+          'Se liquida con el marcador final.',
         ])
         : block('Survivor Pool', [
           `From week ${s.survivorPoolStartWeek}, every castaway still on the island picks one winning team${rule ? ` ${rule}` : ''} each week.`,
           variants,
           `Pick right and you win ${prizeText(s.survivorPoolPrize, false)}. Pick wrong and you are out of the pool.`,
           `You can come back ${s.survivorPoolRevives} ${s.survivorPoolRevives === 1 ? 'time' : 'times'} with a revive; after that you are banned from the pool.`,
-          'A tie neither wins nor knocks you out. Picks settle from the final score.',
+          ...poolExtraLines(s, false),
+          'Picks settle from the final score.',
         ])
     }
     case 'auction': {
@@ -85,6 +106,8 @@ export function answerSideGameRules(topic: SideGameRulesTopic, settings: Survivo
           'En una subasta cerrada cada puja es secreta y no se puede cambiar. En una abierta se ve la puja más alta y hay que superarla.',
           'Gana la puja más alta; un empate lo gana la puja anterior. Algunos artículos son misteriosos hasta el cierre.',
           'El premio llega solo al cerrar, y solo se cobra al ganador.',
+          'Si el premio no se puede entregar (por ejemplo, saliste de la isla antes del cierre), se te devuelve lo que pagaste automáticamente.',
+          s.disadvantagesEnabled.length ? 'Hay desventajas a la venta: si ganas una, eliges al rival que la recibe.' : null,
         ])
         : block('Auction Week', [
           'The commissioner schedules auctions of advantages and prizes, each with an open and a close time.',
@@ -92,6 +115,8 @@ export function answerSideGameRules(topic: SideGameRulesTopic, settings: Survivo
           'In a sealed auction every bid is secret and locks once placed. In an open auction the high bid shows and you must beat it.',
           'The highest bid wins; a tie goes to the earlier bid. Some items stay a mystery until the close.',
           'Prizes arrive on their own at the close, and only the winner pays.',
+          'If a prize cannot be delivered (say you left the island before the close), what you paid is refunded automatically.',
+          s.disadvantagesEnabled.length ? 'Disadvantages are on offer: win one and you choose the opponent it hits.' : null,
         ])
     }
     case 'token_shop': {
@@ -133,5 +158,10 @@ export function sideGameExileLines(settings: SurvivorSideGameSettings | null | u
       : `• Exile teams are won by sealed bid ($${s.exileBidBudget} weekly budget) until ${s.exileBidCloseDay} ${s.exileBidCloseTime} ET; the highest bid wins and a tie goes to the earlier bid. Open teams are first-come after that.`)
   }
   if (s.hideExileMembership) out.push(es ? '• Quién está en el Exilio es secreto: solo lo saben los que están ahí.' : '• Who is on Exile is secret: only the people there know.')
+  if (s.hideExileMembership && s.exileExposureRule !== 'off') {
+    out.push(es
+      ? `• Si expones a alguien del Exilio, el comisionado puede ${s.exileExposureRule === 'remove' ? 'sacarte de la temporada' : 'darte un strike de conducta'}.`
+      : `• Expose someone on Exile and the commissioner can ${s.exileExposureRule === 'remove' ? 'remove you from the season' : 'give you a conduct strike'}.`)
+  }
   return out
 }

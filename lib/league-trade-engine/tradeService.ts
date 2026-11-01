@@ -47,7 +47,7 @@ import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-
 import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
 import { storedVetoRule, vetoVotesNeeded } from './vetoRule'
 import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
-import { redeemSurvivorTradeBypass } from '@/lib/survivor/survivorTradeRuleBypass'
+import { redeemSurvivorTradeBypass, survivorBypassSourceToRedeem } from '@/lib/survivor/survivorTradeRuleBypass'
 
 /**
  * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts) at proposal and at acceptance. One league
@@ -1070,6 +1070,12 @@ export async function finalizeAfLeagueTradeProcessing(input: {
    * gate; never by a manager's request.
    */
   commissionerOverride?: boolean
+  /**
+   * The trade is being pushed through by a commissioner's decision (an approval of a reviewed trade,
+   * or the commissioner-only process route). Like `commissionerOverride` it means the Survivor trade
+   * rules were waived by the commissioner, so a held free-trade token is not spent.
+   */
+  commissionerApproved?: boolean
 }): Promise<void> {
   const trade = await prisma.afLeagueTrade.findUniqueOrThrow({
     where: { id: input.tradeId },
@@ -1241,8 +1247,10 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   // ADR's behavior-preservation strategy (a capture failure must never roll
   // back an already-successful trade). Fails safe, never throws.
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: trade.leagueId, status: 'processed' })
-  if (survivorBypass?.ok && survivorBypass.bypassRequired) {
-    await redeemSurvivorTradeBypass({ leagueId: trade.leagueId, week: survivorBypass.week ?? 0, tradeRef: `af:${trade.id}`, source: survivorBypass.bypassSource, actorUserId: input.actorUserId })
+  // A commissioner forcing or approving the trade through is the override: a held token stays unspent.
+  const survivorRedeemSource = survivorBypassSourceToRedeem(survivorBypass, { commissionerOverride: input.commissionerOverride === true, commissionerApproved: input.commissionerApproved === true })
+  if (survivorRedeemSource && survivorBypass?.ok) {
+    await redeemSurvivorTradeBypass({ leagueId: trade.leagueId, week: survivorBypass.week ?? 0, tradeRef: `af:${trade.id}`, source: survivorRedeemSource, actorUserId: input.actorUserId })
   }
 
   // The integrity scan: the trade review, run once the trade has settled. Native trades were never
@@ -1314,7 +1322,7 @@ export async function commissionerAfTradeDecision(input: {
     return
   }
 
-  await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId, auditMetadata })
+  await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId, auditMetadata, commissionerApproved: true })
 }
 
 export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: string; userId: string }): Promise<void> {

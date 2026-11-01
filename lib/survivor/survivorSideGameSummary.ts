@@ -24,6 +24,8 @@ export interface SideGameGroundingInput {
     poolBanned: boolean
     poolPickedThisWeek: boolean
     pendingPurchases: number
+    /** The caller's OWN season-long used-team list ("no reusing a team"). */
+    poolUsedTeams?: string[]
   }
   /** Auctions taking bids now (label, close time, currency, mode) and the caller's own bid count. */
   openAuctions: Array<{ label: string; closesAt: string; currency: string; mode: string; myBids: number }>
@@ -61,12 +63,19 @@ export function sideGameGroundingLine(input: SideGameGroundingInput): string {
     const items = s.tokenShopItems.filter((i) => i.enabled)
     parts.push(items.length ? `Token shop: ${items.map((i) => `${i.id.replace(/_/g, ' ')} ${i.cost}t`).join(', ')}` : 'Token shop: nothing on sale')
   }
-  if (s.survivorPoolEnabled) parts.push(`Survivor Pool (castaways on the island, from week ${s.survivorPoolStartWeek}): pick one winning team a week; a correct pick wins ${prizeText(s.survivorPoolPrize)}; a wrong pick knocks you out; ${s.survivorPoolRevives} revives, then banned`)
-  parts.push(`Auctions bid in ${s.auctionCurrency === 'auction_cash' ? 'auction cash' : 'FAAB'}; highest bid wins, a tie goes to the earlier bid; sealed bids lock`)
+  if (s.survivorPoolEnabled) {
+    const rule = s.survivorPoolRule === 'conference' ? `from the ${s.survivorPoolConference} conference` : s.survivorPoolRule === 'division' ? `from the ${s.survivorPoolDivision} division` : ''
+    const tie = s.survivorPoolTieRule === 'loss' ? 'a tie counts as a loss' : s.survivorPoolTieRule === 'win' ? 'a tie counts as a win' : 'a tie is a push'
+    const miss = s.survivorPoolMissedPick === 'loss' ? '; a missed week counts as a loss' : s.survivorPoolMissedPick === 'revive' ? '; a missed week uses a revive' : ''
+    parts.push(`Survivor Pool (castaways on the island, from week ${s.survivorPoolStartWeek}): pick one winning team a week${rule ? ` ${rule}` : ''}; a correct pick wins ${prizeText(s.survivorPoolPrize)}; a wrong pick knocks you out; ${tie}${miss}${s.survivorPoolNoReuse ? '; each team can be used once per season' : ''}; ${s.survivorPoolRevives} revives, then banned`)
+  }
+  parts.push(`Auctions bid in ${s.auctionCurrency === 'auction_cash' ? 'auction cash' : 'FAAB'}; highest bid wins, a tie goes to the earlier bid; sealed bids lock; a prize that cannot be delivered is refunded automatically`)
+  if (s.disadvantagesEnabled.length) parts.push(`Disadvantages on offer (the winner chooses the opponent): ${s.disadvantagesEnabled.map((k) => (k === 'opponent_penalty' ? 'a point penalty' : 'taking a vote at their next Tribal')).join(', ')}`)
   const mine: string[] = [`tokens ${me.tokens}`]
   if (s.tokenPoolMode === 'streak' && me.pot) mine.push(`unbanked streak ${me.pot}`)
   if (me.state === 'exile' && s.tokenPoolEnabled) mine.push(`Token Pool picks this week ${me.tokenPoolPicksThisWeek}/${s.tokenPoolPicksPerWeek}`)
   if (s.survivorPoolEnabled && me.state === 'active') mine.push(me.poolBanned ? 'banned from the Survivor Pool' : me.poolAlive ? `in the Survivor Pool (${me.poolPickedThisWeek ? 'picked' : 'no pick yet'} this week)` : `out of the Survivor Pool, ${me.poolRevivesLeft} revives left`)
+  if (s.survivorPoolEnabled && s.survivorPoolNoReuse && me.poolUsedTeams?.length) mine.push(`Survivor Pool teams already used: ${me.poolUsedTeams.join(', ')}`)
   if (me.faab != null) mine.push(`FAAB $${me.faab}`)
   if (me.auctionCash) mine.push(`auction cash $${me.auctionCash}`)
   if (me.pendingPurchases) mine.push(`${me.pendingPurchases} shop item(s) waiting for their return`)

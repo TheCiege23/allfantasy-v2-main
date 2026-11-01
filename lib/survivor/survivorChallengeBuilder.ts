@@ -475,6 +475,8 @@ function describePayout(p: PlannedPayout, lang: ChallengeLang): string {
     case 'steal_blocker': return es ? 'Bloqueador de robos' : 'Steal blocker'
     case 'steal': return es ? `Robo de ${s.what === 'faab' ? `$${s.amount}` : `${s.amount} pts`}` : `Steal of ${s.what === 'faab' ? `$${s.amount}` : `${s.amount} pts`}`
     case 'advantage': return es ? 'Ventaja' : 'Advantage'
+    case 'opponent_penalty': return es ? `−${s.points} puntos a un rival` : `−${s.points} points on an opponent`
+    case 'vote_taken': return es ? 'Quitarle el voto a un rival' : 'Take an opponent’s vote'
   }
 }
 

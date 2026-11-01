@@ -47,8 +47,9 @@ export async function GET(req: NextRequest) {
     const pool = cast.filter((c) => c.redraftRosterId && (r.spec.type === 'tribemate_points'
       ? (c.redraftRosterId !== rosterId || r.spec.allowSelf === true) && (!me?.tribeId || c.tribeId === me.tribeId)
       : c.redraftRosterId !== rosterId && (!me?.tribeId || c.tribeId !== me.tribeId)))
-    // After the merge everyone shares one tribe: a steal may then target anyone else.
-    const list = pool.length || r.spec.type !== 'steal' ? pool : cast.filter((c) => c.redraftRosterId && c.redraftRosterId !== rosterId)
+    // After the merge everyone shares one tribe: a steal (or a disadvantage) may then target anyone else.
+    const aimed = r.spec.type === 'steal' || r.spec.type === 'opponent_penalty' || r.spec.type === 'vote_taken'
+    const list = pool.length || !aimed ? pool : cast.filter((c) => c.redraftRosterId && c.redraftRosterId !== rosterId)
     return list.map((c) => ({ rosterId: c.redraftRosterId!, name: c.displayName })).sort((a, b) => a.name.localeCompare(b.name))
   }
   return NextResponse.json({

@@ -27,6 +27,50 @@ import {
 import { SURVIVOR_REWARD_ADVANTAGE_POWERS } from './survivorRewardModel'
 import { CHALLENGE_FAAB_WEEKLY_CAP_RANGE, DEFAULT_CHALLENGE_FAAB_WEEKLY_CAP } from './survivorChallengeBuilderModel'
 import { REAL_GAME_ALLOWED_PRIZES, REAL_GAME_PRIZE_LIMITS, type RealGamePrizeType } from './survivorRealGameChallengeLogic'
+import { SURVIVOR_SIDE_GAME_DEFAULTS, validateSurvivorSideGamePatch, type SurvivorSideGameKey, type SurvivorSideGameSettings } from './survivorSideGameSettings'
+
+/**
+ * The key side-game settings, also shown on this screen (they live in League.settings.survivorSideGames
+ * with the rest; the full set is in league settings → Exile). Both screens save through ONE validator,
+ * `validateSurvivorSideGamePatch`, and the side games' own season locks, so they cannot disagree.
+ */
+export const SIDE_GAME_SCREEN_KEYS = [
+  'tokenPoolEnabled', 'tokenPoolMode', 'tokenPoolWrongPick', 'tokenShopEnabled',
+  'survivorPoolEnabled', 'survivorPoolTieRule', 'survivorPoolMissedPick', 'survivorPoolNoReuse',
+  'exileClaimMode', 'exileBidBudget', 'exileTokenFaabRate', 'hideExileMembership',
+] as const satisfies readonly SurvivorSideGameKey[]
+export type SideGameScreenKey = (typeof SIDE_GAME_SCREEN_KEYS)[number]
+export type SurvivorScreenSideGames = Pick<SurvivorSideGameSettings, SideGameScreenKey>
+
+/** The screen's side-game values from the league's full side-game settings. */
+export function sideGamesForScreen(s: SurvivorSideGameSettings): SurvivorScreenSideGames {
+  const out = {} as Record<string, unknown>
+  for (const k of SIDE_GAME_SCREEN_KEYS) out[k] = s[k]
+  return out as SurvivorScreenSideGames
+}
+
+/** The screen keys whose value differs from what is saved (the patch the save sends on). */
+export function changedSideGameScreenKeys(saved: Partial<SurvivorScreenSideGames> | undefined, draft: Partial<SurvivorScreenSideGames> | undefined): SideGameScreenKey[] {
+  if (!draft) return []
+  return SIDE_GAME_SCREEN_KEYS.filter((k) => k in draft && JSON.stringify(draft[k]) !== JSON.stringify(saved?.[k]))
+}
+
+/**
+ * The shared check: the same validator the league-settings panel and the Hub save with. `current`
+ * is the league's full side-game settings (defaults on the client); `locked` the side-game keys
+ * locked this season. Returns plain-English errors.
+ */
+export function validateSideGameScreenValues(
+  values: Partial<SurvivorScreenSideGames>,
+  current: SurvivorSideGameSettings = SURVIVOR_SIDE_GAME_DEFAULTS,
+  locked: readonly SurvivorSideGameKey[] = [],
+): string[] {
+  const patch: Record<string, unknown> = {}
+  for (const k of SIDE_GAME_SCREEN_KEYS) if (k in values && JSON.stringify(values[k]) !== JSON.stringify(current[k])) patch[k] = values[k]
+  if (!Object.keys(patch).length) return []
+  const result = validateSurvivorSideGamePatch(current, patch, locked)
+  return result.ok ? [] : [result.error]
+}
 
 export type SurvivorTribeFormation = 'random' | 'commissioner_manual' | 'draft_pattern'
 /** The council tie rule: the owner's rocks rules, plus the two season-points rules older leagues carry. */
@@ -93,6 +137,11 @@ export interface SurvivorSettingsForm {
    * resetting a commissioner's pick to 'auto'. Stored as league.settings.survivorIslandScene.
    */
   islandScene?: SurvivorIslandScenePreference
+  /**
+   * The key side-game settings (SIDE_GAME_SCREEN_KEYS). Optional for the same reason as islandScene:
+   * a form posted without it changes no side game. Each key keeps the side games' own season lock.
+   */
+  sideGames?: Partial<SurvivorScreenSideGames>
 }
 
 export const SURVIVOR_CHALLENGE_SETTING_DEFAULTS = {
@@ -130,6 +179,9 @@ export const SURVIVOR_SETTINGS_EDITABLE_ALL_SEASON: readonly SurvivorSettingsKey
   'winningTribeFaabPerPlayer', 'topScorerReward', 'topScorerAmount', 'topScorerPowerType',
   // Challenge settings apply to the next challenge opened; a running one keeps its own prize.
   'realGameEnabled', 'realGamePerWeek', 'realGamePrizeType', 'realGamePrizeAmount', 'challengeFaabWeeklyCap',
+  // The side games run week to week; the ones that must not change mid-season lock on their own
+  // (SIDE_GAME_KEYS_LOCKED_AT_SEASON_START, enforced by the shared side-game validator).
+  'sideGames',
 ]
 
 export const SURVIVOR_VOTE_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
@@ -149,6 +201,8 @@ export interface SurvivorSettingsContext {
   lastWeek: number
   /** The league's sport (tie-break positions). Defaults to NFL. */
   sport?: string
+  /** The league's full side-game settings, so the shared validator checks against what is saved. */
+  sideGames?: SurvivorSideGameSettings
 }
 
 export function formatVoteTime(time: string): string {
@@ -217,6 +271,7 @@ export function validateSettingsForm(form: SurvivorSettingsForm, ctx: SurvivorSe
   if ((form.houseRules ?? '').length > SURVIVOR_HOUSE_RULES_MAX) errors.push(`House rules can be at most ${SURVIVOR_HOUSE_RULES_MAX} characters.`)
   errors.push(...validateSurvivorWeeklyPrizes(weeklyPrizesFromForm(form), ctx.sport))
   errors.push(...validateChallengeSettings(form))
+  if (form.sideGames) errors.push(...validateSideGameScreenValues(form.sideGames, ctx.sideGames ?? SURVIVOR_SIDE_GAME_DEFAULTS))
   return errors
 }
 
@@ -354,6 +409,17 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
   const powerRaw = str('topScorerPowerType')
   const power = powerRaw == null ? null : (SURVIVOR_REWARD_ADVANTAGE_POWERS as readonly string[]).includes(powerRaw) ? (powerRaw as SurvivorRewardAdvantagePower) : undefined
   if (power === undefined) return null
+  // Optional side-game block: present but malformed (not an object, or a key this screen does not
+  // own) is a bad form; values are range-checked by validateSettingsForm's shared validator.
+  let sideGames: Partial<SurvivorScreenSideGames> | undefined
+  if (r.sideGames !== undefined) {
+    const sg = r.sideGames
+    if (!sg || typeof sg !== 'object' || Array.isArray(sg)) return null
+    const keys = Object.keys(sg)
+    if (keys.some((k) => !(SIDE_GAME_SCREEN_KEYS as readonly string[]).includes(k))) return null
+    // Only the keys sent: a key left out keeps its saved value (never reset to a default).
+    sideGames = { ...(sg as Record<string, unknown>) } as Partial<SurvivorScreenSideGames>
+  }
   const fixedRaw = r.exileBossFixedScore
   const fixed = fixedRaw == null ? null : typeof fixedRaw === 'number' && Number.isFinite(fixedRaw) ? fixedRaw : NaN
   const form: SurvivorSettingsForm = {
@@ -381,6 +447,7 @@ export function parseSettingsForm(input: unknown): SurvivorSettingsForm | null {
     // Added later than the others, so a form without it reads as off rather than invalid.
     spectatorPageEnabled: bool('spectatorPageEnabled') ?? false,
     ...(r.islandScene !== undefined && { islandScene: r.islandScene as SurvivorIslandScenePreference }),
+    ...(sideGames && { sideGames }),
     // Added later still: a form without them keeps today's behaviour (the defaults).
     coCommissionerMode: coMode ?? 'disabled',
     mergeNamingMode: str('mergeNamingMode') === 'manager_vote' ? 'manager_vote' : 'commissioner',
