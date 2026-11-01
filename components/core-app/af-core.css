@@ -130,6 +130,17 @@
     radial-gradient(600px 380px at 88% 30%, rgba(59, 130, 246, 0.12), transparent 70%);
   --chimmy: linear-gradient(160deg, #141c3a, #0d1020 58%);
   --shadow: 0 40px 120px -60px rgba(0, 0, 0, 0.9);
+  /*
+   * Categorical chart series (Commissioner Hub activity charts): waiver claims, trades,
+   * free-agent adds, a fourth spare. The dataviz reference palette's dark steps, validated on
+   * this surface (#0d1020) and AF's (#170f2b): lightness band, chroma floor, CVD ΔE 8.4 worst
+   * adjacent, every slot ≥ 3:1 against the surface. AF mode inherits these. Text is never drawn
+   * in them — a swatch carries the colour, the label stays in --text.
+   */
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
 
   /* Platform marks — a connected league is always identifiable by colour. */
   --p-sleeper-bg: #1f2a4d;
@@ -258,6 +269,15 @@ html[data-mode='light'] .af-core {
     radial-gradient(600px 380px at 88% 30%, rgba(59, 130, 246, 0.09), transparent 70%);
   --chimmy: linear-gradient(160deg, #e8f6fb, #ffffff 58%);
   --shadow: 0 30px 80px -50px rgba(11, 16, 32, 0.4);
+  /*
+   * The light steps of the same four hues, validated on #ffffff: CVD ΔE 9.1 worst adjacent.
+   * Slots 3 and 4 sit under 3:1 against white, so every chart that uses them also carries the
+   * numbers in a legend or a table view.
+   */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
   --p-sleeper-bg: #dbe8fb;
   --p-sleeper-fg: #17518f;
   --p-espn-bg: #fbdcdc;

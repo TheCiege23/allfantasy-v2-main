@@ -236,7 +236,8 @@ export type CommissionerGrant = {
   readonly platform: string
   readonly platformLeagueId: string | null
   readonly season: number | null
-  readonly teams: ReadonlyArray<{ name: string; platformUserId: string | null }>
+  /** `claimedByUserId` is the AllFantasy account that runs the team — chat is matched to teams by it. */
+  readonly teams: ReadonlyArray<{ name: string; platformUserId: string | null; claimedByUserId?: string | null }>
 }
 
 export type { MemberActivityRow } from './commissioner/activity'
@@ -346,6 +347,12 @@ export type CommissionerHubData = {
   depth?: CoreDepthAccess | null
   /** Dynasty leagues only; null (or absent) for every other league, which renders as before. */
   dynasty?: CommissionerHubDynasty | null
+  /**
+   * Set when the imported activity is too old to judge (`staleActivityReason`) — the same rule that
+   * withholds the health score and member activity. The health breakdown and the activity charts
+   * read it so they stay silent on the same leagues. Absent on a fresh or native league.
+   */
+  activityStale?: { days: number; reason: string } | null
 }
 
 export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDenied
@@ -1176,7 +1183,11 @@ export async function getCommissionerHub(input: {
     platform,
     platformLeagueId: league.platformLeagueId ?? null,
     season: league.season ?? null,
-    teams: teams.map((t) => ({ name: teamLabel(t, language), platformUserId: t.platformUserId ?? null })),
+    teams: teams.map((t) => ({
+      name: teamLabel(t, language),
+      platformUserId: t.platformUserId ?? null,
+      claimedByUserId: t.claimedByUserId ?? null,
+    })),
   } as unknown as CommissionerGrant
 
   return {
@@ -1219,6 +1230,7 @@ export async function getCommissionerHub(input: {
     // Absent rather than null on every other league, so its hub data is exactly what it was.
     ...(dynasty ? { dynasty } : {}),
     members: activityStale ? { available: false, reason: stale?.reason ?? '' } : memberActivity,
+    ...(stale ? { activityStale: { days: staleDays, reason: stale.reason } } : {}),
     calendar: { ...calendar, ics },
     areas: buildLeagueAreas(hubLeague, language),
     workflows: buildWorkflows(hubLeague, language),
