@@ -26,6 +26,9 @@ import { prisma } from '@/lib/prisma'
 import {
   computeFaabTransfer,
   foldSurvivorRewardLedger,
+  isThiefThisWeek,
+  readThievesCannotStealFromEachOther,
+  thievesRuleRefusal,
   rewardApplyWeek,
   rewardNeedsChoice,
   stealFaabTake,
@@ -268,7 +271,12 @@ async function executeReward(
       if (!spec.targetRosterId) return { status: 'awaiting_choice', changes: [], note: null }
       const target = await requireActive(db, leagueId, spec.targetRosterId, 'The target')
       if (target.rosterId === thief.rosterId) throw new RewardRefusal('invalid', 'A manager cannot steal from themselves.')
-      const blocker = [...ledger.values()]
+      // Optional house rule (off by default): thieves cannot steal from each other that week.
+      const league = await db.league.findUnique({ where: { id: leagueId }, select: { settings: true, language: true } })
+      if (readThievesCannotStealFromEachOther(league?.settings) && isThiefThisWeek(ledger.values(), target.rosterId, applyWeek, rewardId)) {
+        throw new RewardRefusal('conflict', thievesRuleRefusal(league?.language))
+      }
+      const blocker =[...ledger.values()]
         .filter((r) => r.type === 'steal_blocker' && r.status === 'available' && r.holderRosterIds.includes(target.rosterId) && r.rewardId !== rewardId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]
       if (blocker) {

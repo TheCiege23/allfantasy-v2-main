@@ -6,13 +6,14 @@
  *    Chimmy's choices ("points on a tribemate", steal targets) for the seats it runs.
  *  - `applyWeeklyTribePrizes` (once the week's scores are final): the commissioner's weekly tribe
  *    prizes — FAAB per player for the top-scoring tribe and the top-scorer reward. Before the merge
- *    only; the winning tribe is ranked with the same key-position tie-break the council uses.
+ *    (and, with `payInTribeWeeksAfterMerge`, in a post-merge week where tribes really competed); the
+ *    winning tribe is ranked with the same key-position tie-break the council uses.
  */
 
 import { prisma } from '@/lib/prisma'
 import { applyDueDeferredSurvivorRewards, applySurvivorReward } from './survivorRewardEngine'
 import { loadWeekTieBreak, rankTribesByTotal, tribeTotals } from './survivorCouncilImmunity'
-import { planWeeklyTribePrizes, readSurvivorWeeklyPrizes, weeklyPrizesActive } from './survivorWeeklyPrizes'
+import { competingTribeIdsFromScores, planWeeklyTribePrizes, readSurvivorWeeklyPrizes, weeklyPrizesActive } from './survivorWeeklyPrizes'
 
 const PRE_MERGE_PHASES = new Set(['pre_merge', 'post_swap'])
 
@@ -23,18 +24,39 @@ export async function applyWeeklyTribePrizes(leagueId: string, week: number): Pr
   const prizes = readSurvivorWeeklyPrizes(league?.settings)
   if (!weeklyPrizesActive(prizes)) return { paid: [], skipped: 'off' }
   const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { phase: true, mergeTriggeredAt: true } })
-  if (!game || game.mergeTriggeredAt || !PRE_MERGE_PHASES.has(game.phase)) return { paid: [], skipped: 'merged' }
+  if (!game) return { paid: [], skipped: 'merged' }
+  const merged = Boolean(game.mergeTriggeredAt) || !PRE_MERGE_PHASES.has(game.phase)
+  // After the merge: only with the commissioner's `payInTribeWeeksAfterMerge`, and only in a week
+  // where tribes really competed (that week's own tribe structure — `postMergeWeekTribes`).
+  if (merged && !prizes.payInTribeWeeksAfterMerge) return { paid: [], skipped: 'merged' }
 
-  const tribeIds = (await prisma.survivorTribe.findMany({ where: { leagueId, isActive: true }, select: { id: true } })).map((t) => t.id)
-  if (tribeIds.length < 2) return { paid: [], skipped: 'no_tribes' }
-  const castaways = await prisma.survivorPlayer.findMany({
-    where: { leagueId, playerState: 'active', tribeId: { in: tribeIds } },
-    select: { userId: true, tribeId: true, redraftRosterId: true },
-  })
-  const scores = await prisma.survivorWeeklyScore.findMany({
-    where: { leagueId, week, isFinalized: true, tribeId: { not: null }, userId: { in: castaways.map((c) => c.userId) } },
-    select: { userId: true, tribeId: true, finalScore: true, countedTowardTribeTotal: true },
-  })
+  let tribeIds: string[]
+  let castaways: { userId: string; tribeId: string | null; redraftRosterId: string | null }[]
+  let scores: { userId: string; tribeId: string | null; finalScore: number; countedTowardTribeTotal: boolean | null }[]
+  if (!merged) {
+    tribeIds = (await prisma.survivorTribe.findMany({ where: { leagueId, isActive: true }, select: { id: true } })).map((t) => t.id)
+    if (tribeIds.length < 2) return { paid: [], skipped: 'no_tribes' }
+    castaways = await prisma.survivorPlayer.findMany({
+      where: { leagueId, playerState: 'active', tribeId: { in: tribeIds } },
+      select: { userId: true, tribeId: true, redraftRosterId: true },
+    })
+    scores = await prisma.survivorWeeklyScore.findMany({
+      where: { leagueId, week, isFinalized: true, tribeId: { not: null }, userId: { in: castaways.map((c) => c.userId) } },
+      select: { userId: true, tribeId: true, finalScore: true, countedTowardTribeTotal: true },
+    })
+  } else {
+    const week_ = await postMergeWeekTribes(leagueId, week)
+    if (!week_) return { paid: [], skipped: 'no_tribes' }
+    tribeIds = week_.tribeIds
+    scores = week_.scores
+    // Membership is the tribe each manager scored for THAT week (the surprise tribes may already be
+    // dissolved back into the merged tribe), restricted to castaways still in the game.
+    const tribeOf = new Map(scores.map((s) => [s.userId, s.tribeId]))
+    castaways = (await prisma.survivorPlayer.findMany({
+      where: { leagueId, playerState: 'active', userId: { in: scores.map((s) => s.userId) } },
+      select: { userId: true, tribeId: true, redraftRosterId: true },
+    })).map((c) => ({ ...c, tribeId: tribeOf.get(c.userId) ?? null }))
+  }
   const totals = tribeTotals(scores)
   if (!totals.size) return { paid: [], skipped: 'no_scores' }
   const tieBreak = await loadWeekTieBreak(leagueId, week, totals, tribeIds, { tieBreakPosition: prizes.tribeTieBreakPosition })
@@ -59,6 +81,24 @@ export async function applyWeeklyTribePrizes(leagueId: string, week: number): Pr
     if (!result.ok) console.warn('[survivor] weekly prize not paid', prize.idempotencyKey, result.error)
   }
   return { paid }
+}
+
+/**
+ * A post-merge week's competing tribes: the surprise two-tribe week's tribes when one is live, else
+ * the distinct non-merged tribes on that week's finalized score rows. Null (pay nothing) unless at
+ * least two tribes competed.
+ */
+async function postMergeWeekTribes(leagueId: string, week: number) {
+  const { getActiveSurpriseTribeWeek } = await import('./survivorSurpriseTribes')
+  const surprise = await getActiveSurpriseTribeWeek(leagueId, week).catch(() => null)
+  const mergedTribeIds = (await prisma.survivorTribe.findMany({ where: { leagueId, isMerged: true }, select: { id: true } })).map((t) => t.id)
+  const rows = await prisma.survivorWeeklyScore.findMany({
+    where: { leagueId, week, isFinalized: true, tribeId: { not: null } },
+    select: { userId: true, tribeId: true, finalScore: true, countedTowardTribeTotal: true },
+  })
+  const tribeIds = surprise?.tribeIds?.length ? [...surprise.tribeIds].sort() : competingTribeIdsFromScores(rows, mergedTribeIds)
+  if (tribeIds.length < 2) return null
+  return { tribeIds, scores: rows.filter((r) => r.tribeId && tribeIds.includes(r.tribeId)) }
 }
 
 export async function runSurvivorRewardOpenStep(leagueId: string, week: number): Promise<void> {

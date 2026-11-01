@@ -52,14 +52,21 @@ const WORKSPACE_CSS = readSource("components/brackets/bracket-experience.css")
 
 describe("brackets hub restore: section coverage", () => {
   it("server shell mounts the approved workspace with localized hero and tournament controls", () => {
-    expect(HUB_SRC).toContain("<BracketExperienceHub language={language}")
+    expect(HUB_SRC).toContain("<BracketExperienceHub")
+    expect(HUB_SRC).toContain("language={language}")
+    // The tab order comes from the calendar, computed once on the server.
+    expect(HUB_SRC).toContain("orderHubTournaments(new Date())")
     expect(WORKSPACE_SRC).toContain('data-testid="brackets-hub-hero"')
     expect(WORKSPACE_SRC).toContain("bracketExperienceCopy(language)")
     for (const label of ["eyebrow", "title", "titleEnd", "subtitle", "create", "join"]) {
       expect(WORKSPACE_SRC).toContain(`{copy.${label}}`)
     }
-    for (const sport of ["cfp", "nba-cup", "mlb", "nhl"]) {
+    for (const sport of ["mlb", "nhl"]) {
       expect(WORKSPACE_SRC).toContain(`data-testid="brackets-hub-cta-${sport}"`)
+    }
+    // The tournament switch builds its test ids per tab.
+    for (const sport of ["cfp", "nba-cup", "nfl"]) {
+      expect(WORKSPACE_SRC).toContain(`"brackets-hub-cta-${sport}"`)
     }
     expect(HUB_SRC).toContain(`t("brk.hub.logoAlt")`)
     expect(HUB_SRC).toContain(`t("brk.hub.heroDashboard")`)
@@ -67,7 +74,7 @@ describe("brackets hub restore: section coverage", () => {
 
   it("workspace creation follows the selected tournament and keeps MLB, NHL and join destinations", () => {
     expect(WORKSPACE_SRC).toContain('sport === "ncaaf" ? "NCAAF" : "NBA_CUP"')
-    expect(WORKSPACE_SRC).toContain("href={createHref(sport)}")
+    expect(WORKSPACE_SRC).toContain("href={createHref(engineSport)}")
     expect(WORKSPACE_SRC).toContain('href="/brackets/leagues/new?sport=MLB&challengeType=playoff_challenge"')
     expect(WORKSPACE_SRC).toContain('href="/brackets/leagues/new?sport=NHL&challengeType=playoff_challenge"')
     expect(WORKSPACE_SRC).toContain('href="/brackets/join"')

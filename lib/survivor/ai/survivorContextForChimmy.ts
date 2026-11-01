@@ -17,6 +17,7 @@ export function describeWeeklyPrizesForChimmy(p: SurvivorWeeklyPrizeSettings): s
   if (p.topScorerReward === 'score_boost') parts.push(`its top scorer gets +${p.topScorerAmount} points next week`)
   if (p.topScorerReward === 'advantage') parts.push(`its top scorer wins an advantage (${p.topScorerPowerType.replace(/_/g, ' ')})`)
   if (p.tribeTieBreakPosition !== 'none') parts.push(`tribe-total ties go to the tribe with the higher-scoring ${p.tribeTieBreakPosition}`)
+  if (p.payInTribeWeeksAfterMerge && parts.length) parts.push('also paid in post-merge weeks where tribes compete')
   return parts.join('; ') || 'none'
 }
 import { readSurvivorGovernanceSettings } from '../survivorGovernanceSettings'

@@ -50,7 +50,7 @@ export function chimmyWeeklyReportTitle(week: number, lang: ReportLang = 'en'): 
  * says whether Chimmy voted, never for whom, and never mentions an idol (the commissioner may be a
  * player, and who holds an idol is secret).
  */
-export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReportRow[], lang: ReportLang = 'en', sideGameLine: string | null = null): string {
+export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReportRow[], lang: ReportLang = 'en', sideGameLine: string | null = null, rewardsLine: string | null = null): string {
   const es = lang === 'es'
   const lines = rows.map((r) => {
     const parts = [STATE_LABEL[lang][r.state] ?? r.state]
@@ -69,7 +69,7 @@ export function chimmyWeeklyReportBody(week: number, rows: readonly ChimmyReport
   const intro = es
     ? `Esto es lo que hizo Chimmy por ${rows.length === 1 ? 'su equipo' : `sus ${rows.length} equipos`} en la semana ${week}.`
     : `Here is what Chimmy did for its ${rows.length === 1 ? 'team' : `${rows.length} teams`} in week ${week}.`
-  return [intro, ...lines, ...(sideGameLine ? [sideGameLine] : [])].join('\n')
+  return [intro, ...lines, ...(sideGameLine ? [sideGameLine] : []), ...(rewardsLine ? [rewardsLine] : [])].join('\n')
 }
 
 /**
@@ -107,6 +107,10 @@ export async function sendChimmyWeeklyReport(leagueId: string, week: number): Pr
   const { loadSideGameReportData } = await import('./survivorSideGameService')
   const { sideGameWeeklyReportLine } = await import('./survivorSideGameSummary')
   const sideGames = await loadSideGameReportData(leagueId, week).catch(() => null)
+  // Rewards: paid this week, pending choices, reversals (counts only). Best-effort.
+  const rewardsLine = await Promise.all([import('./survivorRewardEngine'), import('./survivorRewardReport')])
+    .then(async ([{ listSurvivorRewards }, { rewardsWeeklyReportLine }]) => rewardsWeeklyReportLine(await listSurvivorRewards(leagueId), week, lang))
+    .catch(() => null)
   const rows: ChimmyReportRow[] = chimmy.map((p) => {
     const voted = new Set(votes.filter((v) => v.voterUserId === p.userId).map((v) => v.councilId))
     const team = readExileRoster(entries.find((e) => e.userId === p.userId)?.submittedLineup)?.team ?? null
@@ -126,7 +130,7 @@ export async function sendChimmyWeeklyReport(leagueId: string, week: number): Pr
     dedupeKey: String(week),
     week,
     title: chimmyWeeklyReportTitle(week, lang),
-    body: chimmyWeeklyReportBody(week, rows, lang, sideGames ? sideGameWeeklyReportLine(sideGames.input, lang) : null),
+    body: chimmyWeeklyReportBody(week, rows, lang, sideGames ? sideGameWeeklyReportLine(sideGames.input, lang) : null, rewardsLine),
     deepLinkPath: `/survivor/${leagueId}`,
     urgency: 'medium',
   })

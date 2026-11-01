@@ -55,6 +55,7 @@ vi.mock('@/lib/prisma', () => {
     survivorLeagueConfig: table('survivorLeagueConfig'),
     survivorIdol: table('survivorIdol'),
     survivorIdolLedgerEntry: table('survivorIdolLedgerEntry'),
+    league: table('league'),
     $queryRaw: vi.fn(async () => []),
   }
   db.$transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn(db))
@@ -200,5 +201,45 @@ describe('listSurvivorRewards (a manager sees only their own)', () => {
     expect((await listSurvivorRewards(L, { rosterId: 'a1' })).map((r) => r.rewardId)).toEqual([])
     expect((await listSurvivorRewards(L, { rosterId: 'b1' })).map((r) => r.rewardId).sort()).toEqual(['s', 't'])
     expect((await listSurvivorRewards(L, { rosterId: 'b1' })).some((r) => r.rewardId === 'blk')).toBe(false)
+  })
+})
+
+describe('"Thieves cannot steal from each other" (optional rule, off by default)', () => {
+  it('off: a manager holding a steal can still be robbed (today’s behaviour)', async () => {
+    await applySurvivorReward(input('a-steal', { type: 'steal', thiefRosterId: 'a1', what: 'faab', amount: 5 }))
+    const r = await applySurvivorReward(input('b-steal', { type: 'steal', thiefRosterId: 'b1', targetRosterId: 'a1', what: 'faab', amount: 10 }))
+    expect(r).toMatchObject({ ok: true, status: 'applied' })
+    expect(faab('a1')).toBe(90)
+  })
+
+  it('on: refuses a steal aimed at a manager who holds (or used) a steal that week, with a clear reason', async () => {
+    store.tables.league = [{ id: L, settings: { survivorThievesCannotStealFromEachOther: true }, language: 'en' }]
+    await applySurvivorReward(input('a-steal', { type: 'steal', thiefRosterId: 'a1', what: 'faab', amount: 5 }))
+    const refused = await applySurvivorReward(input('b-steal', { type: 'steal', thiefRosterId: 'b1', targetRosterId: 'a1', what: 'faab', amount: 10 }))
+    expect(refused).toMatchObject({ ok: false, code: 'conflict' })
+    expect(refused.ok ? '' : refused.error).toMatch(/thieves cannot steal from each other/)
+    expect(faab('a1')).toBe(100)
+    // A non-thief is still fair game.
+    const ok = await applySurvivorReward(input('b-steal-2', { type: 'steal', thiefRosterId: 'b1', targetRosterId: 'a2', what: 'faab', amount: 10 }))
+    expect(ok).toMatchObject({ ok: true, status: 'applied' })
+  })
+
+  it('on: a pending choice cannot pick a thief either (Spanish league gets a Spanish reason); another week is fine', async () => {
+    store.tables.league = [{ id: L, settings: { survivorThievesCannotStealFromEachOther: true }, language: 'es' }]
+    await applySurvivorReward(input('a-steal', { type: 'steal', thiefRosterId: 'a1', targetRosterId: 'b2', what: 'points', amount: 5 }))
+    await applySurvivorReward(input('b-steal', { type: 'steal', thiefRosterId: 'b1', what: 'faab', amount: 10 }))
+    const refused = await chooseSurvivorRewardTarget({ leagueId: L, rewardId: 'b-steal', actorRosterId: 'b1', targetRosterId: 'a1' })
+    expect(refused).toMatchObject({ ok: false, code: 'conflict' })
+    expect(refused.ok ? '' : refused.error).toMatch(/ladrones no se roban/)
+    const nextWeek = await applySurvivorReward(input('b-steal-w6', { type: 'steal', thiefRosterId: 'b1', targetRosterId: 'a1', what: 'faab', amount: 10 }, { week: 6 }))
+    expect(nextWeek).toMatchObject({ ok: true, status: 'applied' })
+  })
+
+  it('on: a reversed steal no longer makes its holder a thief', async () => {
+    store.tables.league = [{ id: L, settings: { survivorThievesCannotStealFromEachOther: true }, language: 'en' }]
+    await applySurvivorReward(input('a-steal', { type: 'steal', thiefRosterId: 'a1', what: 'faab', amount: 5 }))
+    await reverseSurvivorReward({ leagueId: L, rewardId: 'a-steal', actorUserId: 'commish' })
+    const r = await applySurvivorReward(input('b-steal', { type: 'steal', thiefRosterId: 'b1', targetRosterId: 'a1', what: 'faab', amount: 10 }))
+    expect(r).toMatchObject({ ok: true, status: 'applied' })
   })
 })

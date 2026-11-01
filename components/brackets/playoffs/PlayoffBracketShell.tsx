@@ -3,8 +3,9 @@
 import { useMemo, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { useSession } from "next-auth/react"
-import { RefreshCw, Trophy, Plus, Link2, Clipboard, Settings2, ArrowRightCircle, AlertTriangle } from "lucide-react"
+import { ArrowLeft, RefreshCw, Trophy, Plus, Link2, Clipboard, Settings2, ArrowRightCircle, AlertTriangle, Users, Gamepad2, Lock } from "lucide-react"
 import { toast } from "sonner"
 import type { PlayoffChallengeView } from "@/lib/playoffs/types"
 import {
@@ -12,9 +13,14 @@ import {
   getPlayoffBracketViewClient,
 } from "@/lib/playoffs/playoffClientApi"
 import { hasPoolAdminAccess } from "@/lib/auth/admin"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import LanguageToggle from "@/components/i18n/LanguageToggle"
+import { poolDashboardCopy } from "@/lib/brackets/poolDashboardCopy"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
 import { useNbaCupLiveView } from "./useNbaCupLiveView"
 import NbaCupTournamentPanel from "./NbaCupTournamentPanel"
+import "../bracket-experience.css"
+import "./pool-dashboard.css"
 
 type Props = {
   initialView: PlayoffChallengeView
@@ -29,9 +35,22 @@ const SYNC_SUCCESS_MESSAGES: Record<PlayoffDashboardSyncMode, string> = {
   autofill_results: "Testing only sync completed. Picks were filled from official winners.",
 }
 
+/*
+ * ⚠ SAME CANVAS AS THE BRACKET HUB, IN EVERY APP MODE. The hub
+ * (app/brackets/page.tsx, bracket-experience.css) is deliberately the approved
+ * dark bracket canvas in light, dark and AF modes; this page used to be
+ * light-only cards, which made it the one bracket surface that changed
+ * personality when you clicked into a league. Colours are scoped to `.af-pd`,
+ * so `html[data-mode]` cannot leak a page palette in.
+ *
+ * Commissioner sync tools stay English on purpose: they are staff and
+ * commissioner diagnostics, and their messages are asserted verbatim.
+ */
 export default function PlayoffBracketShell({ initialView }: Props) {
   const router = useRouter()
   const { data: session } = useSession()
+  const { language } = useOptionalLanguage()
+  const copy = poolDashboardCopy(language)
   const syncToolsRef = useRef<HTMLElement | null>(null)
   const [view, setView] = useState(initialView)
   const [refreshing, startRefreshing] = useTransition()
@@ -81,10 +100,10 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     return myEntries.find((entry) => !entry.isComplete) ?? activeViewerEntry ?? myEntries[0] ?? null
   }, [myEntries, view.activeEntry, view?.viewerUserId])
   const primaryButtonLabel = !primaryEntry
-    ? tournamentLocked ? "Bracket entry closed" : !canCreateEntry ? "Bracket limit reached" : "Create Your First Bracket"
+    ? tournamentLocked ? copy.entryClosed : !canCreateEntry ? copy.limitReached : copy.createFirst
     : primaryEntry.isComplete
-      ? "View/Edit Bracket"
-      : "Complete Bracket"
+      ? copy.viewEdit
+      : copy.complete
   const leaderboardRows = useMemo(
     () => {
       const hasScoredResults = entries.some((entry) => (entry.resolvedPicks ?? 0) > 0 || (entry.totalScore ?? 0) > 0 || (entry.correctPicks ?? 0) > 0)
@@ -99,7 +118,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           rank: singleGameSport ? entry.rank ?? index + 1 : index + 1,
           id: entry.id,
           userId: entry.userId,
-          name: entry.name || `Bracket ${index + 1}`,
+          name: entry.name || copy.bracketN(index + 1),
           picks: entry.pickCount,
           totalScore: entry.totalScore ?? 0,
           potentialTotal: entry.potentialTotal ?? 0,
@@ -108,7 +127,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           hasScoredResults,
         }))
     },
-    [entries, singleGameSport]
+    [entries, singleGameSport, copy]
   )
   const bestViewerRow = singleGameSport && view.viewerUserId
     ? leaderboardRows.find((row) => row.userId === view.viewerUserId) ?? null
@@ -127,6 +146,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const canSyncPlayoffPool = canManagePlayoffPool && !singleGameSport
   const canUseAutofillResults = safeChallenge.isTestMode && hasAdminAccess
   const isOwner = safeChallenge.ownerUserId === view?.viewerUserId
+  const sportKey = String(safeChallenge.sport ?? "").toLowerCase()
+  const sportName = copy.sportName[sportKey] ?? sportKey.toUpperCase()
 
   function handleRefresh() {
     startRefreshing(async () => {
@@ -144,7 +165,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
       try {
         const nextEntryIndex = viewerEntryCount + 1
         if (nextEntryIndex > safeChallenge.maxEntriesPerParticipant) {
-          toast.error(`This pool allows ${safeChallenge.maxEntriesPerParticipant} brackets per user.`)
+          toast.error(copy.perUserLimit(safeChallenge.maxEntriesPerParticipant))
           return
         }
 
@@ -152,12 +173,12 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           challengeId: safeChallenge.id,
         })
 
-        toast.success(`Bracket ${nextEntryIndex} created.`)
+        toast.success(copy.created(nextEntryIndex))
         router.push(created.redirectUrl)
         const latest = await getPlayoffBracketViewClient(safeChallenge.id)
         setView(latest)
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unable to create entry"
+        const message = error instanceof Error ? error.message : copy.createFailed
         toast.error(message)
       }
     })
@@ -208,9 +229,9 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     try {
       const absoluteUrl = `${window.location.origin}${safeChallenge.inviteUrl}`
       await navigator.clipboard.writeText(`${absoluteUrl}?code=${safeChallenge.inviteCode}`)
-      toast.success("Invite link copied")
+      toast.success(copy.inviteCopied)
     } catch {
-      toast.error("Could not copy invite link")
+      toast.error(copy.inviteCopyFailed)
     }
   }
 
@@ -219,410 +240,335 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     try {
       const path = `/brackets/leagues/${safeChallenge.id}/entries/${bestViewerRow.id}/view`
       await navigator.clipboard.writeText(`${window.location.origin}${path}`)
-      toast.success("Read-only bracket link copied. Private leagues require membership to view it.")
+      toast.success(copy.bestCopied)
     } catch {
-      toast.error("Could not copy bracket link")
+      toast.error(copy.bestCopyFailed)
     }
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-5 p-4 sm:p-6">
-      <section className="rounded-3xl border border-slate-300 bg-[linear-gradient(130deg,#fff7ed_0%,#ecfeff_45%,#eef2ff_100%)] p-6 shadow-[0_20px_50px_rgba(30,41,59,0.15)]">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{safeChallenge.name}</h1>
-            <p className="mt-1 text-sm text-slate-700">{String(safeChallenge.sport ?? "").toUpperCase()} pool - {safeChallenge.seasonYear}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-400 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
-          <span className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-1 text-white">
-            <Trophy className="h-4 w-4" />
-            {entries.length} bracket{entries.length !== 1 ? "s" : ""}
-          </span>
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-900">{String(safeChallenge.sport ?? "").toUpperCase()}</span>
-          <span className="rounded-full bg-indigo-100 px-3 py-1 text-indigo-900">
-            {participants.length} participant{participants.length !== 1 ? "s" : ""}
-          </span>
-          <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-900">{totalSeries} {singleGameSport ? "games" : "series"}</span>
-          {singleGameSport && <span className="rounded-full bg-violet-100 px-3 py-1 text-violet-900">{rollingCup ? "Join anytime · Each game locks at tipoff" : "Finalized picks lock at the first game"}</span>}
-          {safeChallenge.isTestMode ? <span className="rounded-full bg-sky-100 px-3 py-1 text-sky-900">Test mode</span> : null}
-        </div>
-        {hasTemplateSeries ? (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" />
-              <span data-testid="playoff-template-warning">{singleGameSport
-                ? rollingCup ? "NBA Cup teams and game times update automatically. Pick remaining group games now; knockout matchups open as qualifiers are confirmed. Games already started earn no late points." : "Official teams and game times must be published by an admin before picks open."
-                : "Template teams shown until playoff series sync runs. Teams/Schedule sync does not import winners. Results sync scores finalized picks."}</span>
-            </div>
-          </div>
-        ) : null}
-      </section>
+    <main className="af-bracket-experience af-pd">
+      <div className="af-bx-top af-pd-top">
+        <Link href="/brackets" className="af-pd-back"><ArrowLeft className="h-4 w-4" aria-hidden />{copy.allBrackets}</Link>
+        <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} className="af-pd-wordmark" />
+        <LanguageToggle variant="compact" />
+      </div>
 
-      <section className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
-        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Pool Details</h2>
-          <dl className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-700">
-            <div><dt className="font-semibold">Visibility</dt><dd>{safeChallenge.visibility}</dd></div>
-            <div><dt className="font-semibold">Max Users</dt><dd>{safeChallenge.maxParticipants}</dd></div>
-            <div><dt className="font-semibold">Brackets per User</dt><dd>{safeChallenge.maxEntriesPerParticipant}</dd></div>
-            <div><dt className="font-semibold">Scoring Style</dt><dd>{safeChallenge.scoringStyle}</dd></div>
-            <div><dt className="font-semibold">Lock Rule</dt><dd>{safeChallenge.lockRule}</dd></div>
-            {canManagePlayoffPool && (
-              <div data-testid="playoff-invite-code-cell">
-                <dt className="font-semibold">Invite Code</dt>
-                <dd>{safeChallenge.inviteCode}</dd>
-              </div>
-            )}
-          </dl>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (!primaryEntry) {
-                  handleCreateEntry()
-                  return
-                }
-                openEntry(primaryEntry.id)
-              }}
-              disabled={creatingEntry || (!canCreateEntry && !primaryEntry)}
-              data-testid="playoff-fill-bracket-cta"
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <ArrowRightCircle className="h-4 w-4" />
-              {primaryButtonLabel}
-            </button>
-            {primaryEntry && canCreateEntry ? (
-              <button
-                type="button"
-                onClick={handleCreateEntry}
-                disabled={creatingEntry}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-400 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Plus className="h-4 w-4" />
-                Create Another Bracket
-              </button>
-            ) : null}
-            {canManagePlayoffPool && (
-              <button
-                type="button"
-                onClick={copyInvite}
-                data-testid="playoff-copy-invite-btn"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-400 hover:text-sky-700"
-              >
-                <Clipboard className="h-4 w-4" />
-                Invite
-              </button>
-            )}
-            {canSyncPlayoffPool ? (
-              <button
-                type="button"
-                onClick={() => syncToolsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-              >
-                <Settings2 className="h-4 w-4" />
-                Commissioner Tools
-              </button>
-            ) : null}
-          </div>
-          {singleGameSport && tournamentLimit != null && tournamentUsed != null ? (
-            <p className="mt-2 text-xs font-semibold text-slate-600">
-              {tournamentUsed} of {tournamentLimit} brackets used across this tournament.
-              {tournamentLimit === 1 ? " AF Pro includes five brackets per tournament." : ""}
-              {" "}AllFantasy offers no prizes or gambling; paid plans only allow extra brackets.
-            </p>
-          ) : null}
-          {!canCreateEntry ? (
-            <p className="mt-2 text-xs font-semibold text-rose-700">
-              {tournamentLocked
-                ? "Bracket entry closed when the first game began."
-                : tournamentQuotaReached
-                  ? `Tournament bracket limit reached (${tournamentLimit}).`
-                  : `This league allows up to ${safeChallenge.maxEntriesPerParticipant} brackets per person.`}
-            </p>
-          ) : null}
-        </article>
-
-        {canManagePlayoffPool ? (
-          <article
-            data-testid="playoff-invite-panel"
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-          >
-            <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Invite Panel</h2>
-            <p className="mt-2 text-sm text-slate-700">
-              Share this link:{" "}
-              <span className="font-semibold">
-                {safeChallenge.inviteUrl}?code={safeChallenge.inviteCode}
-              </span>
-            </p>
-            <button
-              type="button"
-              onClick={copyInvite}
-              data-testid="playoff-copy-invite-link-btn"
-              className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
-            >
-              <Link2 className="h-4 w-4" />
-              Copy invite link
-            </button>
-          </article>
-        ) : (
-          <article
-            data-testid="playoff-invite-member-banner"
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-          >
-            <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Invite</h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Only the pool commissioner can copy and share the invite link.
-              Ask your commissioner for the invite link or code.
-            </p>
-          </article>
-        )}
-      </section>
-
-      {canSyncPlayoffPool ? (
-        <section
-          ref={syncToolsRef}
-          id="playoff-commissioner-sync-tools"
-          data-testid="playoff-commissioner-sync-tools"
-          className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="af-pd-shell">
+        <section className="af-pd-hero">
+          <svg className="af-pd-court" viewBox="0 0 1440 320" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <g>
+              <line x1="720" y1="0" x2="720" y2="320" />
+              <circle cx="720" cy="160" r="88" />
+              <circle cx="720" cy="160" r="28" />
+              <path d="M0 40 H150 A150 150 0 0 1 150 280 H0" />
+              <path d="M1440 40 H1290 A150 150 0 0 0 1290 280 H1440" />
+            </g>
+          </svg>
+          <div className="af-pd-hero-top">
             <div>
-              <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Commissioner Sync Tools</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Provider sync updates official NBA/NHL playoff data. User picks are not created unless the testing-only auto-fill action is used.
-              </p>
-              <p data-testid="playoff-sync-tools-visibility-debug" className="mt-1 text-xs font-semibold text-slate-500">
-                syncToolsVisible=true; isOwner={String(isOwner)}; isAdmin={String(hasAdminAccess)}; hasPoolAdminAccess={String(hasAdminAccess)}
-              </p>
+              <p className="af-pd-eyebrow">{copy.poolSeason(sportName, safeChallenge.seasonYear)}</p>
+              <h1>{safeChallenge.name}</h1>
             </div>
-            {syncingSeries ? (
-              <span className="inline-flex items-center gap-2 rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-800">
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                Syncing
-              </span>
-            ) : null}
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <button
-              type="button"
-              onClick={() => handleSyncSeries("teams_schedule_only")}
-              disabled={syncingSeries}
-              data-testid="playoff-sync-schedule-only-button"
-              className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <span className="block text-sm font-black text-amber-950">Sync teams/schedule only</span>
-              <span className="mt-1 block text-xs font-semibold text-amber-800">Loads teams, dates, venues, broadcast. Does not import winners.</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSyncSeries("results_only")}
-              disabled={syncingSeries}
-              data-testid="playoff-sync-results-only-button"
-              className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <span className="block text-sm font-black text-emerald-950">Sync results only</span>
-              <span className="mt-1 block text-xs font-semibold text-emerald-800">Imports final winners/results and scores saved picks.</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSyncSeries("official_bracket")}
-              disabled={syncingSeries}
-              data-testid="playoff-sync-series-button"
-              className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <span className="block text-sm font-black text-sky-950">Sync official bracket</span>
-              <span className="mt-1 block text-xs font-semibold text-sky-800">Updates all known official bracket data. Does not fill user picks.</span>
+            <button type="button" onClick={handleRefresh} disabled={refreshing} className="af-bx-btn">
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden />
+              {copy.refresh}
             </button>
           </div>
+          <div className="af-pd-chips">
+            <span className="af-pd-chip af-pd-chip--accent"><Trophy className="h-3.5 w-3.5" aria-hidden />{copy.brackets(entries.length)}</span>
+            <span className="af-pd-chip"><Users className="h-3.5 w-3.5" aria-hidden />{copy.participants(participants.length)}</span>
+            <span className="af-pd-chip"><Gamepad2 className="h-3.5 w-3.5" aria-hidden />{copy.gamesOrSeries(totalSeries, singleGameSport)}</span>
+            {singleGameSport && <span className="af-pd-chip"><Lock className="h-3.5 w-3.5" aria-hidden />{rollingCup ? copy.rollingLock : copy.fixedLock}</span>}
+            {safeChallenge.isTestMode ? <span className="af-pd-chip af-pd-chip--warn">{copy.testMode}</span> : null}
+          </div>
+          {hasTemplateSeries ? (
+            <div className="af-pd-banner">
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+              <span data-testid="playoff-template-warning">{singleGameSport
+                ? rollingCup ? copy.cupTemplate : copy.singleTemplate
+                : copy.seriesTemplate}</span>
+            </div>
+          ) : null}
+        </section>
 
-          {canUseAutofillResults ? (
-            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3">
-              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-rose-200/70 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-rose-900">
-                Test-mode only
-              </div>
+        <section className="af-pd-grid af-pd-grid--wide">
+          <article className="af-bx-panel af-pd-card">
+            <p className="af-pd-eyebrow">{copy.yourBracket}</p>
+            <div className="af-pd-actions">
               <button
                 type="button"
-                onClick={() => handleSyncSeries("autofill_results")}
-                disabled={syncingSeries}
-                data-testid="playoff-sync-autofill-results-button"
-                className="block rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-bold text-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => {
+                  if (!primaryEntry) {
+                    handleCreateEntry()
+                    return
+                  }
+                  openEntry(primaryEntry.id)
+                }}
+                disabled={creatingEntry || (!canCreateEntry && !primaryEntry)}
+                data-testid="playoff-fill-bracket-cta"
+                className="af-bx-btn af-bx-primary"
               >
-                Auto-fill official results
+                <ArrowRightCircle className="h-4 w-4" aria-hidden />
+                {primaryButtonLabel}
               </button>
-              <p className="mt-2 text-xs font-semibold text-rose-800">Testing only — fills picks from official winners.</p>
+              {primaryEntry && canCreateEntry ? (
+                <button type="button" onClick={handleCreateEntry} disabled={creatingEntry} className="af-bx-btn">
+                  <Plus className="h-4 w-4" aria-hidden />
+                  {copy.createAnother}
+                </button>
+              ) : null}
+              {canManagePlayoffPool && (
+                <button type="button" onClick={copyInvite} data-testid="playoff-copy-invite-btn" className="af-bx-btn">
+                  <Clipboard className="h-4 w-4" aria-hidden />
+                  {copy.invite}
+                </button>
+              )}
+              {canSyncPlayoffPool ? (
+                <button
+                  type="button"
+                  onClick={() => syncToolsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  className="af-bx-btn"
+                >
+                  <Settings2 className="h-4 w-4" aria-hidden />
+                  {copy.commissionerTools}
+                </button>
+              ) : null}
             </div>
+            {singleGameSport && tournamentLimit != null && tournamentUsed != null ? (
+              <p className="af-pd-note">
+                {copy.tournamentUsage(tournamentUsed, tournamentLimit)}
+                {tournamentLimit === 1 ? copy.proNote : ""}
+                {copy.noPrizesShort}
+              </p>
+            ) : null}
+            {!canCreateEntry ? (
+              <p className="af-pd-note af-pd-note--bad">
+                {tournamentLocked
+                  ? copy.closedFirstGame
+                  : tournamentQuotaReached
+                    ? copy.tournamentLimit(tournamentLimit)
+                    : copy.leagueLimit(safeChallenge.maxEntriesPerParticipant)}
+              </p>
+            ) : null}
+
+            <h2 className="af-pd-h2 af-pd-h2--spaced">{copy.poolDetails}</h2>
+            <dl className="af-pd-details">
+              <div><dt>{copy.visibility}</dt><dd>{copy.visibilityValue[safeChallenge.visibility] ?? safeChallenge.visibility}</dd></div>
+              <div><dt>{copy.maxUsers}</dt><dd>{safeChallenge.maxParticipants}</dd></div>
+              <div><dt>{copy.perUser}</dt><dd>{safeChallenge.maxEntriesPerParticipant}</dd></div>
+              <div><dt>{copy.scoring}</dt><dd>{safeChallenge.scoringStyle.replace(/_/g, " ")}</dd></div>
+              <div><dt>{copy.lockRule}</dt><dd>{safeChallenge.lockRule.replace(/_/g, " ")}</dd></div>
+              {canManagePlayoffPool && (
+                <div data-testid="playoff-invite-code-cell">
+                  <dt>{copy.inviteCode}</dt>
+                  <dd className="af-pd-code">{safeChallenge.inviteCode}</dd>
+                </div>
+              )}
+            </dl>
+          </article>
+
+          {canManagePlayoffPool ? (
+            <article data-testid="playoff-invite-panel" className="af-bx-panel af-pd-card">
+              <h2 className="af-pd-h2">{copy.invitePanel}</h2>
+              <p className="af-pd-muted">{copy.shareLink}</p>
+              <div className="af-bx-invite af-pd-invite">
+                <code>{safeChallenge.inviteUrl}?code={safeChallenge.inviteCode}</code>
+              </div>
+              <button type="button" onClick={copyInvite} data-testid="playoff-copy-invite-link-btn" className="af-bx-btn af-bx-wide af-pd-gap">
+                <Link2 className="h-4 w-4" aria-hidden />
+                {copy.copyInvite}
+              </button>
+            </article>
           ) : (
-            <p
-              data-testid="playoff-sync-autofill-unavailable"
-              className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600"
-            >
-              Auto-fill official results is available only in test-mode pools (AllFantasy staff only).
-            </p>
+            <article data-testid="playoff-invite-member-banner" className="af-bx-panel af-pd-card">
+              <h2 className="af-pd-h2">{copy.inviteMemberTitle}</h2>
+              <p className="af-pd-muted">{copy.inviteMemberBody}</p>
+            </article>
           )}
-
-          {syncStatus ? (
-            <p
-              data-testid="playoff-sync-status-message"
-              className={`mt-3 rounded-xl border px-3 py-2 text-sm font-semibold ${
-                syncStatus.type === "success"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                  : "border-rose-200 bg-rose-50 text-rose-800"
-              }`}
-            >
-              {syncStatus.message}
-            </p>
-          ) : null}
-          <PlayoffSyncDiagnosticsPanel diagnostics={syncDiagnostics} />
         </section>
-      ) : null}
 
-      {rollingCup ? <NbaCupTournamentPanel series={series} season={safeChallenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} /> : null}
+        {rollingCup ? <NbaCupTournamentPanel series={series} season={safeChallenge.seasonYear} syncedAt={view.nbaCupLastSyncedAt} /> : null}
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Participants</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            {participants.length} participant{participants.length !== 1 ? "s" : ""}
-          </p>
-          <ul className="mt-3 space-y-2">
-            {participants.map((participant) => (
-              <li key={participant.userId} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                <span className="font-semibold text-slate-800">{participant.displayName}</span>
-                <span className="text-slate-600">{participant.entryCount} entries</span>
-              </li>
-            ))}
-          </ul>
-        </article>
+        {canSyncPlayoffPool ? (
+          <section
+            ref={syncToolsRef}
+            id="playoff-commissioner-sync-tools"
+            data-testid="playoff-commissioner-sync-tools"
+            className="af-bx-panel af-pd-card"
+          >
+            <div className="af-pd-row">
+              <div>
+                <h2 className="af-pd-h2">Commissioner Sync Tools</h2>
+                <p className="af-pd-muted">
+                  Provider sync updates official NBA/NHL playoff data. User picks are not created unless the testing-only auto-fill action is used.
+                </p>
+                <p data-testid="playoff-sync-tools-visibility-debug" className="af-pd-debug">
+                  syncToolsVisible=true; isOwner={String(isOwner)}; isAdmin={String(hasAdminAccess)}; hasPoolAdminAccess={String(hasAdminAccess)}
+                </p>
+              </div>
+              {syncingSeries ? (
+                <span className="af-pd-chip af-pd-chip--accent">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  Syncing
+                </span>
+              ) : null}
+            </div>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">My Brackets / Entries</h2>
-          {myEntries.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-600">You have not created a bracket in this pool yet.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {myEntries.map((entry, index) => (
-                <li key={entry.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{entry.name || `Bracket ${index + 1}`}</p>
-                    <p className="text-xs text-slate-600">
-                      {entry.pickCount}/{totalSeries} picks · {entry.isComplete ? singleGameSport ? "Finalized" : "Complete" : "Draft"}
+            <div className="af-pd-sync">
+              <button type="button" onClick={() => handleSyncSeries("teams_schedule_only")} disabled={syncingSeries} data-testid="playoff-sync-schedule-only-button" className="af-pd-sync-btn" data-tone="warn">
+                <span>Sync teams/schedule only</span>
+                <small>Loads teams, dates, venues, broadcast. Does not import winners.</small>
+              </button>
+              <button type="button" onClick={() => handleSyncSeries("results_only")} disabled={syncingSeries} data-testid="playoff-sync-results-only-button" className="af-pd-sync-btn" data-tone="good">
+                <span>Sync results only</span>
+                <small>Imports final winners/results and scores saved picks.</small>
+              </button>
+              <button type="button" onClick={() => handleSyncSeries("official_bracket")} disabled={syncingSeries} data-testid="playoff-sync-series-button" className="af-pd-sync-btn" data-tone="info">
+                <span>Sync official bracket</span>
+                <small>Updates all known official bracket data. Does not fill user picks.</small>
+              </button>
+            </div>
+
+            {canUseAutofillResults ? (
+              <div className="af-pd-danger">
+                <span className="af-pd-chip af-pd-chip--bad">Test-mode only</span>
+                <button type="button" onClick={() => handleSyncSeries("autofill_results")} disabled={syncingSeries} data-testid="playoff-sync-autofill-results-button" className="af-bx-btn">
+                  Auto-fill official results
+                </button>
+                <p className="af-pd-muted">Testing only — fills picks from official winners.</p>
+              </div>
+            ) : (
+              <p data-testid="playoff-sync-autofill-unavailable" className="af-pd-note">
+                Auto-fill official results is available only in test-mode pools (AllFantasy staff only).
+              </p>
+            )}
+
+            {syncStatus ? (
+              <p data-testid="playoff-sync-status-message" className={`af-pd-status ${syncStatus.type === "success" ? "af-pd-status--good" : "af-pd-status--bad"}`}>
+                {syncStatus.message}
+              </p>
+            ) : null}
+            <PlayoffSyncDiagnosticsPanel diagnostics={syncDiagnostics} />
+          </section>
+        ) : null}
+
+        {singleGameSport && myEntries.length > 0 ? (
+          <section data-testid="playoff-dashboard-your-race" className="af-bx-panel af-pd-card af-pd-race">
+            <div className="af-pd-row">
+              <div>
+                <p className="af-pd-eyebrow">{copy.raceEyebrow}</p>
+                {bestViewerRow ? (
+                  <>
+                    <h2 className="af-pd-rank">
+                      #{bestViewerRow.rank} <span>{copy.ofFinalized(leaderboardRows.length)}</span>
+                    </h2>
+                    <p className="af-pd-muted">
+                      {copy.bestBracket(bestViewerRow.name, bestViewerRow.totalScore, bestViewerRow.potentialTotal, bestViewerRow.correctPicks)}
                     </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => openEntry(entry.id)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
-                  >
-                    {entry.isComplete ? "View/Edit Bracket" : "Complete Bracket"}
+                  </>
+                ) : (
+                  <>
+                    <h2 className="af-pd-h2 af-pd-h2--big">{copy.joinBoard}</h2>
+                    <p className="af-pd-muted">{rollingCup ? copy.joinRolling : copy.joinFixed}</p>
+                  </>
+                )}
+              </div>
+              <div className="af-pd-actions">
+                {bestViewerRow ? (
+                  <button type="button" onClick={copyBestBracket} className="af-bx-btn af-bx-primary">
+                    <Clipboard className="h-4 w-4" aria-hidden />
+                    {copy.shareYours}
                   </button>
+                ) : null}
+                {canManagePlayoffPool && safeChallenge.inviteCode ? (
+                  <button type="button" onClick={copyInvite} className="af-bx-btn">
+                    <Link2 className="h-4 w-4" aria-hidden />
+                    {copy.copyLeagueInvite}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            {nearbyRivals.length > 0 ? (
+              <div className="af-pd-rivals">
+                <p className="af-pd-label">{copy.closest}</p>
+                <div className="af-pd-grid">
+                  {nearbyRivals.map((row) => (
+                    <div key={row.id} className="af-pd-list-row">
+                      <span className="af-pd-strong">#{row.rank} {row.name}</span>
+                      <span className="af-pd-accent">{copy.pts(row.totalScore)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        <section className="af-pd-grid">
+          <article className="af-bx-panel af-pd-card">
+            <h2 className="af-pd-h2">{copy.participantsTitle}</h2>
+            <p className="af-pd-muted">{copy.participants(participants.length)}</p>
+            <ul className="af-pd-list">
+              {participants.map((participant) => (
+                <li key={participant.userId} className="af-pd-list-row">
+                  <span className="af-pd-strong">{participant.displayName}</span>
+                  <span className="af-pd-muted">{copy.entriesCount(participant.entryCount)}</span>
                 </li>
               ))}
             </ul>
-          )}
-        </article>
-      </section>
+          </article>
 
-      {singleGameSport && myEntries.length > 0 ? (
-        <section
-          data-testid="playoff-dashboard-your-race"
-          className="rounded-3xl border border-teal-300/30 bg-slate-950 p-5 text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)] sm:p-6"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-5">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-300">Your league race</p>
-              {bestViewerRow ? (
-                <>
-                  <h2 className="mt-2 text-3xl font-black tracking-tight">
-                    #{bestViewerRow.rank} <span className="text-base font-semibold text-slate-300">of {leaderboardRows.length} finalized brackets</span>
-                  </h2>
-                  <p className="mt-2 text-sm font-semibold text-slate-200">
-                    Best bracket: {bestViewerRow.name} · {bestViewerRow.totalScore} points · {bestViewerRow.potentialTotal} potential · {bestViewerRow.correctPicks} correct
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h2 className="mt-2 text-xl font-black">Finish your picks to join the board</h2>
-                  <p className="mt-2 text-sm text-slate-300">{rollingCup ? "Finalize your upcoming game picks to join the race. Missed games earn zero points." : "Finalize before the first game to see your rank and nearby competitors."}</p>
-                </>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {bestViewerRow ? (
-                <button
-                  type="button"
-                  onClick={copyBestBracket}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-300 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-teal-200"
-                >
-                  <Clipboard className="h-4 w-4" />
-                  Share your bracket
-                </button>
-              ) : null}
-              {canManagePlayoffPool && safeChallenge.inviteCode ? (
-                <button
-                  type="button"
-                  onClick={copyInvite}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/30 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/10"
-                >
-                  <Link2 className="h-4 w-4" />
-                  Copy league invite
-                </button>
-              ) : null}
-            </div>
-          </div>
-          {nearbyRivals.length > 0 ? (
-            <div className="mt-5 border-t border-white/15 pt-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Closest competitors</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {nearbyRivals.map((row) => (
-                  <div key={row.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm">
-                    <span className="truncate font-semibold">#{row.rank} {row.name}</span>
-                    <span className="shrink-0 text-teal-200">{row.totalScore} pts</span>
-                  </div>
+          <article className="af-bx-panel af-pd-card">
+            <h2 className="af-pd-h2">{copy.myEntries}</h2>
+            {myEntries.length === 0 ? (
+              <p className="af-pd-muted">{copy.noEntries}</p>
+            ) : (
+              <ul className="af-pd-list">
+                {myEntries.map((entry, index) => (
+                  <li key={entry.id} className="af-pd-list-row">
+                    <div>
+                      <p className="af-pd-strong">{entry.name || copy.bracketN(index + 1)}</p>
+                      <p className="af-pd-muted">
+                        {copy.picksOf(entry.pickCount, totalSeries)} · {entry.isComplete ? singleGameSport ? copy.finalized : copy.completeStatus : copy.draft}
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => openEntry(entry.id)} className="af-bx-btn af-pd-small">
+                      {entry.isComplete ? copy.viewEdit : copy.complete}
+                    </button>
+                  </li>
                 ))}
-              </div>
-            </div>
-          ) : null}
+              </ul>
+            )}
+          </article>
         </section>
-      ) : null}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="playoff-dashboard-leaderboard">
-        <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Leaderboard</h2>
-        {singleGameSport && <Link className="mt-2 inline-block text-sm font-bold text-teal-700 underline" href={`/brackets/standings?sport=${safeChallenge.sport}&season=${safeChallenge.seasonYear}`}>View universal board →</Link>}
-        <p className="mt-1 text-xs font-semibold text-slate-500">
-          {singleGameSport ? "Finalized brackets only. Potential is the highest score still reachable from saved picks." : hasScoredLeaderboard
-            ? "Scored leaderboard from completed series results." : "Pick-count leaderboard until series results sync."}
-        </p>
-        {leaderboardRows.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-600">No leaderboard entries yet.</p>
-        ) : (
-          <ol className="mt-3 space-y-2">
-            {leaderboardRows.map((row) => (
-              <li key={row.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                <span className="font-semibold text-slate-800">#{row.rank} {row.name}</span>
-                <span className="text-slate-600">
-                  {singleGameSport ? `${row.totalScore} pts · ${row.potentialTotal} potential · ${row.correctPicks} correct` :
-                    row.hasScoredResults ? `${row.totalScore} pts · ${row.correctPicks}/${row.resolvedPicks} correct · ${row.picks} picks` : `${row.picks} picks`}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-      {singleGameSport && <p className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950">AllFantasy offers no prizes, gambling, betting, entry fees, or in-app payouts. Paid subscriptions only increase the number of brackets you can create. Commissioners manage any external arrangements independently under applicable AllFantasy terms.</p>}
-    </div>
+        <section className="af-bx-panel af-pd-card" data-testid="playoff-dashboard-leaderboard">
+          <div className="af-pd-row">
+            <h2 className="af-pd-h2">{copy.leaderboard}</h2>
+            {singleGameSport && <Link className="af-pd-link" href={`/brackets/standings?sport=${safeChallenge.sport}&season=${safeChallenge.seasonYear}`}>{copy.universalBoard}</Link>}
+          </div>
+          <p className="af-pd-muted">
+            {singleGameSport ? copy.boardSingle : hasScoredLeaderboard ? copy.boardScored : copy.boardPicks}
+          </p>
+          {leaderboardRows.length === 0 ? (
+            <p className="af-pd-empty">{copy.noBoard}</p>
+          ) : (
+            <ol className="af-pd-list">
+              {leaderboardRows.map((row) => (
+                <li key={row.id} className="af-pd-list-row" data-you={row.userId === view.viewerUserId ? "true" : undefined}>
+                  <span className="af-pd-strong">#{row.rank} {row.name}</span>
+                  <span className="af-pd-muted">
+                    {singleGameSport ? copy.rowSingle(row.totalScore, row.potentialTotal, row.correctPicks) :
+                      row.hasScoredResults ? copy.rowScored(row.totalScore, row.correctPicks, row.resolvedPicks, row.picks) : copy.rowPicks(row.picks)}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+        {singleGameSport && <p className="af-bx-disclaimer af-pd-disclaimer">{copy.disclaimer}</p>}
+      </div>
+    </main>
   )
 }
