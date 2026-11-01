@@ -39,17 +39,19 @@ describe("NFL bracket board", () => {
     expect(screen.getByText(/14 teams · AFC and NFC/)).toBeInTheDocument()
     expect(screen.getByText("Picks open")).toBeInTheDocument()
     expect(screen.queryByText(/pending/i)).not.toBeInTheDocument()
+    // Seed-slope "series reads" are meaningless for NFL names and reseeded slots.
+    expect(screen.queryByTestId("pb-decision-rail")).not.toBeInTheDocument()
     expect(within(screen.getByTestId("pb-champion")).getAllByText("Super Bowl").length).toBeGreaterThan(0)
     expect(screen.getAllByText("Wild Card").length).toBeGreaterThanOrEqual(2)
     // The 1 seed waits in the divisional round; its opponent is not decided yet.
-    expect(within(screen.getByTestId("pb-series-7")).getByText("Denver Broncos")).toBeInTheDocument()
+    expect(within(screen.getByTestId("pb-series-7")).getByText("Broncos")).toBeInTheDocument()
   })
 
   it("fills the 1 seed's opponent from the entry's own Wild Card picks", () => {
     render(<MlbBracketBoard view={view([[1, "New England Patriots"], [2, "Buffalo Bills"], [3, "Houston Texans"]])} onViewChange={() => {}} />)
     // Winners 2, 6, 5: the lowest seed left is the Bills.
-    expect(within(screen.getByTestId("pb-series-7")).getByText("Buffalo Bills")).toBeInTheDocument()
-    expect(within(screen.getByTestId("pb-series-8")).getByText("New England Patriots")).toBeInTheDocument()
-    expect(within(screen.getByTestId("pb-series-8")).getByText("Houston Texans")).toBeInTheDocument()
+    expect(within(screen.getByTestId("pb-series-7")).getByText("Bills")).toBeInTheDocument()
+    expect(within(screen.getByTestId("pb-series-8")).getByText("Patriots")).toBeInTheDocument()
+    expect(within(screen.getByTestId("pb-series-8")).getByText("Texans")).toBeInTheDocument()
   })
 })

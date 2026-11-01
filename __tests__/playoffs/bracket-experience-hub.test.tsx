@@ -101,6 +101,7 @@ describe("approved bracket experience workspace", () => {
     expect(funnel.querySelectorAll('.af-fn-game[data-side="right"]')).toHaveLength(6)
     expect(funnel.querySelector(".af-fn-sides")?.textContent).toBe("AFCNFC")
     expect(screen.getAllByText("Super Bowl").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("AFC · Lowest seed left").length).toBe(1)
+    // The 1 seed's opponent is decided by the reseeding — one such slot per conference.
+    expect(screen.getAllByText("Lowest seed").length).toBe(2)
   })
 })

@@ -143,7 +143,8 @@ function TeamRow({
           {official ? abbreviate(name) : "?"}
         </span>
       )}
-      <span className="af-pb-team-name" title={official ? name : undefined}>{official ? tournamentLogoSport ? name : abbreviate(name) : "TBD"}</span>
+      {/* NFL names ("New England Patriots") do not fit a bracket cell; the nickname does, and the full name is the title. */}
+      <span className="af-pb-team-name" title={official ? name : undefined}>{official ? tournamentLogoSport ? (sport === "nfl" ? name.split(/\s+/).pop() : name) : abbreviate(name) : "TBD"}</span>
       {official && isPlaceholderName(name) ? (
         <span className="af-pb-team-slot">slot</span>
       ) : null}

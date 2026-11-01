@@ -67,10 +67,17 @@ export default function BracketFunnel({ model, href, pointsLabel, matchupLabel, 
     </section>
   )
   const cols = model.left.length + model.right.length
+  /*
+   * Three rounds a side (NFL, CFP) is seven columns; at the 150px a two-round half uses, that
+   * overflows the hub's bracket panel at 1440px and hides the right half behind a scroll.
+   * Narrower columns keep the whole funnel on screen; a phone still scrolls.
+   */
+  const colMin = cols >= 6 ? 118 : 150
+  const finalMin = cols >= 6 ? 158 : 190
   return (
     <div className="af-fn" data-testid="bracket-funnel">
       <div className="af-fn-sides" aria-hidden="true"><span>{model.leftLabel}</span><span>{model.rightLabel}</span></div>
-      <div className="af-fn-tree" style={{ ["--fn-rows" as string]: tallest, gridTemplateColumns: `repeat(${model.left.length}, minmax(150px, 1fr)) minmax(190px, 1.15fr) repeat(${model.right.length}, minmax(150px, 1fr))`, minWidth: `${cols * 160 + 210}px` }}>
+      <div className="af-fn-tree" data-dense={cols >= 6 ? "true" : undefined} style={{ ["--fn-rows" as string]: tallest, gridTemplateColumns: `repeat(${model.left.length}, minmax(${colMin}px, 1fr)) minmax(${finalMin}px, 1.1fr) repeat(${model.right.length}, minmax(${colMin}px, 1fr))`, minWidth: `${cols * (colMin + 12) + finalMin + 20}px` }}>
         {model.left.map((col, i) => column(col, "left", i))}
         <section className="af-fn-final" aria-label={model.final.title}>
           <Trophy className="af-fn-trophy" aria-hidden />

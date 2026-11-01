@@ -21,7 +21,7 @@ const en = {
   nfl: "NFL Playoffs", nflFormat: "14 teams · 13 games", nflLock: "Each game’s kickoff",
   nflLockNote: "Picks open when the playoff field is set in January", liveNow: "Live now", opens: "Opens", upperBracket: "Upper bracket", lowerBracket: "Lower bracket",
   wildCard: "Wild Card", divisional: "Divisional", conferenceRound: "Conference", superBowl: "Super Bowl", afc: "AFC", nfc: "NFC",
-  lowestSeed: "Lowest seed left", champion: "champion", nflRule: "Seed 1 in each conference has a bye. The divisional round reseeds: the 1 seed plays the lowest seed left.",
+  lowestSeed: "Lowest seed", champion: "champion", nflRule: "Seed 1 in each conference has a bye. The divisional round reseeds: the 1 seed plays the lowest seed left.",
 } as const
 
 const es: Record<keyof typeof en, string> = {
@@ -47,7 +47,7 @@ const es: Record<keyof typeof en, string> = {
   nfl: "Playoffs de la NFL", nflFormat: "14 equipos · 13 partidos", nflLock: "El inicio de cada partido",
   nflLockNote: "Las selecciones abren cuando se define el cuadro en enero", liveNow: "En vivo", opens: "Abre", upperBracket: "Llave superior", lowerBracket: "Llave inferior",
   wildCard: "Comodines", divisional: "Divisional", conferenceRound: "Conferencia", superBowl: "Super Bowl", afc: "AFC", nfc: "NFC",
-  lowestSeed: "Sembrado más bajo restante", champion: "campeón", nflRule: "El sembrado 1 de cada conferencia descansa. La ronda divisional se reordena: el 1 enfrenta al sembrado más bajo restante.",
+  lowestSeed: "Sembrado más bajo", champion: "campeón", nflRule: "El sembrado 1 de cada conferencia descansa. La ronda divisional se reordena: el 1 enfrenta al sembrado más bajo restante.",
 }
 
 export function bracketExperienceCopy(language?: string) { return language?.startsWith("es") ? es : en }

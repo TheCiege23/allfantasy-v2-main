@@ -77,7 +77,11 @@ export default function PlayoffDecisionRail({ view, graph, sport }: PlayoffDecis
         * NBA Cup has no seeds to read — every Cup matchup reads "seeded level, no
         * edge", which is true and useless. The Cup rail's group standings replace it.
         */}
-      {sport === "nba_cup" ? null : <section className="af-pb-card" data-testid="pb-decision-rail">
+      {/*
+        * NFL too: its reads abbreviate full club names into codes nobody uses ("BEA over PAC")
+        * and count reseeded placeholder slots as clubs ("WIN and WIN are seeded level").
+        */}
+      {sport === "nba_cup" || sport === "nfl" ? null : <section className="af-pb-card" data-testid="pb-decision-rail">
         <div className="af-pb-rail-head">Series read</div>
         {reads.length === 0 ? (
           <p className="af-pb-basis" style={{ borderTop: 0 }}>
